@@ -1,0 +1,52 @@
+# Lord British throne-room verification slice
+
+Game data: `C:\Games\U5-Clean`
+
+This executable is a parity harness. It reads original data at runtime but does not embed or emit raw map, dialogue, or asset dumps.
+
+## Scene binding checks
+
+- Scene `0x11` resolves by public partition to `CASTLE:0`.
+- Scene `0x15` resolves by public partition to `CASTLE:4`.
+- Scene `0x1D` resolves by public partition to `KEEP:4`.
+- `CASTLE:0` contains Lord-British-castle staff markers: PASS.
+- `CASTLE:4` contains those staff markers: FAIL.
+- Private-note special scene `0x1D` maps to keep family under the public partition: PASS.
+
+Representative roster names, limited to avoid dialogue or roster dumps:
+
+- `CASTLE:0`: Alistair Bard, Stephen, Treanna, Margaret, Desiree, Drudgeworth, Saduj, Stillwelt
+- `CASTLE:4`: Squire Jimmy, Kurt, Sir Adam Torch
+- `KEEP:4`: Elistaria
+
+## Map/render checks
+
+- `CASTLE:0` floor 0: 32x32 loaded, render-hash `179366faa8b4a8bb`, NPC markers 0, spawn markers 0, doors 0, stairs/ladders 0.
+  Class histogram: furniture=736 npc-sprite=8 special=8 terrain=199 vehicle=73
+- `CASTLE:0` floor 1: 32x32 loaded, render-hash `fe5e6a68d7e255e3`, NPC markers 0, spawn markers 0, doors 14, stairs/ladders 0.
+  Class histogram: decoration=2 door=14 furniture=732 npc-sprite=15 special=14 terrain=175 vehicle=72
+## Movement/pathfinding checks
+
+- Movement probe start: (7, 0), target: (8, 0).
+- Class-derived pathfinding found a path of 1 steps: PASS.
+- Simulated step-by-step movement over the path: PASS.
+- Door-family tiles detected on tested floors: 14.
+
+## Schedule/conversation checks
+
+- Occupied `CASTLE:0` roster slots: 31.
+- Occupied slots with resolved TLK display names: 8.
+- Noon waypoint sample:
+  - slot 1 dlg 0 `(unnamed)` -> waypoint 1 at (17, 28, 0).
+  - slot 2 dlg 0 `(unnamed)` -> waypoint 1 at (13, 28, 0).
+  - slot 3 dlg 0 `(unnamed)` -> waypoint 0 at (20, 12, 0).
+  - slot 4 dlg 0 `(unnamed)` -> waypoint 0 at (22, 12, 0).
+  - slot 5 dlg 0 `(unnamed)` -> waypoint 2 at (19, 15, 1).
+  - slot 6 dlg 0 `(unnamed)` -> waypoint 2 at (21, 17, 1).
+
+## Findings
+
+- The slice runs end-to-end for file loading, scene partitioning, roster/TLK joins, map analysis, render hashing, schedule sampling, and pathfinding smoke checks.
+- `CASTLE:0`, not the fifth castle slot, is the strongest data-backed public binding for Lord British's castle in this slice.
+- The private TOWN note's `0x1D` special-case label conflicts with the public scene partition and should be treated as an unresolved private-analysis issue until rechecked.
+- Exact passability-bitmap offset and bit ordering remain open; this harness uses class-derived passability only for the smoke path.
