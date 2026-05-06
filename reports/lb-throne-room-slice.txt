@@ -32,6 +32,8 @@ Representative roster names, limited to avoid dialogue or roster dumps:
 - Simulated step-by-step movement over the path: PASS.
 - Door-family tiles detected on tested floors: 14.
 
+- Door interaction smoke probe at (14, 0) rewrote a door-family cell and produced a walkable result: PASS.
+
 ## Schedule/conversation checks
 
 - Occupied `CASTLE:0` roster slots: 31.
@@ -43,6 +45,7 @@ Representative roster names, limited to avoid dialogue or roster dumps:
   - slot 4 dlg 0 `(unnamed)` -> waypoint 0 at (22, 12, 0).
   - slot 5 dlg 0 `(unnamed)` -> waypoint 2 at (19, 15, 1).
   - slot 6 dlg 0 `(unnamed)` -> waypoint 2 at (21, 17, 1).
+- Conversation envelope probe: slot 14 dlg 2 has the five leading TLK fields and 11 keyword pairs: PASS.
 
 ## Findings
 

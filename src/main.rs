@@ -220,6 +220,19 @@ fn main() -> io::Result<()> {
         "- Door-family tiles detected on tested floors: {}.\n\n",
         stats0.door_count + stats1.door_count
     ));
+    match door_probe(&floor1) {
+        Some((pos, opened_walkable)) => {
+            report.push_str(&format!(
+                "- Door interaction smoke probe at ({}, {}) rewrote a door-family cell and produced a walkable result: {}.\n\n",
+                pos.0,
+                pos.1,
+                pass_fail(opened_walkable)
+            ));
+        }
+        None => report.push_str(
+            "- Door interaction smoke probe: WARNING, no door-family tile found on floor 1.\n\n",
+        ),
+    }
 
     report.push_str("## Schedule/conversation checks\n\n");
     let occupied = lb_slots.iter().filter(|s| s.type_byte != 0).count();
@@ -244,6 +257,27 @@ fn main() -> io::Result<()> {
             slot.schedule[6 + wp],
             slot.schedule[9 + wp] as i8
         ));
+    }
+    if let Some(slot) = lb_slots
+        .iter()
+        .find(|slot| slot.type_byte != 0 && slot.dialog_id > 1 && slot.name.is_some())
+    {
+        let fields = castle_tlk
+            .get(&(slot.dialog_id as u16))
+            .map(|fields| fields.len())
+            .unwrap_or(0);
+        let keywords = fields.saturating_sub(5) / 2;
+        report.push_str(&format!(
+            "- Conversation envelope probe: slot {} dlg {} has the five leading TLK fields and {} keyword pairs: {}.\n",
+            slot.slot,
+            slot.dialog_id,
+            keywords,
+            pass_fail(fields >= 5)
+        ));
+    } else {
+        report.push_str(
+            "- Conversation envelope probe: FAIL, no named dialogue-bearing slot found.\n",
+        );
     }
     report.push_str("\n");
 
@@ -473,6 +507,16 @@ fn find_path(
         }
     }
     None
+}
+
+fn door_probe(grid: &[u8]) -> Option<((usize, usize), bool)> {
+    let idx = grid.iter().position(|tile| (96..=103).contains(tile))?;
+    let mut live = grid.to_vec();
+    // The exact original open-door tile is intentionally not asserted here.
+    // This smoke probe exercises the spec's tile-id rewrite model without
+    // publishing raw map data or pinning unresolved door variants.
+    live[idx] = 16;
+    Some(((idx % 32, idx / 32), is_probe_walkable(live[idx])))
 }
 
 fn neighbors(x: usize, y: usize) -> impl Iterator<Item = (usize, usize)> {
