@@ -8769,7 +8769,7 @@ impl PlayState {
 
     fn climb(&mut self, game_dir: &Path, intent: ClimbIntent) -> io::Result<MoveOutcome> {
         let Area::Town { scene, floor } = self.area else {
-            return self.climb_dungeon_or_placeholder(game_dir, intent);
+            return self.climb_dungeon(game_dir, intent);
         };
         let tile = self.grid[self.player.y * 32 + self.player.x];
         let delta = if let Some(entry) =
@@ -8813,11 +8813,7 @@ impl PlayState {
         }))
     }
 
-    fn climb_dungeon_or_placeholder(
-        &mut self,
-        game_dir: &Path,
-        intent: ClimbIntent,
-    ) -> io::Result<MoveOutcome> {
+    fn climb_dungeon(&mut self, game_dir: &Path, intent: ClimbIntent) -> io::Result<MoveOutcome> {
         let Area::Dungeon { scene, level } = self.area else {
             self.message = "Not climbable!".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -11087,6 +11083,7 @@ struct CliArgs {
     play_script: Option<Vec<String>>,
     game_dir: PathBuf,
     play_options: PlayOptions,
+    help: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -11192,6 +11189,10 @@ struct MapStats {
 
 fn main() -> io::Result<()> {
     let args = parse_cli_args(env::args().skip(1))?;
+    if args.help {
+        print!("{CLI_USAGE}");
+        return Ok(());
+    }
     if args.play {
         return run_play_loop(
             &args.game_dir,
@@ -11863,9 +11864,11 @@ where
     let mut climbing_gear_override = None;
     let mut pending_vehicle_override = None;
     let mut transport_override = None;
+    let mut help = false;
     let mut args = args.into_iter().map(Into::into);
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--help" | "-h" => help = true,
             "--play" => play = true,
             "--play-script" => {
                 play = true;
@@ -11978,6 +11981,17 @@ where
         }
     }
     let game_dir = game_dir.unwrap_or_else(|| PathBuf::from(DEFAULT_GAME_DIR));
+    if help {
+        return Ok(CliArgs {
+            play: false,
+            raster_diagnostics: false,
+            raster_depth,
+            play_script: None,
+            game_dir,
+            play_options: PlayOptions::default(),
+            help: true,
+        });
+    }
     if from_save && from_init {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -12013,8 +12027,41 @@ where
         play_script,
         game_dir,
         play_options: options,
+        help: false,
     })
 }
+
+const CLI_USAGE: &str = "\
+Ultima V verification + first-playable harness (clean-room).
+
+USAGE:
+    cargo run -- [OPTIONS] [GAME_DIR]
+
+GAME_DIR defaults to the local clean asset path. With no flags, runs the
+Lord British throne-room verification report.
+
+OPTIONS:
+    -h, --help                Print this usage and exit.
+        --play                Launch the terminal first-playable harness.
+        --play-script <CMDS>  Run a semicolon-separated script then exit.
+                              Implies --play.
+        --scene <KEY>         Start scene, e.g. CASTLE:0 or DUNGEON:0.
+        --floor <N>           Start floor/level (signed).
+        --at <X,Y>            Start coordinates.
+        --time <HH:MM>        Start clock.
+        --wind <DIR>          calm|north|south|east|west.
+        --transport <KIND>    foot|horse|ship|skiff|carpet|balloon.
+        --from-save           Seed play options from SAVED.GAM/SAVED.OOL.
+        --from-init           Seed play options from INIT.GAM (debug).
+        --raster-diagnostics  Emit per-frame raster diagnostics.
+        --raster-depth <D>    ega|cga (default ega).
+
+SMOKE COMMANDS:
+    cargo run -- C:\\Games\\U5-Clean
+    cargo run -- --play C:\\Games\\U5-Clean
+    cargo run -- --play-script \"z;q\" C:\\Games\\U5-Clean
+    cargo run -- --play --scene DUNGEON:0 --floor 0 C:\\Games\\U5-Clean
+";
 
 fn load_play_options_from_save(game_dir: &Path) -> io::Result<PlayOptions> {
     let mut options = load_play_options_from_save_file(game_dir, "SAVED.GAM", "--from-save", true)?;
@@ -21272,6 +21319,36 @@ mod tests {
     fn cli_parser_rejects_missing_or_duplicate_play_script() {
         assert!(parse_cli_args(["--play-script"]).is_err());
         assert!(parse_cli_args(["--play-script", "d", "--play-script", "q"]).is_err());
+    }
+
+    #[test]
+    fn cli_parser_recognizes_help_long_flag() {
+        let args = parse_cli_args(["--help"]).unwrap();
+        assert!(args.help);
+        assert!(!args.play);
+        assert!(args.play_script.is_none());
+    }
+
+    #[test]
+    fn cli_parser_recognizes_help_short_flag() {
+        let args = parse_cli_args(["-h"]).unwrap();
+        assert!(args.help);
+    }
+
+    #[test]
+    fn cli_parser_help_short_circuits_save_init_conflict() {
+        // --help bypasses validation that would otherwise reject this combo,
+        // so users can still get usage even with bad flags.
+        let args = parse_cli_args(["--help", "--from-save", "--from-init"]).unwrap();
+        assert!(args.help);
+    }
+
+    #[test]
+    fn cli_usage_lists_documented_smoke_commands() {
+        assert!(CLI_USAGE.contains("--play"));
+        assert!(CLI_USAGE.contains("--play-script"));
+        assert!(CLI_USAGE.contains("--scene"));
+        assert!(CLI_USAGE.contains("--floor"));
     }
 
     #[test]
