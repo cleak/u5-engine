@@ -52,4 +52,4 @@ Representative roster names, limited to avoid dialogue or roster dumps:
 - The slice runs end-to-end for file loading, scene partitioning, roster/TLK joins, map analysis, render hashing, schedule sampling, and pathfinding smoke checks.
 - `CASTLE:0`, not the fifth castle slot, is the strongest data-backed public binding for Lord British's castle in this slice.
 - The private TOWN note's `0x1D` special-case label conflicts with the public scene partition and should be treated as an unresolved private-analysis issue until rechecked.
-- Exact passability-bitmap offset and bit ordering remain open; this harness uses class-derived passability only for the smoke path.
+- The aggregate report keeps its class-derived smoke path; runtime play can also consume an optional clean-room passability bitmap.
