@@ -7,17 +7,32 @@
 //! to satisfy the <1000-lines-per-file rule while preserving the original
 //! flat namespace. Future work can carve these into proper modules.
 
+pub mod animation;
+pub mod clock;
 pub mod constants;
 pub mod direction;
+pub mod npc_runtime;
+pub mod party;
 pub mod scene;
 pub mod shrine_virtue;
 pub mod test_fixtures;
+pub mod timing;
+pub mod transport;
 pub mod wind;
 
+pub use animation::{ActiveObject, ActiveShipWind, AnimationClock, PhaseTick};
+pub use clock::GameClock;
 pub use constants::*;
 pub use direction::Direction;
+pub use npc_runtime::{DoorTracker, LocationMarkers, RuntimeNpc};
+pub use party::{
+    Area, AvatarStats, MoonstoneGateSlot, PartyMember, Player, default_party,
+    increase_capped_stat, party_member_unavailable_message, party_status_name,
+};
 pub use scene::{DungeonScene, Family, PlayTarget, Scene, WorldPlane};
 pub use shrine_virtue::ShrineVirtue;
+pub use timing::{DungeonFieldEffect, SaveTemplateSource, TimingStatusTag};
+pub use transport::{BoardVehicleCandidate, PendingVehicleAcquisition, TransportState};
 pub use wind::WindState;
 
 include!("parts/part_01.rs");
