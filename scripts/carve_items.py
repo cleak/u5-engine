@@ -160,8 +160,11 @@ def parse_items(text: str) -> list[TopItem]:
                         end = n
                 else:
                     # Brace-body item. Walk forward until depth returns to 0 after the first `{`.
+                    # Track `()` and `[]` as well so `;` inside `[u8; N]` or fn parameters
+                    # doesn't get treated as a unit-struct terminator.
                     j = i
                     local_depth = 0
+                    bracket_depth = 0
                     seen_open = False
                     local_in_str = in_str
                     local_str_ch = str_ch
@@ -219,7 +222,16 @@ def parse_items(text: str) -> list[TopItem]:
                                 if seen_open and local_depth == 0:
                                     end = j + 1
                                     break
-                            elif c == ";" and not seen_open and local_depth == 0:
+                            elif c in "([":
+                                bracket_depth += 1
+                            elif c in ")]":
+                                bracket_depth -= 1
+                            elif (
+                                c == ";"
+                                and not seen_open
+                                and local_depth == 0
+                                and bracket_depth == 0
+                            ):
                                 # struct without body (unit struct or tuple struct;)
                                 end = j + 1
                                 break
