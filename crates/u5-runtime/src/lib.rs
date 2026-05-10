@@ -7,10 +7,18 @@
 //! to satisfy the <1000-lines-per-file rule while preserving the original
 //! flat namespace. Future work can carve these into proper modules.
 
+pub mod constants;
 pub mod direction;
+pub mod scene;
+pub mod shrine_virtue;
 pub mod test_fixtures;
+pub mod wind;
 
+pub use constants::*;
 pub use direction::Direction;
+pub use scene::{DungeonScene, Family, PlayTarget, Scene, WorldPlane};
+pub use shrine_virtue::ShrineVirtue;
+pub use wind::WindState;
 
 include!("parts/part_01.rs");
 include!("parts/part_02.rs");
