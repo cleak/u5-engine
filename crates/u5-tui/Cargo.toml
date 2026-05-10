@@ -5,11 +5,11 @@ edition.workspace = true
 
 [features]
 default = []
-visual = ["dep:bevy"]
+visual = ["dep:u5-bevy"]
 
 [dependencies]
 u5-runtime = { workspace = true }
-bevy = { workspace = true, optional = true }
+u5-bevy = { workspace = true, optional = true }
 
 [[bin]]
 name = "u5-engine"

@@ -4357,7 +4357,7 @@ version = "0.1.0"
 name = "u5-tui"
 version = "0.1.0"
 dependencies = [
- "bevy",
+ "u5-bevy",
  "u5-runtime",
 ]
 
