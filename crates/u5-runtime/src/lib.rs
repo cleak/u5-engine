@@ -2,10 +2,6 @@
 //!
 //! This crate owns the simulation, parsers, and rules. It has no UI
 //! dependencies. UI shells (`u5-tui`, `u5-bevy`) consume its public API.
-//!
-//! The lib body is split across `parts/part_NN.rs` files via `include!`
-//! to satisfy the <1000-lines-per-file rule while preserving the original
-//! flat namespace. Future work can carve these into proper modules.
 
 pub mod active_object_io;
 pub mod animation;
@@ -28,6 +24,7 @@ pub mod misc_tables_io;
 pub mod npc_runtime;
 pub mod party;
 pub mod play_options;
+pub mod play_state_impl;
 pub mod play_state_struct;
 pub mod predicates;
 pub mod report;
@@ -91,19 +88,36 @@ pub use world_tables_io::*;
 pub use world_tables_io_get_pickup::*;
 pub use world_tables_io_locations::*;
 
-include!("parts/part_01.rs");
-include!("parts/part_02.rs");
-include!("parts/part_03.rs");
-include!("parts/part_04.rs");
-include!("parts/part_05.rs");
-include!("parts/part_06.rs");
-include!("parts/part_07.rs");
-include!("parts/part_08.rs");
-include!("parts/part_09.rs");
-include!("parts/part_10.rs");
-include!("parts/part_11.rs");
-include!("parts/part_12.rs");
-include!("parts/part_13.rs");
-include!("parts/part_14.rs");
-include!("parts/part_15.rs");
-include!("parts/part_16.rs");
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::fs;
+    use std::io;
+    use std::path::{Path, PathBuf};
+
+    use super::*;
+    use crate::test_fixtures::*;
+    include!("tests_inline/chunk_01.rs");
+    include!("tests_inline/chunk_02.rs");
+    include!("tests_inline/chunk_03.rs");
+    include!("tests_inline/chunk_04.rs");
+    include!("tests_inline/chunk_05.rs");
+    include!("tests_inline/chunk_06.rs");
+    include!("tests_inline/chunk_07.rs");
+    include!("tests_inline/chunk_08.rs");
+    include!("tests_inline/chunk_09.rs");
+    include!("tests_inline/chunk_10.rs");
+    include!("tests_inline/chunk_11.rs");
+    include!("tests_inline/chunk_12.rs");
+    include!("tests_inline/chunk_13.rs");
+    include!("tests_inline/chunk_14.rs");
+    include!("tests_inline/chunk_15.rs");
+    include!("tests_inline/chunk_16.rs");
+    include!("tests_inline/chunk_17.rs");
+    include!("tests_inline/chunk_18.rs");
+    include!("tests_inline/chunk_19.rs");
+    include!("tests_inline/chunk_20.rs");
+    include!("tests_inline/chunk_21.rs");
+    include!("tests_inline/chunk_22.rs");
+    include!("tests_inline/chunk_23.rs");
+}

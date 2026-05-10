@@ -1,3 +1,10 @@
+use std::collections::{HashMap, VecDeque};
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
+
+use crate::*;
+
 impl PlayState {
     pub fn npc_can_step(&self, npc_index: usize, x: usize, y: usize, floor: u8) -> bool {
         if x >= 32

@@ -1,3 +1,10 @@
+use std::collections::{HashMap, VecDeque};
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
+
+use crate::*;
+
 impl PlayState {
     pub fn climb_outdoors(&mut self, game_dir: &Path, plane: WorldPlane) -> io::Result<MoveOutcome> {
         if self.climbing_gear == 0 {
