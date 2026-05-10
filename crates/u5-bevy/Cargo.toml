@@ -1,0 +1,8 @@
+[package]
+name = "u5-bevy"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+u5-runtime = { workspace = true }
+bevy = { workspace = true }

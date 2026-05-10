@@ -1,0 +1,16 @@
+[package]
+name = "u5-tui"
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = []
+visual = ["dep:bevy"]
+
+[dependencies]
+u5-runtime = { workspace = true }
+bevy = { workspace = true, optional = true }
+
+[[bin]]
+name = "u5-engine"
+path = "src/main.rs"

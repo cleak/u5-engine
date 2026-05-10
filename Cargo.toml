@@ -1,11 +1,16 @@
-[package]
-name = "u5-engine"
+[workspace]
+resolver = "3"
+members = [
+    "crates/u5-runtime",
+    "crates/u5-tui",
+    "crates/u5-bevy",
+]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 
-[features]
-default = []
-visual = ["dep:bevy"]
-
-[dependencies]
-bevy = { version = "0.16", optional = true }
+[workspace.dependencies]
+u5-runtime = { path = "crates/u5-runtime" }
+u5-bevy = { path = "crates/u5-bevy" }
+bevy = "0.16"
