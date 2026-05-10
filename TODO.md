@@ -279,11 +279,18 @@ experience.
 
 ### Bevy Integration
 
-- Establish a Bevy app shell.
-  - Game state resource wraps or adapts the existing `PlayState`.
-  - Input systems call existing command handlers.
-  - Rendering systems consume state without duplicating gameplay rules.
-  - Asset loading uses local `C:\Games\U5-Clean` files at runtime.
+- A first visual slice now exists behind `cargo run --features visual --
+  --visual ...`. It opens one Bevy window, renders a single CPU-generated
+  RGBA framebuffer of the existing top-down viewport into one `Image`, and
+  routes keyboard input through the same handlers used by the terminal play
+  loop. Dungeon scenes still fall back to a placeholder notice because the
+  first-person renderer is not part of this slice.
+
+- Establish a Bevy app shell. (visual slice landed)
+  - Game state resource wraps or adapts the existing `PlayState`. (done)
+  - Input systems call existing command handlers. (done)
+  - Rendering systems consume state without duplicating gameplay rules. (done)
+  - Asset loading uses local `C:\Games\U5-Clean` files at runtime. (done)
 
 - Separate engine core from presentation.
   - Move pure parsing/model/gameplay code out of `main.rs`.

@@ -4,6 +4,9 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+#[cfg(feature = "visual")]
+mod visual;
+
 const DEFAULT_GAME_DIR: &str = r"C:\Games\U5-Clean";
 const REPORT_PATH: &str = "reports/lb-throne-room-slice.txt";
 const WORLD_LOCATION_TABLE_FILE: &str = "world_locations.tsv";
@@ -2238,7 +2241,50 @@ impl TileViewport {
         }
         self.pixels.get(y * self.width + x).copied()
     }
+
+    #[cfg_attr(not(any(test, feature = "visual")), allow(dead_code))]
+    fn to_rgba(&self) -> Vec<u8> {
+        let palette: &[[u8; 3]] = match self.depth {
+            TileGraphicsDepth::Ega16 => &EGA_PALETTE_RGB,
+            TileGraphicsDepth::Cga4 => &CGA_PALETTE_RGB,
+        };
+        let mut rgba = Vec::with_capacity(self.pixels.len() * 4);
+        let limit = palette.len();
+        for &index in &self.pixels {
+            let rgb = palette[(index as usize) % limit];
+            rgba.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
+        }
+        rgba
+    }
 }
+
+#[cfg_attr(not(any(test, feature = "visual")), allow(dead_code))]
+const EGA_PALETTE_RGB: [[u8; 3]; 16] = [
+    [0x00, 0x00, 0x00],
+    [0x00, 0x00, 0xaa],
+    [0x00, 0xaa, 0x00],
+    [0x00, 0xaa, 0xaa],
+    [0xaa, 0x00, 0x00],
+    [0xaa, 0x00, 0xaa],
+    [0xaa, 0x55, 0x00],
+    [0xaa, 0xaa, 0xaa],
+    [0x55, 0x55, 0x55],
+    [0x55, 0x55, 0xff],
+    [0x55, 0xff, 0x55],
+    [0x55, 0xff, 0xff],
+    [0xff, 0x55, 0x55],
+    [0xff, 0x55, 0xff],
+    [0xff, 0xff, 0x55],
+    [0xff, 0xff, 0xff],
+];
+
+#[cfg_attr(not(any(test, feature = "visual")), allow(dead_code))]
+const CGA_PALETTE_RGB: [[u8; 3]; 4] = [
+    [0x00, 0x00, 0x00],
+    [0x55, 0xff, 0xff],
+    [0xff, 0x55, 0xff],
+    [0xff, 0xff, 0xff],
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TopDownRenderArea {
@@ -11078,6 +11124,7 @@ fn moonstone_bury_tile_allowed(tile: u8) -> bool {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CliArgs {
     play: bool,
+    visual: bool,
     raster_diagnostics: bool,
     raster_depth: TileGraphicsDepth,
     play_script: Option<Vec<String>>,
@@ -11193,6 +11240,9 @@ fn main() -> io::Result<()> {
         print!("{CLI_USAGE}");
         return Ok(());
     }
+    if args.visual {
+        return run_visual_dispatch(args);
+    }
     if args.play {
         return run_play_loop(
             &args.game_dir,
@@ -11204,6 +11254,20 @@ fn main() -> io::Result<()> {
     }
 
     run_report(&args.game_dir)
+}
+
+#[cfg(feature = "visual")]
+fn run_visual_dispatch(args: CliArgs) -> io::Result<()> {
+    visual::run_visual_loop(&args.game_dir, args.play_options, args.raster_depth)
+}
+
+#[cfg(not(feature = "visual"))]
+fn run_visual_dispatch(_args: CliArgs) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "--visual requires building with --features visual (e.g. \
+         `cargo run --features visual -- --visual <GAME_DIR>`).",
+    ))
 }
 
 fn run_report(game_dir: &Path) -> io::Result<()> {
@@ -11853,6 +11917,7 @@ where
     I::Item: Into<String>,
 {
     let mut play = false;
+    let mut visual = false;
     let mut raster_diagnostics = false;
     let mut raster_depth = TileGraphicsDepth::Ega16;
     let mut play_script = None;
@@ -11870,6 +11935,7 @@ where
         match arg.as_str() {
             "--help" | "-h" => help = true,
             "--play" => play = true,
+            "--visual" => visual = true,
             "--play-script" => {
                 play = true;
                 let value = args.next().ok_or_else(|| {
@@ -11984,6 +12050,7 @@ where
     if help {
         return Ok(CliArgs {
             play: false,
+            visual: false,
             raster_diagnostics: false,
             raster_depth,
             play_script: None,
@@ -12022,6 +12089,7 @@ where
 
     Ok(CliArgs {
         play,
+        visual,
         raster_diagnostics,
         raster_depth,
         play_script,
@@ -12055,12 +12123,16 @@ OPTIONS:
         --from-init           Seed play options from INIT.GAM (debug).
         --raster-diagnostics  Emit per-frame raster diagnostics.
         --raster-depth <D>    ega|cga (default ega).
+        --visual              Launch the Bevy top-down visual harness.
+                              Requires building with `--features visual`.
 
 SMOKE COMMANDS:
     cargo run -- C:\\Games\\U5-Clean
     cargo run -- --play C:\\Games\\U5-Clean
     cargo run -- --play-script \"z;q\" C:\\Games\\U5-Clean
     cargo run -- --play --scene DUNGEON:0 --floor 0 C:\\Games\\U5-Clean
+    cargo run --features visual -- --visual --scene BRITANNIA C:\\Games\\U5-Clean
+    cargo run --features visual -- --visual --scene CASTLE:0 --floor 0 C:\\Games\\U5-Clean
 ";
 
 fn load_play_options_from_save(game_dir: &Path) -> io::Result<PlayOptions> {
@@ -31970,6 +32042,53 @@ CASTLE:0 8
                 aux3: 0,
             }
         );
+    }
+
+    #[test]
+    fn tile_viewport_to_rgba_matches_dimensions_and_palette() {
+        let mut state = test_state(open_grid(), 1, 1);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let viewport = state.render_top_down_frame(1, &atlas).unwrap().unwrap();
+
+        let rgba = viewport.to_rgba();
+
+        assert_eq!(rgba.len(), viewport.width * viewport.height * 4);
+        for chunk in rgba.chunks_exact(4) {
+            assert_eq!(chunk[3], 0xff, "alpha should be opaque");
+        }
+        let player_index = (PLAYER_TILE % atlas.depth.pixel_limit()) as usize;
+        let expected_player_rgb = EGA_PALETTE_RGB[player_index];
+        let center_pixel_offset =
+            (viewport.height / 2) * viewport.width * 4 + (viewport.width / 2) * 4;
+        let center = &rgba[center_pixel_offset..center_pixel_offset + 4];
+        assert_eq!(
+            [center[0], center[1], center[2]],
+            expected_player_rgb,
+            "centre cell should display the player tile in EGA RGB"
+        );
+        assert!(
+            rgba.iter().any(|&byte| byte != 0),
+            "framebuffer should not be entirely zero",
+        );
+    }
+
+    #[test]
+    fn tile_viewport_to_rgba_uses_cga_palette_for_cga_atlas() {
+        let mut state = test_state(open_grid(), 1, 1);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Cga4);
+        let viewport = state.render_top_down_frame(1, &atlas).unwrap().unwrap();
+
+        let rgba = viewport.to_rgba();
+
+        assert_eq!(rgba.len(), viewport.width * viewport.height * 4);
+        for chunk in rgba.chunks_exact(4) {
+            let rgb = [chunk[0], chunk[1], chunk[2]];
+            assert!(
+                CGA_PALETTE_RGB.contains(&rgb),
+                "RGB {rgb:?} should match the CGA palette",
+            );
+            assert_eq!(chunk[3], 0xff);
+        }
     }
 
     #[test]

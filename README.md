@@ -36,6 +36,47 @@ the Lord British castle binding verified by the report:
 cargo run -- --play C:\Games\U5-Clean
 ```
 
+## Bevy visual mode (first slice)
+
+A minimal Bevy frontend renders the same `PlayState` to a real window instead
+of the terminal. It is feature-gated so the default build keeps the lean
+verification dependency surface, and it currently covers only top-down
+overworld and town scenes:
+
+```powershell
+cargo run --features visual -- --visual --scene BRITANNIA C:\Games\U5-Clean
+cargo run --features visual -- --visual --scene CASTLE:0 --floor 0 C:\Games\U5-Clean
+```
+
+The window draws a single CPU-generated 11x11 tile viewport (an `EGA` or `CGA`
+indexed framebuffer converted to RGBA) into one Bevy `Image` and displays it
+through one nearest-neighbor sprite. Gameplay still lives in `PlayState`: the
+input system maps keyboard events into the same handlers used by the terminal
+harness, so movement, blocking, doors, and supported area transitions work out
+of the box. Active dungeon scenes show a `Dungeon view is text-only in this
+slice` notice underneath the viewport; combat, shops, conversations,
+character creation, and the first-person dungeon renderer remain out of scope
+for this slice.
+
+Input map (visual mode):
+
+| Key                                                 | Action            |
+|-----------------------------------------------------|-------------------|
+| `W`/`A`/`S`/`D`, arrow keys, numpad 8/4/2/6         | Cardinal movement |
+| Numpad 7/9/1/3                                      | Diagonal movement |
+| `E`                                                 | Enter             |
+| `O`                                                 | Open              |
+| `K`                                                 | Klimb             |
+| `,` / `.`                                           | `<` / `>` floor   |
+| `Space`                                             | Pass              |
+| `Z`                                                 | Stats             |
+| `Esc`                                               | Quit              |
+
+`--scene`, `--floor`, `--debug-enter`, `--time`, `--wind`, `--transport`,
+`--from-save`, and `--from-init` work the same way they do in terminal play
+mode. The terminal harness is unchanged; building without `--features visual`
+skips the Bevy dependency entirely.
+
 Add `--raster-diagnostics` to play mode to exercise the atlas-backed top-down
 renderer each prompt. It prints only viewport dimensions and a hash of palette
 indices, not raw asset pixels. The diagnostic defaults to the EGA `.16` atlas;

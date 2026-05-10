@@ -3,4 +3,9 @@ name = "u5-engine"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+visual = ["dep:bevy"]
+
 [dependencies]
+bevy = { version = "0.16", optional = true }
