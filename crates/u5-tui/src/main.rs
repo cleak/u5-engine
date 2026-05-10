@@ -1,7 +1,8 @@
 use std::env;
 use std::io;
 
-use u5_runtime::{CliArgs, parse_cli_args, run_play_loop, run_report};
+use u5_runtime::{CliArgs, parse_cli_args, run_report};
+use u5_tui::run_play_loop;
 
 fn main() -> io::Result<()> {
     let args = parse_cli_args(env::args().skip(1))?;

@@ -1,7 +1,6 @@
 use std::collections::{HashMap, VecDeque};
-use std::env;
 use std::fs;
-use std::io::{self, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 
 pub const DEFAULT_GAME_DIR: &str = r"C:\Games\U5-Clean";
@@ -369,7 +368,7 @@ pub enum Family {
 }
 
 impl Family {
-    fn from_scene(scene: u8) -> Option<Self> {
+    pub fn from_scene(scene: u8) -> Option<Self> {
         if scene == 0 || scene > 32 {
             return None;
         }
@@ -382,7 +381,7 @@ impl Family {
         }
     }
 
-    fn stem(self) -> &'static str {
+    pub fn stem(self) -> &'static str {
         match self {
             Self::Towne => "TOWNE",
             Self::Dwelling => "DWELLING",
@@ -391,7 +390,7 @@ impl Family {
         }
     }
 
-    fn from_stem(stem: &str) -> Option<Self> {
+    pub fn from_stem(stem: &str) -> Option<Self> {
         match stem.to_ascii_uppercase().as_str() {
             "TOWNE" | "TOWN" => Some(Self::Towne),
             "DWELLING" => Some(Self::Dwelling),
@@ -410,7 +409,7 @@ pub struct Scene {
 }
 
 impl Scene {
-    fn new(byte: u8) -> io::Result<Self> {
+    pub fn new(byte: u8) -> io::Result<Self> {
         let family = Family::from_scene(byte).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -424,11 +423,11 @@ impl Scene {
         })
     }
 
-    fn key(self) -> String {
+    pub fn key(self) -> String {
         format!("{}:{}", self.family.stem(), self.block)
     }
 
-    fn from_key(value: &str) -> io::Result<Self> {
+    pub fn from_key(value: &str) -> io::Result<Self> {
         if let Some((family, block)) = value.split_once(':') {
             let family = Family::from_stem(family).ok_or_else(|| {
                 io::Error::new(
@@ -469,7 +468,7 @@ pub struct DungeonScene {
 }
 
 impl DungeonScene {
-    fn new(byte: u8) -> io::Result<Self> {
+    pub fn new(byte: u8) -> io::Result<Self> {
         if !(33..=40).contains(&byte) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -482,7 +481,7 @@ impl DungeonScene {
         })
     }
 
-    fn from_record(record: u8) -> io::Result<Self> {
+    pub fn from_record(record: u8) -> io::Result<Self> {
         if record > 7 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -492,11 +491,11 @@ impl DungeonScene {
         Self::new(33 + record)
     }
 
-    fn key(self) -> String {
+    pub fn key(self) -> String {
         format!("DUNGEON:{}", self.record)
     }
 
-    fn name(self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self.record {
             0 => "Deceit",
             1 => "Despise",
@@ -519,7 +518,7 @@ pub enum PlayTarget {
 }
 
 impl PlayTarget {
-    fn from_key(value: &str) -> io::Result<Self> {
+    pub fn from_key(value: &str) -> io::Result<Self> {
         if let Some(plane) = WorldPlane::from_key(value) {
             return Ok(Self::World(plane));
         }
@@ -551,7 +550,7 @@ impl PlayTarget {
         }
     }
 
-    fn key(self) -> String {
+    pub fn key(self) -> String {
         match self {
             Self::Town(scene) => scene.key(),
             Self::Dungeon(scene) => scene.key(),
@@ -567,7 +566,7 @@ pub enum WorldPlane {
 }
 
 impl WorldPlane {
-    fn from_key(value: &str) -> Option<Self> {
+    pub fn from_key(value: &str) -> Option<Self> {
         if value.eq_ignore_ascii_case("UNDERWORLD") || value.eq_ignore_ascii_case("UNDER") {
             Some(Self::Underworld)
         } else if value.eq_ignore_ascii_case("OVERWORLD")
@@ -581,7 +580,7 @@ impl WorldPlane {
         }
     }
 
-    fn from_save_z(z: u8) -> Self {
+    pub fn from_save_z(z: u8) -> Self {
         if z == 0 {
             Self::Britannia
         } else {
@@ -589,21 +588,21 @@ impl WorldPlane {
         }
     }
 
-    fn key(self) -> &'static str {
+    pub fn key(self) -> &'static str {
         match self {
             Self::Britannia => "BRITANNIA",
             Self::Underworld => "UNDERWORLD",
         }
     }
 
-    fn file_name(self) -> &'static str {
+    pub fn file_name(self) -> &'static str {
         match self {
             Self::Britannia => "BRIT.DAT",
             Self::Underworld => "UNDER.DAT",
         }
     }
 
-    fn save_floor(self) -> i8 {
+    pub fn save_floor(self) -> i8 {
         match self {
             Self::Britannia => 0,
             Self::Underworld => -1,
@@ -624,7 +623,7 @@ pub enum ShrineVirtue {
 }
 
 impl ShrineVirtue {
-    fn from_key(value: &str) -> Option<Self> {
+    pub fn from_key(value: &str) -> Option<Self> {
         let value = match value.split_once(':') {
             Some((prefix, suffix)) if prefix.eq_ignore_ascii_case("SHRINE") => suffix,
             _ => value,
@@ -642,7 +641,7 @@ impl ShrineVirtue {
         }
     }
 
-    fn index(self) -> usize {
+    pub fn index(self) -> usize {
         match self {
             Self::Honesty => 0,
             Self::Compassion => 1,
@@ -655,11 +654,11 @@ impl ShrineVirtue {
         }
     }
 
-    fn bit(self) -> u8 {
+    pub fn bit(self) -> u8 {
         1 << self.index()
     }
 
-    fn name(self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self {
             Self::Honesty => "Honesty",
             Self::Compassion => "Compassion",
@@ -672,7 +671,7 @@ impl ShrineVirtue {
         }
     }
 
-    fn mantra(self) -> &'static str {
+    pub fn mantra(self) -> &'static str {
         match self {
             Self::Honesty => "Ahm",
             Self::Compassion => "Mu",
@@ -699,7 +698,7 @@ pub enum Direction {
 }
 
 impl Direction {
-    fn delta(self) -> (isize, isize) {
+    pub fn delta(self) -> (isize, isize) {
         match self {
             Self::NorthWest => (-1, -1),
             Self::North => (0, -1),
@@ -712,7 +711,7 @@ impl Direction {
         }
     }
 
-    fn from_play_key(key: char) -> Option<Self> {
+    pub fn from_play_key(key: char) -> Option<Self> {
         match key.to_ascii_lowercase() {
             '7' | 'y' => Some(Self::NorthWest),
             '8' | 'w' => Some(Self::North),
@@ -726,11 +725,11 @@ impl Direction {
         }
     }
 
-    fn is_cardinal(self) -> bool {
+    pub fn is_cardinal(self) -> bool {
         matches!(self, Self::North | Self::East | Self::South | Self::West)
     }
 
-    fn opposite_cardinal(self) -> Option<Self> {
+    pub fn opposite_cardinal(self) -> Option<Self> {
         match self {
             Self::North => Some(Self::South),
             Self::East => Some(Self::West),
@@ -740,7 +739,7 @@ impl Direction {
         }
     }
 
-    fn turn_left_cardinal(self) -> Option<Self> {
+    pub fn turn_left_cardinal(self) -> Option<Self> {
         match self {
             Self::North => Some(Self::West),
             Self::West => Some(Self::South),
@@ -750,7 +749,7 @@ impl Direction {
         }
     }
 
-    fn turn_right_cardinal(self) -> Option<Self> {
+    pub fn turn_right_cardinal(self) -> Option<Self> {
         match self {
             Self::North => Some(Self::East),
             Self::East => Some(Self::South),
@@ -785,7 +784,7 @@ pub enum WindState {
 }
 
 impl WindState {
-    fn from_key(value: &str) -> io::Result<Self> {
+    pub fn from_key(value: &str) -> io::Result<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "calm" | "none" | "0" => Ok(Self::Calm),
             "north" | "n" => Ok(Self::North),
@@ -799,7 +798,7 @@ impl WindState {
         }
     }
 
-    fn from_save_byte(byte: u8) -> Self {
+    pub fn from_save_byte(byte: u8) -> Self {
         // The public spec verifies only the clean seed's 0 byte; use --wind for
         // semantic non-calm test states until the save-byte table is promoted.
         match byte {
@@ -808,7 +807,7 @@ impl WindState {
         }
     }
 
-    fn direction(self) -> Option<Direction> {
+    pub fn direction(self) -> Option<Direction> {
         match self {
             Self::Calm => None,
             Self::North => Some(Direction::North),
@@ -818,7 +817,7 @@ impl WindState {
         }
     }
 
-    fn name(self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self {
             Self::Calm => "Calm",
             Self::North => "North",
@@ -828,7 +827,7 @@ impl WindState {
         }
     }
 
-    fn status_message(self) -> &'static str {
+    pub fn status_message(self) -> &'static str {
         match self {
             Self::Calm => "Calm Winds",
             Self::North => "North Winds",
@@ -838,7 +837,7 @@ impl WindState {
         }
     }
 
-    fn rel_hur_next(self) -> Self {
+    pub fn rel_hur_next(self) -> Self {
         match self {
             Self::Calm => Self::North,
             Self::North => Self::South,

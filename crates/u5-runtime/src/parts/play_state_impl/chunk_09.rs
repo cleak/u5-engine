@@ -1,5 +1,5 @@
 impl PlayState {
-    fn apply_world_damage_tile(&mut self, entry: WorldDamageTileEntry) -> String {
+    pub fn apply_world_damage_tile(&mut self, entry: WorldDamageTileEntry) -> String {
         let mut checked = 0;
         let mut reports = Vec::new();
         for index in 0..self.party.len() {
@@ -25,11 +25,11 @@ impl PlayState {
         }
     }
 
-    fn world_damage_tile_roll(&self, member_index: usize, entry: WorldDamageTileEntry) -> u8 {
+    pub fn world_damage_tile_roll(&self, member_index: usize, entry: WorldDamageTileEntry) -> u8 {
         1 + (self.world_damage_tile_seed(member_index, entry) % 8)
     }
 
-    fn world_damage_tile_seed(&self, member_index: usize, entry: WorldDamageTileEntry) -> u8 {
+    pub fn world_damage_tile_seed(&self, member_index: usize, entry: WorldDamageTileEntry) -> u8 {
         self.turn as u8
             ^ self.clock.hour.wrapping_mul(3)
             ^ self.clock.minute.wrapping_mul(5)
@@ -38,7 +38,7 @@ impl PlayState {
             ^ (member_index as u8).wrapping_mul(13)
     }
 
-    fn apply_world_encounter_probe(
+    pub fn apply_world_encounter_probe(
         &mut self,
         game_dir: &Path,
         plane: WorldPlane,
@@ -85,7 +85,7 @@ impl PlayState {
         Ok(Some(slot))
     }
 
-    fn world_encounter_roll(&self, entry: WorldEncounterEntry) -> u8 {
+    pub fn world_encounter_roll(&self, entry: WorldEncounterEntry) -> u8 {
         let seed = self.turn as u8
             ^ self.clock.hour.wrapping_mul(3)
             ^ self.clock.minute.wrapping_mul(5)
@@ -98,7 +98,7 @@ impl PlayState {
         1 + (seed % 30)
     }
 
-    fn apply_world_waterfall_sweep(
+    pub fn apply_world_waterfall_sweep(
         &mut self,
         game_dir: &Path,
         plane: WorldPlane,
@@ -159,7 +159,7 @@ impl PlayState {
         Ok(WorldWaterfallSweep::Settled { steps: swept_steps })
     }
 
-    fn apply_world_plane_transition(
+    pub fn apply_world_plane_transition(
         &mut self,
         game_dir: &Path,
         entry: WorldPlaneTransitionEntry,
@@ -208,7 +208,7 @@ impl PlayState {
         Ok(())
     }
 
-    fn apply_world_plane_fall_damage(
+    pub fn apply_world_plane_fall_damage(
         &mut self,
         entry: WorldPlaneTransitionEntry,
     ) -> Option<String> {
@@ -241,7 +241,7 @@ impl PlayState {
         }
     }
 
-    fn world_plane_fall_damage_roll(
+    pub fn world_plane_fall_damage_roll(
         &self,
         member_index: usize,
         entry: WorldPlaneTransitionEntry,
@@ -249,7 +249,7 @@ impl PlayState {
         1 + (self.world_plane_fall_damage_seed(member_index, entry) % 5)
     }
 
-    fn world_plane_fall_damage_seed(
+    pub fn world_plane_fall_damage_seed(
         &self,
         member_index: usize,
         entry: WorldPlaneTransitionEntry,
@@ -264,7 +264,7 @@ impl PlayState {
             ^ (member_index as u8).wrapping_mul(19)
     }
 
-    fn render_text_frame(&mut self, radius: usize) -> String {
+    pub fn render_text_frame(&mut self, radius: usize) -> String {
         self.sync_player_object();
         let frame = self.render_text_view(radius);
         self.visibility_dirty = false;
@@ -284,7 +284,7 @@ impl PlayState {
         Ok(viewport)
     }
 
-    fn render_top_down_viewport(
+    pub fn render_top_down_viewport(
         &self,
         radius: usize,
         atlas: &TileAtlas,
@@ -336,7 +336,7 @@ impl PlayState {
         Ok(Some(viewport))
     }
 
-    fn top_down_render_area(&self) -> Option<TopDownRenderArea> {
+    pub fn top_down_render_area(&self) -> Option<TopDownRenderArea> {
         match self.area {
             Area::Town { .. } => Some(TopDownRenderArea::Town),
             Area::World { plane } => Some(TopDownRenderArea::World(plane)),
@@ -344,7 +344,7 @@ impl PlayState {
         }
     }
 
-    fn top_down_view_tile(
+    pub fn top_down_view_tile(
         &self,
         area: TopDownRenderArea,
         px: isize,
@@ -393,7 +393,7 @@ impl PlayState {
         }
     }
 
-    fn render_text_view(&self, radius: usize) -> String {
+    pub fn render_text_view(&self, radius: usize) -> String {
         let mut out = String::new();
         match self.area {
             Area::Town { scene, floor } => {
@@ -493,7 +493,7 @@ impl PlayState {
         out
     }
 
-    fn surface_visibility_radius(&self, requested: usize) -> usize {
+    pub fn surface_visibility_radius(&self, requested: usize) -> usize {
         if self.ambient_light == 0 || self.ambient_light >= FULL_DAYLIGHT {
             return requested;
         }
@@ -514,7 +514,7 @@ impl PlayState {
         requested.min(cap)
     }
 
-    fn world_visibility_radius(&self, requested: usize) -> usize {
+    pub fn world_visibility_radius(&self, requested: usize) -> usize {
         if matches!(self.area, Area::World { .. })
             && is_water_tile(self.grid[world_cell_index(self.player.x, self.player.y)])
         {
@@ -524,7 +524,7 @@ impl PlayState {
         }
     }
 
-    fn town_cell_visible(
+    pub fn town_cell_visible(
         &self,
         px: isize,
         py: isize,
@@ -546,12 +546,12 @@ impl PlayState {
         })
     }
 
-    fn town_cell_blocks_sight(&self, x: usize, y: usize) -> bool {
+    pub fn town_cell_blocks_sight(&self, x: usize, y: usize) -> bool {
         self.sight_blocking_object_at_current_floor(x, y).is_some()
             || surface_tile_blocks_sight(self.grid[y * 32 + x])
     }
 
-    fn world_cell_visible(
+    pub fn world_cell_visible(
         &self,
         px: isize,
         py: isize,
@@ -569,26 +569,26 @@ impl PlayState {
         })
     }
 
-    fn world_cell_blocks_sight(&self, x: usize, y: usize) -> bool {
+    pub fn world_cell_blocks_sight(&self, x: usize, y: usize) -> bool {
         self.sight_blocking_object_at_current_floor(x, y).is_some()
             || surface_tile_blocks_sight(self.grid[world_cell_index(x, y)])
     }
 
-    fn advance_turn(&mut self) {
+    pub fn advance_turn(&mut self) {
         let minutes = self.turn_minute_increment();
         self.advance_turn_with_minutes(minutes);
     }
 
-    fn advance_turn_with_minutes(&mut self, minutes: u8) {
+    pub fn advance_turn_with_minutes(&mut self, minutes: u8) {
         self.advance_turn_with_minutes_and_door_tick(minutes, true);
     }
 
-    fn advance_turn_without_door_tick(&mut self) {
+    pub fn advance_turn_without_door_tick(&mut self) {
         let minutes = self.turn_minute_increment();
         self.advance_turn_with_minutes_and_door_tick(minutes, false);
     }
 
-    fn advance_turn_with_minutes_and_door_tick(&mut self, minutes: u8, tick_doors: bool) {
+    pub fn advance_turn_with_minutes_and_door_tick(&mut self, minutes: u8, tick_doors: bool) {
         let effective_minutes = self.timing_status.effective_minutes(minutes);
         self.turn += 1;
         let previous_hour = self.clock.hour;
@@ -620,11 +620,11 @@ impl PlayState {
         self.advance_animation_clock();
     }
 
-    fn mode_zero_cleanup(&mut self) {
+    pub fn mode_zero_cleanup(&mut self) {
         self.recompute_daylight();
     }
 
-    fn recompute_daylight(&mut self) {
+    pub fn recompute_daylight(&mut self) {
         if self.ambient_light >= DAYLIGHT_SENTINEL_MIN {
             return;
         }
@@ -643,7 +643,7 @@ impl PlayState {
         }
     }
 
-    fn base_daylight(&self) -> u8 {
+    pub fn base_daylight(&self) -> u8 {
         match self.area {
             Area::Dungeon { .. }
             | Area::World {
@@ -658,7 +658,7 @@ impl PlayState {
         }
     }
 
-    fn advance_visual_tick(&mut self) {
+    pub fn advance_visual_tick(&mut self) {
         self.sync_player_object();
         if self.time_stop_counter == 0 && !matches!(self.area, Area::Dungeon { .. }) {
             self.animate_active_objects();
@@ -666,12 +666,12 @@ impl PlayState {
         self.advance_animation_clock();
     }
 
-    fn decay_light_counters(&mut self, units: u8) {
+    pub fn decay_light_counters(&mut self, units: u8) {
         self.torch_counter = self.torch_counter.saturating_sub(units);
         self.light_spell_counter = self.light_spell_counter.saturating_sub(units);
     }
 
-    fn age_active_effect(&mut self) {
+    pub fn age_active_effect(&mut self) {
         if self.active_effect_counter == 0 {
             self.active_effect_tag = None;
             return;
@@ -682,11 +682,11 @@ impl PlayState {
         }
     }
 
-    fn has_personal_light(&self) -> bool {
+    pub fn has_personal_light(&self) -> bool {
         self.torch_counter != 0 || self.light_spell_counter != 0
     }
 
-    fn dungeon_torch_duration_roll(&self) -> u8 {
+    pub fn dungeon_torch_duration_roll(&self) -> u8 {
         let roll = self.turn as u8
             ^ self.clock.hour
             ^ self.clock.minute
@@ -695,14 +695,14 @@ impl PlayState {
         DUNGEON_TORCH_DURATION_MIN + (roll & 0x0f)
     }
 
-    fn turn_minute_increment(&self) -> u8 {
+    pub fn turn_minute_increment(&self) -> u8 {
         match self.area {
             Area::World { .. } => 2,
             _ => 1,
         }
     }
 
-    fn advance_active_objects(&mut self) {
+    pub fn advance_active_objects(&mut self) {
         if matches!(self.area, Area::Dungeon { .. }) {
             return;
         }
@@ -710,14 +710,14 @@ impl PlayState {
         self.prune_far_overworld_objects();
     }
 
-    fn advance_animation_clock(&mut self) {
+    pub fn advance_animation_clock(&mut self) {
         self.animation.tick_static_tiles();
         if !self.visible_moongate_cells().is_empty() {
             self.animation.tick_moongate();
         }
     }
 
-    fn animate_active_objects(&mut self) {
+    pub fn animate_active_objects(&mut self) {
         for slot in 1..self.active_objects.len() {
             if self.active_objects[slot].is_empty()
                 || self.active_objects[slot].is_player()
@@ -755,7 +755,7 @@ impl PlayState {
         }
     }
 
-    fn try_drift_active_ship(&mut self, slot: usize, tick: PhaseTick) -> ActiveShipWind {
+    pub fn try_drift_active_ship(&mut self, slot: usize, tick: PhaseTick) -> ActiveShipWind {
         let Area::World { plane } = self.area else {
             return ActiveShipWind::None;
         };
@@ -822,7 +822,7 @@ impl PlayState {
         ActiveShipWind::Drifted
     }
 
-    fn try_wander_active_object(&mut self, slot: usize) -> bool {
+    pub fn try_wander_active_object(&mut self, slot: usize) -> bool {
         let Area::World { plane } = self.area else {
             return false;
         };
@@ -862,7 +862,7 @@ impl PlayState {
         true
     }
 
-    fn prune_far_overworld_objects(&mut self) {
+    pub fn prune_far_overworld_objects(&mut self) {
         if !matches!(self.area, Area::World { .. }) {
             return;
         }

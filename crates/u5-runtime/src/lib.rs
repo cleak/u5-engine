@@ -7,6 +7,8 @@
 //! to satisfy the <1000-lines-per-file rule while preserving the original
 //! flat namespace. Future work can carve these into proper modules.
 
+pub mod test_fixtures;
+
 include!("parts/part_01.rs");
 include!("parts/part_02.rs");
 include!("parts/part_03.rs");

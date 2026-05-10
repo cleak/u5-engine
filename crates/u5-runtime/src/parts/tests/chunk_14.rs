@@ -795,45 +795,8 @@
         }
     }
 
-    #[test]
-    fn raster_diagnostic_line_reports_hash_without_pixels() {
-        let mut state = test_state(open_grid(), 1, 1);
-        state.visibility_dirty = true;
-        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
-        let viewport = state.render_top_down_viewport(1, &atlas).unwrap().unwrap();
-        let expected_hash = hash_palette_indices(&viewport.pixels);
-        state.visibility_dirty = true;
 
-        let line = raster_diagnostic_line(&mut state, 1, &atlas).unwrap();
 
-        assert!(line.contains("48x48 px"));
-        assert!(line.contains("3x3 cells"));
-        assert!(line.contains("EGA tile atlas"));
-        assert!(line.contains(&format!("{expected_hash:016x}")));
-        assert!(!state.visibility_dirty);
-    }
-
-    #[test]
-    fn raster_diagnostic_line_reports_selected_cga_depth() {
-        let mut state = test_state(open_grid(), 1, 1);
-        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Cga4);
-
-        let line = raster_diagnostic_line(&mut state, 1, &atlas).unwrap();
-
-        assert!(line.contains("CGA tile atlas"));
-    }
-
-    #[test]
-    fn raster_diagnostic_line_reports_dungeon_unavailable_without_clearing_dirty() {
-        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
-        state.visibility_dirty = true;
-        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
-
-        let line = raster_diagnostic_line(&mut state, 1, &atlas).unwrap();
-
-        assert_eq!(line, "Raster viewport: unavailable for dungeon mode.");
-        assert!(state.visibility_dirty);
-    }
 
     #[test]
     fn top_down_viewport_skips_dungeon_area() {

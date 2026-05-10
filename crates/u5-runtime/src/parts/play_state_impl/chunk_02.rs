@@ -1,5 +1,5 @@
 impl PlayState {
-    fn step_non_town(
+    pub fn step_non_town(
         &mut self,
         direction: Direction,
         nx: isize,
@@ -16,11 +16,11 @@ impl PlayState {
     }
 
     #[cfg(test)]
-    fn handle_dungeon_key(&mut self, key: char, game_dir: &Path) -> io::Result<bool> {
+    pub fn handle_dungeon_key(&mut self, key: char, game_dir: &Path) -> io::Result<bool> {
         self.handle_dungeon_key_with_inline(key, game_dir, None, None, None, None)
     }
 
-    fn handle_dungeon_key_with_inline(
+    pub fn handle_dungeon_key_with_inline(
         &mut self,
         key: char,
         game_dir: &Path,
@@ -182,7 +182,7 @@ impl PlayState {
         }
     }
 
-    fn handle_top_down_key_with_inline(
+    pub fn handle_top_down_key_with_inline(
         &mut self,
         key: char,
         game_dir: &Path,
@@ -340,7 +340,7 @@ impl PlayState {
         Ok(true)
     }
 
-    fn cast_spell_from_suffix(&mut self, suffix: &str, game_dir: &Path) -> io::Result<MoveOutcome> {
+    pub fn cast_spell_from_suffix(&mut self, suffix: &str, game_dir: &Path) -> io::Result<MoveOutcome> {
         let spell_code = inline_spell_code(suffix);
         if spell_code.is_empty() {
             self.message = cast_prompt_message();
@@ -647,7 +647,7 @@ impl PlayState {
         }
     }
 
-    fn mix_reagents_from_suffix(&mut self, suffix: &str) -> MoveOutcome {
+    pub fn mix_reagents_from_suffix(&mut self, suffix: &str) -> MoveOutcome {
         if self.reagents.iter().all(|count| *count == 0) {
             self.message = "No reagents owned!".to_string();
             return MoveOutcome::Blocked;
@@ -712,13 +712,13 @@ impl PlayState {
         }
     }
 
-    fn shrine_prompt_at_current_position(&self, game_dir: &Path) -> io::Result<Option<String>> {
+    pub fn shrine_prompt_at_current_position(&self, game_dir: &Path) -> io::Result<Option<String>> {
         Ok(self
             .current_shrine_entry(game_dir)?
             .map(|entry| shrine_prompt_message(entry.virtue)))
     }
 
-    fn meditate_shrine_from_suffix(
+    pub fn meditate_shrine_from_suffix(
         &mut self,
         suffix: &str,
         game_dir: &Path,
@@ -818,7 +818,7 @@ impl PlayState {
         Ok(Some(outcome))
     }
 
-    fn current_shrine_entry(&self, game_dir: &Path) -> io::Result<Option<ShrineEntry>> {
+    pub fn current_shrine_entry(&self, game_dir: &Path) -> io::Result<Option<ShrineEntry>> {
         let Area::World { plane } = self.area else {
             return Ok(None);
         };
@@ -839,14 +839,14 @@ impl PlayState {
         }))
     }
 
-    fn add_shrine_standing(&mut self, virtue: ShrineVirtue, amount: u8) -> u8 {
+    pub fn add_shrine_standing(&mut self, virtue: ShrineVirtue, amount: u8) -> u8 {
         let standing = &mut self.shrine_standing[virtue.index()];
         let before = *standing;
         *standing = (*standing).saturating_add(amount).min(SHRINE_STANDING_MAX);
         (*standing).saturating_sub(before)
     }
 
-    fn apply_shrine_stat_reward(&mut self, virtue: ShrineVirtue) -> Vec<String> {
+    pub fn apply_shrine_stat_reward(&mut self, virtue: ShrineVirtue) -> Vec<String> {
         let mut notes = Vec::new();
         match virtue {
             ShrineVirtue::Honesty => self.add_avatar_intelligence_reward(&mut notes),
@@ -874,26 +874,26 @@ impl PlayState {
         notes
     }
 
-    fn add_avatar_strength_reward(&mut self, notes: &mut Vec<String>) {
+    pub fn add_avatar_strength_reward(&mut self, notes: &mut Vec<String>) {
         if self.avatar_stats.increase_strength() {
             notes.push("STR +1".to_string());
         }
     }
 
-    fn add_avatar_dexterity_reward(&mut self, notes: &mut Vec<String>) {
+    pub fn add_avatar_dexterity_reward(&mut self, notes: &mut Vec<String>) {
         if self.avatar_stats.increase_dexterity() {
             self.sync_avatar_dexterity_to_party();
             notes.push("DEX +1".to_string());
         }
     }
 
-    fn add_avatar_intelligence_reward(&mut self, notes: &mut Vec<String>) {
+    pub fn add_avatar_intelligence_reward(&mut self, notes: &mut Vec<String>) {
         if self.avatar_stats.increase_intelligence() {
             notes.push("INT +1".to_string());
         }
     }
 
-    fn sync_avatar_dexterity_to_party(&mut self) {
+    pub fn sync_avatar_dexterity_to_party(&mut self) {
         if let Some(member) = self.party.iter_mut().find(|member| member.slot == 0) {
             member.climb_stat = self.avatar_stats.dexterity;
         }

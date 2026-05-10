@@ -1,5 +1,5 @@
 impl PlayState {
-    fn rest_with_watch(
+    pub fn rest_with_watch(
         &mut self,
         hours: Option<u8>,
         game_dir: Option<&Path>,
@@ -49,7 +49,7 @@ impl PlayState {
         Ok(MoveOutcome::Rested)
     }
 
-    fn apply_rest_recovery_tick(&mut self) -> (u16, u16) {
+    pub fn apply_rest_recovery_tick(&mut self) -> (u16, u16) {
         let mut recovered_hp = 0;
         let mut recovered_mana = 0;
         for index in 0..self.party.len() {
@@ -64,15 +64,15 @@ impl PlayState {
         (recovered_hp, recovered_mana)
     }
 
-    fn rest_hp_recovery_roll(&self, member_index: usize) -> u8 {
+    pub fn rest_hp_recovery_roll(&self, member_index: usize) -> u8 {
         1 + (self.rest_hp_recovery_seed(member_index) % 4)
     }
 
-    fn rest_mana_recovery_roll(&self, member_index: usize) -> u8 {
+    pub fn rest_mana_recovery_roll(&self, member_index: usize) -> u8 {
         1 + ((self.rest_hp_recovery_seed(member_index) ^ 0x5a) % 2)
     }
 
-    fn rest_hp_recovery_seed(&self, member_index: usize) -> u8 {
+    pub fn rest_hp_recovery_seed(&self, member_index: usize) -> u8 {
         self.turn as u8
             ^ self.clock.hour.wrapping_mul(3)
             ^ self.clock.minute.wrapping_mul(5)
@@ -81,7 +81,7 @@ impl PlayState {
             ^ (member_index as u8).wrapping_mul(13)
     }
 
-    fn wake_initial_rest_sleepers(&mut self, asleep_at_start: &[u8]) -> usize {
+    pub fn wake_initial_rest_sleepers(&mut self, asleep_at_start: &[u8]) -> usize {
         let mut woke = 0;
         for member in &mut self.party {
             if member.status == b'S' && member.hp > 0 && asleep_at_start.contains(&member.slot) {
@@ -92,13 +92,13 @@ impl PlayState {
         woke
     }
 
-    fn idle_tick(&mut self) -> MoveOutcome {
+    pub fn idle_tick(&mut self) -> MoveOutcome {
         self.advance_visual_tick();
         self.message = "Idle animation tick.".to_string();
         MoveOutcome::IdleTick
     }
 
-    fn ignite_torch(&mut self) -> MoveOutcome {
+    pub fn ignite_torch(&mut self) -> MoveOutcome {
         if self.torches == 0 {
             self.message = "No torches!".to_string();
             return MoveOutcome::Blocked;
@@ -128,7 +128,7 @@ impl PlayState {
         MoveOutcome::Ignited
     }
 
-    fn klimb_command(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+    pub fn klimb_command(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         match self.area {
             Area::Town { scene, floor } => {
                 let tile = self.grid[self.player.y * 32 + self.player.x];
@@ -172,7 +172,7 @@ impl PlayState {
         }
     }
 
-    fn connected_town_climb_choices(
+    pub fn connected_town_climb_choices(
         &self,
         game_dir: &Path,
         scene: Scene,
@@ -195,7 +195,7 @@ impl PlayState {
         )
     }
 
-    fn available_town_climb_choices(
+    pub fn available_town_climb_choices(
         &self,
         game_dir: &Path,
         scene: Scene,
@@ -214,7 +214,7 @@ impl PlayState {
         Ok(choices)
     }
 
-    fn climb(&mut self, game_dir: &Path, intent: ClimbIntent) -> io::Result<MoveOutcome> {
+    pub fn climb(&mut self, game_dir: &Path, intent: ClimbIntent) -> io::Result<MoveOutcome> {
         let Area::Town { scene, floor } = self.area else {
             return self.climb_dungeon(game_dir, intent);
         };
@@ -260,7 +260,7 @@ impl PlayState {
         }))
     }
 
-    fn climb_dungeon(&mut self, game_dir: &Path, intent: ClimbIntent) -> io::Result<MoveOutcome> {
+    pub fn climb_dungeon(&mut self, game_dir: &Path, intent: ClimbIntent) -> io::Result<MoveOutcome> {
         let Area::Dungeon { scene, level } = self.area else {
             self.message = "Not climbable!".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -340,7 +340,7 @@ impl PlayState {
         ))
     }
 
-    fn dungeon_deeper_transition_at(
+    pub fn dungeon_deeper_transition_at(
         &self,
         game_dir: &Path,
         scene: DungeonScene,
@@ -360,7 +360,7 @@ impl PlayState {
         )
     }
 
-    fn apply_dungeon_deeper_transition(
+    pub fn apply_dungeon_deeper_transition(
         &mut self,
         game_dir: &Path,
         entry: DungeonDeeperTransitionEntry,
@@ -391,7 +391,7 @@ impl PlayState {
         Ok(())
     }
 
-    fn enter_current_location(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+    pub fn enter_current_location(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         let Area::World { plane } = self.area else {
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -441,7 +441,7 @@ impl PlayState {
         self.enter_world_target(game_dir, plane, target, None, true)
     }
 
-    fn enter_moongate(
+    pub fn enter_moongate(
         &mut self,
         game_dir: &Path,
         from_plane: WorldPlane,
@@ -451,7 +451,7 @@ impl PlayState {
         self.apply_moongate(game_dir, from_plane, entry)
     }
 
-    fn apply_moongate(
+    pub fn apply_moongate(
         &mut self,
         game_dir: &Path,
         from_plane: WorldPlane,
@@ -499,7 +499,7 @@ impl PlayState {
         ))
     }
 
-    fn resolve_moongate_prompt(
+    pub fn resolve_moongate_prompt(
         &mut self,
         key: char,
         game_dir: &Path,
@@ -528,7 +528,7 @@ impl PlayState {
         }
     }
 
-    fn enter_world_target(
+    pub fn enter_world_target(
         &mut self,
         game_dir: &Path,
         plane: WorldPlane,
@@ -655,7 +655,7 @@ impl PlayState {
         })
     }
 
-    fn restore_return_world(&mut self) -> bool {
+    pub fn restore_return_world(&mut self) -> bool {
         let Some(return_world) = self.return_world.take() else {
             return false;
         };
@@ -679,7 +679,7 @@ impl PlayState {
         true
     }
 
-    fn restore_world_for_target(
+    pub fn restore_world_for_target(
         &mut self,
         game_dir: &Path,
         target: PlayTarget,
@@ -719,7 +719,7 @@ impl PlayState {
         Ok(true)
     }
 
-    fn moongate_at(&self, plane: WorldPlane, x: usize, y: usize) -> Option<MoongateEntry> {
+    pub fn moongate_at(&self, plane: WorldPlane, x: usize, y: usize) -> Option<MoongateEntry> {
         if plane != WorldPlane::Britannia {
             return None;
         }
@@ -734,15 +734,15 @@ impl PlayState {
         })
     }
 
-    fn moongates_visible_by_light(&self) -> bool {
+    pub fn moongates_visible_by_light(&self) -> bool {
         self.ambient_light >= FULL_DAYLIGHT
     }
 
-    fn moongate_origin_tile_matches(&self, entry: MoongateEntry) -> bool {
+    pub fn moongate_origin_tile_matches(&self, entry: MoongateEntry) -> bool {
         entry.matches_origin_tile(self.grid[world_cell_index(entry.x, entry.y)])
     }
 
-    fn visible_moongate_at(&self, plane: WorldPlane, x: usize, y: usize) -> bool {
+    pub fn visible_moongate_at(&self, plane: WorldPlane, x: usize, y: usize) -> bool {
         if plane != WorldPlane::Britannia || !self.moongates_visible_by_light() {
             return false;
         }
@@ -758,7 +758,7 @@ impl PlayState {
         })
     }
 
-    fn visible_moongate_cells(&self) -> Vec<(usize, usize)> {
+    pub fn visible_moongate_cells(&self) -> Vec<(usize, usize)> {
         if !matches!(
             self.area,
             Area::World {
@@ -787,7 +787,7 @@ impl PlayState {
         cells
     }
 
-    fn world_plane_transition_at(
+    pub fn world_plane_transition_at(
         &self,
         game_dir: &Path,
         plane: WorldPlane,
@@ -813,7 +813,7 @@ impl PlayState {
         )
     }
 
-    fn apply_world_underfoot_plane_transition(
+    pub fn apply_world_underfoot_plane_transition(
         &mut self,
         game_dir: &Path,
         plane: WorldPlane,
@@ -831,7 +831,7 @@ impl PlayState {
         }))
     }
 
-    fn world_waterfall_at(
+    pub fn world_waterfall_at(
         &self,
         game_dir: &Path,
         plane: WorldPlane,
@@ -847,7 +847,7 @@ impl PlayState {
         }))
     }
 
-    fn world_damage_tile_at(
+    pub fn world_damage_tile_at(
         &self,
         game_dir: &Path,
         plane: WorldPlane,
@@ -861,7 +861,7 @@ impl PlayState {
         Ok(world_damage_tile_entry_at(&entries, plane, x, y, tile))
     }
 
-    fn append_world_damage_tile_message(
+    pub fn append_world_damage_tile_message(
         &mut self,
         game_dir: Option<&Path>,
         plane: WorldPlane,
@@ -875,7 +875,7 @@ impl PlayState {
         Ok(())
     }
 
-    fn apply_world_underfoot_damage(
+    pub fn apply_world_underfoot_damage(
         &mut self,
         game_dir: &Path,
         plane: WorldPlane,

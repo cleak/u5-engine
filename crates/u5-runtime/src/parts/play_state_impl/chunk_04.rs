@@ -1,5 +1,5 @@
 impl PlayState {
-    fn cast_rel_hur(&mut self, caster_index: usize) -> MoveOutcome {
+    pub fn cast_rel_hur(&mut self, caster_index: usize) -> MoveOutcome {
         if !matches!(self.area, Area::World { .. }) {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
@@ -26,7 +26,7 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    fn cast_gate_travel(
+    pub fn cast_gate_travel(
         &mut self,
         caster_index: usize,
         slot_index: usize,
@@ -67,7 +67,7 @@ impl PlayState {
         }
     }
 
-    fn use_item_command(
+    pub fn use_item_command(
         &mut self,
         request: Option<UseItemRequest>,
         game_dir: Option<&Path>,
@@ -86,7 +86,7 @@ impl PlayState {
         })
     }
 
-    fn use_moonstone_phase(&mut self, slot_index: Option<usize>) -> MoveOutcome {
+    pub fn use_moonstone_phase(&mut self, slot_index: Option<usize>) -> MoveOutcome {
         let Some(slot_index) = slot_index else {
             self.message = use_prompt_message();
             return MoveOutcome::Blocked;
@@ -120,7 +120,7 @@ impl PlayState {
         MoveOutcome::Used
     }
 
-    fn current_moonstone_bury_context(&self) -> Option<(u8, u8, u8, String)> {
+    pub fn current_moonstone_bury_context(&self) -> Option<(u8, u8, u8, String)> {
         match self.area {
             Area::World { plane } => Some((
                 0,
@@ -138,7 +138,7 @@ impl PlayState {
         }
     }
 
-    fn cast_spell_resource_gate(
+    pub fn cast_spell_resource_gate(
         &mut self,
         caster_index: usize,
         spell_index: usize,
@@ -173,7 +173,7 @@ impl PlayState {
         None
     }
 
-    fn apply_gate_travel(
+    pub fn apply_gate_travel(
         &mut self,
         game_dir: &Path,
         phase: usize,
@@ -240,7 +240,7 @@ impl PlayState {
         Ok(())
     }
 
-    fn turn_dungeon(&mut self, clockwise: bool) -> MoveOutcome {
+    pub fn turn_dungeon(&mut self, clockwise: bool) -> MoveOutcome {
         let Area::Dungeon { scene, level } = self.area else {
             self.message = "Turn is only meaningful in dungeon mode.".to_string();
             return MoveOutcome::Blocked;
@@ -265,11 +265,11 @@ impl PlayState {
         MoveOutcome::Moved
     }
 
-    fn look_dungeon(&mut self) -> MoveOutcome {
+    pub fn look_dungeon(&mut self) -> MoveOutcome {
         self.look_dungeon_with_drink(None, None)
     }
 
-    fn look_dungeon_with_drink(
+    pub fn look_dungeon_with_drink(
         &mut self,
         drink: Option<bool>,
         party_index: Option<usize>,
@@ -323,7 +323,7 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
-    fn apply_dungeon_fountain_effect(&mut self, member_index: usize, tile: u8) -> Option<String> {
+    pub fn apply_dungeon_fountain_effect(&mut self, member_index: usize, tile: u8) -> Option<String> {
         let subtype = tile & 0x0f;
         match subtype {
             0 => {
@@ -361,7 +361,7 @@ impl PlayState {
         }
     }
 
-    fn view_gem(&mut self) -> MoveOutcome {
+    pub fn view_gem(&mut self) -> MoveOutcome {
         if self.gems == 0 {
             self.message = "No gems!".to_string();
             return MoveOutcome::Blocked;
@@ -406,7 +406,7 @@ impl PlayState {
         }
     }
 
-    fn dungeon_vision_map(&self, level: u8) -> String {
+    pub fn dungeon_vision_map(&self, level: u8) -> String {
         let radius = DUNGEON_GEM_VIEW_RADIUS;
         let side = (radius * 2 + 1) as usize;
         let center = radius as usize;
@@ -472,7 +472,7 @@ impl PlayState {
         out
     }
 
-    fn dungeon_forward_view(&self, level: u8) -> String {
+    pub fn dungeon_forward_view(&self, level: u8) -> String {
         let mut out = String::from("First-person dungeon view:\n");
         out.push_str(&format!(
             "0: here {}\n",
@@ -513,7 +513,7 @@ impl PlayState {
         out
     }
 
-    fn describe_dungeon_offset(&self, level: u8, dx: isize, dy: isize) -> String {
+    pub fn describe_dungeon_offset(&self, level: u8, dx: isize, dy: isize) -> String {
         let x = self.player.x as isize + dx;
         let y = self.player.y as isize + dy;
         if !(0..DUNGEON_SIDE as isize).contains(&x) || !(0..DUNGEON_SIDE as isize).contains(&y) {
@@ -523,7 +523,7 @@ impl PlayState {
         }
     }
 
-    fn dungeon_offset_blocks_view(&self, level: u8, dx: isize, dy: isize) -> bool {
+    pub fn dungeon_offset_blocks_view(&self, level: u8, dx: isize, dy: isize) -> bool {
         let x = self.player.x as isize + dx;
         let y = self.player.y as isize + dy;
         if !(0..DUNGEON_SIDE as isize).contains(&x) || !(0..DUNGEON_SIDE as isize).contains(&y) {
@@ -533,7 +533,7 @@ impl PlayState {
         !is_dungeon_walkable(self.dungeon_cell(level, x as usize, y as usize))
     }
 
-    fn surface_gem_map(&self, radius: usize) -> String {
+    pub fn surface_gem_map(&self, radius: usize) -> String {
         let mut out = String::new();
         let px = self.player.x as isize;
         let py = self.player.y as isize;
@@ -587,22 +587,22 @@ impl PlayState {
     }
 
     #[cfg(test)]
-    fn look_facing(&mut self) -> MoveOutcome {
+    pub fn look_facing(&mut self) -> MoveOutcome {
         self.look_facing_with_table(None)
     }
 
-    fn look_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+    pub fn look_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         let look_table = load_look_table(game_dir)?;
         self.look_facing_with_resources(Some(&look_table), Some(game_dir))
     }
 
     #[cfg(test)]
-    fn look_facing_with_table(&mut self, look_table: Option<&LookTable>) -> MoveOutcome {
+    pub fn look_facing_with_table(&mut self, look_table: Option<&LookTable>) -> MoveOutcome {
         self.look_facing_with_resources(look_table, None)
             .expect("look without a game dir cannot perform file-backed look context")
     }
 
-    fn look_facing_with_resources(
+    pub fn look_facing_with_resources(
         &mut self,
         look_table: Option<&LookTable>,
         game_dir: Option<&Path>,
@@ -662,7 +662,7 @@ impl PlayState {
         }
     }
 
-    fn look_description(&self, tile: u8, look_table: Option<&LookTable>) -> String {
+    pub fn look_description(&self, tile: u8, look_table: Option<&LookTable>) -> String {
         let base = look_table
             .and_then(|table| {
                 table.description(tile as usize).filter(|description| {
@@ -684,7 +684,7 @@ impl PlayState {
         }
     }
 
-    fn look_description_for_world_tile(
+    pub fn look_description_for_world_tile(
         &self,
         tile: u8,
         look_table: Option<&LookTable>,
@@ -703,7 +703,7 @@ impl PlayState {
         Ok(format!("{base} ({name})"))
     }
 
-    fn world_dungeon_name_at(
+    pub fn world_dungeon_name_at(
         &self,
         game_dir: Option<&Path>,
         plane: WorldPlane,
@@ -734,11 +734,11 @@ impl PlayState {
         }))
     }
 
-    fn talk_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+    pub fn talk_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         self.talk_facing_with_game_dir_and_keyword(game_dir, None)
     }
 
-    fn talk_facing_with_game_dir_and_keyword(
+    pub fn talk_facing_with_game_dir_and_keyword(
         &mut self,
         game_dir: &Path,
         keyword: Option<&str>,
@@ -751,7 +751,7 @@ impl PlayState {
         Ok(self.talk_facing_with_dialogue_and_keyword(&dialogue, keyword))
     }
 
-    fn facing_talk_target(&self) -> Option<(u8, usize, usize)> {
+    pub fn facing_talk_target(&self) -> Option<(u8, usize, usize)> {
         let (dx, dy) = self.player.facing.delta();
         let x = self.player.x as isize + dx;
         let y = self.player.y as isize + dy;
@@ -780,11 +780,11 @@ impl PlayState {
     }
 
     #[cfg(test)]
-    fn talk_facing_with_dialogue(&mut self, dialogue: &HashMap<u16, Vec<String>>) -> MoveOutcome {
+    pub fn talk_facing_with_dialogue(&mut self, dialogue: &HashMap<u16, Vec<String>>) -> MoveOutcome {
         self.talk_facing_with_dialogue_and_keyword(dialogue, None)
     }
 
-    fn talk_facing_with_dialogue_and_keyword(
+    pub fn talk_facing_with_dialogue_and_keyword(
         &mut self,
         dialogue: &HashMap<u16, Vec<String>>,
         keyword: Option<&str>,

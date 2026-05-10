@@ -1,10 +1,10 @@
 impl PlayState {
-    fn z_stats(&mut self) -> MoveOutcome {
+    pub fn z_stats(&mut self) -> MoveOutcome {
         self.message = self.z_stats_message();
         MoveOutcome::Observed
     }
 
-    fn z_stats_message(&self) -> String {
+    pub fn z_stats_message(&self) -> String {
         let area = self.area_status_label();
         let reagents_total: u16 = self.reagents.iter().map(|count| *count as u16).sum();
         let spells = self.spell_stock_summary();
@@ -42,7 +42,7 @@ impl PlayState {
         )
     }
 
-    fn active_effect_status(&self) -> String {
+    pub fn active_effect_status(&self) -> String {
         match (self.active_effect_tag, self.active_effect_counter) {
             (Some(tag), counter) if counter > 0 => {
                 format!("{}/{}", char::from(tag), counter)
@@ -51,7 +51,7 @@ impl PlayState {
         }
     }
 
-    fn toggle_typeahead_buffer(&mut self) {
+    pub fn toggle_typeahead_buffer(&mut self) {
         self.typeahead_buffer_enabled = !self.typeahead_buffer_enabled;
         self.message = if self.typeahead_buffer_enabled {
             "Buffer On."
@@ -61,7 +61,7 @@ impl PlayState {
         .to_string();
     }
 
-    fn exit_to_dos_prompt(&mut self, confirm: Option<bool>) -> PlayInputDisposition {
+    pub fn exit_to_dos_prompt(&mut self, confirm: Option<bool>) -> PlayInputDisposition {
         match confirm {
             None => {
                 self.message = "Exit to DOS? Use QY to exit or QN to cancel.".to_string();
@@ -78,7 +78,7 @@ impl PlayState {
         }
     }
 
-    fn typeahead_status_label(&self) -> &'static str {
+    pub fn typeahead_status_label(&self) -> &'static str {
         if self.typeahead_buffer_enabled {
             "on"
         } else {
@@ -86,7 +86,7 @@ impl PlayState {
         }
     }
 
-    fn area_status_label(&self) -> String {
+    pub fn area_status_label(&self) -> String {
         match self.area {
             Area::Town { scene, floor } => format!("{} floor {floor}", scene.key()),
             Area::Dungeon { scene, level } => format!("{} level {level}", scene.key()),
@@ -94,7 +94,7 @@ impl PlayState {
         }
     }
 
-    fn spell_stock_summary(&self) -> String {
+    pub fn spell_stock_summary(&self) -> String {
         let stock = self
             .spell_charges
             .iter()
@@ -109,7 +109,7 @@ impl PlayState {
         }
     }
 
-    fn party_status_summary(&self) -> String {
+    pub fn party_status_summary(&self) -> String {
         let party = self
             .party
             .iter()
@@ -134,7 +134,7 @@ impl PlayState {
         }
     }
 
-    fn new_order_from_suffix(&mut self, suffix: &str) -> MoveOutcome {
+    pub fn new_order_from_suffix(&mut self, suffix: &str) -> MoveOutcome {
         let Some((first, second)) = parse_inline_party_swap(suffix) else {
             self.message = new_order_prompt_message();
             return MoveOutcome::PromptDeclined;
@@ -162,7 +162,7 @@ impl PlayState {
         MoveOutcome::Used
     }
 
-    fn cast_light_spell(
+    pub fn cast_light_spell(
         &mut self,
         caster_index: usize,
         spell_index: usize,
@@ -180,7 +180,7 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    fn cast_active_effect_spell(
+    pub fn cast_active_effect_spell(
         &mut self,
         caster_index: usize,
         spell_index: usize,
@@ -204,7 +204,7 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    fn cast_awaken(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
+    pub fn cast_awaken(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
         if target_index >= self.party.len() {
             self.message = party_member_unavailable_message(self.party.len());
             return MoveOutcome::Blocked;
@@ -227,7 +227,7 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    fn cast_cure(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
+    pub fn cast_cure(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
         if target_index >= self.party.len() {
             self.message = party_member_unavailable_message(self.party.len());
             return MoveOutcome::Blocked;
@@ -250,7 +250,7 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    fn cast_heal(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
+    pub fn cast_heal(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
         if target_index >= self.party.len() {
             self.message = party_member_unavailable_message(self.party.len());
             return MoveOutcome::Blocked;
@@ -278,7 +278,7 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    fn cast_great_heal(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
+    pub fn cast_great_heal(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
         if target_index >= self.party.len() {
             self.message = party_member_unavailable_message(self.party.len());
             return MoveOutcome::Blocked;
@@ -307,7 +307,7 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    fn cast_resurrect(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
+    pub fn cast_resurrect(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
         if target_index >= self.party.len() {
             self.message = party_member_unavailable_message(self.party.len());
             return MoveOutcome::Blocked;
@@ -335,7 +335,7 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    fn cast_locate(&mut self, caster_index: usize) -> MoveOutcome {
+    pub fn cast_locate(&mut self, caster_index: usize) -> MoveOutcome {
         let Area::World { plane } = self.area else {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
@@ -360,7 +360,7 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
-    fn cast_peer(&mut self, caster_index: usize) -> MoveOutcome {
+    pub fn cast_peer(&mut self, caster_index: usize) -> MoveOutcome {
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, PEER_SPELL_INDEX, PEER_COST)
         {
@@ -372,7 +372,7 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
-    fn cast_x_ray(&mut self, caster_index: usize) -> MoveOutcome {
+    pub fn cast_x_ray(&mut self, caster_index: usize) -> MoveOutcome {
         if !spell_allowed_in_area(X_RAY_SPELL_INDEX, self.area) {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
@@ -388,7 +388,7 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
-    fn cast_create_food(&mut self, caster_index: usize) -> MoveOutcome {
+    pub fn cast_create_food(&mut self, caster_index: usize) -> MoveOutcome {
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, CREATE_FOOD_SPELL_INDEX, CREATE_FOOD_COST)
         {
@@ -403,7 +403,7 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    fn peer_view_message(&self) -> String {
+    pub fn peer_view_message(&self) -> String {
         match self.area {
             Area::Dungeon { scene, level } => format!(
                 "Peer view of {} ({}) level {} (spell; centered flood map, exact glyph/floodability edge cases out of scope):\n{}",
@@ -428,7 +428,7 @@ impl PlayState {
         }
     }
 
-    fn x_ray_view_message(&self) -> String {
+    pub fn x_ray_view_message(&self) -> String {
         match self.area {
             Area::Town { scene, floor } => format!(
                 "X-Ray view of {} floor {} (spell; first-playable full-fill 11x11 map):\n{}",
@@ -447,7 +447,7 @@ impl PlayState {
         }
     }
 
-    fn cast_open_spell(&mut self, caster_index: usize, game_dir: &Path) -> io::Result<MoveOutcome> {
+    pub fn cast_open_spell(&mut self, caster_index: usize, game_dir: &Path) -> io::Result<MoveOutcome> {
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, OPEN_SPELL_INDEX, OPEN_SPELL_COST)
         {
@@ -492,7 +492,7 @@ impl PlayState {
         ))
     }
 
-    fn cast_dungeon_level_spell(
+    pub fn cast_dungeon_level_spell(
         &mut self,
         caster_index: usize,
         spell_index: usize,
@@ -535,7 +535,7 @@ impl PlayState {
         })
     }
 
-    fn cast_dungeon_field_spell(
+    pub fn cast_dungeon_field_spell(
         &mut self,
         caster_index: usize,
         spell_index: usize,
@@ -592,7 +592,7 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    fn cast_dispel_field(
+    pub fn cast_dispel_field(
         &mut self,
         caster_index: usize,
         direction: Option<Direction>,
@@ -644,7 +644,7 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    fn cast_time_stop(&mut self, caster_index: usize) -> MoveOutcome {
+    pub fn cast_time_stop(&mut self, caster_index: usize) -> MoveOutcome {
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, TIME_STOP_SPELL_INDEX, TIME_STOP_COST)
         {
@@ -657,7 +657,7 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    fn cast_blink(
+    pub fn cast_blink(
         &mut self,
         caster_index: usize,
         direction: Option<Direction>,
@@ -698,7 +698,7 @@ impl PlayState {
         Ok(MoveOutcome::Cast)
     }
 
-    fn blink_target_at(
+    pub fn blink_target_at(
         &self,
         game_dir: &Path,
         direction: Direction,
@@ -715,7 +715,7 @@ impl PlayState {
         }))
     }
 
-    fn current_blink_context(&self) -> (PlayTarget, i8, usize, usize) {
+    pub fn current_blink_context(&self) -> (PlayTarget, i8, usize, usize) {
         match self.area {
             Area::World { plane } => (
                 PlayTarget::World(plane),
@@ -743,13 +743,13 @@ impl PlayState {
         }
     }
 
-    fn blink_source_matches(&self, entry: BlinkTargetEntry) -> bool {
+    pub fn blink_source_matches(&self, entry: BlinkTargetEntry) -> bool {
         entry.expected_from_tile.map_or(true, |expected| {
             expected == self.current_area_tile(entry.from_x, entry.from_y)
         })
     }
 
-    fn blink_destination_legal(
+    pub fn blink_destination_legal(
         &self,
         game_dir: &Path,
         entry: BlinkTargetEntry,
@@ -788,7 +788,7 @@ impl PlayState {
         }
     }
 
-    fn current_area_tile(&self, x: usize, y: usize) -> u8 {
+    pub fn current_area_tile(&self, x: usize, y: usize) -> u8 {
         match self.area {
             Area::World { .. } => self.grid[world_cell_index(x, y)],
             Area::Town { .. } => self.grid[y * 32 + x],
@@ -796,7 +796,7 @@ impl PlayState {
         }
     }
 
-    fn cast_magic_lock(&mut self, caster_index: usize, game_dir: &Path) -> io::Result<MoveOutcome> {
+    pub fn cast_magic_lock(&mut self, caster_index: usize, game_dir: &Path) -> io::Result<MoveOutcome> {
         let Area::Town { scene, floor } = self.area else {
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -834,7 +834,7 @@ impl PlayState {
         Ok(MoveOutcome::Cast)
     }
 
-    fn cast_unlock_magic(
+    pub fn cast_unlock_magic(
         &mut self,
         caster_index: usize,
         game_dir: &Path,

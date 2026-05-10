@@ -144,20 +144,6 @@
         assert_eq!(dungeon.message, "Passed.");
     }
 
-    #[test]
-    fn play_input_preserves_space_command_and_suffix() {
-        assert_eq!(play_input_key_and_suffix("\n"), None);
-        assert_eq!(play_input_key_and_suffix("\r\n"), None);
-        assert_eq!(play_input_key_and_suffix(" \n"), Some((' ', String::new())));
-        assert_eq!(
-            play_input_key_and_suffix("f4\r\n"),
-            Some(('f', "4".to_string()))
-        );
-        assert_eq!(
-            play_input_key_and_suffix(" f\n"),
-            Some((' ', "f".to_string()))
-        );
-    }
 
     #[test]
     fn inline_spell_code_uses_order_insensitive_selector_letters() {

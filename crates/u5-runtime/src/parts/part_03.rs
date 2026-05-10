@@ -56,7 +56,7 @@ pub enum WorldDamageEffect {
 }
 
 impl WorldDamageEffect {
-    fn from_key(key: &str) -> Option<Self> {
+    pub fn from_key(key: &str) -> Option<Self> {
         match key.to_ascii_uppercase().as_str() {
             "LAVA" => Some(Self::Lava),
             "DROWNING" | "WATER" => Some(Self::Drowning),
@@ -64,14 +64,14 @@ impl WorldDamageEffect {
         }
     }
 
-    fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::Lava => "lava",
             Self::Drowning => "drowning",
         }
     }
 
-    fn allows_transport(self, transport: TransportState) -> bool {
+    pub fn allows_transport(self, transport: TransportState) -> bool {
         match self {
             Self::Lava => matches!(
                 transport,
@@ -88,7 +88,7 @@ impl WorldDamageEffect {
         }
     }
 
-    fn damages_transport(self, transport: TransportState) -> bool {
+    pub fn damages_transport(self, transport: TransportState) -> bool {
         match self {
             Self::Lava => matches!(transport, TransportState::Carpet { .. }),
             Self::Drowning => matches!(transport, TransportState::Foot),
@@ -244,14 +244,14 @@ pub enum TownStairKind {
 }
 
 impl TownStairKind {
-    fn allows(self, intent: ClimbIntent) -> bool {
+    pub fn allows(self, intent: ClimbIntent) -> bool {
         matches!(
             (self, intent),
             (Self::Up, ClimbIntent::Up) | (Self::Down, ClimbIntent::Down) | (Self::Both, _)
         )
     }
 
-    fn intents(self) -> &'static [ClimbIntent] {
+    pub fn intents(self) -> &'static [ClimbIntent] {
         match self {
             Self::Up => &[ClimbIntent::Up],
             Self::Down => &[ClimbIntent::Down],
@@ -339,7 +339,7 @@ pub struct MoongateEntry {
 }
 
 impl MoongateEntry {
-    fn is_active_at(self, hour: u8) -> bool {
+    pub fn is_active_at(self, hour: u8) -> bool {
         match self.active_hours {
             Some((start, end)) if start <= end => (start..=end).contains(&hour),
             Some((start, end)) => hour >= start || hour <= end,
@@ -347,11 +347,11 @@ impl MoongateEntry {
         }
     }
 
-    fn is_single_ended(self) -> bool {
+    pub fn is_single_ended(self) -> bool {
         self.destination_x == u8::MAX as usize && self.destination_y == u8::MAX as usize
     }
 
-    fn matches_origin_tile(self, tile: u8) -> bool {
+    pub fn matches_origin_tile(self, tile: u8) -> bool {
         self.expected_tile
             .map_or(true, |expected_tile| expected_tile == tile)
     }
@@ -363,11 +363,11 @@ pub struct LookTable {
 }
 
 impl LookTable {
-    fn description(&self, tile: usize) -> Option<&str> {
+    pub fn description(&self, tile: usize) -> Option<&str> {
         self.descriptions.get(tile).map(String::as_str)
     }
 
-    fn is_sentinel(&self, description: &str) -> bool {
+    pub fn is_sentinel(&self, description: &str) -> bool {
         self.description(0)
             .map(|sentinel| description == sentinel)
             .unwrap_or(false)
@@ -381,7 +381,7 @@ pub enum TileGraphicsDepth {
 }
 
 impl TileGraphicsDepth {
-    fn from_key(value: &str) -> io::Result<Self> {
+    pub fn from_key(value: &str) -> io::Result<Self> {
         match value.to_ascii_lowercase().as_str() {
             "e" | "ega" | "ega16" | "16" => Ok(Self::Ega16),
             "c" | "cga" | "cga4" | "4" => Ok(Self::Cga4),
@@ -392,21 +392,21 @@ impl TileGraphicsDepth {
         }
     }
 
-    fn file_name(self) -> &'static str {
+    pub fn file_name(self) -> &'static str {
         match self {
             Self::Ega16 => TILES_EGA_FILE,
             Self::Cga4 => TILES_CGA_FILE,
         }
     }
 
-    fn body_len(self) -> usize {
+    pub fn body_len(self) -> usize {
         match self {
             Self::Ega16 => TILE_ATLAS_EGA_BODY_LEN,
             Self::Cga4 => TILE_ATLAS_CGA_BODY_LEN,
         }
     }
 
-    fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::Ega16 => "EGA tile atlas",
             Self::Cga4 => "CGA tile atlas",
@@ -414,15 +414,14 @@ impl TileGraphicsDepth {
     }
 
     #[cfg(test)]
-    fn file_suffix(self) -> &'static str {
+    pub fn file_suffix(self) -> &'static str {
         match self {
             Self::Ega16 => "16",
             Self::Cga4 => "4",
         }
     }
 
-    #[cfg(test)]
-    fn pixel_limit(self) -> u8 {
+    pub fn pixel_limit(self) -> u8 {
         match self {
             Self::Ega16 => 16,
             Self::Cga4 => 4,
@@ -437,7 +436,7 @@ pub struct TileAtlas {
 }
 
 impl TileAtlas {
-    fn tile_pixels(&self, tile: usize) -> Option<&[u8]> {
+    pub fn tile_pixels(&self, tile: usize) -> Option<&[u8]> {
         let start = tile.checked_mul(TILE_ATLAS_TILE_PIXELS)?;
         let end = start.checked_add(TILE_ATLAS_TILE_PIXELS)?;
         self.pixels.get(start..end)
@@ -456,7 +455,7 @@ pub struct TileViewport {
 
 impl TileViewport {
     #[cfg(test)]
-    fn pixel(&self, x: usize, y: usize) -> Option<u8> {
+    pub fn pixel(&self, x: usize, y: usize) -> Option<u8> {
         if x >= self.width || y >= self.height {
             return None;
         }
@@ -549,7 +548,7 @@ pub struct MonochromeBitmap {
 
 #[cfg(test)]
 impl MonochromeBitmap {
-    fn pixel(&self, x: usize, y: usize) -> Option<u8> {
+    pub fn pixel(&self, x: usize, y: usize) -> Option<u8> {
         if x >= self.width || y >= self.height {
             return None;
         }
@@ -580,7 +579,7 @@ pub struct FixedFont {
 
 #[cfg(test)]
 impl FixedFont {
-    fn glyph(&self, code: u8) -> Option<&MonochromeBitmap> {
+    pub fn glyph(&self, code: u8) -> Option<&MonochromeBitmap> {
         self.glyphs.get(code as usize)
     }
 }
@@ -601,7 +600,7 @@ pub struct ProportionalFont {
 
 #[cfg(test)]
 impl ProportionalFont {
-    fn glyph_for_code(&self, code: u8) -> Option<&ProportionalGlyph> {
+    pub fn glyph_for_code(&self, code: u8) -> Option<&ProportionalGlyph> {
         code.checked_sub(self.first_code)
             .and_then(|slot| self.glyphs.get(slot as usize))
     }
@@ -625,7 +624,7 @@ pub struct TilePassability {
 }
 
 impl TilePassability {
-    fn from_bytes(bytes: &[u8]) -> io::Result<Self> {
+    pub fn from_bytes(bytes: &[u8]) -> io::Result<Self> {
         if bytes.len() != TILE_PASSABILITY_LEN {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -640,7 +639,7 @@ impl TilePassability {
         Ok(Self { bytes: out })
     }
 
-    fn is_passable(&self, tile: u8) -> bool {
+    pub fn is_passable(&self, tile: u8) -> bool {
         let byte = self.bytes[(tile >> 3) as usize];
         let mask = 0x80u8 >> (tile & 7);
         byte & mask != 0

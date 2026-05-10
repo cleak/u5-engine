@@ -1,5 +1,5 @@
 impl PlayState {
-    fn step_dungeon(
+    pub fn step_dungeon(
         &mut self,
         direction: Direction,
         nx: isize,
@@ -119,7 +119,7 @@ impl PlayState {
         Ok(MoveOutcome::Moved)
     }
 
-    fn dungeon_teleport_at(
+    pub fn dungeon_teleport_at(
         &self,
         game_dir: Option<&Path>,
         scene: DungeonScene,
@@ -140,7 +140,7 @@ impl PlayState {
         )
     }
 
-    fn apply_dungeon_teleport(
+    pub fn apply_dungeon_teleport(
         &mut self,
         scene: DungeonScene,
         entry: DungeonTeleportEntry,
@@ -149,7 +149,7 @@ impl PlayState {
         self.apply_dungeon_teleport_transition(scene, entry, Some(direction), true)
     }
 
-    fn apply_dungeon_teleport_after_turn(
+    pub fn apply_dungeon_teleport_after_turn(
         &mut self,
         scene: DungeonScene,
         entry: DungeonTeleportEntry,
@@ -157,7 +157,7 @@ impl PlayState {
         self.apply_dungeon_teleport_transition(scene, entry, None, false)
     }
 
-    fn apply_dungeon_teleport_transition(
+    pub fn apply_dungeon_teleport_transition(
         &mut self,
         scene: DungeonScene,
         entry: DungeonTeleportEntry,
@@ -205,7 +205,7 @@ impl PlayState {
         })
     }
 
-    fn dungeon_wind_tile_extinguishes_torch(
+    pub fn dungeon_wind_tile_extinguishes_torch(
         &self,
         game_dir: Option<&Path>,
         scene: DungeonScene,
@@ -226,7 +226,7 @@ impl PlayState {
             .any(|entry| dungeon_wind_tile_matches(entry, scene, level, x, y, cell)))
     }
 
-    fn dungeon_exit_tile_at(
+    pub fn dungeon_exit_tile_at(
         &self,
         game_dir: Option<&Path>,
         scene: DungeonScene,
@@ -244,7 +244,7 @@ impl PlayState {
             .any(|entry| dungeon_exit_tile_matches(entry, scene, level, x, y, cell)))
     }
 
-    fn apply_dungeon_field_effect(&mut self, field: DungeonFieldEffect) -> String {
+    pub fn apply_dungeon_field_effect(&mut self, field: DungeonFieldEffect) -> String {
         if let Some(status) = field.status() {
             let mut affected = 0;
             for member in &mut self.party {
@@ -283,11 +283,11 @@ impl PlayState {
         "generic field subtype has no pinned first-playable effect".to_string()
     }
 
-    fn dungeon_field_damage_roll(&self, member_index: usize, field: DungeonFieldEffect) -> u8 {
+    pub fn dungeon_field_damage_roll(&self, member_index: usize, field: DungeonFieldEffect) -> u8 {
         1 + (self.dungeon_field_damage_seed(member_index, field) % 8)
     }
 
-    fn dungeon_field_damage_seed(&self, member_index: usize, field: DungeonFieldEffect) -> u8 {
+    pub fn dungeon_field_damage_seed(&self, member_index: usize, field: DungeonFieldEffect) -> u8 {
         self.turn as u8
             ^ self.clock.hour.wrapping_mul(7)
             ^ self.clock.minute.wrapping_mul(11)
@@ -297,11 +297,11 @@ impl PlayState {
             ^ field.damage_seed_bias()
     }
 
-    fn dungeon_fountain_damage_roll(&self, member_index: usize, tile: u8) -> u8 {
+    pub fn dungeon_fountain_damage_roll(&self, member_index: usize, tile: u8) -> u8 {
         self.dungeon_fountain_damage_seed(member_index, tile) % 8
     }
 
-    fn dungeon_fountain_damage_seed(&self, member_index: usize, tile: u8) -> u8 {
+    pub fn dungeon_fountain_damage_seed(&self, member_index: usize, tile: u8) -> u8 {
         self.turn as u8
             ^ self.clock.hour.wrapping_mul(5)
             ^ self.clock.minute.wrapping_mul(9)
@@ -312,7 +312,7 @@ impl PlayState {
             ^ (tile & 0x0f).wrapping_mul(29)
     }
 
-    fn resolve_dungeon_exit_tile(
+    pub fn resolve_dungeon_exit_tile(
         &mut self,
         game_dir: Option<&Path>,
         scene: DungeonScene,
@@ -327,7 +327,7 @@ impl PlayState {
         )
     }
 
-    fn resolve_dungeon_exit_tile_after_turn(
+    pub fn resolve_dungeon_exit_tile_after_turn(
         &mut self,
         game_dir: &Path,
         scene: DungeonScene,
@@ -342,7 +342,7 @@ impl PlayState {
         )
     }
 
-    fn resolve_dungeon_exit_tile_transition(
+    pub fn resolve_dungeon_exit_tile_transition(
         &mut self,
         game_dir: Option<&Path>,
         scene: DungeonScene,
@@ -372,7 +372,7 @@ impl PlayState {
         Ok(self.block_missing_dungeon_return(scene, level, event))
     }
 
-    fn block_missing_dungeon_return(
+    pub fn block_missing_dungeon_return(
         &mut self,
         scene: DungeonScene,
         level: u8,
@@ -386,7 +386,7 @@ impl PlayState {
         MoveOutcome::Blocked
     }
 
-    fn dungeon_door_entry_at(
+    pub fn dungeon_door_entry_at(
         &self,
         game_dir: Option<&Path>,
         scene: DungeonScene,
@@ -404,7 +404,7 @@ impl PlayState {
         }))
     }
 
-    fn dungeon_closed_door_at(
+    pub fn dungeon_closed_door_at(
         &self,
         game_dir: Option<&Path>,
         scene: DungeonScene,
@@ -418,7 +418,7 @@ impl PlayState {
             .is_some_and(|entry| dungeon_closed_door_matches(entry, cell)))
     }
 
-    fn dungeon_open_door_at(
+    pub fn dungeon_open_door_at(
         &self,
         game_dir: Option<&Path>,
         scene: DungeonScene,
@@ -432,7 +432,7 @@ impl PlayState {
             .is_some_and(|entry| entry.open_cell == cell))
     }
 
-    fn resolve_current_dungeon_room_trigger(
+    pub fn resolve_current_dungeon_room_trigger(
         &mut self,
         game_dir: Option<&Path>,
     ) -> io::Result<Option<MoveOutcome>> {
@@ -456,7 +456,7 @@ impl PlayState {
         )
     }
 
-    fn resolve_dungeon_room_trigger(
+    pub fn resolve_dungeon_room_trigger(
         &mut self,
         scene: DungeonScene,
         level: u8,
@@ -476,63 +476,63 @@ impl PlayState {
         MoveOutcome::Moved
     }
 
-    fn tile_walkable(&self, tile: u8) -> bool {
+    pub fn tile_walkable(&self, tile: u8) -> bool {
         is_tile_walkable_for_transport(tile, self.passability.as_ref(), self.player.transport)
     }
 
-    fn opened_town_door_key(scene: Scene, floor: i8, x: usize, y: usize) -> (u8, i8, usize, usize) {
+    pub fn opened_town_door_key(scene: Scene, floor: i8, x: usize, y: usize) -> (u8, i8, usize, usize) {
         (scene.byte, floor, x, y)
     }
 
-    fn is_recorded_open_town_door(&self, scene: Scene, floor: i8, x: usize, y: usize) -> bool {
+    pub fn is_recorded_open_town_door(&self, scene: Scene, floor: i8, x: usize, y: usize) -> bool {
         let key = Self::opened_town_door_key(scene, floor, x, y);
         self.opened_town_doors.contains(&key)
     }
 
-    fn record_open_town_door(&mut self, scene: Scene, floor: i8, x: usize, y: usize) {
+    pub fn record_open_town_door(&mut self, scene: Scene, floor: i8, x: usize, y: usize) {
         let key = Self::opened_town_door_key(scene, floor, x, y);
         if !self.opened_town_doors.contains(&key) {
             self.opened_town_doors.push(key);
         }
     }
 
-    fn forget_open_town_door(&mut self, scene: Scene, floor: i8, x: usize, y: usize) {
+    pub fn forget_open_town_door(&mut self, scene: Scene, floor: i8, x: usize, y: usize) {
         let key = Self::opened_town_door_key(scene, floor, x, y);
         self.opened_town_doors.retain(|entry| *entry != key);
     }
 
-    fn is_revealed_town_secret_door(&self, scene: Scene, floor: i8, x: usize, y: usize) -> bool {
+    pub fn is_revealed_town_secret_door(&self, scene: Scene, floor: i8, x: usize, y: usize) -> bool {
         let key = Self::opened_town_door_key(scene, floor, x, y);
         self.revealed_town_secret_doors.contains(&key)
     }
 
-    fn record_revealed_town_secret_door(&mut self, scene: Scene, floor: i8, x: usize, y: usize) {
+    pub fn record_revealed_town_secret_door(&mut self, scene: Scene, floor: i8, x: usize, y: usize) {
         let key = Self::opened_town_door_key(scene, floor, x, y);
         if !self.revealed_town_secret_doors.contains(&key) {
             self.revealed_town_secret_doors.push(key);
         }
     }
 
-    fn forget_revealed_town_secret_door(&mut self, scene: Scene, floor: i8, x: usize, y: usize) {
+    pub fn forget_revealed_town_secret_door(&mut self, scene: Scene, floor: i8, x: usize, y: usize) {
         let key = Self::opened_town_door_key(scene, floor, x, y);
         self.revealed_town_secret_doors
             .retain(|entry| *entry != key);
     }
 
-    fn clear_open_town_door_state(&mut self) {
+    pub fn clear_open_town_door_state(&mut self) {
         self.door_tracker = None;
         self.opened_town_doors.clear();
         self.revealed_town_secret_doors.clear();
     }
 
-    fn clear_town_floor_reload_door_state(&mut self) {
+    pub fn clear_town_floor_reload_door_state(&mut self) {
         self.door_tracker = None;
         let revealed = self.revealed_town_secret_doors.clone();
         self.opened_town_doors
             .retain(|entry| revealed.contains(entry));
     }
 
-    fn restore_revealed_town_secret_doors_for_floor(
+    pub fn restore_revealed_town_secret_doors_for_floor(
         &mut self,
         game_dir: &Path,
         scene: Scene,
@@ -569,7 +569,7 @@ impl PlayState {
         Ok(())
     }
 
-    fn resolve_dungeon_fall_trap(
+    pub fn resolve_dungeon_fall_trap(
         &mut self,
         scene: DungeonScene,
         start_level: u8,
@@ -580,7 +580,7 @@ impl PlayState {
         self.resolve_dungeon_fall_trap_transition(scene, start_level, x, y, game_dir, true)
     }
 
-    fn resolve_dungeon_fall_trap_transition(
+    pub fn resolve_dungeon_fall_trap_transition(
         &mut self,
         scene: DungeonScene,
         start_level: u8,
@@ -659,7 +659,7 @@ impl PlayState {
         ))
     }
 
-    fn step_world(
+    pub fn step_world(
         &mut self,
         mut direction: Direction,
         mut nx: isize,

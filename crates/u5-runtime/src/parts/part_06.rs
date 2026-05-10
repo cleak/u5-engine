@@ -1,31 +1,3 @@
-pub fn play_script_idle_tick_count(command: &str) -> io::Result<Option<usize>> {
-    let command = command.trim();
-    let lower = command.to_ascii_lowercase();
-    if matches!(lower.as_str(), "idle" | "tick" | "ticks") {
-        return Ok(Some(1));
-    }
-    let Some(value) = lower
-        .strip_prefix("idle:")
-        .or_else(|| lower.strip_prefix("tick:"))
-    else {
-        return Ok(None);
-    };
-    let count = value.parse::<usize>().map_err(|err| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("script idle command `{command}` has invalid tick count: {err}"),
-        )
-    })?;
-    if count == 0 || count > PLAY_SCRIPT_MAX_IDLE_TICKS {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!(
-                "script idle command `{command}` tick count must be 1..{PLAY_SCRIPT_MAX_IDLE_TICKS}"
-            ),
-        ));
-    }
-    Ok(Some(count))
-}
 
 pub fn split_play_script(script: &str) -> Vec<String> {
     script
@@ -34,24 +6,6 @@ pub fn split_play_script(script: &str) -> Vec<String> {
         .filter(|command| !command.is_empty())
         .map(str::to_string)
         .collect()
-}
-
-pub fn play_script_command_label(command: &str) -> String {
-    if command.is_empty() {
-        return "empty".to_string();
-    }
-    if let Some(function_key) = ansi_function_key(command.trim()) {
-        return format!("F{function_key}");
-    }
-    let mut label = String::new();
-    for ch in command.chars() {
-        if ch.is_control() {
-            label.push_str(&format!("\\x{:02x}", ch as u32));
-        } else {
-            label.push(ch);
-        }
-    }
-    label
 }
 
 pub fn parse_cli_args<I>(args: I) -> io::Result<CliArgs>

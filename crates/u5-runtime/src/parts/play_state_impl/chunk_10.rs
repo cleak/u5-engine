@@ -1,5 +1,5 @@
 impl PlayState {
-    fn tick_door_tracker(&mut self) {
+    pub fn tick_door_tracker(&mut self) {
         let Some(mut tracker) = self.door_tracker else {
             return;
         };
@@ -16,7 +16,7 @@ impl PlayState {
         }
     }
 
-    fn sync_player_object(&mut self) {
+    pub fn sync_player_object(&mut self) {
         let z = match self.area {
             Area::Town { floor, .. } => floor,
             Area::Dungeon { level, .. } => level as i8,
@@ -52,7 +52,7 @@ impl PlayState {
         }
     }
 
-    fn current_floor(&self) -> Option<i8> {
+    pub fn current_floor(&self) -> Option<i8> {
         match self.area {
             Area::Town { floor, .. } => Some(floor),
             Area::Dungeon { level, .. } => Some(level as i8),
@@ -60,14 +60,14 @@ impl PlayState {
         }
     }
 
-    fn boardable_vehicle_slot(&self) -> Option<BoardVehicleCandidate> {
+    pub fn boardable_vehicle_slot(&self) -> Option<BoardVehicleCandidate> {
         let positions = self.board_probe_positions();
         positions
             .into_iter()
             .find_map(|(x, y)| self.boardable_vehicle_slot_at(x, y))
     }
 
-    fn boardable_vehicle_slot_at(&self, x: usize, y: usize) -> Option<BoardVehicleCandidate> {
+    pub fn boardable_vehicle_slot_at(&self, x: usize, y: usize) -> Option<BoardVehicleCandidate> {
         let mut candidate = None;
         let mut blocked_by_occupant = false;
         for (slot, object) in self.active_objects.iter().enumerate().skip(1) {
@@ -95,7 +95,7 @@ impl PlayState {
         })
     }
 
-    fn board_probe_positions(&self) -> Vec<(usize, usize)> {
+    pub fn board_probe_positions(&self) -> Vec<(usize, usize)> {
         let mut out = vec![(self.player.x, self.player.y)];
         let (dx, dy) = self.player.facing.delta();
         match self.area {
@@ -117,7 +117,7 @@ impl PlayState {
         out
     }
 
-    fn vehicle_exit_landing(&self, game_dir: Option<&Path>) -> io::Result<Option<(usize, usize)>> {
+    pub fn vehicle_exit_landing(&self, game_dir: Option<&Path>) -> io::Result<Option<(usize, usize)>> {
         for direction in [
             Direction::East,
             Direction::South,
@@ -138,7 +138,7 @@ impl PlayState {
         Ok(None)
     }
 
-    fn adjacent_position(&self, direction: Direction) -> Option<(usize, usize)> {
+    pub fn adjacent_position(&self, direction: Direction) -> Option<(usize, usize)> {
         let (dx, dy) = direction.delta();
         match self.area {
             Area::World { .. } => Some((
@@ -154,7 +154,7 @@ impl PlayState {
         }
     }
 
-    fn player_can_land_on_foot(
+    pub fn player_can_land_on_foot(
         &self,
         game_dir: Option<&Path>,
         x: usize,
@@ -231,14 +231,14 @@ impl PlayState {
         }
     }
 
-    fn object_at_current_floor(&self, x: usize, y: usize) -> Option<&ActiveObject> {
+    pub fn object_at_current_floor(&self, x: usize, y: usize) -> Option<&ActiveObject> {
         self.active_objects
             .iter()
             .skip(1)
             .find(|object| self.object_occupies(**object, x, y))
     }
 
-    fn object_occupies(&self, object: ActiveObject, x: usize, y: usize) -> bool {
+    pub fn object_occupies(&self, object: ActiveObject, x: usize, y: usize) -> bool {
         !object.is_empty()
             && !object.is_player_phantom()
             && self
@@ -247,21 +247,21 @@ impl PlayState {
                 .unwrap_or(false)
     }
 
-    fn dungeon_cell(&self, level: u8, x: usize, y: usize) -> u8 {
+    pub fn dungeon_cell(&self, level: u8, x: usize, y: usize) -> u8 {
         self.grid[dungeon_cell_index(level, x, y)]
     }
 
-    fn blocking_object_at(&self, x: usize, y: usize) -> Option<&ActiveObject> {
+    pub fn blocking_object_at(&self, x: usize, y: usize) -> Option<&ActiveObject> {
         self.object_at_current_floor(x, y)
     }
 
-    fn sight_blocking_object_at_current_floor(&self, x: usize, y: usize) -> Option<&ActiveObject> {
+    pub fn sight_blocking_object_at_current_floor(&self, x: usize, y: usize) -> Option<&ActiveObject> {
         self.active_objects.iter().skip(1).find(|object| {
             self.object_occupies(**object, x, y) && surface_tile_blocks_sight(object.tile)
         })
     }
 
-    fn npc_at_current_floor(&self, x: usize, y: usize) -> Option<&RuntimeNpc> {
+    pub fn npc_at_current_floor(&self, x: usize, y: usize) -> Option<&RuntimeNpc> {
         let floor = self.current_floor()?;
         if floor < 0 {
             return None;
@@ -272,14 +272,14 @@ impl PlayState {
             .find(|npc| npc.x == x && npc.y == y && npc.z == floor)
     }
 
-    fn world_object_at(&self, x: usize, y: usize) -> Option<&ActiveObject> {
+    pub fn world_object_at(&self, x: usize, y: usize) -> Option<&ActiveObject> {
         if !matches!(self.area, Area::World { .. }) {
             return None;
         }
         self.object_at_current_floor(x, y)
     }
 
-    fn load_scheduled_npcs(&mut self, slots: &[NpcSlot]) {
+    pub fn load_scheduled_npcs(&mut self, slots: &[NpcSlot]) {
         self.npcs = slots
             .iter()
             .skip(1)
@@ -289,7 +289,7 @@ impl PlayState {
         self.relink_npc_objects();
     }
 
-    fn load_scheduled_npcs_from_existing_active_objects(&mut self, slots: &[NpcSlot]) {
+    pub fn load_scheduled_npcs_from_existing_active_objects(&mut self, slots: &[NpcSlot]) {
         self.npcs = slots
             .iter()
             .skip(1)
@@ -299,7 +299,7 @@ impl PlayState {
         self.link_npcs_to_existing_active_objects();
     }
 
-    fn attach_player_phantom_npc(&mut self) {
+    pub fn attach_player_phantom_npc(&mut self) {
         let Area::Town { floor, .. } = self.area else {
             return;
         };
@@ -325,7 +325,7 @@ impl PlayState {
         self.sync_npc_active_object(index, floor);
     }
 
-    fn link_npcs_to_existing_active_objects(&mut self) {
+    pub fn link_npcs_to_existing_active_objects(&mut self) {
         let Area::Town { floor, .. } = self.area else {
             return;
         };
@@ -342,7 +342,7 @@ impl PlayState {
         }
     }
 
-    fn match_existing_npc_active_object(
+    pub fn match_existing_npc_active_object(
         &self,
         npc_index: usize,
         floor: u8,
@@ -362,7 +362,7 @@ impl PlayState {
             })
     }
 
-    fn sync_npc_active_object(&mut self, index: usize, floor: u8) -> bool {
+    pub fn sync_npc_active_object(&mut self, index: usize, floor: u8) -> bool {
         if self.npcs[index].is_player_phantom() {
             let (x, y, z, active_object) = {
                 let npc = &self.npcs[index];
@@ -422,7 +422,7 @@ impl PlayState {
         false
     }
 
-    fn relink_npc_objects(&mut self) {
+    pub fn relink_npc_objects(&mut self) {
         let Area::Town { floor, .. } = self.area else {
             return;
         };
@@ -448,7 +448,7 @@ impl PlayState {
         }
     }
 
-    fn advance_npc_schedules(&mut self) {
+    pub fn advance_npc_schedules(&mut self) {
         let Area::Town { floor, .. } = self.area else {
             return;
         };
@@ -498,7 +498,7 @@ impl PlayState {
         }
     }
 
-    fn npc_path_step(
+    pub fn npc_path_step(
         &self,
         npc_index: usize,
         start: (usize, usize),

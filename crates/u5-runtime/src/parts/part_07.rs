@@ -251,11 +251,11 @@ pub struct LzwBitReader<'a> {
 }
 
 impl<'a> LzwBitReader<'a> {
-    fn new(bytes: &'a [u8]) -> Self {
+    pub fn new(bytes: &'a [u8]) -> Self {
         Self { bytes, bit_pos: 0 }
     }
 
-    fn read_code(&mut self, code_size: u8) -> Option<u16> {
+    pub fn read_code(&mut self, code_size: u8) -> Option<u16> {
         let bit_count = code_size as usize;
         if self.bit_pos + bit_count > self.bytes.len() * 8 {
             return None;

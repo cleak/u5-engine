@@ -11,6 +11,10 @@ visual = ["dep:u5-bevy"]
 u5-runtime = { workspace = true }
 u5-bevy = { workspace = true, optional = true }
 
+[lib]
+name = "u5_tui"
+path = "src/lib.rs"
+
 [[bin]]
 name = "u5-engine"
 path = "src/main.rs"

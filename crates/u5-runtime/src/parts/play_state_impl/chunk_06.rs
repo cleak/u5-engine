@@ -1,5 +1,5 @@
 impl PlayState {
-    fn climb_outdoors(&mut self, game_dir: &Path, plane: WorldPlane) -> io::Result<MoveOutcome> {
+    pub fn climb_outdoors(&mut self, game_dir: &Path, plane: WorldPlane) -> io::Result<MoveOutcome> {
         if self.climbing_gear == 0 {
             self.message = "With what?".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -71,7 +71,7 @@ impl PlayState {
         Ok(MoveOutcome::Moved)
     }
 
-    fn apply_outdoor_climb_fall_checks(&mut self) -> (usize, Vec<String>) {
+    pub fn apply_outdoor_climb_fall_checks(&mut self) -> (usize, Vec<String>) {
         let mut checked = 0;
         let mut falls = Vec::new();
         for index in 0..self.party.len() {
@@ -93,15 +93,15 @@ impl PlayState {
         (checked, falls)
     }
 
-    fn outdoor_climb_stat_roll(&self, member_index: usize) -> u8 {
+    pub fn outdoor_climb_stat_roll(&self, member_index: usize) -> u8 {
         1 + (self.outdoor_climb_roll_seed(member_index) % 30)
     }
 
-    fn outdoor_climb_damage_roll(&self, member_index: usize) -> u8 {
+    pub fn outdoor_climb_damage_roll(&self, member_index: usize) -> u8 {
         1 + (self.outdoor_climb_roll_seed(member_index).wrapping_add(17) % 5)
     }
 
-    fn outdoor_climb_roll_seed(&self, member_index: usize) -> u8 {
+    pub fn outdoor_climb_roll_seed(&self, member_index: usize) -> u8 {
         self.turn as u8
             ^ self.clock.hour.wrapping_mul(3)
             ^ self.clock.minute.wrapping_mul(5)
@@ -110,7 +110,7 @@ impl PlayState {
             ^ (member_index as u8).wrapping_mul(13)
     }
 
-    fn resolve_sailed_ship_wind_gate(&mut self, direction: Direction) -> Option<MoveOutcome> {
+    pub fn resolve_sailed_ship_wind_gate(&mut self, direction: Direction) -> Option<MoveOutcome> {
         if !self.player.transport.is_ship_under_sail() {
             return None;
         }
@@ -152,7 +152,7 @@ impl PlayState {
         Some(MoveOutcome::SailStalled)
     }
 
-    fn resolve_balloon_wind_step(
+    pub fn resolve_balloon_wind_step(
         &mut self,
         direction: &mut Direction,
         nx: &mut isize,
@@ -177,12 +177,12 @@ impl PlayState {
     }
 
     #[cfg(test)]
-    fn open_facing(&mut self) -> MoveOutcome {
+    pub fn open_facing(&mut self) -> MoveOutcome {
         self.open_facing_with_game_dir(None)
             .expect("open without a game dir cannot load sidecar metadata")
     }
 
-    fn open_facing_with_game_dir(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
+    pub fn open_facing_with_game_dir(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
         let (scene, floor) = match self.area {
             Area::Town { scene, floor } => (scene, floor),
             Area::Dungeon { scene, level } => {
@@ -241,7 +241,7 @@ impl PlayState {
         Ok(MoveOutcome::DoorOpened)
     }
 
-    fn open_dungeon_underfoot(
+    pub fn open_dungeon_underfoot(
         &mut self,
         game_dir: Option<&Path>,
         scene: DungeonScene,
@@ -302,12 +302,12 @@ impl PlayState {
     }
 
     #[cfg(test)]
-    fn jimmy_facing(&mut self) -> MoveOutcome {
+    pub fn jimmy_facing(&mut self) -> MoveOutcome {
         self.jimmy_facing_with_game_dir(None)
             .expect("jimmy without a game dir cannot load sidecar metadata")
     }
 
-    fn jimmy_facing_with_game_dir(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
+    pub fn jimmy_facing_with_game_dir(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
         if self.keys == 0 {
             self.message = "No keys!".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -322,7 +322,7 @@ impl PlayState {
         }
     }
 
-    fn jimmy_town_facing(
+    pub fn jimmy_town_facing(
         &mut self,
         game_dir: Option<&Path>,
         scene: Scene,
@@ -374,7 +374,7 @@ impl PlayState {
         Ok(MoveOutcome::Blocked)
     }
 
-    fn jimmy_dungeon_underfoot(
+    pub fn jimmy_dungeon_underfoot(
         &mut self,
         game_dir: Option<&Path>,
         scene: DungeonScene,
@@ -435,11 +435,11 @@ impl PlayState {
     }
 
     #[cfg(test)]
-    fn get_dungeon_underfoot(&mut self, scene: DungeonScene, level: u8) -> MoveOutcome {
+    pub fn get_dungeon_underfoot(&mut self, scene: DungeonScene, level: u8) -> MoveOutcome {
         self.get_dungeon_underfoot_with_contents(None, scene, level)
     }
 
-    fn get_dungeon_underfoot_with_game_dir(
+    pub fn get_dungeon_underfoot_with_game_dir(
         &mut self,
         game_dir: Option<&Path>,
         scene: DungeonScene,
@@ -452,7 +452,7 @@ impl PlayState {
         Ok(self.get_dungeon_underfoot_with_contents(chest_entries.as_deref(), scene, level))
     }
 
-    fn get_dungeon_underfoot_with_contents(
+    pub fn get_dungeon_underfoot_with_contents(
         &mut self,
         chest_entries: Option<&[DungeonChestContentEntry]>,
         scene: DungeonScene,
@@ -482,7 +482,7 @@ impl PlayState {
         }
     }
 
-    fn get_object_pickup_at(
+    pub fn get_object_pickup_at(
         &mut self,
         game_dir: &Path,
         target: PlayTarget,
@@ -528,7 +528,7 @@ impl PlayState {
         Ok(Some(MoveOutcome::Got))
     }
 
-    fn apply_object_pickup(&mut self, kind: ObjectPickupKind, amount: u8) {
+    pub fn apply_object_pickup(&mut self, kind: ObjectPickupKind, amount: u8) {
         match kind {
             ObjectPickupKind::Food => self.food = self.food.saturating_add(u16::from(amount)),
             ObjectPickupKind::Gold => self.gold = self.gold.saturating_add(u16::from(amount)),
@@ -538,7 +538,7 @@ impl PlayState {
         }
     }
 
-    fn get_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+    pub fn get_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         match self.area {
             Area::World { plane } => self.get_world_facing(game_dir, plane),
             Area::Town { scene, floor } => self.get_town_facing(game_dir, scene, floor),
@@ -548,7 +548,7 @@ impl PlayState {
         }
     }
 
-    fn get_world_facing(&mut self, game_dir: &Path, plane: WorldPlane) -> io::Result<MoveOutcome> {
+    pub fn get_world_facing(&mut self, game_dir: &Path, plane: WorldPlane) -> io::Result<MoveOutcome> {
         let (dx, dy) = self.player.facing.delta();
         let tx = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
         let ty = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
@@ -598,7 +598,7 @@ impl PlayState {
         Ok(MoveOutcome::Got)
     }
 
-    fn get_town_facing(
+    pub fn get_town_facing(
         &mut self,
         game_dir: &Path,
         scene: Scene,
@@ -663,13 +663,13 @@ impl PlayState {
         Ok(MoveOutcome::Got)
     }
 
-    fn search_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+    pub fn search_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         let entries = load_secret_door_entries(game_dir)?.unwrap_or_default();
         let chest_entries = load_dungeon_chest_content_entries(game_dir)?;
         Ok(self.search_facing_secret(&entries, chest_entries.as_deref()))
     }
 
-    fn search_facing_secret(
+    pub fn search_facing_secret(
         &mut self,
         entries: &[SecretDoorEntry],
         chest_entries: Option<&[DungeonChestContentEntry]>,
@@ -683,7 +683,7 @@ impl PlayState {
         }
     }
 
-    fn search_world_moonstone(&mut self, plane: WorldPlane) -> MoveOutcome {
+    pub fn search_world_moonstone(&mut self, plane: WorldPlane) -> MoveOutcome {
         let (dx, dy) = self.player.facing.delta();
         let tx = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
         let ty = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
@@ -695,7 +695,7 @@ impl PlayState {
         )
     }
 
-    fn search_town_secret(
+    pub fn search_town_secret(
         &mut self,
         entries: &[SecretDoorEntry],
         scene: Scene,
@@ -756,7 +756,7 @@ impl PlayState {
         MoveOutcome::Searched
     }
 
-    fn search_moonstone_at<F>(
+    pub fn search_moonstone_at<F>(
         &mut self,
         x: usize,
         y: usize,
@@ -807,7 +807,7 @@ impl PlayState {
         MoveOutcome::Searched
     }
 
-    fn search_dungeon_secret(
+    pub fn search_dungeon_secret(
         &mut self,
         entries: &[SecretDoorEntry],
         chest_entries: Option<&[DungeonChestContentEntry]>,
@@ -878,7 +878,7 @@ impl PlayState {
         }
     }
 
-    fn search_dungeon_feature(
+    pub fn search_dungeon_feature(
         &mut self,
         scene: DungeonScene,
         level: u8,

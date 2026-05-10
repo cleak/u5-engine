@@ -7,11 +7,11 @@ impl PlayState {
         }
     }
 
-    fn mark_visibility_dirty(&mut self) {
+    pub fn mark_visibility_dirty(&mut self) {
         self.visibility_dirty = true;
     }
 
-    fn current_world_overlay_objects(&self) -> Vec<ActiveObject> {
+    pub fn current_world_overlay_objects(&self) -> Vec<ActiveObject> {
         let mut objects = vec![ActiveObject::empty(); OOL_SLOTS - 1];
         for (index, object) in self
             .active_objects
@@ -26,7 +26,7 @@ impl PlayState {
         objects
     }
 
-    fn cache_current_world_overlay(&mut self) {
+    pub fn cache_current_world_overlay(&mut self) {
         let Area::World { plane } = self.area else {
             return;
         };
@@ -34,7 +34,7 @@ impl PlayState {
             .set(plane, self.current_world_overlay_objects());
     }
 
-    fn save_game_command(
+    pub fn save_game_command(
         &mut self,
         game_dir: &Path,
         confirm: Option<bool>,
@@ -56,7 +56,7 @@ impl PlayState {
         }
     }
 
-    fn write_save_files(&mut self, game_dir: &Path) -> io::Result<()> {
+    pub fn write_save_files(&mut self, game_dir: &Path) -> io::Result<()> {
         let (scene, z, x, y) = self.current_save_location().ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -129,7 +129,7 @@ impl PlayState {
         Ok(())
     }
 
-    fn current_save_location(&self) -> Option<(u8, u8, u8, u8)> {
+    pub fn current_save_location(&self) -> Option<(u8, u8, u8, u8)> {
         let x = u8::try_from(self.player.x).ok()?;
         let y = u8::try_from(self.player.y).ok()?;
         match self.area {
@@ -145,7 +145,7 @@ impl PlayState {
         }
     }
 
-    fn encode_saved_ool(&self, game_dir: &Path) -> io::Result<Vec<u8>> {
+    pub fn encode_saved_ool(&self, game_dir: &Path) -> io::Result<Vec<u8>> {
         let mut bytes = Vec::with_capacity(SAVED_OOL_LEN);
         for plane in [WorldPlane::Britannia, WorldPlane::Underworld] {
             let objects = self.save_overlay_objects_for_plane(game_dir, plane)?;
@@ -154,7 +154,7 @@ impl PlayState {
         Ok(bytes)
     }
 
-    fn save_overlay_objects_for_plane(
+    pub fn save_overlay_objects_for_plane(
         &self,
         game_dir: &Path,
         plane: WorldPlane,
@@ -166,7 +166,7 @@ impl PlayState {
         }
     }
 
-    fn load_world_overlay_for_plane(
+    pub fn load_world_overlay_for_plane(
         &self,
         game_dir: &Path,
         plane: WorldPlane,
@@ -178,7 +178,7 @@ impl PlayState {
         }
     }
 
-    fn replace_world_active_objects(
+    pub fn replace_world_active_objects(
         &mut self,
         game_dir: &Path,
         plane: WorldPlane,
@@ -202,7 +202,7 @@ impl PlayState {
         Ok(())
     }
 
-    fn load_town_scene(game_dir: &Path, scene: Scene, options: PlayOptions) -> io::Result<Self> {
+    pub fn load_town_scene(game_dir: &Path, scene: Scene, options: PlayOptions) -> io::Result<Self> {
         let mut grid = load_floor(game_dir, scene, options.floor)?;
         let passability = load_tile_passability(game_dir)?;
         let moongates = load_moongate_entries(game_dir)?.unwrap_or_default();
@@ -313,7 +313,7 @@ impl PlayState {
         Ok(state)
     }
 
-    fn load_dungeon_scene(
+    pub fn load_dungeon_scene(
         game_dir: &Path,
         scene: DungeonScene,
         options: PlayOptions,
@@ -425,7 +425,7 @@ impl PlayState {
         Ok(state)
     }
 
-    fn load_world_scene(
+    pub fn load_world_scene(
         game_dir: &Path,
         plane: WorldPlane,
         options: PlayOptions,
@@ -567,12 +567,12 @@ impl PlayState {
     }
 
     #[cfg(test)]
-    fn step(&mut self, direction: Direction) -> MoveOutcome {
+    pub fn step(&mut self, direction: Direction) -> MoveOutcome {
         self.step_with_game_dir(direction, None)
             .expect("step without a game dir cannot perform file-backed transitions")
     }
 
-    fn step_with_game_dir(
+    pub fn step_with_game_dir(
         &mut self,
         direction: Direction,
         game_dir: Option<&Path>,
@@ -660,7 +660,7 @@ impl PlayState {
         }
     }
 
-    fn town_exit_tile_at(
+    pub fn town_exit_tile_at(
         &self,
         game_dir: &Path,
         scene: Scene,
@@ -676,7 +676,7 @@ impl PlayState {
         }))
     }
 
-    fn town_lock_at(
+    pub fn town_lock_at(
         &self,
         game_dir: Option<&Path>,
         scene: Scene,
@@ -695,7 +695,7 @@ impl PlayState {
         }))
     }
 
-    fn town_magic_lock_target_at(
+    pub fn town_magic_lock_target_at(
         &self,
         game_dir: &Path,
         scene: Scene,
@@ -716,7 +716,7 @@ impl PlayState {
         }))
     }
 
-    fn town_stair_at(
+    pub fn town_stair_at(
         &self,
         game_dir: &Path,
         scene: Scene,
@@ -732,7 +732,7 @@ impl PlayState {
         }))
     }
 
-    fn resolve_town_exit_tile(
+    pub fn resolve_town_exit_tile(
         &mut self,
         game_dir: &Path,
         scene: Scene,
@@ -742,7 +742,7 @@ impl PlayState {
         self.resolve_town_exit_tile_transition(game_dir, scene, floor, entry, true)
     }
 
-    fn resolve_town_exit_tile_after_turn(
+    pub fn resolve_town_exit_tile_after_turn(
         &mut self,
         game_dir: &Path,
         scene: Scene,
@@ -752,7 +752,7 @@ impl PlayState {
         self.resolve_town_exit_tile_transition(game_dir, scene, floor, entry, false)
     }
 
-    fn resolve_town_exit_tile_transition(
+    pub fn resolve_town_exit_tile_transition(
         &mut self,
         game_dir: &Path,
         scene: Scene,
@@ -798,7 +798,7 @@ impl PlayState {
         ))
     }
 
-    fn block_missing_town_return(&mut self, scene: Scene, floor: i8, event: String) -> MoveOutcome {
+    pub fn block_missing_town_return(&mut self, scene: Scene, floor: i8, event: String) -> MoveOutcome {
         self.area = Area::Town { scene, floor };
         self.sync_player_object();
         self.mark_visibility_dirty();
@@ -807,7 +807,7 @@ impl PlayState {
         MoveOutcome::Blocked
     }
 
-    fn town_trap_door_at(
+    pub fn town_trap_door_at(
         &self,
         game_dir: &Path,
         scene: Scene,
@@ -823,7 +823,7 @@ impl PlayState {
         }))
     }
 
-    fn apply_town_trap_door(
+    pub fn apply_town_trap_door(
         &mut self,
         game_dir: &Path,
         scene: Scene,
@@ -832,7 +832,7 @@ impl PlayState {
         self.apply_town_trap_door_transition(game_dir, scene, entry, true)
     }
 
-    fn apply_town_trap_door_transition(
+    pub fn apply_town_trap_door_transition(
         &mut self,
         game_dir: &Path,
         scene: Scene,
@@ -864,7 +864,7 @@ impl PlayState {
         }))
     }
 
-    fn step_town_stair(
+    pub fn step_town_stair(
         &mut self,
         game_dir: &Path,
         scene: Scene,

@@ -1,5 +1,5 @@
 impl PlayState {
-    fn consume_dungeon_chest(
+    pub fn consume_dungeon_chest(
         &mut self,
         entries: Option<&[DungeonChestContentEntry]>,
         scene: DungeonScene,
@@ -16,7 +16,7 @@ impl PlayState {
         self.consume_dungeon_chest_with_note(scene, level, x, y, idx, tile, verb, &note)
     }
 
-    fn apply_dungeon_chest_content(
+    pub fn apply_dungeon_chest_content(
         &mut self,
         entries: Option<&[DungeonChestContentEntry]>,
         scene: DungeonScene,
@@ -42,7 +42,7 @@ impl PlayState {
         Some(format!("authored chest grants {}", parts.join(", ")))
     }
 
-    fn consume_dungeon_chest_with_note(
+    pub fn consume_dungeon_chest_with_note(
         &mut self,
         scene: DungeonScene,
         level: u8,
@@ -65,7 +65,7 @@ impl PlayState {
         MoveOutcome::ContainerOpened
     }
 
-    fn board_vehicle(&mut self) -> MoveOutcome {
+    pub fn board_vehicle(&mut self) -> MoveOutcome {
         if matches!(self.area, Area::Dungeon { .. }) {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
@@ -100,14 +100,14 @@ impl PlayState {
         MoveOutcome::Boarded
     }
 
-    fn force_foot_transport(&mut self) {
+    pub fn force_foot_transport(&mut self) {
         self.player.transport = TransportState::Foot;
         self.timing_status = TimingStatusTag::Normal;
         self.sail_cadence = 0;
         self.sail_stall_pending = false;
     }
 
-    fn free_active_object_slot(&mut self, slot: usize) {
+    pub fn free_active_object_slot(&mut self, slot: usize) {
         if slot == 0 {
             return;
         }
@@ -116,14 +116,14 @@ impl PlayState {
         }
     }
 
-    fn clear_non_player_active_objects(&mut self) {
+    pub fn clear_non_player_active_objects(&mut self) {
         self.sync_player_object();
         for object in self.active_objects.iter_mut().skip(1) {
             *object = ActiveObject::empty();
         }
     }
 
-    fn clear_moonstone_pickups(&mut self, slot_index: usize) -> bool {
+    pub fn clear_moonstone_pickups(&mut self, slot_index: usize) -> bool {
         let mut removed = false;
         for object in self.active_objects.iter_mut().skip(1) {
             if object.moonstone_slot_index() == Some(slot_index) {
@@ -134,13 +134,13 @@ impl PlayState {
         removed
     }
 
-    fn moonstone_pickup_exists(&self, slot_index: usize) -> bool {
+    pub fn moonstone_pickup_exists(&self, slot_index: usize) -> bool {
         self.active_objects
             .iter()
             .any(|object| object.moonstone_slot_index() == Some(slot_index))
     }
 
-    fn moonstone_pickup_at(&self, x: usize, y: usize) -> Option<(usize, usize)> {
+    pub fn moonstone_pickup_at(&self, x: usize, y: usize) -> Option<(usize, usize)> {
         self.active_objects
             .iter()
             .enumerate()
@@ -156,7 +156,7 @@ impl PlayState {
             })
     }
 
-    fn get_moonstone_pickup_at(&mut self, x: usize, y: usize) -> Option<MoveOutcome> {
+    pub fn get_moonstone_pickup_at(&mut self, x: usize, y: usize) -> Option<MoveOutcome> {
         let (object_slot, slot_index) = self.moonstone_pickup_at(x, y)?;
         self.free_active_object_slot(object_slot);
         self.moonstone_slots[slot_index] = MoonstoneGateSlot::invalid();
@@ -169,7 +169,7 @@ impl PlayState {
         Some(MoveOutcome::Got)
     }
 
-    fn allocate_active_object_slot(&mut self, object: ActiveObject) -> Option<usize> {
+    pub fn allocate_active_object_slot(&mut self, object: ActiveObject) -> Option<usize> {
         if self.active_objects.is_empty() {
             return None;
         }
@@ -191,12 +191,12 @@ impl PlayState {
     }
 
     #[cfg(test)]
-    fn exit_vehicle(&mut self) -> MoveOutcome {
+    pub fn exit_vehicle(&mut self) -> MoveOutcome {
         self.exit_vehicle_with_game_dir(None)
             .expect("vehicle exit without sidecar metadata cannot fail on file I/O")
     }
 
-    fn exit_vehicle_with_game_dir(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
+    pub fn exit_vehicle_with_game_dir(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
         if matches!(self.area, Area::Dungeon { .. }) {
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -251,7 +251,7 @@ impl PlayState {
         Ok(MoveOutcome::ExitedVehicle)
     }
 
-    fn vehicle_can_park_at_current_cell(&self) -> bool {
+    pub fn vehicle_can_park_at_current_cell(&self) -> bool {
         if !self.player.transport.is_balloon() {
             return true;
         }
@@ -263,7 +263,7 @@ impl PlayState {
         !is_mountain_tile(tile) && !is_wall_or_closed_door_tile(tile)
     }
 
-    fn toggle_sails(&mut self) -> MoveOutcome {
+    pub fn toggle_sails(&mut self) -> MoveOutcome {
         let TransportState::Ship {
             type_byte,
             tile,
@@ -294,7 +294,7 @@ impl PlayState {
         MoveOutcome::SailToggled
     }
 
-    fn fire_command(
+    pub fn fire_command(
         &mut self,
         direction: Option<Direction>,
         game_dir: &Path,
@@ -309,7 +309,7 @@ impl PlayState {
         }
     }
 
-    fn fire_town_source(
+    pub fn fire_town_source(
         &mut self,
         game_dir: &Path,
         scene: Scene,
@@ -389,7 +389,7 @@ impl PlayState {
         Ok(MoveOutcome::Fired)
     }
 
-    fn town_fire_target(&self, source: TownFireSourceEntry) -> TownFireTarget {
+    pub fn town_fire_target(&self, source: TownFireSourceEntry) -> TownFireTarget {
         let (dx, dy) = source.direction.delta();
         for distance in 1..=3 {
             let x = source.x as isize + dx * distance;
@@ -421,7 +421,7 @@ impl PlayState {
         TownFireTarget::None
     }
 
-    fn fire_ship_broadside(&mut self, direction: Option<Direction>) -> MoveOutcome {
+    pub fn fire_ship_broadside(&mut self, direction: Option<Direction>) -> MoveOutcome {
         if !matches!(self.area, Area::World { .. }) {
             self.message = "What?".to_string();
             return MoveOutcome::Blocked;
@@ -465,7 +465,7 @@ impl PlayState {
         MoveOutcome::Fired
     }
 
-    fn ship_broadside_target_slot(&self, direction: Direction) -> Option<usize> {
+    pub fn ship_broadside_target_slot(&self, direction: Direction) -> Option<usize> {
         let (dx, dy) = direction.delta();
         for distance in 1..=3 {
             let x = (self.player.x as isize + dx * distance).rem_euclid(WORLD_SIDE as isize);
@@ -485,7 +485,7 @@ impl PlayState {
         None
     }
 
-    fn push_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+    pub fn push_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         match self.area {
             Area::Town { scene, floor } => self.push_town_facing(game_dir, scene, floor),
             Area::Dungeon { .. } => {
@@ -499,7 +499,7 @@ impl PlayState {
         }
     }
 
-    fn push_town_facing(
+    pub fn push_town_facing(
         &mut self,
         game_dir: &Path,
         scene: Scene,
@@ -580,12 +580,12 @@ impl PlayState {
     }
 
     #[cfg(test)]
-    fn pass_turn(&mut self) -> MoveOutcome {
+    pub fn pass_turn(&mut self) -> MoveOutcome {
         self.pass_turn_with_game_dir(None)
             .expect("sidecar-free pass cannot fail")
     }
 
-    fn pass_turn_with_game_dir(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
+    pub fn pass_turn_with_game_dir(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
         let turn_before = self.turn;
         self.advance_turn();
         if self.sail_stall_pending {
@@ -606,7 +606,7 @@ impl PlayState {
         Ok(MoveOutcome::Passed)
     }
 
-    fn queue_current_moongate_prompt(&mut self) -> bool {
+    pub fn queue_current_moongate_prompt(&mut self) -> bool {
         let Area::World { plane } = self.area else {
             return false;
         };
@@ -622,7 +622,7 @@ impl PlayState {
         true
     }
 
-    fn apply_top_down_post_turn_effects_after_turn(
+    pub fn apply_top_down_post_turn_effects_after_turn(
         &mut self,
         turn_before: u64,
         game_dir: &Path,
@@ -643,7 +643,7 @@ impl PlayState {
         }
     }
 
-    fn apply_post_turn_effects_after_outcome(
+    pub fn apply_post_turn_effects_after_outcome(
         &mut self,
         turn_before: u64,
         game_dir: &Path,
@@ -656,7 +656,7 @@ impl PlayState {
         }
     }
 
-    fn apply_world_post_turn_effects_after_turn(
+    pub fn apply_world_post_turn_effects_after_turn(
         &mut self,
         turn_before: u64,
         game_dir: &Path,
@@ -683,7 +683,7 @@ impl PlayState {
         Ok(None)
     }
 
-    fn apply_town_post_turn_effects_after_turn(
+    pub fn apply_town_post_turn_effects_after_turn(
         &mut self,
         turn_before: u64,
         game_dir: &Path,
@@ -726,7 +726,7 @@ impl PlayState {
         Ok(Some(outcome))
     }
 
-    fn apply_dungeon_post_turn_effects_after_turn(
+    pub fn apply_dungeon_post_turn_effects_after_turn(
         &mut self,
         turn_before: u64,
         game_dir: &Path,
@@ -817,7 +817,7 @@ impl PlayState {
         Ok(None)
     }
 
-    fn hole_up_command(&mut self, game_dir: &Path, hours: Option<u8>) -> io::Result<MoveOutcome> {
+    pub fn hole_up_command(&mut self, game_dir: &Path, hours: Option<u8>) -> io::Result<MoveOutcome> {
         match self.area {
             Area::Town { scene, floor } => self.hole_up_town_command(game_dir, hours, scene, floor),
             Area::World { .. } | Area::Dungeon { .. } => {
@@ -826,7 +826,7 @@ impl PlayState {
         }
     }
 
-    fn hole_up_town_command(
+    pub fn hole_up_town_command(
         &mut self,
         game_dir: &Path,
         hours: Option<u8>,

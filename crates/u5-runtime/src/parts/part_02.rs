@@ -1,13 +1,13 @@
 impl PartyMember {
-    fn living(self) -> bool {
+    pub fn living(self) -> bool {
         self.hp > 0 && !matches!(self.status, b'D' | b'A')
     }
 
-    fn conscious(self) -> bool {
+    pub fn conscious(self) -> bool {
         self.living() && self.status != b'S'
     }
 
-    fn apply_damage(&mut self, damage: u8) -> u16 {
+    pub fn apply_damage(&mut self, damage: u8) -> u16 {
         let damage = damage as u16;
         let applied = self.hp.min(damage);
         self.hp -= applied;
@@ -17,19 +17,19 @@ impl PartyMember {
         applied
     }
 
-    fn heal_by(&mut self, hp: u16) -> u16 {
+    pub fn heal_by(&mut self, hp: u16) -> u16 {
         let applied = self.max_hp.saturating_sub(self.hp).min(hp);
         self.hp += applied;
         applied
     }
 
-    fn recover_mana_by(&mut self, mana: u8) -> u8 {
+    pub fn recover_mana_by(&mut self, mana: u8) -> u8 {
         let applied = REST_MANA_CAP.saturating_sub(self.mana).min(mana);
         self.mana += applied;
         applied
     }
 
-    fn heal_to_max(&mut self) -> (u16, u16) {
+    pub fn heal_to_max(&mut self) -> (u16, u16) {
         let before = self.hp;
         self.hp = self.max_hp;
         (before, self.hp)
@@ -45,7 +45,7 @@ pub struct MoonstoneGateSlot {
 }
 
 impl MoonstoneGateSlot {
-    const fn invalid() -> Self {
+    pub const fn invalid() -> Self {
         Self {
             scene: MOONSTONE_INVALID_SCENE,
             x: 0,
@@ -54,7 +54,7 @@ impl MoonstoneGateSlot {
         }
     }
 
-    fn is_valid(self) -> bool {
+    pub fn is_valid(self) -> bool {
         self.scene != MOONSTONE_INVALID_SCENE
     }
 }
@@ -67,7 +67,7 @@ pub struct AvatarStats {
 }
 
 impl AvatarStats {
-    fn capped_seed() -> Self {
+    pub fn capped_seed() -> Self {
         Self {
             strength: AVATAR_STAT_MAX,
             dexterity: AVATAR_STAT_MAX,
@@ -75,15 +75,15 @@ impl AvatarStats {
         }
     }
 
-    fn increase_strength(&mut self) -> bool {
+    pub fn increase_strength(&mut self) -> bool {
         increase_capped_stat(&mut self.strength)
     }
 
-    fn increase_dexterity(&mut self) -> bool {
+    pub fn increase_dexterity(&mut self) -> bool {
         increase_capped_stat(&mut self.dexterity)
     }
 
-    fn increase_intelligence(&mut self) -> bool {
+    pub fn increase_intelligence(&mut self) -> bool {
         increase_capped_stat(&mut self.intelligence)
     }
 }
@@ -177,7 +177,7 @@ pub struct BoardVehicleCandidate {
 }
 
 impl PendingVehicleAcquisition {
-    fn active_object(self, z: i8) -> ActiveObject {
+    pub fn active_object(self, z: i8) -> ActiveObject {
         match self {
             Self::Frigate { x, y, skiffs } => ActiveObject {
                 type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
@@ -204,15 +204,15 @@ impl PendingVehicleAcquisition {
 }
 
 impl TransportState {
-    fn is_foot(self) -> bool {
+    pub fn is_foot(self) -> bool {
         matches!(self, Self::Foot)
     }
 
-    fn is_horse(self) -> bool {
+    pub fn is_horse(self) -> bool {
         matches!(self, Self::Horse { .. })
     }
 
-    fn is_ship_under_sail(self) -> bool {
+    pub fn is_ship_under_sail(self) -> bool {
         matches!(
             self,
             Self::Ship {
@@ -222,11 +222,11 @@ impl TransportState {
         )
     }
 
-    fn is_balloon(self) -> bool {
+    pub fn is_balloon(self) -> bool {
         matches!(self, Self::Balloon { .. })
     }
 
-    fn avatar_tile(self) -> u8 {
+    pub fn avatar_tile(self) -> u8 {
         match self {
             Self::Foot => PLAYER_TILE,
             Self::Horse { tile, .. }
@@ -237,7 +237,7 @@ impl TransportState {
         }
     }
 
-    fn kind_name(self) -> &'static str {
+    pub fn kind_name(self) -> &'static str {
         match self {
             Self::Foot => "foot",
             Self::Horse { .. } => "horse",
@@ -248,7 +248,7 @@ impl TransportState {
         }
     }
 
-    fn status_label(self) -> String {
+    pub fn status_label(self) -> String {
         match self {
             Self::Foot => "foot".to_string(),
             Self::Horse { tile, .. } => format!("horse tile {tile}"),
@@ -268,7 +268,7 @@ impl TransportState {
         }
     }
 
-    fn can_board(self, target: Self) -> bool {
+    pub fn can_board(self, target: Self) -> bool {
         match target {
             Self::Ship { .. } => {
                 matches!(self, Self::Foot | Self::Ship { .. } | Self::Skiff { .. })
@@ -279,7 +279,7 @@ impl TransportState {
         }
     }
 
-    fn save_marker(self) -> u8 {
+    pub fn save_marker(self) -> u8 {
         match self {
             Self::Foot => FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER,
             Self::Horse { tile, .. }
@@ -290,7 +290,7 @@ impl TransportState {
         }
     }
 
-    fn parked_object(self, x: usize, y: usize, z: i8) -> Option<ActiveObject> {
+    pub fn parked_object(self, x: usize, y: usize, z: i8) -> Option<ActiveObject> {
         let (type_byte, tile, aux1, aux3) = match self {
             Self::Foot => return None,
             Self::Horse {
@@ -325,7 +325,7 @@ impl TransportState {
         })
     }
 
-    fn append_ship_auxiliary_warnings(self, message: &mut String) {
+    pub fn append_ship_auxiliary_warnings(self, message: &mut String) {
         if let Self::Ship { hull: 0, .. } = self {
             message.push(' ');
             message.push_str(SHIP_BADLY_DAMAGED_WARNING);
@@ -346,7 +346,7 @@ pub enum TimingStatusTag {
 }
 
 impl TimingStatusTag {
-    fn from_save_byte(byte: u8) -> Self {
+    pub fn from_save_byte(byte: u8) -> Self {
         match byte {
             b'Q' => Self::HalfTime,
             b'T' => Self::NoMinuteLight,
@@ -354,7 +354,7 @@ impl TimingStatusTag {
         }
     }
 
-    fn for_transport(transport: TransportState) -> Self {
+    pub fn for_transport(transport: TransportState) -> Self {
         if matches!(transport, TransportState::Skiff { .. }) {
             Self::HalfTime
         } else {
@@ -362,7 +362,7 @@ impl TimingStatusTag {
         }
     }
 
-    fn effective_minutes(self, base: u8) -> u8 {
+    pub fn effective_minutes(self, base: u8) -> u8 {
         match self {
             Self::Normal => base,
             Self::HalfTime if base == 0 => 0,
@@ -371,7 +371,7 @@ impl TimingStatusTag {
         }
     }
 
-    fn save_byte(self) -> u8 {
+    pub fn save_byte(self) -> u8 {
         match self {
             Self::Normal => 0,
             Self::HalfTime => b'Q',
@@ -379,7 +379,7 @@ impl TimingStatusTag {
         }
     }
 
-    fn status_label(self) -> &'static str {
+    pub fn status_label(self) -> &'static str {
         match self {
             Self::Normal => "normal",
             Self::HalfTime => "half-time",
@@ -405,7 +405,7 @@ pub enum DungeonFieldEffect {
 }
 
 impl DungeonFieldEffect {
-    fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::Sleep => "sleep field",
             Self::PoisonGas => "poison gas field",
@@ -415,7 +415,7 @@ impl DungeonFieldEffect {
         }
     }
 
-    fn status(self) -> Option<u8> {
+    pub fn status(self) -> Option<u8> {
         match self {
             Self::Sleep => Some(b'S'),
             Self::PoisonGas => Some(b'P'),
@@ -423,11 +423,11 @@ impl DungeonFieldEffect {
         }
     }
 
-    fn is_damage_field(self) -> bool {
+    pub fn is_damage_field(self) -> bool {
         matches!(self, Self::Fire | Self::Electric)
     }
 
-    fn damage_seed_bias(self) -> u8 {
+    pub fn damage_seed_bias(self) -> u8 {
         match self {
             Self::Fire => 19,
             Self::Electric => 29,
@@ -443,19 +443,19 @@ pub struct AnimationClock {
 }
 
 impl AnimationClock {
-    fn tick_static_tiles(&mut self) {
+    pub fn tick_static_tiles(&mut self) {
         self.frame = self.frame.wrapping_add(1) & 3;
     }
 
-    fn tick_moongate(&mut self) {
+    pub fn tick_moongate(&mut self) {
         self.moongate_frame = self.moongate_frame.wrapping_add(1) & (MOONGATE_ANIMATION_FRAMES - 1);
     }
 
-    fn resolve_static_tile(self, tile: u8) -> u8 {
+    pub fn resolve_static_tile(self, tile: u8) -> u8 {
         static_tile_animation_family_base(tile).map_or(tile, |base| base + self.frame)
     }
 
-    fn resolve_moongate_tile(self) -> u8 {
+    pub fn resolve_moongate_tile(self) -> u8 {
         MOONGATE_TILE_BASE + self.moongate_frame
     }
 }
@@ -473,7 +473,7 @@ pub struct ActiveObject {
 }
 
 impl ActiveObject {
-    fn empty() -> Self {
+    pub fn empty() -> Self {
         Self {
             type_byte: 0,
             tile: 0,
@@ -486,7 +486,7 @@ impl ActiveObject {
         }
     }
 
-    fn moonstone_pickup(slot_index: usize, x: usize, y: usize, z: i8) -> Self {
+    pub fn moonstone_pickup(slot_index: usize, x: usize, y: usize, z: i8) -> Self {
         Self {
             type_byte: FIRST_PLAYABLE_MOONSTONE_PICKUP_TILE,
             tile: FIRST_PLAYABLE_MOONSTONE_PICKUP_TILE,
@@ -499,11 +499,11 @@ impl ActiveObject {
         }
     }
 
-    fn free(&mut self) {
+    pub fn free(&mut self) {
         self.type_byte = 0;
     }
 
-    fn tick_phase(&mut self) -> PhaseTick {
+    pub fn tick_phase(&mut self) -> PhaseTick {
         let low = self.phase & 0x0f;
         if low == STEADY_PHASE {
             PhaseTick::Steady
@@ -515,19 +515,19 @@ impl ActiveObject {
         }
     }
 
-    fn is_player(self) -> bool {
+    pub fn is_player(self) -> bool {
         self.type_byte == PLAYER_TILE
     }
 
-    fn is_player_phantom(self) -> bool {
+    pub fn is_player_phantom(self) -> bool {
         self.type_byte == PLAYER_NPC_SENTINEL_TYPE
     }
 
-    fn is_empty(self) -> bool {
+    pub fn is_empty(self) -> bool {
         self.type_byte == 0
     }
 
-    fn moonstone_slot_index(self) -> Option<usize> {
+    pub fn moonstone_slot_index(self) -> Option<usize> {
         let slot_index = self.aux1 as usize;
         (self.type_byte == FIRST_PLAYABLE_MOONSTONE_PICKUP_TILE
             && self.tile == FIRST_PLAYABLE_MOONSTONE_PICKUP_TILE
@@ -561,7 +561,7 @@ pub struct GameClock {
 }
 
 impl GameClock {
-    fn new(hour: u8, minute: u8) -> io::Result<Self> {
+    pub fn new(hour: u8, minute: u8) -> io::Result<Self> {
         Self::with_date(
             PLAY_START_YEAR,
             PLAY_START_MONTH,
@@ -571,7 +571,7 @@ impl GameClock {
         )
     }
 
-    fn with_date(year: u16, month: u8, day: u8, hour: u8, minute: u8) -> io::Result<Self> {
+    pub fn with_date(year: u16, month: u8, day: u8, hour: u8, minute: u8) -> io::Result<Self> {
         if !(1..=13).contains(&month) || !(1..=28).contains(&day) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -593,7 +593,7 @@ impl GameClock {
         })
     }
 
-    fn advance_minutes(&mut self, minutes: u8) {
+    pub fn advance_minutes(&mut self, minutes: u8) {
         let total = self.minute as u16 + minutes as u16;
         self.minute = (total % 60) as u8;
         for _ in 0..(total / 60) {
@@ -601,7 +601,7 @@ impl GameClock {
         }
     }
 
-    fn display_hour(self) -> u8 {
+    pub fn display_hour(self) -> u8 {
         match self.hour {
             0 => 12,
             1..=12 => self.hour,
@@ -609,11 +609,11 @@ impl GameClock {
         }
     }
 
-    fn am_pm_suffix(self) -> &'static str {
+    pub fn am_pm_suffix(self) -> &'static str {
         if self.hour < 12 { "A.M." } else { "P.M." }
     }
 
-    fn advance_hour(&mut self) {
+    pub fn advance_hour(&mut self) {
         self.hour += 1;
         if self.hour >= 24 {
             self.hour = 0;
@@ -621,7 +621,7 @@ impl GameClock {
         }
     }
 
-    fn advance_day(&mut self) {
+    pub fn advance_day(&mut self) {
         self.day += 1;
         if self.day > 28 {
             self.day = 1;
@@ -661,7 +661,7 @@ pub struct RuntimeNpc {
 }
 
 impl RuntimeNpc {
-    fn from_slot(slot: &NpcSlot, hour: u8) -> Self {
+    pub fn from_slot(slot: &NpcSlot, hour: u8) -> Self {
         let wp = waypoint_for_hour(&slot.schedule, hour);
         Self {
             slot: slot.slot,
@@ -677,7 +677,7 @@ impl RuntimeNpc {
         }
     }
 
-    fn from_player_phantom(x: usize, y: usize, z: u8, hour: u8) -> Self {
+    pub fn from_player_phantom(x: usize, y: usize, z: u8, hour: u8) -> Self {
         let mut schedule = [0u8; 16];
         for wp in 0..3 {
             schedule[3 + wp] = x as u8;
@@ -699,11 +699,11 @@ impl RuntimeNpc {
         }
     }
 
-    fn is_player_phantom(&self) -> bool {
+    pub fn is_player_phantom(&self) -> bool {
         self.player_phantom
     }
 
-    fn sync_player_phantom_floor(&mut self, floor: u8, hour: u8) {
+    pub fn sync_player_phantom_floor(&mut self, floor: u8, hour: u8) {
         self.z = floor;
         for wp in 0..3 {
             self.schedule[9 + wp] = floor;
@@ -711,7 +711,7 @@ impl RuntimeNpc {
         self.cached_wp = waypoint_for_hour(&self.schedule, hour);
     }
 
-    fn waypoint_position(&self, wp: usize) -> (usize, usize, u8) {
+    pub fn waypoint_position(&self, wp: usize) -> (usize, usize, u8) {
         (
             self.schedule[3 + wp] as usize,
             self.schedule[6 + wp] as usize,
@@ -791,14 +791,14 @@ pub struct WorldOverlayCache {
 }
 
 impl WorldOverlayCache {
-    fn get(&self, plane: WorldPlane) -> Option<Vec<ActiveObject>> {
+    pub fn get(&self, plane: WorldPlane) -> Option<Vec<ActiveObject>> {
         match plane {
             WorldPlane::Britannia => self.britannia.clone(),
             WorldPlane::Underworld => self.underworld.clone(),
         }
     }
 
-    fn set(&mut self, plane: WorldPlane, objects: Vec<ActiveObject>) {
+    pub fn set(&mut self, plane: WorldPlane, objects: Vec<ActiveObject>) {
         match plane {
             WorldPlane::Britannia => self.britannia = Some(objects),
             WorldPlane::Underworld => self.underworld = Some(objects),
@@ -869,7 +869,7 @@ pub enum ObjectPickupKind {
 }
 
 impl ObjectPickupKind {
-    fn from_key(key: &str) -> Option<Self> {
+    pub fn from_key(key: &str) -> Option<Self> {
         match key.to_ascii_lowercase().as_str() {
             "food" | "ration" | "rations" => Some(Self::Food),
             "gold" | "coin" | "coins" => Some(Self::Gold),
@@ -880,7 +880,7 @@ impl ObjectPickupKind {
         }
     }
 
-    fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::Food => "food",
             Self::Gold => "gold",
