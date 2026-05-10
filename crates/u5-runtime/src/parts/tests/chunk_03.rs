@@ -740,22 +740,6 @@
         );
     }
 
-    fn synthetic_britannia_chunk_index() -> [u8; WORLD_CHUNK_COUNT] {
-        let mut table = [BRIT_WATER_SENTINEL; WORLD_CHUNK_COUNT];
-        for (entry, slot) in table.iter_mut().take(BRIT_STORED_CHUNKS).enumerate() {
-            *slot = entry as u8;
-        }
-        table
-    }
-
-    fn write_britannia_world_files(dir: &Path, tile: u8) {
-        let table = synthetic_britannia_chunk_index();
-        let mut data = vec![42; 32];
-        data.extend_from_slice(&table);
-        data.extend_from_slice(&[42; 32]);
-        fs::write(dir.join("DATA.OVL"), data).unwrap();
-        fs::write(dir.join("BRIT.DAT"), vec![tile; BRIT_DAT_LEN]).unwrap();
-    }
 
     #[test]
     fn britannia_chunk_index_finder_uses_public_shape() {

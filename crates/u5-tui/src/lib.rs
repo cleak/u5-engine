@@ -3,8 +3,13 @@
 //! Owns CLI argument parsing, the interactive play loop, terminal rendering,
 //! and the play-script command harness. Game logic lives in `u5-runtime`.
 
+pub mod cli;
 pub mod play_loop;
 
+pub use cli::{
+    CLI_USAGE, CliArgs, parse_cli_args, parse_pending_vehicle_arg, parse_start_arg,
+    parse_time_arg, parse_transport_arg, split_play_script,
+};
 pub use play_loop::{
     ansi_function_key, ansi_navigation_key, handle_empty_play_input, handle_play_script_command,
     is_simple_typeahead_key, is_typeahead_toggle_token, play_input_key_and_suffix,

@@ -2,6 +2,9 @@
 //! u5-tui's integration tests. Public API so it can be reached from
 //! other crates' test targets.
 
+use std::fs;
+use std::path::{Path, PathBuf};
+
 use crate::*;
 
 pub fn open_grid() -> Vec<u8> {
@@ -222,4 +225,84 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         typeahead_buffer_enabled: false,
         pending_moongate: None,
     }
+}
+
+pub fn debug_game_dir() -> PathBuf {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!(
+        "u5-engine-test-{}-{unique}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("CASTLE.DAT"), vec![16; 1024]).unwrap();
+    fs::write(dir.join("CASTLE.NPC"), vec![0; 576]).unwrap();
+    fs::write(dir.join("CASTLE.TLK"), [1, 0, 0, 0]).unwrap();
+    fs::write(dir.join("DUNGEON.DAT"), vec![0; DUNGEON_DAT_LEN]).unwrap();
+    fs::write(dir.join("UNDER.DAT"), vec![5; UNDER_DAT_LEN]).unwrap();
+    write_britannia_world_files(&dir, 5);
+    dir
+}
+
+pub fn saved_game_seed_bytes(scene: u8, z: u8, x: u8, y: u8) -> Vec<u8> {
+    let mut bytes = vec![0; SAVED_GAM_LEN];
+    bytes[SAVE_SCENE_OFFSET] = scene;
+    bytes[SAVE_Z_OFFSET] = z;
+    bytes[SAVE_X_OFFSET] = x;
+    bytes[SAVE_Y_OFFSET] = y;
+    write_u16_at(&mut bytes, SAVE_FOOD_STOCK_OFFSET, DEFAULT_FOOD_STOCK);
+    write_u16_at(&mut bytes, SAVE_GOLD_STOCK_OFFSET, DEFAULT_GOLD_STOCK);
+    bytes[SAVE_KEY_STOCK_OFFSET] = DEFAULT_KEY_STOCK;
+    bytes[SAVE_GEM_STOCK_OFFSET] = DEFAULT_GEM_STOCK;
+    bytes[SAVE_TORCH_STOCK_OFFSET] = DEFAULT_TORCH_STOCK;
+    encode_reagent_stock(&mut bytes, DEFAULT_REAGENTS);
+    write_saved_clock(&mut bytes, GameClock::new(8, 35).unwrap());
+    bytes
+}
+
+pub fn write_saved_clock(bytes: &mut [u8], clock: GameClock) {
+    write_u16_at(bytes, SAVE_YEAR_OFFSET, clock.year);
+    bytes[SAVE_MONTH_OFFSET] = clock.month;
+    bytes[SAVE_DAY_OFFSET] = clock.day;
+    bytes[SAVE_HOUR_OFFSET] = clock.hour;
+    bytes[SAVE_MINUTE_OFFSET] = clock.minute;
+    bytes[SAVE_AMPM_DISPLAY_OFFSET] = clock.display_hour();
+}
+
+pub fn ool_plane_with_object(slot: usize, object: ActiveObject) -> Vec<u8> {
+    let mut bytes = vec![0; OOL_PLANE_LEN];
+    write_ool_object(&mut bytes, slot, object);
+    bytes
+}
+
+pub fn write_ool_object(bytes: &mut [u8], slot: usize, object: ActiveObject) {
+    assert!(slot < OOL_SLOTS);
+    let offset = slot * OOL_RECORD_LEN;
+    bytes[offset] = object.type_byte;
+    bytes[offset + 1] = object.tile;
+    bytes[offset + 2] = object.x as u8;
+    bytes[offset + 3] = object.y as u8;
+    bytes[offset + 4] = if object.z < 0 { 0xff } else { object.z as u8 };
+    bytes[offset + 5] = object.aux1;
+    bytes[offset + 6] = object.phase;
+    bytes[offset + 7] = object.aux3;
+}
+
+pub fn synthetic_britannia_chunk_index() -> [u8; WORLD_CHUNK_COUNT] {
+    let mut table = [BRIT_WATER_SENTINEL; WORLD_CHUNK_COUNT];
+    for (entry, slot) in table.iter_mut().take(BRIT_STORED_CHUNKS).enumerate() {
+        *slot = entry as u8;
+    }
+    table
+}
+
+pub fn write_britannia_world_files(dir: &Path, tile: u8) {
+    let table = synthetic_britannia_chunk_index();
+    let mut data = vec![42; 32];
+    data.extend_from_slice(&table);
+    data.extend_from_slice(&[42; 32]);
+    fs::write(dir.join("DATA.OVL"), data).unwrap();
+    fs::write(dir.join("BRIT.DAT"), vec![tile; BRIT_DAT_LEN]).unwrap();
 }

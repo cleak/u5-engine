@@ -179,18 +179,6 @@ pub fn moonstone_bury_tile_allowed(tile: u8) -> bool {
     matches!(tile, 4..=10 | 44 | 45)
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CliArgs {
-    pub play: bool,
-    pub visual: bool,
-    pub raster_diagnostics: bool,
-    pub raster_depth: TileGraphicsDepth,
-    pub play_script: Option<Vec<String>>,
-    pub game_dir: PathBuf,
-    pub play_options: PlayOptions,
-    pub help: bool,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MoveOutcome {
     Moved,

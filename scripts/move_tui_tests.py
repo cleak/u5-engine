@@ -21,26 +21,18 @@ import re
 from pathlib import Path
 
 CHUNK_DIR = Path("crates/u5-runtime/src/parts/tests")
-DEST = Path("crates/u5-tui/tests/play_loop.rs")
+DEST = Path("crates/u5-tui/tests/cli.rs")
 
 TUI_SYMBOLS = {
-    "raster_diagnostic_line",
-    "play_input_key_and_suffix",
-    "play_input_typeahead_chars",
-    "is_simple_typeahead_key",
-    "is_typeahead_toggle_token",
-    "ansi_navigation_key",
-    "ansi_function_key",
-    "unclassified_escape_sequence",
-    "handle_empty_play_input",
-    "handle_play_script_command",
-    "play_script_idle_tick_count",
-    "play_script_command_label",
-    "play_script_state_line",
-    "run_play_loop",
-    "run_play_script_commands",
-    "print_play_frame",
-    "print_play_script_snapshot",
+    # CLI surface (this pass)
+    "CliArgs",
+    "CLI_USAGE",
+    "parse_cli_args",
+    "parse_pending_vehicle_arg",
+    "parse_start_arg",
+    "parse_transport_arg",
+    "parse_time_arg",
+    "split_play_script",
 }
 
 
