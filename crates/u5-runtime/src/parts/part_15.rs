@@ -1,0 +1,525 @@
+pub fn place_pending_vehicle_acquisition(
+    active_objects: &mut Vec<ActiveObject>,
+    plane: WorldPlane,
+    pending: PendingVehicleAcquisition,
+) -> io::Result<usize> {
+    let object = pending.active_object(plane.save_floor());
+    if let Some(slot) = active_objects
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find_map(|(slot, object)| object.is_empty().then_some(slot))
+    {
+        active_objects[slot] = object;
+        return Ok(slot);
+    }
+    if active_objects.len() < OOL_SLOTS {
+        active_objects.push(object);
+        return Ok(active_objects.len() - 1);
+    }
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        "no active-object slot for pending vehicle acquisition",
+    ))
+}
+
+pub fn dungeon_cell_index(level: u8, x: usize, y: usize) -> usize {
+    level as usize * DUNGEON_LEVEL_LEN + y * DUNGEON_SIDE + x
+}
+
+pub fn first_dungeon_walkable(grid: &[u8], level: u8) -> Option<(usize, usize)> {
+    (0..DUNGEON_SIDE)
+        .flat_map(|y| (0..DUNGEON_SIDE).map(move |x| (x, y)))
+        .find(|(x, y)| is_dungeon_walkable(grid[dungeon_cell_index(level, *x, *y)]))
+}
+
+pub fn is_dungeon_walkable(tile: u8) -> bool {
+    !matches!(tile >> 4, 0x0b..=0x0f)
+}
+
+pub fn is_dungeon_fall_trap(tile: u8) -> bool {
+    matches!(tile, 0x61 | 0x69)
+}
+
+pub fn is_dungeon_bomb_trap(tile: u8) -> bool {
+    matches!(tile, 0x62 | 0x6a)
+}
+
+pub fn dungeon_field_effect(tile: u8) -> Option<DungeonFieldEffect> {
+    match tile {
+        0x80 | 0x88 => Some(DungeonFieldEffect::Sleep),
+        0x81 | 0x89 => Some(DungeonFieldEffect::PoisonGas),
+        0x82 | 0x8a => Some(DungeonFieldEffect::Fire),
+        0x83 | 0x8b => Some(DungeonFieldEffect::Electric),
+        0x84..=0x9f => Some(DungeonFieldEffect::Energy),
+        _ => None,
+    }
+}
+
+pub fn is_dungeon_room_trigger(tile: u8) -> bool {
+    tile >> 4 == 0x0f
+}
+
+pub fn is_dungeon_room_helper_state(tile: u8) -> bool {
+    tile >> 4 == 0x0a
+}
+
+pub fn dungeon_room_slot(tile: u8) -> u8 {
+    tile & 0x0f
+}
+
+pub fn dungeon_room_arena_index(scene: DungeonScene, tile: u8) -> usize {
+    let bank = if scene.record <= 1 {
+        0
+    } else {
+        scene.record - 1
+    };
+    bank * 16 + dungeon_room_slot(tile) as usize
+}
+
+pub fn stair_delta(tile: u8, intent: ClimbIntent) -> Option<i8> {
+    if !(80..=87).contains(&tile) {
+        return None;
+    }
+    // The public spec identifies the stair/ladder family but leaves the exact
+    // subtype table open, so this first-playable hook follows the request.
+    Some(town_climb_delta(intent))
+}
+
+pub fn town_climb_delta(intent: ClimbIntent) -> i8 {
+    match intent {
+        ClimbIntent::Up => 1,
+        ClimbIntent::Down => -1,
+    }
+}
+
+pub fn dungeon_ladder_delta(tile: u8, intent: ClimbIntent) -> Option<i8> {
+    match (tile >> 4, intent) {
+        (0x1, ClimbIntent::Up) => Some(-1),
+        (0x2, ClimbIntent::Down) => Some(1),
+        (0x3, ClimbIntent::Up) => Some(-1),
+        (0x3, ClimbIntent::Down) => Some(1),
+        _ => None,
+    }
+}
+
+pub fn render_glyph(tile: u8) -> char {
+    match tile {
+        0 => ' ',
+        1..=4 => match tile {
+            1 => '~',
+            2 => '=',
+            3 => '-',
+            _ => '_',
+        },
+        5..=15 => ',',
+        16..=23 => '.',
+        24..=63 => '#',
+        64..=79 => 'f',
+        80..=87 => '<',
+        88..=95 => '?',
+        96..=103 => '+',
+        104..=127 => '*',
+        128..=159 => '^',
+        160..=191 => 'v',
+        192..=255 => 'n',
+    }
+}
+
+pub fn render_dungeon_glyph(tile: u8) -> char {
+    match tile >> 4 {
+        0x0 | 0x7 => '.',
+        0x1 => '<',
+        0x2 => '>',
+        0x3 => 'H',
+        0x4 => '$',
+        0x5 => 'f',
+        0x6 => 'p',
+        0x8 | 0x9 => '*',
+        0xA => 'r',
+        0xB..=0xE => '#',
+        0xF => '+',
+        _ => '?',
+    }
+}
+
+pub fn npc_tile(type_byte: u8) -> u8 {
+    if (192..=255).contains(&type_byte) {
+        type_byte
+    } else {
+        192
+    }
+}
+
+pub fn npc_active_object(type_byte: u8, x: usize, y: usize, z: u8) -> ActiveObject {
+    let tile = npc_tile(type_byte);
+    ActiveObject {
+        type_byte: tile,
+        tile,
+        x,
+        y,
+        z: z as i8,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    }
+}
+
+pub fn active_object_matches_runtime_npc(object: ActiveObject, npc: &RuntimeNpc, floor: u8) -> bool {
+    if object.is_empty()
+        || object.x != npc.x
+        || object.y != npc.y
+        || object.z != floor as i8
+        || npc.z != floor
+    {
+        return false;
+    }
+    if npc.is_player_phantom() {
+        object.type_byte == PLAYER_NPC_SENTINEL_TYPE
+    } else {
+        object.type_byte == npc_tile(npc.type_byte)
+    }
+}
+
+pub fn player_phantom_active_object(x: usize, y: usize, z: u8) -> ActiveObject {
+    ActiveObject {
+        type_byte: PLAYER_NPC_SENTINEL_TYPE,
+        tile: 0,
+        x,
+        y,
+        z: z as i8,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    }
+}
+
+pub fn step_toward(from: (usize, usize), to: (usize, usize)) -> Option<(usize, usize)> {
+    if from == to {
+        return None;
+    }
+    let mut next = from;
+    if from.0 != to.0 {
+        next.0 = if from.0 < to.0 {
+            from.0 + 1
+        } else {
+            from.0.saturating_sub(1)
+        };
+    } else if from.1 != to.1 {
+        next.1 = if from.1 < to.1 {
+            from.1 + 1
+        } else {
+            from.1.saturating_sub(1)
+        };
+    }
+    Some(next)
+}
+
+pub fn tile_class(tile: u8) -> &'static str {
+    match tile {
+        0 => "sentinel",
+        1..=4 => "water",
+        5..=15 => "terrain",
+        16..=23 => "path",
+        24..=63 => "wall",
+        64..=95 => "furniture",
+        96..=103 => "door",
+        104..=127 => "decoration",
+        128..=159 => "special",
+        160..=191 => "vehicle",
+        192..=255 => "npc-sprite",
+    }
+}
+
+pub fn transport_from_vehicle_object(
+    type_byte: u8,
+    tile: u8,
+    aux1: u8,
+    aux3: u8,
+) -> Option<TransportState> {
+    match tile {
+        160..=167 => Some(TransportState::Horse { type_byte, tile }),
+        168..=175 => Some(TransportState::Ship {
+            type_byte,
+            tile,
+            sails_hoisted: false,
+            hull: aux1,
+            skiffs: aux3,
+        }),
+        176..=183 => Some(TransportState::Skiff { type_byte, tile }),
+        184..=187 => Some(TransportState::Carpet { type_byte, tile }),
+        188..=191 => None,
+        _ => None,
+    }
+}
+
+pub fn transport_from_save_marker(marker: u8) -> TransportState {
+    transport_from_vehicle_object(marker, marker, 0, 0).unwrap_or_default()
+}
+
+pub fn active_object_frame_tile(type_byte: u8, phase: u8) -> Option<u8> {
+    if type_byte == PLAYER_TILE {
+        return None;
+    }
+    let low = phase & 0x0f;
+    match type_byte {
+        128..=191 => Some((type_byte & !0x03) + (low & 0x03)),
+        192..=255 => Some((type_byte & !0x01) + (low & 0x01)),
+        _ => None,
+    }
+}
+
+pub fn is_ambient_wanderer_object(object: ActiveObject) -> bool {
+    (192..=255).contains(&object.type_byte) || (192..=255).contains(&object.tile)
+}
+
+pub fn is_ship_object(object: ActiveObject) -> bool {
+    (168..=175).contains(&object.type_byte) || (168..=175).contains(&object.tile)
+}
+
+pub fn direction_from_active_object_phase(phase: u8) -> Option<Direction> {
+    match phase >> 4 {
+        0 => Some(Direction::North),
+        1 => Some(Direction::NorthEast),
+        2 => Some(Direction::East),
+        3 => Some(Direction::SouthEast),
+        4 => Some(Direction::South),
+        5 => Some(Direction::SouthWest),
+        6 => Some(Direction::West),
+        7 => Some(Direction::NorthWest),
+        _ => None,
+    }
+}
+
+pub fn active_object_phase_from_direction(direction: Direction, low_nibble: u8) -> u8 {
+    let high_nibble = match direction {
+        Direction::North => 0,
+        Direction::NorthEast => 1,
+        Direction::East => 2,
+        Direction::SouthEast => 3,
+        Direction::South => 4,
+        Direction::SouthWest => 5,
+        Direction::West => 6,
+        Direction::NorthWest => 7,
+    };
+    (high_nibble << 4) | (low_nibble & 0x0f)
+}
+
+pub fn active_object_phase_toward_player(dx: i8, dy: i8) -> u8 {
+    let x_step = -dx.signum();
+    let y_step = -dy.signum();
+    let direction = match (x_step, y_step) {
+        (-1, -1) => Direction::NorthWest,
+        (0, -1) => Direction::North,
+        (1, -1) => Direction::NorthEast,
+        (-1, 0) => Direction::West,
+        (1, 0) => Direction::East,
+        (-1, 1) => Direction::SouthWest,
+        (0, 1) => Direction::South,
+        (1, 1) => Direction::SouthEast,
+        _ => Direction::South,
+    };
+    active_object_phase_from_direction(direction, 0)
+}
+
+pub fn cardinal_direction_from_active_object_phase(phase: u8) -> Option<Direction> {
+    direction_from_active_object_phase(phase).filter(|direction| direction.is_cardinal())
+}
+
+pub fn is_vehicle_object_tile(tile: u8) -> bool {
+    (160..=191).contains(&tile)
+}
+
+pub fn dungeon_cell_class(tile: u8) -> &'static str {
+    match tile >> 4 {
+        0x0 => "passage",
+        0x1 => "up ladder",
+        0x2 => "down ladder",
+        0x3 => "two-way ladder",
+        0x4 => "chest",
+        0x5 => "fountain",
+        0x6 => "pit/trap",
+        0x7 => "passage variant",
+        0x8 | 0x9 => "energy field",
+        0xA => "room-helper state",
+        0xB..=0xE => "wall",
+        0xF => "heavy door/room trigger",
+        _ => "unknown",
+    }
+}
+
+pub fn dungeon_look_description(tile: u8) -> &'static str {
+    let tile = if tile == 0x61 { 0x00 } else { tile };
+    match tile {
+        0x80 => "a sleep field",
+        0x81 => "a poison gas field",
+        0x82 => "a wall of fire",
+        0x83 => "an electric field",
+        _ => match tile >> 4 {
+            0x0 => "passage",
+            0x1 => "an up ladder",
+            0x2 => "a down ladder",
+            0x3 => "a two-way ladder",
+            0x4 => "a wooden chest",
+            0x5 => "a fountain",
+            0x6 => "a pit or trap",
+            0x7 => "passage",
+            0x8 | 0x9 => "an energy field",
+            0xA => "a cleared room trigger",
+            0xB..=0xE => "a wall",
+            0xF => "a heavy door or room trigger",
+            _ => "unknown dungeon cell",
+        },
+    }
+}
+
+pub fn dungeon_search_description(tile: u8) -> &'static str {
+    if let Some(field) = dungeon_field_effect(tile) {
+        return field.label();
+    }
+    match tile >> 4 {
+        0x0 => "nothing of note",
+        0x1 => "an up ladder",
+        0x2 => "a down ladder",
+        0x3 => "a two-way ladder",
+        0x4 => "a wooden chest",
+        0x5 => "a fountain",
+        0x6 => "a pit or trap",
+        0x7 => "a passage",
+        0xA => "a cleared room trigger",
+        0xB..=0xE => "a wall",
+        0xF => "a heavy door or room trigger",
+        _ => "an unknown dungeon cell",
+    }
+}
+
+pub fn render_class_byte(tile: u8) -> u8 {
+    match tile {
+        0 => b' ',
+        1..=4 => b'~',
+        5..=15 => b',',
+        16..=23 => b'.',
+        24..=63 => b'#',
+        64..=95 => b'f',
+        96..=103 => b'D',
+        104..=127 => b'd',
+        128..=159 => b's',
+        160..=191 => b'v',
+        192..=255 => b'n',
+    }
+}
+
+pub fn waypoint_for_hour(schedule: &[u8; 16], hour: u8) -> usize {
+    let t0 = schedule[12];
+    let t1 = schedule[13];
+    let t2 = schedule[14];
+    let t3 = schedule[15];
+    if in_wrapping_range(hour, t0, t1) {
+        0
+    } else if in_wrapping_range(hour, t2, t3) {
+        2
+    } else {
+        1
+    }
+}
+
+pub fn in_wrapping_range(hour: u8, start: u8, end: u8) -> bool {
+    if start == end {
+        return false;
+    }
+    if start < end {
+        hour >= start && hour < end
+    } else {
+        hour >= start || hour < end
+    }
+}
+
+pub fn names(slots: &[NpcSlot]) -> Vec<String> {
+    slots
+        .iter()
+        .filter(|slot| slot.type_byte != 0)
+        .filter_map(|slot| slot.name.clone())
+        .collect()
+}
+
+pub fn contains_all(names: &[String], needles: &[&str]) -> bool {
+    needles.iter().all(|needle| contains_any(names, &[*needle]))
+}
+
+pub fn contains_any(names: &[String], needles: &[&str]) -> bool {
+    names.iter().any(|name| {
+        needles.iter().any(|needle| {
+            name.to_ascii_lowercase()
+                .contains(&needle.to_ascii_lowercase())
+        })
+    })
+}
+
+pub fn sample_names(names: &[String]) -> String {
+    let mut sample: Vec<_> = names.iter().take(8).cloned().collect();
+    if names.len() > sample.len() {
+        sample.push(format!("... +{} more", names.len() - sample.len()));
+    }
+    sample.join(", ")
+}
+
+pub fn hash_palette_indices(pixels: &[u8]) -> u64 {
+    hash_bytes(pixels)
+}
+
+pub fn hash_bytes(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in bytes {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+pub fn compact(s: &str) -> String {
+    s.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim_matches('"')
+        .to_string()
+}
+
+pub fn manhattan(a: (usize, usize), b: (usize, usize)) -> usize {
+    a.0.abs_diff(b.0) + a.1.abs_diff(b.1)
+}
+
+pub fn world_scroll_base(x: usize, y: usize) -> (usize, usize) {
+    (world_scroll_base_axis(x), world_scroll_base_axis(y))
+}
+
+pub fn world_scroll_base_axis(position: usize) -> usize {
+    let base = (position / CHUNK_SIDE) * CHUNK_SIDE;
+    if position % CHUNK_SIDE < CHUNK_SIDE / 2 {
+        (base + WORLD_SIDE - CHUNK_SIDE) % WORLD_SIDE
+    } else {
+        base
+    }
+}
+
+pub fn world_scroll_neighborhood_contains(scroll_base: (usize, usize), x: usize, y: usize) -> bool {
+    world_scroll_axis_offset(scroll_base.0, x) <= ACTIVE_OBJECT_NEIGHBORHOOD_RADIUS
+        && world_scroll_axis_offset(scroll_base.1, y) <= ACTIVE_OBJECT_NEIGHBORHOOD_RADIUS
+}
+
+pub fn world_scroll_axis_offset(base: usize, coordinate: usize) -> usize {
+    (coordinate + WORLD_SIDE - base) % WORLD_SIDE
+}
+
+pub fn u16_at(bytes: &[u8], off: usize) -> u16 {
+    u16::from_le_bytes([bytes[off], bytes[off + 1]])
+}
+
+#[cfg(test)]
+pub fn u32_at(bytes: &[u8], off: usize) -> u32 {
+    u32::from_le_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]])
+}
+
+pub fn write_u16_at(bytes: &mut [u8], off: usize, value: u16) {
+    bytes[off..off + 2].copy_from_slice(&value.to_le_bytes());
+}
+

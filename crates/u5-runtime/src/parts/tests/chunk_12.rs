@@ -1,0 +1,898 @@
+    #[test]
+    fn routed_world_k_plane_transition_does_not_retrigger_reciprocal_landing_row() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(WORLD_PLANE_TRANSITION_TABLE_FILE),
+            "BRITANNIA 11 20 UNDERWORLD 30 40\nUNDERWORLD 30 40 BRITANNIA 11 20\n",
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(11, 20)] = 10;
+        let mut state = britannia_state(grid, 10, 20);
+        state.climbing_gear = 1;
+        state.player.facing = Direction::East;
+
+        assert!(
+            state
+                .handle_top_down_key_with_inline('K', &dir, None, None, None, None)
+                .unwrap()
+        );
+
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (30, 40));
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("Climbed East"));
+        assert!(state.message.contains("F-A-L-L-S"));
+        assert!(!state.message.contains("Ascended from the underworld"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn world_k_low_climb_stat_falls_but_still_moves() {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(11, 20)] = 10;
+        let mut state = world_state(grid, 10, 20);
+        state.climbing_gear = 1;
+        state.player.facing = Direction::East;
+        state.party = vec![PartyMember {
+            slot: 0,
+            status: b'G',
+            climb_stat: 0,
+            mana: 8,
+            hp: 10,
+            max_hp: 20,
+            level: 8,
+        }];
+        let expected_damage = state.outdoor_climb_damage_roll(0) as u16;
+
+        assert_eq!(
+            state.klimb_command(Path::new("")).unwrap(),
+            MoveOutcome::Moved
+        );
+
+        assert_eq!((state.player.x, state.player.y), (11, 20));
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.party[0].hp, 10 - expected_damage);
+        assert_eq!(state.party[0].status, b'G');
+        assert!(state.message.contains("Fell! slot 0 took"));
+        assert!(
+            state
+                .message
+                .contains(&format!("{} HP left", state.party[0].hp))
+        );
+    }
+
+    #[test]
+    fn world_k_skips_dead_or_ashes_members_for_fall_checks() {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(11, 20)] = 10;
+        let mut state = world_state(grid, 10, 20);
+        state.climbing_gear = 1;
+        state.player.facing = Direction::East;
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                status: b'D',
+                climb_stat: 0,
+                mana: 8,
+                hp: 10,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 1,
+                status: b'A',
+                climb_stat: 0,
+                mana: 8,
+                hp: 9,
+                max_hp: 20,
+                level: 8,
+            },
+        ];
+
+        assert_eq!(
+            state.klimb_command(Path::new("")).unwrap(),
+            MoveOutcome::Moved
+        );
+
+        assert_eq!((state.player.x, state.player.y), (11, 20));
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.party[0].hp, 10);
+        assert_eq!(state.party[1].hp, 9);
+        assert!(state.message.contains("fall checks passed for 0 living"));
+        assert!(!state.message.contains("Fell!"));
+    }
+
+    #[test]
+    fn world_enter_uses_location_entry_y_table_when_world_row_omits_entry_y() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 CASTLE:0\n",
+        )
+        .unwrap();
+        fs::write(dir.join(LOCATION_ENTRY_Y_TABLE_FILE), "CASTLE:0 7\n").unwrap();
+        let mut state = britannia_state(open_world_grid(), 10, 20);
+
+        assert_eq!(
+            state.enter_current_location(&dir).unwrap(),
+            MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
+        );
+
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!((state.player.x, state.player.y), (15, 7));
+        assert_eq!(
+            (state.active_objects[0].x, state.active_objects[0].y),
+            (15, 7)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_exit_uses_clean_location_table_when_no_return_snapshot() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 CASTLE:0\n",
+        )
+        .unwrap();
+        let mut state = test_state(open_grid(), 0, 3);
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::West, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+        );
+
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Britannia
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert_eq!(state.active_objects[0].z, 0);
+        assert_eq!(state.grid[world_cell_index(10, 20)], 5);
+        assert!(state.message.contains("world-location table return point"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dungeon_top_exit_uses_clean_location_table_when_no_return_snapshot() {
+        let dir = debug_game_dir();
+        let scene = DungeonScene::new(33).unwrap();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "UNDERWORLD 10 20 DUNGEON:0\n",
+        )
+        .unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x10;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+
+        assert_eq!(
+            state.climb(&dir, ClimbIntent::Up).unwrap(),
+            MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
+        );
+
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert_eq!(state.active_objects[0].z, -1);
+        assert!(state.message.contains("world-location table return point"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn debug_enter_town_round_trips_to_saved_world_grid_and_objects() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 7;
+        let mut state = world_state(grid, 10, 20);
+        state.active_objects.push(ActiveObject {
+            type_byte: 168,
+            tile: 168,
+            x: 11,
+            y: 20,
+            z: -1,
+            phase: 0x22,
+            aux1: 0,
+            aux3: 0,
+        });
+        state.debug_enter = Some(PlayTarget::Town(scene));
+
+        assert_eq!(
+            state.enter_current_location(&dir).unwrap(),
+            MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
+        );
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!(
+            state.return_world.as_ref().map(|ret| (ret.x, ret.y)),
+            Some((10, 20))
+        );
+
+        state.player.x = 0;
+        state.player.y = 1;
+        assert_eq!(
+            state.step(Direction::West),
+            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+        );
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert_eq!(state.grid[world_cell_index(10, 20)], 7);
+        assert_eq!(
+            state.world_object_at(11, 20),
+            Some(&ActiveObject {
+                type_byte: 168,
+                tile: 168,
+                x: 11,
+                y: 20,
+                z: -1,
+                phase: 0x22,
+                aux1: 0,
+                aux3: 0,
+            })
+        );
+        assert_eq!(state.turn, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn return_world_restore_repairs_missing_player_slot_without_shifting_objects() {
+        let mut state = test_state(open_grid(), 0, 0);
+        let vehicle = ActiveObject {
+            type_byte: 168,
+            tile: 168,
+            x: 12,
+            y: 20,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0x22,
+            aux1: 3,
+            aux3: 4,
+        };
+        state.return_world = Some(WorldReturn {
+            plane: WorldPlane::Underworld,
+            x: 10,
+            y: 20,
+            transport: TransportState::Foot,
+            timing_status: TimingStatusTag::Normal,
+            sail_cadence: 0,
+            sail_stall_pending: false,
+            grid: open_world_grid(),
+            active_objects: vec![
+                ActiveObject {
+                    type_byte: 192,
+                    tile: 192,
+                    x: 1,
+                    y: 1,
+                    z: WorldPlane::Underworld.save_floor(),
+                    phase: STEADY_PHASE,
+                    aux1: 0,
+                    aux3: 0,
+                },
+                ActiveObject::empty(),
+                vehicle,
+            ],
+        });
+
+        assert!(state.restore_return_world());
+
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert_eq!(state.active_objects.len(), 3);
+        assert_eq!(
+            state.active_objects[0],
+            ActiveObject {
+                type_byte: PLAYER_TILE,
+                tile: PLAYER_TILE,
+                x: 10,
+                y: 20,
+                z: WorldPlane::Underworld.save_floor(),
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            }
+        );
+        assert!(state.active_objects[1].is_empty());
+        assert_eq!(state.active_objects[2], vehicle);
+    }
+
+    #[test]
+    fn debug_enter_town_round_trips_to_saved_world_sailing_state() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        let transport = TransportState::Ship {
+            type_byte: 168,
+            tile: 168,
+            sails_hoisted: true,
+            hull: 0,
+            skiffs: 0,
+        };
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.player.transport = transport;
+        state.timing_status = TimingStatusTag::HalfTime;
+        state.sail_cadence = 1;
+        state.sail_stall_pending = true;
+        state.sync_player_object();
+        state.debug_enter = Some(PlayTarget::Town(scene));
+
+        assert_eq!(
+            state.enter_current_location(&dir).unwrap(),
+            MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
+        );
+        assert_eq!(
+            state.return_world.as_ref().map(|ret| (
+                ret.transport,
+                ret.timing_status,
+                ret.sail_cadence,
+                ret.sail_stall_pending
+            )),
+            Some((transport, TimingStatusTag::HalfTime, 1, true))
+        );
+        assert_eq!(state.timing_status, TimingStatusTag::Normal);
+
+        state.player.x = 0;
+        state.player.y = 1;
+        assert_eq!(
+            state.step(Direction::West),
+            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+        );
+
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!(state.player.transport, transport);
+        assert_eq!(state.timing_status, TimingStatusTag::HalfTime);
+        assert_eq!(state.sail_cadence, 1);
+        assert!(state.sail_stall_pending);
+        assert_eq!(state.active_objects[0].tile, 168);
+
+        assert_eq!(state.pass_turn(), MoveOutcome::Passed);
+        assert_eq!(state.message, "Ship remains stalled by the wind.");
+        assert!(!state.sail_stall_pending);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn debug_enter_dungeon_top_exit_restores_return_world_transport() {
+        let dir = debug_game_dir();
+        let scene = DungeonScene::new(40).unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let transport = TransportState::Ship {
+            type_byte: 168,
+            tile: 168,
+            sails_hoisted: true,
+            hull: 0,
+            skiffs: 0,
+        };
+        state.player.transport = transport;
+        state.timing_status = TimingStatusTag::HalfTime;
+        state.sail_cadence = 1;
+        state.sail_stall_pending = true;
+        state.sync_player_object();
+        state.debug_enter = Some(PlayTarget::Dungeon(scene));
+
+        assert_eq!(
+            state.enter_current_location(&dir).unwrap(),
+            MoveOutcome::Transition(AreaTransition::EnteredDungeon(scene))
+        );
+        assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
+        assert_eq!(
+            state.return_world.as_ref().map(|ret| (
+                ret.transport,
+                ret.timing_status,
+                ret.sail_cadence,
+                ret.sail_stall_pending
+            )),
+            Some((transport, TimingStatusTag::HalfTime, 1, true))
+        );
+        assert_eq!(state.timing_status, TimingStatusTag::Normal);
+
+        state.grid[dungeon_cell_index(0, 1, 1)] = 0x10;
+        assert_eq!(
+            state.climb(Path::new(""), ClimbIntent::Up).unwrap(),
+            MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
+        );
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert_eq!(state.player.transport, transport);
+        assert_eq!(state.timing_status, TimingStatusTag::HalfTime);
+        assert_eq!(state.sail_cadence, 1);
+        assert!(state.sail_stall_pending);
+        assert_eq!(state.active_objects[0].tile, 168);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn debug_enter_underworld_non_doom_dungeon_allows_trigger_seed_and_faces_west() {
+        let dir = debug_game_dir();
+        let scene = DungeonScene::new(33).unwrap();
+        let mut dungeon_dat = vec![0; DUNGEON_DAT_LEN];
+        dungeon_dat[dungeon_cell_index(7, 7, 7)] = 0xf0;
+        fs::write(dir.join("DUNGEON.DAT"), dungeon_dat).unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.debug_enter = Some(PlayTarget::Dungeon(scene));
+
+        assert_eq!(
+            state.enter_current_location(&dir).unwrap(),
+            MoveOutcome::Transition(AreaTransition::EnteredDungeon(scene))
+        );
+
+        assert_eq!(state.area, Area::Dungeon { scene, level: 7 });
+        assert_eq!((state.player.x, state.player.y), (7, 7));
+        assert_eq!(state.player.facing, Direction::West);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dungeon_start_rejects_non_seed_trigger_cell() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(7, 7, 7)] = 0xf0;
+        grid[dungeon_cell_index(7, 6, 7)] = 0xf0;
+
+        assert!(validate_dungeon_start(&grid, scene, 7, (7, 7)).is_ok());
+        assert!(validate_dungeon_start(&grid, scene, 7, (6, 7)).is_err());
+    }
+
+    #[test]
+    fn dungeon_movement_accepts_passage_and_blocks_walls() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(1, 2, 1)] = 0xb0;
+        let mut state = dungeon_state(grid, 1, 0, 0);
+
+        assert_eq!(state.step(Direction::South), MoveOutcome::Moved);
+        assert_eq!((state.player.x, state.player.y), (0, 1));
+        assert_eq!(state.active_objects[0].z, 1);
+        assert_eq!(state.turn, 1);
+
+        assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.turn, 2);
+        assert_eq!(state.message, "Blocked!");
+    }
+
+    #[test]
+    fn dungeon_fall_trap_drops_one_level_and_marks_destination() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x61;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+
+        assert_eq!(
+            state.step(Direction::East),
+            MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel { scene, level: 1 })
+        );
+
+        assert_eq!(state.area, Area::Dungeon { scene, level: 1 });
+        assert_eq!((state.player.x, state.player.y), (2, 1));
+        assert_eq!(state.active_objects[0].z, 1);
+        assert_eq!(state.grid[dungeon_cell_index(1, 2, 1)], 0x08);
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn dungeon_fall_trap_chain_missing_return_metadata_stays_in_dungeon() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(6, 2, 1)] = 0x61;
+        grid[dungeon_cell_index(7, 2, 1)] = 0x61;
+        let mut state = dungeon_state(grid, 6, 1, 1);
+
+        assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
+
+        assert_eq!(state.area, Area::Dungeon { scene, level: 7 });
+        assert_eq!((state.player.x, state.player.y), (2, 1));
+        assert_eq!(state.active_objects[0].z, 7);
+        assert_eq!(state.grid[dungeon_cell_index(7, 2, 1)], 0x61);
+        assert_eq!(state.turn, 1);
+        assert!(
+            state
+                .message
+                .contains("missing clean return-coordinate metadata")
+        );
+    }
+
+    #[test]
+    fn dungeon_fall_trap_chain_uses_clean_location_table_when_exiting_past_bottom_level() {
+        let dir = debug_game_dir();
+        let scene = DungeonScene::new(33).unwrap();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "UNDERWORLD 10 20 DUNGEON:0\n",
+        )
+        .unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(6, 2, 1)] = 0x61;
+        grid[dungeon_cell_index(7, 2, 1)] = 0x61;
+        let mut state = dungeon_state(grid, 6, 1, 1);
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
+        );
+
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert_eq!(state.active_objects[0].z, -1);
+        assert_eq!(state.grid[world_cell_index(10, 20)], 5);
+        assert!(state.message.contains("world-location table return point"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dungeon_bomb_trap_marks_cell_without_level_change() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x62;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+
+        assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+        assert_eq!((state.player.x, state.player.y), (2, 1));
+        assert_eq!(
+            state.area,
+            Area::Dungeon {
+                scene: DungeonScene::new(33).unwrap(),
+                level: 0,
+            }
+        );
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x6a);
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn dungeon_marked_trap_variants_keep_trap_movement_effects() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut fall_grid = open_dungeon_record();
+        fall_grid[dungeon_cell_index(0, 2, 1)] = 0x69;
+        let mut fall = dungeon_state(fall_grid, 0, 1, 1);
+
+        assert_eq!(
+            fall.step(Direction::East),
+            MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel { scene, level: 1 })
+        );
+
+        assert_eq!(fall.area, Area::Dungeon { scene, level: 1 });
+        assert_eq!((fall.player.x, fall.player.y), (2, 1));
+        assert_eq!(fall.grid[dungeon_cell_index(0, 2, 1)], 0x61);
+        assert_eq!(fall.grid[dungeon_cell_index(1, 2, 1)], 0x08);
+        assert_eq!(fall.turn, 1);
+
+        let mut bomb_grid = open_dungeon_record();
+        bomb_grid[dungeon_cell_index(0, 2, 1)] = 0x6a;
+        let mut bomb = dungeon_state(bomb_grid, 0, 1, 1);
+
+        assert_eq!(bomb.step(Direction::East), MoveOutcome::Moved);
+
+        assert_eq!((bomb.player.x, bomb.player.y), (2, 1));
+        assert_eq!(bomb.area, Area::Dungeon { scene, level: 0 });
+        assert_eq!(bomb.grid[dungeon_cell_index(0, 2, 1)], 0x6a);
+        assert_eq!(bomb.turn, 1);
+    }
+
+    #[test]
+    fn consumed_dungeon_action_on_fall_trap_applies_underfoot_fall_after_turn() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x61;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+
+        assert!(state.handle_dungeon_key('i', Path::new("")).unwrap());
+
+        assert_eq!(state.area, Area::Dungeon { scene, level: 1 });
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.active_objects[0].z, 1);
+        assert_eq!(state.grid[dungeon_cell_index(1, 1, 1)], 0x08);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("Ignited a torch"));
+        assert!(state.message.contains("pit trap"));
+    }
+
+    #[test]
+    fn no_turn_dungeon_action_on_fall_trap_skips_underfoot_fall() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x61;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+
+        assert!(state.handle_dungeon_key('l', Path::new("")).unwrap());
+
+        assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.active_objects[0].z, 0);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x61);
+        assert_eq!(state.turn, 0);
+        assert!(!state.message.contains("pit trap"));
+    }
+
+    #[test]
+    fn pass_turn_on_dungeon_fall_trap_applies_underfoot_fall_after_turn() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x61;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(Path::new(""))).unwrap(),
+            MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel { scene, level: 1 })
+        );
+
+        assert_eq!(state.area, Area::Dungeon { scene, level: 1 });
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.grid[dungeon_cell_index(1, 1, 1)], 0x08);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.starts_with("Passed."));
+        assert!(state.message.contains("pit trap"));
+    }
+
+    #[test]
+    fn inline_cast_on_dungeon_bomb_trap_marks_underfoot_without_extra_turn() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x62;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.spell_charges[IN_LOR_SPELL_INDEX] = 1;
+        state.party[0].mana = IN_LOR_COST;
+        state.party[0].level = IN_LOR_COST;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1IL", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x6a);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert!(state.message.contains("Light!"));
+        assert!(state.message.contains("bomb trap"));
+    }
+
+    #[test]
+    fn dungeon_poison_field_entry_poison_living_party_without_blocking_movement() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x81;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                status: b'G',
+                climb_stat: 30,
+                mana: 8,
+                hp: 10,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 1,
+                status: b'D',
+                climb_stat: 30,
+                mana: 8,
+                hp: 0,
+                max_hp: 20,
+                level: 8,
+            },
+        ];
+
+        assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+        assert_eq!((state.player.x, state.player.y), (2, 1));
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.party[0].status, b'P');
+        assert_eq!(state.party[1].status, b'D');
+        assert!(state.message.contains("poison gas field"));
+        assert!(state.message.contains("set 1 living member(s) to poisoned"));
+        assert!(!state.message.contains("out of scope"));
+    }
+
+    #[test]
+    fn dungeon_sleep_field_marker_variant_sets_living_party_asleep() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x88;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                status: b'P',
+                climb_stat: 30,
+                mana: 8,
+                hp: 10,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 1,
+                status: b'A',
+                climb_stat: 30,
+                mana: 8,
+                hp: 10,
+                max_hp: 20,
+                level: 8,
+            },
+        ];
+
+        assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+        assert_eq!((state.player.x, state.player.y), (2, 1));
+        assert_eq!(state.party[0].status, b'S');
+        assert_eq!(state.party[1].status, b'A');
+        assert!(state.message.contains("sleep field"));
+        assert!(state.message.contains("asleep"));
+    }
+
+    #[test]
+    fn dungeon_fire_and_electric_fields_damage_living_party_members() {
+        let mut fire_grid = open_dungeon_record();
+        fire_grid[dungeon_cell_index(0, 2, 1)] = 0x82;
+        let mut fire = dungeon_state(fire_grid, 0, 1, 1);
+        fire.party = vec![
+            PartyMember {
+                slot: 0,
+                status: b'G',
+                climb_stat: 30,
+                mana: 8,
+                hp: 10,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 1,
+                status: b'D',
+                climb_stat: 30,
+                mana: 8,
+                hp: 9,
+                max_hp: 20,
+                level: 8,
+            },
+        ];
+        let mut damage_probe = fire.clone();
+        damage_probe.player.x = 2;
+        damage_probe.player.y = 1;
+        let expected_fire_damage =
+            damage_probe.dungeon_field_damage_roll(0, DungeonFieldEffect::Fire);
+
+        assert_eq!(fire.step(Direction::East), MoveOutcome::Moved);
+
+        assert_eq!(fire.party[0].hp, 10 - expected_fire_damage as u16);
+        assert_eq!(fire.party[1].hp, 9);
+        assert!(fire.message.contains("wall of fire"));
+        assert!(fire.message.contains("slot 0 took"));
+
+        let mut electric_grid = open_dungeon_record();
+        electric_grid[dungeon_cell_index(0, 2, 1)] = 0x8b;
+        let mut electric = dungeon_state(electric_grid, 0, 1, 1);
+        electric.party[0].hp = 10;
+        let mut electric_probe = electric.clone();
+        electric_probe.player.x = 2;
+        electric_probe.player.y = 1;
+        let expected_electric_damage =
+            electric_probe.dungeon_field_damage_roll(0, DungeonFieldEffect::Electric);
+
+        assert_eq!(electric.step(Direction::East), MoveOutcome::Moved);
+
+        assert_eq!(electric.party[0].hp, 10 - expected_electric_damage as u16);
+        assert!(electric.message.contains("electric field"));
+    }
+
+    #[test]
+    fn consumed_dungeon_action_on_field_applies_underfoot_field_after_turn() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x81;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.party[0].status = b'G';
+
+        assert!(state.handle_dungeon_key('i', Path::new("")).unwrap());
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.party[0].status, b'P');
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert!(state.message.contains("Ignited a torch"));
+        assert!(state.message.contains("poison gas field"));
+        assert!(state.message.contains("poisoned"));
+    }
+
+    #[test]
+    fn no_turn_dungeon_action_on_field_skips_underfoot_field() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x80;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.party[0].status = b'G';
+
+        assert!(state.handle_dungeon_key('l', Path::new("")).unwrap());
+
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.party[0].status, b'G');
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert!(!state.message.contains("sleep field"));
+        assert!(!state.message.contains("asleep"));
+    }
+
+    #[test]
+    fn pass_turn_on_dungeon_fire_field_damages_without_extra_turn() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x82;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.party[0].hp = 20;
+        let mut damage_probe = state.clone();
+        damage_probe.advance_turn();
+        let expected_damage = damage_probe.dungeon_field_damage_roll(0, DungeonFieldEffect::Fire);
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(Path::new(""))).unwrap(),
+            MoveOutcome::Passed
+        );
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.party[0].hp, 20 - expected_damage as u16);
+        assert!(state.message.starts_with("Passed."));
+        assert!(state.message.contains("wall of fire"));
+        assert!(state.message.contains("slot 0 took"));
+    }
+
+    #[test]
+    fn consumed_dungeon_turn_on_wind_tile_extinguishes_underfoot_torch_after_turn() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(DUNGEON_WIND_TILE_TABLE_FILE),
+            "DUNGEON:0 0 1 1 0x70\n",
+        )
+        .unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x70;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.torch_counter = 5;
+        state.light_spell_counter = 5;
+        state.visibility_dirty = false;
+
+        assert!(state.handle_dungeon_key('a', &dir).unwrap());
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.torch_counter, 0);
+        assert_eq!(state.light_spell_counter, 4);
+        assert!(state.visibility_dirty);
+        assert!(state.message.contains("Turned to face"));
+        assert!(state.message.contains("breeze blows out the torch"));
+        let _ = fs::remove_dir_all(dir);
+    }
+

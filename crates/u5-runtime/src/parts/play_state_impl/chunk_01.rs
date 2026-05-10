@@ -1,0 +1,900 @@
+impl PlayState {
+    pub fn load_scene(game_dir: &Path, options: PlayOptions) -> io::Result<Self> {
+        match options.target {
+            PlayTarget::Town(scene) => Self::load_town_scene(game_dir, scene, options),
+            PlayTarget::Dungeon(scene) => Self::load_dungeon_scene(game_dir, scene, options),
+            PlayTarget::World(plane) => Self::load_world_scene(game_dir, plane, options),
+        }
+    }
+
+    fn mark_visibility_dirty(&mut self) {
+        self.visibility_dirty = true;
+    }
+
+    fn current_world_overlay_objects(&self) -> Vec<ActiveObject> {
+        let mut objects = vec![ActiveObject::empty(); OOL_SLOTS - 1];
+        for (index, object) in self
+            .active_objects
+            .iter()
+            .skip(1)
+            .take(OOL_SLOTS - 1)
+            .copied()
+            .enumerate()
+        {
+            objects[index] = object;
+        }
+        objects
+    }
+
+    fn cache_current_world_overlay(&mut self) {
+        let Area::World { plane } = self.area else {
+            return;
+        };
+        self.world_overlays
+            .set(plane, self.current_world_overlay_objects());
+    }
+
+    fn save_game_command(
+        &mut self,
+        game_dir: &Path,
+        confirm: Option<bool>,
+    ) -> io::Result<MoveOutcome> {
+        match confirm {
+            None => {
+                self.message = "Save game? Use QY to save or QN to cancel.".to_string();
+                Ok(MoveOutcome::PromptDeclined)
+            }
+            Some(false) => {
+                self.message = "No.".to_string();
+                Ok(MoveOutcome::PromptDeclined)
+            }
+            Some(true) => {
+                self.write_save_files(game_dir)?;
+                self.message = "Yes. Saving... Done.".to_string();
+                Ok(MoveOutcome::Saved)
+            }
+        }
+    }
+
+    fn write_save_files(&mut self, game_dir: &Path) -> io::Result<()> {
+        let (scene, z, x, y) = self.current_save_location().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "save game is only available in active play modes",
+            )
+        })?;
+        self.sync_player_object();
+        self.cache_current_world_overlay();
+
+        let mut save = load_save_image_template(game_dir, self.save_template_source)?;
+        save[SAVE_SCENE_OFFSET] = scene;
+        save[SAVE_Z_OFFSET] = z;
+        save[SAVE_X_OFFSET] = x;
+        save[SAVE_Y_OFFSET] = y;
+        write_u16_at(&mut save, SAVE_YEAR_OFFSET, self.clock.year);
+        save[SAVE_MONTH_OFFSET] = self.clock.month;
+        save[SAVE_DAY_OFFSET] = self.clock.day;
+        save[SAVE_HOUR_OFFSET] = self.clock.hour;
+        save[SAVE_MINUTE_OFFSET] = self.clock.minute;
+        save[SAVE_AMPM_DISPLAY_OFFSET] = self.clock.display_hour();
+        write_u16_at(&mut save, SAVE_FOOD_STOCK_OFFSET, self.food);
+        write_u16_at(&mut save, SAVE_GOLD_STOCK_OFFSET, self.gold);
+        save[SAVE_KEY_STOCK_OFFSET] = self.keys;
+        save[SAVE_GEM_STOCK_OFFSET] = self.gems;
+        save[SAVE_TORCH_STOCK_OFFSET] = self.torches;
+        save[SAVE_SPELL_CHARGES_OFFSET..SAVE_SPELL_CHARGES_OFFSET + SPELL_COUNT]
+            .copy_from_slice(&self.spell_charges);
+        encode_reagent_stock(&mut save, self.reagents);
+        for (slot_index, slot) in self.moonstone_slots.iter().copied().enumerate() {
+            save[SAVE_MOONSTONE_X_OFFSET + slot_index] = slot.x;
+            save[SAVE_MOONSTONE_Y_OFFSET + slot_index] = slot.y;
+            save[SAVE_MOONSTONE_SCENE_OFFSET + slot_index] = slot.scene;
+            save[SAVE_MOONSTONE_Z_OFFSET + slot_index] = slot.z;
+        }
+        save[SAVE_LIGHT_SPELL_COUNTER_OFFSET] = self.light_spell_counter;
+        save[SAVE_TORCH_COUNTER_OFFSET] = self.torch_counter;
+        save[SAVE_SHRINE_ORDAINED_MASK_OFFSET] = self.shrine_ordained_mask;
+        save[SAVE_SHRINE_CODEX_MASK_OFFSET] = self.shrine_codex_mask;
+        save[SAVE_TIMING_STATUS_TAG_OFFSET] = self.timing_status.save_byte();
+        save[SAVE_ACTIVE_PLAYER_OFFSET] = 0xff;
+        save[SAVE_TRANSPORT_MARKER_OFFSET] = self.player.transport.save_marker();
+        save[SAVE_WIND_OFFSET] = self.wind_save_byte;
+        save[SAVE_PARTY_SIZE_OFFSET] = self.party.len().min(6) as u8;
+        let avatar_record = SAVE_ROSTER_OFFSET;
+        save[avatar_record + SAVE_CHARACTER_STR_OFFSET] = self.avatar_stats.strength;
+        save[avatar_record + SAVE_CHARACTER_DEX_OFFSET] = self.avatar_stats.dexterity;
+        save[avatar_record + SAVE_CHARACTER_INT_OFFSET] = self.avatar_stats.intelligence;
+        for member in self.party.iter().take(6) {
+            let record = SAVE_ROSTER_OFFSET + member.slot as usize * SAVE_CHARACTER_RECORD_LEN;
+            if record + SAVE_CHARACTER_MAX_HP_OFFSET + 1 >= save.len() {
+                continue;
+            }
+            save[record + SAVE_CHARACTER_STATUS_OFFSET] = member.status;
+            save[record + SAVE_CHARACTER_MANA_OFFSET] = member.mana;
+            write_u16_at(&mut save, record + SAVE_CHARACTER_HP_OFFSET, member.hp);
+            write_u16_at(
+                &mut save,
+                record + SAVE_CHARACTER_MAX_HP_OFFSET,
+                member.max_hp,
+            );
+            save[record + SAVE_CHARACTER_LEVEL_OFFSET] = member.level;
+        }
+        let active_table = encode_active_object_table(&self.active_objects)?;
+        save[SAVE_ACTIVE_OBJECTS_OFFSET..SAVE_ACTIVE_OBJECTS_OFFSET + OOL_PLANE_LEN]
+            .copy_from_slice(&active_table);
+
+        let saved_ool = self.encode_saved_ool(game_dir)?;
+        fs::write(game_dir.join("SAVED.GAM"), save)?;
+        fs::write(game_dir.join("SAVED.OOL"), saved_ool)?;
+        Ok(())
+    }
+
+    fn current_save_location(&self) -> Option<(u8, u8, u8, u8)> {
+        let x = u8::try_from(self.player.x).ok()?;
+        let y = u8::try_from(self.player.y).ok()?;
+        match self.area {
+            Area::Town { scene, floor } => Some((scene.byte, floor as u8, x, y)),
+            Area::Dungeon { scene, level } => Some((scene.byte, level, x, y)),
+            Area::World { plane } => {
+                let z = match plane {
+                    WorldPlane::Britannia => 0,
+                    WorldPlane::Underworld => 0xff,
+                };
+                Some((0, z, x, y))
+            }
+        }
+    }
+
+    fn encode_saved_ool(&self, game_dir: &Path) -> io::Result<Vec<u8>> {
+        let mut bytes = Vec::with_capacity(SAVED_OOL_LEN);
+        for plane in [WorldPlane::Britannia, WorldPlane::Underworld] {
+            let objects = self.save_overlay_objects_for_plane(game_dir, plane)?;
+            bytes.extend(encode_ool_plane_objects(&objects)?);
+        }
+        Ok(bytes)
+    }
+
+    fn save_overlay_objects_for_plane(
+        &self,
+        game_dir: &Path,
+        plane: WorldPlane,
+    ) -> io::Result<Vec<ActiveObject>> {
+        if let Some(objects) = self.world_overlays.get(plane) {
+            Ok(objects)
+        } else {
+            load_world_overlay_objects(game_dir, plane)
+        }
+    }
+
+    fn load_world_overlay_for_plane(
+        &self,
+        game_dir: &Path,
+        plane: WorldPlane,
+    ) -> io::Result<Vec<ActiveObject>> {
+        if let Some(objects) = self.world_overlays.get(plane) {
+            Ok(objects)
+        } else {
+            load_world_overlay_objects(game_dir, plane)
+        }
+    }
+
+    fn replace_world_active_objects(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+        x: usize,
+        y: usize,
+    ) -> io::Result<()> {
+        let overlay = self.load_world_overlay_for_plane(game_dir, plane)?;
+        self.active_objects.clear();
+        self.active_objects.push(ActiveObject {
+            type_byte: PLAYER_TILE,
+            tile: PLAYER_TILE,
+            x,
+            y,
+            z: plane.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        self.active_objects.extend(overlay);
+        self.cache_current_world_overlay();
+        Ok(())
+    }
+
+    fn load_town_scene(game_dir: &Path, scene: Scene, options: PlayOptions) -> io::Result<Self> {
+        let mut grid = load_floor(game_dir, scene, options.floor)?;
+        let passability = load_tile_passability(game_dir)?;
+        let moongates = load_moongate_entries(game_dir)?.unwrap_or_default();
+        let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
+        let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;
+        let markers = harvest_location_markers(&grid);
+        normalize_town_runtime_floor(&mut grid, options.clock.hour);
+        let table_start = if options.floor == 0 {
+            load_location_entry_y(game_dir, scene)?.map(|entry_y| (15, entry_y))
+        } else {
+            None
+        };
+        let saved_active_objects = options.saved_active_objects.clone();
+        let has_saved_active_objects = saved_active_objects.is_some();
+        let (x, y) = match options.start.or(table_start) {
+            Some(pos) => {
+                validate_start(&grid, pos, passability.as_ref())?;
+                pos
+            }
+            None => markers
+                .spawn_markers
+                .first()
+                .copied()
+                .or_else(|| first_walkable(&grid, passability.as_ref()))
+                .ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidData, "no playable start cell")
+                })?,
+        };
+
+        let world_overlays = initial_world_overlay_cache(&options);
+        let mut active_objects = vec![ActiveObject {
+            type_byte: PLAYER_TILE,
+            tile: PLAYER_TILE,
+            x,
+            y,
+            z: options.floor,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        }];
+        if let Some(objects) = saved_active_objects {
+            active_objects.extend(objects);
+        }
+        let mut state = Self {
+            area: Area::Town {
+                scene,
+                floor: options.floor,
+            },
+            player: Player {
+                x,
+                y,
+                facing: Direction::South,
+                transport: TransportState::Foot,
+            },
+            active_objects,
+            npcs: Vec::new(),
+            door_tracker: None,
+            opened_town_doors: Vec::new(),
+            revealed_town_secret_doors: Vec::new(),
+            passability,
+            moongates,
+            grid,
+            clock: options.clock,
+            animation: AnimationClock::default(),
+            food: options.food,
+            gold: options.gold,
+            keys: options.keys,
+            gems: options.gems,
+            climbing_gear: options.climbing_gear,
+            party: options.party,
+            spell_charges: options.spell_charges,
+            reagents: options.reagents,
+            moonstone_slots: options.moonstone_slots,
+            shrine_ordained_mask: options.shrine_ordained_mask,
+            shrine_codex_mask: options.shrine_codex_mask,
+            shrine_standing: options.shrine_standing,
+            avatar_stats: options.avatar_stats,
+            torches: options.torches,
+            torch_counter: options.torch_counter,
+            light_spell_counter: options.light_spell_counter,
+            ambient_light: 0,
+            visibility_dirty: false,
+            wind: options.wind,
+            wind_save_byte: options.wind_save_byte,
+            timing_status: options.timing_status,
+            time_stop_counter: options.time_stop_counter,
+            active_effect_tag: options.active_effect_tag,
+            active_effect_counter: options.active_effect_counter,
+            sail_cadence: 0,
+            sail_stall_pending: false,
+            turn: 0,
+            message: format!("Entered {} at ({x}, {y}).", scene.key()),
+            debug_enter: options.debug_enter,
+            return_world: None,
+            world_overlays,
+            save_template_source: options.save_template_source,
+            typeahead_buffer_enabled: false,
+            pending_moongate: None,
+        };
+        if has_saved_active_objects {
+            state.load_scheduled_npcs_from_existing_active_objects(&npc_slots);
+        } else {
+            state.load_scheduled_npcs(&npc_slots);
+        }
+        state.attach_player_phantom_npc();
+        state.mode_zero_cleanup();
+        state.mark_visibility_dirty();
+        Ok(state)
+    }
+
+    fn load_dungeon_scene(
+        game_dir: &Path,
+        scene: DungeonScene,
+        options: PlayOptions,
+    ) -> io::Result<Self> {
+        if !(0..=7).contains(&options.floor) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "dungeon levels are limited to 0..7 by the public spec, got {}",
+                    options.floor
+                ),
+            ));
+        }
+        let grid = load_dungeon_record(game_dir, scene)?;
+        let passability = load_tile_passability(game_dir)?;
+        let moongates = load_moongate_entries(game_dir)?.unwrap_or_default();
+        let level = options.floor as u8;
+        let default_start = (1, 1);
+        let saved_active_objects = options.saved_active_objects.clone();
+        let (x, y) = match options.start {
+            Some(pos) => {
+                validate_dungeon_start(&grid, scene, level, pos)?;
+                pos
+            }
+            None => {
+                if validate_dungeon_start(&grid, scene, level, default_start).is_ok() {
+                    default_start
+                } else {
+                    first_dungeon_walkable(&grid, level).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "no playable dungeon start cell")
+                    })?
+                }
+            }
+        };
+
+        let world_overlays = initial_world_overlay_cache(&options);
+        let mut active_objects = vec![ActiveObject {
+            type_byte: PLAYER_TILE,
+            tile: PLAYER_TILE,
+            x,
+            y,
+            z: level as i8,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        }];
+        if let Some(objects) = saved_active_objects {
+            active_objects.extend(objects);
+        }
+        let mut state = Self {
+            area: Area::Dungeon { scene, level },
+            player: Player {
+                x,
+                y,
+                facing: Direction::East,
+                transport: TransportState::Foot,
+            },
+            active_objects,
+            npcs: Vec::new(),
+            door_tracker: None,
+            opened_town_doors: Vec::new(),
+            revealed_town_secret_doors: Vec::new(),
+            passability,
+            moongates,
+            grid,
+            clock: options.clock,
+            animation: AnimationClock::default(),
+            food: options.food,
+            gold: options.gold,
+            keys: options.keys,
+            gems: options.gems,
+            climbing_gear: options.climbing_gear,
+            party: options.party,
+            spell_charges: options.spell_charges,
+            reagents: options.reagents,
+            moonstone_slots: options.moonstone_slots,
+            shrine_ordained_mask: options.shrine_ordained_mask,
+            shrine_codex_mask: options.shrine_codex_mask,
+            shrine_standing: options.shrine_standing,
+            avatar_stats: options.avatar_stats,
+            torches: options.torches,
+            torch_counter: options.torch_counter,
+            light_spell_counter: options.light_spell_counter,
+            ambient_light: 0,
+            visibility_dirty: false,
+            wind: options.wind,
+            wind_save_byte: options.wind_save_byte,
+            timing_status: options.timing_status,
+            time_stop_counter: options.time_stop_counter,
+            active_effect_tag: options.active_effect_tag,
+            active_effect_counter: options.active_effect_counter,
+            sail_cadence: 0,
+            sail_stall_pending: false,
+            turn: 0,
+            message: format!(
+                "Entered {} ({}) level {level} at ({x}, {y}).",
+                scene.key(),
+                scene.name()
+            ),
+            debug_enter: options.debug_enter,
+            return_world: None,
+            world_overlays,
+            save_template_source: options.save_template_source,
+            typeahead_buffer_enabled: false,
+            pending_moongate: None,
+        };
+        state.mode_zero_cleanup();
+        state.mark_visibility_dirty();
+        Ok(state)
+    }
+
+    fn load_world_scene(
+        game_dir: &Path,
+        plane: WorldPlane,
+        options: PlayOptions,
+    ) -> io::Result<Self> {
+        let grid = load_world_map(game_dir, plane)?;
+        let passability = load_tile_passability(game_dir)?;
+        let moongates = load_moongate_entries(game_dir)?.unwrap_or_default();
+        let damage_tiles = load_world_damage_tile_entries(game_dir)?.unwrap_or_default();
+        let default_start = (1, 1);
+        let (x, y) = match options.start {
+            Some(pos) => {
+                validate_world_start_for_transport(
+                    &grid,
+                    pos,
+                    plane,
+                    passability.as_ref(),
+                    options.transport,
+                    &damage_tiles,
+                )?;
+                pos
+            }
+            None => {
+                if world_start_safe_for_transport(
+                    &grid,
+                    default_start,
+                    plane,
+                    passability.as_ref(),
+                    options.transport,
+                    &damage_tiles,
+                ) {
+                    default_start
+                } else {
+                    first_world_walkable_for_transport(
+                        &grid,
+                        plane,
+                        passability.as_ref(),
+                        options.transport,
+                        &damage_tiles,
+                    )
+                    .ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "no playable world start cell")
+                    })?
+                }
+            }
+        };
+
+        let transport = options.transport;
+        let world_overlays = initial_world_overlay_cache(&options);
+        let mut active_objects = vec![ActiveObject {
+            type_byte: PLAYER_TILE,
+            tile: PLAYER_TILE,
+            x,
+            y,
+            z: plane.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        }];
+        match options.saved_active_objects {
+            Some(saved_objects) => active_objects.extend(saved_objects),
+            None => {
+                if plane == WorldPlane::Britannia {
+                    if let Some(objects) = options.initial_britannia_overlay.clone() {
+                        active_objects.extend(objects);
+                    } else {
+                        active_objects.extend(load_world_overlay_objects(game_dir, plane)?);
+                    }
+                } else {
+                    active_objects.extend(load_world_overlay_objects(game_dir, plane)?);
+                }
+            }
+        }
+        if let Some(pending) = options.pending_vehicle {
+            place_pending_vehicle_acquisition(&mut active_objects, plane, pending)?;
+        }
+
+        let mut state = Self {
+            area: Area::World { plane },
+            player: Player {
+                x,
+                y,
+                facing: Direction::South,
+                transport,
+            },
+            active_objects,
+            npcs: Vec::new(),
+            door_tracker: None,
+            opened_town_doors: Vec::new(),
+            revealed_town_secret_doors: Vec::new(),
+            passability,
+            moongates,
+            grid,
+            clock: options.clock,
+            animation: AnimationClock::default(),
+            food: options.food,
+            gold: options.gold,
+            keys: options.keys,
+            gems: options.gems,
+            climbing_gear: options.climbing_gear,
+            party: options.party,
+            spell_charges: options.spell_charges,
+            reagents: options.reagents,
+            moonstone_slots: options.moonstone_slots,
+            shrine_ordained_mask: options.shrine_ordained_mask,
+            shrine_codex_mask: options.shrine_codex_mask,
+            shrine_standing: options.shrine_standing,
+            avatar_stats: options.avatar_stats,
+            torches: options.torches,
+            torch_counter: options.torch_counter,
+            light_spell_counter: options.light_spell_counter,
+            ambient_light: 0,
+            visibility_dirty: false,
+            wind: options.wind,
+            wind_save_byte: options.wind_save_byte,
+            timing_status: options.timing_status,
+            time_stop_counter: options.time_stop_counter,
+            active_effect_tag: options.active_effect_tag,
+            active_effect_counter: options.active_effect_counter,
+            sail_cadence: 0,
+            sail_stall_pending: false,
+            turn: 0,
+            message: format!(
+                "Entered {} at ({x}, {y}). {}.",
+                plane.key(),
+                options.wind.status_message()
+            ),
+            debug_enter: options.debug_enter,
+            return_world: None,
+            world_overlays,
+            save_template_source: options.save_template_source,
+            typeahead_buffer_enabled: false,
+            pending_moongate: None,
+        };
+        state.sync_player_object();
+        state.cache_current_world_overlay();
+        state.mode_zero_cleanup();
+        state.mark_visibility_dirty();
+        Ok(state)
+    }
+
+    #[cfg(test)]
+    fn step(&mut self, direction: Direction) -> MoveOutcome {
+        self.step_with_game_dir(direction, None)
+            .expect("step without a game dir cannot perform file-backed transitions")
+    }
+
+    fn step_with_game_dir(
+        &mut self,
+        direction: Direction,
+        game_dir: Option<&Path>,
+    ) -> io::Result<MoveOutcome> {
+        self.player.facing = direction;
+        let (dx, dy) = direction.delta();
+        let nx = self.player.x as isize + dx;
+        let ny = self.player.y as isize + dy;
+        let Area::Town { scene, floor } = self.area else {
+            return self.step_non_town(direction, nx, ny, game_dir);
+        };
+
+        if !(0..32).contains(&nx) || !(0..32).contains(&ny) {
+            self.advance_turn();
+            if self.restore_return_world() {
+                self.message = format!("Exited {} to overworld debug return point.", scene.key());
+                self.mark_visibility_dirty();
+                return Ok(MoveOutcome::Transition(AreaTransition::ExitedLocation(
+                    scene,
+                )));
+            } else if let Some(game_dir) = game_dir {
+                if self.restore_world_for_target(game_dir, PlayTarget::Town(scene))? {
+                    self.message = format!(
+                        "Exited {} to world-location table return point.",
+                        scene.key()
+                    );
+                    self.mark_visibility_dirty();
+                    return Ok(MoveOutcome::Transition(AreaTransition::ExitedLocation(
+                        scene,
+                    )));
+                }
+            }
+            return Ok(self.block_missing_town_return(
+                scene,
+                floor,
+                format!("Exited {}", scene.key()),
+            ));
+        }
+
+        let nx = nx as usize;
+        let ny = ny as usize;
+        if self.blocking_object_at(nx, ny).is_some() {
+            self.message = format!("Blocked by actor at ({nx}, {ny}).");
+            return Ok(MoveOutcome::Blocked);
+        }
+        let tile = self.grid[ny * 32 + nx];
+        if let Some(game_dir) = game_dir {
+            if let Some(entry) = self.town_exit_tile_at(game_dir, scene, floor, nx, ny, tile)? {
+                self.player.x = nx;
+                self.player.y = ny;
+                self.sync_player_object();
+                self.mark_visibility_dirty();
+                return self.resolve_town_exit_tile(game_dir, scene, floor, entry);
+            }
+        }
+        if let Some(game_dir) = game_dir {
+            if self
+                .town_stair_at(game_dir, scene, floor, nx, ny, tile)?
+                .is_some()
+                || (self.tile_walkable(tile) && (80..=87).contains(&tile))
+            {
+                return self.step_town_stair(game_dir, scene, floor, nx, ny, tile);
+            }
+        }
+        if let Some(game_dir) = game_dir {
+            if let Some(entry) = self.town_trap_door_at(game_dir, scene, floor, nx, ny, tile)? {
+                self.player.x = nx;
+                self.player.y = ny;
+                self.sync_player_object();
+                self.mark_visibility_dirty();
+                return self.apply_town_trap_door(game_dir, scene, entry);
+            }
+        }
+        if self.tile_walkable(tile) {
+            self.player.x = nx;
+            self.player.y = ny;
+            self.sync_player_object();
+            self.mark_visibility_dirty();
+            self.advance_turn();
+            self.message = format!("Moved to ({nx}, {ny}).");
+            Ok(MoveOutcome::Moved)
+        } else {
+            self.message = format!("Blocked by {} at ({nx}, {ny}).", tile_class(tile));
+            Ok(MoveOutcome::Blocked)
+        }
+    }
+
+    fn town_exit_tile_at(
+        &self,
+        game_dir: &Path,
+        scene: Scene,
+        floor: i8,
+        x: usize,
+        y: usize,
+        tile: u8,
+    ) -> io::Result<Option<TownExitTileEntry>> {
+        Ok(load_town_exit_tile_entries(game_dir)?.and_then(|entries| {
+            entries
+                .into_iter()
+                .find(|entry| town_exit_tile_matches(*entry, scene, floor, x, y, tile))
+        }))
+    }
+
+    fn town_lock_at(
+        &self,
+        game_dir: Option<&Path>,
+        scene: Scene,
+        floor: i8,
+        x: usize,
+        y: usize,
+        tile: u8,
+    ) -> io::Result<Option<TownLockEntry>> {
+        let Some(game_dir) = game_dir else {
+            return Ok(None);
+        };
+        Ok(load_town_lock_entries(game_dir)?.and_then(|entries| {
+            entries
+                .into_iter()
+                .find(|entry| town_lock_matches(*entry, scene, floor, x, y, tile))
+        }))
+    }
+
+    fn town_magic_lock_target_at(
+        &self,
+        game_dir: &Path,
+        scene: Scene,
+        floor: i8,
+        x: usize,
+        y: usize,
+        tile: u8,
+    ) -> io::Result<Option<TownLockEntry>> {
+        Ok(load_town_lock_entries(game_dir)?.and_then(|entries| {
+            entries.into_iter().find(|entry| {
+                entry.kind == TownLockKind::Magic
+                    && entry.scene == scene
+                    && entry.floor == floor
+                    && entry.x == x
+                    && entry.y == y
+                    && entry.unlocked_tile == tile
+            })
+        }))
+    }
+
+    fn town_stair_at(
+        &self,
+        game_dir: &Path,
+        scene: Scene,
+        floor: i8,
+        x: usize,
+        y: usize,
+        tile: u8,
+    ) -> io::Result<Option<TownStairEntry>> {
+        Ok(load_town_stair_entries(game_dir)?.and_then(|entries| {
+            entries
+                .into_iter()
+                .find(|entry| town_stair_matches(*entry, scene, floor, x, y, tile))
+        }))
+    }
+
+    fn resolve_town_exit_tile(
+        &mut self,
+        game_dir: &Path,
+        scene: Scene,
+        floor: i8,
+        entry: TownExitTileEntry,
+    ) -> io::Result<MoveOutcome> {
+        self.resolve_town_exit_tile_transition(game_dir, scene, floor, entry, true)
+    }
+
+    fn resolve_town_exit_tile_after_turn(
+        &mut self,
+        game_dir: &Path,
+        scene: Scene,
+        floor: i8,
+        entry: TownExitTileEntry,
+    ) -> io::Result<MoveOutcome> {
+        self.resolve_town_exit_tile_transition(game_dir, scene, floor, entry, false)
+    }
+
+    fn resolve_town_exit_tile_transition(
+        &mut self,
+        game_dir: &Path,
+        scene: Scene,
+        floor: i8,
+        entry: TownExitTileEntry,
+        advance_turn: bool,
+    ) -> io::Result<MoveOutcome> {
+        if advance_turn {
+            self.advance_turn();
+        }
+        if self.restore_return_world() {
+            self.message = format!(
+                "Stepped onto town exit tile at ({}, {}) in {}; returned to overworld debug return point.",
+                entry.x,
+                entry.y,
+                scene.key()
+            );
+            self.mark_visibility_dirty();
+            return Ok(MoveOutcome::Transition(AreaTransition::ExitedLocation(
+                scene,
+            )));
+        } else if self.restore_world_for_target(game_dir, PlayTarget::Town(scene))? {
+            self.message = format!(
+                "Stepped onto town exit tile at ({}, {}) in {}; returned to world-location table point.",
+                entry.x,
+                entry.y,
+                scene.key()
+            );
+            self.mark_visibility_dirty();
+            return Ok(MoveOutcome::Transition(AreaTransition::ExitedLocation(
+                scene,
+            )));
+        }
+        Ok(self.block_missing_town_return(
+            scene,
+            floor,
+            format!(
+                "Stepped onto town exit tile at ({}, {}) in {}",
+                entry.x,
+                entry.y,
+                scene.key()
+            ),
+        ))
+    }
+
+    fn block_missing_town_return(&mut self, scene: Scene, floor: i8, event: String) -> MoveOutcome {
+        self.area = Area::Town { scene, floor };
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+        self.message =
+            format!("{event}; missing clean return-coordinate metadata, stayed in location.");
+        MoveOutcome::Blocked
+    }
+
+    fn town_trap_door_at(
+        &self,
+        game_dir: &Path,
+        scene: Scene,
+        floor: i8,
+        x: usize,
+        y: usize,
+        tile: u8,
+    ) -> io::Result<Option<TownTrapDoorEntry>> {
+        Ok(load_town_trap_door_entries(game_dir)?.and_then(|entries| {
+            entries
+                .into_iter()
+                .find(|entry| town_trap_door_matches(*entry, scene, floor, x, y, tile))
+        }))
+    }
+
+    fn apply_town_trap_door(
+        &mut self,
+        game_dir: &Path,
+        scene: Scene,
+        entry: TownTrapDoorEntry,
+    ) -> io::Result<MoveOutcome> {
+        self.apply_town_trap_door_transition(game_dir, scene, entry, true)
+    }
+
+    fn apply_town_trap_door_transition(
+        &mut self,
+        game_dir: &Path,
+        scene: Scene,
+        entry: TownTrapDoorEntry,
+        advance_turn: bool,
+    ) -> io::Result<MoveOutcome> {
+        self.grid = load_town_runtime_floor(game_dir, scene, entry.to_floor, self.clock.hour)?;
+        self.area = Area::Town {
+            scene,
+            floor: entry.to_floor,
+        };
+        self.clear_town_floor_reload_door_state();
+        self.restore_revealed_town_secret_doors_for_floor(game_dir, scene, entry.to_floor)?;
+        self.relink_npc_objects();
+        self.mark_visibility_dirty();
+        if advance_turn {
+            self.advance_turn();
+        }
+        self.message = format!(
+            "Fell through trap door at ({}, {}) to {} floor {}.",
+            entry.x,
+            entry.y,
+            scene.key(),
+            entry.to_floor
+        );
+        Ok(MoveOutcome::Transition(AreaTransition::ChangedFloor {
+            scene,
+            floor: entry.to_floor,
+        }))
+    }
+
+    fn step_town_stair(
+        &mut self,
+        game_dir: &Path,
+        scene: Scene,
+        floor: i8,
+        nx: usize,
+        ny: usize,
+        tile: u8,
+    ) -> io::Result<MoveOutcome> {
+        let choices = self.connected_town_climb_choices(game_dir, scene, floor, nx, ny, tile)?;
+        match choices.as_slice() {
+            [] => {
+                self.message = "Not climbable!".to_string();
+                Ok(MoveOutcome::Blocked)
+            }
+            [intent] => {
+                self.player.x = nx;
+                self.player.y = ny;
+                self.sync_player_object();
+                self.mark_visibility_dirty();
+                self.climb(game_dir, *intent)
+            }
+            _ => {
+                self.player.x = nx;
+                self.player.y = ny;
+                self.sync_player_object();
+                self.mark_visibility_dirty();
+                self.message = "Two-way climb: use < or > to choose a climb direction.".to_string();
+                Ok(MoveOutcome::Blocked)
+            }
+        }
+    }
+
+}
