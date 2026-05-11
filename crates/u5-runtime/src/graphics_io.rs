@@ -95,7 +95,21 @@ pub fn composite_sprite_to_viewport(
     cell_x: usize,
     cell_y: usize,
 ) -> io::Result<()> {
-    let tile_pixels = atlas.tile_pixels(tile as usize).ok_or_else(|| {
+    composite_sprite_id_to_viewport(viewport, atlas, tile as usize, cell_x, cell_y)
+}
+
+/// Same as `composite_sprite_to_viewport` but accepts the full 9-bit tile
+/// id space (0..511). Active-object records can address upper-half sprite
+/// ids (NPCs, monsters, vehicles, the avatar) per the visibility/active-
+/// object specs, and those don't fit in a u8.
+pub fn composite_sprite_id_to_viewport(
+    viewport: &mut TileViewport,
+    atlas: &TileAtlas,
+    tile: usize,
+    cell_x: usize,
+    cell_y: usize,
+) -> io::Result<()> {
+    let tile_pixels = atlas.tile_pixels(tile).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("tile atlas is missing tile {tile}"),

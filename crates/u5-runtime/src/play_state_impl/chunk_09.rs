@@ -346,7 +346,23 @@ impl PlayState {
                 if let Some(sprite) =
                     self.top_down_sprite_tile(area, px, py, world_x, world_y, radius)
                 {
-                    composite_sprite_to_viewport(&mut viewport, atlas, sprite, cell_x, cell_y)?;
+                    // The PLAYER_TILE byte (0xFC) is a sentinel for "this
+                    // is the avatar slot", not a real sprite -- the lower
+                    // 8-bit tile space stores "a bellows" at 0xFC. Resolve
+                    // it to the actual avatar sprite in the upper-half tile
+                    // space (256..=511) before blitting.
+                    let sprite_id: usize = if sprite == PLAYER_TILE {
+                        PLAYER_SPRITE_TILE
+                    } else {
+                        sprite as usize
+                    };
+                    composite_sprite_id_to_viewport(
+                        &mut viewport,
+                        atlas,
+                        sprite_id,
+                        cell_x,
+                        cell_y,
+                    )?;
                 }
             }
         }

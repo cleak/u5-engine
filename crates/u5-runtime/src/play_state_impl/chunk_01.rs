@@ -441,7 +441,14 @@ impl PlayState {
         let passability = load_tile_passability(game_dir)?;
         let moongates = load_moongate_entries(game_dir)?.unwrap_or_default();
         let damage_tiles = load_world_damage_tile_entries(game_dir)?.unwrap_or_default();
-        let default_start = (1, 1);
+        // Canonical Ultima V starting position: Iolo's Hut on the surface
+        // (Britannia), at the cell south of the dwelling entrance. For the
+        // Underworld there is no canonical fresh-start spawn, so we keep
+        // the safer (1,1) seed and fall back to a search if that is blocked.
+        let default_start = match plane {
+            WorldPlane::Britannia => (62, 124),
+            WorldPlane::Underworld => (1, 1),
+        };
         let (x, y) = match options.start {
             Some(pos) => {
                 validate_world_start_for_transport(

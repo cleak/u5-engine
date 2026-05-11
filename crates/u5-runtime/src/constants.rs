@@ -92,13 +92,25 @@ pub const PCS_GLYPH_BLOCK_LEN: usize = 1 + PCS_GLYPH_HEIGHT;
 pub const PLAY_SCRIPT_MAX_IDLE_TICKS: usize = 1024;
 pub const PLAY_IGNORED_INPUT_KEY: char = '\u{1e}';
 pub const PLAY_TYPEAHEAD_TOGGLE_KEY: char = '\u{1f}';
+// Sentinel value the active-object table uses to mark the player slot
+// (slot zero). Per `u5-spec/catalogs/tile-catalog.md` Section 14, this
+// is "the player avatar sprite sentinel value 0xFC referenced in the
+// town-entry handler" -- a marker, NOT the actual sprite to render.
+// `PLAYER_SPRITE_TILE` below is what the renderer should display.
 pub const PLAYER_TILE: u8 = 0xfc;
-// The moongate animation cycles 4 sprite frames (closed / opening /
-// open / closing) at tile ids 0xD4..0xD7. Derived from the EGA atlas;
-// LOOK2.DAT separately labels 0xDC as "a moon gate!" but the actual
-// animated frames live at 0xD4..=0xD7.
-pub const MOONGATE_TILE_BASE: u8 = 0xD4;
-pub const MOONGATE_ANIMATION_FRAMES: u8 = 4;
+
+// The actual avatar sprite tile id in the EGA atlas. The character
+// sprites live in the upper half of the 9-bit tile space (256..=511);
+// tile 0x144 is the south-facing on-foot avatar walking frame. LOOK2.DAT
+// labels lower-half 0xFC as "a bellows" which is why a literal blit of
+// PLAYER_TILE shows a blacksmith's bellows on the map.
+pub const PLAYER_SPRITE_TILE: usize = 0x144;
+
+// Moongate is a single static sprite at tile id 0xDC per LOOK2.DAT
+// ("a moon gate!"). Earlier guesses at 0x80 and 0xD4 picked the wrong
+// tiles (food/banquet and a waterfall animation respectively).
+pub const MOONGATE_TILE_BASE: u8 = 0xDC;
+pub const MOONGATE_ANIMATION_FRAMES: u8 = 1;
 pub const STEADY_PHASE: u8 = 0x0f;
 pub const PLAY_START_YEAR: u16 = 139;
 pub const PLAY_START_MONTH: u8 = 4;

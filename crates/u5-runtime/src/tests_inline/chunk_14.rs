@@ -662,9 +662,11 @@
         assert_eq!(viewport.depth, TileGraphicsDepth::Ega16);
         assert_eq!((viewport.cells_wide, viewport.cells_high), (3, 3));
         assert_eq!((viewport.width, viewport.height), (48, 48));
+        // PLAYER_TILE is a sentinel; the renderer resolves it to the
+        // actual avatar sprite at PLAYER_SPRITE_TILE.
         assert_eq!(
             viewport.pixel(16, 16),
-            Some(PLAYER_TILE % atlas.depth.pixel_limit())
+            Some((PLAYER_SPRITE_TILE as u8) % atlas.depth.pixel_limit())
         );
         assert_eq!(viewport.pixel(0, 16), Some(18 % atlas.depth.pixel_limit()));
         assert_eq!(viewport.pixel(32, 16), Some(17 % atlas.depth.pixel_limit()));
@@ -676,7 +678,8 @@
         grid[world_cell_index(0, 0)] = 17;
         let mut state = britannia_state(grid, 255, 0);
         state.ambient_light = FULL_DAYLIGHT;
-        state.animation.moongate_frame = 3;
+        // Moongate is a single-frame sprite at 0xDC; keep frame at 0.
+        state.animation.moongate_frame = 0;
         state.moongates.push(MoongateEntry {
             x: 254,
             y: 0,
@@ -690,14 +693,16 @@
 
         let viewport = state.render_top_down_viewport(1, &atlas).unwrap().unwrap();
 
+        // PLAYER_TILE is a sentinel; the renderer resolves it to the
+        // actual avatar sprite at PLAYER_SPRITE_TILE.
         assert_eq!(
             viewport.pixel(16, 16),
-            Some(PLAYER_TILE % atlas.depth.pixel_limit())
+            Some((PLAYER_SPRITE_TILE as u8) % atlas.depth.pixel_limit())
         );
         assert_eq!(viewport.pixel(32, 16), Some(17 % atlas.depth.pixel_limit()));
         assert_eq!(
             viewport.pixel(0, 16),
-            Some((MOONGATE_TILE_BASE + 3) % atlas.depth.pixel_limit())
+            Some(MOONGATE_TILE_BASE % atlas.depth.pixel_limit())
         );
 
         let mut dark = state.clone();
@@ -705,7 +710,7 @@
         let dark_viewport = dark.render_top_down_viewport(1, &atlas).unwrap().unwrap();
         assert_eq!(
             dark_viewport.pixel(16, 16),
-            Some(PLAYER_TILE % atlas.depth.pixel_limit())
+            Some((PLAYER_SPRITE_TILE as u8) % atlas.depth.pixel_limit())
         );
         assert_eq!(dark_viewport.pixel(32, 16), Some(0));
     }
@@ -728,9 +733,11 @@
 
         let viewport = state.render_top_down_frame(1, &atlas).unwrap().unwrap();
 
+        // PLAYER_TILE is a sentinel; the renderer resolves it to the
+        // actual avatar sprite at PLAYER_SPRITE_TILE.
         assert_eq!(
             viewport.pixel(16, 16),
-            Some(PLAYER_TILE % atlas.depth.pixel_limit())
+            Some((PLAYER_SPRITE_TILE as u8) % atlas.depth.pixel_limit())
         );
         assert!(!state.visibility_dirty);
         assert_eq!(
@@ -760,7 +767,7 @@
         for chunk in rgba.chunks_exact(4) {
             assert_eq!(chunk[3], 0xff, "alpha should be opaque");
         }
-        let player_index = (PLAYER_TILE % atlas.depth.pixel_limit()) as usize;
+        let player_index = ((PLAYER_SPRITE_TILE as u8) % atlas.depth.pixel_limit()) as usize;
         let expected_player_rgb = EGA_PALETTE_RGB[player_index];
         let center_pixel_offset =
             (viewport.height / 2) * viewport.width * 4 + (viewport.width / 2) * 4;
