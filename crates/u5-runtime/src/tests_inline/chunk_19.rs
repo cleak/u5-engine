@@ -463,7 +463,11 @@
         assert_eq!(state.turn, 6);
         assert_eq!(state.torch_counter, 0);
         assert_eq!(state.light_spell_counter, 0);
-        assert_eq!(state.animation.frame, 2);
+        // The frame counter advances once per turn and wraps at the LCM
+        // of supported cycle lengths (12 covers 3 + 4); after 6 ticks
+        // from 0 it sits at 6. The displayed water tile cycles modulo
+        // 3 on top of this counter.
+        assert_eq!(state.animation.frame, 6);
         assert_eq!(state.ambient_light, FULL_DAYLIGHT);
         assert!(state.visibility_dirty);
         assert!(state.message.contains("Party rested 2 hours"));

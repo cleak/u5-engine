@@ -625,16 +625,21 @@
 
     #[test]
     fn static_tile_animation_uses_family_wide_frame_selector() {
-        // Only the water family (1..=3) animates: each cell preserves
-        // its stored identity-offset within the 3-frame cycle.
+        // Per animation.md Section 6: shared frame selector. Every cell
+        // in the water family displays the same frame at each tick,
+        // regardless of stored id.
         for frame in 0..4u8 {
             let clock = AnimationClock {
                 frame,
                 moongate_frame: 0,
             };
             let resolved: Vec<_> = (1u8..=3).map(|t| clock.resolve_static_tile(t)).collect();
-            let expected: Vec<u8> = (0u8..3).map(|i| 1 + ((i + frame) % 3)).collect();
-            assert_eq!(resolved, expected, "frame {frame}");
+            let expected_frame = 1 + (frame % 3);
+            assert_eq!(
+                resolved,
+                vec![expected_frame; 3],
+                "all water cells must share frame {expected_frame} at tick {frame}"
+            );
         }
     }
 

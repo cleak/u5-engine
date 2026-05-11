@@ -421,7 +421,10 @@ fn play_script_idle_count_replays_no_turn_visual_ticks() {
         handle_play_script_command(&mut state, "tick", Path::new("")).unwrap(),
         PlayInputDisposition::Continue
     );
-    assert_eq!(state.animation.frame, 0);
+    // Animation counter is now mod 12 (LCM of supported cycle lengths)
+    // so it just increments to 4. The visible water cycle modulo 3 still
+    // wraps cleanly on top of this.
+    assert_eq!(state.animation.frame, 4);
     assert_eq!(state.turn, 0);
 }
 

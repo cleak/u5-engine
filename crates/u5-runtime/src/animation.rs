@@ -15,7 +15,14 @@ pub struct AnimationClock {
 
 impl AnimationClock {
     pub fn tick_static_tiles(&mut self) {
-        self.frame = self.frame.wrapping_add(1) & 3;
+        // Per animation.md Section 6 the global tile-animation step
+        // increments a shared frame counter. Different families apply
+        // their own cycle length on top, so the counter itself just
+        // counts up; the cycle modulo happens in `resolve_static_tile`.
+        // Wrap at the LCM of supported cycle lengths (12 covers both
+        // the 3-frame water cycle and the 4-frame lava / fire / wind
+        // cycles) so the counter stays small.
+        self.frame = self.frame.wrapping_add(1) % 12;
     }
 
     pub fn tick_moongate(&mut self) {
@@ -23,15 +30,15 @@ impl AnimationClock {
     }
 
     pub fn resolve_static_tile(self, tile: u8) -> u8 {
-        // Per the tile-catalog spec (Section 4): the animator shifts the
-        // displayed sprite within a fixed family run while preserving each
-        // cell's per-tile identity offset. Water is 3 frames (deep water /
-        // water / shoals); swamp is a separate static terrain. Lava / fire
-        // / wind families remain 4-frame.
+        // Per u5-spec/systems/animation.md Section 6: animated terrain
+        // uses a SHARED FRAME SELECTOR per family. "A map cell continues
+        // to mean 'water'; the renderer resolves that semantic tile
+        // through the current water-frame selector at draw time. This
+        // keeps the map stable and makes one frame-counter update
+        // affect every visible cell in the same family." Every cell in
+        // the family displays the same frame at any given tick.
         if let Some((base, cycle)) = static_tile_animation_family(tile) {
-            let offset = (tile - base) % cycle;
-            let advanced = (offset + (self.frame % cycle)) % cycle;
-            base + advanced
+            base + (self.frame % cycle)
         } else {
             tile
         }

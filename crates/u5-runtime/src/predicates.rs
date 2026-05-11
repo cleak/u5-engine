@@ -11,25 +11,23 @@ pub fn is_probe_walkable(tile: u8) -> bool {
     if is_location_entry_marker(tile) {
         return true;
     }
-    // Class boundaries derived from the canonical LOOK2.DAT description for
-    // each tile id (cross-checked with u5-spec/catalogs/tile-catalog.md and
-    // systems/visibility.md). Earlier code used 10..=15 as a single
-    // "mountain" band; LOOK2.DAT shows that band is six distinct types:
-    //   0x0a tropical forest (dense forest, impassable on foot)
-    //   0x0b foothills       (walkable hills)
-    //   0x0c mountains       (impassable except balloon)
-    //   0x0d high peaks      (impassable except balloon)
-    //   0x0e foothills       (walkable hills)
-    //   0x0f foothills       (walkable hills)
+    // Class boundaries derived from canonical LOOK2.DAT and actual U5
+    // gameplay (cross-checked with u5-spec/catalogs/tile-catalog.md and
+    // systems/visibility.md). Notable corrections to the old code:
+    //   0x04 swamp           -- walkable on foot (poisons the party)
+    //   0x0a tropical forest -- walkable, BUT blocks sight (dense)
+    //   0x0b/0x0e/0x0f foothills -- walkable hills
+    //   0x0c mountains, 0x0d high peaks -- impassable except balloon
     !matches!(
         tile,
         // Sentinel.
         0
-        // Water (deep, coastal, shoals) and swamp.
-        | 1..=4
-        // Tropical forest (dense), mountains, high peaks. Foothills
-        // (0x0b, 0x0e, 0x0f) are explicitly walkable.
-        | 0x0a | 0x0c | 0x0d
+        // Open water: deep water, coastal water, shoals (impassable on
+        // foot; 0x04 swamp is walkable so it is NOT in this set).
+        | 1..=3
+        // True mountains and high peaks. Foothills (0x0b/0x0e/0x0f),
+        // tropical forest (0x0a), and swamp (0x04) are all walkable.
+        | 0x0c | 0x0d
         // Dungeon entrance, mystic shrine, ruined shrine, lighthouse
         // (landmarks the player can E-Enter but not step over).
         | 24..=27
@@ -85,8 +83,19 @@ pub fn is_tile_walkable_for_transport(
     }
 }
 
+/// True if the tile is open-ocean water that blocks foot movement and
+/// requires a ship or skiff. Swamp (0x04) is NOT water for movement
+/// purposes -- swamp is walkable terrain that poisons the party. This
+/// matches LOOK2.DAT (water 0x01-0x03 vs swamp 0x04) and actual U5
+/// gameplay.
 pub fn is_water_tile(tile: u8) -> bool {
-    (1..=4).contains(&tile)
+    (1..=3).contains(&tile)
+}
+
+/// True if the tile is swamp -- walkable but applies poison/damage
+/// on contact. Per LOOK2.DAT this is exactly tile 0x04.
+pub fn is_swamp_tile(tile: u8) -> bool {
+    tile == 0x04
 }
 
 /// Returns `(family_base, cycle_length)` for an animated-static tile. The

@@ -78,11 +78,10 @@
     }
 
     #[test]
-    fn true_mountains_and_dense_forest_are_impassable_per_spec() {
-        assert!(
-            !is_probe_walkable(0x0a),
-            "0x0a 'tropical forest' (dense) must be impassable on foot"
-        );
+    fn true_mountains_are_impassable_per_spec() {
+        // Tropical forest 0x0a is walkable but blocks sight (see
+        // dense_forest_is_walkable_but_blocks_sight). Only mountains
+        // and high peaks block on-foot movement.
         assert!(
             !is_probe_walkable(0x0c),
             "0x0c 'mountains' must be impassable on foot"
@@ -129,31 +128,18 @@
         );
     }
 
-    /// Per u5-spec/catalogs/tile-catalog.md Section 4: water is a 4-frame
-    /// cycle; LOOK2.DAT shows 0x04 is "swamp" (distinct terrain) so the
-    /// actual water cycle in this game is 3 frames (0x01..=0x03). Each
-    /// cell preserves its identity offset within the cycle.
+    /// Per u5-spec/systems/animation.md Section 6 the water animator
+    /// uses a shared frame selector: every water cell shows the same
+    /// frame at the same tick, cycling through the family.
     #[test]
-    fn water_animation_cycles_three_frames_preserving_per_cell_identity() {
+    fn water_animation_cycles_three_frames_shared_selector() {
         let mut clock = AnimationClock::default();
-        // Cell stored as "deep water" (0x01) and cell stored as "shoals"
-        // (0x03) are out of phase by 2 in the 3-frame cycle.
-        for tick in 0..6 {
-            let deep = clock.resolve_static_tile(0x01);
-            let shoals = clock.resolve_static_tile(0x03);
-            assert!(
-                (1..=3).contains(&deep),
-                "deep water cell at tick {tick} resolved to {deep:#x}, outside the cycle"
-            );
-            assert!(
-                (1..=3).contains(&shoals),
-                "shoals cell at tick {tick} resolved to {shoals:#x}, outside the cycle"
-            );
-            // Identity offset preserved: shoals - deep is 2 mod 3.
-            let phase_diff = (3 + shoals - deep) % 3;
+        for tick in 0..9 {
+            let resolved = clock.resolve_static_tile(0x01);
+            let expected = 0x01 + (tick % 3);
             assert_eq!(
-                phase_diff, 2,
-                "stored-id offset must be preserved across frames"
+                resolved, expected,
+                "tick {tick}: water-family base 0x01 must show frame 0x{expected:02x}"
             );
             clock.tick_static_tiles();
         }
@@ -173,5 +159,74 @@
         assert!(
             seen.contains(&0x01) && seen.contains(&0x02) && seen.contains(&0x03),
             "water cell stored as 0x02 must visit 0x01, 0x02, and 0x03 across the cycle, got {seen:?}"
+        );
+    }
+
+    /// Per u5-spec/systems/animation.md Section 6: "A map cell continues
+    /// to mean 'water'; the renderer resolves that semantic tile through
+    /// the current water-frame selector at draw time. This keeps the map
+    /// stable and makes one frame-counter update affect every visible
+    /// cell in the same family."
+    /// I.e. the animation is a SHARED FRAME SELECTOR -- at any given
+    /// tick, every water-family cell displays the same frame, regardless
+    /// of what its stored id is.
+    #[test]
+    fn water_animation_is_shared_frame_selector() {
+        for frame in 0..6u8 {
+            let clock = AnimationClock {
+                frame,
+                moongate_frame: 0,
+            };
+            let a = clock.resolve_static_tile(0x01);
+            let b = clock.resolve_static_tile(0x02);
+            let c = clock.resolve_static_tile(0x03);
+            assert_eq!(
+                a, b,
+                "water cells 0x01 and 0x02 must show the same frame at tick {frame}"
+            );
+            assert_eq!(
+                b, c,
+                "water cells 0x02 and 0x03 must show the same frame at tick {frame}"
+            );
+        }
+    }
+
+    /// Per actual Ultima V gameplay: swamp tiles are walkable on foot
+    /// (you take poison damage stepping through). 0x04 is "swamp" per
+    /// LOOK2.DAT. The visual sprite at 0x04 (green dots over blue) is a
+    /// distinct terrain type from water; it must NOT participate in the
+    /// water animation cycle and must NOT block on-foot movement.
+    #[test]
+    fn swamp_is_walkable_and_static() {
+        assert!(
+            is_probe_walkable(0x04),
+            "0x04 'swamp' must be walkable on foot"
+        );
+        for frame in 0..6u8 {
+            let clock = AnimationClock {
+                frame,
+                moongate_frame: 0,
+            };
+            assert_eq!(
+                clock.resolve_static_tile(0x04),
+                0x04,
+                "swamp must stay 0x04 across all animation frames"
+            );
+        }
+    }
+
+    /// Tropical forest (0x0a) is dense forest interior. Per the
+    /// visibility spec Section 6 it blocks sight; per actual U5
+    /// gameplay the player CAN walk into a forest -- dense forest just
+    /// limits visibility to one cell out before the interior wraps.
+    #[test]
+    fn dense_forest_is_walkable_but_blocks_sight() {
+        assert!(
+            is_probe_walkable(0x0a),
+            "0x0a 'tropical forest' must be walkable on foot"
+        );
+        assert!(
+            world_surface_tile_blocks_sight(0x0a),
+            "0x0a 'tropical forest' must block line of sight"
         );
     }
