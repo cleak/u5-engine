@@ -813,13 +813,16 @@
     #[test]
     fn world_k_refuses_clean_lava_sidecar_target_without_turn() {
         let dir = debug_game_dir();
+        // The damage-tile sidecar takes an optional expected_tile after
+        // the effect; 0x0c is "mountains" per LOOK2.DAT (was 10 when
+        // the old code treated 10..=15 as a single mountain band).
         fs::write(
             dir.join(WORLD_DAMAGE_TILE_TABLE_FILE),
-            "BRITANNIA 11 20 LAVA 10\n",
+            "BRITANNIA 11 20 LAVA 12\n",
         )
         .unwrap();
         let mut grid = open_world_grid();
-        grid[world_cell_index(11, 20)] = 10;
+        grid[world_cell_index(11, 20)] = 0x0c;
         let mut state = britannia_state(grid, 10, 20);
         state.climbing_gear = 1;
         state.player.facing = Direction::East;
@@ -836,7 +839,7 @@
     #[test]
     fn world_k_climbs_class_derived_mountain_family_with_gear() {
         let mut grid = open_world_grid();
-        grid[world_cell_index(11, 20)] = 10;
+        grid[world_cell_index(11, 20)] = 0x0c;
         let mut state = world_state(grid, 10, 20);
         state.climbing_gear = 1;
         state.player.facing = Direction::East;
@@ -866,7 +869,7 @@
         )
         .unwrap();
         let mut grid = open_world_grid();
-        grid[world_cell_index(11, 20)] = 10;
+        grid[world_cell_index(11, 20)] = 0x0c;
         let mut state = britannia_state(grid, 10, 20);
         state.climbing_gear = 1;
         state.player.facing = Direction::East;

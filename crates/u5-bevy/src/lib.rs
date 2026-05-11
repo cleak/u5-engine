@@ -79,7 +79,8 @@ pub fn run_visual_loop(
         })
         .insert_resource(ScreenshotState::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, (drive_visual, screenshot_system))
+        .insert_resource(AnimationPump::default())
+        .add_systems(Update, (drive_visual, animate_static_tiles, screenshot_system))
         .run();
 
     Ok(())
@@ -169,6 +170,51 @@ struct VisualState {
 
 #[derive(Component)]
 struct StatusText;
+
+/// Drives the static-tile animator (water cycle) at a fixed wall-clock
+/// cadence so the world looks alive even when the player isn't moving.
+/// Original U5 advances frames on every render tick; we use ~3 Hz which
+/// roughly matches the EGA waterfall pacing the user sees in DOSBox.
+#[derive(Resource)]
+struct AnimationPump {
+    accumulator: f32,
+    interval: f32,
+}
+
+impl Default for AnimationPump {
+    fn default() -> Self {
+        Self {
+            accumulator: 0.0,
+            interval: 0.33,
+        }
+    }
+}
+
+fn animate_static_tiles(
+    time: Res<Time>,
+    mut pump: ResMut<AnimationPump>,
+    visual: Option<ResMut<VisualState>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let Some(mut visual) = visual else {
+        return;
+    };
+    pump.accumulator += time.delta_secs();
+    let mut advanced = false;
+    while pump.accumulator >= pump.interval {
+        pump.accumulator -= pump.interval;
+        visual.state.animation.tick_static_tiles();
+        advanced = true;
+    }
+    if !advanced {
+        return;
+    }
+    let v: &mut VisualState = visual.as_mut();
+    let rgba = render_framebuffer(&mut v.state, &v.atlas);
+    if let Some(image) = images.get_mut(&v.image_handle) {
+        image.data = Some(rgba);
+    }
+}
 
 fn setup(
     mut commands: Commands,

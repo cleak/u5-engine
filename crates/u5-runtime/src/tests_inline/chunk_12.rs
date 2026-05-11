@@ -7,7 +7,7 @@
         )
         .unwrap();
         let mut grid = open_world_grid();
-        grid[world_cell_index(11, 20)] = 10;
+        grid[world_cell_index(11, 20)] = 0x0c;
         let mut state = britannia_state(grid, 10, 20);
         state.climbing_gear = 1;
         state.player.facing = Direction::East;
@@ -35,7 +35,7 @@
     #[test]
     fn world_k_low_climb_stat_falls_but_still_moves() {
         let mut grid = open_world_grid();
-        grid[world_cell_index(11, 20)] = 10;
+        grid[world_cell_index(11, 20)] = 0x0c;
         let mut state = world_state(grid, 10, 20);
         state.climbing_gear = 1;
         state.player.facing = Direction::East;
@@ -70,7 +70,7 @@
     #[test]
     fn world_k_skips_dead_or_ashes_members_for_fall_checks() {
         let mut grid = open_world_grid();
-        grid[world_cell_index(11, 20)] = 10;
+        grid[world_cell_index(11, 20)] = 0x0c;
         let mut state = world_state(grid, 10, 20);
         state.climbing_gear = 1;
         state.player.facing = Direction::East;

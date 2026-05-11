@@ -715,7 +715,12 @@
 
     #[test]
     fn exit_vehicle_refuses_debug_balloon_on_mountain_or_wall_without_turn() {
-        for tile in [10, 24] {
+        // 0x0c = "mountains" per LOOK2.DAT; 0x18 = "a dungeon" landmark.
+        // Earlier this test used 10 ("tropical forest") as a mountain
+        // stand-in, but tropical forest is dense forest, not a mountain
+        // -- a balloon CAN land on dense forest per the spec but cannot
+        // land on a mountain or wall.
+        for tile in [0x0c, 24] {
             let mut grid = open_world_grid();
             grid[world_cell_index(5, 5)] = tile;
             let mut state = world_state(grid, 5, 5);

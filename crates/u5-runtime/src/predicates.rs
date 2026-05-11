@@ -12,21 +12,24 @@ pub fn is_probe_walkable(tile: u8) -> bool {
         return true;
     }
     // Class boundaries derived from the canonical LOOK2.DAT description for
-    // each tile id (cross-checked with u5-spec/catalogs/tile-catalog.md).
-    // Earlier code used the spec's wide aspirational wall range (24..=79),
-    // but most ids in that range are actually grass variants, roads,
-    // bridges, crenellations, and landmark icons that the player can step
-    // onto. We keep the truly impassable ids and leave everything else
-    // walkable; the optional tile_passability.bin sidecar overrides this
-    // when present.
+    // each tile id (cross-checked with u5-spec/catalogs/tile-catalog.md and
+    // systems/visibility.md). Earlier code used 10..=15 as a single
+    // "mountain" band; LOOK2.DAT shows that band is six distinct types:
+    //   0x0a tropical forest (dense forest, impassable on foot)
+    //   0x0b foothills       (walkable hills)
+    //   0x0c mountains       (impassable except balloon)
+    //   0x0d high peaks      (impassable except balloon)
+    //   0x0e foothills       (walkable hills)
+    //   0x0f foothills       (walkable hills)
     !matches!(
         tile,
         // Sentinel.
         0
         // Water (deep, coastal, shoals) and swamp.
         | 1..=4
-        // Tropical forest, foothills, mountains, high peaks.
-        | 10..=15
+        // Tropical forest (dense), mountains, high peaks. Foothills
+        // (0x0b, 0x0e, 0x0f) are explicitly walkable.
+        | 0x0a | 0x0c | 0x0d
         // Dungeon entrance, mystic shrine, ruined shrine, lighthouse
         // (landmarks the player can E-Enter but not step over).
         | 24..=27
@@ -120,11 +123,32 @@ pub fn static_tile_animation_family_base(tile: u8) -> Option<u8> {
 }
 
 pub fn is_lava_tile(tile: u8) -> bool {
-    (10..=15).contains(&tile)
+    // Per LOOK2.DAT, tile 0x8F is "molten lava" (a single sprite). The
+    // claim in the original code that 0x0a..=0x0f is lava came from the
+    // tile-catalog spec; the actual game labels those ids as terrain
+    // (tropical forest / foothills / mountains / high peaks / foothills).
+    tile == 0x8f
 }
 
+/// True if the tile is an actual mountain or high peak per LOOK2.DAT.
+/// Excludes foothills (which are walkable hills) and tropical forest
+/// (which is a dense forest, not mountain). Used for impassability,
+/// sight-blocking, and outdoor-climb gating.
 pub fn is_mountain_tile(tile: u8) -> bool {
-    (10..=15).contains(&tile)
+    matches!(tile, 0x0c | 0x0d)
+}
+
+/// True if the tile is "tropical forest" (dense forest interior). Per
+/// the visibility spec, dense forest blocks sight but isn't a mountain.
+pub fn is_dense_forest_tile(tile: u8) -> bool {
+    tile == 0x0a
+}
+
+/// True if the tile is foothills (rolling hills). Walkable on foot,
+/// see-through, but not strictly grass either. LOOK2.DAT places
+/// foothills at 0x0b, 0x0e, and 0x0f.
+pub fn is_foothills_tile(tile: u8) -> bool {
+    matches!(tile, 0x0b | 0x0e | 0x0f)
 }
 
 pub fn is_outdoor_climbable_tile(tile: u8) -> bool {
@@ -188,14 +212,19 @@ pub fn surface_tile_blocks_sight(tile: u8) -> bool {
     is_mountain_tile(tile) || is_wall_or_closed_door_tile(tile) || matches!(tile, 160..=255)
 }
 
-/// Sight-blocking predicate scoped to the overworld. Indoor wall/door tile
-/// ranges (24..=79, 96..=103) are *town interior* tiles; the same tile ids on
-/// the overworld are landmark icons (towns, signs, coastal markers, dwellings)
-/// that should be visible from a distance, not opaque obstructions. The 160..
-/// vehicle/sprite range likewise represents free-standing objects, not walls.
-/// Only mountains genuinely block sight on the overworld.
+/// Sight-blocking predicate scoped to the overworld. Per
+/// u5-spec/systems/visibility.md Section 6:
+///   * Forest interior (deep woods) blocks sight.
+///   * Mountains always block.
+///   * Open ground (grass, sand, paths, water) does not.
+///   * Hills (foothills) do NOT block sight -- the "see over the
+///     mountain from a hill" mechanic doesn't exist but hills
+///     themselves are transparent.
+/// Indoor wall/door tile ranges are town-interior fixtures; the same
+/// tile ids on the overworld are landmark icons (towns, signs, coastal
+/// markers, dwellings) that should be visible from a distance.
 pub fn world_surface_tile_blocks_sight(tile: u8) -> bool {
-    is_mountain_tile(tile)
+    is_mountain_tile(tile) || is_dense_forest_tile(tile)
 }
 
 pub fn town_fire_source_is_adjacent(entry: TownFireSourceEntry, x: usize, y: usize) -> bool {
