@@ -59,6 +59,11 @@ pub fn unpack_tile_atlas_body(
     Ok(TileAtlas { depth, pixels })
 }
 
+/// Opaque blit for tile ids in the lower 0..=255 map-cell range. Per
+/// the visibility-spec active-object compositor, sprite tiles draw with
+/// their full 16x16 cell including the black bounding-box pixels, so
+/// this is also the path used for the avatar / NPCs / monsters once a
+/// caller has resolved the tile id to a u8.
 pub fn blit_tile_to_viewport(
     viewport: &mut TileViewport,
     atlas: &TileAtlas,
@@ -66,58 +71,13 @@ pub fn blit_tile_to_viewport(
     cell_x: usize,
     cell_y: usize,
 ) -> io::Result<()> {
-    let tile_pixels = atlas.tile_pixels(tile as usize).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("tile atlas is missing tile {tile}"),
-        )
-    })?;
-    let dst_x = cell_x * TILE_ATLAS_SIDE;
-    let dst_y = cell_y * TILE_ATLAS_SIDE;
-    for row in 0..TILE_ATLAS_SIDE {
-        let dst_start = (dst_y + row) * viewport.width + dst_x;
-        let src_start = row * TILE_ATLAS_SIDE;
-        viewport.pixels[dst_start..dst_start + TILE_ATLAS_SIDE]
-            .copy_from_slice(&tile_pixels[src_start..src_start + TILE_ATLAS_SIDE]);
-    }
-    Ok(())
+    blit_tile_id_to_viewport(viewport, atlas, tile as usize, cell_x, cell_y)
 }
 
-/// Composite a sprite tile over whatever is already in the viewport cell.
-/// Treats palette index 0 (EGA black) as transparent so the underlying
-/// terrain shows through the negative space of avatars, NPCs, monsters,
-/// vehicles, and moongate frames. Used by the active-object compositor
-/// path per the visibility spec.
-pub fn composite_sprite_to_viewport(
-    viewport: &mut TileViewport,
-    atlas: &TileAtlas,
-    tile: u8,
-    cell_x: usize,
-    cell_y: usize,
-) -> io::Result<()> {
-    composite_sprite_id_to_viewport(viewport, atlas, tile as usize, cell_x, cell_y)
-}
-
-/// Same as `composite_sprite_to_viewport` but accepts the full 9-bit tile
-/// id space (0..511). Active-object records can address upper-half sprite
-/// ids (NPCs, monsters, vehicles, the avatar) per the visibility/active-
-/// object specs, and those don't fit in a u8.
-pub fn composite_sprite_id_to_viewport(
-    viewport: &mut TileViewport,
-    atlas: &TileAtlas,
-    tile: usize,
-    cell_x: usize,
-    cell_y: usize,
-) -> io::Result<()> {
-    blit_tile_id_to_viewport(viewport, atlas, tile, cell_x, cell_y)
-}
-
-/// Opaque blit accepting the full 9-bit tile id range. Used for active
-/// objects (avatar, NPCs, monsters, vehicles) per the visibility-spec
-/// active-object compositor: the sprite's whole 16x16 cell -- including
-/// the black bounding-box pixels -- overwrites the terrain in the cell,
-/// so the sprite reads clearly as drawn *on top* and not bleeding into
-/// the terrain through transparent-black corners.
+/// Opaque blit accepting the full 9-bit tile id range. Active-object
+/// records can address upper-half sprite ids (NPCs, monsters, vehicles,
+/// the avatar) per the visibility/active-object specs; those don't fit
+/// in a u8.
 pub fn blit_tile_id_to_viewport(
     viewport: &mut TileViewport,
     atlas: &TileAtlas,

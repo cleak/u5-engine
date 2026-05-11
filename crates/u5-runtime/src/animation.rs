@@ -26,7 +26,8 @@ impl AnimationClock {
     }
 
     pub fn tick_moongate(&mut self) {
-        self.moongate_frame = self.moongate_frame.wrapping_add(1) & (MOONGATE_ANIMATION_FRAMES - 1);
+        self.moongate_frame =
+            self.moongate_frame.wrapping_add(1) % MOONGATE_ANIMATION_FRAMES;
     }
 
     pub fn resolve_static_tile(self, tile: u8) -> u8 {

@@ -329,44 +329,90 @@ impl PlayState {
         let r = isize::try_from(radius).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidInput, "viewport radius is too large")
         })?;
+        // One visibility check per cell, not two. The terrain tile is
+        // painted first; the sprite (avatar / NPC / monster / moongate)
+        // blits opaquely over it per the visibility-spec active-object
+        // compositor.
         for cell_y in 0..cells {
             for cell_x in 0..cells {
                 let world_x = px + cell_x as isize - r;
                 let world_y = py + cell_y as isize - r;
-                // Per the visibility spec: paint terrain first (opaque), then
-                // composite sprites on top (palette-0 = transparent) so the
-                // avatar/NPCs/monsters/moongate frames don't blot out the
-                // underlying terrain with their black backgrounds.
-                let Some(terrain) =
-                    self.top_down_terrain_tile(area, px, py, world_x, world_y, radius)
+                let Some((terrain, sprite)) =
+                    self.top_down_render_cell(area, px, py, world_x, world_y, radius)
                 else {
                     continue;
                 };
                 blit_tile_to_viewport(&mut viewport, atlas, terrain, cell_x, cell_y)?;
-                if let Some(sprite) =
-                    self.top_down_sprite_tile(area, px, py, world_x, world_y, radius)
-                {
-                    // The PLAYER_TILE byte (0xFC) is a sentinel for "this
-                    // is the avatar slot", not a real sprite -- the lower
-                    // 8-bit tile space stores "a bellows" at 0xFC. Resolve
-                    // it to the actual avatar sprite in the upper-half tile
-                    // space (256..=511) before blitting.
+                if let Some(sprite) = sprite {
                     let sprite_id: usize = if sprite == PLAYER_TILE {
+                        // PLAYER_TILE is a sentinel; 0xFC is "a bellows"
+                        // in the lower-half tile space. Resolve to the
+                        // real upper-half avatar sprite before blitting.
                         PLAYER_SPRITE_TILE
                     } else {
                         sprite as usize
                     };
-                    composite_sprite_id_to_viewport(
-                        &mut viewport,
-                        atlas,
-                        sprite_id,
-                        cell_x,
-                        cell_y,
-                    )?;
+                    blit_tile_id_to_viewport(&mut viewport, atlas, sprite_id, cell_x, cell_y)?;
                 }
             }
         }
         Ok(Some(viewport))
+    }
+
+    /// Single-pass visibility + terrain + sprite lookup for one cell.
+    /// Returns `None` if the cell is occluded or off-map. The Option in
+    /// the second tuple slot is the sprite to composite on top of the
+    /// terrain (player avatar, active object, or moongate frame).
+    pub fn top_down_render_cell(
+        &self,
+        area: TopDownRenderArea,
+        px: isize,
+        py: isize,
+        x: isize,
+        y: isize,
+        radius: usize,
+    ) -> Option<(u8, Option<u8>)> {
+        match area {
+            TopDownRenderArea::Town => {
+                if !(0..32).contains(&x) || !(0..32).contains(&y) {
+                    return None;
+                }
+                let visible_radius = self.surface_visibility_radius(radius);
+                if !self.town_cell_visible(px, py, x, y, visible_radius) {
+                    return None;
+                }
+                let xu = x as usize;
+                let yu = y as usize;
+                let terrain = self.animation.resolve_static_tile(self.grid[yu * 32 + xu]);
+                let sprite = if x == px && y == py {
+                    Some(PLAYER_TILE)
+                } else {
+                    self.object_at_current_floor(xu, yu).map(|object| object.tile)
+                };
+                Some((terrain, sprite))
+            }
+            TopDownRenderArea::World(plane) => {
+                let visible_radius = self.world_visibility_radius(radius);
+                if !self.world_cell_visible(px, py, x, y, visible_radius) {
+                    return None;
+                }
+                let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
+                let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
+                let terrain = self
+                    .animation
+                    .resolve_static_tile(self.grid[world_cell_index(wx, wy)]);
+                let sprite = if x == px && y == py {
+                    Some(PLAYER_TILE)
+                } else if let Some(object) = self.world_object_at(wx, wy) {
+                    Some(object.tile)
+                } else if self.visible_moongate_at(plane, wx, wy) {
+                    Some(self.animation.resolve_moongate_tile())
+                } else {
+                    None
+                };
+                Some((terrain, sprite))
+            }
+        }
     }
 
     pub fn top_down_render_area(&self) -> Option<TopDownRenderArea> {
@@ -377,106 +423,34 @@ impl PlayState {
         }
     }
 
-    /// Combined terrain + sprite lookup. Kept for callers (text renderer,
-    /// raster diagnostics) that want a single glyph per cell. Returns the
-    /// sprite override if one would composite onto the cell, otherwise the
-    /// underlying terrain tile.
-    pub fn top_down_view_tile(
-        &self,
-        area: TopDownRenderArea,
-        px: isize,
-        py: isize,
-        x: isize,
-        y: isize,
-        radius: usize,
-    ) -> Option<u8> {
-        self.top_down_sprite_tile(area, px, py, x, y, radius)
-            .or_else(|| self.top_down_terrain_tile(area, px, py, x, y, radius))
-    }
-
-    /// Terrain-only lookup for the cell at (x, y). Returns `None` if the cell
-    /// is outside the visible radius / off-map / occluded by line of sight.
-    pub fn top_down_terrain_tile(
-        &self,
-        area: TopDownRenderArea,
-        px: isize,
-        py: isize,
-        x: isize,
-        y: isize,
-        radius: usize,
-    ) -> Option<u8> {
-        match area {
-            TopDownRenderArea::Town => {
-                let visible_radius = self.surface_visibility_radius(radius);
-                if !self.town_cell_visible(px, py, x, y, visible_radius)
-                    || !(0..32).contains(&x)
-                    || !(0..32).contains(&y)
-                {
-                    return None;
-                }
-                let x = x as usize;
-                let y = y as usize;
-                Some(self.animation.resolve_static_tile(self.grid[y * 32 + x]))
-            }
-            TopDownRenderArea::World(_plane) => {
-                let visible_radius = self.world_visibility_radius(radius);
-                if !self.world_cell_visible(px, py, x, y, visible_radius) {
-                    return None;
-                }
-                let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
-                let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
-                Some(
-                    self.animation
-                        .resolve_static_tile(self.grid[world_cell_index(wx, wy)]),
-                )
-            }
-        }
-    }
-
-    /// Sprite override for the cell at (x, y): player avatar, active object
-    /// (NPC / monster / vehicle / item), or moongate frame. Composited on
-    /// top of the terrain with palette index 0 treated as transparent.
-    pub fn top_down_sprite_tile(
-        &self,
-        area: TopDownRenderArea,
-        px: isize,
-        py: isize,
-        x: isize,
-        y: isize,
-        radius: usize,
-    ) -> Option<u8> {
-        if x == px && y == py {
-            return Some(PLAYER_TILE);
-        }
-        match area {
-            TopDownRenderArea::Town => {
-                let visible_radius = self.surface_visibility_radius(radius);
-                if !self.town_cell_visible(px, py, x, y, visible_radius)
-                    || !(0..32).contains(&x)
-                    || !(0..32).contains(&y)
-                {
-                    return None;
-                }
-                let x = x as usize;
-                let y = y as usize;
-                self.object_at_current_floor(x, y).map(|object| object.tile)
-            }
-            TopDownRenderArea::World(plane) => {
-                let visible_radius = self.world_visibility_radius(radius);
-                if !self.world_cell_visible(px, py, x, y, visible_radius) {
-                    return None;
-                }
-                let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
-                let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
-                if let Some(object) = self.world_object_at(wx, wy) {
-                    Some(object.tile)
-                } else if self.visible_moongate_at(plane, wx, wy) {
-                    Some(self.animation.resolve_moongate_tile())
-                } else {
-                    None
+    pub fn viewport_has_animated_tiles(&self, radius: usize) -> bool {
+        let Some(area) = self.top_down_render_area() else {
+            return false;
+        };
+        let px = self.player.x as isize;
+        let py = self.player.y as isize;
+        let r = radius as isize;
+        for y in py - r..=py + r {
+            for x in px - r..=px + r {
+                let tile = match area {
+                    TopDownRenderArea::Town => {
+                        if !(0..32).contains(&x) || !(0..32).contains(&y) {
+                            continue;
+                        }
+                        self.grid[y as usize * 32 + x as usize]
+                    }
+                    TopDownRenderArea::World(_) => {
+                        let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
+                        let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
+                        self.grid[world_cell_index(wx, wy)]
+                    }
+                };
+                if static_tile_animation_family(tile).is_some() {
+                    return true;
                 }
             }
         }
+        false
     }
 
     pub fn render_text_view(&self, radius: usize) -> String {

@@ -206,7 +206,10 @@ fn animate_static_tiles(
         visual.state.animation.tick_static_tiles();
         advanced = true;
     }
-    if !advanced {
+    if !advanced || !visual.state.viewport_has_animated_tiles(VIEWPORT_RADIUS) {
+        // Tick still consumed (state advances even when nothing visible
+        // animates so re-entering a water scene picks up at the right
+        // phase), but skip the framebuffer re-blit.
         return;
     }
     let v: &mut VisualState = visual.as_mut();

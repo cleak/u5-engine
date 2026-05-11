@@ -85,17 +85,10 @@ pub fn is_tile_walkable_for_transport(
 
 /// True if the tile is open-ocean water that blocks foot movement and
 /// requires a ship or skiff. Swamp (0x04) is NOT water for movement
-/// purposes -- swamp is walkable terrain that poisons the party. This
-/// matches LOOK2.DAT (water 0x01-0x03 vs swamp 0x04) and actual U5
-/// gameplay.
+/// purposes -- swamp is walkable terrain that poisons the party.
+/// This matches LOOK2.DAT (water 0x01-0x03 vs swamp 0x04).
 pub fn is_water_tile(tile: u8) -> bool {
     (1..=3).contains(&tile)
-}
-
-/// True if the tile is swamp -- walkable but applies poison/damage
-/// on contact. Per LOOK2.DAT this is exactly tile 0x04.
-pub fn is_swamp_tile(tile: u8) -> bool {
-    tile == 0x04
 }
 
 /// Returns `(family_base, cycle_length)` for an animated-static tile. The
@@ -125,12 +118,6 @@ pub fn static_tile_animation_family(tile: u8) -> Option<(u8, u8)> {
     }
 }
 
-/// Back-compat shim: callers that only need the base. Kept for the
-/// existing surface that returns Option<u8>.
-pub fn static_tile_animation_family_base(tile: u8) -> Option<u8> {
-    static_tile_animation_family(tile).map(|(base, _)| base)
-}
-
 pub fn is_lava_tile(tile: u8) -> bool {
     // Per LOOK2.DAT, tile 0x8F is "molten lava" (a single sprite). The
     // claim in the original code that 0x0a..=0x0f is lava came from the
@@ -151,13 +138,6 @@ pub fn is_mountain_tile(tile: u8) -> bool {
 /// the visibility spec, dense forest blocks sight but isn't a mountain.
 pub fn is_dense_forest_tile(tile: u8) -> bool {
     tile == 0x0a
-}
-
-/// True if the tile is foothills (rolling hills). Walkable on foot,
-/// see-through, but not strictly grass either. LOOK2.DAT places
-/// foothills at 0x0b, 0x0e, and 0x0f.
-pub fn is_foothills_tile(tile: u8) -> bool {
-    matches!(tile, 0x0b | 0x0e | 0x0f)
 }
 
 pub fn is_outdoor_climbable_tile(tile: u8) -> bool {
