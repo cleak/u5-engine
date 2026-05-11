@@ -91,19 +91,24 @@ pub fn is_water_tile(tile: u8) -> bool {
 /// preserving each cell's per-tile identity offset. Returns `None` for
 /// static tiles.
 ///
-/// Per LOOK2.DAT cross-check:
-///   * Water cycles 0x01..=0x03 ("deep water" / "water" / "shoals"). Tile
-///     0x04 ("swamp") is a *distinct* terrain type, not a water frame --
-///     including it in the cycle morphs water cells through a green-dotted
-///     swamp sprite that looks like a different terrain mid-animation.
-///   * Lava / fire / wind tile ranges remain 4-frame.
+/// Only water actually animates in U5's 0..=255 map-tile range. Per a
+/// LOOK2.DAT canonical cross-check:
+///   * 0x01..=0x03 -- "deep water" / "water" / "shoals". 3-frame cycle.
+///   * 0x04        -- "swamp". Static terrain, NOT a water frame.
+///   * 0x0a..=0x0f -- "tropical forest" / "foothills" / "mountains" /
+///                    "high peaks" / "foothills" / "foothills". The spec
+///                    listed this band as a 4-frame lava cycle but the
+///                    game data has six distinct static terrain types
+///                    here. Mountains do not animate.
+///   * 0x5c..=0x5f -- bookshelves and similar furniture (static).
+///   * 0x98..=0x9b -- odd door / portcullis / tables with food (static).
+///   * 0x9c..=0x9f -- tables with food / mirror (static).
+/// Other animation families (fire field, poison field, sleep / energy
+/// field) may exist in dungeon-mode and combat-mode tile spaces but those
+/// run through separate animators.
 pub fn static_tile_animation_family(tile: u8) -> Option<(u8, u8)> {
     match tile {
         1..=3 => Some((1, 3)),
-        10..=13 => Some((10, 4)),
-        92..=95 => Some((92, 4)),
-        152..=155 => Some((152, 4)),
-        156..=159 => Some((156, 4)),
         _ => None,
     }
 }

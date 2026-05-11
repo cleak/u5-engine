@@ -585,21 +585,35 @@
 
     #[test]
     fn animation_clock_cycles_public_static_four_frame_families() {
-        // Water cycles only 3 frames (1..=3) because tile 0x04 is "swamp",
-        // a different terrain type, not a water frame. Other families
-        // remain 4-frame.
-        for (base, cycle) in [(1u8, 3u8), (10, 4), (92, 4), (152, 4), (156, 4)] {
-            let mut clock = AnimationClock::default();
-            let frames: Vec<_> = (0..cycle)
-                .map(|_| {
-                    let tile = clock.resolve_static_tile(base);
-                    clock.tick_static_tiles();
-                    tile
-                })
-                .collect();
+        // Only water actually animates (3 frames). Mountains, bookshelves,
+        // doors, tables in the 0x0a, 0x5c, 0x98, 0x9c bands are static
+        // terrain/furniture per LOOK2.DAT, not animation cycles.
+        let (base, cycle) = (1u8, 3u8);
+        let mut clock = AnimationClock::default();
+        let frames: Vec<_> = (0..cycle)
+            .map(|_| {
+                let tile = clock.resolve_static_tile(base);
+                clock.tick_static_tiles();
+                tile
+            })
+            .collect();
+        let expected: Vec<u8> = (0..cycle).map(|i| base + i).collect();
+        assert_eq!(frames, expected);
 
-            let expected: Vec<u8> = (0..cycle).map(|i| base + i).collect();
-            assert_eq!(frames, expected, "family base {base}, cycle {cycle}");
+        // Static-only tiles remain unchanged across the same cycle.
+        let static_ids: [u8; 6] = [10, 11, 12, 13, 92, 152];
+        for tid in static_ids {
+            for frame in 0..4u8 {
+                let clk = AnimationClock {
+                    frame,
+                    moongate_frame: 0,
+                };
+                assert_eq!(
+                    clk.resolve_static_tile(tid),
+                    tid,
+                    "tile 0x{tid:02x} should not animate at frame {frame}"
+                );
+            }
         }
 
         let clock = AnimationClock {
@@ -611,30 +625,16 @@
 
     #[test]
     fn static_tile_animation_uses_family_wide_frame_selector() {
-        // The animator shifts each cell's displayed tile within its
-        // family while preserving the cell's stored identity-offset.
-        // Water is 3 frames (1..=3); lava/fire/wind families are 4.
-        let families: Vec<(u8, Vec<u8>, u8)> = vec![
-            (1, vec![1, 2, 3], 3),
-            (10, vec![10, 11, 12, 13], 4),
-            (92, vec![92, 93, 94, 95], 4),
-            (152, vec![152, 153, 154, 155], 4),
-            (156, vec![156, 157, 158, 159], 4),
-        ];
-
+        // Only the water family (1..=3) animates: each cell preserves
+        // its stored identity-offset within the 3-frame cycle.
         for frame in 0..4u8 {
             let clock = AnimationClock {
                 frame,
                 moongate_frame: 0,
             };
-            for (base, family, cycle) in &families {
-                let resolved: Vec<_> =
-                    family.iter().map(|&tile| clock.resolve_static_tile(tile)).collect();
-                let expected: Vec<u8> = (0..family.len() as u8)
-                    .map(|i| base + ((i + frame) % cycle))
-                    .collect();
-                assert_eq!(resolved, expected, "family base {base}, frame {frame}");
-            }
+            let resolved: Vec<_> = (1u8..=3).map(|t| clock.resolve_static_tile(t)).collect();
+            let expected: Vec<u8> = (0u8..3).map(|i| 1 + ((i + frame) % 3)).collect();
+            assert_eq!(resolved, expected, "frame {frame}");
         }
     }
 
