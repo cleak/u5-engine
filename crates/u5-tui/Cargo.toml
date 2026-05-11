@@ -10,6 +10,7 @@ visual = ["dep:u5-bevy"]
 [dependencies]
 u5-runtime = { workspace = true }
 u5-bevy = { workspace = true, optional = true }
+image = { workspace = true }
 
 [lib]
 name = "u5_tui"

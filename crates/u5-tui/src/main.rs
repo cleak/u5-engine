@@ -2,13 +2,22 @@ use std::env;
 use std::io;
 
 use u5_runtime::run_report;
-use u5_tui::{CLI_USAGE, CliArgs, parse_cli_args, run_play_loop};
+use u5_tui::{CLI_USAGE, CliArgs, parse_cli_args, run_play_loop, run_save_frame};
 
 fn main() -> io::Result<()> {
     let args = parse_cli_args(env::args().skip(1))?;
     if args.help {
         print!("{CLI_USAGE}");
         return Ok(());
+    }
+    if let Some(out) = args.save_frame.as_deref() {
+        return run_save_frame(
+            &args.game_dir,
+            args.play_options,
+            args.raster_depth,
+            args.play_script,
+            out,
+        );
     }
     if args.visual {
         return run_visual(args);

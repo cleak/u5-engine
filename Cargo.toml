@@ -14,3 +14,4 @@ edition = "2024"
 u5-runtime = { path = "crates/u5-runtime" }
 u5-bevy = { path = "crates/u5-bevy" }
 bevy = "0.16"
+image = { version = "0.25", default-features = false, features = ["png"] }

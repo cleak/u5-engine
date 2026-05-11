@@ -25,6 +25,10 @@ pub struct CliArgs {
     pub game_dir: PathBuf,
     pub play_options: PlayOptions,
     pub help: bool,
+    /// If set, render the top-down viewport after the play-script runs and
+    /// write it to this path as a PNG. Bypasses the interactive play loop
+    /// and the Bevy harness; useful for verifying movement without a desktop.
+    pub save_frame: Option<PathBuf>,
 }
 
 pub fn split_play_script(script: &str) -> Vec<String> {
@@ -55,12 +59,23 @@ where
     let mut pending_vehicle_override = None;
     let mut transport_override = None;
     let mut help = false;
+    let mut save_frame: Option<PathBuf> = None;
     let mut args = args.into_iter().map(Into::into);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" | "-h" => help = true,
             "--play" => play = true,
             "--visual" => visual = true,
+            "--save-frame" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--save-frame requires a PNG output path",
+                    )
+                })?;
+                save_frame = Some(PathBuf::from(value));
+                play = true;
+            }
             "--play-script" => {
                 play = true;
                 let value = args.next().ok_or_else(|| {
@@ -182,6 +197,7 @@ where
             game_dir,
             play_options: PlayOptions::default(),
             help: true,
+            save_frame: None,
         });
     }
     if from_save && from_init {
@@ -221,6 +237,7 @@ where
         game_dir,
         play_options: options,
         help: false,
+        save_frame,
     })
 }
 
@@ -250,6 +267,9 @@ OPTIONS:
         --raster-depth <D>    ega|cga (default ega).
         --visual              Launch the Bevy top-down visual harness.
                               Requires building with `--features visual`.
+        --save-frame <PATH>   Render the top-down viewport (after running
+                              --play-script if given) to a PNG and exit.
+                              Useful for verifying movement without a desktop.
 
 SMOKE COMMANDS:
     cargo run -- C:\\Games\\U5-Clean

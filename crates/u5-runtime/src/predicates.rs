@@ -415,18 +415,50 @@ pub fn first_world_walkable_for_transport(
     transport: TransportState,
     damage_tiles: &[WorldDamageTileEntry],
 ) -> Option<(usize, usize)> {
+    // Prefer a cell that has at least one walkable neighbour. The bare "first
+    // walkable cell in linear scan" was landing on 1x1 islands surrounded by
+    // water, leaving the player unable to move in any direction.
+    let safe = |x: usize, y: usize| -> bool {
+        let tile = grid[world_cell_index(x, y)];
+        if let Some(entry) = world_damage_tile_entry_at(damage_tiles, plane, x, y, tile) {
+            entry.effect.allows_transport(transport)
+                && !entry.effect.damages_transport(transport)
+        } else {
+            is_tile_walkable_for_transport(tile, passability, transport)
+        }
+    };
+    // Require enough walkable cells in the 3x3 neighbourhood that the player
+    // can actually explore. Peninsulas with a single walkable neighbour are
+    // technically valid but produce a near-stuck experience.
+    let with_neighbours = grid.iter().enumerate().find(|&(idx, _)| {
+        let x = idx % WORLD_SIDE;
+        let y = idx / WORLD_SIDE;
+        if !safe(x, y) {
+            return false;
+        }
+        let mut count = 0;
+        for dy in [-1isize, 0, 1] {
+            for dx in [-1isize, 0, 1] {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+                // World wraps.
+                let nx = ((x as isize + dx).rem_euclid(WORLD_SIDE as isize)) as usize;
+                let ny = ((y as isize + dy).rem_euclid(WORLD_SIDE as isize)) as usize;
+                if safe(nx, ny) {
+                    count += 1;
+                }
+            }
+        }
+        count >= 5
+    });
+    if let Some((idx, _)) = with_neighbours {
+        return Some((idx % WORLD_SIDE, idx / WORLD_SIDE));
+    }
+    // Last-ditch fallback: take any walkable cell at all (degenerate map).
     grid.iter()
         .enumerate()
-        .find(|&(idx, tile)| {
-            let x = idx % WORLD_SIDE;
-            let y = idx / WORLD_SIDE;
-            if let Some(entry) = world_damage_tile_entry_at(damage_tiles, plane, x, y, *tile) {
-                entry.effect.allows_transport(transport)
-                    && !entry.effect.damages_transport(transport)
-            } else {
-                is_tile_walkable_for_transport(*tile, passability, transport)
-            }
-        })
+        .find(|&(idx, _)| safe(idx % WORLD_SIDE, idx / WORLD_SIDE))
         .map(|(idx, _)| (idx % WORLD_SIDE, idx / WORLD_SIDE))
 }
 
