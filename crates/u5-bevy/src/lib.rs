@@ -11,6 +11,7 @@ use bevy::image::ImageSampler;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 
 use u5_runtime::{
     Area, Direction, PlayInputDisposition, PlayOptions, PlayState, TILE_ATLAS_SIDE, TileAtlas,
@@ -41,6 +42,24 @@ pub fn run_visual_loop(
     let display_w = VIEWPORT_SIZE_PX as f32 * DISPLAY_SCALE;
     let display_h = display_w + STATUS_PANEL_HEIGHT;
 
+    // Headless screenshot driver: when U5_BEVY_SCREENSHOT is set, the harness
+    // waits a few frames (so the swapchain has a real image), takes a
+    // screenshot via Bevy's `Screenshot` component, then exits. Lets us
+    // verify end-to-end Bevy rendering without an interactive desktop.
+    let screenshot_path: Option<PathBuf> = std::env::var("U5_BEVY_SCREENSHOT")
+        .ok()
+        .map(PathBuf::from);
+    let screenshot_delay: u32 = std::env::var("U5_BEVY_SCREENSHOT_DELAY")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(60);
+    // Optional pre-screenshot keystrokes (single chars), e.g.
+    // `U5_BEVY_PRESS=dddss` to step east 3 then south 2 before the shot.
+    let preset_keys: Vec<char> = std::env::var("U5_BEVY_PRESS")
+        .ok()
+        .map(|s| s.chars().collect())
+        .unwrap_or_default();
+
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -53,11 +72,82 @@ pub fn run_visual_loop(
         }))
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(PendingBootstrap(Mutex::new(Some(bootstrap))))
+        .insert_resource(ScreenshotConfig {
+            path: screenshot_path,
+            frame_delay: screenshot_delay,
+            preset_keys,
+        })
+        .insert_resource(ScreenshotState::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, drive_visual)
+        .add_systems(Update, (drive_visual, screenshot_system))
         .run();
 
     Ok(())
+}
+
+#[derive(Resource)]
+struct ScreenshotConfig {
+    path: Option<PathBuf>,
+    frame_delay: u32,
+    preset_keys: Vec<char>,
+}
+
+#[derive(Resource, Default)]
+struct ScreenshotState {
+    frames_elapsed: u32,
+    preset_keys_applied: bool,
+    taken: bool,
+    frames_after_shot: u32,
+}
+
+fn screenshot_system(
+    mut commands: Commands,
+    config: Res<ScreenshotConfig>,
+    mut state: ResMut<ScreenshotState>,
+    visual: Option<ResMut<VisualState>>,
+    mut images: ResMut<Assets<Image>>,
+    mut text_query: Query<&mut Text2d, With<StatusText>>,
+    mut exit: EventWriter<AppExit>,
+) {
+    let Some(path) = config.path.clone() else {
+        return;
+    };
+    state.frames_elapsed += 1;
+
+    // Apply preset keystrokes directly to PlayState (bypasses the keyboard
+    // system) before the screenshot delay finishes counting down.
+    if !state.preset_keys_applied && !config.preset_keys.is_empty() {
+        if let Some(mut visual) = visual {
+            let game_dir = visual.game_dir.clone();
+            for ch in &config.preset_keys {
+                let _ = handle_play_key_input(&mut visual.state, *ch, "", &game_dir);
+            }
+            // Re-render the framebuffer to reflect the new state.
+            let v: &mut VisualState = visual.as_mut();
+            let rgba = render_framebuffer(&mut v.state, &v.atlas);
+            if let Some(image) = images.get_mut(&v.image_handle) {
+                image.data = Some(rgba);
+            }
+            if let Ok(mut text) = text_query.single_mut() {
+                text.0 = summarize(&v.state, "");
+            }
+            state.preset_keys_applied = true;
+        }
+    }
+
+    if !state.taken && state.frames_elapsed >= config.frame_delay {
+        commands
+            .spawn(Screenshot::primary_window())
+            .observe(save_to_disk(path));
+        state.taken = true;
+    }
+    if state.taken {
+        state.frames_after_shot += 1;
+        // Give the encoder a few frames to flush the PNG to disk.
+        if state.frames_after_shot >= 30 {
+            exit.write(AppExit::Success);
+        }
+    }
 }
 
 struct Bootstrap {
