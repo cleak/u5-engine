@@ -62,8 +62,11 @@
 
     #[test]
     fn world_render_line_of_sight_wraps_with_viewport() {
+        // On the overworld only mountain tiles (10..=15) block sight. Wall
+        // tile ids 24..=79 are landmark icons (towns, shrines, dwellings)
+        // visible from distance, not sight-blocking obstructions.
         let mut grid = open_world_grid();
-        grid[world_cell_index(0, 0)] = 24;
+        grid[world_cell_index(0, 0)] = 10;
         grid[world_cell_index(1, 0)] = 5;
         let mut state = britannia_state(grid, 255, 0);
         state.ambient_light = FULL_DAYLIGHT;
@@ -72,8 +75,28 @@
         let row: Vec<_> = view.lines().nth(3).unwrap().chars().collect();
 
         assert_eq!(row[2], '@');
-        assert_eq!(row[3], '#');
+        // (0, 0) is the mountain; rendered glyph differs from the open grass.
+        assert_ne!(row[3], '.');
+        // Cell behind the mountain (with wrap) is occluded.
         assert_eq!(row[4], ' ');
+    }
+
+    #[test]
+    fn world_render_landmark_tiles_do_not_block_sight() {
+        // Regression: tile id 0x35 (53) is a coastal/dwelling icon on the
+        // overworld, not a wall. Using it adjacent to the player must not
+        // black out cells behind it.
+        let mut grid = open_world_grid();
+        grid[world_cell_index(6, 5)] = 0x35;
+        grid[world_cell_index(7, 5)] = 5;
+        let mut state = britannia_state(grid, 5, 5);
+        state.ambient_light = FULL_DAYLIGHT;
+
+        let view = state.render_text_view(2);
+        let row: Vec<_> = view.lines().nth(2).unwrap().chars().collect();
+
+        // The cell two steps east of the player must be visible (not space).
+        assert_ne!(row[4], ' ', "landmark tile must not occlude cell behind it");
     }
 
     #[test]

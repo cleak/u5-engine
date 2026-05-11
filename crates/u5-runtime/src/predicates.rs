@@ -130,6 +130,16 @@ pub fn surface_tile_blocks_sight(tile: u8) -> bool {
     is_mountain_tile(tile) || is_wall_or_closed_door_tile(tile) || matches!(tile, 160..=255)
 }
 
+/// Sight-blocking predicate scoped to the overworld. Indoor wall/door tile
+/// ranges (24..=79, 96..=103) are *town interior* tiles; the same tile ids on
+/// the overworld are landmark icons (towns, signs, coastal markers, dwellings)
+/// that should be visible from a distance, not opaque obstructions. The 160..
+/// vehicle/sprite range likewise represents free-standing objects, not walls.
+/// Only mountains genuinely block sight on the overworld.
+pub fn world_surface_tile_blocks_sight(tile: u8) -> bool {
+    is_mountain_tile(tile)
+}
+
 pub fn town_fire_source_is_adjacent(entry: TownFireSourceEntry, x: usize, y: usize) -> bool {
     let dx = entry.x.abs_diff(x);
     let dy = entry.y.abs_diff(y);

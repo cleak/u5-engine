@@ -31,8 +31,8 @@ fn main() {
         "Tiles around ({x0}, {y0}) on Britannia. Each cell shows tile id (hex), \
          is_tile_walkable_for_transport(Foot) result, and damage-tile classification."
     );
-    for y in y0.saturating_sub(2)..=y0 + 2 {
-        for x in x0.saturating_sub(2)..=x0 + 2 {
+    for y in y0.saturating_sub(5)..=y0 + 5 {
+        for x in x0.saturating_sub(5)..=x0 + 5 {
             let tile = grid[world_cell_index(x, y)];
             let walk = is_tile_walkable_for_transport(tile, passability.as_ref(), TransportState::Foot);
             let base = is_base_tile_passable(tile, passability.as_ref());

@@ -578,7 +578,7 @@ impl PlayState {
 
     pub fn world_cell_blocks_sight(&self, x: usize, y: usize) -> bool {
         self.sight_blocking_object_at_current_floor(x, y).is_some()
-            || surface_tile_blocks_sight(self.grid[world_cell_index(x, y)])
+            || world_surface_tile_blocks_sight(self.grid[world_cell_index(x, y)])
     }
 
     pub fn advance_turn(&mut self) {
