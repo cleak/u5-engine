@@ -83,6 +83,39 @@ pub fn blit_tile_to_viewport(
     Ok(())
 }
 
+/// Composite a sprite tile over whatever is already in the viewport cell.
+/// Treats palette index 0 (EGA black) as transparent so the underlying
+/// terrain shows through the negative space of avatars, NPCs, monsters,
+/// vehicles, and moongate frames. Used by the active-object compositor
+/// path per the visibility spec.
+pub fn composite_sprite_to_viewport(
+    viewport: &mut TileViewport,
+    atlas: &TileAtlas,
+    tile: u8,
+    cell_x: usize,
+    cell_y: usize,
+) -> io::Result<()> {
+    let tile_pixels = atlas.tile_pixels(tile as usize).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("tile atlas is missing tile {tile}"),
+        )
+    })?;
+    let dst_x = cell_x * TILE_ATLAS_SIDE;
+    let dst_y = cell_y * TILE_ATLAS_SIDE;
+    for row in 0..TILE_ATLAS_SIDE {
+        let dst_start = (dst_y + row) * viewport.width + dst_x;
+        let src_start = row * TILE_ATLAS_SIDE;
+        for col in 0..TILE_ATLAS_SIDE {
+            let px = tile_pixels[src_start + col];
+            if px != 0 {
+                viewport.pixels[dst_start + col] = px;
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 pub fn tile_graphics_file_name(stem: &str, depth: TileGraphicsDepth) -> String {
     format!("{stem}.{}", depth.file_suffix())

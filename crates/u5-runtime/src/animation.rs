@@ -23,7 +23,19 @@ impl AnimationClock {
     }
 
     pub fn resolve_static_tile(self, tile: u8) -> u8 {
-        static_tile_animation_family_base(tile).map_or(tile, |base| base + self.frame)
+        // Per the tile-catalog spec (Section 4): a 4-frame animation cycle
+        // shifts the *displayed* tile id within its family run while keeping
+        // each cell's stored identity intact. A swamp cell at id 0x04 stays
+        // visually a swamp tile, just on the next frame; it does not
+        // suddenly display deep-water on frame 0.
+        if let Some(base) = static_tile_animation_family_base(tile) {
+            const CYCLE: u8 = 4;
+            let offset = (tile - base) % CYCLE;
+            let advanced = (offset + (self.frame & (CYCLE - 1))) % CYCLE;
+            base + advanced
+        } else {
+            tile
+        }
     }
 
     pub fn resolve_moongate_tile(self) -> u8 {

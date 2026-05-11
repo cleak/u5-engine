@@ -93,8 +93,12 @@ pub const PLAY_SCRIPT_MAX_IDLE_TICKS: usize = 1024;
 pub const PLAY_IGNORED_INPUT_KEY: char = '\u{1e}';
 pub const PLAY_TYPEAHEAD_TOGGLE_KEY: char = '\u{1f}';
 pub const PLAYER_TILE: u8 = 0xfc;
-pub const MOONGATE_TILE_BASE: u8 = 128;
-pub const MOONGATE_ANIMATION_FRAMES: u8 = 16;
+// The moongate animation cycles 4 sprite frames (closed / opening /
+// open / closing) at tile ids 0xD4..0xD7. Derived from the EGA atlas;
+// LOOK2.DAT separately labels 0xDC as "a moon gate!" but the actual
+// animated frames live at 0xD4..=0xD7.
+pub const MOONGATE_TILE_BASE: u8 = 0xD4;
+pub const MOONGATE_ANIMATION_FRAMES: u8 = 4;
 pub const STEADY_PHASE: u8 = 0x0f;
 pub const PLAY_START_YEAR: u16 = 139;
 pub const PLAY_START_MONTH: u8 = 4;

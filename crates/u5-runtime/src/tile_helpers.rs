@@ -113,6 +113,11 @@ pub fn dungeon_ladder_delta(tile: u8, intent: ClimbIntent) -> Option<i8> {
 }
 
 pub fn render_glyph(tile: u8) -> char {
+    // Moongate frames have a dedicated glyph regardless of their numeric
+    // range; the actual sprite ids are 0xD4..=0xD7 (see constants.rs).
+    if (MOONGATE_TILE_BASE..MOONGATE_TILE_BASE + MOONGATE_ANIMATION_FRAMES).contains(&tile) {
+        return '^';
+    }
     match tile {
         0 => ' ',
         1..=4 => match tile {

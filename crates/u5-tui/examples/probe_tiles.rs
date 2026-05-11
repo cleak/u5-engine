@@ -26,6 +26,7 @@ fn main() {
     let damage = load_world_damage_tile_entries(dir)
         .unwrap()
         .unwrap_or_default();
+    let look = load_look_table(dir).unwrap();
 
     println!(
         "Tiles around ({x0}, {y0}) on Britannia. Each cell shows tile id (hex), \
@@ -38,8 +39,9 @@ fn main() {
             let base = is_base_tile_passable(tile, passability.as_ref());
             let dmg = world_damage_tile_entry_at(&damage, WorldPlane::Britannia, x, y, tile);
             let here = if (x, y) == (x0, y0) { "*" } else { " " };
+            let desc = look.description(tile as usize).unwrap_or("?");
             println!(
-                "  {here}({x:3},{y:3}) tile=0x{tile:02x} base_pass={base:5} \
+                "  {here}({x:3},{y:3}) tile=0x{tile:02x} {desc:>20} base_pass={base:5} \
                  walk_foot={walk:5} dmg={dmg:?}"
             );
         }

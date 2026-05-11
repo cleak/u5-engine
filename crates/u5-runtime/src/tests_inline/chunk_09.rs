@@ -201,7 +201,7 @@
         visible.ambient_light = FULL_DAYLIGHT;
         visible.animation = AnimationClock {
             frame: 0,
-            moongate_frame: 7,
+            moongate_frame: 1,
         };
         visible.moongates.push(MoongateEntry {
             x: 1,
@@ -216,7 +216,9 @@
         assert_eq!(visible.idle_tick(), MoveOutcome::IdleTick);
 
         assert_eq!(visible.animation.frame, 1);
-        assert_eq!(visible.animation.moongate_frame, 8);
+        // Moongate now uses a 4-frame cycle starting at 0xD4; one tick
+        // advances frame 1 -> 2.
+        assert_eq!(visible.animation.moongate_frame, 2);
     }
 
     #[test]

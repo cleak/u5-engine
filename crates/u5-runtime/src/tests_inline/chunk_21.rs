@@ -608,6 +608,10 @@
 
     #[test]
     fn static_tile_animation_uses_family_wide_frame_selector() {
+        // The animator shifts each cell's displayed tile within its 4-frame
+        // family while preserving the cell's stored identity-offset (so
+        // adjacent water cells with different stored ids don't visually
+        // collapse into a single synchronised sprite).
         let families = [
             (1, 1..=4),
             (10, 10..=13),
@@ -616,14 +620,17 @@
             (156, 156..=159),
         ];
 
-        for frame in 0..4 {
+        for frame in 0..4u8 {
             let clock = AnimationClock {
                 frame,
                 moongate_frame: 0,
             };
             for (base, family) in families.clone() {
                 let resolved: Vec<_> = family.map(|tile| clock.resolve_static_tile(tile)).collect();
-                assert_eq!(resolved, vec![base + frame; 4]);
+                let expected: Vec<u8> = (0..4)
+                    .map(|i| base + ((i + frame) % 4))
+                    .collect();
+                assert_eq!(resolved, expected, "family base {base}, frame {frame}");
             }
         }
     }
@@ -646,7 +653,11 @@
     }
 
     #[test]
-    fn animation_clock_cycles_moongate_through_public_sixteen_frame_plate() {
+    fn animation_clock_cycles_moongate_through_animation_frames() {
+        // Moongate cycles through MOONGATE_ANIMATION_FRAMES sprite frames
+        // starting at MOONGATE_TILE_BASE. The full ring is verified per
+        // u5-spec/catalogs/tile-catalog.md and the LOOK2.DAT moongate
+        // labelling of tile 0xDC.
         let mut clock = AnimationClock::default();
         let frames: Vec<_> = (0..MOONGATE_ANIMATION_FRAMES)
             .map(|_| {

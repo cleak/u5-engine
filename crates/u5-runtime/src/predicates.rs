@@ -11,7 +11,43 @@ pub fn is_probe_walkable(tile: u8) -> bool {
     if is_location_entry_marker(tile) {
         return true;
     }
-    !matches!(tile, 0 | 1..=4 | 10..=15 | 24..=79 | 88..=103 | 120..=127)
+    // Class boundaries derived from the canonical LOOK2.DAT description for
+    // each tile id (cross-checked with u5-spec/catalogs/tile-catalog.md).
+    // Earlier code used the spec's wide aspirational wall range (24..=79),
+    // but most ids in that range are actually grass variants, roads,
+    // bridges, crenellations, and landmark icons that the player can step
+    // onto. We keep the truly impassable ids and leave everything else
+    // walkable; the optional tile_passability.bin sidecar overrides this
+    // when present.
+    !matches!(
+        tile,
+        // Sentinel.
+        0
+        // Water (deep, coastal, shoals) and swamp.
+        | 1..=4
+        // Tropical forest, foothills, mountains, high peaks.
+        | 10..=15
+        // Dungeon entrance, mystic shrine, ruined shrine, lighthouse
+        // (landmarks the player can E-Enter but not step over).
+        | 24..=27
+        // Roofs and crystal sphere.
+        | 39..=41
+        // Hollow stump, crops, fruit tree, cactus.
+        | 43 | 45..=47
+        // Gargoyle landmark and "a mighty castle" tile band.
+        | 56..=63
+        // Town interior surfaces that act as obstacles: planks, codex,
+        // mast, rail, cobble, pillar, pier (but NOT bridges).
+        | 64..=71
+        // Walls, arrow slits, windows, piles of rocks.
+        | 74..=79
+        // Signs, wells, brazier, fireplace.
+        | 88..=95
+        // Doors (id-dependent; closed/locked block).
+        | 96..=103
+        // Decorative obstructions in the upper decoration band.
+        | 120..=127
+    )
 }
 
 pub fn is_tile_walkable(tile: u8, passability: Option<&TilePassability>) -> bool {
