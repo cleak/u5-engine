@@ -585,9 +585,12 @@
 
     #[test]
     fn animation_clock_cycles_public_static_four_frame_families() {
-        for base in [1, 10, 92, 152, 156] {
+        // Water cycles only 3 frames (1..=3) because tile 0x04 is "swamp",
+        // a different terrain type, not a water frame. Other families
+        // remain 4-frame.
+        for (base, cycle) in [(1u8, 3u8), (10, 4), (92, 4), (152, 4), (156, 4)] {
             let mut clock = AnimationClock::default();
-            let frames: Vec<_> = (0..4)
+            let frames: Vec<_> = (0..cycle)
                 .map(|_| {
                     let tile = clock.resolve_static_tile(base);
                     clock.tick_static_tiles();
@@ -595,8 +598,8 @@
                 })
                 .collect();
 
-            assert_eq!(frames, vec![base, base + 1, base + 2, base + 3]);
-            assert_eq!(clock.resolve_static_tile(base), base);
+            let expected: Vec<u8> = (0..cycle).map(|i| base + i).collect();
+            assert_eq!(frames, expected, "family base {base}, cycle {cycle}");
         }
 
         let clock = AnimationClock {
@@ -608,16 +611,15 @@
 
     #[test]
     fn static_tile_animation_uses_family_wide_frame_selector() {
-        // The animator shifts each cell's displayed tile within its 4-frame
-        // family while preserving the cell's stored identity-offset (so
-        // adjacent water cells with different stored ids don't visually
-        // collapse into a single synchronised sprite).
-        let families = [
-            (1, 1..=4),
-            (10, 10..=13),
-            (92, 92..=95),
-            (152, 152..=155),
-            (156, 156..=159),
+        // The animator shifts each cell's displayed tile within its
+        // family while preserving the cell's stored identity-offset.
+        // Water is 3 frames (1..=3); lava/fire/wind families are 4.
+        let families: Vec<(u8, Vec<u8>, u8)> = vec![
+            (1, vec![1, 2, 3], 3),
+            (10, vec![10, 11, 12, 13], 4),
+            (92, vec![92, 93, 94, 95], 4),
+            (152, vec![152, 153, 154, 155], 4),
+            (156, vec![156, 157, 158, 159], 4),
         ];
 
         for frame in 0..4u8 {
@@ -625,10 +627,11 @@
                 frame,
                 moongate_frame: 0,
             };
-            for (base, family) in families.clone() {
-                let resolved: Vec<_> = family.map(|tile| clock.resolve_static_tile(tile)).collect();
-                let expected: Vec<u8> = (0..4)
-                    .map(|i| base + ((i + frame) % 4))
+            for (base, family, cycle) in &families {
+                let resolved: Vec<_> =
+                    family.iter().map(|&tile| clock.resolve_static_tile(tile)).collect();
+                let expected: Vec<u8> = (0..family.len() as u8)
+                    .map(|i| base + ((i + frame) % cycle))
                     .collect();
                 assert_eq!(resolved, expected, "family base {base}, frame {frame}");
             }

@@ -86,15 +86,32 @@ pub fn is_water_tile(tile: u8) -> bool {
     (1..=4).contains(&tile)
 }
 
-pub fn static_tile_animation_family_base(tile: u8) -> Option<u8> {
+/// Returns `(family_base, cycle_length)` for an animated-static tile. The
+/// renderer cycles the displayed sprite within `[base, base + cycle)` while
+/// preserving each cell's per-tile identity offset. Returns `None` for
+/// static tiles.
+///
+/// Per LOOK2.DAT cross-check:
+///   * Water cycles 0x01..=0x03 ("deep water" / "water" / "shoals"). Tile
+///     0x04 ("swamp") is a *distinct* terrain type, not a water frame --
+///     including it in the cycle morphs water cells through a green-dotted
+///     swamp sprite that looks like a different terrain mid-animation.
+///   * Lava / fire / wind tile ranges remain 4-frame.
+pub fn static_tile_animation_family(tile: u8) -> Option<(u8, u8)> {
     match tile {
-        1..=4 => Some(1),
-        10..=13 => Some(10),
-        92..=95 => Some(92),
-        152..=155 => Some(152),
-        156..=159 => Some(156),
+        1..=3 => Some((1, 3)),
+        10..=13 => Some((10, 4)),
+        92..=95 => Some((92, 4)),
+        152..=155 => Some((152, 4)),
+        156..=159 => Some((156, 4)),
         _ => None,
     }
+}
+
+/// Back-compat shim: callers that only need the base. Kept for the
+/// existing surface that returns Option<u8>.
+pub fn static_tile_animation_family_base(tile: u8) -> Option<u8> {
+    static_tile_animation_family(tile).map(|(base, _)| base)
 }
 
 pub fn is_lava_tile(tile: u8) -> bool {

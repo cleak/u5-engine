@@ -109,6 +109,22 @@ pub fn composite_sprite_id_to_viewport(
     cell_x: usize,
     cell_y: usize,
 ) -> io::Result<()> {
+    blit_tile_id_to_viewport(viewport, atlas, tile, cell_x, cell_y)
+}
+
+/// Opaque blit accepting the full 9-bit tile id range. Used for active
+/// objects (avatar, NPCs, monsters, vehicles) per the visibility-spec
+/// active-object compositor: the sprite's whole 16x16 cell -- including
+/// the black bounding-box pixels -- overwrites the terrain in the cell,
+/// so the sprite reads clearly as drawn *on top* and not bleeding into
+/// the terrain through transparent-black corners.
+pub fn blit_tile_id_to_viewport(
+    viewport: &mut TileViewport,
+    atlas: &TileAtlas,
+    tile: usize,
+    cell_x: usize,
+    cell_y: usize,
+) -> io::Result<()> {
     let tile_pixels = atlas.tile_pixels(tile).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidData,
@@ -120,12 +136,8 @@ pub fn composite_sprite_id_to_viewport(
     for row in 0..TILE_ATLAS_SIDE {
         let dst_start = (dst_y + row) * viewport.width + dst_x;
         let src_start = row * TILE_ATLAS_SIDE;
-        for col in 0..TILE_ATLAS_SIDE {
-            let px = tile_pixels[src_start + col];
-            if px != 0 {
-                viewport.pixels[dst_start + col] = px;
-            }
-        }
+        viewport.pixels[dst_start..dst_start + TILE_ATLAS_SIDE]
+            .copy_from_slice(&tile_pixels[src_start..src_start + TILE_ATLAS_SIDE]);
     }
     Ok(())
 }

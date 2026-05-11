@@ -23,15 +23,14 @@ impl AnimationClock {
     }
 
     pub fn resolve_static_tile(self, tile: u8) -> u8 {
-        // Per the tile-catalog spec (Section 4): a 4-frame animation cycle
-        // shifts the *displayed* tile id within its family run while keeping
-        // each cell's stored identity intact. A swamp cell at id 0x04 stays
-        // visually a swamp tile, just on the next frame; it does not
-        // suddenly display deep-water on frame 0.
-        if let Some(base) = static_tile_animation_family_base(tile) {
-            const CYCLE: u8 = 4;
-            let offset = (tile - base) % CYCLE;
-            let advanced = (offset + (self.frame & (CYCLE - 1))) % CYCLE;
+        // Per the tile-catalog spec (Section 4): the animator shifts the
+        // displayed sprite within a fixed family run while preserving each
+        // cell's per-tile identity offset. Water is 3 frames (deep water /
+        // water / shoals); swamp is a separate static terrain. Lava / fire
+        // / wind families remain 4-frame.
+        if let Some((base, cycle)) = static_tile_animation_family(tile) {
+            let offset = (tile - base) % cycle;
+            let advanced = (offset + (self.frame % cycle)) % cycle;
             base + advanced
         } else {
             tile
