@@ -7,23 +7,23 @@ present.
 Log a `plan` note early, before writing code:
 
 ```powershell
-python journal/capture/notes.py --agent codex plan "Plan summary"
+python journal/capture/notes.py --agent claude plan "Plan summary"
 ```
 
 Log findings, decisions, problems, tool notes, and risks as they happen:
 
 ```powershell
-python journal/capture/notes.py --agent codex finding "What was found"
-python journal/capture/notes.py --agent codex decision "What was decided and why"
-python journal/capture/notes.py --agent codex dead_end "What did not work"
-python journal/capture/notes.py --agent codex tool "Tool outcome"
-python journal/capture/notes.py --agent codex risk "Risk or uncertainty"
+python journal/capture/notes.py --agent claude finding "What was found"
+python journal/capture/notes.py --agent claude decision "What was decided and why"
+python journal/capture/notes.py --agent claude dead_end "What did not work"
+python journal/capture/notes.py --agent claude tool "Tool outcome"
+python journal/capture/notes.py --agent claude risk "Risk or uncertainty"
 ```
 
 Log a `final` note before stopping:
 
 ```powershell
-python journal/capture/notes.py --agent codex final "Summary of outcome"
+python journal/capture/notes.py --agent claude final "Summary of outcome"
 ```
 
 Allowed kinds: `plan`, `finding`, `decision`, `dead_end`, `tool`, `risk`,
@@ -36,13 +36,13 @@ delete previous entries.
 If the journal exists but has not been bootstrapped, run:
 
 ```powershell
-python journal/capture/notes.py --bootstrap --agent codex
+python journal/capture/notes.py --bootstrap --agent claude
 ```
 
 ## Project Context
 
-This repository is a clean-room implementation of the classic DOS game Ultima V.
-The implementation target is Rust with Bevy.
+This repository is the clean-room Rust/Bevy implementation of the classic DOS
+game Ultima V.
 
 Current local paths:
 
@@ -51,10 +51,11 @@ Current local paths:
 - Clean asset files: `C:\Games\U5-Clean`
 - Current public/specification repository: `C:\Projects\Rust\u5-clean\u5-spec`
 
-The repository currently contains a narrow Rust verification harness. It reads
-local game assets at runtime and writes sanitized aggregate reports. The
-repository must not include original game assets, raw map dumps, dialogue
-transcripts, binary offsets copied from private analysis, or copyrighted content.
+The repository currently contains a narrow Rust verification and first-playable
+harness. It reads local game assets at runtime and writes sanitized aggregate
+reports. The repository must not include original game assets, raw map dumps,
+dialogue transcripts, binary offsets copied from private analysis, or
+copyrighted content.
 
 ## Clean-Room Rules
 
