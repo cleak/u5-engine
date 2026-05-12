@@ -51,6 +51,11 @@ Current local paths:
 - Clean asset files: `C:\Games\U5-Clean`
 - Current public/specification repository: `C:\Projects\Rust\u5-clean\u5-spec`
 
+The specification repository is read-only from this clean workspace. Agents may
+read `C:\Projects\Rust\u5-clean\u5-spec` as clean input, but must not create,
+edit, delete, stage, commit, or pull changes there unless the user explicitly
+directs that specific operation.
+
 The repository currently contains a narrow Rust verification and first-playable
 harness. It reads local game assets at runtime and writes sanitized aggregate
 reports. The repository must not include original game assets, raw map dumps,
@@ -76,6 +81,8 @@ copyrighted content.
 - Communication from private analysis to this repository must happen through
   clean spec updates pulled into `C:\Projects\Rust\u5-clean\u5-spec`, or through
   user-provided clean-room-safe descriptions.
+- Do not edit `C:\Projects\Rust\u5-clean\u5-spec` from engine work. If the spec
+  needs changes, ask the user for the clean-room-safe update path.
 
 ## Engineering Direction
 
