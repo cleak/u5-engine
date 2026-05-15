@@ -1,4 +1,24 @@
     #[test]
+    fn calendar_thresholds_and_display_hour_match_spec() {
+        // time.md §2,§5
+        assert_eq!(MINUTES_PER_HOUR, 60);
+        assert_eq!(HOURS_PER_DAY, 24);
+        assert_eq!(DAYS_PER_MONTH, 28);
+        assert_eq!(MONTHS_PER_YEAR, 13);
+
+        // Display hour rule.
+        assert_eq!(display_hour_12h(0), 12);
+        assert_eq!(display_hour_12h(1), 1);
+        assert_eq!(display_hour_12h(11), 11);
+        assert_eq!(display_hour_12h(12), 12);
+        assert_eq!(display_hour_12h(13), 1);
+        assert_eq!(display_hour_12h(23), 11);
+        // GameClock's instance method returns the same value.
+        let clock = GameClock::with_date(139, 4, 5, 0, 0).unwrap();
+        assert_eq!(clock.display_hour(), display_hour_12h(0));
+    }
+
+    #[test]
     fn command_dispatch_status_predicates_match_spec() {
         // main-loop.md §6,§7
         // Only ConsumesTurn runs the per-turn epilogue.

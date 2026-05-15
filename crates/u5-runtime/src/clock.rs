@@ -7,6 +7,30 @@ use std::path::Path;
 
 use crate::*;
 
+/// `time.md §5` Britannian calendar wrap thresholds. Sixty minutes
+/// per hour, twenty-four hours per day, twenty-eight days per month,
+/// thirteen months per year. The cascade rolls over when minutes
+/// reach `MINUTES_PER_HOUR`, hours reach `HOURS_PER_DAY`, days
+/// exceed `DAYS_PER_MONTH` (one-based), and months exceed
+/// `MONTHS_PER_YEAR` (one-based).
+pub const MINUTES_PER_HOUR: u8 = 60;
+pub const HOURS_PER_DAY: u8 = 24;
+pub const DAYS_PER_MONTH: u8 = 28;
+pub const MONTHS_PER_YEAR: u8 = 13;
+
+/// `time.md §2`: convert the underlying 0..=23 hour to the 12-hour
+/// display value used by status-row presentation. Hour 0 displays as
+/// 12; 1..=12 display as themselves; 13..=23 display as `hour - 12`.
+/// There is no AM/PM flag in the result; callers consult the raw
+/// hour to pick the suffix.
+pub const fn display_hour_12h(hour_24h: u8) -> u8 {
+    match hour_24h {
+        0 => 12,
+        1..=12 => hour_24h,
+        _ => hour_24h - 12,
+    }
+}
+
 /// `moons.md §3`: the sky/status-strip renderer runs only on
 /// surface and town-family views. Dungeon-class views and the
 /// underworld presentation suppress it. The argument is the saved
