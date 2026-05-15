@@ -46,6 +46,52 @@ pub const fn is_ship_transport_furled(byte: u8) -> bool {
     byte >= SHIP_TRANSPORT_FURLED_FIRST && byte <= SHIP_TRANSPORT_FURLED_LAST
 }
 
+/// `vehicles.md §2` transport/action marker family. Classifies the
+/// party transport state byte into one of the documented ranges. The
+/// low two bits within each family encode N/E/S/W facing using the
+/// `0` north, `1` east, `2` south, `3` west convention.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransportFamily {
+    /// `0x12..=0x13` — mounted horse.
+    MountedHorse,
+    /// `0x14..=0x17` — magic carpet.
+    MagicCarpet,
+    /// `0x1C..=0x1F` — foot/avatar (clean default `0x1C` faces north).
+    Foot,
+    /// `0x20..=0x23` — ship under sail (hoisted, wind-controlled).
+    ShipHoisted,
+    /// `0x24..=0x27` — ship furled / manually handled.
+    ShipFurled,
+    /// `0x28..=0x2B` — skiff.
+    Skiff,
+}
+
+/// `vehicles.md §2`: classify a transport/action marker byte into
+/// its family. Returns `None` for marker values outside the known
+/// transport ranges (those remain opaque transport state, per spec).
+pub const fn transport_family(marker: u8) -> Option<TransportFamily> {
+    Some(match marker {
+        0x12..=0x13 => TransportFamily::MountedHorse,
+        0x14..=0x17 => TransportFamily::MagicCarpet,
+        0x1C..=0x1F => TransportFamily::Foot,
+        0x20..=0x23 => TransportFamily::ShipHoisted,
+        0x24..=0x27 => TransportFamily::ShipFurled,
+        0x28..=0x2B => TransportFamily::Skiff,
+        _ => return None,
+    })
+}
+
+/// `vehicles.md §2`: low two bits decode transport facing as
+/// north (0) / east (1) / south (2) / west (3). Returns `None` for
+/// markers outside the recognised transport families.
+pub const fn transport_facing_index(marker: u8) -> Option<u8> {
+    if transport_family(marker).is_some() {
+        Some(marker & 0x03)
+    } else {
+        None
+    }
+}
+
 /// `stats-panel.md §5` middle-counter selection. The bottom block's
 /// middle counter shows the saved party gold word in ordinary and
 /// combat scenes; when the transport/action marker byte is in the

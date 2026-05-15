@@ -1,4 +1,42 @@
     #[test]
+    fn transport_family_classifier_matches_spec_table() {
+        // vehicles.md §2
+        for b in 0x12u8..=0x13 {
+            assert_eq!(transport_family(b), Some(TransportFamily::MountedHorse));
+        }
+        for b in 0x14u8..=0x17 {
+            assert_eq!(transport_family(b), Some(TransportFamily::MagicCarpet));
+        }
+        for b in 0x1Cu8..=0x1F {
+            assert_eq!(transport_family(b), Some(TransportFamily::Foot));
+        }
+        for b in 0x20u8..=0x23 {
+            assert_eq!(transport_family(b), Some(TransportFamily::ShipHoisted));
+        }
+        for b in 0x24u8..=0x27 {
+            assert_eq!(transport_family(b), Some(TransportFamily::ShipFurled));
+        }
+        for b in 0x28u8..=0x2B {
+            assert_eq!(transport_family(b), Some(TransportFamily::Skiff));
+        }
+        // Out-of-window markers remain opaque.
+        assert_eq!(transport_family(0x00), None);
+        assert_eq!(transport_family(0x10), None); // riderless horse object
+        assert_eq!(transport_family(0x18), None);
+        assert_eq!(transport_family(0x1B), None);
+        assert_eq!(transport_family(0x2C), None);
+        assert_eq!(transport_family(0xFF), None);
+
+        // Facing index = low two bits within each accepted family.
+        assert_eq!(transport_facing_index(0x1C), Some(0)); // foot N
+        assert_eq!(transport_facing_index(0x1D), Some(1)); // foot E
+        assert_eq!(transport_facing_index(0x1E), Some(2)); // foot S
+        assert_eq!(transport_facing_index(0x1F), Some(3)); // foot W
+        assert_eq!(transport_facing_index(0x22), Some(2)); // ship S
+        assert_eq!(transport_facing_index(0x10), None);    // not a transport
+    }
+
+    #[test]
     fn magic_unlock_door_rewrite_only_accepts_wooden_doors() {
         // doors-and-z-transitions.md §7
         assert_eq!(
