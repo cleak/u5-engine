@@ -4,6 +4,33 @@
 //! by the upper layers; gameplay mode loops handle these inline before
 //! the central command dispatcher sees ordinary letter keys.
 
+/// `input.md §4` function-key remap. F1 through F10 become the
+/// contiguous internal byte range `0xC9..=0xD2`, disjoint from
+/// printable ASCII and the direction codes.
+pub const INPUT_CODE_F1: u8 = 0xC9;
+pub const INPUT_CODE_F10: u8 = 0xD2;
+pub const INPUT_CODE_FUNCTION_FIRST: u8 = INPUT_CODE_F1;
+pub const INPUT_CODE_FUNCTION_LAST: u8 = INPUT_CODE_F10;
+
+/// `input.md §4`: returns `Some(1..=10)` for the function-key index a
+/// remapped byte represents, or `None` for non-function bytes. F1 maps
+/// to 1, F10 maps to 10.
+pub const fn input_function_key_index(byte: u8) -> Option<u8> {
+    if byte < INPUT_CODE_FUNCTION_FIRST || byte > INPUT_CODE_FUNCTION_LAST {
+        None
+    } else {
+        Some(byte - INPUT_CODE_FUNCTION_FIRST + 1)
+    }
+}
+
+/// `input.md §3` cursor-blink defaults: glyph code `4` is the first
+/// frame; the blink modulus wraps the phase counter every `4658` poll
+/// iterations. These are mutable resident values; callers that need
+/// real-time pacing derive a visually similar cadence from elapsed
+/// time while preserving the no-advance/erase contract.
+pub const CURSOR_BLINK_BASE_GLYPH: u8 = 4;
+pub const CURSOR_BLINK_MODULUS: u16 = 4658;
+
 /// `input.md §5` direction codes (eight directions plus the "no direction"
 /// case that the upper layer represents by simply not seeing one of these
 /// bytes).

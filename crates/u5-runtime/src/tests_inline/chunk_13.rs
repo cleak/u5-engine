@@ -1,4 +1,25 @@
     #[test]
+    fn input_function_key_remap_and_cursor_blink_match_spec() {
+        // input.md §3,§4
+        assert_eq!(INPUT_CODE_F1, 0xC9);
+        assert_eq!(INPUT_CODE_F10, 0xD2);
+        assert_eq!(INPUT_CODE_FUNCTION_FIRST, INPUT_CODE_F1);
+        assert_eq!(INPUT_CODE_FUNCTION_LAST, INPUT_CODE_F10);
+        assert_eq!(CURSOR_BLINK_BASE_GLYPH, 4);
+        assert_eq!(CURSOR_BLINK_MODULUS, 4658);
+
+        // F1..F10 -> 1..=10.
+        assert_eq!(input_function_key_index(0xC9), Some(1));
+        assert_eq!(input_function_key_index(0xCA), Some(2));
+        assert_eq!(input_function_key_index(0xD2), Some(10));
+        // Out-of-range bytes return None.
+        assert_eq!(input_function_key_index(0xC8), None);
+        assert_eq!(input_function_key_index(0xD3), None); // northwest direction code
+        assert_eq!(input_function_key_index(0xFF), None);
+        assert_eq!(input_function_key_index(b'A'), None);
+    }
+
+    #[test]
     fn town_tile_marker_classifies_harvested_bytes() {
         // town-mode.md §3
         assert_eq!(TOWN_TILE_NPC_START_A, 0x48);
