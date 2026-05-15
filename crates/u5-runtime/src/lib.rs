@@ -202,7 +202,13 @@ pub use timing::{DungeonFieldEffect, SaveTemplateSource, TimingStatusTag};
 pub use town_tables::*;
 pub use town_tables_io::*;
 pub use town_tables_io_movement::*;
-pub use transport::{BoardVehicleCandidate, PendingVehicleAcquisition, TransportState};
+pub use transport::{
+    BoardVehicleCandidate, BoardableFamily, CARPET_MOUNTED, CARPET_PARKED,
+    HORSE_MOUNTED_FIRST, HORSE_MOUNTED_LAST, HORSE_PARKED_FIRST, HORSE_PARKED_LAST,
+    PendingVehicleAcquisition, SHIP_BOARDING_HULL_WARNING_THRESHOLD, SHIP_PARKED_FIRST,
+    SHIP_PARKED_LAST, SKIFF_PARKED_FIRST, SKIFF_PARKED_LAST, TransportState,
+    boardable_family, mount_horse_marker, ship_boarding_warns,
+};
 pub use traps::*;
 pub use u4_transfer::*;
 pub use visibility::{

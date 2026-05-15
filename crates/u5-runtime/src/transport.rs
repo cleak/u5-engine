@@ -42,6 +42,61 @@ pub enum PendingVehicleAcquisition {
     Skiff { x: usize, y: usize },
 }
 
+/// `vehicles.md §4` boardable-object byte ranges and their boarded
+/// transport-marker results.
+pub const HORSE_PARKED_FIRST: u8 = 0x10;
+pub const HORSE_PARKED_LAST: u8 = 0x11;
+pub const HORSE_MOUNTED_FIRST: u8 = 0x12;
+pub const HORSE_MOUNTED_LAST: u8 = 0x13;
+pub const CARPET_PARKED: u8 = 0x1B;
+pub const CARPET_MOUNTED: u8 = 0x14;
+pub const SHIP_PARKED_FIRST: u8 = 0x24;
+pub const SHIP_PARKED_LAST: u8 = 0x27;
+pub const SKIFF_PARKED_FIRST: u8 = 0x28;
+pub const SKIFF_PARKED_LAST: u8 = 0x2B;
+
+/// `vehicles.md §4` boardable family classification.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BoardableFamily {
+    Horse,
+    MagicCarpet,
+    Ship,
+    Skiff,
+}
+
+/// `vehicles.md §4`: classify a parked-object byte into its boardable
+/// family, or `None` if the byte is not a boardable parked object. The
+/// already-mounted ranges (`0x12..=0x13` mounted horses, `0x14` mounted
+/// carpet) intentionally return `None`; they are caller live-state
+/// markers, not parked objects to board.
+pub const fn boardable_family(parked_byte: u8) -> Option<BoardableFamily> {
+    Some(match parked_byte {
+        HORSE_PARKED_FIRST..=HORSE_PARKED_LAST => BoardableFamily::Horse,
+        CARPET_PARKED => BoardableFamily::MagicCarpet,
+        SHIP_PARKED_FIRST..=SHIP_PARKED_LAST => BoardableFamily::Ship,
+        SKIFF_PARKED_FIRST..=SKIFF_PARKED_LAST => BoardableFamily::Skiff,
+        _ => return None,
+    })
+}
+
+/// `vehicles.md §4`: rewrite a parked horse byte to its mounted-marker
+/// counterpart by adding two (`0x10..=0x11` → `0x12..=0x13`). Returns
+/// `None` if the input is not a parked horse byte.
+pub const fn mount_horse_marker(parked_byte: u8) -> Option<u8> {
+    if parked_byte == HORSE_PARKED_FIRST || parked_byte == HORSE_PARKED_LAST {
+        Some(parked_byte + 2)
+    } else {
+        None
+    }
+}
+
+/// `vehicles.md §3`: ship-boarding precondition — print a warning when
+/// hull is below ten or no skiffs are aboard.
+pub const SHIP_BOARDING_HULL_WARNING_THRESHOLD: u8 = 10;
+pub const fn ship_boarding_warns(hull: u8, skiffs: u8) -> bool {
+    hull < SHIP_BOARDING_HULL_WARNING_THRESHOLD || skiffs == 0
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BoardVehicleCandidate {
     pub slot: usize,

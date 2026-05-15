@@ -636,6 +636,41 @@
     }
 
     #[test]
+    fn boardable_family_classifier_matches_spec_table() {
+        // vehicles.md §4
+        assert_eq!(boardable_family(0x10), Some(BoardableFamily::Horse));
+        assert_eq!(boardable_family(0x11), Some(BoardableFamily::Horse));
+        // Mounted-horse ranges are not boardable parked objects.
+        assert_eq!(boardable_family(0x12), None);
+        assert_eq!(boardable_family(0x13), None);
+        // Carpet
+        assert_eq!(boardable_family(0x1B), Some(BoardableFamily::MagicCarpet));
+        assert_eq!(boardable_family(0x14), None);
+        // Ship
+        for byte in 0x24..=0x27u8 {
+            assert_eq!(boardable_family(byte), Some(BoardableFamily::Ship));
+        }
+        // Skiff
+        for byte in 0x28..=0x2Bu8 {
+            assert_eq!(boardable_family(byte), Some(BoardableFamily::Skiff));
+        }
+        assert_eq!(boardable_family(0x2C), None);
+        assert_eq!(boardable_family(0x00), None);
+        // Mount horse marker
+        assert_eq!(mount_horse_marker(0x10), Some(0x12));
+        assert_eq!(mount_horse_marker(0x11), Some(0x13));
+        assert_eq!(mount_horse_marker(0x12), None);
+        assert_eq!(mount_horse_marker(0x1B), None);
+        // Ship boarding warning predicate
+        assert_eq!(SHIP_BOARDING_HULL_WARNING_THRESHOLD, 10);
+        assert!(ship_boarding_warns(0, 2)); // hull below 10
+        assert!(ship_boarding_warns(9, 2)); // hull below 10
+        assert!(!ship_boarding_warns(10, 2));
+        assert!(ship_boarding_warns(50, 0)); // no skiffs
+        assert!(!ship_boarding_warns(50, 1));
+    }
+
+    #[test]
     fn cast_dispatcher_gate_matches_spec_order_and_messages() {
         // magic.md §7
         // Scene gate first: Not here! before charge consumption.
