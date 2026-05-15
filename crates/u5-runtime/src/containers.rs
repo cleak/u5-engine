@@ -80,6 +80,62 @@ pub const fn equipment_grant_quantity(class_code: u8) -> u8 {
     }
 }
 
+/// `containers.md §5` Search location-prefix classification for the
+/// live tile under the searched coordinate. The prefix names the
+/// scenery the search narration mentions before any found-object
+/// text. Returns `None` for tiles that take the generic find prefix.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SearchLocationPrefix {
+    /// `0x2B` — stump.
+    Stump,
+    /// `0x4F` — wall.
+    Wall,
+    /// `0x5A` — shelf.
+    Shelf,
+    /// `0x5C..=0x5D` — bookshelf.
+    Bookshelf,
+    /// `0xA1` — well.
+    Well,
+    /// `0xA5` — desk.
+    Desk,
+    /// `0xA6` — barrel.
+    Barrel,
+    /// `0xA8` — vanity.
+    Vanity,
+    /// `0xAB..=0xAC` — under bed.
+    UnderBed,
+    /// `0xAD` — dresser.
+    Dresser,
+    /// `0xAF` — trunk.
+    Trunk,
+    /// `0xB2` — brazier.
+    Brazier,
+    /// `0xBC` — fireplace.
+    Fireplace,
+}
+
+/// `containers.md §5`: classify a live tile as one of the named
+/// location-prefix scenery cells. Returns `None` for ordinary tiles
+/// (the search narration uses the generic find prefix).
+pub const fn search_location_prefix(tile: u8) -> Option<SearchLocationPrefix> {
+    Some(match tile {
+        0x2B => SearchLocationPrefix::Stump,
+        0x4F => SearchLocationPrefix::Wall,
+        0x5A => SearchLocationPrefix::Shelf,
+        0x5C | 0x5D => SearchLocationPrefix::Bookshelf,
+        0xA1 => SearchLocationPrefix::Well,
+        0xA5 => SearchLocationPrefix::Desk,
+        0xA6 => SearchLocationPrefix::Barrel,
+        0xA8 => SearchLocationPrefix::Vanity,
+        0xAB | 0xAC => SearchLocationPrefix::UnderBed,
+        0xAD => SearchLocationPrefix::Dresser,
+        0xAF => SearchLocationPrefix::Trunk,
+        0xB2 => SearchLocationPrefix::Brazier,
+        0xBC => SearchLocationPrefix::Fireplace,
+        _ => return None,
+    })
+}
+
 /// `containers.md §6`: inventory family one of the seven dungeon-chest
 /// reward rows can grant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

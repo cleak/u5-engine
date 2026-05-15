@@ -1,4 +1,44 @@
     #[test]
+    fn search_location_prefix_classifies_named_scenery() {
+        // containers.md §5
+        assert_eq!(search_location_prefix(0x2B), Some(SearchLocationPrefix::Stump));
+        assert_eq!(search_location_prefix(0x4F), Some(SearchLocationPrefix::Wall));
+        assert_eq!(search_location_prefix(0x5A), Some(SearchLocationPrefix::Shelf));
+        assert_eq!(
+            search_location_prefix(0x5C),
+            Some(SearchLocationPrefix::Bookshelf)
+        );
+        assert_eq!(
+            search_location_prefix(0x5D),
+            Some(SearchLocationPrefix::Bookshelf)
+        );
+        assert_eq!(search_location_prefix(0xA1), Some(SearchLocationPrefix::Well));
+        assert_eq!(search_location_prefix(0xA5), Some(SearchLocationPrefix::Desk));
+        assert_eq!(search_location_prefix(0xA6), Some(SearchLocationPrefix::Barrel));
+        assert_eq!(search_location_prefix(0xA8), Some(SearchLocationPrefix::Vanity));
+        assert_eq!(
+            search_location_prefix(0xAB),
+            Some(SearchLocationPrefix::UnderBed)
+        );
+        assert_eq!(
+            search_location_prefix(0xAC),
+            Some(SearchLocationPrefix::UnderBed)
+        );
+        assert_eq!(search_location_prefix(0xAD), Some(SearchLocationPrefix::Dresser));
+        assert_eq!(search_location_prefix(0xAF), Some(SearchLocationPrefix::Trunk));
+        assert_eq!(search_location_prefix(0xB2), Some(SearchLocationPrefix::Brazier));
+        assert_eq!(
+            search_location_prefix(0xBC),
+            Some(SearchLocationPrefix::Fireplace)
+        );
+        // Generic find prefix
+        assert_eq!(search_location_prefix(0x00), None);
+        assert_eq!(search_location_prefix(0x05), None);
+        assert_eq!(search_location_prefix(0xFF), None);
+        assert_eq!(search_location_prefix(0xDC), None);
+    }
+
+    #[test]
     fn npc_link_action_classifies_per_floor_transition() {
         // active-objects.md §6
         assert_eq!(NPC_RUNTIME_DESCRIPTOR_BYTES, 16);
