@@ -940,6 +940,30 @@
     }
 
     #[test]
+    fn miscmsg_family_matches_spec_clusters() {
+        // formats/miscmsg-dat.md §2,§3
+        assert_eq!(MISCMSG_DAT_LEN, 2_745);
+        assert_eq!(MISCMSG_DAT_RECORDS, 47);
+        for r in 0..=11 {
+            assert_eq!(miscmsg_family(r), Some(MiscMsgFamily::BlackthornAudience));
+        }
+        for r in 12..=19 {
+            assert_eq!(miscmsg_family(r), Some(MiscMsgFamily::VirtueWeaknessPhrases));
+        }
+        for r in 20..=27 {
+            assert_eq!(miscmsg_family(r), Some(MiscMsgFamily::VirtueAphorisms));
+        }
+        for r in 28..=35 {
+            assert_eq!(miscmsg_family(r), Some(MiscMsgFamily::ShrineMeditation));
+        }
+        for r in 36..=46 {
+            assert_eq!(miscmsg_family(r), Some(MiscMsgFamily::UrnCodexProphecy));
+        }
+        assert_eq!(miscmsg_family(47), None);
+        assert_eq!(miscmsg_family(255), None);
+    }
+
+    #[test]
     fn endmsg_dat_size_and_record_count_match_spec() {
         // formats/endmsg-dat.md §2
         assert_eq!(ENDMSG_DAT_LEN, 786);

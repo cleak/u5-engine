@@ -167,7 +167,10 @@ pub use endmsg_io::{
     ENDMSG_DAT_LEN, ENDMSG_DAT_RECORDS, EndgameMessages, load_endgame_messages,
     parse_endgame_messages,
 };
-pub use miscmsg_io::{MiscMessages, load_misc_messages, parse_misc_messages};
+pub use miscmsg_io::{
+    MISCMSG_DAT_LEN, MISCMSG_DAT_RECORDS, MiscMessages, MiscMsgFamily,
+    load_misc_messages, miscmsg_family, parse_misc_messages,
+};
 pub use quest_flags::{
     ConversationLetterAction, conversation_letter_action, tlk_scene_branch_is_set,
     tlk_scene_branch_mask, tlk_scene_branch_set,

@@ -15,6 +15,45 @@ use std::path::Path;
 const MISCMSG_DAT_FILE: &str = "MISCMSG.DAT";
 const EXPECTED_RECORD_COUNT: usize = 47;
 
+/// `formats/miscmsg-dat.md §2`: shipped DOS file size in bytes.
+pub const MISCMSG_DAT_LEN: usize = 2_745;
+/// `formats/miscmsg-dat.md §2`: NUL-terminated record count.
+pub const MISCMSG_DAT_RECORDS: usize = 47;
+
+/// `formats/miscmsg-dat.md §3` consumer cluster a record index belongs
+/// to. The clusters are consumer contracts, not in-file structure.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MiscMsgFamily {
+    /// Records 0..=11 — Blackthorn capture audience templates and
+    /// punishment/release presentation text.
+    BlackthornAudience,
+    /// Records 12..=19 — virtue-failing or weakness phrases keyed by
+    /// the eight virtues.
+    VirtueWeaknessPhrases,
+    /// Records 20..=27 — virtue aphorism paragraphs keyed by the
+    /// eight virtues.
+    VirtueAphorisms,
+    /// Records 28..=35 — shrine meditation prompts/altar/ordained
+    /// presentation.
+    ShrineMeditation,
+    /// Records 36..=46 — urn / Codex prophecy pages, including
+    /// tile-glyph text.
+    UrnCodexProphecy,
+}
+
+/// `formats/miscmsg-dat.md §3`: classify a record index `0..=46` into
+/// its consumer cluster. Returns `None` for indices outside the file.
+pub const fn miscmsg_family(record_index: usize) -> Option<MiscMsgFamily> {
+    Some(match record_index {
+        0..=11 => MiscMsgFamily::BlackthornAudience,
+        12..=19 => MiscMsgFamily::VirtueWeaknessPhrases,
+        20..=27 => MiscMsgFamily::VirtueAphorisms,
+        28..=35 => MiscMsgFamily::ShrineMeditation,
+        36..=46 => MiscMsgFamily::UrnCodexProphecy,
+        _ => return None,
+    })
+}
+
 const BLACKTHORN_AUDIENCE_RANGE: std::ops::RangeInclusive<usize> = 0..=11;
 const VIRTUE_FAILING_RANGE: std::ops::RangeInclusive<usize> = 12..=19;
 const VIRTUE_APHORISM_RANGE: std::ops::RangeInclusive<usize> = 20..=27;
