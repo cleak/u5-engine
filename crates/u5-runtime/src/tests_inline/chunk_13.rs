@@ -1,4 +1,31 @@
     #[test]
+    fn shrine_mantra_table_matches_spec() {
+        // karma.md §7
+        assert_eq!(SHRINE_MANTRA_INPUT_LIMIT, 12);
+        assert_eq!(shrine_mantra_for(ShrineVirtue::Honesty), "Ahm");
+        assert_eq!(shrine_mantra_for(ShrineVirtue::Compassion), "Mu");
+        assert_eq!(shrine_mantra_for(ShrineVirtue::Valor), "Ra");
+        assert_eq!(shrine_mantra_for(ShrineVirtue::Justice), "Beh");
+        assert_eq!(shrine_mantra_for(ShrineVirtue::Sacrifice), "Cah");
+        assert_eq!(shrine_mantra_for(ShrineVirtue::Honor), "Summ");
+        assert_eq!(shrine_mantra_for(ShrineVirtue::Spirituality), "Om");
+        assert_eq!(shrine_mantra_for(ShrineVirtue::Humility), "Lum");
+        // All mantras fit inside the input cap.
+        for v in [
+            ShrineVirtue::Honesty,
+            ShrineVirtue::Compassion,
+            ShrineVirtue::Valor,
+            ShrineVirtue::Justice,
+            ShrineVirtue::Sacrifice,
+            ShrineVirtue::Honor,
+            ShrineVirtue::Spirituality,
+            ShrineVirtue::Humility,
+        ] {
+            assert!(shrine_mantra_for(v).len() <= SHRINE_MANTRA_INPUT_LIMIT);
+        }
+    }
+
+    #[test]
     fn codex_turnin_stat_reward_matches_spec_table() {
         // karma.md §7
         assert_eq!(CODEX_TURNIN_STAT_INCREMENT, 1);

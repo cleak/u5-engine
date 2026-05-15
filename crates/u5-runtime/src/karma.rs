@@ -61,6 +61,27 @@ impl KarmaAction {
     }
 }
 
+/// `karma.md §7` shrine meditation mantra-input cap. The handler
+/// reads up to twelve characters before comparing against the
+/// expected per-virtue mantra.
+pub const SHRINE_MANTRA_INPUT_LIMIT: usize = 12;
+
+/// `karma.md §7` per-virtue expected mantra. The shrine meditation
+/// handler matches the typed input against this fixed table; a
+/// wrong or blank input prints the no-effect branch.
+pub const fn shrine_mantra_for(virtue: ShrineVirtue) -> &'static str {
+    match virtue {
+        ShrineVirtue::Honesty => "Ahm",
+        ShrineVirtue::Compassion => "Mu",
+        ShrineVirtue::Valor => "Ra",
+        ShrineVirtue::Justice => "Beh",
+        ShrineVirtue::Sacrifice => "Cah",
+        ShrineVirtue::Honor => "Summ",
+        ShrineVirtue::Spirituality => "Om",
+        ShrineVirtue::Humility => "Lum",
+    }
+}
+
 /// `karma.md §7` Avatar stat-reward unit applied per touched stat
 /// during a Codex-read shrine turn-in. Each touched stat increments
 /// by one and clamps at thirty. Returns the (str, dex, int) deltas
