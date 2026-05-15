@@ -1,4 +1,16 @@
     #[test]
+    fn reserved_keyword_table_size_matches_spec_inventory() {
+        // conversation.md §5
+        assert_eq!(RESERVED_KEYWORD_TABLE_ENTRIES, 34);
+        assert_eq!(RESERVED_KEYWORD_FUNCTIONAL_COUNT, 5);
+        assert_eq!(RESERVED_KEYWORD_REBUKE_COUNT, 29);
+        assert_eq!(
+            RESERVED_KEYWORD_FUNCTIONAL_COUNT + RESERVED_KEYWORD_REBUKE_COUNT,
+            RESERVED_KEYWORD_TABLE_ENTRIES
+        );
+    }
+
+    #[test]
     fn spell_scene_allow_mask_bits_match_spec() {
         // magic.md §9
         assert_eq!(SPELL_SCENE_BIT_DUNGEON, 0x01);

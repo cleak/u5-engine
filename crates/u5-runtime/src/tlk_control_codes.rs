@@ -43,6 +43,23 @@ impl TlkPrintMaskState {
     }
 }
 
+/// `conversation.md §5` shipped reserved-keyword table size. The
+/// engine-owned vocabulary that lives outside the `.TLK` files
+/// holds thirty-four entries: five functional words (`NAME`, `JOB`,
+/// `WORK`, `BYE`, `THANK`) and twenty-nine profanity / default
+/// rebuke words. The table is checked before the per-NPC blob
+/// keyword scan.
+pub const RESERVED_KEYWORD_TABLE_ENTRIES: usize = 34;
+
+/// `conversation.md §5` count of functional-word entries in the
+/// reserved table (NAME, JOB, WORK, BYE, THANK).
+pub const RESERVED_KEYWORD_FUNCTIONAL_COUNT: usize = 5;
+
+/// `conversation.md §5` count of profanity / default-rebuke entries
+/// in the reserved table.
+pub const RESERVED_KEYWORD_REBUKE_COUNT: usize =
+    RESERVED_KEYWORD_TABLE_ENTRIES - RESERVED_KEYWORD_FUNCTIONAL_COUNT;
+
 /// `conversation.md §7.7` per-blob label count. The byte runner
 /// supports up to fifteen distinct label bytes per NPC blob,
 /// occupying values `0x91..=0x9F`. Labels are byte-level flow
