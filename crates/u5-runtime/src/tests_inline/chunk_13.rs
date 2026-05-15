@@ -1,4 +1,27 @@
     #[test]
+    fn local_light_source_tile_matches_spec_candidates() {
+        // visibility.md §12
+        assert_eq!(LOCAL_LIGHT_MASK_SIDE, 32);
+        for t in 0xB0u8..=0xB3 {
+            assert!(is_local_light_source_tile(t), "tile {t:#x}");
+        }
+        for t in 0xBCu8..=0xBF {
+            assert!(is_local_light_source_tile(t), "tile {t:#x}");
+        }
+        assert!(is_local_light_source_tile(0xDC));
+        assert!(is_local_light_source_tile(0xDE));
+        // Nearby non-source tiles.
+        for t in [
+            0x00u8, 0x01, 0xAF, 0xB4, 0xBB, 0xC0, 0xDB, 0xDD, 0xDF, 0xE0, 0xFF,
+        ] {
+            assert!(
+                !is_local_light_source_tile(t),
+                "tile {t:#x} should not be a local-light source"
+            );
+        }
+    }
+
+    #[test]
     fn active_object_compositor_branch_matches_spec_table() {
         // visibility.md §8
         assert_eq!(VEHICLE_AVATAR_UNDERLAY_MARKER, 0x92);

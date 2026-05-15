@@ -53,6 +53,20 @@ pub const fn visibility_marker(byte: u8) -> VisibilityMarker {
     }
 }
 
+/// `visibility.md §12` local-light mask side dimension. The mask
+/// covers the full 32x32 active map window (not the 11x11 viewport)
+/// because local lights placed outside the viewport can still reach
+/// in.
+pub const LOCAL_LIGHT_MASK_SIDE: usize = 32;
+
+/// `visibility.md §12`: returns `true` for tile ids the resident
+/// local-light refresh recognises as local-light source candidates.
+/// The shipped lookup is `0xB0..=0xB3`, `0xBC..=0xBF`, `0xDC`, and
+/// `0xDE`. Other tiles are not treated as light sources.
+pub const fn is_local_light_source_tile(tile: u8) -> bool {
+    matches!(tile, 0xB0..=0xB3 | 0xBC..=0xBF | 0xDC | 0xDE)
+}
+
 /// `visibility.md §8` active-object compositor branch the helper
 /// dispatches an active-object slot through. The default branch is
 /// the catch-all that passes through the terrain-aware stamp helper.
