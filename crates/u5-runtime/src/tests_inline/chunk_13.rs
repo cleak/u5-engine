@@ -1,4 +1,24 @@
     #[test]
+    fn resurrection_xp_penalty_matches_spec_table() {
+        // karma.md §5
+        assert_eq!(RESURRECTION_PENALTY_SKIP_THRESHOLD, 98);
+        // Standing >= 98 skips the penalty.
+        assert!(resurrection_penalty_skipped(98));
+        assert!(resurrection_penalty_skipped(99));
+        assert!(!resurrection_penalty_skipped(97));
+        assert!(!resurrection_penalty_skipped(0));
+        // XP unchanged at threshold.
+        assert_eq!(resurrection_scaled_xp(98, 1000), 1000);
+        assert_eq!(resurrection_scaled_xp(99, 65535), 65535);
+        // Standing 50 -> half XP.
+        assert_eq!(resurrection_scaled_xp(50, 1000), 500);
+        // Standing 0 -> XP becomes 0.
+        assert_eq!(resurrection_scaled_xp(0, 9999), 0);
+        // No overflow at large XP (60000 * 50 / 100 = 30000).
+        assert_eq!(resurrection_scaled_xp(50, 60000), 30000);
+    }
+
+    #[test]
     fn stats_panel_middle_counter_picks_ship_hull_for_ship_marker() {
         // stats-panel.md §5
         // Ordinary/non-ship markers -> party gold.

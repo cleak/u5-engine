@@ -156,7 +156,10 @@ pub use jimmy::{
     JIMMY_OBJECT_DIE_LOW, dungeon_chest_jimmy_succeeds, dungeon_chest_jimmy_threshold,
     jimmy_door_succeeds, object_chest_jimmy_succeeds, object_chest_jimmy_threshold,
 };
-pub use karma::{KarmaAction, apply_karma_action};
+pub use karma::{
+    KarmaAction, RESURRECTION_PENALTY_SKIP_THRESHOLD, apply_karma_action,
+    resurrection_penalty_skipped, resurrection_scaled_xp,
+};
 pub use lord_british_camp::{
     LORD_BRITISH_CAMP_EVENT_ROLL_BOUND, LORD_BRITISH_CAMP_EVENT_THRESHOLD,
     LORD_BRITISH_CAMP_STAT_REWARD_CAP, LordBritishCampStatReward,
