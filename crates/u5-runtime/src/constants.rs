@@ -174,6 +174,25 @@ pub const SAVE_SHRINE_ORDAINED_MASK_OFFSET: usize = 0x0326;
 pub const SAVE_SHRINE_CODEX_MASK_OFFSET: usize = 0x0328;
 pub const SAVE_FORTUNES_OF_WAR_OFFSET: usize = 0x03b3;
 pub const SAVE_AVATAR_NAME_OFFSET: usize = 0x0002;
+/// `formats/saved-gam.md §7` shared inventory block offsets.
+pub const SAVE_FOOD_OFFSET: usize = 0x0202;
+pub const SAVE_GOLD_OFFSET: usize = 0x0204;
+pub const SAVE_KEYS_OFFSET: usize = 0x0206;
+pub const SAVE_GEMS_OFFSET: usize = 0x0207;
+pub const SAVE_TORCHES_OFFSET: usize = 0x0208;
+pub const SAVE_GRAPPLE_OFFSET: usize = 0x0209;
+pub const SAVE_EQUIPMENT_INVENTORY_OFFSET: usize = 0x021A;
+pub const SAVE_SPELL_CHARGE_BLOCK_OFFSET: usize = 0x024A;
+pub const SAVE_SCROLL_COUNTERS_OFFSET: usize = 0x027A;
+pub const SAVE_POTION_COUNTERS_OFFSET: usize = 0x0282;
+/// `formats/saved-gam.md §6` location-cluster scratch offsets.
+pub const SAVE_SAVED_SCENE_SCRATCH_OFFSET: usize = 0x02EE;
+pub const SAVE_PARTY_Z_OFFSET: usize = 0x02EF;
+pub const SAVE_PARTY_X_OFFSET: usize = 0x02F0;
+pub const SAVE_PARTY_Y_OFFSET: usize = 0x02F1;
+/// `formats/saved-gam.md §6`: party Z `0xFF` is the "no active map"
+/// sentinel.
+pub const SAVE_PARTY_Z_NO_ACTIVE_MAP: u8 = 0xFF;
 pub const SAVE_AVATAR_NAME_LEN: usize = 9;
 pub const SAVE_ACTIVE_OBJECTS_OFFSET: usize = 0x06b4;
 pub const SAVE_PARTY_SIZE_OFFSET: usize = 0x02b5;

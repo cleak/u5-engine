@@ -1983,6 +1983,41 @@
     }
 
     #[test]
+    fn save_inventory_and_location_offsets_match_spec() {
+        // formats/saved-gam.md §6,§7
+        assert_eq!(SAVE_FOOD_OFFSET, 0x0202);
+        assert_eq!(SAVE_GOLD_OFFSET, 0x0204);
+        assert_eq!(SAVE_KEYS_OFFSET, 0x0206);
+        assert_eq!(SAVE_GEMS_OFFSET, 0x0207);
+        assert_eq!(SAVE_TORCHES_OFFSET, 0x0208);
+        assert_eq!(SAVE_GRAPPLE_OFFSET, 0x0209);
+        assert_eq!(SAVE_EQUIPMENT_INVENTORY_OFFSET, 0x021A);
+        assert_eq!(SAVE_SPELL_CHARGE_BLOCK_OFFSET, 0x024A);
+        assert_eq!(SAVE_SCROLL_COUNTERS_OFFSET, 0x027A);
+        assert_eq!(SAVE_POTION_COUNTERS_OFFSET, 0x0282);
+        assert_eq!(SAVE_REAGENTS_OFFSET, 0x02AA);
+        assert_eq!(SAVE_WIND_OFFSET, 0x02EC);
+        assert_eq!(SAVE_SAVED_SCENE_SCRATCH_OFFSET, 0x02EE);
+        assert_eq!(SAVE_PARTY_Z_OFFSET, 0x02EF);
+        assert_eq!(SAVE_PARTY_X_OFFSET, 0x02F0);
+        assert_eq!(SAVE_PARTY_Y_OFFSET, 0x02F1);
+        assert_eq!(SAVE_PARTY_Z_NO_ACTIVE_MAP, 0xFF);
+        // Cross-check: equipment block is 48 bytes wide
+        assert_eq!(
+            SAVE_SPELL_CHARGE_BLOCK_OFFSET - SAVE_EQUIPMENT_INVENTORY_OFFSET,
+            EQUIPMENT_STOCK_BAND_LEN
+        );
+        // Spell-charge block is 48 bytes wide
+        assert_eq!(
+            SAVE_SCROLL_COUNTERS_OFFSET - SAVE_SPELL_CHARGE_BLOCK_OFFSET,
+            SPELL_CHARGE_BAND_LEN
+        );
+        // Location-cluster contiguity around Z/X/Y
+        assert_eq!(SAVE_PARTY_X_OFFSET, SAVE_PARTY_Z_OFFSET + 1);
+        assert_eq!(SAVE_PARTY_Y_OFFSET, SAVE_PARTY_X_OFFSET + 1);
+    }
+
+    #[test]
     fn save_load_disk_swap_and_double_write_predicates() {
         // save-load.md §4.2 step 6: enter the underworld disk-swap loop
         // only when overworld scene + non-zero Z.
