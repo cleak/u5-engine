@@ -1,4 +1,36 @@
     #[test]
+    fn shoppe_record_cluster_constants_match_spec_table() {
+        // shops.md §4 record-id ranges
+        assert_eq!(SHOPPE_RECORDS_SHARED_BARKS_FIRST, 0);
+        assert_eq!(SHOPPE_RECORDS_SHARED_BARKS_LAST, 7);
+        assert_eq!(SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, 8);
+        assert_eq!(SHOPPE_RECORDS_ARMS_DESCRIPTIONS_LAST, 48);
+        assert_eq!(SHOPPE_RECORDS_ARMS_SELL_FIRST, 49);
+        assert_eq!(SHOPPE_RECORDS_ARMS_SELL_LAST, 56);
+        assert_eq!(SHOPPE_RECORDS_TAVERN_FIRST, 57);
+        assert_eq!(SHOPPE_RECORDS_TAVERN_LAST, 88);
+        assert_eq!(SHOPPE_RECORDS_SAGE_FIRST, 84);
+        assert_eq!(SHOPPE_RECORDS_SAGE_LAST, 91);
+        // Sage cluster overlaps the tavern band per spec.
+        assert!(SHOPPE_RECORDS_SAGE_FIRST <= SHOPPE_RECORDS_TAVERN_LAST);
+        assert!(SHOPPE_RECORDS_SAGE_LAST > SHOPPE_RECORDS_TAVERN_LAST);
+        assert_eq!(SHOPPE_RECORDS_HORSE_TRADER_FIRST, 92);
+        assert_eq!(SHOPPE_RECORDS_HORSE_TRADER_LAST, 104);
+        assert_eq!(SHOPPE_RECORDS_SHIP_BROKER_FIRST, 105);
+        assert_eq!(SHOPPE_RECORDS_SHIP_BROKER_LAST, 126);
+        assert_eq!(SHOPPE_RECORDS_REAGENT_FIRST, 127);
+        assert_eq!(SHOPPE_RECORDS_REAGENT_LAST, 146);
+        assert_eq!(SHOPPE_RECORDS_GUILD_FIRST, 148);
+        assert_eq!(SHOPPE_RECORDS_GUILD_LAST, 162);
+        assert_eq!(SHOPPE_RECORDS_HEALER_FIRST, 163);
+        assert_eq!(SHOPPE_RECORDS_HEALER_LAST, 173);
+        assert_eq!(SHOPPE_RECORDS_INNKEEPER_FIRST, 174);
+        assert_eq!(SHOPPE_RECORDS_INNKEEPER_LAST, 193);
+        // Last innkeeper record fits inside the file's record-slot count.
+        assert!(SHOPPE_RECORDS_INNKEEPER_LAST < SHOPPE_DAT_RECORD_SLOTS);
+    }
+
+    #[test]
     fn combat_interference_blocks_only_when_all_five_conditions_hold() {
         // magic.md §7
         // Happy "interferes" path: all conditions met.

@@ -11,6 +11,44 @@ pub const SHOPPE_DAT_LEN: usize = 10_135;
 pub const SHOPPE_DAT_RECORD_SLOTS: usize = 196;
 pub const SHOPPE_DAT_NONEMPTY_RECORDS: usize = 194;
 
+/// `shops.md §4` per-cluster `SHOPPE.DAT` record-id ranges. Each
+/// constant pair documents a shipped record cluster the per-shop-kind
+/// tables hardcode. Some clusters intentionally overlap (sage rumour
+/// records 84-91 sit inside the 57-88 tavern band) and a few slots
+/// are unused NUL-only records.
+pub const SHOPPE_RECORDS_SHARED_BARKS_FIRST: usize = 0;
+pub const SHOPPE_RECORDS_SHARED_BARKS_LAST: usize = 7;
+
+pub const SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST: usize = 8;
+pub const SHOPPE_RECORDS_ARMS_DESCRIPTIONS_LAST: usize = 48;
+
+pub const SHOPPE_RECORDS_ARMS_SELL_FIRST: usize = 49;
+pub const SHOPPE_RECORDS_ARMS_SELL_LAST: usize = 56;
+
+pub const SHOPPE_RECORDS_TAVERN_FIRST: usize = 57;
+pub const SHOPPE_RECORDS_TAVERN_LAST: usize = 88;
+
+pub const SHOPPE_RECORDS_SAGE_FIRST: usize = 84;
+pub const SHOPPE_RECORDS_SAGE_LAST: usize = 91;
+
+pub const SHOPPE_RECORDS_HORSE_TRADER_FIRST: usize = 92;
+pub const SHOPPE_RECORDS_HORSE_TRADER_LAST: usize = 104;
+
+pub const SHOPPE_RECORDS_SHIP_BROKER_FIRST: usize = 105;
+pub const SHOPPE_RECORDS_SHIP_BROKER_LAST: usize = 126;
+
+pub const SHOPPE_RECORDS_REAGENT_FIRST: usize = 127;
+pub const SHOPPE_RECORDS_REAGENT_LAST: usize = 146;
+
+pub const SHOPPE_RECORDS_GUILD_FIRST: usize = 148;
+pub const SHOPPE_RECORDS_GUILD_LAST: usize = 162;
+
+pub const SHOPPE_RECORDS_HEALER_FIRST: usize = 163;
+pub const SHOPPE_RECORDS_HEALER_LAST: usize = 173;
+
+pub const SHOPPE_RECORDS_INNKEEPER_FIRST: usize = 174;
+pub const SHOPPE_RECORDS_INNKEEPER_LAST: usize = 193;
+
 /// `formats/shoppe-dat.md §4`: substitution placeholder a `SHOPPE.DAT`
 /// renderer recognises in the literal-byte stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
