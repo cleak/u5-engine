@@ -1,4 +1,15 @@
     #[test]
+    fn dungeon_chest_gold_upper_collapses_at_depth_zero() {
+        // containers.md §6
+        assert_eq!(dungeon_chest_gold_upper(0), 0);
+        assert_eq!(dungeon_chest_gold_upper(1), 8);
+        assert_eq!(dungeon_chest_gold_upper(7), 56);
+        assert!(dungeon_chest_gold_is_zero_width(0));
+        assert!(!dungeon_chest_gold_is_zero_width(1));
+        assert!(!dungeon_chest_gold_is_zero_width(7));
+    }
+
+    #[test]
     fn search_trap_visibility_classifies_per_spec_table() {
         // containers.md §5
         assert_eq!(
