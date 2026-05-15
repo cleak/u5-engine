@@ -250,6 +250,22 @@ pub const DOOM_FINAL_ROOM_SLOT: u8 = 15;
 pub const EQUIPMENT_SLOT_COUNT: usize = 6;
 pub const EQUIPMENT_EMPTY: u8 = 0xff;
 pub const EQUIPMENT_STOCK_CAP: u8 = 99;
+/// `inventory.md §2`: word-sized party gold counter caps at 9999 in
+/// ordinary play. Storage width is two bytes; do not infer a 65535
+/// gameplay cap from the byte width.
+pub const PARTY_GOLD_CAP: u16 = 9999;
+/// `inventory.md §2`: word-sized party food counter caps at 9999 in
+/// ordinary play.
+pub const PARTY_FOOD_CAP: u16 = 9999;
+/// `inventory.md §2`: byte-sized party spell-charge counter caps at
+/// 99 in ordinary play.
+pub const SPELL_CHARGE_CAP: u8 = 99;
+/// `inventory.md §2`: equipment stock band has 48 entries (item ids
+/// `0..=47`).
+pub const EQUIPMENT_STOCK_BAND_LEN: usize = 48;
+/// `inventory.md §2`: spell-charge band has 48 entries (one per
+/// spell id `0..=47`).
+pub const SPELL_CHARGE_BAND_LEN: usize = 48;
 pub const EQUIP_SLOT_HELM: usize = 0;
 pub const EQUIP_SLOT_ARMOUR: usize = 1;
 pub const EQUIP_SLOT_WEAPON: usize = 2;

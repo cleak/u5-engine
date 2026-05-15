@@ -921,6 +921,22 @@
     }
 
     #[test]
+    fn inventory_caps_match_spec() {
+        // inventory.md §2
+        assert_eq!(PARTY_GOLD_CAP, 9999);
+        assert_eq!(PARTY_FOOD_CAP, 9999);
+        assert_eq!(SPELL_CHARGE_CAP, 99);
+        assert_eq!(EQUIPMENT_STOCK_CAP, 99);
+        assert_eq!(EQUIPMENT_STOCK_BAND_LEN, 48);
+        assert_eq!(SPELL_CHARGE_BAND_LEN, 48);
+        // Cross-check: shop's existing SHOP_GOLD_CAP matches the
+        // inventory layer's gold cap.
+        assert_eq!(SHOP_GOLD_CAP as u16, PARTY_GOLD_CAP);
+        // Cross-check: spell band len equals SPELL_COUNT.
+        assert_eq!(SPELL_CHARGE_BAND_LEN, SPELL_COUNT);
+    }
+
+    #[test]
     fn shrine_quest_state_decodes_bit_pair_per_spec() {
         // karma.md §10
         assert_eq!(
