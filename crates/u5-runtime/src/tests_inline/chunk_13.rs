@@ -636,6 +636,77 @@
     }
 
     #[test]
+    fn karma_actions_apply_with_spec_clamps() {
+        // karma.md §4
+        // Completed-shrine offering adds the digit, capped at MAX
+        assert_eq!(
+            apply_karma_action(50, KarmaAction::CompletedShrineOffering { digit: 9 }),
+            59
+        );
+        assert_eq!(
+            apply_karma_action(95, KarmaAction::CompletedShrineOffering { digit: 9 }),
+            MORAL_STANDING_MAX
+        );
+        // Codex turn-in: +3 normal, +6 for Humility
+        assert_eq!(
+            apply_karma_action(50, KarmaAction::CodexShrineTurnIn { humility: false }),
+            53
+        );
+        assert_eq!(
+            apply_karma_action(50, KarmaAction::CodexShrineTurnIn { humility: true }),
+            56
+        );
+        assert_eq!(
+            apply_karma_action(98, KarmaAction::CodexShrineTurnIn { humility: true }),
+            MORAL_STANDING_MAX
+        );
+        // Town chest: -2, floored at 0
+        assert_eq!(apply_karma_action(50, KarmaAction::TownChestOpened), 48);
+        assert_eq!(apply_karma_action(1, KarmaAction::TownChestOpened), 0);
+        assert_eq!(apply_karma_action(0, KarmaAction::TownChestOpened), 0);
+        // Crop/table food: -1 when nonzero, no-op at 0
+        assert_eq!(apply_karma_action(2, KarmaAction::CropOrTableFoodTaken), 1);
+        assert_eq!(apply_karma_action(0, KarmaAction::CropOrTableFoodTaken), 0);
+        // Town cannon hit: -5, floored at 0
+        assert_eq!(apply_karma_action(10, KarmaAction::TownCannonHit), 5);
+        assert_eq!(apply_karma_action(3, KarmaAction::TownCannonHit), 0);
+        // Helped NPC thank-you: +2, capped
+        assert_eq!(apply_karma_action(50, KarmaAction::HelpedNpcThankYou), 52);
+        assert_eq!(
+            apply_karma_action(98, KarmaAction::HelpedNpcThankYou),
+            MORAL_STANDING_MAX
+        );
+        // Toll milestone: +1, +3 if left party with zero gold
+        assert_eq!(
+            apply_karma_action(
+                50,
+                KarmaAction::TollMilestone {
+                    left_party_with_zero_gold: false
+                }
+            ),
+            51
+        );
+        assert_eq!(
+            apply_karma_action(
+                50,
+                KarmaAction::TollMilestone {
+                    left_party_with_zero_gold: true
+                }
+            ),
+            53
+        );
+        assert_eq!(
+            apply_karma_action(
+                98,
+                KarmaAction::TollMilestone {
+                    left_party_with_zero_gold: true
+                }
+            ),
+            MORAL_STANDING_MAX
+        );
+    }
+
+    #[test]
     fn sleep_ambush_monster_table_matches_spec() {
         // encounters.md §6
         assert_eq!(sleep_ambush_monster(0), Some(SleepAmbushMonster::GiantRat));

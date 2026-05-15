@@ -25,6 +25,7 @@ pub mod graphics;
 pub mod graphics_io;
 pub mod inline_parsers;
 pub mod input_dispatch;
+pub mod karma;
 pub mod lzw;
 pub mod map_decoders;
 pub mod map_io;
@@ -81,6 +82,7 @@ pub use directed_step::{
     type_bypasses_terrain_chance_gate,
 };
 pub use end_io::{EndNarrative, decode_end_window, load_end_narrative};
+pub use karma::{KarmaAction, apply_karma_action};
 pub use endmsg_io::{EndgameMessages, load_endgame_messages, parse_endgame_messages};
 pub use miscmsg_io::{MiscMessages, load_misc_messages, parse_misc_messages};
 pub use question_io::{QuestionRecords, load_question_records, parse_question_records};
