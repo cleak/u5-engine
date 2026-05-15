@@ -130,8 +130,8 @@ pub use jimmy::{
 };
 pub use karma::{KarmaAction, apply_karma_action};
 pub use magic::{
-    CastGateOutcome, cast_dispatcher_gate, heal_spell_amount_from_raw_roll_u8,
-    spell_common_name,
+    CastGateOutcome, RUNE_SYLLABLE_VOCABULARY, cast_dispatcher_gate,
+    heal_spell_amount_from_raw_roll_u8, is_resident_rune_syllable, spell_common_name,
 };
 pub use moongate::{
     NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NaturalMoongateCounterStep,

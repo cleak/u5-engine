@@ -88,6 +88,22 @@ pub const fn cast_dispatcher_gate(
     CastGateOutcome::Cast
 }
 
+/// `magic.md §3` canonical Britannian magic-rune syllable vocabulary.
+/// The twenty-four entries are returned in the spec's table order.
+pub const RUNE_SYLLABLE_VOCABULARY: [&str; 24] = [
+    "An", "Bet", "Corp", "Des", "Ex", "Flam", "Grav", "Hur", "In", "Kal", "Lor", "Mani",
+    "Nox", "Por", "Quas", "Rel", "Sanct", "Tym", "Uus", "Vas", "Wis", "Xen", "Ylem", "Zu",
+];
+
+/// `magic.md §3`: predicate accepting one of the twenty-four resident
+/// rune syllables. Comparison is case-insensitive ASCII; the older
+/// Ultima lore syllables `Jux` and `Ort` are deliberately rejected.
+pub fn is_resident_rune_syllable(token: &str) -> bool {
+    RUNE_SYLLABLE_VOCABULARY
+        .iter()
+        .any(|entry| entry.eq_ignore_ascii_case(token))
+}
+
 /// `magic.md §4` canonical common-name for one spell index `0..=47`.
 /// Returns `None` for out-of-range indices. Matches the spec's circle
 /// table verbatim and is used to render "<spell>" strings in the

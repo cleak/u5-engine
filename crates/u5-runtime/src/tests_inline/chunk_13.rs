@@ -1167,6 +1167,33 @@
     }
 
     #[test]
+    fn rune_syllable_vocabulary_matches_spec_table() {
+        // magic.md §3
+        assert_eq!(RUNE_SYLLABLE_VOCABULARY.len(), 24);
+        assert_eq!(RUNE_SYLLABLE_VOCABULARY[0], "An");
+        assert_eq!(RUNE_SYLLABLE_VOCABULARY[7], "Hur");
+        assert_eq!(RUNE_SYLLABLE_VOCABULARY[23], "Zu");
+        // Resident syllables accept (case-insensitive)
+        assert!(is_resident_rune_syllable("An"));
+        assert!(is_resident_rune_syllable("an"));
+        assert!(is_resident_rune_syllable("MANI"));
+        assert!(is_resident_rune_syllable("Vas"));
+        assert!(is_resident_rune_syllable("Quas"));
+        assert!(is_resident_rune_syllable("Xen"));
+        assert!(is_resident_rune_syllable("Ylem"));
+        // Older Ultima lore syllables are rejected
+        assert!(!is_resident_rune_syllable("Jux"));
+        assert!(!is_resident_rune_syllable("Ort"));
+        assert!(!is_resident_rune_syllable("jux"));
+        assert!(!is_resident_rune_syllable(""));
+        assert!(!is_resident_rune_syllable("Foo"));
+        // Cross-check: every spec entry is accepted
+        for syllable in RUNE_SYLLABLE_VOCABULARY {
+            assert!(is_resident_rune_syllable(syllable));
+        }
+    }
+
+    #[test]
     fn spell_common_name_covers_all_48_indices() {
         // magic.md §4
         assert_eq!(SPELL_CIRCLE_COUNT, 8);
