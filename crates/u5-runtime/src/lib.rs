@@ -7,6 +7,7 @@ pub mod active_object_io;
 pub mod animation;
 pub mod blackthorn;
 pub mod boot;
+pub mod character_record;
 pub mod chargen;
 pub mod clock;
 pub mod combat_actor;
@@ -87,6 +88,9 @@ pub mod world_tables_io_locations;
 
 pub use active_object_io::*;
 pub use animation::{ActiveObject, ActiveShipWind, AnimationClock, PhaseTick};
+pub use character_record::{
+    CharacterClass, CharacterStatus, character_class_for_byte, character_status_for_byte,
+};
 pub use chargen::*;
 pub use clock::{
     GameClock, SKY_STRIP_CELL_COUNT, SkyStripMarker, shop_time_of_day_word,

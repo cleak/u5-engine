@@ -1019,6 +1019,61 @@
     }
 
     #[test]
+    fn character_class_and_status_letter_round_trip() {
+        // formats/saved-gam.md §3.1
+        for class in [
+            CharacterClass::Avatar,
+            CharacterClass::Bard,
+            CharacterClass::Fighter,
+            CharacterClass::Mage,
+            CharacterClass::Druid,
+            CharacterClass::Tinker,
+            CharacterClass::Paladin,
+            CharacterClass::Ranger,
+            CharacterClass::Shepherd,
+        ] {
+            let byte = class.save_byte();
+            assert_eq!(character_class_for_byte(byte), Some(class));
+        }
+        // Specific byte mappings
+        assert_eq!(character_class_for_byte(b'A'), Some(CharacterClass::Avatar));
+        assert_eq!(character_class_for_byte(b'M'), Some(CharacterClass::Mage));
+        assert_eq!(character_class_for_byte(b'P'), Some(CharacterClass::Paladin));
+        // Out-of-range bytes
+        assert_eq!(character_class_for_byte(0), None);
+        assert_eq!(character_class_for_byte(b'X'), None);
+        assert_eq!(character_class_for_byte(b'a'), None);
+        // Status round-trip
+        for status in [
+            CharacterStatus::Good,
+            CharacterStatus::PoisonedOrRevived,
+            CharacterStatus::Sleeping,
+            CharacterStatus::Charmed,
+            CharacterStatus::Dead,
+            CharacterStatus::Ashes,
+        ] {
+            let byte = status.save_byte();
+            assert_eq!(character_status_for_byte(byte), Some(status));
+        }
+        assert_eq!(
+            character_status_for_byte(b'G'),
+            Some(CharacterStatus::Good)
+        );
+        assert_eq!(character_status_for_byte(b'X'), None);
+        // Status 'P' is shared between poison and revive paths;
+        // class 'P' is Paladin. They don't collide because they live in
+        // different record fields.
+        assert_eq!(
+            character_status_for_byte(b'P'),
+            Some(CharacterStatus::PoisonedOrRevived)
+        );
+        assert_eq!(
+            character_class_for_byte(b'P'),
+            Some(CharacterClass::Paladin)
+        );
+    }
+
+    #[test]
     fn paragraph_byte_kind_classifies_per_spec() {
         // formats/font-pcs.md §4
         assert_eq!(paragraph_byte_kind(0x00), ParagraphByteKind::EndOfStream);
