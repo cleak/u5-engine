@@ -636,6 +636,74 @@
     }
 
     #[test]
+    fn parse_question_records_walks_thirty_records_and_strips_markup() {
+        // formats/question-dat.md §2-§3: 30 NUL-terminated records;
+        // record 0 = gypsy arrival, 1 = gypsy invitation, 2..=29 = dilemmas.
+        // `{` is a paragraph marker and `_` is a soft hyphen; both stripped.
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"{Arrival_text");
+        bytes.push(0x00);
+        bytes.extend_from_slice(b"Invitation");
+        bytes.push(0x00);
+        for _ in 2..30usize {
+            bytes.extend_from_slice(b"Dilemma");
+            bytes.push(0x00);
+        }
+
+        let records = parse_question_records(&bytes).expect("30 records should parse");
+
+        assert_eq!(records.records.len(), 30);
+        assert_eq!(records.gypsy_arrival(), Some("Arrivaltext"));
+        assert_eq!(records.gypsy_invitation(), Some("Invitation"));
+        // Dilemma records start at ordinal 2.
+        assert_eq!(records.dilemma(2), Some("Dilemma"));
+        assert_eq!(records.dilemma(29), Some("Dilemma"));
+        assert_eq!(records.dilemmas().len(), 28);
+    }
+
+    #[test]
+    fn parse_question_records_rejects_short_input() {
+        // §7: fewer than 30 records is a bad asset.
+        let mut bytes = Vec::new();
+        for _ in 0..10usize {
+            bytes.extend_from_slice(b"x\0");
+        }
+        assert!(parse_question_records(&bytes).is_err());
+    }
+
+    #[test]
+    fn chargen_question_record_for_pair_matches_spec_table() {
+        // formats/question-dat.md §4: spec lists records 2..=29 mapped to
+        // virtue pairs. Spot-check several published rows.
+        use ShrineVirtue::*;
+        assert_eq!(
+            chargen_question_record_for_pair(Honesty, Compassion).unwrap(),
+            2
+        );
+        assert_eq!(
+            chargen_question_record_for_pair(Honesty, Humility).unwrap(),
+            8
+        );
+        assert_eq!(
+            chargen_question_record_for_pair(Compassion, Valor).unwrap(),
+            9
+        );
+        assert_eq!(
+            chargen_question_record_for_pair(Valor, Justice).unwrap(),
+            15
+        );
+        assert_eq!(
+            chargen_question_record_for_pair(Spirituality, Humility).unwrap(),
+            29
+        );
+        // Symmetric pair (b, a) returns the same record.
+        assert_eq!(
+            chargen_question_record_for_pair(Humility, Spirituality).unwrap(),
+            29
+        );
+    }
+
+    #[test]
     fn parse_misc_messages_clusters_records_by_consumer() {
         // formats/miscmsg-dat.md §2-§3: 47 NUL-terminated records grouped as
         // 0-11 Blackthorn audience, 12-19 virtue failing text, 20-27 virtue
