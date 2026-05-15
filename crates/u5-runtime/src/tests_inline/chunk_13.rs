@@ -636,6 +636,58 @@
     }
 
     #[test]
+    fn reserved_keyword_effect_matches_spec_words() {
+        // conversation.md §6
+        assert_eq!(TLK_INPUT_MAX_LEN, 15);
+        assert_eq!(
+            reserved_keyword_effect(b"NAME"),
+            Some(ReservedKeywordEffect::NameEntry)
+        );
+        assert_eq!(
+            reserved_keyword_effect(b"JOB"),
+            Some(ReservedKeywordEffect::JobEntry)
+        );
+        assert_eq!(
+            reserved_keyword_effect(b"WORK"),
+            Some(ReservedKeywordEffect::JobEntry)
+        );
+        assert_eq!(
+            reserved_keyword_effect(b"BYE"),
+            Some(ReservedKeywordEffect::ByePath)
+        );
+        assert_eq!(
+            reserved_keyword_effect(b"THANK"),
+            Some(ReservedKeywordEffect::ByePath)
+        );
+        // JOIN and WHO ART THOU are not engine-reserved.
+        assert_eq!(reserved_keyword_effect(b"JOIN"), None);
+        assert_eq!(reserved_keyword_effect(b"WHO ART THOU"), None);
+        // Case sensitivity: caller is responsible for the upper-case fold.
+        assert_eq!(reserved_keyword_effect(b"name"), None);
+    }
+
+    #[test]
+    fn tlk_keyword_match_is_space_boundary_and_bit7_strip() {
+        // conversation.md §6
+        // Exact match
+        assert!(tlk_keyword_matches(b"GRAN", b"GRAN"));
+        // Space-boundary match
+        assert!(tlk_keyword_matches(b"GRAN", b"GRAN PA"));
+        // Not a substring/prefix match without a space boundary
+        assert!(!tlk_keyword_matches(b"GRAN", b"GRANDPA"));
+        // Bit-7 strip on the keyword side (high-bit obfuscated)
+        let obfuscated = [b'G' | 0x80, b'R' | 0x80, b'A' | 0x80, b'N' | 0x80];
+        assert!(tlk_keyword_matches(&obfuscated, b"GRAN"));
+        // Case insensitive
+        assert!(tlk_keyword_matches(b"NAME", b"name"));
+        assert!(tlk_keyword_matches(b"name", b"NAME"));
+        // Empty keyword never matches
+        assert!(!tlk_keyword_matches(b"", b"NAME"));
+        // Input shorter than keyword
+        assert!(!tlk_keyword_matches(b"NAMEE", b"NAME"));
+    }
+
+    #[test]
     fn schedule_floor_state_matches_spec_table() {
         // npc-schedules.md §6
         // both equal -> 2

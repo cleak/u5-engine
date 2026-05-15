@@ -77,6 +77,67 @@ pub enum TlkByteKind {
     EndOfResponse,
 }
 
+/// `conversation.md §5,§6` reserved-keyword effect for the five
+/// functional words in the fixed thirty-four-entry table. Returns `None`
+/// for inputs that do not match a functional reserved word; callers must
+/// then check the profanity/default rebuke list before falling through
+/// to the ordinary NPC keyword scan.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReservedKeywordEffect {
+    /// `NAME` — run the Name entry with the engine's prefix.
+    NameEntry,
+    /// `JOB` or `WORK` — run the fixed Job entry.
+    JobEntry,
+    /// `BYE` or `THANK` — run the fixed Bye path.
+    ByePath,
+}
+
+/// `conversation.md §6`: classify a typed reserved-keyword input. The
+/// caller provides an already-uppercased buffer; this helper compares
+/// against the five functional words and returns the entry to run.
+/// Profanity/default rebuke matching is not part of the public reserved
+/// list — that branch belongs to the engine's profanity sweep below.
+pub fn reserved_keyword_effect(input: &[u8]) -> Option<ReservedKeywordEffect> {
+    Some(match input {
+        b"NAME" => ReservedKeywordEffect::NameEntry,
+        b"JOB" | b"WORK" => ReservedKeywordEffect::JobEntry,
+        b"BYE" | b"THANK" => ReservedKeywordEffect::ByePath,
+        _ => return None,
+    })
+}
+
+/// `conversation.md §6`: maximum keyword length the input pipeline
+/// accepts (free-text input is capped at fifteen characters with
+/// backspace handling).
+pub const TLK_INPUT_MAX_LEN: usize = 15;
+
+/// `conversation.md §6`: NPC ordinary-keyword space-boundary match. Both
+/// keyword and input are bit-7-stripped, case-folded to upper case, and
+/// compared from the start. The keyword must end cleanly; the typed
+/// input either ends at the same point or has a literal space at that
+/// position. Returns `true` for a successful match.
+pub fn tlk_keyword_matches(keyword: &[u8], input: &[u8]) -> bool {
+    if keyword.is_empty() {
+        return false;
+    }
+    if input.len() < keyword.len() {
+        return false;
+    }
+    let mut idx = 0;
+    while idx < keyword.len() {
+        let k = keyword[idx] & 0x7F;
+        let i = input[idx] & 0x7F;
+        if k.eq_ignore_ascii_case(&i) == false {
+            return false;
+        }
+        idx += 1;
+    }
+    if input.len() == keyword.len() {
+        return true;
+    }
+    input[keyword.len()] == b' '
+}
+
 /// Classify one `.TLK` byte through the dispatcher table per
 /// `conversation.md §7`. The classification order matters because the
 /// `0x9E..=0x9F` GOTO-LABEL range is a sub-range of the `0x80..=0x9F`

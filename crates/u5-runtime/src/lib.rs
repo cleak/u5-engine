@@ -127,8 +127,9 @@ pub use tlk_control_codes::{
     TLK_CODE_IF_ELSE, TLK_CODE_IF_ELSE_ALT, TLK_CODE_LITERAL_NEWLINE,
     TLK_CODE_PANEL_NEWLINE, TLK_CODE_PAUSE, TLK_CODE_PRINT_AVATAR_NAME,
     TLK_CODE_PROTECT_RUN, TLK_CODE_SET_FLAG, TLK_CODE_WAIT_KEY,
-    TLK_LABEL_FIRST, TLK_LABEL_LAST, TlkByteKind, classify_tlk_byte,
-    is_tlk_label_byte, tlk_introducer_argument_count,
+    TLK_INPUT_MAX_LEN, TLK_LABEL_FIRST, TLK_LABEL_LAST, ReservedKeywordEffect,
+    TlkByteKind, classify_tlk_byte, is_tlk_label_byte, reserved_keyword_effect,
+    tlk_introducer_argument_count, tlk_keyword_matches,
 };
 pub use tile_classes::{
     TILE_BARRIER_FIRST, TILE_BARRIER_LAST, TILE_DECORATION_FIRST, TILE_DECORATION_LAST,
