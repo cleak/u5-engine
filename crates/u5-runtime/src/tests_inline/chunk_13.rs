@@ -1,4 +1,20 @@
     #[test]
+    fn main_quest_requirements_enumerate_per_spec() {
+        // catalogs/quest-graph.md §2
+        assert_eq!(MainQuestRequirement::ALL.len(), 4);
+        assert_eq!(MainQuestRequirement::ALL[0], MainQuestRequirement::RoyalArtifacts);
+        assert_eq!(MainQuestRequirement::ALL[1], MainQuestRequirement::DungeonWords);
+        assert_eq!(
+            MainQuestRequirement::ALL[2],
+            MainQuestRequirement::ShardsAndShadowlords
+        );
+        assert_eq!(
+            MainQuestRequirement::ALL[3],
+            MainQuestRequirement::SandalwoodBox
+        );
+    }
+
+    #[test]
     fn sandalwood_box_pickup_constants_match_spec() {
         // catalogs/quest-graph.md §7
         assert_eq!(SANDALWOOD_BOX_PICKUP_SCENE, 17); // CASTLE:0 = Lord British's Castle

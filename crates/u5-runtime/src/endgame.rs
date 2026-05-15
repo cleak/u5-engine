@@ -2,6 +2,33 @@
 
 use crate::*;
 
+/// `catalogs/quest-graph.md §2`: the four main-quest requirements
+/// the web-shaped progression converges on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MainQuestRequirement {
+    /// 1. Recover the royal artifacts: Crown, Sceptre, and Amulet.
+    RoyalArtifacts,
+    /// 2. Learn and use the eight dungeon Words of Power.
+    DungeonWords,
+    /// 3. Recover and destroy the three evil shards by using the
+    ///    Eternal Flames and the Shadowlords' names.
+    ShardsAndShadowlords,
+    /// 4. Preserve and use the hidden sandalwood-box object that
+    ///    enables Lord British's return.
+    SandalwoodBox,
+}
+
+impl MainQuestRequirement {
+    /// `catalogs/quest-graph.md §2` ordered list of the four
+    /// requirements as they appear in the spec.
+    pub const ALL: [Self; 4] = [
+        Self::RoyalArtifacts,
+        Self::DungeonWords,
+        Self::ShardsAndShadowlords,
+        Self::SandalwoodBox,
+    ];
+}
+
 /// `catalogs/quest-graph.md §7`: shipped Sandalwood Box pickup —
 /// non-speaking object slot 31 in `CASTLE:0` at local (X=18, Y=12, Z=2)
 /// with object tag `0x0E` (the pickup runs through the shared
