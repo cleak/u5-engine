@@ -2093,6 +2093,61 @@
     }
 
     #[test]
+    fn inventory_add_class_covers_spec_table() {
+        // containers.md §8
+        assert_eq!(
+            inventory_add_class(0x01),
+            InventoryAddClass::MustOpenFirst
+        );
+        assert_eq!(inventory_add_class(0x02), InventoryAddClass::Gold);
+        assert_eq!(inventory_add_class(0x03), InventoryAddClass::Potion);
+        assert_eq!(
+            inventory_add_class(0x04),
+            InventoryAddClass::ScrollOrPlans
+        );
+        // Equipment rows
+        for c in [0x05u8, 0x06, 0x09, 0x0A, 0x0B, 0x0C] {
+            assert_eq!(inventory_add_class(c), InventoryAddClass::Equipment);
+        }
+        assert_eq!(inventory_add_class(0x07), InventoryAddClass::Key);
+        assert_eq!(inventory_add_class(0x08), InventoryAddClass::Gem);
+        assert_eq!(inventory_add_class(0x0D), InventoryAddClass::Torch);
+        assert_eq!(
+            inventory_add_class(0x0E),
+            InventoryAddClass::SandalwoodBox
+        );
+        assert_eq!(inventory_add_class(0x0F), InventoryAddClass::Food);
+        assert_eq!(inventory_add_class(0x19), InventoryAddClass::Moonstone);
+        assert_eq!(inventory_add_class(0x1B), InventoryAddClass::MagicCarpet);
+        assert_eq!(
+            inventory_add_class(0xB4),
+            InventoryAddClass::ShadowlordShard
+        );
+        assert_eq!(
+            inventory_add_class(0xB5),
+            InventoryAddClass::CrownOfLordBritish
+        );
+        assert_eq!(
+            inventory_add_class(0xB6),
+            InventoryAddClass::SceptreOfLordBritish
+        );
+        assert_eq!(
+            inventory_add_class(0xB7),
+            InventoryAddClass::AmuletOfLordBritish
+        );
+        // Unknown class codes refuse
+        assert_eq!(inventory_add_class(0x00), InventoryAddClass::NothingToGet);
+        assert_eq!(inventory_add_class(0x10), InventoryAddClass::NothingToGet);
+        assert_eq!(inventory_add_class(0x20), InventoryAddClass::NothingToGet);
+        assert_eq!(inventory_add_class(0xFF), InventoryAddClass::NothingToGet);
+        // Equipment-grant quantities
+        assert_eq!(equipment_grant_quantity(0x05), 5);
+        assert_eq!(equipment_grant_quantity(0x06), 5);
+        assert_eq!(equipment_grant_quantity(0x09), 1);
+        assert_eq!(equipment_grant_quantity(0x0C), 1);
+    }
+
+    #[test]
     fn dungeon_chest_rows_match_spec_table() {
         // containers.md §6
         assert_eq!(DUNGEON_CHEST_ROWS.len(), 7);

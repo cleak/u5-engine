@@ -112,8 +112,9 @@ pub use boot::{
 };
 pub use commands::{Command, command_for_letter};
 pub use containers::{
-    DUNGEON_CHEST_ROWS, DungeonChestReward, DungeonChestRow, TABLE_FOOD_TILE_A,
-    TABLE_FOOD_TILE_B, dungeon_chest_row_awarded, dungeon_chest_row_gate_max,
+    DUNGEON_CHEST_ROWS, DungeonChestReward, DungeonChestRow, InventoryAddClass,
+    TABLE_FOOD_TILE_A, TABLE_FOOD_TILE_B, dungeon_chest_row_awarded,
+    dungeon_chest_row_gate_max, equipment_grant_quantity, inventory_add_class,
     table_food_get_resulting_tile,
 };
 pub use intro::{IntroMenuAction, intro_menu_action};

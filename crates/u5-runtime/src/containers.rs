@@ -2,6 +2,84 @@
 //! covers the dungeon-chest reward generator (§6) and the directional
 //! table-food consumption rule (§7).
 
+/// `containers.md §8` shared inventory-add result family classified
+/// from the found-item class code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InventoryAddClass {
+    /// `0x01` — closed-container "must open first" refusal.
+    MustOpenFirst,
+    /// `0x02` — gold (party gold counter, capped at 9999).
+    Gold,
+    /// `0x03` — potion of the supplied subtype (cap 99 per colour).
+    Potion,
+    /// `0x04` — scroll of the supplied subtype OR the HMS Cape plans
+    /// flag.
+    ScrollOrPlans,
+    /// `0x05`, `0x06`, `0x09..=0x0C` — equipment row N. Arrows and
+    /// Quarrels grant 5; other equipment grants 1.
+    Equipment,
+    /// `0x07` — key (cap 99). Marked odd-key subtypes route to the
+    /// special-key counter.
+    Key,
+    /// `0x08` — gem.
+    Gem,
+    /// `0x0D` — torch (cap 99).
+    Torch,
+    /// `0x0E` — Sandalwood Box flag.
+    SandalwoodBox,
+    /// `0x0F` — food/grain.
+    Food,
+    /// `0x19` — Moonstone flag for the supplied slot.
+    Moonstone,
+    /// `0x1B` — Magic Carpet ownership.
+    MagicCarpet,
+    /// `0xB4` — Shadowlord shard (Falsehood/Hatred/Cowardice).
+    ShadowlordShard,
+    /// `0xB5` — Crown of Lord British.
+    CrownOfLordBritish,
+    /// `0xB6` — Sceptre of Lord British.
+    SceptreOfLordBritish,
+    /// `0xB7` — Amulet of Lord British.
+    AmuletOfLordBritish,
+    /// Any other class code — prints the nothing-to-get refusal and
+    /// leaves inventory unchanged.
+    NothingToGet,
+}
+
+/// `containers.md §8`: classify a found-item class code into the
+/// inventory-add result family the dispatcher applies.
+pub const fn inventory_add_class(class_code: u8) -> InventoryAddClass {
+    match class_code {
+        0x01 => InventoryAddClass::MustOpenFirst,
+        0x02 => InventoryAddClass::Gold,
+        0x03 => InventoryAddClass::Potion,
+        0x04 => InventoryAddClass::ScrollOrPlans,
+        0x05 | 0x06 | 0x09..=0x0C => InventoryAddClass::Equipment,
+        0x07 => InventoryAddClass::Key,
+        0x08 => InventoryAddClass::Gem,
+        0x0D => InventoryAddClass::Torch,
+        0x0E => InventoryAddClass::SandalwoodBox,
+        0x0F => InventoryAddClass::Food,
+        0x19 => InventoryAddClass::Moonstone,
+        0x1B => InventoryAddClass::MagicCarpet,
+        0xB4 => InventoryAddClass::ShadowlordShard,
+        0xB5 => InventoryAddClass::CrownOfLordBritish,
+        0xB6 => InventoryAddClass::SceptreOfLordBritish,
+        0xB7 => InventoryAddClass::AmuletOfLordBritish,
+        _ => InventoryAddClass::NothingToGet,
+    }
+}
+
+/// `containers.md §8` per-row equipment-grant size: arrows (`0x05`)
+/// and quarrels (`0x06`) grant 5 units per award; other equipment
+/// rows (`0x09..=0x0C`) grant 1.
+pub const fn equipment_grant_quantity(class_code: u8) -> u8 {
+    match class_code {
+        0x05 | 0x06 => 5,
+        _ => 1,
+    }
+}
+
 /// `containers.md §6`: inventory family one of the seven dungeon-chest
 /// reward rows can grant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
