@@ -85,6 +85,22 @@ impl ShrineVirtue {
         Self::Spirituality,
         Self::Humility,
     ];
+
+    /// `karma.md §9`: traditional virtue-to-companion pairing. The avatar's
+    /// own class is always Avatar regardless of the winning virtue per
+    /// `chargen.md`; this pairing only describes companion roster slots.
+    pub const fn companion(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Honesty => ("Mariah", "Mage"),
+            Self::Compassion => ("Iolo", "Bard"),
+            Self::Valor => ("Geoffrey", "Fighter"),
+            Self::Justice => ("Jaana", "Druid"),
+            Self::Sacrifice => ("Julia", "Tinker"),
+            Self::Honor => ("Dupre", "Paladin"),
+            Self::Spirituality => ("Shamino", "Ranger"),
+            Self::Humility => ("Katrina", "Shepherd"),
+        }
+    }
 }
 
 /// Result of one Codex urn read per `karma.md §8`.

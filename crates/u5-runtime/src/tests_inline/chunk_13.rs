@@ -667,6 +667,19 @@
     }
 
     #[test]
+    fn shrine_virtue_companion_table_matches_karma_md_section_nine() {
+        // karma.md §9: virtue-to-companion pairing.
+        assert_eq!(ShrineVirtue::Honesty.companion(), ("Mariah", "Mage"));
+        assert_eq!(ShrineVirtue::Compassion.companion(), ("Iolo", "Bard"));
+        assert_eq!(ShrineVirtue::Valor.companion(), ("Geoffrey", "Fighter"));
+        assert_eq!(ShrineVirtue::Justice.companion(), ("Jaana", "Druid"));
+        assert_eq!(ShrineVirtue::Sacrifice.companion(), ("Julia", "Tinker"));
+        assert_eq!(ShrineVirtue::Honor.companion(), ("Dupre", "Paladin"));
+        assert_eq!(ShrineVirtue::Spirituality.companion(), ("Shamino", "Ranger"));
+        assert_eq!(ShrineVirtue::Humility.companion(), ("Katrina", "Shepherd"));
+    }
+
+    #[test]
     fn read_codex_urn_walks_virtues_in_standard_order() {
         // karma.md §8: walk the eight virtues in standard order, stamp the
         // first ordained-and-not-yet-Codex-read virtue, return the chosen
