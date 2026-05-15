@@ -1,4 +1,25 @@
     #[test]
+    fn fire_and_energy_field_raw_damage_match_spec() {
+        // combat.md §11
+        assert_eq!(FIRE_FIELD_DAMAGE_MIN, 1);
+        assert_eq!(FIRE_FIELD_DAMAGE_MAX, 21);
+        assert_eq!(ENERGY_FIELD_RAW_DAMAGE, 0);
+        // Fire field rolls range 1..=21.
+        for seed in 0u8..=20 {
+            let dmg = fire_field_raw_damage(seed);
+            assert!(
+                (FIRE_FIELD_DAMAGE_MIN..=FIRE_FIELD_DAMAGE_MAX).contains(&dmg),
+                "seed {seed} -> dmg {dmg}"
+            );
+        }
+        assert_eq!(fire_field_raw_damage(0), 1);
+        assert_eq!(fire_field_raw_damage(20), 21);
+        // Modulo wraparound covers larger seeds without overflow.
+        assert_eq!(fire_field_raw_damage(21), 1);
+        assert_eq!(fire_field_raw_damage(42), 1);
+    }
+
+    #[test]
     fn monster_wound_classifier_matches_spec_thresholds() {
         // combat.md §9
         assert_eq!(WOUND_MORALE_FLEE_THRESHOLD, 252);

@@ -11,6 +11,21 @@ pub const COMBAT_MONSTER_SLOT_FIRST: usize = 1;
 pub const COMBAT_MONSTER_SLOT_LAST: usize = 25;
 pub const COMBAT_ACTOR_RECORD_LEN: usize = 8;
 
+/// `combat.md §11` Fire Field per-contact raw-damage roll. The
+/// post-step contact hook rolls a uniform `[1, 21]` value before the
+/// normal random defense subtraction. Caller passes the raw `0..=20`
+/// PRNG seed.
+pub const FIRE_FIELD_DAMAGE_MIN: u8 = 1;
+pub const FIRE_FIELD_DAMAGE_MAX: u8 = 21;
+pub const fn fire_field_raw_damage(roll_seed_0_to_20: u8) -> u8 {
+    FIRE_FIELD_DAMAGE_MIN + (roll_seed_0_to_20 % (FIRE_FIELD_DAMAGE_MAX - FIRE_FIELD_DAMAGE_MIN + 1))
+}
+
+/// `combat.md §11` Energy Field raw damage. Energy contact supplies
+/// raw zero to the same damage/value path; the final hit value is
+/// produced by the random defense subtraction alone.
+pub const ENERGY_FIELD_RAW_DAMAGE: u8 = 0;
+
 /// `combat.md §9` four-bucket wound classification produced by the
 /// monster wound-score classifier. The classifier consumes the acting
 /// monster's current HP against its class maximum and feeds AI
