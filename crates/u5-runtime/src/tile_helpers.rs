@@ -483,6 +483,62 @@ pub fn is_vehicle_object_tile(tile: u8) -> bool {
     (160..=191).contains(&tile)
 }
 
+/// `dungeon-mode.md §8` fountain effect derived from the low nibble
+/// of a fountain cell byte (high nibble `0x5`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FountainEffect {
+    /// Sub-type 0 — Cure: sets status to Good.
+    Cure,
+    /// Sub-type 1 — Heal: refills HP without status change.
+    Heal,
+    /// Sub-type 2 — Poison: sets status to Poisoned.
+    Poison,
+    /// Sub-types 3..=15 — Bad taste: random `0..=7` HP damage.
+    BadTaste,
+}
+
+/// `dungeon-mode.md §8`: classify a fountain cell byte's low nibble.
+pub const fn fountain_effect_from_byte(tile: u8) -> FountainEffect {
+    match tile & 0x0F {
+        0 => FountainEffect::Cure,
+        1 => FountainEffect::Heal,
+        2 => FountainEffect::Poison,
+        _ => FountainEffect::BadTaste,
+    }
+}
+
+/// `dungeon-mode.md §8` energy-field sub-type derived from the low
+/// nibble of an energy-field cell byte. Magic field placement preserves
+/// the dungeon visit-marker bit, producing the matching `0x88..=0x8B`
+/// variants of these base bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EnergyFieldKind {
+    /// `0x80` — sleep field (status `'S'` on contact).
+    Sleep,
+    /// `0x81` — poison gas (status `'P'` on contact, no cell rewrite).
+    Poison,
+    /// `0x82` — wall of fire (fire damage on contact).
+    Fire,
+    /// `0x83` — electric field (electric damage + forced step).
+    Electric,
+    /// Other `0x8?` sub-types collapse to the generic energy-field
+    /// description.
+    Generic,
+}
+
+/// `dungeon-mode.md §8`: classify an energy-field cell byte.
+/// Recognises the four named base bytes `0x80..=0x83`; everything else
+/// in the `0x8_` band collapses to the generic energy-field family.
+pub const fn energy_field_kind_from_byte(tile: u8) -> EnergyFieldKind {
+    match tile {
+        0x80 => EnergyFieldKind::Sleep,
+        0x81 => EnergyFieldKind::Poison,
+        0x82 => EnergyFieldKind::Fire,
+        0x83 => EnergyFieldKind::Electric,
+        _ => EnergyFieldKind::Generic,
+    }
+}
+
 /// `dungeon-mode.md §3` typed dungeon-cell class derived from the cell
 /// byte's high nibble. Renderer wall checks, L-Look description routing,
 /// and most special-cell handlers branch on this.

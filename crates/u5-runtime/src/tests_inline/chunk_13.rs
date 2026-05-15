@@ -1377,6 +1377,39 @@
     }
 
     #[test]
+    fn fountain_and_energy_field_classifiers_match_spec() {
+        // dungeon-mode.md §8 fountain
+        assert_eq!(fountain_effect_from_byte(0x50), FountainEffect::Cure);
+        assert_eq!(fountain_effect_from_byte(0x51), FountainEffect::Heal);
+        assert_eq!(fountain_effect_from_byte(0x52), FountainEffect::Poison);
+        // Sub-types 3..=15 all map to BadTaste
+        for low in 3..=15u8 {
+            assert_eq!(
+                fountain_effect_from_byte(0x50 | low),
+                FountainEffect::BadTaste
+            );
+        }
+        // High nibble doesn't matter — only the low nibble is read.
+        assert_eq!(fountain_effect_from_byte(0xA0), FountainEffect::Cure);
+
+        // dungeon-mode.md §8 energy fields
+        assert_eq!(energy_field_kind_from_byte(0x80), EnergyFieldKind::Sleep);
+        assert_eq!(energy_field_kind_from_byte(0x81), EnergyFieldKind::Poison);
+        assert_eq!(energy_field_kind_from_byte(0x82), EnergyFieldKind::Fire);
+        assert_eq!(
+            energy_field_kind_from_byte(0x83),
+            EnergyFieldKind::Electric
+        );
+        // Magic-placement preserves the visit-marker bit (0x88..=0x8B);
+        // the low-bit-only classifier collapses these to Generic
+        // because the renderer still needs to recognise the variant
+        // separately. The L-Look text uses the same Generic name.
+        assert_eq!(energy_field_kind_from_byte(0x88), EnergyFieldKind::Generic);
+        assert_eq!(energy_field_kind_from_byte(0x89), EnergyFieldKind::Generic);
+        assert_eq!(energy_field_kind_from_byte(0x8F), EnergyFieldKind::Generic);
+    }
+
+    #[test]
     fn dungeon_cell_class_of_matches_high_nibble_table() {
         // dungeon-mode.md §3
         assert_eq!(dungeon_cell_class_of(0x00), DungeonCellClass::Passage);
