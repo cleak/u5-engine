@@ -1,4 +1,66 @@
     #[test]
+    fn spawn_terrain_branch_classifier_matches_spec_table() {
+        // encounters.md §4
+        assert_eq!(SPAWN_WHIRLPOOL_DENOMINATOR, 7);
+        assert_eq!(SPAWN_SEA_SERPENT_DENOMINATOR, 3);
+        assert_eq!(SPAWN_LOW_TILE_ALLOWANCE_DENOMINATOR, 4);
+
+        // Surface tile 1 -> whirlpool/aquatic special branch.
+        assert_eq!(
+            spawn_terrain_branch(0x01, false),
+            SpawnTerrainBranch::SurfaceTile1WhirlpoolOrAquatic
+        );
+        // Underworld tile 4 -> Rot Worm direct branch; surface tile 4
+        // continues to the land bucket selected by plane.
+        assert_eq!(
+            spawn_terrain_branch(0x04, true),
+            SpawnTerrainBranch::UnderworldTile4RotWorm
+        );
+        assert_eq!(
+            spawn_terrain_branch(0x04, false),
+            SpawnTerrainBranch::LandBucket
+        );
+        // Tile 7 -> sea-serpent adjacency.
+        assert_eq!(
+            spawn_terrain_branch(0x07, false),
+            SpawnTerrainBranch::SeaSerpentAdjacency
+        );
+        // Town outline tiles 0x0C / 0x0D -> hard reject.
+        assert_eq!(
+            spawn_terrain_branch(0x0C, false),
+            SpawnTerrainBranch::HardReject
+        );
+        assert_eq!(
+            spawn_terrain_branch(0x0D, false),
+            SpawnTerrainBranch::HardReject
+        );
+        // Low/shore/road/bridge bands -> low-tile allowance.
+        for t in [0x00u8, 0x02, 0x03, 0x60, 0x6F, 0xD4, 0xD7, 0xE4, 0xE7] {
+            assert_eq!(
+                spawn_terrain_branch(t, false),
+                SpawnTerrainBranch::LowTileAllowance,
+                "tile {t:#x}"
+            );
+        }
+        // Land bucket coverage.
+        for t in [0x05u8, 0x06, 0x08, 0x09, 0x0E, 0x0F, 0x30, 0x33] {
+            assert_eq!(
+                spawn_terrain_branch(t, false),
+                SpawnTerrainBranch::LandBucket,
+                "tile {t:#x}"
+            );
+        }
+        // Other high tiles -> reject.
+        for t in [0x10u8, 0x40, 0x80, 0xCF, 0xFF] {
+            assert_eq!(
+                spawn_terrain_branch(t, false),
+                SpawnTerrainBranch::HighTileReject,
+                "tile {t:#x}"
+            );
+        }
+    }
+
+    #[test]
     fn encounter_spawner_separation_gate_matches_spec() {
         // encounters.md §4
         assert_eq!(ENCOUNTER_SPAWNER_RETRY_LIMIT, 128);

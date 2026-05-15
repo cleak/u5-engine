@@ -294,6 +294,76 @@ pub const fn sleep_ambush_rest_interrupted(roll: u8) -> bool {
 ///   - Surface tile 0x04 or wilderness band 0x09..=0x0F: 2 by day, 5 at
 ///     hours 0..=4.
 ///   - Any other surface tile: 1 by day, 4 at hours 0..=4.
+/// `encounters.md §4` candidate-terrain branch the encounter
+/// spawner takes once a coordinate has passed the separation gate.
+/// Caller supplies the world tile id and the underworld plane flag.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpawnTerrainBranch {
+    /// Surface tile `0x01` after the low-tile allowance — 1/7 special
+    /// whirlpool roll, otherwise surface default/aquatic bucket.
+    SurfaceTile1WhirlpoolOrAquatic,
+    /// Terrain tile `0x07` — 1/3 sea-serpent adjacency special roll;
+    /// failure rejects the candidate.
+    SeaSerpentAdjacency,
+    /// Terrain tile `0x04` on the full underworld plane — direct Rot
+    /// Worm sprite-run selection.
+    UnderworldTile4RotWorm,
+    /// Surface town-outline tile `0x0C`/`0x0D` — reject.
+    HardReject,
+    /// Low/shore/road/bridge tile that needs the 1/4 allowance die
+    /// before bucket selection.
+    LowTileAllowance,
+    /// Tile passes through to the land bucket selected by world
+    /// plane (`0x00..=0x0F` after the special/hard-reject cases plus
+    /// `0x30..=0x33`).
+    LandBucket,
+    /// Tile id at or above `0x10` not otherwise listed — reject.
+    HighTileReject,
+}
+
+/// `encounters.md §4`: classify a candidate world tile into the
+/// spawner's terrain branch. Caller supplies the underworld flag
+/// (`true` only when the saved Z byte indicates the underworld
+/// plane). Tile-4 reaches `UnderworldTile4RotWorm` only on the
+/// underworld; other tile-4 cases continue to the land bucket.
+pub const fn spawn_terrain_branch(tile: u8, underworld: bool) -> SpawnTerrainBranch {
+    if underworld && tile == 0x04 {
+        return SpawnTerrainBranch::UnderworldTile4RotWorm;
+    }
+    if tile == 0x0C || tile == 0x0D {
+        return SpawnTerrainBranch::HardReject;
+    }
+    if tile == 0x07 {
+        return SpawnTerrainBranch::SeaSerpentAdjacency;
+    }
+    if tile == 0x01 {
+        return SpawnTerrainBranch::SurfaceTile1WhirlpoolOrAquatic;
+    }
+    if tile < 0x04
+        || (tile >= 0x60 && tile <= 0x6F)
+        || (tile >= 0xD4 && tile <= 0xD7)
+        || (tile >= 0xE4 && tile <= 0xE7)
+    {
+        return SpawnTerrainBranch::LowTileAllowance;
+    }
+    if tile < 0x10 || (tile >= 0x30 && tile <= 0x33) {
+        return SpawnTerrainBranch::LandBucket;
+    }
+    SpawnTerrainBranch::HighTileReject
+}
+
+/// `encounters.md §4` whirlpool-special chance gate (1-in-7 on
+/// surface tile 1).
+pub const SPAWN_WHIRLPOOL_DENOMINATOR: u8 = 7;
+
+/// `encounters.md §4` sea-serpent adjacency chance gate (1-in-3
+/// on terrain tile 7); failure rejects the candidate.
+pub const SPAWN_SEA_SERPENT_DENOMINATOR: u8 = 3;
+
+/// `encounters.md §4` low-tile allowance die (1-in-4 on the low /
+/// shore / road / bridge bands); failure rejects the candidate.
+pub const SPAWN_LOW_TILE_ALLOWANCE_DENOMINATOR: u8 = 4;
+
 /// `encounters.md §4` encounter-spawner retry budget. The retry
 /// loop returns silently after this many rejected candidates.
 pub const ENCOUNTER_SPAWNER_RETRY_LIMIT: u8 = 128;
