@@ -8,6 +8,32 @@ use std::path::Path;
 const STORY_DAT_FILE: &str = "STORY.DAT";
 const EXPECTED_RECORD_COUNT: usize = 20;
 
+/// `intro.md §10` — total intro narrative steps (zero-based 0..=20).
+pub const INTRO_STORY_STEP_COUNT: usize = 21;
+
+/// `intro.md §10` — story-art file in use for each zero-based step.
+/// Steps 0-1 use STORY1.16; 2-6 use STORY2.16; 7-8 use STORY3.16;
+/// 9-10 use STORY4.16; 11-12 use STORY5.16; 13-20 use STORY6.16.
+pub const fn intro_story_art_file_for_step(step: usize) -> Option<&'static str> {
+    Some(match step {
+        0..=1 => "STORY1.16",
+        2..=6 => "STORY2.16",
+        7..=8 => "STORY3.16",
+        9..=10 => "STORY4.16",
+        11..=12 => "STORY5.16",
+        13..=20 => "STORY6.16",
+        _ => return None,
+    })
+}
+
+/// `intro.md §10` — step 6 uses two inline doorway-transition text lines
+/// owned by intro code rather than consuming a `STORY.DAT` record.
+pub const INTRO_INLINE_DOORWAY_STEP: usize = 6;
+
+/// `intro.md §10` — step 0 is the automatic opening transition that does
+/// not wait for input.
+pub const INTRO_AUTO_OPENING_STEP: usize = 0;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StoryRecords {
     pub records: Vec<String>,

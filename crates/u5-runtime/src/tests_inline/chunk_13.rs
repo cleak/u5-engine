@@ -777,6 +777,28 @@
     }
 
     #[test]
+    fn intro_story_art_file_for_step_matches_published_boundaries() {
+        // intro.md §10: steps 0-1 STORY1, 2-6 STORY2, 7-8 STORY3, 9-10
+        // STORY4, 11-12 STORY5, 13-20 STORY6.
+        assert_eq!(intro_story_art_file_for_step(0), Some("STORY1.16"));
+        assert_eq!(intro_story_art_file_for_step(1), Some("STORY1.16"));
+        assert_eq!(intro_story_art_file_for_step(2), Some("STORY2.16"));
+        assert_eq!(intro_story_art_file_for_step(6), Some("STORY2.16"));
+        assert_eq!(intro_story_art_file_for_step(7), Some("STORY3.16"));
+        assert_eq!(intro_story_art_file_for_step(8), Some("STORY3.16"));
+        assert_eq!(intro_story_art_file_for_step(9), Some("STORY4.16"));
+        assert_eq!(intro_story_art_file_for_step(10), Some("STORY4.16"));
+        assert_eq!(intro_story_art_file_for_step(11), Some("STORY5.16"));
+        assert_eq!(intro_story_art_file_for_step(12), Some("STORY5.16"));
+        assert_eq!(intro_story_art_file_for_step(13), Some("STORY6.16"));
+        assert_eq!(intro_story_art_file_for_step(20), Some("STORY6.16"));
+        assert_eq!(intro_story_art_file_for_step(21), None);
+        assert_eq!(INTRO_STORY_STEP_COUNT, 21);
+        assert_eq!(INTRO_AUTO_OPENING_STEP, 0);
+        assert_eq!(INTRO_INLINE_DOORWAY_STEP, 6);
+    }
+
+    #[test]
     fn chargen_questionnaire_round_structure_matches_spec_section_six() {
         // chargen.md §6: 3 rounds (4 + 2 + 1 = 7 questions), single-elim.
         assert_eq!(CHARGEN_QUESTION_COUNT, 7);

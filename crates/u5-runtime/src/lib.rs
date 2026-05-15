@@ -88,7 +88,10 @@ pub use signs_io::{
     SignRecord, decode_sign_payload, find_sign, load_sign_records, parse_sign_records,
 };
 pub use stat_arithmetic::{capped_add_u8, capped_add_word, floor_sub_u8, floor_sub_word};
-pub use story_io::{StoryRecords, load_story_records, parse_story_records};
+pub use story_io::{
+    INTRO_AUTO_OPENING_STEP, INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, StoryRecords,
+    intro_story_art_file_for_step, load_story_records, parse_story_records,
+};
 pub use text_wrap::{WrappedLine, wrap_text};
 pub use tlk_control_codes::{
     TLK_CODE_ACTION_DISPATCH, TLK_CODE_ASK_PARTY_NAME, TLK_CODE_ASK_WHO,
