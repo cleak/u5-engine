@@ -150,6 +150,38 @@ impl WindState {
         }
     }
 
+    /// `weather.md §2` autonomous wind-drift acceptance: only the
+    /// zero outer roll over `0..=63` advances to candidate selection.
+    pub const fn autonomous_drift_outer_accepted(outer_roll: u8) -> bool {
+        outer_roll == 0
+    }
+
+    /// `weather.md §2` autonomous wind-drift candidate gate. Cardinal
+    /// candidates `1..=4` are accepted immediately; candidate `0`
+    /// (Calm) is accepted only when the follow-up roll over `0..=255`
+    /// is at least `192` (so Calm is much rarer than any cardinal).
+    /// Returns the accepted state, or `None` to repeat the candidate
+    /// selection.
+    pub const fn autonomous_drift_accept_candidate(
+        candidate: u8,
+        calm_followup_roll: u8,
+    ) -> Option<Self> {
+        match candidate {
+            0 => {
+                if calm_followup_roll >= 192 {
+                    Some(Self::Calm)
+                } else {
+                    None
+                }
+            }
+            1 => Some(Self::North),
+            2 => Some(Self::South),
+            3 => Some(Self::East),
+            4 => Some(Self::West),
+            _ => None,
+        }
+    }
+
     pub fn rel_hur_target(direction: Direction) -> Option<Self> {
         match direction {
             Direction::North => Some(Self::West),

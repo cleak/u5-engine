@@ -1,4 +1,43 @@
     #[test]
+    fn autonomous_wind_drift_gates_per_spec() {
+        // weather.md §2
+        // Outer roll: only 0 of 64 advances.
+        assert!(WindState::autonomous_drift_outer_accepted(0));
+        for r in 1u8..=63 {
+            assert!(!WindState::autonomous_drift_outer_accepted(r));
+        }
+        // Cardinal candidates accept immediately.
+        assert_eq!(
+            WindState::autonomous_drift_accept_candidate(1, 0),
+            Some(WindState::North)
+        );
+        assert_eq!(
+            WindState::autonomous_drift_accept_candidate(2, 0),
+            Some(WindState::South)
+        );
+        assert_eq!(
+            WindState::autonomous_drift_accept_candidate(3, 0),
+            Some(WindState::East)
+        );
+        assert_eq!(
+            WindState::autonomous_drift_accept_candidate(4, 0),
+            Some(WindState::West)
+        );
+        // Calm requires follow-up roll >= 192.
+        assert_eq!(WindState::autonomous_drift_accept_candidate(0, 191), None);
+        assert_eq!(
+            WindState::autonomous_drift_accept_candidate(0, 192),
+            Some(WindState::Calm)
+        );
+        assert_eq!(
+            WindState::autonomous_drift_accept_candidate(0, 255),
+            Some(WindState::Calm)
+        );
+        // Out-of-range candidate -> repeat (None).
+        assert_eq!(WindState::autonomous_drift_accept_candidate(5, 200), None);
+    }
+
+    #[test]
     fn lord_british_camp_event_helpers_match_spec() {
         // rest-and-camp.md §7
         assert_eq!(LORD_BRITISH_CAMP_EVENT_ROLL_BOUND, 100);
