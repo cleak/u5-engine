@@ -1,4 +1,33 @@
     #[test]
+    fn active_effect_tag_byte_and_install_counter_match_spec() {
+        // magic.md §8
+        // ASCII bytes.
+        assert_eq!(ActiveEffectTag::Protection.ascii_byte(), b'P');
+        assert_eq!(ActiveEffectTag::Quickness.ascii_byte(), b'Q');
+        assert_eq!(ActiveEffectTag::MassCharm.ascii_byte(), b'C');
+        assert_eq!(ActiveEffectTag::NegateMagic.ascii_byte(), b'N');
+        assert_eq!(ActiveEffectTag::NegateTime.ascii_byte(), b'T');
+
+        // Spell-side install counters.
+        assert_eq!(ActiveEffectTag::Protection.spell_install_counter(), Some(20));
+        assert_eq!(ActiveEffectTag::Quickness.spell_install_counter(), Some(30));
+        assert_eq!(ActiveEffectTag::MassCharm.spell_install_counter(), Some(20));
+        assert_eq!(ActiveEffectTag::NegateMagic.spell_install_counter(), Some(10));
+        // Negate Time has no separate spell-side install counter; the
+        // scene-aware path applies its own scroll/spell duration.
+        assert_eq!(ActiveEffectTag::NegateTime.spell_install_counter(), None);
+
+        // Byte -> tag classification.
+        assert_eq!(active_effect_tag_for_byte(b'P'), Some(ActiveEffectTag::Protection));
+        assert_eq!(active_effect_tag_for_byte(b'Q'), Some(ActiveEffectTag::Quickness));
+        assert_eq!(active_effect_tag_for_byte(b'C'), Some(ActiveEffectTag::MassCharm));
+        assert_eq!(active_effect_tag_for_byte(b'N'), Some(ActiveEffectTag::NegateMagic));
+        assert_eq!(active_effect_tag_for_byte(b'T'), Some(ActiveEffectTag::NegateTime));
+        assert_eq!(active_effect_tag_for_byte(b'A'), None);
+        assert_eq!(active_effect_tag_for_byte(0), None);
+    }
+
+    #[test]
     fn spawn_terrain_branch_classifier_matches_spec_table() {
         // encounters.md §4
         assert_eq!(SPAWN_WHIRLPOOL_DENOMINATOR, 7);

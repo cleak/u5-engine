@@ -25,6 +25,68 @@ pub const fn spell_min_caster_level(circle: u8) -> u8 {
     circle
 }
 
+/// `magic.md §8` shared active-effect tag installed by combat
+/// buff/debuff spells. The shared helper stores one global
+/// (tag, counter) pair the round walker consults; later actions
+/// that consume the tag look it up by byte value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ActiveEffectTag {
+    /// `'P'` — Protection (`In Sanct`).
+    Protection,
+    /// `'Q'` — Quickness (`Rel Tym`).
+    Quickness,
+    /// `'C'` — Mass Charm (`Quas An Wis`).
+    MassCharm,
+    /// `'N'` — Negate Magic (`In An`).
+    NegateMagic,
+    /// `'T'` — Negate Time (`An Tym`); installed by the Negate Time
+    /// spell and the Negate Time scroll.
+    NegateTime,
+}
+
+impl ActiveEffectTag {
+    /// `magic.md §8`: ASCII byte the engine writes into the global
+    /// shared visible tag slot.
+    pub const fn ascii_byte(self) -> u8 {
+        match self {
+            Self::Protection => b'P',
+            Self::Quickness => b'Q',
+            Self::MassCharm => b'C',
+            Self::NegateMagic => b'N',
+            Self::NegateTime => b'T',
+        }
+    }
+
+    /// `magic.md §8`: counter value installed when the spell-side
+    /// helper writes the tag from a successful C-Cast (Protection
+    /// 20, Quickness 30, Mass Charm 20, Negate Magic 10, Negate Time
+    /// has its own scene-aware path with no separate spell-side
+    /// constant promoted here).
+    pub const fn spell_install_counter(self) -> Option<u8> {
+        match self {
+            Self::Protection => Some(20),
+            Self::Quickness => Some(30),
+            Self::MassCharm => Some(20),
+            Self::NegateMagic => Some(10),
+            Self::NegateTime => None,
+        }
+    }
+}
+
+/// `magic.md §8`: classify the global active-effect tag byte.
+/// Returns `None` for byte values that are not one of the five
+/// confirmed shared tags.
+pub const fn active_effect_tag_for_byte(byte: u8) -> Option<ActiveEffectTag> {
+    Some(match byte {
+        b'P' => ActiveEffectTag::Protection,
+        b'Q' => ActiveEffectTag::Quickness,
+        b'C' => ActiveEffectTag::MassCharm,
+        b'N' => ActiveEffectTag::NegateMagic,
+        b'T' => ActiveEffectTag::NegateTime,
+        _ => return None,
+    })
+}
+
 /// `magic.md §5` C-Cast spell-name selector cap. The compact
 /// letter-coded form accepts at most four selector letters before
 /// the parser auto-completes; longer typed input is truncated to
