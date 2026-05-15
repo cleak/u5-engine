@@ -126,8 +126,8 @@ pub use boot::{
     tandy_low_memory_downgrades,
 };
 pub use commands::{
-    Command, PushableTileFamily, command_for_letter, new_order_swap_accepted,
-    pushable_tile_family,
+    Command, PushableTileFamily, YELL_INPUT_MAX_LEN, YellInputContext,
+    command_for_letter, new_order_swap_accepted, pushable_tile_family,
 };
 pub use containers::{
     DUNGEON_CHEST_ROWS, DungeonChestReward, DungeonChestRow, DungeonChestTrapTier,

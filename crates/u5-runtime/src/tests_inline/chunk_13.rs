@@ -1,4 +1,25 @@
     #[test]
+    fn yell_input_max_len_and_context_variants_match_spec() {
+        // commands.md §11
+        assert_eq!(YELL_INPUT_MAX_LEN, 30);
+        // The three context families are distinct.
+        let all = [
+            YellInputContext::ShadowlordName,
+            YellInputContext::WordOfPower,
+            YellInputContext::NoEffect,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                if i == j {
+                    assert_eq!(a, b);
+                } else {
+                    assert_ne!(a, b);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn pushable_tile_family_classifies_per_spec_table() {
         // commands.md §8
         assert_eq!(

@@ -75,6 +75,28 @@ impl Command {
     }
 }
 
+/// `commands.md §11` Y-Yell free-text input cap. When the party is
+/// not in the ship-sail branch, the command opens a line-input
+/// prompt that accepts up to thirty characters before routing the
+/// typed word to the Shadowlord-name or Word-of-Power scanner.
+pub const YELL_INPUT_MAX_LEN: usize = 30;
+
+/// `commands.md §11` scene routing for the typed Y-Yell input. The
+/// engine selects the scanner family from the active scene context;
+/// other contexts produce no effect after the prompt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum YellInputContext {
+    /// Shadowlord arena scene family — the typed word is compared
+    /// against the three Shadowlord names.
+    ShadowlordName,
+    /// Dungeon Word-of-Power context — the typed word is compared
+    /// against the eight dungeon words in fixed order.
+    WordOfPower,
+    /// Any other non-ship context — the prompt completes without
+    /// effect after empty or non-matching input.
+    NoEffect,
+}
+
 /// `commands.md §8` P-Push pushable static-tile family. The
 /// non-dynamic-object branch of P-Push accepts only the static
 /// tile families documented here.
