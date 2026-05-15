@@ -1,4 +1,15 @@
     #[test]
+    fn return_to_view_constants_match_spec() {
+        // intro.md §12
+        assert_eq!(MISCMAPS_DAT_FILE, "MISCMAPS.DAT");
+        assert_eq!(RTV_STRIP_COUNT, 4);
+        assert_eq!(RTV_STRIP_ROWS, 19);
+        assert_eq!(RTV_STRIP_COLUMNS, 4);
+        assert_eq!(RTV_COMMAND_STREAM_BYTES, 655);
+        assert_eq!(RTV_COMMAND_COUNT, 16);
+    }
+
+    #[test]
     fn blackthorn_challenge_answer_matcher_substring_case_insensitive() {
         // blackthorn.md §4
         assert_eq!(BLACKTHORN_CHALLENGE_INPUT_LIMIT, 14);

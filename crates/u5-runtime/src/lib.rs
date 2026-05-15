@@ -122,7 +122,10 @@ pub use containers::{
     dungeon_chest_row_gate_max, equipment_grant_quantity, inventory_add_class,
     table_food_get_resulting_tile,
 };
-pub use intro::{IntroMenuAction, intro_menu_action};
+pub use intro::{
+    IntroMenuAction, MISCMAPS_DAT_FILE, RTV_COMMAND_COUNT, RTV_COMMAND_STREAM_BYTES,
+    RTV_STRIP_COLUMNS, RTV_STRIP_COUNT, RTV_STRIP_ROWS, intro_menu_action,
+};
 pub use hidden_treasures::{
     HIDDEN_TREASURE_RECORD_DAILY_CACHE, HIDDEN_TREASURE_RECORD_KEY_NPC_GATED,
     HIDDEN_TREASURE_RECORD_SINGLE_USE_NPC_GATED, HiddenTreasureRule,

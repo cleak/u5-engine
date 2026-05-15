@@ -2,6 +2,18 @@
 
 use crate::input_case_fold;
 
+/// `intro.md §12`: Return-to-View loads `MISCMAPS.DAT`. The first
+/// four records are 19-by-4 map strips followed by a 655-byte
+/// command stream driving preview actors and animation beats.
+pub const MISCMAPS_DAT_FILE: &str = "MISCMAPS.DAT";
+pub const RTV_STRIP_COUNT: usize = 4;
+pub const RTV_STRIP_ROWS: usize = 19;
+pub const RTV_STRIP_COLUMNS: usize = 4;
+pub const RTV_COMMAND_STREAM_BYTES: usize = 655;
+/// `intro.md §12`: Return-to-View command stream is interpreted as a
+/// 16-command preview bytecode, not the gameplay TLK runner.
+pub const RTV_COMMAND_COUNT: usize = 16;
+
 /// `intro.md §6`: the six accepted intro-menu actions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IntroMenuAction {
