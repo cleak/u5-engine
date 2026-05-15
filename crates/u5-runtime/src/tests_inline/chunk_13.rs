@@ -742,6 +742,33 @@
     }
 
     #[test]
+    fn lord_british_camp_verdict_bands_match_spec() {
+        // formats/karma-dat.md §4 — Lord British-in-disguise camp event
+        for s in 0..=19u8 {
+            assert_eq!(lord_british_camp_verdict_record(s), 0);
+        }
+        for s in 20..=39u8 {
+            assert_eq!(lord_british_camp_verdict_record(s), 1);
+        }
+        for s in 40..=59u8 {
+            assert_eq!(lord_british_camp_verdict_record(s), 2);
+        }
+        for s in 60..=79u8 {
+            assert_eq!(lord_british_camp_verdict_record(s), 3);
+        }
+        // Top band -> record 5 (record 4 is never selected by this event)
+        for s in 80..=99u8 {
+            assert_eq!(lord_british_camp_verdict_record(s), 5);
+        }
+        // Above-cap behaves like the top band.
+        assert_eq!(lord_british_camp_verdict_record(255), 5);
+        // Cross-check: the LB camp event never picks record 4.
+        for s in 0..=99u8 {
+            assert_ne!(lord_british_camp_verdict_record(s), 4);
+        }
+    }
+
+    #[test]
     fn blackthorn_rescue_verdict_bands_match_spec() {
         // blackthorn.md §7
         assert_eq!(BLACKTHORN_RESCUE_HANDOFF_SCENE, 17);

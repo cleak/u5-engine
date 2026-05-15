@@ -13,6 +13,21 @@ pub const BLACKTHORN_RESCUE_HANDOFF_Y: u8 = 10;
 /// selector to at least this floor after printing the verdict.
 pub const BLACKTHORN_RESCUE_STANDING_FLOOR: u8 = 75;
 
+/// `formats/karma-dat.md §4`: Lord British-in-disguise camp event
+/// verdict-record selector. Uses the same twenty-point band scale for
+/// the lower range, selecting records `0..=3` for bands below 80; for
+/// the top band (`80..=99`) it seeks directly to record 5. Record 4 is
+/// not selected by this event.
+pub const fn lord_british_camp_verdict_record(standing: u8) -> u8 {
+    match standing {
+        0..=19 => 0,
+        20..=39 => 1,
+        40..=59 => 2,
+        60..=79 => 3,
+        _ => 5,
+    }
+}
+
 /// `blackthorn.md §7`: rescue/refuge `KARMA.DAT` verdict band selector.
 /// Divides the one-byte standing input into five twenty-point bands and
 /// returns the matching record index `0..=4`. The shipped sixth record
