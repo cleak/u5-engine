@@ -777,6 +777,30 @@
     }
 
     #[test]
+    fn chargen_virtue_stat_deltas_match_spec_table() {
+        // chargen.md §6: per-virtue (INT, DEX, STR) deltas table.
+        let table: &[(ShrineVirtue, u8, u8, u8)] = &[
+            (ShrineVirtue::Honesty, 2, 0, 0),
+            (ShrineVirtue::Compassion, 0, 2, 0),
+            (ShrineVirtue::Valor, 0, 0, 2),
+            (ShrineVirtue::Justice, 1, 1, 0),
+            (ShrineVirtue::Sacrifice, 0, 1, 1),
+            (ShrineVirtue::Honor, 1, 0, 1),
+            (ShrineVirtue::Spirituality, 1, 1, 1),
+            (ShrineVirtue::Humility, 0, 0, 0),
+        ];
+        for (virtue, int, dex, str_) in table {
+            let delta = chargen_virtue_stat_delta(*virtue);
+            assert_eq!(
+                (delta.intelligence, delta.dexterity, delta.strength),
+                (*int, *dex, *str_),
+                "virtue {} mismatch",
+                virtue.name()
+            );
+        }
+    }
+
+    #[test]
     fn class_refreshed_mana_covers_default_branch_per_magic_md_section_eight() {
         // magic.md §8 Resurrection: Avatar (A), Mage (M), and the default
         // class branch receive mana equal to Intelligence; Bard (B)
