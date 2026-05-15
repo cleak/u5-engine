@@ -1,4 +1,51 @@
     #[test]
+    fn named_scene_byte_constants_match_npc_roster_table() {
+        // catalogs/npc-roster.md §1
+        // Cross-check against the existing town_resident_name table.
+        let pairs = [
+            (SCENE_MOONGLOW, "Moonglow"),
+            (SCENE_BRITAIN, "Britain"),
+            (SCENE_JHELOM, "Jhelom"),
+            (SCENE_YEW, "Yew"),
+            (SCENE_MINOC, "Minoc"),
+            (SCENE_TRINSIC, "Trinsic"),
+            (SCENE_SKARA_BRAE, "Skara Brae"),
+            (SCENE_NEW_MAGINCIA, "New Magincia"),
+            (SCENE_FOGSBANE, "Fogsbane"),
+            (SCENE_STORMCROW, "Stormcrow"),
+            (SCENE_GREYHAVEN, "Greyhaven"),
+            (SCENE_WAVEGUIDE, "Waveguide"),
+            (SCENE_IOLOS_HUT, "Iolo's Hut"),
+            (SCENE_LORD_BRITISHS_CASTLE, "Lord British's Castle"),
+            (SCENE_LORD_BLACKTHORNS_CASTLE, "Lord Blackthorn's Castle"),
+            (SCENE_WEST_BRITANNY, "West Britanny"),
+            (SCENE_NORTH_BRITANNY, "North Britanny"),
+            (SCENE_EAST_BRITANNY, "East Britanny"),
+            (SCENE_PAWS, "Paws"),
+            (SCENE_COVE, "Cove"),
+            (SCENE_BUCCANEERS_DEN, "Buccaneer's Den"),
+            (SCENE_ARARAT, "Ararat"),
+            (SCENE_BORDERMARCH, "Bordermarch"),
+            (SCENE_FARTHING, "Farthing"),
+            (SCENE_WINDEMERE, "Windemere"),
+            (SCENE_STONEGATE, "Stonegate"),
+            (SCENE_THE_LYCAEUM, "The Lycaeum"),
+            (SCENE_EMPATH_ABBEY, "Empath Abbey"),
+            (SCENE_SERPENTS_HOLD, "Serpent's Hold"),
+        ];
+        for (byte, expected_name) in pairs {
+            assert_eq!(
+                town_resident_name(byte).map(str::to_owned),
+                Some(expected_name.to_string()),
+                "scene byte {byte}"
+            );
+        }
+        // Lord British's Castle scene is the spec's confirmed Sandalwood
+        // Box pickup scene.
+        assert_eq!(SCENE_LORD_BRITISHS_CASTLE, 17);
+    }
+
+    #[test]
     fn outdoor_movement_chance_gate_classifies_destination_per_spec() {
         // active-objects.md §8
         // OneInTwo: 0x04, 0x06..=0x08, 0x1E..=0x1F.

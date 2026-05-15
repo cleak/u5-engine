@@ -180,6 +180,43 @@ pub const NPC_EFFECTIVE_SLOTS_PER_SUB_MAP: usize = NPC_SLOTS_PER_SUB_MAP - 1;
 pub const TOWN_NPC_ROSTER_SLOTS: usize = 31;
 pub const TOWN_NPC_BLOCK_BYTES: usize = 576;
 
+/// `catalogs/npc-roster.md §1` named scene-byte constants for the
+/// stock locations the engine ships with. These match the scene-byte
+/// to-place-name table; runtime callers that need a specific scene
+/// can refer to these instead of magic numbers.
+pub const SCENE_MOONGLOW: u8 = 1;
+pub const SCENE_BRITAIN: u8 = 2;
+pub const SCENE_JHELOM: u8 = 3;
+pub const SCENE_YEW: u8 = 4;
+pub const SCENE_MINOC: u8 = 5;
+pub const SCENE_TRINSIC: u8 = 6;
+pub const SCENE_SKARA_BRAE: u8 = 7;
+pub const SCENE_NEW_MAGINCIA: u8 = 8;
+
+pub const SCENE_FOGSBANE: u8 = 9;
+pub const SCENE_STORMCROW: u8 = 10;
+pub const SCENE_GREYHAVEN: u8 = 11;
+pub const SCENE_WAVEGUIDE: u8 = 12;
+pub const SCENE_IOLOS_HUT: u8 = 13;
+
+pub const SCENE_LORD_BRITISHS_CASTLE: u8 = 17;
+pub const SCENE_LORD_BLACKTHORNS_CASTLE: u8 = 18;
+pub const SCENE_WEST_BRITANNY: u8 = 19;
+pub const SCENE_NORTH_BRITANNY: u8 = 20;
+pub const SCENE_EAST_BRITANNY: u8 = 21;
+pub const SCENE_PAWS: u8 = 22;
+pub const SCENE_COVE: u8 = 23;
+pub const SCENE_BUCCANEERS_DEN: u8 = 24;
+
+pub const SCENE_ARARAT: u8 = 25;
+pub const SCENE_BORDERMARCH: u8 = 26;
+pub const SCENE_FARTHING: u8 = 27;
+pub const SCENE_WINDEMERE: u8 = 28;
+pub const SCENE_STONEGATE: u8 = 29;
+pub const SCENE_THE_LYCAEUM: u8 = 30;
+pub const SCENE_EMPATH_ABBEY: u8 = 31;
+pub const SCENE_SERPENTS_HOLD: u8 = 32;
+
 /// `town-mode.md §3` per-cell tile-buffer markers the location-load
 /// pipeline harvests, rewrites, or consumes. These bytes appear in
 /// the on-disk `.DAT` floor and are interpreted at marker-harvest
