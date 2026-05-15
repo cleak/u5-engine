@@ -75,6 +75,50 @@ impl Command {
     }
 }
 
+/// `commands.md §8` P-Push pushable static-tile family. The
+/// non-dynamic-object branch of P-Push accepts only the static
+/// tile families documented here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PushableTileFamily {
+    /// `0x5B` — single non-rotating pushable class.
+    NonRotating5B,
+    /// `0x90..=0x93` — four-facing chair family; movement rewrites
+    /// the facing bits.
+    ChairFourFacing,
+    /// `0xA5`, `0xA6`, `0xA8`, `0xA9` — non-rotating pushable
+    /// classes.
+    NonRotatingA5A6A8A9,
+    /// `0xAD..=0xAF` — non-rotating pushable run.
+    NonRotatingAdAf,
+    /// `0xB4..=0xB7` — four-facing cannon family; movement rewrites
+    /// the facing bits.
+    CannonFourFacing,
+}
+
+impl PushableTileFamily {
+    /// `commands.md §8`: returns `true` for families whose facing
+    /// bits get rewritten by a successful push/pull.
+    pub const fn rewrites_facing(self) -> bool {
+        matches!(self, Self::ChairFourFacing | Self::CannonFourFacing)
+    }
+}
+
+/// `commands.md §8`: classify a static tile byte into its pushable
+/// family for the P-Push command. Returns `None` when the static
+/// tile is not in the pushable set; the caller still accepts a
+/// dynamic object at that coordinate as pushable through the other
+/// branch.
+pub const fn pushable_tile_family(tile: u8) -> Option<PushableTileFamily> {
+    Some(match tile {
+        0x5B => PushableTileFamily::NonRotating5B,
+        0x90..=0x93 => PushableTileFamily::ChairFourFacing,
+        0xA5 | 0xA6 | 0xA8 | 0xA9 => PushableTileFamily::NonRotatingA5A6A8A9,
+        0xAD..=0xAF => PushableTileFamily::NonRotatingAdAf,
+        0xB4..=0xB7 => PushableTileFamily::CannonFourFacing,
+        _ => return None,
+    })
+}
+
 /// `commands.md §6` New-Order swap-accept predicate. The handler
 /// refuses the swap if either selected slot is slot zero (the
 /// leader must remain first). Same-slot swaps are accepted; the

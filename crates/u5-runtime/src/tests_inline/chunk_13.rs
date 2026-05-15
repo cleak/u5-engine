@@ -1,4 +1,54 @@
     #[test]
+    fn pushable_tile_family_classifies_per_spec_table() {
+        // commands.md §8
+        assert_eq!(
+            pushable_tile_family(0x5B),
+            Some(PushableTileFamily::NonRotating5B)
+        );
+        for t in 0x90u8..=0x93 {
+            assert_eq!(
+                pushable_tile_family(t),
+                Some(PushableTileFamily::ChairFourFacing)
+            );
+        }
+        for t in [0xA5u8, 0xA6, 0xA8, 0xA9] {
+            assert_eq!(
+                pushable_tile_family(t),
+                Some(PushableTileFamily::NonRotatingA5A6A8A9)
+            );
+        }
+        for t in 0xADu8..=0xAF {
+            assert_eq!(
+                pushable_tile_family(t),
+                Some(PushableTileFamily::NonRotatingAdAf)
+            );
+        }
+        for t in 0xB4u8..=0xB7 {
+            assert_eq!(
+                pushable_tile_family(t),
+                Some(PushableTileFamily::CannonFourFacing)
+            );
+        }
+        // Adjacent non-pushable tiles return None.
+        assert_eq!(pushable_tile_family(0x5A), None);
+        assert_eq!(pushable_tile_family(0x5C), None);
+        assert_eq!(pushable_tile_family(0x8F), None);
+        assert_eq!(pushable_tile_family(0x94), None);
+        assert_eq!(pushable_tile_family(0xA7), None);
+        assert_eq!(pushable_tile_family(0xAA), None);
+        assert_eq!(pushable_tile_family(0xAC), None);
+        assert_eq!(pushable_tile_family(0xB0), None);
+        assert_eq!(pushable_tile_family(0xB8), None);
+
+        // Only the four-facing families rewrite facing bits on success.
+        assert!(PushableTileFamily::ChairFourFacing.rewrites_facing());
+        assert!(PushableTileFamily::CannonFourFacing.rewrites_facing());
+        assert!(!PushableTileFamily::NonRotating5B.rewrites_facing());
+        assert!(!PushableTileFamily::NonRotatingA5A6A8A9.rewrites_facing());
+        assert!(!PushableTileFamily::NonRotatingAdAf.rewrites_facing());
+    }
+
+    #[test]
     fn new_order_swap_accepted_refuses_leader_slot() {
         // commands.md §6
         // Leader slot 0 is refused on either side.
