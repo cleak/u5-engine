@@ -7,6 +7,26 @@ pub const HIDDEN_TREASURE_RECORD_KEY_NPC_GATED: usize = 13;
 pub const HIDDEN_TREASURE_RECORD_DAILY_CACHE: usize = 14;
 pub const HIDDEN_TREASURE_RECORD_SINGLE_USE_NPC_GATED: usize = 15;
 
+/// `hidden-treasures.md §3` distinct pickup classes that appear in
+/// the fixed 113-record table. The class drives Get's downstream
+/// inventory-add dispatch; the State column is per-record subtype.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HiddenTreasurePickupClass {
+    Armour,
+    Weapon,
+    Scroll,
+    RingOfKeys,
+    Gem,
+    Potion,
+    Food,
+    Torches,
+    Ring,
+    MoldyCorpse,
+    RottingBody,
+    SackOfGold,
+    Amulet,
+}
+
 /// `hidden-treasures.md §2` per-record special-rule classification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HiddenTreasureRule {

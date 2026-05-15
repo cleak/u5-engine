@@ -1,4 +1,36 @@
     #[test]
+    fn hidden_treasure_pickup_class_variants_are_distinct() {
+        // hidden-treasures.md §3 — exhaustively cover the spec's
+        // distinct pickup-class column values.
+        let all = [
+            HiddenTreasurePickupClass::Armour,
+            HiddenTreasurePickupClass::Weapon,
+            HiddenTreasurePickupClass::Scroll,
+            HiddenTreasurePickupClass::RingOfKeys,
+            HiddenTreasurePickupClass::Gem,
+            HiddenTreasurePickupClass::Potion,
+            HiddenTreasurePickupClass::Food,
+            HiddenTreasurePickupClass::Torches,
+            HiddenTreasurePickupClass::Ring,
+            HiddenTreasurePickupClass::MoldyCorpse,
+            HiddenTreasurePickupClass::RottingBody,
+            HiddenTreasurePickupClass::SackOfGold,
+            HiddenTreasurePickupClass::Amulet,
+        ];
+        assert_eq!(all.len(), 13);
+        // Distinctness via pairwise comparison.
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                if i == j {
+                    assert_eq!(a, b);
+                } else {
+                    assert_ne!(a, b);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn inventory_add_class_cap_matches_spec_families() {
         // containers.md §8
         assert_eq!(inventory_add_class_cap(InventoryAddClass::Gold), Some(9999));

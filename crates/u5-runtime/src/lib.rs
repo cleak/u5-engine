@@ -135,8 +135,8 @@ pub use intro::{
 };
 pub use hidden_treasures::{
     HIDDEN_TREASURE_RECORD_DAILY_CACHE, HIDDEN_TREASURE_RECORD_KEY_NPC_GATED,
-    HIDDEN_TREASURE_RECORD_SINGLE_USE_NPC_GATED, HiddenTreasureRule,
-    hidden_treasure_can_stage, hidden_treasure_rule,
+    HIDDEN_TREASURE_RECORD_SINGLE_USE_NPC_GATED, HiddenTreasurePickupClass,
+    HiddenTreasureRule, hidden_treasure_can_stage, hidden_treasure_rule,
 };
 pub use input_codes::{
     INPUT_CODE_EAST, INPUT_CODE_NORTH, INPUT_CODE_NORTHEAST, INPUT_CODE_NORTHWEST,
