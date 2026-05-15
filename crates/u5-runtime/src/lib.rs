@@ -125,7 +125,7 @@ pub use boot::{
     TANDY_LOW_MEMORY_THRESHOLD_KB, parse_explicit_driver_selector, resolve_driver_family,
     tandy_low_memory_downgrades,
 };
-pub use commands::{Command, command_for_letter};
+pub use commands::{Command, command_for_letter, new_order_swap_accepted};
 pub use containers::{
     DUNGEON_CHEST_ROWS, DungeonChestReward, DungeonChestRow, DungeonChestTrapTier,
     InventoryAddClass, SearchLocationPrefix, SearchTrapVisibility, TABLE_FOOD_TILE_A,

@@ -75,6 +75,15 @@ impl Command {
     }
 }
 
+/// `commands.md §6` New-Order swap-accept predicate. The handler
+/// refuses the swap if either selected slot is slot zero (the
+/// leader must remain first). Same-slot swaps are accepted; the
+/// resulting whole-record exchange is a behavioural no-op but the
+/// turn is still consumed.
+pub const fn new_order_swap_accepted(slot_a: usize, slot_b: usize) -> bool {
+    slot_a != 0 && slot_b != 0
+}
+
 /// `commands.md §4`: classify a raw key byte into a [`Command`]. Keys
 /// are case-folded before dispatch (see `input.md §6`). Returns `None`
 /// for any byte outside the `A..=Z` range and the literal `Space` pass

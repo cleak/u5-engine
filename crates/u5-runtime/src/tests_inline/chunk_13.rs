@@ -1,4 +1,19 @@
     #[test]
+    fn new_order_swap_accepted_refuses_leader_slot() {
+        // commands.md §6
+        // Leader slot 0 is refused on either side.
+        assert!(!new_order_swap_accepted(0, 1));
+        assert!(!new_order_swap_accepted(1, 0));
+        assert!(!new_order_swap_accepted(0, 0));
+        // Non-leader pairs are accepted.
+        for a in 1usize..6 {
+            for b in 1usize..6 {
+                assert!(new_order_swap_accepted(a, b));
+            }
+        }
+    }
+
+    #[test]
     fn named_scene_byte_constants_match_npc_roster_table() {
         // catalogs/npc-roster.md §1
         // Cross-check against the existing town_resident_name table.
