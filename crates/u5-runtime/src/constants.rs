@@ -64,6 +64,15 @@ pub const CH_FONT_LEN: usize = 1024;
 pub const CH_GLYPH_COUNT: usize = 128;
 pub const CH_GLYPH_BYTES: usize = 8;
 pub const CH_CELL_SIDE: usize = 8;
+/// `formats/font-hcs.md §2,§3`: a shipped `.HCS` font is exactly
+/// 3072 bytes (128 glyphs × 24 bytes each), each glyph a 16x12 cell
+/// with two bytes per row.
+pub const HCS_FONT_LEN: usize = 3072;
+pub const HCS_GLYPH_COUNT: usize = 128;
+pub const HCS_GLYPH_BYTES: usize = 24;
+pub const HCS_CELL_WIDTH: usize = 16;
+pub const HCS_CELL_HEIGHT: usize = 12;
+pub const HCS_BYTES_PER_ROW: usize = 2;
 #[cfg(test)]
 pub const TITLE_BIT_FILE: &str = "TITLE.BIT";
 #[cfg(test)]

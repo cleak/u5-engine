@@ -1,4 +1,18 @@
     #[test]
+    fn hcs_font_layout_constants_match_spec() {
+        // formats/font-hcs.md §2,§3
+        assert_eq!(HCS_FONT_LEN, 3072);
+        assert_eq!(HCS_GLYPH_COUNT, 128);
+        assert_eq!(HCS_GLYPH_BYTES, 24);
+        assert_eq!(HCS_CELL_WIDTH, 16);
+        assert_eq!(HCS_CELL_HEIGHT, 12);
+        assert_eq!(HCS_BYTES_PER_ROW, 2);
+        assert_eq!(HCS_GLYPH_COUNT * HCS_GLYPH_BYTES, HCS_FONT_LEN);
+        assert_eq!(HCS_CELL_HEIGHT * HCS_BYTES_PER_ROW, HCS_GLYPH_BYTES);
+        assert_eq!(HCS_CELL_WIDTH / 8, HCS_BYTES_PER_ROW);
+    }
+
+    #[test]
     fn ch_font_layout_constants_match_spec() {
         // formats/font-ch.md §2,§3
         assert_eq!(CH_FONT_LEN, 1024);
