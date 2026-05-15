@@ -1,5 +1,7 @@
 //! Town-family scene classification per `town-mode.md` §2.
 
+use crate::npc_runtime::{NPC_FLOOR_LINK_TILE_C8, NPC_FLOOR_LINK_TILE_C9};
+
 /// `town-mode.md §2` four classes the eight-per-class scene-byte band
 /// `1..=32` divides into.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -177,6 +179,54 @@ pub const NPC_EFFECTIVE_SLOTS_PER_SUB_MAP: usize = NPC_SLOTS_PER_SUB_MAP - 1;
 /// per slot for a total of 576 bytes per location.
 pub const TOWN_NPC_ROSTER_SLOTS: usize = 31;
 pub const TOWN_NPC_BLOCK_BYTES: usize = 576;
+
+/// `town-mode.md §3` per-cell tile-buffer markers the location-load
+/// pipeline harvests, rewrites, or consumes. These bytes appear in
+/// the on-disk `.DAT` floor and are interpreted at marker-harvest
+/// time before normal play begins.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TownTileMarker {
+    /// `0x48` — NPC start marker (variant A).
+    NpcStartA,
+    /// `0x49` — NPC start marker (variant B).
+    NpcStartB,
+    /// `0x2A` (`*`) — spawn marker. The first asterisk is the primary
+    /// spawn (overworld entrance); the second is the secondary spawn
+    /// (alternate exit or stairway-up landing).
+    SpawnAsterisk,
+    /// `0x2D` (`-`) — dash marker, processed by the cosmetic variation
+    /// pass after the player has been placed.
+    DashCosmetic,
+    /// `0x2E` (`.`) — period marker, same processing as the dash.
+    PeriodCosmetic,
+    /// `0xC8` — NPC floor-link marker (variant A) consumed by the
+    /// schedule processor's tile-id pathfinder.
+    FloorLinkC8,
+    /// `0xC9` — NPC floor-link marker (variant B).
+    FloorLinkC9,
+}
+
+pub const TOWN_TILE_NPC_START_A: u8 = 0x48;
+pub const TOWN_TILE_NPC_START_B: u8 = 0x49;
+pub const TOWN_TILE_SPAWN_ASTERISK: u8 = b'*';
+pub const TOWN_TILE_DASH_MARKER: u8 = b'-';
+pub const TOWN_TILE_PERIOD_MARKER: u8 = b'.';
+
+/// `town-mode.md §3`: classify a tile byte as one of the harvest
+/// markers, or `None` for ordinary terrain bytes the renderer paints
+/// directly.
+pub const fn town_tile_marker(byte: u8) -> Option<TownTileMarker> {
+    Some(match byte {
+        TOWN_TILE_NPC_START_A => TownTileMarker::NpcStartA,
+        TOWN_TILE_NPC_START_B => TownTileMarker::NpcStartB,
+        TOWN_TILE_SPAWN_ASTERISK => TownTileMarker::SpawnAsterisk,
+        TOWN_TILE_DASH_MARKER => TownTileMarker::DashCosmetic,
+        TOWN_TILE_PERIOD_MARKER => TownTileMarker::PeriodCosmetic,
+        NPC_FLOOR_LINK_TILE_C8 => TownTileMarker::FloorLinkC8,
+        NPC_FLOOR_LINK_TILE_C9 => TownTileMarker::FloorLinkC9,
+        _ => return None,
+    })
+}
 
 /// `npc-schedules.md §3` schedule waypoint selection for the current
 /// hour. Each NPC's 16-byte schedule record carries four hour

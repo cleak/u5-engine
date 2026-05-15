@@ -344,8 +344,10 @@ pub use town_mode::{
     LOCATION_DAT_FLOOR_PAGE_LEN, LOCATION_DAT_FLOOR_PAGES_PER_BLOCK,
     NPC_TYPE_ARRAY_OFFSET, TOWN_GRID_BYTES, TOWN_GRID_SIDE, TOWN_NPC_BLOCK_BYTES,
     TOWN_NPC_ROSTER_SLOTS, TownLocationClass, location_dat_filename, npc_roster_filename,
+    TOWN_TILE_DASH_MARKER, TOWN_TILE_NPC_START_A, TOWN_TILE_NPC_START_B,
+    TOWN_TILE_PERIOD_MARKER, TOWN_TILE_SPAWN_ASTERISK, TownTileMarker,
     npc_schedule_waypoint_for_hour, npc_tlk_filename, town_floor_offset,
-    town_location_class, town_per_class_index, town_resident_name,
+    town_location_class, town_per_class_index, town_resident_name, town_tile_marker,
 };
 pub use town_tables::*;
 pub use town_tables_io::*;

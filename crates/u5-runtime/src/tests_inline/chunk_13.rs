@@ -1,4 +1,31 @@
     #[test]
+    fn town_tile_marker_classifies_harvested_bytes() {
+        // town-mode.md §3
+        assert_eq!(TOWN_TILE_NPC_START_A, 0x48);
+        assert_eq!(TOWN_TILE_NPC_START_B, 0x49);
+        assert_eq!(TOWN_TILE_SPAWN_ASTERISK, b'*');
+        assert_eq!(TOWN_TILE_DASH_MARKER, b'-');
+        assert_eq!(TOWN_TILE_PERIOD_MARKER, b'.');
+
+        assert_eq!(town_tile_marker(0x48), Some(TownTileMarker::NpcStartA));
+        assert_eq!(town_tile_marker(0x49), Some(TownTileMarker::NpcStartB));
+        assert_eq!(town_tile_marker(b'*'), Some(TownTileMarker::SpawnAsterisk));
+        assert_eq!(town_tile_marker(b'-'), Some(TownTileMarker::DashCosmetic));
+        assert_eq!(town_tile_marker(b'.'), Some(TownTileMarker::PeriodCosmetic));
+        assert_eq!(town_tile_marker(0xC8), Some(TownTileMarker::FloorLinkC8));
+        assert_eq!(town_tile_marker(0xC9), Some(TownTileMarker::FloorLinkC9));
+        // Ordinary terrain bytes are not markers.
+        assert_eq!(town_tile_marker(0x00), None);
+        assert_eq!(town_tile_marker(0x01), None);
+        assert_eq!(town_tile_marker(0x47), None);
+        assert_eq!(town_tile_marker(0x4A), None);
+        assert_eq!(town_tile_marker(b' '), None);
+        assert_eq!(town_tile_marker(0xC7), None);
+        assert_eq!(town_tile_marker(0xCA), None);
+        assert_eq!(town_tile_marker(0xFF), None);
+    }
+
+    #[test]
     fn active_object_eviction_off_screen_matches_spec_radius() {
         // active-objects.md §4
         assert_eq!(ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS, 5);
