@@ -57,6 +57,23 @@ pub const EQUIPMENT_NAMES: [&str; EQUIPMENT_COUNT] = [
 /// equipment bytes inside a character record.
 pub const EQUIPMENT_EMPTY_SLOT_SENTINEL: u8 = 0xFF;
 
+/// `catalogs/item-list.md §5.4`: rings of Invisibility and Regeneration
+/// have a 1-in-16 immediate vanish check after a successful R-Ready
+/// and another 1-in-16 removal check during the combat round loop.
+/// Caller passes the raw `0..16` PRNG roll.
+pub const RING_VANISH_DENOMINATOR: u8 = 16;
+pub const fn ring_immediately_vanishes(roll: u8) -> bool {
+    roll % RING_VANISH_DENOMINATOR == 0
+}
+
+/// `catalogs/item-list.md §5.4`: a Ring of Regeneration wearer has a
+/// 1-in-8 chance per combat round to recover 1 HP, capped at the
+/// member's maximum HP. Caller passes the raw `0..8` PRNG roll.
+pub const RING_REGEN_DENOMINATOR: u8 = 8;
+pub const fn ring_regenerates(roll: u8) -> bool {
+    roll % RING_REGEN_DENOMINATOR == 0
+}
+
 /// `inventory.md §3` per-character readied-equipment slot block. The
 /// six bytes appear at offsets `+0x19..+0x1E` in the 32-byte
 /// character record.

@@ -1,4 +1,25 @@
     #[test]
+    fn ring_vanish_and_regen_predicates_match_spec() {
+        // catalogs/item-list.md §5.4
+        assert_eq!(RING_VANISH_DENOMINATOR, 16);
+        assert!(ring_immediately_vanishes(0));
+        assert!(ring_immediately_vanishes(16));
+        assert!(!ring_immediately_vanishes(1));
+        assert!(!ring_immediately_vanishes(15));
+        assert_eq!(RING_REGEN_DENOMINATOR, 8);
+        assert!(ring_regenerates(0));
+        assert!(ring_regenerates(8));
+        assert!(!ring_regenerates(1));
+        assert!(!ring_regenerates(7));
+        // 1-in-16 over uniform 0..16 = exactly one of every 16 rolls
+        let vanish_count = (0..16u8).filter(|&r| ring_immediately_vanishes(r)).count();
+        assert_eq!(vanish_count, 1);
+        // 1-in-8 over uniform 0..8 = exactly one of every 8 rolls
+        let regen_count = (0..8u8).filter(|&r| ring_regenerates(r)).count();
+        assert_eq!(regen_count, 1);
+    }
+
+    #[test]
     fn hcs_font_layout_constants_match_spec() {
         // formats/font-hcs.md §2,§3
         assert_eq!(HCS_FONT_LEN, 3072);
