@@ -107,6 +107,47 @@ pub const fn search_trap_detection_threshold(
     }
 }
 
+/// `containers.md §5` Visible result of the trap-detection narrator
+/// for a per-map object slot. The classifier consumes the trappable
+/// flag, the slot's low difficulty value, and the detection bit
+/// (set when the `1..=30` roll is `>=` the threshold).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SearchTrapVisibility {
+    /// "No trap." — trappable + bit clear, or non-trappable + bit set.
+    NoTrap,
+    /// "Simple trap." — trappable + bit set + difficulty `< 10`.
+    SimpleTrap,
+    /// "Complex trap." — trappable + bit set + difficulty `> 20`.
+    ComplexTrap,
+    /// "Generic trap." — trappable + bit set + difficulty `10..=20`,
+    /// or non-trappable + bit clear (false positive).
+    GenericTrap,
+}
+
+/// `containers.md §5`: classify the visible trap narration result from
+/// the slot's trappable flag, low difficulty value, and detection bit.
+pub const fn search_trap_visibility(
+    trappable: bool,
+    difficulty: u8,
+    detection_bit: bool,
+) -> SearchTrapVisibility {
+    if trappable {
+        if !detection_bit {
+            SearchTrapVisibility::NoTrap
+        } else if difficulty < 10 {
+            SearchTrapVisibility::SimpleTrap
+        } else if difficulty > 20 {
+            SearchTrapVisibility::ComplexTrap
+        } else {
+            SearchTrapVisibility::GenericTrap
+        }
+    } else if detection_bit {
+        SearchTrapVisibility::NoTrap
+    } else {
+        SearchTrapVisibility::GenericTrap
+    }
+}
+
 /// `containers.md §5` Search location-prefix classification for the
 /// live tile under the searched coordinate. The prefix names the
 /// scenery the search narration mentions before any found-object

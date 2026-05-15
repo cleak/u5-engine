@@ -1,4 +1,45 @@
     #[test]
+    fn search_trap_visibility_classifies_per_spec_table() {
+        // containers.md §5
+        assert_eq!(
+            search_trap_visibility(true, 0, false),
+            SearchTrapVisibility::NoTrap
+        );
+        assert_eq!(
+            search_trap_visibility(true, 25, false),
+            SearchTrapVisibility::NoTrap
+        );
+        assert_eq!(
+            search_trap_visibility(true, 0, true),
+            SearchTrapVisibility::SimpleTrap
+        );
+        assert_eq!(
+            search_trap_visibility(true, 9, true),
+            SearchTrapVisibility::SimpleTrap
+        );
+        assert_eq!(
+            search_trap_visibility(true, 10, true),
+            SearchTrapVisibility::GenericTrap
+        );
+        assert_eq!(
+            search_trap_visibility(true, 20, true),
+            SearchTrapVisibility::GenericTrap
+        );
+        assert_eq!(
+            search_trap_visibility(true, 21, true),
+            SearchTrapVisibility::ComplexTrap
+        );
+        assert_eq!(
+            search_trap_visibility(false, 5, true),
+            SearchTrapVisibility::NoTrap
+        );
+        assert_eq!(
+            search_trap_visibility(false, 5, false),
+            SearchTrapVisibility::GenericTrap
+        );
+    }
+
+    #[test]
     fn search_trap_detection_threshold_matches_spec_formulas() {
         // containers.md §5
         // Not trappable: (30 - stat) / 2
