@@ -877,6 +877,60 @@
     }
 
     #[test]
+    fn dungeon_resident_name_and_entry_seed_match_gazetteer() {
+        // catalogs/gazetteer.md §6
+        assert_eq!(dungeon_resident_name(33), Some("Deceit"));
+        assert_eq!(dungeon_resident_name(34), Some("Despise"));
+        assert_eq!(dungeon_resident_name(35), Some("Destard"));
+        assert_eq!(dungeon_resident_name(36), Some("Wrong"));
+        assert_eq!(dungeon_resident_name(37), Some("Covetous"));
+        assert_eq!(dungeon_resident_name(38), Some("Shame"));
+        assert_eq!(dungeon_resident_name(39), Some("Hythloth"));
+        assert_eq!(dungeon_resident_name(40), Some("Doom"));
+        assert_eq!(dungeon_resident_name(32), None);
+        assert_eq!(dungeon_resident_name(41), None);
+        assert_eq!(dungeon_resident_name(0), None);
+
+        // Britannia surface entry: (Z=0, X=1, Y=1) facing east
+        for scene in 33..=40u8 {
+            assert_eq!(
+                dungeon_entry_seed(scene, false),
+                Some(DungeonEntrySeed {
+                    z: 0,
+                    x: 1,
+                    y: 1,
+                    facing: DUNGEON_FACING_EAST
+                })
+            );
+        }
+        // Underworld entry to non-Doom: (Z=7, X=7, Y=7) facing west
+        for scene in 33..=39u8 {
+            assert_eq!(
+                dungeon_entry_seed(scene, true),
+                Some(DungeonEntrySeed {
+                    z: 7,
+                    x: 7,
+                    y: 7,
+                    facing: DUNGEON_FACING_WEST
+                })
+            );
+        }
+        // Doom always uses surface seed
+        assert_eq!(
+            dungeon_entry_seed(40, true),
+            Some(DungeonEntrySeed {
+                z: 0,
+                x: 1,
+                y: 1,
+                facing: DUNGEON_FACING_EAST
+            })
+        );
+        // Non-dungeon scenes have no entry seed
+        assert_eq!(dungeon_entry_seed(0, false), None);
+        assert_eq!(dungeon_entry_seed(41, false), None);
+    }
+
+    #[test]
     fn scene_route_classifies_per_main_loop_table() {
         // main-loop.md §3,§4
         assert_eq!(scene_route(0), SceneRoute::Overworld);

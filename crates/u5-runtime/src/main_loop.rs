@@ -48,6 +48,73 @@ pub const fn scene_route(scene_byte: u8) -> SceneRoute {
     }
 }
 
+/// `catalogs/gazetteer.md §6` resident name for one of the eight
+/// stock dungeons indexed by scene byte `33..=40`.
+pub const fn dungeon_resident_name(scene_byte: u8) -> Option<&'static str> {
+    Some(match scene_byte {
+        33 => "Deceit",
+        34 => "Despise",
+        35 => "Destard",
+        36 => "Wrong",
+        37 => "Covetous",
+        38 => "Shame",
+        39 => "Hythloth",
+        40 => "Doom",
+        _ => return None,
+    })
+}
+
+/// `catalogs/gazetteer.md §6`: dungeon-mode entry seed coordinates.
+/// Britannia surface entry uses `(Z=0, X=1, Y=1)` facing east; the
+/// underworld entry into non-Doom dungeons uses `(Z=7, X=7, Y=7)`
+/// facing west; Doom always uses the surface seed even when reached
+/// from the underworld.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DungeonEntrySeed {
+    /// Z (level), 0..=7.
+    pub z: u8,
+    /// X coordinate, 0..=7.
+    pub x: u8,
+    /// Y coordinate, 0..=7.
+    pub y: u8,
+    /// Cardinal facing — 0 north, 1 east, 2 south, 3 west.
+    pub facing: u8,
+}
+
+pub const DUNGEON_FACING_NORTH: u8 = 0;
+pub const DUNGEON_FACING_EAST: u8 = 1;
+pub const DUNGEON_FACING_SOUTH: u8 = 2;
+pub const DUNGEON_FACING_WEST: u8 = 3;
+
+/// `catalogs/gazetteer.md §6`: pick the entry seed for the given
+/// dungeon scene byte and origin plane. Doom uses the surface seed
+/// even when reached from the underworld.
+pub const fn dungeon_entry_seed(scene_byte: u8, from_underworld: bool) -> Option<DungeonEntrySeed> {
+    if dungeon_resident_name(scene_byte).is_none() {
+        return None;
+    }
+    let surface_seed = DungeonEntrySeed {
+        z: 0,
+        x: 1,
+        y: 1,
+        facing: DUNGEON_FACING_EAST,
+    };
+    let underworld_seed = DungeonEntrySeed {
+        z: 7,
+        x: 7,
+        y: 7,
+        facing: DUNGEON_FACING_WEST,
+    };
+    if !from_underworld {
+        return Some(surface_seed);
+    }
+    // Doom (scene 40) uses the surface seed regardless of origin.
+    if scene_byte == 40 {
+        return Some(surface_seed);
+    }
+    Some(underworld_seed)
+}
+
 /// `main-loop.md §3`: zero-based `DUNGEON.DAT` record index for a
 /// stock-named dungeon scene (`33..=40`). Returns `None` for any value
 /// outside that named-dungeon range.
