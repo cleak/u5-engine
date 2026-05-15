@@ -636,6 +636,45 @@
     }
 
     #[test]
+    fn npc_path_direction_codes_match_spec_table() {
+        // npc-schedules.md §8.2
+        assert_eq!(NPC_PATH_DIR_WEST, 1);
+        assert_eq!(NPC_PATH_DIR_SOUTH, 2);
+        assert_eq!(NPC_PATH_DIR_EAST, 3);
+        assert_eq!(NPC_PATH_DIR_NORTH, 4);
+        // Coordinate effects
+        assert_eq!(npc_path_direction_offset(NPC_PATH_DIR_WEST), (-1, 0));
+        assert_eq!(npc_path_direction_offset(NPC_PATH_DIR_SOUTH), (0, 1));
+        assert_eq!(npc_path_direction_offset(NPC_PATH_DIR_EAST), (1, 0));
+        assert_eq!(npc_path_direction_offset(NPC_PATH_DIR_NORTH), (0, -1));
+        assert_eq!(npc_path_direction_offset(0), (0, 0));
+        assert_eq!(npc_path_direction_offset(5), (0, 0));
+        // Opposite-direction reversal
+        assert_eq!(
+            npc_path_direction_opposite(NPC_PATH_DIR_WEST),
+            Some(NPC_PATH_DIR_EAST)
+        );
+        assert_eq!(
+            npc_path_direction_opposite(NPC_PATH_DIR_EAST),
+            Some(NPC_PATH_DIR_WEST)
+        );
+        assert_eq!(
+            npc_path_direction_opposite(NPC_PATH_DIR_NORTH),
+            Some(NPC_PATH_DIR_SOUTH)
+        );
+        assert_eq!(
+            npc_path_direction_opposite(NPC_PATH_DIR_SOUTH),
+            Some(NPC_PATH_DIR_NORTH)
+        );
+        assert_eq!(npc_path_direction_opposite(0), None);
+        assert_eq!(npc_path_direction_opposite(5), None);
+        // Other §8 constants
+        assert_eq!(NPC_PATHFIND_QUEUE_CAPACITY, 32);
+        assert_eq!(NPC_FLOOR_LINK_TILE_C8, 0xC8);
+        assert_eq!(NPC_FLOOR_LINK_TILE_C9, 0xC9);
+    }
+
+    #[test]
     fn animation_phase_step_classifies_per_spec() {
         // active-objects.md §8
         assert_eq!(ANIMATION_PHASE_STEADY_NIBBLE, 0x0F);

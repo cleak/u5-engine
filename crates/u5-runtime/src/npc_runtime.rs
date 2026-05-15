@@ -20,6 +20,51 @@ pub const NPC_STATE_ASCEND_TOWARD_TARGET: u8 = 5;
 pub const NPC_STATE_CLIMB_UP_OFF_FLOOR: u8 = 6;
 pub const NPC_STATE_CLIMB_DOWN_OFF_FLOOR: u8 = 7;
 pub const NPC_STATE_PARKED_OFF_FLOOR: u8 = 8;
+/// `npc-schedules.md §8.2` BFS direction codes (1 = west, 2 = south,
+/// 3 = east, 4 = north). The seed direction stamped in the start cell's
+/// high nibble is `4` (north). The high nibble of any visited cell is
+/// the *inbound* direction; the route-reverse pass steps opposite each
+/// stored direction from the goal back to the start.
+pub const NPC_PATH_DIR_WEST: u8 = 1;
+pub const NPC_PATH_DIR_SOUTH: u8 = 2;
+pub const NPC_PATH_DIR_EAST: u8 = 3;
+pub const NPC_PATH_DIR_NORTH: u8 = 4;
+
+/// `npc-schedules.md §8.2`: coordinate effect of one BFS direction
+/// code (`(dx, dy)` to add to the current cell). Returns `(0, 0)` for
+/// any code outside `1..=4`.
+pub const fn npc_path_direction_offset(code: u8) -> (i8, i8) {
+    match code {
+        NPC_PATH_DIR_WEST => (-1, 0),
+        NPC_PATH_DIR_SOUTH => (0, 1),
+        NPC_PATH_DIR_EAST => (1, 0),
+        NPC_PATH_DIR_NORTH => (0, -1),
+        _ => (0, 0),
+    }
+}
+
+/// `npc-schedules.md §8.4`: the route-reverse step takes the *opposite*
+/// of each stored inbound-direction code. Returns the opposite-direction
+/// code, or `None` for any input outside `1..=4`.
+pub const fn npc_path_direction_opposite(code: u8) -> Option<u8> {
+    Some(match code {
+        NPC_PATH_DIR_WEST => NPC_PATH_DIR_EAST,
+        NPC_PATH_DIR_EAST => NPC_PATH_DIR_WEST,
+        NPC_PATH_DIR_NORTH => NPC_PATH_DIR_SOUTH,
+        NPC_PATH_DIR_SOUTH => NPC_PATH_DIR_NORTH,
+        _ => return None,
+    })
+}
+
+/// `npc-schedules.md §8.4` BFS queue capacity (small circular FIFO of
+/// `(x, y)` byte pairs).
+pub const NPC_PATHFIND_QUEUE_CAPACITY: usize = 32;
+
+/// `npc-schedules.md §8.5` paired floor-link marker tile bytes used by
+/// the tile-ID variant of the pathfinder.
+pub const NPC_FLOOR_LINK_TILE_C8: u8 = 0xC8;
+pub const NPC_FLOOR_LINK_TILE_C9: u8 = 0xC9;
+
 /// `npc-schedules.md §6`: classify a real boundary transition into the
 /// movement state byte the per-tick walker switches on, given the NPC's
 /// current floor, the new waypoint's floor, and the location's current
