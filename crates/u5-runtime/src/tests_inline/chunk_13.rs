@@ -1,4 +1,23 @@
     #[test]
+    fn equipment_slot_record_offsets_match_spec_table() {
+        // inventory.md §3
+        assert_eq!(EQUIPMENT_BLOCK_FIRST_OFFSET, 0x19);
+        assert_eq!(EQUIPMENT_BLOCK_LEN, 6);
+        assert_eq!(EquipmentSlot::Helm.record_offset(), 0x19);
+        assert_eq!(EquipmentSlot::BodyArmour.record_offset(), 0x1A);
+        assert_eq!(EquipmentSlot::WeaponHand.record_offset(), 0x1B);
+        assert_eq!(EquipmentSlot::OffHand.record_offset(), 0x1C);
+        assert_eq!(EquipmentSlot::Ring.record_offset(), 0x1D);
+        assert_eq!(EquipmentSlot::AmuletOrNeck.record_offset(), 0x1E);
+        // ordered() yields slots in record order; offsets contiguous.
+        let ordered = EquipmentSlot::ordered();
+        for (i, slot) in ordered.iter().enumerate() {
+            assert_eq!(slot.block_index(), i);
+            assert_eq!(slot.record_offset(), EQUIPMENT_BLOCK_FIRST_OFFSET + i);
+        }
+    }
+
+    #[test]
     fn chargen_name_field_constants_match_spec() {
         // chargen.md §4
         assert_eq!(CHARGEN_NAME_INPUT_MAX_LEN, 8);

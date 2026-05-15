@@ -100,7 +100,32 @@ impl EquipmentSlot {
             EquipmentSlot::AmuletOrNeck => 5,
         }
     }
+
+    /// `inventory.md §3` absolute byte offset inside the 32-byte
+    /// character record. `+0x19` Helm through `+0x1E` Amulet.
+    pub const fn record_offset(self) -> usize {
+        EQUIPMENT_BLOCK_FIRST_OFFSET + self.block_index()
+    }
+
+    /// All six slot variants in record order. Useful for iterators
+    /// that need to walk the readied equipment block deterministically.
+    pub const fn ordered() -> [Self; EQUIPMENT_BLOCK_LEN] {
+        [
+            Self::Helm,
+            Self::BodyArmour,
+            Self::WeaponHand,
+            Self::OffHand,
+            Self::Ring,
+            Self::AmuletOrNeck,
+        ]
+    }
 }
+
+/// `inventory.md §3` first byte of the readied-equipment block in the
+/// 32-byte character record (`+0x19`).
+pub const EQUIPMENT_BLOCK_FIRST_OFFSET: usize = 0x19;
+/// `inventory.md §3` length of the readied-equipment block.
+pub const EQUIPMENT_BLOCK_LEN: usize = 6;
 
 /// `inventory.md §3`: ownership predicate used by inventory browsing.
 /// Returns `true` when any of the six readied-equipment bytes equals
