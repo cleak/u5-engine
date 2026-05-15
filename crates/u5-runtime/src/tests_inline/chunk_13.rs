@@ -1,4 +1,22 @@
     #[test]
+    fn ship_broadside_constants_and_apply_damage_match_spec() {
+        // vehicles.md §7
+        assert_eq!(SHIP_BROADSIDE_RANGE_CELLS, 3);
+        assert_eq!(SHIP_BROADSIDE_DAMAGE_MIN, 1);
+        assert_eq!(SHIP_BROADSIDE_DAMAGE_MAX, 20);
+        assert_eq!(SHIP_BROADSIDE_DEPLETION_BYTE_OFFSET, 5);
+
+        // Stays in place when subtraction does not underflow.
+        assert_eq!(ship_broadside_apply_damage(100, 20), Some(80));
+        assert_eq!(ship_broadside_apply_damage(20, 20), Some(0));
+        // Underflow into the high bit clears the slot (None).
+        assert_eq!(ship_broadside_apply_damage(0, 1), None);
+        assert_eq!(ship_broadside_apply_damage(10, 11), None);
+        // Result with high bit set (would imply underflow).
+        assert_eq!(ship_broadside_apply_damage(100, 200), None);
+    }
+
+    #[test]
     fn ship_boarding_precondition_accepts_documented_starting_states() {
         // vehicles.md §4
         // Foot family fully accepted.

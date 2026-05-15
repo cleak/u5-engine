@@ -56,6 +56,7 @@ pub mod pth;
 pub mod report;
 pub mod save_load;
 pub mod scene;
+pub mod ship_broadside;
 pub mod end_io;
 pub mod endmsg_io;
 pub mod miscmsg_io;
@@ -308,6 +309,11 @@ pub use pth::{
 pub use report::run_report;
 pub use save_load::*;
 pub use scene::{DungeonScene, Family, PlayTarget, Scene, WorldPlane};
+pub use ship_broadside::{
+    SHIP_BROADSIDE_DAMAGE_MAX, SHIP_BROADSIDE_DAMAGE_MIN,
+    SHIP_BROADSIDE_DEPLETION_BYTE_OFFSET, SHIP_BROADSIDE_RANGE_CELLS,
+    ship_broadside_apply_damage,
+};
 pub use shops::*;
 pub use shrine_virtue::{
     CodexUrnReadOutcome, ShrineQuestState, ShrineVirtue, all_virtues_complete, read_codex_urn,
