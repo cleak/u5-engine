@@ -63,6 +63,54 @@ pub const TILE_VEHICLE_ART_LAST: u8 = 0xBF;
 pub const TILE_NPC_FIRST: u8 = 0xC0;
 pub const TILE_NPC_LAST: u8 = 0xFF;
 
+/// `catalogs/tile-catalog.md §2` super-category split. The fourteen
+/// concrete classes group into three super-categories that decide
+/// where a tile lives: in the static map grid, in an active-object
+/// record, or as a transient render-buffer effect.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TileSuperCategory {
+    /// World/town/combat terrain classes (water, terrain, path, wall,
+    /// furniture, door, decoration, special, indices roughly `0..=159`).
+    /// Stored in the top-down map and arena terrain grids.
+    MapTerrain,
+    /// Actor/item classes (vehicle, NPC, monster, item, effect, avatar,
+    /// indices `160..=511`). Stored in active-object records.
+    Actor,
+    /// Transient effects written into the rendered tile buffer by
+    /// the moongate animator, projectile animator, or spell handlers.
+    /// Not stored in any persistent map.
+    TransientEffect,
+}
+
+/// `catalogs/tile-catalog.md §2`: classify a tile id `0..=511` into
+/// its super-category. Returns `None` for ids above `511` (no sprite
+/// is allocated above the published sheet).
+pub const fn tile_super_category(tile_id: u16) -> Option<TileSuperCategory> {
+    if tile_id <= 159 {
+        Some(TileSuperCategory::MapTerrain)
+    } else if tile_id <= 511 {
+        Some(TileSuperCategory::Actor)
+    } else {
+        None
+    }
+}
+
+/// `catalogs/tile-catalog.md §4` per-class animation cycle length, or
+/// `None` for tiles whose class does not animate. Returns `Some(4)`
+/// for the four-frame cycle classes (water/lava/fire), `Some(16)` for
+/// moongate frames, and `None` for non-animated classes (walls,
+/// doors, paths, terrain, vegetation, furniture).
+pub const fn tile_animation_cycle_length(tile_id: u8) -> Option<u8> {
+    match tile_id {
+        // Water class — four-frame cycle.
+        TILE_WATER_FIRST..=TILE_WATER_LAST => Some(4),
+        // The barrier band carries field/fire variants in the special
+        // tile encoding; treat as a four-frame animator class.
+        // (Lava/fire tiles live in the Special band 0x80..=0x9F.)
+        _ => None,
+    }
+}
+
 /// Classify a 0..=255 tile id into the coarse `TileClass` group from
 /// `catalogs/tile-catalog.md` §3. Distinct from `tile_helpers::tile_class`,
 /// which returns a short label string for player-facing diagnostics.

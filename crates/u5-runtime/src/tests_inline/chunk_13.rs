@@ -1433,6 +1433,31 @@
     }
 
     #[test]
+    fn tile_super_category_splits_per_spec() {
+        // catalogs/tile-catalog.md §2
+        // Map terrain band 0..=159
+        assert_eq!(tile_super_category(0), Some(TileSuperCategory::MapTerrain));
+        assert_eq!(tile_super_category(50), Some(TileSuperCategory::MapTerrain));
+        assert_eq!(
+            tile_super_category(159),
+            Some(TileSuperCategory::MapTerrain)
+        );
+        // Actor band 160..=511
+        assert_eq!(tile_super_category(160), Some(TileSuperCategory::Actor));
+        assert_eq!(tile_super_category(256), Some(TileSuperCategory::Actor));
+        assert_eq!(tile_super_category(511), Some(TileSuperCategory::Actor));
+        // Above the published sheet
+        assert_eq!(tile_super_category(512), None);
+        assert_eq!(tile_super_category(65535), None);
+        // Water animates with a four-frame cycle
+        assert_eq!(tile_animation_cycle_length(0x01), Some(4));
+        assert_eq!(tile_animation_cycle_length(0x04), Some(4));
+        // Walls and most other classes do not animate
+        assert_eq!(tile_animation_cycle_length(0x18), None);
+        assert_eq!(tile_animation_cycle_length(0x60), None);
+    }
+
+    #[test]
     fn dungeon_pit_trap_kind_classifies_per_spec_table() {
         // dungeon-mode.md §8
         assert_eq!(dungeon_pit_trap_kind(0x60), Some(DungeonPitTrap::PlainPit));
