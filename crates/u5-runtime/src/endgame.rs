@@ -2,6 +2,17 @@
 
 use crate::*;
 
+/// `catalogs/quest-graph.md §7`: shipped Sandalwood Box pickup —
+/// non-speaking object slot 31 in `CASTLE:0` at local (X=18, Y=12, Z=2)
+/// with object tag `0x0E` (the pickup runs through the shared
+/// item-add path, sets the save-backed box flag).
+pub const SANDALWOOD_BOX_PICKUP_SCENE: u8 = 17;
+pub const SANDALWOOD_BOX_PICKUP_X: u8 = 18;
+pub const SANDALWOOD_BOX_PICKUP_Y: u8 = 12;
+pub const SANDALWOOD_BOX_PICKUP_Z: u8 = 2;
+pub const SANDALWOOD_BOX_PICKUP_OBJECT_SLOT: usize = 31;
+pub const SANDALWOOD_BOX_PICKUP_TAG: u8 = 0x0E;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EndgameState {
     pub first_confirmation: Option<bool>,

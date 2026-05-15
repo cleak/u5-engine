@@ -1,4 +1,26 @@
     #[test]
+    fn sandalwood_box_pickup_constants_match_spec() {
+        // catalogs/quest-graph.md §7
+        assert_eq!(SANDALWOOD_BOX_PICKUP_SCENE, 17); // CASTLE:0 = Lord British's Castle
+        assert_eq!(SANDALWOOD_BOX_PICKUP_X, 18);
+        assert_eq!(SANDALWOOD_BOX_PICKUP_Y, 12);
+        assert_eq!(SANDALWOOD_BOX_PICKUP_Z, 2);
+        assert_eq!(SANDALWOOD_BOX_PICKUP_OBJECT_SLOT, 31);
+        assert_eq!(SANDALWOOD_BOX_PICKUP_TAG, 0x0E);
+        // Cross-check: the pickup tag matches the InventoryAddClass
+        // SandalwoodBox dispatcher entry (containers.md §8).
+        assert_eq!(
+            inventory_add_class(SANDALWOOD_BOX_PICKUP_TAG),
+            InventoryAddClass::SandalwoodBox
+        );
+        // Scene is the published Lord British's Castle slot.
+        assert_eq!(
+            town_resident_name(SANDALWOOD_BOX_PICKUP_SCENE),
+            Some("Lord British's Castle")
+        );
+    }
+
+    #[test]
     fn conversation_password_classifies_dawn_and_impera() {
         // catalogs/quest-graph.md §3
         assert_eq!(conversation_password("DAWN"), Some(ConversationPassword::Dawn));
