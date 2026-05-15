@@ -1983,6 +1983,19 @@
     }
 
     #[test]
+    fn save_per_turn_flags_offsets_match_spec() {
+        // formats/saved-gam.md §10
+        assert_eq!(SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET, 0x033A);
+        assert_eq!(SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN, 16);
+        // The bitmap occupies 0x033A..=0x0349
+        assert_eq!(
+            SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET + SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN - 1,
+            0x0349
+        );
+        assert_eq!(SAVE_ACTIVE_PLAYER_NONE, 0xFF);
+    }
+
+    #[test]
     fn save_calendar_offsets_and_bounds_match_spec() {
         // formats/saved-gam.md §5
         assert_eq!(SAVE_YEAR_OFFSET, 0x02CE);

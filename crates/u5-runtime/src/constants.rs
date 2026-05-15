@@ -189,6 +189,17 @@ pub const SAVE_TORCH_COUNTER_OFFSET: usize = 0x0301;
 pub const SAVE_SHRINE_ORDAINED_MASK_OFFSET: usize = 0x0326;
 pub const SAVE_SHRINE_CODEX_MASK_OFFSET: usize = 0x0328;
 pub const SAVE_FORTUNES_OF_WAR_OFFSET: usize = 0x03b3;
+/// `formats/saved-gam.md §10`: durable dungeon room-clear bitmap. The
+/// 16-byte block at `0x033A..0x0349` records which dungeon room
+/// encounters have already been cleared; dungeon mode uses it to
+/// demote matching `0xF?` room-trigger cells to `0xA?` room-helper
+/// cells when rebuilding the loaded dungeon image from `DUNGEON.DAT`.
+pub const SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET: usize = 0x033A;
+pub const SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN: usize = 16;
+/// `formats/saved-gam.md §10`: active-player sentinel value when no
+/// party member is currently selected to move. The byte holds an
+/// integer slot index when one is selected.
+pub const SAVE_ACTIVE_PLAYER_NONE: u8 = 0xFF;
 pub const SAVE_AVATAR_NAME_OFFSET: usize = 0x0002;
 /// `formats/saved-gam.md §7` shared inventory block offsets.
 pub const SAVE_FOOD_OFFSET: usize = 0x0202;
