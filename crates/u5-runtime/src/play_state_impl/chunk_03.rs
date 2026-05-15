@@ -705,6 +705,13 @@ impl PlayState {
             self.message = "Failed!".to_string();
             return MoveOutcome::Blocked;
         }
+        // magic.md §8: Great Heal also fails during the dungeon combat-active
+        // substate.
+        if matches!(self.area, Area::Dungeon { .. }) && self.combat_active {
+            self.advance_turn();
+            self.message = "Failed!".to_string();
+            return MoveOutcome::Blocked;
+        }
 
         let before = self.party[target_index].hp;
         let (_, hp) = self.party[target_index].heal_to_max();

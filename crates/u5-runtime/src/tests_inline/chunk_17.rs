@@ -1038,6 +1038,47 @@
     }
 
     #[test]
+    fn cast_great_heal_refuses_during_dungeon_combat_active_substate() {
+        // magic.md §8: Great Heal fails during the dungeon combat-active
+        // substate, even on living non-Dead targets. The cast still spends
+        // resources because the gate runs after charge/MP/level.
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: GREAT_HEAL_COST,
+                hp: 10,
+                max_hp: 20,
+                level: GREAT_HEAL_COST,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 4,
+                max_hp: 22,
+                level: 1,
+            },
+        ];
+        state.spell_charges[GREAT_HEAL_SPELL_INDEX] = 1;
+        state.combat_active = true;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1MV2", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.party[1].hp, 4);
+        assert_eq!(state.spell_charges[GREAT_HEAL_SPELL_INDEX], 0);
+        assert_eq!(state.message, "Failed!");
+    }
+
+    #[test]
     fn heal_amount_helper_matches_public_roll_range() {
         assert_eq!(heal_spell_amount_from_raw_roll(0), 1);
         assert_eq!(heal_spell_amount_from_raw_roll(1), 1);
