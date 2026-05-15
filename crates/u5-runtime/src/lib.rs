@@ -166,7 +166,10 @@ pub use story_io::{
     IntroStoryArtPlacement, StoryRecords, intro_story_art_file_for_step,
     intro_story_art_placement_for_step, load_story_records, parse_story_records,
 };
-pub use text_wrap::{WRAP_MIN_LINE_BUFFER, WrapByteKind, WrappedLine, wrap_byte_kind, wrap_text};
+pub use text_wrap::{
+    ParagraphByteKind, WRAP_MIN_LINE_BUFFER, WrapByteKind, WrappedLine, paragraph_byte_kind,
+    wrap_byte_kind, wrap_text,
+};
 pub use tlk_control_codes::{
     TLK_CODE_ACTION_DISPATCH, TLK_CODE_ASK_PARTY_NAME, TLK_CODE_ASK_WHO,
     TLK_CODE_CURSE_CHECK, TLK_CODE_END_OF_RESPONSE, TLK_CODE_END_STREAM,

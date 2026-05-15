@@ -1019,6 +1019,25 @@
     }
 
     #[test]
+    fn paragraph_byte_kind_classifies_per_spec() {
+        // formats/font-pcs.md §4
+        assert_eq!(paragraph_byte_kind(0x00), ParagraphByteKind::EndOfStream);
+        assert_eq!(paragraph_byte_kind(b' '), ParagraphByteKind::SpaceBreak);
+        assert_eq!(paragraph_byte_kind(b'\n'), ParagraphByteKind::HardBreak);
+        assert_eq!(paragraph_byte_kind(b'\r'), ParagraphByteKind::HardBreak);
+        assert_eq!(paragraph_byte_kind(b'_'), ParagraphByteKind::SoftHyphen);
+        assert_eq!(paragraph_byte_kind(b'{'), ParagraphByteKind::PageMarker);
+        // Glyph cases
+        assert_eq!(paragraph_byte_kind(b'A'), ParagraphByteKind::Glyph);
+        assert_eq!(paragraph_byte_kind(b'1'), ParagraphByteKind::Glyph);
+        assert_eq!(paragraph_byte_kind(b'!'), ParagraphByteKind::Glyph);
+        assert_eq!(paragraph_byte_kind(b'}'), ParagraphByteKind::Glyph);
+        // Tab is not a special paragraph byte; renderer treats it as a
+        // glyph and reads the width table.
+        assert_eq!(paragraph_byte_kind(0x09), ParagraphByteKind::Glyph);
+    }
+
+    #[test]
     fn wrap_byte_kind_classifies_break_visible_and_control() {
         // text-output.md §6
         assert_eq!(wrap_byte_kind(0x00), WrapByteKind::Break);

@@ -39,6 +39,43 @@ pub const fn wrap_byte_kind(byte: u8) -> WrapByteKind {
 /// characters.
 pub const WRAP_MIN_LINE_BUFFER: usize = 64;
 
+/// `formats/font-pcs.md §4` paragraph-renderer byte classification for
+/// the proportional-font intro/chargen layout. The renderer's special
+/// bytes are space (word-wrap opportunity), newline (forced break),
+/// underscore (soft hyphen marker), and `{` (paragraph/page marker
+/// owned by the surrounding caller flow). NUL terminates the buffer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParagraphByteKind {
+    /// `0x00` — NUL terminator stops paragraph reading.
+    EndOfStream,
+    /// Space — word-wrap opportunity; the renderer can break here.
+    SpaceBreak,
+    /// LF or CR — forced line break.
+    HardBreak,
+    /// `_` — soft-hyphen marker; the renderer wraps at it but does not
+    /// emit a glyph unless the line wraps here.
+    SoftHyphen,
+    /// `{` — paragraph/page marker handled by the caller flow rather
+    /// than by the renderer itself.
+    PageMarker,
+    /// Any other printable byte — measured against the width table and
+    /// rendered through the font segment.
+    Glyph,
+}
+
+/// `formats/font-pcs.md §4`: classify one source byte for the
+/// proportional paragraph renderer.
+pub const fn paragraph_byte_kind(byte: u8) -> ParagraphByteKind {
+    match byte {
+        0x00 => ParagraphByteKind::EndOfStream,
+        b' ' => ParagraphByteKind::SpaceBreak,
+        b'\n' | b'\r' => ParagraphByteKind::HardBreak,
+        b'_' => ParagraphByteKind::SoftHyphen,
+        b'{' => ParagraphByteKind::PageMarker,
+        _ => ParagraphByteKind::Glyph,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WrappedLine<'a> {
     pub text: &'a str,
