@@ -1,4 +1,26 @@
     #[test]
+    fn ship_terrain_predicate_matches_spec_water_band() {
+        // movement.md §4
+        assert_eq!(SHIP_TERRAIN_ACCEPTED_TILES, [0x00, 0x01, 0x02]);
+        assert!(ship_terrain_accepts(0x00));
+        assert!(ship_terrain_accepts(0x01));
+        assert!(ship_terrain_accepts(0x02));
+        // 0x03 (shoals) is not a ship-passable tile; only 0..=2 are.
+        assert!(!ship_terrain_accepts(0x03));
+        // Land bands rejected.
+        for t in [0x04u8, 0x05, 0x09, 0x0F, 0x10, 0x60, 0x80, 0xFF] {
+            assert!(!ship_terrain_accepts(t), "tile {t:#x}");
+        }
+        // Water-creature predicate mirrors the ship predicate.
+        for t in 0u8..=255 {
+            assert_eq!(
+                water_creature_terrain_accepts(t),
+                ship_terrain_accepts(t)
+            );
+        }
+    }
+
+    #[test]
     fn potion_use_effects_match_spec_display_order() {
         // inventory.md §7
         assert_eq!(POTION_USE_EFFECT_COUNT, 8);

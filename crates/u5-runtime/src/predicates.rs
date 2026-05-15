@@ -71,6 +71,27 @@ pub const fn live_chunk_substituted_tile(
     }
 }
 
+/// `movement.md §4` ship terrain predicate (under sail or furled).
+/// Ships accept only the sentinel and the deep-water / water tile
+/// ids `0x00..=0x02`; sail state changes cadence and X-Xit rules,
+/// not the static terrain query.
+pub const SHIP_TERRAIN_ACCEPTED_TILES: [u8; 3] = [0x00, 0x01, 0x02];
+
+/// `movement.md §4`: returns `true` when a ship-class actor can
+/// stand on the supplied static map tile. Used by the shared
+/// tile-class dispatcher for both the under-sail (`0x20..=0x23`)
+/// and furled (`0x24..=0x27`) ship query families.
+pub const fn ship_terrain_accepts(tile: u8) -> bool {
+    matches!(tile, 0x00..=0x02)
+}
+
+/// `movement.md §4` water-creature / pirate-ship active-object
+/// terrain predicate (`0x2C..=0x2F` query family). Same accepted
+/// set as the ship predicate.
+pub const fn water_creature_terrain_accepts(tile: u8) -> bool {
+    ship_terrain_accepts(tile)
+}
+
 /// `movement.md §4` chair-tile force-reject range `0x90..=0x93`. The
 /// base bitset would otherwise allow these ids; most query classes
 /// force-reject them. Two query families exempt themselves from the
