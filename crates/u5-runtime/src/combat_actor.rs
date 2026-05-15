@@ -11,6 +11,15 @@ pub const COMBAT_MONSTER_SLOT_FIRST: usize = 1;
 pub const COMBAT_MONSTER_SLOT_LAST: usize = 25;
 pub const COMBAT_ACTOR_RECORD_LEN: usize = 8;
 
+/// `combat.md §8` Quickness player-dispatch gate. When the shared
+/// `Q` active-effect tag is live, the per-player command handler
+/// rolls a `0..=1` random value before reading input. A zero result
+/// consumes the ready dispatch without reading input; a one result
+/// continues normally.
+pub const fn quickness_skips_player_input(quickness_active: bool, roll_0_or_1: u8) -> bool {
+    quickness_active && roll_0_or_1 == 0
+}
+
 /// `combat.md §6` byte offsets inside the eight-byte combat actor
 /// descriptor. The decoded row order is HP/wound counter, base-step,
 /// flags/faction, owner/target/class, active-object back-reference,

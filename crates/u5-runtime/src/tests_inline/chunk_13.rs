@@ -1,4 +1,17 @@
     #[test]
+    fn quickness_skips_player_input_only_with_zero_roll_and_active_tag() {
+        // combat.md §8
+        // Active tag + zero roll -> skip.
+        assert!(quickness_skips_player_input(true, 0));
+        // Active tag + nonzero roll -> proceed.
+        assert!(!quickness_skips_player_input(true, 1));
+        // Inactive tag -> always proceed regardless of roll.
+        assert!(!quickness_skips_player_input(false, 0));
+        assert!(!quickness_skips_player_input(false, 1));
+        assert!(!quickness_skips_player_input(false, 255));
+    }
+
+    #[test]
     fn combat_actor_record_offsets_match_spec_row_order() {
         // combat.md §6
         assert_eq!(COMBAT_ACTOR_RECORD_LEN, 8);
