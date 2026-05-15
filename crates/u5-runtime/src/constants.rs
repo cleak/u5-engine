@@ -33,6 +33,10 @@ pub const LOCATION_ENTRY_Y_TABLE_FILE: &str = "location_entry_y.tsv";
 pub const TILE_PASSABILITY_FILE: &str = "tile_passability.bin";
 pub const LOOK2_DAT_FILE: &str = "LOOK2.DAT";
 pub const KARMA_DAT_FILE: &str = "KARMA.DAT";
+/// `formats/karma-dat.md §2`: file size in the shipped DOS data set.
+pub const KARMA_DAT_LEN: usize = 761;
+/// `formats/karma-dat.md §2`: number of NUL-terminated text records.
+pub const KARMA_DAT_RECORDS: usize = 6;
 pub const TILES_EGA_FILE: &str = "TILES.16";
 pub const TILES_CGA_FILE: &str = "TILES.4";
 #[cfg(test)]

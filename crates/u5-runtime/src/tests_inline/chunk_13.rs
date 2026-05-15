@@ -853,6 +853,31 @@
     }
 
     #[test]
+    fn karma_dat_tier_classifies_six_records() {
+        // formats/karma-dat.md §2,§3
+        assert_eq!(KARMA_DAT_LEN, 761);
+        assert_eq!(KARMA_DAT_RECORDS, 6);
+        assert_eq!(karma_dat_tier(0), Some(KarmaDatTier::Lowest));
+        assert_eq!(karma_dat_tier(1), Some(KarmaDatTier::Low));
+        assert_eq!(karma_dat_tier(2), Some(KarmaDatTier::Middle));
+        assert_eq!(karma_dat_tier(3), Some(KarmaDatTier::High));
+        assert_eq!(karma_dat_tier(4), Some(KarmaDatTier::Highest));
+        assert_eq!(karma_dat_tier(5), Some(KarmaDatTier::HighestCampVariant));
+        assert_eq!(karma_dat_tier(6), None);
+        assert_eq!(karma_dat_tier(255), None);
+        // Cross-check: the Blackthorn rescue selector and the Lord
+        // British camp selector reach the right tiers.
+        assert_eq!(
+            karma_dat_tier(blackthorn_rescue_verdict_record(99) as usize),
+            Some(KarmaDatTier::Highest)
+        );
+        assert_eq!(
+            karma_dat_tier(lord_british_camp_verdict_record(99) as usize),
+            Some(KarmaDatTier::HighestCampVariant)
+        );
+    }
+
+    #[test]
     fn lord_british_camp_verdict_bands_match_spec() {
         // formats/karma-dat.md §4 — Lord British-in-disguise camp event
         for s in 0..=19u8 {

@@ -28,6 +28,40 @@ pub const fn lord_british_camp_verdict_record(standing: u8) -> u8 {
     }
 }
 
+/// `formats/karma-dat.md §3` semantic tier label for a `KARMA.DAT`
+/// record index.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KarmaDatTier {
+    /// Record 0 — addressed to an avatar who has strayed.
+    Lowest,
+    /// Record 1 — corrective speech.
+    Low,
+    /// Record 2 — middle "you have potential".
+    Middle,
+    /// Record 3 — high; praises the work but flags more remains.
+    High,
+    /// Record 4 — highest; declares the avatar's destiny.
+    Highest,
+    /// Record 5 — short near-variant of record 4 used by the Lord
+    /// British camp event's top band.
+    HighestCampVariant,
+}
+
+/// `formats/karma-dat.md §3`: classify a record index `0..=5` into
+/// its semantic tier label. Returns `None` for indices outside the
+/// six-record file.
+pub const fn karma_dat_tier(record_index: usize) -> Option<KarmaDatTier> {
+    Some(match record_index {
+        0 => KarmaDatTier::Lowest,
+        1 => KarmaDatTier::Low,
+        2 => KarmaDatTier::Middle,
+        3 => KarmaDatTier::High,
+        4 => KarmaDatTier::Highest,
+        5 => KarmaDatTier::HighestCampVariant,
+        _ => return None,
+    })
+}
+
 /// `blackthorn.md §7`: rescue/refuge `KARMA.DAT` verdict band selector.
 /// Divides the one-byte standing input into five twenty-point bands and
 /// returns the matching record index `0..=4`. The shipped sixth record
