@@ -1548,6 +1548,21 @@
     }
 
     #[test]
+    fn combat_combatant_capacity_matches_spec() {
+        // active-objects.md §7
+        assert_eq!(COMBAT_MAX_COMBATANTS, 26);
+        assert_eq!(COMBAT_MONSTER_SLOT_FIRST, 1);
+        assert_eq!(COMBAT_MONSTER_SLOT_LAST, 25);
+        assert_eq!(
+            COMBAT_MONSTER_SLOT_LAST - COMBAT_MONSTER_SLOT_FIRST + 1,
+            COMBAT_MAX_COMBATANTS - 1
+        );
+        // Player slot 0 plus 25 monster slots == 26 total combatants.
+        assert!(COMBAT_PARTY_ACTOR_SLOTS <= COMBAT_MAX_COMBATANTS);
+        assert!(COMBAT_MAX_COMBATANTS <= COMBAT_ACTOR_SLOTS);
+    }
+
+    #[test]
     fn first_monster_ability_picks_in_spec_order() {
         // combat.md §9
         assert_eq!(MONSTER_ABILITY_POSSESS, 0x0040);

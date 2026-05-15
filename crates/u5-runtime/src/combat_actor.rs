@@ -4,6 +4,11 @@ use crate::*;
 
 pub const COMBAT_ACTOR_SLOTS: usize = 32;
 pub const COMBAT_PARTY_ACTOR_SLOTS: usize = 6;
+/// `active-objects.md §7`: combat caps total combatants (party + monsters)
+/// at twenty-six. Monster placement runs in slots 1..=25.
+pub const COMBAT_MAX_COMBATANTS: usize = 26;
+pub const COMBAT_MONSTER_SLOT_FIRST: usize = 1;
+pub const COMBAT_MONSTER_SLOT_LAST: usize = 25;
 pub const COMBAT_ACTOR_RECORD_LEN: usize = 8;
 
 /// `combat.md §9` Pass-2 monster class-flag ability bits, tested in
