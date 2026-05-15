@@ -1,4 +1,25 @@
     #[test]
+    fn tlk_leading_entries_match_spec_disk_order() {
+        // conversation.md §4
+        assert_eq!(TLK_LEADING_ENTRY_COUNT, 5);
+        assert_eq!(tlk_leading_entry_index(TlkLeadingEntry::Name), 0);
+        assert_eq!(tlk_leading_entry_index(TlkLeadingEntry::Description), 1);
+        assert_eq!(tlk_leading_entry_index(TlkLeadingEntry::Greeting), 2);
+        assert_eq!(tlk_leading_entry_index(TlkLeadingEntry::Job), 3);
+        assert_eq!(tlk_leading_entry_index(TlkLeadingEntry::Bye), 4);
+        // All five indices are inside the leading band.
+        for entry in [
+            TlkLeadingEntry::Name,
+            TlkLeadingEntry::Description,
+            TlkLeadingEntry::Greeting,
+            TlkLeadingEntry::Job,
+            TlkLeadingEntry::Bye,
+        ] {
+            assert!(tlk_leading_entry_index(entry) < TLK_LEADING_ENTRY_COUNT);
+        }
+    }
+
+    #[test]
     fn conversation_cleanup_sentinel_zero_allows_warning_pass() {
         // quest-flags.md §5
         assert_eq!(CONVERSATION_CLEANUP_SENTINEL_ALLOW, 0);

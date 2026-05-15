@@ -7,6 +7,39 @@
 //! exist so that helpers and tests can refer to spec-named codes without
 //! magic numbers.
 
+/// `conversation.md §4` mandatory leading entries every NPC blob
+/// begins with, in disk order. After these five NUL-terminated
+/// entries comes the variable-size keyword body (alternating
+/// keyword string + response stream pairs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TlkLeadingEntry {
+    /// Index 0 — display name (e.g. "Jennifer").
+    Name,
+    /// Index 1 — short prose description (e.g. "a weathered girl").
+    Description,
+    /// Index 2 — greeting on first address.
+    Greeting,
+    /// Index 3 — `JOB`-keyword response.
+    Job,
+    /// Index 4 — `BYE`-keyword and conversation-exit response.
+    Bye,
+}
+
+/// `conversation.md §4`: number of mandatory leading entries (5).
+pub const TLK_LEADING_ENTRY_COUNT: usize = 5;
+
+/// `conversation.md §4`: in-blob index `0..=4` for the supplied
+/// leading entry.
+pub const fn tlk_leading_entry_index(entry: TlkLeadingEntry) -> usize {
+    match entry {
+        TlkLeadingEntry::Name => 0,
+        TlkLeadingEntry::Description => 1,
+        TlkLeadingEntry::Greeting => 2,
+        TlkLeadingEntry::Job => 3,
+        TlkLeadingEntry::Bye => 4,
+    }
+}
+
 /// `conversation.md §2` reasons the resident "can talk now"
 /// liveness gate refuses the Talk command before any narration runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

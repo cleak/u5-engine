@@ -249,10 +249,11 @@ pub use tlk_control_codes::{
     CASTLE_TLK_NPCS, COMMON_WORD_DICTIONARY_ENTRIES, DWELLING_TLK_NPCS,
     KEEP_TLK_NPCS, TLK_BLOB_FIXED_WINDOW, TLK_HEADER_ENTRY_LEN,
     TLK_HEADER_FIXED_READ, TLK_INPUT_MAX_LEN, TLK_LABEL_FIRST, TLK_LABEL_LAST,
-    TLK_SENTINEL_NPC_ID, TLK_TEXT_XOR_MASK, TOWNE_TLK_NPCS, ReservedKeywordEffect,
-    TalkRefusal, TlkByteKind, classify_tlk_byte, is_tlk_label_byte,
-    reserved_keyword_effect, shoppe_dictionary_index, talk_liveness_refusal,
-    tlk_dictionary_index, tlk_introducer_argument_count, tlk_keyword_matches,
+    TLK_LEADING_ENTRY_COUNT, TLK_SENTINEL_NPC_ID, TLK_TEXT_XOR_MASK, TOWNE_TLK_NPCS,
+    ReservedKeywordEffect, TalkRefusal, TlkByteKind, TlkLeadingEntry,
+    classify_tlk_byte, is_tlk_label_byte, reserved_keyword_effect,
+    shoppe_dictionary_index, talk_liveness_refusal, tlk_dictionary_index,
+    tlk_introducer_argument_count, tlk_keyword_matches, tlk_leading_entry_index,
 };
 pub use tile_classes::{
     TILE_BARRIER_FIRST, TILE_BARRIER_LAST, TILE_DECORATION_FIRST, TILE_DECORATION_LAST,
