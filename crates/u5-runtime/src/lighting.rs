@@ -1,0 +1,66 @@
+//! Lighting helpers per `lighting.md`. Combines the cached ambient value
+//! with personal light sources (torch, light spell) and exposes the
+//! counter-decay and Ignite-duration rules. The original engine stores
+//! ambient on a 2..=50 scale with 51+ as a "do-not-recompute" sentinel.
+
+use crate::*;
+
+/// `lighting.md §4`: raise `ambient` to the brightest active personal-light
+/// floor. When both counters are nonzero, the torch floor (18) dominates
+/// the spell-light floor (10); zero counters contribute nothing.
+pub const fn apply_personal_light(ambient: u8, torch_counter: u8, light_spell_counter: u8) -> u8 {
+    let mut value = ambient;
+    if torch_counter != 0 && value < TORCH_LIGHT_FLOOR {
+        value = TORCH_LIGHT_FLOOR;
+    }
+    if light_spell_counter != 0 && value < LIGHT_SPELL_FLOOR {
+        value = LIGHT_SPELL_FLOOR;
+    }
+    value
+}
+
+/// `lighting.md §6`: dungeon-mode blackout gate. Without either personal
+/// light source the corridor view and Look description are suppressed.
+pub const fn dungeon_blackout(torch_counter: u8, light_spell_counter: u8) -> bool {
+    torch_counter == 0 && light_spell_counter == 0
+}
+
+/// `lighting.md §5`: saturating per-turn light counter decrement. The
+/// counter is the turn-local light/torch byte; the increment is how many
+/// counter units the current turn spends (1 for town/dungeon/combat, 2
+/// for ordinary overworld, longer for waits).
+pub const fn decay_light_counter(counter: u8, increment: u8) -> u8 {
+    if counter > increment {
+        counter - increment
+    } else {
+        0
+    }
+}
+
+/// `lighting.md §3`: ambient values 51..=255 are the "do-not-recompute"
+/// sentinel band. The cleanup routine leaves a cached ambient byte alone
+/// when it observes one of these values.
+pub const fn ambient_is_sentinel(ambient: u8) -> bool {
+    ambient >= DAYLIGHT_SENTINEL_MIN
+}
+
+/// `lighting.md §8`: Ignite outside dungeon scenes sets the torch counter
+/// to a fixed 240-unit value, overwriting any prior burn.
+pub const fn ignite_torch_surface() -> u8 {
+    SURFACE_TORCH_DURATION
+}
+
+/// `lighting.md §8`: Ignite in dungeon scenes adds a random 112..=127
+/// counter unit increment to the current torch counter, capped at 255.
+/// `roll_112_to_127` is the caller-supplied uniform `[112, 127]` random
+/// roll.
+pub const fn ignite_torch_dungeon(current: u8, roll_112_to_127: u8) -> u8 {
+    current.saturating_add(roll_112_to_127)
+}
+
+/// `lighting.md §8`: *In Lor* (ordinary Light spell) overwrites the
+/// light-spell counter with 100 units; *Vas Lor* (Great Light) overwrites
+/// it with 255 units. Light spells do not stack with prior spell-light
+/// duration.
+pub const LIGHT_SPELL_DURATION: u8 = 100;
+pub const GREAT_LIGHT_SPELL_DURATION: u8 = 255;

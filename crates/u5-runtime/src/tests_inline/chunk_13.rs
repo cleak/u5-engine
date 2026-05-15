@@ -636,6 +636,43 @@
     }
 
     #[test]
+    fn lighting_helpers_match_spec_table() {
+        // lighting.md §4
+        assert_eq!(apply_personal_light(2, 0, 0), 2);
+        assert_eq!(apply_personal_light(2, 1, 0), TORCH_LIGHT_FLOOR);
+        assert_eq!(apply_personal_light(2, 0, 1), LIGHT_SPELL_FLOOR);
+        // Torch dominates spell when both nonzero
+        assert_eq!(apply_personal_light(2, 5, 5), TORCH_LIGHT_FLOOR);
+        // Ambient already brighter than the floor wins
+        assert_eq!(apply_personal_light(FULL_DAYLIGHT, 5, 5), FULL_DAYLIGHT);
+        assert_eq!(apply_personal_light(20, 1, 0), 20);
+
+        // lighting.md §6
+        assert!(dungeon_blackout(0, 0));
+        assert!(!dungeon_blackout(1, 0));
+        assert!(!dungeon_blackout(0, 1));
+
+        // lighting.md §5
+        assert_eq!(decay_light_counter(10, 1), 9);
+        assert_eq!(decay_light_counter(10, 2), 8);
+        assert_eq!(decay_light_counter(2, 5), 0);
+        assert_eq!(decay_light_counter(0, 1), 0);
+
+        // lighting.md §3
+        assert!(!ambient_is_sentinel(50));
+        assert!(ambient_is_sentinel(51));
+        assert!(ambient_is_sentinel(255));
+
+        // lighting.md §8
+        assert_eq!(ignite_torch_surface(), 240);
+        assert_eq!(ignite_torch_dungeon(0, 112), 112);
+        assert_eq!(ignite_torch_dungeon(100, 127), 227);
+        assert_eq!(ignite_torch_dungeon(200, 127), 255);
+        assert_eq!(LIGHT_SPELL_DURATION, 100);
+        assert_eq!(GREAT_LIGHT_SPELL_DURATION, 255);
+    }
+
+    #[test]
     fn player_sail_wait_ticks_matches_weather_table() {
         // weather.md §5
         // Calm never releases.
