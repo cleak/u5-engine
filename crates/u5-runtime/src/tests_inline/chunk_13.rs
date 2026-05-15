@@ -636,6 +636,121 @@
     }
 
     #[test]
+    fn player_sail_wait_ticks_matches_weather_table() {
+        // weather.md §5
+        // Calm never releases.
+        for heading in [
+            Direction::North,
+            Direction::South,
+            Direction::East,
+            Direction::West,
+        ] {
+            assert_eq!(WindState::Calm.player_sail_wait_ticks(heading), None);
+        }
+        // North wind row: N=2, E=0, S=1, W=0
+        assert_eq!(
+            WindState::North.player_sail_wait_ticks(Direction::North),
+            Some(2)
+        );
+        assert_eq!(
+            WindState::North.player_sail_wait_ticks(Direction::East),
+            Some(0)
+        );
+        assert_eq!(
+            WindState::North.player_sail_wait_ticks(Direction::South),
+            Some(1)
+        );
+        assert_eq!(
+            WindState::North.player_sail_wait_ticks(Direction::West),
+            Some(0)
+        );
+        // South wind row: N=1, E=0, S=2, W=0
+        assert_eq!(
+            WindState::South.player_sail_wait_ticks(Direction::North),
+            Some(1)
+        );
+        assert_eq!(
+            WindState::South.player_sail_wait_ticks(Direction::South),
+            Some(2)
+        );
+        // East wind row: N=0, E=2, S=0, W=1
+        assert_eq!(
+            WindState::East.player_sail_wait_ticks(Direction::East),
+            Some(2)
+        );
+        assert_eq!(
+            WindState::East.player_sail_wait_ticks(Direction::West),
+            Some(1)
+        );
+        // West wind row: N=0, E=1, S=0, W=2
+        assert_eq!(
+            WindState::West.player_sail_wait_ticks(Direction::East),
+            Some(1)
+        );
+        assert_eq!(
+            WindState::West.player_sail_wait_ticks(Direction::West),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn active_ship_cadence_matches_weather_table() {
+        // weather.md §7
+        for heading in [
+            Direction::North,
+            Direction::South,
+            Direction::East,
+            Direction::West,
+        ] {
+            assert_eq!(WindState::Calm.active_ship_cadence(heading), None);
+        }
+        // North-facing frame row
+        assert_eq!(
+            WindState::North.active_ship_cadence(Direction::North),
+            Some((2, 3))
+        );
+        assert_eq!(
+            WindState::South.active_ship_cadence(Direction::North),
+            Some((3, 4))
+        );
+        assert_eq!(
+            WindState::East.active_ship_cadence(Direction::North),
+            Some((1, 1))
+        );
+        assert_eq!(
+            WindState::West.active_ship_cadence(Direction::North),
+            Some((1, 1))
+        );
+        // East-facing frame row
+        assert_eq!(
+            WindState::East.active_ship_cadence(Direction::East),
+            Some((2, 3))
+        );
+        assert_eq!(
+            WindState::West.active_ship_cadence(Direction::East),
+            Some((3, 4))
+        );
+        // South-facing frame row
+        assert_eq!(
+            WindState::South.active_ship_cadence(Direction::South),
+            Some((2, 3))
+        );
+        assert_eq!(
+            WindState::North.active_ship_cadence(Direction::South),
+            Some((3, 4))
+        );
+        // West-facing frame row
+        assert_eq!(
+            WindState::West.active_ship_cadence(Direction::West),
+            Some((2, 3))
+        );
+        assert_eq!(
+            WindState::East.active_ship_cadence(Direction::West),
+            Some((3, 4))
+        );
+    }
+
+    #[test]
     fn karma_actions_apply_with_spec_clamps() {
         // karma.md §4
         // Completed-shrine offering adds the digit, capped at MAX

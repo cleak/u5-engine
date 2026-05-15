@@ -80,6 +80,76 @@ impl WindState {
         }
     }
 
+    /// `weather.md §5`: number of wait ticks the input helper inserts
+    /// before the hoisted-sail player ship is released to move in
+    /// `sail_heading` under this wind. Returns `None` for Calm wind
+    /// (movement never released) and for non-cardinal headings.
+    pub fn player_sail_wait_ticks(self, sail_heading: Direction) -> Option<u8> {
+        let wind = self.direction()?;
+        let heading = match sail_heading {
+            Direction::North | Direction::South | Direction::East | Direction::West => sail_heading,
+            _ => return None,
+        };
+        let perpendicular = matches!(
+            (wind, heading),
+            (Direction::North, Direction::East)
+                | (Direction::North, Direction::West)
+                | (Direction::South, Direction::East)
+                | (Direction::South, Direction::West)
+                | (Direction::East, Direction::North)
+                | (Direction::East, Direction::South)
+                | (Direction::West, Direction::North)
+                | (Direction::West, Direction::South)
+        );
+        if perpendicular {
+            return Some(0);
+        }
+        if wind == heading {
+            // Sailing into the wind.
+            Some(2)
+        } else {
+            // Sailing with the wind (heading == opposite of wind source).
+            Some(1)
+        }
+    }
+
+    /// `weather.md §7`: cadence cap for an autonomous active-ship slot
+    /// under prevailing wind, given the slot's current frame heading.
+    /// Returns `(numerator, denominator)` where the slot moves on
+    /// `numerator` of every `denominator` eligible cleanup passes. Returns
+    /// `None` for Calm wind (post-animate movement suppressed).
+    pub fn active_ship_cadence(self, frame_heading: Direction) -> Option<(u8, u8)> {
+        let wind = self.direction()?;
+        let heading = match frame_heading {
+            Direction::North | Direction::South | Direction::East | Direction::West => {
+                frame_heading
+            }
+            _ => return None,
+        };
+        let perpendicular = matches!(
+            (wind, heading),
+            (Direction::North, Direction::East)
+                | (Direction::North, Direction::West)
+                | (Direction::South, Direction::East)
+                | (Direction::South, Direction::West)
+                | (Direction::East, Direction::North)
+                | (Direction::East, Direction::South)
+                | (Direction::West, Direction::North)
+                | (Direction::West, Direction::South)
+        );
+        if perpendicular {
+            // "Every turn" — bypasses the counter entirely.
+            return Some((1, 1));
+        }
+        if wind == heading {
+            // Frame faces directly into wind — 2 of 3 turns.
+            Some((2, 3))
+        } else {
+            // Frame faces with wind (away from source) — 3 of 4 turns.
+            Some((3, 4))
+        }
+    }
+
     pub fn rel_hur_target(direction: Direction) -> Option<Self> {
         match direction {
             Direction::North => Some(Self::West),
