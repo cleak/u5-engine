@@ -636,6 +636,71 @@
     }
 
     #[test]
+    fn sky_strip_marker_position_matches_spec_visibility_table() {
+        // moons.md §2: Fixed hour marker visible 06:00..17:59 at cell `17 -
+        // hour`. Trammel visible 00:00..08:59 at `8 - hour` and 21:00..23:59
+        // at `32 - hour`. Felucca visible 00:00..02:59 at `2 - hour` and
+        // 15:00..23:59 at `26 - hour`. All other hours are below the horizon.
+
+        // Fixed hour marker boundaries.
+        assert_eq!(sky_strip_marker_position(5, SkyStripMarker::FixedHour), None);
+        assert_eq!(
+            sky_strip_marker_position(6, SkyStripMarker::FixedHour),
+            Some(11)
+        );
+        assert_eq!(
+            sky_strip_marker_position(12, SkyStripMarker::FixedHour),
+            Some(5)
+        );
+        assert_eq!(
+            sky_strip_marker_position(17, SkyStripMarker::FixedHour),
+            Some(0)
+        );
+        assert_eq!(sky_strip_marker_position(18, SkyStripMarker::FixedHour), None);
+
+        // Trammel windows.
+        assert_eq!(
+            sky_strip_marker_position(0, SkyStripMarker::Trammel),
+            Some(8)
+        );
+        assert_eq!(
+            sky_strip_marker_position(8, SkyStripMarker::Trammel),
+            Some(0)
+        );
+        // Hour 9..20 inclusive is below horizon.
+        assert_eq!(sky_strip_marker_position(9, SkyStripMarker::Trammel), None);
+        assert_eq!(sky_strip_marker_position(20, SkyStripMarker::Trammel), None);
+        assert_eq!(
+            sky_strip_marker_position(21, SkyStripMarker::Trammel),
+            Some(11)
+        );
+        assert_eq!(
+            sky_strip_marker_position(23, SkyStripMarker::Trammel),
+            Some(9)
+        );
+
+        // Felucca windows.
+        assert_eq!(
+            sky_strip_marker_position(0, SkyStripMarker::Felucca),
+            Some(2)
+        );
+        assert_eq!(
+            sky_strip_marker_position(2, SkyStripMarker::Felucca),
+            Some(0)
+        );
+        assert_eq!(sky_strip_marker_position(3, SkyStripMarker::Felucca), None);
+        assert_eq!(sky_strip_marker_position(14, SkyStripMarker::Felucca), None);
+        assert_eq!(
+            sky_strip_marker_position(15, SkyStripMarker::Felucca),
+            Some(11)
+        );
+        assert_eq!(
+            sky_strip_marker_position(23, SkyStripMarker::Felucca),
+            Some(3)
+        );
+    }
+
+    #[test]
     fn endgame_step_toward_target_prefers_axis_with_greater_distance() {
         // endgame.md §7: each call moves one cell toward target along the axis
         // with the greater remaining distance.

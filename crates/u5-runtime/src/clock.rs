@@ -90,6 +90,40 @@ impl GameClock {
     }
 }
 
+/// One of the three sky-strip markers per `moons.md` §2.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SkyStripMarker {
+    FixedHour,
+    Trammel,
+    Felucca,
+}
+
+/// Width of the sky/status strip per `moons.md` §2.
+pub const SKY_STRIP_CELL_COUNT: u8 = 12;
+
+/// Per `moons.md` §2: compute the cell index `0..11` where the given marker
+/// is visible at the given hour. Returns `None` when the marker is below the
+/// strip's visible horizon.
+pub fn sky_strip_marker_position(hour: u8, marker: SkyStripMarker) -> Option<u8> {
+    let position = match marker {
+        SkyStripMarker::FixedHour => match hour {
+            6..=17 => Some(17u8.wrapping_sub(hour)),
+            _ => None,
+        },
+        SkyStripMarker::Trammel => match hour {
+            0..=8 => Some(8u8.wrapping_sub(hour)),
+            21..=23 => Some(32u8.wrapping_sub(hour)),
+            _ => None,
+        },
+        SkyStripMarker::Felucca => match hour {
+            0..=2 => Some(2u8.wrapping_sub(hour)),
+            15..=23 => Some(26u8.wrapping_sub(hour)),
+            _ => None,
+        },
+    };
+    position.filter(|cell| *cell < SKY_STRIP_CELL_COUNT)
+}
+
 impl Default for GameClock {
     fn default() -> Self {
         Self {

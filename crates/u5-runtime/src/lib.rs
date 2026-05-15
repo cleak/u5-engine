@@ -60,7 +60,7 @@ pub mod world_tables_io_locations;
 pub use active_object_io::*;
 pub use animation::{ActiveObject, ActiveShipWind, AnimationClock, PhaseTick};
 pub use chargen::*;
-pub use clock::GameClock;
+pub use clock::{GameClock, SKY_STRIP_CELL_COUNT, SkyStripMarker, sky_strip_marker_position};
 pub use combat_actor::*;
 pub use combat_arena::*;
 pub use combat_frame::*;
