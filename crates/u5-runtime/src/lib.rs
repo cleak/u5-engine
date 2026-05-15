@@ -261,8 +261,8 @@ pub use town_mode::{
     NPC_FILE_LEN, NPC_SCHEDULE_ARRAY_LEN, NPC_SCHEDULE_RECORD_LEN, NPC_SENTINEL_SLOT,
     NPC_SLOTS_PER_SUB_MAP, NPC_SUB_MAP_LEN, NPC_SUB_MAPS_PER_FILE, NPC_TYPE_ARRAY_LEN,
     NPC_TYPE_ARRAY_OFFSET, TOWN_GRID_BYTES, TOWN_GRID_SIDE, TOWN_NPC_BLOCK_BYTES,
-    TOWN_NPC_ROSTER_SLOTS, TownLocationClass, town_floor_offset, town_location_class,
-    town_per_class_index, town_resident_name,
+    TOWN_NPC_ROSTER_SLOTS, TownLocationClass, npc_roster_filename, npc_tlk_filename,
+    town_floor_offset, town_location_class, town_per_class_index, town_resident_name,
 };
 pub use town_tables::*;
 pub use town_tables_io::*;

@@ -106,6 +106,31 @@ pub const fn town_floor_offset(floor_byte: u8) -> i8 {
     floor_byte as i8
 }
 
+/// `formats/npc.md §2`: filename loaded for a town-family scene
+/// byte's NPC roster. Returns `None` for scene bytes outside `1..=32`.
+pub const fn npc_roster_filename(scene_byte: u8) -> Option<&'static str> {
+    Some(match scene_byte {
+        1..=8 => "TOWNE.NPC",
+        9..=16 => "DWELLING.NPC",
+        17..=24 => "CASTLE.NPC",
+        25..=32 => "KEEP.NPC",
+        _ => return None,
+    })
+}
+
+/// `formats/npc.md §2`: filename loaded for a town-family scene
+/// byte's TLK dialog file. Returns `None` for scene bytes outside
+/// `1..=32`.
+pub const fn npc_tlk_filename(scene_byte: u8) -> Option<&'static str> {
+    Some(match scene_byte {
+        1..=8 => "TOWNE.TLK",
+        9..=16 => "DWELLING.TLK",
+        17..=24 => "CASTLE.TLK",
+        25..=32 => "KEEP.TLK",
+        _ => return None,
+    })
+}
+
 /// `formats/npc.md §3,§4` per-class NPC file layout. The four `.NPC`
 /// files are 4608 bytes each; each contains eight 576-byte sub-maps,
 /// each holding 32 schedule records (16 bytes each) plus a 32-byte

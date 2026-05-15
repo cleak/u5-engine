@@ -734,6 +734,31 @@
     }
 
     #[test]
+    fn npc_roster_and_tlk_filenames_per_spec() {
+        // formats/npc.md §2
+        assert_eq!(npc_roster_filename(0), None);
+        for s in 1..=8u8 {
+            assert_eq!(npc_roster_filename(s), Some("TOWNE.NPC"));
+            assert_eq!(npc_tlk_filename(s), Some("TOWNE.TLK"));
+        }
+        for s in 9..=16u8 {
+            assert_eq!(npc_roster_filename(s), Some("DWELLING.NPC"));
+            assert_eq!(npc_tlk_filename(s), Some("DWELLING.TLK"));
+        }
+        for s in 17..=24u8 {
+            assert_eq!(npc_roster_filename(s), Some("CASTLE.NPC"));
+            assert_eq!(npc_tlk_filename(s), Some("CASTLE.TLK"));
+        }
+        for s in 25..=32u8 {
+            assert_eq!(npc_roster_filename(s), Some("KEEP.NPC"));
+            assert_eq!(npc_tlk_filename(s), Some("KEEP.TLK"));
+        }
+        assert_eq!(npc_roster_filename(33), None);
+        assert_eq!(npc_tlk_filename(33), None);
+        assert_eq!(npc_roster_filename(255), None);
+    }
+
+    #[test]
     fn npc_file_layout_constants_match_spec() {
         // formats/npc.md §3,§4
         assert_eq!(NPC_FILE_LEN, 4608);
