@@ -20,6 +20,42 @@ pub const NPC_STATE_ASCEND_TOWARD_TARGET: u8 = 5;
 pub const NPC_STATE_CLIMB_UP_OFF_FLOOR: u8 = 6;
 pub const NPC_STATE_CLIMB_DOWN_OFF_FLOOR: u8 = 7;
 pub const NPC_STATE_PARKED_OFF_FLOOR: u8 = 8;
+/// `npc-schedules.md §6`: classify a real boundary transition into the
+/// movement state byte the per-tick walker switches on, given the NPC's
+/// current floor, the new waypoint's floor, and the location's current
+/// floor. Returns the state byte from the floor-classification table:
+///   - both equal → 2 (in-plane move)
+///   - equal/below → 7 (climb-down off this floor)
+///   - equal/above → 6 (climb-up off this floor)
+///   - below/equal → 5 (ascend toward target floor)
+///   - above/equal → 4 (descend toward target floor)
+///   - neither/neither → 8 (parked off-floor / replan needed)
+/// "Below" means a floor index numerically greater than the map's
+/// current floor; "above" means numerically smaller. Caller still
+/// applies the already-on-waypoint short-circuit and only invokes the
+/// classifier when a real transition has been detected.
+pub const fn schedule_floor_state(
+    npc_floor: u8,
+    target_floor: u8,
+    map_floor: u8,
+) -> u8 {
+    let npc_eq = npc_floor == map_floor;
+    let target_eq = target_floor == map_floor;
+    if npc_eq && target_eq {
+        NPC_STATE_INPLANE_MOVE
+    } else if npc_eq && target_floor > map_floor {
+        NPC_STATE_CLIMB_DOWN_OFF_FLOOR
+    } else if npc_eq && target_floor < map_floor {
+        NPC_STATE_CLIMB_UP_OFF_FLOOR
+    } else if target_eq && npc_floor > map_floor {
+        NPC_STATE_ASCEND_TOWARD_TARGET
+    } else if target_eq && npc_floor < map_floor {
+        NPC_STATE_DESCEND_TOWARD_TARGET
+    } else {
+        NPC_STATE_PARKED_OFF_FLOOR
+    }
+}
+
 /// Per `npc-schedules.md §4`: stuck counter threshold for forced replan.
 /// When the counter exceeds this value the move queue is reset to inactive
 /// and a fresh route is requested on a later tick.

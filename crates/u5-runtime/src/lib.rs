@@ -166,7 +166,7 @@ pub use npc_runtime::{
     NPC_STATE_ASCEND_TOWARD_TARGET, NPC_STATE_CLIMB_DOWN_OFF_FLOOR,
     NPC_STATE_CLIMB_UP_OFF_FLOOR, NPC_STATE_DESCEND_TOWARD_TARGET, NPC_STATE_EMPTY,
     NPC_STATE_IDLE, NPC_STATE_INPLANE_MOVE, NPC_STATE_PARKED_OFF_FLOOR, NPC_STATE_REPLAY_QUEUE,
-    NPC_STUCK_REPLAN_THRESHOLD, RuntimeNpc,
+    NPC_STUCK_REPLAN_THRESHOLD, RuntimeNpc, schedule_floor_state,
 };
 pub use party::{
     Area, AvatarStats, MoonstoneGateSlot, PartyMember, Player, class_refreshed_mana, default_party,

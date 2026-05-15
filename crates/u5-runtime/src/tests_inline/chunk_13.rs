@@ -636,6 +636,25 @@
     }
 
     #[test]
+    fn schedule_floor_state_matches_spec_table() {
+        // npc-schedules.md §6
+        // both equal -> 2
+        assert_eq!(schedule_floor_state(1, 1, 1), NPC_STATE_INPLANE_MOVE);
+        // equal/below -> 7 (target floor index > map floor index)
+        assert_eq!(schedule_floor_state(1, 2, 1), NPC_STATE_CLIMB_DOWN_OFF_FLOOR);
+        // equal/above -> 6
+        assert_eq!(schedule_floor_state(1, 0, 1), NPC_STATE_CLIMB_UP_OFF_FLOOR);
+        // below/equal -> 5 (npc floor index > map floor index)
+        assert_eq!(schedule_floor_state(2, 1, 1), NPC_STATE_ASCEND_TOWARD_TARGET);
+        // above/equal -> 4
+        assert_eq!(schedule_floor_state(0, 1, 1), NPC_STATE_DESCEND_TOWARD_TARGET);
+        // neither/neither -> 8
+        assert_eq!(schedule_floor_state(0, 2, 1), NPC_STATE_PARKED_OFF_FLOOR);
+        assert_eq!(schedule_floor_state(2, 0, 1), NPC_STATE_PARKED_OFF_FLOOR);
+        assert_eq!(schedule_floor_state(2, 3, 1), NPC_STATE_PARKED_OFF_FLOOR);
+    }
+
+    #[test]
     fn tlk_scene_branch_mask_does_not_wrap() {
         // quest-flags.md §3
         assert_eq!(tlk_scene_branch_mask(0), 0x0000_0001);
