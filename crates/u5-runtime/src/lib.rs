@@ -45,6 +45,7 @@ pub mod question_io;
 pub mod shops;
 pub mod shrine_virtue;
 pub mod signs_io;
+pub mod story_io;
 pub mod start_validation;
 pub mod test_fixtures;
 pub mod tile_helpers;
@@ -71,6 +72,7 @@ pub use question_io::{QuestionRecords, load_question_records, parse_question_rec
 pub use signs_io::{
     SignRecord, decode_sign_payload, find_sign, load_sign_records, parse_sign_records,
 };
+pub use story_io::{StoryRecords, load_story_records, parse_story_records};
 pub use combat_actor::*;
 pub use combat_arena::*;
 pub use combat_frame::*;

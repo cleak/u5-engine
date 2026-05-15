@@ -636,6 +636,35 @@
     }
 
     #[test]
+    fn parse_story_records_walks_twenty_records_and_strips_markup() {
+        // formats/story-dat.md §2-§3: 20 NUL-terminated records driving the
+        // intro story sequence; `{` and `_` are layout markup.
+        let mut bytes = Vec::new();
+        for index in 0..20usize {
+            bytes.push(b'{');
+            bytes.extend_from_slice(format!("Page{index}_break").as_bytes());
+            bytes.push(0x00);
+        }
+        bytes.push(0x00); // Empty trailer per §2.
+
+        let records = parse_story_records(&bytes).expect("20 records should parse");
+
+        assert_eq!(records.records.len(), 20);
+        assert_eq!(records.record(0), Some("Page0break"));
+        assert_eq!(records.record(19), Some("Page19break"));
+        assert_eq!(records.record(20), None);
+    }
+
+    #[test]
+    fn parse_story_records_rejects_short_input() {
+        let mut bytes = Vec::new();
+        for _ in 0..5usize {
+            bytes.extend_from_slice(b"x\0");
+        }
+        assert!(parse_story_records(&bytes).is_err());
+    }
+
+    #[test]
     fn parse_question_records_walks_thirty_records_and_strips_markup() {
         // formats/question-dat.md §2-§3: 30 NUL-terminated records;
         // record 0 = gypsy arrival, 1 = gypsy invitation, 2..=29 = dilemmas.
