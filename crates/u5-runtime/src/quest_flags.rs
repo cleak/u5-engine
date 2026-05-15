@@ -89,6 +89,30 @@ pub const fn tlk_scene_branch_set(slot: u32, bit_index: u8) -> u32 {
     slot | tlk_scene_branch_mask(bit_index)
 }
 
+/// `quest-flags.md §5` shared town/conversation sentinel value that
+/// allows the post-conversation stolen-action warning + signal
+/// reconciliation pass to run. Town setup writes `0` (the traced
+/// town-produced state) for scenes whose Shadowlord-location slot
+/// matches index 0; slot indices `1` and `2`, plus the no-slot
+/// marker, suppress the cleanup pass.
+pub const CONVERSATION_CLEANUP_SENTINEL_ALLOW: u8 = 0;
+
+/// `quest-flags.md §5`: returns `true` when the sentinel allows
+/// the post-conversation stolen-action warning + reconciliation
+/// pass to run (sentinel byte equals zero). Nonzero values
+/// suppress the pass entirely. The shop surcharge helper uses the
+/// same sentinel: nonzero also suppresses the post-transaction
+/// gold debit there.
+pub const fn conversation_cleanup_runs_warning(sentinel: u8) -> bool {
+    sentinel == CONVERSATION_CLEANUP_SENTINEL_ALLOW
+}
+
+/// `quest-flags.md §5` random gold-debit upper bound. When no
+/// byte-sized signal was decremented in the cleanup, the pass
+/// subtracts a random `1..=15` gold from the party's gold total
+/// (floored at zero).
+pub const CONVERSATION_CLEANUP_GOLD_DEBIT_MAX: u8 = 15;
+
 /// `quest-flags.md §4`: confirmed letter effects for the `0x86`
 /// action-dispatch control code's letter-argument family. Returns
 /// `None` for letters not in the published table.

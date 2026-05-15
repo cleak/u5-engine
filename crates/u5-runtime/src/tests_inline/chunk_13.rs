@@ -1,4 +1,16 @@
     #[test]
+    fn conversation_cleanup_sentinel_zero_allows_warning_pass() {
+        // quest-flags.md §5
+        assert_eq!(CONVERSATION_CLEANUP_SENTINEL_ALLOW, 0);
+        assert_eq!(CONVERSATION_CLEANUP_GOLD_DEBIT_MAX, 15);
+        assert!(conversation_cleanup_runs_warning(0));
+        // Slot 1, slot 2, and the no-slot marker all suppress.
+        for v in 1u8..=255 {
+            assert!(!conversation_cleanup_runs_warning(v), "value {v}");
+        }
+    }
+
+    #[test]
     fn title_tick_frame_rectangle_and_cadence_match_spec() {
         // intro.md §5
         assert_eq!(TITLE_TICK_FRAME_X, 0);
