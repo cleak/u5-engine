@@ -588,6 +588,27 @@
     }
 
     #[test]
+    fn endgame_step_toward_target_prefers_axis_with_greater_distance() {
+        // endgame.md §7: each call moves one cell toward target along the axis
+        // with the greater remaining distance.
+        // Pure horizontal: dx > 0, dy = 0
+        assert_eq!(endgame_step_toward_target((0, 5), (3, 5)), (1, 5));
+        // Pure vertical: dx = 0, dy < 0
+        assert_eq!(endgame_step_toward_target((4, 5), (4, 1)), (4, 4));
+        // Diagonal with greater dx
+        assert_eq!(endgame_step_toward_target((0, 0), (5, 2)), (1, 0));
+        // Diagonal with greater dy
+        assert_eq!(endgame_step_toward_target((0, 0), (2, 5)), (0, 1));
+        // Negative directions
+        assert_eq!(endgame_step_toward_target((10, 10), (3, 7)), (9, 10));
+        assert_eq!(endgame_step_toward_target((10, 10), (8, 3)), (10, 9));
+        // On target: no movement
+        assert_eq!(endgame_step_toward_target((4, 4), (4, 4)), (4, 4));
+        // Equal-distance ties: prefer X axis
+        assert_eq!(endgame_step_toward_target((0, 0), (3, 3)), (1, 0));
+    }
+
+    #[test]
     fn endgame_certificate_word_helpers_cover_calendar_range() {
         assert_eq!(endgame_ordinal_word(1).as_deref(), Some("first"));
         assert_eq!(endgame_ordinal_word(21).as_deref(), Some("twenty-first"));

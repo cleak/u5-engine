@@ -236,6 +236,32 @@ fn plural(label: &'static str, amount: u16) -> &'static str {
     }
 }
 
+/// One-call grid step toward a target per `endgame.md` §7: examine the slot's
+/// current `(x, y)` and choose the axis with the greater remaining distance.
+/// Ties prefer the X axis. Returns the new `(x, y)`. When already on the
+/// target, returns the input unchanged.
+pub fn endgame_step_toward_target(
+    current: (isize, isize),
+    target: (isize, isize),
+) -> (isize, isize) {
+    let dx = target.0 - current.0;
+    let dy = target.1 - current.1;
+    if dx == 0 && dy == 0 {
+        return current;
+    }
+    if dx.unsigned_abs() >= dy.unsigned_abs() {
+        if dx == 0 {
+            (current.0, current.1 + dy.signum())
+        } else {
+            (current.0 + dx.signum(), current.1)
+        }
+    } else if dy == 0 {
+        (current.0 + dx.signum(), current.1)
+    } else {
+        (current.0, current.1 + dy.signum())
+    }
+}
+
 impl PlayState {
     pub fn enter_endgame(&mut self) -> MoveOutcome {
         self.pending_moongate = None;
