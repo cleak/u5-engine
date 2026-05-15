@@ -95,6 +95,17 @@ pub const fn natural_moongate_cached_glyph_slot(hour: u8) -> u8 {
 pub const NARRATIVE_GATE_X: u8 = 233;
 pub const NARRATIVE_GATE_Y: u8 = 235;
 
+/// `formats/saved-gam.md §7.2`: Moonstone burying is accepted only
+/// outside dungeon/combat scenes and only when the tile under the
+/// party is one of these world-tile ids: `4..10`, `44`, or `45`.
+pub const fn moonstone_burial_tile_accepted(tile_id: u8) -> bool {
+    matches!(tile_id, 4..=10 | 44 | 45)
+}
+
+/// `formats/saved-gam.md §7.2`: invalid Gate Travel target sentinel
+/// written into the destination-scene byte of an unused Moonstone slot.
+pub const MOONSTONE_GATE_INVALID_SCENE: u8 = 0xFF;
+
 /// `catalogs/gazetteer.md §8`: confirmed surface chasm at Britannia
 /// `(54, 138)` — stepping onto this cell damages the party, swaps the
 /// plane to the Underworld, and reseeds active objects.

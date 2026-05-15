@@ -636,6 +636,25 @@
     }
 
     #[test]
+    fn moonstone_burial_tile_accepted_matches_spec_set() {
+        // formats/saved-gam.md §7.2
+        assert_eq!(MOONSTONE_GATE_INVALID_SCENE, 0xFF);
+        // Accepted: 4..=10, 44, 45
+        for tile in 4..=10u8 {
+            assert!(moonstone_burial_tile_accepted(tile));
+        }
+        assert!(moonstone_burial_tile_accepted(44));
+        assert!(moonstone_burial_tile_accepted(45));
+        // Rejected: outside the published set
+        assert!(!moonstone_burial_tile_accepted(0));
+        assert!(!moonstone_burial_tile_accepted(3));
+        assert!(!moonstone_burial_tile_accepted(11));
+        assert!(!moonstone_burial_tile_accepted(43));
+        assert!(!moonstone_burial_tile_accepted(46));
+        assert!(!moonstone_burial_tile_accepted(255));
+    }
+
+    #[test]
     fn surface_chasm_location_matches_gazetteer() {
         // catalogs/gazetteer.md §8
         assert_eq!(SURFACE_CHASM_X, 54);
