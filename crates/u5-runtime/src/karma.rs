@@ -61,6 +61,27 @@ impl KarmaAction {
     }
 }
 
+/// `karma.md §7` Avatar stat-reward unit applied per touched stat
+/// during a Codex-read shrine turn-in. Each touched stat increments
+/// by one and clamps at thirty. Returns the (str, dex, int) deltas
+/// the turn-in writes onto the Avatar record. The same virtue
+/// columns chargen scores at `+2` per question are scored at `+1`
+/// here, except Humility which still grants no stat reward.
+pub const CODEX_TURNIN_STAT_INCREMENT: u8 = 1;
+pub const CODEX_TURNIN_STAT_CAP: u8 = 30;
+pub const fn codex_turnin_stat_reward(virtue: ShrineVirtue) -> (u8, u8, u8) {
+    match virtue {
+        ShrineVirtue::Honesty => (0, 0, 1),
+        ShrineVirtue::Compassion => (0, 1, 0),
+        ShrineVirtue::Valor => (1, 0, 0),
+        ShrineVirtue::Justice => (0, 1, 1),
+        ShrineVirtue::Sacrifice => (1, 1, 0),
+        ShrineVirtue::Honor => (1, 0, 1),
+        ShrineVirtue::Spirituality => (1, 1, 1),
+        ShrineVirtue::Humility => (0, 0, 0),
+    }
+}
+
 /// `karma.md §5` resurrection-penalty threshold. At a moral-standing
 /// selector of 98 or higher, the revived member's XP is unchanged;
 /// below 98 the XP is scaled down by the selector percentage.

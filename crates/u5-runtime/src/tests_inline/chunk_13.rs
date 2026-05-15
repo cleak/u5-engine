@@ -1,4 +1,32 @@
     #[test]
+    fn codex_turnin_stat_reward_matches_spec_table() {
+        // karma.md §7
+        assert_eq!(CODEX_TURNIN_STAT_INCREMENT, 1);
+        assert_eq!(CODEX_TURNIN_STAT_CAP, 30);
+        assert_eq!(codex_turnin_stat_reward(ShrineVirtue::Honesty), (0, 0, 1));
+        assert_eq!(codex_turnin_stat_reward(ShrineVirtue::Compassion), (0, 1, 0));
+        assert_eq!(codex_turnin_stat_reward(ShrineVirtue::Valor), (1, 0, 0));
+        assert_eq!(codex_turnin_stat_reward(ShrineVirtue::Justice), (0, 1, 1));
+        assert_eq!(codex_turnin_stat_reward(ShrineVirtue::Sacrifice), (1, 1, 0));
+        assert_eq!(codex_turnin_stat_reward(ShrineVirtue::Honor), (1, 0, 1));
+        assert_eq!(codex_turnin_stat_reward(ShrineVirtue::Spirituality), (1, 1, 1));
+        assert_eq!(codex_turnin_stat_reward(ShrineVirtue::Humility), (0, 0, 0));
+        // Cross-check: Humility is the only zero-reward virtue.
+        for v in [
+            ShrineVirtue::Honesty,
+            ShrineVirtue::Compassion,
+            ShrineVirtue::Valor,
+            ShrineVirtue::Justice,
+            ShrineVirtue::Sacrifice,
+            ShrineVirtue::Honor,
+            ShrineVirtue::Spirituality,
+        ] {
+            let (s, d, i) = codex_turnin_stat_reward(v);
+            assert!(s + d + i > 0, "{v:?} should grant a stat reward");
+        }
+    }
+
+    #[test]
     fn blackthorn_challenge_prompt_table_matches_spec() {
         // blackthorn.md §4
         assert_eq!(BLACKTHORN_CHALLENGE_PROMPT_TABLE.len(), 4);

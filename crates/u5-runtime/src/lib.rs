@@ -168,7 +168,8 @@ pub use jimmy::{
     object_chest_jimmy_succeeds, object_chest_jimmy_threshold,
 };
 pub use karma::{
-    KarmaAction, RESURRECTION_PENALTY_SKIP_THRESHOLD, apply_karma_action,
+    CODEX_TURNIN_STAT_CAP, CODEX_TURNIN_STAT_INCREMENT, KarmaAction,
+    RESURRECTION_PENALTY_SKIP_THRESHOLD, apply_karma_action, codex_turnin_stat_reward,
     resurrection_penalty_skipped, resurrection_scaled_xp,
 };
 pub use lord_british_camp::{
