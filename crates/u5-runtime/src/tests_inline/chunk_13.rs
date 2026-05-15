@@ -1983,6 +1983,22 @@
     }
 
     #[test]
+    fn save_top_level_constants_match_spec() {
+        // formats/saved-gam.md §2,§3,§4
+        assert_eq!(SAVED_GAM_LEN, 4192);
+        assert_eq!(SAVE_LEADING_BYTES_LEN, 2);
+        assert_eq!(SAVE_CHARACTER_ROSTER_SLOTS, 16);
+        assert_eq!(SAVE_ROSTER_OFFSET, 0x0002);
+        assert_eq!(SAVE_CHARACTER_RECORD_LEN, 32);
+        // The roster occupies SLOTS*RECORD_LEN = 512 bytes
+        assert_eq!(SAVE_CHARACTER_ROSTER_SLOTS * SAVE_CHARACTER_RECORD_LEN, 512);
+        // Party-size byte
+        assert_eq!(SAVE_PARTY_SIZE_OFFSET, 0x02B5);
+        assert_eq!(SAVE_PARTY_SIZE_MIN, 1);
+        assert_eq!(SAVE_PARTY_SIZE_MAX, 6);
+    }
+
+    #[test]
     fn save_active_object_and_dungeon_buffer_offsets_match_spec() {
         // formats/saved-gam.md §8.1, §8.2
         assert_eq!(SAVE_ACTIVE_OBJECT_TABLE_OFFSET, 0x06B4);

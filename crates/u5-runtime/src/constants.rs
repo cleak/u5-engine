@@ -136,6 +136,15 @@ pub const PLAY_START_MONTH: u8 = 4;
 pub const PLAY_START_DAY: u8 = 5;
 pub const PLAY_START_HOUR: u8 = 12;
 pub const SAVED_GAM_LEN: usize = 4192;
+/// `formats/saved-gam.md §2` top-level layout: leading two bytes
+/// precede the roster.
+pub const SAVE_LEADING_BYTES_LEN: usize = 2;
+/// `formats/saved-gam.md §3`: number of character-record slots in the
+/// roster.
+pub const SAVE_CHARACTER_ROSTER_SLOTS: usize = 16;
+/// `formats/saved-gam.md §4`: party-size byte range (`1..=6`).
+pub const SAVE_PARTY_SIZE_MIN: u8 = 1;
+pub const SAVE_PARTY_SIZE_MAX: u8 = 6;
 pub const SAVE_FOOD_STOCK_OFFSET: usize = 0x0202;
 pub const SAVE_GOLD_STOCK_OFFSET: usize = 0x0204;
 pub const SAVE_KEY_STOCK_OFFSET: usize = 0x0206;
