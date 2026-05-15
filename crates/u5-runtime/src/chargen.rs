@@ -112,6 +112,17 @@ pub fn chargen_virtue_stat_delta(virtue: ShrineVirtue) -> ChargenStats {
     }
 }
 
+/// `chargen.md §7`: STR floor applied after summing the questionnaire
+/// totals. Because the maximum per-question STR contribution is two and
+/// the questionnaire has seven questions, the floor always fires for the
+/// questionnaire path and every newly-created avatar emerges with exactly
+/// twenty Strength.
+pub const CHARGEN_STR_FLOOR: u8 = 20;
+
+/// `chargen.md §8`: starting party size for a fresh-from-questionnaire
+/// save (Avatar plus Iolo and Shamino in scene 13, Iolo's Hut).
+pub const CHARGEN_STARTING_PARTY_SIZE: u8 = 3;
+
 pub fn chargen_stats_from_winners(winners: &[ShrineVirtue]) -> ChargenStats {
     let mut strength = 0u8;
     let mut dexterity = 0u8;
@@ -123,7 +134,7 @@ pub fn chargen_stats_from_winners(winners: &[ShrineVirtue]) -> ChargenStats {
         intelligence = intelligence.saturating_add(delta.intelligence);
     }
     ChargenStats {
-        strength: strength.max(20),
+        strength: strength.max(CHARGEN_STR_FLOOR),
         dexterity,
         intelligence,
     }

@@ -636,6 +636,44 @@
     }
 
     #[test]
+    fn chargen_questionnaire_always_floors_strength_to_twenty() {
+        // chargen.md §7: max STR contribution is 2 per question and there
+        // are 7 questions, so the floor always fires.
+        assert_eq!(CHARGEN_STR_FLOOR, 20);
+        assert_eq!(CHARGEN_STARTING_PARTY_SIZE, 3);
+
+        // Empty winners list: STR should still be floored to 20.
+        let stats = chargen_stats_from_winners(&[]);
+        assert_eq!(stats.strength, CHARGEN_STR_FLOOR);
+        assert_eq!(stats.dexterity, 0);
+        assert_eq!(stats.intelligence, 0);
+
+        // Worst-case STR contribution (any seven Spirituality wins):
+        // chargen_virtue_stat_delta(Spirituality) is INT-only, so STR
+        // remains 0 before the floor.
+        let all_spirituality = vec![ShrineVirtue::Spirituality; 7];
+        let stats = chargen_stats_from_winners(&all_spirituality);
+        assert_eq!(stats.strength, CHARGEN_STR_FLOOR);
+
+        // Best-case STR contribution: any seven full-STR virtues should
+        // still floor the result, since 7*max delta < 20 only if delta<3.
+        // Either way, the result must be >= floor.
+        for v in [
+            ShrineVirtue::Honesty,
+            ShrineVirtue::Compassion,
+            ShrineVirtue::Valor,
+            ShrineVirtue::Justice,
+            ShrineVirtue::Sacrifice,
+            ShrineVirtue::Honor,
+            ShrineVirtue::Spirituality,
+            ShrineVirtue::Humility,
+        ] {
+            let stats = chargen_stats_from_winners(&vec![v; 7]);
+            assert!(stats.strength >= CHARGEN_STR_FLOOR);
+        }
+    }
+
+    #[test]
     fn trap_effect_classification_matches_spec_table() {
         // traps.md §3
         assert_eq!(trap_effect_for_id(0), Some(TrapEffect::Acid));
