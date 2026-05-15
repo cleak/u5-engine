@@ -636,6 +636,36 @@
     }
 
     #[test]
+    fn visibility_markers_classify_per_spec() {
+        // visibility.md §2
+        assert_eq!(VIEWPORT_SIDE, 11);
+        assert_eq!(VIEWPORT_ROW_STRIDE, 32);
+        assert_eq!(TERRAIN_BAND_ROW_STRIDE, 16);
+        assert_eq!(VIEWPORT_PLAYER_ROW, 5);
+        assert_eq!(VIEWPORT_PLAYER_COL, 5);
+        assert_eq!(visibility_marker(0xFF), VisibilityMarker::Hidden);
+        assert_eq!(visibility_marker(0x00), VisibilityMarker::UseCompanion);
+        assert_eq!(visibility_marker(0xDD), VisibilityMarker::ClearVisible);
+        assert_eq!(visibility_marker(0x1C), VisibilityMarker::DimPeriphery);
+        assert_eq!(
+            visibility_marker(0x87),
+            VisibilityMarker::AlreadyRendered
+        );
+        assert_eq!(
+            visibility_marker(0x42),
+            VisibilityMarker::DirectTile(0x42)
+        );
+
+        // visibility.md §3 light-radius branch (signed)
+        assert_eq!(light_radius_branch(0), LightRadiusBranch::PitchDark);
+        assert_eq!(light_radius_branch(1), LightRadiusBranch::Carve(1));
+        assert_eq!(light_radius_branch(50), LightRadiusBranch::Carve(50));
+        assert_eq!(light_radius_branch(127), LightRadiusBranch::Carve(127));
+        assert_eq!(light_radius_branch(128), LightRadiusBranch::DebugFullFill);
+        assert_eq!(light_radius_branch(255), LightRadiusBranch::DebugFullFill);
+    }
+
+    #[test]
     fn active_object_eviction_phase_matches_spec_cascade() {
         // active-objects.md §4
         // Empty slot is always phase 1.
