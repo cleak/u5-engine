@@ -940,6 +940,16 @@
     }
 
     #[test]
+    fn story_dat_size_and_record_count_match_spec() {
+        // formats/story-dat.md §2
+        assert_eq!(STORY_DAT_LEN, 11_679);
+        assert_eq!(STORY_DAT_RECORDS, 20);
+        // intro.md §10: total intro narrative steps include one inline
+        // doorway step that does not consume a STORY.DAT record.
+        assert_eq!(INTRO_STORY_STEP_COUNT, STORY_DAT_RECORDS + 1);
+    }
+
+    #[test]
     fn question_dat_layout_constants_match_spec() {
         // formats/question-dat.md §2,§4
         assert_eq!(QUESTION_DAT_RECORDS, 30);

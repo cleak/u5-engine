@@ -8,6 +8,11 @@ use std::path::Path;
 const STORY_DAT_FILE: &str = "STORY.DAT";
 const EXPECTED_RECORD_COUNT: usize = 20;
 
+/// `formats/story-dat.md §2`: shipped DOS file size in bytes.
+pub const STORY_DAT_LEN: usize = 11_679;
+/// `formats/story-dat.md §2`: number of NUL-terminated text records.
+pub const STORY_DAT_RECORDS: usize = 20;
+
 /// `intro.md §10` — total intro narrative steps (zero-based 0..=20).
 pub const INTRO_STORY_STEP_COUNT: usize = 21;
 
