@@ -46,6 +46,18 @@ pub const KARMA_DAT_LEN: usize = 761;
 pub const KARMA_DAT_RECORDS: usize = 6;
 pub const TILES_EGA_FILE: &str = "TILES.16";
 pub const TILES_CGA_FILE: &str = "TILES.4";
+/// `formats/bit.md §3`: each pointer-table entry is exactly 4 bytes
+/// (a strip-pointer word followed by a metadata word).
+pub const BIT_POINTER_TABLE_ENTRY_LEN: usize = 4;
+/// `formats/bit.md §3`: leading two-byte entry-count word precedes
+/// the pointer-table entries.
+pub const BIT_ENTRY_COUNT_WORD_LEN: usize = 2;
+/// `formats/bit.md §3`: a strip-pointer word value of zero means the
+/// entry has no associated strip body (skipped by the driver scan).
+pub const BIT_STRIP_POINTER_NONE: u16 = 0;
+/// `formats/bit.md §4.3`: `WD.BIT` is a single-entry resource whose
+/// "Warriors of Destiny" lettering is exactly 49 rows tall.
+pub const WD_BIT_LETTERING_ROWS: u16 = 49;
 #[cfg(test)]
 pub const TITLE_BIT_FILE: &str = "TITLE.BIT";
 #[cfg(test)]

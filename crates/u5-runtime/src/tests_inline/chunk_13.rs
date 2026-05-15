@@ -1,4 +1,13 @@
     #[test]
+    fn bit_format_constants_match_spec() {
+        // formats/bit.md §3,§4.3
+        assert_eq!(BIT_POINTER_TABLE_ENTRY_LEN, 4);
+        assert_eq!(BIT_ENTRY_COUNT_WORD_LEN, 2);
+        assert_eq!(BIT_STRIP_POINTER_NONE, 0);
+        assert_eq!(WD_BIT_LETTERING_ROWS, 49);
+    }
+
+    #[test]
     fn tile_atlas_size_constants_match_spec() {
         // formats/tiles.md §3,§4,§5.1
         assert_eq!(TILE_PIXEL_SIDE, 16);
