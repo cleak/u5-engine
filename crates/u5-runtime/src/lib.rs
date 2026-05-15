@@ -153,8 +153,10 @@ pub use input_codes::{
 };
 pub use jimmy::{
     DOOR_AUTO_CLOSE_TURNS, JIMMY_DOOR_DIE_HIGH, JIMMY_DOOR_DIE_LOW, JIMMY_OBJECT_DIE_HIGH,
-    JIMMY_OBJECT_DIE_LOW, dungeon_chest_jimmy_succeeds, dungeon_chest_jimmy_threshold,
-    jimmy_door_succeeds, object_chest_jimmy_succeeds, object_chest_jimmy_threshold,
+    JIMMY_OBJECT_DIE_LOW, MAGIC_UNLOCK_CLOSED_WOODEN_A, MAGIC_UNLOCK_CLOSED_WOODEN_B,
+    MAGIC_UNLOCK_OPEN_WOODEN_A, MAGIC_UNLOCK_OPEN_WOODEN_B, dungeon_chest_jimmy_succeeds,
+    dungeon_chest_jimmy_threshold, jimmy_door_succeeds, magic_unlock_door_rewrite,
+    object_chest_jimmy_succeeds, object_chest_jimmy_threshold,
 };
 pub use karma::{
     KarmaAction, RESURRECTION_PENALTY_SKIP_THRESHOLD, apply_karma_action,

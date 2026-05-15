@@ -60,3 +60,19 @@ pub const fn dungeon_chest_jimmy_succeeds(threshold: u8, roll_1_to_30: u8) -> bo
 /// auto-close countdown to four turns; each turn-consuming pass
 /// decrements it.
 pub const DOOR_AUTO_CLOSE_TURNS: u8 = 4;
+
+/// `doors-and-z-transitions.md §7` magic Open/Unlock helper. The
+/// helper opens only ordinary closed wooden-door variants and uses
+/// fixed per-variant rewrites. Returns `None` for any other tile —
+/// non-wooden doors, magic-locked variants, chests, NPCs, walls.
+pub const MAGIC_UNLOCK_CLOSED_WOODEN_A: u8 = 0x97;
+pub const MAGIC_UNLOCK_OPEN_WOODEN_A: u8 = 0xB8;
+pub const MAGIC_UNLOCK_CLOSED_WOODEN_B: u8 = 0x98;
+pub const MAGIC_UNLOCK_OPEN_WOODEN_B: u8 = 0xBA;
+pub const fn magic_unlock_door_rewrite(tile: u8) -> Option<u8> {
+    match tile {
+        MAGIC_UNLOCK_CLOSED_WOODEN_A => Some(MAGIC_UNLOCK_OPEN_WOODEN_A),
+        MAGIC_UNLOCK_CLOSED_WOODEN_B => Some(MAGIC_UNLOCK_OPEN_WOODEN_B),
+        _ => None,
+    }
+}

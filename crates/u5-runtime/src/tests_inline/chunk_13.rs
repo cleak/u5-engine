@@ -1,4 +1,26 @@
     #[test]
+    fn magic_unlock_door_rewrite_only_accepts_wooden_doors() {
+        // doors-and-z-transitions.md §7
+        assert_eq!(
+            magic_unlock_door_rewrite(MAGIC_UNLOCK_CLOSED_WOODEN_A),
+            Some(MAGIC_UNLOCK_OPEN_WOODEN_A)
+        );
+        assert_eq!(
+            magic_unlock_door_rewrite(MAGIC_UNLOCK_CLOSED_WOODEN_B),
+            Some(MAGIC_UNLOCK_OPEN_WOODEN_B)
+        );
+        // Already-open variants are not re-rewritten.
+        assert_eq!(magic_unlock_door_rewrite(MAGIC_UNLOCK_OPEN_WOODEN_A), None);
+        assert_eq!(magic_unlock_door_rewrite(MAGIC_UNLOCK_OPEN_WOODEN_B), None);
+        // Magic-locked / regular-locked variants (one byte below 0x97):
+        assert_eq!(magic_unlock_door_rewrite(0x95), None);
+        assert_eq!(magic_unlock_door_rewrite(0x96), None);
+        // Sentinels and non-door tiles.
+        assert_eq!(magic_unlock_door_rewrite(0x00), None);
+        assert_eq!(magic_unlock_door_rewrite(0xFF), None);
+    }
+
+    #[test]
     fn text_control_byte_classifies_extended_set() {
         // text-output.md §3
         assert_eq!(TEXT_WINDOW_COUNT, 4);
