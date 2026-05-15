@@ -1749,6 +1749,35 @@
     }
 
     #[test]
+    fn shoppe_placeholder_classifier_matches_spec_table() {
+        // formats/shoppe-dat.md §2,§4
+        assert_eq!(SHOPPE_DAT_LEN, 10_135);
+        assert_eq!(SHOPPE_DAT_RECORD_SLOTS, 196);
+        assert_eq!(SHOPPE_DAT_NONEMPTY_RECORDS, 194);
+        assert_eq!(shoppe_placeholder(b'%'), Some(ShoppePlaceholder::Gold));
+        assert_eq!(
+            shoppe_placeholder(b'^'),
+            Some(ShoppePlaceholder::Quantity)
+        );
+        assert_eq!(
+            shoppe_placeholder(b'$'),
+            Some(ShoppePlaceholder::VendorName)
+        );
+        assert_eq!(shoppe_placeholder(b'&'), Some(ShoppePlaceholder::ItemName));
+        assert_eq!(
+            shoppe_placeholder(b'*'),
+            Some(ShoppePlaceholder::PlaceName)
+        );
+        assert_eq!(shoppe_placeholder(b'#'), Some(ShoppePlaceholder::ShopName));
+        assert_eq!(shoppe_placeholder(b'@'), Some(ShoppePlaceholder::TimeOfDay));
+        // Ordinary text bytes
+        assert_eq!(shoppe_placeholder(b'A'), None);
+        assert_eq!(shoppe_placeholder(b' '), None);
+        assert_eq!(shoppe_placeholder(b'1'), None);
+        assert_eq!(shoppe_placeholder(0x80), None);
+    }
+
+    #[test]
     fn reagent_abbreviation_matches_spec_table() {
         // magic.md §2
         assert_eq!(Reagent::SulfurAsh.abbreviation(), "Sulfur Ash");

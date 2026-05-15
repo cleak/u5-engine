@@ -3,6 +3,48 @@
 use crate::*;
 
 pub const SHOP_COMMODITY_STOCK_CAP: u8 = 99;
+
+/// `formats/shoppe-dat.md §2`: shipped DOS file size in bytes.
+pub const SHOPPE_DAT_LEN: usize = 10_135;
+/// `formats/shoppe-dat.md §2`: total record slots and non-empty
+/// records in the shipped data set.
+pub const SHOPPE_DAT_RECORD_SLOTS: usize = 196;
+pub const SHOPPE_DAT_NONEMPTY_RECORDS: usize = 194;
+
+/// `formats/shoppe-dat.md §4`: substitution placeholder a `SHOPPE.DAT`
+/// renderer recognises in the literal-byte stream.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShoppePlaceholder {
+    /// `%` — current gold amount, price, or total.
+    Gold,
+    /// `^` — current quantity.
+    Quantity,
+    /// `$` — vendor name.
+    VendorName,
+    /// `&` — item, subject, or asked-about name.
+    ItemName,
+    /// `*` — place or location name.
+    PlaceName,
+    /// `#` — shop name.
+    ShopName,
+    /// `@` — time-of-day word: morning/afternoon/evening.
+    TimeOfDay,
+}
+
+/// `formats/shoppe-dat.md §4`: classify a literal byte into a
+/// substitution placeholder. Returns `None` for ordinary ASCII bytes.
+pub const fn shoppe_placeholder(byte: u8) -> Option<ShoppePlaceholder> {
+    Some(match byte {
+        b'%' => ShoppePlaceholder::Gold,
+        b'^' => ShoppePlaceholder::Quantity,
+        b'$' => ShoppePlaceholder::VendorName,
+        b'&' => ShoppePlaceholder::ItemName,
+        b'*' => ShoppePlaceholder::PlaceName,
+        b'#' => ShoppePlaceholder::ShopName,
+        b'@' => ShoppePlaceholder::TimeOfDay,
+        _ => return None,
+    })
+}
 pub const SHOP_FOOD_STOCK_CAP: u16 = 9999;
 pub const SHOP_GOLD_CAP: u16 = 9999;
 
