@@ -777,6 +777,18 @@
     }
 
     #[test]
+    fn chargen_questionnaire_round_structure_matches_spec_section_six() {
+        // chargen.md §6: 3 rounds (4 + 2 + 1 = 7 questions), single-elim.
+        assert_eq!(CHARGEN_QUESTION_COUNT, 7);
+        assert_eq!(CHARGEN_ROUND_COUNT, 3);
+        assert_eq!(CHARGEN_QUESTIONS_PER_ROUND, [4, 2, 1]);
+        assert_eq!(
+            CHARGEN_QUESTIONS_PER_ROUND.iter().sum::<usize>(),
+            CHARGEN_QUESTION_COUNT
+        );
+    }
+
+    #[test]
     fn npc_dynamic_obstacle_radius_matches_published_threshold() {
         // npc-schedules.md §10: occupied cells are blocked only when the
         // occupant is within Manhattan distance less than four from the
