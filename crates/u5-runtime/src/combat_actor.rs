@@ -11,6 +11,49 @@ pub const COMBAT_MONSTER_SLOT_FIRST: usize = 1;
 pub const COMBAT_MONSTER_SLOT_LAST: usize = 25;
 pub const COMBAT_ACTOR_RECORD_LEN: usize = 8;
 
+/// `combat.md §6` byte offsets inside the eight-byte combat actor
+/// descriptor. The decoded row order is HP/wound counter, base-step,
+/// flags/faction, owner/target/class, active-object back-reference,
+/// phase counter, arena X, and arena Y.
+pub const COMBAT_ACTOR_HP_OFFSET: usize = 0;
+pub const COMBAT_ACTOR_BASE_STEP_OFFSET: usize = 1;
+pub const COMBAT_ACTOR_FLAGS_OFFSET: usize = 2;
+pub const COMBAT_ACTOR_OWNER_TARGET_CLASS_OFFSET: usize = 3;
+pub const COMBAT_ACTOR_BACKREF_OFFSET: usize = 4;
+pub const COMBAT_ACTOR_PHASE_OFFSET: usize = 5;
+pub const COMBAT_ACTOR_X_OFFSET: usize = 6;
+pub const COMBAT_ACTOR_Y_OFFSET: usize = 7;
+
+/// `combat.md §6` typed combat-actor field selector. Pairs with the
+/// `COMBAT_ACTOR_*_OFFSET` constants for callers that prefer enum
+/// dispatch over raw indexing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatActorField {
+    Hp,
+    BaseStep,
+    Flags,
+    OwnerTargetClass,
+    Backref,
+    Phase,
+    ArenaX,
+    ArenaY,
+}
+
+impl CombatActorField {
+    pub const fn offset(self) -> usize {
+        match self {
+            Self::Hp => COMBAT_ACTOR_HP_OFFSET,
+            Self::BaseStep => COMBAT_ACTOR_BASE_STEP_OFFSET,
+            Self::Flags => COMBAT_ACTOR_FLAGS_OFFSET,
+            Self::OwnerTargetClass => COMBAT_ACTOR_OWNER_TARGET_CLASS_OFFSET,
+            Self::Backref => COMBAT_ACTOR_BACKREF_OFFSET,
+            Self::Phase => COMBAT_ACTOR_PHASE_OFFSET,
+            Self::ArenaX => COMBAT_ACTOR_X_OFFSET,
+            Self::ArenaY => COMBAT_ACTOR_Y_OFFSET,
+        }
+    }
+}
+
 /// `combat.md §9` Pass-2 monster class-flag ability bits, tested in
 /// fixed order: possess/charm-on-turn first, then blink/phase, then
 /// summon-daemon. Variant classes carrying multiple bits attempt

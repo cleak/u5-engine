@@ -1,4 +1,31 @@
     #[test]
+    fn combat_actor_record_offsets_match_spec_row_order() {
+        // combat.md §6
+        assert_eq!(COMBAT_ACTOR_RECORD_LEN, 8);
+        assert_eq!(CombatActorField::Hp.offset(), 0);
+        assert_eq!(CombatActorField::BaseStep.offset(), 1);
+        assert_eq!(CombatActorField::Flags.offset(), 2);
+        assert_eq!(CombatActorField::OwnerTargetClass.offset(), 3);
+        assert_eq!(CombatActorField::Backref.offset(), 4);
+        assert_eq!(CombatActorField::Phase.offset(), 5);
+        assert_eq!(CombatActorField::ArenaX.offset(), 6);
+        assert_eq!(CombatActorField::ArenaY.offset(), 7);
+        // All offsets are inside the descriptor.
+        for field in [
+            CombatActorField::Hp,
+            CombatActorField::BaseStep,
+            CombatActorField::Flags,
+            CombatActorField::OwnerTargetClass,
+            CombatActorField::Backref,
+            CombatActorField::Phase,
+            CombatActorField::ArenaX,
+            CombatActorField::ArenaY,
+        ] {
+            assert!(field.offset() < COMBAT_ACTOR_RECORD_LEN);
+        }
+    }
+
+    #[test]
     fn inn_leave_and_pickup_bills_match_spec_formulas() {
         // shops.md §8.4
         assert_eq!(INN_LEAVE_DEPOSIT_ROOM_RATE_UNITS, 10);
