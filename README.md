@@ -430,8 +430,11 @@ shipwright-style deliveries supplied through the debug startup hook consume the
 same first-empty-then-append active-object allocation on world entry. Ships preserve
 decoded hull/skiff auxiliary
 bytes through board, sail-toggle, and parked-object exit state, and ship board
-or exit reports the public badly-damaged warning for the unambiguous zero-hull
-case and the no-skiffs warning when that auxiliary count is zero.
+or exit reports the public badly-damaged warning whenever hull condition is
+below ten, plus the no-skiffs warning when that auxiliary count is zero. A
+furled-ship X-it without nearby foot landing launches a carried skiff per
+`vehicles.md` §5: the hull stays parked at the original cell with one fewer
+skiff, and the party becomes the launched skiff in place.
 Britannia's sparse `BRIT.DAT`
 chunks are decoded at runtime by locating the public-shape chunk-index table
 in `DATA.OVL`; the table is not committed to the repository. It is a test
