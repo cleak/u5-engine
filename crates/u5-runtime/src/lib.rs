@@ -50,6 +50,7 @@ pub mod signs_io;
 pub mod stat_arithmetic;
 pub mod story_io;
 pub mod text_wrap;
+pub mod tlk_control_codes;
 pub mod view_classes;
 pub mod start_validation;
 pub mod test_fixtures;
@@ -88,6 +89,16 @@ pub use signs_io::{
 pub use stat_arithmetic::{capped_add_u8, capped_add_word, floor_sub_u8, floor_sub_word};
 pub use story_io::{StoryRecords, load_story_records, parse_story_records};
 pub use text_wrap::{WrappedLine, wrap_text};
+pub use tlk_control_codes::{
+    TLK_CODE_ACTION_DISPATCH, TLK_CODE_ASK_PARTY_NAME, TLK_CODE_ASK_WHO,
+    TLK_CODE_CURSE_CHECK, TLK_CODE_END_OF_RESPONSE, TLK_CODE_END_STREAM,
+    TLK_CODE_GOLD_PAYMENT, TLK_CODE_GOTO_LABEL_FIRST, TLK_CODE_GOTO_LABEL_LAST,
+    TLK_CODE_IF_ELSE, TLK_CODE_IF_ELSE_ALT, TLK_CODE_LITERAL_NEWLINE,
+    TLK_CODE_PANEL_NEWLINE, TLK_CODE_PAUSE, TLK_CODE_PRINT_AVATAR_NAME,
+    TLK_CODE_PROTECT_RUN, TLK_CODE_SET_FLAG, TLK_CODE_WAIT_KEY,
+    TLK_LABEL_FIRST, TLK_LABEL_LAST, is_tlk_label_byte,
+    tlk_introducer_argument_count,
+};
 pub use view_classes::{fc_sprite_proximity_mask_hits, tile_view_class};
 pub use combat_actor::*;
 pub use combat_arena::*;

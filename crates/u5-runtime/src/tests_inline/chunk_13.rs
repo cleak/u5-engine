@@ -667,6 +667,43 @@
     }
 
     #[test]
+    fn tlk_introducer_argument_widths_match_section_seven_six() {
+        // conversation.md §7.6: 0x85 GOLD-PAYMENT takes 3 bytes, 0x86
+        // ACTION-DISPATCH and 0x8C IF-ELSE take 1 byte, 0xFE IF-ELSE-ALT
+        // takes 2 bytes; other codes take none.
+        assert_eq!(tlk_introducer_argument_count(TLK_CODE_GOLD_PAYMENT), Some(3));
+        assert_eq!(
+            tlk_introducer_argument_count(TLK_CODE_ACTION_DISPATCH),
+            Some(1)
+        );
+        assert_eq!(tlk_introducer_argument_count(TLK_CODE_IF_ELSE), Some(1));
+        assert_eq!(tlk_introducer_argument_count(TLK_CODE_IF_ELSE_ALT), Some(2));
+        for code in [
+            TLK_CODE_PRINT_AVATAR_NAME,
+            TLK_CODE_END_STREAM,
+            TLK_CODE_PAUSE,
+            TLK_CODE_WAIT_KEY,
+            TLK_CODE_CURSE_CHECK,
+            TLK_CODE_PROTECT_RUN,
+            TLK_CODE_END_OF_RESPONSE,
+        ] {
+            assert_eq!(tlk_introducer_argument_count(code), None);
+        }
+    }
+
+    #[test]
+    fn tlk_label_byte_classifier_covers_section_seven_seven_range() {
+        // conversation.md §7.7: label bytes 0x91..=0x9F, fifteen entries.
+        for byte in TLK_LABEL_FIRST..=TLK_LABEL_LAST {
+            assert!(is_tlk_label_byte(byte), "byte 0x{byte:02X} should be label");
+        }
+        assert!(!is_tlk_label_byte(0x90));
+        assert!(!is_tlk_label_byte(0xA0));
+        assert!(is_tlk_label_byte(TLK_CODE_GOTO_LABEL_FIRST));
+        assert!(is_tlk_label_byte(TLK_CODE_GOTO_LABEL_LAST));
+    }
+
+    #[test]
     fn npc_schedule_state_constants_match_published_state_machine() {
         // npc-schedules.md §7: 0=empty, 1=idle, 2=in-plane move, 3=replay
         // queue, 4=descend, 5=ascend, 6=climb up off, 7=climb down off,
