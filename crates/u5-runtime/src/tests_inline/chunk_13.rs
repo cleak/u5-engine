@@ -636,6 +636,24 @@
     }
 
     #[test]
+    fn decode_end_window_strips_layout_markers_and_terminates_on_nul() {
+        // formats/end-dat.md §3: `{` paragraph marker and `_` soft hyphen
+        // are layout hints; NUL terminates the rendered output.
+        let bytes = b"{Avatar_Standing\nat_the_circle\0HIDDEN";
+        assert_eq!(decode_end_window(bytes), "AvatarStanding\natthecircle");
+    }
+
+    #[test]
+    fn end_narrative_window_returns_decoded_subslice() {
+        let raw = b"{Hello\nWorld\0".to_vec();
+        let narrative = EndNarrative { raw };
+        assert_eq!(narrative.full_text(), "Hello\nWorld");
+        assert_eq!(narrative.window(1, 6).as_deref(), Some("Hello"));
+        // Out-of-range window returns None per spec §5.
+        assert!(narrative.window(0, 999).is_none());
+    }
+
+    #[test]
     fn parse_story_records_walks_twenty_records_and_strips_markup() {
         // formats/story-dat.md §2-§3: 20 NUL-terminated records driving the
         // intro story sequence; `{` and `_` are layout markup.
