@@ -636,6 +636,49 @@
     }
 
     #[test]
+    fn input_direction_codes_match_spec_table() {
+        // input.md §5
+        assert_eq!(
+            input_code_direction(0xD3),
+            Some(InputDirection::Northwest)
+        );
+        assert_eq!(
+            input_code_direction(0xD4),
+            Some(InputDirection::Southwest)
+        );
+        assert_eq!(
+            input_code_direction(0xD5),
+            Some(InputDirection::Northeast)
+        );
+        assert_eq!(
+            input_code_direction(0xD6),
+            Some(InputDirection::Southeast)
+        );
+        assert_eq!(input_code_direction(0xFB), Some(InputDirection::West));
+        assert_eq!(input_code_direction(0xFC), Some(InputDirection::East));
+        assert_eq!(input_code_direction(0xFD), Some(InputDirection::North));
+        assert_eq!(input_code_direction(0xFE), Some(InputDirection::South));
+        // Non-direction bytes
+        assert_eq!(input_code_direction(b'A'), None);
+        assert_eq!(input_code_direction(0x00), None);
+        assert_eq!(input_code_direction(0xFF), None);
+        // Cardinal predicate
+        assert!(InputDirection::North.is_cardinal());
+        assert!(InputDirection::South.is_cardinal());
+        assert!(InputDirection::East.is_cardinal());
+        assert!(InputDirection::West.is_cardinal());
+        assert!(!InputDirection::Northwest.is_cardinal());
+        assert!(!InputDirection::Southeast.is_cardinal());
+
+        // input.md §6 case fold
+        assert_eq!(input_case_fold(b'a'), b'A');
+        assert_eq!(input_case_fold(b'z'), b'Z');
+        assert_eq!(input_case_fold(b'A'), b'A');
+        assert_eq!(input_case_fold(b'0'), b'0');
+        assert_eq!(input_case_fold(0xFC), 0xFC);
+    }
+
+    #[test]
     fn reserved_keyword_effect_matches_spec_words() {
         // conversation.md §6
         assert_eq!(TLK_INPUT_MAX_LEN, 15);

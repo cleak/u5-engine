@@ -25,6 +25,7 @@ pub mod fonts_io;
 pub mod graphics;
 pub mod graphics_io;
 pub mod inline_parsers;
+pub mod input_codes;
 pub mod input_dispatch;
 pub mod jimmy;
 pub mod karma;
@@ -91,6 +92,11 @@ pub use containers::{
     DUNGEON_CHEST_ROWS, DungeonChestReward, DungeonChestRow, TABLE_FOOD_TILE_A,
     TABLE_FOOD_TILE_B, dungeon_chest_row_awarded, dungeon_chest_row_gate_max,
     table_food_get_resulting_tile,
+};
+pub use input_codes::{
+    INPUT_CODE_EAST, INPUT_CODE_NORTH, INPUT_CODE_NORTHEAST, INPUT_CODE_NORTHWEST,
+    INPUT_CODE_SOUTH, INPUT_CODE_SOUTHEAST, INPUT_CODE_SOUTHWEST, INPUT_CODE_WEST,
+    InputDirection, input_case_fold, input_code_direction,
 };
 pub use jimmy::{
     DOOR_AUTO_CLOSE_TURNS, JIMMY_DOOR_DIE_HIGH, JIMMY_DOOR_DIE_LOW, JIMMY_OBJECT_DIE_HIGH,
