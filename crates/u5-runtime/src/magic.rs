@@ -25,6 +25,42 @@ pub const fn spell_min_caster_level(circle: u8) -> u8 {
     circle
 }
 
+/// `magic.md §8` directed-spell wind family. Sleep, Poison Wind,
+/// Death Wind, and Flame Wind share one shared target-walk layer
+/// that builds a directed set of arena cells from the caster/target
+/// state, then iterates the matching combat actors. The common
+/// layer skips empty actors, actors masked by disqualifying status
+/// flags, and actors already processed by this same spell pass; it
+/// does not run the friend/foe faction lookup, so same-faction
+/// actors and the caster are eligible if their cells are in the
+/// directed area and they pass the non-faction gates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DirectedWindSpell {
+    /// `In Zu` — Sleep (single-target sleep status branch).
+    Sleep,
+    /// `In Nox Hur` — Poison Wind (poison status with resistance gate).
+    PoisonWind,
+    /// `In Vas Grav Corp` — Death Wind (instant-kill via decimal 99).
+    DeathWind,
+    /// `In Flam Hur` — Flame Wind (raw 1..=30 damage roll).
+    FlameWind,
+}
+
+/// `magic.md §8` directed-target-walk maximum cell count. The
+/// shared target-walk layer builds up to twenty-one arena cells
+/// from the caster/target state.
+pub const DIRECTED_WIND_MAX_CELLS: usize = 21;
+
+impl DirectedWindSpell {
+    /// `magic.md §8`: returns `true` when this wind spell credits
+    /// returned monster-kill reward units to the caster's
+    /// experience word (the two damage winds — Death Wind and
+    /// Flame Wind — credit XP; Sleep and Poison Wind do not).
+    pub const fn credits_kill_xp(self) -> bool {
+        matches!(self, Self::DeathWind | Self::FlameWind)
+    }
+}
+
 /// `magic.md §8` field-spell kind. The four field-placement spells
 /// share one helper that dispatches by this kind in non-dungeon
 /// scenes (combat byte tables) and writes a per-spell base byte

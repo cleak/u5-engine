@@ -1,4 +1,15 @@
     #[test]
+    fn directed_wind_spell_kill_xp_predicate_matches_spec() {
+        // magic.md §8
+        assert_eq!(DIRECTED_WIND_MAX_CELLS, 21);
+        // Damage winds credit kill XP; status winds do not.
+        assert!(DirectedWindSpell::DeathWind.credits_kill_xp());
+        assert!(DirectedWindSpell::FlameWind.credits_kill_xp());
+        assert!(!DirectedWindSpell::Sleep.credits_kill_xp());
+        assert!(!DirectedWindSpell::PoisonWind.credits_kill_xp());
+    }
+
+    #[test]
     fn field_spell_kind_byte_tables_match_spec() {
         // magic.md §8
         // Dungeon base bytes.
