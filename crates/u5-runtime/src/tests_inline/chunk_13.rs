@@ -636,6 +636,42 @@
     }
 
     #[test]
+    fn trap_effect_classification_matches_spec_table() {
+        // traps.md §3
+        assert_eq!(trap_effect_for_id(0), Some(TrapEffect::Acid));
+        assert_eq!(trap_effect_for_id(1), Some(TrapEffect::Poison));
+        assert_eq!(trap_effect_for_id(2), Some(TrapEffect::Bomb));
+        assert_eq!(trap_effect_for_id(3), Some(TrapEffect::Gas));
+        assert_eq!(trap_effect_for_id(4), None);
+        assert_eq!(trap_effect_for_id(255), None);
+
+        assert_eq!(trap_effect_damage_max(TrapEffect::Acid), Some(30));
+        assert_eq!(trap_effect_damage_max(TrapEffect::Bomb), Some(8));
+        assert_eq!(trap_effect_damage_max(TrapEffect::Poison), None);
+        assert_eq!(trap_effect_damage_max(TrapEffect::Gas), None);
+
+        assert!(!trap_effect_targets_whole_party(TrapEffect::Acid));
+        assert!(!trap_effect_targets_whole_party(TrapEffect::Poison));
+        assert!(trap_effect_targets_whole_party(TrapEffect::Bomb));
+        assert!(trap_effect_targets_whole_party(TrapEffect::Gas));
+
+        // The non-combat lookup table publishes 3/2/2/1 weights for the
+        // four effect ids.
+        let mut counts = [0u32; 4];
+        for index in 0..8u8 {
+            let id = shared_trap_effect_id_from_index(index, false);
+            counts[usize::from(id)] += 1;
+        }
+        assert_eq!(counts, [3, 2, 2, 1]);
+
+        // In combat the resolver picks only ids 0 and 1.
+        for index in 0..8u8 {
+            let id = shared_trap_effect_id_from_index(index, true);
+            assert!(id == 0 || id == 1);
+        }
+    }
+
+    #[test]
     fn dungeon_chest_rows_match_spec_table() {
         // containers.md §6
         assert_eq!(DUNGEON_CHEST_ROWS.len(), 7);
