@@ -38,6 +38,31 @@ pub const BLACKTHORN_CHALLENGE_PROMPT_COUNT: usize = 4;
 /// player's typed answer against the expected mantra. The expected
 /// word may appear anywhere in the typed buffer rather than being the
 /// entire input.
+/// `blackthorn.md §4` per-prompt accepted-answer table. The
+/// challenge loop iterates the first four virtue/mantra ordinals;
+/// the prompt word and the expected answer are paired in order.
+/// Index `0` is the Honesty/Ahm pair and index `3` is the
+/// Justice/Beh pair.
+pub const BLACKTHORN_CHALLENGE_PROMPT_TABLE: [(&str, &str); 4] = [
+    ("Honesty", "Ahm"),
+    ("Compassion", "Mu"),
+    ("Valour", "Ra"),
+    ("Justice", "Beh"),
+];
+
+/// `blackthorn.md §4`: returns the (prompt-word, expected-answer)
+/// pair for ordinals `0..=3`. Returns `None` for ordinals outside
+/// the live four-prompt range; the resident tables carry later
+/// virtue/mantra pairs but the traced challenge loop only iterates
+/// these four.
+pub const fn blackthorn_challenge_prompt(ordinal: u8) -> Option<(&'static str, &'static str)> {
+    if (ordinal as usize) >= BLACKTHORN_CHALLENGE_PROMPT_TABLE.len() {
+        None
+    } else {
+        Some(BLACKTHORN_CHALLENGE_PROMPT_TABLE[ordinal as usize])
+    }
+}
+
 pub fn blackthorn_challenge_answer_matches(typed: &str, expected_mantra: &str) -> bool {
     let typed_upper = typed.to_ascii_uppercase();
     let expected_upper = expected_mantra.to_ascii_uppercase();

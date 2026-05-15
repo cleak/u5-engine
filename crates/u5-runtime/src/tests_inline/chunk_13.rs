@@ -1,4 +1,23 @@
     #[test]
+    fn blackthorn_challenge_prompt_table_matches_spec() {
+        // blackthorn.md §4
+        assert_eq!(BLACKTHORN_CHALLENGE_PROMPT_TABLE.len(), 4);
+        assert_eq!(blackthorn_challenge_prompt(0), Some(("Honesty", "Ahm")));
+        assert_eq!(blackthorn_challenge_prompt(1), Some(("Compassion", "Mu")));
+        assert_eq!(blackthorn_challenge_prompt(2), Some(("Valour", "Ra")));
+        assert_eq!(blackthorn_challenge_prompt(3), Some(("Justice", "Beh")));
+        // The traced loop only iterates the first four ordinals.
+        assert_eq!(blackthorn_challenge_prompt(4), None);
+        assert_eq!(blackthorn_challenge_prompt(7), None);
+        assert_eq!(blackthorn_challenge_prompt(255), None);
+        // Cross-check: matches answer-comparison contract.
+        for ord in 0u8..4 {
+            let (_, expected) = blackthorn_challenge_prompt(ord).unwrap();
+            assert!(blackthorn_challenge_answer_matches(expected, expected));
+        }
+    }
+
+    #[test]
     fn u4_transfer_source_validation_gates_match_spec() {
         // u4-transfer.md §5
         assert_eq!(U4_TRANSFER_GOLD_GEM_FOOD_MAX, 9999);
