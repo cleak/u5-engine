@@ -1,4 +1,17 @@
     #[test]
+    fn eternal_flame_pairs_with_each_shadowlord_slot() {
+        // catalogs/quest-graph.md §5
+        assert_eq!(eternal_flame_for_shadowlord(0), Some(EternalFlame::Truth));
+        assert_eq!(eternal_flame_for_shadowlord(1), Some(EternalFlame::Love));
+        assert_eq!(
+            eternal_flame_for_shadowlord(2),
+            Some(EternalFlame::Courage)
+        );
+        assert_eq!(eternal_flame_for_shadowlord(3), None);
+        assert_eq!(eternal_flame_for_shadowlord(255), None);
+    }
+
+    #[test]
     fn main_quest_requirements_enumerate_per_spec() {
         // catalogs/quest-graph.md §2
         assert_eq!(MainQuestRequirement::ALL.len(), 4);

@@ -2,6 +2,29 @@
 
 use crate::*;
 
+/// `catalogs/quest-graph.md §5` Eternal-Flame principle the
+/// destruction of one Shadowlord's shard must use.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EternalFlame {
+    /// Falsehood's opposed flame.
+    Truth,
+    /// Hatred's opposed flame.
+    Love,
+    /// Cowardice's opposed flame.
+    Courage,
+}
+
+/// `catalogs/quest-graph.md §5`: the Eternal-Flame paired with each
+/// Shadowlord (by zero-based slot 0=Falsehood / 1=Hatred / 2=Cowardice).
+pub const fn eternal_flame_for_shadowlord(slot: usize) -> Option<EternalFlame> {
+    Some(match slot {
+        0 => EternalFlame::Truth,
+        1 => EternalFlame::Love,
+        2 => EternalFlame::Courage,
+        _ => return None,
+    })
+}
+
 /// `catalogs/quest-graph.md §2`: the four main-quest requirements
 /// the web-shaped progression converges on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
