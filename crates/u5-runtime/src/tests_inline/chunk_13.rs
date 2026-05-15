@@ -1,4 +1,20 @@
     #[test]
+    fn inn_leave_and_pickup_bills_match_spec_formulas() {
+        // shops.md §8.4
+        assert_eq!(INN_LEAVE_DEPOSIT_ROOM_RATE_UNITS, 10);
+        // Leave deposit = 10 * adjusted room rate.
+        assert_eq!(inn_leave_companion_deposit(0), 0);
+        assert_eq!(inn_leave_companion_deposit(7), 70);
+        assert_eq!(inn_leave_companion_deposit(15), 150);
+        // Pickup bill = adjusted lodging * stay (with zero treated as one).
+        assert_eq!(inn_pickup_bill(15, 0), 15);
+        assert_eq!(inn_pickup_bill(15, 1), 15);
+        assert_eq!(inn_pickup_bill(15, 25), 15 * 25);
+        assert_eq!(inn_pickup_bill(0, 4), 0);
+        assert_eq!(inn_pickup_bill(0, 0), 0);
+    }
+
+    #[test]
     fn shoppe_record_cluster_constants_match_spec_table() {
         // shops.md §4 record-id ranges
         assert_eq!(SHOPPE_RECORDS_SHARED_BARKS_FIRST, 0);

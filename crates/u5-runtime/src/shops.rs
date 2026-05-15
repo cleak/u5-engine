@@ -587,6 +587,28 @@ pub const INN_REGISTRY_CAP: usize = 16;
 pub const INN_PARTY_CAP: usize = 6;
 pub const INN_STAY_COUNTER_CAP: u8 = 25;
 
+/// `shops.md §8.4` Leave-companion deposit unit count. The deposit
+/// debited when the player leaves a companion at an inn is the local
+/// adjusted room-rate multiplied by this many units.
+pub const INN_LEAVE_DEPOSIT_ROOM_RATE_UNITS: u8 = 10;
+
+/// `shops.md §8.4`: Leave-companion deposit calculated from the
+/// inn's adjusted room rate (already with Intelligence adjustment
+/// applied). Returns the gold amount to debit before the registry
+/// transfer completes.
+pub const fn inn_leave_companion_deposit(adjusted_room_rate: u16) -> u16 {
+    adjusted_room_rate * INN_LEAVE_DEPOSIT_ROOM_RATE_UNITS as u16
+}
+
+/// `shops.md §8.4`: Pickup bill calculated from the adjusted local
+/// lodging charge and the guest's stored stay counter, treating zero
+/// as one billable unit (so a same-day pickup still costs one
+/// lodging charge).
+pub const fn inn_pickup_bill(adjusted_lodging_charge: u16, stay_counter: u8) -> u16 {
+    let units = if stay_counter == 0 { 1 } else { stay_counter };
+    adjusted_lodging_charge * units as u16
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Inn {
     TheWayfarerInn,
