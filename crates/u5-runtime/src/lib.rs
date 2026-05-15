@@ -140,10 +140,10 @@ pub use magic::{
     spell_common_name, spell_indoor_absorbs,
 };
 pub use moongate::{
-    NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NaturalMoongateCounterStep,
-    natural_moongate_advance_counter, natural_moongate_cached_glyph_slot,
-    natural_moongate_counter_step, natural_moongate_dispatches_meditate,
-    natural_moongate_slot_eligible,
+    NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NaturalMoongateCounterStep, SURFACE_CHASM_X,
+    SURFACE_CHASM_Y, is_surface_chasm_cell, natural_moongate_advance_counter,
+    natural_moongate_cached_glyph_slot, natural_moongate_counter_step,
+    natural_moongate_dispatches_meditate, natural_moongate_slot_eligible,
 };
 pub use main_loop::{
     DUNGEON_FACING_EAST, DUNGEON_FACING_NORTH, DUNGEON_FACING_SOUTH, DUNGEON_FACING_WEST,

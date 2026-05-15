@@ -636,6 +636,17 @@
     }
 
     #[test]
+    fn surface_chasm_location_matches_gazetteer() {
+        // catalogs/gazetteer.md §8
+        assert_eq!(SURFACE_CHASM_X, 54);
+        assert_eq!(SURFACE_CHASM_Y, 138);
+        assert!(is_surface_chasm_cell(54, 138));
+        assert!(!is_surface_chasm_cell(54, 137));
+        assert!(!is_surface_chasm_cell(55, 138));
+        assert!(!is_surface_chasm_cell(0, 0));
+    }
+
+    #[test]
     fn natural_moongate_counter_step_matches_spec_hour_band() {
         // overworld.md §9: 20..=23 and 0..=4 increase; 5..=19 decrease.
         for h in 20..=23u8 {

@@ -94,3 +94,12 @@ pub const fn natural_moongate_cached_glyph_slot(hour: u8) -> u8 {
 /// branch.
 pub const NARRATIVE_GATE_X: u8 = 233;
 pub const NARRATIVE_GATE_Y: u8 = 235;
+
+/// `catalogs/gazetteer.md §8`: confirmed surface chasm at Britannia
+/// `(54, 138)` — stepping onto this cell damages the party, swaps the
+/// plane to the Underworld, and reseeds active objects.
+pub const SURFACE_CHASM_X: u8 = 54;
+pub const SURFACE_CHASM_Y: u8 = 138;
+pub const fn is_surface_chasm_cell(x: u8, y: u8) -> bool {
+    x == SURFACE_CHASM_X && y == SURFACE_CHASM_Y
+}
