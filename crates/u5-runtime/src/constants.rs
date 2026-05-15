@@ -196,6 +196,15 @@ pub const SAVE_FORTUNES_OF_WAR_OFFSET: usize = 0x03b3;
 /// cells when rebuilding the loaded dungeon image from `DUNGEON.DAT`.
 pub const SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET: usize = 0x033A;
 pub const SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN: usize = 16;
+/// `formats/saved-gam.md §8.1`: the live active-object table snapshot
+/// occupies 256 bytes at file offset `0x06B4..=0x07B3`. Layout matches
+/// the in-memory table (32 records × 8 bytes).
+pub const SAVE_ACTIVE_OBJECT_TABLE_OFFSET: usize = 0x06B4;
+/// `formats/saved-gam.md §8.2`: the dungeon/map-cell working buffer
+/// occupies 512 bytes at file offset `0x03B4..=0x05B3` and matches the
+/// 512-byte dungeon-record stride.
+pub const SAVE_DUNGEON_WORKING_BUFFER_OFFSET: usize = 0x03B4;
+pub const SAVE_DUNGEON_WORKING_BUFFER_LEN: usize = 512;
 /// `formats/saved-gam.md §10`: active-player sentinel value when no
 /// party member is currently selected to move. The byte holds an
 /// integer slot index when one is selected.

@@ -1983,6 +1983,19 @@
     }
 
     #[test]
+    fn save_active_object_and_dungeon_buffer_offsets_match_spec() {
+        // formats/saved-gam.md §8.1, §8.2
+        assert_eq!(SAVE_ACTIVE_OBJECT_TABLE_OFFSET, 0x06B4);
+        assert_eq!(SAVE_DUNGEON_WORKING_BUFFER_OFFSET, 0x03B4);
+        assert_eq!(SAVE_DUNGEON_WORKING_BUFFER_LEN, 512);
+        // 32 records × 8 bytes = 256 bytes
+        assert_eq!(OOL_RECORD_LEN * OOL_SLOTS, ACTIVE_OBJECT_SAVE_BYTES);
+        assert_eq!(ACTIVE_OBJECT_SAVE_BYTES, 256);
+        // Active-object table fits inside the save image
+        assert!(SAVE_ACTIVE_OBJECT_TABLE_OFFSET + ACTIVE_OBJECT_SAVE_BYTES <= 0x1060);
+    }
+
+    #[test]
     fn save_per_turn_flags_offsets_match_spec() {
         // formats/saved-gam.md §10
         assert_eq!(SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET, 0x033A);
