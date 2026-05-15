@@ -36,6 +36,7 @@ pub mod karma;
 pub mod lighting;
 pub mod magic;
 pub mod main_loop;
+pub mod moongate;
 pub mod lzw;
 pub mod map_decoders;
 pub mod map_io;
@@ -123,6 +124,12 @@ pub use jimmy::{
 pub use karma::{KarmaAction, apply_karma_action};
 pub use magic::{
     CastGateOutcome, cast_dispatcher_gate, heal_spell_amount_from_raw_roll_u8,
+};
+pub use moongate::{
+    NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NaturalMoongateCounterStep,
+    natural_moongate_advance_counter, natural_moongate_cached_glyph_slot,
+    natural_moongate_counter_step, natural_moongate_dispatches_meditate,
+    natural_moongate_slot_eligible,
 };
 pub use main_loop::{
     SCENE_COMBAT_TEMPORARY, SCENE_DUNGEON_FAMILY_FIRST, SCENE_DUNGEON_FAMILY_LAST,

@@ -636,6 +636,74 @@
     }
 
     #[test]
+    fn natural_moongate_counter_step_matches_spec_hour_band() {
+        // overworld.md §9: 20..=23 and 0..=4 increase; 5..=19 decrease.
+        for h in 20..=23u8 {
+            assert_eq!(
+                natural_moongate_counter_step(h),
+                NaturalMoongateCounterStep::Increase
+            );
+        }
+        for h in 0..=4u8 {
+            assert_eq!(
+                natural_moongate_counter_step(h),
+                NaturalMoongateCounterStep::Increase
+            );
+        }
+        for h in 5..=19u8 {
+            assert_eq!(
+                natural_moongate_counter_step(h),
+                NaturalMoongateCounterStep::Decrease
+            );
+        }
+        // Counter saturation
+        assert_eq!(natural_moongate_advance_counter(0, 0), 1);
+        assert_eq!(
+            natural_moongate_advance_counter(NATURAL_MOONGATE_COUNTER_MAX, 0),
+            NATURAL_MOONGATE_COUNTER_MAX
+        );
+        assert_eq!(natural_moongate_advance_counter(5, 12), 4);
+        assert_eq!(natural_moongate_advance_counter(0, 12), 0);
+        // Slot eligibility — interior (no chunk window)
+        assert!(natural_moongate_slot_eligible(13, 0, 5, 5, 13, 0, None));
+        assert!(!natural_moongate_slot_eligible(13, 0, 5, 5, 14, 0, None));
+        assert!(!natural_moongate_slot_eligible(13, 0, 5, 5, 13, 1, None));
+        // Surface chunk-window
+        assert!(natural_moongate_slot_eligible(
+            0,
+            0,
+            10,
+            10,
+            0,
+            0,
+            Some((0, 0, 32, 32))
+        ));
+        assert!(!natural_moongate_slot_eligible(
+            0,
+            0,
+            40,
+            10,
+            0,
+            0,
+            Some((0, 0, 32, 32))
+        ));
+        // Live-gate entry hook outcome
+        assert!(natural_moongate_dispatches_meditate(0, 0));
+        assert!(natural_moongate_dispatches_meditate(0, 9));
+        assert!(!natural_moongate_dispatches_meditate(0, 10));
+        assert!(!natural_moongate_dispatches_meditate(1, 0));
+        // Cached-glyph slot (before noon = 0, noon onward = 1)
+        for h in 0..=11u8 {
+            assert_eq!(natural_moongate_cached_glyph_slot(h), 0);
+        }
+        for h in 12..=23u8 {
+            assert_eq!(natural_moongate_cached_glyph_slot(h), 1);
+        }
+        assert_eq!(NARRATIVE_GATE_X, 233);
+        assert_eq!(NARRATIVE_GATE_Y, 235);
+    }
+
+    #[test]
     fn town_location_class_and_index_split_per_spec() {
         // town-mode.md §2,§3,§4
         assert_eq!(town_location_class(0), None);
