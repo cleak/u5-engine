@@ -8,6 +8,7 @@ pub mod animation;
 pub mod chargen;
 pub mod clock;
 pub mod combat_actor;
+pub mod commands;
 pub mod combat_arena;
 pub mod combat_frame;
 pub mod combat_setup;
@@ -90,6 +91,7 @@ pub use directed_step::{
     type_bypasses_terrain_chance_gate,
 };
 pub use end_io::{EndNarrative, decode_end_window, load_end_narrative};
+pub use commands::{Command, command_for_letter};
 pub use containers::{
     DUNGEON_CHEST_ROWS, DungeonChestReward, DungeonChestRow, TABLE_FOOD_TILE_A,
     TABLE_FOOD_TILE_B, dungeon_chest_row_awarded, dungeon_chest_row_gate_max,

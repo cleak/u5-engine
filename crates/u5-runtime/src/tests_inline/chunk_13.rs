@@ -636,6 +636,57 @@
     }
 
     #[test]
+    fn command_for_letter_covers_full_a_to_z_table() {
+        // commands.md §4
+        assert_eq!(command_for_letter(b' '), Some(Command::Pass));
+        assert_eq!(command_for_letter(b'A'), Some(Command::Attack));
+        assert_eq!(command_for_letter(b'B'), Some(Command::Board));
+        assert_eq!(command_for_letter(b'C'), Some(Command::Cast));
+        assert_eq!(
+            command_for_letter(b'D'),
+            Some(Command::UnassignedRefusal)
+        );
+        assert_eq!(command_for_letter(b'E'), Some(Command::Enter));
+        assert_eq!(command_for_letter(b'F'), Some(Command::Fire));
+        assert_eq!(command_for_letter(b'G'), Some(Command::Get));
+        assert_eq!(command_for_letter(b'H'), Some(Command::HoleUp));
+        assert_eq!(command_for_letter(b'I'), Some(Command::Ignite));
+        assert_eq!(command_for_letter(b'J'), Some(Command::Jimmy));
+        assert_eq!(command_for_letter(b'K'), Some(Command::Klimb));
+        assert_eq!(command_for_letter(b'L'), Some(Command::Look));
+        assert_eq!(command_for_letter(b'M'), Some(Command::Mix));
+        assert_eq!(command_for_letter(b'N'), Some(Command::NewOrder));
+        assert_eq!(command_for_letter(b'O'), Some(Command::Open));
+        assert_eq!(command_for_letter(b'P'), Some(Command::Push));
+        assert_eq!(command_for_letter(b'Q'), Some(Command::Quit));
+        assert_eq!(command_for_letter(b'R'), Some(Command::Ready));
+        assert_eq!(command_for_letter(b'S'), Some(Command::Search));
+        assert_eq!(command_for_letter(b'T'), Some(Command::Talk));
+        assert_eq!(command_for_letter(b'U'), Some(Command::Use));
+        assert_eq!(command_for_letter(b'V'), Some(Command::View));
+        assert_eq!(
+            command_for_letter(b'W'),
+            Some(Command::UnassignedRefusal)
+        );
+        assert_eq!(command_for_letter(b'X'), Some(Command::Xit));
+        assert_eq!(command_for_letter(b'Y'), Some(Command::Yell));
+        assert_eq!(command_for_letter(b'Z'), Some(Command::ZStats));
+        // Lowercase folded
+        assert_eq!(command_for_letter(b'a'), Some(Command::Attack));
+        // Outside range
+        assert_eq!(command_for_letter(b'0'), None);
+        assert_eq!(command_for_letter(0), None);
+        // Verb prefix sample
+        assert_eq!(Command::Attack.verb_prefix(), "Attack");
+        assert_eq!(Command::Cast.verb_prefix(), "Cast");
+        assert_eq!(Command::HoleUp.verb_prefix(), "Hole up");
+        assert_eq!(Command::NewOrder.verb_prefix(), "New order");
+        assert_eq!(Command::Xit.verb_prefix(), "X-it");
+        assert_eq!(Command::ZStats.verb_prefix(), "Z-stats");
+        assert_eq!(Command::UnassignedRefusal.verb_prefix(), "What?");
+    }
+
+    #[test]
     fn intro_menu_action_matches_spec_keys() {
         // intro.md §6
         assert_eq!(intro_menu_action(b'J'), Some(IntroMenuAction::JourneyOnward));
