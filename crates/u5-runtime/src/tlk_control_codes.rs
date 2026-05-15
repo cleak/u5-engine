@@ -7,6 +7,42 @@
 //! exist so that helpers and tests can refer to spec-named codes without
 //! magic numbers.
 
+/// `conversation.md §7.5` print-mask state for the byte runner.
+/// `0x8E` toggles the mask's high bit. While the mask is flipped,
+/// printable bytes are queued without the high bit, so spaces and
+/// literal-newline bytes inside the run no longer trigger the
+/// normal immediate flush. Shipped dialogue uses matched `0x8E`
+/// pairs around short protected uppercase strings (mantras, Words
+/// of Power, passwords, coordinate-letter notations).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TlkPrintMaskState {
+    /// Default state: spaces and literal newlines flush the word
+    /// buffer normally.
+    NormalBreaks,
+    /// Inside a `0x8E` protected run: spaces and literal newlines
+    /// do not act as buffer breakpoints.
+    ProtectedRun,
+}
+
+impl TlkPrintMaskState {
+    /// `conversation.md §7.5`: returns the post-toggle state
+    /// produced by emitting a `0x8E` PROTECT-RUN code.
+    pub const fn toggle(self) -> Self {
+        match self {
+            Self::NormalBreaks => Self::ProtectedRun,
+            Self::ProtectedRun => Self::NormalBreaks,
+        }
+    }
+
+    /// `conversation.md §7.5`: returns `true` when the buffer's
+    /// soft-break bytes (space, literal newline) should still
+    /// trigger a flush. The protected-run state suppresses the
+    /// normal immediate flush.
+    pub const fn flushes_on_break(self) -> bool {
+        matches!(self, Self::NormalBreaks)
+    }
+}
+
 /// `conversation.md §7.7` per-blob label count. The byte runner
 /// supports up to fifteen distinct label bytes per NPC blob,
 /// occupying values `0x91..=0x9F`. Labels are byte-level flow

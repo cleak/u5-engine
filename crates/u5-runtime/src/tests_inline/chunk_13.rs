@@ -1,4 +1,18 @@
     #[test]
+    fn tlk_print_mask_toggle_pairs_per_spec() {
+        // conversation.md §7.5
+        let normal = TlkPrintMaskState::NormalBreaks;
+        let protected = normal.toggle();
+        assert_eq!(protected, TlkPrintMaskState::ProtectedRun);
+        // Matched 0x8E pair returns to the default.
+        assert_eq!(protected.toggle(), TlkPrintMaskState::NormalBreaks);
+
+        // Only the default state flushes on soft-break bytes.
+        assert!(TlkPrintMaskState::NormalBreaks.flushes_on_break());
+        assert!(!TlkPrintMaskState::ProtectedRun.flushes_on_break());
+    }
+
+    #[test]
     fn tlk_label_index_decodes_label_byte_range() {
         // conversation.md §7.7
         assert_eq!(TLK_LABEL_BYTE_COUNT, 15);
