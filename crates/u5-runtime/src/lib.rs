@@ -330,11 +330,13 @@ pub use town_tables::*;
 pub use town_tables_io::*;
 pub use town_tables_io_movement::*;
 pub use transport::{
-    BoardVehicleCandidate, BoardableFamily, CARPET_MOUNTED, CARPET_PARKED,
-    HORSE_MOUNTED_FIRST, HORSE_MOUNTED_LAST, HORSE_PARKED_FIRST, HORSE_PARKED_LAST,
-    PendingVehicleAcquisition, SHIP_BOARDING_HULL_WARNING_THRESHOLD, SHIP_PARKED_FIRST,
-    SHIP_PARKED_LAST, SKIFF_PARKED_FIRST, SKIFF_PARKED_LAST, TransportState,
-    boardable_family, mount_horse_marker, ship_boarding_warns,
+    BoardVehicleCandidate, BoardableFamily, CARPET_BOARDING_EAST_MARKER,
+    CARPET_BOARDING_NORTH_MARKER, CARPET_MOUNTED, CARPET_PARKED, HORSE_MOUNTED_FIRST,
+    HORSE_MOUNTED_LAST, HORSE_PARKED_FIRST, HORSE_PARKED_LAST, PendingVehicleAcquisition,
+    SHIP_BOARDING_HULL_WARNING_THRESHOLD, SHIP_PARKED_FIRST, SHIP_PARKED_LAST,
+    SKIFF_PARKED_FIRST, SKIFF_PARKED_LAST, TransportState, boardable_family,
+    mount_horse_marker, ship_boarding_precondition_accepts, ship_boarding_stows_carpet,
+    ship_boarding_warns,
 };
 pub use traps::*;
 pub use u4_transfer::*;

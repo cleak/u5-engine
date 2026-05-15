@@ -1,4 +1,35 @@
     #[test]
+    fn ship_boarding_precondition_accepts_documented_starting_states() {
+        // vehicles.md §4
+        // Foot family fully accepted.
+        for b in 0x1Cu8..=0x1F {
+            assert!(ship_boarding_precondition_accepts(b));
+        }
+        // Carpet north and east only.
+        assert!(ship_boarding_precondition_accepts(0x14));
+        assert!(ship_boarding_precondition_accepts(0x15));
+        assert!(!ship_boarding_precondition_accepts(0x16));
+        assert!(!ship_boarding_precondition_accepts(0x17));
+        // Skiff family fully accepted.
+        for b in 0x28u8..=0x2B {
+            assert!(ship_boarding_precondition_accepts(b));
+        }
+        // Mounted-horse / ship / out-of-range refused.
+        assert!(!ship_boarding_precondition_accepts(0x12));
+        assert!(!ship_boarding_precondition_accepts(0x20));
+        assert!(!ship_boarding_precondition_accepts(0x00));
+        assert!(!ship_boarding_precondition_accepts(0xFF));
+
+        // Carpet stow-on-board predicate: only N and E.
+        assert!(ship_boarding_stows_carpet(0x14));
+        assert!(ship_boarding_stows_carpet(0x15));
+        assert!(!ship_boarding_stows_carpet(0x16));
+        assert!(!ship_boarding_stows_carpet(0x17));
+        assert!(!ship_boarding_stows_carpet(0x1C));
+        assert!(!ship_boarding_stows_carpet(0x28));
+    }
+
+    #[test]
     fn transport_family_classifier_matches_spec_table() {
         // vehicles.md §2
         for b in 0x12u8..=0x13 {

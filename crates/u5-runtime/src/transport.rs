@@ -97,6 +97,34 @@ pub const fn ship_boarding_warns(hull: u8, skiffs: u8) -> bool {
     hull < SHIP_BOARDING_HULL_WARNING_THRESHOLD || skiffs == 0
 }
 
+/// `vehicles.md §4` ship-boarding starting-state precondition. The
+/// gate accepts the ordinary foot/avatar family `0x1C..=0x1F`, the
+/// carpet north/east markers `0x14` and `0x15`, and the skiff family
+/// `0x28..=0x2B`. Any other starting state produces the stock "On
+/// foot" refusal with no state change.
+pub const CARPET_BOARDING_NORTH_MARKER: u8 = 0x14;
+pub const CARPET_BOARDING_EAST_MARKER: u8 = 0x15;
+pub const fn ship_boarding_precondition_accepts(marker: u8) -> bool {
+    matches!(
+        marker,
+        0x1C..=0x1F
+            | CARPET_BOARDING_NORTH_MARKER
+            | CARPET_BOARDING_EAST_MARKER
+            | 0x28..=0x2B,
+    )
+}
+
+/// `vehicles.md §4`: returns `true` for the two carpet-compatible
+/// starting states that also bump the carried/stowed carpet counter
+/// when boarding succeeds — only the north and east carpet markers.
+/// South/west carpet markers do not stow on boarding.
+pub const fn ship_boarding_stows_carpet(marker: u8) -> bool {
+    matches!(
+        marker,
+        CARPET_BOARDING_NORTH_MARKER | CARPET_BOARDING_EAST_MARKER,
+    )
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BoardVehicleCandidate {
     pub slot: usize,
