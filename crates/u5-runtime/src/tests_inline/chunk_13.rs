@@ -636,6 +636,40 @@
     }
 
     #[test]
+    fn jimmy_helpers_match_spec_formulas() {
+        // doors-and-z-transitions.md §3
+        // Door pick: class > roll
+        assert_eq!(JIMMY_DOOR_DIE_LOW, 1);
+        assert_eq!(JIMMY_DOOR_DIE_HIGH, 29);
+        assert!(jimmy_door_succeeds(20, 19));
+        assert!(!jimmy_door_succeeds(20, 20));
+        assert!(!jimmy_door_succeeds(20, 21));
+        assert!(jimmy_door_succeeds(29, 1));
+
+        // Object chest: requires high bit; threshold = (diff - class + 30)/2
+        assert_eq!(object_chest_jimmy_threshold(0x40, 10), None);
+        // diff=0x10=16, class=10 -> (16-10+30)/2 = 18
+        assert_eq!(object_chest_jimmy_threshold(0x90, 10), Some(18));
+        // diff=20, class=40 -> (20-40+30)/2 = 5
+        assert_eq!(object_chest_jimmy_threshold(0x94, 40), Some(5));
+        // Negative raw -> 0
+        assert_eq!(object_chest_jimmy_threshold(0x81, 100), Some(0));
+        assert!(object_chest_jimmy_succeeds(18, 1));
+        assert!(object_chest_jimmy_succeeds(18, 18));
+        assert!(!object_chest_jimmy_succeeds(18, 19));
+
+        // Dungeon chest: threshold = (2*depth - class + 30)/2
+        // depth=4, class=20 -> (8-20+30)/2 = 9
+        assert_eq!(dungeon_chest_jimmy_threshold(4, 20), 9);
+        // depth=8, class=10 -> (16-10+30)/2 = 18
+        assert_eq!(dungeon_chest_jimmy_threshold(8, 10), 18);
+        assert!(dungeon_chest_jimmy_succeeds(9, 9));
+        assert!(!dungeon_chest_jimmy_succeeds(9, 10));
+
+        assert_eq!(DOOR_AUTO_CLOSE_TURNS, 4);
+    }
+
+    #[test]
     fn lighting_helpers_match_spec_table() {
         // lighting.md §4
         assert_eq!(apply_personal_light(2, 0, 0), 2);
