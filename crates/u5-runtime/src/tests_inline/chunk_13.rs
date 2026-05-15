@@ -636,6 +636,43 @@
     }
 
     #[test]
+    fn daylight_base_value_matches_spec_table() {
+        // time.md §6
+        // Underworld / dungeon depth are always dark
+        assert_eq!(daylight_base_value(12, 0, true, 0), FULL_DARKNESS);
+        assert_eq!(daylight_base_value(12, 0, false, 1), FULL_DARKNESS);
+        // Pre-dawn / post-dusk surface
+        assert_eq!(daylight_base_value(0, 0, false, 0), FULL_DARKNESS);
+        assert_eq!(daylight_base_value(4, 59, false, 0), FULL_DARKNESS);
+        assert_eq!(daylight_base_value(20, 0, false, 0), FULL_DARKNESS);
+        assert_eq!(daylight_base_value(23, 0, false, 0), FULL_DARKNESS);
+        // Daytime band
+        for hour in 6..=18u8 {
+            assert_eq!(daylight_base_value(hour, 0, false, 0), FULL_DAYLIGHT);
+            assert_eq!(daylight_base_value(hour, 30, false, 0), FULL_DAYLIGHT);
+        }
+        // Dawn at hour 5
+        assert_eq!(daylight_base_value(5, 0, false, 0), 2);
+        assert_eq!(daylight_base_value(5, 9, false, 0), 2);
+        assert_eq!(daylight_base_value(5, 10, false, 0), 5);
+        assert_eq!(daylight_base_value(5, 19, false, 0), 5);
+        assert_eq!(daylight_base_value(5, 20, false, 0), 10);
+        assert_eq!(daylight_base_value(5, 30, false, 0), 20);
+        assert_eq!(daylight_base_value(5, 40, false, 0), 34);
+        assert_eq!(daylight_base_value(5, 50, false, 0), 49);
+        assert_eq!(daylight_base_value(5, 59, false, 0), 49);
+        // Dusk at hour 19 (mirror of dawn)
+        assert_eq!(daylight_base_value(19, 0, false, 0), 49);
+        assert_eq!(daylight_base_value(19, 9, false, 0), 49);
+        assert_eq!(daylight_base_value(19, 10, false, 0), 34);
+        assert_eq!(daylight_base_value(19, 20, false, 0), 20);
+        assert_eq!(daylight_base_value(19, 30, false, 0), 10);
+        assert_eq!(daylight_base_value(19, 40, false, 0), 5);
+        assert_eq!(daylight_base_value(19, 50, false, 0), 2);
+        assert_eq!(daylight_base_value(19, 59, false, 0), 2);
+    }
+
+    #[test]
     fn save_load_disk_swap_and_double_write_predicates() {
         // save-load.md §4.2 step 6: enter the underworld disk-swap loop
         // only when overworld scene + non-zero Z.

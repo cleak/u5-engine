@@ -64,3 +64,32 @@ pub const fn ignite_torch_dungeon(current: u8, roll_112_to_127: u8) -> u8 {
 /// duration.
 pub const LIGHT_SPELL_DURATION: u8 = 100;
 pub const GREAT_LIGHT_SPELL_DURATION: u8 = 255;
+
+/// `time.md §6` Stage-1 base daylight value computed from hour/minute and
+/// scene. Returns the cached ambient base before personal-light floors:
+///   - underworld plane or dungeon depth (`z != 0`) → full darkness;
+///   - hour < 5 or hour > 19 → full darkness;
+///   - hour == 5 → dawn gradient indexed by `minute / 10`;
+///   - hour == 19 → dusk gradient indexed by `(59 - minute) / 10`;
+///   - otherwise (06..=18 surface) → full daylight.
+/// Caller still applies the personal-light floors in [`apply_personal_light`]
+/// and the [`ambient_is_sentinel`] skip rule before writing the result.
+pub const fn daylight_base_value(hour: u8, minute: u8, underworld: bool, depth_z: u8) -> u8 {
+    if underworld || depth_z != 0 {
+        return FULL_DARKNESS;
+    }
+    if hour < 5 || hour > 19 {
+        return FULL_DARKNESS;
+    }
+    if hour == 5 {
+        let raw = (minute / 10) as usize;
+        let idx = if raw > 5 { 5 } else { raw };
+        return DAWN_DUSK_LIGHT[idx];
+    }
+    if hour == 19 {
+        let raw = ((59 - minute) / 10) as usize;
+        let idx = if raw > 5 { 5 } else { raw };
+        return DAWN_DUSK_LIGHT[idx];
+    }
+    FULL_DAYLIGHT
+}

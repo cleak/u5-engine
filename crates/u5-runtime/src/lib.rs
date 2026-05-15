@@ -106,8 +106,8 @@ pub use jimmy::{
 pub use karma::{KarmaAction, apply_karma_action};
 pub use lighting::{
     GREAT_LIGHT_SPELL_DURATION, LIGHT_SPELL_DURATION, ambient_is_sentinel,
-    apply_personal_light, decay_light_counter, dungeon_blackout, ignite_torch_dungeon,
-    ignite_torch_surface,
+    apply_personal_light, daylight_base_value, decay_light_counter, dungeon_blackout,
+    ignite_torch_dungeon, ignite_torch_surface,
 };
 pub use endmsg_io::{EndgameMessages, load_endgame_messages, parse_endgame_messages};
 pub use miscmsg_io::{MiscMessages, load_misc_messages, parse_misc_messages};
