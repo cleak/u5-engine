@@ -636,6 +636,39 @@
     }
 
     #[test]
+    fn codex_turn_in_stat_steps_match_spec_table() {
+        // karma.md §7
+        assert_eq!(ShrineVirtue::Honesty.codex_turn_in_stat_steps(), (0, 0, 1));
+        assert_eq!(
+            ShrineVirtue::Compassion.codex_turn_in_stat_steps(),
+            (0, 1, 0)
+        );
+        assert_eq!(ShrineVirtue::Valor.codex_turn_in_stat_steps(), (1, 0, 0));
+        assert_eq!(
+            ShrineVirtue::Justice.codex_turn_in_stat_steps(),
+            (0, 1, 1)
+        );
+        assert_eq!(
+            ShrineVirtue::Sacrifice.codex_turn_in_stat_steps(),
+            (1, 1, 0)
+        );
+        assert_eq!(ShrineVirtue::Honor.codex_turn_in_stat_steps(), (1, 0, 1));
+        assert_eq!(
+            ShrineVirtue::Spirituality.codex_turn_in_stat_steps(),
+            (1, 1, 1)
+        );
+        assert_eq!(
+            ShrineVirtue::Humility.codex_turn_in_stat_steps(),
+            (0, 0, 0)
+        );
+        // Humility bonus: +3 only on Humility
+        for v in ShrineVirtue::ALL {
+            let expected = if matches!(v, ShrineVirtue::Humility) { 3 } else { 0 };
+            assert_eq!(v.codex_turn_in_humility_bonus(), expected);
+        }
+    }
+
+    #[test]
     fn boot_driver_selection_matches_spec() {
         // boot.md §5 explicit selector parsing
         assert_eq!(

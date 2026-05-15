@@ -86,6 +86,34 @@ impl ShrineVirtue {
         Self::Humility,
     ];
 
+    /// `karma.md §7` Codex turn-in Avatar stat reward. Each touched stat
+    /// increments by one and clamps at thirty (the avatar stat cap).
+    /// Returns `(strength_step, dexterity_step, intelligence_step)` —
+    /// each entry is `1` if the virtue rewards that stat or `0`
+    /// otherwise.
+    pub const fn codex_turn_in_stat_steps(self) -> (u8, u8, u8) {
+        match self {
+            Self::Honesty => (0, 0, 1),
+            Self::Compassion => (0, 1, 0),
+            Self::Valor => (1, 0, 0),
+            Self::Justice => (0, 1, 1),
+            Self::Sacrifice => (1, 1, 0),
+            Self::Honor => (1, 0, 1),
+            Self::Spirituality => (1, 1, 1),
+            Self::Humility => (0, 0, 0),
+        }
+    }
+
+    /// `karma.md §7`: Humility's Codex turn-in adds an additional `+3`
+    /// to the shared moral-standing selector after the stat step. All
+    /// other virtues add only the base `+3`.
+    pub const fn codex_turn_in_humility_bonus(self) -> u8 {
+        match self {
+            Self::Humility => 3,
+            _ => 0,
+        }
+    }
+
     /// `karma.md §9`: traditional virtue-to-companion pairing. The avatar's
     /// own class is always Avatar regardless of the winning virtue per
     /// `chargen.md`; this pairing only describes companion roster slots.
