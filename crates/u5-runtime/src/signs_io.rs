@@ -23,6 +23,14 @@ const SCENE_DIRECTORY_BYTES: usize = SCENE_DIRECTORY_SLOTS * 2;
 const RECORD_HEADER_LEN: usize = 4;
 const SIGNS_DAT_FILE: &str = "SIGNS.DAT";
 
+/// `formats/signs-dat.md §2`: scene directory holds 33 little-endian
+/// scene-block offsets in the leading 66 bytes of the file.
+pub const SIGNS_DAT_SCENE_DIRECTORY_SLOTS: usize = 33;
+pub const SIGNS_DAT_SCENE_DIRECTORY_BYTES: usize = 66;
+/// `formats/signs-dat.md §3`: each sign record begins with a four-byte
+/// `(scene, z, y, x)` header followed by a NUL-terminated payload.
+pub const SIGNS_DAT_RECORD_HEADER_LEN: usize = 4;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SignRecord {
     pub scene: u8,

@@ -180,7 +180,9 @@ pub use question_io::{
     QuestionRecords, load_question_records, parse_question_records,
 };
 pub use signs_io::{
-    SignRecord, decode_sign_payload, find_sign, load_sign_records, parse_sign_records,
+    SIGNS_DAT_RECORD_HEADER_LEN, SIGNS_DAT_SCENE_DIRECTORY_BYTES,
+    SIGNS_DAT_SCENE_DIRECTORY_SLOTS, SignRecord, decode_sign_payload, find_sign,
+    load_sign_records, parse_sign_records,
 };
 pub use stat_arithmetic::{capped_add_u8, capped_add_word, floor_sub_u8, floor_sub_word};
 pub use story_io::{

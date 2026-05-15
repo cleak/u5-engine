@@ -940,6 +940,18 @@
     }
 
     #[test]
+    fn signs_dat_directory_constants_match_spec() {
+        // formats/signs-dat.md §2,§3
+        assert_eq!(SIGNS_DAT_SCENE_DIRECTORY_SLOTS, 33);
+        assert_eq!(SIGNS_DAT_SCENE_DIRECTORY_BYTES, 66);
+        assert_eq!(
+            SIGNS_DAT_SCENE_DIRECTORY_BYTES,
+            SIGNS_DAT_SCENE_DIRECTORY_SLOTS * 2
+        );
+        assert_eq!(SIGNS_DAT_RECORD_HEADER_LEN, 4);
+    }
+
+    #[test]
     fn dungeon_file_offset_matches_spec_layout() {
         // formats/dungeon-dat.md §2
         assert_eq!(DUNGEON_DAT_LEN, 4096);
