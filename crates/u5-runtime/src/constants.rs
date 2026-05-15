@@ -261,6 +261,21 @@ pub const SAVE_CHARACTER_EXPERIENCE_OFFSET: usize = 0x14;
 pub const SAVE_CHARACTER_LEVEL_OFFSET: usize = 0x16;
 pub const SAVE_CHARACTER_STAY_COUNTER_OFFSET: usize = 0x17;
 pub const SAVE_CHARACTER_EQUIPMENT_OFFSET: usize = 0x19;
+/// `formats/tiles.md §1,§5.1`: 16x16 tile pixel side and the flat
+/// atlas's 512-entry capacity.
+pub const TILE_PIXEL_SIDE: usize = 16;
+pub const FLAT_TILE_ATLAS_TILES: usize = 512;
+/// `formats/tiles.md §3`: each EGA tile costs 128 bytes (16 rows × 16
+/// pixels / 2 pixels per byte).
+pub const EGA_TILE_BYTES: usize = 128;
+/// `formats/tiles.md §4`: each CGA tile costs 64 bytes (16 rows × 4
+/// bytes per row at 4 pixels/byte).
+pub const CGA_TILE_BYTES: usize = 64;
+/// `formats/tiles.md §3,§4` total uncompressed flat-atlas size in
+/// bytes per encoding.
+pub const EGA_FLAT_TILE_ATLAS_BYTES: usize = FLAT_TILE_ATLAS_TILES * EGA_TILE_BYTES;
+pub const CGA_FLAT_TILE_ATLAS_BYTES: usize = FLAT_TILE_ATLAS_TILES * CGA_TILE_BYTES;
+
 pub const SPELL_COUNT: usize = 48;
 /// `magic.md §4`: there are eight magic circles.
 pub const SPELL_CIRCLE_COUNT: usize = 8;

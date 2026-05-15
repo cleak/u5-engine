@@ -1,4 +1,19 @@
     #[test]
+    fn tile_atlas_size_constants_match_spec() {
+        // formats/tiles.md §3,§4,§5.1
+        assert_eq!(TILE_PIXEL_SIDE, 16);
+        assert_eq!(FLAT_TILE_ATLAS_TILES, 512);
+        assert_eq!(EGA_TILE_BYTES, 128);
+        assert_eq!(CGA_TILE_BYTES, 64);
+        assert_eq!(EGA_FLAT_TILE_ATLAS_BYTES, 65_536);
+        assert_eq!(CGA_FLAT_TILE_ATLAS_BYTES, 32_768);
+        // 2:1 byte ratio between EGA and CGA encodings
+        assert_eq!(EGA_TILE_BYTES, CGA_TILE_BYTES * 2);
+        // Tile-byte arithmetic: 16x16 / 2px-per-byte = 128
+        assert_eq!(TILE_PIXEL_SIDE * TILE_PIXEL_SIDE / 2, EGA_TILE_BYTES);
+    }
+
+    #[test]
     fn pth_decode_byte_matches_spec_encoding() {
         // formats/pth.md §3,§5
         assert_eq!(BRITISH_PTH_LEN, 2_783);
