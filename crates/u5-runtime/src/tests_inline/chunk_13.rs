@@ -2230,6 +2230,23 @@
     }
 
     #[test]
+    fn ool_filenames_and_plane_table_layout_match_spec() {
+        // formats/ool.md §2,§3
+        assert_eq!(SAVED_OOL_FILENAME, "SAVED.OOL");
+        assert_eq!(BRIT_OOL_FILENAME, "BRIT.OOL");
+        assert_eq!(UNDER_OOL_FILENAME, "UNDER.OOL");
+        assert_eq!(INIT_OOL_FILENAME, "INIT.OOL");
+        assert_eq!(OOL_PLANE_RECORD_COUNT, 32);
+        assert_eq!(OOL_PLANE_RECORD_LEN, 8);
+        assert_eq!(OOL_PLANE_TABLE_LEN, 256);
+        // SAVED.OOL holds two planes back-to-back
+        assert_eq!(OOL_PLANE_TABLE_LEN * 2, SAVED_OOL_FILE_LEN);
+        // BRIT.OOL / UNDER.OOL / INIT.OOL each hold one plane
+        assert_eq!(OOL_PLANE_TABLE_LEN, PER_PLANE_OOL_FILE_LEN);
+        assert_eq!(OOL_PLANE_TABLE_LEN, INIT_OOL_FILE_LEN);
+    }
+
+    #[test]
     fn save_load_disk_swap_and_double_write_predicates() {
         // save-load.md §4.2 step 6: enter the underworld disk-swap loop
         // only when overworld scene + non-zero Z.

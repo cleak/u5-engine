@@ -510,6 +510,19 @@ pub const fn normalize_disk_prompt_mode(requested_mode: u8) -> u8 {
 pub const SAVED_OOL_FILE_LEN: usize = 512;
 pub const PER_PLANE_OOL_FILE_LEN: usize = 256;
 pub const INIT_OOL_FILE_LEN: usize = 256;
+/// `formats/ool.md §2`: published `.OOL` file names for the four
+/// roles the `.OOL` family fills.
+pub const SAVED_OOL_FILENAME: &str = "SAVED.OOL";
+pub const BRIT_OOL_FILENAME: &str = "BRIT.OOL";
+pub const UNDER_OOL_FILENAME: &str = "UNDER.OOL";
+pub const INIT_OOL_FILENAME: &str = "INIT.OOL";
+
+/// `formats/ool.md §3`: each plane table holds 32 active-object
+/// records (8 bytes each = 256 bytes per plane).
+pub const OOL_PLANE_RECORD_COUNT: usize = 32;
+pub const OOL_PLANE_RECORD_LEN: usize = 8;
+pub const OOL_PLANE_TABLE_LEN: usize =
+    OOL_PLANE_RECORD_COUNT * OOL_PLANE_RECORD_LEN;
 
 /// `save-load.md §3.1`: the "above-ground / no z" sentinel used in the
 /// eight-byte `.OOL` record's `z` byte.
