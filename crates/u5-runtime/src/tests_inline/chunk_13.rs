@@ -1,4 +1,22 @@
     #[test]
+    fn title_tick_frame_rectangle_and_cadence_match_spec() {
+        // intro.md §5
+        assert_eq!(TITLE_TICK_FRAME_X, 0);
+        assert_eq!(TITLE_TICK_FRAME_Y, 65);
+        assert_eq!(TITLE_TICK_FRAME_WIDTH, 320);
+        assert_eq!(TITLE_TICK_FRAME_HEIGHT, 49);
+        assert_eq!(TITLE_TICK_FRAME_COUNT, 4);
+        // Frame index advances modulo 4.
+        assert_eq!(title_tick_next_frame(0), 1);
+        assert_eq!(title_tick_next_frame(1), 2);
+        assert_eq!(title_tick_next_frame(2), 3);
+        assert_eq!(title_tick_next_frame(3), 0);
+        // Rectangle stays inside the 320x200 title surface.
+        assert!(TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH <= 320);
+        assert!(TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT <= 200);
+    }
+
+    #[test]
     fn dungeon_facing_helpers_match_spec() {
         // dungeon-mode.md §9
         // Forward delta per facing.

@@ -43,6 +43,23 @@ pub const BRITISH_PTH_PEN_ORIGINS: [(u8, u8); 4] =
 /// lower band before drawing `TITLE.BIT` slot 7.
 pub const TITLE_LOWER_BAND_CLEAR_Y: u16 = 140;
 
+/// `intro.md §5` title-tick frame rectangle. The intro menu's idle
+/// title-tick path draws one driver-local frame strip over the
+/// title screen at this fixed pixel rectangle, then advances the
+/// driver-local frame index modulo four. The replacement frames
+/// belong to a cleanroom renderer; the cadence and destination
+/// rectangle are part of the public contract.
+pub const TITLE_TICK_FRAME_X: u16 = 0;
+pub const TITLE_TICK_FRAME_Y: u16 = 65;
+pub const TITLE_TICK_FRAME_WIDTH: u16 = 320;
+pub const TITLE_TICK_FRAME_HEIGHT: u16 = 49;
+pub const TITLE_TICK_FRAME_COUNT: u8 = 4;
+
+/// `intro.md §5`: advance the title-tick frame index modulo four.
+pub const fn title_tick_next_frame(current_frame: u8) -> u8 {
+    (current_frame + 1) % TITLE_TICK_FRAME_COUNT
+}
+
 /// `intro.md §12`: Return-to-View loads `MISCMAPS.DAT`. The first
 /// four records are 19-by-4 map strips followed by a 655-byte
 /// command stream driving preview actors and animation beats.
