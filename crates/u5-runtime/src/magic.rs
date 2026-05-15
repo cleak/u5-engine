@@ -25,6 +25,24 @@ pub const fn spell_min_caster_level(circle: u8) -> u8 {
     circle
 }
 
+/// `magic.md §5` C-Cast spell-name selector cap. The compact
+/// letter-coded form accepts at most four selector letters before
+/// the parser auto-completes; longer typed input is truncated to
+/// this cap.
+pub const SPELL_SELECTOR_MAX_LEN: usize = 4;
+
+/// `magic.md §5` selector letters that the C-Cast prompt rejects
+/// outright (no rune syllable is keyed by them). Pressing one of
+/// these is a no-op, not a typed-then-rejected character.
+pub const SPELL_SELECTOR_IGNORED_LETTERS: &[u8] = b"JO";
+
+/// `magic.md §5`: returns `true` when the supplied selector letter
+/// is silently ignored by the prompt (not stored in the buffer).
+/// Match is case-insensitive.
+pub const fn spell_selector_is_ignored(letter: u8) -> bool {
+    matches!(letter, b'J' | b'j' | b'O' | b'o')
+}
+
 /// `magic.md §7` four dispatcher gate outcomes for the C-Cast pipeline.
 /// Each variant names the player-visible message; the comments document
 /// the resource-debit asymmetry (spec calls it "intended message is the

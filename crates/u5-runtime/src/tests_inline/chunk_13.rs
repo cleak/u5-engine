@@ -1,4 +1,27 @@
     #[test]
+    fn spell_selector_ignored_letters_match_spec() {
+        // magic.md §5
+        assert_eq!(SPELL_SELECTOR_MAX_LEN, 4);
+        assert_eq!(SPELL_SELECTOR_IGNORED_LETTERS, b"JO");
+        assert!(spell_selector_is_ignored(b'J'));
+        assert!(spell_selector_is_ignored(b'j'));
+        assert!(spell_selector_is_ignored(b'O'));
+        assert!(spell_selector_is_ignored(b'o'));
+        // Real selector letters pass through.
+        assert!(!spell_selector_is_ignored(b'I'));
+        assert!(!spell_selector_is_ignored(b'L'));
+        assert!(!spell_selector_is_ignored(b'M'));
+        assert!(!spell_selector_is_ignored(b'V'));
+        assert!(!spell_selector_is_ignored(b'F'));
+        assert!(!spell_selector_is_ignored(b'P'));
+        assert!(!spell_selector_is_ignored(b'R'));
+        // Non-letters are not stored either, but this predicate is
+        // letter-only so non-letters are treated as not-ignored.
+        assert!(!spell_selector_is_ignored(b'A'));
+        assert!(!spell_selector_is_ignored(b'Z'));
+    }
+
+    #[test]
     fn spell_circle_for_partitions_48_spells_into_8_circles() {
         // magic.md §4
         // Spell ids 0..=5 are circle 1, 6..=11 circle 2, etc.
