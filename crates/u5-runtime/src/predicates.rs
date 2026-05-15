@@ -57,6 +57,45 @@ pub const fn ship_transport_heading_index(byte: u8) -> Option<u8> {
     }
 }
 
+/// `encounters.md §6`: which monster a sleep-ambush picks for a given
+/// uniform 0..8 row roll. Giant Rat occupies rows 0 and 1 (so 2/8); the
+/// remaining six rows are Troll, Bat, Slime, Giant Spider, Gremlin, and
+/// Headless. Returns `None` for out-of-range rolls.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SleepAmbushMonster {
+    GiantRat,
+    Troll,
+    Bat,
+    Slime,
+    GiantSpider,
+    Gremlin,
+    Headless,
+}
+
+/// `encounters.md §6`: select the sleep-ambush monster for a uniform row
+/// roll in `0..8`. Returns `None` for `roll >= 8`.
+pub const fn sleep_ambush_monster(row: u8) -> Option<SleepAmbushMonster> {
+    Some(match row {
+        0 | 1 => SleepAmbushMonster::GiantRat,
+        2 => SleepAmbushMonster::Troll,
+        3 => SleepAmbushMonster::Bat,
+        4 => SleepAmbushMonster::Slime,
+        5 => SleepAmbushMonster::GiantSpider,
+        6 => SleepAmbushMonster::Gremlin,
+        7 => SleepAmbushMonster::Headless,
+        _ => return None,
+    })
+}
+
+/// `encounters.md §6`: PRNG outcome that flips the rest loop into the
+/// sleep-ambush branch. The shared integer PRNG produces sixty-four
+/// outcomes per eligible predicate invocation; only the zero outcome
+/// interrupts. Caller passes the raw 0..64 roll.
+pub const SLEEP_AMBUSH_INTERRUPT_DENOMINATOR: u8 = 64;
+pub const fn sleep_ambush_rest_interrupted(roll: u8) -> bool {
+    roll == 0
+}
+
 /// `encounters.md §3`: random-encounter spawn threshold for an outdoor
 /// per-turn block. Caller rolls `random(1, 30)` and spawns when
 /// `roll < threshold`. Returns the threshold per the public table:

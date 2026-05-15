@@ -636,6 +636,34 @@
     }
 
     #[test]
+    fn sleep_ambush_monster_table_matches_spec() {
+        // encounters.md §6
+        assert_eq!(sleep_ambush_monster(0), Some(SleepAmbushMonster::GiantRat));
+        assert_eq!(sleep_ambush_monster(1), Some(SleepAmbushMonster::GiantRat));
+        assert_eq!(sleep_ambush_monster(2), Some(SleepAmbushMonster::Troll));
+        assert_eq!(sleep_ambush_monster(3), Some(SleepAmbushMonster::Bat));
+        assert_eq!(sleep_ambush_monster(4), Some(SleepAmbushMonster::Slime));
+        assert_eq!(sleep_ambush_monster(5), Some(SleepAmbushMonster::GiantSpider));
+        assert_eq!(sleep_ambush_monster(6), Some(SleepAmbushMonster::Gremlin));
+        assert_eq!(sleep_ambush_monster(7), Some(SleepAmbushMonster::Headless));
+        assert_eq!(sleep_ambush_monster(8), None);
+        assert_eq!(sleep_ambush_monster(255), None);
+
+        // Effective Giant Rat share = 2/8
+        let rat_rows = (0..8u8)
+            .filter(|r| sleep_ambush_monster(*r) == Some(SleepAmbushMonster::GiantRat))
+            .count();
+        assert_eq!(rat_rows, 2);
+
+        // Sleep-ambush interruption: only outcome 0 in 0..64 interrupts.
+        assert_eq!(SLEEP_AMBUSH_INTERRUPT_DENOMINATOR, 64);
+        assert!(sleep_ambush_rest_interrupted(0));
+        for roll in 1..SLEEP_AMBUSH_INTERRUPT_DENOMINATOR {
+            assert!(!sleep_ambush_rest_interrupted(roll));
+        }
+    }
+
+    #[test]
     fn random_encounter_threshold_matches_spec_table() {
         // encounters.md §3
         // Underworld: always 3
