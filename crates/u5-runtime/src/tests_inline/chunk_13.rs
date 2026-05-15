@@ -636,6 +636,29 @@
     }
 
     #[test]
+    fn save_load_disk_swap_and_double_write_predicates() {
+        // save-load.md §4.2 step 6: enter the underworld disk-swap loop
+        // only when overworld scene + non-zero Z.
+        assert_eq!(SAVE_SCENE_OVERWORLD, 0);
+        assert!(save_load_needs_underworld_disk_swap(0, 1));
+        assert!(save_load_needs_underworld_disk_swap(0, 255));
+        assert!(!save_load_needs_underworld_disk_swap(0, 0));
+        assert!(!save_load_needs_underworld_disk_swap(13, 1));
+        assert!(!save_load_needs_underworld_disk_swap(33, 0));
+
+        // save-load.md §5.2 step 5: defensive UNDER.OOL re-flush.
+        assert!(save_flow_double_writes_underworld(0));
+        assert!(!save_flow_double_writes_underworld(1));
+        assert!(save_flow_double_writes_underworld(2));
+
+        // save-load.md §3.1: file lengths and Z sentinel.
+        assert_eq!(SAVED_OOL_FILE_LEN, 512);
+        assert_eq!(PER_PLANE_OOL_FILE_LEN, 256);
+        assert_eq!(INIT_OOL_FILE_LEN, 256);
+        assert_eq!(OOL_NO_Z_SENTINEL, 0xFF);
+    }
+
+    #[test]
     fn input_direction_codes_match_spec_table() {
         // input.md §5
         assert_eq!(

@@ -473,3 +473,33 @@ pub fn saved_game_has_avatar_name(bytes: &[u8]) -> bool {
         .get(SAVE_AVATAR_NAME_OFFSET)
         .is_some_and(|byte| *byte != 0)
 }
+
+/// `save-load.md §4.2` step 6: scene-byte sentinel for the overworld
+/// stream. The save image stores it at [`SAVE_SCENE_OFFSET`].
+pub const SAVE_SCENE_OVERWORLD: u8 = 0;
+
+/// `save-load.md §4.2` step 6: the load flow enters the underworld
+/// disk-swap loop only when the save indicates the player was standing
+/// on the underworld surface at save time — scene byte equals the
+/// overworld scene and party Z is non-zero. Returns `true` when the
+/// disk-swap loop should fire.
+pub const fn save_load_needs_underworld_disk_swap(scene_byte: u8, party_z: u8) -> bool {
+    scene_byte == SAVE_SCENE_OVERWORLD && party_z != 0
+}
+
+/// `save-load.md §5.2` step 5: the save handler writes the underworld
+/// staging half to `UNDER.OOL` once unconditionally, then a second time
+/// as a defensive re-flush when the entry disk-prompt mode was *not*
+/// already mode 1. Returns `true` when the second write should run.
+pub const fn save_flow_double_writes_underworld(entry_disk_prompt_mode: u8) -> bool {
+    entry_disk_prompt_mode != 1
+}
+
+/// `save-load.md §3.1`: file lengths in bytes for the `.OOL` family.
+pub const SAVED_OOL_FILE_LEN: usize = 512;
+pub const PER_PLANE_OOL_FILE_LEN: usize = 256;
+pub const INIT_OOL_FILE_LEN: usize = 256;
+
+/// `save-load.md §3.1`: the "above-ground / no z" sentinel used in the
+/// eight-byte `.OOL` record's `z` byte.
+pub const OOL_NO_Z_SENTINEL: u8 = 0xFF;
