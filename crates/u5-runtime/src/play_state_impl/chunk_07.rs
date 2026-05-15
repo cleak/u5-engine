@@ -1577,6 +1577,19 @@ impl PlayState {
             self.message = format!("{pre_effect_message} {transition_message}");
             return Ok(Some(MoveOutcome::Transition(transition)));
         }
+        // active-objects.md §8: adjacent whirlpool engagement is a
+        // plane-transition effect when the party is not on foot.
+        if let Some(transition) =
+            self.apply_world_whirlpool_engagement(game_dir, plane)?
+        {
+            let transition_message = self.message.clone();
+            self.message = if pre_effect_message.is_empty() {
+                transition_message
+            } else {
+                format!("{pre_effect_message} {transition_message}")
+            };
+            return Ok(Some(MoveOutcome::Transition(transition)));
+        }
         self.append_world_damage_tile_message(Some(game_dir), plane)?;
         if let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)? {
             self.message
@@ -1584,6 +1597,54 @@ impl PlayState {
         }
         self.queue_current_moongate_prompt();
         Ok(None)
+    }
+
+    pub fn apply_world_whirlpool_engagement(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+    ) -> io::Result<Option<AreaTransition>> {
+        // active-objects.md §8: no-op when the party marker is the ordinary
+        // on-foot avatar.
+        if self.player.transport.is_foot() {
+            return Ok(None);
+        }
+        let px = self.player.x as isize;
+        let py = self.player.y as isize;
+        let mut whirlpool_found = false;
+        for (dx, dy) in [(0isize, -1isize), (0, 1), (-1, 0), (1, 0)] {
+            let x = (px + dx).rem_euclid(WORLD_SIDE as isize) as usize;
+            let y = (py + dy).rem_euclid(WORLD_SIDE as isize) as usize;
+            if let Some(object) = self.world_object_at(x, y) {
+                if is_whirlpool_object(*object) {
+                    whirlpool_found = true;
+                    break;
+                }
+            }
+        }
+        if !whirlpool_found {
+            return Ok(None);
+        }
+        let entry = WorldPlaneTransitionEntry {
+            from_plane: plane,
+            x: self.player.x,
+            y: self.player.y,
+            to_plane: WorldPlane::Underworld,
+            to_x: 34,
+            to_y: 18,
+            expected_tile: None,
+        };
+        self.apply_world_plane_transition(game_dir, entry)?;
+        self.message = format!(
+            "Whirlpool! Sucked into the underworld at ({}, {}). {}",
+            entry.to_x,
+            entry.to_y,
+            self.wind.status_message()
+        );
+        Ok(Some(AreaTransition::ChangedWorldPlane {
+            from: plane,
+            to: WorldPlane::Underworld,
+        }))
     }
 
     pub fn apply_town_post_turn_effects_after_turn(

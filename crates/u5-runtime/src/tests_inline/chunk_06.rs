@@ -205,6 +205,96 @@
     }
 
     #[test]
+    fn whirlpool_engagement_pulls_ship_party_to_underworld_landing() {
+        // active-objects.md §8: adjacent whirlpool engagement is a
+        // plane-transition effect when the party is not on foot. The party
+        // lands at underworld coordinate (34, 18) on foot.
+        let dir = debug_game_dir();
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        state.active_objects[0].z = WorldPlane::Britannia.save_floor();
+        state.player.transport = TransportState::Ship {
+            type_byte: 168,
+            tile: 168,
+            sails_hoisted: false,
+            hull: 100,
+            skiffs: 2,
+        };
+        state.sync_player_object();
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xec,
+            tile: 0xec,
+            x: 5,
+            y: 4,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        let outcome = state
+            .apply_world_whirlpool_engagement(&dir, WorldPlane::Britannia)
+            .expect("whirlpool engagement should not error");
+
+        assert_eq!(
+            outcome,
+            Some(AreaTransition::ChangedWorldPlane {
+                from: WorldPlane::Britannia,
+                to: WorldPlane::Underworld,
+            })
+        );
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Underworld,
+            }
+        );
+        assert_eq!(state.player.transport, TransportState::Foot);
+        assert_eq!((state.player.x, state.player.y), (34, 18));
+        assert!(state.message.contains("Whirlpool!"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn whirlpool_engagement_no_op_for_on_foot_party() {
+        // active-objects.md §8: no-op when the party marker is the ordinary
+        // on-foot avatar.
+        let dir = debug_game_dir();
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        state.active_objects[0].z = WorldPlane::Britannia.save_floor();
+        // Player is on foot by default in world_state.
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xec,
+            tile: 0xec,
+            x: 5,
+            y: 4,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        let outcome = state
+            .apply_world_whirlpool_engagement(&dir, WorldPlane::Britannia)
+            .expect("whirlpool engagement should not error");
+
+        assert_eq!(outcome, None);
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Britannia,
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (5, 5));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn ship_broadside_skips_whirlpool_family_without_depletion() {
         let mut state = world_state(open_world_grid(), 0, 0);
         state.player.facing = Direction::South;
