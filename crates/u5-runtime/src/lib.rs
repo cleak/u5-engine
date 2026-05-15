@@ -310,7 +310,9 @@ pub use pth::{
 };
 pub use report::run_report;
 pub use save_load::*;
-pub use scene::{DungeonScene, Family, PlayTarget, Scene, WorldPlane};
+pub use scene::{
+    DungeonPresentationFlavour, DungeonScene, Family, PlayTarget, Scene, WorldPlane,
+};
 pub use ship_broadside::{
     SHIP_BROADSIDE_DAMAGE_MAX, SHIP_BROADSIDE_DAMAGE_MIN,
     SHIP_BROADSIDE_DEPLETION_BYTE_OFFSET, SHIP_BROADSIDE_RANGE_CELLS,

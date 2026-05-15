@@ -1,4 +1,27 @@
     #[test]
+    fn dungeon_presentation_flavour_matches_spec_table() {
+        // dungeon-mode.md §2
+        let cases = [
+            (0u8, DungeonPresentationFlavour::FlavourByte3), // Deceit
+            (1, DungeonPresentationFlavour::Normal),         // Despise
+            (2, DungeonPresentationFlavour::Normal),         // Destard
+            (3, DungeonPresentationFlavour::FlavourByte3),   // Wrong
+            (4, DungeonPresentationFlavour::FlavourByte3),   // Covetous
+            (5, DungeonPresentationFlavour::Mine),           // Shame
+            (6, DungeonPresentationFlavour::Mine),           // Hythloth
+            (7, DungeonPresentationFlavour::Normal),         // Doom
+        ];
+        for (record, expected) in cases {
+            let scene = DungeonScene::from_record(record).expect("valid record");
+            assert_eq!(
+                scene.presentation_flavour(),
+                expected,
+                "record {record}"
+            );
+        }
+    }
+
+    #[test]
     fn npc_schedule_state_for_floor_transition_matches_spec_table() {
         // npc-schedules.md §6 floor-classification table (map = floor 1).
         // both on map -> in-plane (2)

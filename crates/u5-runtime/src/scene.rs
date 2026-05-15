@@ -154,6 +154,30 @@ impl DungeonScene {
             _ => "Unknown",
         }
     }
+
+    /// `dungeon-mode.md §2` presentation flavour. Cosmetic divergences
+    /// in corner glyphs, view resource selection, wall/corpse class-`0xC?`
+    /// descriptions, normal-flavour wall decoration, and a Doom-flavour
+    /// rare text easter egg branch on this. The flavour does not change
+    /// geometry, tile semantics, or encounter selection.
+    pub fn presentation_flavour(self) -> DungeonPresentationFlavour {
+        match self.record {
+            0 | 3 | 4 => DungeonPresentationFlavour::FlavourByte3,
+            5 | 6 => DungeonPresentationFlavour::Mine,
+            _ => DungeonPresentationFlavour::Normal,
+        }
+    }
+}
+
+/// `dungeon-mode.md §2` presentation flavour the dungeon view uses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonPresentationFlavour {
+    /// Despise, Destard, Doom — ordinary presentation.
+    Normal,
+    /// Deceit, Wrong, Covetous — flavour-byte-3 variant.
+    FlavourByte3,
+    /// Shame, Hythloth — mine-style presentation.
+    Mine,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
