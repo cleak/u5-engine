@@ -1377,6 +1377,41 @@
     }
 
     #[test]
+    fn dungeon_pit_trap_kind_classifies_per_spec_table() {
+        // dungeon-mode.md §8
+        assert_eq!(dungeon_pit_trap_kind(0x60), Some(DungeonPitTrap::PlainPit));
+        assert_eq!(dungeon_pit_trap_kind(0x61), Some(DungeonPitTrap::FallTrap));
+        assert_eq!(dungeon_pit_trap_kind(0x69), Some(DungeonPitTrap::FallTrap));
+        assert_eq!(dungeon_pit_trap_kind(0x62), Some(DungeonPitTrap::BombTrap));
+        assert_eq!(dungeon_pit_trap_kind(0x6A), Some(DungeonPitTrap::BombTrap));
+        // Unnamed members of the family
+        assert_eq!(
+            dungeon_pit_trap_kind(0x63),
+            Some(DungeonPitTrap::GenericPitFamily)
+        );
+        assert_eq!(
+            dungeon_pit_trap_kind(0x6F),
+            Some(DungeonPitTrap::GenericPitFamily)
+        );
+        // Outside the band
+        assert_eq!(dungeon_pit_trap_kind(0x5F), None);
+        assert_eq!(dungeon_pit_trap_kind(0x70), None);
+        // Constants
+        assert_eq!(DUNGEON_DEEPEST_LEVEL, 7);
+        assert_eq!(DUNGEON_VISIT_MARKER_BIT, 0x08);
+        // Fall-trap visit-mark predicate
+        assert!(dungeon_fall_destination_marks_visit(0x00));
+        assert!(dungeon_fall_destination_marks_visit(0x8F));
+        assert!(!dungeon_fall_destination_marks_visit(0x90));
+        assert!(!dungeon_fall_destination_marks_visit(0xFF));
+        // Search rewrite targets
+        assert_eq!(DUNGEON_SEARCH_FLAVOR_REWRITE_PRIMARY, 0xB0);
+        assert_eq!(DUNGEON_SEARCH_FLAVOR_REWRITE_VISITED, 0xB8);
+        assert_eq!(DUNGEON_SEARCH_WALL_REWRITE_PRIMARY, 0xE0);
+        assert_eq!(DUNGEON_SEARCH_WALL_REWRITE_VISITED, 0xE8);
+    }
+
+    #[test]
     fn fountain_and_energy_field_classifiers_match_spec() {
         // dungeon-mode.md §8 fountain
         assert_eq!(fountain_effect_from_byte(0x50), FountainEffect::Cure);

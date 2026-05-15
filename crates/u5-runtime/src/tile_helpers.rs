@@ -483,6 +483,63 @@ pub fn is_vehicle_object_tile(tile: u8) -> bool {
     (160..=191).contains(&tile)
 }
 
+/// `dungeon-mode.md §8` pit/trap family classification for the
+/// `0x6?` band. Only the three named exact bytes (`0x60`, `0x61`+
+/// `0x69`, `0x62`+`0x6A`) carry mechanical effects; other `0x6?`
+/// bytes inspect as the generic pit/trap class.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonPitTrap {
+    /// `0x60` — plain pit. Look inspects it; K-Klimb fires the
+    /// surface-reset helper.
+    PlainPit,
+    /// `0x61` and `0x69` — automatic fall traps. Stepping on either
+    /// drops the party to the same X/Y on the next level.
+    FallTrap,
+    /// `0x62` and `0x6A` — bomb traps. Stepping on either prints the
+    /// bomb messages, clears the cell, and does not change Z.
+    BombTrap,
+    /// Other `0x6?` bytes — generic pit/trap inspection only.
+    GenericPitFamily,
+}
+
+/// `dungeon-mode.md §8`: classify a `0x6?` pit/trap byte. Returns
+/// `None` for any byte outside the `0x60..=0x6F` family band.
+pub const fn dungeon_pit_trap_kind(tile: u8) -> Option<DungeonPitTrap> {
+    if tile < 0x60 || tile > 0x6F {
+        return None;
+    }
+    Some(match tile {
+        0x60 => DungeonPitTrap::PlainPit,
+        0x61 | 0x69 => DungeonPitTrap::FallTrap,
+        0x62 | 0x6A => DungeonPitTrap::BombTrap,
+        _ => DungeonPitTrap::GenericPitFamily,
+    })
+}
+
+/// `dungeon-mode.md §8`: Search rewrites `0x61` (secret-door reveal)
+/// to `0x60` for the current visit and marks the same X/Y cell one
+/// level below with the visit bit `0x08` (when not already on the
+/// deepest level). The deepest dungeon level is `7`.
+pub const DUNGEON_DEEPEST_LEVEL: u8 = 7;
+pub const DUNGEON_VISIT_MARKER_BIT: u8 = 0x08;
+
+/// `dungeon-mode.md §8`: stepping into an automatic fall trap
+/// (`0x61`/`0x69`) lands the party at the same X/Y on the next level
+/// and marks bit `0x08` in the destination cell *only when* it is
+/// below the wall/door band (`< 0x90`).
+pub const DUNGEON_WALL_DOOR_BAND_FIRST: u8 = 0x90;
+pub const fn dungeon_fall_destination_marks_visit(destination_byte: u8) -> bool {
+    destination_byte < DUNGEON_WALL_DOOR_BAND_FIRST
+}
+
+/// `dungeon-mode.md §8`: search-rewrite targets for the flavour-class
+/// (`0xC?`) and wall-class (`0xD?`) hidden-passage paths. Each rewrite
+/// preserves only the visit-marker bit on the original cell.
+pub const DUNGEON_SEARCH_FLAVOR_REWRITE_PRIMARY: u8 = 0xB0;
+pub const DUNGEON_SEARCH_FLAVOR_REWRITE_VISITED: u8 = 0xB8;
+pub const DUNGEON_SEARCH_WALL_REWRITE_PRIMARY: u8 = 0xE0;
+pub const DUNGEON_SEARCH_WALL_REWRITE_VISITED: u8 = 0xE8;
+
 /// `dungeon-mode.md §8` fountain effect derived from the low nibble
 /// of a fountain cell byte (high nibble `0x5`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
