@@ -30,6 +30,7 @@ pub mod input_dispatch;
 pub mod jimmy;
 pub mod karma;
 pub mod lighting;
+pub mod magic;
 pub mod lzw;
 pub mod map_decoders;
 pub mod map_io;
@@ -104,6 +105,9 @@ pub use jimmy::{
     jimmy_door_succeeds, object_chest_jimmy_succeeds, object_chest_jimmy_threshold,
 };
 pub use karma::{KarmaAction, apply_karma_action};
+pub use magic::{
+    CastGateOutcome, cast_dispatcher_gate, heal_spell_amount_from_raw_roll_u8,
+};
 pub use lighting::{
     GREAT_LIGHT_SPELL_DURATION, LIGHT_SPELL_DURATION, ambient_is_sentinel,
     apply_personal_light, daylight_base_value, decay_light_counter, dungeon_blackout,

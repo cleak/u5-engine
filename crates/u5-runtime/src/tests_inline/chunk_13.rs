@@ -636,6 +636,52 @@
     }
 
     #[test]
+    fn cast_dispatcher_gate_matches_spec_order_and_messages() {
+        // magic.md §7
+        // Scene gate first: Not here! before charge consumption.
+        let r = cast_dispatcher_gate(false, 0, 0, 0, 0);
+        assert_eq!(r, CastGateOutcome::NotHere);
+        assert!(!r.consumed_charge());
+        assert!(!r.consumed_mana());
+        assert_eq!(r.message(), "Not here!");
+
+        // No charges: None mixed!, no charge spent.
+        let r = cast_dispatcher_gate(true, 0, 99, 8, 1);
+        assert_eq!(r, CastGateOutcome::NoneMixed);
+        assert!(!r.consumed_charge());
+        assert!(!r.consumed_mana());
+        assert_eq!(r.message(), "None mixed!");
+
+        // Mana too low: charge spent, mana not.
+        let r = cast_dispatcher_gate(true, 1, 2, 8, 5);
+        assert_eq!(r, CastGateOutcome::ManaTooLowChargeOnly);
+        assert!(r.consumed_charge());
+        assert!(!r.consumed_mana());
+        assert_eq!(r.message(), "M.P. too low!");
+
+        // Level too low: charge AND mana spent.
+        let r = cast_dispatcher_gate(true, 1, 99, 1, 5);
+        assert_eq!(r, CastGateOutcome::LevelTooLowChargeAndMana);
+        assert!(r.consumed_charge());
+        assert!(r.consumed_mana());
+        assert_eq!(r.message(), "M.P. too low!");
+
+        // All gates pass.
+        let r = cast_dispatcher_gate(true, 1, 99, 8, 5);
+        assert_eq!(r, CastGateOutcome::Cast);
+        assert!(r.consumed_charge());
+        assert!(r.consumed_mana());
+
+        // Heal amount: 0..=60 roll, halved, zero -> 1.
+        assert_eq!(heal_spell_amount_from_raw_roll_u8(0), 1);
+        assert_eq!(heal_spell_amount_from_raw_roll_u8(1), 1);
+        assert_eq!(heal_spell_amount_from_raw_roll_u8(2), 1);
+        assert_eq!(heal_spell_amount_from_raw_roll_u8(3), 1);
+        assert_eq!(heal_spell_amount_from_raw_roll_u8(4), 2);
+        assert_eq!(heal_spell_amount_from_raw_roll_u8(60), 30);
+    }
+
+    #[test]
     fn dungeon_cell_class_of_matches_high_nibble_table() {
         // dungeon-mode.md §3
         assert_eq!(dungeon_cell_class_of(0x00), DungeonCellClass::Passage);
