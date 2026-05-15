@@ -7,6 +7,39 @@ use std::path::{Path, PathBuf};
 
 use crate::*;
 
+/// `active-objects.md §8`: animator outcome for one slot's phase
+/// counter (low nibble of byte 6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AnimationPhaseStep {
+    /// All-ones nibble — slot is steady; the animator skips it.
+    Steady,
+    /// Mid-cycle. The animator decrements the nibble and writes back
+    /// the new value (always `>= 0`); the renderer combines this with
+    /// the tile class to pick a frame.
+    Decrement(u8),
+    /// Cycle ended. The slot is eligible for an AI tick this pass.
+    AiEligible,
+}
+
+/// All-ones nibble in byte 6 marks "steady, do not animate" per
+/// `active-objects.md §8`.
+pub const ANIMATION_PHASE_STEADY_NIBBLE: u8 = 0x0F;
+
+/// `active-objects.md §8`: classify the low nibble of an active-object
+/// phase byte (byte 6) into the animator's per-tick outcome. Higher
+/// bits of the input are masked off; callers may pass either the raw
+/// byte or just the nibble.
+pub const fn animation_phase_step(phase_byte: u8) -> AnimationPhaseStep {
+    let nibble = phase_byte & 0x0F;
+    if nibble == ANIMATION_PHASE_STEADY_NIBBLE {
+        AnimationPhaseStep::Steady
+    } else if nibble == 0 {
+        AnimationPhaseStep::AiEligible
+    } else {
+        AnimationPhaseStep::Decrement(nibble - 1)
+    }
+}
+
 /// `active-objects.md §4`: deterministic eviction phase a candidate
 /// qualifies for, or `None` if the byte-0 / on-screen combination is not
 /// a victim in any phase. Phases 1..=5 are the off-screen passes (with

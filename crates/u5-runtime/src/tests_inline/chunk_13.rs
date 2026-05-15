@@ -636,6 +636,23 @@
     }
 
     #[test]
+    fn animation_phase_step_classifies_per_spec() {
+        // active-objects.md §8
+        assert_eq!(ANIMATION_PHASE_STEADY_NIBBLE, 0x0F);
+        // Steady marker
+        assert_eq!(animation_phase_step(0x0F), AnimationPhaseStep::Steady);
+        assert_eq!(animation_phase_step(0xFF), AnimationPhaseStep::Steady);
+        // AI-eligible (zero nibble)
+        assert_eq!(animation_phase_step(0x00), AnimationPhaseStep::AiEligible);
+        assert_eq!(animation_phase_step(0xA0), AnimationPhaseStep::AiEligible);
+        // Mid-cycle decrement
+        assert_eq!(animation_phase_step(0x01), AnimationPhaseStep::Decrement(0));
+        assert_eq!(animation_phase_step(0x05), AnimationPhaseStep::Decrement(4));
+        assert_eq!(animation_phase_step(0x0E), AnimationPhaseStep::Decrement(13));
+        assert_eq!(animation_phase_step(0xA5), AnimationPhaseStep::Decrement(4));
+    }
+
+    #[test]
     fn codex_turn_in_stat_steps_match_spec_table() {
         // karma.md §7
         assert_eq!(ShrineVirtue::Honesty.codex_turn_in_stat_steps(), (0, 0, 1));
