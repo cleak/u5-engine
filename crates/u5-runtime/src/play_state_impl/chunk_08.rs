@@ -348,7 +348,20 @@ impl PlayState {
     pub fn idle_tick(&mut self) -> MoveOutcome {
         self.advance_visual_tick();
         if let Some(wind) = self.idle_wind_drift() {
-            self.message = format!("Idle animation tick. {}", wind.status_message());
+            // weather.md §2: on the underworld plane the wind state still
+            // updates, but the helper uses its non-surface presentation
+            // branch instead of printing the ordinary cardinal wind label.
+            let on_surface = matches!(
+                self.area,
+                Area::World {
+                    plane: WorldPlane::Britannia
+                }
+            );
+            self.message = if on_surface {
+                format!("Idle animation tick. {}", wind.status_message())
+            } else {
+                "Idle animation tick. The air shifts.".to_string()
+            };
         } else {
             self.message = "Idle animation tick.".to_string();
         }

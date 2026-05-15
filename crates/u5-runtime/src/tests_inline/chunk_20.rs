@@ -85,6 +85,29 @@
     }
 
     #[test]
+    fn idle_tick_underworld_drift_uses_non_surface_presentation_branch() {
+        // weather.md §2: on the underworld plane the wind state still updates,
+        // but the helper uses the non-surface presentation branch instead of
+        // printing the cardinal wind label.
+        let mut state = britannia_state(open_world_grid(), 1, 10);
+        state.area = Area::World {
+            plane: WorldPlane::Underworld,
+        };
+        state.active_objects[0].z = WorldPlane::Underworld.save_floor();
+        state.clock = GameClock::new(12, 0).unwrap();
+        state.wind = WindState::Calm;
+        state.wind_save_byte = 0x7a;
+
+        assert_eq!(state.idle_tick(), MoveOutcome::IdleTick);
+
+        // Wind state did update.
+        assert_eq!(state.wind, WindState::North);
+        // Message must NOT contain the cardinal wind label.
+        assert!(!state.message.contains("North Winds"));
+        assert!(state.message.contains("Idle animation tick"));
+    }
+
+    #[test]
     fn idle_tick_keeps_active_objects_frozen_during_negate_time_without_aging_counter() {
         let mut state = britannia_state(open_world_grid(), 4, 5);
         state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);

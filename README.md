@@ -256,8 +256,9 @@ Open hook from party slot 1, safely consuming an underfoot dungeon chest through
 the visit-local chest rewrite after the saved charge/MP/level gates succeed;
 other currently unmodeled chest targets spend the cast and fail in place. `C1HR`
 casts Rel Hur from party slot 1: it uses the saved pre-mixed spell charge, mana,
-and level gates, then advances the wind through a documented deterministic cycle
-until the exact original transition order is public. `C1PU` and `C1DP` cast the
+and level gates, takes an inline cardinal direction (`C1HR8/6/2/4`) or
+`C1HR<space>` for the no-effect Pass branch, and routes the direction through
+the public `weather.md` §3 mapping (N→W, E→E, S→S, W→N). `C1PU` and `C1DP` cast the
 narrow dungeon Up/Down hooks from party slot 1, moving one dungeon level inside
 public level bounds and failing in place at boundaries without inventing the
 still-open escape-helper split. `C1FGI6`, `C1GIN6`, `C1GIZ6`, and `C1GIS6` cast the
