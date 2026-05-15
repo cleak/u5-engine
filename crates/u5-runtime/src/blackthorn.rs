@@ -13,6 +13,21 @@ pub const BLACKTHORN_RESCUE_HANDOFF_Y: u8 = 10;
 /// selector to at least this floor after printing the verdict.
 pub const BLACKTHORN_RESCUE_STANDING_FLOOR: u8 = 75;
 
+/// `blackthorn.md §2` two player-visible Blackthorn cinematic
+/// families. Both replace the ordinary map loop and hand control
+/// back through an explicit scene/position transition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlackthornEntryFamily {
+    /// Audience/capture: party is subdued, challenged, and routed to
+    /// captivity or release. Traced direct entry path is the town
+    /// post-action NPC event cleanup's arrest/unconscious branch.
+    AudienceCapture,
+    /// Rescue/refuge: darkness-and-thunder cinematic that restores
+    /// the party and moves it to the refuge scene. Reachable from
+    /// town, overworld, and dungeon modes.
+    RescueRefuge,
+}
+
 /// `blackthorn.md §4`: Blackthorn challenge prompt input limit.
 pub const BLACKTHORN_CHALLENGE_INPUT_LIMIT: usize = 14;
 /// `blackthorn.md §4`: number of fixed prompt ordinals the challenge

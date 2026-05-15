@@ -1,4 +1,14 @@
     #[test]
+    fn blackthorn_entry_families_are_distinct() {
+        // blackthorn.md §2: two cinematic families.
+        let a = BlackthornEntryFamily::AudienceCapture;
+        let b = BlackthornEntryFamily::RescueRefuge;
+        assert_ne!(a, b);
+        assert_eq!(a, BlackthornEntryFamily::AudienceCapture);
+        assert_eq!(b, BlackthornEntryFamily::RescueRefuge);
+    }
+
+    #[test]
     fn sky_strip_renders_only_for_surface_and_town_family() {
         // moons.md §3
         // Surface (scene 0) renders only on Britannia, not underworld.
