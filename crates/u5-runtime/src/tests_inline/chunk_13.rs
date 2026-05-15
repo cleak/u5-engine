@@ -660,6 +660,50 @@
     }
 
     #[test]
+    fn terrain_chance_gate_denominator_matches_spec_outdoor_table() {
+        // active-objects.md §8: half-chance for 0x04, 0x06..=0x08,
+        // 0x1E..=0x1F; third-chance for 0x09..=0x0F; no gate for everything
+        // else in the outdoor mover range.
+        assert_eq!(terrain_chance_gate_denominator(0x04), Some(2));
+        assert_eq!(terrain_chance_gate_denominator(0x06), Some(2));
+        assert_eq!(terrain_chance_gate_denominator(0x07), Some(2));
+        assert_eq!(terrain_chance_gate_denominator(0x08), Some(2));
+        assert_eq!(terrain_chance_gate_denominator(0x1E), Some(2));
+        assert_eq!(terrain_chance_gate_denominator(0x1F), Some(2));
+        for tile in 0x09..=0x0F {
+            assert_eq!(terrain_chance_gate_denominator(tile), Some(3));
+        }
+        assert_eq!(terrain_chance_gate_denominator(0x05), None);
+        assert_eq!(terrain_chance_gate_denominator(0x10), None);
+        assert_eq!(terrain_chance_gate_denominator(0x1D), None);
+        assert_eq!(terrain_chance_gate_denominator(0x20), None);
+        assert_eq!(terrain_chance_gate_denominator(0x00), None);
+        assert_eq!(terrain_chance_gate_denominator(0xFF), None);
+    }
+
+    #[test]
+    fn type_bypasses_terrain_chance_gate_lists_water_creatures_and_named_monsters() {
+        // active-objects.md §8: ship-like water-creature frames 0x2C..=0x2F
+        // and Bat/Daemon/Dragon/Mongbat first-frame type bytes bypass the
+        // chance gate.
+        for byte in 0x2C..=0x2Fu8 {
+            assert!(type_bypasses_terrain_chance_gate(byte));
+        }
+        assert!(type_bypasses_terrain_chance_gate(0x94));
+        assert!(type_bypasses_terrain_chance_gate(0xD8));
+        assert!(type_bypasses_terrain_chance_gate(0xDC));
+        assert!(type_bypasses_terrain_chance_gate(0xF0));
+        // Sibling frames are not part of the bypass set.
+        assert!(!type_bypasses_terrain_chance_gate(0x95));
+        assert!(!type_bypasses_terrain_chance_gate(0xD9));
+        assert!(!type_bypasses_terrain_chance_gate(0xDD));
+        assert!(!type_bypasses_terrain_chance_gate(0xF1));
+        // Random other bytes are not in the bypass set.
+        assert!(!type_bypasses_terrain_chance_gate(0x00));
+        assert!(!type_bypasses_terrain_chance_gate(0x80));
+    }
+
+    #[test]
     fn axis_first_choice_picks_x_or_y_from_one_bit_roll() {
         // active-objects.md §8: a one-bit random value chooses which axis to
         // try first.

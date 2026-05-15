@@ -70,7 +70,10 @@ pub use active_object_io::*;
 pub use animation::{ActiveObject, ActiveShipWind, AnimationClock, PhaseTick};
 pub use chargen::*;
 pub use clock::{GameClock, SKY_STRIP_CELL_COUNT, SkyStripMarker, sky_strip_marker_position};
-pub use directed_step::{Axis, axis_first_choice, directed_step_offsets};
+pub use directed_step::{
+    Axis, axis_first_choice, directed_step_offsets, terrain_chance_gate_denominator,
+    type_bypasses_terrain_chance_gate,
+};
 pub use end_io::{EndNarrative, decode_end_window, load_end_narrative};
 pub use endmsg_io::{EndgameMessages, load_endgame_messages, parse_endgame_messages};
 pub use miscmsg_io::{MiscMessages, load_misc_messages, parse_misc_messages};

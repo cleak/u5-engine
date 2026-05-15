@@ -48,3 +48,26 @@ fn wrapped_step_axis(actor: u8, player: u8) -> i8 {
 pub const fn axis_first_choice(rng_bit: u8) -> Axis {
     if rng_bit & 1 == 0 { Axis::X } else { Axis::Y }
 }
+
+/// Per-destination-tile chance gate for ordinary outdoor movers per
+/// `active-objects.md` §8: returns `Some(d)` when the committer must roll a
+/// one-in-`d` chance for the tile, or `None` when the move proceeds
+/// immediately once validation accepts the candidate. Returns `None` for
+/// tile ids outside `0x04..=0x1F`.
+pub const fn terrain_chance_gate_denominator(tile: u8) -> Option<u8> {
+    match tile {
+        0x04 | 0x06..=0x08 | 0x1E..=0x1F => Some(2),
+        0x09..=0x0F => Some(3),
+        _ => None,
+    }
+}
+
+/// Per `active-objects.md` §8: ship-like water-creature frames `0x2C..=0x2F`
+/// and the Bat/Daemon/Dragon/Mongbat first-frame type bytes bypass the
+/// post-validation terrain chance gate.
+pub const fn type_bypasses_terrain_chance_gate(type_byte: u8) -> bool {
+    matches!(
+        type_byte,
+        0x2C..=0x2F | 0x94 | 0xD8 | 0xDC | 0xF0,
+    )
+}
