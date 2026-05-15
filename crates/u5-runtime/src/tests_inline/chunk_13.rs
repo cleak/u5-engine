@@ -777,6 +777,23 @@
     }
 
     #[test]
+    fn class_refreshed_mana_covers_default_branch_per_magic_md_section_eight() {
+        // magic.md §8 Resurrection: Avatar (A), Mage (M), and the default
+        // class branch receive mana equal to Intelligence; Bard (B)
+        // receives half Intelligence.
+        assert_eq!(class_refreshed_mana(b'A', 24), Some(24));
+        assert_eq!(class_refreshed_mana(b'M', 24), Some(24));
+        assert_eq!(class_refreshed_mana(b'B', 24), Some(12));
+        // Default branch — every other class letter receives full INT.
+        assert_eq!(class_refreshed_mana(b'F', 24), Some(24));
+        assert_eq!(class_refreshed_mana(b'P', 24), Some(24));
+        assert_eq!(class_refreshed_mana(b'R', 24), Some(24));
+        assert_eq!(class_refreshed_mana(b'T', 24), Some(24));
+        assert_eq!(class_refreshed_mana(b'D', 24), Some(24));
+        assert_eq!(class_refreshed_mana(b'S', 24), Some(24));
+    }
+
+    #[test]
     fn intro_story_art_placement_for_step_matches_published_table() {
         // intro.md §10: spot-check primary story-art placements at all
         // file-boundary transitions.

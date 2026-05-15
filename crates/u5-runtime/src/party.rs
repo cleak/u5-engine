@@ -191,11 +191,18 @@ pub fn recompute_level_from_experience(experience: u16) -> u8 {
     level
 }
 
+/// `magic.md §8` Resurrection class-refresh table: Avatar (A), Mage (M),
+/// and the default class branch receive mana equal to Intelligence; Bard
+/// (B) receives half Intelligence. Returns `None` only when the spec asks
+/// the caller to leave the existing MP value alone, which the current
+/// trace does not promote — every U5 class letter resolves through this
+/// table.
 pub fn class_refreshed_mana(class_byte: u8, intelligence: u8) -> Option<u8> {
     match class_byte {
-        b'A' | b'M' => Some(intelligence),
         b'B' => Some(intelligence / 2),
-        _ => None,
+        // Avatar, Mage, and any other class fall through to the default
+        // full-Intelligence branch per spec.
+        _ => Some(intelligence),
     }
 }
 
