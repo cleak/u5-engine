@@ -2,6 +2,42 @@
 //! branch-flag mask builder (§3) and the conversation `0x86`
 //! letter-action table (§4).
 
+/// `catalogs/quest-graph.md §1` semantic node class for a quest-graph
+/// entry. The graph is data above the conversation system: a node
+/// describes a fact, gate, item, or action the player can reach.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuestGraphNodeClass {
+    /// A speaking character from `catalogs/npc-roster.md`.
+    Npc,
+    /// A player-typed conversation topic.
+    Keyword,
+    /// A fact that can guide later action, such as a dungeon word.
+    Knowledge,
+    /// A typed answer that unlocks a branch.
+    Password,
+    /// A recoverable, buyable, or granted inventory object.
+    Item,
+    /// A named location from `catalogs/gazetteer.md`.
+    Place,
+    /// A condition such as Resistance trust, yes/no, gold, or virtue.
+    Gate,
+    /// A world command outside Talk (shrine meditation, Yell, ...).
+    Action,
+}
+
+/// `catalogs/quest-graph.md §1`: ordered list of the eight node
+/// classes the catalog uses.
+pub const QUEST_GRAPH_NODE_CLASSES: [QuestGraphNodeClass; 8] = [
+    QuestGraphNodeClass::Npc,
+    QuestGraphNodeClass::Keyword,
+    QuestGraphNodeClass::Knowledge,
+    QuestGraphNodeClass::Password,
+    QuestGraphNodeClass::Item,
+    QuestGraphNodeClass::Place,
+    QuestGraphNodeClass::Gate,
+    QuestGraphNodeClass::Action,
+];
+
 /// `catalogs/quest-graph.md §3` typed gate identifying which password
 /// the player typed into a TALK conversation prompt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

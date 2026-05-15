@@ -179,9 +179,9 @@ pub use miscmsg_io::{
     load_misc_messages, miscmsg_family, parse_misc_messages,
 };
 pub use quest_flags::{
-    ConversationLetterAction, ConversationPassword, conversation_letter_action,
-    conversation_password, tlk_scene_branch_is_set, tlk_scene_branch_mask,
-    tlk_scene_branch_set,
+    ConversationLetterAction, ConversationPassword, QUEST_GRAPH_NODE_CLASSES,
+    QuestGraphNodeClass, conversation_letter_action, conversation_password,
+    tlk_scene_branch_is_set, tlk_scene_branch_mask, tlk_scene_branch_set,
 };
 pub use question_io::{
     QUESTION_DAT_DILEMMA_COUNT, QUESTION_DAT_FIRST_DILEMMA_RECORD, QUESTION_DAT_RECORDS,

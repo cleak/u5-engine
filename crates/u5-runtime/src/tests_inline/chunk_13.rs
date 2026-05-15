@@ -1,4 +1,18 @@
     #[test]
+    fn quest_graph_node_classes_match_spec_table() {
+        // catalogs/quest-graph.md §1
+        assert_eq!(QUEST_GRAPH_NODE_CLASSES.len(), 8);
+        assert_eq!(QUEST_GRAPH_NODE_CLASSES[0], QuestGraphNodeClass::Npc);
+        assert_eq!(QUEST_GRAPH_NODE_CLASSES[1], QuestGraphNodeClass::Keyword);
+        assert_eq!(QUEST_GRAPH_NODE_CLASSES[2], QuestGraphNodeClass::Knowledge);
+        assert_eq!(QUEST_GRAPH_NODE_CLASSES[3], QuestGraphNodeClass::Password);
+        assert_eq!(QUEST_GRAPH_NODE_CLASSES[4], QuestGraphNodeClass::Item);
+        assert_eq!(QUEST_GRAPH_NODE_CLASSES[5], QuestGraphNodeClass::Place);
+        assert_eq!(QUEST_GRAPH_NODE_CLASSES[6], QuestGraphNodeClass::Gate);
+        assert_eq!(QUEST_GRAPH_NODE_CLASSES[7], QuestGraphNodeClass::Action);
+    }
+
+    #[test]
     fn title_screen_layout_constants_match_spec() {
         // intro.md §3
         assert_eq!(TITLE_BIT_INITIAL_PLACEMENTS.len(), 7);
