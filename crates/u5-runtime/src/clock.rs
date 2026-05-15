@@ -7,6 +7,30 @@ use std::path::Path;
 
 use crate::*;
 
+/// `time.md §4` per-turn cleanup state-tag modifier byte values. The
+/// `Q` tag halves the minute increment with a 1-minute floor; the
+/// `T` tag suppresses the minute-counter and light-counter writes
+/// entirely. Other values pass through.
+pub const TIMING_TAG_QUICKNESS: u8 = b'Q';
+pub const TIMING_TAG_NEGATE_TIME: u8 = b'T';
+
+/// `time.md §4`: apply the state-tag modifier to a caller-supplied
+/// minute increment. Returns the adjusted increment to write into the
+/// minute counter (or `None` when the `T` tag suppresses the write).
+pub const fn apply_timing_tag_increment(increment: u8, tag_byte: u8) -> Option<u8> {
+    if tag_byte == TIMING_TAG_NEGATE_TIME {
+        return None;
+    }
+    if tag_byte == TIMING_TAG_QUICKNESS {
+        let halved = increment / 2;
+        if increment > 0 && halved == 0 {
+            return Some(1);
+        }
+        return Some(halved);
+    }
+    Some(increment)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GameClock {
     pub year: u16,

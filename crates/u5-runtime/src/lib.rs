@@ -94,7 +94,8 @@ pub use character_record::{
 };
 pub use chargen::*;
 pub use clock::{
-    GameClock, SKY_STRIP_CELL_COUNT, SkyStripMarker, shop_time_of_day_word,
+    GameClock, SKY_STRIP_CELL_COUNT, SkyStripMarker, TIMING_TAG_NEGATE_TIME,
+    TIMING_TAG_QUICKNESS, apply_timing_tag_increment, shop_time_of_day_word,
     sky_strip_marker_position,
 };
 pub use directed_step::{

@@ -1,4 +1,24 @@
     #[test]
+    fn apply_timing_tag_increment_matches_spec_rules() {
+        // time.md §4
+        assert_eq!(TIMING_TAG_QUICKNESS, b'Q');
+        assert_eq!(TIMING_TAG_NEGATE_TIME, b'T');
+        // No tag: increment passes through
+        assert_eq!(apply_timing_tag_increment(2, 0), Some(2));
+        assert_eq!(apply_timing_tag_increment(20, b' '), Some(20));
+        // Q tag: halve, with 1-minute floor for non-zero increments
+        assert_eq!(apply_timing_tag_increment(2, b'Q'), Some(1));
+        assert_eq!(apply_timing_tag_increment(4, b'Q'), Some(2));
+        // Q tag: increment 1 halves to 0 but is floored to 1
+        assert_eq!(apply_timing_tag_increment(1, b'Q'), Some(1));
+        // Q tag: a zero-increment input stays zero (mode-zero call)
+        assert_eq!(apply_timing_tag_increment(0, b'Q'), Some(0));
+        // T tag: suppress entirely
+        assert_eq!(apply_timing_tag_increment(2, b'T'), None);
+        assert_eq!(apply_timing_tag_increment(20, b'T'), None);
+    }
+
+    #[test]
     fn talk_liveness_gate_refusals_match_spec_priorities() {
         // conversation.md §2
         // Gate accepts when no refusal applies.
