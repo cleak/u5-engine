@@ -636,6 +636,66 @@
     }
 
     #[test]
+    fn parse_misc_messages_clusters_records_by_consumer() {
+        // formats/miscmsg-dat.md §2-§3: 47 NUL-terminated records grouped as
+        // 0-11 Blackthorn audience, 12-19 virtue failing text, 20-27 virtue
+        // aphorism, 28-35 shrine meditation, 36-46 urn/Codex prophecy.
+        let mut bytes = Vec::new();
+        for index in 0..47usize {
+            let label = format!("rec{index}");
+            bytes.extend_from_slice(label.as_bytes());
+            bytes.push(0x00);
+        }
+
+        let messages = parse_misc_messages(&bytes).expect("47 records should parse");
+
+        assert_eq!(messages.records.len(), 47);
+        assert_eq!(messages.blackthorn_audience().len(), 12);
+        assert_eq!(messages.virtue_failing_text().len(), 8);
+        assert_eq!(messages.virtue_aphorism().len(), 8);
+        assert_eq!(messages.shrine_meditation().len(), 8);
+        assert_eq!(messages.urn_codex().len(), 11);
+        assert_eq!(messages.record(0), Some("rec0"));
+        assert_eq!(messages.record(12), Some("rec12"));
+        assert_eq!(messages.record(46), Some("rec46"));
+        assert_eq!(messages.record(47), None);
+    }
+
+    #[test]
+    fn parse_misc_messages_preserves_codex_tile_glyph_bytes() {
+        // formats/miscmsg-dat.md §4: Codex tile-glyph bytes (`@`, `[`, `]`,
+        // `_`) pass through unchanged for the caller to render through the
+        // tile-glyph path.
+        let mut bytes = Vec::new();
+        for _ in 0..36usize {
+            bytes.push(b'a');
+            bytes.push(0x00);
+        }
+        bytes.extend_from_slice(b"TRU[");
+        bytes.push(0x00);
+        for _ in 37..47usize {
+            bytes.push(b'b');
+            bytes.push(0x00);
+        }
+
+        let messages = parse_misc_messages(&bytes).expect("47 records should parse");
+        assert_eq!(messages.record(36), Some("TRU["));
+    }
+
+    #[test]
+    fn parse_misc_messages_rejects_truncated_or_short_input() {
+        // §6: missing terminators and short record counts must be rejected.
+        let mut short = Vec::new();
+        for _ in 0..10usize {
+            short.extend_from_slice(b"x\0");
+        }
+        assert!(parse_misc_messages(&short).is_err());
+
+        let unterminated = b"hello".to_vec();
+        assert!(parse_misc_messages(&unterminated).is_err());
+    }
+
+    #[test]
     fn parse_endgame_messages_walks_eleven_nul_terminated_records() {
         // formats/endmsg-dat.md §2-§4: eleven NUL-terminated plain-ASCII
         // records consumed by the endgame Lord British dialogue.

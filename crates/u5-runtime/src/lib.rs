@@ -40,6 +40,7 @@ pub mod report;
 pub mod save_load;
 pub mod scene;
 pub mod endmsg_io;
+pub mod miscmsg_io;
 pub mod shops;
 pub mod shrine_virtue;
 pub mod signs_io;
@@ -64,6 +65,7 @@ pub use animation::{ActiveObject, ActiveShipWind, AnimationClock, PhaseTick};
 pub use chargen::*;
 pub use clock::{GameClock, SKY_STRIP_CELL_COUNT, SkyStripMarker, sky_strip_marker_position};
 pub use endmsg_io::{EndgameMessages, load_endgame_messages, parse_endgame_messages};
+pub use miscmsg_io::{MiscMessages, load_misc_messages, parse_misc_messages};
 pub use signs_io::{
     SignRecord, decode_sign_payload, find_sign, load_sign_records, parse_sign_records,
 };
