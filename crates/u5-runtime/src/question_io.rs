@@ -18,6 +18,16 @@ const QUESTION_DAT_FILE: &str = "QUESTION.DAT";
 const EXPECTED_RECORD_COUNT: usize = 30;
 const FIRST_DILEMMA_RECORD: usize = 2;
 
+/// `formats/question-dat.md §2`: total NUL-terminated record count
+/// (two leading narrative records plus 28 virtue-dilemma paragraphs).
+pub const QUESTION_DAT_RECORDS: usize = 30;
+/// `formats/question-dat.md §2`: first dilemma record (records 0 and
+/// 1 are the gypsy arrival narrative and the gypsy invitation).
+pub const QUESTION_DAT_FIRST_DILEMMA_RECORD: usize = 2;
+/// `formats/question-dat.md §4`: number of virtue-dilemma paragraphs
+/// (`C(8,2) = 28`).
+pub const QUESTION_DAT_DILEMMA_COUNT: usize = 28;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuestionRecords {
     pub records: Vec<String>,

@@ -175,7 +175,10 @@ pub use quest_flags::{
     ConversationLetterAction, conversation_letter_action, tlk_scene_branch_is_set,
     tlk_scene_branch_mask, tlk_scene_branch_set,
 };
-pub use question_io::{QuestionRecords, load_question_records, parse_question_records};
+pub use question_io::{
+    QUESTION_DAT_DILEMMA_COUNT, QUESTION_DAT_FIRST_DILEMMA_RECORD, QUESTION_DAT_RECORDS,
+    QuestionRecords, load_question_records, parse_question_records,
+};
 pub use signs_io::{
     SignRecord, decode_sign_payload, find_sign, load_sign_records, parse_sign_records,
 };

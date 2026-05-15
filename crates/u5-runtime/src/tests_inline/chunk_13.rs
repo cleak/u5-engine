@@ -940,6 +940,33 @@
     }
 
     #[test]
+    fn question_dat_layout_constants_match_spec() {
+        // formats/question-dat.md §2,§4
+        assert_eq!(QUESTION_DAT_RECORDS, 30);
+        assert_eq!(QUESTION_DAT_FIRST_DILEMMA_RECORD, 2);
+        assert_eq!(QUESTION_DAT_DILEMMA_COUNT, 28);
+        assert_eq!(
+            QUESTION_DAT_FIRST_DILEMMA_RECORD + QUESTION_DAT_DILEMMA_COUNT,
+            QUESTION_DAT_RECORDS
+        );
+        // C(8, 2) = 28 dilemma pairs
+        let mut pair_count = 0;
+        for first in 0..ShrineVirtue::ALL.len() {
+            for second in (first + 1)..ShrineVirtue::ALL.len() {
+                let r = chargen_question_record_for_pair(
+                    ShrineVirtue::ALL[first],
+                    ShrineVirtue::ALL[second],
+                )
+                .expect("ordered pair always resolves");
+                assert!(r >= QUESTION_DAT_FIRST_DILEMMA_RECORD);
+                assert!(r < QUESTION_DAT_RECORDS);
+                pair_count += 1;
+            }
+        }
+        assert_eq!(pair_count, QUESTION_DAT_DILEMMA_COUNT);
+    }
+
+    #[test]
     fn miscmsg_family_matches_spec_clusters() {
         // formats/miscmsg-dat.md §2,§3
         assert_eq!(MISCMSG_DAT_LEN, 2_745);
