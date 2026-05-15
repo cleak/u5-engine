@@ -1511,6 +1511,15 @@ impl PlayState {
         };
 
         if let Some((role, family)) = talk_shop_trigger(dialog_id) {
+            // shops.md §2: ordinary shop arms refuse before opening their menu
+            // when the party is mounted on a horse; only the horse trader
+            // (0x83) is reachable on horseback.
+            if self.player.transport.is_horse() && dialog_id != 0x83 {
+                self.message = format!(
+                    "{role} refuses thee on horseback; dismount before commerce."
+                );
+                return MoveOutcome::Blocked;
+            }
             self.advance_turn();
             self.message = format!(
                 "Talk reached {role} shop trigger 0x{dialog_id:02X} at ({x}, {y}); dispatch family: {family}."

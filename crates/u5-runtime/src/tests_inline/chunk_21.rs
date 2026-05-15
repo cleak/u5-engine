@@ -853,6 +853,83 @@
     }
 
     #[test]
+    fn town_talk_horse_mounted_refuses_non_horse_trader_shops() {
+        // shops.md §2: ordinary shop arms refuse before opening their menu when
+        // the party is mounted on a horse; only the 0x83 horse trader remains.
+        let dialogue = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.player.transport = TransportState::Horse {
+            type_byte: FIRST_PLAYABLE_HORSE_TILE,
+            tile: FIRST_PLAYABLE_HORSE_TILE,
+        };
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x85, // herbalist
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue(&dialogue),
+            MoveOutcome::Blocked
+        );
+
+        assert!(state.message.contains("Herbalist"));
+        assert!(state.message.contains("horseback"));
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
+    }
+
+    #[test]
+    fn town_talk_horse_mounted_still_reaches_horse_trader() {
+        // shops.md §2: the 0x83 horse-trader vehicle-sale arm remains
+        // available while mounted.
+        let dialogue = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.player.transport = TransportState::Horse {
+            type_byte: FIRST_PLAYABLE_HORSE_TILE,
+            tile: FIRST_PLAYABLE_HORSE_TILE,
+        };
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x83, // horse trader
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue(&dialogue),
+            MoveOutcome::Talked
+        );
+
+        assert!(state.message.contains("Horse trader shop trigger 0x83"));
+        assert!(state.message.contains("Vehicle-sale arm"));
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
     fn animation_clock_cycles_public_static_four_frame_families() {
         // Only water actually animates (3 frames). Mountains, bookshelves,
         // doors, tables in the 0x0a, 0x5c, 0x98, 0x9c bands are static
