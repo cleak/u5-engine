@@ -2160,6 +2160,29 @@
     }
 
     #[test]
+    fn combat_arena_metadata_slices_match_spec() {
+        // formats/cbt.md §2 + §5
+        // File lengths
+        assert_eq!(BRIT_CBT_FILE_LEN, 5_632);
+        assert_eq!(DUNGEON_CBT_FILE_LEN, 39_424);
+        // Per-arena setup tables A and B on row 3
+        assert_eq!(CBT_SETUP_TABLE_ROW, 3);
+        assert!(CBT_SETUP_TABLE_A_COLUMNS.contains(&11));
+        assert!(CBT_SETUP_TABLE_A_COLUMNS.contains(&16));
+        assert!(!CBT_SETUP_TABLE_A_COLUMNS.contains(&17));
+        assert!(CBT_SETUP_TABLE_B_COLUMNS.contains(&17));
+        assert!(CBT_SETUP_TABLE_B_COLUMNS.contains(&22));
+        assert!(!CBT_SETUP_TABLE_B_COLUMNS.contains(&23));
+        // Placement-slot rows
+        assert_eq!(CBT_PLACEMENT_X_ROW, 6);
+        assert_eq!(CBT_PLACEMENT_Y_ROW, 7);
+        assert!(CBT_PLACEMENT_COLUMNS.contains(&11));
+        assert!(CBT_PLACEMENT_COLUMNS.contains(&26));
+        assert!(!CBT_PLACEMENT_COLUMNS.contains(&27));
+        assert_eq!(CBT_PLACEMENT_SLOT_COUNT, 16);
+    }
+
+    #[test]
     fn active_object_field_offsets_match_spec() {
         // active-objects.md §3
         assert_eq!(ACTIVE_OBJECT_FIELD_TYPE, 0);
