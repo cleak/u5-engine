@@ -11,6 +11,65 @@ pub const COMBAT_MONSTER_SLOT_FIRST: usize = 1;
 pub const COMBAT_MONSTER_SLOT_LAST: usize = 25;
 pub const COMBAT_ACTOR_RECORD_LEN: usize = 8;
 
+/// `combat.md §9` four-bucket wound classification produced by the
+/// monster wound-score classifier. The classifier consumes the acting
+/// monster's current HP against its class maximum and feeds AI
+/// fleeing/morale decisions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MonsterWoundBucket {
+    /// HP `< 1/4 max` — always-fleeing critical band.
+    Critical,
+    /// HP in `[1/4, 1/2)` — morale-check band; fleeing on 252/256.
+    Wounded,
+    /// HP in `[1/2, 3/4)` — light wounds.
+    LightlyWounded,
+    /// HP `>= 3/4 max` — healthy.
+    Healthy,
+}
+
+/// `combat.md §9` morale-check probability over a `0..=255` roll.
+/// In the wounded band, fleeing is set on 252 of the 256 possible
+/// results.
+pub const WOUND_MORALE_FLEE_THRESHOLD: u16 = 252;
+
+/// `combat.md §9` monster wound-score classifier. Returns the
+/// four-bucket wound classification.
+pub const fn monster_wound_bucket(current_hp: u16, class_max_hp: u16) -> MonsterWoundBucket {
+    if class_max_hp == 0 {
+        return MonsterWoundBucket::Critical;
+    }
+    let quarter = class_max_hp / 4;
+    let half = class_max_hp / 2;
+    let three_quarters = (class_max_hp * 3) / 4;
+    if current_hp < quarter {
+        MonsterWoundBucket::Critical
+    } else if current_hp < half {
+        MonsterWoundBucket::Wounded
+    } else if current_hp < three_quarters {
+        MonsterWoundBucket::LightlyWounded
+    } else {
+        MonsterWoundBucket::Healthy
+    }
+}
+
+/// `combat.md §9` morale verdict for the wounded band. Below 1/4 the
+/// classifier always sets fleeing; in [1/4, 1/2) it sets fleeing
+/// when the morale roll is `< 252` (252 of 256 outcomes); at or above
+/// 1/2 it clears fleeing regardless of the roll.
+pub const fn monster_wound_sets_fleeing(
+    current_hp: u16,
+    class_max_hp: u16,
+    morale_roll_0_to_255: u8,
+) -> bool {
+    match monster_wound_bucket(current_hp, class_max_hp) {
+        MonsterWoundBucket::Critical => true,
+        MonsterWoundBucket::Wounded => {
+            (morale_roll_0_to_255 as u16) < WOUND_MORALE_FLEE_THRESHOLD
+        }
+        MonsterWoundBucket::LightlyWounded | MonsterWoundBucket::Healthy => false,
+    }
+}
+
 /// `combat.md §8` Quickness player-dispatch gate. When the shared
 /// `Q` active-effect tag is live, the per-player command handler
 /// rolls a `0..=1` random value before reading input. A zero result

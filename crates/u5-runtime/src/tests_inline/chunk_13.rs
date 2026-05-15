@@ -1,4 +1,39 @@
     #[test]
+    fn monster_wound_classifier_matches_spec_thresholds() {
+        // combat.md §9
+        assert_eq!(WOUND_MORALE_FLEE_THRESHOLD, 252);
+        // 100 HP class.
+        assert_eq!(monster_wound_bucket(0, 100), MonsterWoundBucket::Critical);
+        assert_eq!(monster_wound_bucket(24, 100), MonsterWoundBucket::Critical);
+        assert_eq!(monster_wound_bucket(25, 100), MonsterWoundBucket::Wounded);
+        assert_eq!(monster_wound_bucket(49, 100), MonsterWoundBucket::Wounded);
+        assert_eq!(
+            monster_wound_bucket(50, 100),
+            MonsterWoundBucket::LightlyWounded
+        );
+        assert_eq!(
+            monster_wound_bucket(74, 100),
+            MonsterWoundBucket::LightlyWounded
+        );
+        assert_eq!(monster_wound_bucket(75, 100), MonsterWoundBucket::Healthy);
+        assert_eq!(monster_wound_bucket(100, 100), MonsterWoundBucket::Healthy);
+        // Zero max -> Critical edge.
+        assert_eq!(monster_wound_bucket(0, 0), MonsterWoundBucket::Critical);
+
+        // Critical band always sets fleeing.
+        assert!(monster_wound_sets_fleeing(0, 100, 0));
+        assert!(monster_wound_sets_fleeing(0, 100, 255));
+        // Wounded band: fleeing on rolls 0..=251 (252 outcomes), clear on 252..=255.
+        assert!(monster_wound_sets_fleeing(30, 100, 0));
+        assert!(monster_wound_sets_fleeing(30, 100, 251));
+        assert!(!monster_wound_sets_fleeing(30, 100, 252));
+        assert!(!monster_wound_sets_fleeing(30, 100, 255));
+        // Lightly wounded / healthy: never fleeing.
+        assert!(!monster_wound_sets_fleeing(50, 100, 0));
+        assert!(!monster_wound_sets_fleeing(80, 100, 251));
+    }
+
+    #[test]
     fn quickness_skips_player_input_only_with_zero_roll_and_active_tag() {
         // combat.md §8
         // Active tag + zero roll -> skip.
