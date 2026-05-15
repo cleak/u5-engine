@@ -1,4 +1,24 @@
     #[test]
+    fn live_chunk_substituted_tile_matches_spec_rules() {
+        // overworld.md §3
+        assert_eq!(LIVE_CHUNK_SUBSTITUTION_TARGET_DF, 0xDF);
+        assert_eq!(LIVE_CHUNK_SUBSTITUTION_TARGET_1A, 0x1A);
+        // 0x16..=0x18 rewrite unconditionally to 0xDF.
+        for tile in 0x16u8..=0x18 {
+            assert_eq!(live_chunk_substituted_tile(tile, true), 0xDF);
+            assert_eq!(live_chunk_substituted_tile(tile, false), 0xDF);
+        }
+        // 0x19 rewrites only when the classifier accepts.
+        assert_eq!(live_chunk_substituted_tile(0x19, true), 0x1A);
+        assert_eq!(live_chunk_substituted_tile(0x19, false), 0x19);
+        // Other tiles pass through under both classifier states.
+        for tile in [0x00u8, 0x01, 0x15, 0x1A, 0x1B, 0xDE, 0xE0, 0xFF] {
+            assert_eq!(live_chunk_substituted_tile(tile, true), tile);
+            assert_eq!(live_chunk_substituted_tile(tile, false), tile);
+        }
+    }
+
+    #[test]
     fn calendar_thresholds_and_display_hour_match_spec() {
         // time.md §2,§5
         assert_eq!(MINUTES_PER_HOUR, 60);

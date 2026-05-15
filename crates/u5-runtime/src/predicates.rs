@@ -46,6 +46,31 @@ pub const fn is_ship_transport_furled(byte: u8) -> bool {
     byte >= SHIP_TRANSPORT_FURLED_FIRST && byte <= SHIP_TRANSPORT_FURLED_LAST
 }
 
+/// `overworld.md §3` per-chunk live-substitution rewrite. After a
+/// chunk is loaded into the live 16x16 chunk buffer, the loader walks
+/// the cells and applies a fixed substitution pass:
+///
+/// - Tile ids `0x16..=0x18` rewrite to `0xDF` unconditionally.
+/// - Tile id `0x19` rewrites to `0x1A` only when the chunk
+///   high-byte classifier accepts the current chunk descriptor.
+///
+/// The substitution affects only the live chunk buffer; the on-disk
+/// chunk is unchanged. The classifier acceptance state is supplied
+/// by the caller (the `chunk_classifier_accepts` flag).
+pub const LIVE_CHUNK_SUBSTITUTION_TARGET_DF: u8 = 0xDF;
+pub const LIVE_CHUNK_SUBSTITUTION_TARGET_1A: u8 = 0x1A;
+
+pub const fn live_chunk_substituted_tile(
+    tile: u8,
+    chunk_classifier_accepts: bool,
+) -> u8 {
+    match tile {
+        0x16..=0x18 => LIVE_CHUNK_SUBSTITUTION_TARGET_DF,
+        0x19 if chunk_classifier_accepts => LIVE_CHUNK_SUBSTITUTION_TARGET_1A,
+        other => other,
+    }
+}
+
 /// `movement.md §4` chair-tile force-reject range `0x90..=0x93`. The
 /// base bitset would otherwise allow these ids; most query classes
 /// force-reject them. Two query families exempt themselves from the
