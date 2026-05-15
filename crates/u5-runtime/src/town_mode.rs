@@ -106,6 +106,25 @@ pub const fn town_floor_offset(floor_byte: u8) -> i8 {
     floor_byte as i8
 }
 
+/// `formats/npc.md §3,§4` per-class NPC file layout. The four `.NPC`
+/// files are 4608 bytes each; each contains eight 576-byte sub-maps,
+/// each holding 32 schedule records (16 bytes each) plus a 32-byte
+/// type array and a 32-byte dialog index array.
+pub const NPC_FILE_LEN: usize = 4608;
+pub const NPC_SUB_MAP_LEN: usize = 576;
+pub const NPC_SUB_MAPS_PER_FILE: usize = 8;
+pub const NPC_SCHEDULE_RECORD_LEN: usize = 16;
+pub const NPC_SCHEDULE_ARRAY_LEN: usize = 512;
+pub const NPC_TYPE_ARRAY_OFFSET: usize = 512;
+pub const NPC_TYPE_ARRAY_LEN: usize = 32;
+pub const NPC_DIALOG_ARRAY_OFFSET: usize = 544;
+pub const NPC_DIALOG_ARRAY_LEN: usize = 32;
+pub const NPC_SLOTS_PER_SUB_MAP: usize = 32;
+/// Slot zero of every sub-map is the unused-sentinel slot the schedule
+/// processor skips; effective capacity per sub-map is therefore 31.
+pub const NPC_SENTINEL_SLOT: usize = 0;
+pub const NPC_EFFECTIVE_SLOTS_PER_SUB_MAP: usize = NPC_SLOTS_PER_SUB_MAP - 1;
+
 /// `town-mode.md §4`: NPC roster size — up to 31 active NPC slots
 /// (slot zero is a sentinel) with three parallel 16/1/1-byte sub-blocks
 /// per slot for a total of 576 bytes per location.

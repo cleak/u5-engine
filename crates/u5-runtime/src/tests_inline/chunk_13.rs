@@ -734,6 +734,35 @@
     }
 
     #[test]
+    fn npc_file_layout_constants_match_spec() {
+        // formats/npc.md §3,§4
+        assert_eq!(NPC_FILE_LEN, 4608);
+        assert_eq!(NPC_SUB_MAP_LEN, 576);
+        assert_eq!(NPC_SUB_MAPS_PER_FILE, 8);
+        assert_eq!(NPC_SUB_MAP_LEN * NPC_SUB_MAPS_PER_FILE, NPC_FILE_LEN);
+        // Sub-map sub-blocks
+        assert_eq!(NPC_SCHEDULE_ARRAY_LEN, 512);
+        assert_eq!(NPC_TYPE_ARRAY_OFFSET, 512);
+        assert_eq!(NPC_TYPE_ARRAY_LEN, 32);
+        assert_eq!(NPC_DIALOG_ARRAY_OFFSET, 544);
+        assert_eq!(NPC_DIALOG_ARRAY_LEN, 32);
+        assert_eq!(
+            NPC_SCHEDULE_ARRAY_LEN + NPC_TYPE_ARRAY_LEN + NPC_DIALOG_ARRAY_LEN,
+            NPC_SUB_MAP_LEN
+        );
+        // 32 schedule slots × 16 bytes each = 512
+        assert_eq!(NPC_SLOTS_PER_SUB_MAP, 32);
+        assert_eq!(NPC_SCHEDULE_RECORD_LEN, 16);
+        assert_eq!(
+            NPC_SLOTS_PER_SUB_MAP * NPC_SCHEDULE_RECORD_LEN,
+            NPC_SCHEDULE_ARRAY_LEN
+        );
+        // Sentinel slot
+        assert_eq!(NPC_SENTINEL_SLOT, 0);
+        assert_eq!(NPC_EFFECTIVE_SLOTS_PER_SUB_MAP, 31);
+    }
+
+    #[test]
     fn town_resident_name_matches_gazetteer_table() {
         // catalogs/gazetteer.md §5
         // Towns
