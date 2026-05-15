@@ -636,6 +636,69 @@
     }
 
     #[test]
+    fn tile_view_class_matches_spec_lookup_table() {
+        // systems/view.md §4: per-tile view class lookup. Spot-check
+        // representative tiles from each class plus boundary cases.
+        // Class 0 (empty/pass-through)
+        assert_eq!(tile_view_class(0x00), 0);
+        assert_eq!(tile_view_class(0xC0), 0);
+        assert_eq!(tile_view_class(0xCF), 0);
+        assert_eq!(tile_view_class(0xFF), 0);
+        // Class 1
+        assert_eq!(tile_view_class(0x05), 1);
+        assert_eq!(tile_view_class(0x30), 1);
+        assert_eq!(tile_view_class(0x37), 1);
+        // Class 2
+        assert_eq!(tile_view_class(0x09), 2);
+        assert_eq!(tile_view_class(0x2D), 2);
+        // Class 3
+        assert_eq!(tile_view_class(0x70), 3);
+        assert_eq!(tile_view_class(0x7F), 3);
+        assert_eq!(tile_view_class(0x44), 3);
+        assert_eq!(tile_view_class(0xDD), 3);
+        // Class 4
+        assert_eq!(tile_view_class(0x5C), 4);
+        assert_eq!(tile_view_class(0xBE), 4);
+        // Class 5
+        assert_eq!(tile_view_class(0x10), 5);
+        assert_eq!(tile_view_class(0x1B), 5);
+        assert_eq!(tile_view_class(0x4C), 5);
+        assert_eq!(tile_view_class(0xFA), 5);
+        // Class 6
+        assert_eq!(tile_view_class(0xEC), 6);
+        assert_eq!(tile_view_class(0xF9), 6);
+        assert_eq!(tile_view_class(0xB8), 6);
+        // Class 7
+        assert_eq!(tile_view_class(0x4D), 7);
+        assert_eq!(tile_view_class(0xFE), 7);
+        // Class 8
+        assert_eq!(tile_view_class(0x0B), 8);
+        assert_eq!(tile_view_class(0x0F), 8);
+        // Class 9
+        assert_eq!(tile_view_class(0x06), 9);
+        assert_eq!(tile_view_class(0x2C), 9);
+        // Class A
+        assert_eq!(tile_view_class(0x60), 0x0A);
+        assert_eq!(tile_view_class(0x69), 0x0A);
+        // Class B
+        assert_eq!(tile_view_class(0xD4), 0x0B);
+        assert_eq!(tile_view_class(0xD7), 0x0B);
+        // Class C
+        assert_eq!(tile_view_class(0x01), 0x0C);
+        // Class D
+        assert_eq!(tile_view_class(0x04), 0x0D);
+        // Class E
+        assert_eq!(tile_view_class(0xE0), 0x0E);
+        assert_eq!(tile_view_class(0xE3), 0x0E);
+        // Class F
+        assert_eq!(tile_view_class(0xD8), 0x0F);
+        assert_eq!(tile_view_class(0xDC), 0x0F);
+        // Class 0x10
+        assert_eq!(tile_view_class(0x20), 0x10);
+        assert_eq!(tile_view_class(0x26), 0x10);
+    }
+
+    #[test]
     fn decode_end_window_strips_layout_markers_and_terminates_on_nul() {
         // formats/end-dat.md §3: `{` paragraph marker and `_` soft hyphen
         // are layout hints; NUL terminates the rendered output.
