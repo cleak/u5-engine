@@ -7,6 +7,16 @@ use std::path::{Path, PathBuf};
 
 use crate::*;
 
+/// `active-objects.md §3` field offsets within the eight-byte record.
+pub const ACTIVE_OBJECT_FIELD_TYPE: usize = 0;
+pub const ACTIVE_OBJECT_FIELD_TILE: usize = 1;
+pub const ACTIVE_OBJECT_FIELD_X: usize = 2;
+pub const ACTIVE_OBJECT_FIELD_Y: usize = 3;
+pub const ACTIVE_OBJECT_FIELD_Z: usize = 4;
+pub const ACTIVE_OBJECT_FIELD_DEP1: usize = 5;
+pub const ACTIVE_OBJECT_FIELD_PHASE: usize = 6;
+pub const ACTIVE_OBJECT_FIELD_DEP3: usize = 7;
+
 /// `active-objects.md §10` overworld off-screen pruning radius. The
 /// per-turn walker frees outdoor active-object slots whose distance
 /// from the scroll bases (Manhattan in either axis) is greater than

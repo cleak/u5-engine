@@ -2160,6 +2160,33 @@
     }
 
     #[test]
+    fn active_object_field_offsets_match_spec() {
+        // active-objects.md §3
+        assert_eq!(ACTIVE_OBJECT_FIELD_TYPE, 0);
+        assert_eq!(ACTIVE_OBJECT_FIELD_TILE, 1);
+        assert_eq!(ACTIVE_OBJECT_FIELD_X, 2);
+        assert_eq!(ACTIVE_OBJECT_FIELD_Y, 3);
+        assert_eq!(ACTIVE_OBJECT_FIELD_Z, 4);
+        assert_eq!(ACTIVE_OBJECT_FIELD_DEP1, 5);
+        assert_eq!(ACTIVE_OBJECT_FIELD_PHASE, 6);
+        assert_eq!(ACTIVE_OBJECT_FIELD_DEP3, 7);
+        // Cross-check: every field offset is within the published
+        // record length.
+        for offset in [
+            ACTIVE_OBJECT_FIELD_TYPE,
+            ACTIVE_OBJECT_FIELD_TILE,
+            ACTIVE_OBJECT_FIELD_X,
+            ACTIVE_OBJECT_FIELD_Y,
+            ACTIVE_OBJECT_FIELD_Z,
+            ACTIVE_OBJECT_FIELD_DEP1,
+            ACTIVE_OBJECT_FIELD_PHASE,
+            ACTIVE_OBJECT_FIELD_DEP3,
+        ] {
+            assert!(offset < OOL_RECORD_LEN);
+        }
+    }
+
+    #[test]
     fn active_object_should_prune_matches_spec_radius() {
         // active-objects.md §10
         assert_eq!(ACTIVE_OBJECT_PRUNE_RADIUS, 32);
