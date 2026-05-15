@@ -734,6 +734,39 @@
     }
 
     #[test]
+    fn location_dat_layout_constants_and_filenames_per_spec() {
+        // formats/location-dat.md §3
+        assert_eq!(LOCATION_DAT_FILE_LEN, 16_384);
+        assert_eq!(LOCATION_DAT_BLOCK_LEN, 2_048);
+        assert_eq!(LOCATION_DAT_BLOCKS_PER_FILE, 8);
+        assert_eq!(LOCATION_DAT_FLOOR_PAGE_LEN, 1_024);
+        assert_eq!(LOCATION_DAT_FLOOR_PAGES_PER_BLOCK, 2);
+        assert_eq!(
+            LOCATION_DAT_BLOCK_LEN * LOCATION_DAT_BLOCKS_PER_FILE,
+            LOCATION_DAT_FILE_LEN
+        );
+        assert_eq!(
+            LOCATION_DAT_FLOOR_PAGE_LEN * LOCATION_DAT_FLOOR_PAGES_PER_BLOCK,
+            LOCATION_DAT_BLOCK_LEN
+        );
+        // formats/location-dat.md §2 file family
+        for s in 1..=8u8 {
+            assert_eq!(location_dat_filename(s), Some("TOWNE.DAT"));
+        }
+        for s in 9..=16u8 {
+            assert_eq!(location_dat_filename(s), Some("DWELLING.DAT"));
+        }
+        for s in 17..=24u8 {
+            assert_eq!(location_dat_filename(s), Some("CASTLE.DAT"));
+        }
+        for s in 25..=32u8 {
+            assert_eq!(location_dat_filename(s), Some("KEEP.DAT"));
+        }
+        assert_eq!(location_dat_filename(0), None);
+        assert_eq!(location_dat_filename(33), None);
+    }
+
+    #[test]
     fn npc_roster_and_tlk_filenames_per_spec() {
         // formats/npc.md §2
         assert_eq!(npc_roster_filename(0), None);

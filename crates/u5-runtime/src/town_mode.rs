@@ -106,6 +106,28 @@ pub const fn town_floor_offset(floor_byte: u8) -> i8 {
     floor_byte as i8
 }
 
+/// `formats/location-dat.md §3` per-class location-data file layout.
+/// Each `*.DAT` is 16384 bytes containing eight 2048-byte per-location
+/// blocks. Each block stores two consecutive 1024-byte floor pages.
+pub const LOCATION_DAT_FILE_LEN: usize = 16_384;
+pub const LOCATION_DAT_BLOCK_LEN: usize = 2_048;
+pub const LOCATION_DAT_BLOCKS_PER_FILE: usize = 8;
+pub const LOCATION_DAT_FLOOR_PAGE_LEN: usize = 1_024;
+pub const LOCATION_DAT_FLOOR_PAGES_PER_BLOCK: usize = 2;
+
+/// `formats/location-dat.md §2`: filename loaded for a town-family
+/// scene byte's location data. Returns `None` for scene bytes outside
+/// `1..=32`.
+pub const fn location_dat_filename(scene_byte: u8) -> Option<&'static str> {
+    Some(match scene_byte {
+        1..=8 => "TOWNE.DAT",
+        9..=16 => "DWELLING.DAT",
+        17..=24 => "CASTLE.DAT",
+        25..=32 => "KEEP.DAT",
+        _ => return None,
+    })
+}
+
 /// `formats/npc.md §2`: filename loaded for a town-family scene
 /// byte's NPC roster. Returns `None` for scene bytes outside `1..=32`.
 pub const fn npc_roster_filename(scene_byte: u8) -> Option<&'static str> {
