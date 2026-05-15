@@ -636,6 +636,49 @@
     }
 
     #[test]
+    fn read_codex_urn_walks_virtues_in_standard_order() {
+        // karma.md §8: walk the eight virtues in standard order, stamp the
+        // first ordained-and-not-yet-Codex-read virtue, return the chosen
+        // virtue. Honesty is index 0 and so should be picked first when
+        // ordained.
+        let mut codex = 0u8;
+        let outcome = read_codex_urn(
+            ShrineVirtue::Honesty.bit() | ShrineVirtue::Justice.bit(),
+            &mut codex,
+        );
+        assert_eq!(outcome, CodexUrnReadOutcome::Stamped(ShrineVirtue::Honesty));
+        assert_eq!(codex, ShrineVirtue::Honesty.bit());
+
+        // Second read with same ordained mask should pick Justice next
+        // because Honesty's Codex-read bit is now set.
+        let outcome = read_codex_urn(
+            ShrineVirtue::Honesty.bit() | ShrineVirtue::Justice.bit(),
+            &mut codex,
+        );
+        assert_eq!(outcome, CodexUrnReadOutcome::Stamped(ShrineVirtue::Justice));
+        assert_eq!(codex, ShrineVirtue::Honesty.bit() | ShrineVirtue::Justice.bit());
+    }
+
+    #[test]
+    fn read_codex_urn_returns_completed_when_all_codex_bits_set() {
+        // karma.md §8: with all eight Codex-read bits set, the reader takes
+        // its completed branch and the saved masks are unchanged.
+        let mut codex = 0xFFu8;
+        let outcome = read_codex_urn(0xFF, &mut codex);
+        assert_eq!(outcome, CodexUrnReadOutcome::Completed);
+        assert_eq!(codex, 0xFF);
+    }
+
+    #[test]
+    fn read_codex_urn_no_ordained_branch_when_no_bits_set() {
+        // §8: if no virtue is ordained, no virtue can be stamped.
+        let mut codex = 0u8;
+        let outcome = read_codex_urn(0, &mut codex);
+        assert_eq!(outcome, CodexUrnReadOutcome::NoOrdained);
+        assert_eq!(codex, 0);
+    }
+
+    #[test]
     fn town_tile_predicates_match_published_catalog_ranges() {
         // catalogs/tile-catalog.md §6: door 96..=103, stair 0xC4..=0xC7,
         // chair 0x8C, NPC floor-link markers 0xC8 and 0xC9.
