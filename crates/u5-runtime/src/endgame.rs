@@ -268,10 +268,25 @@ impl PlayState {
         self.combat_active = false;
         self.pending_combat_actor_slot = None;
         self.pending_combat_terrain_trigger_slot = None;
+        // endgame.md §10: dead party members are mutated into a present /
+        // restored state for the ending tableau, with current health restored
+        // from the stored maximum.
+        self.restore_party_for_endgame_tableau();
         self.endgame = Some(EndgameState::awaiting_first_confirmation());
         self.message =
             "Endgame: Lord British asks whether thou hast brought his box. (Y/N)".to_string();
         MoveOutcome::EndgameEntered
+    }
+
+    /// endgame.md §10: restore the entire travelling party to Good status with
+    /// HP equal to their stored maximum. Used by the endgame entry to set up
+    /// the throne-room tableau. This mutation is cinematic only and is not
+    /// committed to disk.
+    pub fn restore_party_for_endgame_tableau(&mut self) {
+        for member in &mut self.party {
+            member.status = b'G';
+            member.hp = member.max_hp;
+        }
     }
 
     pub fn resolve_endgame_confirmation(&mut self, answer: bool) -> MoveOutcome {

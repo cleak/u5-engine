@@ -588,6 +588,54 @@
     }
 
     #[test]
+    fn enter_endgame_restores_dead_party_for_tableau() {
+        // endgame.md §10: dead party members are mutated into a present /
+        // restored state for the ending tableau, with current health restored
+        // from the stored maximum.
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'D',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 0,
+                max_hp: 60,
+                level: 8,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'B',
+                status: b'P',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 12,
+                max_hp: 30,
+                level: 4,
+            },
+            PartyMember {
+                slot: 2,
+                class_byte: b'M',
+                status: b'S',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 5,
+                max_hp: 25,
+                level: 3,
+            },
+        ];
+
+        state.enter_endgame();
+
+        for member in &state.party {
+            assert_eq!(member.status, b'G');
+            assert_eq!(member.hp, member.max_hp);
+        }
+        assert!(state.endgame.is_some());
+    }
+
+    #[test]
     fn endgame_step_toward_target_prefers_axis_with_greater_distance() {
         // endgame.md §7: each call moves one cell toward target along the axis
         // with the greater remaining distance.
