@@ -54,6 +54,7 @@ pub mod tlk_control_codes;
 pub mod view_classes;
 pub mod start_validation;
 pub mod test_fixtures;
+pub mod tile_classes;
 pub mod tile_helpers;
 pub mod timing;
 pub mod town_tables;
@@ -98,6 +99,14 @@ pub use tlk_control_codes::{
     TLK_CODE_PROTECT_RUN, TLK_CODE_SET_FLAG, TLK_CODE_WAIT_KEY,
     TLK_LABEL_FIRST, TLK_LABEL_LAST, TlkByteKind, classify_tlk_byte,
     is_tlk_label_byte, tlk_introducer_argument_count,
+};
+pub use tile_classes::{
+    TILE_BARRIER_FIRST, TILE_BARRIER_LAST, TILE_DECORATION_FIRST, TILE_DECORATION_LAST,
+    TILE_DOOR_FIRST, TILE_DOOR_LAST, TILE_FURNITURE_FIRST, TILE_FURNITURE_LAST,
+    TILE_NPC_FIRST, TILE_NPC_LAST, TILE_PATH_FIRST, TILE_PATH_LAST, TILE_SPECIAL_FIRST,
+    TILE_SPECIAL_LAST, TILE_TERRAIN_FIRST, TILE_TERRAIN_LAST, TILE_VEHICLE_ART_FIRST,
+    TILE_VEHICLE_ART_LAST, TILE_VEHICLE_FIRST, TILE_VEHICLE_LAST, TILE_WALL_FIRST,
+    TILE_WALL_LAST, TILE_WATER_FIRST, TILE_WATER_LAST, TileClass, coarse_tile_class,
 };
 pub use view_classes::{fc_sprite_proximity_mask_hits, tile_view_class};
 pub use combat_actor::*;

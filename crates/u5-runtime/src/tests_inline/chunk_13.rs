@@ -706,6 +706,37 @@
     }
 
     #[test]
+    fn tile_class_partitions_byte_range_per_catalog_section_three() {
+        // catalogs/tile-catalog.md §3 coarse class groupings.
+        assert_eq!(coarse_tile_class(0x00), TileClass::Sentinel);
+        for tile in TILE_WATER_FIRST..=TILE_WATER_LAST {
+            assert_eq!(coarse_tile_class(tile), TileClass::Water);
+        }
+        assert_eq!(coarse_tile_class(0x05), TileClass::Terrain);
+        assert_eq!(coarse_tile_class(0x0F), TileClass::Terrain);
+        assert_eq!(coarse_tile_class(0x10), TileClass::Path);
+        assert_eq!(coarse_tile_class(0x17), TileClass::Path);
+        assert_eq!(coarse_tile_class(0x18), TileClass::Wall);
+        assert_eq!(coarse_tile_class(0x3F), TileClass::Wall);
+        assert_eq!(coarse_tile_class(0x40), TileClass::Furniture);
+        assert_eq!(coarse_tile_class(0x5F), TileClass::Furniture);
+        assert_eq!(coarse_tile_class(0x60), TileClass::Door);
+        assert_eq!(coarse_tile_class(0x67), TileClass::Door);
+        assert_eq!(coarse_tile_class(0x68), TileClass::Decoration);
+        assert_eq!(coarse_tile_class(0x6F), TileClass::Decoration);
+        assert_eq!(coarse_tile_class(0x70), TileClass::Barrier);
+        assert_eq!(coarse_tile_class(0x7F), TileClass::Barrier);
+        assert_eq!(coarse_tile_class(0x80), TileClass::Special);
+        assert_eq!(coarse_tile_class(0x9F), TileClass::Special);
+        assert_eq!(coarse_tile_class(0xA0), TileClass::Vehicle);
+        assert_eq!(coarse_tile_class(0xBB), TileClass::Vehicle);
+        assert_eq!(coarse_tile_class(0xBC), TileClass::VehicleArt);
+        assert_eq!(coarse_tile_class(0xBF), TileClass::VehicleArt);
+        assert_eq!(coarse_tile_class(0xC0), TileClass::Npc);
+        assert_eq!(coarse_tile_class(0xFF), TileClass::Npc);
+    }
+
+    #[test]
     fn classify_tlk_byte_partitions_dispatcher_table_per_section_seven() {
         // conversation.md §7 dispatcher classification order: 0x00 NUL,
         // 0x01..=0x7F dictionary, 0x9E..=0x9F GOTO label (precedes the
