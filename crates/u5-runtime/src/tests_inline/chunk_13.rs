@@ -1,4 +1,22 @@
     #[test]
+    fn combat_interference_blocks_only_when_all_five_conditions_hold() {
+        // magic.md §7
+        // Happy "interferes" path: all conditions met.
+        assert!(combat_interference_blocks(true, true, true, false, 1));
+        // Each individually-failing condition keeps the cast running.
+        assert!(!combat_interference_blocks(false, true, true, false, 1)); // unmapped target
+        assert!(!combat_interference_blocks(true, false, true, false, 1)); // invalid actor
+        assert!(!combat_interference_blocks(true, true, false, false, 1)); // hidden/asleep
+        assert!(!combat_interference_blocks(true, true, true, true, 1));   // Negate-Time active
+        // Distance != 1 fails.
+        assert!(!combat_interference_blocks(true, true, true, false, 0));
+        assert!(!combat_interference_blocks(true, true, true, false, 2));
+        assert!(!combat_interference_blocks(true, true, true, false, 7));
+        // Negate-Time suppression overrides distance.
+        assert!(!combat_interference_blocks(true, true, true, true, 1));
+    }
+
+    #[test]
     fn spell_selector_ignored_letters_match_spec() {
         // magic.md §5
         assert_eq!(SPELL_SELECTOR_MAX_LEN, 4);

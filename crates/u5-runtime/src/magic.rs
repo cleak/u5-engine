@@ -43,6 +43,42 @@ pub const fn spell_selector_is_ignored(letter: u8) -> bool {
     matches!(letter, b'J' | b'j' | b'O' | b'o')
 }
 
+/// `magic.md §7` combat interference-gate predicate. The gate runs
+/// *before* the C-Cast prompt inside a combat round and blocks the
+/// cast (printing `<target> interferes!`) only when ALL five
+/// conditions hold:
+///
+/// 1. The per-slot combat target map contains a non-sentinel target.
+/// 2. The target slot holds a valid live actor.
+/// 3. The target is visible/awake (not hidden, not sleeping).
+/// 4. The Negate-Time `T` runtime tag is NOT active (it suppresses
+///    interference).
+/// 5. The caster and target are at distance one in the 11x11 arena.
+///
+/// Any failing condition allows the cast to continue to the
+/// dispatcher.
+pub const fn combat_interference_blocks(
+    target_mapped: bool,
+    target_valid: bool,
+    target_visible_and_awake: bool,
+    negate_time_active: bool,
+    caster_target_distance: u8,
+) -> bool {
+    if !target_mapped {
+        return false;
+    }
+    if !target_valid {
+        return false;
+    }
+    if !target_visible_and_awake {
+        return false;
+    }
+    if negate_time_active {
+        return false;
+    }
+    caster_target_distance == 1
+}
+
 /// `magic.md §7` four dispatcher gate outcomes for the C-Cast pipeline.
 /// Each variant names the player-visible message; the comments document
 /// the resource-debit asymmetry (spec calls it "intended message is the

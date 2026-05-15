@@ -171,9 +171,9 @@ pub use lord_british_camp::{
 };
 pub use magic::{
     CastGateOutcome, RUNE_SYLLABLE_VOCABULARY, SPELL_SELECTOR_IGNORED_LETTERS,
-    SPELL_SELECTOR_MAX_LEN, cast_dispatcher_gate, heal_spell_amount_from_raw_roll_u8,
-    is_resident_rune_syllable, spell_circle_for, spell_common_name,
-    spell_indoor_absorbs, spell_mana_cost, spell_min_caster_level,
+    SPELL_SELECTOR_MAX_LEN, cast_dispatcher_gate, combat_interference_blocks,
+    heal_spell_amount_from_raw_roll_u8, is_resident_rune_syllable, spell_circle_for,
+    spell_common_name, spell_indoor_absorbs, spell_mana_cost, spell_min_caster_level,
     spell_selector_is_ignored,
 };
 pub use moongate::{
