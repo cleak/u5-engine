@@ -7,6 +7,25 @@
 //! exist so that helpers and tests can refer to spec-named codes without
 //! magic numbers.
 
+/// `conversation.md §7.7` per-blob label count. The byte runner
+/// supports up to fifteen distinct label bytes per NPC blob,
+/// occupying values `0x91..=0x9F`. Labels are byte-level flow
+/// markers, not globally unique names; shipped blobs commonly reuse
+/// the same label byte multiple times (transfer + record).
+pub const TLK_LABEL_BYTE_COUNT: usize = 15;
+
+/// `conversation.md §7.7`: returns the zero-based label index
+/// `0..=14` for a label byte in the `0x91..=0x9F` range, or `None`
+/// for non-label bytes. Useful for callers that want a dense index
+/// rather than the raw control byte.
+pub const fn tlk_label_index(byte: u8) -> Option<u8> {
+    if byte < TLK_LABEL_FIRST || byte > TLK_LABEL_LAST {
+        None
+    } else {
+        Some(byte - TLK_LABEL_FIRST)
+    }
+}
+
 /// `conversation.md §4` mandatory leading entries every NPC blob
 /// begins with, in disk order. After these five NUL-terminated
 /// entries comes the variable-size keyword body (alternating

@@ -1,4 +1,19 @@
     #[test]
+    fn tlk_label_index_decodes_label_byte_range() {
+        // conversation.md §7.7
+        assert_eq!(TLK_LABEL_BYTE_COUNT, 15);
+        // Label bytes 0x91..=0x9F decode to indices 0..=14.
+        for (offset, byte) in (TLK_LABEL_FIRST..=TLK_LABEL_LAST).enumerate() {
+            assert_eq!(tlk_label_index(byte), Some(offset as u8));
+        }
+        // Non-label bytes return None.
+        assert_eq!(tlk_label_index(0x90), None);
+        assert_eq!(tlk_label_index(0xA0), None);
+        assert_eq!(tlk_label_index(0x00), None);
+        assert_eq!(tlk_label_index(0xFF), None);
+    }
+
+    #[test]
     fn shrine_mantra_table_matches_spec() {
         // karma.md §7
         assert_eq!(SHRINE_MANTRA_INPUT_LIMIT, 12);
