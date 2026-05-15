@@ -1167,6 +1167,49 @@
     }
 
     #[test]
+    fn spell_common_name_covers_all_48_indices() {
+        // magic.md §4
+        assert_eq!(SPELL_CIRCLE_COUNT, 8);
+        assert_eq!(SPELLS_PER_CIRCLE, 6);
+        assert_eq!(SPELL_COUNT, SPELL_CIRCLE_COUNT * SPELLS_PER_CIRCLE);
+
+        let expected_first_per_circle = [
+            "Light",
+            "Open",
+            "Great Light",
+            "Dispel Field",
+            "Swarm",
+            "Tremor",
+            "Invisibility",
+            "Resurrect",
+        ];
+        for (circle, name) in expected_first_per_circle.iter().enumerate() {
+            let idx = circle * SPELLS_PER_CIRCLE;
+            assert_eq!(spell_common_name(idx), Some(*name));
+        }
+        let expected_last_per_circle = [
+            "Vanish",
+            "Create Food",
+            "Blink",
+            "Reveal",
+            "Quickness",
+            "Polymorph",
+            "Cause Fear",
+            "Negate Time",
+        ];
+        for (circle, name) in expected_last_per_circle.iter().enumerate() {
+            let idx = circle * SPELLS_PER_CIRCLE + (SPELLS_PER_CIRCLE - 1);
+            assert_eq!(spell_common_name(idx), Some(*name));
+        }
+        // Every index 0..=47 returns Some
+        for i in 0..SPELL_COUNT {
+            assert!(spell_common_name(i).is_some(), "missing name {i}");
+        }
+        assert_eq!(spell_common_name(48), None);
+        assert_eq!(spell_common_name(255), None);
+    }
+
+    #[test]
     fn cast_dispatcher_gate_matches_spec_order_and_messages() {
         // magic.md §7
         // Scene gate first: Not here! before charge consumption.

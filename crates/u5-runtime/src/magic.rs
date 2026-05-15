@@ -88,6 +88,72 @@ pub const fn cast_dispatcher_gate(
     CastGateOutcome::Cast
 }
 
+/// `magic.md §4` canonical common-name for one spell index `0..=47`.
+/// Returns `None` for out-of-range indices. Matches the spec's circle
+/// table verbatim and is used to render "<spell>" strings in the
+/// player-facing dispatcher and in unit tests.
+pub const fn spell_common_name(index: usize) -> Option<&'static str> {
+    Some(match index {
+        // Circle 1
+        0 => "Light",
+        1 => "Magic Missile",
+        2 => "Awaken",
+        3 => "Cure",
+        4 => "Heal",
+        5 => "Vanish",
+        // Circle 2
+        6 => "Open",
+        7 => "Repel Undead",
+        8 => "Wind Change",
+        9 => "Locate",
+        10 => "Conjure",
+        11 => "Create Food",
+        // Circle 3
+        12 => "Great Light",
+        13 => "Fireball",
+        14 => "Fire Field",
+        15 => "Poison Field",
+        16 => "Sleep Field",
+        17 => "Blink",
+        // Circle 4
+        18 => "Dispel Field",
+        19 => "Protection",
+        20 => "Energy Field",
+        21 => "Up",
+        22 => "Down",
+        23 => "Reveal",
+        // Circle 5
+        24 => "Swarm",
+        25 => "Magic Lock",
+        26 => "Unlock Magic",
+        27 => "Great Heal",
+        28 => "Sleep",
+        29 => "Quickness",
+        // Circle 6
+        30 => "Tremor",
+        31 => "Mass Charm",
+        32 => "Negate Magic",
+        33 => "X-Ray",
+        34 => "Charm",
+        35 => "Polymorph",
+        // Circle 7
+        36 => "Invisibility",
+        37 => "Kill",
+        38 => "Clone",
+        39 => "Peer",
+        40 => "Poison Wind",
+        41 => "Cause Fear",
+        // Circle 8
+        42 => "Resurrect",
+        43 => "Summon",
+        44 => "Death Wind",
+        45 => "Flame Wind",
+        46 => "Gate Travel",
+        47 => "Negate Time",
+        _ => return None,
+    })
+}
+
 /// `magic.md §8` Heal: random `0..=60` roll, halved (integer
 /// truncation), with a zero result promoted to one. Returns the heal
 /// amount in inclusive range `1..=30`.

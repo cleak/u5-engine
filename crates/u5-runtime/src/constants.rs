@@ -187,6 +187,10 @@ pub const SAVE_CHARACTER_LEVEL_OFFSET: usize = 0x16;
 pub const SAVE_CHARACTER_STAY_COUNTER_OFFSET: usize = 0x17;
 pub const SAVE_CHARACTER_EQUIPMENT_OFFSET: usize = 0x19;
 pub const SPELL_COUNT: usize = 48;
+/// `magic.md §4`: there are eight magic circles.
+pub const SPELL_CIRCLE_COUNT: usize = 8;
+/// `magic.md §4`: each circle holds six spells.
+pub const SPELLS_PER_CIRCLE: usize = 6;
 pub const EQUIPMENT_COUNT: usize = 48;
 pub const SCROLL_COUNT: usize = 8;
 pub const POTION_COUNT: usize = 8;
