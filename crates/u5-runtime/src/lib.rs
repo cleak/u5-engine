@@ -5,6 +5,7 @@
 
 pub mod active_object_io;
 pub mod animation;
+pub mod boot;
 pub mod chargen;
 pub mod clock;
 pub mod combat_actor;
@@ -91,6 +92,10 @@ pub use directed_step::{
     type_bypasses_terrain_chance_gate,
 };
 pub use end_io::{EndNarrative, decode_end_window, load_end_narrative};
+pub use boot::{
+    DisplayDriverFamily, GraphicsCapability, TANDY_LOW_MEMORY_THRESHOLD_KB,
+    parse_explicit_driver_selector, resolve_driver_family, tandy_low_memory_downgrades,
+};
 pub use commands::{Command, command_for_letter};
 pub use containers::{
     DUNGEON_CHEST_ROWS, DungeonChestReward, DungeonChestRow, TABLE_FOOD_TILE_A,

@@ -636,6 +636,71 @@
     }
 
     #[test]
+    fn boot_driver_selection_matches_spec() {
+        // boot.md §5 explicit selector parsing
+        assert_eq!(
+            parse_explicit_driver_selector(Some("C")),
+            Some(DisplayDriverFamily::Cga)
+        );
+        assert_eq!(
+            parse_explicit_driver_selector(Some("e")),
+            Some(DisplayDriverFamily::Ega)
+        );
+        assert_eq!(
+            parse_explicit_driver_selector(Some("Tandy")),
+            Some(DisplayDriverFamily::Tandy)
+        );
+        assert_eq!(
+            parse_explicit_driver_selector(Some("h")),
+            Some(DisplayDriverFamily::Hercules)
+        );
+        assert_eq!(parse_explicit_driver_selector(Some("X")), None);
+        assert_eq!(parse_explicit_driver_selector(Some("")), None);
+        assert_eq!(parse_explicit_driver_selector(None), None);
+
+        // Resolution: explicit wins
+        assert_eq!(
+            resolve_driver_family(Some(DisplayDriverFamily::Cga), GraphicsCapability::Ega),
+            Some(DisplayDriverFamily::Cga)
+        );
+        // Auto-detect mapping
+        assert_eq!(
+            resolve_driver_family(None, GraphicsCapability::GenericFourColour),
+            Some(DisplayDriverFamily::Cga)
+        );
+        assert_eq!(
+            resolve_driver_family(None, GraphicsCapability::Ega),
+            Some(DisplayDriverFamily::Ega)
+        );
+        assert_eq!(
+            resolve_driver_family(None, GraphicsCapability::Tandy),
+            Some(DisplayDriverFamily::Tandy)
+        );
+        assert_eq!(
+            resolve_driver_family(None, GraphicsCapability::Hercules),
+            Some(DisplayDriverFamily::Hercules)
+        );
+        // EgaSentinel without an explicit selector takes no driver-load
+        // path.
+        assert_eq!(
+            resolve_driver_family(None, GraphicsCapability::EgaSentinel),
+            None
+        );
+
+        // Filenames
+        assert_eq!(DisplayDriverFamily::Cga.driver_filename(), "CGA.DRV");
+        assert_eq!(DisplayDriverFamily::Ega.driver_filename(), "EGA.DRV");
+        assert_eq!(DisplayDriverFamily::Tandy.driver_filename(), "T1K.DRV");
+        assert_eq!(DisplayDriverFamily::Hercules.driver_filename(), "HER.DRV");
+
+        // Tandy low-memory downgrade threshold
+        assert_eq!(TANDY_LOW_MEMORY_THRESHOLD_KB, 368);
+        assert!(tandy_low_memory_downgrades(367));
+        assert!(!tandy_low_memory_downgrades(368));
+        assert!(!tandy_low_memory_downgrades(640));
+    }
+
+    #[test]
     fn wrap_byte_kind_classifies_break_visible_and_control() {
         // text-output.md §6
         assert_eq!(wrap_byte_kind(0x00), WrapByteKind::Break);
