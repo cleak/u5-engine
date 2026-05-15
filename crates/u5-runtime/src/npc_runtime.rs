@@ -20,6 +20,48 @@ pub const NPC_STATE_ASCEND_TOWARD_TARGET: u8 = 5;
 pub const NPC_STATE_CLIMB_UP_OFF_FLOOR: u8 = 6;
 pub const NPC_STATE_CLIMB_DOWN_OFF_FLOOR: u8 = 7;
 pub const NPC_STATE_PARKED_OFF_FLOOR: u8 = 8;
+/// `formats/npc.md §7` Talk-entry shop-trigger family for high
+/// dialog-index values `0x81..=0x88`. These are not `.TLK` blob ids;
+/// they identify which shop the active scene's resident shop tables
+/// dispatch to when the player initiates Talk against the NPC.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NpcShopTrigger {
+    /// `0x81` — weaponsmith / armourer.
+    WeaponsmithOrArmourer,
+    /// `0x82` — tavern, meal counter, or sage.
+    TavernOrSage,
+    /// `0x83` — horse trader.
+    HorseTrader,
+    /// `0x84` — ship broker / shipwright.
+    ShipwrightOrBroker,
+    /// `0x85` — herbalist / reagent shop.
+    Herbalist,
+    /// `0x86` — guild shop.
+    Guild,
+    /// `0x87` — healer / sanctum.
+    HealerOrSanctum,
+    /// `0x88` — innkeeper.
+    Innkeeper,
+}
+
+/// `formats/npc.md §7`: classify a high dialog-index byte
+/// (`0x81..=0x88`) as a Talk-entry shop trigger. Returns `None` for
+/// ordinary speaking NPC blob ids and any value outside the published
+/// shop range.
+pub const fn npc_shop_trigger(dialog_index: u8) -> Option<NpcShopTrigger> {
+    Some(match dialog_index {
+        0x81 => NpcShopTrigger::WeaponsmithOrArmourer,
+        0x82 => NpcShopTrigger::TavernOrSage,
+        0x83 => NpcShopTrigger::HorseTrader,
+        0x84 => NpcShopTrigger::ShipwrightOrBroker,
+        0x85 => NpcShopTrigger::Herbalist,
+        0x86 => NpcShopTrigger::Guild,
+        0x87 => NpcShopTrigger::HealerOrSanctum,
+        0x88 => NpcShopTrigger::Innkeeper,
+        _ => return None,
+    })
+}
+
 /// `formats/npc.md §5.3` per-waypoint AI behaviour selector. Values
 /// `0..=7` are the shipped behaviour families; values above `7` fall
 /// through to the no-action/default case.

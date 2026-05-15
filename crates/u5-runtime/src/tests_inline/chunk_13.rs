@@ -1595,6 +1595,35 @@
     }
 
     #[test]
+    fn npc_shop_trigger_classifies_per_spec_table() {
+        // formats/npc.md §7
+        assert_eq!(
+            npc_shop_trigger(0x81),
+            Some(NpcShopTrigger::WeaponsmithOrArmourer)
+        );
+        assert_eq!(npc_shop_trigger(0x82), Some(NpcShopTrigger::TavernOrSage));
+        assert_eq!(npc_shop_trigger(0x83), Some(NpcShopTrigger::HorseTrader));
+        assert_eq!(
+            npc_shop_trigger(0x84),
+            Some(NpcShopTrigger::ShipwrightOrBroker)
+        );
+        assert_eq!(npc_shop_trigger(0x85), Some(NpcShopTrigger::Herbalist));
+        assert_eq!(npc_shop_trigger(0x86), Some(NpcShopTrigger::Guild));
+        assert_eq!(
+            npc_shop_trigger(0x87),
+            Some(NpcShopTrigger::HealerOrSanctum)
+        );
+        assert_eq!(npc_shop_trigger(0x88), Some(NpcShopTrigger::Innkeeper));
+        // Outside the shop range returns None — caller routes to TLK
+        // blob lookup using ordinary npc_id rules.
+        assert_eq!(npc_shop_trigger(0), None);
+        assert_eq!(npc_shop_trigger(1), None);
+        assert_eq!(npc_shop_trigger(0x80), None);
+        assert_eq!(npc_shop_trigger(0x89), None);
+        assert_eq!(npc_shop_trigger(0xFF), None);
+    }
+
+    #[test]
     fn npc_ai_behavior_classifies_per_spec_table() {
         // formats/npc.md §5.3
         assert_eq!(npc_ai_behavior(0), Some(NpcAiBehavior::Stationary));
