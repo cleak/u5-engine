@@ -500,6 +500,41 @@
     }
 
     #[test]
+    fn town_hole_up_poisoned_member_keeps_status_and_skips_hp_recovery() {
+        // commands.md §10: poisoned and dead members are not treated like
+        // healthy sleepers. The town bed-rest path must skip HP gain for
+        // poisoned members while still ticking mana, mirroring the
+        // rest-with-watch contract.
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
+        let mut grid = open_grid();
+        grid[32 + 1] = 55;
+        let mut state = test_state(grid, 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: b'A',
+            status: b'P',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 90,
+            hp: 4,
+            max_hp: 12,
+            level: 8,
+        }];
+
+        assert_eq!(
+            state.hole_up_command(&dir, Some(1)).unwrap(),
+            MoveOutcome::Rested
+        );
+
+        assert_eq!(state.party[0].status, b'P');
+        assert_eq!(state.party[0].hp, 4);
+        assert!(state.party[0].mana >= 90);
+        assert!(state.message.contains("recovered 0 HP"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn rest_with_watch_requires_hours_without_turn() {
         let mut state = britannia_state(open_world_grid(), 1, 1);
 

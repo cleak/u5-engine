@@ -256,14 +256,20 @@ impl PlayState {
     }
 
     pub fn apply_rest_recovery_tick(&mut self) -> (u16, u16) {
+        // commands.md §10: poisoned and dead members are not treated like
+        // healthy sleepers, so they do not receive the bed-rest HP gain.
+        // Mana recovery still ticks for living members regardless of status,
+        // matching the rest-with-watch contract.
         let mut recovered_hp = 0;
         let mut recovered_mana = 0;
         for index in 0..self.party.len() {
             if !self.party[index].living() {
                 continue;
             }
-            let hp_recovery = self.rest_hp_recovery_roll(index);
-            recovered_hp += self.party[index].heal_by(u16::from(hp_recovery));
+            if self.party[index].status != b'P' {
+                let hp_recovery = self.rest_hp_recovery_roll(index);
+                recovered_hp += self.party[index].heal_by(u16::from(hp_recovery));
+            }
             let mana_recovery = self.rest_mana_recovery_roll(index);
             recovered_mana += u16::from(self.party[index].recover_mana_by(mana_recovery));
         }
