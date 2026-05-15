@@ -54,3 +54,29 @@ pub const fn trap_effect_damage_max(effect: TrapEffect) -> Option<u8> {
 pub const fn trap_effect_targets_whole_party(effect: TrapEffect) -> bool {
     matches!(effect, TrapEffect::Bomb | TrapEffect::Gas)
 }
+
+/// `traps.md §3`: predicate marking effects that route through the
+/// narrow revive helper (Poison and Gas). Acid and Bomb roll damage
+/// instead.
+pub const fn trap_effect_uses_revive_helper(effect: TrapEffect) -> bool {
+    matches!(effect, TrapEffect::Poison | TrapEffect::Gas)
+}
+
+/// `traps.md §3` non-combat lookup-table outcome count for the given
+/// family. Acid maps to 3 of the 8 equiprobable rolls, Poison and
+/// Bomb to 2 each, Gas to 1. Sum equals the table size of 8.
+pub const fn trap_non_combat_outcomes(effect: TrapEffect) -> u8 {
+    match effect {
+        TrapEffect::Acid => 3,
+        TrapEffect::Poison => 2,
+        TrapEffect::Bomb => 2,
+        TrapEffect::Gas => 1,
+    }
+}
+
+/// `traps.md §3` combat-class scenes only roll between effect ids
+/// `0` (Acid) and `1` (Poison). Returns `true` for those families;
+/// `false` for Bomb and Gas, which never appear in combat traps.
+pub const fn trap_effect_appears_in_combat(effect: TrapEffect) -> bool {
+    matches!(effect, TrapEffect::Acid | TrapEffect::Poison)
+}

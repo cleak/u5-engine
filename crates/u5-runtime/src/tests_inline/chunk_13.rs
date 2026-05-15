@@ -1,4 +1,31 @@
     #[test]
+    fn trap_effect_distribution_predicates_match_spec_tables() {
+        // traps.md §3
+        // Revive helper families.
+        assert!(!trap_effect_uses_revive_helper(TrapEffect::Acid));
+        assert!(trap_effect_uses_revive_helper(TrapEffect::Poison));
+        assert!(!trap_effect_uses_revive_helper(TrapEffect::Bomb));
+        assert!(trap_effect_uses_revive_helper(TrapEffect::Gas));
+
+        // Non-combat outcome counts (3/8, 2/8, 2/8, 1/8 -> sum 8).
+        assert_eq!(trap_non_combat_outcomes(TrapEffect::Acid), 3);
+        assert_eq!(trap_non_combat_outcomes(TrapEffect::Poison), 2);
+        assert_eq!(trap_non_combat_outcomes(TrapEffect::Bomb), 2);
+        assert_eq!(trap_non_combat_outcomes(TrapEffect::Gas), 1);
+        let total = trap_non_combat_outcomes(TrapEffect::Acid)
+            + trap_non_combat_outcomes(TrapEffect::Poison)
+            + trap_non_combat_outcomes(TrapEffect::Bomb)
+            + trap_non_combat_outcomes(TrapEffect::Gas);
+        assert_eq!(total, 8);
+
+        // Combat-class scenes only roll Acid/Poison.
+        assert!(trap_effect_appears_in_combat(TrapEffect::Acid));
+        assert!(trap_effect_appears_in_combat(TrapEffect::Poison));
+        assert!(!trap_effect_appears_in_combat(TrapEffect::Bomb));
+        assert!(!trap_effect_appears_in_combat(TrapEffect::Gas));
+    }
+
+    #[test]
     fn underworld_stack_alternates_armour_and_weapon() {
         // hidden-treasures.md §3 records 0..=11
         assert_eq!(HIDDEN_TREASURE_UNDERWORLD_STACK_LEN, 12);
