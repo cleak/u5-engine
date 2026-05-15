@@ -53,6 +53,48 @@ pub const EQUIPMENT_NAMES: [&str; EQUIPMENT_COUNT] = [
     "Ankh",
 ];
 
+/// `inventory.md §3` empty-slot sentinel for the six readied
+/// equipment bytes inside a character record.
+pub const EQUIPMENT_EMPTY_SLOT_SENTINEL: u8 = 0xFF;
+
+/// `inventory.md §3` per-character readied-equipment slot block. The
+/// six bytes appear at offsets `+0x19..+0x1E` in the 32-byte
+/// character record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EquipmentSlot {
+    Helm,
+    BodyArmour,
+    WeaponHand,
+    OffHand,
+    Ring,
+    AmuletOrNeck,
+}
+
+impl EquipmentSlot {
+    /// Six-byte block index `0..=5` matching the spec record offsets
+    /// `+0x19..+0x1E`.
+    pub const fn block_index(self) -> usize {
+        match self {
+            EquipmentSlot::Helm => 0,
+            EquipmentSlot::BodyArmour => 1,
+            EquipmentSlot::WeaponHand => 2,
+            EquipmentSlot::OffHand => 3,
+            EquipmentSlot::Ring => 4,
+            EquipmentSlot::AmuletOrNeck => 5,
+        }
+    }
+}
+
+/// `inventory.md §3`: ownership predicate used by inventory browsing.
+/// Returns `true` when any of the six readied-equipment bytes equals
+/// the supplied item id (and the id is not the empty-slot sentinel).
+pub fn character_has_readied(equipment_block: &[u8; 6], item_id: u8) -> bool {
+    if item_id == EQUIPMENT_EMPTY_SLOT_SENTINEL {
+        return false;
+    }
+    equipment_block.iter().any(|&slot| slot == item_id)
+}
+
 /// `inventory.md §3.1` published equipment-class tag bytes used by
 /// R-Ready slot routing and refusal logic.
 pub const EQUIPMENT_CLASS_HELM: u8 = 0x80;

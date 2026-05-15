@@ -1050,6 +1050,28 @@
     }
 
     #[test]
+    fn equipment_slot_block_indices_and_ownership_match_spec() {
+        // inventory.md §3
+        assert_eq!(EQUIPMENT_EMPTY_SLOT_SENTINEL, 0xFF);
+        assert_eq!(EquipmentSlot::Helm.block_index(), 0);
+        assert_eq!(EquipmentSlot::BodyArmour.block_index(), 1);
+        assert_eq!(EquipmentSlot::WeaponHand.block_index(), 2);
+        assert_eq!(EquipmentSlot::OffHand.block_index(), 3);
+        assert_eq!(EquipmentSlot::Ring.block_index(), 4);
+        assert_eq!(EquipmentSlot::AmuletOrNeck.block_index(), 5);
+        // Ownership predicate
+        let block = [0x05, 0x42, 0xFF, 0xFF, 0x10, 0xFF];
+        assert!(character_has_readied(&block, 0x05));
+        assert!(character_has_readied(&block, 0x42));
+        assert!(character_has_readied(&block, 0x10));
+        assert!(!character_has_readied(&block, 0x06));
+        assert!(!character_has_readied(&block, 0xFF));
+        // All-empty block
+        let empty = [EQUIPMENT_EMPTY_SLOT_SENTINEL; 6];
+        assert!(!character_has_readied(&empty, 0x05));
+    }
+
+    #[test]
     fn equipment_class_tag_round_trip_per_spec() {
         // inventory.md §3.1
         assert_eq!(EQUIPMENT_CLASS_HELM, 0x80);
