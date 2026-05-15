@@ -636,6 +636,28 @@
     }
 
     #[test]
+    fn wrap_byte_kind_classifies_break_visible_and_control() {
+        // text-output.md §6
+        assert_eq!(wrap_byte_kind(0x00), WrapByteKind::Break);
+        assert_eq!(wrap_byte_kind(b'\n'), WrapByteKind::Break);
+        assert_eq!(wrap_byte_kind(b'\r'), WrapByteKind::Break);
+        assert_eq!(wrap_byte_kind(b' '), WrapByteKind::Break);
+        // Visible: low-ASCII printable except space
+        assert_eq!(wrap_byte_kind(b'A'), WrapByteKind::Visible);
+        assert_eq!(wrap_byte_kind(b'!'), WrapByteKind::Visible);
+        assert_eq!(wrap_byte_kind(b'~'), WrapByteKind::Visible);
+        assert_eq!(wrap_byte_kind(b'0'), WrapByteKind::Visible);
+        // Control: tab, escape, high-bit, etc.
+        assert_eq!(wrap_byte_kind(0x09), WrapByteKind::Control);
+        assert_eq!(wrap_byte_kind(0x1B), WrapByteKind::Control);
+        assert_eq!(wrap_byte_kind(0x7F), WrapByteKind::Control);
+        assert_eq!(wrap_byte_kind(0x80), WrapByteKind::Control);
+        assert_eq!(wrap_byte_kind(0xFF), WrapByteKind::Control);
+        // Min line-buffer width sanity
+        assert!(WRAP_MIN_LINE_BUFFER >= 64);
+    }
+
+    #[test]
     fn command_for_letter_covers_full_a_to_z_table() {
         // commands.md §4
         assert_eq!(command_for_letter(b' '), Some(Command::Pass));

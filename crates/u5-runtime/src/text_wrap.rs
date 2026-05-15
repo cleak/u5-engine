@@ -11,6 +11,34 @@
 //! through as a hard newline. Visible bytes append to the assembled buffer.
 //! Words longer than the window overflow per the original behaviour.
 
+/// `text-output.md §6` byte classification consumed by the wrap-aware
+/// printer. A `Break` byte is space/LF/CR/NUL; a `Visible` byte is any
+/// other low-ASCII printable; a `Control` byte is anything the per-cell
+/// emitter handles (style toggles) and which passes through unchanged
+/// without interrupting the wrap state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WrapByteKind {
+    Break,
+    Visible,
+    Control,
+}
+
+/// `text-output.md §6`: classify one source byte for the wrap-aware
+/// printer's break/visible/control decision.
+pub const fn wrap_byte_kind(byte: u8) -> WrapByteKind {
+    match byte {
+        0x00 | b'\n' | b'\r' | b' ' => WrapByteKind::Break,
+        // Low-ASCII printable range minus the space already covered above
+        0x21..=0x7E => WrapByteKind::Visible,
+        _ => WrapByteKind::Control,
+    }
+}
+
+/// `text-output.md §6` minimum line buffer width — the original
+/// implementation sizes the assembled-line buffer for at least 64
+/// characters.
+pub const WRAP_MIN_LINE_BUFFER: usize = 64;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WrappedLine<'a> {
     pub text: &'a str,
