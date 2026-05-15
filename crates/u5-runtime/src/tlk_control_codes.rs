@@ -7,6 +7,42 @@
 //! exist so that helpers and tests can refer to spec-named codes without
 //! magic numbers.
 
+/// `conversation.md §2` reasons the resident "can talk now"
+/// liveness gate refuses the Talk command before any narration runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TalkRefusal {
+    /// Player is in an active combat round.
+    InCombat,
+    /// Active player is currently asleep.
+    Asleep,
+    /// Active player is currently starving.
+    Starving,
+    /// Engine is already running another conversation.
+    AlreadyInConversation,
+}
+
+/// `conversation.md §2`: select the most-applicable refusal reason
+/// for the liveness gate. Returns `None` when the gate accepts and
+/// the Talk handler can proceed.
+pub const fn talk_liveness_refusal(
+    in_combat: bool,
+    asleep: bool,
+    starving: bool,
+    already_in_conversation: bool,
+) -> Option<TalkRefusal> {
+    if in_combat {
+        Some(TalkRefusal::InCombat)
+    } else if asleep {
+        Some(TalkRefusal::Asleep)
+    } else if starving {
+        Some(TalkRefusal::Starving)
+    } else if already_in_conversation {
+        Some(TalkRefusal::AlreadyInConversation)
+    } else {
+        None
+    }
+}
+
 /// `conversation.md §3` shipped per-class `.TLK` NPC counts (each
 /// includes the leading sentinel slot, so live NPCs use indices
 /// `2..npc_count`).

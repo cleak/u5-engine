@@ -1,4 +1,43 @@
     #[test]
+    fn talk_liveness_gate_refusals_match_spec_priorities() {
+        // conversation.md §2
+        // Gate accepts when no refusal applies.
+        assert_eq!(talk_liveness_refusal(false, false, false, false), None);
+        // Single-condition refusals
+        assert_eq!(
+            talk_liveness_refusal(true, false, false, false),
+            Some(TalkRefusal::InCombat)
+        );
+        assert_eq!(
+            talk_liveness_refusal(false, true, false, false),
+            Some(TalkRefusal::Asleep)
+        );
+        assert_eq!(
+            talk_liveness_refusal(false, false, true, false),
+            Some(TalkRefusal::Starving)
+        );
+        assert_eq!(
+            talk_liveness_refusal(false, false, false, true),
+            Some(TalkRefusal::AlreadyInConversation)
+        );
+        // Combat takes priority over the others.
+        assert_eq!(
+            talk_liveness_refusal(true, true, true, true),
+            Some(TalkRefusal::InCombat)
+        );
+        // Asleep beats Starving + AlreadyInConversation.
+        assert_eq!(
+            talk_liveness_refusal(false, true, true, true),
+            Some(TalkRefusal::Asleep)
+        );
+        // Starving beats AlreadyInConversation.
+        assert_eq!(
+            talk_liveness_refusal(false, false, true, true),
+            Some(TalkRefusal::Starving)
+        );
+    }
+
+    #[test]
     fn tlk_per_class_npc_counts_match_shipped_data() {
         // conversation.md §3
         assert_eq!(TOWNE_TLK_NPCS, 48);
