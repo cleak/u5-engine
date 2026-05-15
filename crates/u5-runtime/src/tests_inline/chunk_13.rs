@@ -1,4 +1,20 @@
     #[test]
+    fn outdoor_serpent_dragon_trigger_and_whirlpool_constants_match_spec() {
+        // active-objects.md §8
+        assert_eq!(OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR, 7);
+        assert!(outdoor_serpent_dragon_triggers(0));
+        for r in 1u8..=6 {
+            assert!(!outdoor_serpent_dragon_triggers(r));
+        }
+        // Adjacency radius for ship-like water-creature attack message.
+        assert_eq!(OUTDOOR_WATER_CREATURE_ADJACENCY_RADIUS, 3);
+        // Whirlpool emergence coordinate matches the documented underworld
+        // entry coordinate.
+        assert_eq!(WHIRLPOOL_EMERGENCE_X, 34);
+        assert_eq!(WHIRLPOOL_EMERGENCE_Y, 18);
+    }
+
+    #[test]
     fn tlk_print_mask_toggle_pairs_per_spec() {
         // conversation.md §7.5
         let normal = TlkPrintMaskState::NormalBreaks;

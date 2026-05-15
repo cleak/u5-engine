@@ -17,6 +17,32 @@ pub const ACTIVE_OBJECT_FIELD_DEP1: usize = 5;
 pub const ACTIVE_OBJECT_FIELD_PHASE: usize = 6;
 pub const ACTIVE_OBJECT_FIELD_DEP3: usize = 7;
 
+/// `active-objects.md §8` outdoor sea-serpent / dragon adjacency
+/// trigger. The outdoor per-turn walker rolls a one-in-seven gate
+/// for first-frame Sea Serpent and Dragon hostile classes near the
+/// player; on the gate's hit and a clear directed probe the same
+/// per-turn finishers as other outdoor encounter effects run.
+pub const OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR: u8 = 7;
+
+/// `active-objects.md §8`: returns `true` when the per-turn walker's
+/// `0..6` PRNG roll triggers the outdoor sea-serpent / dragon
+/// engagement on this tick.
+pub const fn outdoor_serpent_dragon_triggers(roll_0_to_6: u8) -> bool {
+    roll_0_to_6 == 0
+}
+
+/// `active-objects.md §8` ship-like water-creature and pirate
+/// adjacency window. The outdoor per-turn walker prints the attack
+/// message and runs the water-creature step path when the slot is
+/// aligned with the player within this many cells.
+pub const OUTDOOR_WATER_CREATURE_ADJACENCY_RADIUS: i32 = 3;
+
+/// `active-objects.md §2,§7` (whirlpool emergence) coordinates the
+/// outdoor whirlpool transition writes when the party is moved to
+/// the underworld plane.
+pub const WHIRLPOOL_EMERGENCE_X: u8 = 34;
+pub const WHIRLPOOL_EMERGENCE_Y: u8 = 18;
+
 /// `active-objects.md §4` viewport-relative off-screen test for the
 /// eviction cascade. A candidate slot more than this many cells from
 /// the player in either axis qualifies for the off-screen phases
