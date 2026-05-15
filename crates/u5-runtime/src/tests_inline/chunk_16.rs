@@ -1223,3 +1223,106 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         let _ = fs::remove_dir_all(dir);
     }
 
+    #[test]
+    fn shrine_codex_turn_in_raises_shared_moral_standing_by_three() {
+        // karma.md §3-4: Codex turn-in adds +3 to the shared moral-standing
+        // selector, clamped at 99.
+        let dir = debug_game_dir();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 JUSTICE 136\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 136;
+        let mut state = britannia_state(grid, 10, 20);
+        let bit = ShrineVirtue::Justice.bit();
+        state.shrine_ordained_mask = bit;
+        state.shrine_codex_mask = bit;
+        state.moral_standing = 50;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "Beh", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.moral_standing, 53);
+        assert!(state.message.contains("moral +3 to 53"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn shrine_codex_humility_turn_in_raises_shared_moral_standing_by_six() {
+        // karma.md §3-4: Humility receives an additional +3 on top of the
+        // ordinary +3 Codex turn-in bonus to the shared moral-standing
+        // selector.
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(SHRINE_TABLE_FILE),
+            "BRITANNIA 10 20 HUMILITY 136\n",
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 136;
+        let mut state = britannia_state(grid, 10, 20);
+        let bit = ShrineVirtue::Humility.bit();
+        state.shrine_ordained_mask = bit;
+        state.shrine_codex_mask = bit;
+        state.moral_standing = 40;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "Lum", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.moral_standing, 46);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn shrine_codex_turn_in_clamps_shared_moral_standing_at_ninety_nine() {
+        // karma.md §3: Shrine increases clamp the shared selector at 99.
+        let dir = debug_game_dir();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 JUSTICE 136\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 136;
+        let mut state = britannia_state(grid, 10, 20);
+        let bit = ShrineVirtue::Justice.bit();
+        state.shrine_ordained_mask = bit;
+        state.shrine_codex_mask = bit;
+        state.moral_standing = 98;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "Beh", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.moral_standing, MORAL_STANDING_MAX);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn shrine_offering_raises_shared_moral_standing_by_offered_digit() {
+        // karma.md §3-4: completed-shrine gold offering adds the offered
+        // digit (1..9) to the shared moral-standing selector, clamped at 99.
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(SHRINE_TABLE_FILE),
+            "BRITANNIA 10 20 COMPASSION 136\n",
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 136;
+        let mut state = britannia_state(grid, 10, 20);
+        let virtue = ShrineVirtue::Compassion;
+        state.shrine_codex_mask = virtue.bit();
+        state.gold = 800;
+        state.moral_standing = 20;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "Mu/7", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.gold, 100);
+        assert_eq!(state.moral_standing, 27);
+        assert!(state.message.contains("moral +7 to 27"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
