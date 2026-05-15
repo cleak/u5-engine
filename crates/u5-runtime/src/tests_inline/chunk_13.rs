@@ -1,4 +1,57 @@
     #[test]
+    fn active_object_compositor_branch_matches_spec_table() {
+        // visibility.md §8
+        assert_eq!(VEHICLE_AVATAR_UNDERLAY_MARKER, 0x92);
+
+        // Water-bound class via type byte.
+        for t in 0xE8u8..=0xEB {
+            assert_eq!(
+                active_object_compositor_branch(t, 0),
+                ActiveObjectCompositorBranch::WaterBoundCompanion
+            );
+        }
+        assert_eq!(
+            active_object_compositor_branch(0x1E, 0),
+            ActiveObjectCompositorBranch::WaterBoundCompanion
+        );
+        assert_eq!(
+            active_object_compositor_branch(0x1F, 0),
+            ActiveObjectCompositorBranch::WaterBoundCompanion
+        );
+
+        // Water-creature class via frame byte (when type byte does not
+        // already match the water-bound branch).
+        assert_eq!(
+            active_object_compositor_branch(0x80, 0x1D),
+            ActiveObjectCompositorBranch::WaterCreatureCompanion
+        );
+        assert_eq!(
+            active_object_compositor_branch(0x80, 0x1E),
+            ActiveObjectCompositorBranch::WaterCreatureCompanion
+        );
+
+        // Vehicle/avatar branch.
+        assert_eq!(
+            active_object_compositor_branch(0x5C, 0),
+            ActiveObjectCompositorBranch::VehicleAvatarCompanion
+        );
+
+        // Default helper for everything else.
+        assert_eq!(
+            active_object_compositor_branch(0x00, 0x00),
+            ActiveObjectCompositorBranch::DefaultHelper
+        );
+        assert_eq!(
+            active_object_compositor_branch(0x80, 0x00),
+            ActiveObjectCompositorBranch::DefaultHelper
+        );
+        assert_eq!(
+            active_object_compositor_branch(0xC0, 0xC0),
+            ActiveObjectCompositorBranch::DefaultHelper
+        );
+    }
+
+    #[test]
     fn fog_refinement_squared_distance_matches_spec_threshold() {
         // visibility.md §7
         assert_eq!(FOG_REFINE_SQUARED_THRESHOLD, 5);

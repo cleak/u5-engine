@@ -53,6 +53,55 @@ pub const fn visibility_marker(byte: u8) -> VisibilityMarker {
     }
 }
 
+/// `visibility.md §8` active-object compositor branch the helper
+/// dispatches an active-object slot through. The default branch is
+/// the catch-all that passes through the terrain-aware stamp helper.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ActiveObjectCompositorBranch {
+    /// `0xE8..=0xEB` or exact `0x1E`/`0x1F` — water-bound
+    /// companion-band class. Stamps the slot's frame byte into the
+    /// terrain band and writes the use-companion marker into the
+    /// visibility grid.
+    WaterBoundCompanion,
+    /// Frame byte exactly `0x1D` or `0x1E` — water-creature
+    /// companion-band class. Same companion-band stamp.
+    WaterCreatureCompanion,
+    /// Type byte exactly `0x5C` — vehicle/avatar-family companion
+    /// branch. Caller still needs to check the visibility-grid
+    /// underlay marker `0x92` before stamping the companion path.
+    VehicleAvatarCompanion,
+    /// Anything else — falls through to the default tile compositor
+    /// helper.
+    DefaultHelper,
+}
+
+/// `visibility.md §8`: classify a slot by its `(type, frame)` byte
+/// pair. The water-bound branch is keyed by the type byte; the
+/// water-creature branch is keyed by the frame byte; the
+/// vehicle/avatar branch is keyed by the type byte alone (caller
+/// applies the underlay-marker check).
+pub const fn active_object_compositor_branch(
+    type_byte: u8,
+    frame_byte: u8,
+) -> ActiveObjectCompositorBranch {
+    if (type_byte >= 0xE8 && type_byte <= 0xEB) || type_byte == 0x1E || type_byte == 0x1F {
+        return ActiveObjectCompositorBranch::WaterBoundCompanion;
+    }
+    if frame_byte == 0x1D || frame_byte == 0x1E {
+        return ActiveObjectCompositorBranch::WaterCreatureCompanion;
+    }
+    if type_byte == 0x5C {
+        return ActiveObjectCompositorBranch::VehicleAvatarCompanion;
+    }
+    ActiveObjectCompositorBranch::DefaultHelper
+}
+
+/// `visibility.md §8` vehicle/avatar underlay marker. The
+/// `VehicleAvatarCompanion` branch stamps through the companion
+/// path only when the visibility-grid cell currently holds this
+/// marker; otherwise it falls through to the default helper.
+pub const VEHICLE_AVATAR_UNDERLAY_MARKER: u8 = 0x92;
+
 /// `visibility.md §7` fog-edge refinement squared-distance threshold.
 /// The post-pass folds each viewport coordinate around the centre
 /// `(5, 5)`, computes `(5 - folded_x)^2 + (5 - folded_y)^2`, and
