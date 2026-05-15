@@ -11,6 +11,48 @@
 //! through as a hard newline. Visible bytes append to the assembled buffer.
 //! Words longer than the window overflow per the original behaviour.
 
+/// `text-output.md §2` fixed text-window count. The system maintains
+/// exactly four window descriptors; addressing a fifth window is
+/// silently ignored.
+pub const TEXT_WINDOW_COUNT: usize = 4;
+
+/// `text-output.md §4` cell-grid extent in columns and rows. The
+/// top-left cell is `(0, 0)` and the bottom-right is `(39, 24)`.
+pub const TEXT_SCREEN_COLUMNS: u8 = 40;
+pub const TEXT_SCREEN_ROWS: u8 = 25;
+
+/// `text-output.md §3` extended text-control bytes that mutate the
+/// active window's cached style without rendering as glyphs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextControlByte {
+    /// `0xFB` — clear centre-output flag.
+    CentreOff,
+    /// `0xFC` — set centre-output flag.
+    CentreOn,
+    /// `0xFD` — toggle inverse video.
+    InverseToggle,
+    /// `0xFE` — toggle underline.
+    UnderlineToggle,
+    /// `0xFF` — clear the active text window's rectangle through the
+    /// display-driver fill path.
+    ClearWindow,
+}
+
+/// `text-output.md §3`: classify a high-bit byte against the spec's
+/// extended-control table. Returns `None` for bytes that are not one
+/// of the five confirmed control values; callers handle those through
+/// the per-cell emitter's ordinary code-byte path.
+pub const fn text_control_byte(byte: u8) -> Option<TextControlByte> {
+    Some(match byte {
+        0xFB => TextControlByte::CentreOff,
+        0xFC => TextControlByte::CentreOn,
+        0xFD => TextControlByte::InverseToggle,
+        0xFE => TextControlByte::UnderlineToggle,
+        0xFF => TextControlByte::ClearWindow,
+        _ => return None,
+    })
+}
+
 /// `text-output.md §6` byte classification consumed by the wrap-aware
 /// printer. A `Break` byte is space/LF/CR/NUL; a `Visible` byte is any
 /// other low-ASCII printable; a `Control` byte is anything the per-cell

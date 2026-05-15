@@ -223,8 +223,9 @@ pub use story_io::{
     load_story_records, parse_story_records,
 };
 pub use text_wrap::{
-    ParagraphByteKind, WRAP_MIN_LINE_BUFFER, WrapByteKind, WrappedLine, paragraph_byte_kind,
-    wrap_byte_kind, wrap_text,
+    ParagraphByteKind, TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS, TEXT_WINDOW_COUNT,
+    TextControlByte, WRAP_MIN_LINE_BUFFER, WrapByteKind, WrappedLine,
+    paragraph_byte_kind, text_control_byte, wrap_byte_kind, wrap_text,
 };
 pub use tlk_control_codes::{
     TLK_CODE_ACTION_DISPATCH, TLK_CODE_ASK_PARTY_NAME, TLK_CODE_ASK_WHO,

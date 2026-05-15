@@ -1,4 +1,31 @@
     #[test]
+    fn text_control_byte_classifies_extended_set() {
+        // text-output.md §3
+        assert_eq!(TEXT_WINDOW_COUNT, 4);
+        assert_eq!(TEXT_SCREEN_COLUMNS, 40);
+        assert_eq!(TEXT_SCREEN_ROWS, 25);
+        assert_eq!(text_control_byte(0xFB), Some(TextControlByte::CentreOff));
+        assert_eq!(text_control_byte(0xFC), Some(TextControlByte::CentreOn));
+        assert_eq!(
+            text_control_byte(0xFD),
+            Some(TextControlByte::InverseToggle)
+        );
+        assert_eq!(
+            text_control_byte(0xFE),
+            Some(TextControlByte::UnderlineToggle)
+        );
+        assert_eq!(
+            text_control_byte(0xFF),
+            Some(TextControlByte::ClearWindow)
+        );
+        // Surrounding/non-control bytes return None.
+        assert_eq!(text_control_byte(0x00), None);
+        assert_eq!(text_control_byte(0x7F), None);
+        assert_eq!(text_control_byte(0x80), None);
+        assert_eq!(text_control_byte(0xFA), None);
+    }
+
+    #[test]
     fn resurrection_xp_penalty_matches_spec_table() {
         // karma.md §5
         assert_eq!(RESURRECTION_PENALTY_SKIP_THRESHOLD, 98);
