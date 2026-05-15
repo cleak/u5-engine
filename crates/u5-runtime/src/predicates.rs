@@ -294,6 +294,74 @@ pub const fn sleep_ambush_rest_interrupted(roll: u8) -> bool {
 ///   - Surface tile 0x04 or wilderness band 0x09..=0x0F: 2 by day, 5 at
 ///     hours 0..=4.
 ///   - Any other surface tile: 1 by day, 4 at hours 0..=4.
+/// `encounters.md §4` random-spawn bucket weight tables. The picker
+/// rolls on a `0..=255` scale, walks weights in the order below,
+/// and returns the first row whose cumulative weight covers the
+/// roll. Each entry pairs a weight with the first byte of the
+/// payload sprite run (the rest of the run follows the canonical
+/// `(base, base+1, base+2, base+3)` four-frame layout).
+pub const SURFACE_AQUATIC_BUCKET: [(u8, u8); 5] = [
+    (72, 0x8C), // Shark
+    (72, 0x84), // Squid
+    (40, 0x88), // Sea Serpent
+    (38, 0x80), // Sea Horse
+    (34, 0x2C), // Pirate-ship / water-creature facing frames
+];
+
+pub const UNDERWORLD_AQUATIC_BUCKET: [(u8, u8); 2] = [
+    (128, 0x84), // Squid
+    (128, 0x88), // Sea Serpent
+];
+
+pub const SURFACE_LAND_BUCKET: [(u8, u8); 12] = [
+    (60, 0xC0), // Orc
+    (50, 0xC8), // Python
+    (40, 0x90), // Giant Rat
+    (30, 0x98), // Giant Spider
+    (20, 0xBC), // Insect Swarm
+    (15, 0xC4), // Skeleton
+    (15, 0xD0), // Headless
+    (10, 0xE4), // Troll
+    (10, 0xCC), // Ettin
+    (3, 0xD4),  // Wisp
+    (2, 0xDC),  // Dragon
+    (1, 0xD8),  // Daemon
+];
+
+pub const UNDERWORLD_LAND_BUCKET: [(u8, u8); 7] = [
+    (64, 0x94), // Bat
+    (56, 0x90), // Giant Rat
+    (56, 0x98), // Giant Spider
+    (32, 0xF0), // Mongbat
+    (32, 0xF4), // Corpser
+    (8, 0xD8),  // Daemon
+    (8, 0xDC),  // Dragon
+];
+
+/// `encounters.md §4`: walk a weighted bucket and return the first
+/// payload whose cumulative weight covers the supplied `0..=255`
+/// roll. The bucket entries pair `(weight, payload)`. Returns the
+/// last entry's payload as a defensive fallback when the roll
+/// exceeds the cumulative weight (the spec lists no overflow case;
+/// shipped buckets sum to ~256 so this matters only for short
+/// custom buckets).
+pub const fn pick_random_spawn_bucket(bucket: &[(u8, u8)], roll: u8) -> Option<u8> {
+    if bucket.is_empty() {
+        return None;
+    }
+    let mut cumulative: u16 = 0;
+    let mut i: usize = 0;
+    while i < bucket.len() {
+        let (weight, payload) = bucket[i];
+        cumulative += weight as u16;
+        if (roll as u16) < cumulative {
+            return Some(payload);
+        }
+        i += 1;
+    }
+    Some(bucket[bucket.len() - 1].1)
+}
+
 /// `encounters.md §3` random-encounter roll bound. The probe rolls
 /// uniformly in `[1, 30]`; spawn fires when `roll < threshold`. The
 /// effective per-eligible-turn chance is `(threshold - 1) / 30`,

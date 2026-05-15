@@ -1,4 +1,41 @@
     #[test]
+    fn random_spawn_bucket_picker_matches_spec_weights() {
+        // encounters.md §4
+        // Surface aquatic bucket: cumulative weights are
+        // 72, 144, 184, 222, 256.
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_AQUATIC_BUCKET, 0), Some(0x8C));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_AQUATIC_BUCKET, 71), Some(0x8C));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_AQUATIC_BUCKET, 72), Some(0x84));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_AQUATIC_BUCKET, 143), Some(0x84));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_AQUATIC_BUCKET, 144), Some(0x88));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_AQUATIC_BUCKET, 183), Some(0x88));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_AQUATIC_BUCKET, 184), Some(0x80));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_AQUATIC_BUCKET, 221), Some(0x80));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_AQUATIC_BUCKET, 222), Some(0x2C));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_AQUATIC_BUCKET, 255), Some(0x2C));
+
+        // Underworld aquatic bucket: 128, 256.
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_AQUATIC_BUCKET, 0), Some(0x84));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_AQUATIC_BUCKET, 127), Some(0x84));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_AQUATIC_BUCKET, 128), Some(0x88));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_AQUATIC_BUCKET, 255), Some(0x88));
+
+        // Surface land bucket counts.
+        assert_eq!(SURFACE_LAND_BUCKET.len(), 12);
+        // Underworld land bucket counts.
+        assert_eq!(UNDERWORLD_LAND_BUCKET.len(), 7);
+
+        // Surface land first entry (Orc, weight 60).
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 0), Some(0xC0));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 59), Some(0xC0));
+        // Last surface-land entry (Daemon, weight 1, cumulative 256).
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 255), Some(0xD8));
+
+        // Empty bucket -> None.
+        assert_eq!(pick_random_spawn_bucket(&[], 0), None);
+    }
+
+    #[test]
     fn ship_terrain_predicate_matches_spec_water_band() {
         // movement.md §4
         assert_eq!(SHIP_TERRAIN_ACCEPTED_TILES, [0x00, 0x01, 0x02]);
