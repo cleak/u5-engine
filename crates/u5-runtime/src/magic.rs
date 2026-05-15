@@ -88,6 +88,19 @@ pub const fn cast_dispatcher_gate(
     CastGateOutcome::Cast
 }
 
+/// `catalogs/spell-list.md §4` indoor short-circuits before the
+/// scene-mask comparison: Lord Blackthorn's Castle absorbs casts while
+/// the Crown of Lord British ownership flag is clear, and Stonegate
+/// absorbs casts unconditionally. Returns `true` when the dispatcher
+/// should print "Absorbed!" and abort before consuming a charge or
+/// mana.
+pub const fn spell_indoor_absorbs(scene_blackthorn_castle: bool, has_crown: bool, scene_stonegate: bool) -> bool {
+    if scene_stonegate {
+        return true;
+    }
+    scene_blackthorn_castle && !has_crown
+}
+
 /// `magic.md §3` canonical Britannian magic-rune syllable vocabulary.
 /// The twenty-four entries are returned in the spec's table order.
 pub const RUNE_SYLLABLE_VOCABULARY: [&str; 24] = [

@@ -1261,6 +1261,21 @@
     }
 
     #[test]
+    fn spell_indoor_absorbs_matches_spec_short_circuits() {
+        // catalogs/spell-list.md §4
+        // Stonegate absorbs unconditionally
+        assert!(spell_indoor_absorbs(false, true, true));
+        assert!(spell_indoor_absorbs(false, false, true));
+        assert!(spell_indoor_absorbs(true, true, true));
+        // Blackthorn absorbs only without the Crown
+        assert!(spell_indoor_absorbs(true, false, false));
+        assert!(!spell_indoor_absorbs(true, true, false));
+        // Other indoor scenes pass through
+        assert!(!spell_indoor_absorbs(false, false, false));
+        assert!(!spell_indoor_absorbs(false, true, false));
+    }
+
+    #[test]
     fn rune_syllable_vocabulary_matches_spec_table() {
         // magic.md §3
         assert_eq!(RUNE_SYLLABLE_VOCABULARY.len(), 24);
