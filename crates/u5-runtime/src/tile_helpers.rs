@@ -36,6 +36,18 @@ pub fn dungeon_cell_index(level: u8, x: usize, y: usize) -> usize {
     level as usize * DUNGEON_LEVEL_LEN + y * DUNGEON_SIDE + x
 }
 
+/// `formats/dungeon-dat.md §2`: absolute file offset of cell
+/// `(level, x, y)` inside the eight-record `DUNGEON.DAT`. The file is
+/// dungeon-major (records are 512 bytes each), each record is
+/// level-major (eight 64-byte levels), and each level is row-major Y
+/// then X.
+pub const fn dungeon_file_offset(record_index: u8, level: u8, x: u8, y: u8) -> usize {
+    (record_index as usize) * DUNGEON_RECORD_LEN
+        + (level as usize) * DUNGEON_LEVEL_LEN
+        + (y as usize) * DUNGEON_SIDE
+        + (x as usize)
+}
+
 pub fn first_dungeon_walkable(grid: &[u8], level: u8) -> Option<(usize, usize)> {
     (0..DUNGEON_SIDE)
         .flat_map(|y| (0..DUNGEON_SIDE).map(move |x| (x, y)))

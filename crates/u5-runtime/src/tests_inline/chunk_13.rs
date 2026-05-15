@@ -940,6 +940,30 @@
     }
 
     #[test]
+    fn dungeon_file_offset_matches_spec_layout() {
+        // formats/dungeon-dat.md §2
+        assert_eq!(DUNGEON_DAT_LEN, 4096);
+        assert_eq!(DUNGEON_RECORD_LEN, 512);
+        assert_eq!(DUNGEON_LEVEL_LEN, 64);
+        assert_eq!(DUNGEON_SIDE, 8);
+        // First cell of first dungeon record
+        assert_eq!(dungeon_file_offset(0, 0, 0, 0), 0);
+        // Last cell of first dungeon record
+        assert_eq!(dungeon_file_offset(0, 7, 7, 7), DUNGEON_RECORD_LEN - 1);
+        // First cell of second record
+        assert_eq!(dungeon_file_offset(1, 0, 0, 0), DUNGEON_RECORD_LEN);
+        // Doom record (index 7) first cell
+        assert_eq!(dungeon_file_offset(7, 0, 0, 0), 7 * DUNGEON_RECORD_LEN);
+        // Specific cell math
+        assert_eq!(
+            dungeon_file_offset(2, 3, 5, 4),
+            2 * 512 + 3 * 64 + 4 * 8 + 5
+        );
+        // The eight dungeon records together fill DUNGEON_DAT
+        assert_eq!(8 * DUNGEON_RECORD_LEN, DUNGEON_DAT_LEN);
+    }
+
+    #[test]
     fn brit_chunk_slot_and_file_offset_match_spec() {
         // formats/brit-dat.md §3
         assert_eq!(WORLD_SIDE, 256);
