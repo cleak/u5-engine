@@ -636,6 +636,51 @@
     }
 
     #[test]
+    fn parse_endgame_messages_walks_eleven_nul_terminated_records() {
+        // formats/endmsg-dat.md §2-§4: eleven NUL-terminated plain-ASCII
+        // records consumed by the endgame Lord British dialogue.
+        let labels = [
+            "Greetings",
+            "First box prompt",
+            "Second box prompt",
+            "Rite 1",
+            "Rite 2",
+            "Rite 3",
+            "Rite 4",
+            "Rite 5",
+            "Rite 6",
+            "Rite 7",
+            "Refusal branch",
+        ];
+        let mut bytes = Vec::new();
+        for label in labels {
+            bytes.extend_from_slice(label.as_bytes());
+            bytes.push(0x00);
+        }
+
+        let messages = parse_endgame_messages(&bytes).expect("11 records should parse");
+
+        assert_eq!(messages.records.len(), 11);
+        assert_eq!(messages.initial_greeting(), Some("Greetings"));
+        assert_eq!(messages.first_box_prompt(), Some("First box prompt"));
+        assert_eq!(messages.second_box_prompt(), Some("Second box prompt"));
+        assert_eq!(messages.rite_messages().len(), 7);
+        assert_eq!(messages.refusal_branch(), Some("Refusal branch"));
+    }
+
+    #[test]
+    fn parse_endgame_messages_rejects_unterminated_record() {
+        // §5: a missing NUL terminator must be rejected as a bad asset.
+        let mut bytes = b"Hello\0World".to_vec();
+        // 'World' is not NUL-terminated; parser should error.
+        assert!(parse_endgame_messages(&bytes).is_err());
+
+        // Also reject when fewer than 11 records.
+        bytes = b"only one record\0".to_vec();
+        assert!(parse_endgame_messages(&bytes).is_err());
+    }
+
+    #[test]
     fn parse_sign_records_decodes_directory_and_payload() {
         // formats/signs-dat.md §2-§4. Build a minimal SIGNS.DAT image with
         // two scene blocks separated by a zero-scene sentinel. Scene 17 has
