@@ -667,6 +667,38 @@
     }
 
     #[test]
+    fn tile_blocks_sight_propagation_matches_spec_classifier() {
+        // visibility.md §6: the sight-blocking spec list.
+        for tile in [
+            0x09u8, 0x0A, 0x0C, 0x0D, 0x4D, 0x4E, 0x4F, 0x5A, 0x97, 0xB8, 0xB9, 0xBC, 0xD0,
+            0xD1, 0xD2, 0xD3, 0xF8, 0xFE, 0xFF,
+        ] {
+            assert!(
+                tile_blocks_sight_propagation(tile),
+                "tile 0x{tile:02X} should block sight"
+            );
+        }
+        // Non-listed tiles use the ordinary propagation rule.
+        for tile in [0x00u8, 0x05, 0x10, 0x4A, 0x4B, 0x98, 0xBA, 0xBB, 0xC0] {
+            assert!(
+                !tile_blocks_sight_propagation(tile),
+                "tile 0x{tile:02X} should not block sight"
+            );
+        }
+    }
+
+    #[test]
+    fn tile_propagates_sight_only_when_adjacent_lists_orthogonal_set() {
+        // visibility.md §6 orthogonal-only group.
+        for tile in [0x4Au8, 0x4B, 0x98, 0xBA, 0xBB] {
+            assert!(tile_propagates_sight_only_when_adjacent(tile));
+        }
+        for tile in [0x09u8, 0x0A, 0x4D, 0x97, 0xB8] {
+            assert!(!tile_propagates_sight_only_when_adjacent(tile));
+        }
+    }
+
+    #[test]
     fn shop_time_of_day_word_partitions_24_hour_clock() {
         // shops.md §4.1: morning for hours 0..12, afternoon for 12..18,
         // evening for 18..24.

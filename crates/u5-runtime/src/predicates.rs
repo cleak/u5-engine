@@ -251,6 +251,35 @@ pub fn surface_tile_blocks_sight(tile: u8) -> bool {
     is_mountain_tile(tile) || is_wall_or_closed_door_tile(tile) || matches!(tile, 160..=255)
 }
 
+/// `visibility.md` §6: tile identities that fully stop the centre-out sight
+/// carve. These are spec-listed family members (forest 0x09, hill/mountain
+/// /lava-rock 0x0A/0x0C/0x0D, bookshelf/dresser/vanity/trunk 0x4D..=0x4F,
+/// sign-post 0x5A, monster sprite frames Bat 0x97 / Gargoyle 0xB8..=0xB9 /
+/// Insect Swarm 0xBC / Headless 0xD0..=0xD3 / Rot Worm 0xF8 / Shadow Lord
+/// 0xFE..=0xFF). Tiles not in this set or in the orthogonal-only set use
+/// the ordinary propagation rule.
+pub const fn tile_blocks_sight_propagation(tile: u8) -> bool {
+    matches!(
+        tile,
+        0x09 | 0x0A | 0x0C | 0x0D
+            | 0x4D..=0x4F
+            | 0x5A
+            | 0x97
+            | 0xB8 | 0xB9
+            | 0xBC
+            | 0xD0..=0xD3
+            | 0xF8
+            | 0xFE | 0xFF,
+    )
+}
+
+/// `visibility.md` §6: tile identities that propagate the carve only when
+/// orthogonally adjacent to the centre cell — bookshelf/dresser
+/// 0x4A..=0x4B, Giant Spider frame 0x98, Gargoyle frames 0xBA..=0xBB.
+pub const fn tile_propagates_sight_only_when_adjacent(tile: u8) -> bool {
+    matches!(tile, 0x4A | 0x4B | 0x98 | 0xBA | 0xBB)
+}
+
 /// Sight-blocking predicate scoped to the overworld. Per
 /// u5-spec/systems/visibility.md Section 6:
 ///   * Forest interior (deep woods) blocks sight.
