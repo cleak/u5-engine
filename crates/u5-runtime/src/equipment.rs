@@ -53,6 +53,44 @@ pub const EQUIPMENT_NAMES: [&str; EQUIPMENT_COUNT] = [
     "Ankh",
 ];
 
+/// `inventory.md §3.1` published equipment-class tag bytes used by
+/// R-Ready slot routing and refusal logic.
+pub const EQUIPMENT_CLASS_HELM: u8 = 0x80;
+pub const EQUIPMENT_CLASS_BODY_ARMOUR: u8 = 0x40;
+pub const EQUIPMENT_CLASS_ONE_HAND: u8 = 0x20;
+pub const EQUIPMENT_CLASS_TWO_HAND: u8 = 0x30;
+pub const EQUIPMENT_CLASS_RING: u8 = 0x02;
+pub const EQUIPMENT_CLASS_AMULET: u8 = 0x04;
+pub const EQUIPMENT_CLASS_NONE: u8 = 0x00;
+
+/// `inventory.md §3.1` typed equipment-class tag.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EquipmentClassTag {
+    Helm,
+    BodyArmour,
+    OneHand,
+    TwoHand,
+    Ring,
+    Amulet,
+    /// Ammunition rows have no readied-equipment tag (`0x00`).
+    None,
+}
+
+/// `inventory.md §3.1`: classify an equipment-class tag byte. Returns
+/// `None` for any unknown bit pattern.
+pub const fn equipment_class_tag(tag: u8) -> Option<EquipmentClassTag> {
+    Some(match tag {
+        EQUIPMENT_CLASS_HELM => EquipmentClassTag::Helm,
+        EQUIPMENT_CLASS_BODY_ARMOUR => EquipmentClassTag::BodyArmour,
+        EQUIPMENT_CLASS_ONE_HAND => EquipmentClassTag::OneHand,
+        EQUIPMENT_CLASS_TWO_HAND => EquipmentClassTag::TwoHand,
+        EQUIPMENT_CLASS_RING => EquipmentClassTag::Ring,
+        EQUIPMENT_CLASS_AMULET => EquipmentClassTag::Amulet,
+        EQUIPMENT_CLASS_NONE => EquipmentClassTag::None,
+        _ => return None,
+    })
+}
+
 pub const EQUIPMENT_CLASS_TAGS: [u8; EQUIPMENT_COUNT] = [
     0x80, 0x80, 0x80, 0x80, 0x20, 0x20, 0x20, 0x20, 0x20, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40,
     0x20, 0x30, 0x20, 0x30, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x30, 0x00, 0x30, 0x00, 0x20, 0x30,

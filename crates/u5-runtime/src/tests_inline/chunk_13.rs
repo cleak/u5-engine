@@ -1050,6 +1050,39 @@
     }
 
     #[test]
+    fn equipment_class_tag_round_trip_per_spec() {
+        // inventory.md §3.1
+        assert_eq!(EQUIPMENT_CLASS_HELM, 0x80);
+        assert_eq!(EQUIPMENT_CLASS_BODY_ARMOUR, 0x40);
+        assert_eq!(EQUIPMENT_CLASS_ONE_HAND, 0x20);
+        assert_eq!(EQUIPMENT_CLASS_TWO_HAND, 0x30);
+        assert_eq!(EQUIPMENT_CLASS_RING, 0x02);
+        assert_eq!(EQUIPMENT_CLASS_AMULET, 0x04);
+        assert_eq!(EQUIPMENT_CLASS_NONE, 0x00);
+        // Round trip
+        assert_eq!(equipment_class_tag(0x80), Some(EquipmentClassTag::Helm));
+        assert_eq!(
+            equipment_class_tag(0x40),
+            Some(EquipmentClassTag::BodyArmour)
+        );
+        assert_eq!(equipment_class_tag(0x20), Some(EquipmentClassTag::OneHand));
+        assert_eq!(equipment_class_tag(0x30), Some(EquipmentClassTag::TwoHand));
+        assert_eq!(equipment_class_tag(0x02), Some(EquipmentClassTag::Ring));
+        assert_eq!(equipment_class_tag(0x04), Some(EquipmentClassTag::Amulet));
+        assert_eq!(equipment_class_tag(0x00), Some(EquipmentClassTag::None));
+        // Unknown bit patterns return None
+        assert_eq!(equipment_class_tag(0x01), None);
+        assert_eq!(equipment_class_tag(0x10), None);
+        assert_eq!(equipment_class_tag(0xFF), None);
+
+        // Cross-check that the existing tag table only uses values we
+        // can classify.
+        for tag in EQUIPMENT_CLASS_TAGS {
+            assert!(equipment_class_tag(tag).is_some(), "unknown tag {tag:#x}");
+        }
+    }
+
+    #[test]
     fn inventory_caps_match_spec() {
         // inventory.md §2
         assert_eq!(PARTY_GOLD_CAP, 9999);
