@@ -248,9 +248,11 @@ pub use npc_runtime::{
     NPC_STATE_IDLE, NPC_STATE_INPLANE_MOVE, NPC_STATE_PARKED_OFF_FLOOR, NPC_STATE_REPLAY_QUEUE,
     NPC_FLOOR_LINK_TILE_C8, NPC_FLOOR_LINK_TILE_C9, NPC_PATH_DIR_EAST, NPC_PATH_DIR_NORTH,
     NPC_PATH_DIR_SOUTH, NPC_PATH_DIR_WEST, NPC_PATHFIND_QUEUE_CAPACITY,
-    NPC_STUCK_REPLAN_THRESHOLD, NpcAiBehavior, NpcShopTrigger, RuntimeNpc, npc_ai_behavior,
-    npc_path_direction_offset, npc_path_direction_opposite, npc_shop_trigger,
-    schedule_floor_state,
+    NPC_DIALOG_ID_HIGH_FALLBACK, NPC_DIALOG_ID_HIGH_FIRST, NPC_DIALOG_ID_HIGH_LAST,
+    NPC_DIALOG_ID_NONE, NPC_DIALOG_ID_TLK_SENTINEL, NPC_STUCK_REPLAN_THRESHOLD,
+    NpcAiBehavior, NpcDialogIdKind, NpcShopTrigger, RuntimeNpc, npc_ai_behavior,
+    npc_dialog_id_kind, npc_path_direction_offset, npc_path_direction_opposite,
+    npc_shop_trigger, schedule_floor_state,
 };
 pub use party::{
     Area, AvatarStats, MoonstoneGateSlot, PartyMember, Player, class_refreshed_mana, default_party,

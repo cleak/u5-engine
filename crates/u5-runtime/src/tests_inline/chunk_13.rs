@@ -1,4 +1,22 @@
     #[test]
+    fn npc_dialog_id_classifier_matches_spec_table() {
+        // catalogs/npc-roster.md §4
+        assert_eq!(npc_dialog_id_kind(0), NpcDialogIdKind::NoDialogue);
+        assert_eq!(
+            npc_dialog_id_kind(1),
+            NpcDialogIdKind::TlkHeaderSentinel
+        );
+        assert_eq!(npc_dialog_id_kind(2), NpcDialogIdKind::OrdinaryBlobId);
+        assert_eq!(npc_dialog_id_kind(50), NpcDialogIdKind::OrdinaryBlobId);
+        assert_eq!(npc_dialog_id_kind(128), NpcDialogIdKind::OrdinaryBlobId);
+        for byte in 129..=136u8 {
+            assert_eq!(npc_dialog_id_kind(byte), NpcDialogIdKind::HighSpecial);
+        }
+        assert_eq!(npc_dialog_id_kind(137), NpcDialogIdKind::OrdinaryBlobId);
+        assert_eq!(npc_dialog_id_kind(255), NpcDialogIdKind::HighSpecial);
+    }
+
+    #[test]
     fn ring_vanish_and_regen_predicates_match_spec() {
         // catalogs/item-list.md §5.4
         assert_eq!(RING_VANISH_DENOMINATOR, 16);

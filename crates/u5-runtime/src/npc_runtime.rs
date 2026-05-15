@@ -20,6 +20,49 @@ pub const NPC_STATE_ASCEND_TOWARD_TARGET: u8 = 5;
 pub const NPC_STATE_CLIMB_UP_OFF_FLOOR: u8 = 6;
 pub const NPC_STATE_CLIMB_DOWN_OFF_FLOOR: u8 = 7;
 pub const NPC_STATE_PARKED_OFF_FLOOR: u8 = 8;
+/// `catalogs/npc-roster.md §4`: dialog-id `0` is the ordinary
+/// no-dialogue value (the engine prints the funny-look stub when the
+/// player Talks to such an NPC).
+pub const NPC_DIALOG_ID_NONE: u8 = 0;
+/// `catalogs/npc-roster.md §4`: dialog-id `1` is the universal `.TLK`
+/// header sentinel — no shipped roster slot carries this id.
+pub const NPC_DIALOG_ID_TLK_SENTINEL: u8 = 1;
+/// `catalogs/npc-roster.md §4`: high dialog ids `129..=136` and `255`
+/// are observed in the shipped roster but do not resolve to real
+/// `.TLK` records; they likely mark guards, generic role actors,
+/// hostile actors, or non-speaking schedule participants.
+pub const NPC_DIALOG_ID_HIGH_FIRST: u8 = 129;
+pub const NPC_DIALOG_ID_HIGH_LAST: u8 = 136;
+pub const NPC_DIALOG_ID_HIGH_FALLBACK: u8 = 255;
+
+/// `catalogs/npc-roster.md §4`: classify a dialog-id byte into the
+/// engine's `.TLK`-resolution category.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NpcDialogIdKind {
+    /// `0` — no dialogue; Talk produces the funny-look stub.
+    NoDialogue,
+    /// `1` — universal `.TLK` sentinel; no live roster slot uses it.
+    TlkHeaderSentinel,
+    /// `2..=128` and any other id below the high-special band — an
+    /// ordinary `.TLK` blob lookup key.
+    OrdinaryBlobId,
+    /// `129..=136` and `255` — high/special non-resolving ids the
+    /// shipped roster uses for guards, hostiles, and similar
+    /// non-speaking participants.
+    HighSpecial,
+}
+
+/// `catalogs/npc-roster.md §4`: classify a dialog-id byte.
+pub const fn npc_dialog_id_kind(byte: u8) -> NpcDialogIdKind {
+    match byte {
+        NPC_DIALOG_ID_NONE => NpcDialogIdKind::NoDialogue,
+        NPC_DIALOG_ID_TLK_SENTINEL => NpcDialogIdKind::TlkHeaderSentinel,
+        NPC_DIALOG_ID_HIGH_FIRST..=NPC_DIALOG_ID_HIGH_LAST => NpcDialogIdKind::HighSpecial,
+        NPC_DIALOG_ID_HIGH_FALLBACK => NpcDialogIdKind::HighSpecial,
+        _ => NpcDialogIdKind::OrdinaryBlobId,
+    }
+}
+
 /// `formats/npc.md §7` Talk-entry shop-trigger family for high
 /// dialog-index values `0x81..=0x88`. These are not `.TLK` blob ids;
 /// they identify which shop the active scene's resident shop tables
