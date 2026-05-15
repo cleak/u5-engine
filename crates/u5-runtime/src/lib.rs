@@ -13,6 +13,7 @@ pub mod combat_frame;
 pub mod combat_setup;
 pub mod combat_stats;
 pub mod constants;
+pub mod containers;
 pub mod directed_step;
 pub mod direction;
 pub mod dungeon_tables;
@@ -84,6 +85,11 @@ pub use directed_step::{
     type_bypasses_terrain_chance_gate,
 };
 pub use end_io::{EndNarrative, decode_end_window, load_end_narrative};
+pub use containers::{
+    DUNGEON_CHEST_ROWS, DungeonChestReward, DungeonChestRow, TABLE_FOOD_TILE_A,
+    TABLE_FOOD_TILE_B, dungeon_chest_row_awarded, dungeon_chest_row_gate_max,
+    table_food_get_resulting_tile,
+};
 pub use jimmy::{
     DOOR_AUTO_CLOSE_TURNS, JIMMY_DOOR_DIE_HIGH, JIMMY_DOOR_DIE_LOW, JIMMY_OBJECT_DIE_HIGH,
     JIMMY_OBJECT_DIE_LOW, dungeon_chest_jimmy_succeeds, dungeon_chest_jimmy_threshold,

@@ -636,6 +636,51 @@
     }
 
     #[test]
+    fn dungeon_chest_rows_match_spec_table() {
+        // containers.md §6
+        assert_eq!(DUNGEON_CHEST_ROWS.len(), 7);
+        let expected = [
+            (2u8, DungeonChestReward::Food),
+            (4, DungeonChestReward::Gold),
+            (5, DungeonChestReward::Keys),
+            (10, DungeonChestReward::Gems),
+            (20, DungeonChestReward::Torches),
+            (25, DungeonChestReward::Potion),
+            (25, DungeonChestReward::Scroll),
+        ];
+        for (i, row) in DUNGEON_CHEST_ROWS.iter().enumerate() {
+            assert_eq!(row.gate_threshold, expected[i].0);
+            assert_eq!(row.reward, expected[i].1);
+        }
+        // Per-row gate max: 4*depth + 4
+        assert_eq!(dungeon_chest_row_gate_max(0), 4);
+        assert_eq!(dungeon_chest_row_gate_max(7), 32);
+        // Awarded when threshold <= roll
+        let food = DUNGEON_CHEST_ROWS[0];
+        assert!(dungeon_chest_row_awarded(food, 2));
+        assert!(dungeon_chest_row_awarded(food, 31));
+        assert!(!dungeon_chest_row_awarded(food, 1));
+        let scroll = DUNGEON_CHEST_ROWS[6];
+        assert!(dungeon_chest_row_awarded(scroll, 25));
+        assert!(!dungeon_chest_row_awarded(scroll, 24));
+    }
+
+    #[test]
+    fn table_food_get_directional_rules_match_spec() {
+        // containers.md §7
+        assert_eq!(table_food_get_resulting_tile(0x9B, 0, -1), Some(0x95));
+        assert_eq!(table_food_get_resulting_tile(0x9B, 0, 1), None);
+        assert_eq!(table_food_get_resulting_tile(0x9B, -1, 0), None);
+        assert_eq!(table_food_get_resulting_tile(0x9B, 1, 0), None);
+        assert_eq!(table_food_get_resulting_tile(0x9B, 1, -1), None);
+        assert_eq!(table_food_get_resulting_tile(0x9C, 0, -1), Some(0x9A));
+        assert_eq!(table_food_get_resulting_tile(0x9C, 0, 1), Some(0x9B));
+        assert_eq!(table_food_get_resulting_tile(0x9C, -1, 0), None);
+        assert_eq!(table_food_get_resulting_tile(0x9C, 1, 0), None);
+        assert_eq!(table_food_get_resulting_tile(0x95, 0, -1), None);
+    }
+
+    #[test]
     fn jimmy_helpers_match_spec_formulas() {
         // doors-and-z-transitions.md §3
         // Door pick: class > roll
