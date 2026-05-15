@@ -17,6 +17,32 @@ pub const ACTIVE_OBJECT_FIELD_DEP1: usize = 5;
 pub const ACTIVE_OBJECT_FIELD_PHASE: usize = 6;
 pub const ACTIVE_OBJECT_FIELD_DEP3: usize = 7;
 
+/// `active-objects.md §2` per-pass iteration order. The renderer
+/// walks slots from `OOL_SLOTS - 1` down to `0` so lower-indexed
+/// slots paint on top — guaranteeing the player (slot zero) draws
+/// over every other entity in the same cell. The per-tick animator
+/// walks slots from `0` up to `OOL_SLOTS - 1`; iteration order there
+/// affects only deterministic tie-breaking, not correctness.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ActiveObjectPassOrder {
+    /// Renderer pass — high index to low (`31..=0`).
+    RendererHighToLow,
+    /// Per-tick animator pass — low index to high (`0..=31`).
+    AnimatorLowToHigh,
+}
+
+impl ActiveObjectPassOrder {
+    /// Returns the (start, end_inclusive, step_descending) tuple for
+    /// the requested pass. `step_descending == true` means iterate
+    /// from `start` down to `end_inclusive`.
+    pub const fn iteration(self) -> (usize, usize, bool) {
+        match self {
+            Self::RendererHighToLow => (OOL_SLOTS - 1, 0, true),
+            Self::AnimatorLowToHigh => (0, OOL_SLOTS - 1, false),
+        }
+    }
+}
+
 /// `active-objects.md §10` overworld off-screen pruning radius. The
 /// per-turn walker frees outdoor active-object slots whose distance
 /// from the scroll bases (Manhattan in either axis) is greater than

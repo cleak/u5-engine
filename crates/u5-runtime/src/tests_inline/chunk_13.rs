@@ -1,4 +1,20 @@
     #[test]
+    fn active_object_pass_order_matches_spec() {
+        // active-objects.md §2
+        let (start, end, descending) =
+            ActiveObjectPassOrder::RendererHighToLow.iteration();
+        assert_eq!(start, OOL_SLOTS - 1);
+        assert_eq!(end, 0);
+        assert!(descending);
+
+        let (start, end, descending) =
+            ActiveObjectPassOrder::AnimatorLowToHigh.iteration();
+        assert_eq!(start, 0);
+        assert_eq!(end, OOL_SLOTS - 1);
+        assert!(!descending);
+    }
+
+    #[test]
     fn live_chunk_substituted_tile_matches_spec_rules() {
         // overworld.md §3
         assert_eq!(LIVE_CHUNK_SUBSTITUTION_TARGET_DF, 0xDF);
