@@ -1,4 +1,33 @@
     #[test]
+    fn visibility_carve_neighbor_order_matches_spec_ring() {
+        // visibility.md §5 — W, SW, S, SE, E, NE, N, NW.
+        assert_eq!(VISIBILITY_CARVE_NEIGHBOR_ORDER.len(), 8);
+        assert_eq!(VISIBILITY_CARVE_NEIGHBOR_ORDER[0], (-1, 0));
+        assert_eq!(VISIBILITY_CARVE_NEIGHBOR_ORDER[1], (-1, 1));
+        assert_eq!(VISIBILITY_CARVE_NEIGHBOR_ORDER[2], (0, 1));
+        assert_eq!(VISIBILITY_CARVE_NEIGHBOR_ORDER[3], (1, 1));
+        assert_eq!(VISIBILITY_CARVE_NEIGHBOR_ORDER[4], (1, 0));
+        assert_eq!(VISIBILITY_CARVE_NEIGHBOR_ORDER[5], (1, -1));
+        assert_eq!(VISIBILITY_CARVE_NEIGHBOR_ORDER[6], (0, -1));
+        assert_eq!(VISIBILITY_CARVE_NEIGHBOR_ORDER[7], (-1, -1));
+        // Ring sums to (0, 0): each cardinal cancels its opposite.
+        let sum: (i8, i8) = VISIBILITY_CARVE_NEIGHBOR_ORDER
+            .iter()
+            .fold((0i8, 0i8), |acc, (dx, dy)| (acc.0 + dx, acc.1 + dy));
+        assert_eq!(sum, (0, 0));
+    }
+
+    #[test]
+    fn visibility_in_radius_uses_squared_distance_threshold() {
+        // visibility.md §5
+        assert!(visibility_in_radius(0, 0));
+        assert!(visibility_in_radius(0, 100));
+        assert!(visibility_in_radius(100, 100));
+        assert!(!visibility_in_radius(101, 100));
+        assert!(visibility_in_radius(99, 100));
+    }
+
+    #[test]
     fn autonomous_wind_drift_gates_per_spec() {
         // weather.md §2
         // Outer roll: only 0 of 64 advances.

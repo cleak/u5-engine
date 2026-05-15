@@ -53,6 +53,29 @@ pub const fn visibility_marker(byte: u8) -> VisibilityMarker {
     }
 }
 
+/// `visibility.md §5` neighbour expansion order for the visibility
+/// carve helper. The carve pops a coordinate and examines its eight
+/// neighbours in this fixed ring order: West, Southwest, South,
+/// Southeast, East, Northeast, North, Northwest. Each entry is the
+/// `(dx, dy)` offset from the popped coordinate.
+pub const VISIBILITY_CARVE_NEIGHBOR_ORDER: [(i8, i8); 8] = [
+    (-1, 0),  // West
+    (-1, 1),  // Southwest
+    (0, 1),   // South
+    (1, 1),   // Southeast
+    (1, 0),   // East
+    (1, -1),  // Northeast
+    (0, -1),  // North
+    (-1, -1), // Northwest
+];
+
+/// `visibility.md §5`: squared-distance threshold check. A cell is
+/// inside the main light radius when its squared centre-relative
+/// distance is `<=` the supplied light value.
+pub const fn visibility_in_radius(squared_distance: u32, light_value: u32) -> bool {
+    squared_distance <= light_value
+}
+
 /// `visibility.md §3`: producer behaviour selected by the sign of the
 /// (signed) light-radius byte.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
