@@ -163,7 +163,10 @@ pub use lighting::{
     apply_personal_light, daylight_base_value, decay_light_counter, dungeon_blackout,
     ignite_torch_dungeon, ignite_torch_surface,
 };
-pub use endmsg_io::{EndgameMessages, load_endgame_messages, parse_endgame_messages};
+pub use endmsg_io::{
+    ENDMSG_DAT_LEN, ENDMSG_DAT_RECORDS, EndgameMessages, load_endgame_messages,
+    parse_endgame_messages,
+};
 pub use miscmsg_io::{MiscMessages, load_misc_messages, parse_misc_messages};
 pub use quest_flags::{
     ConversationLetterAction, conversation_letter_action, tlk_scene_branch_is_set,

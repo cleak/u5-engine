@@ -940,6 +940,13 @@
     }
 
     #[test]
+    fn endmsg_dat_size_and_record_count_match_spec() {
+        // formats/endmsg-dat.md §2
+        assert_eq!(ENDMSG_DAT_LEN, 786);
+        assert_eq!(ENDMSG_DAT_RECORDS, 11);
+    }
+
+    #[test]
     fn end_narrative_windows_match_spec_table() {
         // formats/end-dat.md §2,§4
         assert_eq!(END_DAT_LEN, 3_698);

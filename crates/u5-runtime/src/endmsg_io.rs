@@ -9,6 +9,12 @@ use std::path::Path;
 const ENDMSG_DAT_FILE: &str = "ENDMSG.DAT";
 const EXPECTED_RECORD_COUNT: usize = 11;
 
+/// `formats/endmsg-dat.md §2`: shipped DOS file size in bytes.
+pub const ENDMSG_DAT_LEN: usize = 786;
+/// `formats/endmsg-dat.md §2`: number of NUL-terminated dialogue
+/// records the file holds.
+pub const ENDMSG_DAT_RECORDS: usize = 11;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EndgameMessages {
     pub records: Vec<String>,
