@@ -1,4 +1,22 @@
     #[test]
+    fn conversation_password_classifies_dawn_and_impera() {
+        // catalogs/quest-graph.md §3
+        assert_eq!(conversation_password("DAWN"), Some(ConversationPassword::Dawn));
+        assert_eq!(conversation_password("dawn"), Some(ConversationPassword::Dawn));
+        assert_eq!(
+            conversation_password("IMPERA"),
+            Some(ConversationPassword::Impera)
+        );
+        assert_eq!(
+            conversation_password("Impera"),
+            Some(ConversationPassword::Impera)
+        );
+        assert_eq!(conversation_password(""), None);
+        assert_eq!(conversation_password("DAWN1"), None);
+        assert_eq!(conversation_password("BLACKTHORN"), None);
+    }
+
+    #[test]
     fn npc_dialog_id_classifier_matches_spec_table() {
         // catalogs/npc-roster.md §4
         assert_eq!(npc_dialog_id_kind(0), NpcDialogIdKind::NoDialogue);

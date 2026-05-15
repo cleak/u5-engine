@@ -2,6 +2,31 @@
 //! branch-flag mask builder (§3) and the conversation `0x86`
 //! letter-action table (§4).
 
+/// `catalogs/quest-graph.md §3` typed gate identifying which password
+/// the player typed into a TALK conversation prompt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConversationPassword {
+    /// `DAWN` — Resistance trust token; opens anti-Blackthorn
+    /// branches and Council-member help.
+    Dawn,
+    /// `IMPERA` — Oppression / Blackthorn-aligned password; routes
+    /// the player into hostile or dangerous Blackthorn-side branches.
+    Impera,
+}
+
+/// `catalogs/quest-graph.md §3`: classify a typed password input.
+/// Comparison is case-insensitive ASCII; returns `None` for any other
+/// input.
+pub fn conversation_password(input: &str) -> Option<ConversationPassword> {
+    if input.eq_ignore_ascii_case("DAWN") {
+        Some(ConversationPassword::Dawn)
+    } else if input.eq_ignore_ascii_case("IMPERA") {
+        Some(ConversationPassword::Impera)
+    } else {
+        None
+    }
+}
+
 /// `quest-flags.md §3`: build the 32-bit mask the TALK runner uses for
 /// per-scene branch flags. The original implementation is a plain
 /// left-shift with no wrap or clamp, so indices `>=32` produce a zero
