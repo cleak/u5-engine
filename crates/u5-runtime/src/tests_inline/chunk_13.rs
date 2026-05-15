@@ -636,6 +636,20 @@
     }
 
     #[test]
+    fn spell_damage_caps_and_kill_sentinel_match_spec_table() {
+        // catalogs/spell-list.md §5: Magic Missile raw 1..16 (id 1),
+        // Fireball raw 1..30 (id 13), Kill is single-target instant kill
+        // (id 37). combat.md §11 fixes Fire Field raw at 1..21 and §12
+        // names the instant-kill sentinel value 99.
+        assert_eq!(SPELL_CODES[MAGIC_MISSILE_SPELL_INDEX], "GP");
+        assert_eq!(MAGIC_MISSILE_RAW_DAMAGE_MAX, 16);
+        assert_eq!(SPELL_CODES[FIREBALL_SPELL_INDEX], "FV");
+        assert_eq!(FIREBALL_RAW_DAMAGE_MAX, 30);
+        assert_eq!(SPELL_CODES[KILL_SPELL_INDEX], "CX");
+        assert_eq!(FIRE_FIELD_RAW_DAMAGE_MAX, 21);
+    }
+
+    #[test]
     fn spell_scene_bit_for_scene_byte_matches_published_partition() {
         // catalogs/spell-list.md §4: scene-byte to single-bit mapping.
         // 0 -> overworld, 1..=32 -> indoor, 33..=127 -> dungeon, >=0x80 -> combat.

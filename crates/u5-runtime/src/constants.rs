@@ -377,6 +377,18 @@ pub const TIME_STOP_SPELL_INDEX: usize = 47;
 pub const TIME_STOP_COST: u8 = 8;
 pub const TIME_STOP_DURATION: u8 = 10;
 pub const NEGATE_TIME_ACTIVE_EFFECT_TAG: u8 = b'T';
+
+// Combat-side raw damage caps for single-target damage spells per
+// `catalogs/spell-list.md` §5. The instant-kill sentinel itself lives in
+// `combat_actor` because the damage helpers there compare it as `i16`.
+pub const MAGIC_MISSILE_SPELL_INDEX: usize = 1;
+pub const MAGIC_MISSILE_RAW_DAMAGE_MAX: u8 = 16;
+pub const FIREBALL_SPELL_INDEX: usize = 13;
+pub const FIREBALL_RAW_DAMAGE_MAX: u8 = 30;
+pub const KILL_SPELL_INDEX: usize = 37;
+/// Fire-Field per-actor raw damage roll cap per `combat.md` §11. Energy
+/// Field supplies raw zero to the same damage path; that case has no cap.
+pub const FIRE_FIELD_RAW_DAMAGE_MAX: u8 = 21;
 pub const SPELL_CODES: [&str; SPELL_COUNT] = [
     "IL", "GP", "AZ", "AN", "M", "AY", "AS", "ACX", "HR", "IW", "KX", "IMX", "LV", "FV", "FGI",
     "GIN", "GIZ", "IP", "AG", "IS", "GIS", "PU", "DP", "QW", "BIX", "AEP", "EIP", "MV", "IZ", "RT",
