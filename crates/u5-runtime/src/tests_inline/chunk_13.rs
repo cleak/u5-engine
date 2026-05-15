@@ -1,4 +1,49 @@
     #[test]
+    fn wishing_well_keywords_and_view_outcome_match_spec() {
+        // view.md §2,§3
+        assert_eq!(WISHING_WELL_WISH_KEYWORDS.len(), 6);
+        for k in [
+            "Corvette",
+            "Ferrari",
+            "Lamborghini",
+            "Lotus",
+            "Porsche",
+            "Horse",
+        ] {
+            assert!(wishing_well_wish_accepted(k));
+            assert!(wishing_well_wish_accepted(&k.to_lowercase()));
+            assert!(wishing_well_wish_accepted(&k.to_uppercase()));
+        }
+        assert!(!wishing_well_wish_accepted(""));
+        assert!(!wishing_well_wish_accepted("Avatar"));
+        assert!(!wishing_well_wish_accepted("Anything"));
+
+        // V-View outcome.
+        // Combat short-circuits even when gems are present.
+        assert_eq!(
+            view_command_outcome(0, true),
+            ViewCommandOutcome::CombatLabelOnly
+        );
+        assert_eq!(
+            view_command_outcome(5, true),
+            ViewCommandOutcome::CombatLabelOnly
+        );
+        // Outside combat: zero gems refuse, otherwise enter overlay.
+        assert_eq!(
+            view_command_outcome(0, false),
+            ViewCommandOutcome::NoGemRefusal
+        );
+        assert_eq!(
+            view_command_outcome(1, false),
+            ViewCommandOutcome::EnterOverlay
+        );
+        assert_eq!(
+            view_command_outcome(99, false),
+            ViewCommandOutcome::EnterOverlay
+        );
+    }
+
+    #[test]
     fn yell_input_max_len_and_context_variants_match_spec() {
         // commands.md §11
         assert_eq!(YELL_INPUT_MAX_LEN, 30);

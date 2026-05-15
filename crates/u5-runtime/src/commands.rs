@@ -75,6 +75,50 @@ impl Command {
     }
 }
 
+/// `view.md §3` accepted wishing-well wish keywords. The well's
+/// object-spawn branch accepts only the six vehicle/joke names
+/// recognized by the original handler. Match is case-insensitive
+/// at the caller; this catalog stores the canonical capitalisation.
+pub const WISHING_WELL_WISH_KEYWORDS: [&str; 6] =
+    ["Corvette", "Ferrari", "Lamborghini", "Lotus", "Porsche", "Horse"];
+
+/// `view.md §3`: returns `true` when the typed wish matches one of
+/// the six accepted wishing-well keywords (case-insensitive).
+pub fn wishing_well_wish_accepted(typed: &str) -> bool {
+    let upper = typed.trim().to_ascii_uppercase();
+    WISHING_WELL_WISH_KEYWORDS
+        .iter()
+        .any(|word| word.to_ascii_uppercase() == upper)
+}
+
+/// `view.md §2` V-View command outcome. Dispatcher inputs a single
+/// gem stock and the active scene's combat marker; the helper
+/// reports whether the call should consume a gem and whether the
+/// caller should enter the view overlay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ViewCommandOutcome {
+    /// No gem owned — print the no-gem refusal and return.
+    NoGemRefusal,
+    /// Combat scene — print/acknowledge the View label and abort
+    /// without spending a gem.
+    CombatLabelOnly,
+    /// Decrement one gem and enter the view overlay (LOOKOBJ for
+    /// overworld/town, DNGLOOK for dungeon).
+    EnterOverlay,
+}
+
+/// `view.md §2`: classify a V-View command call. The dispatcher's
+/// gem-stock check happens before the overlay is invoked.
+pub const fn view_command_outcome(gems: u8, in_combat: bool) -> ViewCommandOutcome {
+    if in_combat {
+        return ViewCommandOutcome::CombatLabelOnly;
+    }
+    if gems == 0 {
+        return ViewCommandOutcome::NoGemRefusal;
+    }
+    ViewCommandOutcome::EnterOverlay
+}
+
 /// `commands.md §11` Y-Yell free-text input cap. When the party is
 /// not in the ship-sail branch, the command opens a line-input
 /// prompt that accepts up to thirty characters before routing the
