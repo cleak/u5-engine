@@ -1,5 +1,30 @@
 //! Cast/Mix dispatcher gate helpers per `magic.md` §7.
 
+use crate::*;
+
+/// `magic.md §4` per-spell circle index (`1..=8`). Returns `None`
+/// for out-of-range spell ids. The circle determines mana cost and
+/// minimum caster level: a circle-N spell costs N magic points and
+/// requires the caster to be at least level N.
+pub const fn spell_circle_for(spell_id: u8) -> Option<u8> {
+    if (spell_id as usize) >= SPELL_COUNT {
+        return None;
+    }
+    Some(spell_id / SPELLS_PER_CIRCLE as u8 + 1)
+}
+
+/// `magic.md §4`: a circle-N spell costs N magic points.
+pub const fn spell_mana_cost(circle: u8) -> u8 {
+    circle
+}
+
+/// `magic.md §4`: minimum caster level required for a spell of the
+/// supplied circle (level == circle). The level gate accepts the
+/// cast and debits mana even when below — only the *effect* fails.
+pub const fn spell_min_caster_level(circle: u8) -> u8 {
+    circle
+}
+
 /// `magic.md §7` four dispatcher gate outcomes for the C-Cast pipeline.
 /// Each variant names the player-visible message; the comments document
 /// the resource-debit asymmetry (spec calls it "intended message is the

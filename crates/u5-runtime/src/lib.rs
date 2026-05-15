@@ -171,8 +171,9 @@ pub use lord_british_camp::{
 };
 pub use magic::{
     CastGateOutcome, RUNE_SYLLABLE_VOCABULARY, cast_dispatcher_gate,
-    heal_spell_amount_from_raw_roll_u8, is_resident_rune_syllable,
-    spell_common_name, spell_indoor_absorbs,
+    heal_spell_amount_from_raw_roll_u8, is_resident_rune_syllable, spell_circle_for,
+    spell_common_name, spell_indoor_absorbs, spell_mana_cost,
+    spell_min_caster_level,
 };
 pub use moongate::{
     MOONSTONE_GATE_INVALID_SCENE, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,

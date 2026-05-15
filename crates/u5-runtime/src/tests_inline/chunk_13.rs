@@ -1,4 +1,30 @@
     #[test]
+    fn spell_circle_for_partitions_48_spells_into_8_circles() {
+        // magic.md §4
+        // Spell ids 0..=5 are circle 1, 6..=11 circle 2, etc.
+        for spell_id in 0u8..48 {
+            let expected_circle = spell_id / 6 + 1;
+            assert_eq!(spell_circle_for(spell_id), Some(expected_circle));
+        }
+        assert_eq!(spell_circle_for(48), None);
+        assert_eq!(spell_circle_for(255), None);
+
+        // Boundary spells of each circle.
+        assert_eq!(spell_circle_for(0), Some(1));
+        assert_eq!(spell_circle_for(5), Some(1));
+        assert_eq!(spell_circle_for(6), Some(2));
+        assert_eq!(spell_circle_for(11), Some(2));
+        assert_eq!(spell_circle_for(42), Some(8));
+        assert_eq!(spell_circle_for(47), Some(8));
+
+        // Mana cost == circle == minimum caster level.
+        for circle in 1u8..=8 {
+            assert_eq!(spell_mana_cost(circle), circle);
+            assert_eq!(spell_min_caster_level(circle), circle);
+        }
+    }
+
+    #[test]
     fn ranged_weapon_required_ammo_matches_spec() {
         // inventory.md §6 / catalogs/item-list.md §5
         assert_eq!(ranged_weapon_required_ammo(ITEM_ID_BOW), Some(ITEM_ID_ARROWS));
