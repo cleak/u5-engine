@@ -1237,6 +1237,19 @@
     }
 
     #[test]
+    fn normalize_disk_prompt_mode_folds_2_and_5_to_1() {
+        // screen-mode-dispatch.md §5
+        assert_eq!(normalize_disk_prompt_mode(0), 0);
+        assert_eq!(normalize_disk_prompt_mode(1), 1);
+        assert_eq!(normalize_disk_prompt_mode(2), 1);
+        assert_eq!(normalize_disk_prompt_mode(3), 3);
+        assert_eq!(normalize_disk_prompt_mode(4), 4);
+        assert_eq!(normalize_disk_prompt_mode(5), 1);
+        assert_eq!(normalize_disk_prompt_mode(6), 6);
+        assert_eq!(normalize_disk_prompt_mode(255), 255);
+    }
+
+    #[test]
     fn save_load_disk_swap_and_double_write_predicates() {
         // save-load.md §4.2 step 6: enter the underworld disk-swap loop
         // only when overworld scene + non-zero Z.

@@ -495,6 +495,17 @@ pub const fn save_flow_double_writes_underworld(entry_disk_prompt_mode: u8) -> b
     entry_disk_prompt_mode != 1
 }
 
+/// `screen-mode-dispatch.md §5`: the disk-prompt request normalizes the
+/// historical mode values `2` and `5` to mode `1`; other values pass
+/// through unchanged.
+pub const fn normalize_disk_prompt_mode(requested_mode: u8) -> u8 {
+    if requested_mode == 2 || requested_mode == 5 {
+        1
+    } else {
+        requested_mode
+    }
+}
+
 /// `save-load.md §3.1`: file lengths in bytes for the `.OOL` family.
 pub const SAVED_OOL_FILE_LEN: usize = 512;
 pub const PER_PLANE_OOL_FILE_LEN: usize = 256;
