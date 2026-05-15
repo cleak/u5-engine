@@ -161,10 +161,6 @@ impl PlayState {
             self.message = new_order_prompt_message();
             return MoveOutcome::PromptDeclined;
         };
-        if first == second {
-            self.message = "Party slots are already in that order.".to_string();
-            return MoveOutcome::PromptDeclined;
-        }
         let party_len = self.party.len();
         if first >= party_len || second >= party_len {
             self.message = format!(
@@ -173,6 +169,20 @@ impl PlayState {
                 if party_len == 1 { "" } else { "s" }
             );
             return MoveOutcome::Blocked;
+        }
+        // commands.md §6: if either selected slot is slot zero, the command
+        // refuses because the leader must remain first, and it returns
+        // without consuming a turn.
+        if first == 0 || second == 0 {
+            self.message = "The leader must remain first.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        // commands.md §6: picking the same nonzero slot twice is accepted as
+        // a behavioural no-op, but the turn is still consumed.
+        if first == second {
+            self.advance_turn();
+            self.message = format!("New order: party slot {} unchanged.", first + 1);
+            return MoveOutcome::Used;
         }
 
         self.party.swap(first, second);
@@ -188,6 +198,9 @@ impl PlayState {
         if first < self.party_equipment.len() && second < self.party_equipment.len() {
             self.party_equipment.swap(first, second);
         }
+        // commands.md §6: the command marks the turn as consumed after the
+        // exchange.
+        self.advance_turn();
         self.message = format!(
             "New order: party slots {} and {} swapped.",
             first + 1,

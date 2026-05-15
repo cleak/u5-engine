@@ -309,11 +309,13 @@ first-playable strange-rock pickup, and `G`et clears that pickup while
 invalidating the associated Gate Travel slot.
 Save export still preserves existing non-calm wind bytes rather than inventing
 an unverified byte mapping.
-`N<from><to>` swaps two one-based runtime party positions without spending a
-turn, for example `N12` swaps the first and second travelling members. The swap
-affects later party-position prompts such as `C1...` casts and runtime damage
-checks, while save export still updates each member's original roster record
-because the persistent party-order table is not yet public.
+`N<from><to>` swaps two one-based runtime party positions and consumes a turn
+per `commands.md` §6, for example `N23` swaps the second and third travelling
+members. Slot one is the leader and refuses to move; selecting the same nonzero
+slot twice is accepted as a turn-consuming no-op. The swap affects later
+party-position prompts such as `C2...` casts and runtime damage checks, while
+save export still updates each member's original roster record because the
+persistent party-order table is not yet public.
 In overworld ship mode,
 `f` plus an inline direction (for example `f4`) fires a first-playable
 broadside: bow/stern shots refuse, legal broadsides trace up to three cells,

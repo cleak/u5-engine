@@ -197,7 +197,9 @@
     }
 
     #[test]
-    fn new_order_swaps_runtime_party_positions_without_turn() {
+    fn new_order_swaps_nonleader_party_positions_and_consumes_turn() {
+        // commands.md §6: a successful nonzero-slot swap exchanges the whole
+        // roster records and marks the turn as consumed.
         let mut state = test_state(open_grid(), 1, 1);
         state.party = vec![
             PartyMember {
@@ -233,7 +235,7 @@
         ];
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'N', "13", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, 'N', "23", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -243,10 +245,96 @@
                 .iter()
                 .map(|member| member.slot)
                 .collect::<Vec<_>>(),
-            vec![2, 1, 0]
+            vec![0, 2, 1]
         );
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "New order: party slots 2 and 3 swapped.");
+    }
+
+    #[test]
+    fn new_order_refuses_swaps_involving_leader_slot_one() {
+        // commands.md §6: if either selected slot is slot zero (one-based
+        // slot 1), the command refuses without consuming a turn — the leader
+        // must remain first.
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: 10,
+                mana: 1,
+                hp: 10,
+                max_hp: 20,
+                level: 1,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: 20,
+                mana: 2,
+                hp: 11,
+                max_hp: 21,
+                level: 2,
+            },
+            PartyMember {
+                slot: 2,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: 30,
+                mana: 3,
+                hp: 12,
+                max_hp: 22,
+                level: 3,
+            },
+        ];
+        let original = state.party.clone();
+
+        assert_eq!(state.new_order_from_suffix("12"), MoveOutcome::Blocked);
+        assert_eq!(state.message, "The leader must remain first.");
+        assert_eq!(state.party, original);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "New order: party slots 1 and 3 swapped.");
+
+        assert_eq!(state.new_order_from_suffix("31"), MoveOutcome::Blocked);
+        assert_eq!(state.message, "The leader must remain first.");
+        assert_eq!(state.party, original);
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn new_order_same_nonzero_slot_consumes_turn_as_noop() {
+        // commands.md §6: picking the same nonzero slot twice is accepted as
+        // a behavioural no-op, but the turn is still consumed.
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: 10,
+                mana: 1,
+                hp: 10,
+                max_hp: 20,
+                level: 1,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: 20,
+                mana: 2,
+                hp: 11,
+                max_hp: 21,
+                level: 2,
+            },
+        ];
+        let original = state.party.clone();
+
+        assert_eq!(state.new_order_from_suffix("22"), MoveOutcome::Used);
+        assert_eq!(state.party, original);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "New order: party slot 2 unchanged.");
     }
 
     #[test]
@@ -284,11 +372,8 @@
         assert_eq!(state.party, original);
         assert_eq!(state.turn, 0);
 
-        assert_eq!(
-            state.new_order_from_suffix("11"),
-            MoveOutcome::PromptDeclined
-        );
-        assert_eq!(state.message, "Party slots are already in that order.");
+        assert_eq!(state.new_order_from_suffix("11"), MoveOutcome::Blocked);
+        assert_eq!(state.message, "The leader must remain first.");
         assert_eq!(state.party, original);
         assert_eq!(state.turn, 0);
 
@@ -317,6 +402,16 @@
                 class_byte: b'A',
                 status: b'G',
                 climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 10,
+                max_hp: 20,
+                level: 1,
+            },
+            PartyMember {
+                slot: 2,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
                 mana: 1,
                 hp: 10,
                 max_hp: 20,
@@ -326,33 +421,49 @@
         state.spell_charges[IN_LOR_SPELL_INDEX] = 1;
         state.ambient_light = FULL_DARKNESS;
 
+        // commands.md §6: swapping nonleader slots 2 and 3 consumes one turn.
         assert_eq!(
-            handle_play_key_input(&mut state, 'N', "12", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, 'N', "23", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert_eq!(state.party[0].slot, 1);
-        assert_eq!(state.turn, 0);
-
-        assert_eq!(
-            handle_play_key_input(&mut state, 'C', "1LI", Path::new("")).unwrap(),
-            PlayInputDisposition::Continue
-        );
-
-        assert_eq!(state.party[0].slot, 1);
-        assert_eq!(state.party[0].mana, 0);
-        assert_eq!(state.party[1].slot, 0);
-        assert_eq!(state.party[1].mana, 0);
-        assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
+        assert_eq!(state.party[1].slot, 2);
         assert_eq!(state.turn, 1);
+
+        // Casting from one-based slot 2 should now spend the mana that was
+        // originally on slot 2 but moved to runtime position 1.
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "2LI", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.party[1].slot, 2);
+        assert_eq!(state.party[1].mana, 0);
+        assert_eq!(state.party[2].slot, 1);
+        assert_eq!(state.party[2].mana, 0);
+        assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
+        assert_eq!(state.turn, 2);
         assert_eq!(state.message, "Light!");
     }
 
     #[test]
     fn new_order_swaps_strength_and_equipment_sidecars() {
+        // commands.md §6: New Order swaps the whole roster records (names,
+        // stats, equipment, counters) and consumes a turn. Use slots 2 and 3
+        // because slot 0 is the leader, which the spec refuses to move.
         let mut state = test_state(open_grid(), 1, 1);
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: 5,
+                mana: 0,
+                hp: 9,
+                max_hp: 19,
+                level: 1,
+            },
+            PartyMember {
+                slot: 1,
                 class_byte: b'A',
                 status: b'G',
                 climb_stat: 10,
@@ -362,7 +473,7 @@
                 level: 1,
             },
             PartyMember {
-                slot: 1,
+                slot: 2,
                 class_byte: b'A',
                 status: b'G',
                 climb_stat: 20,
@@ -372,9 +483,17 @@
                 level: 2,
             },
         ];
-        state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0"];
-        state.party_strengths = vec![12, 34];
+        state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0", *b"DUPRE\0\0\0\0"];
+        state.party_strengths = vec![10, 12, 34];
         state.party_equipment = vec![
+            [
+                EQUIPMENT_EMPTY,
+                EQUIPMENT_EMPTY,
+                EQUIPMENT_EMPTY,
+                EQUIPMENT_EMPTY,
+                EQUIPMENT_EMPTY,
+                EQUIPMENT_EMPTY,
+            ],
             [
                 1,
                 EQUIPMENT_EMPTY,
@@ -393,13 +512,16 @@
             ],
         ];
 
-        assert_eq!(state.new_order_from_suffix("12"), MoveOutcome::Used);
+        assert_eq!(state.new_order_from_suffix("23"), MoveOutcome::Used);
 
-        assert_eq!(state.party_names, vec![*b"IOLO\0\0\0\0\0", *b"AVATAR\0\0\0"]);
-        assert_eq!(state.party_strengths, vec![34, 12]);
-        assert_eq!(state.party_equipment[0][EQUIP_SLOT_WEAPON], 16);
-        assert_eq!(state.party_equipment[1][EQUIP_SLOT_HELM], 1);
-        assert_eq!(state.turn, 0);
+        assert_eq!(
+            state.party_names,
+            vec![*b"AVATAR\0\0\0", *b"DUPRE\0\0\0\0", *b"IOLO\0\0\0\0\0"]
+        );
+        assert_eq!(state.party_strengths, vec![10, 34, 12]);
+        assert_eq!(state.party_equipment[1][EQUIP_SLOT_WEAPON], 16);
+        assert_eq!(state.party_equipment[2][EQUIP_SLOT_HELM], 1);
+        assert_eq!(state.turn, 1);
     }
 
     #[test]
