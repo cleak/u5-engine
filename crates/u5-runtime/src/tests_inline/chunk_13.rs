@@ -1,4 +1,49 @@
     #[test]
+    fn lord_british_camp_event_helpers_match_spec() {
+        // rest-and-camp.md §7
+        assert_eq!(LORD_BRITISH_CAMP_EVENT_ROLL_BOUND, 100);
+        assert_eq!(LORD_BRITISH_CAMP_EVENT_THRESHOLD, 25);
+        assert!(lord_british_camp_event_triggered(0));
+        assert!(lord_british_camp_event_triggered(24));
+        assert!(!lord_british_camp_event_triggered(25));
+        assert!(!lord_british_camp_event_triggered(99));
+
+        // Level recomputation table from spec.
+        assert_eq!(level_for_experience(0), 1);
+        assert_eq!(level_for_experience(99), 1);
+        assert_eq!(level_for_experience(100), 2);
+        assert_eq!(level_for_experience(199), 2);
+        assert_eq!(level_for_experience(200), 3);
+        assert_eq!(level_for_experience(399), 3);
+        assert_eq!(level_for_experience(400), 4);
+        assert_eq!(level_for_experience(799), 4);
+        assert_eq!(level_for_experience(800), 5);
+        assert_eq!(level_for_experience(1599), 5);
+        assert_eq!(level_for_experience(1600), 6);
+
+        // HP refresh = 30 * level.
+        assert_eq!(lord_british_camp_event_hp_for_level(1), 30);
+        assert_eq!(lord_british_camp_event_hp_for_level(8), 240);
+
+        // Stat-reward selector.
+        assert_eq!(
+            lord_british_camp_stat_reward(1),
+            Some(LordBritishCampStatReward::Strength)
+        );
+        assert_eq!(
+            lord_british_camp_stat_reward(2),
+            Some(LordBritishCampStatReward::Dexterity)
+        );
+        assert_eq!(
+            lord_british_camp_stat_reward(3),
+            Some(LordBritishCampStatReward::Intelligence)
+        );
+        assert_eq!(lord_british_camp_stat_reward(0), None);
+        assert_eq!(lord_british_camp_stat_reward(4), None);
+        assert_eq!(LORD_BRITISH_CAMP_STAT_REWARD_CAP, 30);
+    }
+
+    #[test]
     fn rest_status_predicates_match_spec_tables() {
         // rest-and-camp.md §5
         // Rest-with-watch participation.

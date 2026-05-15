@@ -36,6 +36,7 @@ pub mod intro;
 pub mod jimmy;
 pub mod karma;
 pub mod lighting;
+pub mod lord_british_camp;
 pub mod magic;
 pub mod main_loop;
 pub mod moongate;
@@ -156,6 +157,12 @@ pub use jimmy::{
     jimmy_door_succeeds, object_chest_jimmy_succeeds, object_chest_jimmy_threshold,
 };
 pub use karma::{KarmaAction, apply_karma_action};
+pub use lord_british_camp::{
+    LORD_BRITISH_CAMP_EVENT_ROLL_BOUND, LORD_BRITISH_CAMP_EVENT_THRESHOLD,
+    LORD_BRITISH_CAMP_STAT_REWARD_CAP, LordBritishCampStatReward,
+    level_for_experience, lord_british_camp_event_hp_for_level,
+    lord_british_camp_event_triggered, lord_british_camp_stat_reward,
+};
 pub use magic::{
     CastGateOutcome, RUNE_SYLLABLE_VOCABULARY, cast_dispatcher_gate,
     heal_spell_amount_from_raw_roll_u8, is_resident_rune_syllable,
