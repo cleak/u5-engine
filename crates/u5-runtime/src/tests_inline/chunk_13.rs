@@ -1766,6 +1766,25 @@
     }
 
     #[test]
+    fn active_object_should_prune_matches_spec_radius() {
+        // active-objects.md §10
+        assert_eq!(ACTIVE_OBJECT_PRUNE_RADIUS, 32);
+        assert_eq!(ACTIVE_OBJECT_SAVE_BYTES, 256);
+        // Inside the radius: keep
+        assert!(!active_object_should_prune(100, 100, 100, 100));
+        assert!(!active_object_should_prune(132, 100, 100, 100));
+        assert!(!active_object_should_prune(100, 68, 100, 100));
+        // Just outside: prune
+        assert!(active_object_should_prune(133, 100, 100, 100));
+        assert!(active_object_should_prune(67, 100, 100, 100));
+        assert!(active_object_should_prune(100, 133, 100, 100));
+        assert!(active_object_should_prune(100, 67, 100, 100));
+        // Either-axis boundary
+        assert!(active_object_should_prune(200, 100, 100, 100));
+        assert!(active_object_should_prune(100, 0, 100, 100));
+    }
+
+    #[test]
     fn active_object_eviction_phase_matches_spec_cascade() {
         // active-objects.md §4
         // Empty slot is always phase 1.

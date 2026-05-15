@@ -7,6 +7,32 @@ use std::path::{Path, PathBuf};
 
 use crate::*;
 
+/// `active-objects.md §10` overworld off-screen pruning radius. The
+/// per-turn walker frees outdoor active-object slots whose distance
+/// from the scroll bases (Manhattan in either axis) is greater than
+/// this many cells.
+pub const ACTIVE_OBJECT_PRUNE_RADIUS: i32 = 32;
+
+/// `active-objects.md §10`: predicate for the overworld per-turn
+/// pruning sweep. Returns `true` when an outdoor slot at
+/// `(slot_x, slot_y)` is more than [`ACTIVE_OBJECT_PRUNE_RADIUS`] cells
+/// from the scroll base in either axis and should be freed.
+pub const fn active_object_should_prune(
+    slot_x: i32,
+    slot_y: i32,
+    scroll_base_x: i32,
+    scroll_base_y: i32,
+) -> bool {
+    let dx = slot_x - scroll_base_x;
+    let dy = slot_y - scroll_base_y;
+    let abs_dx = if dx < 0 { -dx } else { dx };
+    let abs_dy = if dy < 0 { -dy } else { dy };
+    abs_dx > ACTIVE_OBJECT_PRUNE_RADIUS || abs_dy > ACTIVE_OBJECT_PRUNE_RADIUS
+}
+
+/// `active-objects.md §11` save-image active-object region length.
+pub const ACTIVE_OBJECT_SAVE_BYTES: usize = 256;
+
 /// `active-objects.md §8`: animator outcome for one slot's phase
 /// counter (low nibble of byte 6).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
