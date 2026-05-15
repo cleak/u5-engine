@@ -352,6 +352,21 @@ impl Reagent {
             Self::Mandrake => REAGENT_MANDRAKE,
         }
     }
+
+    /// `magic.md §2`: short abbreviation used in the M-Mix prompt and
+    /// other tight UI lines. Long names live in [`display_name`].
+    pub const fn abbreviation(self) -> &'static str {
+        match self {
+            Self::SulfurAsh => "Sulfur Ash",
+            Self::Ginseng => "Ginseng",
+            Self::Garlic => "Garlic",
+            Self::SpiderSilk => "Sp. Silk",
+            Self::BloodMoss => "Blood Moss",
+            Self::BlackPearl => "Blk. Pearl",
+            Self::Nightshade => "Nightshade",
+            Self::Mandrake => "Mandrake",
+        }
+    }
 }
 
 pub const REAGENT_VENDOR_ORDER: [Reagent; REAGENT_COUNT] = [

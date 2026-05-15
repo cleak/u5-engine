@@ -1167,6 +1167,26 @@
     }
 
     #[test]
+    fn reagent_abbreviation_matches_spec_table() {
+        // magic.md §2
+        assert_eq!(Reagent::SulfurAsh.abbreviation(), "Sulfur Ash");
+        assert_eq!(Reagent::Ginseng.abbreviation(), "Ginseng");
+        assert_eq!(Reagent::Garlic.abbreviation(), "Garlic");
+        assert_eq!(Reagent::SpiderSilk.abbreviation(), "Sp. Silk");
+        assert_eq!(Reagent::BloodMoss.abbreviation(), "Blood Moss");
+        assert_eq!(Reagent::BlackPearl.abbreviation(), "Blk. Pearl");
+        assert_eq!(Reagent::Nightshade.abbreviation(), "Nightshade");
+        assert_eq!(Reagent::Mandrake.abbreviation(), "Mandrake");
+        // Display name and abbreviation differ only for the two
+        // multi-word reagents whose long form does not fit a tight UI
+        // line ("Spider Silk"/"Black Pearl").
+        for r in REAGENT_VENDOR_ORDER {
+            let differs = matches!(r, Reagent::SpiderSilk | Reagent::BlackPearl);
+            assert_eq!(r.display_name() != r.abbreviation(), differs);
+        }
+    }
+
+    #[test]
     fn rune_syllable_vocabulary_matches_spec_table() {
         // magic.md §3
         assert_eq!(RUNE_SYLLABLE_VOCABULARY.len(), 24);
