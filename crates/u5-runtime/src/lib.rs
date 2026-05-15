@@ -106,9 +106,10 @@ pub use end_io::{
     decode_end_window, end_narrative_window, load_end_narrative,
 };
 pub use blackthorn::{
+    BLACKTHORN_CHALLENGE_INPUT_LIMIT, BLACKTHORN_CHALLENGE_PROMPT_COUNT,
     BLACKTHORN_RESCUE_HANDOFF_SCENE, BLACKTHORN_RESCUE_HANDOFF_X, BLACKTHORN_RESCUE_HANDOFF_Y,
-    BLACKTHORN_RESCUE_STANDING_FLOOR, KarmaDatTier, blackthorn_rescue_verdict_record,
-    karma_dat_tier, lord_british_camp_verdict_record,
+    BLACKTHORN_RESCUE_STANDING_FLOOR, KarmaDatTier, blackthorn_challenge_answer_matches,
+    blackthorn_rescue_verdict_record, karma_dat_tier, lord_british_camp_verdict_record,
 };
 pub use boot::{
     DisplayDriverFamily, GraphicsCapability, TANDY_LOW_MEMORY_THRESHOLD_KB,

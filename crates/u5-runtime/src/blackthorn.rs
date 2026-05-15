@@ -13,6 +13,22 @@ pub const BLACKTHORN_RESCUE_HANDOFF_Y: u8 = 10;
 /// selector to at least this floor after printing the verdict.
 pub const BLACKTHORN_RESCUE_STANDING_FLOOR: u8 = 75;
 
+/// `blackthorn.md §4`: Blackthorn challenge prompt input limit.
+pub const BLACKTHORN_CHALLENGE_INPUT_LIMIT: usize = 14;
+/// `blackthorn.md §4`: number of fixed prompt ordinals the challenge
+/// loop iterates (the first four virtue/mantra pairs).
+pub const BLACKTHORN_CHALLENGE_PROMPT_COUNT: usize = 4;
+
+/// `blackthorn.md §4`: case-insensitive substring match of the
+/// player's typed answer against the expected mantra. The expected
+/// word may appear anywhere in the typed buffer rather than being the
+/// entire input.
+pub fn blackthorn_challenge_answer_matches(typed: &str, expected_mantra: &str) -> bool {
+    let typed_upper = typed.to_ascii_uppercase();
+    let expected_upper = expected_mantra.to_ascii_uppercase();
+    typed_upper.contains(&expected_upper)
+}
+
 /// `formats/karma-dat.md §4`: Lord British-in-disguise camp event
 /// verdict-record selector. Uses the same twenty-point band scale for
 /// the lower range, selecting records `0..=3` for bands below 80; for

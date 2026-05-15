@@ -1,4 +1,23 @@
     #[test]
+    fn blackthorn_challenge_answer_matcher_substring_case_insensitive() {
+        // blackthorn.md §4
+        assert_eq!(BLACKTHORN_CHALLENGE_INPUT_LIMIT, 14);
+        assert_eq!(BLACKTHORN_CHALLENGE_PROMPT_COUNT, 4);
+        // Exact match
+        assert!(blackthorn_challenge_answer_matches("Ahm", "Ahm"));
+        // Case insensitive
+        assert!(blackthorn_challenge_answer_matches("ahm", "Ahm"));
+        assert!(blackthorn_challenge_answer_matches("AHM", "ahm"));
+        // Substring match (anywhere in buffer)
+        assert!(blackthorn_challenge_answer_matches("the answer is Ahm", "Ahm"));
+        assert!(blackthorn_challenge_answer_matches("Ahmic", "Ahm"));
+        assert!(blackthorn_challenge_answer_matches("xMux", "Mu"));
+        // Negative
+        assert!(!blackthorn_challenge_answer_matches("Beh", "Ahm"));
+        assert!(!blackthorn_challenge_answer_matches("", "Ahm"));
+    }
+
+    #[test]
     fn eternal_flame_pairs_with_each_shadowlord_slot() {
         // catalogs/quest-graph.md §5
         assert_eq!(eternal_flame_for_shadowlord(0), Some(EternalFlame::Truth));
