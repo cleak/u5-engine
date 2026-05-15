@@ -1,4 +1,32 @@
     #[test]
+    fn encounter_spawner_separation_gate_matches_spec() {
+        // encounters.md §4
+        assert_eq!(ENCOUNTER_SPAWNER_RETRY_LIMIT, 128);
+        assert_eq!(ENCOUNTER_SPAWNER_MIN_SEPARATION, 6);
+        assert_eq!(ENCOUNTER_SPAWNER_MAX_SEPARATION, 250);
+        assert_eq!(SEA_CREATURE_WANDER_SEED, 100);
+
+        // Inside the visible centre — both axes <= 6 — rejected.
+        for d in 0u8..=6 {
+            assert!(!encounter_spawner_separation_ok(50 + d, 50, 50, 50));
+            assert!(!encounter_spawner_separation_ok(50, 50 + d, 50, 50));
+        }
+        // Past 6 on both axes — accepted.
+        assert!(encounter_spawner_separation_ok(57, 57, 50, 50));
+        assert!(encounter_spawner_separation_ok(43, 43, 50, 50)); // dx=7, dy=7
+        assert!(encounter_spawner_separation_ok(60, 60, 50, 50)); // dx=10, dy=10
+        // dx > 6 but dy <= 6 — rejected.
+        assert!(!encounter_spawner_separation_ok(57, 53, 50, 50));
+        // Either axis at the boundary — rejected.
+        assert!(!encounter_spawner_separation_ok(56, 60, 50, 50)); // dx=6
+        assert!(!encounter_spawner_separation_ok(60, 56, 50, 50)); // dy=6
+        // Wrapped-near torus distances: dx == 250 -> rejected, dx ==
+        // 249 -> accepted (open interval at MAX).
+        assert!(!encounter_spawner_separation_ok(0, 100, 250, 100));
+        assert!(encounter_spawner_separation_ok(0, 100, 249, 80));
+    }
+
+    #[test]
     fn random_spawn_bucket_picker_matches_spec_weights() {
         // encounters.md §4
         // Surface aquatic bucket: cumulative weights are

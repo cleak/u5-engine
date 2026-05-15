@@ -294,6 +294,42 @@ pub const fn sleep_ambush_rest_interrupted(roll: u8) -> bool {
 ///   - Surface tile 0x04 or wilderness band 0x09..=0x0F: 2 by day, 5 at
 ///     hours 0..=4.
 ///   - Any other surface tile: 1 by day, 4 at hours 0..=4.
+/// `encounters.md §4` encounter-spawner retry budget. The retry
+/// loop returns silently after this many rejected candidates.
+pub const ENCOUNTER_SPAWNER_RETRY_LIMIT: u8 = 128;
+
+/// `encounters.md §4` minimum/maximum candidate-coordinate
+/// separation from the party. Both X and Y separations must be
+/// strictly greater than `MIN` (keeps the spawn outside the
+/// immediate visible centre) and strictly less than `MAX` (rejects
+/// wrapped-near coordinates on the 256-by-256 torus).
+pub const ENCOUNTER_SPAWNER_MIN_SEPARATION: u8 = 6;
+pub const ENCOUNTER_SPAWNER_MAX_SEPARATION: u8 = 250;
+
+/// `encounters.md §4`: returns `true` when a candidate `(slot_x,
+/// slot_y)` passes the spawner's separation gate against the
+/// party's `(player_x, player_y)`. Both axes must be in the
+/// `(MIN, MAX)` open interval; either axis failing rejects the
+/// candidate.
+pub const fn encounter_spawner_separation_ok(
+    slot_x: u8,
+    slot_y: u8,
+    player_x: u8,
+    player_y: u8,
+) -> bool {
+    let dx = slot_x.abs_diff(player_x);
+    let dy = slot_y.abs_diff(player_y);
+    dx > ENCOUNTER_SPAWNER_MIN_SEPARATION
+        && dx < ENCOUNTER_SPAWNER_MAX_SEPARATION
+        && dy > ENCOUNTER_SPAWNER_MIN_SEPARATION
+        && dy < ENCOUNTER_SPAWNER_MAX_SEPARATION
+}
+
+/// `encounters.md §4` sea-creature wander-counter seed. Sea-creature
+/// class spawns receive this auxiliary value to seed their outdoor
+/// animation/wander counter; other classes start with zero.
+pub const SEA_CREATURE_WANDER_SEED: u8 = 100;
+
 /// `encounters.md §4` random-spawn bucket weight tables. The picker
 /// rolls on a `0..=255` scale, walks weights in the order below,
 /// and returns the first row whose cumulative weight covers the
