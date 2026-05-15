@@ -1377,6 +1377,47 @@
     }
 
     #[test]
+    fn first_monster_ability_picks_in_spec_order() {
+        // combat.md §9
+        assert_eq!(MONSTER_ABILITY_POSSESS, 0x0040);
+        assert_eq!(MONSTER_ABILITY_BLINK, 0x0800);
+        assert_eq!(MONSTER_ABILITY_SUMMON_DAEMON, 0x0400);
+        // No ability bits
+        assert_eq!(first_monster_ability(0), None);
+        assert_eq!(first_monster_ability(0xFFFF & !(0x0040 | 0x0400 | 0x0800)), None);
+        // One bit at a time
+        assert_eq!(
+            first_monster_ability(MONSTER_ABILITY_POSSESS),
+            Some(MonsterAbility::Possess)
+        );
+        assert_eq!(
+            first_monster_ability(MONSTER_ABILITY_BLINK),
+            Some(MonsterAbility::Blink)
+        );
+        assert_eq!(
+            first_monster_ability(MONSTER_ABILITY_SUMMON_DAEMON),
+            Some(MonsterAbility::SummonDaemon)
+        );
+        // Multiple bits — possess wins, then blink, then summon
+        assert_eq!(
+            first_monster_ability(MONSTER_ABILITY_POSSESS | MONSTER_ABILITY_BLINK),
+            Some(MonsterAbility::Possess)
+        );
+        assert_eq!(
+            first_monster_ability(
+                MONSTER_ABILITY_POSSESS
+                    | MONSTER_ABILITY_BLINK
+                    | MONSTER_ABILITY_SUMMON_DAEMON
+            ),
+            Some(MonsterAbility::Possess)
+        );
+        assert_eq!(
+            first_monster_ability(MONSTER_ABILITY_BLINK | MONSTER_ABILITY_SUMMON_DAEMON),
+            Some(MonsterAbility::Blink)
+        );
+    }
+
+    #[test]
     fn dungeon_pit_trap_kind_classifies_per_spec_table() {
         // dungeon-mode.md §8
         assert_eq!(dungeon_pit_trap_kind(0x60), Some(DungeonPitTrap::PlainPit));

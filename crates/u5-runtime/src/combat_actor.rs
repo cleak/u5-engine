@@ -6,6 +6,41 @@ pub const COMBAT_ACTOR_SLOTS: usize = 32;
 pub const COMBAT_PARTY_ACTOR_SLOTS: usize = 6;
 pub const COMBAT_ACTOR_RECORD_LEN: usize = 8;
 
+/// `combat.md §9` Pass-2 monster class-flag ability bits, tested in
+/// fixed order: possess/charm-on-turn first, then blink/phase, then
+/// summon-daemon. Variant classes carrying multiple bits attempt
+/// possess first.
+pub const MONSTER_ABILITY_POSSESS: u16 = 0x0040;
+pub const MONSTER_ABILITY_BLINK: u16 = 0x0800;
+pub const MONSTER_ABILITY_SUMMON_DAEMON: u16 = 0x0400;
+
+/// `combat.md §9` monster class-flag ability bit tested in turn-pass 2.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MonsterAbility {
+    /// `0x0040` — possess/charm-on-turn.
+    Possess,
+    /// `0x0800` — blink/phase (~1-in-8 toggle).
+    Blink,
+    /// `0x0400` — summon-daemon (~1-in-8 placement attempt).
+    SummonDaemon,
+}
+
+/// `combat.md §9`: select the monster ability the Pass-2 hook attempts
+/// first for the given class flag word. The fixed branch order is
+/// possess → blink → summon-daemon, so a class with multiple bits
+/// returns possess. Returns `None` when no ability bit is set.
+pub const fn first_monster_ability(class_flags: u16) -> Option<MonsterAbility> {
+    if class_flags & MONSTER_ABILITY_POSSESS != 0 {
+        Some(MonsterAbility::Possess)
+    } else if class_flags & MONSTER_ABILITY_BLINK != 0 {
+        Some(MonsterAbility::Blink)
+    } else if class_flags & MONSTER_ABILITY_SUMMON_DAEMON != 0 {
+        Some(MonsterAbility::SummonDaemon)
+    } else {
+        None
+    }
+}
+
 pub const COMBAT_ACTOR_FLAG_TEAM_TOGGLE: u8 = 0x01;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_80: u8 = 0x80;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_40: u8 = 0x40;
