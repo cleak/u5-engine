@@ -4,6 +4,38 @@ use std::io;
 
 use crate::*;
 
+/// `encounters.md §4` outdoor arena bank size: sixteen 11x11 arenas
+/// stored in the on-disk `outdoor combat arena bank`.
+pub const OUTDOOR_ARENA_COUNT: usize = 16;
+
+/// `encounters.md §4` outdoor-arena trigger-class window: the linear
+/// formula `arena_id = (class - 0x40) / 4` covers class bytes
+/// `0x40..=0x7F`. Class bytes outside this window fall through to
+/// scripted handling.
+pub const OUTDOOR_ARENA_CLASS_FIRST: u8 = 0x40;
+pub const OUTDOOR_ARENA_CLASS_LAST: u8 = 0x7F;
+
+/// `encounters.md §4` skiff/pirate-ship special class id. The active
+/// object's class for pirate-ship encounters is hard-coded to arena 1
+/// regardless of where the linear formula would place it.
+pub const OUTDOOR_ARENA_SKIFF_CLASS: u8 = 0x18;
+pub const OUTDOOR_ARENA_SKIFF_INDEX: u8 = 1;
+
+/// `encounters.md §4`: returns the outdoor arena id (`0..=15`) for an
+/// active-object trigger class byte. Class bytes inside `0x40..=0x7F`
+/// use the linear formula `(class - 0x40) / 4`; the skiff/pirate-ship
+/// class hard-codes arena 1; other class bytes fall through (`None`)
+/// to scripted handling.
+pub const fn outdoor_arena_id_for_class(class_byte: u8) -> Option<u8> {
+    if class_byte == OUTDOOR_ARENA_SKIFF_CLASS {
+        return Some(OUTDOOR_ARENA_SKIFF_INDEX);
+    }
+    if class_byte < OUTDOOR_ARENA_CLASS_FIRST || class_byte > OUTDOOR_ARENA_CLASS_LAST {
+        return None;
+    }
+    Some((class_byte - OUTDOOR_ARENA_CLASS_FIRST) / 4)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TerrainCombatSetup {
     pub arena_index: usize,

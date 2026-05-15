@@ -1,4 +1,32 @@
     #[test]
+    fn outdoor_arena_id_for_class_matches_spec_table() {
+        // encounters.md §4
+        assert_eq!(OUTDOOR_ARENA_COUNT, 16);
+        // Linear formula across 0x40..=0x7F.
+        for arena in 0u8..16 {
+            let first = OUTDOOR_ARENA_CLASS_FIRST + arena * 4;
+            for offset in 0u8..4 {
+                let class_byte = first + offset;
+                assert_eq!(
+                    outdoor_arena_id_for_class(class_byte),
+                    Some(arena),
+                    "class {class_byte:#x} expected arena {arena}"
+                );
+            }
+        }
+        // Skiff/pirate-ship special hard-codes arena 1.
+        assert_eq!(
+            outdoor_arena_id_for_class(OUTDOOR_ARENA_SKIFF_CLASS),
+            Some(OUTDOOR_ARENA_SKIFF_INDEX)
+        );
+        // Out-of-window classes fall through to scripted handling.
+        assert_eq!(outdoor_arena_id_for_class(0x00), None);
+        assert_eq!(outdoor_arena_id_for_class(0x3F), None);
+        assert_eq!(outdoor_arena_id_for_class(0x80), None);
+        assert_eq!(outdoor_arena_id_for_class(0xFF), None);
+    }
+
+    #[test]
     fn random_encounter_probe_spawn_predicate_matches_spec() {
         // encounters.md §3
         assert_eq!(RANDOM_ENCOUNTER_ROLL_BOUND, 30);
