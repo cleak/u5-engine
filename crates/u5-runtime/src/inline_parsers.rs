@@ -521,6 +521,27 @@ pub const fn spell_scene_bit_for_scene_byte(byte: u8) -> u8 {
     }
 }
 
+/// Per `combat.md §10`: spell MP cost is `(spell_id / 6) + 1` for the
+/// public eight-circles-of-six-spells layout. Returns `None` for spell
+/// indices outside the 48-spell range.
+pub const fn spell_mp_cost(spell_index: usize) -> Option<u8> {
+    if spell_index < SPELL_COUNT {
+        Some((spell_index / 6) as u8 + 1)
+    } else {
+        None
+    }
+}
+
+/// Zero-based spell circle = `spell_id / 6`. Useful for the level-gate per
+/// `catalogs/spell-list.md` (caster must reach at least `circle + 1`).
+pub const fn spell_circle_index(spell_index: usize) -> Option<u8> {
+    if spell_index < SPELL_COUNT {
+        Some((spell_index / 6) as u8)
+    } else {
+        None
+    }
+}
+
 pub fn spell_allowed_in_area(spell_index: usize, area: Area) -> bool {
     SPELL_SCENE_MASKS[spell_index] & spell_scene_bit_for_area(area) != 0
 }

@@ -1051,6 +1051,25 @@
     }
 
     #[test]
+    fn spell_mp_cost_follows_eight_circles_of_six_layout() {
+        // combat.md §10: spell MP cost is (spell_id / 6) + 1.
+        // Circle 0 (id 0..5) costs 1; circle 1 (6..11) costs 2; ...
+        // circle 7 (42..47) costs 8.
+        assert_eq!(spell_mp_cost(0), Some(1));
+        assert_eq!(spell_mp_cost(5), Some(1));
+        assert_eq!(spell_mp_cost(6), Some(2));
+        assert_eq!(spell_mp_cost(11), Some(2));
+        assert_eq!(spell_mp_cost(12), Some(3));
+        assert_eq!(spell_mp_cost(47), Some(8));
+        assert_eq!(spell_mp_cost(48), None);
+
+        assert_eq!(spell_circle_index(0), Some(0));
+        assert_eq!(spell_circle_index(5), Some(0));
+        assert_eq!(spell_circle_index(47), Some(7));
+        assert_eq!(spell_circle_index(48), None);
+    }
+
+    #[test]
     fn spell_scene_bit_for_scene_byte_matches_published_partition() {
         // catalogs/spell-list.md §4: scene-byte to single-bit mapping.
         // 0 -> overworld, 1..=32 -> indoor, 33..=127 -> dungeon, >=0x80 -> combat.
