@@ -48,6 +48,7 @@ pub mod end_io;
 pub mod endmsg_io;
 pub mod miscmsg_io;
 pub mod question_io;
+pub mod quest_flags;
 pub mod shops;
 pub mod shrine_virtue;
 pub mod signs_io;
@@ -104,6 +105,10 @@ pub use lighting::{
 };
 pub use endmsg_io::{EndgameMessages, load_endgame_messages, parse_endgame_messages};
 pub use miscmsg_io::{MiscMessages, load_misc_messages, parse_misc_messages};
+pub use quest_flags::{
+    ConversationLetterAction, conversation_letter_action, tlk_scene_branch_is_set,
+    tlk_scene_branch_mask, tlk_scene_branch_set,
+};
 pub use question_io::{QuestionRecords, load_question_records, parse_question_records};
 pub use signs_io::{
     SignRecord, decode_sign_payload, find_sign, load_sign_records, parse_sign_records,

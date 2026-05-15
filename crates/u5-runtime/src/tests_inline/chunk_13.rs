@@ -636,6 +636,77 @@
     }
 
     #[test]
+    fn tlk_scene_branch_mask_does_not_wrap() {
+        // quest-flags.md §3
+        assert_eq!(tlk_scene_branch_mask(0), 0x0000_0001);
+        assert_eq!(tlk_scene_branch_mask(1), 0x0000_0002);
+        assert_eq!(tlk_scene_branch_mask(31), 0x8000_0000);
+        // No wrap or clamp: bit 32 and beyond produce zero mask.
+        assert_eq!(tlk_scene_branch_mask(32), 0);
+        assert_eq!(tlk_scene_branch_mask(255), 0);
+
+        // Setter then tester round-trip
+        let slot = tlk_scene_branch_set(0, 5);
+        assert!(tlk_scene_branch_is_set(slot, 5));
+        assert!(!tlk_scene_branch_is_set(slot, 6));
+        // Out-of-range setter is a no-op
+        assert_eq!(tlk_scene_branch_set(slot, 32), slot);
+        assert!(!tlk_scene_branch_is_set(slot, 32));
+    }
+
+    #[test]
+    fn conversation_letter_action_table_matches_spec() {
+        // quest-flags.md §4
+        assert_eq!(
+            conversation_letter_action(b'A'),
+            Some(ConversationLetterAction::GrantFood)
+        );
+        assert_eq!(
+            conversation_letter_action(b'B'),
+            Some(ConversationLetterAction::GrantGold)
+        );
+        assert_eq!(
+            conversation_letter_action(b'C'),
+            Some(ConversationLetterAction::GrantKeys)
+        );
+        assert_eq!(
+            conversation_letter_action(b'D'),
+            Some(ConversationLetterAction::GrantGems)
+        );
+        assert_eq!(
+            conversation_letter_action(b'E'),
+            Some(ConversationLetterAction::GrantTorches)
+        );
+        assert_eq!(
+            conversation_letter_action(b'F'),
+            Some(ConversationLetterAction::SetGrappleGate)
+        );
+        assert_eq!(
+            conversation_letter_action(b'G'),
+            Some(ConversationLetterAction::GrantMagicCarpet)
+        );
+        assert_eq!(
+            conversation_letter_action(b'H'),
+            Some(ConversationLetterAction::SetSextant)
+        );
+        assert_eq!(
+            conversation_letter_action(b'I'),
+            Some(ConversationLetterAction::SetSpyglass)
+        );
+        assert_eq!(
+            conversation_letter_action(b'J'),
+            Some(ConversationLetterAction::SetBlackBadge)
+        );
+        assert_eq!(
+            conversation_letter_action(b'K'),
+            Some(ConversationLetterAction::GrantSkullKeys)
+        );
+        assert_eq!(conversation_letter_action(b'L'), None);
+        assert_eq!(conversation_letter_action(b'a'), None);
+        assert_eq!(conversation_letter_action(0), None);
+    }
+
+    #[test]
     fn visibility_markers_classify_per_spec() {
         // visibility.md §2
         assert_eq!(VIEWPORT_SIDE, 11);
