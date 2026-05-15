@@ -1,4 +1,31 @@
     #[test]
+    fn intro_story_special_step_predicates_match_spec() {
+        // intro.md §10
+        assert_eq!(INTRO_TRANSITION_STRIP_STEPS, [0, 7, 14]);
+        assert_eq!(
+            INTRO_STORY6_SECONDARY_PASS_STEPS,
+            [15, 16, 17, 18, 19, 20]
+        );
+        assert_eq!(INTRO_STORY6_SECONDARY_Y_DELTA, 55);
+
+        // Transition-strip predicate is true only for steps 0, 7, 14.
+        for step in 0usize..INTRO_STORY_STEP_COUNT {
+            let want = matches!(step, 0 | 7 | 14);
+            assert_eq!(intro_step_has_transition_strip(step), want, "step {step}");
+        }
+
+        // STORY6 secondary-pass predicate is true only for steps 15..=20.
+        for step in 0usize..INTRO_STORY_STEP_COUNT {
+            let want = (15..=20).contains(&step);
+            assert_eq!(
+                intro_step_has_story6_secondary_pass(step),
+                want,
+                "step {step}"
+            );
+        }
+    }
+
+    #[test]
     fn reserved_keyword_table_size_matches_spec_inventory() {
         // conversation.md §5
         assert_eq!(RESERVED_KEYWORD_TABLE_ENTRIES, 34);

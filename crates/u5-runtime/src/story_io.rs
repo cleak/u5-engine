@@ -39,6 +39,32 @@ pub const INTRO_INLINE_DOORWAY_STEP: usize = 6;
 /// not wait for input.
 pub const INTRO_AUTO_OPENING_STEP: usize = 0;
 
+/// `intro.md §10` static transition-strip pre-draw steps (each
+/// draws two `TEXT.16` transition subimages before the primary
+/// story-art draw).
+pub const INTRO_TRANSITION_STRIP_STEPS: [usize; 3] = [0, 7, 14];
+
+/// `intro.md §10` secondary `STORY6.16` art-pass steps (each draws
+/// a second STORY6 subimage at the primary X coordinate 55 pixels
+/// below the primary Y).
+pub const INTRO_STORY6_SECONDARY_PASS_STEPS: [usize; 6] = [15, 16, 17, 18, 19, 20];
+
+/// `intro.md §10` Y-pixel delta for the secondary `STORY6.16` pass.
+pub const INTRO_STORY6_SECONDARY_Y_DELTA: u16 = 55;
+
+/// `intro.md §10`: returns `true` for steps that require the static
+/// `TEXT.16` transition-strip pre-draw before the primary story-art
+/// draw.
+pub const fn intro_step_has_transition_strip(step: usize) -> bool {
+    matches!(step, 0 | 7 | 14)
+}
+
+/// `intro.md §10`: returns `true` for the six secondary
+/// `STORY6.16` art-pass steps.
+pub const fn intro_step_has_story6_secondary_pass(step: usize) -> bool {
+    matches!(step, 15..=20)
+}
+
 /// `intro.md §10` — primary story-art placement for one zero-based intro
 /// step. Coordinates use 320-by-200 pixel space with origin at upper-left.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

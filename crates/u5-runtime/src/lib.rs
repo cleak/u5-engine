@@ -246,10 +246,12 @@ pub use signs_io::{
 };
 pub use stat_arithmetic::{capped_add_u8, capped_add_word, floor_sub_u8, floor_sub_word};
 pub use story_io::{
-    INTRO_AUTO_OPENING_STEP, INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT,
-    IntroStoryArtPlacement, STORY_DAT_LEN, STORY_DAT_RECORDS, StoryRecords,
-    intro_story_art_file_for_step, intro_story_art_placement_for_step,
-    load_story_records, parse_story_records,
+    INTRO_AUTO_OPENING_STEP, INTRO_INLINE_DOORWAY_STEP,
+    INTRO_STORY6_SECONDARY_PASS_STEPS, INTRO_STORY6_SECONDARY_Y_DELTA,
+    INTRO_STORY_STEP_COUNT, INTRO_TRANSITION_STRIP_STEPS, IntroStoryArtPlacement,
+    STORY_DAT_LEN, STORY_DAT_RECORDS, StoryRecords, intro_step_has_story6_secondary_pass,
+    intro_step_has_transition_strip, intro_story_art_file_for_step,
+    intro_story_art_placement_for_step, load_story_records, parse_story_records,
 };
 pub use text_wrap::{
     ParagraphByteKind, TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS, TEXT_WINDOW_COUNT,
