@@ -7,6 +7,25 @@
 //! exist so that helpers and tests can refer to spec-named codes without
 //! magic numbers.
 
+/// `formats/tlk.md §5`: each header entry is exactly four bytes
+/// (`(blob_offset, npc_id)`).
+pub const TLK_HEADER_ENTRY_LEN: usize = 4;
+/// `formats/tlk.md §6`: NPC-id `0x0001` is the universal sentinel slot
+/// at the head of every `.TLK` file; no live NPC carries this id.
+pub const TLK_SENTINEL_NPC_ID: u16 = 0x0001;
+/// `formats/tlk.md §4`: the engine performs a single fixed-size header
+/// read of 512 bytes (covers any class — TOWNE's 48-NPC header is only
+/// 192 bytes).
+pub const TLK_HEADER_FIXED_READ: usize = 512;
+/// `formats/tlk.md §4`: blob payload window the engine reads at the
+/// matched `blob_offset`. Shorter blobs may include bytes from
+/// following entries; longer nominal spans are truncated to this
+/// window.
+pub const TLK_BLOB_FIXED_WINDOW: usize = 1024;
+/// `formats/tlk.md §8`: high-bit XOR mask the obfuscated text bytes
+/// carry on disk. Stripping it recovers low-ASCII.
+pub const TLK_TEXT_XOR_MASK: u8 = 0x80;
+
 // §7.2 player-name and stream-control codes
 pub const TLK_CODE_PRINT_AVATAR_NAME: u8 = 0x81;
 pub const TLK_CODE_END_STREAM: u8 = 0x82;

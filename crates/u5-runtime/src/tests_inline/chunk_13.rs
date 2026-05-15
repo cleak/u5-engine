@@ -2325,6 +2325,20 @@
     }
 
     #[test]
+    fn tlk_file_layout_constants_match_spec() {
+        // formats/tlk.md §4-§8
+        assert_eq!(TLK_HEADER_ENTRY_LEN, 4);
+        assert_eq!(TLK_SENTINEL_NPC_ID, 0x0001);
+        assert_eq!(TLK_HEADER_FIXED_READ, 512);
+        assert_eq!(TLK_BLOB_FIXED_WINDOW, 1024);
+        assert_eq!(TLK_TEXT_XOR_MASK, 0x80);
+        // Apply the XOR mask to a printable byte to recover plain
+        // ASCII per §8.
+        assert_eq!(b'A' ^ TLK_TEXT_XOR_MASK, 0xC1);
+        assert_eq!(b' ' ^ TLK_TEXT_XOR_MASK, 0xA0);
+    }
+
+    #[test]
     fn reserved_keyword_effect_matches_spec_words() {
         // conversation.md §6
         assert_eq!(TLK_INPUT_MAX_LEN, 15);
