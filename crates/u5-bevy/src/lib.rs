@@ -12,6 +12,7 @@ use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
+use bevy::text::TextBounds;
 
 use u5_runtime::{
     Area, Direction, PlayInputDisposition, PlayOptions, PlayState, TILE_ATLAS_SIDE, TileAtlas,
@@ -272,6 +273,7 @@ fn setup(
         },
         TextColor(Color::WHITE),
         TextLayout::new_with_justify(JustifyText::Center),
+        TextBounds::new_horizontal(display_size - 16.0),
         Transform::from_xyz(0.0, -display_size * 0.5, 0.0),
         StatusText,
     ));
