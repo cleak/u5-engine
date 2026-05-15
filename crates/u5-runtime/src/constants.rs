@@ -431,6 +431,24 @@ pub const HORSE_OBJECT_LAST: u8 = 0x11;
 pub const HORSE_TRANSPORT_FIRST: u8 = 0x12;
 pub const HORSE_TRANSPORT_LAST: u8 = 0x13;
 
+/// Active-object slot allocator boundaries per `active-objects.md` §4.
+/// Slot 0 is the canonical player slot; the ordinary acquisition path
+/// searches slots `1..=23`; slots `24..=31` are reserved for setup paths
+/// outside the allocator. Byte-0 value `0xB5` is universally protected from
+/// eviction (Grendel/monster-variant actor class).
+pub const ACTIVE_OBJECT_PLAYER_SLOT: usize = 0;
+pub const ACTIVE_OBJECT_ORDINARY_FIRST: usize = 1;
+pub const ACTIVE_OBJECT_ORDINARY_LAST: usize = 23;
+pub const ACTIVE_OBJECT_RESERVED_FIRST: usize = 24;
+pub const ACTIVE_OBJECT_RESERVED_LAST: usize = 31;
+/// Universally protected byte-0 value: never an eviction victim, never
+/// recycled by the slot allocator's last-resort phase.
+pub const ACTIVE_OBJECT_PROTECTED_TYPE_BYTE: u8 = 0xB5;
+/// `active-objects.md` §4 off-screen test radius. A candidate more than
+/// roughly five cells from the player in either axis is eligible for the
+/// off-screen eviction phases.
+pub const ACTIVE_OBJECT_OFF_SCREEN_RADIUS: usize = 5;
+
 pub const SPELL_CODES: [&str; SPELL_COUNT] = [
     "IL", "GP", "AZ", "AN", "M", "AY", "AS", "ACX", "HR", "IW", "KX", "IMX", "LV", "FV", "FGI",
     "GIN", "GIZ", "IP", "AG", "IS", "GIS", "PU", "DP", "QW", "BIX", "AEP", "EIP", "MV", "IZ", "RT",

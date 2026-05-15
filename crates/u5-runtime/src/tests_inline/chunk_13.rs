@@ -667,6 +667,20 @@
     }
 
     #[test]
+    fn active_object_slot_partition_constants_match_section_four() {
+        // active-objects.md §4: slot 0 player; ordinary 1..=23; reserved
+        // 24..=31; 0xB5 is the universally protected byte-0; off-screen
+        // test radius is five cells.
+        assert_eq!(ACTIVE_OBJECT_PLAYER_SLOT, 0);
+        assert_eq!(ACTIVE_OBJECT_ORDINARY_FIRST, 1);
+        assert_eq!(ACTIVE_OBJECT_ORDINARY_LAST, 23);
+        assert_eq!(ACTIVE_OBJECT_RESERVED_FIRST, 24);
+        assert_eq!(ACTIVE_OBJECT_RESERVED_LAST, 31);
+        assert_eq!(ACTIVE_OBJECT_PROTECTED_TYPE_BYTE, 0xB5);
+        assert_eq!(ACTIVE_OBJECT_OFF_SCREEN_RADIUS, 5);
+    }
+
+    #[test]
     fn tlk_introducer_argument_widths_match_section_seven_six() {
         // conversation.md §7.6: 0x85 GOLD-PAYMENT takes 3 bytes, 0x86
         // ACTION-DISPATCH and 0x8C IF-ELSE take 1 byte, 0xFE IF-ELSE-ALT
