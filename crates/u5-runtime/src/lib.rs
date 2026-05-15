@@ -34,6 +34,7 @@ pub mod jimmy;
 pub mod karma;
 pub mod lighting;
 pub mod magic;
+pub mod main_loop;
 pub mod lzw;
 pub mod map_decoders;
 pub mod map_io;
@@ -116,6 +117,12 @@ pub use jimmy::{
 pub use karma::{KarmaAction, apply_karma_action};
 pub use magic::{
     CastGateOutcome, cast_dispatcher_gate, heal_spell_amount_from_raw_roll_u8,
+};
+pub use main_loop::{
+    SCENE_COMBAT_TEMPORARY, SCENE_DUNGEON_FAMILY_FIRST, SCENE_DUNGEON_FAMILY_LAST,
+    SCENE_DUNGEON_NAMED_FIRST, SCENE_DUNGEON_NAMED_LAST, SCENE_INTRO_FIRST, SCENE_INTRO_LAST,
+    SCENE_OVERWORLD, SCENE_TOWN_FAMILY_FIRST, SCENE_TOWN_FAMILY_LAST, SceneRoute,
+    dungeon_record_index, mode_minute_increment, scene_route,
 };
 pub use lighting::{
     GREAT_LIGHT_SPELL_DURATION, LIGHT_SPELL_DURATION, ambient_is_sentinel,

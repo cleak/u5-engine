@@ -636,6 +636,39 @@
     }
 
     #[test]
+    fn scene_route_classifies_per_main_loop_table() {
+        // main-loop.md §3,§4
+        assert_eq!(scene_route(0), SceneRoute::Overworld);
+        for v in 1..=32u8 {
+            assert_eq!(scene_route(v), SceneRoute::TownFamily);
+        }
+        for v in [33u8, 40, 50, 100, 127] {
+            assert_eq!(scene_route(v), SceneRoute::Dungeon);
+        }
+        for v in 0x40..=0x42u8 {
+            assert_eq!(scene_route(v), SceneRoute::IntroOrPreview);
+        }
+        assert_eq!(scene_route(0xFF), SceneRoute::CombatTemporary);
+        // Outside-the-stock-byte high range routes to combat (high
+        // values are treated as combat-class by readers).
+        assert_eq!(scene_route(0x80), SceneRoute::CombatTemporary);
+        assert_eq!(scene_route(0xFE), SceneRoute::CombatTemporary);
+
+        // Stock-named DUNGEON.DAT record indices (33..=40 -> 0..=7)
+        assert_eq!(dungeon_record_index(32), None);
+        assert_eq!(dungeon_record_index(33), Some(0));
+        assert_eq!(dungeon_record_index(40), Some(7));
+        assert_eq!(dungeon_record_index(41), None);
+
+        // Per-mode minute increments
+        assert_eq!(mode_minute_increment(SceneRoute::Overworld), Some(2));
+        assert_eq!(mode_minute_increment(SceneRoute::TownFamily), Some(1));
+        assert_eq!(mode_minute_increment(SceneRoute::Dungeon), Some(1));
+        assert_eq!(mode_minute_increment(SceneRoute::IntroOrPreview), None);
+        assert_eq!(mode_minute_increment(SceneRoute::CombatTemporary), None);
+    }
+
+    #[test]
     fn npc_path_direction_codes_match_spec_table() {
         // npc-schedules.md §8.2
         assert_eq!(NPC_PATH_DIR_WEST, 1);
