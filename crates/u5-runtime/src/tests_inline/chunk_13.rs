@@ -1,4 +1,49 @@
     #[test]
+    fn potion_use_effects_match_spec_display_order() {
+        // inventory.md §7
+        assert_eq!(POTION_USE_EFFECT_COUNT, 8);
+        assert_eq!(POTION_VARIATION_DENOMINATOR, 16);
+
+        assert_eq!(potion_use_effect(0), Some(PotionUseEffect::Wake));
+        assert_eq!(potion_use_effect(1), Some(PotionUseEffect::Heal));
+        assert_eq!(potion_use_effect(2), Some(PotionUseEffect::CurePoison));
+        assert_eq!(potion_use_effect(3), Some(PotionUseEffect::Poison));
+        assert_eq!(potion_use_effect(4), Some(PotionUseEffect::Sleep));
+        assert_eq!(
+            potion_use_effect(5),
+            Some(PotionUseEffect::PoofPresentation)
+        );
+        assert_eq!(
+            potion_use_effect(6),
+            Some(PotionUseEffect::CombatInvisibility)
+        );
+        assert_eq!(
+            potion_use_effect(7),
+            Some(PotionUseEffect::VisibilitySweep)
+        );
+        assert_eq!(potion_use_effect(8), None);
+        assert_eq!(potion_use_effect(255), None);
+
+        // Cross-check against the existing POTION_*_INDEX constants.
+        assert_eq!(
+            potion_use_effect(POTION_BLUE_INDEX),
+            Some(PotionUseEffect::Wake)
+        );
+        assert_eq!(
+            potion_use_effect(POTION_RED_INDEX),
+            Some(PotionUseEffect::CurePoison)
+        );
+        assert_eq!(
+            potion_use_effect(POTION_GREEN_INDEX),
+            Some(PotionUseEffect::Poison)
+        );
+        assert_eq!(
+            potion_use_effect(POTION_ORANGE_INDEX),
+            Some(PotionUseEffect::Sleep)
+        );
+    }
+
+    #[test]
     fn scroll_use_effects_match_spec_table() {
         // inventory.md §7
         assert_eq!(SCROLL_USE_EFFECT_COUNT, 8);

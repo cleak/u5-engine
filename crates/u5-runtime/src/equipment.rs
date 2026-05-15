@@ -136,6 +136,56 @@ pub const ITEM_ID_CROSSBOW: u8 = 28;
 pub const ITEM_ID_QUARRELS: u8 = 29;
 pub const ITEM_ID_MAGIC_BOW: u8 = 36;
 
+/// `inventory.md §7` U-Use potion family. The eight colour-coded
+/// counters dispatch through a party-member target path. Display
+/// order is Blue, Yellow, Red, Green, Orange, Purple, Black, White
+/// with the spec's per-colour normal effects.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PotionUseEffect {
+    /// Blue (index 0) — Wake. Restores a sleeping member.
+    Wake,
+    /// Yellow (index 1) — Heal.
+    Heal,
+    /// Red (index 2) — Cure poison.
+    CurePoison,
+    /// Green (index 3) — Poison.
+    Poison,
+    /// Orange (index 4) — Sleep.
+    Sleep,
+    /// Purple (index 5) — Combat-only "Poof" presentation.
+    PoofPresentation,
+    /// Black (index 6) — Combat invisibility.
+    CombatInvisibility,
+    /// White (index 7) — Surface/town visibility-sweep animation.
+    VisibilitySweep,
+}
+
+/// `inventory.md §7` potion-counter index space (8 entries).
+pub const POTION_USE_EFFECT_COUNT: usize = 8;
+
+/// `inventory.md §7`: classify a potion counter index `0..=7` into
+/// its dispatched effect. Returns `None` for indices outside that
+/// range.
+pub const fn potion_use_effect(index: usize) -> Option<PotionUseEffect> {
+    Some(match index {
+        0 => PotionUseEffect::Wake,
+        1 => PotionUseEffect::Heal,
+        2 => PotionUseEffect::CurePoison,
+        3 => PotionUseEffect::Poison,
+        4 => PotionUseEffect::Sleep,
+        5 => PotionUseEffect::PoofPresentation,
+        6 => PotionUseEffect::CombatInvisibility,
+        7 => PotionUseEffect::VisibilitySweep,
+        _ => return None,
+    })
+}
+
+/// `inventory.md §7` potion variation roll denominator. The
+/// consumed-potion variation roll gives 1-in-16 chance to force the
+/// Orange sleep effect and 1-in-16 to replace the effect with a
+/// uniformly random potion row.
+pub const POTION_VARIATION_DENOMINATOR: u8 = 16;
+
 /// `inventory.md §7` U-Use scroll family. The handler exposes eight
 /// scroll counters dispatching to spell-like effects in this order:
 /// Light, Wind Change, Protection, Negate Magic, View, Summon
