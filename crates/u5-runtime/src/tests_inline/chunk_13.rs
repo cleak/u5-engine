@@ -1051,6 +1051,30 @@
     }
 
     #[test]
+    fn spell_mp_cost_matches_published_per_spell_cost_constants() {
+        // combat.md §10 says cost = (id/6)+1. Cross-check the formula
+        // against the named per-spell COST constants for several spells.
+        assert_eq!(spell_mp_cost(IN_LOR_SPELL_INDEX), Some(IN_LOR_COST));
+        assert_eq!(spell_mp_cost(AWAKEN_SPELL_INDEX), Some(AWAKEN_COST));
+        assert_eq!(spell_mp_cost(CURE_SPELL_INDEX), Some(CURE_COST));
+        assert_eq!(spell_mp_cost(HEAL_SPELL_INDEX), Some(HEAL_COST));
+        assert_eq!(spell_mp_cost(REL_HUR_SPELL_INDEX), Some(REL_HUR_COST));
+        assert_eq!(spell_mp_cost(IN_WIS_SPELL_INDEX), Some(IN_WIS_COST));
+        assert_eq!(spell_mp_cost(CREATE_FOOD_SPELL_INDEX), Some(CREATE_FOOD_COST));
+        assert_eq!(spell_mp_cost(VAS_LOR_SPELL_INDEX), Some(VAS_LOR_COST));
+        assert_eq!(spell_mp_cost(BLINK_SPELL_INDEX), Some(BLINK_COST));
+        assert_eq!(spell_mp_cost(PROTECTION_SPELL_INDEX), Some(PROTECTION_COST));
+        assert_eq!(spell_mp_cost(GREAT_HEAL_SPELL_INDEX), Some(GREAT_HEAL_COST));
+        assert_eq!(spell_mp_cost(QUICKNESS_SPELL_INDEX), Some(QUICKNESS_COST));
+        assert_eq!(spell_mp_cost(MASS_CHARM_SPELL_INDEX), Some(MASS_CHARM_COST));
+        assert_eq!(spell_mp_cost(NEGATE_MAGIC_SPELL_INDEX), Some(NEGATE_MAGIC_COST));
+        assert_eq!(spell_mp_cost(PEER_SPELL_INDEX), Some(PEER_COST));
+        assert_eq!(spell_mp_cost(RESURRECT_SPELL_INDEX), Some(RESURRECT_COST));
+        assert_eq!(spell_mp_cost(GATE_TRAVEL_SPELL_INDEX), Some(GATE_TRAVEL_COST));
+        assert_eq!(spell_mp_cost(TIME_STOP_SPELL_INDEX), Some(TIME_STOP_COST));
+    }
+
+    #[test]
     fn spell_mp_cost_follows_eight_circles_of_six_layout() {
         // combat.md §10: spell MP cost is (spell_id / 6) + 1.
         // Circle 0 (id 0..5) costs 1; circle 1 (6..11) costs 2; ...
