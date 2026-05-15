@@ -636,6 +636,29 @@
     }
 
     #[test]
+    fn town_tile_predicates_match_published_catalog_ranges() {
+        // catalogs/tile-catalog.md §6: door 96..=103, stair 0xC4..=0xC7,
+        // chair 0x8C, NPC floor-link markers 0xC8 and 0xC9.
+        assert!(is_town_door_tile(96));
+        assert!(is_town_door_tile(99));
+        assert!(is_town_door_tile(103));
+        assert!(!is_town_door_tile(95));
+        assert!(!is_town_door_tile(104));
+
+        assert!(is_town_stair_tile(0xC4));
+        assert!(is_town_stair_tile(0xC7));
+        assert!(!is_town_stair_tile(0xC3));
+        assert!(!is_town_stair_tile(0xC8));
+
+        assert!(is_npc_floor_link_tile(0xC8));
+        assert!(is_npc_floor_link_tile(0xC9));
+        assert!(!is_npc_floor_link_tile(0xC7));
+        assert!(!is_npc_floor_link_tile(0xCA));
+
+        assert_eq!(TOWN_CHAIR_TILE, 0x8C);
+    }
+
+    #[test]
     fn spell_damage_caps_and_kill_sentinel_match_spec_table() {
         // catalogs/spell-list.md §5: Magic Missile raw 1..16 (id 1),
         // Fireball raw 1..30 (id 13), Kill is single-target instant kill

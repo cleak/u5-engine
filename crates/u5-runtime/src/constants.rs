@@ -389,6 +389,24 @@ pub const KILL_SPELL_INDEX: usize = 37;
 /// Fire-Field per-actor raw damage roll cap per `combat.md` §11. Energy
 /// Field supplies raw zero to the same damage path; that case has no cap.
 pub const FIRE_FIELD_RAW_DAMAGE_MAX: u8 = 21;
+
+/// Inclusive town/world door tile-id range per `catalogs/tile-catalog.md` §6:
+/// indices `96..=103` are the door family used by O-Open / J-Jimmy / magic
+/// Open. Open variants written by the O command live in this range alongside
+/// the closed forms.
+pub const TOWN_DOOR_TILE_FIRST: u8 = 96;
+pub const TOWN_DOOR_TILE_LAST: u8 = 103;
+/// Inclusive town stair tile-id range per `catalogs/tile-catalog.md` §6:
+/// `0xC4..=0xC7` is the facing-sensitive stairway family whose low two bits
+/// encode movement-wrapper-normalised facing.
+pub const TOWN_STAIR_TILE_FIRST: u8 = 0xC4;
+pub const TOWN_STAIR_TILE_LAST: u8 = 0xC7;
+/// Town chair trigger tile per `catalogs/tile-catalog.md` §6.
+pub const TOWN_CHAIR_TILE: u8 = 0x8C;
+/// NPC floor-link marker tiles consumed by the schedule pathfinder per
+/// `catalogs/tile-catalog.md` §6.
+pub const NPC_FLOOR_LINK_TILE_A: u8 = 0xC8;
+pub const NPC_FLOOR_LINK_TILE_B: u8 = 0xC9;
 pub const SPELL_CODES: [&str; SPELL_COUNT] = [
     "IL", "GP", "AZ", "AN", "M", "AY", "AS", "ACX", "HR", "IW", "KX", "IMX", "LV", "FV", "FGI",
     "GIN", "GIZ", "IP", "AG", "IS", "GIS", "PU", "DP", "QW", "BIX", "AEP", "EIP", "MV", "IZ", "RT",

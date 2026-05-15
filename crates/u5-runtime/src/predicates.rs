@@ -7,6 +7,28 @@ use std::path::{Path, PathBuf};
 
 use crate::*;
 
+/// `catalogs/tile-catalog.md` §6: any tile id in the door family
+/// (`96..=103`) is a town/world door tile that blocks movement when closed
+/// and dispatches the door-interaction handler.
+pub const fn is_town_door_tile(tile: u8) -> bool {
+    tile >= TOWN_DOOR_TILE_FIRST && tile <= TOWN_DOOR_TILE_LAST
+}
+
+/// `catalogs/tile-catalog.md` §6: town stair tile-id family
+/// (`0xC4..=0xC7`). The low two bits of the tile id are the
+/// movement-wrapper-normalised facing.
+pub const fn is_town_stair_tile(tile: u8) -> bool {
+    tile >= TOWN_STAIR_TILE_FIRST && tile <= TOWN_STAIR_TILE_LAST
+}
+
+/// `catalogs/tile-catalog.md` §6: NPC floor-link marker tiles consumed by
+/// the schedule pathfinder's tile-ID variant. The two bytes are
+/// authored-only annotations, not ordinary furniture; do not treat them as
+/// passable terrain without consulting the schedule spec.
+pub const fn is_npc_floor_link_tile(tile: u8) -> bool {
+    tile == NPC_FLOOR_LINK_TILE_A || tile == NPC_FLOOR_LINK_TILE_B
+}
+
 pub fn is_probe_walkable(tile: u8) -> bool {
     if is_location_entry_marker(tile) {
         return true;
