@@ -190,8 +190,10 @@ pub use main_loop::{
     DungeonEntrySeed, SCENE_COMBAT_TEMPORARY, SCENE_DUNGEON_FAMILY_FIRST,
     SCENE_DUNGEON_FAMILY_LAST, SCENE_DUNGEON_NAMED_FIRST, SCENE_DUNGEON_NAMED_LAST,
     SCENE_INTRO_FIRST, SCENE_INTRO_LAST, SCENE_OVERWORLD, SCENE_TOWN_FAMILY_FIRST,
-    SCENE_TOWN_FAMILY_LAST, SceneRoute, dungeon_entry_seed, dungeon_record_index,
-    dungeon_resident_name, mode_minute_increment, scene_route,
+    SCENE_TOWN_FAMILY_LAST, SceneRoute, dungeon_entry_seed,
+    dungeon_facing_back_delta, dungeon_facing_forward_delta,
+    dungeon_facing_turn_around, dungeon_facing_turn_left, dungeon_facing_turn_right,
+    dungeon_record_index, dungeon_resident_name, mode_minute_increment, scene_route,
 };
 pub use lighting::{
     GREAT_LIGHT_SPELL_DURATION, LIGHT_SPELL_DURATION, LightDecayCadence,

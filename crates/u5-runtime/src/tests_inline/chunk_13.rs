@@ -1,4 +1,36 @@
     #[test]
+    fn dungeon_facing_helpers_match_spec() {
+        // dungeon-mode.md §9
+        // Forward delta per facing.
+        assert_eq!(dungeon_facing_forward_delta(DUNGEON_FACING_NORTH), Some((0, -1)));
+        assert_eq!(dungeon_facing_forward_delta(DUNGEON_FACING_EAST), Some((1, 0)));
+        assert_eq!(dungeon_facing_forward_delta(DUNGEON_FACING_SOUTH), Some((0, 1)));
+        assert_eq!(dungeon_facing_forward_delta(DUNGEON_FACING_WEST), Some((-1, 0)));
+        assert_eq!(dungeon_facing_forward_delta(4), None);
+
+        // Back delta is negation of forward.
+        for f in 0u8..4 {
+            let fwd = dungeon_facing_forward_delta(f).unwrap();
+            let bwd = dungeon_facing_back_delta(f).unwrap();
+            assert_eq!((bwd.0, bwd.1), (-fwd.0, -fwd.1));
+        }
+
+        // Turning rotates facing modulo 4.
+        assert_eq!(dungeon_facing_turn_left(DUNGEON_FACING_NORTH), DUNGEON_FACING_WEST);
+        assert_eq!(dungeon_facing_turn_left(DUNGEON_FACING_WEST), DUNGEON_FACING_SOUTH);
+        assert_eq!(dungeon_facing_turn_right(DUNGEON_FACING_NORTH), DUNGEON_FACING_EAST);
+        assert_eq!(dungeon_facing_turn_right(DUNGEON_FACING_WEST), DUNGEON_FACING_NORTH);
+        assert_eq!(dungeon_facing_turn_around(DUNGEON_FACING_NORTH), DUNGEON_FACING_SOUTH);
+        assert_eq!(dungeon_facing_turn_around(DUNGEON_FACING_EAST), DUNGEON_FACING_WEST);
+
+        // Two left turns == one turnaround.
+        for f in 0u8..4 {
+            let two_left = dungeon_facing_turn_left(dungeon_facing_turn_left(f));
+            assert_eq!(two_left, dungeon_facing_turn_around(f));
+        }
+    }
+
+    #[test]
     fn dungeon_chest_trap_tier_matches_spec_bands() {
         // dungeon-mode.md §8
         // Tier < 4 -> Simple.

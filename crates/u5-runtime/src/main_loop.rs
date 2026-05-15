@@ -86,6 +86,47 @@ pub const DUNGEON_FACING_EAST: u8 = 1;
 pub const DUNGEON_FACING_SOUTH: u8 = 2;
 pub const DUNGEON_FACING_WEST: u8 = 3;
 
+/// `dungeon-mode.md §9` per-facing forward step `(dx, dy)` on the
+/// 8x8 floor. The party moves into `(x + dx, y + dy)` for the
+/// supplied facing, with X west-to-east and Y north-to-south. The
+/// floor wraps modulo 8 in the caller; this helper returns the raw
+/// signed delta. Returns `None` for facing values outside `0..=3`.
+pub const fn dungeon_facing_forward_delta(facing: u8) -> Option<(i8, i8)> {
+    match facing {
+        DUNGEON_FACING_NORTH => Some((0, -1)),
+        DUNGEON_FACING_EAST => Some((1, 0)),
+        DUNGEON_FACING_SOUTH => Some((0, 1)),
+        DUNGEON_FACING_WEST => Some((-1, 0)),
+        _ => None,
+    }
+}
+
+/// `dungeon-mode.md §9` per-facing back-step `(dx, dy)`: the
+/// negation of the forward delta.
+pub const fn dungeon_facing_back_delta(facing: u8) -> Option<(i8, i8)> {
+    match dungeon_facing_forward_delta(facing) {
+        Some((dx, dy)) => Some((-dx, -dy)),
+        None => None,
+    }
+}
+
+/// `dungeon-mode.md §9` left turn — decrement facing modulo 4.
+pub const fn dungeon_facing_turn_left(facing: u8) -> u8 {
+    (facing + 3) % 4
+}
+
+/// `dungeon-mode.md §9` right turn — increment facing modulo 4.
+pub const fn dungeon_facing_turn_right(facing: u8) -> u8 {
+    (facing + 1) % 4
+}
+
+/// `dungeon-mode.md §9` 180-degree turnaround — facing + 2 mod 4.
+/// The unrecognised-movement-subcode fallthrough rotates the party
+/// by this amount.
+pub const fn dungeon_facing_turn_around(facing: u8) -> u8 {
+    (facing + 2) % 4
+}
+
 /// `catalogs/gazetteer.md §6`: pick the entry seed for the given
 /// dungeon scene byte and origin plane. Doom uses the surface seed
 /// even when reached from the underworld.
