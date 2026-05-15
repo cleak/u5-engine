@@ -1,4 +1,26 @@
     #[test]
+    fn underworld_stack_alternates_armour_and_weapon() {
+        // hidden-treasures.md §3 records 0..=11
+        assert_eq!(HIDDEN_TREASURE_UNDERWORLD_STACK_LEN, 12);
+        assert_eq!(HIDDEN_TREASURE_UNDERWORLD_STACK_FLOOR, 255);
+        assert_eq!(HIDDEN_TREASURE_UNDERWORLD_STACK_X, 233);
+        assert_eq!(HIDDEN_TREASURE_UNDERWORLD_STACK_Y, 233);
+        for record in HIDDEN_TREASURE_UNDERWORLD_STACK_FIRST
+            ..=HIDDEN_TREASURE_UNDERWORLD_STACK_LAST
+        {
+            let entry = underworld_stack_record(record).expect("in stack range");
+            if record % 2 == 0 {
+                assert_eq!(entry, (HiddenTreasurePickupClass::Armour, 15));
+            } else {
+                assert_eq!(entry, (HiddenTreasurePickupClass::Weapon, 41));
+            }
+        }
+        // Outside the stack range -> None.
+        assert_eq!(underworld_stack_record(12), None);
+        assert_eq!(underworld_stack_record(112), None);
+    }
+
+    #[test]
     fn hidden_treasure_pickup_class_variants_are_distinct() {
         // hidden-treasures.md §3 — exhaustively cover the spec's
         // distinct pickup-class column values.

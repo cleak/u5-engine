@@ -27,6 +27,42 @@ pub enum HiddenTreasurePickupClass {
     Amulet,
 }
 
+/// `hidden-treasures.md §3` co-located underworld stack: records
+/// `0..=11` are all staged at the underworld plane at `(233, 233)`,
+/// alternating Armour state 15 (even indices) and Weapon state 41
+/// (odd indices). The shared coordinate forms a one-shot stack that
+/// drains on repeated successful Search at the same point.
+pub const HIDDEN_TREASURE_UNDERWORLD_STACK_FIRST: usize = 0;
+pub const HIDDEN_TREASURE_UNDERWORLD_STACK_LAST: usize = 11;
+pub const HIDDEN_TREASURE_UNDERWORLD_STACK_LEN: usize = 12;
+pub const HIDDEN_TREASURE_UNDERWORLD_STACK_FLOOR: u8 = 255;
+pub const HIDDEN_TREASURE_UNDERWORLD_STACK_X: u8 = 233;
+pub const HIDDEN_TREASURE_UNDERWORLD_STACK_Y: u8 = 233;
+pub const HIDDEN_TREASURE_UNDERWORLD_STACK_ARMOUR_STATE: u8 = 15;
+pub const HIDDEN_TREASURE_UNDERWORLD_STACK_WEAPON_STATE: u8 = 41;
+
+/// `hidden-treasures.md §3`: returns the pickup class and per-record
+/// State byte for any record in the underworld stack. Returns `None`
+/// for records outside the `0..=11` stack range.
+pub const fn underworld_stack_record(
+    record_index: usize,
+) -> Option<(HiddenTreasurePickupClass, u8)> {
+    if record_index > HIDDEN_TREASURE_UNDERWORLD_STACK_LAST {
+        return None;
+    }
+    if record_index % 2 == 0 {
+        Some((
+            HiddenTreasurePickupClass::Armour,
+            HIDDEN_TREASURE_UNDERWORLD_STACK_ARMOUR_STATE,
+        ))
+    } else {
+        Some((
+            HiddenTreasurePickupClass::Weapon,
+            HIDDEN_TREASURE_UNDERWORLD_STACK_WEAPON_STATE,
+        ))
+    }
+}
+
 /// `hidden-treasures.md §2` per-record special-rule classification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HiddenTreasureRule {
