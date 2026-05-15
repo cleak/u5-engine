@@ -1595,6 +1595,28 @@
     }
 
     #[test]
+    fn npc_ai_behavior_classifies_per_spec_table() {
+        // formats/npc.md §5.3
+        assert_eq!(npc_ai_behavior(0), Some(NpcAiBehavior::Stationary));
+        assert_eq!(npc_ai_behavior(1), Some(NpcAiBehavior::BoundedWander));
+        assert_eq!(npc_ai_behavior(2), Some(NpcAiBehavior::UnboundedWander));
+        assert_eq!(
+            npc_ai_behavior(3),
+            Some(NpcAiBehavior::FollowAtDistance)
+        );
+        assert_eq!(
+            npc_ai_behavior(4),
+            Some(NpcAiBehavior::ApproachAndAttack)
+        );
+        assert_eq!(npc_ai_behavior(5), Some(NpcAiBehavior::ReservedEngage));
+        assert_eq!(npc_ai_behavior(6), Some(NpcAiBehavior::GuardOrBlock));
+        assert_eq!(npc_ai_behavior(7), Some(NpcAiBehavior::RandomChase));
+        // Values above 7 fall through to None (no-action default)
+        assert_eq!(npc_ai_behavior(8), None);
+        assert_eq!(npc_ai_behavior(255), None);
+    }
+
+    #[test]
     fn schedule_floor_state_matches_spec_table() {
         // npc-schedules.md §6
         // both equal -> 2

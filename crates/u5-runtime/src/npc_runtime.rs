@@ -20,6 +20,48 @@ pub const NPC_STATE_ASCEND_TOWARD_TARGET: u8 = 5;
 pub const NPC_STATE_CLIMB_UP_OFF_FLOOR: u8 = 6;
 pub const NPC_STATE_CLIMB_DOWN_OFF_FLOOR: u8 = 7;
 pub const NPC_STATE_PARKED_OFF_FLOOR: u8 = 8;
+/// `formats/npc.md §5.3` per-waypoint AI behaviour selector. Values
+/// `0..=7` are the shipped behaviour families; values above `7` fall
+/// through to the no-action/default case.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NpcAiBehavior {
+    /// `0` — stationary at the selected waypoint.
+    Stationary,
+    /// `1` — random wander, bounded to a small radius around the
+    /// waypoint.
+    BoundedWander,
+    /// `2` — random wander without the radius bound.
+    UnboundedWander,
+    /// `3` — follow or shadow the player while maintaining distance.
+    FollowAtDistance,
+    /// `4` — approach and attack when close enough.
+    ApproachAndAttack,
+    /// `5` — reserved engage/chase path; present in the dispatcher but
+    /// not used by shipped roster data.
+    ReservedEngage,
+    /// `6` — guard or blocking event path.
+    GuardOrBlock,
+    /// `7` — randomized chase/engage path.
+    RandomChase,
+}
+
+/// `formats/npc.md §5.3`: classify the per-waypoint AI byte. Returns
+/// `None` for values above `7`, which the spec maps to the
+/// no-action/default case the dispatcher takes.
+pub const fn npc_ai_behavior(byte: u8) -> Option<NpcAiBehavior> {
+    Some(match byte {
+        0 => NpcAiBehavior::Stationary,
+        1 => NpcAiBehavior::BoundedWander,
+        2 => NpcAiBehavior::UnboundedWander,
+        3 => NpcAiBehavior::FollowAtDistance,
+        4 => NpcAiBehavior::ApproachAndAttack,
+        5 => NpcAiBehavior::ReservedEngage,
+        6 => NpcAiBehavior::GuardOrBlock,
+        7 => NpcAiBehavior::RandomChase,
+        _ => return None,
+    })
+}
+
 /// `npc-schedules.md §8.2` BFS direction codes (1 = west, 2 = south,
 /// 3 = east, 4 = north). The seed direction stamped in the start cell's
 /// high nibble is `4` (north). The high nibble of any visited cell is
