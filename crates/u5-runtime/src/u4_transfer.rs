@@ -9,6 +9,42 @@ use crate::*;
 pub const U5_TRANSFER_MALE_BYTE: u8 = SAVE_GENDER_MALE_BYTE;
 pub const U5_TRANSFER_FEMALE_BYTE: u8 = SAVE_GENDER_FEMALE_BYTE;
 
+/// `u4-transfer.md §5` accepted source-side counter ranges. The
+/// transfer rejects the entire attempt before writing the
+/// destination save when any leading-record value falls outside
+/// these bounds.
+pub const U4_TRANSFER_GOLD_GEM_FOOD_MAX: u16 = 9999;
+pub const U4_TRANSFER_MOVE_MOON_DUNGEON_MAX: u16 = 70;
+pub const U4_TRANSFER_CLASS_INDEX_MAX: u8 = 7;
+
+/// `u4-transfer.md §5`: range gate for the `gold`, `gems`, and
+/// `food` source-side counters. Returns `true` when the value is
+/// inside the accepted `0..=9999` range.
+pub const fn u4_transfer_gold_gem_food_in_range(value: u16) -> bool {
+    value <= U4_TRANSFER_GOLD_GEM_FOOD_MAX
+}
+
+/// `u4-transfer.md §5`: range gate for the `move`, `moon`, and
+/// `dungeon` source-side counters. Returns `true` when the value is
+/// inside the accepted `0..=70` range.
+pub const fn u4_transfer_move_moon_dungeon_in_range(value: u16) -> bool {
+    value <= U4_TRANSFER_MOVE_MOON_DUNGEON_MAX
+}
+
+/// `u4-transfer.md §5`: range gate for the source-side class index
+/// (`0..=7`). Caller falls through to the per-class translation only
+/// when this gate accepts.
+pub const fn u4_transfer_class_index_in_range(class_index: u8) -> bool {
+    class_index <= U4_TRANSFER_CLASS_INDEX_MAX
+}
+
+/// `u4-transfer.md §5`: name-byte gate. The transfer accepts only
+/// NUL or printable bytes in the imported name field; any other
+/// control byte rejects the transfer attempt.
+pub const fn u4_transfer_name_byte_accepted(byte: u8) -> bool {
+    byte == 0 || (byte >= 0x20 && byte <= 0x7E)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct U4TransferSource {
     pub name: Vec<u8>,

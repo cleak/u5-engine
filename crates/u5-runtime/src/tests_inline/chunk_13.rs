@@ -1,4 +1,41 @@
     #[test]
+    fn u4_transfer_source_validation_gates_match_spec() {
+        // u4-transfer.md §5
+        assert_eq!(U4_TRANSFER_GOLD_GEM_FOOD_MAX, 9999);
+        assert_eq!(U4_TRANSFER_MOVE_MOON_DUNGEON_MAX, 70);
+        assert_eq!(U4_TRANSFER_CLASS_INDEX_MAX, 7);
+
+        // Gold/gem/food range gate.
+        assert!(u4_transfer_gold_gem_food_in_range(0));
+        assert!(u4_transfer_gold_gem_food_in_range(9999));
+        assert!(!u4_transfer_gold_gem_food_in_range(10000));
+        assert!(!u4_transfer_gold_gem_food_in_range(65535));
+
+        // Move/moon/dungeon range gate.
+        assert!(u4_transfer_move_moon_dungeon_in_range(0));
+        assert!(u4_transfer_move_moon_dungeon_in_range(70));
+        assert!(!u4_transfer_move_moon_dungeon_in_range(71));
+        assert!(!u4_transfer_move_moon_dungeon_in_range(255));
+
+        // Class index range gate.
+        for c in 0u8..=7 {
+            assert!(u4_transfer_class_index_in_range(c));
+        }
+        assert!(!u4_transfer_class_index_in_range(8));
+        assert!(!u4_transfer_class_index_in_range(255));
+
+        // Name-byte gate: NUL + printable accepted; control bytes rejected.
+        assert!(u4_transfer_name_byte_accepted(0));
+        assert!(u4_transfer_name_byte_accepted(b'A'));
+        assert!(u4_transfer_name_byte_accepted(b' '));
+        assert!(u4_transfer_name_byte_accepted(b'~'));
+        assert!(!u4_transfer_name_byte_accepted(0x01));
+        assert!(!u4_transfer_name_byte_accepted(0x1F));
+        assert!(!u4_transfer_name_byte_accepted(0x7F));
+        assert!(!u4_transfer_name_byte_accepted(0xFF));
+    }
+
+    #[test]
     fn input_function_key_remap_and_cursor_blink_match_spec() {
         // input.md §3,§4
         assert_eq!(INPUT_CODE_F1, 0xC9);
