@@ -667,6 +667,38 @@
     }
 
     #[test]
+    fn shop_time_of_day_word_partitions_24_hour_clock() {
+        // shops.md §4.1: morning for hours 0..12, afternoon for 12..18,
+        // evening for 18..24.
+        for hour in 0..12u8 {
+            assert_eq!(shop_time_of_day_word(hour), "morning");
+        }
+        for hour in 12..18u8 {
+            assert_eq!(shop_time_of_day_word(hour), "afternoon");
+        }
+        for hour in 18..24u8 {
+            assert_eq!(shop_time_of_day_word(hour), "evening");
+        }
+    }
+
+    #[test]
+    fn game_clock_display_hour_and_am_pm_suffix_match_spec() {
+        // time.md §2: display hour is 12 when underlying hour is 0; the
+        // hour itself when 1..=12; otherwise hour - 12. AM for 0..12, PM
+        // otherwise.
+        let clock_at = |hour: u8| GameClock::new(hour, 0).unwrap();
+        assert_eq!(clock_at(0).display_hour(), 12);
+        assert_eq!(clock_at(0).am_pm_suffix(), "A.M.");
+        assert_eq!(clock_at(1).display_hour(), 1);
+        assert_eq!(clock_at(11).am_pm_suffix(), "A.M.");
+        assert_eq!(clock_at(12).display_hour(), 12);
+        assert_eq!(clock_at(12).am_pm_suffix(), "P.M.");
+        assert_eq!(clock_at(13).display_hour(), 1);
+        assert_eq!(clock_at(23).display_hour(), 11);
+        assert_eq!(clock_at(23).am_pm_suffix(), "P.M.");
+    }
+
+    #[test]
     fn shrine_virtue_companion_table_matches_karma_md_section_nine() {
         // karma.md §9: virtue-to-companion pairing.
         assert_eq!(ShrineVirtue::Honesty.companion(), ("Mariah", "Mage"));

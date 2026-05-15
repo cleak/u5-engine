@@ -101,6 +101,19 @@ pub enum SkyStripMarker {
 /// Width of the sky/status strip per `moons.md` §2.
 pub const SKY_STRIP_CELL_COUNT: u8 = 12;
 
+/// `shops.md` §4.1 substitution placeholder `@` (and any caller that wants
+/// the same time-of-day word): returns `"morning"` for hours `0..12`,
+/// `"afternoon"` for hours `12..18`, and `"evening"` for hours `18..24`.
+pub const fn shop_time_of_day_word(hour: u8) -> &'static str {
+    if hour < 12 {
+        "morning"
+    } else if hour < 18 {
+        "afternoon"
+    } else {
+        "evening"
+    }
+}
+
 /// Per `moons.md` §2: compute the cell index `0..11` where the given marker
 /// is visible at the given hour. Returns `None` when the marker is below the
 /// strip's visible horizon.
