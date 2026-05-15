@@ -1,4 +1,36 @@
     #[test]
+    fn local_view_class_for_tile_matches_spec_table_spot_check() {
+        // view.md §4
+        // Sample one tile from each documented class.
+        assert_eq!(local_view_class_for_tile(0x00), LocalViewClass::Empty);
+        assert_eq!(local_view_class_for_tile(0xFF), LocalViewClass::Empty);
+        assert_eq!(local_view_class_for_tile(0xC0), LocalViewClass::Empty);
+        assert_eq!(local_view_class_for_tile(0x05), LocalViewClass::SparseCheckers);
+        assert_eq!(local_view_class_for_tile(0x35), LocalViewClass::SparseCheckers);
+        assert_eq!(local_view_class_for_tile(0x09), LocalViewClass::SolidFill);
+        assert_eq!(local_view_class_for_tile(0x2D), LocalViewClass::SolidFill);
+        assert_eq!(local_view_class_for_tile(0x07), LocalViewClass::FilledFrame);
+        assert_eq!(local_view_class_for_tile(0x70), LocalViewClass::FilledFrame);
+        assert_eq!(local_view_class_for_tile(0x47), LocalViewClass::HorizontalRails);
+        assert_eq!(local_view_class_for_tile(0x10), LocalViewClass::CentredBars);
+        assert_eq!(local_view_class_for_tile(0x99), LocalViewClass::HollowRectangle);
+        assert_eq!(local_view_class_for_tile(0xFE), LocalViewClass::DiagonalStyle);
+        assert_eq!(local_view_class_for_tile(0x0B), LocalViewClass::DiagonalStep);
+        assert_eq!(local_view_class_for_tile(0x06), LocalViewClass::VegetationHybrid);
+        assert_eq!(local_view_class_for_tile(0x60), LocalViewClass::FourCornerRing);
+        assert_eq!(local_view_class_for_tile(0x02), LocalViewClass::DiagonalBlits);
+        assert_eq!(local_view_class_for_tile(0x01), LocalViewClass::NoopDefault);
+        assert_eq!(local_view_class_for_tile(0x04), LocalViewClass::CreatureComposite);
+        assert_eq!(local_view_class_for_tile(0xE0), LocalViewClass::VerticalWallDoor);
+        assert_eq!(local_view_class_for_tile(0xD8), LocalViewClass::PeerVariant);
+        assert_eq!(local_view_class_for_tile(0x20), LocalViewClass::FenceWall);
+        // Exhaustive sweep: every tile id classifies (no panic).
+        for t in 0u8..=255 {
+            let _ = local_view_class_for_tile(t);
+        }
+    }
+
+    #[test]
     fn wishing_well_keywords_and_view_outcome_match_spec() {
         // view.md §2,§3
         assert_eq!(WISHING_WELL_WISH_KEYWORDS.len(), 6);

@@ -75,6 +75,130 @@ impl Command {
     }
 }
 
+/// `view.md §4` LOOKOBJ local-view 32x32 overlay class. Each
+/// sampled cell is reduced to a view class and drawn by a
+/// per-class renderer. The classes here are the spec's compact
+/// dispatch ids; their exact pixel contracts live with the
+/// renderer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LocalViewClass {
+    /// `0` — empty/pass-through.
+    Empty,
+    /// `1` — sparse corner/checker pattern.
+    SparseCheckers,
+    /// `2` — solid 4x4 filled cell.
+    SolidFill,
+    /// `3` — filled cell-frame style.
+    FilledFrame,
+    /// `4` — two full-width horizontal rails.
+    HorizontalRails,
+    /// `5` — two short centered horizontal bars.
+    CentredBars,
+    /// `6` — hollow four-edge rectangle.
+    HollowRectangle,
+    /// `7` — diagonal/edge style group used for mountains, shoreline,
+    /// undead/wall-flavour tiles.
+    DiagonalStyle,
+    /// `8` — diagonal two-quadrant step pattern.
+    DiagonalStep,
+    /// `9` — hybrid vegetation pattern.
+    VegetationHybrid,
+    /// `0xA` — four-corner room/feature ring.
+    FourCornerRing,
+    /// `0xB` — two diagonal blits (peer/gem-view bank-aware).
+    DiagonalBlits,
+    /// `0xC` — table-mapped no-op default for tile id 0x01.
+    NoopDefault,
+    /// `0xD` — creature-on-terrain composite.
+    CreatureComposite,
+    /// `0xE` — vertical two-line wall/door presentation.
+    VerticalWallDoor,
+    /// `0xF` — peer-spell/gem-view variant on the alternate bank.
+    PeerVariant,
+    /// `0x10` — fence/wall renderer with edge-bit selection.
+    FenceWall,
+}
+
+/// `view.md §4`: classify a tile id into its LOOKOBJ local-view
+/// class. The mapping is exhaustive across all 256 tile ids; tiles
+/// not explicitly listed in the spec table fall through to `Empty`
+/// (consistent with the `0` view class's "pass-through" contract for
+/// unmapped values).
+pub const fn local_view_class_for_tile(tile: u8) -> LocalViewClass {
+    match tile {
+        0x00 | 0xC0..=0xC3 | 0xCC..=0xCF | 0xFF => LocalViewClass::Empty,
+        0x05 | 0x30..=0x37 => LocalViewClass::SparseCheckers,
+        0x09..=0x0A | 0x2D => LocalViewClass::SolidFill,
+        0x07
+        | 0x1C
+        | 0x1E..=0x1F
+        | 0x40
+        | 0x44
+        | 0x48..=0x49
+        | 0x6A..=0x6B
+        | 0x70..=0x7F
+        | 0x87
+        | 0x8C
+        | 0x8F
+        | 0xAA
+        | 0xBC
+        | 0xDD => LocalViewClass::FilledFrame,
+        0x1D
+        | 0x38
+        | 0x47
+        | 0x5A
+        | 0x5C..=0x5D
+        | 0x94..=0x96
+        | 0x9A..=0x9C
+        | 0xAB..=0xAC
+        | 0xBE => LocalViewClass::HorizontalRails,
+        0x10..=0x1B
+        | 0x29..=0x2B
+        | 0x2E..=0x2F
+        | 0x41..=0x43
+        | 0x4C
+        | 0x58..=0x59
+        | 0x5B
+        | 0x5E..=0x5F
+        | 0x80..=0x85
+        | 0x88..=0x8B
+        | 0x8D..=0x8E
+        | 0x90..=0x93
+        | 0x9D..=0xA9
+        | 0xAD..=0xB7
+        | 0xBD
+        | 0xBF
+        | 0xC8..=0xCB
+        | 0xDE..=0xDF
+        | 0xE8..=0xEB
+        | 0xFA..=0xFD => LocalViewClass::CentredBars,
+        0x0D
+        | 0x45
+        | 0x4A..=0x4B
+        | 0x86
+        | 0x97..=0x99
+        | 0xB8..=0xBB
+        | 0xC4..=0xC7
+        | 0xEC..=0xF9 => LocalViewClass::HollowRectangle,
+        0x0C
+        | 0x27..=0x28
+        | 0x39..=0x3F
+        | 0x46
+        | 0x4D..=0x57
+        | 0xD0..=0xD3
+        | 0xFE => LocalViewClass::DiagonalStyle,
+        0x0B | 0x0E..=0x0F => LocalViewClass::DiagonalStep,
+        0x06 | 0x08 | 0x2C => LocalViewClass::VegetationHybrid,
+        0x03 | 0x60..=0x69 | 0x6C..=0x6F | 0xE4..=0xE7 => LocalViewClass::FourCornerRing,
+        0x02 | 0xD4..=0xD7 => LocalViewClass::DiagonalBlits,
+        0x01 => LocalViewClass::NoopDefault,
+        0x04 => LocalViewClass::CreatureComposite,
+        0xE0..=0xE3 => LocalViewClass::VerticalWallDoor,
+        0xD8..=0xDC => LocalViewClass::PeerVariant,
+        0x20..=0x26 => LocalViewClass::FenceWall,
+    }
+}
+
 /// `view.md §3` accepted wishing-well wish keywords. The well's
 /// object-spawn branch accepts only the six vehicle/joke names
 /// recognized by the original handler. Match is case-insensitive
