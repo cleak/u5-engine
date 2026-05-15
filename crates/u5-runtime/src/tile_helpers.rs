@@ -483,6 +483,73 @@ pub fn is_vehicle_object_tile(tile: u8) -> bool {
     (160..=191).contains(&tile)
 }
 
+/// `dungeon-mode.md §3` typed dungeon-cell class derived from the cell
+/// byte's high nibble. Renderer wall checks, L-Look description routing,
+/// and most special-cell handlers branch on this.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonCellClass {
+    Passage,
+    UpLadder,
+    DownLadder,
+    TwoWayLadder,
+    Chest,
+    Fountain,
+    PitTrap,
+    PassageVariant,
+    EnergyField,
+    EnergyFieldSecondary,
+    RoomHelperState,
+    Wall,
+    HeavyDoorOrRoomTrigger,
+}
+
+/// `dungeon-mode.md §3`: classify a dungeon-cell byte by its high nibble.
+pub const fn dungeon_cell_class_of(tile: u8) -> DungeonCellClass {
+    match tile >> 4 {
+        0x0 => DungeonCellClass::Passage,
+        0x1 => DungeonCellClass::UpLadder,
+        0x2 => DungeonCellClass::DownLadder,
+        0x3 => DungeonCellClass::TwoWayLadder,
+        0x4 => DungeonCellClass::Chest,
+        0x5 => DungeonCellClass::Fountain,
+        0x6 => DungeonCellClass::PitTrap,
+        0x7 => DungeonCellClass::PassageVariant,
+        0x8 => DungeonCellClass::EnergyField,
+        0x9 => DungeonCellClass::EnergyFieldSecondary,
+        0xA => DungeonCellClass::RoomHelperState,
+        0xB..=0xE => DungeonCellClass::Wall,
+        // 0xF and any (impossible) higher value
+        _ => DungeonCellClass::HeavyDoorOrRoomTrigger,
+    }
+}
+
+impl DungeonCellClass {
+    /// `dungeon-mode.md §3`: solid-blocker wall classes (high nibble
+    /// `0xB..=0xE`). The renderer's wall checks branch on this.
+    pub const fn is_wall(self) -> bool {
+        matches!(self, DungeonCellClass::Wall)
+    }
+
+    /// `dungeon-mode.md §3`: classes that K-Klimb can act on.
+    pub const fn is_ladder(self) -> bool {
+        matches!(
+            self,
+            DungeonCellClass::UpLadder
+                | DungeonCellClass::DownLadder
+                | DungeonCellClass::TwoWayLadder
+        )
+    }
+
+    /// `dungeon-mode.md §3`: classes that render as walkable passage in
+    /// the first-person renderer.
+    pub const fn is_passage_like(self) -> bool {
+        matches!(
+            self,
+            DungeonCellClass::Passage | DungeonCellClass::PassageVariant
+        )
+    }
+}
+
 pub fn dungeon_cell_class(tile: u8) -> &'static str {
     match tile >> 4 {
         0x0 => "passage",

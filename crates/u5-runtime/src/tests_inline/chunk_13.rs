@@ -636,6 +636,56 @@
     }
 
     #[test]
+    fn dungeon_cell_class_of_matches_high_nibble_table() {
+        // dungeon-mode.md §3
+        assert_eq!(dungeon_cell_class_of(0x00), DungeonCellClass::Passage);
+        assert_eq!(dungeon_cell_class_of(0x0F), DungeonCellClass::Passage);
+        assert_eq!(dungeon_cell_class_of(0x10), DungeonCellClass::UpLadder);
+        assert_eq!(dungeon_cell_class_of(0x20), DungeonCellClass::DownLadder);
+        assert_eq!(
+            dungeon_cell_class_of(0x30),
+            DungeonCellClass::TwoWayLadder
+        );
+        assert_eq!(dungeon_cell_class_of(0x40), DungeonCellClass::Chest);
+        assert_eq!(dungeon_cell_class_of(0x50), DungeonCellClass::Fountain);
+        assert_eq!(dungeon_cell_class_of(0x60), DungeonCellClass::PitTrap);
+        assert_eq!(dungeon_cell_class_of(0x69), DungeonCellClass::PitTrap);
+        assert_eq!(
+            dungeon_cell_class_of(0x70),
+            DungeonCellClass::PassageVariant
+        );
+        assert_eq!(
+            dungeon_cell_class_of(0x80),
+            DungeonCellClass::EnergyField
+        );
+        assert_eq!(
+            dungeon_cell_class_of(0x90),
+            DungeonCellClass::EnergyFieldSecondary
+        );
+        assert_eq!(
+            dungeon_cell_class_of(0xA0),
+            DungeonCellClass::RoomHelperState
+        );
+        for high in 0xB..=0xE {
+            assert_eq!(dungeon_cell_class_of(high << 4), DungeonCellClass::Wall);
+        }
+        assert_eq!(
+            dungeon_cell_class_of(0xF0),
+            DungeonCellClass::HeavyDoorOrRoomTrigger
+        );
+        // Convenience predicates
+        assert!(DungeonCellClass::Wall.is_wall());
+        assert!(!DungeonCellClass::Passage.is_wall());
+        assert!(DungeonCellClass::UpLadder.is_ladder());
+        assert!(DungeonCellClass::DownLadder.is_ladder());
+        assert!(DungeonCellClass::TwoWayLadder.is_ladder());
+        assert!(!DungeonCellClass::Chest.is_ladder());
+        assert!(DungeonCellClass::Passage.is_passage_like());
+        assert!(DungeonCellClass::PassageVariant.is_passage_like());
+        assert!(!DungeonCellClass::Wall.is_passage_like());
+    }
+
+    #[test]
     fn daylight_base_value_matches_spec_table() {
         // time.md §6
         // Underworld / dungeon depth are always dark
