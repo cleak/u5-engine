@@ -636,6 +636,61 @@
     }
 
     #[test]
+    fn capped_add_u8_clamps_at_caller_supplied_cap() {
+        // stat-arithmetic.md §2: byte capped add stores cap when the result
+        // reaches or exceeds the cap; returns actual delta applied.
+        let mut field = 90u8;
+        let applied = capped_add_u8(&mut field, 5, 99);
+        assert_eq!(field, 95);
+        assert_eq!(applied, 5);
+        let applied = capped_add_u8(&mut field, 10, 99);
+        assert_eq!(field, 99);
+        assert_eq!(applied, 4);
+        let applied = capped_add_u8(&mut field, 50, 99);
+        assert_eq!(field, 99);
+        assert_eq!(applied, 0);
+    }
+
+    #[test]
+    fn capped_add_word_uses_signed_comparison_and_returns_delta() {
+        // §2: word capped add uses signed comparison; returns actual delta.
+        let mut hp: i16 = 50;
+        assert_eq!(capped_add_word(&mut hp, 30, 100), 30);
+        assert_eq!(hp, 80);
+        assert_eq!(capped_add_word(&mut hp, 50, 100), 20);
+        assert_eq!(hp, 100);
+        // Negative starting field still observes signed cap.
+        let mut hp: i16 = -5;
+        assert_eq!(capped_add_word(&mut hp, 10, 100), 10);
+        assert_eq!(hp, 5);
+    }
+
+    #[test]
+    fn floor_sub_u8_floors_at_zero_and_returns_actual_subtracted() {
+        // §2: byte floor subtract stores zero when the current value is not
+        // greater than the amount; returns actual subtracted.
+        let mut field = 7u8;
+        assert_eq!(floor_sub_u8(&mut field, 3), 3);
+        assert_eq!(field, 4);
+        assert_eq!(floor_sub_u8(&mut field, 10), 4);
+        assert_eq!(field, 0);
+        assert_eq!(floor_sub_u8(&mut field, 5), 0);
+        assert_eq!(field, 0);
+    }
+
+    #[test]
+    fn floor_sub_word_clamps_at_zero_in_signed_comparison() {
+        // §2: word floor subtract floors at zero with signed comparison.
+        let mut hp: i16 = 30;
+        assert_eq!(floor_sub_word(&mut hp, 18), 18);
+        assert_eq!(hp, 12);
+        assert_eq!(floor_sub_word(&mut hp, 100), 12);
+        assert_eq!(hp, 0);
+        assert_eq!(floor_sub_word(&mut hp, 5), 0);
+        assert_eq!(hp, 0);
+    }
+
+    #[test]
     fn directed_step_offsets_reduce_wrapped_distance_to_player() {
         // active-objects.md §8: per-axis one-cell step toward the player on
         // the 256-cell torus. Aligned axes return 0; non-wrapped distances

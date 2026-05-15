@@ -47,6 +47,7 @@ pub mod question_io;
 pub mod shops;
 pub mod shrine_virtue;
 pub mod signs_io;
+pub mod stat_arithmetic;
 pub mod story_io;
 pub mod text_wrap;
 pub mod view_classes;
@@ -81,6 +82,7 @@ pub use question_io::{QuestionRecords, load_question_records, parse_question_rec
 pub use signs_io::{
     SignRecord, decode_sign_payload, find_sign, load_sign_records, parse_sign_records,
 };
+pub use stat_arithmetic::{capped_add_u8, capped_add_word, floor_sub_u8, floor_sub_word};
 pub use story_io::{StoryRecords, load_story_records, parse_story_records};
 pub use text_wrap::{WrappedLine, wrap_text};
 pub use view_classes::{fc_sprite_proximity_mask_hits, tile_view_class};
