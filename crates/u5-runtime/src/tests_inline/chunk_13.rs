@@ -706,6 +706,34 @@
     }
 
     #[test]
+    fn classify_tlk_byte_partitions_dispatcher_table_per_section_seven() {
+        // conversation.md §7 dispatcher classification order: 0x00 NUL,
+        // 0x01..=0x7F dictionary, 0x9E..=0x9F GOTO label (precedes the
+        // 0x80..=0x9F control band), 0x80..=0x9F control, 0xA0..=0xFD
+        // printable, 0xFE IF-ELSE alias, 0xFF end-of-response.
+        assert_eq!(classify_tlk_byte(0x00), TlkByteKind::Nul);
+        assert_eq!(classify_tlk_byte(0x01), TlkByteKind::DictionaryToken);
+        assert_eq!(classify_tlk_byte(0x7F), TlkByteKind::DictionaryToken);
+        assert_eq!(classify_tlk_byte(0x80), TlkByteKind::ControlByte);
+        assert_eq!(classify_tlk_byte(0x9D), TlkByteKind::ControlByte);
+        assert_eq!(classify_tlk_byte(0x9E), TlkByteKind::GotoLabel);
+        assert_eq!(classify_tlk_byte(0x9F), TlkByteKind::GotoLabel);
+        assert_eq!(classify_tlk_byte(0xA0), TlkByteKind::PrintableText);
+        assert_eq!(classify_tlk_byte(0xFD), TlkByteKind::PrintableText);
+        assert_eq!(classify_tlk_byte(0xFE), TlkByteKind::IfElseAlias);
+        assert_eq!(classify_tlk_byte(0xFF), TlkByteKind::EndOfResponse);
+        // Spot-check the control codes resolve to ControlByte (not IfElseAlias).
+        for code in [
+            TLK_CODE_PRINT_AVATAR_NAME,
+            TLK_CODE_GOLD_PAYMENT,
+            TLK_CODE_ACTION_DISPATCH,
+            TLK_CODE_IF_ELSE,
+        ] {
+            assert_eq!(classify_tlk_byte(code), TlkByteKind::ControlByte);
+        }
+    }
+
+    #[test]
     fn tlk_label_byte_classifier_covers_section_seven_seven_range() {
         // conversation.md §7.7: label bytes 0x91..=0x9F, fifteen entries.
         for byte in TLK_LABEL_FIRST..=TLK_LABEL_LAST {

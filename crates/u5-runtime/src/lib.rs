@@ -96,8 +96,8 @@ pub use tlk_control_codes::{
     TLK_CODE_IF_ELSE, TLK_CODE_IF_ELSE_ALT, TLK_CODE_LITERAL_NEWLINE,
     TLK_CODE_PANEL_NEWLINE, TLK_CODE_PAUSE, TLK_CODE_PRINT_AVATAR_NAME,
     TLK_CODE_PROTECT_RUN, TLK_CODE_SET_FLAG, TLK_CODE_WAIT_KEY,
-    TLK_LABEL_FIRST, TLK_LABEL_LAST, is_tlk_label_byte,
-    tlk_introducer_argument_count,
+    TLK_LABEL_FIRST, TLK_LABEL_LAST, TlkByteKind, classify_tlk_byte,
+    is_tlk_label_byte, tlk_introducer_argument_count,
 };
 pub use view_classes::{fc_sprite_proximity_mask_hits, tile_view_class};
 pub use combat_actor::*;

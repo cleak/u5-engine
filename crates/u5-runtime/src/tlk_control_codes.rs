@@ -54,3 +54,41 @@ pub const fn tlk_introducer_argument_count(code: u8) -> Option<u8> {
 pub const fn is_tlk_label_byte(byte: u8) -> bool {
     byte >= TLK_LABEL_FIRST && byte <= TLK_LABEL_LAST
 }
+
+/// Result of classifying a single byte through the `.TLK` byte runner per
+/// `conversation.md §7`'s dispatcher table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TlkByteKind {
+    /// Byte 0 (NUL): implicit blob-end marker; no action is enumerated by
+    /// the spec dispatcher table itself.
+    Nul,
+    /// Nonzero high-bit-clear `0x01..=0x7F`: common-word dictionary token.
+    DictionaryToken,
+    /// `0x80..=0x9F` excluding the GOTO range: engine control byte
+    /// (Sections 7.2-7.6).
+    ControlByte,
+    /// `0x9E..=0x9F`: GOTO-LABEL byte (Section 7.7).
+    GotoLabel,
+    /// `0xA0..=0xFD`: printable text with the high bit set (Section 7.1).
+    PrintableText,
+    /// `0xFE`: multi-byte introducer aliased to `0x8C` IF-ELSE.
+    IfElseAlias,
+    /// `0xFF`: end-of-response marker.
+    EndOfResponse,
+}
+
+/// Classify one `.TLK` byte through the dispatcher table per
+/// `conversation.md §7`. The classification order matters because the
+/// `0x9E..=0x9F` GOTO-LABEL range is a sub-range of the `0x80..=0x9F`
+/// control band and must take precedence.
+pub const fn classify_tlk_byte(byte: u8) -> TlkByteKind {
+    match byte {
+        0x00 => TlkByteKind::Nul,
+        0x01..=0x7F => TlkByteKind::DictionaryToken,
+        0x9E | 0x9F => TlkByteKind::GotoLabel,
+        0x80..=0x9F => TlkByteKind::ControlByte,
+        0xA0..=0xFD => TlkByteKind::PrintableText,
+        TLK_CODE_IF_ELSE_ALT => TlkByteKind::IfElseAlias,
+        TLK_CODE_END_OF_RESPONSE => TlkByteKind::EndOfResponse,
+    }
+}
