@@ -1,4 +1,22 @@
     #[test]
+    fn common_word_dictionary_index_helpers_match_spec() {
+        // conversation.md §8
+        assert_eq!(COMMON_WORD_DICTIONARY_ENTRIES, 128);
+        // TLK dictionary tokens are 0x01..=0x7F; NUL and high-bit bytes are not tokens.
+        assert_eq!(tlk_dictionary_index(0x00), None);
+        assert_eq!(tlk_dictionary_index(0x01), Some(1));
+        assert_eq!(tlk_dictionary_index(0x7F), Some(127));
+        assert_eq!(tlk_dictionary_index(0x80), None);
+        assert_eq!(tlk_dictionary_index(0xFF), None);
+        // Shoppe phrase tokens use 0x80..=0xFF; shop token 0x80 maps
+        // to the same logical entry zero.
+        assert_eq!(shoppe_dictionary_index(0x00), None);
+        assert_eq!(shoppe_dictionary_index(0x7F), None);
+        assert_eq!(shoppe_dictionary_index(0x80), Some(0));
+        assert_eq!(shoppe_dictionary_index(0xFF), Some(127));
+    }
+
+    #[test]
     fn quest_graph_node_classes_match_spec_table() {
         // catalogs/quest-graph.md §1
         assert_eq!(QUEST_GRAPH_NODE_CLASSES.len(), 8);

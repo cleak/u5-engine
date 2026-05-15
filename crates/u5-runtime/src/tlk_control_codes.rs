@@ -7,6 +7,33 @@
 //! exist so that helpers and tests can refer to spec-named codes without
 //! magic numbers.
 
+/// `conversation.md §8`: shared common-word dictionary has 128
+/// entries. The dialogue runner and the shop renderer apply different
+/// byte-range biases when reaching this same logical table.
+pub const COMMON_WORD_DICTIONARY_ENTRIES: usize = 128;
+
+/// `conversation.md §8`: TLK dialogue dictionary tokens are nonzero
+/// high-bit-clear bytes (`0x01..=0x7F`); the byte runner's range maps
+/// directly to the 128-entry index `0..=127` (less the NUL slot).
+pub const fn tlk_dictionary_index(token: u8) -> Option<usize> {
+    if token == 0 || token & 0x80 != 0 {
+        None
+    } else {
+        Some(token as usize)
+    }
+}
+
+/// `conversation.md §8` / `shoppe-dat.md §5`: the shop renderer bias
+/// strips the high bit of a phrase token to produce the same logical
+/// dictionary index. Token `0x80` resolves to entry zero.
+pub const fn shoppe_dictionary_index(token: u8) -> Option<usize> {
+    if token & 0x80 == 0 {
+        None
+    } else {
+        Some((token & 0x7F) as usize)
+    }
+}
+
 /// `formats/tlk.md §5`: each header entry is exactly four bytes
 /// (`(blob_offset, npc_id)`).
 pub const TLK_HEADER_ENTRY_LEN: usize = 4;
