@@ -58,6 +58,12 @@ pub const BIT_STRIP_POINTER_NONE: u16 = 0;
 /// `formats/bit.md §4.3`: `WD.BIT` is a single-entry resource whose
 /// "Warriors of Destiny" lettering is exactly 49 rows tall.
 pub const WD_BIT_LETTERING_ROWS: u16 = 49;
+/// `formats/font-ch.md §2,§3`: a shipped `.CH` font is exactly
+/// 1024 bytes (128 glyphs × 8 bytes each).
+pub const CH_FONT_LEN: usize = 1024;
+pub const CH_GLYPH_COUNT: usize = 128;
+pub const CH_GLYPH_BYTES: usize = 8;
+pub const CH_CELL_SIDE: usize = 8;
 #[cfg(test)]
 pub const TITLE_BIT_FILE: &str = "TITLE.BIT";
 #[cfg(test)]

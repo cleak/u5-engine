@@ -1,4 +1,14 @@
     #[test]
+    fn ch_font_layout_constants_match_spec() {
+        // formats/font-ch.md §2,§3
+        assert_eq!(CH_FONT_LEN, 1024);
+        assert_eq!(CH_GLYPH_COUNT, 128);
+        assert_eq!(CH_GLYPH_BYTES, 8);
+        assert_eq!(CH_CELL_SIDE, 8);
+        assert_eq!(CH_GLYPH_COUNT * CH_GLYPH_BYTES, CH_FONT_LEN);
+    }
+
+    #[test]
     fn bit_format_constants_match_spec() {
         // formats/bit.md §3,§4.3
         assert_eq!(BIT_POINTER_TABLE_ENTRY_LEN, 4);
