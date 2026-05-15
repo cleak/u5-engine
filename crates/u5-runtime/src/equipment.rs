@@ -127,6 +127,28 @@ pub const EQUIPMENT_BLOCK_FIRST_OFFSET: usize = 0x19;
 /// `inventory.md §3` length of the readied-equipment block.
 pub const EQUIPMENT_BLOCK_LEN: usize = 6;
 
+/// `catalogs/item-list.md §5` equipment ids for the three ranged
+/// weapons whose R-Ready cascade requires a non-zero matching
+/// ammunition counter.
+pub const ITEM_ID_BOW: u8 = 26;
+pub const ITEM_ID_ARROWS: u8 = 27;
+pub const ITEM_ID_CROSSBOW: u8 = 28;
+pub const ITEM_ID_QUARRELS: u8 = 29;
+pub const ITEM_ID_MAGIC_BOW: u8 = 36;
+
+/// `inventory.md §6` R-Ready ranged-weapon ammo precondition.
+/// Returns the equipment-stock item id that must have a non-zero
+/// counter before the weapon can be readied: arrows (27) for Bow
+/// and Magic Bow, quarrels (29) for Crossbow. Returns `None` for
+/// any other item id (no ammo gate applies).
+pub const fn ranged_weapon_required_ammo(item_id: u8) -> Option<u8> {
+    match item_id {
+        ITEM_ID_BOW | ITEM_ID_MAGIC_BOW => Some(ITEM_ID_ARROWS),
+        ITEM_ID_CROSSBOW => Some(ITEM_ID_QUARRELS),
+        _ => None,
+    }
+}
+
 /// `inventory.md §3`: ownership predicate used by inventory browsing.
 /// Returns `true` when any of the six readied-equipment bytes equals
 /// the supplied item id (and the id is not the empty-slot sentinel).

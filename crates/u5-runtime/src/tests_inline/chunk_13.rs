@@ -1,4 +1,29 @@
     #[test]
+    fn ranged_weapon_required_ammo_matches_spec() {
+        // inventory.md §6 / catalogs/item-list.md §5
+        assert_eq!(ranged_weapon_required_ammo(ITEM_ID_BOW), Some(ITEM_ID_ARROWS));
+        assert_eq!(
+            ranged_weapon_required_ammo(ITEM_ID_MAGIC_BOW),
+            Some(ITEM_ID_ARROWS)
+        );
+        assert_eq!(
+            ranged_weapon_required_ammo(ITEM_ID_CROSSBOW),
+            Some(ITEM_ID_QUARRELS)
+        );
+        // Ammunition rows themselves have no ammo gate.
+        assert_eq!(ranged_weapon_required_ammo(ITEM_ID_ARROWS), None);
+        assert_eq!(ranged_weapon_required_ammo(ITEM_ID_QUARRELS), None);
+        // Non-ranged equipment ids don't gate on ammo.
+        for id in 0u8..26 {
+            assert_eq!(ranged_weapon_required_ammo(id), None);
+        }
+        assert_eq!(ranged_weapon_required_ammo(30), None);
+        assert_eq!(ranged_weapon_required_ammo(35), None);
+        assert_eq!(ranged_weapon_required_ammo(40), None);
+        assert_eq!(ranged_weapon_required_ammo(0xFF), None);
+    }
+
+    #[test]
     fn equipment_slot_record_offsets_match_spec_table() {
         // inventory.md §3
         assert_eq!(EQUIPMENT_BLOCK_FIRST_OFFSET, 0x19);
