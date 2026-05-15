@@ -1983,6 +1983,35 @@
     }
 
     #[test]
+    fn save_calendar_offsets_and_bounds_match_spec() {
+        // formats/saved-gam.md §5
+        assert_eq!(SAVE_YEAR_OFFSET, 0x02CE);
+        assert_eq!(SAVE_TIMING_STATUS_TAG_OFFSET, 0x02D4);
+        assert_eq!(SAVE_ACTIVE_PLAYER_OFFSET, 0x02D5);
+        assert_eq!(SAVE_TRANSPORT_MARKER_OFFSET, 0x02D6);
+        assert_eq!(SAVE_MONTH_OFFSET, 0x02D7);
+        assert_eq!(SAVE_DAY_OFFSET, 0x02D8);
+        assert_eq!(SAVE_HOUR_OFFSET, 0x02D9);
+        assert_eq!(SAVE_SAVED_HOUR_SNAPSHOT_OFFSET, 0x02DA);
+        assert_eq!(SAVE_MINUTE_OFFSET, 0x02DB);
+        assert_eq!(SAVE_COMBAT_ROUND_COUNTER_OFFSET, 0x02DC);
+        assert_eq!(SAVE_PER_TURN_STATE_OFFSET, 0x02DD);
+        assert_eq!(SAVE_AMPM_DISPLAY_OFFSET, 0x02DE);
+        // Bounds
+        assert_eq!(SAVE_MONTH_MIN, 1);
+        assert_eq!(SAVE_MONTH_MAX, 13);
+        assert_eq!(SAVE_DAY_MIN, 1);
+        assert_eq!(SAVE_DAY_MAX, 28);
+        assert_eq!(SAVE_HOUR_MAX, 23);
+        assert_eq!(SAVE_MINUTE_MAX, 59);
+        // Calendar bytes are contiguous (Month..Hour..Snapshot..Minute..Round..State..AMPM)
+        assert_eq!(SAVE_DAY_OFFSET, SAVE_MONTH_OFFSET + 1);
+        assert_eq!(SAVE_HOUR_OFFSET, SAVE_DAY_OFFSET + 1);
+        assert_eq!(SAVE_SAVED_HOUR_SNAPSHOT_OFFSET, SAVE_HOUR_OFFSET + 1);
+        assert_eq!(SAVE_MINUTE_OFFSET, SAVE_SAVED_HOUR_SNAPSHOT_OFFSET + 1);
+    }
+
+    #[test]
     fn save_inventory_and_location_offsets_match_spec() {
         // formats/saved-gam.md §6,§7
         assert_eq!(SAVE_FOOD_OFFSET, 0x0202);

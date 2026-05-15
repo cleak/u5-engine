@@ -159,9 +159,25 @@ pub const SAVE_TRANSPORT_MARKER_OFFSET: usize = 0x02d6;
 pub const SAVE_MONTH_OFFSET: usize = 0x02d7;
 pub const SAVE_DAY_OFFSET: usize = 0x02d8;
 pub const SAVE_HOUR_OFFSET: usize = 0x02d9;
+/// `formats/saved-gam.md §5`: adjacent saved-hour snapshot byte the
+/// per-turn cleanup uses to detect hour crossings. Not the active
+/// hour; preserve byte-for-byte on round trip.
+pub const SAVE_SAVED_HOUR_SNAPSHOT_OFFSET: usize = 0x02da;
 pub const SAVE_MINUTE_OFFSET: usize = 0x02db;
 pub const SAVE_COMBAT_ROUND_COUNTER_OFFSET: usize = 0x02dc;
+/// `formats/saved-gam.md §5` adjacent per-turn state byte; preserve
+/// byte-for-byte but no public calendar meaning.
+pub const SAVE_PER_TURN_STATE_OFFSET: usize = 0x02dd;
 pub const SAVE_AMPM_DISPLAY_OFFSET: usize = 0x02de;
+/// `formats/saved-gam.md §5`: in-game calendar bounds. Months are
+/// one-based 1..=13 (thirteen 28-day months per year), days are
+/// one-based 1..=28, hours are zero-based 0..=23, minutes 0..=59.
+pub const SAVE_MONTH_MIN: u8 = 1;
+pub const SAVE_MONTH_MAX: u8 = 13;
+pub const SAVE_DAY_MIN: u8 = 1;
+pub const SAVE_DAY_MAX: u8 = 28;
+pub const SAVE_HOUR_MAX: u8 = 23;
+pub const SAVE_MINUTE_MAX: u8 = 59;
 pub const SAVE_MORAL_STANDING_OFFSET: usize = 0x02e2;
 pub const SAVE_WIND_OFFSET: usize = 0x02ec;
 pub const SAVE_SCENE_OFFSET: usize = 0x02ed;
