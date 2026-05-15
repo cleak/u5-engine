@@ -636,6 +636,46 @@
     }
 
     #[test]
+    fn intro_menu_action_matches_spec_keys() {
+        // intro.md §6
+        assert_eq!(intro_menu_action(b'J'), Some(IntroMenuAction::JourneyOnward));
+        assert_eq!(
+            intro_menu_action(b'C'),
+            Some(IntroMenuAction::CreateNewCharacter)
+        );
+        assert_eq!(
+            intro_menu_action(b'T'),
+            Some(IntroMenuAction::TransferFromUltimaIv)
+        );
+        assert_eq!(
+            intro_menu_action(b'U'),
+            Some(IntroMenuAction::UltimaVIntroduction)
+        );
+        assert_eq!(
+            intro_menu_action(b'A'),
+            Some(IntroMenuAction::Acknowledgements)
+        );
+        assert_eq!(intro_menu_action(b'R'), Some(IntroMenuAction::ReturnToView));
+        // Lowercase folded
+        assert_eq!(intro_menu_action(b'j'), Some(IntroMenuAction::JourneyOnward));
+        assert_eq!(intro_menu_action(b'r'), Some(IntroMenuAction::ReturnToView));
+        // Enter / Return -> RepeatCachedSelection
+        assert_eq!(
+            intro_menu_action(b'\r'),
+            Some(IntroMenuAction::RepeatCachedSelection)
+        );
+        assert_eq!(
+            intro_menu_action(b'\n'),
+            Some(IntroMenuAction::RepeatCachedSelection)
+        );
+        // Invalid
+        assert_eq!(intro_menu_action(b'B'), None);
+        assert_eq!(intro_menu_action(b'X'), None);
+        assert_eq!(intro_menu_action(0), None);
+        assert_eq!(intro_menu_action(b' '), None);
+    }
+
+    #[test]
     fn boardable_family_classifier_matches_spec_table() {
         // vehicles.md §4
         assert_eq!(boardable_family(0x10), Some(BoardableFamily::Horse));

@@ -27,6 +27,7 @@ pub mod graphics_io;
 pub mod inline_parsers;
 pub mod input_codes;
 pub mod input_dispatch;
+pub mod intro;
 pub mod jimmy;
 pub mod karma;
 pub mod lighting;
@@ -94,6 +95,7 @@ pub use containers::{
     TABLE_FOOD_TILE_B, dungeon_chest_row_awarded, dungeon_chest_row_gate_max,
     table_food_get_resulting_tile,
 };
+pub use intro::{IntroMenuAction, intro_menu_action};
 pub use input_codes::{
     INPUT_CODE_EAST, INPUT_CODE_NORTH, INPUT_CODE_NORTHEAST, INPUT_CODE_NORTHWEST,
     INPUT_CODE_SOUTH, INPUT_CODE_SOUTHEAST, INPUT_CODE_SOUTHWEST, INPUT_CODE_WEST,
