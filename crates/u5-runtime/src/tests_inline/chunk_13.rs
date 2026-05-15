@@ -1,4 +1,37 @@
     #[test]
+    fn title_screen_layout_constants_match_spec() {
+        // intro.md §3
+        assert_eq!(TITLE_BIT_INITIAL_PLACEMENTS.len(), 7);
+        assert_eq!(
+            TITLE_BIT_INITIAL_PLACEMENTS[0],
+            TitleBitPlacement {
+                asset: TitleBitAsset::Title,
+                slot: 0,
+                top_left_x: 148,
+                top_left_y: 0,
+                width: 24,
+                height: 3
+            }
+        );
+        assert_eq!(TITLE_BIT_INITIAL_PLACEMENTS[6].slot, 6);
+        assert_eq!(TITLE_BIT_INITIAL_PLACEMENTS[6].width, 280);
+        assert_eq!(TITLE_BIT_INITIAL_PLACEMENTS[6].height, 61);
+        // Each subsequent slot starts at the previous slot's bottom edge.
+        for win in TITLE_BIT_INITIAL_PLACEMENTS.windows(2) {
+            assert_eq!(
+                win[1].top_left_y,
+                win[0].top_left_y + win[0].height
+            );
+        }
+        // BRITISH.PTH has 4 pen origins
+        assert_eq!(BRITISH_PTH_PEN_ORIGINS.len(), 4);
+        assert_eq!(BRITISH_PTH_PEN_ORIGINS[0], (68, 44));
+        assert_eq!(BRITISH_PTH_PEN_ORIGINS[3], (105, 167));
+        assert_eq!(TITLE_LOWER_BAND_CLEAR_Y, 140);
+        assert_eq!(BRITISH_PTH_PEN_ORIGINS.len(), BRITISH_PTH_SEGMENT_COUNT);
+    }
+
+    #[test]
     fn return_to_view_constants_match_spec() {
         // intro.md §12
         assert_eq!(MISCMAPS_DAT_FILE, "MISCMAPS.DAT");

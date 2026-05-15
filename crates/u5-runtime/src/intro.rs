@@ -2,6 +2,47 @@
 
 use crate::input_case_fold;
 
+/// `intro.md §3`: title-screen 320x200 pixel placement for one
+/// bitmap slot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TitleBitPlacement {
+    pub asset: TitleBitAsset,
+    pub slot: u8,
+    pub top_left_x: u16,
+    pub top_left_y: u16,
+    pub width: u16,
+    pub height: u16,
+}
+
+/// `intro.md §3`: which compressed-bitmap resource a placement
+/// references.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TitleBitAsset {
+    Title,
+    British,
+}
+
+/// `intro.md §3` initial title mark — `TITLE.BIT` slots 0..=6 drawn
+/// in ascending order.
+pub const TITLE_BIT_INITIAL_PLACEMENTS: [TitleBitPlacement; 7] = [
+    TitleBitPlacement { asset: TitleBitAsset::Title, slot: 0, top_left_x: 148, top_left_y: 0, width: 24, height: 3 },
+    TitleBitPlacement { asset: TitleBitAsset::Title, slot: 1, top_left_x: 140, top_left_y: 3, width: 40, height: 7 },
+    TitleBitPlacement { asset: TitleBitAsset::Title, slot: 2, top_left_x: 124, top_left_y: 10, width: 72, height: 11 },
+    TitleBitPlacement { asset: TitleBitAsset::Title, slot: 3, top_left_x: 104, top_left_y: 21, width: 112, height: 20 },
+    TitleBitPlacement { asset: TitleBitAsset::Title, slot: 4, top_left_x: 84, top_left_y: 41, width: 152, height: 32 },
+    TitleBitPlacement { asset: TitleBitAsset::Title, slot: 5, top_left_x: 52, top_left_y: 73, width: 216, height: 45 },
+    TitleBitPlacement { asset: TitleBitAsset::Title, slot: 6, top_left_x: 20, top_left_y: 118, width: 280, height: 61 },
+];
+
+/// `intro.md §3` four `BRITISH.PTH` pen origins, in the order the
+/// path walker is called.
+pub const BRITISH_PTH_PEN_ORIGINS: [(u8, u8); 4] =
+    [(68, 44), (94, 64), (78, 143), (105, 167)];
+
+/// `intro.md §3` lower-screen Y where the title flow clears the
+/// lower band before drawing `TITLE.BIT` slot 7.
+pub const TITLE_LOWER_BAND_CLEAR_Y: u16 = 140;
+
 /// `intro.md §12`: Return-to-View loads `MISCMAPS.DAT`. The first
 /// four records are 19-by-4 map strips followed by a 655-byte
 /// command stream driving preview actors and animation beats.
