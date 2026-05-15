@@ -636,6 +636,44 @@
     }
 
     #[test]
+    fn town_location_class_and_index_split_per_spec() {
+        // town-mode.md §2,§3,§4
+        assert_eq!(town_location_class(0), None);
+        for s in 1..=8u8 {
+            assert_eq!(town_location_class(s), Some(TownLocationClass::Town));
+            assert_eq!(town_per_class_index(s), Some(s - 1));
+        }
+        for s in 9..=16u8 {
+            assert_eq!(town_location_class(s), Some(TownLocationClass::Dwelling));
+            assert_eq!(town_per_class_index(s), Some(s - 9));
+        }
+        for s in 17..=24u8 {
+            assert_eq!(town_location_class(s), Some(TownLocationClass::Castle));
+            assert_eq!(town_per_class_index(s), Some(s - 17));
+        }
+        for s in 25..=32u8 {
+            assert_eq!(town_location_class(s), Some(TownLocationClass::Keep));
+            assert_eq!(town_per_class_index(s), Some(s - 25));
+        }
+        assert_eq!(town_location_class(33), None);
+        assert_eq!(town_per_class_index(33), None);
+        // Family names
+        assert_eq!(TownLocationClass::Town.family_name(), "town");
+        assert_eq!(TownLocationClass::Castle.family_name(), "castle");
+        // Floor byte signed-eight-bit interpretation
+        assert_eq!(town_floor_offset(0), 0);
+        assert_eq!(town_floor_offset(1), 1);
+        assert_eq!(town_floor_offset(127), 127);
+        assert_eq!(town_floor_offset(128), -128);
+        assert_eq!(town_floor_offset(255), -1); // basement (one floor below base)
+        // Per-location grid + roster constants
+        assert_eq!(TOWN_GRID_SIDE, 32);
+        assert_eq!(TOWN_GRID_BYTES, 1024);
+        assert_eq!(TOWN_NPC_ROSTER_SLOTS, 31);
+        assert_eq!(TOWN_NPC_BLOCK_BYTES, 576);
+    }
+
+    #[test]
     fn blackthorn_rescue_verdict_bands_match_spec() {
         // blackthorn.md §7
         assert_eq!(BLACKTHORN_RESCUE_HANDOFF_SCENE, 17);

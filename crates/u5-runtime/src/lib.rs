@@ -69,6 +69,7 @@ pub mod test_fixtures;
 pub mod tile_classes;
 pub mod tile_helpers;
 pub mod timing;
+pub mod town_mode;
 pub mod town_tables;
 pub mod town_tables_io;
 pub mod town_tables_io_movement;
@@ -223,6 +224,10 @@ pub use shrine_virtue::{CodexUrnReadOutcome, ShrineVirtue, read_codex_urn};
 pub use start_validation::*;
 pub use tile_helpers::*;
 pub use timing::{DungeonFieldEffect, SaveTemplateSource, TimingStatusTag};
+pub use town_mode::{
+    TOWN_GRID_BYTES, TOWN_GRID_SIDE, TOWN_NPC_BLOCK_BYTES, TOWN_NPC_ROSTER_SLOTS,
+    TownLocationClass, town_floor_offset, town_location_class, town_per_class_index,
+};
 pub use town_tables::*;
 pub use town_tables_io::*;
 pub use town_tables_io_movement::*;
