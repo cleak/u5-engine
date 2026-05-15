@@ -25,6 +25,34 @@ pub const fn dungeon_blackout(torch_counter: u8, light_spell_counter: u8) -> boo
     torch_counter == 0 && light_spell_counter == 0
 }
 
+/// `lighting.md §5` per-turn cadence class. The light counter spends
+/// one unit per ordinary town/dungeon/combat turn and two units per
+/// ordinary overworld turn; longer waits spend the wait's requested
+/// increment directly. Mode-zero refreshes recompute ambient lighting
+/// only and do not spend counter duration.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LightDecayCadence {
+    /// Town, dungeon, or combat turn — 1 counter unit.
+    TownDungeonCombatTurn,
+    /// Ordinary overworld turn — 2 counter units.
+    OverworldTurn,
+    /// Long wait — explicit caller-supplied increment passes through.
+    Wait(u8),
+    /// Mode-zero refresh — no counter spend.
+    ModeZeroRefresh,
+}
+
+/// `lighting.md §5`: turn-cadence -> counter-spend mapping. Returns
+/// the number of counter units the per-turn cleanup decays by.
+pub const fn light_counter_increment(cadence: LightDecayCadence) -> u8 {
+    match cadence {
+        LightDecayCadence::TownDungeonCombatTurn => 1,
+        LightDecayCadence::OverworldTurn => 2,
+        LightDecayCadence::Wait(units) => units,
+        LightDecayCadence::ModeZeroRefresh => 0,
+    }
+}
+
 /// `lighting.md §5`: saturating per-turn light counter decrement. The
 /// counter is the turn-local light/torch byte; the increment is how many
 /// counter units the current turn spends (1 for town/dungeon/combat, 2

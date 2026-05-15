@@ -1,4 +1,39 @@
     #[test]
+    fn light_counter_increment_per_cadence_matches_spec() {
+        // lighting.md §5
+        assert_eq!(
+            light_counter_increment(LightDecayCadence::TownDungeonCombatTurn),
+            1
+        );
+        assert_eq!(
+            light_counter_increment(LightDecayCadence::OverworldTurn),
+            2
+        );
+        assert_eq!(light_counter_increment(LightDecayCadence::Wait(60)), 60);
+        assert_eq!(light_counter_increment(LightDecayCadence::Wait(0)), 0);
+        assert_eq!(
+            light_counter_increment(LightDecayCadence::ModeZeroRefresh),
+            0
+        );
+        // Chained with decay_light_counter: town turn drains 1 from 5.
+        assert_eq!(
+            decay_light_counter(
+                5,
+                light_counter_increment(LightDecayCadence::TownDungeonCombatTurn)
+            ),
+            4
+        );
+        // Mode-zero refresh leaves counter unchanged.
+        assert_eq!(
+            decay_light_counter(
+                5,
+                light_counter_increment(LightDecayCadence::ModeZeroRefresh)
+            ),
+            5
+        );
+    }
+
+    #[test]
     fn visibility_carve_neighbor_order_matches_spec_ring() {
         // visibility.md §5 — W, SW, S, SE, E, NE, N, NW.
         assert_eq!(VISIBILITY_CARVE_NEIGHBOR_ORDER.len(), 8);

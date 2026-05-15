@@ -185,9 +185,10 @@ pub use main_loop::{
     dungeon_resident_name, mode_minute_increment, scene_route,
 };
 pub use lighting::{
-    GREAT_LIGHT_SPELL_DURATION, LIGHT_SPELL_DURATION, ambient_is_sentinel,
-    apply_personal_light, daylight_base_value, decay_light_counter, dungeon_blackout,
-    ignite_torch_dungeon, ignite_torch_surface,
+    GREAT_LIGHT_SPELL_DURATION, LIGHT_SPELL_DURATION, LightDecayCadence,
+    ambient_is_sentinel, apply_personal_light, daylight_base_value,
+    decay_light_counter, dungeon_blackout, ignite_torch_dungeon, ignite_torch_surface,
+    light_counter_increment,
 };
 pub use endmsg_io::{
     ENDMSG_DAT_LEN, ENDMSG_DAT_RECORDS, EndgameMessages, load_endgame_messages,
