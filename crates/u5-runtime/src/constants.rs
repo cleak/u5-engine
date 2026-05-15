@@ -407,6 +407,30 @@ pub const TOWN_CHAIR_TILE: u8 = 0x8C;
 /// `catalogs/tile-catalog.md` §6.
 pub const NPC_FLOOR_LINK_TILE_A: u8 = 0xC8;
 pub const NPC_FLOOR_LINK_TILE_B: u8 = 0xC9;
+
+/// Save-image ship transport marker ranges per `vehicles.md` §6 / Ship
+/// Sails. Hoisted/wind-control ships use `0x20..=0x23`; furled/manual ships
+/// use `0x24..=0x27`. In both ranges the low two bits encode heading as
+/// north (0), east (1), south (2), west (3). These are save-image transport
+/// bytes, not visual tile ids.
+pub const SHIP_TRANSPORT_HOISTED_FIRST: u8 = 0x20;
+pub const SHIP_TRANSPORT_HOISTED_LAST: u8 = 0x23;
+pub const SHIP_TRANSPORT_FURLED_FIRST: u8 = 0x24;
+pub const SHIP_TRANSPORT_FURLED_LAST: u8 = 0x27;
+/// Carpet transport markers `0x14..=0x17` per `vehicles.md` §2/§4: the low
+/// two bits encode the carpet's facing on the same N/E/S/W convention used
+/// by ships. Only the north (`0x14`) and east (`0x15`) markers are accepted
+/// by the ship boarding precondition described in §4.
+pub const CARPET_TRANSPORT_FIRST: u8 = 0x14;
+pub const CARPET_TRANSPORT_LAST: u8 = 0x17;
+/// Horse object byte range `0x10..=0x11` (riderless) and `0x12..=0x13`
+/// (mounted). Boarding adds 2 to the riderless object byte to produce the
+/// mounted marker per `vehicles.md` §4.
+pub const HORSE_OBJECT_FIRST: u8 = 0x10;
+pub const HORSE_OBJECT_LAST: u8 = 0x11;
+pub const HORSE_TRANSPORT_FIRST: u8 = 0x12;
+pub const HORSE_TRANSPORT_LAST: u8 = 0x13;
+
 pub const SPELL_CODES: [&str; SPELL_COUNT] = [
     "IL", "GP", "AZ", "AN", "M", "AY", "AS", "ACX", "HR", "IW", "KX", "IMX", "LV", "FV", "FGI",
     "GIN", "GIZ", "IP", "AG", "IS", "GIS", "PU", "DP", "QW", "BIX", "AEP", "EIP", "MV", "IZ", "RT",

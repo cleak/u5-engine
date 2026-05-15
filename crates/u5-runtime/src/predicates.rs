@@ -29,6 +29,34 @@ pub const fn is_npc_floor_link_tile(tile: u8) -> bool {
     tile == NPC_FLOOR_LINK_TILE_A || tile == NPC_FLOOR_LINK_TILE_B
 }
 
+/// `vehicles.md` §6: a ship-transport marker byte (either hoisted
+/// `0x20..=0x23` or furled `0x24..=0x27`).
+pub const fn is_ship_transport_marker(byte: u8) -> bool {
+    (byte >= SHIP_TRANSPORT_HOISTED_FIRST && byte <= SHIP_TRANSPORT_HOISTED_LAST)
+        || (byte >= SHIP_TRANSPORT_FURLED_FIRST && byte <= SHIP_TRANSPORT_FURLED_LAST)
+}
+
+/// `vehicles.md` §6: ship hoisted/wind-control marker byte `0x20..=0x23`.
+pub const fn is_ship_transport_hoisted(byte: u8) -> bool {
+    byte >= SHIP_TRANSPORT_HOISTED_FIRST && byte <= SHIP_TRANSPORT_HOISTED_LAST
+}
+
+/// `vehicles.md` §6: ship furled/manual marker byte `0x24..=0x27`.
+pub const fn is_ship_transport_furled(byte: u8) -> bool {
+    byte >= SHIP_TRANSPORT_FURLED_FIRST && byte <= SHIP_TRANSPORT_FURLED_LAST
+}
+
+/// `vehicles.md` §6: low two bits of a ship transport marker decode heading
+/// as north (0), east (1), south (2), west (3). Returns `None` for non-ship
+/// bytes.
+pub const fn ship_transport_heading_index(byte: u8) -> Option<u8> {
+    if is_ship_transport_marker(byte) {
+        Some(byte & 0x03)
+    } else {
+        None
+    }
+}
+
 pub fn is_probe_walkable(tile: u8) -> bool {
     if is_location_entry_marker(tile) {
         return true;

@@ -636,6 +636,37 @@
     }
 
     #[test]
+    fn ship_transport_marker_predicates_match_published_ranges() {
+        // vehicles.md §6: hoisted 0x20..=0x23, furled 0x24..=0x27.
+        for byte in 0x20..=0x23u8 {
+            assert!(is_ship_transport_marker(byte));
+            assert!(is_ship_transport_hoisted(byte));
+            assert!(!is_ship_transport_furled(byte));
+        }
+        for byte in 0x24..=0x27u8 {
+            assert!(is_ship_transport_marker(byte));
+            assert!(!is_ship_transport_hoisted(byte));
+            assert!(is_ship_transport_furled(byte));
+        }
+        for byte in [0x1F, 0x28, 0x00, 0xFFu8] {
+            assert!(!is_ship_transport_marker(byte));
+        }
+    }
+
+    #[test]
+    fn ship_transport_heading_index_decodes_low_two_bits() {
+        // vehicles.md §6: low two bits encode N=0, E=1, S=2, W=3 in both
+        // hoisted and furled ranges.
+        assert_eq!(ship_transport_heading_index(0x20), Some(0));
+        assert_eq!(ship_transport_heading_index(0x21), Some(1));
+        assert_eq!(ship_transport_heading_index(0x22), Some(2));
+        assert_eq!(ship_transport_heading_index(0x23), Some(3));
+        assert_eq!(ship_transport_heading_index(0x24), Some(0));
+        assert_eq!(ship_transport_heading_index(0x27), Some(3));
+        assert_eq!(ship_transport_heading_index(0x14), None);
+    }
+
+    #[test]
     fn read_codex_urn_walks_virtues_in_standard_order() {
         // karma.md §8: walk the eight virtues in standard order, stamp the
         // first ordained-and-not-yet-Codex-read virtue, return the chosen
