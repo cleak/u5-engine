@@ -1,4 +1,29 @@
     #[test]
+    fn pth_decode_byte_matches_spec_encoding() {
+        // formats/pth.md §3,§5
+        assert_eq!(BRITISH_PTH_LEN, 2_783);
+        assert_eq!(BRITISH_PTH_SEGMENT_COUNT, 4);
+        // NUL is the segment terminator
+        assert_eq!(pth_decode_byte(0), None);
+        // Pen-down: both magnitudes <= 2
+        let s = pth_decode_byte(0x12).unwrap(); // dx=1 (high), dy=2 (low), positive
+        assert_eq!(s, PenStroke { dx: 1, dy: 2, pen_down: true });
+        // Pen-up: high magnitude > 2
+        let s = pth_decode_byte(0x31).unwrap();
+        assert_eq!(s, PenStroke { dx: 3, dy: 1, pen_down: false });
+        // Negative deltas (sign bits set)
+        let s = pth_decode_byte(0x88).unwrap(); // dx=-0, dy=-0
+        assert_eq!(s, PenStroke { dx: 0, dy: 0, pen_down: true });
+        let s = pth_decode_byte(0x91).unwrap(); // dx=-1, dy=1, pen_down (mags <=2)
+        assert_eq!(s, PenStroke { dx: -1, dy: 1, pen_down: true });
+        // Largest magnitude per axis
+        let s = pth_decode_byte(0x77).unwrap(); // dx=7, dy=7, pen-up
+        assert_eq!(s, PenStroke { dx: 7, dy: 7, pen_down: false });
+        let s = pth_decode_byte(0xFF).unwrap(); // dx=-7, dy=-7, pen-up
+        assert_eq!(s, PenStroke { dx: -7, dy: -7, pen_down: false });
+    }
+
+    #[test]
     fn no_turn_dungeon_action_on_wind_tile_skips_underfoot_wind() {
         let dir = debug_game_dir();
         fs::write(

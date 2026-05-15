@@ -51,6 +51,7 @@ pub mod play_state_impl;
 pub mod play_state_struct;
 pub mod predicates;
 pub mod prng;
+pub mod pth;
 pub mod report;
 pub mod save_load;
 pub mod scene;
@@ -263,6 +264,9 @@ pub use play_options::*;
 pub use play_state_struct::{PlayState, WorldOverlayCache, WorldReturn};
 pub use predicates::*;
 pub use prng::*;
+pub use pth::{
+    BRITISH_PTH_LEN, BRITISH_PTH_SEGMENT_COUNT, PenStroke, pth_decode_byte,
+};
 pub use report::run_report;
 pub use save_load::*;
 pub use scene::{DungeonScene, Family, PlayTarget, Scene, WorldPlane};
