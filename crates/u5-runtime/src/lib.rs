@@ -119,8 +119,9 @@ pub use blackthorn::{
     lord_british_camp_verdict_record,
 };
 pub use boot::{
-    DisplayDriverFamily, GraphicsCapability, TANDY_LOW_MEMORY_THRESHOLD_KB,
-    parse_explicit_driver_selector, resolve_driver_family, tandy_low_memory_downgrades,
+    DisplayDriverFamily, GraphicsCapability, MachineClass,
+    TANDY_LOW_MEMORY_THRESHOLD_KB, parse_explicit_driver_selector, resolve_driver_family,
+    tandy_low_memory_downgrades,
 };
 pub use commands::{Command, command_for_letter};
 pub use containers::{

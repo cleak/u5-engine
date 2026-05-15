@@ -15,6 +15,40 @@ pub enum GraphicsCapability {
     EgaSentinel,
 }
 
+/// `boot.md §3` machine-class probe outcome. Boot classifies the host
+/// along the (machine, graphics) axes; this enum is the machine half.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MachineClass {
+    /// IBM PC or PCjr-style baseline. PCjr skips the extended graphics
+    /// probe (so the auto-detect path must not run the Hercules port
+    /// test on this class).
+    PcOrPcjr,
+    /// IBM AT or later compatible.
+    At,
+    /// Tandy 1000 detected by the conservative ROM signature scan that
+    /// runs only for the BIOS id family that can hide a Tandy 1000
+    /// behind a PC-compatible id.
+    Tandy1000,
+    /// Non-matching or clone BIOS id; treated as generic XT-class with
+    /// graphics probing.
+    OtherOrGenericXt,
+}
+
+impl MachineClass {
+    /// `boot.md §3`: PCjr-class machines skip the extended-graphics
+    /// probe; every other class runs the BIOS+Hercules probe.
+    pub const fn skips_extended_graphics_probe(self) -> bool {
+        matches!(self, Self::PcOrPcjr)
+    }
+
+    /// `boot.md §3`: a Tandy-1000 ROM-signature hit stamps both the
+    /// machine class and the Tandy graphics capability up front,
+    /// short-circuiting the ordinary auto-detect path.
+    pub const fn forces_tandy_graphics(self) -> bool {
+        matches!(self, Self::Tandy1000)
+    }
+}
+
 /// `boot.md §5` driver families that can actually be loaded.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DisplayDriverFamily {

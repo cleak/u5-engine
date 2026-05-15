@@ -1,4 +1,20 @@
     #[test]
+    fn machine_class_probe_predicates_match_spec() {
+        // boot.md §3
+        // PCjr-class skips the extended graphics probe.
+        assert!(MachineClass::PcOrPcjr.skips_extended_graphics_probe());
+        assert!(!MachineClass::At.skips_extended_graphics_probe());
+        assert!(!MachineClass::Tandy1000.skips_extended_graphics_probe());
+        assert!(!MachineClass::OtherOrGenericXt.skips_extended_graphics_probe());
+
+        // Tandy 1000 ROM-signature hit forces Tandy graphics.
+        assert!(MachineClass::Tandy1000.forces_tandy_graphics());
+        assert!(!MachineClass::PcOrPcjr.forces_tandy_graphics());
+        assert!(!MachineClass::At.forces_tandy_graphics());
+        assert!(!MachineClass::OtherOrGenericXt.forces_tandy_graphics());
+    }
+
+    #[test]
     fn tlk_leading_entries_match_spec_disk_order() {
         // conversation.md §4
         assert_eq!(TLK_LEADING_ENTRY_COUNT, 5);
