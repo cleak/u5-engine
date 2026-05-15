@@ -86,6 +86,18 @@ impl ShrineVirtue {
         Self::Humility,
     ];
 
+    /// `karma.md §10` per-virtue shrine quest state derived from the
+    /// (ordained, codex-read) bit pair stored in the two save-backed
+    /// shrine masks.
+    pub const fn shrine_quest_state(ordained: bool, codex_read: bool) -> ShrineQuestState {
+        match (ordained, codex_read) {
+            (false, false) => ShrineQuestState::NotStarted,
+            (true, false) => ShrineQuestState::Ordained,
+            (true, true) => ShrineQuestState::CodexRead,
+            (false, true) => ShrineQuestState::Complete,
+        }
+    }
+
     /// `karma.md §7` Codex turn-in Avatar stat reward. Each touched stat
     /// increments by one and clamps at thirty (the avatar stat cap).
     /// Returns `(strength_step, dexterity_step, intelligence_step)` —
@@ -129,6 +141,27 @@ impl ShrineVirtue {
             Self::Humility => ("Katrina", "Shepherd"),
         }
     }
+}
+
+/// `karma.md §10` per-virtue shrine quest state encoded by the
+/// (ordained, codex-read) bit pair in the two shrine masks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShrineQuestState {
+    /// Both bits clear — virtue's quest path has not begun.
+    NotStarted,
+    /// Ordained bit set — must visit the Codex.
+    Ordained,
+    /// Both bits set — Codex page read; must return to the shrine.
+    CodexRead,
+    /// Codex bit set, ordained bit clear — quest complete.
+    Complete,
+}
+
+/// `karma.md §10`: the player's "all virtues complete" terminal state
+/// has every codex-read bit set and every ordained bit clear. Both
+/// inputs are eight-bit masks with one bit per virtue index `0..=7`.
+pub const fn all_virtues_complete(ordained_mask: u8, codex_read_mask: u8) -> bool {
+    ordained_mask == 0 && codex_read_mask == 0xFF
 }
 
 /// Result of one Codex urn read per `karma.md §8`.

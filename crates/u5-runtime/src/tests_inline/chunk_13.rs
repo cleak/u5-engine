@@ -921,6 +921,36 @@
     }
 
     #[test]
+    fn shrine_quest_state_decodes_bit_pair_per_spec() {
+        // karma.md §10
+        assert_eq!(
+            ShrineVirtue::shrine_quest_state(false, false),
+            ShrineQuestState::NotStarted
+        );
+        assert_eq!(
+            ShrineVirtue::shrine_quest_state(true, false),
+            ShrineQuestState::Ordained
+        );
+        assert_eq!(
+            ShrineVirtue::shrine_quest_state(true, true),
+            ShrineQuestState::CodexRead
+        );
+        assert_eq!(
+            ShrineVirtue::shrine_quest_state(false, true),
+            ShrineQuestState::Complete
+        );
+
+        // "All virtues complete" terminal state: codex=0xFF, ordained=0
+        assert!(all_virtues_complete(0, 0xFF));
+        // Any ordained bit still set fails the predicate
+        assert!(!all_virtues_complete(0x01, 0xFF));
+        // Any codex bit still clear fails the predicate
+        assert!(!all_virtues_complete(0, 0x7F));
+        // Empty state is not "complete"
+        assert!(!all_virtues_complete(0, 0));
+    }
+
+    #[test]
     fn codex_turn_in_stat_steps_match_spec_table() {
         // karma.md §7
         assert_eq!(ShrineVirtue::Honesty.codex_turn_in_stat_steps(), (0, 0, 1));

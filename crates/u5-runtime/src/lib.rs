@@ -245,7 +245,9 @@ pub use report::run_report;
 pub use save_load::*;
 pub use scene::{DungeonScene, Family, PlayTarget, Scene, WorldPlane};
 pub use shops::*;
-pub use shrine_virtue::{CodexUrnReadOutcome, ShrineVirtue, read_codex_urn};
+pub use shrine_virtue::{
+    CodexUrnReadOutcome, ShrineQuestState, ShrineVirtue, all_virtues_complete, read_codex_urn,
+};
 pub use start_validation::*;
 pub use tile_helpers::*;
 pub use timing::{DungeonFieldEffect, SaveTemplateSource, TimingStatusTag};
