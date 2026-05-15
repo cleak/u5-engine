@@ -7,6 +7,18 @@ use std::path::Path;
 
 use crate::*;
 
+/// `moons.md §3`: the sky/status-strip renderer runs only on
+/// surface and town-family views. Dungeon-class views and the
+/// underworld presentation suppress it. The argument is the saved
+/// scene byte and the underworld plane flag.
+pub const fn sky_strip_renders(scene_byte: u8, underworld_plane: bool) -> bool {
+    if underworld_plane {
+        return false;
+    }
+    // Surface (scene 0) and town-family (1..=32) render the strip.
+    scene_byte <= 32
+}
+
 /// `time.md §5` provision-decrement hours: food is spent only at
 /// 06:00, 12:00, and 18:00 (when the food counter is non-zero).
 pub const PROVISION_DECREMENT_HOURS: [u8; 3] = [6, 12, 18];

@@ -97,6 +97,7 @@ pub use clock::{
     GameClock, PROVISION_DECREMENT_HOURS, SKY_STRIP_CELL_COUNT, SkyStripMarker,
     TIMING_TAG_NEGATE_TIME, TIMING_TAG_QUICKNESS, apply_timing_tag_increment,
     is_provision_decrement_hour, shop_time_of_day_word, sky_strip_marker_position,
+    sky_strip_renders,
 };
 pub use directed_step::{
     Axis, axis_first_choice, directed_step_offsets, terrain_chance_gate_denominator,

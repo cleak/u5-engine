@@ -1,4 +1,26 @@
     #[test]
+    fn sky_strip_renders_only_for_surface_and_town_family() {
+        // moons.md §3
+        // Surface (scene 0) renders only on Britannia, not underworld.
+        assert!(sky_strip_renders(0, false));
+        assert!(!sky_strip_renders(0, true));
+        // Town-family scenes render
+        for scene in 1..=32u8 {
+            assert!(sky_strip_renders(scene, false));
+        }
+        // Town-family scenes also do not render on the underworld
+        // plane (they're never reachable there but the predicate
+        // honors the override).
+        assert!(!sky_strip_renders(13, true));
+        // Dungeon-class scenes are suppressed.
+        assert!(!sky_strip_renders(33, false));
+        assert!(!sky_strip_renders(40, false));
+        assert!(!sky_strip_renders(127, false));
+        // Combat marker is suppressed.
+        assert!(!sky_strip_renders(0xFF, false));
+    }
+
+    #[test]
     fn provision_decrement_hours_match_spec_table() {
         // time.md §5
         assert_eq!(PROVISION_DECREMENT_HOURS, [6, 12, 18]);
