@@ -57,6 +57,35 @@ pub const fn ship_transport_heading_index(byte: u8) -> Option<u8> {
     }
 }
 
+/// `formats/brit-dat.md §3`: logical chunk slot for the world
+/// coordinate `(x, y)`. Coordinates are wrapped modulo the
+/// 256-cell world side first.
+pub const fn brit_chunk_slot(x: u8, y: u8) -> usize {
+    let cx = (x as usize) / CHUNK_SIDE;
+    let cy = (y as usize) / CHUNK_SIDE;
+    cy * WORLD_CHUNKS_PER_SIDE + cx
+}
+
+/// `formats/brit-dat.md §3`: byte offset within a 256-byte stored
+/// chunk for the world coordinate `(x, y)`.
+pub const fn brit_offset_in_chunk(x: u8, y: u8) -> usize {
+    let lx = (x as usize) % CHUNK_SIDE;
+    let ly = (y as usize) % CHUNK_SIDE;
+    ly * CHUNK_SIDE + lx
+}
+
+/// `formats/brit-dat.md §3`: file offset for tile `(x, y)` given the
+/// chunk-index table entry for that tile's chunk slot. Returns `None`
+/// when the table entry is the [`BRIT_WATER_SENTINEL`] (the loader
+/// substitutes deep water for that case rather than reading from
+/// disk).
+pub const fn brit_file_offset(table_entry: u8, x: u8, y: u8) -> Option<usize> {
+    if table_entry == BRIT_WATER_SENTINEL {
+        return None;
+    }
+    Some((table_entry as usize) * CHUNK_BYTES + brit_offset_in_chunk(x, y))
+}
+
 /// `formats/look2-dat.md §3`: byte offset of the terrain-domain
 /// table entry for `tile_id` inside the LOOK2.DAT offset table.
 pub const fn look2_terrain_table_offset(tile_id: u8) -> usize {

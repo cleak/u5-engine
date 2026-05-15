@@ -940,6 +940,34 @@
     }
 
     #[test]
+    fn brit_chunk_slot_and_file_offset_match_spec() {
+        // formats/brit-dat.md §3
+        assert_eq!(WORLD_SIDE, 256);
+        assert_eq!(WORLD_CHUNKS_PER_SIDE, 16);
+        assert_eq!(WORLD_CHUNK_COUNT, 256);
+        assert_eq!(BRIT_DAT_LEN, 52_480);
+        assert_eq!(BRIT_STORED_CHUNKS, 205);
+        // Chunk slot
+        assert_eq!(brit_chunk_slot(0, 0), 0);
+        assert_eq!(brit_chunk_slot(15, 15), 0);
+        assert_eq!(brit_chunk_slot(16, 0), 1);
+        assert_eq!(brit_chunk_slot(0, 16), 16);
+        assert_eq!(brit_chunk_slot(255, 255), 16 * 16 - 1);
+        // Offset in chunk (row-major)
+        assert_eq!(brit_offset_in_chunk(0, 0), 0);
+        assert_eq!(brit_offset_in_chunk(1, 0), 1);
+        assert_eq!(brit_offset_in_chunk(0, 1), 16);
+        assert_eq!(brit_offset_in_chunk(15, 15), 16 * 16 - 1);
+        assert_eq!(brit_offset_in_chunk(16, 16), 0);
+        // Water-sentinel returns None
+        assert_eq!(brit_file_offset(BRIT_WATER_SENTINEL, 100, 100), None);
+        // Stored block 0, cell (0, 0)
+        assert_eq!(brit_file_offset(0, 0, 0), Some(0));
+        // Stored block 5, cell (15, 15)
+        assert_eq!(brit_file_offset(5, 15, 15), Some(5 * 256 + 255));
+    }
+
+    #[test]
     fn story_dat_size_and_record_count_match_spec() {
         // formats/story-dat.md §2
         assert_eq!(STORY_DAT_LEN, 11_679);
