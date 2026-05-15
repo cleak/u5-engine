@@ -1,4 +1,45 @@
     #[test]
+    fn outdoor_movement_chance_gate_classifies_destination_per_spec() {
+        // active-objects.md §8
+        // OneInTwo: 0x04, 0x06..=0x08, 0x1E..=0x1F.
+        assert_eq!(
+            outdoor_movement_chance_gate(0x04),
+            OutdoorMovementChanceGate::OneInTwo
+        );
+        for t in 0x06u8..=0x08 {
+            assert_eq!(
+                outdoor_movement_chance_gate(t),
+                OutdoorMovementChanceGate::OneInTwo
+            );
+        }
+        for t in 0x1Eu8..=0x1F {
+            assert_eq!(
+                outdoor_movement_chance_gate(t),
+                OutdoorMovementChanceGate::OneInTwo
+            );
+        }
+        // OneInThree: 0x09..=0x0F.
+        for t in 0x09u8..=0x0F {
+            assert_eq!(
+                outdoor_movement_chance_gate(t),
+                OutdoorMovementChanceGate::OneInThree
+            );
+        }
+        // Immediate: 0x05, 0x10..=0x1D, plus everything outside 0x04..=0x1F.
+        for t in [0x00u8, 0x05, 0x10, 0x1D, 0x20, 0x80, 0xDC, 0xFF] {
+            assert_eq!(
+                outdoor_movement_chance_gate(t),
+                OutdoorMovementChanceGate::Immediate,
+                "tile {t:#x}"
+            );
+        }
+
+        // Auto-clear destination tile / age cap constants.
+        assert_eq!(OUTDOOR_STEP_CLEAR_DESTINATION_TILE, 0xDC);
+        assert_eq!(FC_PROXIMITY_AGE_CAP, 20);
+    }
+
+    #[test]
     fn outdoor_serpent_dragon_trigger_and_whirlpool_constants_match_spec() {
         // active-objects.md §8
         assert_eq!(OUTDOOR_SERPENT_DRAGON_TRIGGER_DENOMINATOR, 7);

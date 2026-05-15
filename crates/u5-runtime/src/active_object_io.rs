@@ -17,6 +17,47 @@ pub const ACTIVE_OBJECT_FIELD_DEP1: usize = 5;
 pub const ACTIVE_OBJECT_FIELD_PHASE: usize = 6;
 pub const ACTIVE_OBJECT_FIELD_DEP3: usize = 7;
 
+/// `active-objects.md §8` outdoor step-committer destination-tile
+/// chance gate. After ordinary terrain/occupancy validation accepts
+/// a candidate cell, the step committer can still refuse the move
+/// based on the destination tile family.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OutdoorMovementChanceGate {
+    /// Tile ids `0x04`, `0x06..=0x08`, `0x1E..=0x1F` — accept on a
+    /// one-in-two roll.
+    OneInTwo,
+    /// Tile ids `0x09..=0x0F` — accept on a one-in-three roll.
+    OneInThree,
+    /// Tile id `0x05`, `0x10..=0x1D`, and ids outside `0x04..=0x1F`
+    /// — accept immediately.
+    Immediate,
+}
+
+/// `active-objects.md §8`: classify a destination tile id into its
+/// post-validation chance gate. The four monster first-frame values
+/// `0x94` Bat, `0xD8` Daemon, `0xDC` Dragon, and `0xF0` Mongbat —
+/// plus ship-like water-creature frames `0x2C..=0x2F` — bypass the
+/// low-terrain gate at the caller; this helper classifies the
+/// destination tile only.
+pub const fn outdoor_movement_chance_gate(destination_tile: u8) -> OutdoorMovementChanceGate {
+    match destination_tile {
+        0x04 | 0x06..=0x08 | 0x1E..=0x1F => OutdoorMovementChanceGate::OneInTwo,
+        0x09..=0x0F => OutdoorMovementChanceGate::OneInThree,
+        _ => OutdoorMovementChanceGate::Immediate,
+    }
+}
+
+/// `active-objects.md §8` step-committer auto-clear tile. When a
+/// committed step lands on destination tile id `0xDC` (the moon-gate
+/// / local-light terrain family), the moving slot is cleared.
+pub const OUTDOOR_STEP_CLEAR_DESTINATION_TILE: u8 = 0xDC;
+
+/// `active-objects.md §8` `0xFC` proximity-mask age cap. Listed
+/// proximity cells increment the slot's first auxiliary byte as an
+/// age counter; while the counter remains below twenty, the slot
+/// requests a directed step toward the player.
+pub const FC_PROXIMITY_AGE_CAP: u8 = 20;
+
 /// `active-objects.md §8` outdoor sea-serpent / dragon adjacency
 /// trigger. The outdoor per-turn walker rolls a one-in-seven gate
 /// for first-frame Sea Serpent and Dragon hostile classes near the
