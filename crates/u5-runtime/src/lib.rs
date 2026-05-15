@@ -5,6 +5,7 @@
 
 pub mod active_object_io;
 pub mod animation;
+pub mod blackthorn;
 pub mod boot;
 pub mod chargen;
 pub mod clock;
@@ -93,6 +94,10 @@ pub use directed_step::{
     type_bypasses_terrain_chance_gate,
 };
 pub use end_io::{EndNarrative, decode_end_window, load_end_narrative};
+pub use blackthorn::{
+    BLACKTHORN_RESCUE_HANDOFF_SCENE, BLACKTHORN_RESCUE_HANDOFF_X, BLACKTHORN_RESCUE_HANDOFF_Y,
+    BLACKTHORN_RESCUE_STANDING_FLOOR, blackthorn_rescue_verdict_record,
+};
 pub use boot::{
     DisplayDriverFamily, GraphicsCapability, TANDY_LOW_MEMORY_THRESHOLD_KB,
     parse_explicit_driver_selector, resolve_driver_family, tandy_low_memory_downgrades,

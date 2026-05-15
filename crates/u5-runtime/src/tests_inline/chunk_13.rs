@@ -636,6 +636,33 @@
     }
 
     #[test]
+    fn blackthorn_rescue_verdict_bands_match_spec() {
+        // blackthorn.md §7
+        assert_eq!(BLACKTHORN_RESCUE_HANDOFF_SCENE, 17);
+        assert_eq!(BLACKTHORN_RESCUE_HANDOFF_X, 10);
+        assert_eq!(BLACKTHORN_RESCUE_HANDOFF_Y, 10);
+        assert_eq!(BLACKTHORN_RESCUE_STANDING_FLOOR, 75);
+        // Twenty-point bands: 0..19, 20..39, 40..59, 60..79, 80..99
+        for s in 0..=19u8 {
+            assert_eq!(blackthorn_rescue_verdict_record(s), 0);
+        }
+        for s in 20..=39u8 {
+            assert_eq!(blackthorn_rescue_verdict_record(s), 1);
+        }
+        for s in 40..=59u8 {
+            assert_eq!(blackthorn_rescue_verdict_record(s), 2);
+        }
+        for s in 60..=79u8 {
+            assert_eq!(blackthorn_rescue_verdict_record(s), 3);
+        }
+        for s in 80..=99u8 {
+            assert_eq!(blackthorn_rescue_verdict_record(s), 4);
+        }
+        // Clamps to top band for values above the standing cap.
+        assert_eq!(blackthorn_rescue_verdict_record(255), 4);
+    }
+
+    #[test]
     fn scene_route_classifies_per_main_loop_table() {
         // main-loop.md §3,§4
         assert_eq!(scene_route(0), SceneRoute::Overworld);
