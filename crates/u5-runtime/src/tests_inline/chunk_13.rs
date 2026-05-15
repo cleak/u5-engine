@@ -667,6 +667,23 @@
     }
 
     #[test]
+    fn npc_schedule_state_constants_match_published_state_machine() {
+        // npc-schedules.md §7: 0=empty, 1=idle, 2=in-plane move, 3=replay
+        // queue, 4=descend, 5=ascend, 6=climb up off, 7=climb down off,
+        // 8=parked off-floor.
+        assert_eq!(NPC_STATE_EMPTY, 0);
+        assert_eq!(NPC_STATE_IDLE, 1);
+        assert_eq!(NPC_STATE_INPLANE_MOVE, 2);
+        assert_eq!(NPC_STATE_REPLAY_QUEUE, 3);
+        assert_eq!(NPC_STATE_DESCEND_TOWARD_TARGET, 4);
+        assert_eq!(NPC_STATE_ASCEND_TOWARD_TARGET, 5);
+        assert_eq!(NPC_STATE_CLIMB_UP_OFF_FLOOR, 6);
+        assert_eq!(NPC_STATE_CLIMB_DOWN_OFF_FLOOR, 7);
+        assert_eq!(NPC_STATE_PARKED_OFF_FLOOR, 8);
+        assert_eq!(NPC_STUCK_REPLAN_THRESHOLD, 3);
+    }
+
+    #[test]
     fn tile_blocks_sight_propagation_matches_spec_classifier() {
         // visibility.md §6: the sight-blocking spec list.
         for tile in [

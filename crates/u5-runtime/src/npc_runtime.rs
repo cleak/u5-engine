@@ -7,6 +7,24 @@ use std::path::Path;
 
 use crate::*;
 
+/// Per `npc-schedules.md §7`: NPC schedule state-machine values `0..=8`.
+/// Empty / idle / in-plane move / replaying queue / descend toward target /
+/// ascend toward target / climb up off-floor / climb down off-floor /
+/// parked off-floor.
+pub const NPC_STATE_EMPTY: u8 = 0;
+pub const NPC_STATE_IDLE: u8 = 1;
+pub const NPC_STATE_INPLANE_MOVE: u8 = 2;
+pub const NPC_STATE_REPLAY_QUEUE: u8 = 3;
+pub const NPC_STATE_DESCEND_TOWARD_TARGET: u8 = 4;
+pub const NPC_STATE_ASCEND_TOWARD_TARGET: u8 = 5;
+pub const NPC_STATE_CLIMB_UP_OFF_FLOOR: u8 = 6;
+pub const NPC_STATE_CLIMB_DOWN_OFF_FLOOR: u8 = 7;
+pub const NPC_STATE_PARKED_OFF_FLOOR: u8 = 8;
+/// Per `npc-schedules.md §4`: stuck counter threshold for forced replan.
+/// When the counter exceeds this value the move queue is reset to inactive
+/// and a fresh route is requested on a later tick.
+pub const NPC_STUCK_REPLAN_THRESHOLD: u16 = 3;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeNpc {
     pub slot: usize,
