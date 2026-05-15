@@ -57,6 +57,13 @@ pub const fn ship_transport_heading_index(byte: u8) -> Option<u8> {
     }
 }
 
+/// `formats/under-dat.md §2,§3`: file offset for tile `(x, y)` in the
+/// underworld map. Every logical chunk is stored (no chunk-index
+/// table) so the offset is `chunk_slot * 256 + offset_in_chunk`.
+pub const fn under_file_offset(x: u8, y: u8) -> usize {
+    brit_chunk_slot(x, y) * CHUNK_BYTES + brit_offset_in_chunk(x, y)
+}
+
 /// `formats/brit-dat.md §3`: logical chunk slot for the world
 /// coordinate `(x, y)`. Coordinates are wrapped modulo the
 /// 256-cell world side first.

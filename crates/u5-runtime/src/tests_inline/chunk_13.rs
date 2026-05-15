@@ -976,6 +976,19 @@
     }
 
     #[test]
+    fn under_file_offset_matches_spec_layout() {
+        // formats/under-dat.md §2
+        assert_eq!(UNDER_DAT_LEN, 65_536);
+        assert_eq!(UNDER_DAT_LEN, WORLD_CELLS);
+        // First and last cells
+        assert_eq!(under_file_offset(0, 0), 0);
+        assert_eq!(under_file_offset(255, 255), UNDER_DAT_LEN - 1);
+        // Every logical chunk is stored, so chunk_slot == stored block index
+        // and slot 1 starts at byte 256.
+        assert_eq!(under_file_offset(16, 0), 256);
+    }
+
+    #[test]
     fn brit_chunk_slot_and_file_offset_match_spec() {
         // formats/brit-dat.md §3
         assert_eq!(WORLD_SIDE, 256);
