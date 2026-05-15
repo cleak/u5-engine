@@ -1,4 +1,32 @@
     #[test]
+    fn npc_schedule_waypoint_resolves_per_spec_segments() {
+        // npc-schedules.md §3
+        // A typical baker schedule: 06 morning -> waypoint 0, 12 noon
+        // -> waypoint 1, 18 evening -> waypoint 2, 22 night-home -> wp 1.
+        let time = [6u8, 12, 18, 22];
+        // 06..=11 in segment [time[0], time[1]) -> waypoint 0.
+        for h in 6u8..12 {
+            assert_eq!(npc_schedule_waypoint_for_hour(time, h), 0, "hour {h}");
+        }
+        // 12..=17 -> waypoint 1.
+        for h in 12u8..18 {
+            assert_eq!(npc_schedule_waypoint_for_hour(time, h), 1, "hour {h}");
+        }
+        // 18..=21 -> waypoint 2.
+        for h in 18u8..22 {
+            assert_eq!(npc_schedule_waypoint_for_hour(time, h), 2, "hour {h}");
+        }
+        // 22..=23 (after the last boundary, in the wrap segment) -> waypoint 1.
+        for h in 22u8..24 {
+            assert_eq!(npc_schedule_waypoint_for_hour(time, h), 1, "hour {h}");
+        }
+        // 0..=5 (still in the wrap segment, before time[0]) -> waypoint 1.
+        for h in 0u8..6 {
+            assert_eq!(npc_schedule_waypoint_for_hour(time, h), 1, "hour {h}");
+        }
+    }
+
+    #[test]
     fn monster_kill_xp_reward_matches_spec() {
         // combat.md §12 — quarter of max HP plus one.
         assert_eq!(monster_kill_xp_reward(0), 1);

@@ -331,8 +331,8 @@ pub use town_mode::{
     LOCATION_DAT_FLOOR_PAGE_LEN, LOCATION_DAT_FLOOR_PAGES_PER_BLOCK,
     NPC_TYPE_ARRAY_OFFSET, TOWN_GRID_BYTES, TOWN_GRID_SIDE, TOWN_NPC_BLOCK_BYTES,
     TOWN_NPC_ROSTER_SLOTS, TownLocationClass, location_dat_filename, npc_roster_filename,
-    npc_tlk_filename, town_floor_offset, town_location_class, town_per_class_index,
-    town_resident_name,
+    npc_schedule_waypoint_for_hour, npc_tlk_filename, town_floor_offset,
+    town_location_class, town_per_class_index, town_resident_name,
 };
 pub use town_tables::*;
 pub use town_tables_io::*;

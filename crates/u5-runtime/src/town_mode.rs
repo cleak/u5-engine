@@ -177,3 +177,40 @@ pub const NPC_EFFECTIVE_SLOTS_PER_SUB_MAP: usize = NPC_SLOTS_PER_SUB_MAP - 1;
 /// per slot for a total of 576 bytes per location.
 pub const TOWN_NPC_ROSTER_SLOTS: usize = 31;
 pub const TOWN_NPC_BLOCK_BYTES: usize = 576;
+
+/// `npc-schedules.md §3` schedule waypoint selection for the current
+/// hour. Each NPC's 16-byte schedule record carries four hour
+/// boundaries `time[0..=3]` that carve the 24-hour day into four
+/// segments, each mapped to a waypoint:
+///
+///   [time[0], time[1]) -> waypoint 0
+///   [time[1], time[2]) -> waypoint 1
+///   [time[2], time[3]) -> waypoint 2
+///   [time[3], time[0]) (wraps midnight) -> waypoint 1
+///
+/// Returns the active waypoint index (0..=2) for the supplied hour
+/// (0..=23). The selection follows the spec's "most recent past
+/// boundary, with 24-hour wraparound" rule, so equality with a
+/// boundary picks that segment's waypoint.
+pub const fn npc_schedule_waypoint_for_hour(time: [u8; 4], hour: u8) -> u8 {
+    // Map (boundary -> waypoint) per the spec table.
+    let waypoints: [u8; 4] = [0, 1, 2, 1];
+    // Score each segment's start by how recently it occurred (mod 24).
+    // Prefer the segment whose start has the smallest "hour - start"
+    // remainder. The wraparound boundary (time[3]) maps to waypoint 1,
+    // matching the night band that returns the NPC to the home/sleep
+    // waypoint until the next morning.
+    let mut best_idx: usize = 0;
+    let mut best_recency: u8 = 24;
+    let mut i: usize = 0;
+    while i < 4 {
+        let start = time[i] % 24;
+        let recency = (hour + 24 - start) % 24;
+        if recency < best_recency {
+            best_recency = recency;
+            best_idx = i;
+        }
+        i += 1;
+    }
+    waypoints[best_idx]
+}
