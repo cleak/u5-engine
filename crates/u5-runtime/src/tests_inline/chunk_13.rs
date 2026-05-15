@@ -1,4 +1,17 @@
     #[test]
+    fn monster_kill_xp_reward_matches_spec() {
+        // combat.md §12 — quarter of max HP plus one.
+        assert_eq!(monster_kill_xp_reward(0), 1);
+        assert_eq!(monster_kill_xp_reward(3), 1); // 0 + 1
+        assert_eq!(monster_kill_xp_reward(4), 2); // 1 + 1
+        assert_eq!(monster_kill_xp_reward(40), 11);
+        assert_eq!(monster_kill_xp_reward(100), 26);
+        assert_eq!(monster_kill_xp_reward(255), 64);
+        // u16::MAX yields (65535/4) + 1 = 16384.
+        assert_eq!(monster_kill_xp_reward(u16::MAX), 16384);
+    }
+
+    #[test]
     fn fire_and_energy_field_raw_damage_match_spec() {
         // combat.md §11
         assert_eq!(FIRE_FIELD_DAMAGE_MIN, 1);

@@ -11,6 +11,15 @@ pub const COMBAT_MONSTER_SLOT_FIRST: usize = 1;
 pub const COMBAT_MONSTER_SLOT_LAST: usize = 25;
 pub const COMBAT_ACTOR_RECORD_LEN: usize = 8;
 
+/// `combat.md §12` per-kill raw experience-reward unit. Each monster
+/// killed produces "roughly a quarter of max-HP plus one" credited to
+/// the killing party member's experience word (capped at 9999 by the
+/// caller's standard arithmetic). The unit is also reused by spell-side
+/// multi-target callers like Tremor.
+pub const fn monster_kill_xp_reward(class_max_hp: u16) -> u16 {
+    (class_max_hp / 4).saturating_add(1)
+}
+
 /// `combat.md §11` Fire Field per-contact raw-damage roll. The
 /// post-step contact hook rolls a uniform `[1, 21]` value before the
 /// normal random defense subtraction. Caller passes the raw `0..=20`
