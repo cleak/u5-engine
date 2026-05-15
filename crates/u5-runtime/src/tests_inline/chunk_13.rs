@@ -636,6 +636,45 @@
     }
 
     #[test]
+    fn active_object_eviction_phase_matches_spec_cascade() {
+        // active-objects.md §4
+        // Empty slot is always phase 1.
+        assert_eq!(active_object_eviction_phase(0x00, true), Some(1));
+        assert_eq!(active_object_eviction_phase(0x00, false), Some(1));
+
+        // 0x01..=0x0F low-priority scenery
+        assert_eq!(active_object_eviction_phase(0x01, true), Some(2));
+        assert_eq!(active_object_eviction_phase(0x0F, true), Some(2));
+        assert_eq!(active_object_eviction_phase(0x01, false), Some(6));
+
+        // 0x80..=0xFF monsters/dynamic actors (except 0xB5)
+        assert_eq!(active_object_eviction_phase(0x80, true), Some(3));
+        assert_eq!(active_object_eviction_phase(0xFF, true), Some(3));
+        assert_eq!(active_object_eviction_phase(0x80, false), Some(7));
+        assert_eq!(active_object_eviction_phase(0xB5, true), None);
+        assert_eq!(active_object_eviction_phase(0xB5, false), None);
+
+        // 0x10..=0x11 door/fixture-like
+        assert_eq!(active_object_eviction_phase(0x10, true), Some(4));
+        assert_eq!(active_object_eviction_phase(0x11, true), Some(4));
+        assert_eq!(active_object_eviction_phase(0x10, false), Some(8));
+
+        // 0x30..=0x7F items/chests
+        assert_eq!(active_object_eviction_phase(0x30, true), Some(5));
+        assert_eq!(active_object_eviction_phase(0x7F, true), Some(5));
+        assert_eq!(active_object_eviction_phase(0x30, false), Some(9));
+
+        // 0x12..=0x1F NPC/person ranges and 0x20..=0x2F vehicle ranges
+        // are protected from off-screen phases but eligible for the
+        // last-resort phase 10.
+        assert_eq!(active_object_eviction_phase(0x12, true), Some(10));
+        assert_eq!(active_object_eviction_phase(0x1F, true), Some(10));
+        assert_eq!(active_object_eviction_phase(0x20, true), Some(10));
+        assert_eq!(active_object_eviction_phase(0x2F, true), Some(10));
+        assert_eq!(active_object_eviction_phase(0x20, false), Some(10));
+    }
+
+    #[test]
     fn chargen_questionnaire_always_floors_strength_to_twenty() {
         // chargen.md §7: max STR contribution is 2 per question and there
         // are 7 questions, so the floor always fires.

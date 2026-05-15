@@ -7,6 +7,38 @@ use std::path::{Path, PathBuf};
 
 use crate::*;
 
+/// `active-objects.md §4`: deterministic eviction phase a candidate
+/// qualifies for, or `None` if the byte-0 / on-screen combination is not
+/// a victim in any phase. Phases 1..=5 are the off-screen passes (with
+/// phase 1 being the empty-slot path); phases 6..=10 are the
+/// any-on-screen passes. Byte 0x00 (empty slot) returns `Some(1)`. Byte
+/// 0xB5 is universally protected and returns `None` regardless.
+pub const fn active_object_eviction_phase(byte0: u8, off_screen: bool) -> Option<u8> {
+    if byte0 == ACTIVE_OBJECT_PROTECTED_TYPE_BYTE {
+        return None;
+    }
+    if byte0 == 0x00 {
+        return Some(1);
+    }
+    if off_screen {
+        match byte0 {
+            0x01..=0x0F => Some(2),
+            0x80..=0xFF => Some(3), // 0xB5 already returned None above.
+            0x10..=0x11 => Some(4),
+            0x30..=0x7F => Some(5),
+            _ => Some(10),
+        }
+    } else {
+        match byte0 {
+            0x01..=0x0F => Some(6),
+            0x80..=0xFF => Some(7),
+            0x10..=0x11 => Some(8),
+            0x30..=0x7F => Some(9),
+            _ => Some(10),
+        }
+    }
+}
+
 pub fn refresh_saved_ool_mirrors_for_load(game_dir: &Path) -> io::Result<()> {
     let bytes = read_saved_ool_bytes(game_dir)?;
     fs::write(game_dir.join("BRIT.OOL"), &bytes[..OOL_PLANE_LEN])?;
