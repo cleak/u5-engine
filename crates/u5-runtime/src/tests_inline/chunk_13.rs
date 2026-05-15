@@ -1,4 +1,38 @@
     #[test]
+    fn rest_status_predicates_match_spec_tables() {
+        // rest-and-camp.md §5
+        // Rest-with-watch participation.
+        assert!(rest_with_watch_participates(CharacterStatus::Good));
+        assert!(rest_with_watch_participates(
+            CharacterStatus::PoisonedOrRevived
+        ));
+        assert!(rest_with_watch_participates(CharacterStatus::Sleeping));
+        assert!(!rest_with_watch_participates(CharacterStatus::Charmed));
+        assert!(!rest_with_watch_participates(CharacterStatus::Dead));
+        assert!(!rest_with_watch_participates(CharacterStatus::Ashes));
+
+        // Town-hours temporary-sleep marking only Good members.
+        assert!(town_rest_temp_sleep_marked(CharacterStatus::Good));
+        assert!(!town_rest_temp_sleep_marked(
+            CharacterStatus::PoisonedOrRevived
+        ));
+        assert!(!town_rest_temp_sleep_marked(CharacterStatus::Sleeping));
+        assert!(!town_rest_temp_sleep_marked(CharacterStatus::Charmed));
+        assert!(!town_rest_temp_sleep_marked(CharacterStatus::Dead));
+        assert!(!town_rest_temp_sleep_marked(CharacterStatus::Ashes));
+
+        // Cleanup restores Sleeping -> Good only.
+        assert!(rest_cleanup_transitions_to_good(CharacterStatus::Sleeping));
+        assert!(!rest_cleanup_transitions_to_good(CharacterStatus::Good));
+        assert!(!rest_cleanup_transitions_to_good(
+            CharacterStatus::PoisonedOrRevived
+        ));
+        assert!(!rest_cleanup_transitions_to_good(CharacterStatus::Charmed));
+        assert!(!rest_cleanup_transitions_to_good(CharacterStatus::Dead));
+        assert!(!rest_cleanup_transitions_to_good(CharacterStatus::Ashes));
+    }
+
+    #[test]
     fn trap_effect_distribution_predicates_match_spec_tables() {
         // traps.md §3
         // Revive helper families.

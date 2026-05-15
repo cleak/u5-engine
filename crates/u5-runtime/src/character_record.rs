@@ -93,6 +93,34 @@ impl CharacterStatus {
     }
 }
 
+/// `rest-and-camp.md §5` rest-with-watch participation classification.
+/// Good, Poisoned, and Sleeping members participate in the watch
+/// path; Charmed, Dead, and Ashes members are skipped and have no
+/// dedicated H-Hole-up status transition.
+pub const fn rest_with_watch_participates(status: CharacterStatus) -> bool {
+    matches!(
+        status,
+        CharacterStatus::Good
+            | CharacterStatus::PoisonedOrRevived
+            | CharacterStatus::Sleeping,
+    )
+}
+
+/// `rest-and-camp.md §5` town-hours rest pass: only Good members are
+/// temporarily marked Sleeping for the elapsed-rest loop. The cleanup
+/// pass then restores all Sleeping members to Good. Non-Good members
+/// are not changed by this temporary sleep-marking.
+pub const fn town_rest_temp_sleep_marked(status: CharacterStatus) -> bool {
+    matches!(status, CharacterStatus::Good)
+}
+
+/// `rest-and-camp.md §5` cleanup transition: Sleeping members are
+/// restored to Good during cleanup (regardless of whether they were
+/// temporarily marked or already Sleeping at entry).
+pub const fn rest_cleanup_transitions_to_good(status: CharacterStatus) -> bool {
+    matches!(status, CharacterStatus::Sleeping)
+}
+
 /// `formats/saved-gam.md §3.1`: classify a status byte at `+0x0B`.
 pub const fn character_status_for_byte(byte: u8) -> Option<CharacterStatus> {
     Some(match byte {

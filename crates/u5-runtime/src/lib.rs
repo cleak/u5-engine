@@ -91,6 +91,8 @@ pub use active_object_io::*;
 pub use animation::{ActiveObject, ActiveShipWind, AnimationClock, PhaseTick};
 pub use character_record::{
     CharacterClass, CharacterStatus, character_class_for_byte, character_status_for_byte,
+    rest_cleanup_transitions_to_good, rest_with_watch_participates,
+    town_rest_temp_sleep_marked,
 };
 pub use chargen::*;
 pub use clock::{
