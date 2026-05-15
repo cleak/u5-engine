@@ -1,4 +1,21 @@
     #[test]
+    fn search_trap_detection_threshold_matches_spec_formulas() {
+        // containers.md §5
+        // Not trappable: (30 - stat) / 2
+        assert_eq!(search_trap_detection_threshold(false, 0, 10), 10);
+        assert_eq!(search_trap_detection_threshold(false, 99, 10), 10);
+        assert_eq!(search_trap_detection_threshold(false, 0, 30), 0);
+        // Negative raw -> 0
+        assert_eq!(search_trap_detection_threshold(false, 0, 100), 0);
+        // Trappable: (difficulty - stat + 30) / 2
+        assert_eq!(search_trap_detection_threshold(true, 10, 10), 15);
+        assert_eq!(search_trap_detection_threshold(true, 30, 0), 30);
+        assert_eq!(search_trap_detection_threshold(true, 0, 30), 0);
+        // Below the floor -> 0
+        assert_eq!(search_trap_detection_threshold(true, 0, 100), 0);
+    }
+
+    #[test]
     fn search_location_prefix_classifies_named_scenery() {
         // containers.md §5
         assert_eq!(search_location_prefix(0x2B), Some(SearchLocationPrefix::Stump));

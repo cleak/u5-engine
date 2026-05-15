@@ -80,6 +80,33 @@ pub const fn equipment_grant_quantity(class_code: u8) -> u8 {
     }
 }
 
+/// `containers.md §5` Search trap-detection threshold for a per-map
+/// object's slot metadata. The `trappable` flag distinguishes the
+/// two formulas; both halve the unsigned-word intermediate value.
+/// Caller rolls `1..=30` and the detection bit is set when the roll
+/// is greater than or equal to the threshold.
+pub const fn search_trap_detection_threshold(
+    trappable: bool,
+    difficulty: u8,
+    member_trap_detection: u8,
+) -> u8 {
+    if trappable {
+        let raw = (difficulty as i16) - (member_trap_detection as i16) + 30;
+        if raw < 0 {
+            0
+        } else {
+            (raw as u16 / 2) as u8
+        }
+    } else {
+        let raw = 30i16 - member_trap_detection as i16;
+        if raw < 0 {
+            0
+        } else {
+            (raw as u16 / 2) as u8
+        }
+    }
+}
+
 /// `containers.md §5` Search location-prefix classification for the
 /// live tile under the searched coordinate. The prefix names the
 /// scenery the search narration mentions before any found-object
