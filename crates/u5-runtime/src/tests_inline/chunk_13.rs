@@ -636,6 +636,56 @@
     }
 
     #[test]
+    fn parse_sign_records_decodes_directory_and_payload() {
+        // formats/signs-dat.md §2-§4. Build a minimal SIGNS.DAT image with
+        // two scene blocks separated by a zero-scene sentinel. Scene 17 has
+        // one record at (0, 5, 6); scene 18 has one record at (1, 7, 8)
+        // using divider/decoration glyphs.
+        let mut bytes = vec![0u8; 33 * 2];
+        let scene17_offset = 66u16;
+        bytes[17 * 2..17 * 2 + 2].copy_from_slice(&scene17_offset.to_le_bytes());
+        // Scene 17 record + payload + NUL + sentinel = 4 + 5 + 1 + 1 = 11
+        let scene18_offset = scene17_offset + 4 + 5 + 1 + 1;
+        bytes[18 * 2..18 * 2 + 2].copy_from_slice(&scene18_offset.to_le_bytes());
+        // Scene 17 block.
+        bytes.extend_from_slice(&[17, 0, 5, 6]);
+        bytes.extend_from_slice(b"Hello");
+        bytes.push(0x00);
+        bytes.push(0x00); // end-of-block sentinel
+        // Scene 18 block.
+        bytes.extend_from_slice(&[18, 1, 7, 8]);
+        bytes.extend_from_slice(&[b'A', 0x26, b'B', 0x29, b'C']);
+        bytes.push(0x00);
+        bytes.push(0x00); // end-of-block sentinel
+
+        let records = parse_sign_records(&bytes).expect("parse should succeed");
+        assert_eq!(records.len(), 2);
+
+        let lookup_17 = find_sign(&records, 17, 0, 5, 6).expect("scene 17 record present");
+        assert_eq!(lookup_17.body, "Hello");
+
+        let lookup_18 = find_sign(&records, 18, 1, 7, 8).expect("scene 18 record present");
+        assert_eq!(lookup_18.body, "A-B*C");
+
+        // No matching record returns None.
+        assert!(find_sign(&records, 17, 1, 1, 1).is_none());
+    }
+
+    #[test]
+    fn parse_sign_records_rejects_short_directory() {
+        // Less than the 66-byte scene directory must error per §2 of the format spec.
+        assert!(parse_sign_records(&[0u8; 10]).is_err());
+    }
+
+    #[test]
+    fn decode_sign_payload_handles_pause_and_high_bit() {
+        // §4: 0x0D becomes a newline; high-bit text still prints as the
+        // low-seven-bit character.
+        let bytes = [b'A', 0x0d, b'B' | 0x80, b'C'];
+        assert_eq!(decode_sign_payload(&bytes), "A\nBC");
+    }
+
+    #[test]
     fn sky_strip_marker_position_matches_spec_visibility_table() {
         // moons.md §2: Fixed hour marker visible 06:00..17:59 at cell `17 -
         // hour`. Trammel visible 00:00..08:59 at `8 - hour` and 21:00..23:59

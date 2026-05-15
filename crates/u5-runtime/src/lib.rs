@@ -41,6 +41,7 @@ pub mod save_load;
 pub mod scene;
 pub mod shops;
 pub mod shrine_virtue;
+pub mod signs_io;
 pub mod start_validation;
 pub mod test_fixtures;
 pub mod tile_helpers;
@@ -61,6 +62,9 @@ pub use active_object_io::*;
 pub use animation::{ActiveObject, ActiveShipWind, AnimationClock, PhaseTick};
 pub use chargen::*;
 pub use clock::{GameClock, SKY_STRIP_CELL_COUNT, SkyStripMarker, sky_strip_marker_position};
+pub use signs_io::{
+    SignRecord, decode_sign_payload, find_sign, load_sign_records, parse_sign_records,
+};
 pub use combat_actor::*;
 pub use combat_arena::*;
 pub use combat_frame::*;
