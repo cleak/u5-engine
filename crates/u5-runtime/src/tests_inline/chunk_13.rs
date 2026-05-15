@@ -1,4 +1,34 @@
     #[test]
+    fn stats_panel_middle_counter_picks_ship_hull_for_ship_marker() {
+        // stats-panel.md §5
+        // Ordinary/non-ship markers -> party gold.
+        assert_eq!(
+            stats_panel_middle_counter(0x00),
+            StatsPanelMiddleCounter::PartyGold
+        );
+        assert_eq!(
+            stats_panel_middle_counter(0x1F),
+            StatsPanelMiddleCounter::PartyGold
+        );
+        assert_eq!(
+            stats_panel_middle_counter(0x28),
+            StatsPanelMiddleCounter::PartyGold
+        );
+        assert_eq!(
+            stats_panel_middle_counter(0xFF),
+            StatsPanelMiddleCounter::PartyGold
+        );
+        // Ship family 0x20..=0x27 -> hull condition.
+        for b in 0x20u8..=0x27 {
+            assert_eq!(
+                stats_panel_middle_counter(b),
+                StatsPanelMiddleCounter::ShipHullCondition,
+                "ship marker {b:#x} should select hull"
+            );
+        }
+    }
+
+    #[test]
     fn outdoor_arena_id_for_class_matches_spec_table() {
         // encounters.md §4
         assert_eq!(OUTDOOR_ARENA_COUNT, 16);

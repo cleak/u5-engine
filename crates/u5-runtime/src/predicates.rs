@@ -46,6 +46,31 @@ pub const fn is_ship_transport_furled(byte: u8) -> bool {
     byte >= SHIP_TRANSPORT_FURLED_FIRST && byte <= SHIP_TRANSPORT_FURLED_LAST
 }
 
+/// `stats-panel.md §5` middle-counter selection. The bottom block's
+/// middle counter shows the saved party gold word in ordinary and
+/// combat scenes; when the transport/action marker byte is in the
+/// ship family `0x20..=0x27`, that slot instead shows the current
+/// ship hull condition from active-object byte `+5`. The classifier
+/// uses only the marker family — there is no separate parked-object
+/// validation before reading the active vehicle hull byte.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StatsPanelMiddleCounter {
+    /// Show party gold word, right-aligned.
+    PartyGold,
+    /// Show ship-status label and hull condition byte.
+    ShipHullCondition,
+}
+
+/// `stats-panel.md §5`: classify the middle-counter slot from the
+/// transport/action marker byte.
+pub const fn stats_panel_middle_counter(transport_marker: u8) -> StatsPanelMiddleCounter {
+    if is_ship_transport_marker(transport_marker) {
+        StatsPanelMiddleCounter::ShipHullCondition
+    } else {
+        StatsPanelMiddleCounter::PartyGold
+    }
+}
+
 /// `vehicles.md` §6: low two bits of a ship transport marker decode heading
 /// as north (0), east (1), south (2), west (3). Returns `None` for non-ship
 /// bytes.
