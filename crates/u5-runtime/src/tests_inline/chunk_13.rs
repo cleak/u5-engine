@@ -1,4 +1,16 @@
     #[test]
+    fn tlk_per_class_npc_counts_match_shipped_data() {
+        // conversation.md §3
+        assert_eq!(TOWNE_TLK_NPCS, 48);
+        assert_eq!(DWELLING_TLK_NPCS, 15);
+        assert_eq!(CASTLE_TLK_NPCS, 40);
+        assert_eq!(KEEP_TLK_NPCS, 32);
+        // Largest class header (TOWNE 48 NPCs * 4 bytes/entry) fits
+        // inside the engine's 512-byte fixed header read window.
+        assert!(TOWNE_TLK_NPCS * TLK_HEADER_ENTRY_LEN <= TLK_HEADER_FIXED_READ);
+    }
+
+    #[test]
     fn common_word_dictionary_index_helpers_match_spec() {
         // conversation.md §8
         assert_eq!(COMMON_WORD_DICTIONARY_ENTRIES, 128);

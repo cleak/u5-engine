@@ -7,6 +7,14 @@
 //! exist so that helpers and tests can refer to spec-named codes without
 //! magic numbers.
 
+/// `conversation.md §3` shipped per-class `.TLK` NPC counts (each
+/// includes the leading sentinel slot, so live NPCs use indices
+/// `2..npc_count`).
+pub const TOWNE_TLK_NPCS: usize = 48;
+pub const DWELLING_TLK_NPCS: usize = 15;
+pub const CASTLE_TLK_NPCS: usize = 40;
+pub const KEEP_TLK_NPCS: usize = 32;
+
 /// `conversation.md §8`: shared common-word dictionary has 128
 /// entries. The dialogue runner and the shop renderer apply different
 /// byte-range biases when reaching this same logical table.
