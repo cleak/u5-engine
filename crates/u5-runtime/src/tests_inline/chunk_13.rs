@@ -636,6 +636,40 @@
     }
 
     #[test]
+    fn directed_step_offsets_reduce_wrapped_distance_to_player() {
+        // active-objects.md §8: per-axis one-cell step toward the player on
+        // the 256-cell torus. Aligned axes return 0; non-wrapped distances
+        // pick the obvious direction; wrapped distances pick the shorter way.
+
+        // Same cell: no movement.
+        assert_eq!(directed_step_offsets(10, 10, 10, 10), (0, 0));
+
+        // Player one east + two south: step east first.
+        assert_eq!(directed_step_offsets(10, 10, 11, 12), (1, 1));
+
+        // Player west + north: negative steps.
+        assert_eq!(directed_step_offsets(10, 10, 8, 5), (-1, -1));
+
+        // Wraparound: actor at 250, player at 5 -> shorter forward (wrap).
+        assert_eq!(directed_step_offsets(250, 0, 5, 0), (1, 0));
+        // Symmetric: actor at 5, player at 250 -> shorter backward (wrap).
+        assert_eq!(directed_step_offsets(5, 0, 250, 0), (-1, 0));
+
+        // Equidistant tie (128 each way) prefers forward step.
+        assert_eq!(directed_step_offsets(0, 0, 128, 0), (1, 0));
+    }
+
+    #[test]
+    fn axis_first_choice_picks_x_or_y_from_one_bit_roll() {
+        // active-objects.md §8: a one-bit random value chooses which axis to
+        // try first.
+        assert_eq!(axis_first_choice(0), Axis::X);
+        assert_eq!(axis_first_choice(2), Axis::X);
+        assert_eq!(axis_first_choice(1), Axis::Y);
+        assert_eq!(axis_first_choice(3), Axis::Y);
+    }
+
+    #[test]
     fn fc_sprite_proximity_mask_matches_spec_six_by_six_table() {
         // active-objects.md §8: `0xFC` sprite class proximity-mask table.
         // Listed cells enter the special branch; the rest fall through.
