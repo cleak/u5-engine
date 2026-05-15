@@ -38,7 +38,7 @@
         );
 
         assert_eq!(world.turn, 1);
-        assert_eq!(world.message, "Sextant: K'P C'D.");
+        assert_eq!(world.message, "Sextant: K'P,C'D\"");
     }
 
     #[test]

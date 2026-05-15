@@ -505,7 +505,7 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-        assert_eq!(state.message, "Locate: K'P C'D.\"");
+        assert_eq!(state.message, "Locate: K'P,C'D\"");
     }
 
     #[test]

@@ -767,7 +767,9 @@ impl PlayState {
         let y = sextant_coordinate(self.player.y);
         let x = sextant_coordinate(self.player.x);
         self.advance_turn();
-        self.message = format!("Locate: {y} {x}.\"");
+        // magic.md §8: the sextant-style printer prints Y first, then a
+        // comma and the X-coordinate, with a trailing double-quote character.
+        self.message = format!("Locate: {y},{x}\"");
         MoveOutcome::Observed
     }
 

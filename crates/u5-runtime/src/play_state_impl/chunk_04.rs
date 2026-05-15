@@ -341,7 +341,9 @@ impl PlayState {
         let y = sextant_coordinate(self.player.y);
         let x = sextant_coordinate(self.player.x);
         self.advance_turn();
-        self.message = format!("Sextant: {y} {x}.");
+        // magic.md §8 / inventory.md §7: shared sextant printer is Y first,
+        // then a comma and the X-coordinate, with a trailing double quote.
+        self.message = format!("Sextant: {y},{x}\"");
         MoveOutcome::Used
     }
 
