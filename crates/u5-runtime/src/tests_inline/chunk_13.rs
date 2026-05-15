@@ -2811,6 +2811,29 @@
     }
 
     #[test]
+    fn look2_dat_offset_table_layout_matches_spec() {
+        // formats/look2-dat.md §2,§3
+        assert_eq!(LOOK2_DAT_OFFSET_TABLE_LEN, 1024);
+        assert_eq!(LOOK2_DAT_TERRAIN_ENTRIES, 256);
+        assert_eq!(LOOK2_DAT_OBJECT_ENTRIES, 256);
+        assert_eq!(LOOK2_DAT_OBJECT_DOMAIN_BASE, 0x200);
+        assert_eq!(
+            (LOOK2_DAT_TERRAIN_ENTRIES + LOOK2_DAT_OBJECT_ENTRIES) * 2,
+            LOOK2_DAT_OFFSET_TABLE_LEN
+        );
+        // Terrain entries
+        assert_eq!(look2_terrain_table_offset(0), 0);
+        assert_eq!(look2_terrain_table_offset(1), 2);
+        assert_eq!(look2_terrain_table_offset(255), 510);
+        // Object entries are in the upper half
+        assert_eq!(look2_object_table_offset(0), 0x200);
+        assert_eq!(look2_object_table_offset(1), 0x202);
+        assert_eq!(look2_object_table_offset(255), 0x3FE);
+        // Verify the two domains are disjoint
+        assert!(look2_object_table_offset(0) > look2_terrain_table_offset(255));
+    }
+
+    #[test]
     fn sleep_ambush_monster_table_matches_spec() {
         // encounters.md §6
         assert_eq!(sleep_ambush_monster(0), Some(SleepAmbushMonster::GiantRat));

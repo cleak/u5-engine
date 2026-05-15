@@ -32,6 +32,13 @@ pub const LOCATION_FLOOR_TABLE_FILE: &str = "location_floor_pages.tsv";
 pub const LOCATION_ENTRY_Y_TABLE_FILE: &str = "location_entry_y.tsv";
 pub const TILE_PASSABILITY_FILE: &str = "tile_passability.bin";
 pub const LOOK2_DAT_FILE: &str = "LOOK2.DAT";
+/// `formats/look2-dat.md §2`: 1024-byte offset table holds 512
+/// little-endian word offsets — entries 0..=255 for terrain
+/// descriptions and 256..=511 for object descriptions.
+pub const LOOK2_DAT_OFFSET_TABLE_LEN: usize = 1024;
+pub const LOOK2_DAT_TERRAIN_ENTRIES: usize = 256;
+pub const LOOK2_DAT_OBJECT_ENTRIES: usize = 256;
+pub const LOOK2_DAT_OBJECT_DOMAIN_BASE: usize = 0x200;
 pub const KARMA_DAT_FILE: &str = "KARMA.DAT";
 /// `formats/karma-dat.md §2`: file size in the shipped DOS data set.
 pub const KARMA_DAT_LEN: usize = 761;

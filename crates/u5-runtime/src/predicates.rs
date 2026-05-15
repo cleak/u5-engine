@@ -57,6 +57,18 @@ pub const fn ship_transport_heading_index(byte: u8) -> Option<u8> {
     }
 }
 
+/// `formats/look2-dat.md §3`: byte offset of the terrain-domain
+/// table entry for `tile_id` inside the LOOK2.DAT offset table.
+pub const fn look2_terrain_table_offset(tile_id: u8) -> usize {
+    (tile_id as usize) * 2
+}
+
+/// `formats/look2-dat.md §3`: byte offset of the object-domain table
+/// entry for `object_id` inside the LOOK2.DAT offset table.
+pub const fn look2_object_table_offset(object_id: u8) -> usize {
+    LOOK2_DAT_OBJECT_DOMAIN_BASE + (object_id as usize) * 2
+}
+
 /// `encounters.md §6`: which monster a sleep-ambush picks for a given
 /// uniform 0..8 row roll. Giant Rat occupies rows 0 and 1 (so 2/8); the
 /// remaining six rows are Troll, Bat, Slime, Giant Spider, Gremlin, and
