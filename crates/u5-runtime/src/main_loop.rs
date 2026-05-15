@@ -2,6 +2,42 @@
 
 /// `main-loop.md §3` scene-byte ranges: well-known sentinels for the
 /// intro sub-states and the temporary combat marker.
+/// `main-loop.md §7` shared command-dispatcher status word. Returned
+/// by per-letter handler blocks so the calling mode loop knows
+/// whether to run the per-turn epilogue, suppress the redraw, or
+/// treat the keystroke as a meta toggle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommandDispatchStatus {
+    /// Action consumed a turn — run the per-turn epilogue and
+    /// advance the world clock.
+    ConsumesTurn,
+    /// Action did not consume a turn — leave the world clock
+    /// unchanged and skip the epilogue.
+    NoTurn,
+    /// Buffer toggle (a non-game key like Ctrl-S that should not
+    /// advance the clock).
+    BufferToggle,
+    /// Town command produced a message but should not redraw.
+    /// Mode loop keeps polling without repainting.
+    RepollNoRedraw,
+}
+
+impl CommandDispatchStatus {
+    /// `main-loop.md §6,§7`: returns `true` when the mode-loop should
+    /// run its per-turn epilogue (cleanup, NPC schedule, encounter
+    /// rolls, etc.). Only `ConsumesTurn` triggers the epilogue.
+    pub const fn runs_per_turn_epilogue(self) -> bool {
+        matches!(self, Self::ConsumesTurn)
+    }
+
+    /// `main-loop.md §7`: returns `true` when the mode-loop should
+    /// repaint the viewport after dispatch. `RepollNoRedraw`
+    /// suppresses the redraw; the others let it run normally.
+    pub const fn requests_redraw(self) -> bool {
+        !matches!(self, Self::RepollNoRedraw)
+    }
+}
+
 pub const SCENE_OVERWORLD: u8 = 0;
 pub const SCENE_TOWN_FAMILY_FIRST: u8 = 1;
 pub const SCENE_TOWN_FAMILY_LAST: u8 = 32;

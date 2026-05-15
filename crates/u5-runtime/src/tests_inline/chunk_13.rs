@@ -1,4 +1,20 @@
     #[test]
+    fn command_dispatch_status_predicates_match_spec() {
+        // main-loop.md §6,§7
+        // Only ConsumesTurn runs the per-turn epilogue.
+        assert!(CommandDispatchStatus::ConsumesTurn.runs_per_turn_epilogue());
+        assert!(!CommandDispatchStatus::NoTurn.runs_per_turn_epilogue());
+        assert!(!CommandDispatchStatus::BufferToggle.runs_per_turn_epilogue());
+        assert!(!CommandDispatchStatus::RepollNoRedraw.runs_per_turn_epilogue());
+
+        // Only RepollNoRedraw suppresses the redraw.
+        assert!(CommandDispatchStatus::ConsumesTurn.requests_redraw());
+        assert!(CommandDispatchStatus::NoTurn.requests_redraw());
+        assert!(CommandDispatchStatus::BufferToggle.requests_redraw());
+        assert!(!CommandDispatchStatus::RepollNoRedraw.requests_redraw());
+    }
+
+    #[test]
     fn machine_class_probe_predicates_match_spec() {
         // boot.md §3
         // PCjr-class skips the extended graphics probe.
