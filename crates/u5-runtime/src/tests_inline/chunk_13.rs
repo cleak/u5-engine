@@ -1,4 +1,14 @@
     #[test]
+    fn npc_link_action_classifies_per_floor_transition() {
+        // active-objects.md §6
+        assert_eq!(NPC_RUNTIME_DESCRIPTOR_BYTES, 16);
+        assert_eq!(npc_link_action(false, true), NpcLinkAction::Allocate);
+        assert_eq!(npc_link_action(true, true), NpcLinkAction::UpdateCoordinates);
+        assert_eq!(npc_link_action(true, false), NpcLinkAction::Free);
+        assert_eq!(npc_link_action(false, false), NpcLinkAction::NoAction);
+    }
+
+    #[test]
     fn blackthorn_entry_families_are_distinct() {
         // blackthorn.md §2: two cinematic families.
         let a = BlackthornEntryFamily::AudienceCapture;

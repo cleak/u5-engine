@@ -63,6 +63,44 @@ pub const fn npc_dialog_id_kind(byte: u8) -> NpcDialogIdKind {
     }
 }
 
+/// `active-objects.md §6`: per-NPC runtime descriptor stride is
+/// sixteen bytes (pursuit target, pathfinding state, active
+/// waypoint, linked-slot index into the active-object table).
+pub const NPC_RUNTIME_DESCRIPTOR_BYTES: usize = 16;
+
+/// `active-objects.md §6` action the world-mutation helper takes
+/// when a schedule step crosses (or stays on) the player's floor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NpcLinkAction {
+    /// Off → on player's floor: allocate a new slot, fill the
+    /// record, set linked-slot.
+    Allocate,
+    /// On → on player's floor: update the existing slot's
+    /// coordinates.
+    UpdateCoordinates,
+    /// On → off player's floor: free the slot (zero the type byte),
+    /// clear linked-slot.
+    Free,
+    /// Off → off player's floor: no active-object slot action;
+    /// logical state only.
+    NoAction,
+}
+
+/// `active-objects.md §6`: classify the world-mutation helper's
+/// action from the NPC's old and new floor compared against the
+/// player's current floor.
+pub const fn npc_link_action(
+    old_on_player_floor: bool,
+    new_on_player_floor: bool,
+) -> NpcLinkAction {
+    match (old_on_player_floor, new_on_player_floor) {
+        (false, true) => NpcLinkAction::Allocate,
+        (true, true) => NpcLinkAction::UpdateCoordinates,
+        (true, false) => NpcLinkAction::Free,
+        (false, false) => NpcLinkAction::NoAction,
+    }
+}
+
 /// `formats/npc.md §7` Talk-entry shop-trigger family for high
 /// dialog-index values `0x81..=0x88`. These are not `.TLK` blob ids;
 /// they identify which shop the active scene's resident shop tables
