@@ -1,4 +1,35 @@
     #[test]
+    fn movement_chair_force_reject_exempts_foot_and_0x40() {
+        // movement.md §4
+        assert_eq!(MOVEMENT_CHAIR_FORCE_REJECT_FIRST, 0x90);
+        assert_eq!(MOVEMENT_CHAIR_FORCE_REJECT_LAST, 0x93);
+
+        // Non-exempt query (e.g. mounted horse 0x12) -> reject for 0x90..=0x93.
+        for tile in 0x90u8..=0x93 {
+            assert!(movement_chair_force_reject_applies(0x12, tile));
+            assert!(movement_chair_force_reject_applies(0x14, tile)); // carpet
+            assert!(movement_chair_force_reject_applies(0x28, tile)); // skiff
+        }
+        // On-foot family 0x1C..=0x1F exempt.
+        for q in 0x1Cu8..=0x1F {
+            for tile in 0x90u8..=0x93 {
+                assert!(!movement_chair_force_reject_applies(q, tile));
+            }
+        }
+        // 0x40 query exempt.
+        for tile in 0x90u8..=0x93 {
+            assert!(!movement_chair_force_reject_applies(0x40, tile));
+        }
+        // Outside the chair range -> never the force-reject (other rules apply).
+        for q in 0u8..0x20u8 {
+            assert!(!movement_chair_force_reject_applies(q, 0x8F));
+            assert!(!movement_chair_force_reject_applies(q, 0x94));
+            assert!(!movement_chair_force_reject_applies(q, 0x00));
+            assert!(!movement_chair_force_reject_applies(q, 0xFF));
+        }
+    }
+
+    #[test]
     fn ship_broadside_constants_and_apply_damage_match_spec() {
         // vehicles.md §7
         assert_eq!(SHIP_BROADSIDE_RANGE_CELLS, 3);

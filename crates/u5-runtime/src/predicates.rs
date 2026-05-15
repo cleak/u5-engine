@@ -46,6 +46,31 @@ pub const fn is_ship_transport_furled(byte: u8) -> bool {
     byte >= SHIP_TRANSPORT_FURLED_FIRST && byte <= SHIP_TRANSPORT_FURLED_LAST
 }
 
+/// `movement.md §4` chair-tile force-reject range `0x90..=0x93`. The
+/// base bitset would otherwise allow these ids; most query classes
+/// force-reject them. Two query families exempt themselves from the
+/// force reject: the on-foot/avatar family `0x1C..=0x1F` and the
+/// `0x40` query family (single-id query).
+pub const MOVEMENT_CHAIR_FORCE_REJECT_FIRST: u8 = 0x90;
+pub const MOVEMENT_CHAIR_FORCE_REJECT_LAST: u8 = 0x93;
+
+/// `movement.md §4`: returns `true` when the static-terrain
+/// dispatcher's force-reject for the chair tile range applies for
+/// this query class. The on-foot family and the `0x40` query are
+/// exempt; everything else respects the reject.
+pub const fn movement_chair_force_reject_applies(query_class: u8, tile: u8) -> bool {
+    if tile < MOVEMENT_CHAIR_FORCE_REJECT_FIRST
+        || tile > MOVEMENT_CHAIR_FORCE_REJECT_LAST
+    {
+        return false;
+    }
+    // Exempt families: on-foot avatar 0x1C..=0x1F and 0x40 query.
+    if (query_class >= 0x1C && query_class <= 0x1F) || query_class == 0x40 {
+        return false;
+    }
+    true
+}
+
 /// `vehicles.md §2` transport/action marker family. Classifies the
 /// party transport state byte into one of the documented ranges. The
 /// low two bits within each family encode N/E/S/W facing using the
