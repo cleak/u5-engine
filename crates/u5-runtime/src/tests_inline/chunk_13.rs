@@ -636,6 +636,34 @@
     }
 
     #[test]
+    fn spell_scene_bit_for_scene_byte_matches_published_partition() {
+        // catalogs/spell-list.md §4: scene-byte to single-bit mapping.
+        // 0 -> overworld, 1..=32 -> indoor, 33..=127 -> dungeon, >=0x80 -> combat.
+        assert_eq!(spell_scene_bit_for_scene_byte(0), SPELL_SCENE_OVERWORLD);
+        for byte in 1..=32u8 {
+            assert_eq!(
+                spell_scene_bit_for_scene_byte(byte),
+                SPELL_SCENE_INDOOR,
+                "byte {byte} should be indoor"
+            );
+        }
+        for byte in [33u8, 40, 100, 127] {
+            assert_eq!(
+                spell_scene_bit_for_scene_byte(byte),
+                SPELL_SCENE_DUNGEON,
+                "byte {byte} should be dungeon"
+            );
+        }
+        for byte in [0x80u8, 0x90, 0xC0, 0xFF] {
+            assert_eq!(
+                spell_scene_bit_for_scene_byte(byte),
+                SPELL_SCENE_COMBAT,
+                "byte 0x{byte:02X} should be combat"
+            );
+        }
+    }
+
+    #[test]
     fn capped_add_u8_clamps_at_caller_supplied_cap() {
         // stat-arithmetic.md §2: byte capped add stores cap when the result
         // reaches or exceeds the cap; returns actual delta applied.

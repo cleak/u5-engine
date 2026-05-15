@@ -507,6 +507,20 @@ pub fn spell_scene_bit_for_area(area: Area) -> u8 {
     }
 }
 
+/// Per `catalogs/spell-list.md` §4: map an active scene byte to the
+/// single-bit scene class used by the spell allow mask. `0` is overworld,
+/// `1..=32` is indoor/town, `33..=127` is dungeon, and `>= 0x80` is the
+/// combat-class scene per the public reader contract that "any value at or
+/// above `0x80` as combat-class".
+pub const fn spell_scene_bit_for_scene_byte(byte: u8) -> u8 {
+    match byte {
+        0 => SPELL_SCENE_OVERWORLD,
+        1..=32 => SPELL_SCENE_INDOOR,
+        33..=127 => SPELL_SCENE_DUNGEON,
+        _ => SPELL_SCENE_COMBAT,
+    }
+}
+
 pub fn spell_allowed_in_area(spell_index: usize, area: Area) -> bool {
     SPELL_SCENE_MASKS[spell_index] & spell_scene_bit_for_area(area) != 0
 }
