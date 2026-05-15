@@ -25,6 +25,47 @@ pub const fn spell_min_caster_level(circle: u8) -> u8 {
     circle
 }
 
+/// `magic.md §9` per-spell scene allow-mask bits. Each spell carries
+/// a four-bit mask; the dispatcher tests the active scene's bit and
+/// rejects with `Not here!` when the bit is clear.
+pub const SPELL_SCENE_BIT_DUNGEON: u8 = 0x01;
+pub const SPELL_SCENE_BIT_COMBAT: u8 = 0x02;
+pub const SPELL_SCENE_BIT_INDOOR: u8 = 0x04;
+pub const SPELL_SCENE_BIT_OVERWORLD: u8 = 0x08;
+
+/// `magic.md §9` scene-class enum aligned with the allow-mask bits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpellSceneClass {
+    /// `0x01` — dungeon scene.
+    Dungeon,
+    /// `0x02` — combat-class scene (the temporary 0xFF marker).
+    Combat,
+    /// `0x04` — indoor / town-mode scene.
+    Indoor,
+    /// `0x08` — overworld / underworld travel mode.
+    Overworld,
+}
+
+impl SpellSceneClass {
+    /// `magic.md §9`: returns the bit position the dispatcher tests
+    /// for this scene class against the per-spell allow-mask.
+    pub const fn allow_mask_bit(self) -> u8 {
+        match self {
+            Self::Dungeon => SPELL_SCENE_BIT_DUNGEON,
+            Self::Combat => SPELL_SCENE_BIT_COMBAT,
+            Self::Indoor => SPELL_SCENE_BIT_INDOOR,
+            Self::Overworld => SPELL_SCENE_BIT_OVERWORLD,
+        }
+    }
+}
+
+/// `magic.md §9`: returns `true` when the spell's allow mask permits
+/// casting in the supplied scene class. The dispatcher tests this
+/// gate after the scene byte has selected the active class.
+pub const fn spell_allowed_in_scene(allow_mask: u8, scene: SpellSceneClass) -> bool {
+    (allow_mask & scene.allow_mask_bit()) != 0
+}
+
 /// `magic.md §8` directed-spell wind family. Sleep, Poison Wind,
 /// Death Wind, and Flame Wind share one shared target-walk layer
 /// that builds a directed set of arena cells from the caster/target

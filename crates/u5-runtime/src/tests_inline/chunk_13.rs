@@ -1,4 +1,45 @@
     #[test]
+    fn spell_scene_allow_mask_bits_match_spec() {
+        // magic.md §9
+        assert_eq!(SPELL_SCENE_BIT_DUNGEON, 0x01);
+        assert_eq!(SPELL_SCENE_BIT_COMBAT, 0x02);
+        assert_eq!(SPELL_SCENE_BIT_INDOOR, 0x04);
+        assert_eq!(SPELL_SCENE_BIT_OVERWORLD, 0x08);
+
+        assert_eq!(SpellSceneClass::Dungeon.allow_mask_bit(), 0x01);
+        assert_eq!(SpellSceneClass::Combat.allow_mask_bit(), 0x02);
+        assert_eq!(SpellSceneClass::Indoor.allow_mask_bit(), 0x04);
+        assert_eq!(SpellSceneClass::Overworld.allow_mask_bit(), 0x08);
+
+        // Combat-only spell (mask 0x02) accepts combat, refuses elsewhere.
+        let combat_only = 0x02;
+        assert!(spell_allowed_in_scene(combat_only, SpellSceneClass::Combat));
+        assert!(!spell_allowed_in_scene(combat_only, SpellSceneClass::Dungeon));
+        assert!(!spell_allowed_in_scene(combat_only, SpellSceneClass::Indoor));
+        assert!(!spell_allowed_in_scene(combat_only, SpellSceneClass::Overworld));
+
+        // Universal spell (mask 0x0F) accepts everywhere.
+        let universal = 0x0F;
+        for scene in [
+            SpellSceneClass::Dungeon,
+            SpellSceneClass::Combat,
+            SpellSceneClass::Indoor,
+            SpellSceneClass::Overworld,
+        ] {
+            assert!(spell_allowed_in_scene(universal, scene));
+        }
+        // Empty mask refuses everything.
+        for scene in [
+            SpellSceneClass::Dungeon,
+            SpellSceneClass::Combat,
+            SpellSceneClass::Indoor,
+            SpellSceneClass::Overworld,
+        ] {
+            assert!(!spell_allowed_in_scene(0x00, scene));
+        }
+    }
+
+    #[test]
     fn directed_wind_spell_kill_xp_predicate_matches_spec() {
         // magic.md §8
         assert_eq!(DIRECTED_WIND_MAX_CELLS, 21);
