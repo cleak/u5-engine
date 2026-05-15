@@ -255,7 +255,10 @@
     }
 
     #[test]
-    fn exit_vehicle_refuses_without_foot_landing() {
+    fn exit_vehicle_furled_ship_without_landing_launches_carried_skiff() {
+        // doors-and-z-transitions.md §11 / vehicles.md §5: a furled-ship exit
+        // without nearby foot landing launches a carried skiff if available.
+        // The hull stays parked at the original cell with one fewer skiff.
         let mut state = world_state(vec![1; WORLD_CELLS], 5, 5);
         state.player.transport = TransportState::Ship {
             type_byte: 168,
@@ -263,6 +266,43 @@
             sails_hoisted: false,
             hull: 77,
             skiffs: 2,
+        };
+        state.sync_player_object();
+
+        assert_eq!(state.exit_vehicle(), MoveOutcome::ExitedVehicle);
+
+        assert!(matches!(
+            state.player.transport,
+            TransportState::Skiff { .. }
+        ));
+        assert_eq!((state.player.x, state.player.y), (5, 5));
+        let parked = state
+            .active_objects
+            .iter()
+            .skip(1)
+            .find(|object| {
+                object.type_byte == 168 && object.x == 5 && object.y == 5
+            })
+            .copied()
+            .expect("ship hull should be parked at original cell");
+        assert_eq!(parked.aux1, 77);
+        assert_eq!(parked.aux3, 1);
+        assert_eq!(state.message, "Launched a skiff from the ship.");
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn exit_vehicle_refuses_furled_ship_with_no_landing_and_no_skiffs() {
+        // doors-and-z-transitions.md §11: when foot landing fails AND the
+        // ship has no carried skiff, exit refuses with the no-land/no-skiffs
+        // line and consumes no turn.
+        let mut state = world_state(vec![1; WORLD_CELLS], 5, 5);
+        state.player.transport = TransportState::Ship {
+            type_byte: 168,
+            tile: 168,
+            sails_hoisted: false,
+            hull: 77,
+            skiffs: 0,
         };
         state.sync_player_object();
 
@@ -275,7 +315,7 @@
                 tile: 168,
                 sails_hoisted: false,
                 hull: 77,
-                skiffs: 2,
+                skiffs: 0,
             }
         );
         assert_eq!((state.player.x, state.player.y), (5, 5));

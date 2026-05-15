@@ -470,10 +470,59 @@ impl PlayState {
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
-        let Some((x, y)) = self.vehicle_exit_landing(game_dir)? else {
+        let landing = self.vehicle_exit_landing(game_dir)?;
+
+        // doors-and-z-transitions.md §11 / vehicles.md §5: a furled-ship exit
+        // without nearby foot landing falls back to launching a carried skiff.
+        // The ship hull stays parked at the original cell with one fewer
+        // skiff aboard, and the party becomes the launched skiff in place.
+        if landing.is_none() {
+            if let TransportState::Ship {
+                type_byte,
+                tile,
+                sails_hoisted: false,
+                hull,
+                skiffs,
+            } = transport
+            {
+                if skiffs > 0 {
+                    let parked_with_one_less_skiff = ActiveObject {
+                        type_byte,
+                        tile,
+                        x: old_x,
+                        y: old_y,
+                        z,
+                        phase: STEADY_PHASE,
+                        aux1: hull,
+                        aux3: skiffs - 1,
+                    };
+                    if self
+                        .allocate_active_object_slot(parked_with_one_less_skiff)
+                        .is_none()
+                    {
+                        self.message = "No active-object slot for vehicle.".to_string();
+                        return Ok(MoveOutcome::Blocked);
+                    }
+                    self.player.transport = TransportState::Skiff {
+                        type_byte: FIRST_PLAYABLE_SKIFF_TILE,
+                        tile: FIRST_PLAYABLE_SKIFF_TILE,
+                    };
+                    self.timing_status =
+                        TimingStatusTag::for_transport(self.player.transport);
+                    self.sail_cadence = 0;
+                    self.sail_stall_pending = false;
+                    self.sync_player_object();
+                    self.mark_visibility_dirty();
+                    self.advance_turn();
+                    self.message = "Launched a skiff from the ship.".to_string();
+                    return Ok(MoveOutcome::ExitedVehicle);
+                }
+            }
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
-        };
+        }
+
+        let (x, y) = landing.expect("landing checked above");
         let Some(parked) = transport.parked_object(old_x, old_y, z) else {
             self.message = "Nothing to exit.".to_string();
             return Ok(MoveOutcome::Blocked);
