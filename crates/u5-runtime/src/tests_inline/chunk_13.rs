@@ -1,4 +1,33 @@
     #[test]
+    fn fog_refinement_squared_distance_matches_spec_threshold() {
+        // visibility.md §7
+        assert_eq!(FOG_REFINE_SQUARED_THRESHOLD, 5);
+        // Fold rule: min(coord, 10 - coord).
+        assert_eq!(fog_refine_folded_coord(0), 0);
+        assert_eq!(fog_refine_folded_coord(5), 5);
+        assert_eq!(fog_refine_folded_coord(10), 0);
+        assert_eq!(fog_refine_folded_coord(3), 3);
+        assert_eq!(fog_refine_folded_coord(7), 3);
+        // Centre cell -> distance 0 -> inside core.
+        assert_eq!(fog_refine_squared_distance(5, 5), 0);
+        assert!(fog_refine_inside_clear_core(5, 5));
+        // (5, 4) and (4, 5) -> distance 1 -> inside.
+        assert_eq!(fog_refine_squared_distance(5, 4), 1);
+        assert_eq!(fog_refine_squared_distance(4, 5), 1);
+        // (4, 4) -> 1 + 1 = 2 -> inside.
+        assert_eq!(fog_refine_squared_distance(4, 4), 2);
+        // (3, 4) -> 4 + 1 = 5 -> still inside (<=5).
+        assert_eq!(fog_refine_squared_distance(3, 4), 5);
+        assert!(fog_refine_inside_clear_core(3, 4));
+        // (3, 3) -> 4 + 4 = 8 -> outside.
+        assert_eq!(fog_refine_squared_distance(3, 3), 8);
+        assert!(!fog_refine_inside_clear_core(3, 3));
+        // Symmetric across the centre — (7, 7) folds to (3, 3).
+        assert_eq!(fog_refine_squared_distance(7, 7), 8);
+        assert!(!fog_refine_inside_clear_core(7, 7));
+    }
+
+    #[test]
     fn local_view_class_for_tile_matches_spec_table_spot_check() {
         // view.md §4
         // Sample one tile from each documented class.

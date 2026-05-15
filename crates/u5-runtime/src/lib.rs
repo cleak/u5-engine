@@ -383,11 +383,13 @@ pub use transport::{
 pub use traps::*;
 pub use u4_transfer::*;
 pub use visibility::{
-    LightRadiusBranch, TERRAIN_BAND_ROW_STRIDE, VIEWPORT_PLAYER_COL, VIEWPORT_PLAYER_ROW,
-    VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE, VISIBILITY_ALREADY_RENDERED,
-    VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR, VISIBILITY_DIM_PERIPHERY,
-    VISIBILITY_HIDDEN, VISIBILITY_USE_COMPANION, VisibilityMarker, light_radius_branch,
-    visibility_in_radius, visibility_marker,
+    FOG_REFINE_SQUARED_THRESHOLD, LightRadiusBranch, TERRAIN_BAND_ROW_STRIDE,
+    VIEWPORT_PLAYER_COL, VIEWPORT_PLAYER_ROW, VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE,
+    VISIBILITY_ALREADY_RENDERED, VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR,
+    VISIBILITY_DIM_PERIPHERY, VISIBILITY_HIDDEN, VISIBILITY_USE_COMPANION,
+    VisibilityMarker, fog_refine_folded_coord, fog_refine_inside_clear_core,
+    fog_refine_squared_distance, light_radius_branch, visibility_in_radius,
+    visibility_marker,
 };
 pub use wind::WindState;
 pub use world_tables::*;

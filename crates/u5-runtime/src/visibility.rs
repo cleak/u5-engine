@@ -53,6 +53,38 @@ pub const fn visibility_marker(byte: u8) -> VisibilityMarker {
     }
 }
 
+/// `visibility.md §7` fog-edge refinement squared-distance threshold.
+/// The post-pass folds each viewport coordinate around the centre
+/// `(5, 5)`, computes `(5 - folded_x)^2 + (5 - folded_y)^2`, and
+/// compares it against `5`. Cells with `squared > 5` carrying the
+/// clear marker are downgraded to dim; cells with `squared <= 5`
+/// carrying the dim marker are upgraded to clear.
+pub const FOG_REFINE_SQUARED_THRESHOLD: u32 = 5;
+
+/// `visibility.md §7`: fold a viewport coordinate `0..=10` around
+/// the centre `5` so the squared-distance lookup can be computed
+/// as a 6x6 table (`folded = min(coord, 10 - coord)`).
+pub const fn fog_refine_folded_coord(coord: u8) -> u8 {
+    let mirrored = 10u8.saturating_sub(coord);
+    if coord < mirrored { coord } else { mirrored }
+}
+
+/// `visibility.md §7`: squared centre-relative distance the fog
+/// post-pass uses, computed from a viewport `(col, row)`. Returns
+/// `(5 - folded_col)^2 + (5 - folded_row)^2`.
+pub const fn fog_refine_squared_distance(col: u8, row: u8) -> u32 {
+    let dx = 5u8.saturating_sub(fog_refine_folded_coord(col));
+    let dy = 5u8.saturating_sub(fog_refine_folded_coord(row));
+    (dx as u32) * (dx as u32) + (dy as u32) * (dy as u32)
+}
+
+/// `visibility.md §7`: returns `true` when the supplied viewport
+/// `(col, row)` falls inside the clear-marker core (squared
+/// distance `<= 5`); cells outside that core are downgraded to dim.
+pub const fn fog_refine_inside_clear_core(col: u8, row: u8) -> bool {
+    fog_refine_squared_distance(col, row) <= FOG_REFINE_SQUARED_THRESHOLD
+}
+
 /// `visibility.md §5` neighbour expansion order for the visibility
 /// carve helper. The carve pops a coordinate and examines its eight
 /// neighbours in this fixed ring order: West, Southwest, South,
