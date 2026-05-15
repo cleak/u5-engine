@@ -54,6 +54,14 @@ pub const CHARGEN_ROUND_COUNT: usize = 3;
 /// `chargen.md §6` — questions per round, indexed by round (0..3).
 pub const CHARGEN_QUESTIONS_PER_ROUND: [usize; CHARGEN_ROUND_COUNT] = [4, 2, 1];
 
+/// `chargen.md §4` Avatar name-prompt input limit. The free-text
+/// prompt accepts up to eight characters; shorter names are
+/// null-padded into the eight-byte name slice. The save record's
+/// name field is nine bytes wide; chargen leaves the ninth byte as
+/// the seed padding.
+pub const CHARGEN_NAME_INPUT_MAX_LEN: usize = 8;
+pub const CHARGEN_NAME_FIELD_LEN: usize = 9;
+
 pub fn chargen_question_record_for_pair(
     first: ShrineVirtue,
     second: ShrineVirtue,

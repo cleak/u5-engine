@@ -1,4 +1,14 @@
     #[test]
+    fn chargen_name_field_constants_match_spec() {
+        // chargen.md §4
+        assert_eq!(CHARGEN_NAME_INPUT_MAX_LEN, 8);
+        assert_eq!(CHARGEN_NAME_FIELD_LEN, 9);
+        // The save-record character-name field width must accommodate the
+        // 8-character input plus the seed-preserved ninth byte.
+        assert!(CHARGEN_NAME_FIELD_LEN > CHARGEN_NAME_INPUT_MAX_LEN);
+    }
+
+    #[test]
     fn movement_chair_force_reject_exempts_foot_and_0x40() {
         // movement.md §4
         assert_eq!(MOVEMENT_CHAIR_FORCE_REJECT_FIRST, 0x90);
