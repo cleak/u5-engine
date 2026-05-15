@@ -78,7 +78,7 @@ pub use signs_io::{
 };
 pub use story_io::{StoryRecords, load_story_records, parse_story_records};
 pub use text_wrap::{WrappedLine, wrap_text};
-pub use view_classes::tile_view_class;
+pub use view_classes::{fc_sprite_proximity_mask_hits, tile_view_class};
 pub use combat_actor::*;
 pub use combat_arena::*;
 pub use combat_frame::*;

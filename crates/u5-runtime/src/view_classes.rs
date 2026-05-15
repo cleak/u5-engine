@@ -10,6 +10,30 @@
 
 const VIEW_CLASS_DEFAULT: u8 = 0;
 
+/// active-objects.md §8: the special `0xFC` sprite class consults a fixed
+/// proximity mask keyed by wrapped `(|dy|, |dx|)` distance to the player.
+/// Returns `true` only for the cells the spec lists as entering the special
+/// branch; cells outside the six-by-six half-window fall through to ordinary
+/// directed movement.
+pub const fn fc_sprite_proximity_mask_hits(abs_dy: u8, abs_dx: u8) -> bool {
+    matches!(
+        (abs_dy, abs_dx),
+        (0, 2)
+            | (0, 3)
+            | (0, 4)
+            | (1, 3)
+            | (1, 4)
+            | (2, 2)
+            | (2, 3)
+            | (3, 0)
+            | (3, 1)
+            | (3, 2)
+            | (3, 3)
+            | (4, 0)
+            | (4, 1)
+    )
+}
+
 /// Per-tile view class per `view.md` §4. Tile ids not listed in the spec
 /// table fall through to class 0 (empty/pass-through).
 pub const fn tile_view_class(tile: u8) -> u8 {

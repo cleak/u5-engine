@@ -636,6 +636,47 @@
     }
 
     #[test]
+    fn fc_sprite_proximity_mask_matches_spec_six_by_six_table() {
+        // active-objects.md §8: `0xFC` sprite class proximity-mask table.
+        // Listed cells enter the special branch; the rest fall through.
+        let listed = [
+            (0u8, 2u8),
+            (0, 3),
+            (0, 4),
+            (1, 3),
+            (1, 4),
+            (2, 2),
+            (2, 3),
+            (3, 0),
+            (3, 1),
+            (3, 2),
+            (3, 3),
+            (4, 0),
+            (4, 1),
+        ];
+        for (dy, dx) in listed {
+            assert!(
+                fc_sprite_proximity_mask_hits(dy, dx),
+                "({dy},{dx}) should hit"
+            );
+        }
+        // Spot-check non-listed cells from inside the half-window.
+        for (dy, dx) in [(0u8, 0u8), (0, 1), (1, 0), (1, 1), (1, 2), (2, 0), (2, 1)] {
+            assert!(
+                !fc_sprite_proximity_mask_hits(dy, dx),
+                "({dy},{dx}) should not hit"
+            );
+        }
+        // Row 5 is entirely outside the special branch.
+        for dx in 0..=5u8 {
+            assert!(!fc_sprite_proximity_mask_hits(5, dx));
+        }
+        // Cells outside the 6x6 half-window also miss.
+        assert!(!fc_sprite_proximity_mask_hits(6, 0));
+        assert!(!fc_sprite_proximity_mask_hits(0, 5));
+    }
+
+    #[test]
     fn wrap_text_breaks_at_spaces_within_window_width() {
         // text-output.md §6: only space, LF, CR, and NUL are break bytes.
         // Subsequent lines use the full window width.
