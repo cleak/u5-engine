@@ -940,6 +940,27 @@
     }
 
     #[test]
+    fn end_narrative_windows_match_spec_table() {
+        // formats/end-dat.md §2,§4
+        assert_eq!(END_DAT_LEN, 3_698);
+        assert_eq!(END_DAT_WINDOW_COUNT, 6);
+        for (n, expected) in [
+            (1u8, EndNarrativeWindow::ReturnHomeOpening),
+            (2, EndNarrativeWindow::Homecoming),
+            (3, EndNarrativeWindow::RestlessNight),
+            (4, EndNarrativeWindow::BlackthornJudgmentOpen),
+            (5, EndNarrativeWindow::BlackthornSentence),
+            (6, EndNarrativeWindow::OrbExileResolution),
+        ] {
+            assert_eq!(end_narrative_window(n), Some(expected));
+            assert_eq!(expected.number(), n);
+        }
+        // Out-of-range
+        assert_eq!(end_narrative_window(0), None);
+        assert_eq!(end_narrative_window(7), None);
+    }
+
+    #[test]
     fn karma_dat_tier_classifies_six_records() {
         // formats/karma-dat.md §2,§3
         assert_eq!(KARMA_DAT_LEN, 761);

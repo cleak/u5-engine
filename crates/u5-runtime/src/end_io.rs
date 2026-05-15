@@ -14,6 +14,58 @@ use std::path::Path;
 
 const END_DAT_FILE: &str = "END.DAT";
 
+/// `formats/end-dat.md §2`: shipped DOS file size in bytes.
+pub const END_DAT_LEN: usize = 3_698;
+/// `formats/end-dat.md §4`: number of fixed final-presentation
+/// windows the endgame helper selects from the loaded text.
+pub const END_DAT_WINDOW_COUNT: usize = 6;
+
+/// `formats/end-dat.md §4` semantic role for each fixed window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EndNarrativeWindow {
+    /// Window 1 — return-home opening at the circle of stones.
+    ReturnHomeOpening,
+    /// Window 2 — Avatar's homecoming and laying down the long quest.
+    Homecoming,
+    /// Window 3 — restless night after returning home.
+    RestlessNight,
+    /// Window 4 — Blackthorn's closing judgment scene opens.
+    BlackthornJudgmentOpen,
+    /// Window 5 — Blackthorn's sentence and choice continues.
+    BlackthornSentence,
+    /// Window 6 — orb/gate exile resolution and final Blackthorn
+    /// departure.
+    OrbExileResolution,
+}
+
+impl EndNarrativeWindow {
+    /// Spec one-based window number.
+    pub const fn number(self) -> u8 {
+        match self {
+            EndNarrativeWindow::ReturnHomeOpening => 1,
+            EndNarrativeWindow::Homecoming => 2,
+            EndNarrativeWindow::RestlessNight => 3,
+            EndNarrativeWindow::BlackthornJudgmentOpen => 4,
+            EndNarrativeWindow::BlackthornSentence => 5,
+            EndNarrativeWindow::OrbExileResolution => 6,
+        }
+    }
+}
+
+/// `formats/end-dat.md §4`: classify a one-based window number into
+/// the published role.
+pub const fn end_narrative_window(number: u8) -> Option<EndNarrativeWindow> {
+    Some(match number {
+        1 => EndNarrativeWindow::ReturnHomeOpening,
+        2 => EndNarrativeWindow::Homecoming,
+        3 => EndNarrativeWindow::RestlessNight,
+        4 => EndNarrativeWindow::BlackthornJudgmentOpen,
+        5 => EndNarrativeWindow::BlackthornSentence,
+        6 => EndNarrativeWindow::OrbExileResolution,
+        _ => return None,
+    })
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EndNarrative {
     pub raw: Vec<u8>,

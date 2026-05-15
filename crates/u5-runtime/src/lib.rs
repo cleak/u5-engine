@@ -100,7 +100,10 @@ pub use directed_step::{
     Axis, axis_first_choice, directed_step_offsets, terrain_chance_gate_denominator,
     type_bypasses_terrain_chance_gate,
 };
-pub use end_io::{EndNarrative, decode_end_window, load_end_narrative};
+pub use end_io::{
+    END_DAT_LEN, END_DAT_WINDOW_COUNT, EndNarrative, EndNarrativeWindow,
+    decode_end_window, end_narrative_window, load_end_narrative,
+};
 pub use blackthorn::{
     BLACKTHORN_RESCUE_HANDOFF_SCENE, BLACKTHORN_RESCUE_HANDOFF_X, BLACKTHORN_RESCUE_HANDOFF_Y,
     BLACKTHORN_RESCUE_STANDING_FLOOR, KarmaDatTier, blackthorn_rescue_verdict_record,
