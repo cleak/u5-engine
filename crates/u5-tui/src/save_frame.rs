@@ -7,7 +7,10 @@ use std::io;
 use std::path::Path;
 
 use image::{ImageBuffer, Rgba};
-use u5_runtime::{PlayOptions, PlayState, TileGraphicsDepth, load_tile_atlas};
+use u5_runtime::{
+    PlayOptions, PlayState, TILE_ATLAS_SIDE, TileGraphicsDepth, load_tile_atlas,
+    render_text_panel_rgba,
+};
 
 use crate::handle_play_script_command;
 
@@ -29,16 +32,29 @@ pub fn run_save_frame(
         }
     }
 
-    let Some(viewport) = state.render_top_down_frame(VIEWPORT_RADIUS, &atlas)? else {
-        return Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "current scene has no top-down viewport (dungeon mode is text-only)",
-        ));
-    };
+    let cells = VIEWPORT_RADIUS * 2 + 1;
+    let fallback_width = cells * TILE_ATLAS_SIDE;
+    let (width, height, rgba, frame_kind) =
+        if let Some(viewport) = state.render_top_down_frame(VIEWPORT_RADIUS, &atlas)? {
+            (
+                viewport.width as u32,
+                viewport.height as u32,
+                viewport.to_rgba(),
+                "tile viewport",
+            )
+        } else {
+            (
+                fallback_width as u32,
+                fallback_width as u32,
+                render_text_panel_rgba(
+                    &state.render_text_view(VIEWPORT_RADIUS),
+                    fallback_width,
+                    fallback_width,
+                )?,
+                "text panel",
+            )
+        };
 
-    let width = viewport.width as u32;
-    let height = viewport.height as u32;
-    let rgba = viewport.to_rgba();
     let image: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::from_raw(width, height, rgba)
         .ok_or_else(|| {
             io::Error::new(
@@ -55,7 +71,7 @@ pub fn run_save_frame(
         .save(out)
         .map_err(|err| io::Error::other(format!("failed to save {}: {err}", out.display())))?;
     println!(
-        "Saved {}x{} viewport to {} (player at ({}, {}) facing {}, turn {})",
+        "Saved {}x{} {frame_kind} to {} (player at ({}, {}) facing {}, turn {})",
         width,
         height,
         out.display(),

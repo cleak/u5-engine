@@ -323,7 +323,30 @@
     }
 
     #[test]
-    fn town_hole_up_advances_one_schedule_tick_per_hour() {
+    fn town_hole_up_accepts_only_single_nonzero_duration_digit() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
+        let mut grid = open_grid();
+        grid[32 + 1] = 55;
+        let mut state = test_state(grid, 1, 1);
+
+        assert_eq!(
+            state.hole_up_command(&dir, Some(10)).unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.message, "Rest hours must be in 1..9.");
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_hole_up_runs_initial_schedule_burst_and_ten_minute_cleanup() {
+        assert_eq!(PlayState::town_rest_target_hour(17, 2), 19);
+        assert_eq!(PlayState::town_rest_target_hour(23, 1), 1);
+        assert_eq!(PlayState::town_rest_target_hour(22, 2), 1);
+
         let dir = debug_game_dir();
         fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
         let mut grid = open_grid();
@@ -355,9 +378,12 @@
             MoveOutcome::Rested
         );
 
-        assert_eq!(state.clock, GameClock::new(19, 30).unwrap());
-        assert_eq!(state.turn, 2);
-        assert_eq!(state.torch_counter, 0);
+        assert_eq!(state.clock, GameClock::new(19, 0).unwrap());
+        assert_eq!(
+            state.turn,
+            u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS) + 9
+        );
+        assert_eq!(state.torch_counter, 10);
         assert_eq!(state.light_spell_counter, 0);
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (4, 1));
         assert_eq!(
@@ -365,6 +391,45 @@
             (4, 1)
         );
         assert!(state.message.contains("Rested 2 hours"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_hole_up_stops_when_rest_surface_rejects_after_elapsed_tick() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
+        let mut grid = open_grid();
+        grid[1] = 0x87;
+        grid[32 + 1] = 55;
+        let mut state = test_state(grid, 1, 1);
+        state.clock = GameClock::new(19, 50).unwrap();
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: b'A',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 0,
+            hp: 5,
+            max_hp: 10,
+            level: 8,
+        }];
+
+        assert_eq!(
+            state.hole_up_command(&dir, Some(2)).unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.clock, GameClock::new(20, 0).unwrap());
+        assert_eq!(
+            state.turn,
+            u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS) + 1
+        );
+        assert_eq!(state.grid[32 + 1], 55 ^ 0xdd);
+        assert_eq!(state.party[0].status, b'G');
+        assert_eq!(state.party[0].hp, 5);
+        assert_eq!(state.party[0].mana, 0);
+        assert!(state.message.contains("thrown out"));
+        assert!(state.message.contains("woke 1 asleep member(s)"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -379,6 +444,7 @@
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: DEFAULT_CLIMB_STAT,
                 mana: 0,
@@ -388,6 +454,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'S',
                 climb_stat: DEFAULT_CLIMB_STAT,
                 mana: 5,
@@ -397,6 +464,7 @@
             },
             PartyMember {
                 slot: 2,
+                class_byte: b'A',
                 status: b'D',
                 climb_stat: DEFAULT_CLIMB_STAT,
                 mana: 0,
@@ -412,17 +480,22 @@
         );
 
         assert_eq!(state.clock, GameClock::new(9, 0).unwrap());
-        assert_eq!(state.turn, 1);
-        assert_eq!(state.party[0].hp, 8);
-        assert_eq!(state.party[0].mana, 1);
-        assert_eq!(state.party[1].status, b'S');
-        assert_eq!(state.party[1].hp, 7);
-        assert_eq!(state.party[1].mana, 7);
+        assert_eq!(
+            state.turn,
+            u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS)
+                + u64::from(TOWN_REST_TICKS_PER_HOUR)
+        );
+        assert_eq!(state.party[0].hp, 7);
+        assert_eq!(state.party[0].mana, 2);
+        assert_eq!(state.party[1].status, b'G');
+        assert_eq!(state.party[1].hp, 4);
+        assert_eq!(state.party[1].mana, 6);
         assert_eq!(state.party[2].status, b'D');
         assert_eq!(state.party[2].hp, 0);
         assert_eq!(state.party[2].mana, 0);
-        assert!(state.message.contains("recovered 7 HP"));
+        assert!(state.message.contains("recovered 3 HP"));
         assert!(state.message.contains("and 3 MP"));
+        assert!(state.message.contains("woke 2 asleep member(s)"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -441,7 +514,14 @@
             state.hole_up_command(Path::new(""), Some(0)).unwrap(),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.message, "Rest hours must be in 1..24.");
+        assert_eq!(state.message, "Rest hours must be in 1..9.");
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(
+            state.hole_up_command(Path::new(""), Some(10)).unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, "Rest hours must be in 1..9.");
         assert_eq!(state.turn, 0);
     }
 
@@ -474,6 +554,23 @@
     }
 
     #[test]
+    fn dangerous_rest_interrupts_on_one_in_sixty_four_predicate() {
+        let mut state = britannia_state(open_world_grid(), 0, 15);
+        state.clock = GameClock::new(0, 0).unwrap();
+
+        assert_eq!(
+            state.hole_up_command(Path::new(""), Some(2)).unwrap(),
+            MoveOutcome::Rested
+        );
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.clock, GameClock::new(0, 20).unwrap());
+        assert!(state.message.contains("Party rested 0 hours 20 minutes"));
+        assert!(state.message.contains("Ambushed!"));
+        assert!(!state.message.contains("out of scope"));
+    }
+
+    #[test]
     fn world_rest_with_watch_applies_underfoot_damage_sidecar_each_tick() {
         let dir = debug_game_dir();
         fs::write(
@@ -484,6 +581,7 @@
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.party = vec![PartyMember {
             slot: 0,
+            class_byte: b'A',
             status: b'G',
             climb_stat: DEFAULT_CLIMB_STAT,
             mana: 0,
@@ -516,6 +614,7 @@
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: DEFAULT_CLIMB_STAT,
                 mana: 0,
@@ -525,6 +624,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'S',
                 climb_stat: DEFAULT_CLIMB_STAT,
                 mana: 2,
@@ -534,6 +634,7 @@
             },
             PartyMember {
                 slot: 2,
+                class_byte: b'A',
                 status: b'D',
                 climb_stat: DEFAULT_CLIMB_STAT,
                 mana: 0,
@@ -543,6 +644,7 @@
             },
             PartyMember {
                 slot: 3,
+                class_byte: b'A',
                 status: b'A',
                 climb_stat: DEFAULT_CLIMB_STAT,
                 mana: 4,
@@ -552,6 +654,7 @@
             },
             PartyMember {
                 slot: 4,
+                class_byte: b'A',
                 status: b'P',
                 climb_stat: DEFAULT_CLIMB_STAT,
                 mana: 98,
@@ -580,12 +683,86 @@
         assert_eq!(state.party[3].hp, 6);
         assert_eq!(state.party[3].mana, 4);
         assert_eq!(state.party[4].status, b'P');
-        assert!(state.party[4].hp >= 7);
-        assert!(state.party[4].hp <= 8);
+        assert_eq!(state.party[4].hp, 7);
         assert_eq!(state.party[4].mana, REST_MANA_CAP);
         assert!(state.message.contains("recovered "));
         assert!(state.message.contains(" MP"));
         assert!(state.message.contains("woke 1 asleep member"));
+    }
+
+    #[test]
+    fn rest_with_watch_poisoned_members_keep_status_and_skip_hp_recovery() {
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: b'A',
+            status: b'P',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 98,
+            hp: 3,
+            max_hp: 12,
+            level: 8,
+        }];
+
+        assert_eq!(
+            state.hole_up_command(Path::new(""), Some(1)).unwrap(),
+            MoveOutcome::Rested
+        );
+
+        assert_eq!(state.party[0].status, b'P');
+        assert_eq!(state.party[0].hp, 3);
+        assert_eq!(state.party[0].mana, REST_MANA_CAP);
+        assert!(state.message.contains("recovered 0 HP"));
+        assert!(state.message.contains("MP"));
+    }
+
+    #[test]
+    fn lord_british_camp_event_recomputes_level_and_prints_karma_verdict() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(KARMA_DAT_FILE),
+            karma_bytes(&[
+                "low",
+                "twenty",
+                "forty",
+                "sixty",
+                "blackthorn-top",
+                "camp-top",
+            ]),
+        )
+        .unwrap();
+        let mut state = britannia_state(open_world_grid(), 2, 0);
+        state.clock = GameClock::new(0, 0).unwrap();
+        state.avatar_stats = AvatarStats {
+            strength: 20,
+            dexterity: 20,
+            intelligence: 18,
+        };
+        state.party[0].level = 1;
+        state.party[0].hp = 10;
+        state.party[0].max_hp = 30;
+        state.party[0].mana = 0;
+        state.party[0].climb_stat = 20;
+        state.party_experience = vec![200];
+        state.party_strengths = vec![20];
+        state.party_intelligence = vec![18];
+        state.moral_standing = 80;
+
+        assert_eq!(state.hole_up_command(&dir, Some(1)).unwrap(), MoveOutcome::Rested);
+
+        assert_eq!(state.party[0].level, 3);
+        assert_eq!(state.party[0].hp, 90);
+        assert_eq!(state.party[0].max_hp, 90);
+        assert_eq!(state.avatar_stats.dexterity, 21);
+        assert_eq!(state.party[0].climb_stat, 21);
+        assert_eq!(state.party[0].mana, 18);
+        assert!(state.visibility_dirty);
+        assert!(state.message.contains("Lord British-in-disguise camp event."));
+        assert!(state.message.contains("P1 reached level 3 from 200 XP"));
+        assert!(state.message.contains("Dexterity reward"));
+        assert!(state.message.contains("Verdict: camp-top"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

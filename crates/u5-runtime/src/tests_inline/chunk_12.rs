@@ -41,6 +41,7 @@
         state.player.facing = Direction::East;
         state.party = vec![PartyMember {
             slot: 0,
+            class_byte: b'A',
             status: b'G',
             climb_stat: 0,
             mana: 8,
@@ -77,6 +78,7 @@
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'D',
                 climb_stat: 0,
                 mana: 8,
@@ -86,6 +88,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'A',
                 climb_stat: 0,
                 mana: 8,
@@ -166,22 +169,18 @@
     }
 
     #[test]
-    fn dungeon_top_exit_uses_clean_location_table_when_no_return_snapshot() {
+    fn dungeon_surface_reset_uses_clean_location_table_when_no_return_snapshot() {
         let dir = debug_game_dir();
-        let scene = DungeonScene::new(33).unwrap();
         fs::write(
             dir.join(WORLD_LOCATION_TABLE_FILE),
             "UNDERWORLD 10 20 DUNGEON:0\n",
         )
         .unwrap();
         let mut grid = open_dungeon_record();
-        grid[dungeon_cell_index(0, 1, 1)] = 0x10;
+        grid[dungeon_cell_index(0, 1, 1)] = 0x60;
         let mut state = dungeon_state(grid, 0, 1, 1);
 
-        assert_eq!(
-            state.climb(&dir, ClimbIntent::Up).unwrap(),
-            MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
-        );
+        assert!(state.handle_dungeon_key('k', &dir).unwrap());
 
         assert_eq!(
             state.area,
@@ -291,6 +290,7 @@
                 ActiveObject::empty(),
                 vehicle,
             ],
+            pending_vehicle: None,
         });
 
         assert!(state.restore_return_world());
@@ -380,7 +380,7 @@
     }
 
     #[test]
-    fn debug_enter_dungeon_top_exit_restores_return_world_transport() {
+    fn debug_enter_dungeon_surface_reset_restores_return_world_transport() {
         let dir = debug_game_dir();
         let scene = DungeonScene::new(40).unwrap();
         let mut state = world_state(open_world_grid(), 10, 20);
@@ -414,7 +414,7 @@
         );
         assert_eq!(state.timing_status, TimingStatusTag::Normal);
 
-        state.grid[dungeon_cell_index(0, 1, 1)] = 0x10;
+        state.grid[dungeon_cell_index(0, 1, 1)] = 0x60;
         assert_eq!(
             state.climb(Path::new(""), ClimbIntent::Up).unwrap(),
             MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
@@ -697,6 +697,7 @@
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: 30,
                 mana: 8,
@@ -706,6 +707,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'D',
                 climb_stat: 30,
                 mana: 8,
@@ -727,6 +729,25 @@
     }
 
     #[test]
+    fn dungeon_generic_energy_field_moves_without_status_damage_or_placeholder() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x90;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.party[0].status = b'G';
+        state.party[0].hp = 10;
+
+        assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+        assert_eq!((state.player.x, state.player.y), (2, 1));
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.party[0].status, b'G');
+        assert_eq!(state.party[0].hp, 10);
+        assert!(state.message.contains("energy field"));
+        assert!(state.message.contains("no contact effect"));
+        assert!(!state.message.contains("first-playable"));
+    }
+
+    #[test]
     fn dungeon_sleep_field_marker_variant_sets_living_party_asleep() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 2, 1)] = 0x88;
@@ -734,6 +755,7 @@
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'P',
                 climb_stat: 30,
                 mana: 8,
@@ -743,6 +765,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'A',
                 climb_stat: 30,
                 mana: 8,
@@ -769,6 +792,7 @@
         fire.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: 30,
                 mana: 8,
@@ -778,6 +802,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'D',
                 climb_stat: 30,
                 mana: 8,

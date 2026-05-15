@@ -22,12 +22,12 @@
     #[test]
     fn dungeon_g_key_routes_to_underfoot_get() {
         let mut grid = open_dungeon_record();
-        grid[dungeon_cell_index(0, 1, 1)] = 0x4d;
+        grid[dungeon_cell_index(0, 1, 1)] = 0x7d;
         let mut state = dungeon_state(grid, 0, 1, 1);
 
         assert!(state.handle_dungeon_key('g', Path::new("")).unwrap());
 
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7d);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x08);
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("Got dungeon chest"));
     }
@@ -53,7 +53,26 @@
 
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xf2);
         assert_eq!(state.turn, 0);
-        assert!(state.message.contains("subtypes are still open"));
+        assert_eq!(state.message, "Nothing to open here.");
+    }
+
+    #[test]
+    fn dungeon_jimmy_preserves_unresolved_heavy_door_subtype_without_turn() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0xf2;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+
+        assert_eq!(
+            state
+                .jimmy_facing_with_game_dir_and_member(None, Some(0))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xf2);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "No lock!");
     }
 
     #[test]
@@ -378,6 +397,74 @@
     }
 
     #[test]
+    fn parsed_tlk_aliases_sentinel_id_one_to_first_real_blob() {
+        let dialogue = parse_tlk_bytes(&tlk_bytes(&[(
+            2,
+            &["Ada", "a test smith", "Greetings", "I mend gear", "Bye"],
+        )]))
+        .unwrap();
+
+        assert_eq!(dialogue.get(&1), dialogue.get(&2));
+    }
+
+    #[test]
+    fn parsed_tlk_caps_each_blob_to_runtime_window() {
+        let long_name = "A".repeat(1100);
+        let bytes = tlk_bytes(&[(2, &[long_name.as_str()])]);
+        let dialogue = parse_tlk_bytes(&bytes).unwrap();
+
+        assert_eq!(dialogue[&2][0].len(), 1024);
+    }
+
+    #[test]
+    fn town_talk_dialog_id_one_uses_sentinel_alias() {
+        let dialogue = parse_tlk_bytes(&tlk_bytes(&[(
+            2,
+            &["Ada", "a test smith", "Greetings", "I mend gear", "Bye"],
+        )]))
+        .unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 1,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: Some("Ada".to_string()),
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue(&dialogue),
+            MoveOutcome::Talked
+        );
+
+        assert!(state.message.contains("Talked to Ada"));
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn talk_shop_trigger_maps_public_shop_roles() {
+        assert_eq!(
+            talk_shop_trigger(0x81),
+            Some(("Weaponsmith / armourer", "Arms stock arm"))
+        );
+        assert_eq!(
+            talk_shop_trigger(0x84),
+            Some(("Ship broker / shipwright", "Shipwright sale arm"))
+        );
+        assert_eq!(talk_shop_trigger(0xff), None);
+    }
+
+    #[test]
     fn talk_keyword_match_respects_space_boundary() {
         assert!(talk_keyword_matches("JOB", "job"));
         assert!(talk_keyword_matches("JOB", "job news"));
@@ -387,7 +474,7 @@
     }
 
     #[test]
-    fn talk_keyword_response_resolves_job_bye_and_pairs() {
+    fn talk_keyword_response_resolves_reserved_aliases_and_pairs() {
         let fields = vec![
             "Ada".to_string(),
             "a test smith".to_string(),
@@ -400,8 +487,11 @@
             "Long answer".to_string(),
         ];
 
+        assert_eq!(talk_keyword_response(&fields, "name"), Some("Ada"));
         assert_eq!(talk_keyword_response(&fields, "job"), Some("I mend gear"));
+        assert_eq!(talk_keyword_response(&fields, "work"), Some("I mend gear"));
         assert_eq!(talk_keyword_response(&fields, "bye"), Some("Farewell"));
+        assert_eq!(talk_keyword_response(&fields, "thank"), Some("Farewell"));
         assert_eq!(
             talk_keyword_response(&fields, "grandpa"),
             Some("Long answer")
@@ -411,6 +501,75 @@
             Some("Short answer")
         );
         assert_eq!(talk_keyword_response(&fields, "granite"), None);
+    }
+
+    #[test]
+    fn talk_response_text_and_actions_strips_action_markers() {
+        assert_eq!(
+            talk_response_text_and_actions("Take this {ACTION:F} friend"),
+            ("Take this friend".to_string(), vec!['F'])
+        );
+    }
+
+    #[test]
+    fn talk_branch_flags_use_32_bit_scene_slot_and_zero_mask_out_of_range() {
+        assert_eq!(talk_branch_flag_mask(0), 1);
+        assert_eq!(talk_branch_flag_mask(31), 0x8000_0000);
+        assert_eq!(talk_branch_flag_mask(32), 0);
+        assert_eq!(talk_branch_flag_mask(255), 0);
+
+        let mut slot = 0u32;
+        assert!(!talk_branch_flag_is_set(slot, 5));
+        assert!(set_talk_branch_flag(&mut slot, 5));
+        assert_eq!(slot, 0x20);
+        assert!(talk_branch_flag_is_set(slot, 5));
+        assert!(!set_talk_branch_flag(&mut slot, 5));
+        assert_eq!(slot, 0x20);
+
+        assert!(!set_talk_branch_flag(&mut slot, 32));
+        assert_eq!(slot, 0x20);
+        assert!(!talk_branch_flag_is_set(0xffff_ffff, 32));
+    }
+
+    #[test]
+    fn play_state_keeps_talk_branch_flags_per_town_scene() {
+        let mut state = test_state(open_grid(), 1, 1);
+        let first_scene = match state.area {
+            Area::Town { scene, .. } => scene,
+            _ => unreachable!(),
+        };
+        let second_scene = Scene::new(first_scene.byte + 1).unwrap();
+
+        assert_eq!(state.talk_branch_slot_for_scene(first_scene), 0);
+        assert!(!state.active_talk_branch_flag_is_set(3));
+        assert!(state.set_active_talk_branch_flag(3));
+        assert!(!state.set_active_talk_branch_flag(3));
+        assert!(state.active_talk_branch_flag_is_set(3));
+        assert_eq!(state.talk_branch_slot_for_scene(first_scene), 0x08);
+        assert_eq!(state.talk_branch_slot_for_scene(second_scene), 0);
+
+        assert!(state.set_talk_branch_flag_for_scene(second_scene, 5));
+        assert_eq!(state.talk_branch_slot_for_scene(first_scene), 0x08);
+        assert_eq!(state.talk_branch_slot_for_scene(second_scene), 0x20);
+
+        state.area = Area::Town {
+            scene: second_scene,
+            floor: 0,
+        };
+        assert!(!state.active_talk_branch_flag_is_set(3));
+        assert!(state.active_talk_branch_flag_is_set(5));
+    }
+
+    #[test]
+    fn play_state_talk_branch_flags_ignore_non_town_and_out_of_range_bits() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+
+        assert!(!state.active_talk_branch_flag_is_set(0));
+        assert!(!state.set_active_talk_branch_flag(0));
+
+        let scene = Scene::new(0x11).unwrap();
+        assert!(!state.set_talk_branch_flag_for_scene(scene, 32));
+        assert_eq!(state.talk_branch_slot_for_scene(scene), 0);
     }
 
     #[test]
@@ -458,6 +617,69 @@
     }
 
     #[test]
+    fn town_talk_action_dispatch_grants_confirmed_special_item_flags() {
+        fn push_text(bytes: &mut Vec<u8>, text: &str) {
+            for byte in text.bytes() {
+                bytes.push(byte | 0x80);
+            }
+            bytes.push(0);
+        }
+
+        let mut bytes = vec![0; 8];
+        bytes[0..2].copy_from_slice(&2u16.to_le_bytes());
+        bytes[2..4].copy_from_slice(&1u16.to_le_bytes());
+        bytes[4..6].copy_from_slice(&8u16.to_le_bytes());
+        bytes[6..8].copy_from_slice(&2u16.to_le_bytes());
+        for field in ["Ada", "a test smith", "Greetings", "I mend gear", "Bye", "GIFT"] {
+            push_text(&mut bytes, field);
+        }
+        push_text(&mut bytes, "Take this");
+        let terminator = bytes.pop().unwrap();
+        assert_eq!(terminator, 0);
+        bytes.push(0x86);
+        bytes.push(b'F' | 0x80);
+        bytes.push(0x86);
+        bytes.push(b'H' | 0x80);
+        bytes.push(0x86);
+        bytes.push(b'I' | 0x80);
+        bytes.push(0x86);
+        bytes.push(b'J' | 0x80);
+        bytes.push(0);
+
+        let dialogue = parse_tlk_bytes(&bytes).unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.climbing_gear = 0;
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 2,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: Some("Ada".to_string()),
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue_and_keyword(&dialogue, Some("gift")),
+            MoveOutcome::Talked
+        );
+
+        assert_eq!(state.climbing_gear, 1);
+        assert_eq!(state.special_items[SPECIAL_ITEM_SEXTANT_INDEX], 1);
+        assert_eq!(state.special_items[SPECIAL_ITEM_SPYGLASS_INDEX], 1);
+        assert_eq!(state.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX], 1);
+        assert_eq!(state.message, "Talked to Ada: Take this");
+    }
+
+    #[test]
     fn play_input_talk_suffix_routes_to_one_shot_keyword_lookup() {
         let dir = debug_game_dir();
         fs::write(
@@ -494,6 +716,51 @@
 
         assert_eq!(state.message, "Talked to Ada: I mend gear");
         assert_eq!(state.turn, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn play_input_talk_suffix_routes_reserved_aliases() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join("CASTLE.TLK"),
+            tlk_bytes(&[(
+                2,
+                &["Ada", "a test smith", "Greetings", "I mend gear", "Farewell"],
+            )]),
+        )
+        .unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 2,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: Some("Ada".to_string()),
+            },
+        ]);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'T', "WORK", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.message, "Talked to Ada: I mend gear");
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'T', "THANK", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.message, "Talked to Ada: Farewell");
+        assert_eq!(state.turn, 2);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -553,7 +820,7 @@
     }
 
     #[test]
-    fn town_talk_reports_shop_trigger_without_keyword_loop() {
+    fn town_talk_reports_public_shop_trigger_dispatch_family() {
         let dialogue = HashMap::new();
         let mut state = test_state(open_grid(), 1, 1);
         state.player.facing = Direction::East;
@@ -579,7 +846,9 @@
             MoveOutcome::Talked
         );
 
-        assert!(state.message.contains("shop trigger 0x84"));
+        assert!(state.message.contains("Ship broker / shipwright shop trigger 0x84"));
+        assert!(state.message.contains("Shipwright sale arm"));
+        assert!(!state.message.contains("out of scope"));
         assert_eq!(state.turn, 1);
     }
 

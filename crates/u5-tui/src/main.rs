@@ -2,12 +2,26 @@ use std::env;
 use std::io;
 
 use u5_runtime::run_report;
-use u5_tui::{CLI_USAGE, CliArgs, parse_cli_args, run_play_loop, run_save_frame};
+use u5_tui::{
+    CLI_USAGE, CliArgs, parse_cli_args, run_create_character_command, run_play_loop, run_save_frame,
+};
 
 fn main() -> io::Result<()> {
     let args = parse_cli_args(env::args().skip(1))?;
     if args.help {
         print!("{CLI_USAGE}");
+        return Ok(());
+    }
+    if let Some(command) = args.create_character.as_ref() {
+        let avatar = run_create_character_command(&args.game_dir, command)?;
+        let name = String::from_utf8_lossy(
+            &avatar.name[..avatar
+                .name
+                .iter()
+                .position(|byte| *byte == 0)
+                .unwrap_or(avatar.name.len())],
+        );
+        println!("Created character {name}. Choose Journey Onward to load the new save.");
         return Ok(());
     }
     if let Some(out) = args.save_frame.as_deref() {

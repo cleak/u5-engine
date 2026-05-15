@@ -170,7 +170,9 @@ pub fn parse_dungeon_deeper_transition_entries(
     Ok(entries)
 }
 
-pub fn load_dungeon_teleport_entries(game_dir: &Path) -> io::Result<Option<Vec<DungeonTeleportEntry>>> {
+pub fn load_dungeon_teleport_entries(
+    game_dir: &Path,
+) -> io::Result<Option<Vec<DungeonTeleportEntry>>> {
     let path = game_dir.join(DUNGEON_TELEPORT_TABLE_FILE);
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,
@@ -375,7 +377,9 @@ pub fn load_dungeon_chest_content_entries(
     parse_dungeon_chest_content_entries(&text).map(Some)
 }
 
-pub fn parse_dungeon_chest_content_entries(text: &str) -> io::Result<Vec<DungeonChestContentEntry>> {
+pub fn parse_dungeon_chest_content_entries(
+    text: &str,
+) -> io::Result<Vec<DungeonChestContentEntry>> {
     let mut entries = Vec::new();
     for (line_index, line) in text.lines().enumerate() {
         let line_number = line_index + 1;

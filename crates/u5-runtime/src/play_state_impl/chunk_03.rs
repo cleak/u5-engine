@@ -3,6 +3,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::play_state_impl::chunk_04::sextant_coordinate;
 use crate::*;
 
 impl PlayState {
@@ -16,9 +17,10 @@ impl PlayState {
         let reagents_total: u16 = self.reagents.iter().map(|count| *count as u16).sum();
         let spells = self.spell_stock_summary();
         let party = self.party_status_summary();
+        let equipment = equipment_stock_summary(&self.equipment_stock);
         let effect = self.active_effect_status();
         format!(
-            "Z-stats: {area} at ({}, {}), facing {}, date Y{} M{} D{} {:02}:{:02}, turn {}; transport {}; wind {}; typeahead {}; timing {}; light torch={} spell={} ambient={} time-stop={} effect={}; inventory food={} gold={} keys={} gems={} torches={} climbing={} reagents={}; spells {}; party {}.",
+            "Z-stats: {area} at ({}, {}), facing {}, date Y{} M{} D{} {:02}:{:02}, turn {}; transport {}; wind {}; typeahead {}; timing {}; light torch={} spell={} ambient={} time-stop={} effect={}; inventory food={} gold={} keys={} gems={} torches={} climbing={} reagents={}; equipment {}; spells {}; party {}.",
             self.player.x,
             self.player.y,
             self.player.facing.name(),
@@ -44,6 +46,7 @@ impl PlayState {
             self.torches,
             self.climbing_gear,
             reagents_total,
+            equipment,
             spells,
             party
         )
@@ -122,15 +125,27 @@ impl PlayState {
             .iter()
             .enumerate()
             .map(|(index, member)| {
+                let strength = self
+                    .party_strengths
+                    .get(index)
+                    .copied()
+                    .unwrap_or(self.avatar_stats.strength);
+                let equipment = self
+                    .party_equipment
+                    .get(index)
+                    .map(readied_equipment_summary)
+                    .unwrap_or_else(|| "none".to_string());
                 format!(
-                    "P{}:slot{} {} HP {}/{} MP {} L{}",
+                    "P{}:slot{} {} STR {} HP {}/{} MP {} L{} equip [{}]",
                     index + 1,
                     member.slot,
                     party_status_name(member.status),
+                    strength,
                     member.hp,
                     member.max_hp,
                     member.mana,
-                    member.level
+                    member.level,
+                    equipment
                 )
             })
             .collect::<Vec<_>>();
@@ -161,12 +176,182 @@ impl PlayState {
         }
 
         self.party.swap(first, second);
+        if first < self.party_names.len() && second < self.party_names.len() {
+            self.party_names.swap(first, second);
+        }
+        if first < self.party_stay_counters.len() && second < self.party_stay_counters.len() {
+            self.party_stay_counters.swap(first, second);
+        }
+        if first < self.party_strengths.len() && second < self.party_strengths.len() {
+            self.party_strengths.swap(first, second);
+        }
+        if first < self.party_equipment.len() && second < self.party_equipment.len() {
+            self.party_equipment.swap(first, second);
+        }
         self.message = format!(
             "New order: party slots {} and {} swapped.",
             first + 1,
             second + 1
         );
         MoveOutcome::Used
+    }
+
+    pub fn ready_equipment_from_suffix(&mut self, suffix: &str) -> MoveOutcome {
+        let request = match parse_inline_ready_request(suffix) {
+            Ok(Some(request)) => request,
+            Ok(None) => {
+                self.message = ready_prompt_message();
+                return MoveOutcome::PromptDeclined;
+            }
+            Err(err) => {
+                self.message = format!("{err}");
+                return MoveOutcome::Blocked;
+            }
+        };
+        self.ready_equipment(request)
+    }
+
+    pub fn ready_equipment(&mut self, request: InlineReadyRequest) -> MoveOutcome {
+        let party_len = self.party.len();
+        if request.party_index >= party_len {
+            self.message = party_member_unavailable_message(party_len);
+            return MoveOutcome::Blocked;
+        }
+        if !self.party[request.party_index].living() {
+            self.message = format!("Party member {} is unavailable.", request.party_index + 1);
+            return MoveOutcome::Blocked;
+        }
+        if self.party_equipment.len() < party_len {
+            self.party_equipment
+                .resize(party_len, [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT]);
+        }
+        if self.party_strengths.len() < party_len {
+            self.party_strengths
+                .resize(party_len, self.avatar_stats.strength);
+        }
+
+        let item_id = request.item_id;
+        let name = equipment_name(item_id);
+        if let Some(slot) = self.party_equipment[request.party_index]
+            .iter()
+            .position(|item| *item as usize == item_id)
+        {
+            self.party_equipment[request.party_index][slot] = EQUIPMENT_EMPTY;
+            self.equipment_stock[item_id] = self.equipment_stock[item_id]
+                .saturating_add(1)
+                .min(EQUIPMENT_STOCK_CAP);
+            self.message = format!(
+                "Unequipped {name} from party member {}; stock is {}.",
+                request.party_index + 1,
+                self.equipment_stock[item_id]
+            );
+            if self.combat_active
+                && item_id == EQUIPMENT_ID_RING_INVISIBILITY
+                && request.party_index < COMBAT_PARTY_ACTOR_SLOTS
+                && clear_combat_linked_invisibility(
+                    &mut self.combat_actors[request.party_index],
+                    &mut self.active_objects,
+                )
+                .is_some_and(CombatLinkedVisibilityOutcome::changed)
+            {
+                self.mark_visibility_dirty();
+            }
+            return MoveOutcome::Used;
+        }
+        if self.equipment_stock[item_id] == 0 {
+            self.message = format!("No carried {name} to ready.");
+            return MoveOutcome::Blocked;
+        }
+        if matches!(item_id, EQUIPMENT_ID_ARROWS | EQUIPMENT_ID_QUARRELS) {
+            self.message = format!("{name} are ammunition, not readied equipment.");
+            return MoveOutcome::Blocked;
+        }
+        if matches!(item_id, EQUIPMENT_ID_BOW | EQUIPMENT_ID_MAGIC_BOW)
+            && self.equipment_stock[EQUIPMENT_ID_ARROWS] == 0
+        {
+            self.message = "No arrows for that weapon.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if item_id == EQUIPMENT_ID_CROSSBOW && self.equipment_stock[EQUIPMENT_ID_QUARRELS] == 0 {
+            self.message = "No quarrels for that weapon.".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        let Some(slot) = self.ready_target_slot(item_id) else {
+            self.message = format!("{name} cannot be readied.");
+            return MoveOutcome::Blocked;
+        };
+        if self.party_equipment[request.party_index][slot] != EQUIPMENT_EMPTY {
+            self.message = format!("Remove current {} first.", slot_name(slot));
+            return MoveOutcome::Blocked;
+        }
+        if EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_TWO_HAND
+            && self.party_equipment[request.party_index][EQUIP_SLOT_OFFHAND] != EQUIPMENT_EMPTY
+        {
+            self.message = "Both hands must be free.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if slot == EQUIP_SLOT_OFFHAND {
+            let weapon = self.party_equipment[request.party_index][EQUIP_SLOT_WEAPON];
+            if weapon != EQUIPMENT_EMPTY
+                && EQUIPMENT_CLASS_TAGS[weapon as usize] == EQUIPMENT_TAG_TWO_HAND
+            {
+                self.message = "Weapon hand holds a two-handed item.".to_string();
+                return MoveOutcome::Blocked;
+            }
+        }
+
+        let current_burden = ready_burden(&self.party_equipment[request.party_index]);
+        let next_burden = current_burden.saturating_add(EQUIPMENT_READY_BURDENS[item_id]);
+        let strength = self.party_strengths[request.party_index];
+        if next_burden > strength {
+            self.message = format!(
+                "Party member {} is not strong enough for {name} ({next_burden}>{strength}).",
+                request.party_index + 1
+            );
+            return MoveOutcome::Blocked;
+        }
+
+        self.party_equipment[request.party_index][slot] = item_id as u8;
+        self.equipment_stock[item_id] = self.equipment_stock[item_id].saturating_sub(1);
+        if is_magic_vanish_ring(item_id)
+            && self.ready_ring_vanish_roll(request.party_index, item_id) == 0
+        {
+            self.party_equipment[request.party_index][slot] = EQUIPMENT_EMPTY;
+            self.message = format!(
+                "Readied {name} for party member {}, but it vanished.",
+                request.party_index + 1
+            );
+        } else {
+            self.message = format!(
+                "Readied {name} for party member {} in {}; stock is {}.",
+                request.party_index + 1,
+                slot_name(slot),
+                self.equipment_stock[item_id]
+            );
+        }
+        MoveOutcome::Used
+    }
+
+    pub fn ready_target_slot(&self, item_id: usize) -> Option<usize> {
+        match EQUIPMENT_CLASS_TAGS.get(item_id).copied()? {
+            EQUIPMENT_TAG_HELM => Some(EQUIP_SLOT_HELM),
+            EQUIPMENT_TAG_ARMOUR => Some(EQUIP_SLOT_ARMOUR),
+            EQUIPMENT_TAG_RING => Some(EQUIP_SLOT_RING),
+            EQUIPMENT_TAG_AMULET => Some(EQUIP_SLOT_AMULET),
+            EQUIPMENT_TAG_TWO_HAND => Some(EQUIP_SLOT_WEAPON),
+            EQUIPMENT_TAG_ONE_HAND if is_shield_item(item_id) => Some(EQUIP_SLOT_OFFHAND),
+            EQUIPMENT_TAG_ONE_HAND => Some(EQUIP_SLOT_WEAPON),
+            EQUIPMENT_TAG_AMMO => None,
+            _ => None,
+        }
+    }
+
+    pub fn ready_ring_vanish_roll(&self, party_index: usize, item_id: usize) -> u8 {
+        (self.turn as u8)
+            .wrapping_add(party_index as u8)
+            .wrapping_add(item_id as u8)
+            & 0x0f
     }
 
     pub fn cast_light_spell(
@@ -187,6 +372,78 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
+    pub fn cast_vanish(
+        &mut self,
+        caster_index: usize,
+        direction: Option<Direction>,
+    ) -> MoveOutcome {
+        let Area::Town { .. } = self.area else {
+            self.message = "Not here!".to_string();
+            return MoveOutcome::Blocked;
+        };
+        let Some(direction) = direction else {
+            self.message = "Direction? Use C1AY8/C1AY6/C1AY2/C1AY4.".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !direction.is_cardinal() {
+            self.message = "Vanish requires a cardinal direction.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if let Some(outcome) =
+            self.cast_spell_resource_gate(caster_index, VANISH_SPELL_INDEX, VANISH_COST)
+        {
+            return outcome;
+        }
+
+        let (dx, dy) = direction.delta();
+        let tx = self.player.x as isize + dx;
+        let ty = self.player.y as isize + dy;
+        if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
+            self.advance_turn();
+            self.message = "Failed!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let tx = tx as usize;
+        let ty = ty as usize;
+        let Some(slot) = self.vanishable_object_slot_at_current_floor(tx, ty) else {
+            self.advance_turn();
+            self.message = "Failed!".to_string();
+            return MoveOutcome::Blocked;
+        };
+
+        let object = self.active_objects[slot];
+        self.free_active_object_slot(slot);
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = format!("Vanished object tile {} at ({tx}, {ty}).", object.tile);
+        MoveOutcome::Cast
+    }
+
+    pub fn vanishable_object_slot_at_current_floor(&self, x: usize, y: usize) -> Option<usize> {
+        self.active_objects
+            .iter()
+            .enumerate()
+            .skip(1)
+            .find_map(|(slot, object)| {
+                let object = *object;
+                if !self.object_occupies(object, x, y)
+                    || object.moonstone_slot_index().is_some()
+                    || transport_from_vehicle_object(
+                        object.type_byte,
+                        object.tile,
+                        object.aux1,
+                        object.aux3,
+                    )
+                    .is_some()
+                    || (192..=255).contains(&object.type_byte)
+                    || (192..=255).contains(&object.tile)
+                {
+                    return None;
+                }
+                (64..=159).contains(&object.tile).then_some(slot)
+            })
+    }
+
     pub fn cast_active_effect_spell(
         &mut self,
         caster_index: usize,
@@ -196,7 +453,7 @@ impl PlayState {
         duration: u8,
         label: &str,
     ) -> MoveOutcome {
-        if !spell_allowed_in_area(spell_index, self.area) {
+        if !self.spell_allowed_in_current_cast_context(spell_index) {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         }
@@ -211,22 +468,110 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    pub fn cast_awaken(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
-        if target_index >= self.party.len() {
-            self.message = party_member_unavailable_message(self.party.len());
+    pub fn cast_reveal(&mut self, caster_index: usize) -> MoveOutcome {
+        if !self.combat_active {
+            self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         }
+        if let Some(outcome) =
+            self.cast_spell_resource_gate(caster_index, REVEAL_SPELL_INDEX, REVEAL_COST)
+        {
+            return outcome;
+        }
+
+        let revealed = apply_combat_reveal(&mut self.combat_actors);
+        if revealed != 0 {
+            self.mark_visibility_dirty();
+        }
+        self.advance_turn();
+        self.message = if revealed == 0 {
+            "Reveal found nothing.".to_string()
+        } else {
+            format!("Revealed {revealed} combat actor(s).")
+        };
+        MoveOutcome::Cast
+    }
+
+    pub fn cast_invisibility(&mut self, caster_index: usize) -> MoveOutcome {
+        if !self.combat_active {
+            self.message = "Not here!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if let Some(outcome) =
+            self.cast_spell_resource_gate(caster_index, INVISIBILITY_SPELL_INDEX, INVISIBILITY_COST)
+        {
+            return outcome;
+        }
+
+        let eligible = caster_index < COMBAT_PARTY_ACTOR_SLOTS;
+        self.advance_turn();
+        let applied = eligible
+            && apply_combat_linked_invisibility(
+                &mut self.combat_actors[caster_index],
+                &mut self.active_objects,
+            )
+            .is_some_and(CombatLinkedVisibilityOutcome::changed);
+        if applied {
+            self.mark_visibility_dirty();
+        }
+        self.message = if applied {
+            "Invisibility!".to_string()
+        } else {
+            "Failed!".to_string()
+        };
+        if applied {
+            MoveOutcome::Cast
+        } else {
+            MoveOutcome::Blocked
+        }
+    }
+
+    pub fn cast_cause_fear(&mut self, caster_index: usize) -> MoveOutcome {
+        if !self.combat_active {
+            self.message = "Not here!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if let Some(outcome) =
+            self.cast_spell_resource_gate(caster_index, CAUSE_FEAR_SPELL_INDEX, CAUSE_FEAR_COST)
+        {
+            return outcome;
+        }
+
+        let mut groups = [0u8; COMBAT_ACTOR_SLOTS];
+        for (slot, group) in groups.iter_mut().enumerate() {
+            *group = resolve_combat_target_group_for_actor(self.combat_actors[slot], slot, None);
+        }
+        let protected_or_immune = [false; COMBAT_ACTOR_SLOTS];
+        let caster_group = groups.get(caster_index).copied().unwrap_or(1);
+        let targets = collect_cause_fear_actor_slots(
+            &self.combat_actors,
+            &groups,
+            caster_group,
+            &protected_or_immune,
+        );
+        let affected = apply_cause_fear_critical_hp_setup(&mut self.combat_actors, &targets);
+
+        self.advance_turn();
+        self.message = if affected == 0 {
+            "Cause Fear found no target.".to_string()
+        } else {
+            format!("Cause Fear affected {affected} combat actor(s).")
+        };
+        MoveOutcome::Cast
+    }
+
+    pub fn cast_awaken(&mut self, caster_index: usize) -> MoveOutcome {
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, AWAKEN_SPELL_INDEX, AWAKEN_COST)
         {
             return outcome;
         }
 
-        if self.party[target_index].status != b'S' {
+        let Some(target_index) = self.party.iter().position(|member| member.status == b'S') else {
             self.advance_turn();
             self.message = "Failed!".to_string();
             return MoveOutcome::Blocked;
-        }
+        };
 
         self.party[target_index].status = b'G';
         self.advance_turn();
@@ -274,7 +619,8 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let healed = self.party[target_index].heal_by(HEAL_AMOUNT);
+        let amount = self.heal_spell_amount(caster_index, target_index);
+        let healed = self.party[target_index].heal_by(amount);
         let hp = self.party[target_index].hp;
         let max_hp = self.party[target_index].max_hp;
         self.advance_turn();
@@ -283,6 +629,51 @@ impl PlayState {
             target_index + 1
         );
         MoveOutcome::Cast
+    }
+
+    pub fn heal_spell_raw_roll(&self, caster_index: usize, target_index: usize) -> u8 {
+        self.turn
+            .wrapping_add((caster_index as u64).wrapping_mul(17))
+            .wrapping_add((target_index as u64).wrapping_mul(14))
+            .wrapping_add((self.player.x as u64).wrapping_mul(3))
+            .wrapping_add((self.player.y as u64).wrapping_mul(5))
+            .wrapping_rem(u64::from(HEAL_RAW_ROLL_MAX) + 1) as u8
+    }
+
+    pub fn heal_spell_amount(&self, caster_index: usize, target_index: usize) -> u16 {
+        heal_spell_amount_from_raw_roll(self.heal_spell_raw_roll(caster_index, target_index))
+    }
+
+    pub fn resurrect_party_member_to_hp(
+        &mut self,
+        target_index: usize,
+        hp_after: u16,
+    ) -> Option<u16> {
+        if target_index >= self.party.len() || self.party[target_index].status != b'D' {
+            return None;
+        }
+
+        self.normalize_party_progress_vectors();
+        let experience = resurrection_adjusted_experience(
+            self.party_experience[target_index],
+            self.moral_standing,
+        );
+        self.party_experience[target_index] = experience;
+        let level = recompute_level_from_experience(experience);
+        let max_hp = u16::from(level) * 30;
+        let intelligence = if target_index == 0 {
+            self.avatar_stats.intelligence
+        } else {
+            self.party_intelligence[target_index]
+        };
+        let mana = class_refreshed_mana(self.party[target_index].class_byte, intelligence)
+            .unwrap_or(self.party[target_index].mana);
+        self.party[target_index].status = b'G';
+        self.party[target_index].mana = mana;
+        self.party[target_index].level = level;
+        self.party[target_index].hp = hp_after.min(max_hp);
+        self.party[target_index].max_hp = max_hp;
+        Some(max_hp)
     }
 
     pub fn cast_great_heal(&mut self, caster_index: usize, target_index: usize) -> MoveOutcome {
@@ -331,19 +722,19 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        self.party[target_index].status = b'G';
-        let (_, hp) = self.party[target_index].heal_to_max();
-        let max_hp = self.party[target_index].max_hp;
+        let max_hp = self
+            .resurrect_party_member_to_hp(target_index, 1)
+            .expect("target status checked before spell resurrection");
         self.advance_turn();
         self.message = format!(
-            "Resurrected party member {} ({hp}/{max_hp}).",
+            "Resurrected party member {} (1/{max_hp}).",
             target_index + 1
         );
         MoveOutcome::Cast
     }
 
     pub fn cast_locate(&mut self, caster_index: usize) -> MoveOutcome {
-        let Area::World { plane } = self.area else {
+        let Area::World { .. } = self.area else {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         };
@@ -353,17 +744,10 @@ impl PlayState {
             return outcome;
         }
 
+        let y = sextant_coordinate(self.player.y);
+        let x = sextant_coordinate(self.player.x);
         self.advance_turn();
-        self.message = format!(
-            "Locate: {} at ({}, {}), facing {}, wind {}, time {:02}:{:02}.",
-            plane.key(),
-            self.player.x,
-            self.player.y,
-            self.player.facing.name(),
-            self.wind.status_message(),
-            self.clock.hour,
-            self.clock.minute
-        );
+        self.message = format!("Locate: {y} {x}.\"");
         MoveOutcome::Observed
     }
 
@@ -413,24 +797,24 @@ impl PlayState {
     pub fn peer_view_message(&self) -> String {
         match self.area {
             Area::Dungeon { scene, level } => format!(
-                "Peer view of {} ({}) level {} (spell; centered flood map, exact glyph/floodability edge cases out of scope):\n{}",
+                "Peer view of {} ({}) level {} (spell; centered flood map):\n{}",
                 scene.key(),
                 scene.name(),
                 level,
                 self.dungeon_vision_map(level)
             ),
             Area::Town { scene, floor } => format!(
-                "Peer view of {} floor {} (spell; full-fill 11x11 map):\n{}",
+                "Peer view of {} floor {} (spell; 32x32 class map):\n{}",
                 scene.key(),
                 floor,
-                self.surface_gem_map(5)
+                self.surface_view_map()
             ),
             Area::World { plane } => format!(
-                "Peer view of {} at ({}, {}) (spell; full-fill 11x11 map):\n{}",
+                "Peer view of {} at ({}, {}) (spell; 32x32 class map):\n{}",
                 plane.key(),
                 self.player.x,
                 self.player.y,
-                self.surface_gem_map(5)
+                self.surface_view_map()
             ),
         }
     }
@@ -438,23 +822,38 @@ impl PlayState {
     pub fn x_ray_view_message(&self) -> String {
         match self.area {
             Area::Town { scene, floor } => format!(
-                "X-Ray view of {} floor {} (spell; first-playable full-fill 11x11 map):\n{}",
+                "X-Ray view of {} floor {} (spell; 32x32 class map):\n{}",
                 scene.key(),
                 floor,
-                self.surface_gem_map(5)
+                self.surface_view_map()
             ),
             Area::World { plane } => format!(
-                "X-Ray view of {} at ({}, {}) (spell; first-playable full-fill 11x11 map):\n{}",
+                "X-Ray view of {} at ({}, {}) (spell; 32x32 class map):\n{}",
                 plane.key(),
                 self.player.x,
                 self.player.y,
-                self.surface_gem_map(5)
+                self.surface_view_map()
             ),
             Area::Dungeon { .. } => "Not here!".to_string(),
         }
     }
 
-    pub fn cast_open_spell(&mut self, caster_index: usize, game_dir: &Path) -> io::Result<MoveOutcome> {
+    pub fn cast_open_spell(
+        &mut self,
+        caster_index: usize,
+        direction: Option<Direction>,
+        _game_dir: &Path,
+    ) -> io::Result<MoveOutcome> {
+        if !matches!(self.area, Area::Dungeon { .. }) {
+            let Some(direction) = direction else {
+                self.message = "Direction? Use C1AS8/C1AS6/C1AS2/C1AS4.".to_string();
+                return Ok(MoveOutcome::Blocked);
+            };
+            if !direction.is_cardinal() {
+                self.message = "Open requires a cardinal direction.".to_string();
+                return Ok(MoveOutcome::Blocked);
+            }
+        }
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, OPEN_SPELL_INDEX, OPEN_SPELL_COST)
         {
@@ -462,9 +861,7 @@ impl PlayState {
         }
 
         let Area::Dungeon { scene, level } = self.area else {
-            self.advance_turn();
-            self.message = "Failed!".to_string();
-            return Ok(MoveOutcome::Blocked);
+            return Ok(self.cast_open_ordinary_surface_door(direction));
         };
         let idx = dungeon_cell_index(level, self.player.x, self.player.y);
         let tile = self.grid[idx];
@@ -474,29 +871,64 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         }
 
-        let chest_entries = load_dungeon_chest_content_entries(game_dir)?;
-        let note = self
-            .apply_dungeon_chest_content(
-                chest_entries.as_deref(),
-                scene,
-                level,
-                self.player.x,
-                self.player.y,
-                tile,
-            )
-            .map(|grant_note| format!("trap generator bypassed by An Sanct; {grant_note}"))
-            .unwrap_or_else(|| "trap generator bypassed by An Sanct".to_string());
-
-        Ok(self.consume_dungeon_chest_with_note(
-            scene,
-            level,
+        self.grid[idx] = 0x70 | (tile & 0x0f);
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = format!(
+            "Safely opened dungeon chest at ({}, {}) on {} level {level}; trap generator bypassed by An Sanct, marked visit-local open chest.",
             self.player.x,
             self.player.y,
-            idx,
-            tile,
-            "Safely opened",
-            &note,
-        ))
+            scene.key()
+        );
+        Ok(MoveOutcome::ContainerOpened)
+    }
+
+    pub fn cast_open_ordinary_surface_door(&mut self, direction: Option<Direction>) -> MoveOutcome {
+        let Some(direction) = direction else {
+            self.message = "Direction? Use C1AS8/C1AS6/C1AS2/C1AS4.".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !direction.is_cardinal() {
+            self.message = "Open requires a cardinal direction.".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        let (dx, dy) = direction.delta();
+        let tx = self.player.x as isize + dx;
+        let ty = self.player.y as isize + dy;
+        let Some(idx) = (match self.area {
+            Area::World { .. } => {
+                let tx = tx.rem_euclid(WORLD_SIDE as isize) as usize;
+                let ty = ty.rem_euclid(WORLD_SIDE as isize) as usize;
+                Some(world_cell_index(tx, ty))
+            }
+            Area::Town { .. } => {
+                if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
+                    None
+                } else {
+                    Some(ty as usize * 32 + tx as usize)
+                }
+            }
+            Area::Dungeon { .. } => None,
+        }) else {
+            self.advance_turn();
+            self.message = "Failed!".to_string();
+            return MoveOutcome::Blocked;
+        };
+
+        self.grid[idx] = match self.grid[idx] {
+            0x97 => 0xb8,
+            0x98 => 0xba,
+            _ => {
+                self.advance_turn();
+                self.message = "Failed!".to_string();
+                return MoveOutcome::Blocked;
+            }
+        };
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = "Opened!".to_string();
+        MoveOutcome::DoorOpened
     }
 
     pub fn cast_dungeon_level_spell(
@@ -604,6 +1036,9 @@ impl PlayState {
         caster_index: usize,
         direction: Option<Direction>,
     ) -> MoveOutcome {
+        if self.combat_active {
+            return self.cast_combat_dispel_field(caster_index, direction);
+        }
         let Area::Dungeon { scene, level } = self.area else {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
@@ -659,8 +1094,9 @@ impl PlayState {
         }
 
         self.advance_turn();
-        self.time_stop_counter = TIME_STOP_DURATION;
-        self.message = format!("Time stopped for {TIME_STOP_DURATION} turns.");
+        self.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        self.active_effect_counter = TIME_STOP_DURATION;
+        self.message = "Negate time!".to_string();
         MoveOutcome::Cast
     }
 
@@ -803,7 +1239,11 @@ impl PlayState {
         }
     }
 
-    pub fn cast_magic_lock(&mut self, caster_index: usize, game_dir: &Path) -> io::Result<MoveOutcome> {
+    pub fn cast_magic_lock(
+        &mut self,
+        caster_index: usize,
+        game_dir: &Path,
+    ) -> io::Result<MoveOutcome> {
         let Area::Town { scene, floor } = self.area else {
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -885,5 +1325,4 @@ impl PlayState {
         self.message = "Unlocked!".to_string();
         Ok(MoveOutcome::Cast)
     }
-
 }

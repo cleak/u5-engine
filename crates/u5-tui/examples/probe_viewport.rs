@@ -45,7 +45,10 @@ fn main() {
         println!();
     }
 
-    println!("\nActive objects on the current plane (z=={}):", plane.save_floor());
+    println!(
+        "\nActive objects on the current plane (z=={}):",
+        plane.save_floor()
+    );
     for (i, obj) in state.active_objects.iter().enumerate() {
         if obj.tile == 0 || (obj.x == 0 && obj.y == 0 && obj.tile == 0) {
             continue;

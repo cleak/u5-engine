@@ -165,6 +165,55 @@ pub fn parse_blink_target_entries(text: &str) -> io::Result<Vec<BlinkTargetEntry
     Ok(entries)
 }
 
+pub fn load_karma_records(game_dir: &Path) -> io::Result<Option<Vec<String>>> {
+    let path = game_dir.join(KARMA_DAT_FILE);
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => {
+            return Err(io::Error::new(
+                err.kind(),
+                format!("{}: {err}", path.display()),
+            ));
+        }
+    };
+    parse_karma_dat(&bytes).map(Some)
+}
+
+pub fn parse_karma_dat(bytes: &[u8]) -> io::Result<Vec<String>> {
+    let mut records = Vec::with_capacity(KARMA_RECORD_COUNT);
+    let mut start = 0;
+    for record_index in 0..KARMA_RECORD_COUNT {
+        let Some(relative_end) = bytes[start..].iter().position(|byte| *byte == 0) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{KARMA_DAT_FILE} record {record_index} is not NUL-terminated"),
+            ));
+        };
+        let end = start + relative_end;
+        let record = &bytes[start..end];
+        if let Some(byte) = record
+            .iter()
+            .copied()
+            .find(|byte| !matches!(*byte, b'\t' | b'\n' | b'\r' | 0x20..=0x7e))
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{KARMA_DAT_FILE} record {record_index} has non-ASCII byte 0x{byte:02x}"),
+            ));
+        }
+        let text = String::from_utf8(record.to_vec()).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{KARMA_DAT_FILE} record {record_index} is not UTF-8: {err}"),
+            )
+        })?;
+        records.push(text);
+        start = end + 1;
+    }
+    Ok(records)
+}
+
 pub fn validate_blink_target_bounds(
     target: PlayTarget,
     floor: i8,
@@ -399,7 +448,12 @@ pub fn parse_moongate_tile_field(value: &str, line_number: usize) -> io::Result<
     })
 }
 
-pub fn parse_hour_field(value: &str, table: &str, line_number: usize, label: &str) -> io::Result<u8> {
+pub fn parse_hour_field(
+    value: &str,
+    table: &str,
+    line_number: usize,
+    label: &str,
+) -> io::Result<u8> {
     let hour = parse_u8_literal(value).map_err(|err| {
         io::Error::new(
             err.kind(),
@@ -505,7 +559,9 @@ pub fn load_location_entry_y(game_dir: &Path, scene: Scene) -> io::Result<Option
     )
 }
 
-pub fn load_location_entry_y_entries(game_dir: &Path) -> io::Result<Option<Vec<LocationEntryYEntry>>> {
+pub fn load_location_entry_y_entries(
+    game_dir: &Path,
+) -> io::Result<Option<Vec<LocationEntryYEntry>>> {
     let path = game_dir.join(LOCATION_ENTRY_Y_TABLE_FILE);
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,
@@ -584,7 +640,10 @@ pub fn parse_location_entry_y_entries(text: &str) -> io::Result<Vec<LocationEntr
     Ok(entries)
 }
 
-pub fn load_world_overlay_objects(game_dir: &Path, plane: WorldPlane) -> io::Result<Vec<ActiveObject>> {
+pub fn load_world_overlay_objects(
+    game_dir: &Path,
+    plane: WorldPlane,
+) -> io::Result<Vec<ActiveObject>> {
     let saved_ool = game_dir.join("SAVED.OOL");
     if saved_ool.exists() {
         let bytes = read_saved_ool_bytes(game_dir)?;

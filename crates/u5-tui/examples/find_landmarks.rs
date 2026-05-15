@@ -24,7 +24,10 @@ fn main() {
     for (tile, positions) in &by_tile {
         let desc = look.description(*tile as usize).unwrap_or("?");
         if positions.len() > 30 {
-            println!("tile 0x{tile:02x} {desc:>25}  {} occurrences", positions.len());
+            println!(
+                "tile 0x{tile:02x} {desc:>25}  {} occurrences",
+                positions.len()
+            );
         } else {
             print!("tile 0x{tile:02x} {desc:>25}  ");
             for (x, y) in positions.iter().take(20) {

@@ -507,8 +507,7 @@ pub fn first_world_walkable_for_transport(
     let safe = |x: usize, y: usize| -> bool {
         let tile = grid[world_cell_index(x, y)];
         if let Some(entry) = world_damage_tile_entry_at(damage_tiles, plane, x, y, tile) {
-            entry.effect.allows_transport(transport)
-                && !entry.effect.damages_transport(transport)
+            entry.effect.allows_transport(transport) && !entry.effect.damages_transport(transport)
         } else {
             is_tile_walkable_for_transport(tile, passability, transport)
         }

@@ -264,7 +264,48 @@
         assert_eq!((state.player.x, state.player.y), (0, 0));
         assert_eq!(state.clock, GameClock::default());
         assert_eq!(state.turn, 0);
-        assert!(state.message.contains("combat is out of scope"));
+        assert!(state.message.contains("world object tile 170"));
+        assert!(state.message.contains("slot 1"));
+        assert!(state.message.contains("no terrain-combat arena selected"));
+        assert!(!state.message.contains("out of scope"));
+    }
+
+    #[test]
+    fn world_movement_into_combat_class_object_selects_brit_cbt_arena() {
+        let dir = debug_game_dir();
+        let record = synthetic_combat_arena_record();
+        fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
+        let mut state = world_state(open_world_grid(), 0, 0);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x50,
+            tile: 0xc0,
+            x: 1,
+            y: 0,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Used
+        );
+
+        assert_eq!((state.player.x, state.player.y), (0, 0));
+        assert_eq!(state.turn, 1);
+        assert!(state.combat_active);
+        assert_eq!(state.pending_combat_terrain_trigger_slot, Some(1));
+        assert!(state.message.contains("slot 1"));
+        assert!(state.message.contains("entered terrain combat"));
+        assert!(state.message.contains("BRIT.CBT arena 4"));
+        assert!(state.message.contains("Orc"));
+        assert_eq!(state.active_objects[6].tile, 0xc0);
+        assert_eq!((state.active_objects[6].x, state.active_objects[6].y), (0, 15));
+        assert!(!state.message.contains("out of scope"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

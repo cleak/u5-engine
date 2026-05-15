@@ -75,6 +75,15 @@ impl LookTable {
     }
 }
 
+pub fn blackthorn_karma_record_index(moral_standing: u8) -> usize {
+    usize::from(moral_standing / 20).min(4)
+}
+
+pub fn lord_british_camp_karma_record_index(moral_standing: u8) -> usize {
+    let band = moral_standing / 20;
+    if band >= 4 { 5 } else { usize::from(band) }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LocationFloorEntry {
     pub scene: Scene,

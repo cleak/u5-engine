@@ -61,23 +61,27 @@ impl PlayState {
         if key == 'S' {
             handled!(self.search_facing_with_game_dir(game_dir)?);
         }
+        if key == 'A' {
+            handled!(self.attack_command_with_game_dir(None, Some(game_dir))?);
+        }
         match key.to_ascii_lowercase() {
             '8' | 'w' => {
-                self.step_with_game_dir(self.player.facing, Some(game_dir))?;
-                Ok(true)
+                handled!(self.step_with_game_dir(self.player.facing, Some(game_dir))?);
             }
             '2' | 's' => {
                 let facing = self.player.facing;
-                if let Some(direction) = facing.opposite_cardinal() {
-                    self.step_with_game_dir(direction, Some(game_dir))?;
+                let outcome = if let Some(direction) = facing.opposite_cardinal() {
+                    let outcome = self.step_with_game_dir(direction, Some(game_dir))?;
                     if matches!(self.area, Area::Dungeon { .. }) {
                         self.player.facing = facing;
                     }
+                    outcome
                 } else {
                     self.message =
                         "Dungeon back-step requires a cardinal facing direction.".to_string();
-                }
-                Ok(true)
+                    MoveOutcome::Blocked
+                };
+                handled!(outcome);
             }
             '4' | 'a' => {
                 handled!(self.turn_dungeon(false));
@@ -89,17 +93,23 @@ impl PlayState {
                 let Area::Dungeon { level, .. } = self.area else {
                     unreachable!("dungeon key handler is gated to dungeon scenes");
                 };
-                let outcome = match self.dungeon_cell(level, self.player.x, self.player.y) >> 4 {
-                    0x1 => self.climb(game_dir, ClimbIntent::Up)?,
-                    0x2 => self.climb(game_dir, ClimbIntent::Down)?,
-                    0x3 => {
-                        self.message =
-                            "Two-way ladder: use < or > to choose a climb direction.".to_string();
-                        MoveOutcome::Blocked
-                    }
-                    _ => {
-                        self.message = "Not climbable!".to_string();
-                        MoveOutcome::Blocked
+                let tile = self.dungeon_cell(level, self.player.x, self.player.y);
+                let outcome = if tile == 0x60 {
+                    self.climb(game_dir, ClimbIntent::Up)?
+                } else {
+                    match tile >> 4 {
+                        0x1 => self.climb(game_dir, ClimbIntent::Up)?,
+                        0x2 => self.climb(game_dir, ClimbIntent::Down)?,
+                        0x3 => {
+                            self.message =
+                                "Two-way ladder: use < or > to choose a climb direction."
+                                    .to_string();
+                            MoveOutcome::Blocked
+                        }
+                        _ => {
+                            self.message = "Not climbable!".to_string();
+                            MoveOutcome::Blocked
+                        }
                     }
                 };
                 handled!(outcome);
@@ -169,15 +179,13 @@ impl PlayState {
                 handled!();
             }
             'r' => {
-                self.message = "Ready is out of scope in this slice.".to_string();
-                handled!();
+                handled!(self.ready_equipment_from_suffix(""));
             }
             'u' => {
                 handled!(self.use_item_command(inline_use_request, Some(game_dir))?);
             }
             'y' => {
-                self.message = "Yell is out of scope in this slice.".to_string();
-                handled!();
+                handled!(self.yell_command(None));
             }
             'z' => {
                 handled!(self.z_stats());
@@ -222,8 +230,7 @@ impl PlayState {
         if key.is_ascii_uppercase() {
             match key {
                 'A' => {
-                    self.message = "Attack is out of scope in this slice.".to_string();
-                    handled!();
+                    handled!(self.attack_command_with_game_dir(inline_direction, Some(game_dir))?);
                 }
                 'B' => {
                     handled!(self.board_vehicle());
@@ -280,8 +287,7 @@ impl PlayState {
                     handled!(self.save_game_command(game_dir, inline_yes_no)?);
                 }
                 'R' => {
-                    self.message = "Ready is out of scope in this slice.".to_string();
-                    handled!();
+                    handled!(self.ready_equipment_from_suffix(""));
                 }
                 'S' => {
                     handled!(self.search_facing_with_game_dir(game_dir)?);
@@ -299,7 +305,7 @@ impl PlayState {
                     handled!(self.exit_vehicle_with_game_dir(Some(game_dir))?);
                 }
                 'Y' => {
-                    handled!(self.toggle_sails());
+                    handled!(self.yell_command(None));
                 }
                 'Z' => {
                     handled!(self.z_stats());
@@ -334,10 +340,8 @@ impl PlayState {
                 MoveOutcome::Observed
             }
             'z' => self.z_stats(),
-            'r' => {
-                self.message = "Ready is out of scope in this slice.".to_string();
-                MoveOutcome::Blocked
-            }
+            'r' => self.ready_equipment_from_suffix(""),
+            'y' => self.yell_command(None),
             '<' => self.climb(game_dir, ClimbIntent::Up)?,
             '>' => self.climb(game_dir, ClimbIntent::Down)?,
             '.' => self.idle_tick(),
@@ -347,10 +351,30 @@ impl PlayState {
         Ok(true)
     }
 
-    pub fn cast_spell_from_suffix(&mut self, suffix: &str, game_dir: &Path) -> io::Result<MoveOutcome> {
+    pub fn cast_spell_from_suffix(
+        &mut self,
+        suffix: &str,
+        game_dir: &Path,
+    ) -> io::Result<MoveOutcome> {
         let spell_code = inline_spell_code(suffix);
         if spell_code.is_empty() {
             self.message = cast_prompt_message();
+            return Ok(MoveOutcome::Blocked);
+        }
+        let spell_index = spell_index_from_code(&spell_code);
+        if spell_index.is_some()
+            && parse_inline_party_index(suffix).is_some()
+            && self.current_scene_absorbs_casts()
+        {
+            self.message = "Absorbed!".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
+        if spell_index.is_some()
+            && parse_inline_party_index(suffix).is_some()
+            && self.combat_active
+            && self.active_effect_tag == Some(NEGATE_MAGIC_ACTIVE_EFFECT_TAG)
+        {
+            self.message = "Magic absorbed!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
         match spell_code.as_str() {
@@ -381,10 +405,14 @@ impl PlayState {
             }
             "AS" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1AS for party slot 1.".to_string();
+                    self.message = "Who casts? Use C1AS6 for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
-                self.cast_open_spell(caster_index, game_dir)
+                self.cast_open_spell(
+                    caster_index,
+                    parse_inline_cardinal_direction(suffix),
+                    game_dir,
+                )
             }
             "AT" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
@@ -392,6 +420,13 @@ impl PlayState {
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_time_stop(caster_index))
+            }
+            "AY" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1AY6 for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_vanish(caster_index, parse_inline_cardinal_direction(suffix)))
             }
             "AWY" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
@@ -402,14 +437,93 @@ impl PlayState {
             }
             "AZ" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1AZ2 for party slot 1.".to_string();
+                    self.message = "Who casts? Use C1AZ for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
-                let Some(target_index) = parse_inline_target_party_index(suffix) else {
-                    self.message = "Whom? Use C1AZ2 to awaken party member 2.".to_string();
+                Ok(self.cast_awaken(caster_index))
+            }
+            "KX" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1KX for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
-                Ok(self.cast_awaken(caster_index, target_index))
+                Ok(self.cast_combat_conjure_spell(caster_index, spell_index.unwrap()))
+            }
+            "AEX" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1AEX7 for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                if !self.combat_active {
+                    self.message = "Not here!".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                }
+                let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
+                    self.message = "Creature? Use C1AEX7 to target combat slot 7.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_combat_charm_spell(caster_index, spell_index.unwrap(), target_slot))
+            }
+            "BRX" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1BRX7 for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                if !self.combat_active {
+                    self.message = "Not here!".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                }
+                let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
+                    self.message = "Creature? Use C1BRX7 to target combat slot 7.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_combat_polymorph_spell(
+                    caster_index,
+                    spell_index.unwrap(),
+                    target_slot,
+                ))
+            }
+            "BIX" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1BIX for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_combat_swarm_spell(caster_index, spell_index.unwrap()))
+            }
+            "IQX" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1IQX7 for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                if !self.combat_active {
+                    self.message = "Not here!".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                }
+                let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
+                    self.message = "Creature? Use C1IQX7 to target combat slot 7.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_combat_clone_spell(caster_index, spell_index.unwrap(), target_slot))
+            }
+            "CX" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1CX7 for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                if !self.combat_active {
+                    self.message = "Not here!".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                }
+                let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
+                    self.message = "Target? Use C1CX7 to target combat slot 7.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_active_target_combat_spell(
+                    caster_index,
+                    spell_index.unwrap(),
+                    CombatSpellDamageKind::Kill,
+                    target_slot,
+                ))
             }
             "DP" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
@@ -418,11 +532,40 @@ impl PlayState {
                 };
                 Ok(self.cast_dungeon_level_spell(caster_index, DES_POR_SPELL_INDEX, 1, "Down"))
             }
+            "FV" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1FV7 for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                if !self.combat_active {
+                    self.message = "Not here!".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                }
+                let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
+                    self.message = "Target? Use C1FV7 to target combat slot 7.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_active_target_combat_spell(
+                    caster_index,
+                    spell_index.unwrap(),
+                    CombatSpellDamageKind::Fireball,
+                    target_slot,
+                ))
+            }
             "FGI" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
                     self.message = "Who casts? Use C1FGI6 for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
+                if self.combat_active {
+                    return Ok(self.cast_combat_arena_field_spell(
+                        caster_index,
+                        FIRE_FIELD_SPELL_INDEX,
+                        FIELD_SPELL_COST,
+                        CombatArenaFieldKind::Fire,
+                        parse_inline_cardinal_direction(suffix),
+                    ));
+                }
                 Ok(self.cast_dungeon_field_spell(
                     caster_index,
                     FIRE_FIELD_SPELL_INDEX,
@@ -438,6 +581,15 @@ impl PlayState {
                     self.message = "Who casts? Use C1GIN6 for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
+                if self.combat_active {
+                    return Ok(self.cast_combat_arena_field_spell(
+                        caster_index,
+                        POISON_FIELD_SPELL_INDEX,
+                        FIELD_SPELL_COST,
+                        CombatArenaFieldKind::Poison,
+                        parse_inline_cardinal_direction(suffix),
+                    ));
+                }
                 Ok(self.cast_dungeon_field_spell(
                     caster_index,
                     POISON_FIELD_SPELL_INDEX,
@@ -453,6 +605,15 @@ impl PlayState {
                     self.message = "Who casts? Use C1GIZ6 for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
+                if self.combat_active {
+                    return Ok(self.cast_combat_arena_field_spell(
+                        caster_index,
+                        SLEEP_FIELD_SPELL_INDEX,
+                        FIELD_SPELL_COST,
+                        CombatArenaFieldKind::Sleep,
+                        parse_inline_cardinal_direction(suffix),
+                    ));
+                }
                 Ok(self.cast_dungeon_field_spell(
                     caster_index,
                     SLEEP_FIELD_SPELL_INDEX,
@@ -463,11 +624,40 @@ impl PlayState {
                     "Sleep field",
                 ))
             }
+            "GP" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1GP7 for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                if !self.combat_active {
+                    self.message = "Not here!".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                }
+                let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
+                    self.message = "Target? Use C1GP7 to target combat slot 7.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_active_target_combat_spell(
+                    caster_index,
+                    spell_index.unwrap(),
+                    CombatSpellDamageKind::MagicMissile,
+                    target_slot,
+                ))
+            }
             "GIS" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
                     self.message = "Who casts? Use C1GIS6 for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
+                if self.combat_active {
+                    return Ok(self.cast_combat_arena_field_spell(
+                        caster_index,
+                        ENERGY_FIELD_SPELL_INDEX,
+                        ENERGY_FIELD_COST,
+                        CombatArenaFieldKind::Energy,
+                        parse_inline_cardinal_direction(suffix),
+                    ));
+                }
                 Ok(self.cast_dungeon_field_spell(
                     caster_index,
                     ENERGY_FIELD_SPELL_INDEX,
@@ -522,6 +712,13 @@ impl PlayState {
                     game_dir,
                 )
             }
+            "IPVY" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1IPVY for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_tremor_combat_spell(caster_index, spell_index.unwrap()))
+            }
             "IQW" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
                     self.message = "Who casts? Use C1IQW for party slot 1.".to_string();
@@ -536,12 +733,24 @@ impl PlayState {
                 };
                 Ok(self.cast_locate(caster_index))
             }
+            "LS" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1LS for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_invisibility(caster_index))
+            }
             "HR" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
                     self.message = "Who casts? Use C1HR for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
-                Ok(self.cast_rel_hur(caster_index))
+                let direction = parse_inline_cardinal_direction(suffix);
+                Ok(self.cast_rel_hur(
+                    caster_index,
+                    direction,
+                    direction.is_none() && suffix.ends_with(' '),
+                ))
             }
             "LV" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
@@ -595,6 +804,20 @@ impl PlayState {
                 };
                 Ok(self.cast_resurrect(caster_index, target_index))
             }
+            "CKX" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1CKX for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_combat_summon_daemon_spell(caster_index, spell_index.unwrap()))
+            }
+            "CIQ" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1CIQ for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_cause_fear(caster_index))
+            }
             "PU" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
                     self.message = "Who casts? Use C1PU for party slot 1.".to_string();
@@ -613,6 +836,13 @@ impl PlayState {
                 };
                 self.cast_gate_travel(caster_index, slot_index, game_dir)
             }
+            "QW" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1QW for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_reveal(caster_index))
+            }
             "RT" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
                     self.message = "Who casts? Use C1RT for party slot 1.".to_string();
@@ -625,6 +855,20 @@ impl PlayState {
                     QUICKNESS_ACTIVE_EFFECT_TAG,
                     QUICKNESS_ACTIVE_EFFECT_DURATION,
                     "Quickness",
+                ))
+            }
+            "AQW" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1AQW for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_active_effect_spell(
+                    caster_index,
+                    MASS_CHARM_SPELL_INDEX,
+                    MASS_CHARM_COST,
+                    MASS_CHARM_ACTIVE_EFFECT_TAG,
+                    MASS_CHARM_ACTIVE_EFFECT_DURATION,
+                    "Mass charm",
                 ))
             }
             "AI" => {
@@ -642,8 +886,8 @@ impl PlayState {
                 ))
             }
             _ => {
-                if let Some(spell_index) = spell_index_from_code(&spell_code) {
-                    if !spell_allowed_in_area(spell_index, self.area) {
+                if let Some(spell_index) = spell_index {
+                    if !self.spell_allowed_in_current_cast_context(spell_index) {
                         self.message = "Not here!".to_string();
                         return Ok(MoveOutcome::Blocked);
                     }
@@ -652,6 +896,17 @@ impl PlayState {
                 Ok(MoveOutcome::Blocked)
             }
         }
+    }
+
+    pub fn current_scene_absorbs_casts(&self) -> bool {
+        let Area::Town { scene, .. } = self.area else {
+            return false;
+        };
+        if scene.byte == STONEGATE_SCENE_BYTE {
+            return true;
+        }
+        scene.byte == LORD_BLACKTHORN_CASTLE_SCENE_BYTE
+            && self.special_items[SPECIAL_ITEM_CROWN_LB_INDEX] == 0
     }
 
     pub fn mix_reagents_from_suffix(&mut self, suffix: &str) -> MoveOutcome {
@@ -705,17 +960,150 @@ impl PlayState {
                 MoveOutcome::Cast
             }
             Some(spell_index) => {
-                self.message = format!(
+                let base = format!(
                     "Mixed wrong reagents for {}; no spell charges added.",
                     SPELL_CODES[spell_index]
                 );
+                self.message = self.wrong_mix_trap_message(base);
                 MoveOutcome::Blocked
             }
             None => {
-                self.message =
+                let base =
                     "Mixed wrong reagents for unknown spell; no spell charges added.".to_string();
+                self.message = self.wrong_mix_trap_message(base);
                 MoveOutcome::Blocked
             }
+        }
+    }
+
+    pub fn wrong_mix_trap_message(&mut self, base: String) -> String {
+        let target_slot = self.shared_trap_default_target_slot();
+        let trap = self.apply_shared_trap_effect_to_slot(target_slot);
+        format!("{base}\n{trap}")
+    }
+
+    pub fn shared_trap_default_target_slot(&self) -> usize {
+        self.party
+            .iter()
+            .position(|member| matches!(member.status, b'G' | b'P'))
+            .or(self.active_player)
+            .unwrap_or(0)
+    }
+
+    pub fn apply_shared_trap_effect_to_slot(&mut self, triggering_slot: usize) -> String {
+        match self.shared_trap_effect_id(triggering_slot) {
+            0 => self.apply_acid_trap_effect(triggering_slot),
+            1 => self.apply_poison_trap_effect(triggering_slot),
+            2 => self.apply_bomb_trap_effect(triggering_slot),
+            _ => self.apply_gas_trap_effect(),
+        }
+    }
+
+    pub fn shared_trap_effect_id(&self, triggering_slot: usize) -> u8 {
+        let seed = self.shared_trap_seed(triggering_slot, 0);
+        shared_trap_effect_id_from_index(seed, self.combat_active)
+    }
+
+    pub fn shared_trap_seed(&self, triggering_slot: usize, salt: u8) -> u8 {
+        (self.turn as u8)
+            .wrapping_add((self.player.x as u8).wrapping_mul(3))
+            .wrapping_add((self.player.y as u8).wrapping_mul(5))
+            .wrapping_add((triggering_slot as u8).wrapping_mul(17))
+            .wrapping_add(salt)
+    }
+
+    pub fn shared_trap_damage_roll(
+        &self,
+        triggering_slot: usize,
+        target_slot: usize,
+        max_damage: u8,
+        salt: u8,
+    ) -> u8 {
+        let seed = self
+            .shared_trap_seed(triggering_slot, salt)
+            .wrapping_add((target_slot as u8).wrapping_mul(13));
+        shared_trap_damage_from_index(seed, max_damage)
+    }
+
+    pub fn apply_acid_trap_effect(&mut self, triggering_slot: usize) -> String {
+        let damage =
+            self.shared_trap_damage_roll(triggering_slot, triggering_slot, TRAP_ACID_DAMAGE_MAX, 3);
+        let Some(member) = self.party.get_mut(triggering_slot) else {
+            return format!(
+                "Acid trap found no party member in slot {}.",
+                triggering_slot + 1
+            );
+        };
+
+        let applied = member.apply_damage(damage);
+        if member.hp == 0 && self.active_player == Some(triggering_slot) {
+            self.active_player = None;
+        }
+        format!(
+            "Acid trap hit party member {} for {applied} HP.",
+            triggering_slot + 1
+        )
+    }
+
+    pub fn apply_poison_trap_effect(&mut self, triggering_slot: usize) -> String {
+        if self.revive_dead_party_member_as_poisoned(triggering_slot) {
+            format!(
+                "Poison trap revived party member {} as poisoned.",
+                triggering_slot + 1
+            )
+        } else {
+            format!(
+                "Poison trap had no effect on party member {}.",
+                triggering_slot + 1
+            )
+        }
+    }
+
+    pub fn apply_bomb_trap_effect(&mut self, triggering_slot: usize) -> String {
+        let mut affected = 0usize;
+        let mut total_applied = 0u16;
+        let limit = self.party.len().min(COMBAT_PARTY_ACTOR_SLOTS);
+        for target_slot in 0..limit {
+            if !self.party[target_slot].living() {
+                continue;
+            }
+            let damage = self.shared_trap_damage_roll(
+                triggering_slot,
+                target_slot,
+                TRAP_BOMB_DAMAGE_MAX,
+                11,
+            );
+            let applied = self.party[target_slot].apply_damage(damage);
+            if applied != 0 {
+                affected += 1;
+                total_applied = total_applied.saturating_add(applied);
+            }
+            if self.party[target_slot].hp == 0 && self.active_player == Some(target_slot) {
+                self.active_player = None;
+            }
+        }
+        format!("Bomb trap dealt {total_applied} HP across {affected} party member(s).")
+    }
+
+    pub fn apply_gas_trap_effect(&mut self) -> String {
+        let mut revived = 0usize;
+        for slot in 0..self.party.len().min(COMBAT_PARTY_ACTOR_SLOTS) {
+            if self.revive_dead_party_member_as_poisoned(slot) {
+                revived += 1;
+            }
+        }
+        format!("Gas trap revived {revived} dead party member(s) as poisoned.")
+    }
+
+    pub fn revive_dead_party_member_as_poisoned(&mut self, slot: usize) -> bool {
+        let Some(member) = self.party.get_mut(slot) else {
+            return false;
+        };
+        if member.status == b'D' {
+            member.status = b'P';
+            true
+        } else {
+            false
         }
     }
 
@@ -905,5 +1293,4 @@ impl PlayState {
             member.climb_stat = self.avatar_stats.dexterity;
         }
     }
-
 }

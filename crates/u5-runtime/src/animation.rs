@@ -26,8 +26,7 @@ impl AnimationClock {
     }
 
     pub fn tick_moongate(&mut self) {
-        self.moongate_frame =
-            self.moongate_frame.wrapping_add(1) % MOONGATE_ANIMATION_FRAMES;
+        self.moongate_frame = self.moongate_frame.wrapping_add(1) % MOONGATE_ANIMATION_FRAMES;
     }
 
     pub fn resolve_static_tile(self, tile: u8) -> u8 {
@@ -89,6 +88,19 @@ impl ActiveObject {
         }
     }
 
+    pub fn fixed_hidden_treasure_pickup(record: usize, x: usize, y: usize, z: i8) -> Self {
+        Self {
+            type_byte: FIXED_HIDDEN_TREASURE_OBJECT_TILE,
+            tile: FIXED_HIDDEN_TREASURE_OBJECT_TILE,
+            x,
+            y,
+            z,
+            phase: STEADY_PHASE,
+            aux1: record as u8,
+            aux3: FIXED_HIDDEN_TREASURE_OBJECT_AUX3,
+        }
+    }
+
     pub fn free(&mut self) {
         self.type_byte = 0;
     }
@@ -124,6 +136,15 @@ impl ActiveObject {
             && self.aux3 == MOONSTONE_PICKUP_AUX3
             && slot_index < MOONSTONE_SLOT_COUNT)
             .then_some(slot_index)
+    }
+
+    pub fn fixed_hidden_treasure_record(self) -> Option<usize> {
+        let record = self.aux1 as usize;
+        (self.type_byte == FIXED_HIDDEN_TREASURE_OBJECT_TILE
+            && self.tile == FIXED_HIDDEN_TREASURE_OBJECT_TILE
+            && self.aux3 == FIXED_HIDDEN_TREASURE_OBJECT_AUX3
+            && record < FIXED_HIDDEN_TREASURE_COUNT)
+            .then_some(record)
     }
 }
 

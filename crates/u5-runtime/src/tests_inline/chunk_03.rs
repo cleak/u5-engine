@@ -34,6 +34,11 @@
         state.gold = 9876;
         state.keys = 7;
         state.gems = 3;
+        state.climbing_gear = 1;
+        state.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
+        state.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX] = 1;
+        state.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = 1;
+        state.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX] = 1;
         state.torches = 5;
         state.torch_counter = 44;
         state.light_spell_counter = 22;
@@ -45,6 +50,8 @@
         };
         state.timing_status = TimingStatusTag::HalfTime;
         state.spell_charges[REL_HUR_SPELL_INDEX] = 4;
+        state.scroll_stock[6] = 8;
+        state.potion_stock[7] = 9;
         state.reagents = [9, 8, 7, 6, 5, 4, 3, 2];
         state.moonstone_slots[2] = MoonstoneGateSlot {
             scene: 0,
@@ -54,6 +61,10 @@
         };
         state.shrine_ordained_mask = 0b0000_1010;
         state.shrine_codex_mask = 0b0100_0001;
+        state.moral_standing = 42;
+        state.fortunes_of_war = 0x7e;
+        state.active_player = Some(1);
+        state.combat_round_counter = 7;
         state.avatar_stats = AvatarStats {
             strength: 23,
             dexterity: 24,
@@ -62,6 +73,7 @@
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'P',
                 climb_stat: 18,
                 mana: 5,
@@ -71,6 +83,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'B',
                 status: b'S',
                 climb_stat: 7,
                 mana: 6,
@@ -79,6 +92,11 @@
                 level: 4,
             },
         ];
+        state.party_names = vec![*b"MARIA\0\0\0\0", *b"IOLO\0\0\0\0\0"];
+        state.party_experience = vec![350, 750];
+        state.party_stay_counters = vec![4, 30];
+        state.party_strengths = vec![23, 12];
+        state.party_intelligence = vec![25, 13];
         state.active_objects.push(underworld_object);
 
         assert_eq!(
@@ -103,7 +121,26 @@
         assert_eq!(saved[SAVE_KEY_STOCK_OFFSET], 7);
         assert_eq!(saved[SAVE_GEM_STOCK_OFFSET], 3);
         assert_eq!(saved[SAVE_TORCH_STOCK_OFFSET], 5);
+        assert_eq!(saved[SAVE_CLIMBING_GEAR_OFFSET], 1);
+        assert_eq!(
+            saved[SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_SEXTANT_INDEX],
+            1
+        );
+        assert_eq!(
+            saved[SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_SPYGLASS_INDEX],
+            1
+        );
+        assert_eq!(
+            saved[SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_POCKET_WATCH_INDEX],
+            1
+        );
+        assert_eq!(
+            saved[SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_BLACK_BADGE_INDEX],
+            1
+        );
         assert_eq!(saved[SAVE_SPELL_CHARGES_OFFSET + REL_HUR_SPELL_INDEX], 4);
+        assert_eq!(saved[SAVE_SCROLL_STOCK_OFFSET + 6], 8);
+        assert_eq!(saved[SAVE_POTION_STOCK_OFFSET + 7], 9);
         assert_eq!(saved[SAVE_REAGENTS_OFFSET], 4);
         assert_eq!(saved[SAVE_REAGENTS_OFFSET + 1], 5);
         assert_eq!(saved[SAVE_REAGENTS_OFFSET + 2], 7);
@@ -120,8 +157,11 @@
         assert_eq!(saved[SAVE_TORCH_COUNTER_OFFSET], 44);
         assert_eq!(saved[SAVE_SHRINE_ORDAINED_MASK_OFFSET], 0b0000_1010);
         assert_eq!(saved[SAVE_SHRINE_CODEX_MASK_OFFSET], 0b0100_0001);
+        assert_eq!(saved[SAVE_MORAL_STANDING_OFFSET], 42);
+        assert_eq!(saved[SAVE_FORTUNES_OF_WAR_OFFSET], 0x7e);
         assert_eq!(saved[SAVE_TIMING_STATUS_TAG_OFFSET], b'Q');
-        assert_eq!(saved[SAVE_ACTIVE_PLAYER_OFFSET], 0xff);
+        assert_eq!(saved[SAVE_ACTIVE_PLAYER_OFFSET], 1);
+        assert_eq!(saved[SAVE_COMBAT_ROUND_COUNTER_OFFSET], 7);
         assert_eq!(
             saved[SAVE_TRANSPORT_MARKER_OFFSET],
             FIRST_PLAYABLE_SKIFF_TILE
@@ -129,8 +169,16 @@
         assert_eq!(saved[SAVE_WIND_OFFSET], 9);
         assert_eq!(saved[SAVE_PARTY_SIZE_OFFSET], 2);
         assert_eq!(
+            &saved[SAVE_ROSTER_OFFSET..SAVE_ROSTER_OFFSET + SAVE_CHARACTER_NAME_LEN],
+            b"MARIA\0\0\0\0"
+        );
+        assert_eq!(
             saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_STATUS_OFFSET],
             b'P'
+        );
+        assert_eq!(
+            saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_CLASS_OFFSET],
+            b'A'
         );
         assert_eq!(saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_STR_OFFSET], 23);
         assert_eq!(saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_DEX_OFFSET], 24);
@@ -145,11 +193,29 @@
             66
         );
         assert_eq!(saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_LEVEL_OFFSET], 3);
+        assert_eq!(
+            u16_at(&saved, SAVE_ROSTER_OFFSET + SAVE_CHARACTER_EXPERIENCE_OFFSET),
+            350
+        );
+        assert_eq!(
+            saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_STAY_COUNTER_OFFSET],
+            4
+        );
         let second = SAVE_ROSTER_OFFSET + SAVE_CHARACTER_RECORD_LEN;
+        assert_eq!(&saved[second..second + SAVE_CHARACTER_NAME_LEN], b"IOLO\0\0\0\0\0");
+        assert_eq!(saved[second + SAVE_CHARACTER_CLASS_OFFSET], b'B');
         assert_eq!(saved[second + SAVE_CHARACTER_STATUS_OFFSET], b'S');
+        assert_eq!(saved[second + SAVE_CHARACTER_STR_OFFSET], 12);
+        assert_eq!(saved[second + SAVE_CHARACTER_DEX_OFFSET], 7);
+        assert_eq!(saved[second + SAVE_CHARACTER_INT_OFFSET], 13);
         assert_eq!(saved[second + SAVE_CHARACTER_MANA_OFFSET], 6);
         assert_eq!(u16_at(&saved, second + SAVE_CHARACTER_HP_OFFSET), 44);
         assert_eq!(u16_at(&saved, second + SAVE_CHARACTER_MAX_HP_OFFSET), 88);
+        assert_eq!(u16_at(&saved, second + SAVE_CHARACTER_EXPERIENCE_OFFSET), 750);
+        assert_eq!(
+            saved[second + SAVE_CHARACTER_STAY_COUNTER_OFFSET],
+            INN_STAY_COUNTER_CAP
+        );
         assert_eq!(saved[second + SAVE_CHARACTER_LEVEL_OFFSET], 4);
         assert_eq!(saved[SAVE_ACTIVE_OBJECTS_OFFSET], PLAYER_TILE);
         assert_eq!(
@@ -168,6 +234,49 @@
         assert_eq!(britannia_overlay[0], britannia_object);
         assert_eq!(underworld_overlay[0], underworld_object);
         assert!(state.message.contains("Done."));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn save_game_command_writes_inn_registry_view() {
+        let dir = debug_game_dir();
+        let mut template = saved_game_seed_bytes(17, 0, 15, 15);
+        template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        fs::write(dir.join("SAVED.GAM"), template).unwrap();
+        fs::write(dir.join("SAVED.OOL"), vec![0; SAVED_OOL_LEN]).unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.inn_registry.push(InnGuestRecord {
+            scene_marker: 0x12,
+            name: [0; SAVE_CHARACTER_NAME_LEN],
+            member: PartyMember {
+                slot: 0,
+                class_byte: b'B',
+                status: b'P',
+                climb_stat: 7,
+                mana: 3,
+                hp: 12,
+                max_hp: 28,
+                level: 3,
+            },
+            strength: 17,
+            intelligence: 19,
+            experience: 700,
+            equipment: [1, 2, 3, 4, 5, 6],
+            stay_counter: 4,
+        });
+
+        assert_eq!(
+            state.save_game_command(&dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+
+        let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+        let registry = decode_inn_registry(&saved);
+        assert_eq!(registry, state.inn_registry);
+        assert_eq!(
+            saved[SAVE_INN_REGISTRY_OFFSET + SAVE_CHARACTER_RECORD_LEN],
+            0
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -194,6 +303,110 @@
         let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
         assert_eq!(saved[SAVE_WIND_OFFSET], 0x7a);
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn save_load_maps_public_wind_save_values() {
+        let mut save = saved_game_seed_bytes(0, 0xff, 10, 20);
+        save[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        save[SAVE_WIND_OFFSET] = 3;
+
+        let options = play_options_from_save_bytes(&save).unwrap();
+
+        assert_eq!(options.wind, WindState::East);
+        assert_eq!(options.wind_save_byte, 3);
+    }
+
+    #[test]
+    fn inn_registry_decodes_nonzero_scene_markers_from_shifted_save_view() {
+        let mut bytes = saved_game_seed_bytes(17, 0, 5, 5);
+        bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        let record = SAVE_INN_REGISTRY_OFFSET + SAVE_CHARACTER_RECORD_LEN;
+        bytes[record] = 0x12;
+        bytes[record + SAVE_CHARACTER_CLASS_OFFSET] = b'B';
+        bytes[record + SAVE_CHARACTER_STATUS_OFFSET] = b'P';
+        bytes[record + SAVE_CHARACTER_STR_OFFSET] = 17;
+        bytes[record + SAVE_CHARACTER_DEX_OFFSET] = 7;
+        bytes[record + SAVE_CHARACTER_INT_OFFSET] = 19;
+        bytes[record + SAVE_CHARACTER_MANA_OFFSET] = 3;
+        write_u16_at(&mut bytes, record + SAVE_CHARACTER_HP_OFFSET, 12);
+        write_u16_at(&mut bytes, record + SAVE_CHARACTER_MAX_HP_OFFSET, 28);
+        write_u16_at(&mut bytes, record + SAVE_CHARACTER_EXPERIENCE_OFFSET, 700);
+        bytes[record + SAVE_CHARACTER_LEVEL_OFFSET] = 3;
+        bytes[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET] = 4;
+        bytes[record + SAVE_CHARACTER_EQUIPMENT_OFFSET
+            ..record + SAVE_CHARACTER_EQUIPMENT_OFFSET + EQUIPMENT_SLOT_COUNT]
+            .copy_from_slice(&[1, 2, 3, 4, 5, 6]);
+
+        let registry = decode_inn_registry(&bytes);
+
+        assert_eq!(registry.len(), 1);
+        assert_eq!(registry[0].scene_marker, 0x12);
+        assert_eq!(registry[0].member.slot, 1);
+        assert_eq!(registry[0].member.class_byte, b'B');
+        assert_eq!(registry[0].member.status, b'P');
+        assert_eq!(registry[0].member.hp, 12);
+        assert_eq!(registry[0].member.max_hp, 28);
+        assert_eq!(registry[0].strength, 17);
+        assert_eq!(registry[0].intelligence, 19);
+        assert_eq!(registry[0].experience, 700);
+        assert_eq!(registry[0].equipment, [1, 2, 3, 4, 5, 6]);
+        assert_eq!(registry[0].stay_counter, 4);
+
+        let options = play_options_from_save_bytes(&bytes).unwrap();
+        assert_eq!(options.inn_registry, registry);
+    }
+
+    #[test]
+    fn inn_registry_encoding_writes_known_guest_fields_and_clears_markers() {
+        let mut bytes = vec![0xff; SAVED_GAM_LEN];
+        let guest = InnGuestRecord {
+            scene_marker: 0x11,
+            name: [0; SAVE_CHARACTER_NAME_LEN],
+            member: PartyMember {
+                slot: 5,
+                class_byte: b'M',
+                status: b'G',
+                climb_stat: 8,
+                mana: 9,
+                hp: 42,
+                max_hp: 84,
+                level: 4,
+            },
+            strength: 14,
+            intelligence: 22,
+            experience: 1234,
+            equipment: [6, 5, 4, 3, 2, 1],
+            stay_counter: 30,
+        };
+
+        encode_inn_registry(&mut bytes, &[guest]);
+
+        let record = SAVE_INN_REGISTRY_OFFSET;
+        assert_eq!(bytes[record], 0x11);
+        assert_eq!(bytes[record + SAVE_CHARACTER_CLASS_OFFSET], b'M');
+        assert_eq!(bytes[record + SAVE_CHARACTER_STATUS_OFFSET], b'G');
+        assert_eq!(bytes[record + SAVE_CHARACTER_STR_OFFSET], 14);
+        assert_eq!(bytes[record + SAVE_CHARACTER_DEX_OFFSET], 8);
+        assert_eq!(bytes[record + SAVE_CHARACTER_INT_OFFSET], 22);
+        assert_eq!(bytes[record + SAVE_CHARACTER_MANA_OFFSET], 9);
+        assert_eq!(u16_at(&bytes, record + SAVE_CHARACTER_HP_OFFSET), 42);
+        assert_eq!(u16_at(&bytes, record + SAVE_CHARACTER_MAX_HP_OFFSET), 84);
+        assert_eq!(
+            u16_at(&bytes, record + SAVE_CHARACTER_EXPERIENCE_OFFSET),
+            1234
+        );
+        assert_eq!(bytes[record + SAVE_CHARACTER_LEVEL_OFFSET], 4);
+        assert_eq!(
+            bytes[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET],
+            INN_STAY_COUNTER_CAP
+        );
+        assert_eq!(
+            &bytes[record + SAVE_CHARACTER_EQUIPMENT_OFFSET
+                ..record + SAVE_CHARACTER_EQUIPMENT_OFFSET + EQUIPMENT_SLOT_COUNT],
+            &[6, 5, 4, 3, 2, 1]
+        );
+        assert_eq!(bytes[SAVE_INN_REGISTRY_OFFSET + SAVE_CHARACTER_RECORD_LEN], 0);
     }
 
     #[test]
@@ -234,6 +447,14 @@
         bytes[SAVE_Z_OFFSET] = 0;
         bytes[SAVE_X_OFFSET] = 15;
         bytes[SAVE_Y_OFFSET] = 15;
+        bytes[SAVE_MORAL_STANDING_OFFSET] = 37;
+        bytes[SAVE_CLIMBING_GEAR_OFFSET] = 1;
+        bytes[SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_SEXTANT_INDEX] = 1;
+        bytes[SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_SPYGLASS_INDEX] = 1;
+        bytes[SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_POCKET_WATCH_INDEX] = 1;
+        bytes[SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_BLACK_BADGE_INDEX] = 1;
+        bytes[SAVE_FORTUNES_OF_WAR_OFFSET] = 0x99;
+        bytes[SAVE_COMBAT_ROUND_COUNTER_OFFSET] = 8;
         let clock = GameClock::with_date(141, 6, 7, 8, 35).unwrap();
         write_saved_clock(&mut bytes, clock);
 
@@ -245,7 +466,14 @@
         assert_eq!(options.clock, clock);
         assert_eq!(options.wind, WindState::Calm);
         assert_eq!(options.keys, 0);
-        assert_eq!(options.climbing_gear, DEFAULT_CLIMBING_GEAR);
+        assert_eq!(options.moral_standing, 37);
+        assert_eq!(options.climbing_gear, 1);
+        assert_eq!(options.special_items[SPECIAL_ITEM_SEXTANT_INDEX], 1);
+        assert_eq!(options.special_items[SPECIAL_ITEM_SPYGLASS_INDEX], 1);
+        assert_eq!(options.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX], 1);
+        assert_eq!(options.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX], 1);
+        assert_eq!(options.fortunes_of_war, 0x99);
+        assert_eq!(options.combat_round_counter, 8);
         assert_eq!(options.party, default_party());
     }
 
@@ -260,6 +488,8 @@
         write_saved_clock(&mut bytes, GameClock::new(8, 35).unwrap());
         bytes[SAVE_PARTY_SIZE_OFFSET] = 2;
         bytes[SAVE_SPELL_CHARGES_OFFSET + REL_HUR_SPELL_INDEX] = 3;
+        bytes[SAVE_SCROLL_STOCK_OFFSET + 6] = 4;
+        bytes[SAVE_POTION_STOCK_OFFSET + 7] = 5;
         bytes[SAVE_MOONSTONE_X_OFFSET + 1] = 22;
         bytes[SAVE_MOONSTONE_Y_OFFSET + 1] = 23;
         bytes[SAVE_MOONSTONE_SCENE_OFFSET + 1] = 0;
@@ -267,6 +497,8 @@
         bytes[SAVE_SHRINE_ORDAINED_MASK_OFFSET] = 0b0010_0010;
         bytes[SAVE_SHRINE_CODEX_MASK_OFFSET] = 0b1000_0001;
         let first = SAVE_ROSTER_OFFSET;
+        bytes[first..first + SAVE_CHARACTER_NAME_LEN].copy_from_slice(b"MARIA\0\0\0\0");
+        bytes[first + SAVE_CHARACTER_CLASS_OFFSET] = b'A';
         bytes[first + SAVE_CHARACTER_STATUS_OFFSET] = b'G';
         bytes[first + SAVE_CHARACTER_STR_OFFSET] = 11;
         bytes[first + SAVE_CHARACTER_DEX_OFFSET] = 18;
@@ -276,19 +508,29 @@
         bytes[first + SAVE_CHARACTER_HP_OFFSET + 1] = 1;
         bytes[first + SAVE_CHARACTER_MAX_HP_OFFSET] = 194;
         bytes[first + SAVE_CHARACTER_MAX_HP_OFFSET + 1] = 1;
+        write_u16_at(&mut bytes, first + SAVE_CHARACTER_EXPERIENCE_OFFSET, 350);
+        bytes[first + SAVE_CHARACTER_STAY_COUNTER_OFFSET] = 3;
         bytes[first + SAVE_CHARACTER_LEVEL_OFFSET] = 5;
         let second = SAVE_ROSTER_OFFSET + SAVE_CHARACTER_RECORD_LEN;
+        bytes[second..second + SAVE_CHARACTER_NAME_LEN].copy_from_slice(b"IOLO\0\0\0\0\0");
+        bytes[second + SAVE_CHARACTER_CLASS_OFFSET] = b'B';
         bytes[second + SAVE_CHARACTER_STATUS_OFFSET] = b'D';
+        bytes[second + SAVE_CHARACTER_STR_OFFSET] = 9;
         bytes[second + SAVE_CHARACTER_DEX_OFFSET] = 7;
+        bytes[second + SAVE_CHARACTER_INT_OFFSET] = 13;
         bytes[second + SAVE_CHARACTER_MANA_OFFSET] = 2;
         bytes[second + SAVE_CHARACTER_HP_OFFSET] = 0;
         bytes[second + SAVE_CHARACTER_HP_OFFSET + 1] = 0;
         bytes[second + SAVE_CHARACTER_MAX_HP_OFFSET] = 120;
+        write_u16_at(&mut bytes, second + SAVE_CHARACTER_EXPERIENCE_OFFSET, 750);
+        bytes[second + SAVE_CHARACTER_STAY_COUNTER_OFFSET] = 4;
         bytes[second + SAVE_CHARACTER_LEVEL_OFFSET] = 1;
 
         let options = play_options_from_save_bytes(&bytes).unwrap();
 
         assert_eq!(options.spell_charges[REL_HUR_SPELL_INDEX], 3);
+        assert_eq!(options.scroll_stock[6], 4);
+        assert_eq!(options.potion_stock[7], 5);
         assert_eq!(options.shrine_ordained_mask, 0b0010_0010);
         assert_eq!(options.shrine_codex_mask, 0b1000_0001);
         assert_eq!(
@@ -308,11 +550,20 @@
                 z: 0xff,
             }
         );
+        assert_eq!(options.party_experience, vec![350, 750]);
+        assert_eq!(
+            options.party_names,
+            vec![*b"MARIA\0\0\0\0", *b"IOLO\0\0\0\0\0"]
+        );
+        assert_eq!(options.party_stay_counters, vec![3, 4]);
+        assert_eq!(options.party_strengths, vec![11, 9]);
+        assert_eq!(options.party_intelligence, vec![19, 13]);
         assert_eq!(
             options.party,
             vec![
                 PartyMember {
                     slot: 0,
+                    class_byte: b'A',
                     status: b'G',
                     climb_stat: 18,
                     mana: 12,
@@ -322,6 +573,7 @@
                 },
                 PartyMember {
                     slot: 1,
+                    class_byte: b'B',
                     status: b'D',
                     climb_stat: 7,
                     mana: 2,
@@ -577,12 +829,55 @@
     }
 
     #[test]
-    fn saved_game_avatar_name_helper_uses_public_name_field() {
+    fn save_play_options_reject_empty_saved_game_before_scene_dispatch() {
+        let mut bytes = vec![0; SAVED_GAM_LEN];
+        bytes[SAVE_AVATAR_NAME_OFFSET + 4] = b'A';
+        bytes[SAVE_SCENE_OFFSET] = 0;
+        bytes[SAVE_Z_OFFSET] = 0;
+        bytes[SAVE_X_OFFSET] = 15;
+        bytes[SAVE_Y_OFFSET] = 15;
+        write_saved_clock(&mut bytes, GameClock::new(8, 35).unwrap());
+
+        let err = play_options_from_save_bytes(&bytes).unwrap_err();
+
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("No active game"));
+    }
+
+    #[test]
+    fn saved_game_avatar_name_helper_uses_first_public_name_byte() {
         let mut bytes = vec![0; SAVED_GAM_LEN];
 
         assert!(!saved_game_has_avatar_name(&bytes));
         bytes[SAVE_AVATAR_NAME_OFFSET + 4] = b'A';
+        assert!(!saved_game_has_avatar_name(&bytes));
+        bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';
         assert!(saved_game_has_avatar_name(&bytes));
+    }
+
+    #[test]
+    fn decode_party_names_reads_active_roster_names_with_fixed_stride() {
+        let mut bytes = vec![0; SAVED_GAM_LEN];
+        bytes[SAVE_PARTY_SIZE_OFFSET] = 2;
+        bytes[SAVE_ROSTER_OFFSET..SAVE_ROSTER_OFFSET + 5].copy_from_slice(b"AVATR");
+        let second = SAVE_ROSTER_OFFSET + SAVE_CHARACTER_RECORD_LEN;
+        bytes[second..second + 5].copy_from_slice(b"Saduj");
+
+        let names = decode_party_names(&bytes);
+
+        assert_eq!(names.len(), 2);
+        assert_eq!(&names[0][..5], b"AVATR");
+        assert_eq!(&names[1][..5], b"Saduj");
+        assert!(party_name_forces_monster_combat_group(&names[1]));
+    }
+
+    #[test]
+    fn decode_party_names_rejects_invalid_party_size_like_party_decoder() {
+        let mut bytes = vec![0; SAVED_GAM_LEN];
+        bytes[SAVE_PARTY_SIZE_OFFSET] = 7;
+        bytes[SAVE_ROSTER_OFFSET..SAVE_ROSTER_OFFSET + 5].copy_from_slice(b"AVATR");
+
+        assert!(decode_party_names(&bytes).is_empty());
     }
 
     #[test]
@@ -605,6 +900,23 @@
             max_year,
             GameClock::with_date(u16::MAX, 1, 1, 0, 0).unwrap()
         );
+    }
+
+    #[test]
+    fn turn_advance_clears_fortunes_of_war_on_month_boundary_only() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.clock = GameClock::with_date(139, 4, 27, 23, 59).unwrap();
+        state.fortunes_of_war = 0x55;
+
+        state.advance_turn_with_minutes(1);
+        assert_eq!(state.clock, GameClock::with_date(139, 4, 28, 0, 0).unwrap());
+        assert_eq!(state.fortunes_of_war, 0x55);
+
+        state.clock = GameClock::with_date(139, 4, 28, 23, 59).unwrap();
+        state.advance_turn_with_minutes(1);
+
+        assert_eq!(state.clock, GameClock::with_date(139, 5, 1, 0, 0).unwrap());
+        assert_eq!(state.fortunes_of_war, 0);
     }
 
     #[test]
@@ -676,13 +988,29 @@
             keys: DEFAULT_KEY_STOCK,
             gems: DEFAULT_GEM_STOCK,
             climbing_gear: DEFAULT_CLIMBING_GEAR,
+            special_items: [0; SPECIAL_ITEM_COUNT],
             party: default_party(),
+            party_names: default_party_names(1),
+            party_experience: default_party_experience(1),
+            party_stay_counters: default_party_stay_counters(1),
+            party_strengths: default_party_strengths(1),
+            party_intelligence: default_party_intelligence(1),
+            party_equipment: default_party_equipment(1),
+            equipment_stock: [0; EQUIPMENT_COUNT],
             spell_charges: [0; SPELL_COUNT],
+            scroll_stock: [0; SCROLL_COUNT],
+            potion_stock: [0; POTION_COUNT],
             reagents: DEFAULT_REAGENTS,
+            rare_reagent_harvest_days: [RARE_REAGENT_HARVEST_UNSEEN_DAY;
+                RARE_REAGENT_HARVEST_POINT_COUNT],
+            fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
+            fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
+            shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
             shrine_ordained_mask: 0,
             shrine_codex_mask: 0,
             shrine_standing: [0; VIRTUE_COUNT],
+            moral_standing: 0,
             avatar_stats: AvatarStats::default(),
             torches: DEFAULT_TORCH_STOCK,
             torch_counter: 0,
@@ -693,8 +1021,12 @@
             time_stop_counter: 0,
             active_effect_tag: None,
             active_effect_counter: 0,
+            fortunes_of_war: 0,
+            active_player: None,
+            combat_round_counter: 0,
             transport: TransportState::Foot,
             pending_vehicle: None,
+            inn_registry: Vec::new(),
             initial_britannia_overlay: None,
             debug_enter: None,
             saved_active_objects: None,

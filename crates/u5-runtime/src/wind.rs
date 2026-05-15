@@ -1,4 +1,4 @@
-//! Wind state: direction (or calm), parsing, and the `Rel Hur` cycle.
+//! Wind state: direction (or calm), parsing, and Rel Hur targets.
 
 use std::io;
 
@@ -30,11 +30,23 @@ impl WindState {
     }
 
     pub fn from_save_byte(byte: u8) -> Self {
-        // The public spec verifies only the clean seed's 0 byte; use --wind for
-        // semantic non-calm test states until the save-byte table is promoted.
         match byte {
             0 => Self::Calm,
+            1 => Self::North,
+            2 => Self::South,
+            3 => Self::East,
+            4 => Self::West,
             _ => Self::Calm,
+        }
+    }
+
+    pub fn save_byte(self) -> u8 {
+        match self {
+            Self::Calm => 0,
+            Self::North => 1,
+            Self::South => 2,
+            Self::East => 3,
+            Self::West => 4,
         }
     }
 
@@ -68,13 +80,13 @@ impl WindState {
         }
     }
 
-    pub fn rel_hur_next(self) -> Self {
-        match self {
-            Self::Calm => Self::North,
-            Self::North => Self::South,
-            Self::South => Self::East,
-            Self::East => Self::West,
-            Self::West => Self::Calm,
+    pub fn rel_hur_target(direction: Direction) -> Option<Self> {
+        match direction {
+            Direction::North => Some(Self::West),
+            Direction::East => Some(Self::East),
+            Direction::South => Some(Self::South),
+            Direction::West => Some(Self::North),
+            _ => None,
         }
     }
 }

@@ -83,7 +83,10 @@ pub fn parse_wd_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
 }
 
 #[cfg(test)]
-pub fn parse_single_image_bit_body(body: &[u8], resource_name: &str) -> io::Result<MonochromeBitmap> {
+pub fn parse_single_image_bit_body(
+    body: &[u8],
+    resource_name: &str,
+) -> io::Result<MonochromeBitmap> {
     if body.len() < 8 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -306,7 +309,10 @@ pub fn parse_proportional_font(bytes: &[u8]) -> io::Result<ProportionalFont> {
 }
 
 #[cfg(test)]
-pub fn parse_proportional_font_body(body: &[u8], resource_name: &str) -> io::Result<ProportionalFont> {
+pub fn parse_proportional_font_body(
+    body: &[u8],
+    resource_name: &str,
+) -> io::Result<ProportionalFont> {
     if body.len() < 2 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,

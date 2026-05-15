@@ -512,6 +512,364 @@
     }
 
     #[test]
+    fn y_yell_shipboard_toggles_sails_and_non_ship_prompts_without_turn() {
+        let mut ship = world_state(open_world_grid(), 5, 5);
+        ship.player.transport = TransportState::Ship {
+            type_byte: 168,
+            tile: 168,
+            sails_hoisted: false,
+            hull: 77,
+            skiffs: 2,
+        };
+
+        assert_eq!(
+            handle_play_key_input(&mut ship, 'Y', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(ship.player.transport.is_ship_under_sail());
+        assert_eq!(ship.message, "Sails hoisted.");
+        assert_eq!(ship.turn, 1);
+
+        let mut foot = world_state(open_world_grid(), 5, 5);
+        assert_eq!(
+            handle_play_key_input(&mut foot, 'Y', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(foot.message, "Yell what? Use Y<word>.");
+        assert_eq!(foot.turn, 0);
+    }
+
+    #[test]
+    fn y_yell_words_and_shadowlord_names_consume_turn_without_placeholder() {
+        let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
+
+        assert_eq!(
+            handle_play_key_input(&mut dungeon, 'Y', "fallax", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(dungeon.turn, 1);
+        assert!(dungeon.message.contains("Yelled FALLAX"));
+        assert!(dungeon.message.contains("Word of Power for Deceit"));
+        assert!(!dungeon.message.contains("out of scope"));
+
+        let mut world = world_state(open_world_grid(), 5, 5);
+
+        assert_eq!(
+            handle_play_key_input(&mut world, 'Y', "faulinei", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(world.turn, 1);
+        assert!(world.message.contains("name of Falsehood"));
+        assert!(world.message.contains("No Shadowlord answers here."));
+    }
+
+    #[test]
+    fn y_yell_shadowlord_name_observes_vanquished_state() {
+        let mut world = world_state(open_world_grid(), 5, 5);
+        world.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = SHADOWLORD_VANQUISHED;
+
+        assert_eq!(
+            handle_play_key_input(&mut world, 'Y', "faulinei", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(world.turn, 1);
+        assert!(world.message.contains("name of Falsehood"));
+        assert!(world.message.contains("Falsehood is vanquished."));
+    }
+
+    #[test]
+    fn y_yell_shadowlord_name_spawns_only_in_matching_virtue_town() {
+        let mut town = test_state(open_grid(), 5, 5);
+        town.area = Area::Town {
+            scene: Scene::new(1).unwrap(),
+            floor: 0,
+        };
+        town.visibility_dirty = false;
+
+        assert_eq!(
+            handle_play_key_input(&mut town, 'Y', "faulinei", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(town.turn, 1);
+        assert!(town.message.contains("Falsehood appears"));
+        assert_eq!(town.active_objects.len(), 2);
+        assert_eq!(
+            town.active_objects[1],
+            ActiveObject {
+                type_byte: SHADOWLORD_OBJECT_TILE_BASE,
+                tile: SHADOWLORD_OBJECT_TILE_BASE,
+                x: 5,
+                y: 6,
+                z: 0,
+                phase: active_object_phase_from_direction(Direction::North, 0),
+                aux1: SHADOWLORD_FALSEHOOD_INDEX as u8,
+                aux3: 1,
+            }
+        );
+        assert!(town.visibility_dirty);
+
+        let mut wrong_town = test_state(open_grid(), 5, 5);
+        wrong_town.area = Area::Town {
+            scene: Scene::new(2).unwrap(),
+            floor: 0,
+        };
+
+        assert_eq!(
+            handle_play_key_input(&mut wrong_town, 'Y', "faulinei", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(wrong_town.active_objects.len(), 1);
+        assert!(wrong_town.message.contains("No Shadowlord answers here."));
+    }
+
+    #[test]
+    fn y_yell_shadowlord_name_requires_free_active_object_slot() {
+        let mut town = test_state(open_grid(), 5, 5);
+        town.area = Area::Town {
+            scene: Scene::new(1).unwrap(),
+            floor: 0,
+        };
+        town.active_objects.resize(
+            OOL_SLOTS,
+            ActiveObject {
+                type_byte: 0x10,
+                tile: 0x10,
+                x: 0,
+                y: 0,
+                z: 1,
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            },
+        );
+        town.recompute_daylight();
+        town.visibility_dirty = false;
+
+        assert_eq!(
+            handle_play_key_input(&mut town, 'Y', "faulinei", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(town.turn, 1);
+        assert!(town.message.contains("No Shadowlord answers here."));
+        assert!(town.active_objects.iter().skip(1).all(|object| object.z == 1));
+        assert!(!town.visibility_dirty);
+    }
+
+    #[test]
+    fn shadowlord_helpers_track_living_vanquished_and_all_done() {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.shadowlord_hideouts = [1, SHADOWLORD_VANQUISHED, 0x80];
+
+        assert_eq!(
+            PlayState::shadowlord_name_index("ASTAROTH"),
+            Some(SHADOWLORD_HATRED_INDEX)
+        );
+        assert!(state.shadowlord_alive(SHADOWLORD_FALSEHOOD_INDEX));
+        assert!(state.shadowlord_vanquished(SHADOWLORD_HATRED_INDEX));
+        assert!(!state.shadowlord_alive(SHADOWLORD_COWARDICE_INDEX));
+        assert!(!state.all_shadowlords_vanquished());
+
+        assert!(state.vanquish_shadowlord(SHADOWLORD_FALSEHOOD_INDEX));
+        assert!(!state.vanquish_shadowlord(SHADOWLORD_FALSEHOOD_INDEX));
+        state.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX] = SHADOWLORD_VANQUISHED;
+
+        assert!(state.all_shadowlords_vanquished());
+    }
+
+    #[test]
+    fn stonegate_entry_presentation_uses_sceptre_and_living_shadowlord_slots() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.area = Area::Town {
+            scene: Scene::new(STONEGATE_SCENE_BYTE).unwrap(),
+            floor: 0,
+        };
+        state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+        state.shadowlord_hideouts = [1, SHADOWLORD_VANQUISHED, 0];
+        state.message = "Entered KEEP:4.".to_string();
+
+        state.append_stonegate_entry_presentation_message();
+
+        assert!(state.message.contains("Sceptre prelude"));
+        assert!(state.message.contains("air of Falsehood"));
+        assert!(!state.message.contains("air of Hatred"));
+        assert!(!state.message.contains("air of Cowardice"));
+
+        state.area = Area::Town {
+            scene: Scene::new(17).unwrap(),
+            floor: 0,
+        };
+        assert_eq!(state.stonegate_entry_presentation_message(), None);
+    }
+
+    #[test]
+    fn a_attack_prompts_for_direction_without_turn_or_movement() {
+        let mut state = test_state(open_grid(), 5, 5);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!((state.player.x, state.player.y), (5, 5));
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Attack where? Use A<direction>.");
+    }
+
+    #[test]
+    fn a_attack_inline_direction_consumes_turn_without_moving() {
+        let mut state = test_state(open_grid(), 5, 5);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "6", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!((state.player.x, state.player.y), (5, 5));
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Attacked East at (6, 5); no target.");
+    }
+
+    #[test]
+    fn a_attack_adjacent_non_npc_object_reports_no_town_target() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.active_objects.push(ActiveObject {
+            type_byte: 42,
+            tile: 42,
+            x: 6,
+            y: 5,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "6", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!((state.player.x, state.player.y), (5, 5));
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("Attacked object tile 42"));
+        assert!(state.message.contains("to the East"));
+        assert!(state.message.contains("no attackable town NPC"));
+        assert!(!state.message.contains("pending"));
+        assert!(!state.message.contains("out of scope"));
+    }
+
+    #[test]
+    fn a_attack_adjacent_town_npc_removes_linked_runtime_actor() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        let slots = [
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 2,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                name: None,
+            },
+        ];
+        state.load_scheduled_npcs(&slots);
+        let object_slot = state.npcs[0].active_object.unwrap();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "6", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.turn, 1);
+        assert!(state.npcs.is_empty());
+        assert!(state.active_objects[object_slot].is_empty());
+        assert_eq!(state.removed_town_npcs, vec![(17, 0, 1)]);
+        assert!(state.visibility_dirty);
+        assert!(state.message.contains("Attacked NPC slot 1"));
+        assert!(state.message.contains("target removed"));
+        assert!(!state.message.contains("combat"));
+        assert!(!state.message.contains("pending"));
+
+        state.load_scheduled_npcs(&slots);
+        assert!(
+            state.npcs.is_empty(),
+            "removed NPC slot must not relink during the current scene visit"
+        );
+    }
+
+    #[test]
+    fn world_attack_adjacent_combat_class_object_selects_brit_cbt_arena() {
+        let dir = debug_game_dir();
+        let record = synthetic_combat_arena_record();
+        fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x44,
+            tile: 0xc0,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "6", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!((state.player.x, state.player.y), (5, 5));
+        assert_eq!(state.turn, 1);
+        assert!(state.combat_active);
+        assert_eq!(state.pending_combat_terrain_trigger_slot, Some(1));
+        assert!(state.message.contains("Attacked object tile 192"));
+        assert!(state.message.contains("slot 1"));
+        assert!(state.message.contains("entered terrain combat"));
+        assert!(state.message.contains("BRIT.CBT arena 1"));
+        assert!(state.message.contains("Orc"));
+        assert_eq!(state.active_objects[6].tile, 0xc0);
+        assert_eq!((state.active_objects[6].x, state.active_objects[6].y), (0, 15));
+        assert!(!state.message.contains("pending"));
+        assert!(!state.message.contains("out of scope"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn world_attack_reports_published_base_combat_class_from_sprite_run() {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x44,
+            tile: 0xc0,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(state.attack_command(Some(Direction::East)), MoveOutcome::Used);
+
+        assert!(state.message.contains("selected BRIT.CBT arena 1"));
+        assert!(state.message.contains("base class Orc (32)"));
+    }
+
+    #[test]
     fn ship_fire_requires_ship_and_inline_broadside_direction_without_turn() {
         let mut foot = world_state(open_world_grid(), 5, 5);
 

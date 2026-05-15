@@ -19,13 +19,29 @@
             keys: DEFAULT_KEY_STOCK,
             gems: DEFAULT_GEM_STOCK,
             climbing_gear: DEFAULT_CLIMBING_GEAR,
+            special_items: [0; SPECIAL_ITEM_COUNT],
             party: default_party(),
+            party_names: default_party_names(1),
+            party_experience: default_party_experience(1),
+            party_stay_counters: default_party_stay_counters(1),
+            party_strengths: default_party_strengths(1),
+            party_intelligence: default_party_intelligence(1),
+            party_equipment: default_party_equipment(1),
+            equipment_stock: [0; EQUIPMENT_COUNT],
             spell_charges: [0; SPELL_COUNT],
+            scroll_stock: [0; SCROLL_COUNT],
+            potion_stock: [0; POTION_COUNT],
             reagents: DEFAULT_REAGENTS,
+            rare_reagent_harvest_days: [RARE_REAGENT_HARVEST_UNSEEN_DAY;
+                RARE_REAGENT_HARVEST_POINT_COUNT],
+            fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
+            fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
+            shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
             shrine_ordained_mask: 0,
             shrine_codex_mask: 0,
             shrine_standing: [0; VIRTUE_COUNT],
+            moral_standing: 0,
             avatar_stats: AvatarStats::default(),
             torches: DEFAULT_TORCH_STOCK,
             torch_counter: 0,
@@ -36,8 +52,12 @@
             time_stop_counter: 0,
             active_effect_tag: None,
             active_effect_counter: 0,
+            fortunes_of_war: 0,
+            active_player: None,
+            combat_round_counter: 0,
             transport,
             pending_vehicle: None,
+            inn_registry: Vec::new(),
             initial_britannia_overlay: None,
             debug_enter: None,
             saved_active_objects: Some(Vec::new()),
@@ -527,6 +547,39 @@
     }
 
     #[test]
+    fn world_enter_stonegate_preserves_entry_message_and_presentation_notes() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
+        fs::write(dir.join("KEEP.DAT"), location_pages()).unwrap();
+        fs::write(dir.join("KEEP.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
+        fs::write(dir.join("KEEP.TLK"), [1, 0, 0, 0]).unwrap();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 KEEP:4 7\n",
+        )
+        .unwrap();
+        let mut state = britannia_state(open_world_grid(), 10, 20);
+        state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+        state.shadowlord_hideouts = [
+            1,
+            SHADOWLORD_VANQUISHED,
+            SHADOWLORD_VANQUISHED,
+        ];
+
+        assert_eq!(
+            state.enter_current_location(&dir).unwrap(),
+            MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
+        );
+
+        assert!(state.message.contains("Entered KEEP:4 from BRITANNIA"));
+        assert!(state.message.contains("Sceptre prelude"));
+        assert!(state.message.contains("air of Falsehood"));
+        assert!(!state.message.contains("air of Hatred"));
+        assert!(!state.message.contains("air of Cowardice"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn world_enter_uses_clean_location_table_for_dungeon_seed() {
         let dir = debug_game_dir();
         let scene = DungeonScene::new(33).unwrap();
@@ -609,7 +662,27 @@
             Some(WorldPlane::Underworld)
         );
 
+        let mut sealed_doom_state = world_state(open_world_grid(), 12, 34);
+
+        assert_eq!(
+            sealed_doom_state.enter_current_location(&dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(
+            sealed_doom_state.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert!(sealed_doom_state.return_world.is_none());
+        assert_eq!(
+            sealed_doom_state.message,
+            "Doom is sealed until all Shadowlords are vanquished."
+        );
+
         let mut doom_state = world_state(open_world_grid(), 12, 34);
+        doom_state.shadowlord_hideouts = [SHADOWLORD_VANQUISHED; SHADOWLORD_COUNT];
 
         assert_eq!(
             doom_state.enter_current_location(&dir).unwrap(),
@@ -724,13 +797,29 @@ CASTLE:0 6
             keys: DEFAULT_KEY_STOCK,
             gems: DEFAULT_GEM_STOCK,
             climbing_gear: DEFAULT_CLIMBING_GEAR,
+            special_items: [0; SPECIAL_ITEM_COUNT],
             party: default_party(),
+            party_names: default_party_names(1),
+            party_experience: default_party_experience(1),
+            party_stay_counters: default_party_stay_counters(1),
+            party_strengths: default_party_strengths(1),
+            party_intelligence: default_party_intelligence(1),
+            party_equipment: default_party_equipment(1),
+            equipment_stock: [0; EQUIPMENT_COUNT],
             spell_charges: [0; SPELL_COUNT],
+            scroll_stock: [0; SCROLL_COUNT],
+            potion_stock: [0; POTION_COUNT],
             reagents: DEFAULT_REAGENTS,
+            rare_reagent_harvest_days: [RARE_REAGENT_HARVEST_UNSEEN_DAY;
+                RARE_REAGENT_HARVEST_POINT_COUNT],
+            fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
+            fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
+            shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
             shrine_ordained_mask: 0,
             shrine_codex_mask: 0,
             shrine_standing: [0; VIRTUE_COUNT],
+            moral_standing: 0,
             avatar_stats: AvatarStats::default(),
             torches: DEFAULT_TORCH_STOCK,
             torch_counter: 0,
@@ -741,8 +830,12 @@ CASTLE:0 6
             time_stop_counter: 0,
             active_effect_tag: None,
             active_effect_counter: 0,
+            fortunes_of_war: 0,
+            active_player: None,
+            combat_round_counter: 0,
             transport: TransportState::Foot,
             pending_vehicle: None,
+            inn_registry: Vec::new(),
             initial_britannia_overlay: None,
             debug_enter: None,
             saved_active_objects: None,
@@ -767,6 +860,123 @@ CASTLE:0 8
 ";
 
         assert!(parse_location_entry_y_entries(text).is_err());
+    }
+
+    #[test]
+    fn stonegate_load_appends_entry_presentation_notes() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(STONEGATE_SCENE_BYTE).unwrap();
+        fs::write(dir.join("KEEP.DAT"), location_pages()).unwrap();
+        fs::write(dir.join("KEEP.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
+        fs::write(dir.join("KEEP.TLK"), [1, 0, 0, 0]).unwrap();
+        let mut options = PlayOptions::default();
+        options.target = PlayTarget::Town(scene);
+        options.start = Some((1, 1));
+        options.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+        options.shadowlord_hideouts = [
+            SHADOWLORD_VANQUISHED,
+            2,
+            SHADOWLORD_VANQUISHED,
+        ];
+
+        let state = PlayState::load_town_scene(&dir, scene, options).unwrap();
+
+        assert!(state.message.contains("Entered KEEP:4"));
+        assert!(state.message.contains("Sceptre prelude"));
+        assert!(state.message.contains("air of Hatred"));
+        assert!(!state.message.contains("air of Falsehood"));
+        assert!(!state.message.contains("air of Cowardice"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_entry_installs_living_shadowlord_for_matching_fresh_scene() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(1).unwrap();
+        fs::write(dir.join("TOWNE.DAT"), open_grid()).unwrap();
+        fs::write(dir.join("TOWNE.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
+        fs::write(dir.join("TOWNE.TLK"), [1, 0, 0, 0]).unwrap();
+        let mut options = PlayOptions::default();
+        options.target = PlayTarget::Town(scene);
+        options.start = Some((5, 5));
+        options.shadowlord_hideouts = [
+            1,
+            SHADOWLORD_VANQUISHED,
+            SHADOWLORD_VANQUISHED,
+        ];
+        options.saved_active_objects = None;
+
+        let state = PlayState::load_town_scene(&dir, scene, options).unwrap();
+
+        assert!(state.message.contains("Shadowlord entry: Falsehood appears"));
+        let object = state
+            .active_objects
+            .iter()
+            .copied()
+            .find(|object| {
+                PlayState::shadowlord_name_encounter_index(*object)
+                    == Some(SHADOWLORD_FALSEHOOD_INDEX)
+            })
+            .unwrap();
+        assert_eq!(
+            object,
+            ActiveObject {
+                type_byte: SHADOWLORD_OBJECT_TILE_BASE,
+                tile: SHADOWLORD_OBJECT_TILE_BASE,
+                x: 5,
+                y: 6,
+                z: 0,
+                phase: active_object_phase_from_direction(Direction::North, 0),
+                aux1: SHADOWLORD_FALSEHOOD_INDEX as u8,
+                aux3: 1,
+            }
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_entry_preserving_reentry_does_not_duplicate_shadowlord_object() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(1).unwrap();
+        fs::write(dir.join("TOWNE.DAT"), open_grid()).unwrap();
+        fs::write(dir.join("TOWNE.NPC"), vec![0; (scene.block + 1) * 576]).unwrap();
+        fs::write(dir.join("TOWNE.TLK"), [1, 0, 0, 0]).unwrap();
+        let existing = ActiveObject {
+            type_byte: SHADOWLORD_OBJECT_TILE_BASE,
+            tile: SHADOWLORD_OBJECT_TILE_BASE,
+            x: 5,
+            y: 6,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: SHADOWLORD_FALSEHOOD_INDEX as u8,
+            aux3: 1,
+        };
+        let mut options = PlayOptions::default();
+        options.target = PlayTarget::Town(scene);
+        options.start = Some((5, 5));
+        options.shadowlord_hideouts = [
+            1,
+            SHADOWLORD_VANQUISHED,
+            SHADOWLORD_VANQUISHED,
+        ];
+        options.saved_active_objects = Some(vec![existing]);
+
+        let state = PlayState::load_town_scene(&dir, scene, options).unwrap();
+
+        assert!(!state.message.contains("Shadowlord entry"));
+        assert_eq!(
+            state
+                .active_objects
+                .iter()
+                .copied()
+                .filter(|object| {
+                    PlayState::shadowlord_name_encounter_index(*object)
+                        == Some(SHADOWLORD_FALSEHOOD_INDEX)
+                })
+                .count(),
+            1
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

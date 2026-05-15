@@ -368,12 +368,12 @@
         state.sail_stall_pending = true;
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'C', "1HR", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, 'C', "1HR4", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
         assert_eq!(state.wind, WindState::North);
-        assert_eq!(state.wind_save_byte, 0x7a);
+        assert_eq!(state.wind_save_byte, 1);
         assert_eq!(state.spell_charges[REL_HUR_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 1);
         assert_eq!(state.turn, 1);
@@ -384,7 +384,7 @@
     }
 
     #[test]
-    fn cast_rel_hur_resets_raw_wind_save_byte_when_cycle_returns_to_calm() {
+    fn cast_rel_hur_prompt_direction_maps_to_spec_winds() {
         let mut state = britannia_state(open_world_grid(), 5, 5);
         state.spell_charges[REL_HUR_SPELL_INDEX] = 1;
         state.party[0].mana = 3;
@@ -393,13 +393,59 @@
         state.wind_save_byte = 0x7a;
 
         assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1HR8", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.wind, WindState::West);
+        assert_eq!(state.wind_save_byte, 4);
+        assert_eq!(state.message, "Wind change! West Winds -> West Winds.");
+    }
+
+    #[test]
+    fn cast_rel_hur_missing_direction_prompts_without_spending_spell() {
+        let mut state = britannia_state(open_world_grid(), 5, 5);
+        state.spell_charges[REL_HUR_SPELL_INDEX] = 1;
+        state.party[0].mana = 3;
+        state.party[0].level = 2;
+        state.wind = WindState::East;
+
+        assert_eq!(
             handle_play_key_input(&mut state, 'C', "1HR", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.wind, WindState::Calm);
-        assert_eq!(state.wind_save_byte, 0);
-        assert_eq!(state.message, "Wind change! West Winds -> Calm Winds.");
+        assert_eq!(state.wind, WindState::East);
+        assert_eq!(state.spell_charges[REL_HUR_SPELL_INDEX], 1);
+        assert_eq!(state.party[0].mana, 3);
+        assert_eq!(state.turn, 0);
+        assert_eq!(
+            state.message,
+            "Direction? Use C1HR8/C1HR6/C1HR2/C1HR4, or C1HR<space>."
+        );
+    }
+
+    #[test]
+    fn cast_rel_hur_pass_consumes_cast_without_changing_wind() {
+        let mut state = britannia_state(open_world_grid(), 5, 5);
+        state.spell_charges[REL_HUR_SPELL_INDEX] = 1;
+        state.party[0].mana = 3;
+        state.party[0].level = 2;
+        state.wind = WindState::East;
+        state.wind_save_byte = 3;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1HR ", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.wind, WindState::East);
+        assert_eq!(state.wind_save_byte, 3);
+        assert_eq!(state.spell_charges[REL_HUR_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 1);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+        assert_eq!(state.message, "Wind change! Pass.");
     }
 
     #[test]
@@ -410,7 +456,7 @@
         state.party[0].level = 2;
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'C', "1HR", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, 'C', "1HR8", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -427,7 +473,7 @@
         state.party[0].level = 2;
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'C', "1HR", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, 'C', "1HR8", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -445,7 +491,7 @@
         state.party[0].level = 2;
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'C', "1HR", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, 'C', "1HR8", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -457,7 +503,7 @@
     }
 
     #[test]
-    fn cast_time_stop_sets_counter_and_consumes_charge_mana_and_turn() {
+    fn cast_time_stop_sets_shared_t_counter_and_consumes_charge_mana_and_turn() {
         let mut state = britannia_state(open_world_grid(), 5, 5);
         state.spell_charges[TIME_STOP_SPELL_INDEX] = 1;
         state.party[0].mana = 8;
@@ -472,15 +518,20 @@
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-        assert_eq!(state.time_stop_counter, TIME_STOP_DURATION);
-        assert_eq!(state.message, "Time stopped for 10 turns.");
+        assert_eq!(state.active_effect_tag, Some(NEGATE_TIME_ACTIVE_EFFECT_TAG));
+        assert_eq!(state.active_effect_counter, TIME_STOP_DURATION);
+        assert_eq!(state.time_stop_counter, 0);
+        assert_eq!(state.message, "Negate time!");
     }
 
     #[test]
-    fn time_stop_freezes_scheduled_npcs_and_active_objects_while_counter_decays() {
+    fn negate_time_t_tag_freezes_minutes_npcs_and_active_objects_while_counter_decays() {
         let mut state = test_state(open_grid(), 1, 1);
         state.clock = GameClock::new(17, 59).unwrap();
-        state.time_stop_counter = 2;
+        state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 2;
+        state.torch_counter = 5;
+        state.light_spell_counter = 7;
         let slots = vec![
             NpcSlot {
                 slot: 0,
@@ -511,23 +562,31 @@
 
         state.advance_turn();
 
+        assert_eq!(state.clock, GameClock::new(17, 59).unwrap());
+        assert_eq!(state.active_effect_tag, Some(NEGATE_TIME_ACTIVE_EFFECT_TAG));
+        assert_eq!(state.active_effect_counter, 1);
+        assert_eq!(state.torch_counter, 5);
+        assert_eq!(state.light_spell_counter, 7);
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (2, 1));
+        assert_eq!(state.active_objects[2].phase, 0x22);
+        assert_eq!(state.active_objects[2].tile, 168);
+
+        state.advance_turn();
+
+        assert_eq!(state.clock, GameClock::new(17, 59).unwrap());
+        assert_eq!(state.active_effect_tag, None);
+        assert_eq!(state.active_effect_counter, 0);
+        assert_eq!(state.torch_counter, 5);
+        assert_eq!(state.light_spell_counter, 7);
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (2, 1));
+        assert_eq!(state.active_objects[2].phase, 0x22);
+        assert_eq!(state.active_objects[2].tile, 168);
+
+        state.advance_turn();
+
         assert_eq!(state.clock, GameClock::new(18, 0).unwrap());
-        assert_eq!(state.time_stop_counter, 1);
-        assert_eq!((state.npcs[0].x, state.npcs[0].y), (2, 1));
-        assert_eq!(state.active_objects[2].phase, 0x22);
-        assert_eq!(state.active_objects[2].tile, 168);
-
-        state.advance_turn();
-
-        assert_eq!(state.clock, GameClock::new(18, 1).unwrap());
-        assert_eq!(state.time_stop_counter, 0);
-        assert_eq!((state.npcs[0].x, state.npcs[0].y), (2, 1));
-        assert_eq!(state.active_objects[2].phase, 0x22);
-        assert_eq!(state.active_objects[2].tile, 168);
-
-        state.advance_turn();
-
-        assert_eq!(state.clock, GameClock::new(18, 2).unwrap());
+        assert_eq!(state.torch_counter, 4);
+        assert_eq!(state.light_spell_counter, 6);
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (3, 1));
         assert_eq!(
             (state.active_objects[1].x, state.active_objects[1].y),

@@ -15,7 +15,7 @@ use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 
 use u5_runtime::{
     Area, Direction, PlayInputDisposition, PlayOptions, PlayState, TILE_ATLAS_SIDE, TileAtlas,
-    TileGraphicsDepth, handle_play_key_input, load_tile_atlas,
+    TileGraphicsDepth, handle_play_key_input, load_tile_atlas, render_text_panel_rgba,
 };
 
 const VIEWPORT_RADIUS: usize = 5;
@@ -46,9 +46,8 @@ pub fn run_visual_loop(
     // waits a few frames (so the swapchain has a real image), takes a
     // screenshot via Bevy's `Screenshot` component, then exits. Lets us
     // verify end-to-end Bevy rendering without an interactive desktop.
-    let screenshot_path: Option<PathBuf> = std::env::var("U5_BEVY_SCREENSHOT")
-        .ok()
-        .map(PathBuf::from);
+    let screenshot_path: Option<PathBuf> =
+        std::env::var("U5_BEVY_SCREENSHOT").ok().map(PathBuf::from);
     let screenshot_delay: u32 = std::env::var("U5_BEVY_SCREENSHOT_DELAY")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -63,7 +62,7 @@ pub fn run_visual_loop(
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "Ultima V — first-playable visual slice".into(),
+                title: "Ultima V".into(),
                 resolution: (display_w, display_h).into(),
                 resizable: true,
                 ..default()
@@ -80,7 +79,10 @@ pub fn run_visual_loop(
         .insert_resource(ScreenshotState::default())
         .add_systems(Startup, setup)
         .insert_resource(AnimationPump::default())
-        .add_systems(Update, (drive_visual, animate_static_tiles, screenshot_system))
+        .add_systems(
+            Update,
+            (drive_visual, animate_static_tiles, screenshot_system),
+        )
         .run();
 
     Ok(())
@@ -333,22 +335,18 @@ fn drive_visual(
 fn render_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
     match state.render_top_down_frame(VIEWPORT_RADIUS, atlas) {
         Ok(Some(viewport)) => viewport.to_rgba(),
-        _ => placeholder_rgba(),
+        _ => render_text_panel_rgba(
+            &state.render_text_view(VIEWPORT_RADIUS),
+            VIEWPORT_SIZE_PX as usize,
+            VIEWPORT_SIZE_PX as usize,
+        )
+        .unwrap_or_else(|_| vec![0; (VIEWPORT_SIZE_PX as usize) * (VIEWPORT_SIZE_PX as usize) * 4]),
     }
-}
-
-fn placeholder_rgba() -> Vec<u8> {
-    let pixel_count = (VIEWPORT_SIZE_PX as usize) * (VIEWPORT_SIZE_PX as usize);
-    let mut bytes = Vec::with_capacity(pixel_count * 4);
-    for _ in 0..pixel_count {
-        bytes.extend_from_slice(&[0x10, 0x10, 0x14, 0xff]);
-    }
-    bytes
 }
 
 fn summarize(state: &PlayState, fallback: &str) -> String {
     let dungeon_note = if matches!(state.area, Area::Dungeon { .. }) {
-        " [Dungeon view is text-only in this slice.]"
+        " [Dungeon first-person panel]"
     } else {
         ""
     };
@@ -390,4 +388,50 @@ fn key_code_to_char(key: KeyCode) -> Option<char> {
         _ => return None,
     };
     Some(ch)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use u5_runtime::test_fixtures::{dungeon_state, open_dungeon_record, synthetic_tile_atlas};
+    use u5_runtime::{
+        Direction, TEXT_PANEL_BODY_RGBA, TEXT_PANEL_HEADER_RGBA, TileGraphicsDepth,
+        dungeon_cell_index, wrap_text_panel_lines,
+    };
+
+    #[test]
+    fn dungeon_framebuffer_renders_text_panel_instead_of_blank_placeholder() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x40;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.player.facing = Direction::East;
+        state.torch_counter = 9;
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let rgba = render_framebuffer(&mut state, &atlas);
+
+        assert_eq!(
+            rgba.len(),
+            (VIEWPORT_SIZE_PX as usize) * (VIEWPORT_SIZE_PX as usize) * 4
+        );
+        assert!(
+            rgba.chunks_exact(4)
+                .any(|pixel| pixel == TEXT_PANEL_HEADER_RGBA)
+        );
+        assert!(
+            rgba.chunks_exact(4)
+                .any(|pixel| pixel == TEXT_PANEL_BODY_RGBA)
+        );
+    }
+
+    #[test]
+    fn text_panel_wrapper_preserves_short_lines_and_wraps_long_status() {
+        let lines =
+            wrap_text_panel_lines("DUNGEON:0 LEVEL 0\nA VERY LONG DUNGEON STATUS LINE", 12, 6);
+
+        assert_eq!(lines[0], "DUNGEON:0");
+        assert_eq!(lines[1], "LEVEL 0");
+        assert!(lines.iter().any(|line| line == "A VERY LONG"));
+        assert!(lines.iter().any(|line| line == "DUNGEON"));
+    }
 }

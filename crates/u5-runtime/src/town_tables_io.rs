@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 
 use crate::*;
 
-pub fn load_town_fire_source_entries(game_dir: &Path) -> io::Result<Option<Vec<TownFireSourceEntry>>> {
+pub fn load_town_fire_source_entries(
+    game_dir: &Path,
+) -> io::Result<Option<Vec<TownFireSourceEntry>>> {
     let path = game_dir.join(TOWN_FIRE_SOURCE_TABLE_FILE);
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,
@@ -534,4 +536,3 @@ pub fn parse_town_rest_bed_entries(text: &str) -> io::Result<Vec<TownRestBedEntr
     }
     Ok(entries)
 }
-

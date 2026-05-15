@@ -456,8 +456,39 @@
         assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xa7);
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("slot 7"));
-        assert!(state.message.contains("arena 23"));
-        assert!(state.message.contains("combat handoff is out of scope"));
+        assert!(state.message.contains("selected DUNGEON.CBT arena 23"));
+        assert!(!state.message.contains("out of scope"));
+    }
+
+    #[test]
+    fn dungeon_room_trigger_loads_selected_dungeon_cbt_record_when_available() {
+        let dir = debug_game_dir();
+        let scene = DungeonScene::new(35).unwrap();
+        let record = synthetic_combat_arena_record();
+        let mut dungeon_cbt = Vec::new();
+        for _ in 0..DUNGEON_CBT_RECORDS {
+            dungeon_cbt.extend_from_slice(&record);
+        }
+        fs::write(dir.join(DUNGEON_CBT_FILE), dungeon_cbt).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0xf7;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.area = Area::Dungeon { scene, level: 0 };
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Moved
+        );
+
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xa7);
+        assert!(state.message.contains("loaded DUNGEON.CBT arena 23"));
+        assert!(state.message.contains("terrain[0,0]=0x00"));
+        assert!(state.message.contains("16 room source marker(s)"));
+        assert!(state.message.contains("1 absorbable-field marker(s)"));
+        assert!(state.message.contains("first source 0x30"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -472,6 +503,102 @@
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xa3);
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("slot 3"));
+    }
+
+    #[test]
+    fn doom_final_room_trigger_enters_endgame_without_room_rewrite() {
+        let scene = DungeonScene::new(40).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(
+            DOOM_FINAL_ROOM_LEVEL,
+            DOOM_FINAL_ROOM_X,
+            DOOM_FINAL_ROOM_Y,
+        )] = 0xf0 | DOOM_FINAL_ROOM_SLOT;
+        let mut state = dungeon_state(grid, DOOM_FINAL_ROOM_LEVEL, 4, DOOM_FINAL_ROOM_Y);
+        state.area = Area::Dungeon {
+            scene,
+            level: DOOM_FINAL_ROOM_LEVEL,
+        };
+
+        assert_eq!(state.step(Direction::East), MoveOutcome::EndgameEntered);
+
+        assert_eq!((state.player.x, state.player.y), (5, 7));
+        assert_eq!(
+            state.grid[dungeon_cell_index(
+                DOOM_FINAL_ROOM_LEVEL,
+                DOOM_FINAL_ROOM_X,
+                DOOM_FINAL_ROOM_Y,
+            )],
+            0xf0 | DOOM_FINAL_ROOM_SLOT
+        );
+        assert_eq!(state.turn, 0);
+        assert_eq!(
+            state.endgame,
+            Some(EndgameState::awaiting_first_confirmation())
+        );
+        assert!(state.message.contains("Lord British asks"));
+    }
+
+    #[test]
+    fn endgame_confirmation_gates_victory_on_final_answer_and_box_flag() {
+        let dir = debug_game_dir();
+        let mut missing_box = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        missing_box.enter_endgame();
+
+        assert_eq!(
+            handle_play_key_input(&mut missing_box, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(
+            missing_box.endgame,
+            Some(EndgameState::awaiting_final_confirmation(true))
+        );
+
+        assert_eq!(
+            handle_play_key_input(&mut missing_box, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(
+            missing_box
+                .endgame
+                .as_ref()
+                .and_then(|state| state.outcome),
+            Some(EndgameOutcome::MissingBoxOrRefused)
+        );
+        assert_eq!(missing_box.turn, 0);
+
+        let mut victory = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        victory.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 1;
+        victory.party_names = vec![*b"MARIA\0\0\0\0"];
+        victory.clock = GameClock::with_date(141, 5, 6, 12, 0).unwrap();
+        victory.enter_endgame();
+        victory.resolve_endgame_confirmation(false);
+        victory.resolve_endgame_confirmation(true);
+
+        let endgame = victory.endgame.as_ref().unwrap();
+        assert_eq!(endgame.first_confirmation, Some(false));
+        assert_eq!(endgame.final_confirmation, Some(true));
+        assert_eq!(endgame.outcome, Some(EndgameOutcome::Victory));
+        assert!(endgame.certificate.as_ref().unwrap().contains("MARIA"));
+        assert!(victory.message.contains("sixth day of the fifth month"));
+        assert!(victory.message.contains("one hundred forty-one"));
+        assert!(victory.message.contains("2 years, 1 month, 1 day"));
+        assert!(victory.message.contains("Report this completed quest to Origin"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn endgame_certificate_word_helpers_cover_calendar_range() {
+        assert_eq!(endgame_ordinal_word(1).as_deref(), Some("first"));
+        assert_eq!(endgame_ordinal_word(21).as_deref(), Some("twenty-first"));
+        assert_eq!(endgame_ordinal_word(28).as_deref(), Some("twenty-eighth"));
+        assert_eq!(endgame_ordinal_word(29), None);
+        assert_eq!(endgame_cardinal_word(139), "one hundred thirty-nine");
+        assert_eq!(endgame_cardinal_word(141), "one hundred forty-one");
+        assert_eq!(
+            endgame_cardinal_word(2026),
+            "two thousand twenty-six"
+        );
     }
 
     #[test]
@@ -505,15 +632,35 @@
     }
 
     #[test]
-    fn dungeon_movement_rejects_diagonals_and_bounds_without_turn() {
+    fn dungeon_movement_rejects_diagonals_and_wraps_bounds() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 0, 0);
 
         assert_eq!(state.step(Direction::NorthWest), MoveOutcome::Blocked);
         assert_eq!((state.player.x, state.player.y), (0, 0));
         assert_eq!(state.turn, 0);
 
-        assert_eq!(state.step(Direction::North), MoveOutcome::Blocked);
-        assert_eq!((state.player.x, state.player.y), (0, 0));
+        assert_eq!(state.step(Direction::North), MoveOutcome::Moved);
+        assert_eq!((state.player.x, state.player.y), (0, 7));
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("Moved North to (0, 7)"));
+    }
+
+    #[test]
+    fn dungeon_movement_blocks_active_monster_cell_without_turn() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xc0,
+            tile: 0xc0,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
+        assert_eq!((state.player.x, state.player.y), (1, 1));
         assert_eq!(state.turn, 0);
         assert_eq!(state.message, "Blocked!");
     }
@@ -619,9 +766,44 @@
     }
 
     #[test]
+    fn dungeon_attack_uses_forward_wrapped_probe_without_direction_prompt() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 0, 1);
+        state.player.facing = Direction::West;
+
+        assert!(state.handle_dungeon_key('A', Path::new("")).unwrap());
+
+        assert_eq!(state.turn, 0);
+        assert!(state.message.contains("Attacked forward at (7, 1)"));
+        assert!(state.message.contains("no target"));
+    }
+
+    #[test]
+    fn dungeon_attack_forward_monster_clears_active_object_and_consumes_turn() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.player.facing = Direction::East;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xc0,
+            tile: 0xc0,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert!(state.handle_dungeon_key('A', Path::new("")).unwrap());
+
+        assert_eq!(state.turn, 1);
+        assert!(state.active_objects[1].is_empty());
+        assert!(state.message.contains("Attacked dungeon monster tile 192"));
+        assert!(state.message.contains("dungeon combat resolution is pending"));
+    }
+
+    #[test]
     fn top_down_uppercase_command_letters_preempt_vi_movement() {
         for (key, expected) in [
-            ('A', "Attack is out of scope"),
+            ('A', "Attack where?"),
             ('C', "Cast what?"),
             ('D', "What?"),
             ('M', "Mix what?"),
@@ -749,6 +931,83 @@
     }
 
     #[test]
+    fn dungeon_post_turn_active_monster_greedy_steps_toward_party() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 3,
+            y: 1,
+            z: 0,
+            phase: 0x20,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(Path::new(""))).unwrap(),
+            MoveOutcome::Passed
+        );
+
+        let object = state.active_objects[1];
+        assert_eq!((object.x, object.y), (2, 1));
+        assert_eq!(object.phase, active_object_phase_from_direction(Direction::West, 0));
+        assert!(state.message.contains("Dungeon monster tile 192 moved West to (2, 1)"));
+    }
+
+    #[test]
+    fn dungeon_post_turn_active_monster_rejects_sleep_field_step() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x80;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 3,
+            y: 1,
+            z: 0,
+            phase: 0x20,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(Path::new(""))).unwrap(),
+            MoveOutcome::Passed
+        );
+
+        let object = state.active_objects[1];
+        assert_eq!((object.x, object.y), (3, 1));
+        assert!(!state.message.contains("Dungeon monster tile 192 moved"));
+    }
+
+    #[test]
+    fn dungeon_post_turn_active_monster_contact_faces_threat_and_consumes_monster() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.player.facing = Direction::North;
+        state.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: 0x20,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(Path::new(""))).unwrap(),
+            MoveOutcome::Used
+        );
+
+        assert_eq!(state.player.facing, Direction::East);
+        assert!(state.active_objects[1].is_empty());
+        assert!(state.message.contains("approaches from the East"));
+        assert!(state.message.contains("dungeon combat resolution is pending"));
+    }
+
+    #[test]
     fn dungeon_idle_tick_does_not_animate_top_down_active_objects() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.active_objects.push(ActiveObject {
@@ -861,9 +1120,9 @@
             ('C', "Cast what?"),
             ('M', "Mix what?"),
             ('N', "New order?"),
-            ('R', "Ready is out of scope"),
+            ('R', "Ready what?"),
             ('U', "Use what?"),
-            ('Y', "Yell is out of scope"),
+            ('Y', "Yell what?"),
             ('Z', "Z-stats:"),
         ] {
             assert!(state.handle_dungeon_key(key, Path::new("")).unwrap());

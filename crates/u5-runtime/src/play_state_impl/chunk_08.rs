@@ -15,8 +15,8 @@ impl PlayState {
             self.message = "Rest- how many hours? Use H plus a number in this harness.".to_string();
             return Ok(MoveOutcome::Blocked);
         };
-        if !(1..=24).contains(&hours) {
-            self.message = "Rest hours must be in 1..24.".to_string();
+        if !(1..=9).contains(&hours) {
+            self.message = "Rest hours must be in 1..9.".to_string();
             return Ok(MoveOutcome::Blocked);
         }
         let asleep_at_start = self
@@ -29,10 +29,13 @@ impl PlayState {
         let mut recovered_mana = 0;
         let mut world_damage_ticks = 0;
         let mut last_world_damage = None;
-        for _ in 0..hours {
+        let mut interrupted = false;
+        let mut rest_ticks = 0u64;
+        'resting: for _ in 0..hours {
             for _ in 0..REST_WATCH_TICKS_PER_HOUR {
                 self.advance_turn_with_minutes(REST_WATCH_MINUTES_PER_TICK);
-                let (hp, mana) = self.apply_rest_recovery_tick();
+                rest_ticks += 1;
+                let (hp, mana) = self.apply_rest_with_watch_recovery_tick();
                 recovered_hp += hp;
                 recovered_mana += mana;
                 if let (Some(game_dir), Area::World { plane }) = (game_dir, self.area) {
@@ -41,19 +44,215 @@ impl PlayState {
                         last_world_damage = Some(report);
                     }
                 }
+                if self.dangerous_rest_interrupted() {
+                    interrupted = true;
+                    break 'resting;
+                }
             }
         }
         let woke = self.wake_initial_rest_sleepers(&asleep_at_start);
+        let completed_hours = rest_ticks / u64::from(REST_WATCH_TICKS_PER_HOUR);
+        let completed_minutes = (rest_ticks % u64::from(REST_WATCH_TICKS_PER_HOUR))
+            * u64::from(REST_WATCH_MINUTES_PER_TICK);
+        let duration = if completed_minutes == 0 {
+            format!(
+                "{completed_hours} hour{}",
+                if completed_hours == 1 { "" } else { "s" }
+            )
+        } else {
+            format!(
+                "{completed_hours} hour{} {completed_minutes} minute{}",
+                if completed_hours == 1 { "" } else { "s" },
+                if completed_minutes == 1 { "" } else { "s" }
+            )
+        };
         self.message = format!(
-            "Party rested {hours} hour{}; recovered {recovered_hp} HP and {recovered_mana} MP; woke {woke} asleep member(s); ambush checks are out of scope.",
-            if hours == 1 { "" } else { "s" },
+            "Party rested {duration}; recovered {recovered_hp} HP and {recovered_mana} MP; woke {woke} asleep member(s).",
         );
+        if interrupted {
+            self.message.push_str(" Ambushed!");
+        }
         if let Some(report) = last_world_damage {
             self.message.push_str(&format!(
                 " Underfoot world damage triggered {world_damage_ticks} tick(s); last {report}."
             ));
         }
+        if !interrupted
+            && matches!(self.area, Area::World { .. })
+            && self.lord_british_camp_event_roll() < 25
+        {
+            let event_message = self.resolve_lord_british_camp_event(game_dir)?;
+            self.message.push(' ');
+            self.message.push_str(&event_message);
+        }
         Ok(MoveOutcome::Rested)
+    }
+
+    pub fn lord_british_camp_event_roll(&self) -> u8 {
+        let area = match self.area {
+            Area::World { plane } => plane.save_floor() as u8,
+            Area::Dungeon { scene, level } => scene.byte ^ level,
+            Area::Town { scene, floor } => scene.byte ^ floor as u8,
+        };
+        (self
+            .turn
+            .wrapping_add(u64::from(self.clock.hour) * 3)
+            .wrapping_add(u64::from(self.clock.minute) * 5)
+            .wrapping_add((self.player.x as u64) * 7)
+            .wrapping_add((self.player.y as u64) * 11)
+            .wrapping_add(u64::from(area))
+            % 100) as u8
+    }
+
+    pub fn resolve_lord_british_camp_event(
+        &mut self,
+        game_dir: Option<&Path>,
+    ) -> io::Result<String> {
+        self.normalize_party_progress_vectors();
+        let mut notes = vec!["Lord British-in-disguise camp event.".to_string()];
+        let mut level_changes = 0;
+        for index in 0..self.party.len() {
+            if !self.party[index].living() {
+                continue;
+            }
+            let experience = self.party_experience[index];
+            let level = recompute_level_from_experience(experience);
+            if self.party[index].level == level {
+                continue;
+            }
+            self.party[index].level = level;
+            let hp = u16::from(level) * 30;
+            self.party[index].hp = hp;
+            self.party[index].max_hp = hp;
+            let reward = self.apply_lord_british_camp_stat_reward(index);
+            self.refresh_party_member_class_mana(index);
+            level_changes += 1;
+            notes.push(format!(
+                "P{} reached level {level} from {experience} XP and received {reward}.",
+                index + 1
+            ));
+        }
+        if level_changes == 0 {
+            notes.push("No living party member was ready for a new level.".to_string());
+        }
+        notes.push(self.lord_british_camp_verdict_message(game_dir)?);
+        self.mark_visibility_dirty();
+        Ok(notes.join(" "))
+    }
+
+    pub fn normalize_party_progress_vectors(&mut self) {
+        let len = self.party.len();
+        self.party_names.resize(len, [0; SAVE_CHARACTER_NAME_LEN]);
+        self.party_experience.resize(len, 0);
+        self.party_stay_counters.resize(len, 0);
+        self.party_strengths.resize(len, self.avatar_stats.strength);
+        self.party_intelligence
+            .resize(len, self.avatar_stats.intelligence);
+        if len > 0 {
+            self.party_strengths[0] = self.avatar_stats.strength;
+            self.party_intelligence[0] = self.avatar_stats.intelligence;
+        }
+    }
+
+    pub fn apply_lord_british_camp_stat_reward(&mut self, member_index: usize) -> &'static str {
+        match self.lord_british_camp_stat_roll(member_index) {
+            1 => {
+                if member_index == 0 {
+                    self.avatar_stats.increase_strength();
+                    self.party_strengths[0] = self.avatar_stats.strength;
+                } else if let Some(strength) = self.party_strengths.get_mut(member_index) {
+                    increase_capped_stat(strength);
+                }
+                "Strength reward"
+            }
+            2 => {
+                if member_index == 0 {
+                    self.avatar_stats.increase_dexterity();
+                    if let Some(member) = self.party.get_mut(0) {
+                        member.climb_stat = self.avatar_stats.dexterity;
+                    }
+                } else if let Some(member) = self.party.get_mut(member_index) {
+                    increase_capped_stat(&mut member.climb_stat);
+                }
+                "Dexterity reward"
+            }
+            _ => {
+                if member_index == 0 {
+                    self.avatar_stats.increase_intelligence();
+                    self.party_intelligence[0] = self.avatar_stats.intelligence;
+                } else if let Some(intelligence) = self.party_intelligence.get_mut(member_index) {
+                    increase_capped_stat(intelligence);
+                }
+                "Intelligence reward"
+            }
+        }
+    }
+
+    pub fn lord_british_camp_stat_roll(&self, member_index: usize) -> u8 {
+        1 + ((self.turn as u8)
+            .wrapping_add((self.player.x as u8).wrapping_mul(5))
+            .wrapping_add((member_index as u8).wrapping_mul(17))
+            % 3)
+    }
+
+    pub fn refresh_party_member_class_mana(&mut self, member_index: usize) {
+        let Some(member) = self.party.get(member_index).copied() else {
+            return;
+        };
+        let intelligence = if member_index == 0 {
+            self.avatar_stats.intelligence
+        } else {
+            self.party_intelligence
+                .get(member_index)
+                .copied()
+                .unwrap_or(self.avatar_stats.intelligence)
+        };
+        if let Some(mana) = class_refreshed_mana(member.class_byte, intelligence) {
+            if let Some(member) = self.party.get_mut(member_index) {
+                member.mana = mana;
+            }
+        }
+    }
+
+    pub fn lord_british_camp_verdict_message(&self, game_dir: Option<&Path>) -> io::Result<String> {
+        let record_index = lord_british_camp_karma_record_index(self.moral_standing);
+        let Some(game_dir) = game_dir else {
+            return Ok(format!(
+                "KARMA.DAT verdict record {record_index} unavailable."
+            ));
+        };
+        let Some(records) = load_karma_records(game_dir)? else {
+            return Ok(format!(
+                "KARMA.DAT verdict record {record_index} unavailable."
+            ));
+        };
+        Ok(records
+            .get(record_index)
+            .map(|record| format!("Verdict: {record}"))
+            .unwrap_or_else(|| format!("KARMA.DAT verdict record {record_index} unavailable.")))
+    }
+
+    pub fn dangerous_rest_interrupted(&self) -> bool {
+        matches!(self.area, Area::World { .. } | Area::Dungeon { .. })
+            && self.dangerous_rest_interrupt_roll() == 0
+    }
+
+    pub fn dangerous_rest_interrupt_roll(&self) -> u8 {
+        self.dangerous_rest_interrupt_seed() % 64
+    }
+
+    pub fn dangerous_rest_interrupt_seed(&self) -> u8 {
+        let area = match self.area {
+            Area::World { plane } => plane.save_floor() as u8,
+            Area::Dungeon { scene, level } => scene.byte ^ level,
+            Area::Town { scene, floor } => scene.byte ^ floor as u8,
+        };
+        self.turn as u8
+            ^ self.clock.hour.wrapping_mul(3)
+            ^ self.clock.minute.wrapping_mul(5)
+            ^ (self.player.x as u8).wrapping_mul(7)
+            ^ (self.player.y as u8).wrapping_mul(11)
+            ^ area
     }
 
     pub fn apply_rest_recovery_tick(&mut self) -> (u16, u16) {
@@ -69,6 +268,47 @@ impl PlayState {
             recovered_mana += u16::from(self.party[index].recover_mana_by(mana_recovery));
         }
         (recovered_hp, recovered_mana)
+    }
+
+    pub fn apply_rest_with_watch_recovery_tick(&mut self) -> (u16, u16) {
+        let mut recovered_hp = 0;
+        let mut recovered_mana = 0;
+        for index in 0..self.party.len() {
+            if !matches!(self.party[index].status, b'G' | b'P' | b'S')
+                || !self.party[index].living()
+            {
+                continue;
+            }
+            if self.party[index].status != b'P' {
+                let hp_recovery = self.rest_hp_recovery_roll(index);
+                recovered_hp += self.party[index].heal_by(u16::from(hp_recovery));
+            }
+            let mana_recovery = self.rest_mana_recovery_roll(index);
+            recovered_mana += u16::from(self.party[index].recover_mana_by(mana_recovery));
+        }
+        (recovered_hp, recovered_mana)
+    }
+
+    pub fn mark_town_rest_sleepers(&mut self) -> usize {
+        let mut marked = 0;
+        for member in &mut self.party {
+            if member.status == b'G' && member.living() {
+                member.status = b'S';
+                marked += 1;
+            }
+        }
+        marked
+    }
+
+    pub fn wake_town_rest_sleepers(&mut self) -> usize {
+        let mut woke = 0;
+        for member in &mut self.party {
+            if member.status == b'S' && member.hp > 0 {
+                member.status = b'G';
+                woke += 1;
+            }
+        }
+        woke
     }
 
     pub fn rest_hp_recovery_roll(&self, member_index: usize) -> u8 {
@@ -101,8 +341,46 @@ impl PlayState {
 
     pub fn idle_tick(&mut self) -> MoveOutcome {
         self.advance_visual_tick();
-        self.message = "Idle animation tick.".to_string();
+        if let Some(wind) = self.idle_wind_drift() {
+            self.message = format!("Idle animation tick. {}", wind.status_message());
+        } else {
+            self.message = "Idle animation tick.".to_string();
+        }
         MoveOutcome::IdleTick
+    }
+
+    pub fn idle_wind_drift(&mut self) -> Option<WindState> {
+        if !matches!(self.area, Area::World { .. }) || self.idle_wind_roll(0) & 0x3f != 0 {
+            return None;
+        }
+        for attempt in 0..=u8::MAX {
+            let candidate = self.idle_wind_candidate(attempt);
+            if candidate != WindState::Calm || self.idle_wind_roll(attempt.wrapping_add(2)) >= 192 {
+                self.apply_wind_state(candidate);
+                return Some(candidate);
+            }
+        }
+        None
+    }
+
+    pub fn idle_wind_candidate(&self, attempt: u8) -> WindState {
+        match self.idle_wind_roll(attempt.wrapping_add(1)) % 5 {
+            0 => WindState::Calm,
+            1 => WindState::North,
+            2 => WindState::South,
+            3 => WindState::East,
+            _ => WindState::West,
+        }
+    }
+
+    pub fn idle_wind_roll(&self, attempt: u8) -> u8 {
+        self.turn as u8
+            ^ self.clock.hour.wrapping_mul(3)
+            ^ self.clock.minute.wrapping_mul(5)
+            ^ (self.player.x as u8).wrapping_mul(7)
+            ^ (self.player.y as u8).wrapping_mul(11)
+            ^ self.animation.frame.wrapping_mul(13)
+            ^ attempt.wrapping_mul(17)
     }
 
     pub fn ignite_torch(&mut self) -> MoveOutcome {
@@ -161,17 +439,23 @@ impl PlayState {
                 }
             }
             Area::Dungeon { level, .. } => {
-                match self.dungeon_cell(level, self.player.x, self.player.y) >> 4 {
-                    0x1 => self.climb(game_dir, ClimbIntent::Up),
-                    0x2 => self.climb(game_dir, ClimbIntent::Down),
-                    0x3 => {
-                        self.message =
-                            "Two-way ladder: use < or > to choose a climb direction.".to_string();
-                        Ok(MoveOutcome::Blocked)
-                    }
-                    _ => {
-                        self.message = "Not climbable!".to_string();
-                        Ok(MoveOutcome::Blocked)
+                let tile = self.dungeon_cell(level, self.player.x, self.player.y);
+                if tile == 0x60 {
+                    self.climb(game_dir, ClimbIntent::Up)
+                } else {
+                    match tile >> 4 {
+                        0x1 => self.climb(game_dir, ClimbIntent::Up),
+                        0x2 => self.climb(game_dir, ClimbIntent::Down),
+                        0x3 => {
+                            self.message =
+                                "Two-way ladder: use < or > to choose a climb direction."
+                                    .to_string();
+                            Ok(MoveOutcome::Blocked)
+                        }
+                        _ => {
+                            self.message = "Not climbable!".to_string();
+                            Ok(MoveOutcome::Blocked)
+                        }
                     }
                 }
             }
@@ -241,6 +525,15 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         };
         let next_floor = floor.saturating_add(delta);
+        self.change_town_floor(game_dir, scene, next_floor)
+    }
+
+    pub fn change_town_floor(
+        &mut self,
+        game_dir: &Path,
+        scene: Scene,
+        next_floor: i8,
+    ) -> io::Result<MoveOutcome> {
         let next_grid = match load_town_runtime_floor(game_dir, scene, next_floor, self.clock.hour)
         {
             Ok(grid) => grid,
@@ -267,66 +560,40 @@ impl PlayState {
         }))
     }
 
-    pub fn climb_dungeon(&mut self, game_dir: &Path, intent: ClimbIntent) -> io::Result<MoveOutcome> {
+    pub fn climb_dungeon(
+        &mut self,
+        game_dir: &Path,
+        intent: ClimbIntent,
+    ) -> io::Result<MoveOutcome> {
         let Area::Dungeon { scene, level } = self.area else {
             self.message = "Not climbable!".to_string();
             return Ok(MoveOutcome::Blocked);
         };
         let tile = self.dungeon_cell(level, self.player.x, self.player.y);
+        if tile == 0x60 {
+            return self.resolve_dungeon_surface_reset(
+                game_dir,
+                scene,
+                level,
+                format!("Exited {} ({})", scene.key(), scene.name()),
+            );
+        }
         let Some(delta) = dungeon_ladder_delta(tile, intent) else {
             self.message = "Not climbable!".to_string();
             return Ok(MoveOutcome::Blocked);
         };
         let next_level = level as i8 + delta;
-        if next_level < 0 {
-            if self.restore_return_world() {
-                self.advance_turn();
-                self.message = format!(
-                    "Exited {} ({}) to overworld debug return point.",
-                    scene.key(),
-                    scene.name()
-                );
-            } else if self.restore_world_for_target(game_dir, PlayTarget::Dungeon(scene))? {
-                self.advance_turn();
-                self.message = format!(
-                    "Exited {} ({}) to world-location table return point.",
-                    scene.key(),
-                    scene.name()
-                );
-            } else {
-                return Ok(self.block_missing_dungeon_return(
-                    scene,
-                    level,
-                    format!("Exited {} ({})", scene.key(), scene.name()),
-                ));
-            }
-            self.mark_visibility_dirty();
-            return Ok(MoveOutcome::Transition(AreaTransition::ExitedDungeon(
-                scene,
-            )));
-        }
-        if next_level > 7 {
-            if let Some(entry) = self.dungeon_deeper_transition_at(
-                game_dir,
-                scene,
-                level,
-                self.player.x,
-                self.player.y,
-            )? {
-                self.advance_turn();
-                self.apply_dungeon_deeper_transition(game_dir, entry)?;
-                return Ok(MoveOutcome::Transition(
-                    AreaTransition::ExitedDungeonToWorldPlane {
-                        scene,
-                        plane: entry.to_plane,
-                    },
-                ));
-            }
-            self.message = "No connected deeper level in this slice.".to_string();
+        if !(0..=7).contains(&next_level) {
+            self.message = "Blocked!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
 
         let next_level = next_level as u8;
+        let landing = self.dungeon_cell(next_level, self.player.x, self.player.y);
+        if !dungeon_climb_landing_allowed(landing) {
+            self.message = "Blocked!".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
         self.area = Area::Dungeon {
             scene,
             level: next_level,
@@ -345,6 +612,36 @@ impl PlayState {
                 level: next_level,
             },
         ))
+    }
+
+    pub fn resolve_dungeon_surface_reset(
+        &mut self,
+        game_dir: &Path,
+        scene: DungeonScene,
+        level: u8,
+        event: String,
+    ) -> io::Result<MoveOutcome> {
+        if self.restore_return_world() {
+            self.advance_turn();
+            self.message = format!(
+                "Exited {} ({}) to overworld debug return point.",
+                scene.key(),
+                scene.name()
+            );
+        } else if self.restore_world_for_target(game_dir, PlayTarget::Dungeon(scene))? {
+            self.advance_turn();
+            self.message = format!(
+                "Exited {} ({}) to world-location table return point.",
+                scene.key(),
+                scene.name()
+            );
+        } else {
+            return Ok(self.block_missing_dungeon_return(scene, level, event));
+        }
+        self.mark_visibility_dirty();
+        Ok(MoveOutcome::Transition(AreaTransition::ExitedDungeon(
+            scene,
+        )))
     }
 
     pub fn dungeon_deeper_transition_at(
@@ -535,6 +832,81 @@ impl PlayState {
         }
     }
 
+    pub fn set_cached_moon_glyph_slots(
+        &mut self,
+        trammel_slot: Option<usize>,
+        felucca_slot: Option<usize>,
+    ) {
+        self.cached_moon_glyph_slots = [
+            trammel_slot.filter(|slot| *slot < MOONSTONE_SLOT_COUNT),
+            felucca_slot.filter(|slot| *slot < MOONSTONE_SLOT_COUNT),
+        ];
+    }
+
+    pub fn resolve_natural_moongate_entry(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let Some(idx) = self.current_live_natural_moongate_cell_index() else {
+            return Ok(None);
+        };
+        if self.grid.get(idx).copied() != Some(NATURAL_MOONGATE_TERRAIN_TILE) {
+            return Ok(None);
+        }
+
+        self.grid[idx] = NATURAL_MOONGATE_RESTORED_TERRAIN_TILE;
+        self.mark_visibility_dirty();
+
+        if self.clock.hour == 0 && self.clock.minute < 10 {
+            self.message = "Natural moongate opened the shrine meditation path.".to_string();
+            return Ok(Some(MoveOutcome::Observed));
+        }
+
+        let Some(slot_index) = self.cached_natural_moongate_slot_index() else {
+            self.message = "Natural moongate moon-glyph cache is unavailable.".to_string();
+            return Ok(Some(MoveOutcome::Blocked));
+        };
+
+        let phase = slot_index + 1;
+        let slot = self.moonstone_slots[slot_index];
+        match gate_travel_destination(slot) {
+            GateTravelDestination::Ready {
+                target,
+                floor,
+                start,
+            } => {
+                self.apply_gate_travel(game_dir, phase, target, floor, start)?;
+                Ok(Some(MoveOutcome::Transition(
+                    AreaTransition::GateTraveled { target },
+                )))
+            }
+            GateTravelDestination::Empty => {
+                self.message = format!("Natural moongate phase {phase} is not set.");
+                Ok(Some(MoveOutcome::Blocked))
+            }
+            GateTravelDestination::Invalid(reason) => {
+                self.message = format!("Natural moongate phase {phase} is invalid: {reason}.");
+                Ok(Some(MoveOutcome::Blocked))
+            }
+        }
+    }
+
+    pub fn cached_natural_moongate_slot_index(&self) -> Option<usize> {
+        let moon = if self.clock.hour < 12 { 0 } else { 1 };
+        self.cached_moon_glyph_slots[moon].filter(|slot| *slot < MOONSTONE_SLOT_COUNT)
+    }
+
+    pub fn current_live_natural_moongate_cell_index(&self) -> Option<usize> {
+        let idx = match self.area {
+            Area::World { .. } => world_cell_index(self.player.x, self.player.y),
+            Area::Town { .. } if self.player.x < 32 && self.player.y < 32 => {
+                self.player.y * 32 + self.player.x
+            }
+            _ => return None,
+        };
+        (idx < self.grid.len()).then_some(idx)
+    }
+
     pub fn enter_world_target(
         &mut self,
         game_dir: &Path,
@@ -543,6 +915,14 @@ impl PlayState {
         town_entry_y: Option<usize>,
         debug: bool,
     ) -> io::Result<MoveOutcome> {
+        if !debug
+            && matches!(target, PlayTarget::Dungeon(scene) if scene.record == 7)
+            && !self.all_shadowlords_vanquished()
+        {
+            self.message = "Doom is sealed until all Shadowlords are vanquished.".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
+
         self.cache_current_world_overlay();
         let return_world = WorldReturn {
             plane,
@@ -554,6 +934,7 @@ impl PlayState {
             sail_stall_pending: self.sail_stall_pending,
             grid: self.grid.clone(),
             active_objects: self.active_objects.clone(),
+            pending_vehicle: None,
         };
         let mut options = PlayOptions {
             target,
@@ -565,13 +946,28 @@ impl PlayState {
             keys: self.keys,
             gems: self.gems,
             climbing_gear: self.climbing_gear,
+            special_items: self.special_items,
             party: self.party.clone(),
+            party_names: self.party_names.clone(),
+            party_experience: self.party_experience.clone(),
+            party_stay_counters: self.party_stay_counters.clone(),
+            party_strengths: self.party_strengths.clone(),
+            party_intelligence: self.party_intelligence.clone(),
+            party_equipment: self.party_equipment.clone(),
+            equipment_stock: self.equipment_stock,
             spell_charges: self.spell_charges,
+            scroll_stock: self.scroll_stock,
+            potion_stock: self.potion_stock,
             reagents: self.reagents,
+            rare_reagent_harvest_days: self.rare_reagent_harvest_days,
+            fixed_hidden_treasure_found: self.fixed_hidden_treasure_found,
+            fixed_hidden_treasure_daily_day: self.fixed_hidden_treasure_daily_day,
             moonstone_slots: self.moonstone_slots,
+            shadowlord_hideouts: self.shadowlord_hideouts,
             shrine_ordained_mask: self.shrine_ordained_mask,
             shrine_codex_mask: self.shrine_codex_mask,
             shrine_standing: self.shrine_standing,
+            moral_standing: self.moral_standing,
             avatar_stats: self.avatar_stats,
             torches: self.torches,
             torch_counter: self.torch_counter,
@@ -582,8 +978,12 @@ impl PlayState {
             time_stop_counter: self.time_stop_counter,
             active_effect_tag: self.active_effect_tag,
             active_effect_counter: self.active_effect_counter,
+            fortunes_of_war: self.fortunes_of_war,
+            active_player: self.active_player,
+            combat_round_counter: self.combat_round_counter,
             transport: TransportState::Foot,
             pending_vehicle: None,
+            inn_registry: self.inn_registry.clone(),
             initial_britannia_overlay: None,
             debug_enter: self.debug_enter,
             saved_active_objects: None,
@@ -650,6 +1050,7 @@ impl PlayState {
             }
             PlayTarget::World(_) => unreachable!(),
         };
+        next.append_stonegate_entry_presentation_message();
         *self = next;
         Ok(match target {
             PlayTarget::Town(scene) => {
@@ -677,6 +1078,13 @@ impl PlayState {
         self.grid = return_world.grid;
         self.npcs.clear();
         self.active_objects = return_world.active_objects;
+        if let Some(pending) = return_world.pending_vehicle {
+            if let Err(err) =
+                place_pending_vehicle_acquisition(&mut self.active_objects, plane, pending)
+            {
+                self.message = err.to_string();
+            }
+        }
         self.sync_player_object();
         self.cache_current_world_overlay();
         self.clear_open_town_door_state();
@@ -899,5 +1307,8 @@ impl PlayState {
             Ok(None)
         }
     }
+}
 
+fn dungeon_climb_landing_allowed(tile: u8) -> bool {
+    !matches!(tile >> 4, 0x0 | 0x0b..=0x0f)
 }

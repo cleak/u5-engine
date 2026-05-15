@@ -1,0 +1,201 @@
+//! Combat arena (`*.CBT`) record decoder.
+
+use std::fs;
+use std::io;
+use std::path::Path;
+
+pub const COMBAT_ARENA_SIDE: usize = 11;
+pub const COMBAT_ARENA_ROW_STRIDE: usize = 32;
+pub const COMBAT_ARENA_METADATA_START: usize = 11;
+pub const COMBAT_ARENA_METADATA_LEN: usize = COMBAT_ARENA_ROW_STRIDE - COMBAT_ARENA_METADATA_START;
+pub const COMBAT_ARENA_RECORD_LEN: usize = COMBAT_ARENA_SIDE * COMBAT_ARENA_ROW_STRIDE;
+pub const BRIT_CBT_RECORDS: usize = 16;
+pub const DUNGEON_CBT_RECORDS: usize = 112;
+pub const BRIT_CBT_FILE: &str = "BRIT.CBT";
+pub const DUNGEON_CBT_FILE: &str = "DUNGEON.CBT";
+pub const DUNGEON_ROOM_SOURCE_ROW: usize = 5;
+pub const DUNGEON_ROOM_SOURCE_COLUMN: usize = 11;
+pub const DUNGEON_ROOM_SOURCE_COUNT: usize = 16;
+pub const DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE: u8 = 0x3c;
+pub const DEFAULT_COMBAT_ARENA_TERRAIN: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] =
+    [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CombatArenaRecord {
+    rows: [[u8; COMBAT_ARENA_ROW_STRIDE]; COMBAT_ARENA_SIDE],
+}
+
+impl CombatArenaRecord {
+    pub fn from_record_bytes(bytes: &[u8]) -> io::Result<Self> {
+        if bytes.len() != COMBAT_ARENA_RECORD_LEN {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "combat arena record must be {COMBAT_ARENA_RECORD_LEN} bytes, got {}",
+                    bytes.len()
+                ),
+            ));
+        }
+        let mut rows = [[0u8; COMBAT_ARENA_ROW_STRIDE]; COMBAT_ARENA_SIDE];
+        for (row_index, row) in rows.iter_mut().enumerate() {
+            let start = row_index * COMBAT_ARENA_ROW_STRIDE;
+            row.copy_from_slice(&bytes[start..start + COMBAT_ARENA_ROW_STRIDE]);
+        }
+        Ok(Self { rows })
+    }
+
+    pub fn row(&self, y: usize) -> Option<&[u8; COMBAT_ARENA_ROW_STRIDE]> {
+        self.rows.get(y)
+    }
+
+    pub fn terrain(&self, x: usize, y: usize) -> Option<u8> {
+        if x >= COMBAT_ARENA_SIDE {
+            return None;
+        }
+        self.rows.get(y).map(|row| row[x])
+    }
+
+    pub fn terrain_grid(&self) -> [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] {
+        let mut terrain = DEFAULT_COMBAT_ARENA_TERRAIN;
+        for (y, terrain_row) in terrain.iter_mut().enumerate() {
+            terrain_row.copy_from_slice(&self.rows[y][..COMBAT_ARENA_SIDE]);
+        }
+        terrain
+    }
+
+    pub fn metadata(&self, row: usize, column: usize) -> Option<u8> {
+        if !(COMBAT_ARENA_METADATA_START..COMBAT_ARENA_ROW_STRIDE).contains(&column) {
+            return None;
+        }
+        self.rows.get(row).map(|arena_row| arena_row[column])
+    }
+
+    pub fn outdoor_setup_table_a(&self) -> [u8; 6] {
+        self.slice_from_row::<6>(3, 11)
+    }
+
+    pub fn outdoor_setup_table_b(&self) -> [u8; 6] {
+        self.slice_from_row::<6>(3, 17)
+    }
+
+    pub fn outdoor_placement_x(&self) -> [u8; 16] {
+        self.slice_from_row::<16>(6, 11)
+    }
+
+    pub fn outdoor_placement_y(&self) -> [u8; 16] {
+        self.slice_from_row::<16>(7, 11)
+    }
+
+    pub fn dungeon_room_sources(&self) -> [u8; 16] {
+        self.slice_from_row::<DUNGEON_ROOM_SOURCE_COUNT>(
+            DUNGEON_ROOM_SOURCE_ROW,
+            DUNGEON_ROOM_SOURCE_COLUMN,
+        )
+    }
+
+    pub fn dungeon_room_setup_sources(&self) -> Vec<DungeonRoomSetupSource> {
+        self.dungeon_room_sources()
+            .into_iter()
+            .enumerate()
+            .filter_map(|(slot, source)| DungeonRoomSetupSource::new(slot, source))
+            .collect()
+    }
+
+    fn slice_from_row<const N: usize>(&self, row: usize, start: usize) -> [u8; N] {
+        let mut out = [0u8; N];
+        out.copy_from_slice(&self.rows[row][start..start + N]);
+        out
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DungeonRoomSetupSource {
+    pub slot: usize,
+    pub source: u8,
+    pub kind: DungeonRoomSetupSourceKind,
+}
+
+impl DungeonRoomSetupSource {
+    pub fn new(slot: usize, source: u8) -> Option<Self> {
+        if source == 0 || slot >= DUNGEON_ROOM_SOURCE_COUNT {
+            return None;
+        }
+        Some(Self {
+            slot,
+            source,
+            kind: DungeonRoomSetupSourceKind::from_source(source),
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonRoomSetupSourceKind {
+    OrdinaryCombatant,
+    AbsorbableField,
+    SpecialPlacement,
+}
+
+impl DungeonRoomSetupSourceKind {
+    pub fn from_source(source: u8) -> Self {
+        if source == DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE {
+            Self::AbsorbableField
+        } else if (0x40..=0x7f).contains(&source) {
+            Self::OrdinaryCombatant
+        } else {
+            Self::SpecialPlacement
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CombatArenaBank {
+    pub resource_name: String,
+    pub records: Vec<CombatArenaRecord>,
+}
+
+impl CombatArenaBank {
+    pub fn record(&self, index: usize) -> Option<&CombatArenaRecord> {
+        self.records.get(index)
+    }
+}
+
+pub fn parse_combat_arena_bank(
+    resource_name: &str,
+    bytes: &[u8],
+    expected_records: usize,
+) -> io::Result<CombatArenaBank> {
+    let expected_len = expected_records * COMBAT_ARENA_RECORD_LEN;
+    if bytes.len() != expected_len {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{resource_name} must be {expected_len} bytes ({expected_records} records), got {}",
+                bytes.len()
+            ),
+        ));
+    }
+
+    let mut records = Vec::with_capacity(expected_records);
+    for chunk in bytes.chunks_exact(COMBAT_ARENA_RECORD_LEN) {
+        records.push(CombatArenaRecord::from_record_bytes(chunk)?);
+    }
+
+    Ok(CombatArenaBank {
+        resource_name: resource_name.to_string(),
+        records,
+    })
+}
+
+pub fn load_brit_cbt(game_dir: &Path) -> io::Result<CombatArenaBank> {
+    let path = game_dir.join(BRIT_CBT_FILE);
+    let bytes = fs::read(&path)
+        .map_err(|err| io::Error::new(err.kind(), format!("{}: {err}", path.display())))?;
+    parse_combat_arena_bank(BRIT_CBT_FILE, &bytes, BRIT_CBT_RECORDS)
+}
+
+pub fn load_dungeon_cbt(game_dir: &Path) -> io::Result<CombatArenaBank> {
+    let path = game_dir.join(DUNGEON_CBT_FILE);
+    let bytes = fs::read(&path)
+        .map_err(|err| io::Error::new(err.kind(), format!("{}: {err}", path.display())))?;
+    parse_combat_arena_bank(DUNGEON_CBT_FILE, &bytes, DUNGEON_CBT_RECORDS)
+}

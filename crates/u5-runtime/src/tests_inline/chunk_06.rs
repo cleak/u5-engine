@@ -115,6 +115,7 @@
         let mut grid = open_grid();
         grid[32 + 3] = 96;
         let mut state = test_state(grid, 0, 1);
+        state.moral_standing = 3;
         state.active_objects.push(ActiveObject {
             type_byte: 192,
             tile: 192,
@@ -131,9 +132,106 @@
         assert_eq!(state.grid[32 + 3], 96);
         assert!(state.active_objects[1].is_empty());
         assert!(state.object_at_current_floor(2, 1).is_none());
+        assert_eq!(state.moral_standing, 0);
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("object tile 192"));
+        assert!(state.message.contains("moral standing decreased by 3"));
+        assert!(!state.message.contains("out of scope"));
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn ship_broadside_depletes_target_aux1_without_destroying_low_result() {
+        let mut state = world_state(open_world_grid(), 0, 0);
+        state.player.facing = Direction::South;
+        state.player.transport = TransportState::Ship {
+            type_byte: 168,
+            tile: 168,
+            sails_hoisted: false,
+            hull: 100,
+            skiffs: 2,
+        };
+        let target = ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 1,
+            y: 0,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 80,
+            aux3: 0,
+        };
+        state.active_objects.push(target);
+        let damage = state.ship_broadside_damage_roll(Direction::East, 1, target);
+
+        assert_eq!(state.fire_ship_broadside(Some(Direction::East)), MoveOutcome::Fired);
+
+        assert!(!state.active_objects[1].is_empty());
+        assert_eq!(state.active_objects[1].aux1, 80 - damage);
+        assert_eq!(state.turn, 1);
+        assert!(state.visibility_dirty);
+        assert!(state.message.contains("durability now"));
+        assert!(!state.message.contains("out of scope"));
+    }
+
+    #[test]
+    fn ship_broadside_clears_target_when_aux1_subtraction_enters_high_bit_range() {
+        let mut state = world_state(open_world_grid(), 0, 0);
+        state.player.facing = Direction::South;
+        state.player.transport = TransportState::Ship {
+            type_byte: 168,
+            tile: 168,
+            sails_hoisted: false,
+            hull: 100,
+            skiffs: 2,
+        };
+        state.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 1,
+            y: 0,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(state.fire_ship_broadside(Some(Direction::East)), MoveOutcome::Fired);
+
+        assert!(state.active_objects[1].is_empty());
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("target destroyed"));
+        assert!(!state.message.contains("out of scope"));
+    }
+
+    #[test]
+    fn ship_broadside_skips_whirlpool_family_without_depletion() {
+        let mut state = world_state(open_world_grid(), 0, 0);
+        state.player.facing = Direction::South;
+        state.player.transport = TransportState::Ship {
+            type_byte: 168,
+            tile: 168,
+            sails_hoisted: false,
+            hull: 100,
+            skiffs: 2,
+        };
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xec,
+            tile: 0xec,
+            x: 1,
+            y: 0,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 7,
+            aux3: 0,
+        });
+
+        assert_eq!(state.fire_ship_broadside(Some(Direction::East)), MoveOutcome::Fired);
+
+        assert_eq!(state.active_objects[1].aux1, 7);
+        assert!(!state.active_objects[1].is_empty());
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("no target in range"));
     }
 
     #[test]
@@ -311,6 +409,71 @@
         assert!(state.visibility_dirty);
         assert!(state.message.contains("Got 1 keys"));
         assert!(state.message.contains("CASTLE:0 floor 0"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_get_table_food_uses_directional_rewrite_without_sidecar() {
+        let dir = debug_game_dir();
+        let mut grid = open_grid();
+        grid[32 + 2] = 0x9b;
+        grid[32 * 3 + 4] = 0x9c;
+        let mut state = test_state(grid, 2, 2);
+        state.player.facing = Direction::North;
+        state.food = 12;
+        state.moral_standing = 3;
+        state.visibility_dirty = false;
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+
+        assert_eq!(state.grid[32 + 2], 0x95);
+        assert_eq!(state.food, 13);
+        assert_eq!(state.moral_standing, 2);
+        assert_eq!(state.turn, 1);
+        assert!(state.visibility_dirty);
+        assert!(state.message.contains("Ate food from table tile 0x9B"));
+
+        state.player.x = 4;
+        state.player.y = 2;
+        state.player.facing = Direction::South;
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+
+        assert_eq!(state.grid[32 * 3 + 4], 0x9b);
+        assert_eq!(state.food, 14);
+        assert_eq!(state.moral_standing, 1);
+        assert_eq!(state.turn, 2);
+        assert!(state.message.contains("Ate food from table tile 0x9C"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_get_table_food_invalid_reach_refuses_without_mutation_or_turn() {
+        let dir = debug_game_dir();
+        let mut grid = open_grid();
+        grid[32 + 2] = 0x9b;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.food = 12;
+        state.moral_standing = 3;
+        state.visibility_dirty = false;
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.grid[32 + 2], 0x9b);
+        assert_eq!(state.food, 12);
+        assert_eq!(state.moral_standing, 3);
+        assert_eq!(state.turn, 0);
+        assert!(!state.visibility_dirty);
+        assert_eq!(state.message, "The plate cannot be reached.");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -649,6 +812,48 @@
     }
 
     #[test]
+    fn town_search_live_tile_fallback_reports_published_location_prefixes() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xa6;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+
+        assert_eq!(
+            state.search_facing_secret(&[], None),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Searched barrel; nothing found.");
+    }
+
+    #[test]
+    fn town_search_generic_find_marker_skips_moonstone_scan() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xdc;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.moonstone_slots[0] = MoonstoneGateSlot {
+            scene: 0x11,
+            x: 2,
+            y: 1,
+            z: 0,
+        };
+
+        assert_eq!(
+            state.search_facing_secret(&[], None),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.active_objects.len(), 1);
+        assert_eq!(
+            state.message,
+            "Searched a generic find marker; no Moonstone scan was attempted."
+        );
+    }
+
+    #[test]
     fn search_world_moonstone_surfaces_highest_matching_phase_and_get_invalidates_slot() {
         let dir = debug_game_dir();
         let mut state = britannia_state(open_world_grid(), 4, 5);
@@ -707,6 +912,240 @@
             state.message,
             "Recovered Moonstone phase 4; Gate Travel slot cleared."
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn search_world_rare_reagent_harvest_requires_midnight_and_daily_cookie() {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(open_world_grid(), 181, 54);
+        state.player.facing = Direction::East;
+        state.clock = GameClock::with_date(139, 4, 5, 0, 17).unwrap();
+        state.reagents[REAGENT_MANDRAKE] = 98;
+        state.visibility_dirty = false;
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.reagents[REAGENT_MANDRAKE], 99);
+        assert_eq!(state.rare_reagent_harvest_days[0], 5);
+        assert!(state.message.contains("sprigs of Mandrake Root"));
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.reagents[REAGENT_MANDRAKE], 99);
+        assert_eq!(state.message, "Nothing to search here.");
+
+        state.clock = GameClock::with_date(139, 4, 6, 1, 0).unwrap();
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.rare_reagent_harvest_days[0], 5);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn search_world_rare_reagent_harvest_uses_fixed_nightshade_point() {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(open_world_grid(), 44, 136);
+        state.player.facing = Direction::South;
+        state.clock = GameClock::with_date(139, 4, 5, 0, 0).unwrap();
+        state.reagents[REAGENT_NIGHTSHADE] = 0;
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+
+        assert!((2..=15).contains(&state.reagents[REAGENT_NIGHTSHADE]));
+        assert_eq!(state.rare_reagent_harvest_days[2], 5);
+        assert!(state.message.contains("sprigs of Nightshade"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn search_fixed_hidden_treasure_stages_pickup_and_get_grants_inventory() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 4, 8);
+        state.area = Area::Town {
+            scene: Scene::new(1).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.gems = 0;
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+
+        assert_eq!(state.turn, 1);
+        assert!(state.fixed_hidden_treasure_found(18));
+        assert_eq!(state.message, "Found gem.");
+        assert_eq!(
+            state.active_objects[1],
+            ActiveObject::fixed_hidden_treasure_pickup(18, 5, 8, 0)
+        );
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+
+        assert_eq!(state.gems, 1);
+        assert!(state.active_objects[1].is_empty());
+        assert!(state.message.contains("added 1 gems"));
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.turn, 2);
+        assert_eq!(state.message, "No secret door found.");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn fixed_hidden_treasure_table_covers_all_spec_records() {
+        assert_eq!(
+            PlayState::fixed_hidden_treasure_table_len(),
+            FIXED_HIDDEN_TREASURE_COUNT
+        );
+        assert!(PlayState::fixed_hidden_treasure_table_records_are_sequential());
+    }
+
+    #[test]
+    fn search_fixed_hidden_treasure_skips_found_duplicate_coordinates() {
+        let dir = debug_game_dir();
+        let mut state = world_state(open_world_grid(), 232, 233);
+        state.player.facing = Direction::East;
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert!(state.fixed_hidden_treasure_found(0));
+        assert_eq!(state.active_objects[1].fixed_hidden_treasure_record(), Some(0));
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+        assert_eq!(state.equipment_stock[15], 1);
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert!(state.fixed_hidden_treasure_found(1));
+        assert_eq!(state.active_objects[1].fixed_hidden_treasure_record(), Some(1));
+        assert_eq!(state.message, "Found weapon.");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn search_fixed_hidden_treasure_reaches_final_duplicate_record() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 11, 12);
+        state.area = Area::Town {
+            scene: Scene::new(17).unwrap(),
+            floor: 2,
+        };
+        state.player.facing = Direction::East;
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert!(state.fixed_hidden_treasure_found(111));
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+        assert_eq!(state.potion_stock[6], 1);
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert!(state.fixed_hidden_treasure_found(112));
+        assert_eq!(
+            state.active_objects[1].fixed_hidden_treasure_record(),
+            Some(112)
+        );
+        assert_eq!(state.message, "Found scroll.");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn search_fixed_hidden_daily_cache_resets_by_day_and_caps_keys() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 1, 2);
+        state.area = Area::Town {
+            scene: Scene::new(5).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.clock = GameClock::with_date(139, 4, 5, 12, 0).unwrap();
+        state.keys = 98;
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert_eq!(state.fixed_hidden_treasure_daily_day, 5);
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+        assert_eq!(state.keys, 99);
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.fixed_hidden_treasure_daily_day, 5);
+
+        state.clock = GameClock::with_date(139, 4, 6, 12, 0).unwrap();
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert_eq!(state.fixed_hidden_treasure_daily_day, 6);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn get_fixed_hidden_treasure_grants_equipment_stock() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 0, 15);
+        state.area = Area::Town {
+            scene: Scene::new(23).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+
+        assert_eq!(state.equipment_stock[47], 1);
+        assert!(state.message.contains("equipment id 47"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -796,6 +1235,140 @@
         assert_eq!(state.clock, GameClock::new(12, 4).unwrap());
         assert_eq!(state.message, "Gate Travel phase 3 -> BRITANNIA at (4, 5).");
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn natural_moongate_refresh_stamps_and_wanes_world_slots() {
+        let gate_idx = world_cell_index(6, 7);
+        let stale_idx = world_cell_index(9, 10);
+        let mut grid = open_world_grid();
+        grid[stale_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+        let mut state = britannia_state(grid, 4, 5);
+        state.clock = GameClock::new(20, 0).unwrap();
+        state.moonstone_slots[1] = MoonstoneGateSlot {
+            scene: 0,
+            x: 6,
+            y: 7,
+            z: WorldPlane::Britannia.save_floor() as u8,
+        };
+
+        assert!(state.refresh_natural_moongates());
+
+        assert_eq!(state.natural_moongate_counter, 1);
+        assert_eq!(state.grid[gate_idx], NATURAL_MOONGATE_TERRAIN_TILE);
+        assert_eq!(state.grid[stale_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert!(state.visibility_dirty);
+
+        state.visibility_dirty = false;
+        state.clock = GameClock::new(12, 0).unwrap();
+
+        assert!(state.refresh_natural_moongates());
+
+        assert_eq!(state.natural_moongate_counter, 0);
+        assert_eq!(state.grid[gate_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert!(state.visibility_dirty);
+    }
+
+    #[test]
+    fn natural_moongate_refresh_stamps_town_slots_on_matching_floor() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.clock = GameClock::new(23, 0).unwrap();
+        state.moonstone_slots[0] = MoonstoneGateSlot {
+            scene: 0x11,
+            x: 2,
+            y: 1,
+            z: 0,
+        };
+        state.moonstone_slots[1] = MoonstoneGateSlot {
+            scene: 0x11,
+            x: 3,
+            y: 1,
+            z: 1,
+        };
+
+        assert!(state.refresh_natural_moongates());
+
+        assert_eq!(state.grid[1 * 32 + 2], NATURAL_MOONGATE_TERRAIN_TILE);
+        assert_eq!(state.grid[1 * 32 + 3], 16);
+        assert_eq!(state.natural_moongate_counter, 1);
+    }
+
+    #[test]
+    fn natural_moongate_entry_uses_cached_moon_slot_without_spending_turn() {
+        let dir = debug_game_dir();
+        let origin_idx = world_cell_index(5, 5);
+        let mut grid = open_world_grid();
+        grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+        let mut state = britannia_state(grid, 5, 5);
+        state.clock = GameClock::new(11, 58).unwrap();
+        state.set_cached_moon_glyph_slots(Some(1), None);
+        state.moonstone_slots[1] = MoonstoneGateSlot {
+            scene: 0,
+            x: 6,
+            y: 7,
+            z: WorldPlane::Britannia.save_floor() as u8,
+        };
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Britannia
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (6, 7));
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::new(11, 58).unwrap());
+        assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert_eq!(state.message, "Gate Travel phase 2 -> BRITANNIA at (6, 7).");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn natural_moongate_entry_clears_tile_and_reports_missing_glyph_cache() {
+        let origin_idx = world_cell_index(5, 5);
+        let mut grid = open_world_grid();
+        grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+        let mut state = britannia_state(grid, 5, 5);
+        state.clock = GameClock::new(11, 58).unwrap();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'q', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!((state.player.x, state.player.y), (5, 5));
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert!(state.visibility_dirty);
+        assert_eq!(
+            state.message,
+            "Natural moongate moon-glyph cache is unavailable."
+        );
+    }
+
+    #[test]
+    fn natural_moongate_midnight_window_clears_tile_without_glyph_cache() {
+        let origin_idx = world_cell_index(5, 5);
+        let mut grid = open_world_grid();
+        grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+        let mut state = britannia_state(grid, 5, 5);
+        state.clock = GameClock::new(0, 9).unwrap();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'q', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert_eq!(
+            state.message,
+            "Natural moongate opened the shrine meditation path."
+        );
     }
 
     #[test]

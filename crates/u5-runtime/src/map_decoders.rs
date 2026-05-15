@@ -289,7 +289,10 @@ pub fn neighbors(x: usize, y: usize) -> impl Iterator<Item = (usize, usize)> {
     out.into_iter()
 }
 
-pub fn first_walkable(grid: &[u8], passability: Option<&TilePassability>) -> Option<(usize, usize)> {
+pub fn first_walkable(
+    grid: &[u8],
+    passability: Option<&TilePassability>,
+) -> Option<(usize, usize)> {
     grid.iter()
         .position(|tile| is_tile_walkable(*tile, passability))
         .map(|idx| (idx % 32, idx / 32))

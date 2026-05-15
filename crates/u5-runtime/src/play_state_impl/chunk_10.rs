@@ -124,7 +124,10 @@ impl PlayState {
         out
     }
 
-    pub fn vehicle_exit_landing(&self, game_dir: Option<&Path>) -> io::Result<Option<(usize, usize)>> {
+    pub fn vehicle_exit_landing(
+        &self,
+        game_dir: Option<&Path>,
+    ) -> io::Result<Option<(usize, usize)>> {
         for direction in [
             Direction::East,
             Direction::South,
@@ -238,11 +241,21 @@ impl PlayState {
         }
     }
 
-    pub fn object_at_current_floor(&self, x: usize, y: usize) -> Option<&ActiveObject> {
+    pub fn object_slot_at_current_floor(
+        &self,
+        x: usize,
+        y: usize,
+    ) -> Option<(usize, &ActiveObject)> {
         self.active_objects
             .iter()
+            .enumerate()
             .skip(1)
-            .find(|object| self.object_occupies(**object, x, y))
+            .find(|(_, object)| self.object_occupies(**object, x, y))
+    }
+
+    pub fn object_at_current_floor(&self, x: usize, y: usize) -> Option<&ActiveObject> {
+        self.object_slot_at_current_floor(x, y)
+            .map(|(_, object)| object)
     }
 
     pub fn object_occupies(&self, object: ActiveObject, x: usize, y: usize) -> bool {
@@ -262,7 +275,11 @@ impl PlayState {
         self.object_at_current_floor(x, y)
     }
 
-    pub fn sight_blocking_object_at_current_floor(&self, x: usize, y: usize) -> Option<&ActiveObject> {
+    pub fn sight_blocking_object_at_current_floor(
+        &self,
+        x: usize,
+        y: usize,
+    ) -> Option<&ActiveObject> {
         self.active_objects.iter().skip(1).find(|object| {
             self.object_occupies(**object, x, y) && surface_tile_blocks_sight(object.tile)
         })
@@ -280,30 +297,57 @@ impl PlayState {
     }
 
     pub fn world_object_at(&self, x: usize, y: usize) -> Option<&ActiveObject> {
+        self.world_object_slot_at(x, y).map(|(_, object)| object)
+    }
+
+    pub fn world_object_slot_at(&self, x: usize, y: usize) -> Option<(usize, &ActiveObject)> {
         if !matches!(self.area, Area::World { .. }) {
             return None;
         }
-        self.object_at_current_floor(x, y)
+        self.object_slot_at_current_floor(x, y)
     }
 
     pub fn load_scheduled_npcs(&mut self, slots: &[NpcSlot]) {
+        let removed = self.removed_town_npc_markers_for_current_scene();
         self.npcs = slots
             .iter()
             .skip(1)
-            .filter(|slot| slot.type_byte != 0)
+            .filter(|slot| slot.type_byte != 0 && !removed.contains(&slot.slot))
             .map(|slot| RuntimeNpc::from_slot(slot, self.clock.hour))
             .collect();
         self.relink_npc_objects();
     }
 
     pub fn load_scheduled_npcs_from_existing_active_objects(&mut self, slots: &[NpcSlot]) {
+        let removed = self.removed_town_npc_markers_for_current_scene();
         self.npcs = slots
             .iter()
             .skip(1)
-            .filter(|slot| slot.type_byte != 0)
+            .filter(|slot| slot.type_byte != 0 && !removed.contains(&slot.slot))
             .map(|slot| RuntimeNpc::from_slot(slot, self.clock.hour))
             .collect();
         self.link_npcs_to_existing_active_objects();
+    }
+
+    pub fn removed_town_npc_markers_for_current_scene(&self) -> Vec<usize> {
+        let Area::Town { scene, floor } = self.area else {
+            return Vec::new();
+        };
+        self.removed_town_npcs
+            .iter()
+            .filter_map(|(entry_scene, entry_floor, slot)| {
+                (*entry_scene == scene.byte && *entry_floor == floor).then_some(*slot)
+            })
+            .collect()
+    }
+
+    pub fn mark_removed_town_npc_once(&mut self, scene: Scene, floor: i8, slot: usize) -> bool {
+        let marker = (scene.byte, floor, slot);
+        if self.removed_town_npcs.contains(&marker) {
+            return false;
+        }
+        self.removed_town_npcs.push(marker);
+        true
     }
 
     pub fn attach_player_phantom_npc(&mut self) {
@@ -545,5 +589,4 @@ impl PlayState {
         }
         None
     }
-
 }

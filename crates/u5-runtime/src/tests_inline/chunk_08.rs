@@ -55,6 +55,7 @@
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: 30,
                 mana: 8,
@@ -64,6 +65,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'D',
                 climb_stat: 30,
                 mana: 8,
@@ -102,6 +104,7 @@
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: 30,
                 mana: 8,
@@ -111,6 +114,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'D',
                 climb_stat: 30,
                 mana: 8,
@@ -148,6 +152,7 @@
         let mut state = britannia_state(vec![1; WORLD_CELLS], 1, 0);
         state.party = vec![PartyMember {
             slot: 0,
+            class_byte: b'A',
             status: b'G',
             climb_stat: 30,
             mana: 8,
@@ -757,6 +762,7 @@
         state.torches = 1;
         state.party = vec![PartyMember {
             slot: 0,
+            class_byte: b'A',
             status: b'G',
             climb_stat: DEFAULT_CLIMB_STAT,
             mana: 0,

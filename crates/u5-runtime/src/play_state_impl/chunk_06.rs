@@ -6,7 +6,11 @@ use std::path::{Path, PathBuf};
 use crate::*;
 
 impl PlayState {
-    pub fn climb_outdoors(&mut self, game_dir: &Path, plane: WorldPlane) -> io::Result<MoveOutcome> {
+    pub fn climb_outdoors(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+    ) -> io::Result<MoveOutcome> {
         if self.climbing_gear == 0 {
             self.message = "With what?".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -129,7 +133,7 @@ impl PlayState {
         let Some(wind_direction) = self.wind.direction() else {
             self.sail_cadence = 0;
             self.sail_stall_pending = true;
-            self.advance_turn();
+            self.advance_sailing_wait_turn();
             self.message = "Sails hang slack in calm wind.".to_string();
             return Some(MoveOutcome::SailStalled);
         };
@@ -149,7 +153,7 @@ impl PlayState {
             self.sail_cadence = 0;
         }
 
-        self.advance_turn();
+        self.advance_sailing_wait_turn();
         self.sail_stall_pending = true;
         self.message = format!(
             "Sails stalled by {} wind while heading {}.",
@@ -189,7 +193,10 @@ impl PlayState {
             .expect("open without a game dir cannot load sidecar metadata")
     }
 
-    pub fn open_facing_with_game_dir(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
+    pub fn open_facing_with_game_dir(
+        &mut self,
+        game_dir: Option<&Path>,
+    ) -> io::Result<MoveOutcome> {
         let (scene, floor) = match self.area {
             Area::Town { scene, floor } => (scene, floor),
             Area::Dungeon { scene, level } => {
@@ -256,13 +263,8 @@ impl PlayState {
     ) -> io::Result<MoveOutcome> {
         let idx = dungeon_cell_index(level, self.player.x, self.player.y);
         let tile = self.grid[idx];
-        let chest_entries = game_dir
-            .map(load_dungeon_chest_content_entries)
-            .transpose()?
-            .flatten();
         match tile >> 4 {
-            0x4 => Ok(self.consume_dungeon_chest(
-                chest_entries.as_deref(),
+            0x4 => Ok(self.open_dungeon_chest(
                 scene,
                 level,
                 self.player.x,
@@ -271,6 +273,11 @@ impl PlayState {
                 tile,
                 "Opened",
             )),
+            0x7 => {
+                self.advance_turn();
+                self.message = "It's open!".to_string();
+                Ok(MoveOutcome::ContainerOpened)
+            }
             0xF => {
                 let Some(entry) = self.dungeon_door_entry_at(
                     game_dir,
@@ -280,9 +287,7 @@ impl PlayState {
                     self.player.y,
                 )?
                 else {
-                    self.message =
-                        "Dungeon heavy-door and room-trigger subtypes are still open in the public spec for this slice."
-                            .to_string();
+                    self.message = "Nothing to open here.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
                 if entry.open_cell == tile {
@@ -310,18 +315,28 @@ impl PlayState {
 
     #[cfg(test)]
     pub fn jimmy_facing(&mut self) -> MoveOutcome {
-        self.jimmy_facing_with_game_dir(None)
+        self.jimmy_facing_with_game_dir_and_member(None, Some(0))
             .expect("jimmy without a game dir cannot load sidecar metadata")
     }
 
-    pub fn jimmy_facing_with_game_dir(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
-        if self.keys == 0 {
-            self.message = "No keys!".to_string();
+    pub fn jimmy_facing_with_game_dir(
+        &mut self,
+        game_dir: Option<&Path>,
+    ) -> io::Result<MoveOutcome> {
+        self.jimmy_facing_with_game_dir_and_member(game_dir, Some(0))
+    }
+
+    pub fn use_skull_key(&mut self, game_dir: Option<&Path>) -> io::Result<MoveOutcome> {
+        if self.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX] == 0 {
+            self.message = "No Skull Keys!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
         match self.area {
-            Area::Town { scene, floor } => self.jimmy_town_facing(game_dir, scene, floor),
-            Area::Dungeon { scene, level } => self.jimmy_dungeon_underfoot(game_dir, scene, level),
+            Area::Town { scene, floor } => self.use_skull_key_town_facing(game_dir, scene, floor),
+            Area::Dungeon { .. } => {
+                self.message = "Not here!".to_string();
+                Ok(MoveOutcome::Blocked)
+            }
             Area::World { .. } => {
                 self.message = "No lock!".to_string();
                 Ok(MoveOutcome::Blocked)
@@ -329,7 +344,7 @@ impl PlayState {
         }
     }
 
-    pub fn jimmy_town_facing(
+    pub fn use_skull_key_town_facing(
         &mut self,
         game_dir: Option<&Path>,
         scene: Scene,
@@ -342,15 +357,113 @@ impl PlayState {
             self.message = "No lock!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
+
+        self.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX] =
+            self.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX].saturating_sub(1);
         let tx = tx as usize;
         let ty = ty as usize;
-        if let Some(object) = self.blocking_object_at(tx, ty).copied() {
+        if self.blocking_object_at(tx, ty).is_some() {
             self.advance_turn();
-            self.message = format!(
-                "Jimmy checked NPC/object tile {} at ({tx}, {ty}); pickpocket rewards are out of scope in this slice.",
-                object.tile
-            );
+            self.message = "No lock!".to_string();
             return Ok(MoveOutcome::LockTried);
+        }
+
+        let idx = ty * 32 + tx;
+        let tile = self.grid[idx];
+        if (96..=103).contains(&tile) && self.is_revealed_town_secret_door(scene, floor, tx, ty) {
+            self.advance_turn();
+            self.message = "No lock!".to_string();
+            return Ok(MoveOutcome::LockTried);
+        }
+        if let Some(entry) = self.town_lock_at(game_dir, scene, floor, tx, ty, tile)? {
+            if entry.kind == TownLockKind::Magic {
+                self.advance_turn();
+                self.message = "Magic lock!".to_string();
+                return Ok(MoveOutcome::LockTried);
+            }
+            self.grid[idx] = entry.unlocked_tile;
+            self.mark_visibility_dirty();
+            self.advance_turn();
+            self.message = "Unlocked!".to_string();
+            return Ok(MoveOutcome::LockTried);
+        }
+        if let Some(unlocked_tile) = Self::visible_jimmy_unlock_tile(tile) {
+            self.grid[idx] = unlocked_tile;
+            self.mark_visibility_dirty();
+            self.advance_turn();
+            self.message = "Unlocked!".to_string();
+            return Ok(MoveOutcome::LockTried);
+        }
+
+        self.advance_turn();
+        self.message = "No lock!".to_string();
+        Ok(MoveOutcome::LockTried)
+    }
+
+    pub fn jimmy_facing_with_game_dir_and_member(
+        &mut self,
+        game_dir: Option<&Path>,
+        member_index: Option<usize>,
+    ) -> io::Result<MoveOutcome> {
+        if let Area::Dungeon { scene, level } = self.area {
+            let Some(member_index) = self.resolve_jimmy_member_index(member_index) else {
+                return Ok(MoveOutcome::PromptDeclined);
+            };
+            return self.jimmy_dungeon_underfoot(game_dir, scene, level, member_index);
+        }
+        if self.keys == 0 {
+            self.message = "No keys!".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
+        let Some(member_index) = self.resolve_jimmy_member_index(member_index) else {
+            return Ok(MoveOutcome::PromptDeclined);
+        };
+        match self.area {
+            Area::Town { scene, floor } => {
+                self.jimmy_town_facing(game_dir, scene, floor, member_index)
+            }
+            Area::World { .. } => {
+                self.message = "No lock!".to_string();
+                Ok(MoveOutcome::Blocked)
+            }
+            Area::Dungeon { .. } => unreachable!("dungeon Jimmy returns before key preflight"),
+        }
+    }
+
+    pub fn resolve_jimmy_member_index(&mut self, member_index: Option<usize>) -> Option<usize> {
+        let Some(member_index) = member_index else {
+            self.message = "Who picks? Use J<party>.".to_string();
+            return None;
+        };
+        if !self
+            .party
+            .get(member_index)
+            .is_some_and(|member| member.conscious())
+        {
+            self.message = party_member_unavailable_message(member_index);
+            return None;
+        }
+        Some(member_index)
+    }
+
+    pub fn jimmy_town_facing(
+        &mut self,
+        game_dir: Option<&Path>,
+        scene: Scene,
+        floor: i8,
+        member_index: usize,
+    ) -> io::Result<MoveOutcome> {
+        let (dx, dy) = self.player.facing.delta();
+        let tx = self.player.x as isize + dx;
+        let ty = self.player.y as isize + dy;
+        if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
+            self.message = "No lock!".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
+        let tx = tx as usize;
+        let ty = ty as usize;
+        if self.blocking_object_at(tx, ty).is_some() {
+            return self.jimmy_town_pickpocket(game_dir, scene, floor, tx, ty, member_index);
         }
         let idx = ty * 32 + tx;
         let tile = self.grid[idx];
@@ -364,21 +477,115 @@ impl PlayState {
                 self.message = "Magic lock!".to_string();
                 return Ok(MoveOutcome::Blocked);
             }
+            if !self.jimmy_lock_pick_succeeds(member_index) {
+                self.keys = self.keys.saturating_sub(1);
+                self.advance_turn();
+                self.message = "Key broke!".to_string();
+                return Ok(MoveOutcome::LockTried);
+            }
             self.grid[idx] = entry.unlocked_tile;
             self.mark_visibility_dirty();
             self.advance_turn();
             self.message = "Unlocked!".to_string();
             return Ok(MoveOutcome::LockTried);
         }
-        if (96..=103).contains(&tile) {
+        if let Some(unlocked_tile) = Self::visible_jimmy_unlock_tile(tile) {
+            if !self.jimmy_lock_pick_succeeds(member_index) {
+                self.keys = self.keys.saturating_sub(1);
+                self.advance_turn();
+                self.message = "Key broke!".to_string();
+                return Ok(MoveOutcome::LockTried);
+            }
+            self.grid[idx] = unlocked_tile;
+            self.mark_visibility_dirty();
             self.advance_turn();
-            self.message = format!(
-                "Jimmy checked door tile {tile} at ({tx}, {ty}); lock-state table and pick roll are out of scope in this slice."
-            );
+            self.message = "Unlocked!".to_string();
             return Ok(MoveOutcome::LockTried);
         }
         self.message = "No lock!".to_string();
         Ok(MoveOutcome::Blocked)
+    }
+
+    fn jimmy_town_pickpocket(
+        &mut self,
+        game_dir: Option<&Path>,
+        scene: Scene,
+        floor: i8,
+        tx: usize,
+        ty: usize,
+        member_index: usize,
+    ) -> io::Result<MoveOutcome> {
+        let Some((slot, dialog_id)) = self.npc_pickpocket_target(floor, tx, ty) else {
+            self.message = "No one is there!".to_string();
+            return Ok(MoveOutcome::Blocked);
+        };
+        if !self.jimmy_lock_pick_succeeds(member_index) {
+            self.keys = self.keys.saturating_sub(1);
+            self.advance_turn();
+            self.message = "Key broke!".to_string();
+            return Ok(MoveOutcome::LockTried);
+        }
+
+        if self.mark_npc_pickpocketed_once(scene, floor, slot) {
+            self.add_moral_standing(2);
+        }
+        self.advance_turn();
+        self.message = self.npc_pickpocket_thanks_line(game_dir, scene, dialog_id)?;
+        Ok(MoveOutcome::LockTried)
+    }
+
+    fn npc_pickpocket_target(&self, floor: i8, tx: usize, ty: usize) -> Option<(usize, u8)> {
+        if floor < 0 {
+            return None;
+        }
+        let floor = floor as u8;
+        self.npcs
+            .iter()
+            .find(|npc| !npc.is_player_phantom() && npc.x == tx && npc.y == ty && npc.z == floor)
+            .map(|npc| (npc.slot, npc.dialog_id))
+    }
+
+    fn mark_npc_pickpocketed_once(&mut self, scene: Scene, floor: i8, slot: usize) -> bool {
+        let marker = (scene.byte, floor, slot);
+        if self.pickpocketed_npcs.contains(&marker) {
+            return false;
+        }
+        self.pickpocketed_npcs.push(marker);
+        true
+    }
+
+    pub fn add_moral_standing(&mut self, amount: u8) -> u8 {
+        let before = self.moral_standing;
+        self.moral_standing = self
+            .moral_standing
+            .saturating_add(amount)
+            .min(MORAL_STANDING_MAX);
+        self.moral_standing - before
+    }
+
+    fn npc_pickpocket_thanks_line(
+        &self,
+        game_dir: Option<&Path>,
+        scene: Scene,
+        dialog_id: u8,
+    ) -> io::Result<String> {
+        if dialog_id <= 1 {
+            return Ok("Thanks!".to_string());
+        }
+        let Some(game_dir) = game_dir else {
+            return Ok("Thanks!".to_string());
+        };
+        let dialogue_path = game_dir.join(format!("{}.TLK", scene.family.stem()));
+        if !dialogue_path.exists() {
+            return Ok("Thanks!".to_string());
+        }
+        let dialogue = parse_tlk(&dialogue_path)?;
+        Ok(dialogue
+            .get(&(dialog_id as u16))
+            .and_then(|fields| fields.get(4))
+            .filter(|line| !line.is_empty())
+            .cloned()
+            .unwrap_or_else(|| "Thanks!".to_string()))
     }
 
     pub fn jimmy_dungeon_underfoot(
@@ -386,18 +593,47 @@ impl PlayState {
         game_dir: Option<&Path>,
         scene: DungeonScene,
         level: u8,
+        member_index: usize,
     ) -> io::Result<MoveOutcome> {
         let idx = dungeon_cell_index(level, self.player.x, self.player.y);
         let tile = self.grid[idx];
         Ok(match tile >> 4 {
             0x4 => {
+                if self.keys == 0 {
+                    self.message = "No keys!".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                }
+                if Self::is_plain_closed_dungeon_chest(tile) {
+                    self.keys = self.keys.saturating_sub(1);
+                    self.advance_turn();
+                    self.message = "Key broke!".to_string();
+                    return Ok(MoveOutcome::LockTried);
+                }
+
+                let class_byte = self
+                    .party
+                    .get(member_index)
+                    .map(|member| member.class_byte)
+                    .unwrap_or_default();
+                let threshold = Self::dungeon_chest_pick_threshold(level, class_byte);
+                let roll =
+                    self.dungeon_chest_trap_roll(level, self.player.x, self.player.y, tile, 0, 30);
+                if roll > threshold {
+                    self.keys = self.keys.saturating_sub(1);
+                    self.advance_turn();
+                    self.message = "Key broke!".to_string();
+                    return Ok(MoveOutcome::LockTried);
+                }
+
+                self.grid[idx] = 0x70 | (tile & 0x0f);
+                self.mark_visibility_dirty();
                 self.advance_turn();
-                self.message = format!(
-                    "Jimmy checked dungeon chest at ({}, {}) on {} level {level}; key break and content rolls are out of scope in this slice.",
-                    self.player.x,
-                    self.player.y,
-                    scene.key()
-                );
+                self.message = "Unlocked!".to_string();
+                MoveOutcome::LockTried
+            }
+            0x7 => {
+                self.advance_turn();
+                self.message = "It's open!".to_string();
                 MoveOutcome::LockTried
             }
             0xF => {
@@ -409,24 +645,28 @@ impl PlayState {
                     self.player.y,
                 )?
                 else {
-                    self.advance_turn();
-                    self.message = format!(
-                        "Jimmy checked dungeon door at ({}, {}) on {} level {level}; lock-state low-nibble and pick roll are out of scope in this slice.",
-                        self.player.x,
-                        self.player.y,
-                        scene.key()
-                    );
-                    return Ok(MoveOutcome::LockTried);
+                    self.message = "No lock!".to_string();
+                    return Ok(MoveOutcome::Blocked);
                 };
                 if entry.open_cell == tile {
                     self.advance_turn();
                     self.message = "It's open!".to_string();
                     return Ok(MoveOutcome::LockTried);
                 }
+                if self.keys == 0 {
+                    self.message = "No keys!".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                }
                 if !dungeon_closed_door_matches(entry, tile) {
                     self.message =
                         "Dungeon door sidecar did not match the current cell byte.".to_string();
                     return Ok(MoveOutcome::Blocked);
+                }
+                if !self.jimmy_lock_pick_succeeds(member_index) {
+                    self.keys = self.keys.saturating_sub(1);
+                    self.advance_turn();
+                    self.message = "Key broke!".to_string();
+                    return Ok(MoveOutcome::LockTried);
                 }
                 self.grid[idx] = entry.open_cell;
                 self.mark_visibility_dirty();
@@ -439,6 +679,36 @@ impl PlayState {
                 MoveOutcome::Blocked
             }
         })
+    }
+
+    pub fn jimmy_lock_pick_succeeds(&self, member_index: usize) -> bool {
+        let class_byte = self
+            .party
+            .get(member_index)
+            .map(|member| member.class_byte)
+            .unwrap_or_default();
+        class_byte > self.jimmy_lock_pick_roll(member_index)
+    }
+
+    pub fn jimmy_lock_pick_roll(&self, member_index: usize) -> u8 {
+        1 + (self.jimmy_lock_pick_seed(member_index) % 29)
+    }
+
+    pub fn jimmy_lock_pick_seed(&self, member_index: usize) -> u8 {
+        self.turn as u8
+            ^ self.clock.hour.wrapping_mul(5)
+            ^ self.clock.minute.wrapping_mul(7)
+            ^ (self.player.x as u8).wrapping_mul(11)
+            ^ (self.player.y as u8).wrapping_mul(13)
+            ^ (member_index as u8).wrapping_mul(17)
+    }
+
+    pub fn visible_jimmy_unlock_tile(tile: u8) -> Option<u8> {
+        if (97..=103).contains(&tile) && tile % 2 == 1 {
+            Some(tile - 1)
+        } else {
+            None
+        }
     }
 
     #[cfg(test)]
@@ -468,7 +738,11 @@ impl PlayState {
         let idx = dungeon_cell_index(level, self.player.x, self.player.y);
         let tile = self.grid[idx];
         match tile >> 4 {
-            0x4 => self.consume_dungeon_chest(
+            0x4 => {
+                self.message = "Must open it first.".to_string();
+                MoveOutcome::Blocked
+            }
+            0x7 => self.consume_dungeon_chest(
                 chest_entries,
                 scene,
                 level,
@@ -555,11 +829,18 @@ impl PlayState {
         }
     }
 
-    pub fn get_world_facing(&mut self, game_dir: &Path, plane: WorldPlane) -> io::Result<MoveOutcome> {
+    pub fn get_world_facing(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+    ) -> io::Result<MoveOutcome> {
         let (dx, dy) = self.player.facing.delta();
         let tx = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
         let ty = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
         if let Some(outcome) = self.get_moonstone_pickup_at(tx, ty) {
+            return Ok(outcome);
+        }
+        if let Some(outcome) = self.get_fixed_hidden_treasure_pickup_at(tx, ty) {
             return Ok(outcome);
         }
         if let Some(outcome) = self.get_object_pickup_at(
@@ -623,6 +904,9 @@ impl PlayState {
         if let Some(outcome) = self.get_moonstone_pickup_at(tx, ty) {
             return Ok(outcome);
         }
+        if let Some(outcome) = self.get_fixed_hidden_treasure_pickup_at(tx, ty) {
+            return Ok(outcome);
+        }
         if let Some(outcome) =
             self.get_object_pickup_at(game_dir, PlayTarget::Town(scene), floor, tx, ty)?
         {
@@ -635,6 +919,9 @@ impl PlayState {
 
         let idx = ty * 32 + tx;
         let tile = self.grid[idx];
+        if let Some(outcome) = self.get_town_table_food(idx, tx, ty, tile, dx, dy) {
+            return Ok(outcome);
+        }
         let Some(entries) = load_town_get_tile_entries(game_dir)? else {
             self.message = "Nothing to get here.".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -670,6 +957,37 @@ impl PlayState {
         Ok(MoveOutcome::Got)
     }
 
+    pub fn get_town_table_food(
+        &mut self,
+        idx: usize,
+        x: usize,
+        y: usize,
+        tile: u8,
+        dx: isize,
+        dy: isize,
+    ) -> Option<MoveOutcome> {
+        let replacement = match (tile, dx, dy) {
+            (0x9b, 0, -1) => 0x95,
+            (0x9c, 0, -1) => 0x9a,
+            (0x9c, 0, 1) => 0x9b,
+            (0x9b | 0x9c, _, _) => {
+                self.message = "The plate cannot be reached.".to_string();
+                return Some(MoveOutcome::Blocked);
+            }
+            _ => return None,
+        };
+
+        self.grid[idx] = replacement;
+        self.food = self.food.saturating_add(1);
+        self.moral_standing = self.moral_standing.saturating_sub(1);
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = format!(
+            "Ate food from table tile 0x{tile:02X} at ({x}, {y}); replaced with tile 0x{replacement:02X}; added 1 food."
+        );
+        Some(MoveOutcome::Got)
+    }
+
     pub fn search_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         let entries = load_secret_door_entries(game_dir)?.unwrap_or_default();
         let chest_entries = load_dungeon_chest_content_entries(game_dir)?;
@@ -694,12 +1012,24 @@ impl PlayState {
         let (dx, dy) = self.player.facing.delta();
         let tx = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
         let ty = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
-        self.search_moonstone_at(
+        if let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
+            moonstone_slot_matches_world(slot, plane, tx, ty)
+        }) {
+            return outcome;
+        }
+        if let Some(outcome) = self.search_rare_reagent_at(plane, tx, ty) {
+            return outcome;
+        }
+        if let Some(outcome) = self.search_fixed_hidden_treasure_at(
+            HiddenTreasureTarget::World(plane),
+            plane.save_floor(),
             tx,
             ty,
-            |slot| moonstone_slot_matches_world(slot, plane, tx, ty),
-            "Nothing to search here.",
-        )
+        ) {
+            return outcome;
+        }
+        self.message = "Nothing to search here.".to_string();
+        MoveOutcome::Blocked
     }
 
     pub fn search_town_secret(
@@ -738,20 +1068,68 @@ impl PlayState {
             _ => None,
         });
         let Some(reveal_tile) = reveal_tile else {
-            return self.search_moonstone_at(
+            if tile == 0xdc {
+                if let Some(outcome) = self.search_fixed_hidden_treasure_at(
+                    HiddenTreasureTarget::Town(scene.byte),
+                    floor,
+                    tx,
+                    ty,
+                ) {
+                    return outcome;
+                }
+                self.message =
+                    "Searched a generic find marker; no Moonstone scan was attempted.".to_string();
+                return MoveOutcome::Blocked;
+            }
+            let miss_message =
+                town_search_live_tile_miss_message(tile).unwrap_or("No secret door found.");
+            if let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
+                moonstone_slot_matches_town(slot, scene, floor, tx, ty)
+            }) {
+                return outcome;
+            }
+            if let Some(outcome) = self.search_fixed_hidden_treasure_at(
+                HiddenTreasureTarget::Town(scene.byte),
+                floor,
                 tx,
                 ty,
-                |slot| moonstone_slot_matches_town(slot, scene, floor, tx, ty),
-                "No secret door found.",
-            );
+            ) {
+                return outcome;
+            }
+            self.message = miss_message.to_string();
+            return MoveOutcome::Blocked;
         };
         if !(24..=63).contains(&tile) {
-            return self.search_moonstone_at(
+            if tile == 0xdc {
+                if let Some(outcome) = self.search_fixed_hidden_treasure_at(
+                    HiddenTreasureTarget::Town(scene.byte),
+                    floor,
+                    tx,
+                    ty,
+                ) {
+                    return outcome;
+                }
+                self.message =
+                    "Searched a generic find marker; no Moonstone scan was attempted.".to_string();
+                return MoveOutcome::Blocked;
+            }
+            let miss_message =
+                town_search_live_tile_miss_message(tile).unwrap_or("No secret door found.");
+            if let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
+                moonstone_slot_matches_town(slot, scene, floor, tx, ty)
+            }) {
+                return outcome;
+            }
+            if let Some(outcome) = self.search_fixed_hidden_treasure_at(
+                HiddenTreasureTarget::Town(scene.byte),
+                floor,
                 tx,
                 ty,
-                |slot| moonstone_slot_matches_town(slot, scene, floor, tx, ty),
-                "No secret door found.",
-            );
+            ) {
+                return outcome;
+            }
+            self.message = miss_message.to_string();
+            return MoveOutcome::Blocked;
         }
 
         self.grid[idx] = reveal_tile;
@@ -773,6 +1151,23 @@ impl PlayState {
     where
         F: Fn(MoonstoneGateSlot) -> bool,
     {
+        if let Some(outcome) = self.search_moonstone_pickup_at(x, y, matches_slot) {
+            return outcome;
+        }
+
+        self.message = miss_message.to_string();
+        MoveOutcome::Blocked
+    }
+
+    pub fn search_moonstone_pickup_at<F>(
+        &mut self,
+        x: usize,
+        y: usize,
+        matches_slot: F,
+    ) -> Option<MoveOutcome>
+    where
+        F: Fn(MoonstoneGateSlot) -> bool,
+    {
         let Some(slot_index) = self
             .moonstone_slots
             .iter()
@@ -783,8 +1178,7 @@ impl PlayState {
                 (slot.is_valid() && matches_slot(slot)).then_some(slot_index)
             })
         else {
-            self.message = miss_message.to_string();
-            return MoveOutcome::Blocked;
+            return None;
         };
 
         if self.moonstone_pickup_exists(slot_index) {
@@ -792,17 +1186,16 @@ impl PlayState {
                 "Moonstone phase {} is already surfaced as a strange rock.",
                 slot_index + 1
             );
-            return MoveOutcome::Blocked;
+            return Some(MoveOutcome::Blocked);
         }
 
         let Some(z) = self.current_floor() else {
-            self.message = miss_message.to_string();
-            return MoveOutcome::Blocked;
+            return None;
         };
         let pickup = ActiveObject::moonstone_pickup(slot_index, x, y, z);
         if self.allocate_active_object_slot(pickup).is_none() {
             self.message = "No active-object slot for Moonstone pickup.".to_string();
-            return MoveOutcome::Blocked;
+            return Some(MoveOutcome::Blocked);
         }
 
         self.mark_visibility_dirty();
@@ -811,13 +1204,263 @@ impl PlayState {
             "Found a strange rock for Moonstone phase {}.",
             slot_index + 1
         );
-        MoveOutcome::Searched
+        Some(MoveOutcome::Searched)
+    }
+
+    pub fn search_rare_reagent_at(
+        &mut self,
+        plane: WorldPlane,
+        x: usize,
+        y: usize,
+    ) -> Option<MoveOutcome> {
+        if plane != WorldPlane::Britannia || self.clock.hour != 0 {
+            return None;
+        }
+        let point = RARE_REAGENT_HARVEST_POINTS
+            .iter()
+            .find(|point| point.x == x && point.y == y)?;
+        if self.rare_reagent_harvest_days[point.index] == self.clock.day {
+            return None;
+        }
+
+        let amount = self.rare_reagent_harvest_amount(point.index);
+        self.reagents[point.reagent_index] = self.reagents[point.reagent_index]
+            .saturating_add(amount)
+            .min(99);
+        self.rare_reagent_harvest_days[point.index] = self.clock.day;
+        self.advance_turn();
+        self.message = format!("Found {amount} sprigs of {}.", point.label);
+        Some(MoveOutcome::Searched)
+    }
+
+    pub fn rare_reagent_harvest_amount(&self, point_index: usize) -> u8 {
+        2 + (self.rare_reagent_harvest_seed(point_index) % 14)
+    }
+
+    pub fn rare_reagent_harvest_seed(&self, point_index: usize) -> u8 {
+        (self.turn as u8).wrapping_mul(17)
+            ^ self.clock.year as u8
+            ^ self.clock.month.wrapping_mul(3)
+            ^ self.clock.day.wrapping_mul(5)
+            ^ self.clock.hour.wrapping_mul(7)
+            ^ self.clock.minute.wrapping_mul(11)
+            ^ (self.player.x as u8).wrapping_mul(13)
+            ^ (self.player.y as u8).wrapping_mul(19)
+            ^ (point_index as u8).wrapping_mul(23)
+    }
+
+    pub fn search_fixed_hidden_treasure_at(
+        &mut self,
+        target: HiddenTreasureTarget,
+        floor: i8,
+        x: usize,
+        y: usize,
+    ) -> Option<MoveOutcome> {
+        let mut matching_entries = FIXED_HIDDEN_TREASURES.iter().copied().filter(|entry| {
+            entry.target == target && entry.floor == floor && entry.x == x && entry.y == y
+        });
+        let Some(entry) = matching_entries.find(|entry| {
+            if self.fixed_hidden_treasure_pickup_exists(entry.record) {
+                true
+            } else {
+                self.fixed_hidden_treasure_rule_allows(*entry, x, y)
+            }
+        }) else {
+            return None;
+        };
+        if self.fixed_hidden_treasure_pickup_exists(entry.record) {
+            self.message = format!("{} is already surfaced here.", entry.pickup.label());
+            return Some(MoveOutcome::Blocked);
+        }
+        let pickup = ActiveObject::fixed_hidden_treasure_pickup(entry.record, x, y, floor);
+        if self.allocate_active_object_slot(pickup).is_none() {
+            self.message = "No active-object slot for hidden treasure pickup.".to_string();
+            return Some(MoveOutcome::Blocked);
+        }
+        self.mark_fixed_hidden_treasure_found(entry);
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = format!("Found {}.", entry.pickup.label());
+        Some(MoveOutcome::Searched)
+    }
+
+    #[cfg(test)]
+    pub fn fixed_hidden_treasure_table_len() -> usize {
+        FIXED_HIDDEN_TREASURES.len()
+    }
+
+    #[cfg(test)]
+    pub fn fixed_hidden_treasure_table_records_are_sequential() -> bool {
+        FIXED_HIDDEN_TREASURES
+            .iter()
+            .enumerate()
+            .all(|(record, entry)| entry.record == record)
+    }
+
+    pub fn fixed_hidden_treasure_rule_allows(
+        &self,
+        entry: FixedHiddenTreasureEntry,
+        x: usize,
+        y: usize,
+    ) -> bool {
+        match entry.rule {
+            HiddenTreasureRule::OneShot => !self.fixed_hidden_treasure_found(entry.record),
+            HiddenTreasureRule::KeyNpcGated => {
+                self.keys != 0
+                    && !self.fixed_hidden_treasure_found(entry.record)
+                    && !self.fixed_hidden_treasure_target_occupied(x, y)
+            }
+            HiddenTreasureRule::Daily => self.fixed_hidden_treasure_daily_day != self.clock.day,
+            HiddenTreasureRule::SingleUseNpcGated => {
+                !self.fixed_hidden_treasure_found(entry.record)
+                    && !self.fixed_hidden_treasure_target_occupied(x, y)
+            }
+        }
+    }
+
+    pub fn mark_fixed_hidden_treasure_found(&mut self, entry: FixedHiddenTreasureEntry) {
+        match entry.rule {
+            HiddenTreasureRule::Daily => self.fixed_hidden_treasure_daily_day = self.clock.day,
+            _ => self.set_fixed_hidden_treasure_found(entry.record),
+        }
+    }
+
+    pub fn fixed_hidden_treasure_found(&self, record: usize) -> bool {
+        let byte = record / 8;
+        let bit = record % 8;
+        self.fixed_hidden_treasure_found
+            .get(byte)
+            .is_some_and(|value| value & (1 << bit) != 0)
+    }
+
+    pub fn set_fixed_hidden_treasure_found(&mut self, record: usize) {
+        let byte = record / 8;
+        let bit = record % 8;
+        if let Some(value) = self.fixed_hidden_treasure_found.get_mut(byte) {
+            *value |= 1 << bit;
+        }
+    }
+
+    pub fn fixed_hidden_treasure_target_occupied(&self, x: usize, y: usize) -> bool {
+        self.active_objects.iter().skip(1).any(|object| {
+            self.object_occupies(*object, x, y)
+                && !object.is_empty()
+                && object.fixed_hidden_treasure_record().is_none()
+                && object.moonstone_slot_index().is_none()
+        })
+    }
+
+    pub fn fixed_hidden_treasure_pickup_exists(&self, record: usize) -> bool {
+        self.active_objects
+            .iter()
+            .any(|object| object.fixed_hidden_treasure_record() == Some(record))
+    }
+
+    pub fn fixed_hidden_treasure_pickup_at(&self, x: usize, y: usize) -> Option<(usize, usize)> {
+        self.active_objects
+            .iter()
+            .enumerate()
+            .skip(1)
+            .find_map(|(object_slot, object)| {
+                if self.object_occupies(*object, x, y) {
+                    object
+                        .fixed_hidden_treasure_record()
+                        .map(|record| (object_slot, record))
+                } else {
+                    None
+                }
+            })
+    }
+
+    pub fn get_fixed_hidden_treasure_pickup_at(
+        &mut self,
+        x: usize,
+        y: usize,
+    ) -> Option<MoveOutcome> {
+        let (object_slot, record) = self.fixed_hidden_treasure_pickup_at(x, y)?;
+        let Some(entry) = FIXED_HIDDEN_TREASURES
+            .iter()
+            .find(|entry| entry.record == record)
+            .copied()
+        else {
+            self.message = "Unknown hidden treasure pickup.".to_string();
+            return Some(MoveOutcome::Blocked);
+        };
+        self.free_active_object_slot(object_slot);
+        let grant = self.apply_fixed_hidden_treasure_pickup(entry.pickup, entry.state);
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = format!("Got {}{}.", entry.pickup.label(), grant);
+        Some(MoveOutcome::Got)
+    }
+
+    pub fn apply_fixed_hidden_treasure_pickup(
+        &mut self,
+        pickup: HiddenTreasurePickup,
+        state: u8,
+    ) -> String {
+        match pickup {
+            HiddenTreasurePickup::Food => {
+                self.food = self.food.saturating_add(u16::from(state));
+                format!("; added {state} food")
+            }
+            HiddenTreasurePickup::SackOfGold => {
+                self.gold = self
+                    .gold
+                    .saturating_add(u16::from(state))
+                    .min(SHOP_GOLD_CAP);
+                format!("; added {state} gold")
+            }
+            HiddenTreasurePickup::RingOfKeys => {
+                self.keys = self.keys.saturating_add(state).min(99);
+                format!("; added {state} keys")
+            }
+            HiddenTreasurePickup::Gem => {
+                self.gems = self.gems.saturating_add(state).min(99);
+                format!("; added {state} gems")
+            }
+            HiddenTreasurePickup::Torches => {
+                self.torches = self.torches.saturating_add(state).min(99);
+                format!("; added {state} torches")
+            }
+            HiddenTreasurePickup::Potion => {
+                let subtype = (state as usize) & 7;
+                self.potion_stock[subtype] = self.potion_stock[subtype].saturating_add(1).min(99);
+                format!("; added 1 {} potion", potion_label(subtype))
+            }
+            HiddenTreasurePickup::Scroll => {
+                let subtype = (state as usize) & 7;
+                self.scroll_stock[subtype] = self.scroll_stock[subtype].saturating_add(1).min(99);
+                format!("; added 1 scroll subtype {subtype}")
+            }
+            HiddenTreasurePickup::Armour
+            | HiddenTreasurePickup::Weapon
+            | HiddenTreasurePickup::Ring
+            | HiddenTreasurePickup::Amulet => {
+                let item = state as usize;
+                if item < EQUIPMENT_COUNT {
+                    let amount = if item == EQUIPMENT_ID_ARROWS || item == EQUIPMENT_ID_QUARRELS {
+                        5
+                    } else {
+                        1
+                    };
+                    self.equipment_stock[item] =
+                        self.equipment_stock[item].saturating_add(amount).min(99);
+                    format!("; added equipment id {item}")
+                } else {
+                    "; no compatible inventory slot".to_string()
+                }
+            }
+            HiddenTreasurePickup::MoldyCorpse | HiddenTreasurePickup::RottingBody => {
+                "; found no usable inventory".to_string()
+            }
+        }
     }
 
     pub fn search_dungeon_secret(
         &mut self,
         entries: &[SecretDoorEntry],
-        chest_entries: Option<&[DungeonChestContentEntry]>,
+        _chest_entries: Option<&[DungeonChestContentEntry]>,
         scene: DungeonScene,
         level: u8,
     ) -> MoveOutcome {
@@ -861,16 +1504,7 @@ impl PlayState {
         }
 
         match tile >> 4 {
-            0x4 => self.consume_dungeon_chest(
-                chest_entries,
-                scene,
-                level,
-                tx,
-                ty,
-                idx,
-                tile,
-                "Searched",
-            ),
+            0x4 => self.search_dungeon_chest(scene, level, tx, ty, tile),
             _ if is_dungeon_bomb_trap(tile) => {
                 self.grid[idx] = 0x6a;
                 self.mark_visibility_dirty();
@@ -901,5 +1535,1274 @@ impl PlayState {
         );
         MoveOutcome::Searched
     }
+}
 
+#[derive(Clone, Copy)]
+pub struct RareReagentHarvestPoint {
+    pub index: usize,
+    pub x: usize,
+    pub y: usize,
+    pub reagent_index: usize,
+    pub label: &'static str,
+}
+
+pub const RARE_REAGENT_HARVEST_POINTS: [RareReagentHarvestPoint; RARE_REAGENT_HARVEST_POINT_COUNT] = [
+    RareReagentHarvestPoint {
+        index: 0,
+        x: 182,
+        y: 54,
+        reagent_index: REAGENT_MANDRAKE,
+        label: "Mandrake Root",
+    },
+    RareReagentHarvestPoint {
+        index: 1,
+        x: 97,
+        y: 165,
+        reagent_index: REAGENT_MANDRAKE,
+        label: "Mandrake Root",
+    },
+    RareReagentHarvestPoint {
+        index: 2,
+        x: 44,
+        y: 137,
+        reagent_index: REAGENT_NIGHTSHADE,
+        label: "Nightshade",
+    },
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HiddenTreasureTarget {
+    World(WorldPlane),
+    Town(u8),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HiddenTreasurePickup {
+    Armour,
+    Weapon,
+    Scroll,
+    Potion,
+    Gem,
+    Food,
+    Torches,
+    Ring,
+    Amulet,
+    RingOfKeys,
+    SackOfGold,
+    MoldyCorpse,
+    RottingBody,
+}
+
+impl HiddenTreasurePickup {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Armour => "armour",
+            Self::Weapon => "weapon",
+            Self::Scroll => "scroll",
+            Self::Potion => "potion",
+            Self::Gem => "gem",
+            Self::Food => "food",
+            Self::Torches => "torches",
+            Self::Ring => "ring",
+            Self::Amulet => "amulet",
+            Self::RingOfKeys => "ring of keys",
+            Self::SackOfGold => "sack of gold",
+            Self::MoldyCorpse => "moldy corpse",
+            Self::RottingBody => "rotting body",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HiddenTreasureRule {
+    OneShot,
+    KeyNpcGated,
+    Daily,
+    SingleUseNpcGated,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FixedHiddenTreasureEntry {
+    pub record: usize,
+    pub target: HiddenTreasureTarget,
+    pub floor: i8,
+    pub x: usize,
+    pub y: usize,
+    pub pickup: HiddenTreasurePickup,
+    pub state: u8,
+    pub rule: HiddenTreasureRule,
+}
+
+const fn ht(
+    record: usize,
+    target: HiddenTreasureTarget,
+    floor: i8,
+    x: usize,
+    y: usize,
+    pickup: HiddenTreasurePickup,
+    state: u8,
+    rule: HiddenTreasureRule,
+) -> FixedHiddenTreasureEntry {
+    FixedHiddenTreasureEntry {
+        record,
+        target,
+        floor,
+        x,
+        y,
+        pickup,
+        state,
+        rule,
+    }
+}
+
+pub const FIXED_HIDDEN_TREASURES: &[FixedHiddenTreasureEntry] = &[
+    ht(
+        0,
+        HiddenTreasureTarget::World(WorldPlane::Underworld),
+        -1,
+        233,
+        233,
+        HiddenTreasurePickup::Armour,
+        15,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        1,
+        HiddenTreasureTarget::World(WorldPlane::Underworld),
+        -1,
+        233,
+        233,
+        HiddenTreasurePickup::Weapon,
+        41,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        2,
+        HiddenTreasureTarget::World(WorldPlane::Underworld),
+        -1,
+        233,
+        233,
+        HiddenTreasurePickup::Armour,
+        15,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        3,
+        HiddenTreasureTarget::World(WorldPlane::Underworld),
+        -1,
+        233,
+        233,
+        HiddenTreasurePickup::Weapon,
+        41,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        4,
+        HiddenTreasureTarget::World(WorldPlane::Underworld),
+        -1,
+        233,
+        233,
+        HiddenTreasurePickup::Armour,
+        15,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        5,
+        HiddenTreasureTarget::World(WorldPlane::Underworld),
+        -1,
+        233,
+        233,
+        HiddenTreasurePickup::Weapon,
+        41,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        6,
+        HiddenTreasureTarget::World(WorldPlane::Underworld),
+        -1,
+        233,
+        233,
+        HiddenTreasurePickup::Armour,
+        15,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        7,
+        HiddenTreasureTarget::World(WorldPlane::Underworld),
+        -1,
+        233,
+        233,
+        HiddenTreasurePickup::Weapon,
+        41,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        8,
+        HiddenTreasureTarget::World(WorldPlane::Underworld),
+        -1,
+        233,
+        233,
+        HiddenTreasurePickup::Armour,
+        15,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        9,
+        HiddenTreasureTarget::World(WorldPlane::Underworld),
+        -1,
+        233,
+        233,
+        HiddenTreasurePickup::Weapon,
+        41,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        10,
+        HiddenTreasureTarget::World(WorldPlane::Underworld),
+        -1,
+        233,
+        233,
+        HiddenTreasurePickup::Armour,
+        15,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        11,
+        HiddenTreasureTarget::World(WorldPlane::Underworld),
+        -1,
+        233,
+        233,
+        HiddenTreasurePickup::Weapon,
+        41,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        12,
+        HiddenTreasureTarget::Town(21),
+        0,
+        2,
+        15,
+        HiddenTreasurePickup::Scroll,
+        255,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        13,
+        HiddenTreasureTarget::Town(18),
+        -1,
+        6,
+        8,
+        HiddenTreasurePickup::RingOfKeys,
+        9,
+        HiddenTreasureRule::KeyNpcGated,
+    ),
+    ht(
+        14,
+        HiddenTreasureTarget::Town(5),
+        0,
+        2,
+        2,
+        HiddenTreasurePickup::RingOfKeys,
+        133,
+        HiddenTreasureRule::Daily,
+    ),
+    ht(
+        15,
+        HiddenTreasureTarget::World(WorldPlane::Britannia),
+        0,
+        80,
+        64,
+        HiddenTreasurePickup::Weapon,
+        39,
+        HiddenTreasureRule::SingleUseNpcGated,
+    ),
+    ht(
+        16,
+        HiddenTreasureTarget::Town(18),
+        1,
+        6,
+        7,
+        HiddenTreasurePickup::Weapon,
+        35,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        17,
+        HiddenTreasureTarget::Town(18),
+        1,
+        6,
+        23,
+        HiddenTreasurePickup::Weapon,
+        40,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        18,
+        HiddenTreasureTarget::Town(1),
+        0,
+        5,
+        8,
+        HiddenTreasurePickup::Gem,
+        1,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        19,
+        HiddenTreasureTarget::Town(1),
+        0,
+        6,
+        25,
+        HiddenTreasurePickup::Armour,
+        10,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        20,
+        HiddenTreasureTarget::Town(1),
+        0,
+        8,
+        25,
+        HiddenTreasurePickup::Armour,
+        10,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        21,
+        HiddenTreasureTarget::Town(1),
+        0,
+        5,
+        23,
+        HiddenTreasurePickup::Potion,
+        5,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        22,
+        HiddenTreasureTarget::Town(1),
+        0,
+        13,
+        13,
+        HiddenTreasurePickup::Potion,
+        6,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        23,
+        HiddenTreasureTarget::Town(1),
+        0,
+        13,
+        14,
+        HiddenTreasurePickup::Potion,
+        7,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        24,
+        HiddenTreasureTarget::Town(1),
+        0,
+        13,
+        16,
+        HiddenTreasurePickup::Scroll,
+        5,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        25,
+        HiddenTreasureTarget::Town(1),
+        0,
+        13,
+        17,
+        HiddenTreasurePickup::Scroll,
+        7,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        26,
+        HiddenTreasureTarget::Town(1),
+        1,
+        19,
+        24,
+        HiddenTreasurePickup::Food,
+        10,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        27,
+        HiddenTreasureTarget::Town(1),
+        0,
+        3,
+        27,
+        HiddenTreasurePickup::Torches,
+        3,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        28,
+        HiddenTreasureTarget::Town(1),
+        0,
+        29,
+        27,
+        HiddenTreasurePickup::Ring,
+        42,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        29,
+        HiddenTreasureTarget::Town(2),
+        0,
+        1,
+        2,
+        HiddenTreasurePickup::Food,
+        5,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        30,
+        HiddenTreasureTarget::Town(2),
+        0,
+        26,
+        6,
+        HiddenTreasurePickup::Weapon,
+        20,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        31,
+        HiddenTreasureTarget::Town(2),
+        1,
+        6,
+        24,
+        HiddenTreasurePickup::Ring,
+        43,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        32,
+        HiddenTreasureTarget::Town(3),
+        0,
+        16,
+        21,
+        HiddenTreasurePickup::Scroll,
+        1,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        33,
+        HiddenTreasureTarget::Town(3),
+        0,
+        10,
+        20,
+        HiddenTreasurePickup::Food,
+        5,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        34,
+        HiddenTreasureTarget::Town(3),
+        0,
+        1,
+        29,
+        HiddenTreasurePickup::Food,
+        10,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        35,
+        HiddenTreasureTarget::Town(3),
+        0,
+        23,
+        30,
+        HiddenTreasurePickup::Weapon,
+        38,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        36,
+        HiddenTreasureTarget::Town(3),
+        0,
+        29,
+        1,
+        HiddenTreasurePickup::Torches,
+        4,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        37,
+        HiddenTreasureTarget::Town(4),
+        0,
+        11,
+        29,
+        HiddenTreasurePickup::Weapon,
+        18,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        38,
+        HiddenTreasureTarget::Town(4),
+        0,
+        26,
+        22,
+        HiddenTreasurePickup::Potion,
+        3,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        39,
+        HiddenTreasureTarget::Town(4),
+        0,
+        26,
+        1,
+        HiddenTreasurePickup::Scroll,
+        4,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        40,
+        HiddenTreasureTarget::Town(4),
+        0,
+        2,
+        13,
+        HiddenTreasurePickup::MoldyCorpse,
+        0,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        41,
+        HiddenTreasureTarget::Town(4),
+        0,
+        2,
+        14,
+        HiddenTreasurePickup::MoldyCorpse,
+        0,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        42,
+        HiddenTreasureTarget::Town(4),
+        0,
+        4,
+        14,
+        HiddenTreasurePickup::RottingBody,
+        0,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        43,
+        HiddenTreasureTarget::Town(4),
+        0,
+        3,
+        16,
+        HiddenTreasurePickup::RottingBody,
+        0,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        44,
+        HiddenTreasureTarget::Town(4),
+        0,
+        2,
+        18,
+        HiddenTreasurePickup::RottingBody,
+        0,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        45,
+        HiddenTreasureTarget::Town(4),
+        0,
+        3,
+        16,
+        HiddenTreasurePickup::Weapon,
+        21,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        46,
+        HiddenTreasureTarget::Town(4),
+        -1,
+        22,
+        27,
+        HiddenTreasurePickup::Weapon,
+        37,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        47,
+        HiddenTreasureTarget::Town(4),
+        -1,
+        22,
+        20,
+        HiddenTreasurePickup::RingOfKeys,
+        5,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        48,
+        HiddenTreasureTarget::Town(5),
+        0,
+        8,
+        27,
+        HiddenTreasurePickup::SackOfGold,
+        99,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        49,
+        HiddenTreasureTarget::Town(5),
+        1,
+        11,
+        13,
+        HiddenTreasurePickup::Scroll,
+        1,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        50,
+        HiddenTreasureTarget::Town(5),
+        1,
+        11,
+        12,
+        HiddenTreasurePickup::Scroll,
+        1,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        51,
+        HiddenTreasureTarget::Town(5),
+        1,
+        21,
+        8,
+        HiddenTreasurePickup::Potion,
+        1,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        52,
+        HiddenTreasureTarget::Town(5),
+        1,
+        23,
+        8,
+        HiddenTreasurePickup::Potion,
+        2,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        53,
+        HiddenTreasureTarget::Town(5),
+        1,
+        23,
+        7,
+        HiddenTreasurePickup::Scroll,
+        6,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        54,
+        HiddenTreasureTarget::Town(6),
+        1,
+        6,
+        24,
+        HiddenTreasurePickup::Gem,
+        4,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        55,
+        HiddenTreasureTarget::Town(7),
+        0,
+        2,
+        5,
+        HiddenTreasurePickup::RottingBody,
+        0,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        56,
+        HiddenTreasureTarget::Town(7),
+        0,
+        7,
+        6,
+        HiddenTreasurePickup::Potion,
+        1,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        57,
+        HiddenTreasureTarget::Town(8),
+        1,
+        18,
+        21,
+        HiddenTreasurePickup::Potion,
+        3,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        58,
+        HiddenTreasureTarget::Town(8),
+        1,
+        21,
+        25,
+        HiddenTreasurePickup::RingOfKeys,
+        7,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        59,
+        HiddenTreasureTarget::Town(9),
+        0,
+        12,
+        10,
+        HiddenTreasurePickup::Torches,
+        9,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        60,
+        HiddenTreasureTarget::Town(11),
+        0,
+        15,
+        21,
+        HiddenTreasurePickup::Potion,
+        0,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        61,
+        HiddenTreasureTarget::Town(11),
+        0,
+        9,
+        14,
+        HiddenTreasurePickup::Gem,
+        5,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        62,
+        HiddenTreasureTarget::Town(11),
+        0,
+        12,
+        16,
+        HiddenTreasurePickup::SackOfGold,
+        50,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        63,
+        HiddenTreasureTarget::Town(13),
+        0,
+        2,
+        24,
+        HiddenTreasurePickup::Potion,
+        7,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        64,
+        HiddenTreasureTarget::Town(14),
+        0,
+        12,
+        16,
+        HiddenTreasurePickup::Scroll,
+        5,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        65,
+        HiddenTreasureTarget::Town(14),
+        0,
+        16,
+        14,
+        HiddenTreasurePickup::Amulet,
+        45,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        66,
+        HiddenTreasureTarget::Town(14),
+        0,
+        12,
+        17,
+        HiddenTreasurePickup::Scroll,
+        7,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        67,
+        HiddenTreasureTarget::Town(14),
+        0,
+        12,
+        14,
+        HiddenTreasurePickup::Potion,
+        4,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        68,
+        HiddenTreasureTarget::Town(17),
+        0,
+        7,
+        20,
+        HiddenTreasurePickup::Armour,
+        10,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        69,
+        HiddenTreasureTarget::Town(17),
+        0,
+        7,
+        21,
+        HiddenTreasurePickup::Armour,
+        11,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        70,
+        HiddenTreasureTarget::Town(17),
+        0,
+        7,
+        22,
+        HiddenTreasurePickup::Armour,
+        9,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        71,
+        HiddenTreasureTarget::Town(17),
+        0,
+        7,
+        23,
+        HiddenTreasurePickup::Armour,
+        12,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        72,
+        HiddenTreasureTarget::Town(17),
+        1,
+        13,
+        21,
+        HiddenTreasurePickup::Weapon,
+        30,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        73,
+        HiddenTreasureTarget::Town(17),
+        -1,
+        18,
+        7,
+        HiddenTreasurePickup::RingOfKeys,
+        7,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        74,
+        HiddenTreasureTarget::Town(17),
+        -1,
+        23,
+        20,
+        HiddenTreasurePickup::Ring,
+        44,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        75,
+        HiddenTreasureTarget::Town(18),
+        1,
+        18,
+        17,
+        HiddenTreasurePickup::Potion,
+        3,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        76,
+        HiddenTreasureTarget::Town(18),
+        2,
+        6,
+        13,
+        HiddenTreasurePickup::Scroll,
+        5,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        77,
+        HiddenTreasureTarget::Town(18),
+        2,
+        6,
+        14,
+        HiddenTreasurePickup::Scroll,
+        5,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        78,
+        HiddenTreasureTarget::Town(18),
+        2,
+        6,
+        16,
+        HiddenTreasurePickup::Scroll,
+        2,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        79,
+        HiddenTreasureTarget::Town(18),
+        2,
+        6,
+        17,
+        HiddenTreasurePickup::Scroll,
+        7,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        80,
+        HiddenTreasureTarget::Town(18),
+        2,
+        7,
+        19,
+        HiddenTreasurePickup::Ring,
+        43,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        81,
+        HiddenTreasureTarget::Town(19),
+        0,
+        2,
+        3,
+        HiddenTreasurePickup::RottingBody,
+        0,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        82,
+        HiddenTreasureTarget::Town(19),
+        0,
+        7,
+        5,
+        HiddenTreasurePickup::RottingBody,
+        0,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        83,
+        HiddenTreasureTarget::Town(19),
+        0,
+        7,
+        7,
+        HiddenTreasurePickup::RottingBody,
+        0,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        84,
+        HiddenTreasureTarget::Town(19),
+        0,
+        2,
+        7,
+        HiddenTreasurePickup::RottingBody,
+        0,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        85,
+        HiddenTreasureTarget::Town(19),
+        0,
+        7,
+        5,
+        HiddenTreasurePickup::Scroll,
+        6,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        86,
+        HiddenTreasureTarget::Town(19),
+        0,
+        2,
+        3,
+        HiddenTreasurePickup::Ring,
+        44,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        87,
+        HiddenTreasureTarget::Town(20),
+        0,
+        25,
+        18,
+        HiddenTreasurePickup::Gem,
+        3,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        88,
+        HiddenTreasureTarget::Town(21),
+        0,
+        2,
+        13,
+        HiddenTreasurePickup::Scroll,
+        1,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        89,
+        HiddenTreasureTarget::Town(21),
+        0,
+        2,
+        14,
+        HiddenTreasurePickup::Scroll,
+        1,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        90,
+        HiddenTreasureTarget::Town(21),
+        0,
+        2,
+        16,
+        HiddenTreasurePickup::Scroll,
+        1,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        91,
+        HiddenTreasureTarget::Town(22),
+        0,
+        13,
+        13,
+        HiddenTreasurePickup::Ring,
+        42,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        92,
+        HiddenTreasureTarget::Town(22),
+        0,
+        12,
+        3,
+        HiddenTreasurePickup::RingOfKeys,
+        5,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        93,
+        HiddenTreasureTarget::Town(23),
+        0,
+        1,
+        15,
+        HiddenTreasurePickup::Amulet,
+        47,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        94,
+        HiddenTreasureTarget::Town(24),
+        0,
+        22,
+        19,
+        HiddenTreasurePickup::RingOfKeys,
+        1,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        95,
+        HiddenTreasureTarget::Town(24),
+        0,
+        22,
+        19,
+        HiddenTreasurePickup::Potion,
+        3,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        96,
+        HiddenTreasureTarget::Town(25),
+        0,
+        16,
+        25,
+        HiddenTreasurePickup::Scroll,
+        1,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        97,
+        HiddenTreasureTarget::Town(26),
+        0,
+        4,
+        11,
+        HiddenTreasurePickup::Amulet,
+        46,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        98,
+        HiddenTreasureTarget::Town(27),
+        0,
+        17,
+        11,
+        HiddenTreasurePickup::Potion,
+        5,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        99,
+        HiddenTreasureTarget::Town(27),
+        0,
+        17,
+        10,
+        HiddenTreasurePickup::Potion,
+        4,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        100,
+        HiddenTreasureTarget::Town(28),
+        0,
+        22,
+        19,
+        HiddenTreasurePickup::Scroll,
+        5,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        101,
+        HiddenTreasureTarget::Town(30),
+        2,
+        9,
+        23,
+        HiddenTreasurePickup::Ring,
+        42,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        102,
+        HiddenTreasureTarget::Town(30),
+        2,
+        7,
+        23,
+        HiddenTreasurePickup::Amulet,
+        46,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        103,
+        HiddenTreasureTarget::Town(30),
+        2,
+        7,
+        20,
+        HiddenTreasurePickup::Potion,
+        7,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        104,
+        HiddenTreasureTarget::Town(30),
+        1,
+        19,
+        22,
+        HiddenTreasurePickup::Weapon,
+        18,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        105,
+        HiddenTreasureTarget::Town(30),
+        1,
+        17,
+        22,
+        HiddenTreasurePickup::Amulet,
+        46,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        106,
+        HiddenTreasureTarget::Town(31),
+        0,
+        3,
+        6,
+        HiddenTreasurePickup::Potion,
+        1,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        107,
+        HiddenTreasureTarget::Town(31),
+        0,
+        7,
+        19,
+        HiddenTreasurePickup::Food,
+        20,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        108,
+        HiddenTreasureTarget::Town(32),
+        1,
+        21,
+        8,
+        HiddenTreasurePickup::Potion,
+        7,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        109,
+        HiddenTreasureTarget::Town(1),
+        1,
+        24,
+        19,
+        HiddenTreasurePickup::Food,
+        16,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        110,
+        HiddenTreasureTarget::Town(1),
+        1,
+        24,
+        20,
+        HiddenTreasurePickup::Food,
+        13,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        111,
+        HiddenTreasureTarget::Town(17),
+        2,
+        12,
+        12,
+        HiddenTreasurePickup::Potion,
+        6,
+        HiddenTreasureRule::OneShot,
+    ),
+    ht(
+        112,
+        HiddenTreasureTarget::Town(17),
+        2,
+        12,
+        12,
+        HiddenTreasurePickup::Scroll,
+        7,
+        HiddenTreasureRule::OneShot,
+    ),
+];
+
+pub fn town_search_live_tile_miss_message(tile: u8) -> Option<&'static str> {
+    match tile {
+        0x2b => Some("Searched stump; nothing found."),
+        0x4f => Some("Searched wall; nothing found."),
+        0x5a => Some("Searched shelf; nothing found."),
+        0x5c | 0x5d => Some("Searched bookshelf; nothing found."),
+        0xa1 => Some("Searched well; nothing found."),
+        0xa5 => Some("Searched desk; nothing found."),
+        0xa6 => Some("Searched barrel; nothing found."),
+        0xa8 => Some("Searched vanity; nothing found."),
+        0xab | 0xac => Some("Searched under bed; nothing found."),
+        0xad => Some("Searched dresser; nothing found."),
+        0xaf => Some("Searched trunk; nothing found."),
+        0xb2 => Some("Searched brazier; nothing found."),
+        0xbc => Some("Searched fireplace; nothing found."),
+        _ => None,
+    }
 }

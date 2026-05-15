@@ -20,13 +20,14 @@ impl PlayState {
                 "Dungeon debug movement uses cardinal steps only in this slice.".to_string();
             return Ok(MoveOutcome::Blocked);
         }
-        if !(0..DUNGEON_SIDE as isize).contains(&nx) || !(0..DUNGEON_SIDE as isize).contains(&ny) {
+
+        let nx = nx.rem_euclid(DUNGEON_SIDE as isize) as usize;
+        let ny = ny.rem_euclid(DUNGEON_SIDE as isize) as usize;
+        if self.dungeon_active_monster_at(nx, ny).is_some() {
             self.message = "Blocked!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
 
-        let nx = nx as usize;
-        let ny = ny as usize;
         let tile = self.dungeon_cell(level, nx, ny);
         if self.dungeon_open_door_at(game_dir, scene, level, nx, ny, tile)? {
             self.player.x = nx;
@@ -50,7 +51,7 @@ impl PlayState {
             self.player.y = ny;
             self.sync_player_object();
             self.mark_visibility_dirty();
-            return Ok(self.resolve_dungeon_room_trigger(scene, level, nx, ny, tile));
+            return self.resolve_dungeon_room_trigger(game_dir, scene, level, nx, ny, tile);
         }
         if let Some(entry) = self.dungeon_teleport_at(game_dir, scene, level, nx, ny, tile)? {
             return Ok(self.apply_dungeon_teleport(scene, entry, direction));
@@ -99,8 +100,9 @@ impl PlayState {
             let slot = dungeon_room_slot(tile);
             let arena = dungeon_room_arena_index(scene, tile);
             self.advance_turn();
+            let arena_note = self.dungeon_room_arena_note(game_dir, arena)?;
             self.message = format!(
-                "Moved {} to ({nx}, {ny}) on {} level {level}; room-helper state slot {slot} maps to arena {arena} (combat handoff out of scope).",
+                "Moved {} to ({nx}, {ny}) on {} level {level}; room-helper state slot {slot}; {arena_note}.",
                 direction.name(),
                 scene.key()
             );
@@ -287,7 +289,7 @@ impl PlayState {
             return reports.join("; ");
         }
 
-        "generic field subtype has no pinned first-playable effect".to_string()
+        "generic energy field has no contact effect".to_string()
     }
 
     pub fn dungeon_field_damage_roll(&self, member_index: usize, field: DungeonFieldEffect) -> u8 {
@@ -457,37 +459,99 @@ impl PlayState {
             return Ok(None);
         }
         Ok(
-            (is_dungeon_room_trigger(tile) || is_dungeon_room_helper_state(tile)).then(|| {
-                self.resolve_dungeon_room_trigger(scene, level, self.player.x, self.player.y, tile)
-            }),
+            if is_dungeon_room_trigger(tile) || is_dungeon_room_helper_state(tile) {
+                Some(self.resolve_dungeon_room_trigger(
+                    game_dir,
+                    scene,
+                    level,
+                    self.player.x,
+                    self.player.y,
+                    tile,
+                )?)
+            } else {
+                None
+            },
         )
     }
 
     pub fn resolve_dungeon_room_trigger(
         &mut self,
+        game_dir: Option<&Path>,
         scene: DungeonScene,
         level: u8,
         x: usize,
         y: usize,
         tile: u8,
-    ) -> MoveOutcome {
+    ) -> io::Result<MoveOutcome> {
         let slot = dungeon_room_slot(tile);
+        if scene.record == DOOM_DUNGEON_RECORD
+            && level == DOOM_FINAL_ROOM_LEVEL
+            && x == DOOM_FINAL_ROOM_X
+            && y == DOOM_FINAL_ROOM_Y
+            && slot == DOOM_FINAL_ROOM_SLOT
+        {
+            return Ok(self.enter_endgame());
+        }
         let arena = dungeon_room_arena_index(scene, tile);
         self.grid[dungeon_cell_index(level, x, y)] = 0xa0 | slot;
         self.mark_visibility_dirty();
         self.advance_turn();
+        let arena_note = self.dungeon_room_arena_note(game_dir, arena)?;
         self.message = format!(
-            "Entered dungeon room trigger slot {slot} at ({x}, {y}) on {} level {level}; arena {arena} combat handoff is out of scope, marked visit-local room-helper state.",
+            "Entered dungeon room trigger slot {slot} at ({x}, {y}) on {} level {level}; {arena_note}; marked visit-local room-helper state.",
             scene.key()
         );
-        MoveOutcome::Moved
+        Ok(MoveOutcome::Moved)
+    }
+
+    pub fn dungeon_room_arena_note(
+        &self,
+        game_dir: Option<&Path>,
+        arena: usize,
+    ) -> io::Result<String> {
+        let Some(game_dir) = game_dir else {
+            return Ok(format!("selected DUNGEON.CBT arena {arena}"));
+        };
+        if !game_dir.join(DUNGEON_CBT_FILE).exists() {
+            return Ok(format!("selected DUNGEON.CBT arena {arena}"));
+        }
+        let bank = load_dungeon_cbt(game_dir)?;
+        let record = bank.record(arena).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("DUNGEON.CBT has no arena record {arena}"),
+            )
+        })?;
+        let setup = dungeon_room_combat_setup_from_record(arena, record);
+        let room_sources = record.dungeon_room_sources();
+        let source_count = setup.setup_sources.len();
+        let absorbable_count = setup
+            .setup_sources
+            .iter()
+            .filter(|source| source.kind == DungeonRoomSetupSourceKind::AbsorbableField)
+            .count();
+        let first_source = room_sources[0];
+        let terrain_origin = setup.terrain[0][0];
+        let absorbable_note = if absorbable_count > 0 {
+            format!(", {absorbable_count} absorbable-field marker(s)")
+        } else {
+            String::new()
+        };
+        Ok(format!(
+            "loaded DUNGEON.CBT arena {arena} (terrain[0,0]=0x{terrain_origin:02X}, {source_count} room source marker(s){absorbable_note}, first source 0x{first_source:02X})"
+        ))
     }
 
     pub fn tile_walkable(&self, tile: u8) -> bool {
         is_tile_walkable_for_transport(tile, self.passability.as_ref(), self.player.transport)
     }
 
-    pub fn opened_town_door_key(scene: Scene, floor: i8, x: usize, y: usize) -> (u8, i8, usize, usize) {
+    pub fn opened_town_door_key(
+        scene: Scene,
+        floor: i8,
+        x: usize,
+        y: usize,
+    ) -> (u8, i8, usize, usize) {
         (scene.byte, floor, x, y)
     }
 
@@ -508,19 +572,37 @@ impl PlayState {
         self.opened_town_doors.retain(|entry| *entry != key);
     }
 
-    pub fn is_revealed_town_secret_door(&self, scene: Scene, floor: i8, x: usize, y: usize) -> bool {
+    pub fn is_revealed_town_secret_door(
+        &self,
+        scene: Scene,
+        floor: i8,
+        x: usize,
+        y: usize,
+    ) -> bool {
         let key = Self::opened_town_door_key(scene, floor, x, y);
         self.revealed_town_secret_doors.contains(&key)
     }
 
-    pub fn record_revealed_town_secret_door(&mut self, scene: Scene, floor: i8, x: usize, y: usize) {
+    pub fn record_revealed_town_secret_door(
+        &mut self,
+        scene: Scene,
+        floor: i8,
+        x: usize,
+        y: usize,
+    ) {
         let key = Self::opened_town_door_key(scene, floor, x, y);
         if !self.revealed_town_secret_doors.contains(&key) {
             self.revealed_town_secret_doors.push(key);
         }
     }
 
-    pub fn forget_revealed_town_secret_door(&mut self, scene: Scene, floor: i8, x: usize, y: usize) {
+    pub fn forget_revealed_town_secret_door(
+        &mut self,
+        scene: Scene,
+        floor: i8,
+        x: usize,
+        y: usize,
+    ) {
         let key = Self::opened_town_door_key(scene, floor, x, y);
         self.revealed_town_secret_doors
             .retain(|entry| *entry != key);
@@ -721,9 +803,32 @@ impl PlayState {
                 return Ok(MoveOutcome::Blocked);
             }
         }
-        if let Some(object) = self.world_object_at(nx, ny) {
+        if let Some((object_slot, object)) = self
+            .world_object_slot_at(nx, ny)
+            .map(|(slot, object)| (slot, *object))
+        {
+            if let Some(game_dir) = game_dir {
+                if game_dir.join(BRIT_CBT_FILE).exists()
+                    && outdoor_combat_arena_index_for_object(object).is_some()
+                    && terrain_combat_base_class(object).is_some()
+                {
+                    self.advance_turn();
+                    let note = self.enter_terrain_combat_from_world_object(
+                        game_dir,
+                        plane,
+                        object_slot,
+                        object,
+                    )?;
+                    self.message = format!(
+                        "Moved into world object tile {} at ({nx}, {ny}) in slot {object_slot}; {note}.",
+                        object.tile
+                    );
+                    return Ok(MoveOutcome::Used);
+                }
+            }
+            let note = self.terrain_encounter_note(game_dir, plane, object)?;
             self.message = format!(
-                "Blocked by world object tile {} at ({nx}, {ny}); combat is out of scope for this slice.",
+                "Blocked by world object tile {} at ({nx}, {ny}) in slot {object_slot}; {note}.",
                 object.tile
             );
             return Ok(MoveOutcome::Blocked);
@@ -874,5 +979,4 @@ impl PlayState {
         }
         Ok(MoveOutcome::Moved)
     }
-
 }

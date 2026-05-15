@@ -172,6 +172,15 @@
     }
 
     #[test]
+    fn inline_combat_actor_target_uses_second_one_based_number() {
+        assert_eq!(parse_inline_combat_actor_slot("1GP7"), Some(6));
+        assert_eq!(parse_inline_combat_actor_slot("1GP32"), Some(31));
+        assert_eq!(parse_inline_combat_actor_slot("1GP33"), None);
+        assert_eq!(parse_inline_combat_actor_slot("1GP"), None);
+        assert_eq!(parse_inline_combat_actor_slot("GP7"), None);
+    }
+
+    #[test]
     fn parse_inline_mix_request_accepts_spell_mask_and_quantity() {
         assert_eq!(
             parse_inline_mix_request("IL/0x80/2").unwrap(),
@@ -410,6 +419,25 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
     }
 
     #[test]
+    fn mass_charm_active_effect_spell_preserves_combat_only_scene_gate() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.spell_charges[MASS_CHARM_SPELL_INDEX] = 1;
+        state.party[0].mana = MASS_CHARM_COST;
+        state.party[0].level = MASS_CHARM_COST;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1AQW", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.spell_charges[MASS_CHARM_SPELL_INDEX], 1);
+        assert_eq!(state.party[0].mana, MASS_CHARM_COST);
+        assert_eq!(state.active_effect_tag, None);
+        assert_eq!(state.active_effect_counter, 0);
+        assert_eq!(state.message, "Not here!");
+    }
+
+    #[test]
     fn active_effect_counter_ages_and_clears_on_consumed_turns() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.active_effect_tag = Some(PROTECTION_ACTIVE_EFFECT_TAG);
@@ -425,6 +453,18 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         assert_eq!(state.active_effect_tag, None);
         assert_eq!(state.active_effect_counter, 0);
         assert_eq!(state.active_effect_status(), "none");
+    }
+
+    #[test]
+    fn active_effect_counter_255_is_inert_at_aging_endpoint() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.active_effect_tag = Some(NEGATE_MAGIC_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = u8::MAX;
+
+        state.advance_turn();
+
+        assert_eq!(state.active_effect_tag, Some(NEGATE_MAGIC_ACTIVE_EFFECT_TAG));
+        assert_eq!(state.active_effect_counter, u8::MAX);
     }
 
     #[test]
@@ -449,7 +489,7 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
 
     #[test]
     fn cast_in_wis_reports_world_location_and_consumes_resources() {
-        let mut state = britannia_state(open_world_grid(), 5, 5);
+        let mut state = britannia_state(open_world_grid(), 0x23, 0xaf);
         state.player.facing = Direction::East;
         state.wind = WindState::North;
         state.spell_charges[IN_WIS_SPELL_INDEX] = 1;
@@ -465,10 +505,7 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-        assert_eq!(
-            state.message,
-            "Locate: BRITANNIA at (5, 5), facing East, wind North Winds, time 12:02."
-        );
+        assert_eq!(state.message, "Locate: K'P C'D.\"");
     }
 
     #[test]
@@ -487,6 +524,107 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         assert_eq!(state.party[0].mana, IN_WIS_COST);
         assert_eq!(state.turn, 0);
         assert_eq!(state.message, "Not here!");
+    }
+
+    #[test]
+    fn cast_scene_absorption_precedes_scene_resources_and_turn() {
+        let mut stonegate = test_state(open_grid(), 5, 5);
+        stonegate.area = Area::Town {
+            scene: Scene::new(STONEGATE_SCENE_BYTE).unwrap(),
+            floor: 0,
+        };
+        stonegate.spell_charges[IN_LOR_SPELL_INDEX] = 1;
+        stonegate.party[0].mana = IN_LOR_COST;
+        stonegate.party[0].level = IN_LOR_COST;
+
+        assert_eq!(
+            handle_play_key_input(&mut stonegate, 'C', "1IL", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(stonegate.spell_charges[IN_LOR_SPELL_INDEX], 1);
+        assert_eq!(stonegate.party[0].mana, IN_LOR_COST);
+        assert_eq!(stonegate.light_spell_counter, 0);
+        assert_eq!(stonegate.turn, 0);
+        assert_eq!(stonegate.message, "Absorbed!");
+
+        let mut blackthorn = test_state(open_grid(), 5, 5);
+        blackthorn.area = Area::Town {
+            scene: Scene::new(LORD_BLACKTHORN_CASTLE_SCENE_BYTE).unwrap(),
+            floor: 0,
+        };
+        let gp = spell_index_from_code("GP").unwrap();
+        blackthorn.spell_charges[gp] = 1;
+        blackthorn.party[0].mana = 1;
+        blackthorn.party[0].level = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut blackthorn, 'C', "1GP", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(blackthorn.spell_charges[gp], 1);
+        assert_eq!(blackthorn.party[0].mana, 1);
+        assert_eq!(blackthorn.turn, 0);
+        assert_eq!(blackthorn.message, "Absorbed!");
+    }
+
+    #[test]
+    fn blackthorn_cast_absorption_clears_after_crown_ownership() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.area = Area::Town {
+            scene: Scene::new(LORD_BLACKTHORN_CASTLE_SCENE_BYTE).unwrap(),
+            floor: 0,
+        };
+        state.special_items[SPECIAL_ITEM_CROWN_LB_INDEX] = 1;
+        state.spell_charges[IN_LOR_SPELL_INDEX] = 1;
+        state.party[0].mana = IN_LOR_COST;
+        state.party[0].level = IN_LOR_COST;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1IL", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.light_spell_counter, IN_LOR_LIGHT_DURATION);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Light!");
+    }
+
+    #[test]
+    fn cast_absorption_does_not_mask_missing_caster_or_unknown_spell() {
+        let mut missing_caster = test_state(open_grid(), 5, 5);
+        missing_caster.area = Area::Town {
+            scene: Scene::new(STONEGATE_SCENE_BYTE).unwrap(),
+            floor: 0,
+        };
+        missing_caster.spell_charges[IN_LOR_SPELL_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut missing_caster, 'C', "IL", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(missing_caster.spell_charges[IN_LOR_SPELL_INDEX], 1);
+        assert_eq!(
+            missing_caster.message,
+            "Who casts? Use C1IL for party slot 1."
+        );
+
+        let mut unknown = test_state(open_grid(), 5, 5);
+        unknown.area = Area::Town {
+            scene: Scene::new(STONEGATE_SCENE_BYTE).unwrap(),
+            floor: 0,
+        };
+
+        assert_eq!(
+            handle_play_key_input(&mut unknown, 'C', "1ZZ", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(unknown.message, "No effect!");
     }
 
     #[test]
@@ -509,22 +647,139 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
     }
 
     #[test]
-    fn cast_unimplemented_allowed_spell_still_reports_no_effect() {
+    fn spell_scene_bits_match_published_mask_values() {
+        assert_eq!(SPELL_SCENE_DUNGEON, 0x01);
+        assert_eq!(SPELL_SCENE_COMBAT, 0x02);
+        assert_eq!(SPELL_SCENE_INDOOR, 0x04);
+        assert_eq!(SPELL_SCENE_OVERWORLD, 0x08);
+
+        let gp = spell_index_from_code("GP").unwrap();
+        assert_eq!(SPELL_SCENE_MASKS[gp], SPELL_SCENE_COMBAT);
+        assert!(!spell_allowed_in_area(gp, test_state(open_grid(), 1, 1).area));
+
+        let fgi = spell_index_from_code("FGI").unwrap();
+        assert_eq!(
+            SPELL_SCENE_MASKS[fgi],
+            SPELL_SCENE_COMBAT | SPELL_SCENE_DUNGEON
+        );
+        assert!(spell_allowed_in_area(
+            fgi,
+            dungeon_state(open_dungeon_record(), 0, 1, 1).area
+        ));
+    }
+
+    #[test]
+    fn cast_vanish_removes_facing_indoor_object_without_map_rewrite() {
         let mut state = test_state(open_grid(), 1, 1);
         let spell_index = spell_index_from_code("AY").unwrap();
         state.spell_charges[spell_index] = 1;
         state.party[0].mana = 1;
         state.party[0].level = 1;
+        let map_tile_before = state.grid[1 * 32 + 2];
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x40,
+            tile: 0x40,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'C', "1AY", Path::new("")).unwrap(),
+            handle_play_key_input(&mut state, 'C', "1AY6", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.spell_charges[spell_index], 1);
-        assert_eq!(state.party[0].mana, 1);
-        assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "No effect!");
+        assert!(state.active_objects[1].is_empty());
+        assert_eq!(state.grid[1 * 32 + 2], map_tile_before);
+        assert_eq!(state.spell_charges[spell_index], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Vanished object tile 64 at (2, 1).");
+    }
+
+    #[test]
+    fn cast_vanish_prompts_or_fails_without_spending_resources_before_target() {
+        let mut missing_direction = test_state(open_grid(), 1, 1);
+        let spell_index = spell_index_from_code("AY").unwrap();
+        missing_direction.spell_charges[spell_index] = 1;
+        missing_direction.party[0].mana = 1;
+        missing_direction.party[0].level = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut missing_direction, 'C', "1AY", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(missing_direction.spell_charges[spell_index], 1);
+        assert_eq!(missing_direction.party[0].mana, 1);
+        assert_eq!(missing_direction.turn, 0);
+        assert_eq!(
+            missing_direction.message,
+            "Direction? Use C1AY8/C1AY6/C1AY2/C1AY4."
+        );
+
+        let mut no_object = test_state(open_grid(), 1, 1);
+        no_object.spell_charges[spell_index] = 1;
+        no_object.party[0].mana = 1;
+        no_object.party[0].level = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut no_object, 'C', "1AY6", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(no_object.spell_charges[spell_index], 0);
+        assert_eq!(no_object.party[0].mana, 0);
+        assert_eq!(no_object.turn, 1);
+        assert_eq!(no_object.message, "Failed!");
+    }
+
+    #[test]
+    fn cast_vanish_protects_npcs_vehicles_and_moonstones() {
+        let spell_index = spell_index_from_code("AY").unwrap();
+        for object in [
+            ActiveObject {
+                type_byte: 0xc0,
+                tile: 0xc0,
+                x: 2,
+                y: 1,
+                z: 0,
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            },
+            ActiveObject {
+                type_byte: FIRST_PLAYABLE_SKIFF_TILE,
+                tile: FIRST_PLAYABLE_SKIFF_TILE,
+                x: 2,
+                y: 1,
+                z: 0,
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            },
+            ActiveObject::moonstone_pickup(0, 2, 1, 0),
+        ] {
+            let mut state = test_state(open_grid(), 1, 1);
+            state.spell_charges[spell_index] = 1;
+            state.party[0].mana = 1;
+            state.party[0].level = 1;
+            state.active_objects.push(object);
+
+            assert_eq!(
+                handle_play_key_input(&mut state, 'C', "1AY6", Path::new("")).unwrap(),
+                PlayInputDisposition::Continue
+            );
+
+            assert_eq!(state.active_objects[1], object);
+            assert_eq!(state.spell_charges[spell_index], 0);
+            assert_eq!(state.party[0].mana, 0);
+            assert_eq!(state.turn, 1);
+            assert_eq!(state.message, "Failed!");
+        }
     }
 
     #[test]
@@ -590,7 +845,7 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         assert!(state.message.contains("Peer view of CASTLE:0 floor 0"));
-        assert!(state.message.contains("spell; full-fill 11x11 map"));
+        assert!(state.message.contains("spell; 32x32 class map"));
         assert!(state.message.contains('@'));
     }
 
@@ -630,7 +885,7 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         assert!(state.message.contains("X-Ray view of CASTLE:0 floor 0"));
-        assert!(state.message.contains("first-playable full-fill 11x11 map"));
+        assert!(state.message.contains("spell; 32x32 class map"));
         assert!(state.message.contains('@'));
     }
 
@@ -687,8 +942,110 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         assert_eq!(state.spell_charges[OPEN_SPELL_INDEX], 0);
         assert_eq!(
             state.message,
-            "Mixed wrong reagents for AS; no spell charges added."
+            "Mixed wrong reagents for AS; no spell charges added.\nAcid trap hit party member 1 for 12 HP."
         );
+        assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP - 12);
+    }
+
+    #[test]
+    fn shared_trap_index_helpers_match_published_selection_and_damage_ranges() {
+        let non_combat = (0..8)
+            .map(|index| shared_trap_effect_id_from_index(index, false))
+            .collect::<Vec<_>>();
+        assert_eq!(non_combat, vec![0, 0, 0, 1, 1, 2, 2, 3]);
+
+        let combat = (0..8)
+            .map(|index| shared_trap_effect_id_from_index(index, true))
+            .collect::<Vec<_>>();
+        assert_eq!(combat, vec![0, 1, 0, 1, 0, 1, 0, 1]);
+
+        assert_eq!(shared_trap_damage_from_index(0, TRAP_ACID_DAMAGE_MAX), 1);
+        assert_eq!(
+            shared_trap_damage_from_index(29, TRAP_ACID_DAMAGE_MAX),
+            30
+        );
+        assert_eq!(
+            shared_trap_damage_from_index(30, TRAP_ACID_DAMAGE_MAX),
+            1
+        );
+        assert_eq!(shared_trap_damage_from_index(7, TRAP_BOMB_DAMAGE_MAX), 8);
+    }
+
+    #[test]
+    fn shared_trap_effect_resolver_applies_published_effect_families() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 10,
+                max_hp: 20,
+                level: 1,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 10,
+                max_hp: 20,
+                level: 1,
+            },
+            PartyMember {
+                slot: 2,
+                class_byte: b'A',
+                status: b'D',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 0,
+                max_hp: 20,
+                level: 1,
+            },
+        ];
+
+        let effects = (0..8)
+            .map(|turn| {
+                state.turn = turn;
+                state.shared_trap_effect_id(0)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(effects, vec![0, 0, 0, 1, 1, 2, 2, 3]);
+
+        state.turn = 0;
+        state.active_player = Some(0);
+        assert_eq!(
+            state.apply_shared_trap_effect_to_slot(0),
+            "Acid trap hit party member 1 for 10 HP."
+        );
+        assert_eq!(state.party[0].hp, 0);
+        assert_eq!(state.party[0].status, b'D');
+        assert_eq!(state.active_player, None);
+
+        state.turn = 3;
+        assert_eq!(
+            state.apply_shared_trap_effect_to_slot(0),
+            "Poison trap revived party member 1 as poisoned."
+        );
+        assert_eq!(state.party[0].status, b'P');
+        assert_eq!(state.party[0].hp, 0);
+
+        state.turn = 5;
+        assert_eq!(
+            state.apply_shared_trap_effect_to_slot(1),
+            "Bomb trap dealt 7 HP across 1 party member(s)."
+        );
+        assert_eq!(state.party[1].hp, 3);
+
+        state.turn = 7;
+        assert_eq!(
+            state.apply_shared_trap_effect_to_slot(0),
+            "Gas trap revived 1 dead party member(s) as poisoned."
+        );
+        assert_eq!(state.party[2].status, b'P');
     }
 
     #[test]

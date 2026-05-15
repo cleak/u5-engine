@@ -78,24 +78,88 @@
     }
 
     #[test]
-    fn rel_hur_wind_change_uses_first_playable_cycle() {
-        let mut wind = WindState::Calm;
-        let mut cycle = Vec::new();
-        for _ in 0..5 {
-            wind = wind.rel_hur_next();
-            cycle.push(wind);
-        }
+    fn wind_save_byte_maps_public_persistent_values() {
+        assert_eq!(WindState::from_save_byte(0), WindState::Calm);
+        assert_eq!(WindState::from_save_byte(1), WindState::North);
+        assert_eq!(WindState::from_save_byte(2), WindState::South);
+        assert_eq!(WindState::from_save_byte(3), WindState::East);
+        assert_eq!(WindState::from_save_byte(4), WindState::West);
+        assert_eq!(WindState::from_save_byte(0x7a), WindState::Calm);
 
+        assert_eq!(WindState::Calm.save_byte(), 0);
+        assert_eq!(WindState::North.save_byte(), 1);
+        assert_eq!(WindState::South.save_byte(), 2);
+        assert_eq!(WindState::East.save_byte(), 3);
+        assert_eq!(WindState::West.save_byte(), 4);
+    }
+
+    #[test]
+    fn prng_state_advance_matches_public_formula_sequence() {
+        let mut state = 0;
+
+        state = u5_prng_advance_state(state);
+        assert_eq!(state, 0x8012);
+        state = u5_prng_advance_state(state);
+        assert_eq!(state, 0xd014);
+        state = u5_prng_advance_state(state);
+        assert_eq!(state, 0x1e14);
+        state = u5_prng_advance_state(state);
+        assert_eq!(state, 0x0454);
+        state = u5_prng_advance_state(state);
+        assert_eq!(state, 0x00ac);
+    }
+
+    #[test]
+    fn prng_range_consumes_state_and_applies_inclusive_modulo() {
+        let mut prng = U5Prng::new(0);
+
+        assert_eq!(prng.next_range_u16(1, 30), 19);
+        assert_eq!(prng.state(), 0x8012);
+        assert_eq!(prng.next_range_u16(1, 30), 11);
+        assert_eq!(prng.state(), 0xd014);
+        assert_eq!(prng.next_range_u8(10, 15), 12);
+        assert_eq!(prng.state(), 0x1e14);
+    }
+
+    #[test]
+    fn prng_range_helper_updates_external_state_word() {
+        let mut state = 0x1234;
+
+        assert_eq!(u5_prng_range_u16(&mut state, 4, 7), 4);
+        assert_eq!(state, 0x06d8);
+    }
+
+    #[test]
+    fn prng_zero_width_range_panics_after_state_advance() {
+        let mut prng = U5Prng::new(0);
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            prng.next_range_u16(0, 0xffff);
+        }));
+
+        assert!(result.is_err());
+        assert_eq!(prng.state(), 0x8012);
+    }
+
+    #[test]
+    fn rel_hur_wind_change_uses_prompt_direction_mapping() {
         assert_eq!(
-            cycle,
-            vec![
-                WindState::North,
-                WindState::South,
-                WindState::East,
-                WindState::West,
-                WindState::Calm
-            ]
+            WindState::rel_hur_target(Direction::North),
+            Some(WindState::West)
         );
+        assert_eq!(
+            WindState::rel_hur_target(Direction::East),
+            Some(WindState::East)
+        );
+        assert_eq!(
+            WindState::rel_hur_target(Direction::South),
+            Some(WindState::South)
+        );
+        assert_eq!(
+            WindState::rel_hur_target(Direction::West),
+            Some(WindState::North)
+        );
+        assert_eq!(WindState::rel_hur_target(Direction::NorthEast), None);
     }
 
     #[test]
@@ -212,6 +276,284 @@
         assert_eq!(saved[SAVE_AVATAR_NAME_OFFSET], b'I');
         assert_eq!(saved[SAVE_X_OFFSET], 10);
         assert_eq!(saved[SAVE_Y_OFFSET], 20);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn chargen_pair_records_follow_public_question_table() {
+        assert_eq!(
+            chargen_question_record_for_pair(ShrineVirtue::Honesty, ShrineVirtue::Compassion)
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            chargen_question_record_for_pair(ShrineVirtue::Humility, ShrineVirtue::Honesty)
+                .unwrap(),
+            8
+        );
+        assert_eq!(
+            chargen_question_record_for_pair(ShrineVirtue::Justice, ShrineVirtue::Sacrifice)
+                .unwrap(),
+            20
+        );
+        assert_eq!(
+            chargen_question_record_for_pair(ShrineVirtue::Spirituality, ShrineVirtue::Humility)
+                .unwrap(),
+            29
+        );
+        assert_eq!(
+            chargen_question_record_for_pair(ShrineVirtue::Valor, ShrineVirtue::Valor),
+            Err(ChargenError::SameVirtuePair)
+        );
+    }
+
+    #[test]
+    fn chargen_winner_stats_apply_virtue_deltas_and_strength_floor() {
+        let stats = chargen_stats_from_winners(&[
+            ShrineVirtue::Honesty,
+            ShrineVirtue::Compassion,
+            ShrineVirtue::Valor,
+            ShrineVirtue::Justice,
+            ShrineVirtue::Sacrifice,
+            ShrineVirtue::Honor,
+            ShrineVirtue::Spirituality,
+        ]);
+
+        assert_eq!(
+            stats,
+            ChargenStats {
+                strength: 20,
+                dexterity: 5,
+                intelligence: 5,
+            }
+        );
+    }
+
+    #[test]
+    fn chargen_application_customizes_only_avatar_identity_and_stats() {
+        let mut save = saved_game_seed_bytes(0, 0, 10, 20);
+        let record = SAVE_ROSTER_OFFSET;
+        save[record + SAVE_CHARACTER_NAME_LEN - 1] = 0x7f;
+        save[record + SAVE_CHARACTER_CLASS_OFFSET] = b'A';
+        save[record + SAVE_CHARACTER_STATUS_OFFSET] = b'G';
+        write_u16_at(&mut save, record + SAVE_CHARACTER_HP_OFFSET, 60);
+        write_u16_at(&mut save, record + SAVE_CHARACTER_EXPERIENCE_OFFSET, 150);
+        save[record + SAVE_CHARACTER_LEVEL_OFFSET] = 2;
+        let equipment_offset = record + SAVE_CHARACTER_EQUIPMENT_OFFSET;
+        save[equipment_offset] = 0x42;
+        let stats = ChargenStats {
+            strength: 20,
+            dexterity: 7,
+            intelligence: 9,
+        };
+
+        let avatar = apply_chargen_to_save(&mut save, b"DUPRE", false, stats).unwrap();
+
+        assert_eq!(&save[record..record + SAVE_CHARACTER_NAME_LEN - 1], b"DUPRE\0\0\0");
+        assert_eq!(save[record + SAVE_CHARACTER_NAME_LEN - 1], 0x7f);
+        assert_eq!(save[record + SAVE_CHARACTER_GENDER_OFFSET], SAVE_GENDER_FEMALE_BYTE);
+        assert_eq!(save[record + SAVE_CHARACTER_CLASS_OFFSET], b'A');
+        assert_eq!(save[record + SAVE_CHARACTER_STATUS_OFFSET], b'G');
+        assert_eq!(save[record + SAVE_CHARACTER_STR_OFFSET], 20);
+        assert_eq!(save[record + SAVE_CHARACTER_DEX_OFFSET], 7);
+        assert_eq!(save[record + SAVE_CHARACTER_INT_OFFSET], 9);
+        assert_eq!(save[record + SAVE_CHARACTER_MANA_OFFSET], 9);
+        assert_eq!(u16_at(&save, record + SAVE_CHARACTER_HP_OFFSET), 60);
+        assert_eq!(u16_at(&save, record + SAVE_CHARACTER_EXPERIENCE_OFFSET), 150);
+        assert_eq!(save[record + SAVE_CHARACTER_LEVEL_OFFSET], 2);
+        assert_eq!(save[equipment_offset], 0x42);
+        assert_eq!(
+            avatar,
+            ChargenAvatar {
+                name: [b'D', b'U', b'P', b'R', b'E', 0, 0, 0, 0x7f],
+                male: false,
+                stats,
+            }
+        );
+    }
+
+    #[test]
+    fn chargen_commit_writes_saved_files_from_init_seeds() {
+        let dir = debug_game_dir();
+        let mut init_gam = saved_game_seed_bytes(13, 0, 15, 15);
+        init_gam[SAVE_TORCH_STOCK_OFFSET] = 4;
+        init_gam[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_CLASS_OFFSET] = b'A';
+        fs::write(dir.join("INIT.GAM"), &init_gam).unwrap();
+        let init_ool: Vec<u8> = (0..OOL_PLANE_LEN).map(|index| 255 - index as u8).collect();
+        fs::write(dir.join("INIT.OOL"), &init_ool).unwrap();
+        fs::write(dir.join("SAVED.GAM"), vec![0xcc; SAVED_GAM_LEN]).unwrap();
+        fs::write(dir.join("SAVED.OOL"), vec![0xdd; SAVED_OOL_LEN]).unwrap();
+        let stats = ChargenStats {
+            strength: 20,
+            dexterity: 6,
+            intelligence: 8,
+        };
+
+        let avatar = commit_chargen_save(&dir, b"AVATAR", true, stats).unwrap();
+
+        let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+        let saved_ool = fs::read(dir.join("SAVED.OOL")).unwrap();
+        assert_eq!(
+            &saved[SAVE_ROSTER_OFFSET..SAVE_ROSTER_OFFSET + SAVE_CHARACTER_NAME_LEN],
+            b"AVATAR\0\0\0"
+        );
+        assert_eq!(
+            saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_GENDER_OFFSET],
+            SAVE_GENDER_MALE_BYTE
+        );
+        assert_eq!(saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_CLASS_OFFSET], b'A');
+        assert_eq!(saved[SAVE_TORCH_STOCK_OFFSET], 4);
+        assert_eq!(&saved_ool[..OOL_PLANE_LEN], vec![0; OOL_PLANE_LEN]);
+        assert_eq!(&saved_ool[OOL_PLANE_LEN..], init_ool.as_slice());
+        assert_eq!(avatar.male, true);
+        assert_eq!(avatar.stats, stats);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn chargen_blank_name_does_not_rewrite_saved_files() {
+        let dir = debug_game_dir();
+        fs::write(dir.join("INIT.GAM"), saved_game_seed_bytes(13, 0, 15, 15)).unwrap();
+        fs::write(dir.join("INIT.OOL"), vec![0x11; OOL_PLANE_LEN]).unwrap();
+        let old_saved = vec![0x22; SAVED_GAM_LEN];
+        let old_saved_ool = vec![0x33; SAVED_OOL_LEN];
+        fs::write(dir.join("SAVED.GAM"), &old_saved).unwrap();
+        fs::write(dir.join("SAVED.OOL"), &old_saved_ool).unwrap();
+
+        let err = commit_chargen_save(
+            &dir,
+            b"",
+            true,
+            ChargenStats {
+                strength: 20,
+                dexterity: 0,
+                intelligence: 0,
+            },
+        )
+        .err()
+        .unwrap();
+
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(fs::read(dir.join("SAVED.GAM")).unwrap(), old_saved);
+        assert_eq!(fs::read(dir.join("SAVED.OOL")).unwrap(), old_saved_ool);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn u4_transfer_application_maps_avatar_fields_and_preserves_seed_bytes() {
+        let mut save = saved_game_seed_bytes(0, 0, 10, 20);
+        let equipment_offset = SAVE_ROSTER_OFFSET + SAVE_CHARACTER_EQUIPMENT_OFFSET;
+        save[equipment_offset] = 0x7d;
+        save[SAVE_TORCH_STOCK_OFFSET] = 6;
+        let source = U4TransferSource {
+            name: b"IOLO12345".to_vec(),
+            male: true,
+            class_index: 1,
+            strength: 8,
+            dexterity: 29,
+            intelligence: 30,
+            experience: 3500,
+        };
+
+        let avatar = apply_u4_transfer_to_save(&mut save, &source, None).unwrap();
+
+        let record = SAVE_ROSTER_OFFSET;
+        assert_eq!(&save[record..record + SAVE_CHARACTER_NAME_LEN], b"IOLO1234\0");
+        assert_eq!(save[record + SAVE_CHARACTER_GENDER_OFFSET], U5_TRANSFER_MALE_BYTE);
+        assert_eq!(save[record + SAVE_CHARACTER_CLASS_OFFSET], b'B');
+        assert_eq!(save[record + SAVE_CHARACTER_STATUS_OFFSET], b'G');
+        assert_eq!(save[record + SAVE_CHARACTER_STR_OFFSET], 20);
+        assert_eq!(save[record + SAVE_CHARACTER_DEX_OFFSET], 20);
+        assert_eq!(save[record + SAVE_CHARACTER_INT_OFFSET], 20);
+        assert_eq!(save[record + SAVE_CHARACTER_MANA_OFFSET], 20);
+        assert_eq!(u16_at(&save, record + SAVE_CHARACTER_HP_OFFSET), 90);
+        assert_eq!(u16_at(&save, record + SAVE_CHARACTER_MAX_HP_OFFSET), 90);
+        assert_eq!(u16_at(&save, record + SAVE_CHARACTER_EXPERIENCE_OFFSET), 350);
+        assert_eq!(save[record + SAVE_CHARACTER_LEVEL_OFFSET], 3);
+        assert_eq!(save[equipment_offset], 0x7d);
+        assert_eq!(save[SAVE_TORCH_STOCK_OFFSET], 6);
+        assert_eq!(
+            avatar,
+            U4TransferAvatar {
+                name: *b"IOLO1234\0",
+                male: true,
+                class_byte: b'B',
+                strength: 20,
+                dexterity: 20,
+                intelligence: 20,
+                experience: 350,
+                level: 3,
+                hp: 90,
+            }
+        );
+    }
+
+    #[test]
+    fn u4_transfer_commit_writes_saved_game_from_brit_seed_and_saved_ool_from_brit_ool() {
+        let dir = debug_game_dir();
+        let mut brit_gam = saved_game_seed_bytes(0, 0, 22, 33);
+        brit_gam[SAVE_TORCH_STOCK_OFFSET] = 5;
+        fs::write(dir.join("BRIT.GAM"), &brit_gam).unwrap();
+        let brit_ool: Vec<u8> = (0..OOL_PLANE_LEN).map(|index| index as u8).collect();
+        fs::write(dir.join("BRIT.OOL"), &brit_ool).unwrap();
+        let under_ool = vec![0x44; OOL_PLANE_LEN];
+        fs::write(dir.join("UNDER.OOL"), &under_ool).unwrap();
+        fs::write(dir.join("SAVED.GAM"), vec![0xcc; SAVED_GAM_LEN]).unwrap();
+        fs::write(dir.join("SAVED.OOL"), vec![0xdd; SAVED_OOL_LEN]).unwrap();
+        let source = U4TransferSource {
+            name: b"MARIA".to_vec(),
+            male: false,
+            class_index: 0,
+            strength: 30,
+            dexterity: 10,
+            intelligence: 11,
+            experience: 990,
+        };
+
+        let avatar = commit_u4_transfer_save(&dir, &source, None).unwrap();
+
+        let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+        let saved_ool = fs::read(dir.join("SAVED.OOL")).unwrap();
+        assert_eq!(&saved[SAVE_ROSTER_OFFSET..SAVE_ROSTER_OFFSET + SAVE_CHARACTER_NAME_LEN], b"MARIA\0\0\0\0");
+        assert_eq!(
+            saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_GENDER_OFFSET],
+            U5_TRANSFER_FEMALE_BYTE
+        );
+        assert_eq!(saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_CLASS_OFFSET], b'M');
+        assert_eq!(saved[SAVE_TORCH_STOCK_OFFSET], 5);
+        assert_eq!(&saved_ool[..OOL_PLANE_LEN], vec![0; OOL_PLANE_LEN]);
+        assert_eq!(&saved_ool[OOL_PLANE_LEN..], brit_ool.as_slice());
+        assert_eq!(fs::read(dir.join("BRIT.OOL")).unwrap(), brit_ool);
+        assert_eq!(fs::read(dir.join("UNDER.OOL")).unwrap(), under_ool);
+        assert_eq!(avatar.class_byte, b'M');
+        assert_eq!(avatar.male, false);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn u4_transfer_invalid_source_does_not_rewrite_saved_files() {
+        let dir = debug_game_dir();
+        fs::write(dir.join("BRIT.GAM"), saved_game_seed_bytes(0, 0, 10, 20)).unwrap();
+        fs::write(dir.join("BRIT.OOL"), vec![0x11; OOL_PLANE_LEN]).unwrap();
+        let old_saved = vec![0x22; SAVED_GAM_LEN];
+        let old_saved_ool = vec![0x33; SAVED_OOL_LEN];
+        fs::write(dir.join("SAVED.GAM"), &old_saved).unwrap();
+        fs::write(dir.join("SAVED.OOL"), &old_saved_ool).unwrap();
+        let source = U4TransferSource {
+            name: b"AVATAR".to_vec(),
+            male: true,
+            class_index: 8,
+            strength: 20,
+            dexterity: 20,
+            intelligence: 20,
+            experience: 0,
+        };
+
+        let err = commit_u4_transfer_save(&dir, &source, None).err().unwrap();
+
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(fs::read(dir.join("SAVED.GAM")).unwrap(), old_saved);
+        assert_eq!(fs::read(dir.join("SAVED.OOL")).unwrap(), old_saved_ool);
         let _ = fs::remove_dir_all(dir);
     }
 

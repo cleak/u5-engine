@@ -77,6 +77,81 @@
     }
 
     #[test]
+    fn town_step_onto_facing_stair_family_climbs_up_when_direction_matches() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
+        let mut grid = open_grid();
+        grid[1] = 0xc5;
+        let mut state = test_state(grid, 0, 0);
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Transition(AreaTransition::ChangedFloor { scene, floor: 1 })
+        );
+
+        assert_eq!(state.area, Area::Town { scene, floor: 1 });
+        assert_eq!((state.player.x, state.player.y), (1, 0));
+        assert_eq!(state.grid[1], 1);
+        assert_eq!(state.active_objects[0].z, 1);
+        assert_eq!(state.turn, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_step_onto_facing_stair_family_climbs_down_from_opposite_direction() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
+        let mut grid = open_grid();
+        grid[1] = 0xc7;
+        let mut state = test_state(grid, 0, 0);
+        state.area = Area::Town { scene, floor: 1 };
+        state.active_objects[0].z = 1;
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Transition(AreaTransition::ChangedFloor { scene, floor: 0 })
+        );
+
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!((state.player.x, state.player.y), (1, 0));
+        assert_eq!(state.grid[1], 0);
+        assert_eq!(state.active_objects[0].z, 0);
+        assert_eq!(state.turn, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_step_onto_facing_stair_family_side_crossing_moves_without_floor_change() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
+        let mut grid = open_grid();
+        grid[1] = 0xc4;
+        let mut state = test_state(grid, 0, 0);
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Moved
+        );
+
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!((state.player.x, state.player.y), (1, 0));
+        assert_eq!(state.grid[1], 0xc4);
+        assert_eq!(state.active_objects[0].z, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Moved to (1, 0).");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn town_step_onto_clean_trap_door_changes_to_target_floor() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
@@ -291,6 +366,7 @@
                 },
                 world_object,
             ],
+            pending_vehicle: None,
         });
         state.visibility_dirty = false;
 

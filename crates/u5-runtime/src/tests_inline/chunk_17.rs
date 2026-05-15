@@ -19,6 +19,7 @@
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: 10,
                 mana: 4,
@@ -28,6 +29,7 @@
             },
             PartyMember {
                 slot: 2,
+                class_byte: b'A',
                 status: b'P',
                 climb_stat: 30,
                 mana: 5,
@@ -63,11 +65,10 @@
             "inventory food=123 gold=987 keys=7 gems=3 torches=5 climbing=1 reagents=36"
         ));
         assert!(state.message.contains("spells IL=2, PRV=1"));
-        assert!(
-            state.message.contains(
-                "party P1:slot0 good HP 10/20 MP 4 L2; P2:slot2 poisoned HP 6/30 MP 5 L3"
-            )
-        );
+        assert!(state.message.contains("party P1:slot0 good STR"));
+        assert!(state.message.contains("HP 10/20 MP 4 L2 equip [none]"));
+        assert!(state.message.contains("P2:slot2 poisoned STR"));
+        assert!(state.message.contains("HP 6/30 MP 5 L3 equip [none]"));
     }
 
     #[test]
@@ -100,11 +101,108 @@
     }
 
     #[test]
+    fn shadowlord_midnight_reroll_skips_vanquished_and_keeps_living_distinct() {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.clock = GameClock::with_date(139, 4, 5, 23, 59).unwrap();
+        state.shadowlord_hideouts = [1, SHADOWLORD_VANQUISHED, 2];
+
+        state.advance_turn_with_minutes(1);
+
+        assert_eq!(state.clock.day, 6);
+        assert_eq!(
+            state.shadowlord_hideouts[SHADOWLORD_HATRED_INDEX],
+            SHADOWLORD_VANQUISHED
+        );
+        assert!(PlayState::shadowlord_slot_is_living(
+            state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX]
+        ));
+        assert!(PlayState::shadowlord_slot_is_living(
+            state.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX]
+        ));
+        assert_ne!(
+            state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX],
+            state.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX]
+        );
+    }
+
+    #[test]
+    fn shadowlord_reroll_rejects_current_hideout_id() {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.shadowlord_hideouts = [1, 2, SHADOWLORD_VANQUISHED];
+
+        assert_eq!(state.reroll_shadowlord_hideouts_excluding(Some(3)), 2);
+
+        assert_ne!(state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX], 3);
+        assert_ne!(state.shadowlord_hideouts[SHADOWLORD_HATRED_INDEX], 3);
+        assert_ne!(
+            state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX],
+            state.shadowlord_hideouts[SHADOWLORD_HATRED_INDEX]
+        );
+        assert_eq!(
+            state.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX],
+            SHADOWLORD_VANQUISHED
+        );
+    }
+
+    #[test]
+    fn shadowlord_current_hideout_id_uses_virtue_town_scene_ids_only() {
+        let mut state = test_state(open_grid(), 1, 1);
+
+        state.area = Area::Town {
+            scene: Scene::new(1).unwrap(),
+            floor: 0,
+        };
+        assert_eq!(state.current_shadowlord_hideout_id(), Some(1));
+
+        state.area = Area::Town {
+            scene: Scene::new(8).unwrap(),
+            floor: 0,
+        };
+        assert_eq!(state.current_shadowlord_hideout_id(), Some(8));
+
+        state.area = Area::Town {
+            scene: Scene::new(9).unwrap(),
+            floor: 0,
+        };
+        assert_eq!(state.current_shadowlord_hideout_id(), None);
+
+        state.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        assert_eq!(state.current_shadowlord_hideout_id(), None);
+    }
+
+    #[test]
+    fn shadowlord_midnight_reroll_excludes_current_virtue_town() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(1).unwrap(),
+            floor: 0,
+        };
+        state.clock = GameClock::with_date(139, 4, 5, 23, 59).unwrap();
+        state.shadowlord_hideouts = [1, 2, SHADOWLORD_VANQUISHED];
+
+        state.advance_turn_with_minutes(1);
+
+        assert_ne!(state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX], 1);
+        assert_ne!(state.shadowlord_hideouts[SHADOWLORD_HATRED_INDEX], 1);
+        assert_ne!(
+            state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX],
+            state.shadowlord_hideouts[SHADOWLORD_HATRED_INDEX]
+        );
+        assert_eq!(
+            state.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX],
+            SHADOWLORD_VANQUISHED
+        );
+    }
+
+    #[test]
     fn new_order_swaps_runtime_party_positions_without_turn() {
         let mut state = test_state(open_grid(), 1, 1);
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: 10,
                 mana: 1,
@@ -114,6 +212,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'P',
                 climb_stat: 20,
                 mana: 2,
@@ -123,6 +222,7 @@
             },
             PartyMember {
                 slot: 2,
+                class_byte: b'A',
                 status: b'S',
                 climb_stat: 30,
                 mana: 3,
@@ -155,6 +255,7 @@
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: 10,
                 mana: 1,
@@ -164,6 +265,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: 20,
                 mana: 2,
@@ -202,6 +304,7 @@
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: DEFAULT_CLIMB_STAT,
                 mana: 0,
@@ -211,6 +314,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: DEFAULT_CLIMB_STAT,
                 mana: 1,
@@ -244,11 +348,428 @@
     }
 
     #[test]
+    fn new_order_swaps_strength_and_equipment_sidecars() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: 10,
+                mana: 1,
+                hp: 10,
+                max_hp: 20,
+                level: 1,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: 20,
+                mana: 2,
+                hp: 11,
+                max_hp: 21,
+                level: 2,
+            },
+        ];
+        state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0"];
+        state.party_strengths = vec![12, 34];
+        state.party_equipment = vec![
+            [
+                1,
+                EQUIPMENT_EMPTY,
+                EQUIPMENT_EMPTY,
+                EQUIPMENT_EMPTY,
+                EQUIPMENT_EMPTY,
+                EQUIPMENT_EMPTY,
+            ],
+            [
+                EQUIPMENT_EMPTY,
+                EQUIPMENT_EMPTY,
+                16,
+                EQUIPMENT_EMPTY,
+                EQUIPMENT_EMPTY,
+                EQUIPMENT_EMPTY,
+            ],
+        ];
+
+        assert_eq!(state.new_order_from_suffix("12"), MoveOutcome::Used);
+
+        assert_eq!(state.party_names, vec![*b"IOLO\0\0\0\0\0", *b"AVATAR\0\0\0"]);
+        assert_eq!(state.party_strengths, vec![34, 12]);
+        assert_eq!(state.party_equipment[0][EQUIP_SLOT_WEAPON], 16);
+        assert_eq!(state.party_equipment[1][EQUIP_SLOT_HELM], 1);
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn ready_equipment_equips_and_unequips_without_turn() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_strengths = vec![50];
+        state.party_equipment = default_party_equipment(1);
+        state.equipment_stock[EQUIPMENT_ID_ARROWS] = 5;
+        state.equipment_stock[EQUIPMENT_ID_BOW] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'R', "1/26", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(
+            state.party_equipment[0][EQUIP_SLOT_WEAPON],
+            EQUIPMENT_ID_BOW as u8
+        );
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 0);
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(state.ready_equipment_from_suffix("1/26"), MoveOutcome::Used);
+
+        assert_eq!(state.party_equipment[0][EQUIP_SLOT_WEAPON], EQUIPMENT_EMPTY);
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn ready_equipment_unequipping_invisibility_ring_clears_combat_hidden_flag() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.combat_active = true;
+        state.party_equipment = default_party_equipment(1);
+        state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_INVISIBILITY as u8;
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            4,
+            4,
+        ]);
+        state.active_objects[0].type_byte = 0x5c;
+        state.active_objects[0].tile = 0x5d;
+        assert!(apply_combat_linked_invisibility(
+            &mut state.combat_actors[0],
+            &mut state.active_objects,
+        )
+        .unwrap()
+        .changed());
+        state.visibility_dirty = false;
+
+        assert_eq!(
+            state.ready_equipment_from_suffix("1/42"),
+            MoveOutcome::Used
+        );
+
+        assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_RING_INVISIBILITY], 1);
+        assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
+        assert_eq!(state.active_objects[0].tile, 0x5c);
+        assert!(state.visibility_dirty);
+        assert_eq!(
+            state.message,
+            "Unequipped Ring of Invisibility from party member 1; stock is 1."
+        );
+    }
+
+    #[test]
+    fn ready_equipment_enforces_stock_ammunition_and_strength_gates() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_strengths = vec![5];
+        state.party_equipment = default_party_equipment(1);
+
+        assert_eq!(
+            state.ready_equipment_from_suffix("1/16"),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, "No carried Dagger to ready.");
+
+        state.equipment_stock[EQUIPMENT_ID_BOW] = 1;
+        assert_eq!(
+            state.ready_equipment_from_suffix("1/26"),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, "No arrows for that weapon.");
+
+        state.equipment_stock[EQUIPMENT_ID_ARROWS] = 1;
+        assert_eq!(
+            state.ready_equipment_from_suffix("1/26"),
+            MoveOutcome::Blocked
+        );
+        assert!(state.message.contains("not strong enough"));
+        assert_eq!(state.party_equipment[0][EQUIP_SLOT_WEAPON], EQUIPMENT_EMPTY);
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
+    }
+
+    #[test]
+    fn ready_equipment_respects_hand_and_slot_occupancy() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_strengths = vec![60];
+        state.party_equipment = default_party_equipment(1);
+        state.equipment_stock[31] = 1;
+        state.equipment_stock[4] = 1;
+        state.equipment_stock[16] = 1;
+
+        assert_eq!(state.ready_equipment_from_suffix("1/31"), MoveOutcome::Used);
+        assert_eq!(state.party_equipment[0][EQUIP_SLOT_WEAPON], 31);
+
+        assert_eq!(
+            state.ready_equipment_from_suffix("1/4"),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, "Weapon hand holds a two-handed item.");
+
+        assert_eq!(
+            state.ready_equipment_from_suffix("1/16"),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, "Remove current weapon first.");
+    }
+
+    #[test]
+    fn cast_reveal_clears_combat_hidden_flags_and_marks_redraw() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.combat_active = true;
+        state.party[0].mana = REVEAL_COST;
+        state.party[0].level = REVEAL_COST;
+        state.spell_charges[REVEAL_SPELL_INDEX] = 1;
+        state.combat_actors[7] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+            32,
+            7,
+            0,
+            4,
+            5,
+        ]);
+        state.visibility_dirty = false;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1QW", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.spell_charges[REVEAL_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert!(!state.combat_actors[7].is_hidden_or_unrevealed());
+        assert!(state.visibility_dirty);
+        assert_eq!(state.message, "Revealed 1 combat actor(s).");
+    }
+
+    #[test]
+    fn cast_reveal_requires_combat_before_spending_resources() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party[0].mana = REVEAL_COST;
+        state.party[0].level = REVEAL_COST;
+        state.spell_charges[REVEAL_SPELL_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1QW", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.spell_charges[REVEAL_SPELL_INDEX], 1);
+        assert_eq!(state.party[0].mana, REVEAL_COST);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Not here!");
+    }
+
+    #[test]
+    fn cast_invisibility_marks_current_combat_actor_hidden() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.combat_active = true;
+        state.party[0].mana = INVISIBILITY_COST;
+        state.party[0].level = INVISIBILITY_COST;
+        state.spell_charges[INVISIBILITY_SPELL_INDEX] = 1;
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            4,
+            5,
+        ]);
+        state.active_objects[0].type_byte = 0x5c;
+        state.active_objects[0].tile = 0x5c;
+        state.visibility_dirty = false;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1LS", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.spell_charges[INVISIBILITY_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert!(state.combat_actors[0].is_hidden_or_unrevealed());
+        assert_eq!(state.active_objects[0].tile, COMBAT_HIDDEN_ACTIVE_OBJECT_TILE);
+        assert!(state.visibility_dirty);
+        assert_eq!(state.message, "Invisibility!");
+    }
+
+    #[test]
+    fn cast_invisibility_requires_combat_before_spending_resources() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party[0].mana = INVISIBILITY_COST;
+        state.party[0].level = INVISIBILITY_COST;
+        state.spell_charges[INVISIBILITY_SPELL_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1LS", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.spell_charges[INVISIBILITY_SPELL_INDEX], 1);
+        assert_eq!(state.party[0].mana, INVISIBILITY_COST);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Not here!");
+    }
+
+    #[test]
+    fn cast_cause_fear_forces_hostile_combat_actors_to_critical_hp() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.combat_active = true;
+        state.party[0].mana = CAUSE_FEAR_COST;
+        state.party[0].level = CAUSE_FEAR_COST;
+        state.spell_charges[CAUSE_FEAR_SPELL_INDEX] = 1;
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            4,
+            5,
+        ]);
+        state.combat_actors[6] = CombatActorDescriptor::from_row([
+            50,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_CLASS_DAEMON,
+            6,
+            0,
+            6,
+            5,
+        ]);
+        state.combat_actors[7] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_MARKED_DEAD,
+            COMBAT_CLASS_GIANT_RAT,
+            7,
+            0,
+            7,
+            5,
+        ]);
+        state.combat_actors[8] = CombatActorDescriptor::from_row([
+            25,
+            1,
+            COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+            COMBAT_CLASS_PYTHON,
+            8,
+            0,
+            8,
+            5,
+        ]);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1CIQ", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.spell_charges[CAUSE_FEAR_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.combat_actors[0].hp_or_wound, 20);
+        assert_eq!(
+            state.combat_actors[6].hp_or_wound,
+            cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_DAEMON).unwrap().max_hp)
+        );
+        assert_eq!(state.combat_actors[7].hp_or_wound, 20);
+        assert_eq!(
+            state.combat_actors[8].hp_or_wound,
+            cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_PYTHON).unwrap().max_hp)
+        );
+        assert_eq!(state.message, "Cause Fear affected 2 combat actor(s).");
+    }
+
+    #[test]
+    fn cast_cause_fear_requires_combat_before_spending_resources() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party[0].mana = CAUSE_FEAR_COST;
+        state.party[0].level = CAUSE_FEAR_COST;
+        state.spell_charges[CAUSE_FEAR_SPELL_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1CIQ", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.spell_charges[CAUSE_FEAR_SPELL_INDEX], 1);
+        assert_eq!(state.party[0].mana, CAUSE_FEAR_COST);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Not here!");
+    }
+
+    #[test]
+    fn cast_cause_fear_skips_charmed_monsters_as_same_faction() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.combat_active = true;
+        state.party[0].mana = CAUSE_FEAR_COST;
+        state.party[0].level = CAUSE_FEAR_COST;
+        state.spell_charges[CAUSE_FEAR_SPELL_INDEX] = 1;
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            4,
+            5,
+        ]);
+        state.combat_actors[6] = CombatActorDescriptor::from_row([
+            50,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_TEAM_TOGGLE,
+            COMBAT_CLASS_DAEMON,
+            6,
+            0,
+            6,
+            5,
+        ]);
+        state.combat_actors[7] = CombatActorDescriptor::from_row([
+            50,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_CLASS_PYTHON,
+            7,
+            0,
+            7,
+            5,
+        ]);
+
+        assert_eq!(state.cast_cause_fear(0), MoveOutcome::Cast);
+
+        assert_eq!(state.combat_actors[6].hp_or_wound, 50);
+        assert_eq!(
+            state.combat_actors[7].hp_or_wound,
+            cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_PYTHON).unwrap().max_hp)
+        );
+        assert_eq!(state.message, "Cause Fear affected 1 combat actor(s).");
+    }
+
+    #[test]
     fn cast_restore_spells_clear_status_and_heal_hp_after_resource_gates() {
         let mut cure = dungeon_state(open_dungeon_record(), 0, 1, 1);
         cure.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: DEFAULT_CLIMB_STAT,
                 mana: 3,
@@ -258,6 +779,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'P',
                 climb_stat: DEFAULT_CLIMB_STAT,
                 mana: 0,
@@ -281,17 +803,39 @@
         assert_eq!(cure.message, "Cured party member 2.");
 
         let mut awaken = dungeon_state(open_dungeon_record(), 0, 1, 1);
-        awaken.party = cure.party.clone();
+        awaken.party = vec![
+            cure.party[0].clone(),
+            PartyMember {
+                slot: 1,
+                class_byte: b'A',
+                status: b'S',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 8,
+                max_hp: 20,
+                level: 1,
+            },
+            PartyMember {
+                slot: 2,
+                class_byte: b'A',
+                status: b'S',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 8,
+                max_hp: 20,
+                level: 1,
+            },
+        ];
         awaken.party[0].mana = 3;
-        awaken.party[1].status = b'S';
         awaken.spell_charges[AWAKEN_SPELL_INDEX] = 1;
 
         assert_eq!(
-            handle_play_key_input(&mut awaken, 'C', "1AZ2", Path::new("")).unwrap(),
+            handle_play_key_input(&mut awaken, 'C', "1AZ", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
         assert_eq!(awaken.party[1].status, b'G');
+        assert_eq!(awaken.party[2].status, b'S');
         assert_eq!(awaken.spell_charges[AWAKEN_SPELL_INDEX], 0);
         assert_eq!(awaken.party[0].mana, 2);
         assert_eq!(awaken.turn, 1);
@@ -301,19 +845,21 @@
         heal.party = cure.party;
         heal.party[0].mana = 3;
         heal.party[1].hp = 8;
-        heal.party[1].max_hp = 15;
+        heal.party[1].max_hp = 25;
         heal.spell_charges[HEAL_SPELL_INDEX] = 1;
+        let expected_heal = heal.heal_spell_amount(0, 1);
 
         assert_eq!(
             handle_play_key_input(&mut heal, 'C', "1M2", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(heal.party[1].hp, 15);
+        assert_eq!(expected_heal, 11);
+        assert_eq!(heal.party[1].hp, 8 + expected_heal);
         assert_eq!(heal.spell_charges[HEAL_SPELL_INDEX], 0);
         assert_eq!(heal.party[0].mana, 2);
         assert_eq!(heal.turn, 1);
-        assert_eq!(heal.message, "Healed party member 2 for 7 HP (15/15).");
+        assert_eq!(heal.message, "Healed party member 2 for 11 HP (19/25).");
 
         let mut great_heal = dungeon_state(open_dungeon_record(), 0, 1, 1);
         great_heal.party = heal.party.clone();
@@ -342,8 +888,14 @@
         resurrect.party[0].mana = RESURRECT_COST;
         resurrect.party[0].level = RESURRECT_COST;
         resurrect.party[1].status = b'D';
+        resurrect.party[1].class_byte = b'B';
         resurrect.party[1].hp = 0;
         resurrect.party[1].max_hp = 19;
+        resurrect.party[1].mana = 0;
+        resurrect.party[1].level = 1;
+        resurrect.party_experience = vec![0, 350];
+        resurrect.party_intelligence = vec![30, 13];
+        resurrect.moral_standing = 99;
         resurrect.spell_charges[RESURRECT_SPELL_INDEX] = 1;
 
         assert_eq!(
@@ -352,11 +904,77 @@
         );
 
         assert_eq!(resurrect.party[1].status, b'G');
-        assert_eq!(resurrect.party[1].hp, 19);
+        assert_eq!(resurrect.party[1].hp, 1);
+        assert_eq!(resurrect.party[1].mana, 6);
+        assert_eq!(resurrect.party[1].level, 3);
+        assert_eq!(resurrect.party[1].max_hp, 90);
+        assert_eq!(resurrect.party_experience[1], 350);
         assert_eq!(resurrect.spell_charges[RESURRECT_SPELL_INDEX], 0);
         assert_eq!(resurrect.party[0].mana, 0);
         assert_eq!(resurrect.turn, 1);
-        assert_eq!(resurrect.message, "Resurrected party member 2 (19/19).");
+        assert_eq!(resurrect.message, "Resurrected party member 2 (1/90).");
+    }
+
+    #[test]
+    fn heal_amount_helper_matches_public_roll_range() {
+        assert_eq!(heal_spell_amount_from_raw_roll(0), 1);
+        assert_eq!(heal_spell_amount_from_raw_roll(1), 1);
+        assert_eq!(heal_spell_amount_from_raw_roll(60), 30);
+
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        let mut seen = [false; 31];
+        for turn in 0..=60 {
+            state.turn = turn;
+            let amount = state.heal_spell_amount(0, 0);
+            assert!((1..=30).contains(&amount));
+            seen[amount as usize] = true;
+        }
+        assert!(seen[1]);
+        assert!(seen[30]);
+    }
+
+    #[test]
+    fn resurrect_rescales_experience_when_moral_standing_is_below_threshold() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: RESURRECT_COST,
+                hp: 10,
+                max_hp: 20,
+                level: RESURRECT_COST,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'M',
+                status: b'D',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 0,
+                max_hp: 30,
+                level: 1,
+            },
+        ];
+        state.party_experience = vec![0, 300];
+        state.party_intelligence = vec![30, 21];
+        state.moral_standing = 75;
+        state.spell_charges[RESURRECT_SPELL_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1CIM2", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.party_experience[1], 400);
+        assert_eq!(state.party[1].status, b'G');
+        assert_eq!(state.party[1].hp, 1);
+        assert_eq!(state.party[1].mana, 21);
+        assert_eq!(state.party[1].level, 4);
+        assert_eq!(state.party[1].max_hp, 120);
+        assert_eq!(state.message, "Resurrected party member 2 (1/120).");
     }
 
     #[test]
@@ -419,6 +1037,7 @@
         great_heal_dead.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: DEFAULT_CLIMB_STAT,
                 mana: GREAT_HEAL_COST,
@@ -428,6 +1047,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'D',
                 climb_stat: DEFAULT_CLIMB_STAT,
                 mana: 0,
@@ -516,12 +1136,12 @@
         assert!(state.visibility_dirty);
         assert_eq!(
             state.message,
-            "Safely opened dungeon chest at (1, 1) on DUNGEON:0 level 0; trap generator bypassed by An Sanct, marked visit-local passage."
+            "Safely opened dungeon chest at (1, 1) on DUNGEON:0 level 0; trap generator bypassed by An Sanct, marked visit-local open chest."
         );
     }
 
     #[test]
-    fn cast_an_sanct_applies_clean_sidecar_chest_grants() {
+    fn cast_an_sanct_opens_without_applying_clean_sidecar_chest_grants() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(DUNGEON_CHEST_TABLE_FILE),
@@ -543,8 +1163,8 @@
         );
 
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7b);
-        assert_eq!(state.gold, starting_gold + 12);
-        assert_eq!(state.torches, starting_torches + 1);
+        assert_eq!(state.gold, starting_gold);
+        assert_eq!(state.torches, starting_torches);
         assert_eq!(state.spell_charges[OPEN_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
@@ -553,12 +1173,56 @@
                 .message
                 .contains("trap generator bypassed by An Sanct")
         );
-        assert!(
-            state
-                .message
-                .contains("authored chest grants 12 gold, 1 torches")
-        );
+        assert!(!state.message.contains("authored chest grants"));
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn cast_an_sanct_opens_ordinary_surface_doors_without_open_tracker() {
+        let mut town_grid = open_grid();
+        town_grid[1 * 32 + 2] = 0x97;
+        let mut town = test_state(town_grid, 1, 1);
+        town.spell_charges[OPEN_SPELL_INDEX] = 1;
+        town.party[0].mana = OPEN_SPELL_COST;
+        town.party[0].level = OPEN_SPELL_COST;
+
+        assert_eq!(
+            handle_play_key_input(&mut town, 'C', "1AS6", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(town.grid[1 * 32 + 2], 0xb8);
+        assert_eq!(town.spell_charges[OPEN_SPELL_INDEX], 0);
+        assert_eq!(town.party[0].mana, 0);
+        assert_eq!(town.turn, 1);
+        assert_eq!(town.clock, GameClock::new(12, 1).unwrap());
+        assert!(town.visibility_dirty);
+        assert_eq!(town.door_tracker, None);
+        let Area::Town { scene, floor } = town.area else {
+            unreachable!("test state should be a town");
+        };
+        assert!(!town.is_recorded_open_town_door(scene, floor, 2, 1));
+        assert_eq!(town.message, "Opened!");
+
+        let mut world_grid = open_world_grid();
+        world_grid[world_cell_index(4, 5)] = 0x98;
+        let mut world = britannia_state(world_grid, 5, 5);
+        world.spell_charges[OPEN_SPELL_INDEX] = 1;
+        world.party[0].mana = OPEN_SPELL_COST;
+        world.party[0].level = OPEN_SPELL_COST;
+
+        assert_eq!(
+            handle_play_key_input(&mut world, 'C', "1AS4", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(world.grid[world_cell_index(4, 5)], 0xba);
+        assert_eq!(world.spell_charges[OPEN_SPELL_INDEX], 0);
+        assert_eq!(world.party[0].mana, 0);
+        assert_eq!(world.turn, 1);
+        assert_eq!(world.clock, GameClock::new(12, 2).unwrap());
+        assert_eq!(world.door_tracker, None);
+        assert_eq!(world.message, "Opened!");
     }
 
     #[test]
@@ -583,7 +1247,7 @@
         no_modeled_target.party[0].level = OPEN_SPELL_COST;
 
         assert_eq!(
-            handle_play_key_input(&mut no_modeled_target, 'C', "1AS", Path::new("")).unwrap(),
+            handle_play_key_input(&mut no_modeled_target, 'C', "1AS6", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 

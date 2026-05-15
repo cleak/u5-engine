@@ -46,6 +46,10 @@ pub fn is_dungeon_walkable(tile: u8) -> bool {
     !matches!(tile >> 4, 0x0b..=0x0f)
 }
 
+pub fn dungeon_minimap_expands(tile: u8) -> bool {
+    !matches!(tile >> 4, 0x0b..=0x0d)
+}
+
 pub fn is_dungeon_fall_trap(tile: u8) -> bool {
     matches!(tile, 0x61 | 0x69)
 }
@@ -95,6 +99,31 @@ pub fn stair_delta(tile: u8, intent: ClimbIntent) -> Option<i8> {
     Some(town_climb_delta(intent))
 }
 
+pub fn town_walk_on_stair_delta(tile: u8, direction: Direction) -> Option<i8> {
+    if !(0xc4..=0xc7).contains(&tile) {
+        return None;
+    }
+    let direction = town_cardinal_direction_code(direction)?;
+    let selector = tile & 0x03;
+    if selector == direction {
+        Some(1)
+    } else if selector == ((direction + 2) & 0x03) {
+        Some(-1)
+    } else {
+        None
+    }
+}
+
+fn town_cardinal_direction_code(direction: Direction) -> Option<u8> {
+    match direction {
+        Direction::North => Some(0),
+        Direction::East => Some(1),
+        Direction::South => Some(2),
+        Direction::West => Some(3),
+        _ => None,
+    }
+}
+
 pub fn town_climb_delta(intent: ClimbIntent) -> i8 {
     match intent {
         ClimbIntent::Up => 1,
@@ -140,20 +169,109 @@ pub fn render_glyph(tile: u8) -> char {
     }
 }
 
-pub fn render_dungeon_glyph(tile: u8) -> char {
-    match tile >> 4 {
-        0x0 | 0x7 => '.',
-        0x1 => '<',
-        0x2 => '>',
-        0x3 => 'H',
-        0x4 => '$',
-        0x5 => 'f',
-        0x6 => 'p',
-        0x8 | 0x9 => '*',
-        0xA => 'r',
-        0xB..=0xE => '#',
-        0xF => '+',
+pub fn surface_view_class(tile: u8) -> u8 {
+    match tile {
+        0x00 | 0xc0..=0xc3 | 0xcc..=0xcf | 0xff => 0x00,
+        0x05 | 0x30..=0x37 => 0x01,
+        0x09..=0x0a | 0x2d => 0x02,
+        0x07
+        | 0x1c
+        | 0x1e..=0x1f
+        | 0x40
+        | 0x44
+        | 0x48..=0x49
+        | 0x6a..=0x6b
+        | 0x70..=0x7f
+        | 0x87
+        | 0x8c
+        | 0x8f
+        | 0xaa
+        | 0xbc
+        | 0xdd => 0x03,
+        0x1d
+        | 0x38
+        | 0x47
+        | 0x5a
+        | 0x5c..=0x5d
+        | 0x94..=0x96
+        | 0x9a..=0x9c
+        | 0xab..=0xac
+        | 0xbe => 0x04,
+        0x10..=0x1b
+        | 0x29..=0x2b
+        | 0x2e..=0x2f
+        | 0x41..=0x43
+        | 0x4c
+        | 0x58..=0x59
+        | 0x5b
+        | 0x5e..=0x5f
+        | 0x80..=0x85
+        | 0x88..=0x8b
+        | 0x8d..=0x8e
+        | 0x90..=0x93
+        | 0x9d..=0xa9
+        | 0xad..=0xb7
+        | 0xbd
+        | 0xbf
+        | 0xc8..=0xcb
+        | 0xde..=0xdf
+        | 0xe8..=0xeb
+        | 0xfa..=0xfd => 0x05,
+        0x0d
+        | 0x45
+        | 0x4a..=0x4b
+        | 0x86
+        | 0x97..=0x99
+        | 0xb8..=0xbb
+        | 0xc4..=0xc7
+        | 0xec..=0xf9 => 0x06,
+        0x0c | 0x27..=0x28 | 0x39..=0x3f | 0x46 | 0x4d..=0x57 | 0xd0..=0xd3 | 0xfe => 0x07,
+        0x0b | 0x0e..=0x0f => 0x08,
+        0x06 | 0x08 | 0x2c => 0x09,
+        0x03 | 0x60..=0x69 | 0x6c..=0x6f | 0xe4..=0xe7 => 0x0a,
+        0x02 | 0xd4..=0xd7 => 0x0b,
+        0x01 => 0x0c,
+        0x04 => 0x0d,
+        0xe0..=0xe3 => 0x0e,
+        0xd8..=0xdc => 0x0f,
+        0x20..=0x26 => 0x10,
+    }
+}
+
+pub fn render_surface_view_class(class: u8) -> char {
+    match class {
+        0x00 => ' ',
+        0x01..=0x09 => (b'0' + class) as char,
+        0x0a..=0x0f => (b'A' + (class - 0x0a)) as char,
+        0x10 => 'G',
+        0x5a => 'W',
         _ => '?',
+    }
+}
+
+pub fn render_dungeon_glyph(tile: u8) -> char {
+    match tile {
+        0x00..=0x07 => ' ',
+        0x08..=0x0f => '.',
+        0x10..=0x1f => '<',
+        0x20..=0x2f => '>',
+        0x30..=0x3f => 'H',
+        0x40..=0x4f => '$',
+        0x50..=0x5f => 'f',
+        0x60 => 'o',
+        0x61 | 0x69 => 'v',
+        0x68 => '.',
+        0x62..=0x6f => '!',
+        0x70..=0x7f => ' ',
+        0x80..=0x8f => '*',
+        0x90..=0x9f => ' ',
+        0xa0..=0xaf => '+',
+        0xb0 => '#',
+        0xb1..=0xbf => '#',
+        0xc0..=0xcf => '#',
+        0xd0..=0xdf => '#',
+        0xe0..=0xef => '+',
+        0xf0..=0xff => '+',
     }
 }
 
@@ -179,7 +297,11 @@ pub fn npc_active_object(type_byte: u8, x: usize, y: usize, z: u8) -> ActiveObje
     }
 }
 
-pub fn active_object_matches_runtime_npc(object: ActiveObject, npc: &RuntimeNpc, floor: u8) -> bool {
+pub fn active_object_matches_runtime_npc(
+    object: ActiveObject,
+    npc: &RuntimeNpc,
+    floor: u8,
+) -> bool {
     if object.is_empty()
         || object.x != npc.x
         || object.y != npc.y
@@ -289,6 +411,23 @@ pub fn is_ambient_wanderer_object(object: ActiveObject) -> bool {
 
 pub fn is_ship_object(object: ActiveObject) -> bool {
     (168..=175).contains(&object.type_byte) || (168..=175).contains(&object.tile)
+}
+
+pub fn is_whirlpool_object(object: ActiveObject) -> bool {
+    (0xec..=0xef).contains(&object.type_byte) || (0xec..=0xef).contains(&object.tile)
+}
+
+pub fn outdoor_combat_arena_index_for_object(object: ActiveObject) -> Option<usize> {
+    outdoor_combat_arena_index_for_byte(object.type_byte)
+        .or_else(|| outdoor_combat_arena_index_for_byte(object.tile))
+}
+
+pub fn outdoor_combat_arena_index_for_byte(byte: u8) -> Option<usize> {
+    match byte {
+        0x2c..=0x2f => Some(1),
+        0x40..=0x7f => Some(((byte - 0x40) / 4) as usize),
+        _ => None,
+    }
 }
 
 pub fn direction_from_active_object_phase(phase: u8) -> Option<Direction> {

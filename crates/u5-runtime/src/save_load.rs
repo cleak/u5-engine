@@ -21,7 +21,10 @@ pub fn load_play_options_from_init(game_dir: &Path) -> io::Result<PlayOptions> {
     Ok(options)
 }
 
-pub fn load_save_image_template(game_dir: &Path, source: SaveTemplateSource) -> io::Result<Vec<u8>> {
+pub fn load_save_image_template(
+    game_dir: &Path,
+    source: SaveTemplateSource,
+) -> io::Result<Vec<u8>> {
     match source {
         SaveTemplateSource::SavedGame => {
             read_save_image_file(&game_dir.join("SAVED.GAM"), "SAVED.GAM")
@@ -90,7 +93,12 @@ pub fn play_options_from_save_bytes_named(
             ),
         ));
     }
-    let _avatar_name_present = saved_game_has_avatar_name(bytes);
+    if file_name.eq_ignore_ascii_case("SAVED.GAM") && !saved_game_has_avatar_name(bytes) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "No active game. Please create a character or transfer one from Ultima IV.",
+        ));
+    }
     let scene_byte = bytes[SAVE_SCENE_OFFSET];
     if scene_byte > 40 {
         return Err(io::Error::new(
@@ -140,9 +148,26 @@ pub fn play_options_from_save_bytes_named(
     spell_charges.copy_from_slice(
         &bytes[SAVE_SPELL_CHARGES_OFFSET..SAVE_SPELL_CHARGES_OFFSET + SPELL_COUNT],
     );
+    let mut scroll_stock = [0; SCROLL_COUNT];
+    scroll_stock
+        .copy_from_slice(&bytes[SAVE_SCROLL_STOCK_OFFSET..SAVE_SCROLL_STOCK_OFFSET + SCROLL_COUNT]);
+    let mut potion_stock = [0; POTION_COUNT];
+    potion_stock
+        .copy_from_slice(&bytes[SAVE_POTION_STOCK_OFFSET..SAVE_POTION_STOCK_OFFSET + POTION_COUNT]);
     let moonstone_slots = decode_moonstone_gate_slots(bytes);
     let reagents = decode_reagent_stock(bytes);
     let avatar_stats = decode_avatar_stats(bytes);
+    let party = decode_save_party(bytes);
+    let party_size = party.len();
+    let party_names = decode_party_names(bytes);
+    let party_experience = decode_party_experience(bytes, party.len());
+    let party_stay_counters = decode_party_stay_counters(bytes, party.len());
+    let party_strengths = decode_party_strengths(bytes, party.len());
+    let party_intelligence = decode_party_intelligence(bytes, party.len());
+    let party_equipment = decode_party_equipment(bytes, party.len());
+    let equipment_stock = decode_equipment_stock(bytes);
+    let special_items = decode_special_items(bytes);
+    let inn_registry = decode_inn_registry(bytes);
 
     Ok(PlayOptions {
         target,
@@ -159,14 +184,30 @@ pub fn play_options_from_save_bytes_named(
         gold: u16_at(bytes, SAVE_GOLD_STOCK_OFFSET),
         keys: bytes[SAVE_KEY_STOCK_OFFSET],
         gems: bytes[SAVE_GEM_STOCK_OFFSET],
-        climbing_gear: DEFAULT_CLIMBING_GEAR,
-        party: decode_save_party(bytes),
+        climbing_gear: bytes[SAVE_CLIMBING_GEAR_OFFSET],
+        special_items,
+        party,
+        party_names,
+        party_experience,
+        party_stay_counters,
+        party_strengths,
+        party_intelligence,
+        party_equipment,
+        equipment_stock,
         spell_charges,
+        scroll_stock,
+        potion_stock,
         reagents,
+        rare_reagent_harvest_days: [RARE_REAGENT_HARVEST_UNSEEN_DAY;
+            RARE_REAGENT_HARVEST_POINT_COUNT],
+        fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
+        fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
         moonstone_slots,
+        shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
         shrine_ordained_mask: bytes[SAVE_SHRINE_ORDAINED_MASK_OFFSET],
         shrine_codex_mask: bytes[SAVE_SHRINE_CODEX_MASK_OFFSET],
         shrine_standing: [0; VIRTUE_COUNT],
+        moral_standing: bytes[SAVE_MORAL_STANDING_OFFSET],
         avatar_stats,
         torches: bytes[SAVE_TORCH_STOCK_OFFSET],
         torch_counter: bytes[SAVE_TORCH_COUNTER_OFFSET],
@@ -177,8 +218,12 @@ pub fn play_options_from_save_bytes_named(
         time_stop_counter: 0,
         active_effect_tag: None,
         active_effect_counter: 0,
+        fortunes_of_war: bytes[SAVE_FORTUNES_OF_WAR_OFFSET],
+        active_player: decode_active_player_slot(bytes[SAVE_ACTIVE_PLAYER_OFFSET], party_size),
+        combat_round_counter: bytes[SAVE_COMBAT_ROUND_COUNTER_OFFSET],
         transport: transport_from_save_marker(bytes[SAVE_TRANSPORT_MARKER_OFFSET]),
         pending_vehicle: None,
+        inn_registry,
         initial_britannia_overlay: None,
         debug_enter: None,
         saved_active_objects: if include_active_objects {
@@ -188,6 +233,154 @@ pub fn play_options_from_save_bytes_named(
         },
         save_template_source: SaveTemplateSource::PreferSavedGame,
     })
+}
+
+pub fn decode_special_items(bytes: &[u8]) -> [u8; SPECIAL_ITEM_COUNT] {
+    let mut special_items = [0; SPECIAL_ITEM_COUNT];
+    special_items.copy_from_slice(
+        &bytes[SAVE_SPECIAL_ITEM_OFFSET..SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_COUNT],
+    );
+    special_items
+}
+
+pub fn decode_equipment_stock(bytes: &[u8]) -> [u8; EQUIPMENT_COUNT] {
+    let mut stock = [0; EQUIPMENT_COUNT];
+    stock.copy_from_slice(
+        &bytes[SAVE_EQUIPMENT_STOCK_OFFSET..SAVE_EQUIPMENT_STOCK_OFFSET + EQUIPMENT_COUNT],
+    );
+    stock
+}
+
+pub fn decode_party_strengths(bytes: &[u8], party_size: usize) -> Vec<u8> {
+    (0..party_size)
+        .map(|slot| {
+            let record = SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+            bytes[record + SAVE_CHARACTER_STR_OFFSET]
+        })
+        .collect()
+}
+
+pub fn decode_party_experience(bytes: &[u8], party_size: usize) -> Vec<u16> {
+    (0..party_size)
+        .map(|slot| {
+            let record = SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+            u16_at(bytes, record + SAVE_CHARACTER_EXPERIENCE_OFFSET)
+        })
+        .collect()
+}
+
+pub fn decode_party_stay_counters(bytes: &[u8], party_size: usize) -> Vec<u8> {
+    (0..party_size)
+        .map(|slot| {
+            let record = SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+            bytes[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET]
+        })
+        .collect()
+}
+
+pub fn decode_party_intelligence(bytes: &[u8], party_size: usize) -> Vec<u8> {
+    (0..party_size)
+        .map(|slot| {
+            let record = SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+            bytes[record + SAVE_CHARACTER_INT_OFFSET]
+        })
+        .collect()
+}
+
+pub fn decode_party_equipment(bytes: &[u8], party_size: usize) -> Vec<[u8; EQUIPMENT_SLOT_COUNT]> {
+    (0..party_size)
+        .map(|slot| {
+            let record = SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+            let mut equipment = [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT];
+            equipment.copy_from_slice(
+                &bytes[record + SAVE_CHARACTER_EQUIPMENT_OFFSET
+                    ..record + SAVE_CHARACTER_EQUIPMENT_OFFSET + EQUIPMENT_SLOT_COUNT],
+            );
+            equipment
+        })
+        .collect()
+}
+
+pub fn decode_inn_registry(bytes: &[u8]) -> Vec<InnGuestRecord> {
+    (0..SAVE_INN_REGISTRY_COUNT)
+        .filter_map(|slot| {
+            let record = SAVE_INN_REGISTRY_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+            let scene_marker = bytes[record];
+            if scene_marker == 0 {
+                return None;
+            }
+            let class_byte = match bytes[record + SAVE_CHARACTER_CLASS_OFFSET] {
+                0 => b'A',
+                value => value,
+            };
+            let mut equipment = [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT];
+            equipment.copy_from_slice(
+                &bytes[record + SAVE_CHARACTER_EQUIPMENT_OFFSET
+                    ..record + SAVE_CHARACTER_EQUIPMENT_OFFSET + EQUIPMENT_SLOT_COUNT],
+            );
+            Some(InnGuestRecord {
+                scene_marker,
+                name: {
+                    let mut name = [0; SAVE_CHARACTER_NAME_LEN];
+                    name.copy_from_slice(&bytes[record..record + SAVE_CHARACTER_NAME_LEN]);
+                    name[0] = 0;
+                    name
+                },
+                member: PartyMember {
+                    slot: slot as u8,
+                    class_byte,
+                    status: bytes[record + SAVE_CHARACTER_STATUS_OFFSET],
+                    climb_stat: bytes[record + SAVE_CHARACTER_DEX_OFFSET],
+                    mana: bytes[record + SAVE_CHARACTER_MANA_OFFSET],
+                    hp: u16_at(bytes, record + SAVE_CHARACTER_HP_OFFSET),
+                    max_hp: u16_at(bytes, record + SAVE_CHARACTER_MAX_HP_OFFSET),
+                    level: bytes[record + SAVE_CHARACTER_LEVEL_OFFSET],
+                },
+                strength: bytes[record + SAVE_CHARACTER_STR_OFFSET],
+                intelligence: bytes[record + SAVE_CHARACTER_INT_OFFSET],
+                experience: u16_at(bytes, record + SAVE_CHARACTER_EXPERIENCE_OFFSET),
+                equipment,
+                stay_counter: bytes[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET],
+            })
+        })
+        .collect()
+}
+
+pub fn encode_inn_registry(bytes: &mut [u8], registry: &[InnGuestRecord]) {
+    for slot in 0..SAVE_INN_REGISTRY_COUNT {
+        let record = SAVE_INN_REGISTRY_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+        bytes[record] = 0;
+    }
+
+    for (slot, guest) in registry.iter().take(SAVE_INN_REGISTRY_COUNT).enumerate() {
+        let record = SAVE_INN_REGISTRY_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+        bytes[record] = guest.scene_marker;
+        bytes[record..record + SAVE_CHARACTER_NAME_LEN].copy_from_slice(&guest.name);
+        bytes[record] = guest.scene_marker;
+        bytes[record + SAVE_CHARACTER_CLASS_OFFSET] = guest.member.class_byte;
+        bytes[record + SAVE_CHARACTER_STATUS_OFFSET] = guest.member.status;
+        bytes[record + SAVE_CHARACTER_STR_OFFSET] = guest.strength;
+        bytes[record + SAVE_CHARACTER_DEX_OFFSET] = guest.member.climb_stat;
+        bytes[record + SAVE_CHARACTER_INT_OFFSET] = guest.intelligence;
+        bytes[record + SAVE_CHARACTER_MANA_OFFSET] = guest.member.mana;
+        write_u16_at(bytes, record + SAVE_CHARACTER_HP_OFFSET, guest.member.hp);
+        write_u16_at(
+            bytes,
+            record + SAVE_CHARACTER_MAX_HP_OFFSET,
+            guest.member.max_hp,
+        );
+        write_u16_at(
+            bytes,
+            record + SAVE_CHARACTER_EXPERIENCE_OFFSET,
+            guest.experience,
+        );
+        bytes[record + SAVE_CHARACTER_LEVEL_OFFSET] = guest.member.level;
+        bytes[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET] =
+            guest.stay_counter.min(INN_STAY_COUNTER_CAP);
+        bytes[record + SAVE_CHARACTER_EQUIPMENT_OFFSET
+            ..record + SAVE_CHARACTER_EQUIPMENT_OFFSET + EQUIPMENT_SLOT_COUNT]
+            .copy_from_slice(&guest.equipment);
+    }
 }
 
 pub fn decode_reagent_stock(bytes: &[u8]) -> [u8; REAGENT_COUNT] {
@@ -222,6 +415,10 @@ pub fn decode_save_party(bytes: &[u8]) -> Vec<PartyMember> {
     (0..party_size)
         .map(|slot| {
             let record = SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+            let class_byte = match bytes[record + SAVE_CHARACTER_CLASS_OFFSET] {
+                0 => b'A',
+                value => value,
+            };
             let status = bytes[record + SAVE_CHARACTER_STATUS_OFFSET];
             let climb_stat = bytes[record + SAVE_CHARACTER_DEX_OFFSET];
             let mana = bytes[record + SAVE_CHARACTER_MANA_OFFSET];
@@ -230,6 +427,7 @@ pub fn decode_save_party(bytes: &[u8]) -> Vec<PartyMember> {
             let level = bytes[record + SAVE_CHARACTER_LEVEL_OFFSET];
             PartyMember {
                 slot: slot as u8,
+                class_byte,
                 status,
                 climb_stat,
                 mana,
@@ -237,6 +435,22 @@ pub fn decode_save_party(bytes: &[u8]) -> Vec<PartyMember> {
                 max_hp,
                 level,
             }
+        })
+        .collect()
+}
+
+pub fn decode_party_names(bytes: &[u8]) -> Vec<[u8; SAVE_CHARACTER_NAME_LEN]> {
+    let party_size = bytes[SAVE_PARTY_SIZE_OFFSET] as usize;
+    if !(1..=6).contains(&party_size) {
+        return Vec::new();
+    }
+
+    (0..party_size)
+        .map(|slot| {
+            let record = SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+            let mut name = [0; SAVE_CHARACTER_NAME_LEN];
+            name.copy_from_slice(&bytes[record..record + SAVE_CHARACTER_NAME_LEN]);
+            name
         })
         .collect()
 }
@@ -256,6 +470,6 @@ pub fn decode_moonstone_gate_slots(bytes: &[u8]) -> [MoonstoneGateSlot; MOONSTON
 
 pub fn saved_game_has_avatar_name(bytes: &[u8]) -> bool {
     bytes
-        .get(SAVE_AVATAR_NAME_OFFSET..SAVE_AVATAR_NAME_OFFSET + SAVE_AVATAR_NAME_LEN)
-        .is_some_and(|name| name.iter().any(|byte| *byte != 0))
+        .get(SAVE_AVATAR_NAME_OFFSET)
+        .is_some_and(|byte| *byte != 0)
 }

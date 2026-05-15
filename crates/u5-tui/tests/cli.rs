@@ -229,8 +229,7 @@ fn from_init_world_bootstrap_uses_init_ool_surface_overlay() {
 #[test]
 fn cli_parser_rejects_save_and_init_seed_conflict() {
     assert!(
-        parse_cli_args(["--play", "--from-save", "--from-init", r"C:\Games\U5-Clean",])
-            .is_err()
+        parse_cli_args(["--play", "--from-save", "--from-init", r"C:\Games\U5-Clean",]).is_err()
     );
 }
 
@@ -306,6 +305,110 @@ fn cli_parser_help_short_circuits_save_init_conflict() {
     assert!(args.help);
 }
 
+#[test]
+fn cli_parser_accepts_deterministic_create_character_command() {
+    let args = parse_cli_args([
+        "--create-character",
+        "AVATAR",
+        "--gender",
+        "female",
+        "--chargen-winners",
+        "Honesty,Compassion,Valor,Justice,Sacrifice,Honor,Spirituality",
+        r"C:\Games\U5-Clean",
+    ])
+    .unwrap();
+
+    assert!(!args.play);
+    assert!(!args.visual);
+    let command = args.create_character.unwrap();
+    assert_eq!(command.name, b"AVATAR");
+    assert_eq!(command.male, false);
+    assert_eq!(
+        command.winners,
+        vec![
+            ShrineVirtue::Honesty,
+            ShrineVirtue::Compassion,
+            ShrineVirtue::Valor,
+            ShrineVirtue::Justice,
+            ShrineVirtue::Sacrifice,
+            ShrineVirtue::Honor,
+            ShrineVirtue::Spirituality,
+        ]
+    );
+    assert_eq!(
+        command.stats,
+        ChargenStats {
+            strength: 20,
+            dexterity: 5,
+            intelligence: 5,
+        }
+    );
+}
+
+#[test]
+fn cli_create_character_command_writes_saved_files_and_returns_without_play() {
+    let dir = debug_game_dir();
+    fs::write(dir.join("INIT.GAM"), saved_game_seed_bytes(13, 0, 15, 15)).unwrap();
+    fs::write(dir.join("INIT.OOL"), vec![0x77; OOL_PLANE_LEN]).unwrap();
+    let args = parse_cli_args([
+        "--create-character",
+        "IOLO",
+        "--gender",
+        "male",
+        "--chargen-winners",
+        "Humility,Humility,Humility,Humility,Humility,Humility,Humility",
+        dir.to_str().unwrap(),
+    ])
+    .unwrap();
+
+    let avatar =
+        run_create_character_command(&args.game_dir, args.create_character.as_ref().unwrap())
+            .unwrap();
+
+    assert!(!args.play);
+    assert_eq!(avatar.name, *b"IOLO\0\0\0\0\0");
+    let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+    assert_eq!(
+        &saved[SAVE_ROSTER_OFFSET..SAVE_ROSTER_OFFSET + SAVE_CHARACTER_NAME_LEN],
+        b"IOLO\0\0\0\0\0"
+    );
+    assert_eq!(
+        saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_GENDER_OFFSET],
+        SAVE_GENDER_MALE_BYTE
+    );
+    let saved_ool = fs::read(dir.join("SAVED.OOL")).unwrap();
+    assert_eq!(&saved_ool[..OOL_PLANE_LEN], vec![0; OOL_PLANE_LEN]);
+    assert_eq!(&saved_ool[OOL_PLANE_LEN..], vec![0x77; OOL_PLANE_LEN]);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn cli_create_character_rejects_incomplete_or_play_combined_invocations() {
+    assert!(
+        parse_cli_args([
+            "--create-character",
+            "AVATAR",
+            "--chargen-winners",
+            "Honesty,Compassion,Valor,Justice,Sacrifice,Honor,Spirituality",
+        ])
+        .is_err()
+    );
+    assert!(
+        parse_cli_args([
+            "--play",
+            "--create-character",
+            "AVATAR",
+            "--gender",
+            "male",
+            "--chargen-winners",
+            "Honesty,Compassion,Valor,Justice,Sacrifice,Honor,Spirituality",
+        ])
+        .is_err()
+    );
+    assert!(parse_chargen_winners_arg("Honesty,Valor").is_err());
+    assert!(parse_chargen_gender_arg("unknown").is_err());
+}
+
 // from chunk_02
 #[test]
 fn cli_usage_lists_documented_smoke_commands() {
@@ -313,5 +416,5 @@ fn cli_usage_lists_documented_smoke_commands() {
     assert!(CLI_USAGE.contains("--play-script"));
     assert!(CLI_USAGE.contains("--scene"));
     assert!(CLI_USAGE.contains("--floor"));
+    assert!(CLI_USAGE.contains("--create-character"));
 }
-

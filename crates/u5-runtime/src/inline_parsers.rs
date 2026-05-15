@@ -63,17 +63,166 @@ pub fn moonstone_phase_from_inline_number(value: u8) -> Option<usize> {
 }
 
 pub fn parse_inline_use_request(value: &str) -> Option<UseItemRequest> {
-    let token = value.chars().find(|ch| !ch.is_whitespace())?;
+    let trimmed = value.trim_start();
+    if let Some(index) = parse_inline_potion_index(trimmed) {
+        return Some(UseItemRequest::Potion {
+            index,
+            target: parse_inline_target_party_index(trimmed),
+        });
+    }
+    if trimmed
+        .get(..3)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("CIM"))
+    {
+        return Some(UseItemRequest::Scroll {
+            index: SCROLL_RESURRECTION_INDEX,
+            direction: None,
+            target: parse_inline_target_party_index(trimmed),
+        });
+    }
+    if trimmed
+        .get(..3)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("CKX"))
+    {
+        return Some(UseItemRequest::Scroll {
+            index: SCROLL_SUMMON_DAEMON_INDEX,
+            direction: None,
+            target: None,
+        });
+    }
+    if trimmed
+        .get(..3)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("IQW"))
+    {
+        return Some(UseItemRequest::Scroll {
+            index: SCROLL_VIEW_INDEX,
+            direction: None,
+            target: None,
+        });
+    }
+    if trimmed
+        .get(..2)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("AM"))
+    {
+        return Some(UseItemRequest::AmuletOfLordBritish);
+    }
+    if trimmed
+        .get(..2)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("BB"))
+    {
+        return Some(UseItemRequest::BlackBadge);
+    }
+    if trimmed
+        .get(..2)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("CR"))
+    {
+        return Some(UseItemRequest::CrownOfLordBritish);
+    }
+    if trimmed
+        .get(..2)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("SC"))
+    {
+        return Some(UseItemRequest::Sceptre);
+    }
+    if trimmed
+        .get(..2)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("SP"))
+    {
+        return Some(UseItemRequest::Spyglass);
+    }
+    if trimmed
+        .get(..2)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("AI"))
+    {
+        return Some(UseItemRequest::Scroll {
+            index: SCROLL_NEGATE_MAGIC_INDEX,
+            direction: None,
+            target: None,
+        });
+    }
+    if trimmed
+        .get(..2)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("AT"))
+    {
+        return Some(UseItemRequest::Scroll {
+            index: SCROLL_NEGATE_TIME_INDEX,
+            direction: None,
+            target: None,
+        });
+    }
+    if trimmed
+        .get(..2)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("HR"))
+    {
+        return Some(UseItemRequest::Scroll {
+            index: SCROLL_WIND_CHANGE_INDEX,
+            direction: parse_inline_cardinal_direction(trimmed),
+            target: None,
+        });
+    }
+    if trimmed
+        .get(..2)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("IS"))
+    {
+        return Some(UseItemRequest::Scroll {
+            index: SCROLL_PROTECTION_INDEX,
+            direction: None,
+            target: None,
+        });
+    }
+    if trimmed
+        .get(..2)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("LV"))
+    {
+        return Some(UseItemRequest::Scroll {
+            index: SCROLL_LIGHT_INDEX,
+            direction: None,
+            target: None,
+        });
+    }
+    let token = trimmed.chars().next()?;
     match token.to_ascii_uppercase() {
         'T' | 'I' => Some(UseItemRequest::Torch),
         'G' | 'V' => Some(UseItemRequest::Gem),
-        'K' | 'J' => Some(UseItemRequest::Key),
+        'B' => Some(UseItemRequest::WoodenBox),
+        'C' => Some(UseItemRequest::MagicCarpet),
+        'P' => Some(UseItemRequest::HmsCapePlans),
+        'K' | 'J' => Some(UseItemRequest::SkullKey),
+        'S' => Some(UseItemRequest::Sextant),
+        'W' => Some(UseItemRequest::PocketWatch),
         '1'..='8' => token
             .to_digit(10)
             .and_then(|digit| moonstone_phase_from_inline_number(digit as u8))
             .map(UseItemRequest::Moonstone),
         _ => Some(UseItemRequest::Invalid),
     }
+}
+
+pub fn parse_inline_potion_index(value: &str) -> Option<usize> {
+    const PREFIXES: [(&str, usize); 16] = [
+        ("YELLOW", POTION_YELLOW_INDEX),
+        ("PURPLE", POTION_PURPLE_INDEX),
+        ("ORANGE", POTION_ORANGE_INDEX),
+        ("GREEN", POTION_GREEN_INDEX),
+        ("WHITE", POTION_WHITE_INDEX),
+        ("BLACK", POTION_BLACK_INDEX),
+        ("BLUE", POTION_BLUE_INDEX),
+        ("RED", POTION_RED_INDEX),
+        ("BLA", POTION_BLACK_INDEX),
+        ("BLU", POTION_BLUE_INDEX),
+        ("YE", POTION_YELLOW_INDEX),
+        ("PU", POTION_PURPLE_INDEX),
+        ("OR", POTION_ORANGE_INDEX),
+        ("GR", POTION_GREEN_INDEX),
+        ("WH", POTION_WHITE_INDEX),
+        ("RE", POTION_RED_INDEX),
+    ];
+    PREFIXES.iter().find_map(|(prefix, index)| {
+        value
+            .get(..prefix.len())
+            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(prefix))
+            .then_some(*index)
+    })
 }
 
 pub fn parse_inline_cardinal_direction(value: &str) -> Option<Direction> {
@@ -111,6 +260,17 @@ pub fn parse_inline_target_party_index(value: &str) -> Option<usize> {
         .and_then(|digit| digit.checked_sub(1))
 }
 
+pub fn parse_inline_combat_actor_slot(value: &str) -> Option<usize> {
+    let mut groups = value
+        .split(|ch: char| !ch.is_ascii_digit())
+        .filter(|group| !group.is_empty());
+    groups.next()?;
+    let target = groups.next()?.parse::<usize>().ok()?;
+    (1..=COMBAT_ACTOR_SLOTS)
+        .contains(&target)
+        .then_some(target - 1)
+}
+
 pub fn parse_inline_party_swap(value: &str) -> Option<(usize, usize)> {
     let mut digits = value.chars().filter_map(|ch| ch.to_digit(10));
     let first = digits.next()?;
@@ -141,10 +301,62 @@ pub struct InlineMixRequest {
     pub amount: u8,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InlineReadyRequest {
+    pub party_index: usize,
+    pub item_id: usize,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InlineShrineRequest {
     pub mantra: String,
     pub offering: Option<u8>,
+}
+
+pub fn parse_inline_ready_request(value: &str) -> io::Result<Option<InlineReadyRequest>> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    let parts: Vec<_> = trimmed
+        .split(|ch| matches!(ch, '/' | ':' | ','))
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect();
+    if parts.len() != 2 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Ready syntax is R<party-slot>/<equipment-id>, for example R1/16.",
+        ));
+    }
+    let party_slot = parse_u8_literal(parts[0]).map_err(|err| {
+        io::Error::new(
+            err.kind(),
+            format!("invalid ready party slot `{}`: {err}", parts[0]),
+        )
+    })?;
+    let item_id = parse_u8_literal(parts[1]).map_err(|err| {
+        io::Error::new(
+            err.kind(),
+            format!("invalid ready equipment id `{}`: {err}", parts[1]),
+        )
+    })?;
+    if party_slot == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Ready party slot must be 1 or greater.",
+        ));
+    }
+    if item_id as usize >= EQUIPMENT_COUNT {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("Ready equipment id must be 0..47, got {item_id}."),
+        ));
+    }
+    Ok(Some(InlineReadyRequest {
+        party_index: party_slot as usize - 1,
+        item_id: item_id as usize,
+    }))
 }
 
 pub fn parse_inline_mix_request(value: &str) -> io::Result<Option<InlineMixRequest>> {
@@ -247,17 +459,30 @@ pub fn shrine_prompt_message(virtue: ShrineVirtue) -> String {
 }
 
 pub fn cast_prompt_message() -> String {
-    "Cast what? Use C1IL/C1AZ2/C1AN2/C1M2/C1MV2/C1CIM2/C1IS/C1RT/C1AI/C1IW/C1IMX/C1AS/C1LV/C1HR/C1IP6/C1PU/C1DP/C1AG6/C1AEP/C1EIP/C1IQW/C1AWY/C1PRV2/C1AT."
+    "Cast what? Use C1IL/C1AZ/C1AN2/C1M2/C1AY6/C1MV2/C1CIM2/C1IS/C1RT/C1AI/C1IW/C1IMX/C1AS6/C1LV/C1HR/C1IP6/C1PU/C1DP/C1AG6/C1AEP/C1EIP/C1IQW/C1AWY/C1PRV2/C1AT."
         .to_string()
 }
 
 pub fn use_prompt_message() -> String {
-    "Use what? Use UT for torch, UG for gem, UK for key, or U1 through U8 for Moonstone phase."
+    "Use what? Use UT torch, UG gem, UK key, scroll codes, potion colors, USC Sceptre, USP Spyglass, UCR Crown, UAM Amulet, UBB Badge, or U1..U8 Moonstone."
         .to_string()
 }
 
 pub fn new_order_prompt_message() -> String {
     "New order? Use N12 to swap party slots 1 and 2.".to_string()
+}
+
+pub fn ready_prompt_message() -> String {
+    "Ready what? Use R<party-slot>/<equipment-id>, for example R1/16.".to_string()
+}
+
+pub fn yell_prompt_message() -> String {
+    "Yell what? Use Y<word>.".to_string()
+}
+
+pub fn non_empty_yell_word(value: &str) -> Option<&str> {
+    let trimmed = value.trim();
+    (!trimmed.is_empty()).then_some(trimmed)
 }
 
 pub fn inline_spell_code(value: &str) -> String {

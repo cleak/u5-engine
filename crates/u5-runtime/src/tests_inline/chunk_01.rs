@@ -104,6 +104,15 @@
         bytes
     }
 
+    fn karma_bytes(records: &[&str]) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        for record in records {
+            bytes.extend_from_slice(record.as_bytes());
+            bytes.push(0);
+        }
+        bytes
+    }
+
     fn passability_with_tiles(tiles: &[u8]) -> TilePassability {
         let mut bytes = [0; TILE_PASSABILITY_LEN];
         for tile in tiles {
@@ -151,6 +160,56 @@
 
         let err = decode_lzw_envelope(&bytes, "fixture").unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn karma_dat_parser_reads_six_nul_records_and_ignores_trailing_data() {
+        let bytes = karma_bytes(&["low", "twenty", "forty", "sixty", "eighty", "top"]);
+        let mut with_trailer = bytes.clone();
+        with_trailer.extend_from_slice(b"ignored trailer");
+
+        assert_eq!(
+            parse_karma_dat(&with_trailer).unwrap(),
+            vec!["low", "twenty", "forty", "sixty", "eighty", "top"]
+        );
+    }
+
+    #[test]
+    fn karma_dat_parser_rejects_missing_records_and_high_bytes() {
+        assert!(parse_karma_dat(&karma_bytes(&["one", "two"])).is_err());
+
+        let mut high = karma_bytes(&["one", "two", "three", "four", "five", "six"]);
+        high[1] = 0x80;
+
+        assert!(parse_karma_dat(&high).is_err());
+    }
+
+    #[test]
+    fn karma_verdict_selectors_keep_blackthorn_and_camp_top_bands_distinct() {
+        assert_eq!(blackthorn_karma_record_index(0), 0);
+        assert_eq!(blackthorn_karma_record_index(79), 3);
+        assert_eq!(blackthorn_karma_record_index(80), 4);
+        assert_eq!(blackthorn_karma_record_index(255), 4);
+        assert_eq!(lord_british_camp_karma_record_index(0), 0);
+        assert_eq!(lord_british_camp_karma_record_index(79), 3);
+        assert_eq!(lord_british_camp_karma_record_index(80), 5);
+        assert_eq!(lord_british_camp_karma_record_index(255), 5);
+    }
+
+    #[test]
+    fn load_karma_records_reads_optional_karma_dat_file() {
+        let dir = debug_game_dir();
+        assert!(load_karma_records(&dir).unwrap().is_none());
+
+        fs::write(
+            dir.join(KARMA_DAT_FILE),
+            karma_bytes(&["low", "twenty", "forty", "sixty", "eighty", "top"]),
+        )
+        .unwrap();
+
+        let records = load_karma_records(&dir).unwrap().unwrap();
+        assert_eq!(records[5], "top");
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

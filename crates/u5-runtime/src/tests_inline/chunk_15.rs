@@ -207,12 +207,35 @@
         let scene = DungeonScene::new(33).unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(1, 1, 1)] = 0x10;
+        grid[dungeon_cell_index(0, 1, 1)] = 0x20;
         let mut state = dungeon_state(grid, 1, 1, 1);
 
         assert!(state.handle_dungeon_key('k', Path::new("")).unwrap());
 
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
         assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn dungeon_ladder_rejects_plain_passage_landing_without_turn() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(1, 1, 1)] = 0x10;
+        let mut state = dungeon_state(grid, 1, 1, 1);
+
+        assert_eq!(
+            state.climb(Path::new(""), ClimbIntent::Up).unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(
+            state.area,
+            Area::Dungeon {
+                scene: DungeonScene::new(33).unwrap(),
+                level: 1,
+            }
+        );
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Blocked!");
     }
 
     #[test]
@@ -230,6 +253,7 @@
         let scene = DungeonScene::new(33).unwrap();
         let mut up_grid = open_dungeon_record();
         up_grid[dungeon_cell_index(2, 1, 1)] = 0x30;
+        up_grid[dungeon_cell_index(1, 1, 1)] = 0x20;
         let mut up = dungeon_state(up_grid, 2, 1, 1);
 
         assert!(up.handle_dungeon_key('k', Path::new("")).unwrap());
@@ -245,6 +269,7 @@
 
         let mut down_grid = open_dungeon_record();
         down_grid[dungeon_cell_index(2, 1, 1)] = 0x30;
+        down_grid[dungeon_cell_index(3, 1, 1)] = 0x10;
         let mut down = dungeon_state(down_grid, 2, 1, 1);
 
         assert!(down.handle_dungeon_key('>', Path::new("")).unwrap());
@@ -255,7 +280,7 @@
     }
 
     #[test]
-    fn dungeon_ladder_changes_level_and_top_up_missing_return_stays_in_dungeon() {
+    fn dungeon_ladder_changes_level_and_boundary_up_stays_in_dungeon() {
         let scene = DungeonScene::new(33).unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(3, 1, 1)] = 0x10;
@@ -285,11 +310,7 @@
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
         assert_eq!(state.active_objects[0].z, 0);
         assert_eq!(state.turn, turn_before_missing_return);
-        assert!(
-            state
-                .message
-                .contains("missing clean return-coordinate metadata")
-        );
+        assert_eq!(state.message, "Blocked!");
     }
 
     #[test]
@@ -311,11 +332,11 @@
             }
         );
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "No connected deeper level in this slice.");
+        assert_eq!(state.message, "Blocked!");
     }
 
     #[test]
-    fn dungeon_bottom_ladder_uses_clean_deeper_transition_table() {
+    fn dungeon_bottom_ladder_ignores_clean_deeper_transition_table() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(DUNGEON_DEEPER_TRANSITION_TABLE_FILE),
@@ -332,29 +353,21 @@
 
         assert_eq!(
             state.climb(&dir, ClimbIntent::Down).unwrap(),
-            MoveOutcome::Transition(AreaTransition::ExitedDungeonToWorldPlane {
-                scene,
-                plane: WorldPlane::Underworld,
-            })
+            MoveOutcome::Blocked
         );
 
         assert_eq!(
             state.area,
-            Area::World {
-                plane: WorldPlane::Underworld,
-            }
+            Area::Dungeon { scene, level: 7 }
         );
-        assert_eq!((state.player.x, state.player.y), (30, 40));
+        assert_eq!((state.player.x, state.player.y), (1, 1));
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!(state.timing_status, TimingStatusTag::Normal);
-        assert_eq!(state.sail_cadence, 0);
-        assert!(!state.sail_stall_pending);
-        assert_eq!(
-            state.active_objects[0].z,
-            WorldPlane::Underworld.save_floor()
-        );
-        assert_eq!(state.turn, 1);
-        assert!(state.message.contains("scripted deeper transition"));
+        assert_eq!(state.timing_status, TimingStatusTag::HalfTime);
+        assert_eq!(state.sail_cadence, 1);
+        assert!(state.sail_stall_pending);
+        assert_eq!(state.active_objects[0].z, 7);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Blocked!");
         let _ = fs::remove_dir_all(dir);
     }
 

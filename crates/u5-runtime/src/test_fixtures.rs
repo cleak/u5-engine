@@ -2,6 +2,7 @@
 //! u5-tui's integration tests. Public API so it can be reached from
 //! other crates' test targets.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -57,18 +58,36 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         grid,
         clock: GameClock::default(),
         animation: AnimationClock::default(),
+        natural_moongate_counter: 0,
+        cached_moon_glyph_slots: [None, None],
         food: DEFAULT_FOOD_STOCK,
         gold: DEFAULT_GOLD_STOCK,
         keys: DEFAULT_KEY_STOCK,
         gems: DEFAULT_GEM_STOCK,
         climbing_gear: DEFAULT_CLIMBING_GEAR,
+        special_items: [0; SPECIAL_ITEM_COUNT],
         party: default_party(),
+        party_names: default_party_names(1),
+        party_experience: default_party_experience(1),
+        party_stay_counters: default_party_stay_counters(1),
+        party_strengths: default_party_strengths(1),
+        party_intelligence: default_party_intelligence(1),
+        party_equipment: default_party_equipment(1),
+        equipment_stock: [0; EQUIPMENT_COUNT],
         spell_charges: [0; SPELL_COUNT],
+        scroll_stock: [0; SCROLL_COUNT],
+        potion_stock: [0; POTION_COUNT],
         reagents: DEFAULT_REAGENTS,
+        rare_reagent_harvest_days: [RARE_REAGENT_HARVEST_UNSEEN_DAY;
+            RARE_REAGENT_HARVEST_POINT_COUNT],
+        fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
+        fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
         moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
+        shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
         shrine_ordained_mask: 0,
         shrine_codex_mask: 0,
         shrine_standing: [0; VIRTUE_COUNT],
+        moral_standing: 0,
         avatar_stats: AvatarStats::default(),
         torches: DEFAULT_TORCH_STOCK,
         torch_counter: 0,
@@ -81,6 +100,16 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         time_stop_counter: 0,
         active_effect_tag: None,
         active_effect_counter: 0,
+        fortunes_of_war: 0,
+        active_player: None,
+        combat_round_counter: 0,
+        combat_active: false,
+        combat_frame_snapshot: None,
+        pending_combat_actor_slot: None,
+        pending_combat_terrain_trigger_slot: None,
+        next_combat_actor_slot: 0,
+        combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
+        combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
         sail_cadence: 0,
         sail_stall_pending: false,
         turn: 0,
@@ -91,6 +120,11 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         save_template_source: SaveTemplateSource::PreferSavedGame,
         typeahead_buffer_enabled: false,
         pending_moongate: None,
+        endgame: None,
+        pickpocketed_npcs: Vec::new(),
+        removed_town_npcs: Vec::new(),
+        talk_branch_flags: HashMap::new(),
+        inn_registry: Vec::new(),
     }
 }
 
@@ -123,18 +157,36 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         grid,
         clock: GameClock::default(),
         animation: AnimationClock::default(),
+        natural_moongate_counter: 0,
+        cached_moon_glyph_slots: [None, None],
         food: DEFAULT_FOOD_STOCK,
         gold: DEFAULT_GOLD_STOCK,
         keys: DEFAULT_KEY_STOCK,
         gems: DEFAULT_GEM_STOCK,
         climbing_gear: DEFAULT_CLIMBING_GEAR,
+        special_items: [0; SPECIAL_ITEM_COUNT],
         party: default_party(),
+        party_names: default_party_names(1),
+        party_experience: default_party_experience(1),
+        party_stay_counters: default_party_stay_counters(1),
+        party_strengths: default_party_strengths(1),
+        party_intelligence: default_party_intelligence(1),
+        party_equipment: default_party_equipment(1),
+        equipment_stock: [0; EQUIPMENT_COUNT],
         spell_charges: [0; SPELL_COUNT],
+        scroll_stock: [0; SCROLL_COUNT],
+        potion_stock: [0; POTION_COUNT],
         reagents: DEFAULT_REAGENTS,
+        rare_reagent_harvest_days: [RARE_REAGENT_HARVEST_UNSEEN_DAY;
+            RARE_REAGENT_HARVEST_POINT_COUNT],
+        fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
+        fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
         moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
+        shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
         shrine_ordained_mask: 0,
         shrine_codex_mask: 0,
         shrine_standing: [0; VIRTUE_COUNT],
+        moral_standing: 0,
         avatar_stats: AvatarStats::default(),
         torches: DEFAULT_TORCH_STOCK,
         torch_counter: 0,
@@ -147,6 +199,16 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         time_stop_counter: 0,
         active_effect_tag: None,
         active_effect_counter: 0,
+        fortunes_of_war: 0,
+        active_player: None,
+        combat_round_counter: 0,
+        combat_active: false,
+        combat_frame_snapshot: None,
+        pending_combat_actor_slot: None,
+        pending_combat_terrain_trigger_slot: None,
+        next_combat_actor_slot: 0,
+        combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
+        combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
         sail_cadence: 0,
         sail_stall_pending: false,
         turn: 0,
@@ -157,6 +219,11 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         save_template_source: SaveTemplateSource::PreferSavedGame,
         typeahead_buffer_enabled: false,
         pending_moongate: None,
+        endgame: None,
+        pickpocketed_npcs: Vec::new(),
+        removed_town_npcs: Vec::new(),
+        talk_branch_flags: HashMap::new(),
+        inn_registry: Vec::new(),
     }
 }
 
@@ -190,18 +257,36 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         grid,
         clock: GameClock::default(),
         animation: AnimationClock::default(),
+        natural_moongate_counter: 0,
+        cached_moon_glyph_slots: [None, None],
         food: DEFAULT_FOOD_STOCK,
         gold: DEFAULT_GOLD_STOCK,
         keys: DEFAULT_KEY_STOCK,
         gems: DEFAULT_GEM_STOCK,
         climbing_gear: DEFAULT_CLIMBING_GEAR,
+        special_items: [0; SPECIAL_ITEM_COUNT],
         party: default_party(),
+        party_names: default_party_names(1),
+        party_experience: default_party_experience(1),
+        party_stay_counters: default_party_stay_counters(1),
+        party_strengths: default_party_strengths(1),
+        party_intelligence: default_party_intelligence(1),
+        party_equipment: default_party_equipment(1),
+        equipment_stock: [0; EQUIPMENT_COUNT],
         spell_charges: [0; SPELL_COUNT],
+        scroll_stock: [0; SCROLL_COUNT],
+        potion_stock: [0; POTION_COUNT],
         reagents: DEFAULT_REAGENTS,
+        rare_reagent_harvest_days: [RARE_REAGENT_HARVEST_UNSEEN_DAY;
+            RARE_REAGENT_HARVEST_POINT_COUNT],
+        fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
+        fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
         moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
+        shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
         shrine_ordained_mask: 0,
         shrine_codex_mask: 0,
         shrine_standing: [0; VIRTUE_COUNT],
+        moral_standing: 0,
         avatar_stats: AvatarStats::default(),
         torches: DEFAULT_TORCH_STOCK,
         torch_counter: 0,
@@ -214,6 +299,16 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         time_stop_counter: 0,
         active_effect_tag: None,
         active_effect_counter: 0,
+        fortunes_of_war: 0,
+        active_player: None,
+        combat_round_counter: 0,
+        combat_active: false,
+        combat_frame_snapshot: None,
+        pending_combat_actor_slot: None,
+        pending_combat_terrain_trigger_slot: None,
+        next_combat_actor_slot: 0,
+        combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
+        combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
         sail_cadence: 0,
         sail_stall_pending: false,
         turn: 0,
@@ -224,6 +319,11 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         save_template_source: SaveTemplateSource::PreferSavedGame,
         typeahead_buffer_enabled: false,
         pending_moongate: None,
+        endgame: None,
+        pickpocketed_npcs: Vec::new(),
+        removed_town_npcs: Vec::new(),
+        talk_branch_flags: HashMap::new(),
+        inn_registry: Vec::new(),
     }
 }
 
@@ -232,10 +332,7 @@ pub fn debug_game_dir() -> PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let dir = std::env::temp_dir().join(format!(
-        "u5-engine-test-{}-{unique}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("u5-engine-test-{}-{unique}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join("CASTLE.DAT"), vec![16; 1024]).unwrap();
     fs::write(dir.join("CASTLE.NPC"), vec![0; 576]).unwrap();
@@ -257,6 +354,10 @@ pub fn saved_game_seed_bytes(scene: u8, z: u8, x: u8, y: u8) -> Vec<u8> {
     bytes[SAVE_KEY_STOCK_OFFSET] = DEFAULT_KEY_STOCK;
     bytes[SAVE_GEM_STOCK_OFFSET] = DEFAULT_GEM_STOCK;
     bytes[SAVE_TORCH_STOCK_OFFSET] = DEFAULT_TORCH_STOCK;
+    bytes[SAVE_CLIMBING_GEAR_OFFSET] = DEFAULT_CLIMBING_GEAR;
+    bytes[SAVE_ACTIVE_PLAYER_OFFSET] = 0xff;
+    bytes[SAVE_SPECIAL_ITEM_OFFSET..SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_COUNT]
+        .copy_from_slice(&[0; SPECIAL_ITEM_COUNT]);
     encode_reagent_stock(&mut bytes, DEFAULT_REAGENTS);
     write_saved_clock(&mut bytes, GameClock::new(8, 35).unwrap());
     bytes

@@ -9,10 +9,9 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use u5_runtime::{
-    Direction, PLAY_IGNORED_INPUT_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS,
-    PLAY_TYPEAHEAD_TOGGLE_KEY, PlayInputDisposition, PlayOptions, PlayState, TileAtlas,
-    TileGraphicsDepth, handle_play_key_input, hash_bytes, hash_palette_indices,
-    load_tile_atlas,
+    Direction, PLAY_IGNORED_INPUT_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS, PLAY_TYPEAHEAD_TOGGLE_KEY,
+    PlayInputDisposition, PlayOptions, PlayState, TileAtlas, TileGraphicsDepth,
+    handle_play_key_input, hash_bytes, hash_palette_indices, load_tile_atlas,
 };
 
 pub fn run_play_loop(

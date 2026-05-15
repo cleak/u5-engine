@@ -5,15 +5,23 @@
 //! command-line surface.
 
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use u5_runtime::{
-    DEFAULT_GAME_DIR, FIRST_PLAYABLE_BALLOON_TILE, FIRST_PLAYABLE_FRIGATE_TILE,
-    FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_SKIFF_TILE, GameClock,
-    PendingVehicleAcquisition, PlayOptions, PlayTarget, TileGraphicsDepth, TimingStatusTag,
-    TransportState, WindState, load_play_options_from_init, load_play_options_from_save,
-    parse_u8_literal,
+    ChargenAvatar, ChargenStats, DEFAULT_GAME_DIR, FIRST_PLAYABLE_BALLOON_TILE,
+    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_SKIFF_TILE,
+    GameClock, PendingVehicleAcquisition, PlayOptions, PlayTarget, ShrineVirtue, TileGraphicsDepth,
+    TimingStatusTag, TransportState, WindState, chargen_stats_from_winners, commit_chargen_save,
+    load_play_options_from_init, load_play_options_from_save, parse_u8_literal,
 };
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CreateCharacterCommand {
+    pub name: Vec<u8>,
+    pub male: bool,
+    pub winners: Vec<ShrineVirtue>,
+    pub stats: ChargenStats,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CliArgs {
@@ -29,6 +37,7 @@ pub struct CliArgs {
     /// write it to this path as a PNG. Bypasses the interactive play loop
     /// and the Bevy harness; useful for verifying movement without a desktop.
     pub save_frame: Option<PathBuf>,
+    pub create_character: Option<CreateCharacterCommand>,
 }
 
 pub fn split_play_script(script: &str) -> Vec<String> {
@@ -60,6 +69,9 @@ where
     let mut transport_override = None;
     let mut help = false;
     let mut save_frame: Option<PathBuf> = None;
+    let mut create_character_name: Option<Vec<u8>> = None;
+    let mut create_character_male: Option<bool> = None;
+    let mut create_character_winners: Option<Vec<ShrineVirtue>> = None;
     let mut args = args.into_iter().map(Into::into);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -103,6 +115,35 @@ where
             }
             "--from-save" => from_save = true,
             "--from-init" => from_init = true,
+            "--create-character" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--create-character requires a name",
+                    )
+                })?;
+                if create_character_name.replace(value.into_bytes()).is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--create-character may only be supplied once",
+                    ));
+                }
+            }
+            "--gender" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "--gender requires male|female")
+                })?;
+                create_character_male = Some(parse_chargen_gender_arg(&value)?);
+            }
+            "--chargen-winners" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--chargen-winners requires seven comma-separated virtues",
+                    )
+                })?;
+                create_character_winners = Some(parse_chargen_winners_arg(&value)?);
+            }
             "--scene" => {
                 let value = args.next().ok_or_else(|| {
                     io::Error::new(io::ErrorKind::InvalidInput, "--scene requires a value")
@@ -198,6 +239,7 @@ where
             play_options: PlayOptions::default(),
             help: true,
             save_frame: None,
+            create_character: None,
         });
     }
     if from_save && from_init {
@@ -206,6 +248,41 @@ where
             "--from-save and --from-init are mutually exclusive",
         ));
     }
+    let create_character = if let Some(name) = create_character_name {
+        if play || visual || save_frame.is_some() || from_save || from_init {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--create-character writes a save and returns to the intro/menu state; it cannot be combined with play, visual, save-frame, from-save, or from-init",
+            ));
+        }
+        let male = create_character_male.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--create-character requires --gender male|female",
+            )
+        })?;
+        let winners = create_character_winners.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--create-character requires --chargen-winners with seven virtues",
+            )
+        })?;
+        let stats = chargen_stats_from_winners(&winners);
+        Some(CreateCharacterCommand {
+            name,
+            male,
+            winners,
+            stats,
+        })
+    } else {
+        if create_character_male.is_some() || create_character_winners.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--gender and --chargen-winners require --create-character",
+            ));
+        }
+        None
+    };
     if from_save {
         options = load_play_options_from_save(&game_dir)?;
     } else if from_init {
@@ -238,6 +315,7 @@ where
         play_options: options,
         help: false,
         save_frame,
+        create_character,
     })
 }
 
@@ -263,6 +341,10 @@ OPTIONS:
         --transport <KIND>    foot|horse|ship|skiff|carpet|balloon.
         --from-save           Seed play options from SAVED.GAM/SAVED.OOL.
         --from-init           Seed play options from INIT.GAM (debug).
+        --create-character <N>
+                              Create SAVED.GAM/SAVED.OOL from INIT seeds and return.
+        --gender <G>          male|female for --create-character.
+        --chargen-winners <V> Seven comma-separated winning virtues for chargen.
         --raster-diagnostics  Emit per-frame raster diagnostics.
         --raster-depth <D>    ega|cga (default ega).
         --visual              Launch the Bevy top-down visual harness.
@@ -276,9 +358,17 @@ SMOKE COMMANDS:
     cargo run -- --play C:\\Games\\U5-Clean
     cargo run -- --play-script \"z;q\" C:\\Games\\U5-Clean
     cargo run -- --play --scene DUNGEON:0 --floor 0 C:\\Games\\U5-Clean
+    cargo run -- --create-character Avatar --gender male --chargen-winners Honesty,Compassion,Valor,Justice,Sacrifice,Honor,Spirituality C:\\Games\\U5-Clean
     cargo run --features visual -- --visual --scene BRITANNIA C:\\Games\\U5-Clean
     cargo run --features visual -- --visual --scene CASTLE:0 --floor 0 C:\\Games\\U5-Clean
 ";
+
+pub fn run_create_character_command(
+    game_dir: &Path,
+    command: &CreateCharacterCommand,
+) -> io::Result<ChargenAvatar> {
+    commit_chargen_save(game_dir, &command.name, command.male, command.stats)
+}
 
 pub fn parse_start_arg(value: &str) -> io::Result<(usize, usize)> {
     let (x, y) = value.split_once(',').ok_or_else(|| {
@@ -358,7 +448,6 @@ pub fn parse_pending_vehicle_arg(value: &str) -> io::Result<PendingVehicleAcquis
     }
 }
 
-
 pub fn parse_transport_arg(value: &str) -> io::Result<TransportState> {
     match value.trim().to_ascii_lowercase().as_str() {
         "foot" => Ok(TransportState::Foot),
@@ -392,6 +481,43 @@ pub fn parse_transport_arg(value: &str) -> io::Result<TransportState> {
     }
 }
 
+pub fn parse_chargen_gender_arg(value: &str) -> io::Result<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "m" | "male" => Ok(true),
+        "f" | "female" => Ok(false),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unknown gender `{value}`; expected male|female"),
+        )),
+    }
+}
+
+pub fn parse_chargen_winners_arg(value: &str) -> io::Result<Vec<ShrineVirtue>> {
+    let winners: Vec<_> = value
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            ShrineVirtue::from_key(part).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("unknown chargen virtue `{part}`"),
+                )
+            })
+        })
+        .collect::<io::Result<_>>()?;
+    if winners.len() != 7 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "--chargen-winners requires exactly seven virtues, got {}",
+                winners.len()
+            ),
+        ));
+    }
+    Ok(winners)
+}
+
 pub fn parse_time_arg(value: &str) -> io::Result<GameClock> {
     let (hour, minute) = if let Some((hour, minute)) = value.split_once(':') {
         (hour, minute)
@@ -412,4 +538,3 @@ pub fn parse_time_arg(value: &str) -> io::Result<GameClock> {
     })?;
     GameClock::new(hour, minute)
 }
-

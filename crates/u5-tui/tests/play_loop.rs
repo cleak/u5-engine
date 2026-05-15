@@ -517,4 +517,3 @@ fn play_script_local_clean_smoke_runs_default_scene_when_present() {
         PlayInputDisposition::Quit
     );
 }
-

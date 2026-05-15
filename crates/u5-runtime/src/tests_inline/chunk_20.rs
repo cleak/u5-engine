@@ -65,9 +65,30 @@
     }
 
     #[test]
-    fn idle_tick_keeps_active_objects_frozen_during_time_stop_without_aging_counter() {
+    fn idle_tick_can_apply_public_random_wind_drift_without_turn() {
+        let mut state = britannia_state(open_world_grid(), 1, 10);
+        state.clock = GameClock::new(12, 0).unwrap();
+        state.wind = WindState::Calm;
+        state.wind_save_byte = 0x7a;
+        state.sail_cadence = 1;
+        state.sail_stall_pending = true;
+
+        assert_eq!(state.idle_tick(), MoveOutcome::IdleTick);
+
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
+        assert_eq!(state.wind, WindState::North);
+        assert_eq!(state.wind_save_byte, 1);
+        assert_eq!(state.sail_cadence, 0);
+        assert!(!state.sail_stall_pending);
+        assert_eq!(state.message, "Idle animation tick. North Winds");
+    }
+
+    #[test]
+    fn idle_tick_keeps_active_objects_frozen_during_negate_time_without_aging_counter() {
         let mut state = britannia_state(open_world_grid(), 4, 5);
-        state.time_stop_counter = 3;
+        state.active_effect_tag = Some(NEGATE_TIME_ACTIVE_EFFECT_TAG);
+        state.active_effect_counter = 3;
         state.active_objects.push(ActiveObject {
             type_byte: 168,
             tile: 168,
@@ -82,7 +103,8 @@
         assert_eq!(state.idle_tick(), MoveOutcome::IdleTick);
 
         assert_eq!(state.turn, 0);
-        assert_eq!(state.time_stop_counter, 3);
+        assert_eq!(state.active_effect_tag, Some(NEGATE_TIME_ACTIVE_EFFECT_TAG));
+        assert_eq!(state.active_effect_counter, 3);
         assert_eq!(state.animation.frame, 1);
         assert_eq!(state.active_objects[1].phase, 0x22);
         assert_eq!(state.active_objects[1].tile, 168);
@@ -138,7 +160,7 @@
     }
 
     #[test]
-    fn jimmy_town_door_consumes_turn_without_visit_local_rewrite() {
+    fn jimmy_town_locked_door_roll_success_unlocks_visit_local_tile() {
         let mut grid = open_grid();
         grid[32 + 2] = 97;
         let mut state = test_state(grid, 1, 1);
@@ -148,9 +170,25 @@
 
         assert_eq!(state.turn, 1);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
+        assert_eq!(state.grid[32 + 2], 96);
+        assert_eq!(state.message, "Unlocked!");
+        assert!(state.visibility_dirty);
+    }
+
+    #[test]
+    fn jimmy_town_locked_door_roll_failure_breaks_key_without_unlocking() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 97;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.party[0].class_byte = 1;
+
+        assert_eq!(state.jimmy_facing(), MoveOutcome::LockTried);
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK - 1);
         assert_eq!(state.grid[32 + 2], 97);
-        assert!(state.message.contains("Jimmy checked door tile 97"));
-        assert!(state.message.contains("lock-state table"));
+        assert_eq!(state.message, "Key broke!");
     }
 
     #[test]
@@ -330,6 +368,185 @@
             })
         );
         assert_eq!(state.turn, 2);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_jimmy_locked_sidecar_roll_failure_breaks_key_without_rewrite() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 97 96\n").unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = 97;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.party[0].class_byte = 1;
+        state.visibility_dirty = false;
+
+        assert_eq!(
+            state.jimmy_facing_with_game_dir(Some(&dir)).unwrap(),
+            MoveOutcome::LockTried
+        );
+
+        assert_eq!(state.message, "Key broke!");
+        assert_eq!(state.grid[32 + 2], 97);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK - 1);
+        assert_eq!(state.turn, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_jimmy_inline_party_member_uses_selected_class_byte() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 97 96\n").unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = 97;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: 1,
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 8,
+                hp: DEFAULT_PARTY_HP,
+                max_hp: DEFAULT_PARTY_MAX_HP,
+                level: 8,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'B',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 8,
+                hp: DEFAULT_PARTY_HP,
+                max_hp: DEFAULT_PARTY_MAX_HP,
+                level: 8,
+            },
+        ];
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'J', "2", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.message, "Unlocked!");
+        assert_eq!(state.grid[32 + 2], 96);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK);
+        assert_eq!(state.turn, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_jimmy_pickpocket_success_marks_npc_and_clamps_moral_standing() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.moral_standing = 98;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 2,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(state.jimmy_facing(), MoveOutcome::LockTried);
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK);
+        assert_eq!(state.moral_standing, MORAL_STANDING_MAX);
+        assert_eq!(state.pickpocketed_npcs, vec![(17, 0, 1)]);
+        assert_eq!(state.message, "Thanks!");
+
+        assert_eq!(state.jimmy_facing(), MoveOutcome::LockTried);
+        assert_eq!(state.turn, 2);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK);
+        assert_eq!(state.moral_standing, MORAL_STANDING_MAX);
+        assert_eq!(state.pickpocketed_npcs, vec![(17, 0, 1)]);
+    }
+
+    #[test]
+    fn town_jimmy_pickpocket_failure_breaks_key_without_mark_or_moral_reward() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.party[0].class_byte = 1;
+        state.moral_standing = 10;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 2,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(state.jimmy_facing(), MoveOutcome::LockTried);
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK - 1);
+        assert_eq!(state.moral_standing, 10);
+        assert!(state.pickpocketed_npcs.is_empty());
+        assert_eq!(state.message, "Key broke!");
+    }
+
+    #[test]
+    fn town_jimmy_object_without_active_npc_refuses_without_key_loss() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.active_objects.push(ActiveObject {
+            type_byte: 168,
+            tile: 168,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(state.jimmy_facing(), MoveOutcome::Blocked);
+
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK);
+        assert_eq!(state.moral_standing, 0);
+        assert_eq!(state.message, "No one is there!");
+    }
+
+    #[test]
+    fn town_jimmy_without_inline_party_prompts_without_turn() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 97 96\n").unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = 97;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'J', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.message, "Who picks? Use J<party>.");
+        assert_eq!(state.grid[32 + 2], 97);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK);
+        assert_eq!(state.turn, 0);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -607,20 +824,19 @@
 
         assert_eq!(
             state.search_facing_with_game_dir(&dir).unwrap(),
-            MoveOutcome::ContainerOpened
+            MoveOutcome::Searched
         );
 
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
-        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x7c);
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x4c);
         assert_eq!(state.turn, 1);
-        assert!(state.visibility_dirty);
         assert!(state.message.contains("Searched dungeon chest at (2, 1)"));
         assert!(!state.message.contains("secret door"));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn dungeon_search_chest_consumes_turn_and_marks_visit_local_passage() {
+    fn dungeon_search_chest_reports_trap_detail_without_consuming_chest() {
         let dir = debug_game_dir();
         let scene = DungeonScene::new(33).unwrap();
         let mut grid = open_dungeon_record();
@@ -631,19 +847,14 @@
 
         assert_eq!(
             state.search_facing_with_game_dir(&dir).unwrap(),
-            MoveOutcome::ContainerOpened
+            MoveOutcome::Searched
         );
 
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
-        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x7c);
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x4c);
         assert_eq!(state.turn, 1);
-        assert!(state.visibility_dirty);
         assert!(state.message.contains("Searched dungeon chest at (2, 1)"));
-        assert!(
-            state
-                .message
-                .contains("content/trap generator is out of scope")
-        );
+        assert!(state.message.contains("trap"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -706,6 +917,7 @@
         state.player.facing = Direction::East;
         state.party = vec![PartyMember {
             slot: 0,
+            class_byte: b'A',
             status: b'G',
             climb_stat: 30,
             mana: 8,
@@ -729,7 +941,7 @@
     }
 
     #[test]
-    fn dungeon_open_chest_consumes_turn_and_marks_visit_local_passage() {
+    fn dungeon_open_chest_consumes_turn_and_marks_visit_local_open_chest() {
         let scene = DungeonScene::new(33).unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 1, 1)] = 0x4b;
@@ -741,6 +953,7 @@
 
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7b);
+        assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP - 12);
         assert_eq!(state.turn, 1);
         assert_eq!(state.door_tracker, None);
         assert!(state.visibility_dirty);
@@ -748,15 +961,16 @@
         assert!(
             state
                 .message
-                .contains("content/trap generator is out of scope")
+                .contains("Acid trap hit party member 1 for 12 HP.")
         );
+        assert!(state.message.contains("marked visit-local open chest"));
     }
 
     #[test]
     fn dungeon_get_chest_consumes_turn_and_marks_visit_local_passage() {
         let scene = DungeonScene::new(33).unwrap();
         let mut grid = open_dungeon_record();
-        grid[dungeon_cell_index(0, 1, 1)] = 0x4c;
+        grid[dungeon_cell_index(0, 1, 1)] = 0x7c;
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.ambient_light = FULL_DARKNESS;
         state.visibility_dirty = false;
@@ -767,16 +981,44 @@
         );
 
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7c);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x08);
         assert_eq!(state.turn, 1);
         assert_eq!(state.door_tracker, None);
         assert!(state.visibility_dirty);
         assert!(state.message.contains("Got dungeon chest"));
-        assert!(
-            state
-                .message
-                .contains("content/trap generator is out of scope")
+        assert!(state.message.contains("generated chest grants"));
+    }
+
+    #[test]
+    fn dungeon_get_chest_generated_rewards_follow_public_rows() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(7, 0, 2)] = 0x7c;
+        let mut state = dungeon_state(grid, 7, 0, 2);
+        state.food = 0;
+        state.gold = 0;
+        state.keys = 0;
+        state.gems = 0;
+        state.torches = 0;
+
+        assert_eq!(
+            state.get_dungeon_underfoot(scene, 7),
+            MoveOutcome::ContainerOpened
         );
+
+        assert_eq!(state.grid[dungeon_cell_index(7, 0, 2)], 0x08);
+        assert_eq!(state.food, 11);
+        assert_eq!(state.gold, 52);
+        assert_eq!(state.keys, 2);
+        assert_eq!(state.gems, 1);
+        assert_eq!(state.torches, 2);
+        assert_eq!(state.potion_stock[7], 1);
+        assert_eq!(state.scroll_stock[6], 1);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("generated chest grants 11 food"));
+        assert!(state.message.contains("52 gold"));
+        assert!(state.message.contains("1 white potion"));
+        assert!(state.message.contains("1 CIM scroll"));
     }
 
     #[test]
@@ -789,7 +1031,7 @@
         .unwrap();
         let scene = DungeonScene::new(33).unwrap();
         let mut grid = open_dungeon_record();
-        grid[dungeon_cell_index(0, 1, 1)] = 0x4c;
+        grid[dungeon_cell_index(0, 1, 1)] = 0x7c;
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.gold = 10;
         state.gems = 1;
@@ -802,7 +1044,7 @@
             MoveOutcome::ContainerOpened
         );
 
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7c);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x08);
         assert_eq!(state.gold, 17);
         assert_eq!(state.gems, 3);
         assert_eq!(state.torches, 1);
@@ -817,7 +1059,7 @@
     }
 
     #[test]
-    fn dungeon_open_chest_applies_clean_sidecar_grants() {
+    fn dungeon_open_chest_does_not_apply_clean_sidecar_grants() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(DUNGEON_CHEST_TABLE_FILE),
@@ -838,20 +1080,16 @@
 
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7b);
-        assert_eq!(state.keys, 3);
-        assert_eq!(state.food, 17);
+        assert_eq!(state.keys, 1);
+        assert_eq!(state.food, 12);
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("Opened dungeon chest"));
-        assert!(
-            state
-                .message
-                .contains("authored chest grants 2 keys, 5 food")
-        );
+        assert!(!state.message.contains("authored chest grants"));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn dungeon_search_chest_applies_clean_sidecar_grants_and_guard() {
+    fn dungeon_search_chest_ignores_clean_sidecar_grants_and_guard() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(DUNGEON_CHEST_TABLE_FILE),
@@ -867,15 +1105,15 @@
 
         assert_eq!(
             state.search_facing_with_game_dir(&dir).unwrap(),
-            MoveOutcome::ContainerOpened
+            MoveOutcome::Searched
         );
 
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
-        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x7c);
-        assert_eq!(state.keys, 3);
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x4c);
+        assert_eq!(state.keys, 1);
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("Searched dungeon chest"));
-        assert!(state.message.contains("authored chest grants 2 keys"));
+        assert!(!state.message.contains("authored chest grants"));
 
         let mut mismatch_grid = open_dungeon_record();
         mismatch_grid[dungeon_cell_index(0, 2, 1)] = 0x4b;
@@ -885,16 +1123,12 @@
 
         assert_eq!(
             mismatch.search_facing_with_game_dir(&dir).unwrap(),
-            MoveOutcome::ContainerOpened
+            MoveOutcome::Searched
         );
 
         assert_eq!(mismatch.keys, 1);
-        assert_eq!(mismatch.grid[dungeon_cell_index(0, 2, 1)], 0x7b);
-        assert!(
-            mismatch
-                .message
-                .contains("content/trap generator is out of scope")
-        );
+        assert_eq!(mismatch.grid[dungeon_cell_index(0, 2, 1)], 0x4b);
+        assert!(!mismatch.message.contains("generated chest grants"));
         let _ = fs::remove_dir_all(dir);
     }
 

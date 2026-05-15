@@ -89,8 +89,17 @@ impl PlayState {
         save[SAVE_KEY_STOCK_OFFSET] = self.keys;
         save[SAVE_GEM_STOCK_OFFSET] = self.gems;
         save[SAVE_TORCH_STOCK_OFFSET] = self.torches;
+        save[SAVE_CLIMBING_GEAR_OFFSET] = self.climbing_gear;
+        save[SAVE_SPECIAL_ITEM_OFFSET..SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_COUNT]
+            .copy_from_slice(&self.special_items);
+        save[SAVE_EQUIPMENT_STOCK_OFFSET..SAVE_EQUIPMENT_STOCK_OFFSET + EQUIPMENT_COUNT]
+            .copy_from_slice(&self.equipment_stock);
         save[SAVE_SPELL_CHARGES_OFFSET..SAVE_SPELL_CHARGES_OFFSET + SPELL_COUNT]
             .copy_from_slice(&self.spell_charges);
+        save[SAVE_SCROLL_STOCK_OFFSET..SAVE_SCROLL_STOCK_OFFSET + SCROLL_COUNT]
+            .copy_from_slice(&self.scroll_stock);
+        save[SAVE_POTION_STOCK_OFFSET..SAVE_POTION_STOCK_OFFSET + POTION_COUNT]
+            .copy_from_slice(&self.potion_stock);
         encode_reagent_stock(&mut save, self.reagents);
         for (slot_index, slot) in self.moonstone_slots.iter().copied().enumerate() {
             save[SAVE_MOONSTONE_X_OFFSET + slot_index] = slot.x;
@@ -102,8 +111,11 @@ impl PlayState {
         save[SAVE_TORCH_COUNTER_OFFSET] = self.torch_counter;
         save[SAVE_SHRINE_ORDAINED_MASK_OFFSET] = self.shrine_ordained_mask;
         save[SAVE_SHRINE_CODEX_MASK_OFFSET] = self.shrine_codex_mask;
+        save[SAVE_MORAL_STANDING_OFFSET] = self.moral_standing;
         save[SAVE_TIMING_STATUS_TAG_OFFSET] = self.timing_status.save_byte();
-        save[SAVE_ACTIVE_PLAYER_OFFSET] = 0xff;
+        save[SAVE_FORTUNES_OF_WAR_OFFSET] = self.fortunes_of_war;
+        save[SAVE_ACTIVE_PLAYER_OFFSET] = encode_active_player_slot(self.active_player);
+        save[SAVE_COMBAT_ROUND_COUNTER_OFFSET] = self.combat_round_counter;
         save[SAVE_TRANSPORT_MARKER_OFFSET] = self.player.transport.save_marker();
         save[SAVE_WIND_OFFSET] = self.wind_save_byte;
         save[SAVE_PARTY_SIZE_OFFSET] = self.party.len().min(6) as u8;
@@ -111,12 +123,27 @@ impl PlayState {
         save[avatar_record + SAVE_CHARACTER_STR_OFFSET] = self.avatar_stats.strength;
         save[avatar_record + SAVE_CHARACTER_DEX_OFFSET] = self.avatar_stats.dexterity;
         save[avatar_record + SAVE_CHARACTER_INT_OFFSET] = self.avatar_stats.intelligence;
-        for member in self.party.iter().take(6) {
+        for (party_index, member) in self.party.iter().take(6).enumerate() {
             let record = SAVE_ROSTER_OFFSET + member.slot as usize * SAVE_CHARACTER_RECORD_LEN;
             if record + SAVE_CHARACTER_MAX_HP_OFFSET + 1 >= save.len() {
                 continue;
             }
+            if member.slot != 0 {
+                if let Some(strength) = self.party_strengths.get(party_index).copied() {
+                    save[record + SAVE_CHARACTER_STR_OFFSET] = strength;
+                }
+            }
+            save[record + SAVE_CHARACTER_CLASS_OFFSET] = member.class_byte;
+            if let Some(name) = self.party_names.get(party_index) {
+                save[record..record + SAVE_CHARACTER_NAME_LEN].copy_from_slice(name);
+            }
             save[record + SAVE_CHARACTER_STATUS_OFFSET] = member.status;
+            if member.slot != 0 {
+                if let Some(intelligence) = self.party_intelligence.get(party_index).copied() {
+                    save[record + SAVE_CHARACTER_INT_OFFSET] = intelligence;
+                }
+                save[record + SAVE_CHARACTER_DEX_OFFSET] = member.climb_stat;
+            }
             save[record + SAVE_CHARACTER_MANA_OFFSET] = member.mana;
             write_u16_at(&mut save, record + SAVE_CHARACTER_HP_OFFSET, member.hp);
             write_u16_at(
@@ -124,8 +151,25 @@ impl PlayState {
                 record + SAVE_CHARACTER_MAX_HP_OFFSET,
                 member.max_hp,
             );
+            let experience = self.party_experience.get(party_index).copied().unwrap_or(0);
+            write_u16_at(
+                &mut save,
+                record + SAVE_CHARACTER_EXPERIENCE_OFFSET,
+                experience,
+            );
+            save[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET] = self
+                .party_stay_counters
+                .get(party_index)
+                .copied()
+                .unwrap_or(0)
+                .min(INN_STAY_COUNTER_CAP);
             save[record + SAVE_CHARACTER_LEVEL_OFFSET] = member.level;
+            if let Some(equipment) = self.party_equipment.get(party_index) {
+                let start = record + SAVE_CHARACTER_EQUIPMENT_OFFSET;
+                save[start..start + EQUIPMENT_SLOT_COUNT].copy_from_slice(equipment);
+            }
         }
+        encode_inn_registry(&mut save, &self.inn_registry);
         let active_table = encode_active_object_table(&self.active_objects)?;
         save[SAVE_ACTIVE_OBJECTS_OFFSET..SAVE_ACTIVE_OBJECTS_OFFSET + OOL_PLANE_LEN]
             .copy_from_slice(&active_table);
@@ -209,7 +253,11 @@ impl PlayState {
         Ok(())
     }
 
-    pub fn load_town_scene(game_dir: &Path, scene: Scene, options: PlayOptions) -> io::Result<Self> {
+    pub fn load_town_scene(
+        game_dir: &Path,
+        scene: Scene,
+        options: PlayOptions,
+    ) -> io::Result<Self> {
         let mut grid = load_floor(game_dir, scene, options.floor)?;
         let passability = load_tile_passability(game_dir)?;
         let moongates = load_moongate_entries(game_dir)?.unwrap_or_default();
@@ -274,18 +322,35 @@ impl PlayState {
             grid,
             clock: options.clock,
             animation: AnimationClock::default(),
+            natural_moongate_counter: 0,
+            cached_moon_glyph_slots: [None, None],
             food: options.food,
             gold: options.gold,
             keys: options.keys,
             gems: options.gems,
             climbing_gear: options.climbing_gear,
+            special_items: options.special_items,
             party: options.party,
+            party_names: options.party_names,
+            party_experience: options.party_experience,
+            party_stay_counters: options.party_stay_counters,
+            party_strengths: options.party_strengths,
+            party_intelligence: options.party_intelligence,
+            party_equipment: options.party_equipment,
+            equipment_stock: options.equipment_stock,
             spell_charges: options.spell_charges,
+            scroll_stock: options.scroll_stock,
+            potion_stock: options.potion_stock,
             reagents: options.reagents,
+            rare_reagent_harvest_days: options.rare_reagent_harvest_days,
+            fixed_hidden_treasure_found: options.fixed_hidden_treasure_found,
+            fixed_hidden_treasure_daily_day: options.fixed_hidden_treasure_daily_day,
             moonstone_slots: options.moonstone_slots,
+            shadowlord_hideouts: options.shadowlord_hideouts,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
             shrine_standing: options.shrine_standing,
+            moral_standing: options.moral_standing,
             avatar_stats: options.avatar_stats,
             torches: options.torches,
             torch_counter: options.torch_counter,
@@ -298,6 +363,16 @@ impl PlayState {
             time_stop_counter: options.time_stop_counter,
             active_effect_tag: options.active_effect_tag,
             active_effect_counter: options.active_effect_counter,
+            fortunes_of_war: options.fortunes_of_war,
+            active_player: options.active_player,
+            combat_round_counter: options.combat_round_counter,
+            combat_active: false,
+            combat_frame_snapshot: None,
+            pending_combat_actor_slot: None,
+            pending_combat_terrain_trigger_slot: None,
+            next_combat_actor_slot: 0,
+            combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
+            combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
             turn: 0,
@@ -308,6 +383,11 @@ impl PlayState {
             save_template_source: options.save_template_source,
             typeahead_buffer_enabled: false,
             pending_moongate: None,
+            endgame: None,
+            pickpocketed_npcs: Vec::new(),
+            removed_town_npcs: Vec::new(),
+            talk_branch_flags: HashMap::new(),
+            inn_registry: options.inn_registry,
         };
         if has_saved_active_objects {
             state.load_scheduled_npcs_from_existing_active_objects(&npc_slots);
@@ -315,8 +395,20 @@ impl PlayState {
             state.load_scheduled_npcs(&npc_slots);
         }
         state.attach_player_phantom_npc();
+        if !has_saved_active_objects {
+            if let Some((slot, index)) = state.install_shadowlord_entry_encounter() {
+                let shadowlord = Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord");
+                if !state.message.is_empty() {
+                    state.message.push('\n');
+                }
+                state.message.push_str(&format!(
+                    "Shadowlord entry: {shadowlord} appears in active-object slot {slot}."
+                ));
+            }
+        }
         state.mode_zero_cleanup();
         state.mark_visibility_dirty();
+        state.append_stonegate_entry_presentation_message();
         Ok(state)
     }
 
@@ -388,18 +480,35 @@ impl PlayState {
             grid,
             clock: options.clock,
             animation: AnimationClock::default(),
+            natural_moongate_counter: 0,
+            cached_moon_glyph_slots: [None, None],
             food: options.food,
             gold: options.gold,
             keys: options.keys,
             gems: options.gems,
             climbing_gear: options.climbing_gear,
+            special_items: options.special_items,
             party: options.party,
+            party_names: options.party_names,
+            party_experience: options.party_experience,
+            party_stay_counters: options.party_stay_counters,
+            party_strengths: options.party_strengths,
+            party_intelligence: options.party_intelligence,
+            party_equipment: options.party_equipment,
+            equipment_stock: options.equipment_stock,
             spell_charges: options.spell_charges,
+            scroll_stock: options.scroll_stock,
+            potion_stock: options.potion_stock,
             reagents: options.reagents,
+            rare_reagent_harvest_days: options.rare_reagent_harvest_days,
+            fixed_hidden_treasure_found: options.fixed_hidden_treasure_found,
+            fixed_hidden_treasure_daily_day: options.fixed_hidden_treasure_daily_day,
             moonstone_slots: options.moonstone_slots,
+            shadowlord_hideouts: options.shadowlord_hideouts,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
             shrine_standing: options.shrine_standing,
+            moral_standing: options.moral_standing,
             avatar_stats: options.avatar_stats,
             torches: options.torches,
             torch_counter: options.torch_counter,
@@ -412,6 +521,16 @@ impl PlayState {
             time_stop_counter: options.time_stop_counter,
             active_effect_tag: options.active_effect_tag,
             active_effect_counter: options.active_effect_counter,
+            fortunes_of_war: options.fortunes_of_war,
+            active_player: options.active_player,
+            combat_round_counter: options.combat_round_counter,
+            combat_active: false,
+            combat_frame_snapshot: None,
+            pending_combat_actor_slot: None,
+            pending_combat_terrain_trigger_slot: None,
+            next_combat_actor_slot: 0,
+            combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
+            combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
             turn: 0,
@@ -426,6 +545,11 @@ impl PlayState {
             save_template_source: options.save_template_source,
             typeahead_buffer_enabled: false,
             pending_moongate: None,
+            endgame: None,
+            pickpocketed_npcs: Vec::new(),
+            removed_town_npcs: Vec::new(),
+            talk_branch_flags: HashMap::new(),
+            inn_registry: options.inn_registry,
         };
         state.mode_zero_cleanup();
         state.mark_visibility_dirty();
@@ -534,18 +658,35 @@ impl PlayState {
             grid,
             clock: options.clock,
             animation: AnimationClock::default(),
+            natural_moongate_counter: 0,
+            cached_moon_glyph_slots: [None, None],
             food: options.food,
             gold: options.gold,
             keys: options.keys,
             gems: options.gems,
             climbing_gear: options.climbing_gear,
+            special_items: options.special_items,
             party: options.party,
+            party_names: options.party_names,
+            party_experience: options.party_experience,
+            party_stay_counters: options.party_stay_counters,
+            party_strengths: options.party_strengths,
+            party_intelligence: options.party_intelligence,
+            party_equipment: options.party_equipment,
+            equipment_stock: options.equipment_stock,
             spell_charges: options.spell_charges,
+            scroll_stock: options.scroll_stock,
+            potion_stock: options.potion_stock,
             reagents: options.reagents,
+            rare_reagent_harvest_days: options.rare_reagent_harvest_days,
+            fixed_hidden_treasure_found: options.fixed_hidden_treasure_found,
+            fixed_hidden_treasure_daily_day: options.fixed_hidden_treasure_daily_day,
             moonstone_slots: options.moonstone_slots,
+            shadowlord_hideouts: options.shadowlord_hideouts,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
             shrine_standing: options.shrine_standing,
+            moral_standing: options.moral_standing,
             avatar_stats: options.avatar_stats,
             torches: options.torches,
             torch_counter: options.torch_counter,
@@ -558,6 +699,16 @@ impl PlayState {
             time_stop_counter: options.time_stop_counter,
             active_effect_tag: options.active_effect_tag,
             active_effect_counter: options.active_effect_counter,
+            fortunes_of_war: options.fortunes_of_war,
+            active_player: options.active_player,
+            combat_round_counter: options.combat_round_counter,
+            combat_active: false,
+            combat_frame_snapshot: None,
+            pending_combat_actor_slot: None,
+            pending_combat_terrain_trigger_slot: None,
+            next_combat_actor_slot: 0,
+            combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
+            combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
             turn: 0,
@@ -572,6 +723,11 @@ impl PlayState {
             save_template_source: options.save_template_source,
             typeahead_buffer_enabled: false,
             pending_moongate: None,
+            endgame: None,
+            pickpocketed_npcs: Vec::new(),
+            removed_town_npcs: Vec::new(),
+            talk_branch_flags: HashMap::new(),
+            inn_registry: options.inn_registry,
         };
         state.sync_player_object();
         state.cache_current_world_overlay();
@@ -640,6 +796,15 @@ impl PlayState {
                 self.sync_player_object();
                 self.mark_visibility_dirty();
                 return self.resolve_town_exit_tile(game_dir, scene, floor, entry);
+            }
+        }
+        if let Some(game_dir) = game_dir {
+            if let Some(delta) = town_walk_on_stair_delta(tile, direction) {
+                self.player.x = nx;
+                self.player.y = ny;
+                self.sync_player_object();
+                self.mark_visibility_dirty();
+                return self.change_town_floor(game_dir, scene, floor.saturating_add(delta));
             }
         }
         if let Some(game_dir) = game_dir {
@@ -812,7 +977,12 @@ impl PlayState {
         ))
     }
 
-    pub fn block_missing_town_return(&mut self, scene: Scene, floor: i8, event: String) -> MoveOutcome {
+    pub fn block_missing_town_return(
+        &mut self,
+        scene: Scene,
+        floor: i8,
+        event: String,
+    ) -> MoveOutcome {
         self.area = Area::Town { scene, floor };
         self.sync_player_object();
         self.mark_visibility_dirty();
@@ -910,5 +1080,4 @@ impl PlayState {
             }
         }
     }
-
 }

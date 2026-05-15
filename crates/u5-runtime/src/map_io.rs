@@ -26,10 +26,11 @@ pub fn parse_tlk_bytes(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<String>>> {
     entries.sort_by_key(|(_, off)| *off);
     let mut out = HashMap::new();
     for (idx, (id, off)) in entries.iter().enumerate() {
-        let end = entries
+        let nominal_end = entries
             .get(idx + 1)
             .map(|(_, next)| *next)
             .unwrap_or(bytes.len());
+        let end = nominal_end.min(off.saturating_add(1024));
         if *off >= bytes.len() || *off >= end {
             continue;
         }
@@ -45,6 +46,13 @@ pub fn parse_tlk_bytes(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<String>>> {
         }
         out.insert(*id, fields);
     }
+    if !out.contains_key(&1) {
+        if let Some((first_id, _)) = entries.first() {
+            if let Some(fields) = out.get(first_id).cloned() {
+                out.insert(1, fields);
+            }
+        }
+    }
     Ok(out)
 }
 
@@ -58,7 +66,14 @@ pub fn decode_tlk_field(bytes: &[u8], mut pos: usize, end: usize) -> (String, us
         }
         match b {
             0x85 => pos = (pos + 3).min(end),
-            0x86 | 0x8c => pos = (pos + 1).min(end),
+            0x86 => {
+                if pos < end {
+                    let action = (bytes[pos] & 0x7f) as char;
+                    s.push_str(&format!("{{ACTION:{action}}}"));
+                    pos += 1;
+                }
+            }
+            0x8c => pos = (pos + 1).min(end),
             0xfe => pos = (pos + 2).min(end),
             0xa0..=0xfd => s.push((b ^ 0x80) as char),
             0x01..=0x9d => s.push(' '),
@@ -74,10 +89,13 @@ pub fn non_empty_talk_keyword(keyword: &str) -> Option<&str> {
 }
 
 pub fn talk_keyword_response<'a>(fields: &'a [String], keyword: &str) -> Option<&'a str> {
-    if talk_keyword_matches("JOB", keyword) {
+    if talk_keyword_matches("NAME", keyword) {
+        return fields.first().map(String::as_str);
+    }
+    if talk_keyword_matches("JOB", keyword) || talk_keyword_matches("WORK", keyword) {
         return fields.get(3).map(String::as_str);
     }
-    if talk_keyword_matches("BYE", keyword) {
+    if talk_keyword_matches("BYE", keyword) || talk_keyword_matches("THANK", keyword) {
         return fields.get(4).map(String::as_str);
     }
 
@@ -106,6 +124,60 @@ pub fn talk_keyword_compare_text(value: &str) -> String {
         .bytes()
         .map(|byte| (byte & 0x7f).to_ascii_uppercase() as char)
         .collect()
+}
+
+pub fn talk_response_text_and_actions(response: &str) -> (String, Vec<char>) {
+    let mut text = String::new();
+    let mut actions = Vec::new();
+    let mut rest = response;
+    while let Some(start) = rest.find("{ACTION:") {
+        text.push_str(&rest[..start]);
+        let after = &rest[start + "{ACTION:".len()..];
+        if let Some(end) = after.find('}') {
+            if let Some(action) = after[..end].chars().next() {
+                actions.push(action.to_ascii_uppercase());
+            }
+            rest = &after[end + 1..];
+        } else {
+            text.push_str(&rest[start..]);
+            rest = "";
+        }
+    }
+    text.push_str(rest);
+    (compact(&text), actions)
+}
+
+pub const fn talk_branch_flag_mask(bit_index: u8) -> u32 {
+    if bit_index < 32 { 1u32 << bit_index } else { 0 }
+}
+
+pub const fn talk_branch_flag_is_set(slot: u32, bit_index: u8) -> bool {
+    let mask = talk_branch_flag_mask(bit_index);
+    mask != 0 && slot & mask != 0
+}
+
+pub fn set_talk_branch_flag(slot: &mut u32, bit_index: u8) -> bool {
+    let mask = talk_branch_flag_mask(bit_index);
+    let before = *slot;
+    *slot |= mask;
+    *slot != before
+}
+
+pub fn talk_shop_trigger(dialog_id: u8) -> Option<(&'static str, &'static str)> {
+    match dialog_id {
+        0x81 => Some(("Weaponsmith / armourer", "Arms stock arm")),
+        0x82 => Some((
+            "Tavern / meal counter / sage-style rumour flow",
+            "Interactive tavern arm",
+        )),
+        0x83 => Some(("Horse trader", "Vehicle-sale arm")),
+        0x84 => Some(("Ship broker / shipwright", "Shipwright sale arm")),
+        0x85 => Some(("Herbalist", "Reagent arm")),
+        0x86 => Some(("Guildmaster", "Guild arm")),
+        0x87 => Some(("Healer / sanctum", "Healer arm")),
+        0x88 => Some(("Innkeeper", "Inn arm")),
+        _ => None,
+    }
 }
 
 pub fn parse_npc_block(

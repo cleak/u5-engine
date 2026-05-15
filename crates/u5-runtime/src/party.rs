@@ -25,6 +25,7 @@ pub struct Player {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PartyMember {
     pub slot: u8,
+    pub class_byte: u8,
     pub status: u8,
     pub climb_stat: u8,
     pub mana: u8,
@@ -141,6 +142,7 @@ impl Default for AvatarStats {
 pub fn default_party() -> Vec<PartyMember> {
     vec![PartyMember {
         slot: 0,
+        class_byte: b'A',
         status: b'G',
         climb_stat: DEFAULT_CLIMB_STAT,
         mana: 8,
@@ -148,6 +150,67 @@ pub fn default_party() -> Vec<PartyMember> {
         max_hp: DEFAULT_PARTY_MAX_HP,
         level: 8,
     }]
+}
+
+pub fn default_party_names(party_len: usize) -> Vec<[u8; SAVE_CHARACTER_NAME_LEN]> {
+    let mut names = vec![[0; SAVE_CHARACTER_NAME_LEN]; party_len];
+    if let Some(leader) = names.get_mut(0) {
+        leader[..6].copy_from_slice(b"Avatar");
+    }
+    names
+}
+
+pub fn party_name_to_string(name: &[u8]) -> Option<String> {
+    let end = name
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(name.len());
+    let display = String::from_utf8_lossy(&name[..end]).trim_end().to_string();
+    (!display.is_empty()).then_some(display)
+}
+
+pub fn default_party_experience(party_len: usize) -> Vec<u16> {
+    vec![0; party_len]
+}
+
+pub fn default_party_stay_counters(party_len: usize) -> Vec<u8> {
+    vec![0; party_len]
+}
+
+pub fn default_party_intelligence(party_len: usize) -> Vec<u8> {
+    vec![AVATAR_STAT_MAX; party_len]
+}
+
+pub fn recompute_level_from_experience(experience: u16) -> u8 {
+    let mut level = 1;
+    let mut quotient = experience / 100;
+    while quotient != 0 {
+        level += 1;
+        quotient /= 2;
+    }
+    level
+}
+
+pub fn class_refreshed_mana(class_byte: u8, intelligence: u8) -> Option<u8> {
+    match class_byte {
+        b'A' | b'M' => Some(intelligence),
+        b'B' => Some(intelligence / 2),
+        _ => None,
+    }
+}
+
+pub const fn heal_spell_amount_from_raw_roll(raw_roll: u8) -> u16 {
+    let amount = raw_roll / 2;
+    if amount == 0 { 1 } else { amount as u16 }
+}
+
+pub fn resurrection_adjusted_experience(experience: u16, moral_standing: u8) -> u16 {
+    if moral_standing >= 98 {
+        return experience;
+    }
+
+    let divisor = u32::from(moral_standing.max(1));
+    ((u32::from(experience) * 100) / divisor).min(u32::from(u16::MAX)) as u16
 }
 
 pub fn party_status_name(status: u8) -> &'static str {
@@ -169,3 +232,21 @@ pub fn party_member_unavailable_message(party_len: usize) -> String {
     )
 }
 
+pub fn potion_label(index: usize) -> &'static str {
+    const LABELS: [&str; POTION_COUNT] = [
+        "blue", "yellow", "red", "green", "orange", "purple", "black", "white",
+    ];
+    LABELS.get(index).copied().unwrap_or("unknown")
+}
+
+pub fn potion_effect_index_after_variation(
+    selected_index: usize,
+    variation_roll: u8,
+    random_roll: u8,
+) -> usize {
+    match variation_roll & 0x0f {
+        0..=13 => selected_index,
+        14 => POTION_ORANGE_INDEX,
+        _ => (random_roll as usize) & 0x07,
+    }
+}

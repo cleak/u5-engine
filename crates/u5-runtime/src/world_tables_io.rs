@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 
 use crate::*;
 
-pub fn load_world_waterfall_entries(game_dir: &Path) -> io::Result<Option<Vec<WorldWaterfallEntry>>> {
+pub fn load_world_waterfall_entries(
+    game_dir: &Path,
+) -> io::Result<Option<Vec<WorldWaterfallEntry>>> {
     let path = game_dir.join(WORLD_WATERFALL_TABLE_FILE);
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,
@@ -246,7 +248,9 @@ pub fn parse_world_damage_tile_entries(text: &str) -> io::Result<Vec<WorldDamage
     Ok(entries)
 }
 
-pub fn load_world_encounter_entries(game_dir: &Path) -> io::Result<Option<Vec<WorldEncounterEntry>>> {
+pub fn load_world_encounter_entries(
+    game_dir: &Path,
+) -> io::Result<Option<Vec<WorldEncounterEntry>>> {
     let path = game_dir.join(WORLD_ENCOUNTER_TABLE_FILE);
     let text = match fs::read_to_string(&path) {
         Ok(text) => text,

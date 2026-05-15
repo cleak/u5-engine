@@ -477,4 +477,3 @@ pub fn unpack_graphic_pixels(
     }
     Ok(pixels)
 }
-

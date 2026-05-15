@@ -48,8 +48,85 @@
         assert_eq!((state.player.x, state.player.y), (1, 1));
         assert_eq!(state.turn, 1);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
-        assert!(state.message.contains("Jimmy checked dungeon chest"));
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7b);
+        assert_eq!(state.message, "Unlocked!");
         assert!(!state.message.contains("Dungeon movement"));
+    }
+
+    #[test]
+    fn dungeon_jimmy_prompts_for_picker_before_key_stock_check() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x4b;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.keys = 0;
+
+        assert_eq!(
+            state
+                .jimmy_facing_with_game_dir_and_member(None, None)
+                .unwrap(),
+            MoveOutcome::PromptDeclined
+        );
+
+        assert_eq!(state.message, "Who picks? Use J<party>.");
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.keys, 0);
+    }
+
+    #[test]
+    fn dungeon_jimmy_plain_closed_chest_breaks_key_without_rewrite() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x40;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.keys = 2;
+
+        assert_eq!(
+            state.jimmy_facing_with_game_dir_and_member(None, Some(0)).unwrap(),
+            MoveOutcome::LockTried
+        );
+
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x40);
+        assert_eq!(state.keys, 1);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Key broke!");
+    }
+
+    #[test]
+    fn dungeon_jimmy_marked_chest_roll_success_unlocks_visit_local_cell() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x4b;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.keys = 2;
+        state.visibility_dirty = false;
+
+        assert_eq!(
+            state.jimmy_facing_with_game_dir_and_member(None, Some(0)).unwrap(),
+            MoveOutcome::LockTried
+        );
+
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7b);
+        assert_eq!(state.keys, 2);
+        assert_eq!(state.turn, 1);
+        assert!(state.visibility_dirty);
+        assert_eq!(state.message, "Unlocked!");
+    }
+
+    #[test]
+    fn dungeon_jimmy_marked_chest_roll_failure_breaks_key_without_rewrite() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x4b;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.keys = 2;
+        state.party[0].class_byte = 30;
+
+        assert_eq!(
+            state.jimmy_facing_with_game_dir_and_member(None, Some(0)).unwrap(),
+            MoveOutcome::LockTried
+        );
+
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x4b);
+        assert_eq!(state.keys, 1);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Key broke!");
     }
 
     #[test]
@@ -251,6 +328,7 @@
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: 30,
                 mana: 8,
@@ -260,6 +338,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: 30,
                 mana: 8,
@@ -318,6 +397,7 @@
         state.party = vec![
             PartyMember {
                 slot: 0,
+                class_byte: b'A',
                 status: b'G',
                 climb_stat: 30,
                 mana: 8,
@@ -327,6 +407,7 @@
             },
             PartyMember {
                 slot: 1,
+                class_byte: b'A',
                 status: b'P',
                 climb_stat: 30,
                 mana: 8,
@@ -382,6 +463,7 @@
         assert_eq!(state.turn, 0);
         assert!(state.message.contains("Dungeon view"));
         assert!(state.message.contains("centered flood map"));
+        assert!(!state.message.contains("out of scope"));
         let rows: Vec<_> = state.message.lines().skip(1).collect();
         assert_eq!(rows.len(), 11);
         assert!(rows.iter().all(|row| row.chars().count() == 11));
@@ -408,12 +490,48 @@
     }
 
     #[test]
+    fn dungeon_view_flood_expands_through_door_and_room_classes() {
+        for blocker in [0xa0, 0xe0, 0xf0] {
+            let mut grid = vec![0xb0; DUNGEON_RECORD_LEN];
+            grid[dungeon_cell_index(0, 1, 1)] = 0x00;
+            grid[dungeon_cell_index(0, 2, 1)] = blocker;
+            grid[dungeon_cell_index(0, 3, 1)] = 0x20;
+            let mut state = dungeon_state(grid, 0, 1, 1);
+            state.gems = 1;
+
+            assert_eq!(state.view_gem(), MoveOutcome::Observed);
+
+            let rows: Vec<_> = state.message.lines().skip(1).collect();
+            assert_eq!(rows[5].chars().nth(6), Some('+'));
+            assert_eq!(rows[5].chars().nth(7), Some('>'));
+        }
+    }
+
+    #[test]
+    fn dungeon_view_flood_stops_at_wall_presentation_classes() {
+        for blocker in [0xb0, 0xc0, 0xd0] {
+            let mut grid = vec![0xb0; DUNGEON_RECORD_LEN];
+            grid[dungeon_cell_index(0, 1, 1)] = 0x00;
+            grid[dungeon_cell_index(0, 2, 1)] = blocker;
+            grid[dungeon_cell_index(0, 3, 1)] = 0x20;
+            let mut state = dungeon_state(grid, 0, 1, 1);
+            state.gems = 1;
+
+            assert_eq!(state.view_gem(), MoveOutcome::Observed);
+
+            let rows: Vec<_> = state.message.lines().skip(1).collect();
+            assert_eq!(rows[5].chars().nth(6), Some('#'));
+            assert_eq!(rows[5].chars().nth(7), Some(' '));
+        }
+    }
+
+    #[test]
     fn town_view_decrements_gem_and_reports_full_fill_map_without_turn() {
         let mut state = test_state(open_grid(), 5, 5);
         state.gems = 1;
         state.active_objects.push(ActiveObject {
-            type_byte: 192,
-            tile: 192,
+            type_byte: 0xaa,
+            tile: 0xaa,
             x: 6,
             y: 5,
             z: 0,
@@ -427,7 +545,12 @@
         assert_eq!(state.gems, 0);
         assert_eq!(state.turn, 0);
         assert!(state.message.contains("Gem view of CASTLE:0"));
-        assert!(state.message.contains(".....@n...."));
+        assert!(state.message.contains("32x32 class map"));
+        let rows: Vec<_> = state.message.lines().skip(1).collect();
+        assert_eq!(rows.len(), 32);
+        assert!(rows.iter().all(|row| row.chars().count() == 32));
+        assert_eq!(rows[16].chars().nth(16), Some('@'));
+        assert_eq!(rows[16].chars().nth(17), Some('3'));
     }
 
     #[test]
@@ -450,7 +573,36 @@
         assert_eq!(state.gems, 1);
         assert_eq!(state.turn, 0);
         assert!(state.message.contains("Gem view of UNDERWORLD"));
-        assert!(state.message.contains(",,,,v@,,,,,"));
+        assert!(state.message.contains("32x32 class map"));
+        let rows: Vec<_> = state.message.lines().skip(1).collect();
+        assert_eq!(rows.len(), 32);
+        assert!(rows.iter().all(|row| row.chars().count() == 32));
+        assert_eq!(rows[16].chars().nth(15), Some('3'));
+        assert_eq!(rows[16].chars().nth(16), Some('@'));
+        assert_eq!(rows[16].chars().nth(17), Some('1'));
+    }
+
+    #[test]
+    fn surface_view_class_uses_spec_tile_ranges() {
+        assert_eq!(surface_view_class(0x00), 0x00);
+        assert_eq!(surface_view_class(0x05), 0x01);
+        assert_eq!(surface_view_class(0x2d), 0x02);
+        assert_eq!(surface_view_class(0x70), 0x03);
+        assert_eq!(surface_view_class(0x5a), 0x04);
+        assert_eq!(surface_view_class(0x80), 0x05);
+        assert_eq!(surface_view_class(0xec), 0x06);
+        assert_eq!(surface_view_class(0xfe), 0x07);
+        assert_eq!(surface_view_class(0x0e), 0x08);
+        assert_eq!(surface_view_class(0x2c), 0x09);
+        assert_eq!(surface_view_class(0xe4), 0x0a);
+        assert_eq!(surface_view_class(0xd4), 0x0b);
+        assert_eq!(surface_view_class(0x01), 0x0c);
+        assert_eq!(surface_view_class(0x04), 0x0d);
+        assert_eq!(surface_view_class(0xe3), 0x0e);
+        assert_eq!(surface_view_class(0xdc), 0x0f);
+        assert_eq!(surface_view_class(0x26), 0x10);
+        assert_eq!(render_surface_view_class(0x0a), 'A');
+        assert_eq!(render_surface_view_class(0x10), 'G');
     }
 
     #[test]
@@ -800,6 +952,33 @@
             );
             assert_eq!(chunk[3], 0xff);
         }
+    }
+
+    #[test]
+    fn text_panel_renderer_produces_bounded_nonblank_rgba() {
+        let rgba = render_text_panel_rgba(
+            "DUNGEON:0 LEVEL 0\nA VERY LONG DUNGEON STATUS LINE",
+            48,
+            24,
+        )
+        .unwrap();
+
+        assert_eq!(rgba.len(), 48 * 24 * 4);
+        assert!(
+            rgba.chunks_exact(4)
+                .any(|pixel| pixel == TEXT_PANEL_HEADER_RGBA)
+        );
+        assert!(
+            rgba.chunks_exact(4)
+                .any(|pixel| pixel == TEXT_PANEL_BODY_RGBA)
+        );
+        assert!(wrap_text_panel_lines("DUNGEON:0 LEVEL 0", 12, 4).contains(&"LEVEL 0".to_string()));
+    }
+
+    #[test]
+    fn text_panel_renderer_rejects_overflow_dimensions() {
+        assert!(render_text_panel_rgba("x", usize::MAX, 2).is_err());
+        assert!(render_text_panel_rgba("x", usize::MAX / 2 + 1, 3).is_err());
     }
 
 

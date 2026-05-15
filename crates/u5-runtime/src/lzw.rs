@@ -131,7 +131,6 @@ pub fn decode_gif_lzw_payload(
     Ok(output)
 }
 
-
 impl<'a> LzwBitReader<'a> {
     pub fn new(bytes: &'a [u8]) -> Self {
         Self { bytes, bit_pos: 0 }
@@ -153,4 +152,3 @@ impl<'a> LzwBitReader<'a> {
         Some(code)
     }
 }
-

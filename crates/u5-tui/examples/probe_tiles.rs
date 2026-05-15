@@ -35,7 +35,8 @@ fn main() {
     for y in y0.saturating_sub(5)..=y0 + 5 {
         for x in x0.saturating_sub(5)..=x0 + 5 {
             let tile = grid[world_cell_index(x, y)];
-            let walk = is_tile_walkable_for_transport(tile, passability.as_ref(), TransportState::Foot);
+            let walk =
+                is_tile_walkable_for_transport(tile, passability.as_ref(), TransportState::Foot);
             let base = is_base_tile_passable(tile, passability.as_ref());
             let dmg = world_damage_tile_entry_at(&damage, WorldPlane::Britannia, x, y, tile);
             let here = if (x, y) == (x0, y0) { "*" } else { " " };

@@ -387,7 +387,8 @@ impl PlayState {
                 let sprite = if x == px && y == py {
                     Some(PLAYER_TILE)
                 } else {
-                    self.object_at_current_floor(xu, yu).map(|object| object.tile)
+                    self.object_at_current_floor(xu, yu)
+                        .map(|object| object.tile)
                 };
                 Some((terrain, sprite))
             }
@@ -643,17 +644,52 @@ impl PlayState {
         self.advance_turn_with_minutes_and_door_tick(minutes, true);
     }
 
+    pub fn advance_turn_with_minutes_and_active_objects(
+        &mut self,
+        minutes: u8,
+        advance_active_objects: bool,
+    ) {
+        self.advance_turn_with_minutes_and_door_tick_and_active_objects(
+            minutes,
+            true,
+            advance_active_objects,
+        );
+    }
+
     pub fn advance_turn_without_door_tick(&mut self) {
         let minutes = self.turn_minute_increment();
         self.advance_turn_with_minutes_and_door_tick(minutes, false);
     }
 
     pub fn advance_turn_with_minutes_and_door_tick(&mut self, minutes: u8, tick_doors: bool) {
-        let effective_minutes = self.timing_status.effective_minutes(minutes);
+        self.advance_turn_with_minutes_and_door_tick_and_active_objects(minutes, tick_doors, true);
+    }
+
+    pub fn advance_turn_with_minutes_and_door_tick_and_active_objects(
+        &mut self,
+        minutes: u8,
+        tick_doors: bool,
+        advance_active_objects: bool,
+    ) {
+        let negate_time_active = self.negate_time_active();
+        let effective_minutes = if negate_time_active {
+            0
+        } else {
+            self.timing_status.effective_minutes(minutes)
+        };
         self.turn += 1;
+        let previous_day = self.clock.day;
         let previous_hour = self.clock.hour;
         let previous_moongates = self.visible_moongate_cells();
         self.clock.advance_minutes(effective_minutes);
+        if self.clock.day != previous_day {
+            self.reroll_shadowlord_hideouts();
+        }
+        if previous_day == 28 && self.clock.day == 1 {
+            self.fortunes_of_war = 0;
+            age_stay_counters_month(&mut self.party_stay_counters);
+            age_inn_registry_month(&mut self.inn_registry);
+        }
         self.decay_light_counters(effective_minutes);
         if matches!(self.area, Area::Town { .. })
             && self.clock.hour != previous_hour
@@ -663,15 +699,18 @@ impl PlayState {
             self.mark_visibility_dirty();
         }
         self.recompute_daylight();
+        self.refresh_natural_moongates();
         if self.visible_moongate_cells() != previous_moongates {
             self.mark_visibility_dirty();
         }
         self.sync_player_object();
         if self.time_stop_counter != 0 {
             self.time_stop_counter = self.time_stop_counter.saturating_sub(1);
-        } else {
+        } else if !negate_time_active {
             self.advance_npc_schedules();
-            self.advance_active_objects();
+            if advance_active_objects {
+                self.advance_active_objects();
+            }
         }
         self.age_active_effect();
         if tick_doors {
@@ -682,6 +721,78 @@ impl PlayState {
 
     pub fn mode_zero_cleanup(&mut self) {
         self.recompute_daylight();
+        self.refresh_natural_moongates();
+    }
+
+    pub fn refresh_natural_moongates(&mut self) -> bool {
+        if self.natural_moongate_night_window() {
+            self.natural_moongate_counter = self
+                .natural_moongate_counter
+                .saturating_add(1)
+                .min(NATURAL_MOONGATE_COUNTER_MAX);
+        } else {
+            self.natural_moongate_counter = self.natural_moongate_counter.saturating_sub(1);
+        }
+
+        let Some(indices) = self.natural_moongate_slot_indices_for_current_scene() else {
+            return false;
+        };
+        let present = self.natural_moongate_counter != 0;
+        let mut changed = false;
+
+        for idx in 0..self.grid.len() {
+            let eligible = indices.contains(&idx);
+            let target = if eligible && present {
+                NATURAL_MOONGATE_TERRAIN_TILE
+            } else if (eligible && !present)
+                || (!eligible && self.grid[idx] == NATURAL_MOONGATE_TERRAIN_TILE)
+            {
+                NATURAL_MOONGATE_RESTORED_TERRAIN_TILE
+            } else {
+                self.grid[idx]
+            };
+            if self.grid[idx] != target {
+                self.grid[idx] = target;
+                changed = true;
+            }
+        }
+
+        if changed {
+            self.mark_visibility_dirty();
+            self.recompute_daylight();
+        }
+        changed
+    }
+
+    pub fn natural_moongate_night_window(&self) -> bool {
+        matches!(self.clock.hour, 20..=23 | 0..=4)
+    }
+
+    pub fn natural_moongate_slot_indices_for_current_scene(&self) -> Option<Vec<usize>> {
+        match self.area {
+            Area::World { plane } => Some(
+                self.moonstone_slots
+                    .iter()
+                    .copied()
+                    .filter(|slot| slot.scene == 0 && WorldPlane::from_save_z(slot.z) == plane)
+                    .map(|slot| world_cell_index(slot.x as usize, slot.y as usize))
+                    .collect(),
+            ),
+            Area::Town { scene, floor } => Some(
+                self.moonstone_slots
+                    .iter()
+                    .copied()
+                    .filter(|slot| {
+                        slot.scene == scene.byte
+                            && slot.z as i8 == floor
+                            && (slot.x as usize) < 32
+                            && (slot.y as usize) < 32
+                    })
+                    .map(|slot| slot.y as usize * 32 + slot.x as usize)
+                    .collect(),
+            ),
+            Area::Dungeon { .. } => None,
+        }
     }
 
     pub fn recompute_daylight(&mut self) {
@@ -720,7 +831,10 @@ impl PlayState {
 
     pub fn advance_visual_tick(&mut self) {
         self.sync_player_object();
-        if self.time_stop_counter == 0 && !matches!(self.area, Area::Dungeon { .. }) {
+        if self.time_stop_counter == 0
+            && !self.negate_time_active()
+            && !matches!(self.area, Area::Dungeon { .. })
+        {
             self.animate_active_objects();
         }
         self.advance_animation_clock();
@@ -731,15 +845,19 @@ impl PlayState {
         self.light_spell_counter = self.light_spell_counter.saturating_sub(units);
     }
 
-    pub fn age_active_effect(&mut self) {
-        if self.active_effect_counter == 0 {
-            self.active_effect_tag = None;
-            return;
+    pub fn age_active_effect(&mut self) -> ActiveEffectAgeOutcome {
+        let outcome = age_active_effect_state(self.active_effect_tag, self.active_effect_counter);
+        self.active_effect_tag = outcome.tag;
+        self.active_effect_counter = outcome.counter;
+        if outcome.expired {
+            self.mark_visibility_dirty();
         }
-        self.active_effect_counter = self.active_effect_counter.saturating_sub(1);
-        if self.active_effect_counter == 0 {
-            self.active_effect_tag = None;
-        }
+        outcome
+    }
+
+    pub fn negate_time_active(&self) -> bool {
+        self.active_effect_tag == Some(NEGATE_TIME_ACTIVE_EFFECT_TAG)
+            && self.active_effect_counter != 0
     }
 
     pub fn has_personal_light(&self) -> bool {
@@ -944,5 +1062,4 @@ impl PlayState {
             self.mark_visibility_dirty();
         }
     }
-
 }

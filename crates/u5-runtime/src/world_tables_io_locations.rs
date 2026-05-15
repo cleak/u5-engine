@@ -319,7 +319,9 @@ pub fn load_world_plane_transition_entries(
     parse_world_plane_transition_entries(&text).map(Some)
 }
 
-pub fn parse_world_plane_transition_entries(text: &str) -> io::Result<Vec<WorldPlaneTransitionEntry>> {
+pub fn parse_world_plane_transition_entries(
+    text: &str,
+) -> io::Result<Vec<WorldPlaneTransitionEntry>> {
     let mut entries = Vec::new();
     for (line_index, line) in text.lines().enumerate() {
         let line_number = line_index + 1;
@@ -452,7 +454,6 @@ pub fn parse_world_plane_transition_entries(text: &str) -> io::Result<Vec<WorldP
     Ok(entries)
 }
 
-
 pub fn load_world_location_entries(game_dir: &Path) -> io::Result<Option<Vec<WorldLocationEntry>>> {
     let path = game_dir.join(WORLD_LOCATION_TABLE_FILE);
     let text = match fs::read_to_string(&path) {
@@ -467,4 +468,3 @@ pub fn load_world_location_entries(game_dir: &Path) -> io::Result<Option<Vec<Wor
     };
     parse_world_location_entries(&text).map(Some)
 }
-
