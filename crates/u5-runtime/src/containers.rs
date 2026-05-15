@@ -135,6 +135,30 @@ pub const fn search_trap_detection_threshold(
     }
 }
 
+/// `dungeon-mode.md §8` dungeon-chest Search trap tier classifier.
+/// Once the dungeon-chest Search has derived a tier value, this
+/// helper maps it into the visible-narration band: tier `< 4` is
+/// simple, tier `>= 7` is complex, the middle band is generic. The
+/// tier itself is either a fresh `1..=8` roll (when the first roll
+/// is at or below the threshold) or the current depth Z (when the
+/// chest byte is already marked); both inputs share this band map.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonChestTrapTier {
+    Simple,
+    Generic,
+    Complex,
+}
+
+pub const fn dungeon_chest_trap_tier(tier: u8) -> DungeonChestTrapTier {
+    if tier < 4 {
+        DungeonChestTrapTier::Simple
+    } else if tier >= 7 {
+        DungeonChestTrapTier::Complex
+    } else {
+        DungeonChestTrapTier::Generic
+    }
+}
+
 /// `containers.md §5` Visible result of the trap-detection narrator
 /// for a per-map object slot. The classifier consumes the trappable
 /// flag, the slot's low difficulty value, and the detection bit

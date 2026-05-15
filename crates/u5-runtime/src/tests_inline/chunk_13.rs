@@ -1,4 +1,22 @@
     #[test]
+    fn dungeon_chest_trap_tier_matches_spec_bands() {
+        // dungeon-mode.md §8
+        // Tier < 4 -> Simple.
+        for t in 0u8..4 {
+            assert_eq!(dungeon_chest_trap_tier(t), DungeonChestTrapTier::Simple);
+        }
+        // Tier 4..6 -> Generic.
+        for t in 4u8..7 {
+            assert_eq!(dungeon_chest_trap_tier(t), DungeonChestTrapTier::Generic);
+        }
+        // Tier >= 7 -> Complex.
+        for t in 7u8..=20 {
+            assert_eq!(dungeon_chest_trap_tier(t), DungeonChestTrapTier::Complex);
+        }
+        assert_eq!(dungeon_chest_trap_tier(255), DungeonChestTrapTier::Complex);
+    }
+
+    #[test]
     fn dungeon_presentation_flavour_matches_spec_table() {
         // dungeon-mode.md §2
         let cases = [
