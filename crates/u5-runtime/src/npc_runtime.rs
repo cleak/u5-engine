@@ -20,6 +20,45 @@ pub const NPC_STATE_ASCEND_TOWARD_TARGET: u8 = 5;
 pub const NPC_STATE_CLIMB_UP_OFF_FLOOR: u8 = 6;
 pub const NPC_STATE_CLIMB_DOWN_OFF_FLOOR: u8 = 7;
 pub const NPC_STATE_PARKED_OFF_FLOOR: u8 = 8;
+
+/// `npc-schedules.md §6` floor-classification mapper. The boundary
+/// trigger compares the NPC's current floor, the new waypoint's
+/// floor, and the location's current floor and chooses the new
+/// state-machine value:
+///
+/// - both on map -> in-plane move (2)
+/// - NPC on map, target above -> climb-up off-floor (6)
+/// - NPC on map, target below -> climb-down off-floor (7)
+/// - NPC above, target on map -> ascend toward target (5)
+/// - NPC below, target on map -> descend toward target (4)
+/// - neither on map -> parked off-floor (8)
+///
+/// "Below" means floor index numerically greater than the map's
+/// current floor; "above" means numerically less.
+pub const fn npc_schedule_state_for_floor_transition(
+    npc_z: u8,
+    target_z: u8,
+    map_current_floor: u8,
+) -> u8 {
+    let npc_on_map = npc_z == map_current_floor;
+    let target_on_map = target_z == map_current_floor;
+    if npc_on_map && target_on_map {
+        return NPC_STATE_INPLANE_MOVE;
+    }
+    if npc_on_map && target_z < map_current_floor {
+        return NPC_STATE_CLIMB_UP_OFF_FLOOR;
+    }
+    if npc_on_map && target_z > map_current_floor {
+        return NPC_STATE_CLIMB_DOWN_OFF_FLOOR;
+    }
+    if target_on_map && npc_z < map_current_floor {
+        return NPC_STATE_ASCEND_TOWARD_TARGET;
+    }
+    if target_on_map && npc_z > map_current_floor {
+        return NPC_STATE_DESCEND_TOWARD_TARGET;
+    }
+    NPC_STATE_PARKED_OFF_FLOOR
+}
 /// `catalogs/npc-roster.md §4`: dialog-id `0` is the ordinary
 /// no-dialogue value (the engine prints the funny-look stub when the
 /// player Talks to such an NPC).

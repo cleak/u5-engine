@@ -1,4 +1,47 @@
     #[test]
+    fn npc_schedule_state_for_floor_transition_matches_spec_table() {
+        // npc-schedules.md §6 floor-classification table (map = floor 1).
+        // both on map -> in-plane (2)
+        assert_eq!(
+            npc_schedule_state_for_floor_transition(1, 1, 1),
+            NPC_STATE_INPLANE_MOVE
+        );
+        // NPC on map, target above (z < 1) -> climb-up (6)
+        assert_eq!(
+            npc_schedule_state_for_floor_transition(1, 0, 1),
+            NPC_STATE_CLIMB_UP_OFF_FLOOR
+        );
+        // NPC on map, target below (z > 1) -> climb-down (7)
+        assert_eq!(
+            npc_schedule_state_for_floor_transition(1, 2, 1),
+            NPC_STATE_CLIMB_DOWN_OFF_FLOOR
+        );
+        // NPC above, target on map -> ascend (5)
+        assert_eq!(
+            npc_schedule_state_for_floor_transition(0, 1, 1),
+            NPC_STATE_ASCEND_TOWARD_TARGET
+        );
+        // NPC below, target on map -> descend (4)
+        assert_eq!(
+            npc_schedule_state_for_floor_transition(2, 1, 1),
+            NPC_STATE_DESCEND_TOWARD_TARGET
+        );
+        // Neither on map -> parked off-floor (8)
+        assert_eq!(
+            npc_schedule_state_for_floor_transition(0, 2, 1),
+            NPC_STATE_PARKED_OFF_FLOOR
+        );
+        assert_eq!(
+            npc_schedule_state_for_floor_transition(2, 0, 1),
+            NPC_STATE_PARKED_OFF_FLOOR
+        );
+        assert_eq!(
+            npc_schedule_state_for_floor_transition(2, 2, 1),
+            NPC_STATE_PARKED_OFF_FLOOR
+        );
+    }
+
+    #[test]
     fn npc_schedule_waypoint_resolves_per_spec_segments() {
         // npc-schedules.md §3
         // A typical baker schedule: 06 morning -> waypoint 0, 12 noon

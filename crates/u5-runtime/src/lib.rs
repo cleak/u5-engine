@@ -290,8 +290,8 @@ pub use npc_runtime::{
     NPC_DIALOG_ID_NONE, NPC_DIALOG_ID_TLK_SENTINEL, NPC_RUNTIME_DESCRIPTOR_BYTES,
     NPC_STUCK_REPLAN_THRESHOLD, NpcAiBehavior, NpcDialogIdKind, NpcLinkAction,
     NpcShopTrigger, RuntimeNpc, npc_ai_behavior, npc_dialog_id_kind, npc_link_action,
-    npc_path_direction_offset, npc_path_direction_opposite, npc_shop_trigger,
-    schedule_floor_state,
+    npc_path_direction_offset, npc_path_direction_opposite,
+    npc_schedule_state_for_floor_transition, npc_shop_trigger, schedule_floor_state,
 };
 pub use party::{
     Area, AvatarStats, MoonstoneGateSlot, PartyMember, Player, class_refreshed_mana, default_party,
