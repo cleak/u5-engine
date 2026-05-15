@@ -1,4 +1,58 @@
     #[test]
+    fn inventory_add_class_cap_matches_spec_families() {
+        // containers.md §8
+        assert_eq!(inventory_add_class_cap(InventoryAddClass::Gold), Some(9999));
+        assert_eq!(inventory_add_class_cap(InventoryAddClass::Potion), Some(99));
+        assert_eq!(
+            inventory_add_class_cap(InventoryAddClass::ScrollOrPlans),
+            Some(99)
+        );
+        assert_eq!(
+            inventory_add_class_cap(InventoryAddClass::Equipment),
+            Some(99)
+        );
+        assert_eq!(inventory_add_class_cap(InventoryAddClass::Key), Some(99));
+        assert_eq!(inventory_add_class_cap(InventoryAddClass::Torch), Some(99));
+        // Uncapped quantity families.
+        assert_eq!(inventory_add_class_cap(InventoryAddClass::Gem), None);
+        assert_eq!(inventory_add_class_cap(InventoryAddClass::Food), None);
+        // Flag-only / refusal families have no quantity counter.
+        assert_eq!(
+            inventory_add_class_cap(InventoryAddClass::SandalwoodBox),
+            None
+        );
+        assert_eq!(inventory_add_class_cap(InventoryAddClass::Moonstone), None);
+        assert_eq!(
+            inventory_add_class_cap(InventoryAddClass::MagicCarpet),
+            None
+        );
+        assert_eq!(
+            inventory_add_class_cap(InventoryAddClass::ShadowlordShard),
+            None
+        );
+        assert_eq!(
+            inventory_add_class_cap(InventoryAddClass::CrownOfLordBritish),
+            None
+        );
+        assert_eq!(
+            inventory_add_class_cap(InventoryAddClass::SceptreOfLordBritish),
+            None
+        );
+        assert_eq!(
+            inventory_add_class_cap(InventoryAddClass::AmuletOfLordBritish),
+            None
+        );
+        assert_eq!(
+            inventory_add_class_cap(InventoryAddClass::MustOpenFirst),
+            None
+        );
+        assert_eq!(
+            inventory_add_class_cap(InventoryAddClass::NothingToGet),
+            None
+        );
+    }
+
+    #[test]
     fn dungeon_chest_gold_upper_collapses_at_depth_zero() {
         // containers.md §6
         assert_eq!(dungeon_chest_gold_upper(0), 0);

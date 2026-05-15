@@ -70,6 +70,34 @@ pub const fn inventory_add_class(class_code: u8) -> InventoryAddClass {
     }
 }
 
+/// `containers.md §8`: counter cap the inventory-add dispatcher
+/// applies for each result family. Returns `None` for families that
+/// are flag/event-only (no quantity counter), refusal-only families,
+/// or families the spec leaves uncapped (gems and food: §8 lists no
+/// cap). Gold uses the party gold cap of 9999; per-counter quantity
+/// families (potion, scroll, equipment, key, torch) cap at 99.
+pub const fn inventory_add_class_cap(class: InventoryAddClass) -> Option<u16> {
+    match class {
+        InventoryAddClass::Gold => Some(9999),
+        InventoryAddClass::Potion
+        | InventoryAddClass::ScrollOrPlans
+        | InventoryAddClass::Equipment
+        | InventoryAddClass::Key
+        | InventoryAddClass::Torch => Some(99),
+        InventoryAddClass::Gem
+        | InventoryAddClass::Food
+        | InventoryAddClass::MustOpenFirst
+        | InventoryAddClass::SandalwoodBox
+        | InventoryAddClass::Moonstone
+        | InventoryAddClass::MagicCarpet
+        | InventoryAddClass::ShadowlordShard
+        | InventoryAddClass::CrownOfLordBritish
+        | InventoryAddClass::SceptreOfLordBritish
+        | InventoryAddClass::AmuletOfLordBritish
+        | InventoryAddClass::NothingToGet => None,
+    }
+}
+
 /// `containers.md §8` per-row equipment-grant size: arrows (`0x05`)
 /// and quarrels (`0x06`) grant 5 units per award; other equipment
 /// rows (`0x09..=0x0C`) grant 1.

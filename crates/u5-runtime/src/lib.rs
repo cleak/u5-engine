@@ -124,8 +124,8 @@ pub use containers::{
     SearchLocationPrefix, SearchTrapVisibility, TABLE_FOOD_TILE_A, TABLE_FOOD_TILE_B,
     dungeon_chest_row_awarded, dungeon_chest_row_gate_max, equipment_grant_quantity,
     dungeon_chest_gold_is_zero_width, dungeon_chest_gold_upper, inventory_add_class,
-    search_location_prefix, search_trap_detection_threshold, search_trap_visibility,
-    table_food_get_resulting_tile,
+    inventory_add_class_cap, search_location_prefix, search_trap_detection_threshold,
+    search_trap_visibility, table_food_get_resulting_tile,
 };
 pub use intro::{
     BRITISH_PTH_PEN_ORIGINS, IntroMenuAction, MISCMAPS_DAT_FILE, RTV_COMMAND_COUNT,
