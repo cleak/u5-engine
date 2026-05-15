@@ -7,6 +7,16 @@ use std::path::Path;
 
 use crate::*;
 
+/// `time.md §5` provision-decrement hours: food is spent only at
+/// 06:00, 12:00, and 18:00 (when the food counter is non-zero).
+pub const PROVISION_DECREMENT_HOURS: [u8; 3] = [6, 12, 18];
+
+/// `time.md §5`: `true` when the given hour is one of the three
+/// provision-decrement hours.
+pub const fn is_provision_decrement_hour(hour: u8) -> bool {
+    matches!(hour, 6 | 12 | 18)
+}
+
 /// `time.md §4` per-turn cleanup state-tag modifier byte values. The
 /// `Q` tag halves the minute increment with a 1-minute floor; the
 /// `T` tag suppresses the minute-counter and light-counter writes

@@ -1,4 +1,14 @@
     #[test]
+    fn provision_decrement_hours_match_spec_table() {
+        // time.md §5
+        assert_eq!(PROVISION_DECREMENT_HOURS, [6, 12, 18]);
+        for hour in 0..24u8 {
+            let expected = matches!(hour, 6 | 12 | 18);
+            assert_eq!(is_provision_decrement_hour(hour), expected);
+        }
+    }
+
+    #[test]
     fn apply_timing_tag_increment_matches_spec_rules() {
         // time.md §4
         assert_eq!(TIMING_TAG_QUICKNESS, b'Q');
