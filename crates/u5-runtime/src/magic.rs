@@ -25,6 +25,68 @@ pub const fn spell_min_caster_level(circle: u8) -> u8 {
     circle
 }
 
+/// `magic.md §8` field-spell kind. The four field-placement spells
+/// share one helper that dispatches by this kind in non-dungeon
+/// scenes (combat byte tables) and writes a per-spell base byte
+/// directly into the live dungeon image in dungeon scenes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FieldSpellKind {
+    /// `In Flam Grav` — Fire Field.
+    Fire,
+    /// `In Nox Grav` — Poison Field.
+    Poison,
+    /// `In Zu Grav` — Sleep Field.
+    Sleep,
+    /// `In Sanct Grav` — Energy Field.
+    Energy,
+}
+
+impl FieldSpellKind {
+    /// `magic.md §8` dungeon base field byte. The dungeon helper
+    /// overwrites the live cell with this byte when the cell is the
+    /// open passage `0x00`.
+    pub const fn dungeon_base_byte(self) -> u8 {
+        match self {
+            Self::Fire => 0x82,
+            Self::Poison => 0x81,
+            Self::Sleep => 0x80,
+            Self::Energy => 0x83,
+        }
+    }
+
+    /// `magic.md §8` dungeon visit-marker-preserving field byte.
+    /// The dungeon helper writes this variant when the live cell
+    /// already carries the visit bit (`0x08`).
+    pub const fn dungeon_marker_byte(self) -> u8 {
+        self.dungeon_base_byte() | 0x08
+    }
+
+    /// `magic.md §8` combat field-kind byte the shared field helper
+    /// receives in non-dungeon scenes (a separate kind table from
+    /// the dungeon byte mapping).
+    pub const fn combat_kind_byte(self) -> u8 {
+        match self {
+            Self::Fire => 0x35,
+            Self::Poison => 0x33,
+            Self::Sleep => 0x34,
+            Self::Energy => 0x36,
+        }
+    }
+}
+
+/// `magic.md §8`: classify a dungeon field byte (with or without
+/// the visit marker bit) into its field-spell kind. Returns `None`
+/// for bytes outside the four field families.
+pub const fn field_spell_kind_for_dungeon_byte(byte: u8) -> Option<FieldSpellKind> {
+    Some(match byte & !0x08 {
+        0x82 => FieldSpellKind::Fire,
+        0x81 => FieldSpellKind::Poison,
+        0x80 => FieldSpellKind::Sleep,
+        0x83 => FieldSpellKind::Energy,
+        _ => return None,
+    })
+}
+
 /// `magic.md §8` shared active-effect tag installed by combat
 /// buff/debuff spells. The shared helper stores one global
 /// (tag, counter) pair the round walker consults; later actions

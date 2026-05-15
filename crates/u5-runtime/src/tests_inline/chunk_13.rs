@@ -1,4 +1,45 @@
     #[test]
+    fn field_spell_kind_byte_tables_match_spec() {
+        // magic.md §8
+        // Dungeon base bytes.
+        assert_eq!(FieldSpellKind::Fire.dungeon_base_byte(), 0x82);
+        assert_eq!(FieldSpellKind::Poison.dungeon_base_byte(), 0x81);
+        assert_eq!(FieldSpellKind::Sleep.dungeon_base_byte(), 0x80);
+        assert_eq!(FieldSpellKind::Energy.dungeon_base_byte(), 0x83);
+        // Marker-preserving variants are base | 0x08.
+        for k in [
+            FieldSpellKind::Fire,
+            FieldSpellKind::Poison,
+            FieldSpellKind::Sleep,
+            FieldSpellKind::Energy,
+        ] {
+            assert_eq!(k.dungeon_marker_byte(), k.dungeon_base_byte() | 0x08);
+        }
+        // Combat field-kind bytes.
+        assert_eq!(FieldSpellKind::Fire.combat_kind_byte(), 0x35);
+        assert_eq!(FieldSpellKind::Poison.combat_kind_byte(), 0x33);
+        assert_eq!(FieldSpellKind::Sleep.combat_kind_byte(), 0x34);
+        assert_eq!(FieldSpellKind::Energy.combat_kind_byte(), 0x36);
+        // Reverse classifier accepts both base and marker variants.
+        for (byte, expected) in [
+            (0x82u8, FieldSpellKind::Fire),
+            (0x8A, FieldSpellKind::Fire),
+            (0x81, FieldSpellKind::Poison),
+            (0x89, FieldSpellKind::Poison),
+            (0x80, FieldSpellKind::Sleep),
+            (0x88, FieldSpellKind::Sleep),
+            (0x83, FieldSpellKind::Energy),
+            (0x8B, FieldSpellKind::Energy),
+        ] {
+            assert_eq!(field_spell_kind_for_dungeon_byte(byte), Some(expected));
+        }
+        // Non-field bytes return None.
+        assert_eq!(field_spell_kind_for_dungeon_byte(0x00), None);
+        assert_eq!(field_spell_kind_for_dungeon_byte(0x84), None);
+        assert_eq!(field_spell_kind_for_dungeon_byte(0xFF), None);
+    }
+
+    #[test]
     fn active_effect_tag_byte_and_install_counter_match_spec() {
         // magic.md §8
         // ASCII bytes.
