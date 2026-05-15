@@ -777,6 +777,14 @@
     }
 
     #[test]
+    fn npc_dynamic_obstacle_radius_matches_published_threshold() {
+        // npc-schedules.md §10: occupied cells are blocked only when the
+        // occupant is within Manhattan distance less than four from the
+        // NPC's runtime destination.
+        assert_eq!(NPC_DYNAMIC_OBSTACLE_MANHATTAN_RADIUS, 4);
+    }
+
+    #[test]
     fn npc_schedule_state_constants_match_published_state_machine() {
         // npc-schedules.md §7: 0=empty, 1=idle, 2=in-plane move, 3=replay
         // queue, 4=descend, 5=ascend, 6=climb up off, 7=climb down off,

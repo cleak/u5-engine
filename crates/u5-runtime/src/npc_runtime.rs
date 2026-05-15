@@ -25,6 +25,13 @@ pub const NPC_STATE_PARKED_OFF_FLOOR: u8 = 8;
 /// and a fresh route is requested on a later tick.
 pub const NPC_STUCK_REPLAN_THRESHOLD: u16 = 3;
 
+/// Per `npc-schedules.md §10` movement constraint: dynamic-obstacle scan
+/// radius. An occupied active-object cell is reported as blocked only when
+/// the occupant is within Manhattan distance less than this value from the
+/// NPC's runtime destination. Cells outside this radius are treated as
+/// walkable by the pathfinding workspace.
+pub const NPC_DYNAMIC_OBSTACLE_MANHATTAN_RADIUS: usize = 4;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeNpc {
     pub slot: usize,
