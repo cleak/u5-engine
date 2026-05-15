@@ -152,6 +152,30 @@ pub const fn sleep_ambush_rest_interrupted(roll: u8) -> bool {
 ///   - Surface tile 0x04 or wilderness band 0x09..=0x0F: 2 by day, 5 at
 ///     hours 0..=4.
 ///   - Any other surface tile: 1 by day, 4 at hours 0..=4.
+/// `encounters.md §3` random-encounter roll bound. The probe rolls
+/// uniformly in `[1, 30]`; spawn fires when `roll < threshold`. The
+/// effective per-eligible-turn chance is `(threshold - 1) / 30`,
+/// with thresholds 0 and 1 both producing no encounter.
+pub const RANDOM_ENCOUNTER_ROLL_BOUND: u8 = 30;
+
+/// `encounters.md §3`: returns `true` when a `random(1, 30)` roll
+/// fires the encounter spawner. Spawn fires when `roll < threshold`.
+pub const fn random_encounter_probe_spawns(roll: u8, threshold: u8) -> bool {
+    roll < threshold
+}
+
+/// `encounters.md §3`: per-eligible-turn spawn count out of 30
+/// outcomes. Returns `0` for thresholds `0` and `1` (no spawn);
+/// returns `threshold - 1` for thresholds `2..=30`. Caller divides by
+/// 30 to get the spawn probability.
+pub const fn random_encounter_spawn_outcomes(threshold: u8) -> u8 {
+    if threshold == 0 {
+        0
+    } else {
+        threshold - 1
+    }
+}
+
 pub const fn random_encounter_threshold(underworld: bool, tile: u8, hour: u8) -> u8 {
     if underworld {
         return 3;

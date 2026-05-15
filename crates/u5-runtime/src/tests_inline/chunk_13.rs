@@ -1,4 +1,32 @@
     #[test]
+    fn random_encounter_probe_spawn_predicate_matches_spec() {
+        // encounters.md §3
+        assert_eq!(RANDOM_ENCOUNTER_ROLL_BOUND, 30);
+        // Threshold 0 and 1 never spawn.
+        for roll in 1u8..=30 {
+            assert!(!random_encounter_probe_spawns(roll, 0));
+            assert!(!random_encounter_probe_spawns(roll, 1));
+        }
+        assert_eq!(random_encounter_spawn_outcomes(0), 0);
+        assert_eq!(random_encounter_spawn_outcomes(1), 0);
+        // Threshold N (N >= 2) -> N-1 spawning rolls (rolls 1..N-1 spawn).
+        for threshold in 2u8..=30 {
+            for roll in 1u8..=30 {
+                let expect = roll < threshold;
+                assert_eq!(
+                    random_encounter_probe_spawns(roll, threshold),
+                    expect,
+                    "threshold={threshold} roll={roll}",
+                );
+            }
+            assert_eq!(
+                random_encounter_spawn_outcomes(threshold),
+                threshold - 1
+            );
+        }
+    }
+
+    #[test]
     fn light_counter_increment_per_cadence_matches_spec() {
         // lighting.md §5
         assert_eq!(
