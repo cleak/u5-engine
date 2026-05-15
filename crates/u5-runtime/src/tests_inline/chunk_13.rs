@@ -742,6 +742,42 @@
     }
 
     #[test]
+    fn hidden_treasure_rule_special_records_match_spec() {
+        // hidden-treasures.md §2
+        for r in [0usize, 1, 5, 12, 16, 17, 99, 112] {
+            assert_eq!(hidden_treasure_rule(r), HiddenTreasureRule::OneShot);
+        }
+        assert_eq!(
+            hidden_treasure_rule(13),
+            HiddenTreasureRule::KeyAndNpcAbsence
+        );
+        assert_eq!(
+            hidden_treasure_rule(14),
+            HiddenTreasureRule::DailyCache
+        );
+        assert_eq!(
+            hidden_treasure_rule(15),
+            HiddenTreasureRule::SingleUseAndNpcAbsence
+        );
+        // Stage gates
+        // Record 13: requires keys >= 1 and no NPC on the tile
+        assert!(hidden_treasure_can_stage(13, 1, false, 0, 0, true));
+        assert!(!hidden_treasure_can_stage(13, 0, false, 0, 0, true));
+        assert!(!hidden_treasure_can_stage(13, 5, true, 0, 0, true));
+        // Record 14: cookie != current day
+        assert!(hidden_treasure_can_stage(14, 0, false, 5, 6, true));
+        assert!(!hidden_treasure_can_stage(14, 0, false, 7, 7, true));
+        // Record 15: flag clear AND no NPC
+        assert!(hidden_treasure_can_stage(15, 0, false, 0, 0, true));
+        assert!(!hidden_treasure_can_stage(15, 0, false, 0, 0, false));
+        assert!(!hidden_treasure_can_stage(15, 0, true, 0, 0, true));
+        // Ordinary one-shot record passes the per-record gate (caller
+        // owns the found bitmap).
+        assert!(hidden_treasure_can_stage(0, 0, true, 0, 0, false));
+        assert!(hidden_treasure_can_stage(99, 0, true, 0, 0, false));
+    }
+
+    #[test]
     fn lord_british_camp_verdict_bands_match_spec() {
         // formats/karma-dat.md §4 — Lord British-in-disguise camp event
         for s in 0..=19u8 {

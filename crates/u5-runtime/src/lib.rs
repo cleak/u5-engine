@@ -27,6 +27,7 @@ pub mod equipment;
 pub mod fonts_io;
 pub mod graphics;
 pub mod graphics_io;
+pub mod hidden_treasures;
 pub mod inline_parsers;
 pub mod input_codes;
 pub mod input_dispatch;
@@ -112,6 +113,11 @@ pub use containers::{
     table_food_get_resulting_tile,
 };
 pub use intro::{IntroMenuAction, intro_menu_action};
+pub use hidden_treasures::{
+    HIDDEN_TREASURE_RECORD_DAILY_CACHE, HIDDEN_TREASURE_RECORD_KEY_NPC_GATED,
+    HIDDEN_TREASURE_RECORD_SINGLE_USE_NPC_GATED, HiddenTreasureRule,
+    hidden_treasure_can_stage, hidden_treasure_rule,
+};
 pub use input_codes::{
     INPUT_CODE_EAST, INPUT_CODE_NORTH, INPUT_CODE_NORTHEAST, INPUT_CODE_NORTHWEST,
     INPUT_CODE_SOUTH, INPUT_CODE_SOUTHEAST, INPUT_CODE_SOUTHWEST, INPUT_CODE_WEST,
