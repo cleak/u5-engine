@@ -34,6 +34,49 @@ pub const INTRO_INLINE_DOORWAY_STEP: usize = 6;
 /// not wait for input.
 pub const INTRO_AUTO_OPENING_STEP: usize = 0;
 
+/// `intro.md §10` — primary story-art placement for one zero-based intro
+/// step. Coordinates use 320-by-200 pixel space with origin at upper-left.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IntroStoryArtPlacement {
+    pub subimage: u8,
+    pub top_left_x: u16,
+    pub top_left_y: u16,
+}
+
+const INTRO_STORY_ART_PLACEMENTS: [IntroStoryArtPlacement; INTRO_STORY_STEP_COUNT] = [
+    IntroStoryArtPlacement { subimage: 0, top_left_x: 0, top_left_y: 0 },
+    IntroStoryArtPlacement { subimage: 1, top_left_x: 0, top_left_y: 74 },
+    IntroStoryArtPlacement { subimage: 0, top_left_x: 136, top_left_y: 0 },
+    IntroStoryArtPlacement { subimage: 1, top_left_x: 0, top_left_y: 38 },
+    IntroStoryArtPlacement { subimage: 2, top_left_x: 152, top_left_y: 76 },
+    IntroStoryArtPlacement { subimage: 2, top_left_x: 0, top_left_y: 0 },
+    IntroStoryArtPlacement { subimage: 2, top_left_x: 72, top_left_y: 38 },
+    IntroStoryArtPlacement { subimage: 0, top_left_x: 0, top_left_y: 0 },
+    IntroStoryArtPlacement { subimage: 1, top_left_x: 0, top_left_y: 82 },
+    IntroStoryArtPlacement { subimage: 0, top_left_x: 0, top_left_y: 82 },
+    IntroStoryArtPlacement { subimage: 1, top_left_x: 0, top_left_y: 82 },
+    IntroStoryArtPlacement { subimage: 0, top_left_x: 0, top_left_y: 82 },
+    IntroStoryArtPlacement { subimage: 1, top_left_x: 0, top_left_y: 82 },
+    IntroStoryArtPlacement { subimage: 0, top_left_x: 176, top_left_y: 0 },
+    IntroStoryArtPlacement { subimage: 1, top_left_x: 0, top_left_y: 0 },
+    IntroStoryArtPlacement { subimage: 2, top_left_x: 176, top_left_y: 0 },
+    IntroStoryArtPlacement { subimage: 6, top_left_x: 0, top_left_y: 46 },
+    IntroStoryArtPlacement { subimage: 4, top_left_x: 176, top_left_y: 78 },
+    IntroStoryArtPlacement { subimage: 2, top_left_x: 0, top_left_y: 0 },
+    IntroStoryArtPlacement { subimage: 6, top_left_x: 176, top_left_y: 55 },
+    IntroStoryArtPlacement { subimage: 4, top_left_x: 0, top_left_y: 87 },
+];
+
+/// `intro.md §10` — return the primary story-art placement for the given
+/// zero-based intro step, or `None` for out-of-range steps.
+pub const fn intro_story_art_placement_for_step(step: usize) -> Option<IntroStoryArtPlacement> {
+    if step < INTRO_STORY_STEP_COUNT {
+        Some(INTRO_STORY_ART_PLACEMENTS[step])
+    } else {
+        None
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StoryRecords {
     pub records: Vec<String>,

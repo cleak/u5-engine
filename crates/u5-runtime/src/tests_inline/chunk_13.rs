@@ -777,6 +777,23 @@
     }
 
     #[test]
+    fn intro_story_art_placement_for_step_matches_published_table() {
+        // intro.md §10: spot-check primary story-art placements at all
+        // file-boundary transitions.
+        let p = intro_story_art_placement_for_step(0).unwrap();
+        assert_eq!(p, IntroStoryArtPlacement { subimage: 0, top_left_x: 0, top_left_y: 0 });
+        let p = intro_story_art_placement_for_step(2).unwrap();
+        assert_eq!(p, IntroStoryArtPlacement { subimage: 0, top_left_x: 136, top_left_y: 0 });
+        let p = intro_story_art_placement_for_step(7).unwrap();
+        assert_eq!(p, IntroStoryArtPlacement { subimage: 0, top_left_x: 0, top_left_y: 0 });
+        let p = intro_story_art_placement_for_step(13).unwrap();
+        assert_eq!(p, IntroStoryArtPlacement { subimage: 0, top_left_x: 176, top_left_y: 0 });
+        let p = intro_story_art_placement_for_step(20).unwrap();
+        assert_eq!(p, IntroStoryArtPlacement { subimage: 4, top_left_x: 0, top_left_y: 87 });
+        assert!(intro_story_art_placement_for_step(21).is_none());
+    }
+
+    #[test]
     fn intro_story_art_file_for_step_matches_published_boundaries() {
         // intro.md §10: steps 0-1 STORY1, 2-6 STORY2, 7-8 STORY3, 9-10
         // STORY4, 11-12 STORY5, 13-20 STORY6.
