@@ -636,6 +636,32 @@
     }
 
     #[test]
+    fn random_encounter_threshold_matches_spec_table() {
+        // encounters.md §3
+        // Underworld: always 3
+        for hour in 0..24u8 {
+            assert_eq!(random_encounter_threshold(true, 0x05, hour), 3);
+            assert_eq!(random_encounter_threshold(true, 0x20, hour), 3);
+        }
+        // Surface no-encounter band 0x20..=0x26
+        assert_eq!(random_encounter_threshold(false, 0x20, 12), 0);
+        assert_eq!(random_encounter_threshold(false, 0x26, 18), 0);
+        assert_eq!(random_encounter_threshold(false, 0x20, 0), 3);
+        assert_eq!(random_encounter_threshold(false, 0x26, 4), 3);
+        // Surface tile 0x04 or wilderness 0x09..=0x0F
+        assert_eq!(random_encounter_threshold(false, 0x04, 12), 2);
+        assert_eq!(random_encounter_threshold(false, 0x09, 12), 2);
+        assert_eq!(random_encounter_threshold(false, 0x0F, 12), 2);
+        assert_eq!(random_encounter_threshold(false, 0x04, 0), 5);
+        assert_eq!(random_encounter_threshold(false, 0x09, 4), 5);
+        // Any other surface tile
+        assert_eq!(random_encounter_threshold(false, 0x05, 12), 1);
+        assert_eq!(random_encounter_threshold(false, 0x06, 18), 1);
+        assert_eq!(random_encounter_threshold(false, 0x05, 0), 4);
+        assert_eq!(random_encounter_threshold(false, 0x10, 4), 4);
+    }
+
+    #[test]
     fn ship_transport_marker_predicates_match_published_ranges() {
         // vehicles.md §6: hoisted 0x20..=0x23, furled 0x24..=0x27.
         for byte in 0x20..=0x23u8 {

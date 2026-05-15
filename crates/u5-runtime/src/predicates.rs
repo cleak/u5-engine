@@ -57,6 +57,32 @@ pub const fn ship_transport_heading_index(byte: u8) -> Option<u8> {
     }
 }
 
+/// `encounters.md §3`: random-encounter spawn threshold for an outdoor
+/// per-turn block. Caller rolls `random(1, 30)` and spawns when
+/// `roll < threshold`. Returns the threshold per the public table:
+///   - Underworld plane: 3 (no hour adjustment).
+///   - Surface no-encounter band 0x20..=0x26: 0 by day, 3 at hours 0..=4.
+///   - Surface tile 0x04 or wilderness band 0x09..=0x0F: 2 by day, 5 at
+///     hours 0..=4.
+///   - Any other surface tile: 1 by day, 4 at hours 0..=4.
+pub const fn random_encounter_threshold(underworld: bool, tile: u8, hour: u8) -> u8 {
+    if underworld {
+        return 3;
+    }
+    let night = hour <= 4;
+    match tile {
+        0x20..=0x26 => {
+            if night { 3 } else { 0 }
+        }
+        0x04 | 0x09..=0x0F => {
+            if night { 5 } else { 2 }
+        }
+        _ => {
+            if night { 4 } else { 1 }
+        }
+    }
+}
+
 pub fn is_probe_walkable(tile: u8) -> bool {
     if is_location_entry_marker(tile) {
         return true;
