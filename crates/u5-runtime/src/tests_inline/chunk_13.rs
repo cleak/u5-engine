@@ -1,4 +1,26 @@
     #[test]
+    fn scroll_use_effects_match_spec_table() {
+        // inventory.md §7
+        assert_eq!(SCROLL_USE_EFFECT_COUNT, 8);
+        assert_eq!(scroll_use_effect(0), Some(ScrollUseEffect::Light));
+        assert_eq!(scroll_use_effect(1), Some(ScrollUseEffect::WindChange));
+        assert_eq!(scroll_use_effect(2), Some(ScrollUseEffect::Protection));
+        assert_eq!(scroll_use_effect(3), Some(ScrollUseEffect::NegateMagic));
+        assert_eq!(scroll_use_effect(4), Some(ScrollUseEffect::View));
+        assert_eq!(scroll_use_effect(5), Some(ScrollUseEffect::SummonDaemon));
+        assert_eq!(scroll_use_effect(6), Some(ScrollUseEffect::Resurrection));
+        assert_eq!(scroll_use_effect(7), Some(ScrollUseEffect::NegateTime));
+        assert_eq!(scroll_use_effect(8), None);
+        assert_eq!(scroll_use_effect(255), None);
+
+        // Item-specific durations.
+        assert_eq!(SCROLL_LIGHT_DURATION, 240);
+        assert_eq!(SCROLL_PROTECTION_DURATION, 100);
+        assert_eq!(SCROLL_NEGATE_MAGIC_DURATION, 20);
+        assert_eq!(SCROLL_NEGATE_TIME_DURATION, 20);
+    }
+
+    #[test]
     fn local_light_source_tile_matches_spec_candidates() {
         // visibility.md §12
         assert_eq!(LOCAL_LIGHT_MASK_SIDE, 32);

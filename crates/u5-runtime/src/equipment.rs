@@ -136,6 +136,54 @@ pub const ITEM_ID_CROSSBOW: u8 = 28;
 pub const ITEM_ID_QUARRELS: u8 = 29;
 pub const ITEM_ID_MAGIC_BOW: u8 = 36;
 
+/// `inventory.md §7` U-Use scroll family. The handler exposes eight
+/// scroll counters dispatching to spell-like effects in this order:
+/// Light, Wind Change, Protection, Negate Magic, View, Summon
+/// Daemon, Resurrection, Negate Time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScrollUseEffect {
+    /// Index 0 — Light: starts the light counter at value 240.
+    Light,
+    /// Index 1 — Wind Change.
+    WindChange,
+    /// Index 2 — Protection: installs the `P` active-effect tag with
+    /// duration 100.
+    Protection,
+    /// Index 3 — Negate Magic: installs the `N` active-effect tag
+    /// with duration 20.
+    NegateMagic,
+    /// Index 4 — View.
+    View,
+    /// Index 5 — Summon Daemon.
+    SummonDaemon,
+    /// Index 6 — Resurrection.
+    Resurrection,
+    /// Index 7 — Negate Time: installs the `T` active-effect tag
+    /// with duration 20, except in Stonegate and Doom where it
+    /// reports no effect.
+    NegateTime,
+}
+
+/// `inventory.md §7` U-Use scroll-counter index space (8 entries).
+pub const SCROLL_USE_EFFECT_COUNT: usize = 8;
+
+/// `inventory.md §7`: classify a scroll counter index `0..=7` into
+/// its dispatched effect. Returns `None` for indices outside that
+/// range.
+pub const fn scroll_use_effect(index: usize) -> Option<ScrollUseEffect> {
+    Some(match index {
+        0 => ScrollUseEffect::Light,
+        1 => ScrollUseEffect::WindChange,
+        2 => ScrollUseEffect::Protection,
+        3 => ScrollUseEffect::NegateMagic,
+        4 => ScrollUseEffect::View,
+        5 => ScrollUseEffect::SummonDaemon,
+        6 => ScrollUseEffect::Resurrection,
+        7 => ScrollUseEffect::NegateTime,
+        _ => return None,
+    })
+}
+
 /// `inventory.md §6` R-Ready ranged-weapon ammo precondition.
 /// Returns the equipment-stock item id that must have a non-zero
 /// counter before the weapon can be readied: arrows (27) for Bow
