@@ -50,6 +50,50 @@ pub const fn town_per_class_index(scene_byte: u8) -> Option<u8> {
     }
 }
 
+/// `catalogs/gazetteer.md §5` resident town/dwelling/castle/keep
+/// names indexed by scene byte `1..=32`. Returns `None` for the
+/// overworld scene `0` and for the few dwelling/castle slots whose
+/// resident name is blank in the public gazetteer.
+pub const fn town_resident_name(scene_byte: u8) -> Option<&'static str> {
+    Some(match scene_byte {
+        // Towns
+        1 => "Moonglow",
+        2 => "Britain",
+        3 => "Jhelom",
+        4 => "Yew",
+        5 => "Minoc",
+        6 => "Trinsic",
+        7 => "Skara Brae",
+        8 => "New Magincia",
+        // Dwellings
+        9 => "Fogsbane",
+        10 => "Stormcrow",
+        11 => "Greyhaven",
+        12 => "Waveguide",
+        13 => "Iolo's Hut",
+        // 14, 15, 16 — blank resident names
+        // Castles
+        17 => "Lord British's Castle",
+        18 => "Lord Blackthorn's Castle",
+        19 => "West Britanny",
+        20 => "North Britanny",
+        21 => "East Britanny",
+        22 => "Paws",
+        23 => "Cove",
+        24 => "Buccaneer's Den",
+        // Keeps
+        25 => "Ararat",
+        26 => "Bordermarch",
+        27 => "Farthing",
+        28 => "Windemere",
+        29 => "Stonegate",
+        30 => "The Lycaeum",
+        31 => "Empath Abbey",
+        32 => "Serpent's Hold",
+        _ => return None,
+    })
+}
+
 /// `town-mode.md §3`: per-location grid dimensions and floor byte size.
 pub const TOWN_GRID_SIDE: usize = 32;
 pub const TOWN_GRID_BYTES: usize = TOWN_GRID_SIDE * TOWN_GRID_SIDE;

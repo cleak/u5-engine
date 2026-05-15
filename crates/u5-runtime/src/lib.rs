@@ -255,6 +255,7 @@ pub use timing::{DungeonFieldEffect, SaveTemplateSource, TimingStatusTag};
 pub use town_mode::{
     TOWN_GRID_BYTES, TOWN_GRID_SIDE, TOWN_NPC_BLOCK_BYTES, TOWN_NPC_ROSTER_SLOTS,
     TownLocationClass, town_floor_offset, town_location_class, town_per_class_index,
+    town_resident_name,
 };
 pub use town_tables::*;
 pub use town_tables_io::*;

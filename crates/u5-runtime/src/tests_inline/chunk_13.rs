@@ -704,6 +704,51 @@
     }
 
     #[test]
+    fn town_resident_name_matches_gazetteer_table() {
+        // catalogs/gazetteer.md §5
+        // Towns
+        assert_eq!(town_resident_name(0), None);
+        assert_eq!(town_resident_name(1), Some("Moonglow"));
+        assert_eq!(town_resident_name(2), Some("Britain"));
+        assert_eq!(town_resident_name(3), Some("Jhelom"));
+        assert_eq!(town_resident_name(4), Some("Yew"));
+        assert_eq!(town_resident_name(5), Some("Minoc"));
+        assert_eq!(town_resident_name(6), Some("Trinsic"));
+        assert_eq!(town_resident_name(7), Some("Skara Brae"));
+        assert_eq!(town_resident_name(8), Some("New Magincia"));
+        // Dwellings (5 named, 3 blank)
+        assert_eq!(town_resident_name(9), Some("Fogsbane"));
+        assert_eq!(town_resident_name(10), Some("Stormcrow"));
+        assert_eq!(town_resident_name(11), Some("Greyhaven"));
+        assert_eq!(town_resident_name(12), Some("Waveguide"));
+        assert_eq!(town_resident_name(13), Some("Iolo's Hut"));
+        assert_eq!(town_resident_name(14), None);
+        assert_eq!(town_resident_name(15), None);
+        assert_eq!(town_resident_name(16), None);
+        // Castles
+        assert_eq!(town_resident_name(17), Some("Lord British's Castle"));
+        assert_eq!(town_resident_name(18), Some("Lord Blackthorn's Castle"));
+        assert_eq!(town_resident_name(19), Some("West Britanny"));
+        assert_eq!(town_resident_name(20), Some("North Britanny"));
+        assert_eq!(town_resident_name(21), Some("East Britanny"));
+        assert_eq!(town_resident_name(22), Some("Paws"));
+        assert_eq!(town_resident_name(23), Some("Cove"));
+        assert_eq!(town_resident_name(24), Some("Buccaneer's Den"));
+        // Keeps
+        assert_eq!(town_resident_name(25), Some("Ararat"));
+        assert_eq!(town_resident_name(26), Some("Bordermarch"));
+        assert_eq!(town_resident_name(27), Some("Farthing"));
+        assert_eq!(town_resident_name(28), Some("Windemere"));
+        assert_eq!(town_resident_name(29), Some("Stonegate"));
+        assert_eq!(town_resident_name(30), Some("The Lycaeum"));
+        assert_eq!(town_resident_name(31), Some("Empath Abbey"));
+        assert_eq!(town_resident_name(32), Some("Serpent's Hold"));
+        // Out of town-family range
+        assert_eq!(town_resident_name(33), None);
+        assert_eq!(town_resident_name(255), None);
+    }
+
+    #[test]
     fn town_location_class_and_index_split_per_spec() {
         // town-mode.md §2,§3,§4
         assert_eq!(town_location_class(0), None);
