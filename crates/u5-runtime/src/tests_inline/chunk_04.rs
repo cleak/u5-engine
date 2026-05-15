@@ -503,6 +503,59 @@
     }
 
     #[test]
+    fn board_ship_with_hull_below_ten_reports_badly_damaged_warning() {
+        // vehicles.md §4: ship boarding warns when hull condition is below
+        // ten, not just zero.
+        for hull in [1u8, 5, 9] {
+            let mut state = world_state(open_world_grid(), 0, 0);
+            state.player.facing = Direction::East;
+            state.active_objects.push(ActiveObject {
+                type_byte: 168,
+                tile: 168,
+                x: 1,
+                y: 0,
+                z: WorldPlane::Underworld.save_floor(),
+                phase: STEADY_PHASE,
+                aux1: hull,
+                aux3: 2,
+            });
+
+            assert_eq!(state.board_vehicle(), MoveOutcome::Boarded);
+
+            assert!(
+                state.message.contains(SHIP_BADLY_DAMAGED_WARNING),
+                "hull={hull} should report badly-damaged"
+            );
+        }
+    }
+
+    #[test]
+    fn board_ship_with_hull_at_ten_or_above_omits_badly_damaged_warning() {
+        // vehicles.md §4: hull condition of ten or higher does not warn.
+        for hull in [10u8, 50, 100] {
+            let mut state = world_state(open_world_grid(), 0, 0);
+            state.player.facing = Direction::East;
+            state.active_objects.push(ActiveObject {
+                type_byte: 168,
+                tile: 168,
+                x: 1,
+                y: 0,
+                z: WorldPlane::Underworld.save_floor(),
+                phase: STEADY_PHASE,
+                aux1: hull,
+                aux3: 2,
+            });
+
+            assert_eq!(state.board_vehicle(), MoveOutcome::Boarded);
+
+            assert!(
+                !state.message.contains(SHIP_BADLY_DAMAGED_WARNING),
+                "hull={hull} should not report badly-damaged"
+            );
+        }
+    }
+
+    #[test]
     fn board_non_ship_vehicle_still_requires_foot() {
         let mut state = world_state(open_world_grid(), 0, 0);
         state.player.transport = TransportState::Skiff {
