@@ -17,6 +17,37 @@ pub const ACTIVE_OBJECT_FIELD_DEP1: usize = 5;
 pub const ACTIVE_OBJECT_FIELD_PHASE: usize = 6;
 pub const ACTIVE_OBJECT_FIELD_DEP3: usize = 7;
 
+/// `active-objects.md §4` viewport-relative off-screen test for the
+/// eviction cascade. A candidate slot more than this many cells from
+/// the player in either axis qualifies for the off-screen phases
+/// (phases 2..=5). The radius matches the visible 11x11 viewport
+/// half-width (5 cells from the centre).
+pub const ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS: i32 = 5;
+
+/// `active-objects.md §4`: returns `true` when an active-object slot
+/// at `(slot_x, slot_y)` is more than [`ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS`]
+/// cells from the player's current position in either axis (i.e.
+/// outside the viewport's visible footprint).
+pub const fn active_object_eviction_off_screen(
+    slot_x: i32,
+    slot_y: i32,
+    player_x: i32,
+    player_y: i32,
+) -> bool {
+    let dx = if slot_x > player_x {
+        slot_x - player_x
+    } else {
+        player_x - slot_x
+    };
+    let dy = if slot_y > player_y {
+        slot_y - player_y
+    } else {
+        player_y - slot_y
+    };
+    dx > ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS
+        || dy > ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS
+}
+
 /// `active-objects.md §2` per-pass iteration order. The renderer
 /// walks slots from `OOL_SLOTS - 1` down to `0` so lower-indexed
 /// slots paint on top — guaranteeing the player (slot zero) draws

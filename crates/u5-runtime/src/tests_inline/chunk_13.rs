@@ -1,4 +1,24 @@
     #[test]
+    fn active_object_eviction_off_screen_matches_spec_radius() {
+        // active-objects.md §4
+        assert_eq!(ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS, 5);
+        // Inside radius -> on-screen.
+        assert!(!active_object_eviction_off_screen(50, 50, 50, 50));
+        assert!(!active_object_eviction_off_screen(45, 50, 50, 50));
+        assert!(!active_object_eviction_off_screen(55, 50, 50, 50));
+        assert!(!active_object_eviction_off_screen(50, 55, 50, 50));
+        // At the radius -> still on-screen (strictly greater than).
+        assert!(!active_object_eviction_off_screen(45, 55, 50, 50));
+        // Past the radius in either axis -> off-screen.
+        assert!(active_object_eviction_off_screen(44, 50, 50, 50));
+        assert!(active_object_eviction_off_screen(56, 50, 50, 50));
+        assert!(active_object_eviction_off_screen(50, 44, 50, 50));
+        assert!(active_object_eviction_off_screen(50, 56, 50, 50));
+        // Far away in both axes.
+        assert!(active_object_eviction_off_screen(10, 10, 100, 100));
+    }
+
+    #[test]
     fn active_object_pass_order_matches_spec() {
         // active-objects.md §2
         let (start, end, descending) =
