@@ -47,6 +47,7 @@ pub mod shops;
 pub mod shrine_virtue;
 pub mod signs_io;
 pub mod story_io;
+pub mod text_wrap;
 pub mod view_classes;
 pub mod start_validation;
 pub mod test_fixtures;
@@ -76,6 +77,7 @@ pub use signs_io::{
     SignRecord, decode_sign_payload, find_sign, load_sign_records, parse_sign_records,
 };
 pub use story_io::{StoryRecords, load_story_records, parse_story_records};
+pub use text_wrap::{WrappedLine, wrap_text};
 pub use view_classes::tile_view_class;
 pub use combat_actor::*;
 pub use combat_arena::*;

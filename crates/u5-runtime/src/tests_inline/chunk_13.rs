@@ -636,6 +636,30 @@
     }
 
     #[test]
+    fn wrap_text_breaks_at_spaces_within_window_width() {
+        // text-output.md §6: only space, LF, CR, and NUL are break bytes.
+        // Subsequent lines use the full window width.
+        let lines = wrap_text("the quick brown fox", 10, 0);
+        assert_eq!(lines, vec!["the quick", "brown fox"]);
+    }
+
+    #[test]
+    fn wrap_text_first_line_uses_remaining_width_after_cursor() {
+        // §6: first emitted line uses `window_width - cursor_x_at_entry`.
+        let lines = wrap_text("hello world", 10, 5);
+        // First line has 5 cells available, "hello" fits but "hello world"
+        // doesn't, so wrap before "world".
+        assert_eq!(lines, vec!["hello", "world"]);
+    }
+
+    #[test]
+    fn wrap_text_terminates_on_nul_and_handles_hard_newlines() {
+        // §6: NUL stops reading; LF/CR force a line emit.
+        let lines = wrap_text("line one\nline two\0HIDDEN", 40, 0);
+        assert_eq!(lines, vec!["line one", "line two"]);
+    }
+
+    #[test]
     fn tile_view_class_matches_spec_lookup_table() {
         // systems/view.md §4: per-tile view class lookup. Spot-check
         // representative tiles from each class plus boundary cases.
