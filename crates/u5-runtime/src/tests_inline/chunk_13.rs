@@ -1,4 +1,50 @@
     #[test]
+    fn shadowlord_principle_round_trips_slot_and_flame() {
+        // catalogs/quest-graph.md §5
+        assert_eq!(
+            shadowlord_principle_for_slot(0),
+            Some(ShadowlordPrinciple::Falsehood)
+        );
+        assert_eq!(
+            shadowlord_principle_for_slot(1),
+            Some(ShadowlordPrinciple::Hatred)
+        );
+        assert_eq!(
+            shadowlord_principle_for_slot(2),
+            Some(ShadowlordPrinciple::Cowardice)
+        );
+        for slot in 3usize..16 {
+            assert_eq!(shadowlord_principle_for_slot(slot), None);
+        }
+        for shadowlord in ShadowlordPrinciple::ALL {
+            assert_eq!(
+                shadowlord_principle_for_slot(shadowlord.slot()),
+                Some(shadowlord)
+            );
+        }
+        assert_eq!(
+            ShadowlordPrinciple::Falsehood.eternal_flame(),
+            EternalFlame::Truth
+        );
+        assert_eq!(
+            ShadowlordPrinciple::Hatred.eternal_flame(),
+            EternalFlame::Love
+        );
+        assert_eq!(
+            ShadowlordPrinciple::Cowardice.eternal_flame(),
+            EternalFlame::Courage
+        );
+        // Sanity: the typed enum's slot is consistent with the
+        // existing slot-indexed eternal_flame_for_shadowlord helper.
+        for shadowlord in ShadowlordPrinciple::ALL {
+            assert_eq!(
+                eternal_flame_for_shadowlord(shadowlord.slot()),
+                Some(shadowlord.eternal_flame())
+            );
+        }
+    }
+
+    #[test]
     fn sailing_wait_pass_minutes_responds_to_hms_cape_rigging_flag() {
         // weather.md §5: ordinary sailing wait passes spend two
         // outdoor minutes; HMS Cape rigging halves that to one.

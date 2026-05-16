@@ -25,6 +25,57 @@ pub const fn eternal_flame_for_shadowlord(slot: usize) -> Option<EternalFlame> {
     })
 }
 
+/// `catalogs/quest-graph.md §5` typed Shadowlord identity. The three
+/// hideout slots are tied to a fixed virtue principle: slot 0 is
+/// Falsehood (Fauline), slot 1 is Hatred (Astaroth), slot 2 is
+/// Cowardice (Nosfentor). The principle, the name, and the opposed
+/// Eternal-Flame are stable across the quest.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShadowlordPrinciple {
+    /// Slot 0 — Fauline, opposed by the Flame of Truth.
+    Falsehood,
+    /// Slot 1 — Astaroth, opposed by the Flame of Love.
+    Hatred,
+    /// Slot 2 — Nosfentor, opposed by the Flame of Courage.
+    Cowardice,
+}
+
+impl ShadowlordPrinciple {
+    /// Slot order published in `catalogs/quest-graph.md §5`.
+    pub const ALL: [Self; 3] = [Self::Falsehood, Self::Hatred, Self::Cowardice];
+
+    /// `catalogs/quest-graph.md §5`: hideout slot index `0..=2` the
+    /// shipped roster assigns to this principle.
+    pub const fn slot(self) -> usize {
+        match self {
+            Self::Falsehood => 0,
+            Self::Hatred => 1,
+            Self::Cowardice => 2,
+        }
+    }
+
+    /// `catalogs/quest-graph.md §5`: opposed Eternal Flame.
+    pub const fn eternal_flame(self) -> EternalFlame {
+        match self {
+            Self::Falsehood => EternalFlame::Truth,
+            Self::Hatred => EternalFlame::Love,
+            Self::Cowardice => EternalFlame::Courage,
+        }
+    }
+}
+
+/// `catalogs/quest-graph.md §5`: classify a hideout slot index into
+/// the typed Shadowlord principle, or `None` for indices outside
+/// the published `0..=2` set.
+pub const fn shadowlord_principle_for_slot(slot: usize) -> Option<ShadowlordPrinciple> {
+    Some(match slot {
+        0 => ShadowlordPrinciple::Falsehood,
+        1 => ShadowlordPrinciple::Hatred,
+        2 => ShadowlordPrinciple::Cowardice,
+        _ => return None,
+    })
+}
+
 /// `catalogs/quest-graph.md §2`: the four main-quest requirements
 /// the web-shaped progression converges on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
