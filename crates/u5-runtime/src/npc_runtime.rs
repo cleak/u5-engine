@@ -372,6 +372,13 @@ pub const NPC_PATH_DIR_SOUTH: u8 = 2;
 pub const NPC_PATH_DIR_EAST: u8 = 3;
 pub const NPC_PATH_DIR_NORTH: u8 = 4;
 
+/// `npc-schedules.md §4`: returns `true` when the per-NPC stuck
+/// counter has exceeded the published replan threshold and the
+/// walker must reset the move queue / counter pair on the next pass.
+pub const fn npc_stuck_counter_forces_replan(counter: u16) -> bool {
+    counter > NPC_STUCK_REPLAN_THRESHOLD
+}
+
 /// `npc-schedules.md §8.2`: coordinate effect of one BFS direction
 /// code (`(dx, dy)` to add to the current cell). Returns `(0, 0)` for
 /// any code outside `1..=4`.

@@ -32,6 +32,20 @@
     }
 
     #[test]
+    fn npc_stuck_counter_forces_replan_at_strict_threshold_exceed() {
+        // npc-schedules.md §4: the walker resets the move queue when
+        // the stuck counter *strictly* exceeds the published
+        // threshold (3). Equal-or-below leaves it alone.
+        assert_eq!(NPC_STUCK_REPLAN_THRESHOLD, 3);
+        for counter in 0u16..=NPC_STUCK_REPLAN_THRESHOLD {
+            assert!(!npc_stuck_counter_forces_replan(counter));
+        }
+        assert!(npc_stuck_counter_forces_replan(NPC_STUCK_REPLAN_THRESHOLD + 1));
+        assert!(npc_stuck_counter_forces_replan(100));
+        assert!(npc_stuck_counter_forces_replan(u16::MAX));
+    }
+
+    #[test]
     fn dungeon_movement_action_maps_published_numpad_directions() {
         // dungeon-mode.md §9: numpad/arrow direction codes route to
         // Forward (North), Back (South), TurnLeft (West),
