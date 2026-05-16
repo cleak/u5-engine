@@ -1,4 +1,28 @@
     #[test]
+    fn npc_pathfind_visit_stamp_encodes_direction_in_high_nibble() {
+        // npc-schedules.md §8.2: BFS overwrites each visited cell with
+        // `direction << 4`. The shift width and seed value should be
+        // named so workspace-builder code does not bake `4` and `0x40`
+        // as bare literals.
+        assert_eq!(NPC_PATHFIND_DIRECTION_SHIFT, 4);
+        assert_eq!(NPC_PATHFIND_START_SEED, 0x40);
+        // Visit stamp for each cardinal direction lands in the high
+        // nibble exactly, leaving the low nibble clear so the cell's
+        // pre-existing marker (open / goal sentinel) can still be read
+        // by BFS via capture-before-write.
+        assert_eq!(npc_pathfind_visit_stamp(NPC_PATH_DIR_WEST), 0x10);
+        assert_eq!(npc_pathfind_visit_stamp(NPC_PATH_DIR_SOUTH), 0x20);
+        assert_eq!(npc_pathfind_visit_stamp(NPC_PATH_DIR_EAST), 0x30);
+        assert_eq!(npc_pathfind_visit_stamp(NPC_PATH_DIR_NORTH), 0x40);
+        // The start-cell seed is by construction the north-direction
+        // visit stamp.
+        assert_eq!(
+            NPC_PATHFIND_START_SEED,
+            npc_pathfind_visit_stamp(NPC_PATH_DIR_NORTH)
+        );
+    }
+
+    #[test]
     fn town_rest_hour_wrap_uses_compatibility_subtrahend() {
         // rest-and-camp.md §4: "If current hour plus digit exceeds 23,
         // the original subtracts 23 rather than applying a normal

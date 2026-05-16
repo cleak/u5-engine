@@ -464,6 +464,28 @@ pub const fn npc_path_direction_opposite(code: u8) -> Option<u8> {
 /// `(x, y)` byte pairs).
 pub const NPC_PATHFIND_QUEUE_CAPACITY: usize = 32;
 
+/// `npc-schedules.md §8.2`: bit shift used to encode an inbound direction
+/// code into the high nibble of a workspace cell (`direction << 4`).
+/// The low nibble of the same byte carries the workspace marker (open,
+/// goal sentinel) before the cell has been visited.
+pub const NPC_PATHFIND_DIRECTION_SHIFT: u8 = 4;
+
+/// `npc-schedules.md §8.5`: encoded high-nibble start-cell seed used by
+/// the workspace builder. The seed is `NPC_PATH_DIR_NORTH << NPC_PATHFIND_DIRECTION_SHIFT`
+/// (`0x40`); BFS reads this as the start cell's already-visited inbound
+/// direction.
+pub const NPC_PATHFIND_START_SEED: u8 = NPC_PATH_DIR_NORTH << NPC_PATHFIND_DIRECTION_SHIFT;
+
+/// `npc-schedules.md §8.2`: encode an inbound direction code as the
+/// high-nibble visit stamp written into a workspace cell. Returns
+/// `direction << NPC_PATHFIND_DIRECTION_SHIFT`. The low nibble is left
+/// to the workspace marker so capture-then-write order in BFS can read
+/// the original cell's goal sentinel before the visit stamp overwrites
+/// it.
+pub const fn npc_pathfind_visit_stamp(direction: u8) -> u8 {
+    direction << NPC_PATHFIND_DIRECTION_SHIFT
+}
+
 /// `npc-schedules.md §8.5` paired floor-link marker tile bytes used by
 /// the tile-ID variant of the pathfinder.
 pub const NPC_FLOOR_LINK_TILE_C8: u8 = 0xC8;
