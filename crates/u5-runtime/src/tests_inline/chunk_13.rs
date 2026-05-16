@@ -32,6 +32,33 @@
     }
 
     #[test]
+    fn npc_schedule_state_probe_and_step_groups_match_spec() {
+        // npc-schedules.md §7: the five "probe and step" states are
+        // InPlaneMove, DescendTowardTarget, AscendTowardTarget,
+        // ClimbUpOffFloor, and ClimbDownOffFloor. ReplayQueue is the
+        // only other state that produces a visible step (by popping
+        // a queued direction).
+        use NpcScheduleState::*;
+        for state in [
+            InPlaneMove,
+            DescendTowardTarget,
+            AscendTowardTarget,
+            ClimbUpOffFloor,
+            ClimbDownOffFloor,
+        ] {
+            assert!(state.is_probe_and_step(), "{state:?}");
+            assert!(state.produces_visible_step(), "{state:?}");
+        }
+        for state in [Empty, Idle, ParkedOffFloor] {
+            assert!(!state.is_probe_and_step(), "{state:?}");
+            assert!(!state.produces_visible_step(), "{state:?}");
+        }
+        // ReplayQueue produces visible steps but is not probe-and-step.
+        assert!(!ReplayQueue.is_probe_and_step());
+        assert!(ReplayQueue.produces_visible_step());
+    }
+
+    #[test]
     fn npc_ai_behavior_event_predicates_match_published_table() {
         // npc-schedules.md §9: ApproachAndAttack, ReservedEngage,
         // and RandomChase raise the town-mode attack event when

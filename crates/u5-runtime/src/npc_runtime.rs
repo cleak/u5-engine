@@ -92,6 +92,32 @@ impl NpcScheduleState {
             Self::ParkedOffFloor => NPC_STATE_PARKED_OFF_FLOOR,
         }
     }
+
+    /// `npc-schedules.md §7`: returns `true` for the five "probe and
+    /// step" states — InPlaneMove, DescendTowardTarget,
+    /// AscendTowardTarget, ClimbUpOffFloor, and ClimbDownOffFloor.
+    /// These are the states whose tick body probes cardinal
+    /// directions and may invoke the flood-fill pathfinder; Idle,
+    /// ReplayQueue, Empty, and ParkedOffFloor take other code paths.
+    pub const fn is_probe_and_step(self) -> bool {
+        matches!(
+            self,
+            Self::InPlaneMove
+                | Self::DescendTowardTarget
+                | Self::AscendTowardTarget
+                | Self::ClimbUpOffFloor
+                | Self::ClimbDownOffFloor,
+        )
+    }
+
+    /// `npc-schedules.md §7`: returns `true` for states that produce
+    /// a visible per-tick action (probe-and-step states plus the
+    /// queue-replay state). The walker skips the other states (Empty
+    /// is skipped before the state byte is even read; Idle and
+    /// ParkedOffFloor have no movement dispatch arm).
+    pub const fn produces_visible_step(self) -> bool {
+        self.is_probe_and_step() || matches!(self, Self::ReplayQueue)
+    }
 }
 
 /// `npc-schedules.md §6` floor-classification mapper. The boundary
