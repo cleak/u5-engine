@@ -232,7 +232,8 @@ pub use main_loop::{
     SCENE_TOWN_FAMILY_LAST, SceneRoute, dungeon_entry_seed,
     dungeon_facing_back_delta, dungeon_facing_forward_delta,
     dungeon_facing_turn_around, dungeon_facing_turn_left, dungeon_facing_turn_right,
-    dungeon_record_index, dungeon_resident_name, mode_minute_increment, scene_route,
+    dungeon_record_index, dungeon_resident_name, mode_minute_increment,
+    save_scene_byte_normalised, scene_route,
 };
 pub use lighting::{
     GREAT_LIGHT_SPELL_DURATION, LIGHT_SPELL_DURATION, LightDecayCadence,

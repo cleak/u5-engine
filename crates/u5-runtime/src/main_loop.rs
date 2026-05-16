@@ -1,5 +1,18 @@
 //! Outer-dispatch routing per `main-loop.md` §3-§4.
 
+/// `main-loop.md §11` Q-save scene-byte normalisation. Combat is not
+/// saved; if the active scene byte is the temporary combat marker
+/// (`0xFF`) when the save handler runs, the writer substitutes the
+/// post-combat home scene byte the framer would have restored to.
+/// Returns the byte that should land in the saved image.
+pub const fn save_scene_byte_normalised(scene_byte: u8, post_combat_home: u8) -> u8 {
+    if scene_byte == SCENE_COMBAT_TEMPORARY {
+        post_combat_home
+    } else {
+        scene_byte
+    }
+}
+
 /// `main-loop.md §3` scene-byte ranges: well-known sentinels for the
 /// intro sub-states and the temporary combat marker.
 /// `main-loop.md §9` world-tick branch the redraw orchestrator

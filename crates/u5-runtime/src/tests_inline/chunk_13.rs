@@ -1,4 +1,17 @@
     #[test]
+    fn save_scene_byte_normalised_swaps_combat_marker_for_home_scene() {
+        // main-loop.md §11
+        // Combat marker -> home scene byte.
+        assert_eq!(save_scene_byte_normalised(SCENE_COMBAT_TEMPORARY, 0), 0);
+        assert_eq!(save_scene_byte_normalised(SCENE_COMBAT_TEMPORARY, 7), 7);
+        assert_eq!(save_scene_byte_normalised(SCENE_COMBAT_TEMPORARY, 33), 33);
+        // Non-combat scenes pass through unchanged regardless of home.
+        for scene in [0u8, 1, 8, 16, 24, 32, 33, 40, 0x42] {
+            assert_eq!(save_scene_byte_normalised(scene, 99), scene);
+        }
+    }
+
+    #[test]
     fn tile_animation_family_classifies_published_ranges() {
         // animation.md §6
         // Water 0x01..=0x03 — four-frame cycle.
