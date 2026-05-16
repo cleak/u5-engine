@@ -12,7 +12,10 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-const MISCMSG_DAT_FILE: &str = "MISCMSG.DAT";
+/// `formats/miscmsg-dat.md §2` published filename. The Blackthorn
+/// audience overlay, shrine/virtue presentation, and Codex/urn
+/// prophecy pages all read records out of this file.
+pub const MISCMSG_DAT_FILE: &str = "MISCMSG.DAT";
 const EXPECTED_RECORD_COUNT: usize = 47;
 
 /// `formats/miscmsg-dat.md §2`: shipped DOS file size in bytes.

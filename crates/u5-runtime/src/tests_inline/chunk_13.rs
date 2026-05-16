@@ -1,4 +1,11 @@
     #[test]
+    fn miscmsg_dat_file_constant_is_published() {
+        // formats/miscmsg-dat.md §2: published filename for the
+        // Blackthorn audience cluster + shrine/Codex prophecy file.
+        assert_eq!(MISCMSG_DAT_FILE, "MISCMSG.DAT");
+    }
+
+    #[test]
     fn tlk_if_else_alt_branches_is_at_or_above_threshold() {
         // conversation.md §7.6: 0xFE IF-ELSE-ALT branches when the
         // shared moral-standing selector is at or above the threshold.
