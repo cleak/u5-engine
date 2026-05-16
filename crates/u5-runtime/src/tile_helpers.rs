@@ -70,6 +70,15 @@ pub fn is_dungeon_bomb_trap(tile: u8) -> bool {
     matches!(tile, 0x62 | 0x6a)
 }
 
+/// `dungeon-mode.md §8` published energy-field base bytes. Magic
+/// field placement preserves the dungeon visit-marker bit when it
+/// writes into the live dungeon image, so each field has a paired
+/// marker variant at `base | DUNGEON_VISIT_MARKER_BIT`.
+pub const DUNGEON_FIELD_SLEEP_BASE: u8 = 0x80;
+pub const DUNGEON_FIELD_POISON_GAS_BASE: u8 = 0x81;
+pub const DUNGEON_FIELD_FIRE_BASE: u8 = 0x82;
+pub const DUNGEON_FIELD_ELECTRIC_BASE: u8 = 0x83;
+
 pub fn dungeon_field_effect(tile: u8) -> Option<DungeonFieldEffect> {
     match tile {
         0x80 | 0x88 => Some(DungeonFieldEffect::Sleep),
@@ -79,6 +88,21 @@ pub fn dungeon_field_effect(tile: u8) -> Option<DungeonFieldEffect> {
         0x84..=0x9f => Some(DungeonFieldEffect::Energy),
         _ => None,
     }
+}
+
+/// `dungeon-mode.md §8`: returns the energy-field base byte for one
+/// effect family. Used by both the look-text path (which keys off
+/// the base) and the placement path (which writes
+/// `base | DUNGEON_VISIT_MARKER_BIT` to preserve the visit-marker
+/// bit). Returns `None` for the generic catch-all `Energy` band.
+pub const fn dungeon_field_base_byte(effect: DungeonFieldEffect) -> Option<u8> {
+    Some(match effect {
+        DungeonFieldEffect::Sleep => DUNGEON_FIELD_SLEEP_BASE,
+        DungeonFieldEffect::PoisonGas => DUNGEON_FIELD_POISON_GAS_BASE,
+        DungeonFieldEffect::Fire => DUNGEON_FIELD_FIRE_BASE,
+        DungeonFieldEffect::Electric => DUNGEON_FIELD_ELECTRIC_BASE,
+        DungeonFieldEffect::Energy => return None,
+    })
 }
 
 pub fn is_dungeon_room_trigger(tile: u8) -> bool {

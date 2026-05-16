@@ -1,4 +1,48 @@
     #[test]
+    fn dungeon_field_base_byte_pairs_effect_with_published_byte() {
+        // dungeon-mode.md §8: the four energy fields have published
+        // base bytes (0x80..=0x83) with paired visit-marker variants
+        // (0x88..=0x8B). The generic Energy band has no single base.
+        assert_eq!(DUNGEON_FIELD_SLEEP_BASE, 0x80);
+        assert_eq!(DUNGEON_FIELD_POISON_GAS_BASE, 0x81);
+        assert_eq!(DUNGEON_FIELD_FIRE_BASE, 0x82);
+        assert_eq!(DUNGEON_FIELD_ELECTRIC_BASE, 0x83);
+        assert_eq!(
+            dungeon_field_base_byte(DungeonFieldEffect::Sleep),
+            Some(DUNGEON_FIELD_SLEEP_BASE)
+        );
+        assert_eq!(
+            dungeon_field_base_byte(DungeonFieldEffect::PoisonGas),
+            Some(DUNGEON_FIELD_POISON_GAS_BASE)
+        );
+        assert_eq!(
+            dungeon_field_base_byte(DungeonFieldEffect::Fire),
+            Some(DUNGEON_FIELD_FIRE_BASE)
+        );
+        assert_eq!(
+            dungeon_field_base_byte(DungeonFieldEffect::Electric),
+            Some(DUNGEON_FIELD_ELECTRIC_BASE)
+        );
+        assert_eq!(
+            dungeon_field_base_byte(DungeonFieldEffect::Energy),
+            None
+        );
+        // The visit-marker variants round-trip through the existing
+        // classifier: base | 0x08 reclassifies to the same effect.
+        for base in [
+            DUNGEON_FIELD_SLEEP_BASE,
+            DUNGEON_FIELD_POISON_GAS_BASE,
+            DUNGEON_FIELD_FIRE_BASE,
+            DUNGEON_FIELD_ELECTRIC_BASE,
+        ] {
+            assert_eq!(
+                dungeon_field_effect(base),
+                dungeon_field_effect(base | DUNGEON_VISIT_MARKER_BIT)
+            );
+        }
+    }
+
+    #[test]
     fn dungeon_fountain_effect_classifies_subtype_per_spec() {
         // dungeon-mode.md §8: fountain cells use the high nibble 0x5
         // and the low nibble selects the drink effect:
