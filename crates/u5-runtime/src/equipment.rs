@@ -350,6 +350,40 @@ pub const fn equipment_class_tag(tag: u8) -> Option<EquipmentClassTag> {
     })
 }
 
+/// `inventory.md §3.1` R-Ready slot family selected by an equipment
+/// class tag. Helm, BodyArmour, Ring, and Amulet tags route directly
+/// to their named slot. The OneHand and TwoHand tags share the
+/// generic Hand family — the R-Ready hand branch later resolves
+/// which of WeaponHand and OffHand the item ends up in (one-handed
+/// can land in either; two-handed occupies both). The None tag is
+/// ammunition stock and does not use a readied slot at all.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EquipmentSlotFamily {
+    Helm,
+    BodyArmour,
+    Hand,
+    Ring,
+    Amulet,
+    /// Ammunition rows have no readied-equipment slot.
+    None,
+}
+
+impl EquipmentClassTag {
+    /// `inventory.md §3.1`: R-Ready slot family this class tag
+    /// routes to. OneHand/TwoHand both map to the generic Hand
+    /// family; ammunition (class tag `0x00`) maps to None.
+    pub const fn slot_family(self) -> EquipmentSlotFamily {
+        match self {
+            Self::Helm => EquipmentSlotFamily::Helm,
+            Self::BodyArmour => EquipmentSlotFamily::BodyArmour,
+            Self::OneHand | Self::TwoHand => EquipmentSlotFamily::Hand,
+            Self::Ring => EquipmentSlotFamily::Ring,
+            Self::Amulet => EquipmentSlotFamily::Amulet,
+            Self::None => EquipmentSlotFamily::None,
+        }
+    }
+}
+
 pub const EQUIPMENT_CLASS_TAGS: [u8; EQUIPMENT_COUNT] = [
     0x80, 0x80, 0x80, 0x80, 0x20, 0x20, 0x20, 0x20, 0x20, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40,
     0x20, 0x30, 0x20, 0x30, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x30, 0x00, 0x30, 0x00, 0x20, 0x30,

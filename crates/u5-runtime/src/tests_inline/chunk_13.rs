@@ -1,4 +1,37 @@
     #[test]
+    fn equipment_class_tag_slot_family_routes_per_spec() {
+        // inventory.md §3.1
+        assert_eq!(
+            EquipmentClassTag::Helm.slot_family(),
+            EquipmentSlotFamily::Helm
+        );
+        assert_eq!(
+            EquipmentClassTag::BodyArmour.slot_family(),
+            EquipmentSlotFamily::BodyArmour
+        );
+        assert_eq!(
+            EquipmentClassTag::OneHand.slot_family(),
+            EquipmentSlotFamily::Hand
+        );
+        assert_eq!(
+            EquipmentClassTag::TwoHand.slot_family(),
+            EquipmentSlotFamily::Hand
+        );
+        assert_eq!(
+            EquipmentClassTag::Ring.slot_family(),
+            EquipmentSlotFamily::Ring
+        );
+        assert_eq!(
+            EquipmentClassTag::Amulet.slot_family(),
+            EquipmentSlotFamily::Amulet
+        );
+        assert_eq!(
+            EquipmentClassTag::None.slot_family(),
+            EquipmentSlotFamily::None
+        );
+    }
+
+    #[test]
     fn shadowlord_principle_round_trips_slot_and_flame() {
         // catalogs/quest-graph.md §5
         assert_eq!(
