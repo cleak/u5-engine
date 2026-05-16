@@ -9,6 +9,16 @@ use crate::*;
 pub const U5_TRANSFER_MALE_BYTE: u8 = SAVE_GENDER_MALE_BYTE;
 pub const U5_TRANSFER_FEMALE_BYTE: u8 = SAVE_GENDER_FEMALE_BYTE;
 
+/// `u4-transfer.md §5,§11` published filenames the transfer flow
+/// reads and writes. The U5-side transfer seed pair is `BRIT.GAM`
+/// (save image) and `BRIT.OOL` (object overlay), the U4-side source
+/// is the player disk's `PARTY.SAV`, and the commit destination is
+/// the ordinary U5 save pair `SAVED.GAM` / `SAVED.OOL`. The seeds
+/// are read-only; only the commit step writes anything to disk.
+pub const U4_TRANSFER_U5_SEED_GAM_FILENAME: &str = "BRIT.GAM";
+pub const U4_TRANSFER_U5_SEED_OOL_FILENAME: &str = "BRIT.OOL";
+pub const U4_TRANSFER_U4_SOURCE_FILENAME: &str = "PARTY.SAV";
+
 /// `u4-transfer.md §5` accepted source-side counter ranges. The
 /// transfer rejects the entire attempt before writing the
 /// destination save when any leading-record value falls outside
@@ -209,7 +219,10 @@ pub fn commit_u4_transfer_save(
     source: &U4TransferSource,
     overrides: Option<&U4TransferOverrides>,
 ) -> io::Result<U4TransferAvatar> {
-    let mut save = read_save_image_file(&game_dir.join("BRIT.GAM"), "BRIT.GAM")?;
+    let mut save = read_save_image_file(
+        &game_dir.join(U4_TRANSFER_U5_SEED_GAM_FILENAME),
+        U4_TRANSFER_U5_SEED_GAM_FILENAME,
+    )?;
     let brit_ool = read_brit_ool_plane(game_dir)?;
     let avatar = apply_u4_transfer_to_save(&mut save, source, overrides)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;

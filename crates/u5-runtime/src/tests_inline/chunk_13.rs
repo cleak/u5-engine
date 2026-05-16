@@ -1,4 +1,12 @@
     #[test]
+    fn u4_transfer_published_filenames_match_spec() {
+        // u4-transfer.md §5,§11
+        assert_eq!(U4_TRANSFER_U5_SEED_GAM_FILENAME, "BRIT.GAM");
+        assert_eq!(U4_TRANSFER_U5_SEED_OOL_FILENAME, "BRIT.OOL");
+        assert_eq!(U4_TRANSFER_U4_SOURCE_FILENAME, "PARTY.SAV");
+    }
+
+    #[test]
     fn dungeon_scene_for_word_of_power_inverts_word_table() {
         // catalogs/quest-graph.md §4
         for scene in 33u8..=40 {
