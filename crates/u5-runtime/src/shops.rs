@@ -4,14 +4,30 @@ use crate::*;
 
 pub const SHOP_COMMODITY_STOCK_CAP: u8 = 99;
 
+/// `shops.md §6` arms-shop pricing percent denominator. The shop's
+/// quote formula divides by 100 to express the Intelligence
+/// adjustment as a percentage rather than a raw scalar.
+pub const ARMS_SHOP_PERCENT_DENOMINATOR: i32 = 100;
+/// `shops.md §6` arms-shop Intelligence weighting factor. The Buy
+/// quote subtracts `3 * intelligence` percentage points from 100
+/// before scaling the base price; the Sell offer multiplies the
+/// base price by the same `3 * intelligence` percentage before the
+/// `+1` minimum offer.
+pub const ARMS_SHOP_INTELLIGENCE_WEIGHT: i32 = 3;
+/// `shops.md §6` arms-shop Sell minimum-offer bias. The Sell offer
+/// is `floor(base * 3 * intelligence / 100) + 1`, so every accepted
+/// Sell credits at least one gold even when intelligence is zero.
+pub const ARMS_SHOP_SELL_MIN_OFFER_BIAS: u32 = 1;
+
 /// `shops.md §6` arms-shop Buy quote. The shop's quote is the
 /// canonical base price plus the integer-truncated Intelligence
 /// adjustment `base * (100 - 3 * intelligence) / 100`. The same
 /// item therefore quotes differently when a different party member
 /// is speaking. Saturating math guards against absurd inputs.
 pub const fn arms_shop_buy_quote(base_price: u16, speaker_intelligence: u8) -> u16 {
-    let factor: i32 = 100 - 3 * speaker_intelligence as i32;
-    let adjustment = (base_price as i32 * factor) / 100;
+    let factor: i32 = ARMS_SHOP_PERCENT_DENOMINATOR
+        - ARMS_SHOP_INTELLIGENCE_WEIGHT * speaker_intelligence as i32;
+    let adjustment = (base_price as i32 * factor) / ARMS_SHOP_PERCENT_DENOMINATOR;
     let quoted = base_price as i32 + adjustment;
     if quoted < 0 {
         0
@@ -27,8 +43,10 @@ pub const fn arms_shop_buy_quote(base_price: u16, speaker_intelligence: u8) -> u
 /// raised by the offer and the shared equipment counter is
 /// decremented; this helper returns only the gold offer value.
 pub const fn arms_shop_sell_offer(base_price: u16, speaker_intelligence: u8) -> u16 {
-    let prod = base_price as u32 * 3 * speaker_intelligence as u32;
-    let offer = prod / 100 + 1;
+    let prod = base_price as u32
+        * ARMS_SHOP_INTELLIGENCE_WEIGHT as u32
+        * speaker_intelligence as u32;
+    let offer = prod / ARMS_SHOP_PERCENT_DENOMINATOR as u32 + ARMS_SHOP_SELL_MIN_OFFER_BIAS;
     if offer > u16::MAX as u32 { u16::MAX } else { offer as u16 }
 }
 

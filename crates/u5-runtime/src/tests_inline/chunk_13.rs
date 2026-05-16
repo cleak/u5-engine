@@ -1,4 +1,30 @@
     #[test]
+    fn arms_shop_pricing_formula_constants_match_spec() {
+        // shops.md §6: the arms-shop Buy quote is
+        // `base + base * (100 - 3 * intelligence) / 100`, and the
+        // Sell offer is `floor(base * 3 * intelligence / 100) + 1`.
+        // Promote the shared `100` percent denominator and `3` Int
+        // weight, plus the `+1` Sell minimum bias.
+        assert_eq!(ARMS_SHOP_PERCENT_DENOMINATOR, 100);
+        assert_eq!(ARMS_SHOP_INTELLIGENCE_WEIGHT, 3);
+        assert_eq!(ARMS_SHOP_SELL_MIN_OFFER_BIAS, 1);
+        // Spot-check buy quote at a few intelligence values.
+        // intelligence 0: base + base * 100/100 = 2 * base.
+        assert_eq!(arms_shop_buy_quote(100, 0), 200);
+        // intelligence ~33.33 (33): factor = 100 - 99 = 1,
+        // quote = 100 + 100 * 1 / 100 = 101.
+        assert_eq!(arms_shop_buy_quote(100, 33), 101);
+        // intelligence 99: factor = 100 - 297 = -197,
+        // adjustment = 100 * -197 / 100 = -197,
+        // quote = 100 + -197 = -97 → clamps to 0.
+        assert_eq!(arms_shop_buy_quote(100, 99), 0);
+        // Sell offer floors at 1.
+        assert_eq!(arms_shop_sell_offer(100, 0), 1);
+        // base=100, int=10 → 100*3*10/100 + 1 = 30 + 1 = 31.
+        assert_eq!(arms_shop_sell_offer(100, 10), 31);
+    }
+
+    #[test]
     fn shop_placeholder_byte_constants_match_spec() {
         // shops.md §4.1: the SHOPPE.DAT bark renderer reserves seven
         // printable-ASCII bytes as substitution placeholders. None of
