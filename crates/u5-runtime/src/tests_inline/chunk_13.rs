@@ -32,6 +32,60 @@
     }
 
     #[test]
+    fn dungeon_chest_search_outcome_dispatches_per_spec() {
+        // dungeon-mode.md §8: Search uses the shared dungeon-chest
+        // threshold. No-trap branch requires roll > threshold AND
+        // the chest byte to be plain (unmarked). Otherwise tier
+        // comes from the fresh roll on unmarked chests or the
+        // current depth Z on already-marked chests.
+        use DungeonChestSearchOutcome::*;
+        use DungeonChestTrapTier::*;
+
+        // Plain chest, roll above threshold -> no trap.
+        assert_eq!(
+            dungeon_chest_search_outcome(15, 20, 7, 3, false),
+            NoTrap
+        );
+        // Plain chest, roll at threshold -> trap branch with fresh tier.
+        // fresh_tier=2 -> Simple (< 4).
+        assert_eq!(
+            dungeon_chest_search_outcome(15, 15, 2, 3, false),
+            Trap(Simple)
+        );
+        // Plain chest, roll below threshold -> trap branch with fresh
+        // tier 7 -> Complex (>= 7).
+        assert_eq!(
+            dungeon_chest_search_outcome(15, 10, 7, 3, false),
+            Trap(Complex)
+        );
+        // Plain chest, fresh tier 5 -> Generic (middle band).
+        assert_eq!(
+            dungeon_chest_search_outcome(15, 10, 5, 3, false),
+            Trap(Generic)
+        );
+        // Marked chest, any roll -> tier comes from depth Z, not roll.
+        // Depth 0 -> Simple; depth 7 -> Complex; depth 5 -> Generic.
+        assert_eq!(
+            dungeon_chest_search_outcome(15, 30, 1, 0, true),
+            Trap(Simple)
+        );
+        assert_eq!(
+            dungeon_chest_search_outcome(15, 30, 1, 7, true),
+            Trap(Complex)
+        );
+        assert_eq!(
+            dungeon_chest_search_outcome(15, 30, 1, 5, true),
+            Trap(Generic)
+        );
+        // Marked chest never takes the no-trap branch, even when
+        // roll > threshold.
+        assert_eq!(
+            dungeon_chest_search_outcome(15, 30, 1, 3, true),
+            Trap(Simple)
+        );
+    }
+
+    #[test]
     fn dungeon_field_base_byte_pairs_effect_with_published_byte() {
         // dungeon-mode.md §8: the four energy fields have published
         // base bytes (0x80..=0x83) with paired visit-marker variants

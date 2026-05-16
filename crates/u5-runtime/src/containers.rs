@@ -251,6 +251,49 @@ pub const fn dungeon_chest_trap_tier(tier: u8) -> DungeonChestTrapTier {
     }
 }
 
+/// `dungeon-mode.md §8` dungeon-chest Search outcome. Search shares
+/// the dungeon Jimmy threshold formula
+/// (`(2*depth - member_lockpick + 30) / 2`); the visible result then
+/// depends on whether the first roll cleared the threshold and
+/// whether the searched chest byte is already marked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonChestSearchOutcome {
+    /// Plain closed chest byte and first roll above the threshold —
+    /// Search reports "no trap".
+    NoTrap,
+    /// Trap-tier classification once a tier value has been derived.
+    Trap(DungeonChestTrapTier),
+}
+
+/// `dungeon-mode.md §8`: resolve the dungeon-chest Search visible
+/// result from the published inputs. `first_roll_1_to_30` is the
+/// `1..=30` die roll; `fresh_tier_1_to_8` is the fresh `1..=8` roll
+/// used when the first roll is at or below the threshold and the
+/// chest byte is unmarked; `current_depth_z` is the active dungeon
+/// depth used when the chest byte is already marked.
+///
+/// Per the spec: the no-trap branch fires only on `roll > threshold`
+/// *and* `!chest_byte_marked`. Otherwise tier is the fresh roll on
+/// an unmarked chest or the current Z on a marked chest, and is
+/// then classified by [`dungeon_chest_trap_tier`].
+pub const fn dungeon_chest_search_outcome(
+    threshold: u8,
+    first_roll_1_to_30: u8,
+    fresh_tier_1_to_8: u8,
+    current_depth_z: u8,
+    chest_byte_marked: bool,
+) -> DungeonChestSearchOutcome {
+    if first_roll_1_to_30 > threshold && !chest_byte_marked {
+        return DungeonChestSearchOutcome::NoTrap;
+    }
+    let tier = if chest_byte_marked {
+        current_depth_z
+    } else {
+        fresh_tier_1_to_8
+    };
+    DungeonChestSearchOutcome::Trap(dungeon_chest_trap_tier(tier))
+}
+
 /// `containers.md §5` Visible result of the trap-detection narrator
 /// for a per-map object slot. The classifier consumes the trappable
 /// flag, the slot's low difficulty value, and the detection bit
