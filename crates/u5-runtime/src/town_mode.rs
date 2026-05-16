@@ -159,6 +159,19 @@ pub const fn npc_tlk_filename(scene_byte: u8) -> Option<&'static str> {
 /// files are 4608 bytes each; each contains eight 576-byte sub-maps,
 /// each holding 32 schedule records (16 bytes each) plus a 32-byte
 /// type array and a 32-byte dialog index array.
+/// `overworld.md §2` town-mover scene byte that lands the party on
+/// the underworld plane after an interior exit. Ordinary town
+/// exits restore the surface plane; this is the one traced
+/// exception (Stonegate's interior egress, scene `0x19`).
+pub const TOWN_EXIT_UNDERWORLD_SCENE: u8 = 0x19;
+
+/// `overworld.md §2`: returns `true` when an interior exit from
+/// the supplied scene byte should restore the underworld plane
+/// rather than the surface plane.
+pub const fn town_exit_lands_underworld(scene_byte: u8) -> bool {
+    scene_byte == TOWN_EXIT_UNDERWORLD_SCENE
+}
+
 /// `town-mode.md §7` town-family exit-threshold tile id. Stepping
 /// onto a `0x59` cell prompts the player; accepting clears the
 /// scene byte and maps the interior exit back to the location's

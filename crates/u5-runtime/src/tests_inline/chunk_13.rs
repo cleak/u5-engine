@@ -1,4 +1,18 @@
     #[test]
+    fn town_exit_lands_underworld_only_for_stonegate() {
+        // overworld.md §2
+        assert_eq!(TOWN_EXIT_UNDERWORLD_SCENE, 0x19);
+        assert!(town_exit_lands_underworld(0x19));
+        for scene in [0u8, 1, 8, 16, 17, 24, 26, 32, 0x18, 0x1A, 0xFF] {
+            assert!(
+                !town_exit_lands_underworld(scene),
+                "scene {:#x} should restore the surface plane",
+                scene
+            );
+        }
+    }
+
+    #[test]
     fn town_stair_intent_decodes_facing_low_bits() {
         // town-mode.md §7
         // Stair tile family bounds.
