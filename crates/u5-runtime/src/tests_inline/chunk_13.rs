@@ -1,4 +1,28 @@
     #[test]
+    fn outdoor_active_object_class_immobile_matches_spec_range() {
+        // movement.md §4: only 0xE8..=0xEB is the immobile / never-pass
+        // family.
+        for cls in 0xE8u8..=0xEB {
+            assert!(
+                outdoor_active_object_class_immobile(cls),
+                "{cls:#04x} should be immobile"
+            );
+        }
+        // Adjacent ranges all have other movement predicates.
+        for cls in [0xE0u8, 0xE3, 0xE4, 0xE7, 0xEC, 0xEF, 0xF4, 0xFB, 0x00, 0x80, 0xFF] {
+            assert!(
+                !outdoor_active_object_class_immobile(cls),
+                "{cls:#04x} should not be immobile"
+            );
+        }
+        // Sanity: an immobile class never returns a single-tile
+        // acceptance via the single-tile-query helper either.
+        for cls in 0xE8u8..=0xEB {
+            assert_eq!(outdoor_active_object_single_tile_query(cls), None);
+        }
+    }
+
+    #[test]
     fn text_window_inner_width_and_centred_start_match_spec() {
         // text-output.md §4: window whose corners are columns 6 and 33
         // has width 27 (27 chars fit before wrapping).

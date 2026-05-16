@@ -131,6 +131,16 @@ pub const fn outdoor_active_object_single_tile_query(class_byte: u8) -> Option<u
     })
 }
 
+/// `movement.md §4` outdoor active-object immobile family
+/// `0xE8..=0xEB`. The static-terrain predicate for this query family
+/// rejects every tile id, so a slot in this class never accepts an
+/// outdoor step. The spec leaves the family's promoted name open;
+/// callers should treat it as "never-pass" rather than as an art
+/// label.
+pub const fn outdoor_active_object_class_immobile(class_byte: u8) -> bool {
+    matches!(class_byte, 0xE8..=0xEB)
+}
+
 /// `vehicles.md §2` transport/action marker family. Classifies the
 /// party transport state byte into one of the documented ranges. The
 /// low two bits within each family encode N/E/S/W facing using the
