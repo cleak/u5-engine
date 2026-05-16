@@ -90,6 +90,14 @@ pub const fn mount_horse_marker(parked_byte: u8) -> Option<u8> {
     }
 }
 
+/// `vehicles.md §4` shipwright frigate purchase initial state. A
+/// freshly placed frigate carries full hull condition (100) and two
+/// skiffs aboard; buying a standalone skiff while the frigate is
+/// still queued increments the same carried-skiff payload instead
+/// of placing a second active-object slot.
+pub const FRIGATE_PURCHASE_HULL: u8 = 100;
+pub const FRIGATE_PURCHASE_SKIFFS: u8 = 2;
+
 /// `vehicles.md §3`: ship-boarding precondition — print a warning when
 /// hull is below ten or no skiffs are aboard.
 pub const SHIP_BOARDING_HULL_WARNING_THRESHOLD: u8 = 10;

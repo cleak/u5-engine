@@ -1,4 +1,11 @@
     #[test]
+    fn frigate_purchase_starts_with_full_hull_and_two_skiffs() {
+        // vehicles.md §4
+        assert_eq!(FRIGATE_PURCHASE_HULL, 100);
+        assert_eq!(FRIGATE_PURCHASE_SKIFFS, 2);
+    }
+
+    #[test]
     fn outdoor_active_object_single_tile_query_matches_spec_table() {
         // movement.md §4
         // 0xE0..=0xE3 sea-serpent adjacency -> tile 0x07.
