@@ -7,6 +7,23 @@
     }
 
     #[test]
+    fn arms_shop_action_routes_b_s_and_exits_on_anything_else() {
+        // shops.md §8.1
+        assert_eq!(arms_shop_action(b'B'), ArmsShopAction::Buy);
+        assert_eq!(arms_shop_action(b'b'), ArmsShopAction::Buy);
+        assert_eq!(arms_shop_action(b'S'), ArmsShopAction::Sell);
+        assert_eq!(arms_shop_action(b's'), ArmsShopAction::Sell);
+        // Anything else — Space, other letters, control bytes — exits.
+        for byte in [b' ', b'A', b'X', b'Y', b'N', b'\r', 0x00, 0x1B, 0xFF] {
+            assert_eq!(
+                arms_shop_action(byte),
+                ArmsShopAction::Exit,
+                "byte {byte:#04x}"
+            );
+        }
+    }
+
+    #[test]
     fn healer_service_action_accepts_c_h_r_and_exit_keys() {
         // shops.md §8.3
         assert_eq!(

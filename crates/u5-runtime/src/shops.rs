@@ -32,6 +32,33 @@ pub const fn arms_shop_sell_offer(base_price: u16, speaker_intelligence: u8) -> 
     if offer > u16::MAX as u32 { u16::MAX } else { offer as u16 }
 }
 
+/// `shops.md §8.1` arms-shop entry-menu outcome. After the
+/// randomised "Hail, friend! Wouldst thou Buy or Sell?" greeting,
+/// the player picks `B` (Buy), `S` (Sell), or anything else (Exit
+/// with the randomised farewell). The shipped flow does not have a
+/// re-prompt branch: any non-B/S input including Space exits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArmsShopAction {
+    /// `B` (case-insensitive) — enter the Buy listing.
+    Buy,
+    /// `S` (case-insensitive) — enter the Sell browser.
+    Sell,
+    /// Space or any other key — exit with the randomised farewell.
+    Exit,
+}
+
+/// `shops.md §8.1`: classify one keystroke for the arms-shop
+/// entry menu (weaponsmith / armourer). The caller has already
+/// applied the input case fold; this helper accepts both upper-
+/// and lower-case `B` / `S` for uppercase-naive callers.
+pub const fn arms_shop_action(byte: u8) -> ArmsShopAction {
+    match byte {
+        b'B' | b'b' => ArmsShopAction::Buy,
+        b'S' | b's' => ArmsShopAction::Sell,
+        _ => ArmsShopAction::Exit,
+    }
+}
+
 /// `shops.md §4.1` `@` substitution time-of-day word the bark
 /// renderer expands inline. The hour byte is read fresh from the
 /// world clock on every render: hour < 12 → `morning`, hour < 18 →
