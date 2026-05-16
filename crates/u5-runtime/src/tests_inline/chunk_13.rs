@@ -1,4 +1,22 @@
     #[test]
+    fn sextant_coordinate_letters_split_byte_into_two_letters() {
+        // magic.md §8: high and low nibbles map to letters A..=P.
+        assert_eq!(sextant_coordinate_letters(0x00), (b'A', b'A'));
+        assert_eq!(sextant_coordinate_letters(0x0F), (b'A', b'P'));
+        assert_eq!(sextant_coordinate_letters(0xF0), (b'P', b'A'));
+        assert_eq!(sextant_coordinate_letters(0xFF), (b'P', b'P'));
+        // Mid-range: byte 0x86 -> high nibble 8 -> 'I', low nibble 6 -> 'G'.
+        assert_eq!(sextant_coordinate_letters(0x86), (b'I', b'G'));
+        assert_eq!(sextant_coordinate_letters(138), (b'I', b'K'));
+        // Sanity: every byte input lands in the A..=P square.
+        for byte in 0u8..=255 {
+            let (high, low) = sextant_coordinate_letters(byte);
+            assert!((b'A'..=b'P').contains(&high), "byte {byte:#04x} high {high}");
+            assert!((b'A'..=b'P').contains(&low), "byte {byte:#04x} low {low}");
+        }
+    }
+
+    #[test]
     fn npc_file_arithmetic_helpers_match_spec_strides() {
         // formats/npc.md §3,§4
         assert_eq!(npc_sub_map_offset(0), 0);

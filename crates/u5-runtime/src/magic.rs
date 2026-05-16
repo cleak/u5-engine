@@ -18,6 +18,20 @@ pub const fn spell_mana_cost(circle: u8) -> u8 {
     circle
 }
 
+/// `magic.md §8` In Wis / Locate sextant-style coordinate letter
+/// pair. The shared coordinate printer splits a one-byte map
+/// coordinate into its high and low nibbles and maps each nibble
+/// `0..=15` to letters `A..=P`. Returns `(high_letter, low_letter)`
+/// as ASCII bytes; the caller composes the surrounding apostrophe,
+/// comma, double-quote, and newline punctuation. Used by Locate,
+/// the Sextant U-Use, and any other coordinate-printer caller that
+/// shares the same letter convention.
+pub const fn sextant_coordinate_letters(coordinate: u8) -> (u8, u8) {
+    let high = b'A' + ((coordinate >> 4) & 0x0F);
+    let low = b'A' + (coordinate & 0x0F);
+    (high, low)
+}
+
 /// `magic.md §8` field-placement spell -> energy-field cell byte
 /// the placement writes into the dungeon image. `In Flam Grav`
 /// (spell 14, Fire Field) writes `0x82`; `In Nox Grav` (spell 15,
