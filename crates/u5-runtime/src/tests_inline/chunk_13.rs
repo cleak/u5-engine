@@ -1,4 +1,17 @@
     #[test]
+    fn combat_step_direction_delta_matches_spec_codes() {
+        // combat.md §11
+        assert_eq!(combat_step_direction_delta(COMBAT_DIRECTION_WEST), (-1, 0));
+        assert_eq!(combat_step_direction_delta(COMBAT_DIRECTION_EAST), (1, 0));
+        assert_eq!(combat_step_direction_delta(COMBAT_DIRECTION_NORTH), (0, -1));
+        assert_eq!(combat_step_direction_delta(COMBAT_DIRECTION_SOUTH), (0, 1));
+        // Code zero and out-of-range fall through to attack-in-place.
+        assert_eq!(combat_step_direction_delta(0), (0, 0));
+        assert_eq!(combat_step_direction_delta(5), (0, 0));
+        assert_eq!(combat_step_direction_delta(0xFF), (0, 0));
+    }
+
+    #[test]
     fn combat_restore_active_player_slot_clears_on_dead_or_sleeping() {
         // combat.md §4
         // Dead and Sleeping suppress the restore.

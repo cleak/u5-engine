@@ -13,6 +13,29 @@ pub struct CombatFrameSnapshot {
     pub combat_terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
 }
 
+/// `combat.md §11` step-or-attack direction codes. The world-mode
+/// loops and the combat dispatcher share this mapping: `1 = west`,
+/// `2 = east`, `3 = north`, `4 = south`. Code `0` (or any value out
+/// of `1..=4`) maps to `(0, 0)` and is the "attack in place" case.
+pub const COMBAT_DIRECTION_WEST: u8 = 1;
+pub const COMBAT_DIRECTION_EAST: u8 = 2;
+pub const COMBAT_DIRECTION_NORTH: u8 = 3;
+pub const COMBAT_DIRECTION_SOUTH: u8 = 4;
+
+/// `combat.md §11`: translate a step-or-attack direction code into
+/// the `(dx, dy)` unit step the primitive applies. Code zero or any
+/// value outside `1..=4` returns `(0, 0)` so the caller treats it as
+/// "attack in place".
+pub const fn combat_step_direction_delta(code: u8) -> (i8, i8) {
+    match code {
+        COMBAT_DIRECTION_WEST => (-1, 0),
+        COMBAT_DIRECTION_EAST => (1, 0),
+        COMBAT_DIRECTION_NORTH => (0, -1),
+        COMBAT_DIRECTION_SOUTH => (0, 1),
+        _ => (0, 0),
+    }
+}
+
 /// `combat.md §4` post-combat active-player restore. The framer
 /// restores the saved active-player slot only when the pre-combat
 /// active player has not died or fallen asleep during the fight; a
