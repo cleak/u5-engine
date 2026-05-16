@@ -247,6 +247,24 @@ impl GameClock {
     }
 }
 
+/// `time.md §10` standard per-turn cleanup minute increment supplied
+/// by each gameplay mode loop. Indoor scenes (town, dungeon, combat)
+/// pass [`MINUTES_PER_INDOOR_TURN`]; the overworld mode loop passes
+/// [`MINUTES_PER_OUTDOOR_TURN`]. The cleanup routine can still
+/// receive caller-supplied larger values (rest, town arrest, wait
+/// commands); the timing-tag adjustments in
+/// [`apply_timing_tag_increment`] still apply.
+pub const MINUTES_PER_INDOOR_TURN: u8 = 1;
+pub const MINUTES_PER_OUTDOOR_TURN: u8 = 2;
+
+/// `time.md §10` per-turn cleanup minute increment for one
+/// `MINUTES_PER_*_TURN` mode loop. Combat rounds also use
+/// [`MINUTES_PER_INDOOR_TURN`], applied once when the round counter
+/// wraps. Town-arrest surrender uses
+/// [`TOWN_ARREST_CLEANUP_INCREMENT_MINUTES`]; the rest path drives
+/// elapsed rest through repeated ten-minute calls.
+pub const TOWN_REST_CLEANUP_INCREMENT_MINUTES: u8 = 10;
+
 /// `time.md §8` per-character month-counter cap. The month rollover
 /// increments each of the sixteen character records' one-byte counters
 /// (the inn's guest-stay counter), capped at this value. The inn

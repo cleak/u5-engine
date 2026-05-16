@@ -1,4 +1,19 @@
     #[test]
+    fn per_turn_minute_increments_match_published_mode_costs() {
+        // time.md §10: indoor mode loops pass one minute per turn,
+        // the overworld passes two, the town rest path uses
+        // ten-minute cleanup calls until the target hour is reached.
+        assert_eq!(MINUTES_PER_INDOOR_TURN, 1);
+        assert_eq!(MINUTES_PER_OUTDOOR_TURN, 2);
+        assert_eq!(TOWN_REST_CLEANUP_INCREMENT_MINUTES, 10);
+        // Combat rounds also use the indoor minute on counter wrap.
+        assert_eq!(
+            COMBAT_ROUND_WRAP_TIME_ADVANCE_MINUTES,
+            MINUTES_PER_INDOOR_TURN
+        );
+    }
+
+    #[test]
     fn natural_moongate_live_and_underlying_tile_constants_match_spec() {
         // overworld.md §9: eligible saved Moonstone slots are stamped
         // with the live moon-gate tile (0xDC) while the gate-presence
