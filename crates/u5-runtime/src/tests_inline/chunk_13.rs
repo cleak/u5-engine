@@ -1,4 +1,28 @@
     #[test]
+    fn outer_loop_flags_skip_overworld_only_when_pending_and_zero_scene() {
+        // main-loop.md §4
+        let pending = OuterLoopFlags {
+            exit_pending: true,
+            previous_was_dungeon: false,
+        };
+        // Pending flag + overworld scene -> skip the redundant overworld pass.
+        assert!(pending.should_skip_overworld(SCENE_OVERWORLD));
+        // Pending flag but a different scene -> the outer loop still routes
+        // normally; no-op cancellation can't produce a non-zero scene byte
+        // here, but the predicate is conservatively scoped.
+        assert!(!pending.should_skip_overworld(1));
+        assert!(!pending.should_skip_overworld(33));
+
+        // Default flags never skip.
+        let cleared = OuterLoopFlags::default();
+        assert!(!cleared.exit_pending);
+        assert!(!cleared.previous_was_dungeon);
+        for scene in [0u8, 1, 17, 33, 0xFF] {
+            assert!(!cleared.should_skip_overworld(scene));
+        }
+    }
+
+    #[test]
     fn dungeon_room_clear_bit_position_packs_per_spec() {
         // formats/saved-gam.md §10
         assert_eq!(SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON, 2);

@@ -2,6 +2,31 @@
 
 /// `main-loop.md §3` scene-byte ranges: well-known sentinels for the
 /// intro sub-states and the temporary combat marker.
+/// `main-loop.md §4` outer-loop bookkeeping flags. The router keeps
+/// two single-bit flags between iterations:
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct OuterLoopFlags {
+    /// Set when the overworld branch returns. Prevents a tight
+    /// overworld -> overworld spin when the scene byte is still
+    /// zero (e.g. a no-op cancellation produced no scene change).
+    pub exit_pending: bool,
+    /// Tracks whether the previous iteration ran the dungeon
+    /// branch. The dungeon dispatch consults this to know whether
+    /// the player is entering fresh or returning from combat.
+    pub previous_was_dungeon: bool,
+}
+
+impl OuterLoopFlags {
+    /// `main-loop.md §4`: returns `true` when the outer loop should
+    /// skip the overworld branch this iteration because the
+    /// previous iteration already returned with the scene byte
+    /// still at zero. Caller clears the flag after honoring the
+    /// skip.
+    pub const fn should_skip_overworld(self, scene_byte: u8) -> bool {
+        self.exit_pending && scene_byte == SCENE_OVERWORLD
+    }
+}
+
 /// `main-loop.md §7` shared command-dispatcher status word. Returned
 /// by per-letter handler blocks so the calling mode loop knows
 /// whether to run the per-turn epilogue, suppress the redraw, or
