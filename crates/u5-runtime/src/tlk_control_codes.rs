@@ -156,6 +156,50 @@ pub const DWELLING_TLK_NPCS: usize = 15;
 pub const CASTLE_TLK_NPCS: usize = 40;
 pub const KEEP_TLK_NPCS: usize = 32;
 
+/// `conversation.md §3` `.TLK` file class selected from the active
+/// scene byte. Talk dispatch only resolves a dialog index against the
+/// file matching the scene's location class.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TlkFileClass {
+    /// Scenes `1..=8` — `TOWNE.TLK`.
+    Towne,
+    /// Scenes `9..=16` — `DWELLING.TLK`.
+    Dwelling,
+    /// Scenes `17..=24` — `CASTLE.TLK`.
+    Castle,
+    /// Scenes `25..=32` — `KEEP.TLK`.
+    Keep,
+}
+
+impl TlkFileClass {
+    /// `conversation.md §3` shipped header NPC count for this class
+    /// (includes the leading sentinel slot).
+    pub const fn shipped_npc_count(self) -> usize {
+        match self {
+            Self::Towne => TOWNE_TLK_NPCS,
+            Self::Dwelling => DWELLING_TLK_NPCS,
+            Self::Castle => CASTLE_TLK_NPCS,
+            Self::Keep => KEEP_TLK_NPCS,
+        }
+    }
+}
+
+/// `conversation.md §3`: classify the active scene byte to its
+/// `.TLK` file class. Mapping is `(scene_id - 1) >> 3` over
+/// `1..=32`; scene `0` (overworld) and any value above `32` have no
+/// `.TLK` file because Talk is unavailable there.
+pub const fn tlk_class_for_scene(scene_byte: u8) -> Option<TlkFileClass> {
+    if scene_byte == 0 || scene_byte > 32 {
+        return None;
+    }
+    Some(match (scene_byte - 1) >> 3 {
+        0 => TlkFileClass::Towne,
+        1 => TlkFileClass::Dwelling,
+        2 => TlkFileClass::Castle,
+        _ => TlkFileClass::Keep,
+    })
+}
+
 /// `conversation.md §8`: shared common-word dictionary has 128
 /// entries. The dialogue runner and the shop renderer apply different
 /// byte-range biases when reaching this same logical table.

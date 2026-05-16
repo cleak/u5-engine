@@ -1,4 +1,28 @@
     #[test]
+    fn tlk_class_for_scene_partitions_per_spec() {
+        // conversation.md §3
+        assert_eq!(tlk_class_for_scene(0), None);
+        assert_eq!(tlk_class_for_scene(1), Some(TlkFileClass::Towne));
+        assert_eq!(tlk_class_for_scene(8), Some(TlkFileClass::Towne));
+        assert_eq!(tlk_class_for_scene(9), Some(TlkFileClass::Dwelling));
+        assert_eq!(tlk_class_for_scene(16), Some(TlkFileClass::Dwelling));
+        assert_eq!(tlk_class_for_scene(17), Some(TlkFileClass::Castle));
+        assert_eq!(tlk_class_for_scene(24), Some(TlkFileClass::Castle));
+        assert_eq!(tlk_class_for_scene(25), Some(TlkFileClass::Keep));
+        assert_eq!(tlk_class_for_scene(32), Some(TlkFileClass::Keep));
+        assert_eq!(tlk_class_for_scene(33), None);
+        assert_eq!(tlk_class_for_scene(0xFF), None);
+        // Shipped NPC counts
+        assert_eq!(TlkFileClass::Towne.shipped_npc_count(), TOWNE_TLK_NPCS);
+        assert_eq!(
+            TlkFileClass::Dwelling.shipped_npc_count(),
+            DWELLING_TLK_NPCS
+        );
+        assert_eq!(TlkFileClass::Castle.shipped_npc_count(), CASTLE_TLK_NPCS);
+        assert_eq!(TlkFileClass::Keep.shipped_npc_count(), KEEP_TLK_NPCS);
+    }
+
+    #[test]
     fn npc_type_byte_class_recognises_published_special_values() {
         // formats/npc.md §6
         assert_eq!(npc_type_byte_class(0x00), NpcTypeByteClass::Empty);
