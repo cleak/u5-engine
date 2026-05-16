@@ -1,23 +1,20 @@
     #[test]
-    fn visibility_radius_branch_classifies_signed_byte() {
-        // visibility.md §3
-        // Zero -> total darkness.
-        assert_eq!(
-            visibility_radius_branch(0),
-            VisibilityRadiusBranch::TotalDarkness
-        );
-        // Positive (0x01..=0x7F) -> normal carve.
-        for r in [1u8, 5, 18, 50, 0x7F] {
-            assert_eq!(
-                visibility_radius_branch(r),
-                VisibilityRadiusBranch::NormalCarve
-            );
-        }
-        // High-bit set -> full-fill (debug branch).
-        for r in [0x80u8, 0x81, 0xC0, 0xFF] {
-            assert_eq!(
-                visibility_radius_branch(r),
-                VisibilityRadiusBranch::FullFill
+    fn visibility_cheap_path_needs_refill_targets_zero_cells() {
+        // visibility.md §10
+        assert!(visibility_cheap_path_needs_refill(VISIBILITY_USE_COMPANION));
+        // Other markers retain their previous-frame state.
+        for byte in [
+            VISIBILITY_HIDDEN,
+            VISIBILITY_CLEAR,
+            VISIBILITY_DIM_PERIPHERY,
+            VISIBILITY_ALREADY_RENDERED,
+            0x42u8,
+            0xA0u8,
+        ] {
+            assert!(
+                !visibility_cheap_path_needs_refill(byte),
+                "byte {:#x} should not trigger lazy refill",
+                byte
             );
         }
     }
