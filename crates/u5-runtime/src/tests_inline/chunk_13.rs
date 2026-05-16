@@ -1,4 +1,17 @@
     #[test]
+    fn chargen_starting_calendar_matches_endgame_elapsed_time_baseline() {
+        // chargen.md §8 names the seeded starting calendar; endgame.md
+        // §9 names the elapsed-time baseline the Avatarhood certificate
+        // subtracts from the saved world clock. They describe the same
+        // year/month/day from two viewpoints, so the two named-constant
+        // triples must always agree. Pin equality so a future edit
+        // cannot silently desync them.
+        assert_eq!(CHARGEN_STARTING_YEAR, ENDGAME_CAMPAIGN_START_YEAR);
+        assert_eq!(CHARGEN_STARTING_MONTH, ENDGAME_CAMPAIGN_START_MONTH);
+        assert_eq!(CHARGEN_STARTING_DAY, ENDGAME_CAMPAIGN_START_DAY);
+    }
+
+    #[test]
     fn disk_prompt_mode_alias_constants_match_spec_normalisation() {
         // screen-mode-dispatch.md §5: the disk-prompt request folds
         // historical modes 2 and 5 to mode 1, and lets other values
