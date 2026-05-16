@@ -674,6 +674,21 @@ pub const fn inn_pickup_bill(adjusted_lodging_charge: u16, stay_counter: u8) -> 
     adjusted_lodging_charge * units as u16
 }
 
+/// `shops.md §8.4` morbid pickup conversion. A guest left at the
+/// inn while Poisoned is converted to Dead on pickup: the returned
+/// record's status flips to `'D'`, current HP is cleared, and the
+/// inn prints "Thy friend has died, by the way." Other stored
+/// statuses pass through unchanged.
+pub const fn inn_pickup_status_converts_to_dead(stored_status: CharacterStatus) -> bool {
+    matches!(stored_status, CharacterStatus::PoisonedOrRevived)
+}
+
+/// `shops.md §8.4` 28-day month-rollover stay-counter cap. Each
+/// month rollover bumps the inn registry's per-guest stay counter
+/// by one until this cap is reached; the pickup bill multiplies the
+/// adjusted lodging charge by the stored counter.
+pub const INN_STAY_COUNTER_MAX: u8 = 25;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Inn {
     TheWayfarerInn,

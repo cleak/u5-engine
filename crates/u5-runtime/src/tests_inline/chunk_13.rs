@@ -1,4 +1,27 @@
     #[test]
+    fn inn_pickup_morbid_path_targets_only_poisoned() {
+        // shops.md §8.4
+        assert!(inn_pickup_status_converts_to_dead(
+            CharacterStatus::PoisonedOrRevived
+        ));
+        for status in [
+            CharacterStatus::Good,
+            CharacterStatus::Sleeping,
+            CharacterStatus::Charmed,
+            CharacterStatus::Dead,
+            CharacterStatus::Ashes,
+        ] {
+            assert!(
+                !inn_pickup_status_converts_to_dead(status),
+                "status {:?} should not be converted to Dead by pickup",
+                status
+            );
+        }
+        // 28-day month-rollover cap.
+        assert_eq!(INN_STAY_COUNTER_MAX, 25);
+    }
+
+    #[test]
     fn healer_treatment_accepts_per_status_and_hp() {
         // shops.md §8.3
         // Cure: only Poisoned.
