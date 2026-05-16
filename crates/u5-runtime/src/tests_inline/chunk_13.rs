@@ -1,4 +1,12 @@
     #[test]
+    fn combat_exit_outcome_result_codes_match_spec() {
+        // combat.md §14
+        assert_eq!(CombatExitOutcome::Victory.result_code(), 1);
+        assert_eq!(CombatExitOutcome::Escape.result_code(), 1);
+        assert_eq!(CombatExitOutcome::Defeat.result_code(), 0);
+    }
+
+    #[test]
     fn combat_split_and_factory_defense_constants_match_spec() {
         // combat.md §12
         assert_eq!(COMBAT_SPLIT_PLACEMENT_ATTEMPTS, 8);

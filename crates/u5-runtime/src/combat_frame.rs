@@ -13,6 +13,34 @@ pub struct CombatFrameSnapshot {
     pub combat_terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
 }
 
+/// `combat.md §14` round-loop exit outcomes. The framer's restore
+/// phase runs identically for all three; only the result code the
+/// round loop returns to its caller differs. Victory and Escape
+/// both return `1`; Defeat returns `0`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatExitOutcome {
+    /// Every hostile actor has been killed.
+    Victory,
+    /// The entire party is dead, asleep, or otherwise inactive
+    /// (also reached intentionally by combat `Q`).
+    Defeat,
+    /// The party left the arena via the out-of-bounds combat-leave
+    /// helper.
+    Escape,
+}
+
+impl CombatExitOutcome {
+    /// `combat.md §14` the result code the combat round loop
+    /// returns to the framer's caller. Victory and Escape both use
+    /// `1`; Defeat uses `0`.
+    pub const fn result_code(self) -> u8 {
+        match self {
+            Self::Victory | Self::Escape => 1,
+            Self::Defeat => 0,
+        }
+    }
+}
+
 /// `combat.md §12` split-on-damage placement-attempt cap. When a
 /// monster with the split-on-damage class flag is damaged but not
 /// killed, combat scans the actor table for an empty slot to copy
