@@ -1,4 +1,37 @@
     #[test]
+    fn story_text_marker_classifies_published_renderer_bytes() {
+        // formats/story-dat.md §3: the renderer recognises `{` as a
+        // paragraph/page-start, `_` as a soft hyphen / syllable
+        // break, `\n` as a hard newline, and `\0` as the record
+        // terminator. Other bytes pass through to the glyph renderer.
+        assert_eq!(
+            story_text_marker(b'{'),
+            Some(StoryTextMarker::ParagraphStart)
+        );
+        assert_eq!(
+            story_text_marker(b'_'),
+            Some(StoryTextMarker::SoftBreak)
+        );
+        assert_eq!(
+            story_text_marker(b'\n'),
+            Some(StoryTextMarker::HardNewline)
+        );
+        assert_eq!(
+            story_text_marker(0),
+            Some(StoryTextMarker::RecordEnd)
+        );
+        // Ordinary ASCII glyphs return None.
+        assert_eq!(story_text_marker(b'A'), None);
+        assert_eq!(story_text_marker(b'.'), None);
+        assert_eq!(story_text_marker(b' '), None);
+        // Marker byte constants line up with the enum classifier.
+        assert_eq!(STORY_PARAGRAPH_START_MARKER, b'{');
+        assert_eq!(STORY_SOFT_BREAK_MARKER, b'_');
+        assert_eq!(STORY_HARD_NEWLINE_MARKER, b'\n');
+        assert_eq!(STORY_RECORD_END_MARKER, 0);
+    }
+
+    #[test]
     fn intro_step_extras_match_published_pixel_coordinates() {
         // intro.md §10: step 1 draws STORY1 subimage 2 at (40, 86)
         // then runs a rectangular transition over (40, 86)..(75, 120);

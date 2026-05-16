@@ -18,6 +18,45 @@ pub const STORY_DAT_RECORDS: usize = 20;
 /// `intro.md §10` — total intro narrative steps (zero-based 0..=20).
 pub const INTRO_STORY_STEP_COUNT: usize = 21;
 
+/// `formats/story-dat.md §3` renderer-visible marker bytes the
+/// proportional-font renderer recognises inside a `STORY.DAT`
+/// record's plain-ASCII payload.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoryTextMarker {
+    /// `{` — paragraph or page-start marker. The renderer walks past
+    /// it without emitting a glyph; the caller owns the actual
+    /// wait-for-key or slide-advance behavior.
+    ParagraphStart,
+    /// `_` — soft hyphen / syllable break. Permits a line break but
+    /// is not rendered as an underscore glyph.
+    SoftBreak,
+    /// `\n` — hard newline inside the current record.
+    HardNewline,
+    /// `\0` — end of the current story record. The reader stops
+    /// consuming bytes here and advances to the next record.
+    RecordEnd,
+}
+
+/// `formats/story-dat.md §3` ASCII byte values for the four named
+/// markers above.
+pub const STORY_PARAGRAPH_START_MARKER: u8 = b'{';
+pub const STORY_SOFT_BREAK_MARKER: u8 = b'_';
+pub const STORY_HARD_NEWLINE_MARKER: u8 = b'\n';
+pub const STORY_RECORD_END_MARKER: u8 = 0;
+
+/// `formats/story-dat.md §3`: classify one record-payload byte into
+/// its renderer marker, or return `None` for ordinary glyph bytes
+/// the renderer prints directly.
+pub const fn story_text_marker(byte: u8) -> Option<StoryTextMarker> {
+    Some(match byte {
+        STORY_PARAGRAPH_START_MARKER => StoryTextMarker::ParagraphStart,
+        STORY_SOFT_BREAK_MARKER => StoryTextMarker::SoftBreak,
+        STORY_HARD_NEWLINE_MARKER => StoryTextMarker::HardNewline,
+        STORY_RECORD_END_MARKER => StoryTextMarker::RecordEnd,
+        _ => return None,
+    })
+}
+
 /// `intro.md §10` — story-art file in use for each zero-based step.
 /// Steps 0-1 use STORY1.16; 2-6 use STORY2.16; 7-8 use STORY3.16;
 /// 9-10 use STORY4.16; 11-12 use STORY5.16; 13-20 use STORY6.16.

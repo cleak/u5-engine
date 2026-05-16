@@ -304,6 +304,9 @@ pub use signs_io::{
 };
 pub use stat_arithmetic::{capped_add_u8, capped_add_word, floor_sub_u8, floor_sub_word};
 pub use story_io::{
+    STORY_HARD_NEWLINE_MARKER, STORY_PARAGRAPH_START_MARKER,
+    STORY_RECORD_END_MARKER, STORY_SOFT_BREAK_MARKER, StoryTextMarker,
+    story_text_marker,
     INTRO_AUTO_OPENING_STEP, INTRO_INLINE_DOORWAY_STEP,
     INTRO_STEP_0_TRANSITION_STRIPS, INTRO_STEP_14_TRANSITION_STRIPS,
     INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
