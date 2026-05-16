@@ -1,4 +1,40 @@
     #[test]
+    fn new_order_outcome_resolves_cancellation_refusal_and_swap() {
+        // commands.md §6: cancelling either selector prompt aborts
+        // without consuming a turn; a leader-slot selection refuses
+        // the swap with the leader-must-remain-first rule; otherwise
+        // the two roster records exchange and the turn is consumed.
+        use NewOrderOutcome::*;
+
+        // Cancellation on either side.
+        assert_eq!(new_order_outcome(None, None), Cancelled);
+        assert_eq!(new_order_outcome(None, Some(2)), Cancelled);
+        assert_eq!(new_order_outcome(Some(1), None), Cancelled);
+
+        // Leader-slot refusal.
+        assert_eq!(new_order_outcome(Some(0), Some(2)), LeaderRefusal);
+        assert_eq!(new_order_outcome(Some(3), Some(0)), LeaderRefusal);
+        assert_eq!(new_order_outcome(Some(0), Some(0)), LeaderRefusal);
+
+        // Non-leader swap (same-slot pair is accepted; the swap is
+        // a no-op but the caller still consumes the turn).
+        assert_eq!(
+            new_order_outcome(Some(1), Some(2)),
+            Swap { slot_a: 1, slot_b: 2 }
+        );
+        assert_eq!(
+            new_order_outcome(Some(4), Some(4)),
+            Swap { slot_a: 4, slot_b: 4 }
+        );
+
+        // The bool-returning predicate agrees with the typed result.
+        assert!(new_order_swap_accepted(1, 2));
+        assert!(new_order_swap_accepted(4, 4));
+        assert!(!new_order_swap_accepted(0, 2));
+        assert!(!new_order_swap_accepted(3, 0));
+    }
+
+    #[test]
     fn party_target_selector_result_distinguishes_explicit_none_from_cancel() {
         // input.md §9: the selector returns three semantic families:
         // a non-negative slot index, an Escape/cancel result, and a

@@ -146,11 +146,11 @@ pub use boot::{
     parse_explicit_driver_selector, resolve_driver_family, tandy_low_memory_downgrades,
 };
 pub use commands::{
-    Command, LocalViewClass, PushableTileFamily, ViewCommandOutcome,
+    Command, LocalViewClass, NewOrderOutcome, PushableTileFamily, ViewCommandOutcome,
     WISHING_WELL_WISH_KEYWORDS, YELL_INPUT_MAX_LEN, YellInputContext,
-    command_for_letter, local_view_class_for_tile, new_order_swap_accepted,
-    pushable_tile_family, town_fountain_drink_accepts, view_command_outcome,
-    wishing_well_wish_accepted,
+    command_for_letter, local_view_class_for_tile, new_order_outcome,
+    new_order_swap_accepted, pushable_tile_family, town_fountain_drink_accepts,
+    view_command_outcome, wishing_well_wish_accepted,
 };
 pub use containers::{
     DUNGEON_CHEST_ROWS, DungeonChestReward, DungeonChestRow, DungeonChestTrapTier,

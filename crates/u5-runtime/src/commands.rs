@@ -331,6 +331,44 @@ pub const fn new_order_swap_accepted(slot_a: usize, slot_b: usize) -> bool {
     slot_a != 0 && slot_b != 0
 }
 
+/// `commands.md §6` resolved outcome for one N-New Order command.
+/// Cancellation of either prompt or a leader-slot selection both
+/// abort without consuming a turn; only a successful non-leader
+/// pair consumes the turn (same-slot pairs included — the swap is a
+/// behavioural no-op but the turn is still consumed).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NewOrderOutcome {
+    /// Either prompt was cancelled. The command prints the
+    /// no-selection result and returns without consuming a turn.
+    Cancelled,
+    /// At least one selected slot is the leader (slot 0). The
+    /// command refuses and returns without consuming a turn.
+    LeaderRefusal,
+    /// Both selections are non-leader slots. The handler exchanges
+    /// the two roster records and consumes the turn. Same-slot pairs
+    /// are accepted here; the swap is a no-op but the turn still
+    /// counts.
+    Swap { slot_a: usize, slot_b: usize },
+}
+
+/// `commands.md §6`: resolve the N-New Order outcome from the two
+/// shared party-member selector results. Either selection being
+/// `None` means the prompt was cancelled; otherwise the helper
+/// applies the leader-slot refusal before returning a swap.
+pub const fn new_order_outcome(
+    slot_a: Option<usize>,
+    slot_b: Option<usize>,
+) -> NewOrderOutcome {
+    let (a, b) = match (slot_a, slot_b) {
+        (Some(a), Some(b)) => (a, b),
+        _ => return NewOrderOutcome::Cancelled,
+    };
+    if a == 0 || b == 0 {
+        return NewOrderOutcome::LeaderRefusal;
+    }
+    NewOrderOutcome::Swap { slot_a: a, slot_b: b }
+}
+
 /// `commands.md §4`: classify a raw key byte into a [`Command`]. Keys
 /// are case-folded before dispatch (see `input.md §6`). Returns `None`
 /// for any byte outside the `A..=Z` range and the literal `Space` pass
