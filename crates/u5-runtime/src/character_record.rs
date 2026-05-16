@@ -148,6 +148,17 @@ pub const fn rest_cleanup_transitions_to_good(status: CharacterStatus) -> bool {
     matches!(status, CharacterStatus::Sleeping)
 }
 
+/// `rest-and-camp.md §5`: returns `true` when a rest-with-watch
+/// participant is eligible for ordinary HP recovery during the rest
+/// loop. Good and Sleeping members recover HP (capped at maximum HP);
+/// Poisoned members participate in the watch but do not receive
+/// ordinary rest HP recovery, and Charmed/Dead/Ashes members do not
+/// participate at all. This is the HP-tick eligibility predicate, not
+/// the broader watch-participation predicate.
+pub const fn rest_with_watch_recovers_hp(status: CharacterStatus) -> bool {
+    matches!(status, CharacterStatus::Good | CharacterStatus::Sleeping)
+}
+
 /// `formats/saved-gam.md §3.1`: classify a status byte at `+0x0B`.
 pub const fn character_status_for_byte(byte: u8) -> Option<CharacterStatus> {
     Some(match byte {

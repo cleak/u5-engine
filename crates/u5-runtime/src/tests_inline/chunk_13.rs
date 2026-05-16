@@ -1,4 +1,25 @@
     #[test]
+    fn rest_with_watch_recovers_hp_only_for_good_and_sleeping() {
+        // rest-and-camp.md §5: HP recovery is for Good and Sleeping members
+        // only. Poisoned members participate in the watch but do not receive
+        // ordinary rest HP recovery. Charmed/Dead/Ashes are not in the
+        // rest-participating set at all.
+        assert!(rest_with_watch_recovers_hp(CharacterStatus::Good));
+        assert!(rest_with_watch_recovers_hp(CharacterStatus::Sleeping));
+        assert!(!rest_with_watch_recovers_hp(
+            CharacterStatus::PoisonedOrRevived
+        ));
+        assert!(!rest_with_watch_recovers_hp(CharacterStatus::Charmed));
+        assert!(!rest_with_watch_recovers_hp(CharacterStatus::Dead));
+        assert!(!rest_with_watch_recovers_hp(CharacterStatus::Ashes));
+        // Sanity: Poisoned still participates even though it does not
+        // recover HP — the two predicates are independent.
+        assert!(rest_with_watch_participates(
+            CharacterStatus::PoisonedOrRevived
+        ));
+    }
+
+    #[test]
     fn outdoor_water_creature_attack_aligned_orthogonal_within_three() {
         // active-objects.md §8: ship-like water-creature and pirate frames
         // trigger the attack message + water-creature step path when they
