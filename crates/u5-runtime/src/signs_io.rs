@@ -31,6 +31,41 @@ pub const SIGNS_DAT_SCENE_DIRECTORY_BYTES: usize = 66;
 /// `(scene, z, y, x)` header followed by a NUL-terminated payload.
 pub const SIGNS_DAT_RECORD_HEADER_LEN: usize = 4;
 
+/// `formats/signs-dat.md §4` formatter byte vocabulary for a sign
+/// payload byte. The formatter classifies each byte by value range
+/// and either ends the record, pauses for input, substitutes a
+/// macro fragment, emits the shared separator glyph, or prints
+/// the low-seven-bit character.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SignBodyByteKind {
+    /// `0x00` — end-of-record terminator.
+    EndOfRecord,
+    /// `0x0D` — pause for keypress, then resume.
+    PauseForKey,
+    /// `0x29..=0x31` — index into the small resident macro pool
+    /// for framed-sign decoration fragments.
+    Macro(u8),
+    /// `0x26` or `0x27` — separator glyph used as a decorative
+    /// divider in shipped records.
+    SeparatorGlyph,
+    /// Anything else — print the low-seven-bit character value;
+    /// the high bit controls a presentation-mode toggle in the
+    /// text-output layer rather than the printed glyph.
+    Character(u8),
+}
+
+/// `formats/signs-dat.md §4`: classify a single payload byte for
+/// the sign-body formatter.
+pub const fn sign_body_byte_kind(byte: u8) -> SignBodyByteKind {
+    match byte {
+        0x00 => SignBodyByteKind::EndOfRecord,
+        0x0D => SignBodyByteKind::PauseForKey,
+        0x29..=0x31 => SignBodyByteKind::Macro(byte),
+        0x26 | 0x27 => SignBodyByteKind::SeparatorGlyph,
+        other => SignBodyByteKind::Character(other & 0x7F),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SignRecord {
     pub scene: u8,

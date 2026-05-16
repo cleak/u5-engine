@@ -1,4 +1,35 @@
     #[test]
+    fn sign_body_byte_kind_classifies_payload_per_spec() {
+        // formats/signs-dat.md §4
+        assert_eq!(sign_body_byte_kind(0x00), SignBodyByteKind::EndOfRecord);
+        assert_eq!(sign_body_byte_kind(0x0D), SignBodyByteKind::PauseForKey);
+        // Macro pool 0x29..=0x31.
+        for byte in 0x29u8..=0x31 {
+            assert_eq!(sign_body_byte_kind(byte), SignBodyByteKind::Macro(byte));
+        }
+        // Separator glyphs.
+        assert_eq!(sign_body_byte_kind(0x26), SignBodyByteKind::SeparatorGlyph);
+        assert_eq!(sign_body_byte_kind(0x27), SignBodyByteKind::SeparatorGlyph);
+        // Other bytes print as low-seven-bit characters; high bit stripped.
+        assert_eq!(
+            sign_body_byte_kind(b'A'),
+            SignBodyByteKind::Character(b'A')
+        );
+        assert_eq!(
+            sign_body_byte_kind(0xC1),
+            SignBodyByteKind::Character(b'A')
+        );
+        assert_eq!(
+            sign_body_byte_kind(0x20),
+            SignBodyByteKind::Character(0x20)
+        );
+        assert_eq!(
+            sign_body_byte_kind(0xFF),
+            SignBodyByteKind::Character(0x7F)
+        );
+    }
+
+    #[test]
     fn town_fountain_drink_accepts_excludes_dead_and_asleep() {
         // view.md §3
         for status in [
