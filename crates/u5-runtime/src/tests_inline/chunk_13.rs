@@ -1,4 +1,48 @@
     #[test]
+    fn equipped_item_weight_stat_sums_six_slots_with_protection_bonus() {
+        // inventory.md §2.1 / catalogs/item-list.md §5.1: the
+        // equipped-item statistic helper sums the published
+        // equipped-weight column for the six readied slots, treats
+        // empty slots as zero, and adds 3 when Protection is active.
+
+        // Fully empty equipment.
+        let empty: [u8; EQUIPMENT_SLOT_COUNT] = [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT];
+        assert_eq!(equipped_item_weight_stat(&empty, false), 0);
+        assert_eq!(
+            equipped_item_weight_stat(&empty, true),
+            EQUIPPED_WEIGHT_PROTECTION_BONUS
+        );
+
+        // Mixed loadout: Plate Mail (14 → 7) + Magic Shield (7 → 5) +
+        // Mystic Sword (41 → 1) + Ring of Protection (43 → 2) +
+        // Spiked Collar (46 → 2) = 17. The sixth slot stays empty.
+        let mut kit: [u8; EQUIPMENT_SLOT_COUNT] = [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT];
+        kit[0] = 14;
+        kit[1] = 7;
+        kit[2] = 41;
+        kit[3] = 43;
+        kit[4] = 46;
+        assert_eq!(equipped_item_weight_stat(&kit, false), 17);
+        // With Protection active, the bonus stacks on top.
+        assert_eq!(
+            equipped_item_weight_stat(&kit, true),
+            17 + EQUIPPED_WEIGHT_PROTECTION_BONUS
+        );
+
+        // The protection bonus is exactly the documented 3 units.
+        assert_eq!(EQUIPPED_WEIGHT_PROTECTION_BONUS, 3);
+
+        // Published spot checks against the item-list table.
+        assert_eq!(EQUIPMENT_EQUIPPED_WEIGHTS[0], 1); // Leather Helm
+        assert_eq!(EQUIPMENT_EQUIPPED_WEIGHTS[15], 10); // Mystic Armour
+        assert_eq!(EQUIPMENT_EQUIPPED_WEIGHTS[16], 0); // Dagger
+        assert_eq!(EQUIPMENT_EQUIPPED_WEIGHTS[20], 1); // Main Gauche
+        assert_eq!(EQUIPMENT_EQUIPPED_WEIGHTS[43], 2); // Ring of Protection
+        assert_eq!(EQUIPMENT_EQUIPPED_WEIGHTS[46], 2); // Spiked Collar
+        assert_eq!(EQUIPMENT_EQUIPPED_WEIGHTS[47], 0); // Ankh
+    }
+
+    #[test]
     fn sleep_ambush_restored_status_preserves_poisoned_and_lifts_sleepers() {
         // rest-and-camp.md §6: before handing the ambush row to
         // combat setup, the rest helper restores each rest-local

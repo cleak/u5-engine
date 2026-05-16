@@ -395,6 +395,43 @@ pub const EQUIPMENT_READY_BURDENS: [u8; EQUIPMENT_COUNT] = [
     16, 15, 13, 18, 0, 0, 8, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0,
 ];
 
+/// `catalogs/item-list.md §5.1` per-equipment "equipped weight stat"
+/// lookup. This is a separate resident table from
+/// [`EQUIPMENT_READY_BURDENS`] and is summed by the equipped-item
+/// statistic helper; the R-Ready strength gate does not consult it.
+pub const EQUIPMENT_EQUIPPED_WEIGHTS: [u8; EQUIPMENT_COUNT] = [
+    1, 2, 3, 3, 2, 3, 3, 5, 0, 1, 2, 3, 4, 5, 7, 10, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 2, 0, 0, 2, 0,
+];
+
+/// `inventory.md §2.1` Protection active-effect equipped-weight bonus.
+/// The traced equipped-item statistic helper adds 3 to the summed
+/// six-slot table when the shared active-effect/status tag is the
+/// Protection tag.
+pub const EQUIPPED_WEIGHT_PROTECTION_BONUS: u8 = 3;
+
+/// `inventory.md §2.1` / `catalogs/item-list.md §5.1`: sum the
+/// per-equipment "equipped weight stat" across the six readied
+/// slots, treating empty slots as zero and `EQUIPMENT_EMPTY`
+/// sentinels as no contribution. Adds the Protection bonus when
+/// `protection_active` is set.
+pub fn equipped_item_weight_stat(
+    equipment: &[u8; EQUIPMENT_SLOT_COUNT],
+    protection_active: bool,
+) -> u8 {
+    let total = equipment
+        .iter()
+        .copied()
+        .filter(|item| *item != EQUIPMENT_EMPTY)
+        .filter_map(|item| EQUIPMENT_EQUIPPED_WEIGHTS.get(item as usize).copied())
+        .fold(0u8, u8::saturating_add);
+    if protection_active {
+        total.saturating_add(EQUIPPED_WEIGHT_PROTECTION_BONUS)
+    } else {
+        total
+    }
+}
+
 pub const EQUIPMENT_ATTACK_MAXES: [u8; EQUIPMENT_COUNT] = [
     0, 0, 0, 4, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 6, 8, 8, 8, 10, 10, 12, 15, 15, 10, 1, 12,
     1, 15, 20, 20, 20, 30, 99, 15, 12, 20, 99, 1, 30, 0, 0, 0, 0, 0, 0,
