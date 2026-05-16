@@ -250,18 +250,19 @@ impl ActiveEffectTag {
         }
     }
 
-    /// `magic.md §8`: counter value installed when the spell-side
-    /// helper writes the tag from a successful C-Cast (Protection
-    /// 20, Quickness 30, Mass Charm 20, Negate Magic 10, Negate Time
-    /// has its own scene-aware path with no separate spell-side
-    /// constant promoted here).
+    /// `magic.md §8` / `catalogs/spell-list.md §6`: counter value
+    /// installed when the spell-side helper writes the tag from a
+    /// successful C-Cast. Protection 20, Quickness 30, Mass Charm 20,
+    /// Negate Magic 10, Negate Time 10. The Negate Time spell-side
+    /// install is gated by the magic-absorption check at the caller;
+    /// this helper only encodes the install-counter value.
     pub const fn spell_install_counter(self) -> Option<u8> {
         match self {
             Self::Protection => Some(20),
             Self::Quickness => Some(30),
             Self::MassCharm => Some(20),
             Self::NegateMagic => Some(10),
-            Self::NegateTime => None,
+            Self::NegateTime => Some(crate::TIME_STOP_DURATION),
         }
     }
 

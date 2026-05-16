@@ -1,4 +1,24 @@
     #[test]
+    fn negate_time_spell_install_counter_matches_time_stop_duration() {
+        // catalogs/spell-list.md §6: Negate Time (An Tym) starts the
+        // shared `T` runtime tag with a 10-count countdown.
+        // Confirm the install counter and the byte-classifier agree.
+        assert_eq!(TIME_STOP_DURATION, 10);
+        assert_eq!(
+            ActiveEffectTag::NegateTime.spell_install_counter(),
+            Some(TIME_STOP_DURATION)
+        );
+        assert_eq!(
+            ActiveEffectTag::NegateTime.ascii_byte(),
+            NEGATE_TIME_ACTIVE_EFFECT_TAG
+        );
+        assert_eq!(
+            active_effect_tag_for_byte(NEGATE_TIME_ACTIVE_EFFECT_TAG),
+            Some(ActiveEffectTag::NegateTime)
+        );
+    }
+
+    #[test]
     fn spell_rune_name_lookup_matches_published_table() {
         // catalogs/spell-list.md §5: spot checks across the
         // eight-circle spell table. Every entry should have a
@@ -4393,9 +4413,12 @@
         assert_eq!(ActiveEffectTag::Quickness.spell_install_counter(), Some(30));
         assert_eq!(ActiveEffectTag::MassCharm.spell_install_counter(), Some(20));
         assert_eq!(ActiveEffectTag::NegateMagic.spell_install_counter(), Some(10));
-        // Negate Time has no separate spell-side install counter; the
-        // scene-aware path applies its own scroll/spell duration.
-        assert_eq!(ActiveEffectTag::NegateTime.spell_install_counter(), None);
+        // Negate Time C-Cast installs the shared `T` tag with the
+        // published 10-count countdown (catalogs/spell-list.md §6).
+        assert_eq!(
+            ActiveEffectTag::NegateTime.spell_install_counter(),
+            Some(TIME_STOP_DURATION)
+        );
 
         // Byte -> tag classification.
         assert_eq!(active_effect_tag_for_byte(b'P'), Some(ActiveEffectTag::Protection));
