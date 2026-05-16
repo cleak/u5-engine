@@ -32,6 +32,47 @@
     }
 
     #[test]
+    fn npc_ai_behavior_event_predicates_match_published_table() {
+        // npc-schedules.md §9: ApproachAndAttack, ReservedEngage,
+        // and RandomChase raise the town-mode attack event when
+        // adjacent. GuardOrBlock raises the non-attack guard event
+        // instead. BoundedWander and UnboundedWander are the two
+        // random-wander behaviours.
+        for behavior in [
+            NpcAiBehavior::ApproachAndAttack,
+            NpcAiBehavior::ReservedEngage,
+            NpcAiBehavior::RandomChase,
+        ] {
+            assert!(behavior.raises_attack_event(), "{behavior:?}");
+            assert!(!behavior.raises_guard_event(), "{behavior:?}");
+        }
+        assert!(NpcAiBehavior::GuardOrBlock.raises_guard_event());
+        assert!(!NpcAiBehavior::GuardOrBlock.raises_attack_event());
+        for behavior in [
+            NpcAiBehavior::Stationary,
+            NpcAiBehavior::FollowAtDistance,
+            NpcAiBehavior::BoundedWander,
+            NpcAiBehavior::UnboundedWander,
+        ] {
+            assert!(!behavior.raises_attack_event(), "{behavior:?}");
+            assert!(!behavior.raises_guard_event(), "{behavior:?}");
+        }
+        // Wander predicate covers the two random-wander variants.
+        assert!(NpcAiBehavior::BoundedWander.is_wander());
+        assert!(NpcAiBehavior::UnboundedWander.is_wander());
+        for behavior in [
+            NpcAiBehavior::Stationary,
+            NpcAiBehavior::FollowAtDistance,
+            NpcAiBehavior::ApproachAndAttack,
+            NpcAiBehavior::ReservedEngage,
+            NpcAiBehavior::GuardOrBlock,
+            NpcAiBehavior::RandomChase,
+        ] {
+            assert!(!behavior.is_wander(), "{behavior:?}");
+        }
+    }
+
+    #[test]
     fn npc_stuck_counter_forces_replan_at_strict_threshold_exceed() {
         // npc-schedules.md §4: the walker resets the move queue when
         // the stuck counter *strictly* exceeds the published

@@ -345,6 +345,35 @@ pub enum NpcAiBehavior {
     RandomChase,
 }
 
+impl NpcAiBehavior {
+    /// `npc-schedules.md §9`: returns `true` for AI behaviours that
+    /// can raise the town-mode attack event when the NPC reaches an
+    /// adjacent cell to the player. Only the approach-and-attack and
+    /// the two chase/engage paths use this event; guard/block uses
+    /// its own non-attack event instead.
+    pub const fn raises_attack_event(self) -> bool {
+        matches!(
+            self,
+            Self::ApproachAndAttack | Self::ReservedEngage | Self::RandomChase
+        )
+    }
+
+    /// `npc-schedules.md §9`: returns `true` for AI behaviours that
+    /// raise the non-attack guard event instead of the attack event
+    /// when adjacent. Only the guard/block family takes this path.
+    pub const fn raises_guard_event(self) -> bool {
+        matches!(self, Self::GuardOrBlock)
+    }
+
+    /// `npc-schedules.md §9`: returns `true` for the two random-wander
+    /// behaviours. Bounded wander rejects steps that would leave a
+    /// small radius around the waypoint; unbounded wander skips that
+    /// gate.
+    pub const fn is_wander(self) -> bool {
+        matches!(self, Self::BoundedWander | Self::UnboundedWander)
+    }
+}
+
 /// `formats/npc.md §5.3`: classify the per-waypoint AI byte. Returns
 /// `None` for values above `7`, which the spec maps to the
 /// no-action/default case the dispatcher takes.
