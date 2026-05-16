@@ -159,6 +159,55 @@ pub const fn npc_tlk_filename(scene_byte: u8) -> Option<&'static str> {
 /// files are 4608 bytes each; each contains eight 576-byte sub-maps,
 /// each holding 32 schedule records (16 bytes each) plus a 32-byte
 /// type array and a 32-byte dialog index array.
+/// `town-mode.md §7` town-family exit-threshold tile id. Stepping
+/// onto a `0x59` cell prompts the player; accepting clears the
+/// scene byte and maps the interior exit back to the location's
+/// overworld coordinate.
+pub const TOWN_EXIT_THRESHOLD_TILE: u8 = 0x59;
+
+/// `town-mode.md §7` stair tile family (`0xC4..=0xC7`). The low two
+/// bits encode the matching facing direction: matching the
+/// movement code moves up one floor, matching that code's
+/// opposite-facing value moves down one floor, and crossing the
+/// stair from either side is just a normal walk.
+pub const TOWN_STAIR_TILE_FIRST: u8 = 0xC4;
+pub const TOWN_STAIR_TILE_LAST: u8 = 0xC7;
+
+/// `town-mode.md §7` town stair K-Klimb intent decoded from the
+/// stair tile and the avatar's current movement facing code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TownStairIntent {
+    /// Movement facing matches the stair's encoded facing — go up
+    /// one floor.
+    Up,
+    /// Movement facing is the opposite of the stair's encoded
+    /// facing — go down one floor.
+    Down,
+    /// Stair tile but neither facing match — crossing the stair as
+    /// an ordinary walk; no floor change.
+    Cross,
+}
+
+/// `town-mode.md §7`: classify a town stair-walk intent. Returns
+/// `None` for any tile outside `TOWN_STAIR_TILE_FIRST..=_LAST`.
+/// Caller passes the stair tile and the avatar's normalised
+/// facing code (0..=3); the stair's encoded facing is the tile's
+/// low two bits.
+pub const fn town_stair_intent(tile: u8, facing: u8) -> Option<TownStairIntent> {
+    if tile < TOWN_STAIR_TILE_FIRST || tile > TOWN_STAIR_TILE_LAST {
+        return None;
+    }
+    let stair_facing = tile & 0x03;
+    let opposite = (stair_facing + 2) & 0x03;
+    Some(if facing == stair_facing {
+        TownStairIntent::Up
+    } else if facing == opposite {
+        TownStairIntent::Down
+    } else {
+        TownStairIntent::Cross
+    })
+}
+
 /// `town-mode.md §5,§6` dawn/dusk substitution night-band hours.
 /// The shipped maps store gate cells in their daytime/open form;
 /// the location-load pass toggles paired archway cells into their

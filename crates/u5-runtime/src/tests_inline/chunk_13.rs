@@ -1,4 +1,32 @@
     #[test]
+    fn town_stair_intent_decodes_facing_low_bits() {
+        // town-mode.md §7
+        // Stair tile family bounds.
+        assert_eq!(TOWN_STAIR_TILE_FIRST, 0xC4);
+        assert_eq!(TOWN_STAIR_TILE_LAST, 0xC7);
+        assert_eq!(TOWN_EXIT_THRESHOLD_TILE, 0x59);
+        // 0xC4 (stair_facing=0/N): facing 0 -> Up, facing 2 -> Down,
+        // facing 1 or 3 -> Cross.
+        assert_eq!(town_stair_intent(0xC4, 0), Some(TownStairIntent::Up));
+        assert_eq!(town_stair_intent(0xC4, 2), Some(TownStairIntent::Down));
+        assert_eq!(town_stair_intent(0xC4, 1), Some(TownStairIntent::Cross));
+        assert_eq!(town_stair_intent(0xC4, 3), Some(TownStairIntent::Cross));
+        // 0xC5 (stair_facing=1/E): facing 1 -> Up, facing 3 -> Down.
+        assert_eq!(town_stair_intent(0xC5, 1), Some(TownStairIntent::Up));
+        assert_eq!(town_stair_intent(0xC5, 3), Some(TownStairIntent::Down));
+        // 0xC6 (stair_facing=2/S): facing 2 -> Up, facing 0 -> Down.
+        assert_eq!(town_stair_intent(0xC6, 2), Some(TownStairIntent::Up));
+        assert_eq!(town_stair_intent(0xC6, 0), Some(TownStairIntent::Down));
+        // 0xC7 (stair_facing=3/W): facing 3 -> Up, facing 1 -> Down.
+        assert_eq!(town_stair_intent(0xC7, 3), Some(TownStairIntent::Up));
+        assert_eq!(town_stair_intent(0xC7, 1), Some(TownStairIntent::Down));
+        // Non-stair tiles return None.
+        assert_eq!(town_stair_intent(0x00, 0), None);
+        assert_eq!(town_stair_intent(0xC3, 0), None);
+        assert_eq!(town_stair_intent(0xC8, 0), None);
+    }
+
+    #[test]
     fn town_dawn_dusk_substitution_band_wraps_midnight() {
         // town-mode.md §5,§6
         assert_eq!(TOWN_NIGHT_BAND_DUSK_HOUR, 20);
