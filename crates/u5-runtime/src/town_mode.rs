@@ -202,6 +202,26 @@ pub const fn world_location_table_scene_for_row(row: usize) -> Option<u8> {
 /// exception (Stonegate's interior egress, scene `0x19`).
 pub const TOWN_EXIT_UNDERWORLD_SCENE: u8 = 0x19;
 
+/// `town-mode.md §5` Yew-jail surrender destination. The arrest
+/// path sends the party to scene Yew (`TOWNE:3`, scene byte 4) at
+/// floor 0 cell `(25, 4)`. The town setup pass recognises this
+/// local `Y == 4` as a special case that skips the
+/// permanent-location queue lookup before allocating a phantom NPC.
+pub const TOWN_ARREST_JAIL_SCENE: u8 = 4;
+pub const TOWN_ARREST_JAIL_FLOOR: u8 = 0;
+pub const TOWN_ARREST_JAIL_X: u8 = 25;
+pub const TOWN_ARREST_JAIL_Y: u8 = 4;
+
+/// `town-mode.md §5`: returns `true` when town entry hit the
+/// jail-wakeup branch — local floor 0 cell with `Y == TOWN_ARREST_JAIL_Y`
+/// in the Yew scene. The phantom-attach helper skips the queue
+/// lookup on this path.
+pub const fn town_entry_is_jail_wakeup(scene_byte: u8, floor: u8, y: u8) -> bool {
+    scene_byte == TOWN_ARREST_JAIL_SCENE
+        && floor == TOWN_ARREST_JAIL_FLOOR
+        && y == TOWN_ARREST_JAIL_Y
+}
+
 /// `overworld.md §2`: returns `true` when an interior exit from
 /// the supplied scene byte should restore the underworld plane
 /// rather than the surface plane.

@@ -32,6 +32,26 @@
     }
 
     #[test]
+    fn town_entry_jail_wakeup_predicate_matches_published_coordinate() {
+        // town-mode.md §5: surrendering at a guard-catch event sends
+        // the party to Yew (scene 4) floor 0 cell (25, 4). The
+        // setup pass skips the permanent-location queue lookup when
+        // town entry hits scene 4 / floor 0 / Y == 4.
+        assert_eq!(TOWN_ARREST_JAIL_SCENE, 4);
+        assert_eq!(TOWN_ARREST_JAIL_FLOOR, 0);
+        assert_eq!(TOWN_ARREST_JAIL_X, 25);
+        assert_eq!(TOWN_ARREST_JAIL_Y, 4);
+        assert!(town_entry_is_jail_wakeup(
+            TOWN_ARREST_JAIL_SCENE,
+            TOWN_ARREST_JAIL_FLOOR,
+            TOWN_ARREST_JAIL_Y
+        ));
+        assert!(!town_entry_is_jail_wakeup(5, 0, 4));
+        assert!(!town_entry_is_jail_wakeup(4, 0, 5));
+        assert!(!town_entry_is_jail_wakeup(4, 1, 4));
+    }
+
+    #[test]
     fn tile_glyph_digraph_classifies_published_byte_codes() {
         // formats/miscmsg-dat.md §4: Codex/prophecy tile-glyph
         // records use `@` for inter-word space, `[` for TH, `]` for
