@@ -32,6 +32,17 @@
     }
 
     #[test]
+    fn healer_unmatched_row_fees_match_published_table() {
+        // shops.md §8.3: the resident cost table has an eighth row
+        // (Cure 1, Heal 70, Resurrect 270) that no shipped healer
+        // scene maps to. Preserve the published values so custom
+        // scenes that point at row 7 still get the engine fees.
+        assert_eq!(HEALER_UNMATCHED_ROW_CURE_FEE, 1);
+        assert_eq!(HEALER_UNMATCHED_ROW_HEAL_FEE, 70);
+        assert_eq!(HEALER_UNMATCHED_ROW_RESURRECT_FEE, 270);
+    }
+
+    #[test]
     fn shop_affordability_refusal_barks_match_spec_text() {
         // shops.md §6.1: per-kind refusal lines printed when the
         // affordability gate rejects a purchase. Bark text is

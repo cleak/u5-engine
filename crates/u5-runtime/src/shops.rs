@@ -1009,6 +1009,17 @@ pub const SAGE_TOPIC_INPUT_LIMIT: usize = 15;
 /// sage matches typed input case-insensitively against this list
 /// with a strict topic-boundary check (the next input character must
 /// be end-of-input or a space).
+/// `shops.md §8.3` unmatched resident healer cost row. The resident
+/// healer cost table has eight rows; the seven shipped healers map
+/// to rows 0..=6, but row 7 carries the published `(Cure 1,
+/// Heal 70, Resurrect 270)` fees with no shipped healer scene
+/// reaching it. Compatible implementations should preserve the
+/// values so a custom or modded scene that points at row 7 still
+/// gets the same fees the resident engine would have charged.
+pub const HEALER_UNMATCHED_ROW_CURE_FEE: u16 = 1;
+pub const HEALER_UNMATCHED_ROW_HEAL_FEE: u16 = 70;
+pub const HEALER_UNMATCHED_ROW_RESURRECT_FEE: u16 = 270;
+
 /// `shops.md §6.1` published shop affordability refusal barks. The
 /// shop kind picks which line to print when the affordability gate
 /// rejects a purchase; the bark is presentation only and does not
