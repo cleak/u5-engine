@@ -1,4 +1,30 @@
     #[test]
+    fn spyglass_usable_requires_overworld_with_stars() {
+        // inventory.md §7
+        assert!(spyglass_usable(0, true));
+        assert!(!spyglass_usable(0, false));
+        // Non-overworld scenes refuse regardless of sky state.
+        for scene in [1u8, 17, 33, 0xFF] {
+            assert!(!spyglass_usable(scene, true));
+            assert!(!spyglass_usable(scene, false));
+        }
+    }
+
+    #[test]
+    fn hms_cape_plans_usable_only_aboard_ship() {
+        // inventory.md §7
+        for marker in 0x20u8..=0x27 {
+            assert!(hms_cape_plans_usable(marker), "marker {marker:#x}");
+        }
+        // Foot, horse, carpet, skiff -> refuse.
+        for marker in [0x12u8, 0x13, 0x14, 0x15, 0x16, 0x17, 0x1C, 0x1D, 0x28, 0x2B] {
+            assert!(!hms_cape_plans_usable(marker), "marker {marker:#x}");
+        }
+        assert!(!hms_cape_plans_usable(0x00));
+        assert!(!hms_cape_plans_usable(0xFF));
+    }
+
+    #[test]
     fn sextant_usable_only_at_overworld_night() {
         // inventory.md §7
         // Overworld at night (hours 0..=5 and 19..=23) -> usable.

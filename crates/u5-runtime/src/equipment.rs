@@ -186,6 +186,24 @@ pub const fn potion_use_effect(index: usize) -> Option<PotionUseEffect> {
 /// uniformly random potion row.
 pub const POTION_VARIATION_DENOMINATOR: u8 = 16;
 
+/// `inventory.md §7` Spyglass U-Use eligibility predicate. The
+/// Spyglass is a surface-only utility; it refuses outside the
+/// overworld scene byte zero. The caller must additionally check
+/// the sky-state "no stars" gate before the successful path enters
+/// the LOOKOBJ full Britannia chunk-map renderer.
+pub const fn spyglass_usable(scene_byte: u8, sky_has_stars: bool) -> bool {
+    scene_byte == 0 && sky_has_stars
+}
+
+/// `inventory.md §7` HMS Cape plans U-Use eligibility predicate.
+/// The plans are a shipboard-only utility — usable only when the
+/// party is aboard a ship (transport marker family `0x20..=0x27`).
+/// On success the caller marks the ship-rigging flag so the ship
+/// is rigged for double speed; otherwise the U-Use refuses.
+pub const fn hms_cape_plans_usable(transport_marker: u8) -> bool {
+    matches!(transport_marker, 0x20..=0x27)
+}
+
 /// `inventory.md §7` Sextant U-Use eligibility predicate. The
 /// Sextant is an outdoor night-only utility — it refuses outside
 /// the overworld or during the daytime interval. The "daytime
