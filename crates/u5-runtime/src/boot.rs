@@ -81,6 +81,25 @@ impl DisplayDriverFamily {
             DisplayDriverFamily::Hercules => "HER.DRV",
         }
     }
+
+    /// `boot.md §5` / `intro.md`: paired screen-panel asset suffix
+    /// the driver family chooses for the LZW screen-panel archives
+    /// (`STARTSC`, `STORY1`–`STORY6`, etc.). EGA and Tandy are
+    /// 16-colour and use `.16`; CGA and Hercules are 4-colour and
+    /// use `.4`.
+    pub const fn intro_panel_asset_suffix(self) -> &'static str {
+        match self {
+            DisplayDriverFamily::Ega | DisplayDriverFamily::Tandy => ".16",
+            DisplayDriverFamily::Cga | DisplayDriverFamily::Hercules => ".4",
+        }
+    }
+
+    /// `boot.md §5` / `intro.md`: returns `true` for the paired
+    /// high-colour intro asset family (EGA and Tandy); `false` for
+    /// the low-colour CGA and Hercules families.
+    pub const fn uses_high_colour_intro_assets(self) -> bool {
+        matches!(self, DisplayDriverFamily::Ega | DisplayDriverFamily::Tandy)
+    }
 }
 
 /// `boot.md §5`: parse a command-line driver-selection argument. The

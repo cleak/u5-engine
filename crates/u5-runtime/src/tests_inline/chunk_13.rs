@@ -1,4 +1,23 @@
     #[test]
+    fn intro_panel_asset_suffix_pairs_high_and_low_colour_drivers() {
+        // boot.md §5 / intro.md §3: the driver family chooses the
+        // paired screen-panel asset suffix. EGA and Tandy are
+        // high-colour (.16); CGA and Hercules are low-colour (.4).
+        assert_eq!(DisplayDriverFamily::Ega.intro_panel_asset_suffix(), ".16");
+        assert_eq!(DisplayDriverFamily::Tandy.intro_panel_asset_suffix(), ".16");
+        assert_eq!(DisplayDriverFamily::Cga.intro_panel_asset_suffix(), ".4");
+        assert_eq!(
+            DisplayDriverFamily::Hercules.intro_panel_asset_suffix(),
+            ".4"
+        );
+
+        assert!(DisplayDriverFamily::Ega.uses_high_colour_intro_assets());
+        assert!(DisplayDriverFamily::Tandy.uses_high_colour_intro_assets());
+        assert!(!DisplayDriverFamily::Cga.uses_high_colour_intro_assets());
+        assert!(!DisplayDriverFamily::Hercules.uses_high_colour_intro_assets());
+    }
+
+    #[test]
     fn save_load_published_messages_match_spec_text() {
         // save-load.md §5.2 / §4.2: Quit-and-Save prints the prompt
         // line, the Yes/No reply, "Saving..." and "Done."; the load
