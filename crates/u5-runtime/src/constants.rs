@@ -691,6 +691,9 @@ pub const OOL_RECORD_LEN: usize = 8;
 pub const OOL_SLOTS: usize = 32;
 pub const OOL_PLANE_LEN: usize = OOL_RECORD_LEN * OOL_SLOTS;
 pub const SAVED_OOL_LEN: usize = OOL_PLANE_LEN * 2;
+/// `formats/dungeon-dat.md §1` published filename for the 4,096-byte
+/// dungeon-record file.
+pub const DUNGEON_DAT_FILENAME: &str = "DUNGEON.DAT";
 pub const DUNGEON_DAT_LEN: usize = 4096;
 pub const DUNGEON_RECORD_LEN: usize = 512;
 pub const DUNGEON_LEVEL_LEN: usize = 64;

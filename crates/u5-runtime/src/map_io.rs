@@ -278,12 +278,12 @@ pub fn resolve_location_floor_page(game_dir: &Path, scene: Scene, floor: i8) -> 
 }
 
 pub fn load_dungeon_record(game_dir: &Path, scene: DungeonScene) -> io::Result<Vec<u8>> {
-    let bytes = read(&game_dir.join("DUNGEON.DAT"))?;
+    let bytes = read(&game_dir.join(DUNGEON_DAT_FILENAME))?;
     if bytes.len() != DUNGEON_DAT_LEN {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "DUNGEON.DAT must be {DUNGEON_DAT_LEN} bytes, got {}",
+                "{DUNGEON_DAT_FILENAME} must be {DUNGEON_DAT_LEN} bytes, got {}",
                 bytes.len()
             ),
         ));
@@ -297,7 +297,7 @@ pub fn load_world_map(game_dir: &Path, plane: WorldPlane) -> io::Result<Vec<u8>>
     match plane {
         WorldPlane::Underworld => decode_world_map_bytes(plane, &bytes),
         WorldPlane::Britannia => {
-            let data = read(&game_dir.join("DATA.OVL"))?;
+            let data = read(&game_dir.join(DATA_OVL_FILENAME))?;
             let chunk_index = find_britannia_chunk_index(&data)?;
             decode_britannia_map_bytes(&bytes, &chunk_index)
         }
