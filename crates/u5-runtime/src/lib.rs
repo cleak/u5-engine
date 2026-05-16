@@ -241,8 +241,9 @@ pub use main_loop::{
     SCENE_TOWN_FAMILY_LAST, SceneRoute, dungeon_entry_seed,
     dungeon_facing_back_delta, dungeon_facing_forward_delta,
     dungeon_facing_turn_around, dungeon_facing_turn_left, dungeon_facing_turn_right,
-    dungeon_record_index, dungeon_resident_name, dungeon_word_of_power,
-    mode_minute_increment, save_scene_byte_normalised, scene_route,
+    dungeon_record_index, dungeon_resident_name, dungeon_scene_for_word_of_power,
+    dungeon_word_of_power, mode_minute_increment, save_scene_byte_normalised,
+    scene_route,
 };
 pub use lighting::{
     DUNGEON_TORCH_INCREMENT_MAX, DUNGEON_TORCH_INCREMENT_MIN,

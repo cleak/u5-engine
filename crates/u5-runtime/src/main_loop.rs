@@ -177,6 +177,33 @@ pub const fn dungeon_word_of_power(scene_byte: u8) -> Option<&'static str> {
     })
 }
 
+/// `catalogs/quest-graph.md §4`: inverse of [`dungeon_word_of_power`].
+/// Returns the dungeon scene byte (`33..=40`) the typed Word of
+/// Power corresponds to, or `None` for any input that is not one of
+/// the eight published words. Matching is case-insensitive ASCII to
+/// match the Yell input pipeline's uppercase folding.
+pub fn dungeon_scene_for_word_of_power(word: &str) -> Option<u8> {
+    if word.eq_ignore_ascii_case("FALLAX") {
+        Some(33)
+    } else if word.eq_ignore_ascii_case("VILIS") {
+        Some(34)
+    } else if word.eq_ignore_ascii_case("INOPIA") {
+        Some(35)
+    } else if word.eq_ignore_ascii_case("MALUM") {
+        Some(36)
+    } else if word.eq_ignore_ascii_case("AVIDUS") {
+        Some(37)
+    } else if word.eq_ignore_ascii_case("INFAMA") {
+        Some(38)
+    } else if word.eq_ignore_ascii_case("IGNAVUS") {
+        Some(39)
+    } else if word.eq_ignore_ascii_case("VERAMOCOR") {
+        Some(40)
+    } else {
+        None
+    }
+}
+
 /// `catalogs/gazetteer.md §6` resident name for one of the eight
 /// stock dungeons indexed by scene byte `33..=40`.
 pub const fn dungeon_resident_name(scene_byte: u8) -> Option<&'static str> {

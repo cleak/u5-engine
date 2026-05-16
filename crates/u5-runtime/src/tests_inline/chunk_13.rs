@@ -1,4 +1,25 @@
     #[test]
+    fn dungeon_scene_for_word_of_power_inverts_word_table() {
+        // catalogs/quest-graph.md §4
+        for scene in 33u8..=40 {
+            let word = dungeon_word_of_power(scene).expect("word for dungeon scene");
+            assert_eq!(
+                dungeon_scene_for_word_of_power(word),
+                Some(scene),
+                "{word} should map back to scene {scene}"
+            );
+            // Case-insensitive: lowercase form rounds-trips too.
+            let lower = word.to_ascii_lowercase();
+            assert_eq!(dungeon_scene_for_word_of_power(&lower), Some(scene));
+        }
+        // Unknown words.
+        assert_eq!(dungeon_scene_for_word_of_power(""), None);
+        assert_eq!(dungeon_scene_for_word_of_power("DAWN"), None);
+        assert_eq!(dungeon_scene_for_word_of_power("FALLAXX"), None);
+        assert_eq!(dungeon_scene_for_word_of_power("FALLA"), None);
+    }
+
+    #[test]
     fn chargen_starting_map_tuple_matches_init_gam_seed() {
         // chargen.md §8: scene 13 (Iolo's Hut), saved-scene scratch 0,
         // floor/Z 0, X 15, Y 15.
