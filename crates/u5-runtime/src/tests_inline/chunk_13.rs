@@ -1,4 +1,24 @@
     #[test]
+    fn text_window_inner_width_and_centred_start_match_spec() {
+        // text-output.md §4: window whose corners are columns 6 and 33
+        // has width 27 (27 chars fit before wrapping).
+        assert_eq!(text_window_inner_width(6, 33), 27);
+        assert_eq!(text_window_inner_width(0, 39), 39);
+        // Inverted corners collapse to zero.
+        assert_eq!(text_window_inner_width(20, 10), 0);
+        assert_eq!(text_window_inner_width(15, 15), 0);
+
+        // text-output.md §5: centred start column = (width - line) / 2.
+        assert_eq!(text_window_centred_start_column(27, 7), 10);
+        assert_eq!(text_window_centred_start_column(27, 27), 0);
+        // Lines wider than the window collapse to column 0 rather than
+        // producing a negative offset.
+        assert_eq!(text_window_centred_start_column(27, 30), 0);
+        // Even split.
+        assert_eq!(text_window_centred_start_column(40, 10), 15);
+    }
+
+    #[test]
     fn active_object_slot_role_partitions_table_per_spec() {
         // active-objects.md §4
         assert_eq!(

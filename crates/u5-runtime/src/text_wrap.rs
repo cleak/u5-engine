@@ -21,6 +21,35 @@ pub const TEXT_WINDOW_COUNT: usize = 4;
 pub const TEXT_SCREEN_COLUMNS: u8 = 40;
 pub const TEXT_SCREEN_ROWS: u8 = 25;
 
+/// `text-output.md §4` text-window inner width in cells:
+/// `bottom_right_x - top_left_x`. The trailing column is excluded —
+/// a window whose corners are columns 6 and 33 has width 27 (27
+/// characters fit before wrapping is forced). The wrap-aware
+/// printer's word-break logic and the centring helper both consume
+/// this figure. Returns 0 when the corners are inverted (callers
+/// should normalise the descriptor before calling).
+pub const fn text_window_inner_width(top_left_x: u8, bottom_right_x: u8) -> u8 {
+    if bottom_right_x > top_left_x {
+        bottom_right_x - top_left_x
+    } else {
+        0
+    }
+}
+
+/// `text-output.md §5` centred-line starting column. When the
+/// active window's centre flag is set, the wrap-aware printer
+/// repositions the cursor to `(width - characters_in_line) / 2`
+/// before emitting. Returns 0 when the line is wider than the
+/// window (centring becomes a no-op rather than producing a
+/// negative column).
+pub const fn text_window_centred_start_column(window_width: u8, line_chars: u8) -> u8 {
+    if line_chars >= window_width {
+        0
+    } else {
+        (window_width - line_chars) / 2
+    }
+}
+
 /// `text-output.md §9` boot-time text-window defaults. After
 /// `Window descriptor defaults`, all four windows have:
 /// - rectangle `(0, 0)..=(39, 24)` (full 40-by-25 screen);
