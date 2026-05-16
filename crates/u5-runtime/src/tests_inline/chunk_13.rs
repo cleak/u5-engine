@@ -1,4 +1,26 @@
     #[test]
+    fn spell_rune_name_lookup_matches_published_table() {
+        // catalogs/spell-list.md §5: spot checks across the
+        // eight-circle spell table. Every entry should have a
+        // rune-name; out-of-range indices return None.
+        assert_eq!(spell_rune_name(0), Some("In Lor"));
+        assert_eq!(spell_rune_name(1), Some("Grav Por"));
+        assert_eq!(spell_rune_name(4), Some("Mani"));
+        assert_eq!(spell_rune_name(12), Some("Vas Lor"));
+        assert_eq!(spell_rune_name(19), Some("In Sanct"));
+        assert_eq!(spell_rune_name(30), Some("In Vas Por Ylem"));
+        assert_eq!(spell_rune_name(37), Some("Xen Corp"));
+        assert_eq!(spell_rune_name(42), Some("In Mani Corp"));
+        assert_eq!(spell_rune_name(46), Some("Vas Rel Por"));
+        assert_eq!(spell_rune_name(47), Some("An Tym"));
+        // Every published spell id has a rune-name.
+        for index in 0..SPELL_COUNT {
+            assert!(spell_rune_name(index).is_some(), "spell {index}");
+        }
+        assert_eq!(spell_rune_name(SPELL_COUNT), None);
+    }
+
+    #[test]
     fn rare_reagent_harvest_quantity_stays_in_2_to_15_range() {
         // containers.md §5: a successful midnight harvest rolls
         // 2..=15 sprigs of the matching reagent.

@@ -587,6 +587,64 @@ pub const fn spell_common_name(index: usize) -> Option<&'static str> {
     })
 }
 
+/// `catalogs/spell-list.md §5` canonical Britannian rune-name for one
+/// spell index. The long rune-name strings are aligned from the
+/// parser tokens, manual spell names, and handler behaviour. Returns
+/// `None` for out-of-range indices.
+pub const fn spell_rune_name(index: usize) -> Option<&'static str> {
+    Some(match index {
+        0 => "In Lor",
+        1 => "Grav Por",
+        2 => "An Zu",
+        3 => "An Nox",
+        4 => "Mani",
+        5 => "An Ylem",
+        6 => "An Sanct",
+        7 => "An Xen Corp",
+        8 => "Rel Hur",
+        9 => "In Wis",
+        10 => "Kal Xen",
+        11 => "In Xen Mani",
+        12 => "Vas Lor",
+        13 => "Vas Flam",
+        14 => "In Flam Grav",
+        15 => "In Nox Grav",
+        16 => "In Zu Grav",
+        17 => "In Por",
+        18 => "An Grav",
+        19 => "In Sanct",
+        20 => "In Sanct Grav",
+        21 => "Uus Por",
+        22 => "Des Por",
+        23 => "Wis Quas",
+        24 => "In Bet Xen",
+        25 => "An Ex Por",
+        26 => "In Ex Por",
+        27 => "Vas Mani",
+        28 => "In Zu",
+        29 => "Rel Tym",
+        30 => "In Vas Por Ylem",
+        31 => "Quas An Wis",
+        32 => "In An",
+        33 => "Wis An Ylem",
+        34 => "An Xen Ex",
+        35 => "Rel Xen Bet",
+        36 => "Sanct Lor",
+        37 => "Xen Corp",
+        38 => "In Quas Xen",
+        39 => "In Quas Wis",
+        40 => "In Nox Hur",
+        41 => "In Quas Corp",
+        42 => "In Mani Corp",
+        43 => "Kal Xen Corp",
+        44 => "In Vas Grav Corp",
+        45 => "In Flam Hur",
+        46 => "Vas Rel Por",
+        47 => "An Tym",
+        _ => return None,
+    })
+}
+
 /// `magic.md §8` Heal: random `0..=60` roll, halved (integer
 /// truncation), with a zero result promoted to one. Returns the heal
 /// amount in inclusive range `1..=30`.
