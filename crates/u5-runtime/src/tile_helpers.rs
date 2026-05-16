@@ -628,6 +628,40 @@ pub enum DungeonCellClass {
     HeavyDoorOrRoomTrigger,
 }
 
+/// `dungeon-mode.md §8` Search-on-wall rewrite outcome. The Search
+/// command can convert flavour-wall and hidden-wall cells into the
+/// matching revealed sub-class for the current dungeon visit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonSearchWallRewrite {
+    /// Flavour class `0xC?` low nibbles `1` and `2` only narrate the
+    /// inspected feature; the cell is not rewritten.
+    NarrateOnly,
+    /// Other flavour `0xC?` cells convert to `0xB0` or `0xB8`,
+    /// preserving the visit-marker bit.
+    ToFlavourFind(u8),
+    /// Hidden-wall `0xD?` cells convert to `0xE0` or `0xE8`,
+    /// preserving the visit-marker bit.
+    ToHiddenWallReveal(u8),
+}
+
+/// `dungeon-mode.md §8`: classify the Search outcome on a flavour-
+/// or hidden-wall cell. Returns `None` for any byte outside the
+/// `0xC?` and `0xD?` classes; those classes have no Search-specific
+/// rewrite.
+pub const fn dungeon_search_wall_rewrite(tile: u8) -> Option<DungeonSearchWallRewrite> {
+    let marker = tile & DUNGEON_RUNTIME_VARIANT_BIT;
+    match tile >> 4 {
+        0xC => match tile & 0x0F {
+            // Marker-form variants of "1" and "2" (0x09, 0x0A) also
+            // narrate only — the spec rewrite excludes those values.
+            0x01 | 0x02 | 0x09 | 0x0A => Some(DungeonSearchWallRewrite::NarrateOnly),
+            _ => Some(DungeonSearchWallRewrite::ToFlavourFind(0xB0 | marker)),
+        },
+        0xD => Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE0 | marker)),
+        _ => None,
+    }
+}
+
 /// `dungeon-mode.md §8`: dungeon chest `Get` consumes the open chest
 /// by clearing its chest class in the loaded dungeon image. The
 /// visit-marker bit (`0x08`) is preserved so a follow-up Search /

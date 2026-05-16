@@ -1,4 +1,49 @@
     #[test]
+    fn dungeon_search_wall_rewrite_classifies_flavour_and_hidden_walls() {
+        // dungeon-mode.md §8
+        // Flavour 0xC1, 0xC2 narrate only.
+        assert_eq!(
+            dungeon_search_wall_rewrite(0xC1),
+            Some(DungeonSearchWallRewrite::NarrateOnly)
+        );
+        assert_eq!(
+            dungeon_search_wall_rewrite(0xC2),
+            Some(DungeonSearchWallRewrite::NarrateOnly)
+        );
+        // Other 0xC? values rewrite to 0xB0, marker preserved.
+        assert_eq!(
+            dungeon_search_wall_rewrite(0xC0),
+            Some(DungeonSearchWallRewrite::ToFlavourFind(0xB0))
+        );
+        assert_eq!(
+            dungeon_search_wall_rewrite(0xC8),
+            Some(DungeonSearchWallRewrite::ToFlavourFind(0xB8))
+        );
+        assert_eq!(
+            dungeon_search_wall_rewrite(0xC3),
+            Some(DungeonSearchWallRewrite::ToFlavourFind(0xB0))
+        );
+        // Hidden-wall 0xD? rewrites to 0xE?, marker preserved.
+        assert_eq!(
+            dungeon_search_wall_rewrite(0xD0),
+            Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE0))
+        );
+        assert_eq!(
+            dungeon_search_wall_rewrite(0xD8),
+            Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE8))
+        );
+        assert_eq!(
+            dungeon_search_wall_rewrite(0xDF),
+            Some(DungeonSearchWallRewrite::ToHiddenWallReveal(0xE8))
+        );
+        // Other classes are not affected by Search.
+        assert_eq!(dungeon_search_wall_rewrite(0x00), None);
+        assert_eq!(dungeon_search_wall_rewrite(0xB0), None);
+        assert_eq!(dungeon_search_wall_rewrite(0xE0), None);
+        assert_eq!(dungeon_search_wall_rewrite(0xF0), None);
+    }
+
+    #[test]
     fn dungeon_chest_post_get_clears_class_preserving_marker() {
         // dungeon-mode.md §8
         // Plain unmarked closed chest -> passage (no marker).
