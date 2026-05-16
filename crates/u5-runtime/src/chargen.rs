@@ -142,6 +142,14 @@ pub const CHARGEN_AVATAR_SEED_STATUS_BYTE: u8 = b'G';
 /// save (Avatar plus Iolo and Shamino in scene 13, Iolo's Hut).
 pub const CHARGEN_STARTING_PARTY_SIZE: u8 = 3;
 
+/// `chargen.md §4` maximum visible characters the name prompt accepts.
+/// The shipped prompt prints "By what name shalt thou be known?" and
+/// opens a free-text input prompt with this many characters of room.
+/// The save record's name field is one byte longer
+/// ([`SAVE_CHARACTER_NAME_LEN`] = 9) so the trailing byte stays as
+/// seed padding when the player enters the maximum length.
+pub const CHARGEN_NAME_INPUT_LIMIT: usize = SAVE_CHARACTER_NAME_LEN - 1;
+
 /// `chargen.md §8` starting map tuple for a fresh-from-questionnaire
 /// save. The chargen writer seeds scene 13 (Iolo's Hut) on floor /
 /// Z 0 at local cell (15, 15) with a zero saved-scene scratch byte.
@@ -227,7 +235,7 @@ fn normalize_chargen_name(
     let mut has_non_space = false;
     for (index, &byte) in name_bytes
         .iter()
-        .take(SAVE_CHARACTER_NAME_LEN - 1)
+        .take(CHARGEN_NAME_INPUT_LIMIT)
         .enumerate()
     {
         if !(0x20..=0x7e).contains(&byte) {

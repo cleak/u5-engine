@@ -1,4 +1,13 @@
     #[test]
+    fn chargen_name_input_limit_is_one_below_record_name_field() {
+        // chargen.md §4: the prompt accepts up to 8 visible characters;
+        // the save record's name field is 9 bytes so the trailing byte
+        // stays as seed padding when the player fills the prompt.
+        assert_eq!(CHARGEN_NAME_INPUT_LIMIT, 8);
+        assert_eq!(CHARGEN_NAME_INPUT_LIMIT, SAVE_CHARACTER_NAME_LEN - 1);
+    }
+
+    #[test]
     fn question_dat_dilemma_record_for_pair_walks_lexicographic_order() {
         // formats/question-dat.md §4 spot-checks against the published
         // ordinal-to-pair table.
