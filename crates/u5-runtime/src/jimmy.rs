@@ -75,6 +75,12 @@ pub const fn jimmy_door_succeeds(member_class: u8, roll_1_to_29: u8) -> bool {
 /// does not apply this increase.
 pub const JIMMY_NPC_PICKPOCKET_KARMA_REWARD: u8 = 2;
 
+/// `doors-and-z-transitions.md §3` shared `+30` bias applied to the
+/// object-chest and dungeon-chest pick thresholds before halving.
+/// Both formulas are `(difficulty - member_class + JIMMY_CHEST_THRESHOLD_BIAS) / 2`,
+/// so the bias is shared spec data rather than a per-formula constant.
+pub const JIMMY_CHEST_THRESHOLD_BIAS: i16 = 30;
+
 /// `doors-and-z-transitions.md §3`: per-map object chest pick. Returns
 /// `None` when the high bit of the object stat is clear (the chest is in
 /// the broken-lock state and no real pick can occur). Otherwise computes
@@ -87,7 +93,7 @@ pub const fn object_chest_jimmy_threshold(object_stat: u8, member_class: u8) -> 
         return None;
     }
     let difficulty = (object_stat & 0x7f) as i16;
-    let raw = difficulty - member_class as i16 + 30;
+    let raw = difficulty - member_class as i16 + JIMMY_CHEST_THRESHOLD_BIAS;
     if raw < 0 {
         Some(0)
     } else {
@@ -99,10 +105,10 @@ pub const fn object_chest_jimmy_succeeds(threshold: u8, roll_1_to_30: u8) -> boo
 }
 
 /// `doors-and-z-transitions.md §3`: dungeon chest pick. Threshold is
-/// `(2*depth - member_class + 30) / 2`; roll is `1..=30` and success
-/// occurs when `roll <= threshold`.
+/// `(2*depth - member_class + JIMMY_CHEST_THRESHOLD_BIAS) / 2`; roll
+/// is `1..=30` and success occurs when `roll <= threshold`.
 pub const fn dungeon_chest_jimmy_threshold(depth: u8, member_class: u8) -> u8 {
-    let raw = (2 * depth as i16) - member_class as i16 + 30;
+    let raw = (2 * depth as i16) - member_class as i16 + JIMMY_CHEST_THRESHOLD_BIAS;
     if raw < 0 {
         0
     } else {

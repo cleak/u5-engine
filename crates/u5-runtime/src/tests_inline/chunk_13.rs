@@ -1,4 +1,25 @@
     #[test]
+    fn jimmy_chest_threshold_bias_is_shared_across_object_and_dungeon_paths() {
+        // doors-and-z-transitions.md §3: both the per-map object
+        // chest and the dungeon chest pick the lock threshold by
+        // `(difficulty - member_class + 30) / 2`. The `+30` bias is
+        // shared spec data and was duplicated as a bare literal in
+        // both helpers. Promote it to JIMMY_CHEST_THRESHOLD_BIAS and
+        // pin the resulting threshold equality for matching inputs.
+        assert_eq!(JIMMY_CHEST_THRESHOLD_BIAS, 30);
+        // A 2*depth value equal to an object difficulty produces the
+        // same threshold for the same member-class. Use difficulty
+        // 8 (object stat 0x88) versus dungeon depth 4 (`2*4 = 8`).
+        let object_stat = 0x80 | 8u8;
+        let dungeon_depth = 4u8;
+        for class in 0u8..30 {
+            let obj = object_chest_jimmy_threshold(object_stat, class).unwrap();
+            let dun = dungeon_chest_jimmy_threshold(dungeon_depth, class);
+            assert_eq!(obj, dun, "class {class}: object {obj} vs dungeon {dun}");
+        }
+    }
+
+    #[test]
     fn karma_dat_band_width_matches_rescue_and_camp_selectors() {
         // blackthorn.md §7 and formats/karma-dat.md §4 describe the
         // KARMA.DAT verdict selectors as five (or six) twenty-point
