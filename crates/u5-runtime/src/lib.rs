@@ -270,10 +270,11 @@ pub use main_loop::{
 pub use lighting::{
     DUNGEON_TORCH_INCREMENT_MAX, DUNGEON_TORCH_INCREMENT_MIN,
     GREAT_LIGHT_SPELL_DURATION, LIGHT_SPELL_DURATION, LightDecayCadence,
-    OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG, OVERWORLD_UNDERFOOT_BLACKOUT_TILE,
-    ambient_is_sentinel, apply_personal_light, daylight_base_value,
-    decay_light_counter, dungeon_blackout, ignite_torch_dungeon, ignite_torch_surface,
-    light_counter_increment, light_counter_spend_with_tag,
+    MOONGATE_ANIMATOR_DAYTIME_THRESHOLD, OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG,
+    OVERWORLD_UNDERFOOT_BLACKOUT_TILE, ambient_is_sentinel, apply_personal_light,
+    daylight_base_value, decay_light_counter, dungeon_blackout,
+    ignite_torch_dungeon, ignite_torch_surface, light_counter_increment,
+    light_counter_spend_with_tag, moongate_animator_render_eligible,
     overworld_underfoot_forces_dark,
 };
 pub use endmsg_io::{

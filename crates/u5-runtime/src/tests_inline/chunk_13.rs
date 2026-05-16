@@ -1,4 +1,29 @@
     #[test]
+    fn moongate_animator_render_eligibility_gates_at_full_daylight() {
+        // overworld.md §natural-gates: the per-frame natural-moongate
+        // animator only stamps a frame when the ambient light is at
+        // or above the daytime threshold (= FULL_DAYLIGHT). Below
+        // that threshold it resets its phase instead.
+        assert_eq!(MOONGATE_ANIMATOR_DAYTIME_THRESHOLD, FULL_DAYLIGHT);
+        assert!(!moongate_animator_render_eligible(FULL_DARKNESS));
+        assert!(!moongate_animator_render_eligible(0));
+        assert!(!moongate_animator_render_eligible(FULL_DAYLIGHT - 1));
+        // Cells at the threshold are eligible; sentinel ambient
+        // bytes (51+) are also above the threshold.
+        assert!(moongate_animator_render_eligible(FULL_DAYLIGHT));
+        assert!(moongate_animator_render_eligible(DAYLIGHT_SENTINEL_MIN));
+        assert!(moongate_animator_render_eligible(u8::MAX));
+        // Dawn/dusk gradient: only the final daytime-floor step
+        // matches at FULL_DAYLIGHT itself; lower steps are below.
+        for level in DAWN_DUSK_LIGHT {
+            assert_eq!(
+                moongate_animator_render_eligible(level),
+                level >= FULL_DAYLIGHT
+            );
+        }
+    }
+
+    #[test]
     fn water_creature_body_retrieval_constants_match_spec() {
         // active-objects.md §9: after combat exits with the body
         // exit-message state, a restored water-creature trigger slot
