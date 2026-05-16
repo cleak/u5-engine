@@ -1,4 +1,23 @@
     #[test]
+    fn blackthorn_rescue_post_print_standing_clamps_to_floor() {
+        // karma.md §6: after the rescue path prints its verdict, the
+        // moral-standing selector is raised to at least 75. Inputs
+        // at or above the floor pass through unchanged.
+        assert_eq!(blackthorn_rescue_post_print_standing(0), 75);
+        assert_eq!(blackthorn_rescue_post_print_standing(74), 75);
+        assert_eq!(
+            blackthorn_rescue_post_print_standing(BLACKTHORN_RESCUE_STANDING_FLOOR),
+            BLACKTHORN_RESCUE_STANDING_FLOOR
+        );
+        assert_eq!(blackthorn_rescue_post_print_standing(75), 75);
+        assert_eq!(blackthorn_rescue_post_print_standing(76), 76);
+        assert_eq!(blackthorn_rescue_post_print_standing(99), 99);
+        // 99 is the published selector cap, but the helper does not
+        // re-cap: it only enforces the floor.
+        assert_eq!(blackthorn_rescue_post_print_standing(255), 255);
+    }
+
+    #[test]
     fn wind_setter_outcome_makes_calm_to_calm_a_noop() {
         // weather.md §3: the shared wind setter treats Calm → Calm as
         // a no-op; every other accepted transition plays the wind

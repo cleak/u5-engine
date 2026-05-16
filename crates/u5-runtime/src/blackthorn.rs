@@ -191,3 +191,15 @@ pub const fn blackthorn_rescue_verdict_record(standing: u8) -> u8 {
         _ => 4,
     }
 }
+
+/// `karma.md §6` rescue/refuge post-print standing bump. After the
+/// rescue path prints its selected verdict record, the moral-standing
+/// selector is raised to at least [`BLACKTHORN_RESCUE_STANDING_FLOOR`].
+/// Returns the input when it already meets or exceeds the floor.
+pub const fn blackthorn_rescue_post_print_standing(standing: u8) -> u8 {
+    if standing < BLACKTHORN_RESCUE_STANDING_FLOOR {
+        BLACKTHORN_RESCUE_STANDING_FLOOR
+    } else {
+        standing
+    }
+}
