@@ -32,6 +32,27 @@
     }
 
     #[test]
+    fn npc_dynamic_obstacle_blocks_within_radius_strictly() {
+        // npc-schedules.md §10: occupants strictly inside the
+        // dynamic-obstacle radius (Manhattan distance < 4) are
+        // reported as blocked; occupants at or beyond the radius
+        // are treated as walkable by the pathfinding workspace.
+        let dest_x = 16;
+        let dest_y = 12;
+        // Same cell: distance 0 -> blocked.
+        assert!(npc_dynamic_obstacle_blocks(dest_x, dest_y, dest_x, dest_y));
+        // Manhattan 3 < 4 -> blocked.
+        assert!(npc_dynamic_obstacle_blocks(dest_x + 1, dest_y + 2, dest_x, dest_y));
+        assert!(npc_dynamic_obstacle_blocks(dest_x - 3, dest_y, dest_x, dest_y));
+        // Manhattan 4 -> not blocked (boundary is exclusive).
+        assert!(!npc_dynamic_obstacle_blocks(dest_x + 4, dest_y, dest_x, dest_y));
+        assert!(!npc_dynamic_obstacle_blocks(dest_x + 2, dest_y - 2, dest_x, dest_y));
+        // Manhattan 5+: well outside.
+        assert!(!npc_dynamic_obstacle_blocks(dest_x + 5, dest_y, dest_x, dest_y));
+        assert!(!npc_dynamic_obstacle_blocks(0, 0, dest_x, dest_y));
+    }
+
+    #[test]
     fn npc_schedule_state_probe_and_step_groups_match_spec() {
         // npc-schedules.md §7: the five "probe and step" states are
         // InPlaneMove, DescendTowardTarget, AscendTowardTarget,

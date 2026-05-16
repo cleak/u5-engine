@@ -429,7 +429,8 @@ pub use npc_runtime::{
     npc_dialog_id_kind, npc_link_action, npc_path_direction_offset,
     npc_path_direction_opposite, npc_schedule_state_classify,
     npc_schedule_state_for_floor_transition, npc_shop_trigger,
-    npc_state_off_floor_or_empty, npc_stuck_counter_forces_replan,
+    npc_dynamic_obstacle_blocks, npc_state_off_floor_or_empty,
+    npc_stuck_counter_forces_replan,
     npc_type_byte_class, npc_type_byte_occupied, schedule_floor_state,
 };
 pub use party::{

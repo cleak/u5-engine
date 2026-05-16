@@ -517,6 +517,31 @@ pub const NPC_STUCK_REPLAN_THRESHOLD: u16 = 3;
 /// walkable by the pathfinding workspace.
 pub const NPC_DYNAMIC_OBSTACLE_MANHATTAN_RADIUS: usize = 4;
 
+/// `npc-schedules.md §10`: returns `true` when an occupied active-
+/// object cell falls within the dynamic-obstacle scan radius around
+/// the NPC's runtime destination. Occupants strictly inside the
+/// radius (Manhattan distance `<` the radius) are reported as
+/// blocked; occupants at or beyond the radius are treated as
+/// walkable by the pathfinding workspace.
+pub const fn npc_dynamic_obstacle_blocks(
+    occupant_x: i32,
+    occupant_y: i32,
+    destination_x: i32,
+    destination_y: i32,
+) -> bool {
+    let dx = if occupant_x > destination_x {
+        occupant_x - destination_x
+    } else {
+        destination_x - occupant_x
+    };
+    let dy = if occupant_y > destination_y {
+        occupant_y - destination_y
+    } else {
+        destination_y - occupant_y
+    };
+    (dx + dy) < NPC_DYNAMIC_OBSTACLE_MANHATTAN_RADIUS as i32
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeNpc {
     pub slot: usize,
