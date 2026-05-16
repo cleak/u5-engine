@@ -628,6 +628,47 @@ pub enum DungeonCellClass {
     HeavyDoorOrRoomTrigger,
 }
 
+/// `dungeon-mode.md §13` Z-axis floor bounds. Dungeon levels are
+/// indexed `0..=7` with zero at the top and seven at the deepest
+/// floor. K-Klimb refuses to step above level zero or below level
+/// seven; the pit-chain off-bottom path is the only Z mutation that
+/// can leave the level byte at the incremented value above seven.
+pub const DUNGEON_LEVEL_TOP: u8 = 0;
+pub const DUNGEON_LEVEL_BOTTOM: u8 = 7;
+
+/// `dungeon-mode.md §13` K-Klimb requested Z direction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KlimbDirection {
+    /// Up ladder step — decrement Z toward the surface.
+    Up,
+    /// Down ladder step — increment Z toward the deepest floor.
+    Down,
+}
+
+/// `dungeon-mode.md §13`: apply a K-Klimb ladder step. Returns the
+/// new Z when the step is accepted, or `None` when the apply path
+/// refuses (already at level zero for Up, already at level seven
+/// for Down). Caller should still test the destination cell with
+/// the obstruction check before honouring the new Z.
+pub const fn dungeon_klimb_z_step(z: u8, direction: KlimbDirection) -> Option<u8> {
+    match direction {
+        KlimbDirection::Up => {
+            if z > DUNGEON_LEVEL_TOP {
+                Some(z - 1)
+            } else {
+                None
+            }
+        }
+        KlimbDirection::Down => {
+            if z < DUNGEON_LEVEL_BOTTOM {
+                Some(z + 1)
+            } else {
+                None
+            }
+        }
+    }
+}
+
 /// `dungeon-mode.md §12` V-View minimap flood expansion rule. The
 /// per-cell painter returns "expand" for most classes after painting
 /// the glyph; only the wall presentation classes `0xB?`, `0xC?`, and

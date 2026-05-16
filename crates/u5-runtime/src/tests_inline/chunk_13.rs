@@ -1,4 +1,22 @@
     #[test]
+    fn dungeon_klimb_z_step_respects_level_bounds() {
+        // dungeon-mode.md §13
+        // Up from interior levels.
+        assert_eq!(dungeon_klimb_z_step(7, KlimbDirection::Up), Some(6));
+        assert_eq!(dungeon_klimb_z_step(1, KlimbDirection::Up), Some(0));
+        // Up from top refuses.
+        assert_eq!(dungeon_klimb_z_step(0, KlimbDirection::Up), None);
+        // Down from interior levels.
+        assert_eq!(dungeon_klimb_z_step(0, KlimbDirection::Down), Some(1));
+        assert_eq!(dungeon_klimb_z_step(6, KlimbDirection::Down), Some(7));
+        // Down from bottom refuses.
+        assert_eq!(dungeon_klimb_z_step(7, KlimbDirection::Down), None);
+        // Bounds constants.
+        assert_eq!(DUNGEON_LEVEL_TOP, 0);
+        assert_eq!(DUNGEON_LEVEL_BOTTOM, 7);
+    }
+
+    #[test]
     fn dungeon_minimap_flood_expands_except_through_walls() {
         // dungeon-mode.md §12
         // Wall presentation classes stop the flood walker.
