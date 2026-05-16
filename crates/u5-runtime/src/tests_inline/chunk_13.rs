@@ -1,4 +1,23 @@
     #[test]
+    fn u4_transfer_no_transferable_data_fires_only_when_all_zero() {
+        // u4-transfer.md §5
+        assert_eq!(U4_TRANSFER_VIRTUE_STANDING_COUNT, 8);
+        // All zero -> guard fires.
+        assert!(u4_transfer_no_transferable_data(&[0u16; 8]));
+        assert!(u4_transfer_no_transferable_data(&[]));
+        // Any nonzero word allows normal preview.
+        assert!(!u4_transfer_no_transferable_data(&[
+            1u16, 0, 0, 0, 0, 0, 0, 0
+        ]));
+        assert!(!u4_transfer_no_transferable_data(&[
+            0u16, 0, 0, 0, 0, 0, 0, 50
+        ]));
+        assert!(!u4_transfer_no_transferable_data(&[
+            10u16, 20, 30, 40, 50, 60, 70, 80
+        ]));
+    }
+
+    #[test]
     fn save_prompt_decision_accepts_only_yn() {
         // save-load.md §5.2
         assert_eq!(save_prompt_decision(b'Y'), Some(true));

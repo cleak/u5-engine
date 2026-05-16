@@ -103,6 +103,21 @@ impl std::fmt::Display for U4TransferError {
 
 impl std::error::Error for U4TransferError {}
 
+/// `u4-transfer.md §5` virtue-standing word count tested by the
+/// "no transferable data" guard. The transfer reads the eight
+/// consecutive virtue/karma standing words for Honesty, Compassion,
+/// Valor, Justice, Sacrifice, Honor, Spirituality, and Humility.
+pub const U4_TRANSFER_VIRTUE_STANDING_COUNT: usize = 8;
+
+/// `u4-transfer.md §5`: returns `true` when the transfer guard
+/// should present the "no transferable data" branch instead of the
+/// normal preview. The guard fires only when every virtue-standing
+/// word in the supplied buffer is zero. Any nonzero word allows
+/// the normal transfer preview to proceed.
+pub fn u4_transfer_no_transferable_data(virtue_standings: &[u16]) -> bool {
+    virtue_standings.iter().all(|&word| word == 0)
+}
+
 pub fn u4_transfer_class_byte(class_index: u8) -> Option<u8> {
     match class_index {
         0 => Some(b'M'),
