@@ -1,4 +1,23 @@
     #[test]
+    fn hidden_treasure_record_special_gates_match_spec() {
+        // hidden-treasures.md §2
+        // Record 13: requires keys >= 1 and not NPC-occupied.
+        assert!(hidden_treasure_record_13_accepts(1, false));
+        assert!(hidden_treasure_record_13_accepts(99, false));
+        assert!(!hidden_treasure_record_13_accepts(0, false));
+        assert!(!hidden_treasure_record_13_accepts(1, true));
+        // Record 14: stages once per in-game day.
+        assert!(hidden_treasure_record_14_ready(0, 5));
+        assert!(hidden_treasure_record_14_ready(4, 5));
+        assert!(!hidden_treasure_record_14_ready(5, 5));
+        // Record 15: single-use flag must be clear; no NPC.
+        assert!(hidden_treasure_record_15_accepts(false, false));
+        assert!(!hidden_treasure_record_15_accepts(true, false));
+        assert!(!hidden_treasure_record_15_accepts(false, true));
+        assert!(!hidden_treasure_record_15_accepts(true, true));
+    }
+
+    #[test]
     fn chargen_avatar_seed_header_matches_chargen_md_section_8() {
         // chargen.md §8
         assert_eq!(CHARGEN_AVATAR_SEED_CURRENT_HP, 60);

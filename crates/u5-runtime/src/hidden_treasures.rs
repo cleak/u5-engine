@@ -7,6 +7,30 @@ pub const HIDDEN_TREASURE_RECORD_KEY_NPC_GATED: usize = 13;
 pub const HIDDEN_TREASURE_RECORD_DAILY_CACHE: usize = 14;
 pub const HIDDEN_TREASURE_RECORD_SINGLE_USE_NPC_GATED: usize = 15;
 
+/// `hidden-treasures.md §2` record 13 stage-acceptance gate. Search
+/// stages this record only when the party owns at least one
+/// ordinary key and the searched cell is not occupied by an NPC.
+pub const fn hidden_treasure_record_13_accepts(keys: u8, npc_present: bool) -> bool {
+    keys >= 1 && !npc_present
+}
+
+/// `hidden-treasures.md §2` record 14 daily-cooldown gate. Search
+/// stages the record at most once per in-game day; the saved
+/// cooldown cookie holds the last day the record fired (or
+/// `FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY` = 0 when never staged).
+/// A successful stage stores the current day; subsequent searches
+/// the same day are rejected.
+pub const fn hidden_treasure_record_14_ready(stored_day: u8, current_day: u8) -> bool {
+    stored_day != current_day
+}
+
+/// `hidden-treasures.md §2` record 15 stage-acceptance gate. Search
+/// stages this record only when its single-use flag is still clear
+/// and the searched cell is not occupied by an NPC.
+pub const fn hidden_treasure_record_15_accepts(single_use_flag: bool, npc_present: bool) -> bool {
+    !single_use_flag && !npc_present
+}
+
 /// `hidden-treasures.md §3` distinct pickup classes that appear in
 /// the fixed 113-record table. The class drives Get's downstream
 /// inventory-add dispatch; the State column is per-record subtype.

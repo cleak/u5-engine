@@ -169,7 +169,9 @@ pub use hidden_treasures::{
     HIDDEN_TREASURE_UNDERWORLD_STACK_LAST, HIDDEN_TREASURE_UNDERWORLD_STACK_LEN,
     HIDDEN_TREASURE_UNDERWORLD_STACK_WEAPON_STATE, HIDDEN_TREASURE_UNDERWORLD_STACK_X,
     HIDDEN_TREASURE_UNDERWORLD_STACK_Y, HiddenTreasurePickupClass, HiddenTreasureRule,
-    hidden_treasure_can_stage, hidden_treasure_rule, underworld_stack_record,
+    hidden_treasure_can_stage, hidden_treasure_record_13_accepts,
+    hidden_treasure_record_14_ready, hidden_treasure_record_15_accepts,
+    hidden_treasure_rule, underworld_stack_record,
 };
 pub use input_codes::{
     CURSOR_BLINK_BASE_GLYPH, CURSOR_BLINK_MODULUS, INPUT_CODE_EAST, INPUT_CODE_F1,
