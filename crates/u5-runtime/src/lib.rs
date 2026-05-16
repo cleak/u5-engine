@@ -230,10 +230,10 @@ pub use jimmy::{
     overworld_klimb_entry_gate,
 };
 pub use karma::{
-    CODEX_TURNIN_STAT_CAP, CODEX_TURNIN_STAT_INCREMENT, KarmaAction,
-    RESURRECTION_PENALTY_SKIP_THRESHOLD, SHRINE_MANTRA_INPUT_LIMIT, apply_karma_action,
-    codex_turnin_stat_reward, resurrection_penalty_skipped, resurrection_scaled_xp,
-    shrine_mantra_for,
+    CODEX_TURNIN_STAT_CAP, CODEX_TURNIN_STAT_INCREMENT, KARMA_CROP_OR_TABLE_FOOD_DEBIT,
+    KarmaAction, RESURRECTION_PENALTY_SKIP_THRESHOLD, SHRINE_MANTRA_INPUT_LIMIT,
+    apply_karma_action, codex_turnin_stat_reward, resurrection_penalty_skipped,
+    resurrection_scaled_xp, shrine_mantra_for,
 };
 pub use lord_british_camp::{
     LORD_BRITISH_CAMP_EVENT_ROLL_BOUND, LORD_BRITISH_CAMP_EVENT_THRESHOLD,

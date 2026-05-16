@@ -1,4 +1,18 @@
     #[test]
+    fn karma_crop_or_table_food_debit_is_one() {
+        // karma.md §4: picking a crop cell or eating reachable table
+        // food reduces the shared moral-standing selector by one
+        // (when nonzero). Promote the value to a named constant so
+        // the table-food handler and the karma action table do not
+        // bake it as a bare `1` / `-1`.
+        assert_eq!(KARMA_CROP_OR_TABLE_FOOD_DEBIT, 1);
+        assert_eq!(
+            KarmaAction::CropOrTableFoodTaken.signed_delta(),
+            -(KARMA_CROP_OR_TABLE_FOOD_DEBIT as i16)
+        );
+    }
+
+    #[test]
     fn shrine_codex_turn_in_moral_increase_is_three() {
         // karma.md §4: shrine Codex turn-in adds +3 to the shared
         // moral-standing selector (and to the per-virtue shrine

@@ -45,7 +45,7 @@ impl KarmaAction {
                 }
             }
             KarmaAction::TownChestOpened => -2,
-            KarmaAction::CropOrTableFoodTaken => -1,
+            KarmaAction::CropOrTableFoodTaken => -(KARMA_CROP_OR_TABLE_FOOD_DEBIT as i16),
             KarmaAction::TownCannonHit => -5,
             KarmaAction::HelpedNpcThankYou => 2,
             KarmaAction::TollMilestone {
@@ -60,6 +60,13 @@ impl KarmaAction {
         }
     }
 }
+
+/// `karma.md §4` shared moral-standing debit applied when the party
+/// picks a crop cell or eats reachable table food. The selector is
+/// reduced by this many units (floored at zero) on each successful
+/// take; if the selector is already zero, the path is a no-op rather
+/// than a wrap.
+pub const KARMA_CROP_OR_TABLE_FOOD_DEBIT: u8 = 1;
 
 /// `karma.md §7` shrine meditation mantra-input cap. The handler
 /// reads up to twelve characters before comparing against the

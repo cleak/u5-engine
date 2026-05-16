@@ -979,7 +979,9 @@ impl PlayState {
 
         self.grid[idx] = replacement;
         self.food = self.food.saturating_add(1);
-        self.moral_standing = self.moral_standing.saturating_sub(1);
+        self.moral_standing = self
+            .moral_standing
+            .saturating_sub(KARMA_CROP_OR_TABLE_FOOD_DEBIT);
         self.mark_visibility_dirty();
         self.advance_turn();
         self.message = format!(
