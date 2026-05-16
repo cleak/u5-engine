@@ -24,6 +24,38 @@ pub const VISIBILITY_CLEAR: u8 = 0xDD;
 pub const VISIBILITY_DIM_PERIPHERY: u8 = 0x1C;
 pub const VISIBILITY_ALREADY_RENDERED: u8 = 0x87;
 
+/// `visibility.md §3` light-radius branch the producer takes after
+/// reading the (signed) `light_radius` byte.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VisibilityRadiusBranch {
+    /// Negative byte (high bit set, value `0x80..=0xFF`) — debug
+    /// full-fill path: every cell is painted from the world map
+    /// regardless of the visibility carve. No shipped scene drives
+    /// this branch.
+    FullFill,
+    /// Zero — total darkness. The grid stays fully obscured;
+    /// the visibility carve does not run.
+    TotalDarkness,
+    /// Positive (`0x01..=0x7F`) — normal case. The visibility
+    /// carve runs with the radius value.
+    NormalCarve,
+}
+
+/// `visibility.md §3`: classify the producer's light-radius
+/// branch from the byte the lighting subsystem maintains. The byte
+/// is treated as signed: high-bit-set values take the full-fill
+/// branch, zero takes total darkness, and any other low-bit-clear
+/// value runs the normal carve.
+pub const fn visibility_radius_branch(light_radius: u8) -> VisibilityRadiusBranch {
+    if light_radius & 0x80 != 0 {
+        VisibilityRadiusBranch::FullFill
+    } else if light_radius == 0 {
+        VisibilityRadiusBranch::TotalDarkness
+    } else {
+        VisibilityRadiusBranch::NormalCarve
+    }
+}
+
 /// `visibility.md §2` semantic classification of a visibility-grid byte.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VisibilityMarker {

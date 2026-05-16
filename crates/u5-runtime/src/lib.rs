@@ -423,6 +423,7 @@ pub use visibility::{
     VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE, VISIBILITY_ALREADY_RENDERED,
     VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR, VISIBILITY_DIM_PERIPHERY,
     VISIBILITY_HIDDEN, VISIBILITY_USE_COMPANION, VisibilityMarker,
+    VisibilityRadiusBranch, visibility_radius_branch,
     active_object_compositor_branch, fog_refine_folded_coord,
     fog_refine_inside_clear_core, fog_refine_squared_distance,
     is_local_light_source_tile, light_radius_branch, visibility_in_radius,

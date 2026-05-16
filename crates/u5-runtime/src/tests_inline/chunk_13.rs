@@ -1,4 +1,28 @@
     #[test]
+    fn visibility_radius_branch_classifies_signed_byte() {
+        // visibility.md §3
+        // Zero -> total darkness.
+        assert_eq!(
+            visibility_radius_branch(0),
+            VisibilityRadiusBranch::TotalDarkness
+        );
+        // Positive (0x01..=0x7F) -> normal carve.
+        for r in [1u8, 5, 18, 50, 0x7F] {
+            assert_eq!(
+                visibility_radius_branch(r),
+                VisibilityRadiusBranch::NormalCarve
+            );
+        }
+        // High-bit set -> full-fill (debug branch).
+        for r in [0x80u8, 0x81, 0xC0, 0xFF] {
+            assert_eq!(
+                visibility_radius_branch(r),
+                VisibilityRadiusBranch::FullFill
+            );
+        }
+    }
+
+    #[test]
     fn outdoor_step_clears_on_destination_targets_moongate_tile() {
         // active-objects.md §8 + overworld.md §9
         assert_eq!(OUTDOOR_STEP_CLEAR_DESTINATION_TILE, 0xDC);
