@@ -1009,6 +1009,19 @@ pub const SAGE_TOPIC_INPUT_LIMIT: usize = 15;
 /// sage matches typed input case-insensitively against this list
 /// with a strict topic-boundary check (the next input character must
 /// be end-of-input or a space).
+/// `shops.md §2` horse-trader Talk dialog id. Ordinary shops refuse
+/// to open their menu when the party is mounted on a horse; only
+/// the horse-trader vehicle-sale arm (`0x83`) remains available.
+pub const HORSE_TRADER_DIALOG_ID: u8 = 0x83;
+
+/// `shops.md §2` mounted-horse shop-entry gate. Returns `true` when
+/// the shop arm should refuse to open because the party is mounted
+/// on a horse and the target shop is not the horse trader. The horse
+/// trader is the only shop dialog id allowed while mounted.
+pub const fn shop_refuses_mounted_horse(dialog_id: u8, mounted_on_horse: bool) -> bool {
+    mounted_on_horse && dialog_id != HORSE_TRADER_DIALOG_ID
+}
+
 /// `shops.md §8.10` stationary-display purchase prompt outcome.
 /// The Y/N loop accepts `Y` (offer and confirm), `N` or Space
 /// (exit), and silently re-prompts on any other byte.

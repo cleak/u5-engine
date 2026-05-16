@@ -32,6 +32,27 @@
     }
 
     #[test]
+    fn shop_refuses_mounted_horse_except_at_horse_trader() {
+        // shops.md §2: ordinary shop arms refuse before opening
+        // their menu when the party is mounted on a horse; only the
+        // horse-trader dialog id (0x83) is reachable on horseback.
+        assert_eq!(HORSE_TRADER_DIALOG_ID, 0x83);
+        // On foot: nothing refuses.
+        for dialog in 0x81u8..=0x88 {
+            assert!(!shop_refuses_mounted_horse(dialog, false));
+        }
+        // Mounted: every shop except 0x83 refuses.
+        for dialog in 0x81u8..=0x88 {
+            let expected_refusal = dialog != HORSE_TRADER_DIALOG_ID;
+            assert_eq!(
+                shop_refuses_mounted_horse(dialog, true),
+                expected_refusal,
+                "dialog {dialog:#04x}"
+            );
+        }
+    }
+
+    #[test]
     fn stationary_display_prompt_classifies_y_n_space_and_discards_others() {
         // shops.md §8.10: the stationary-display purchase Y/N loop
         // accepts Y (offer), N or Space (exit), and silently
