@@ -7,6 +7,45 @@
     }
 
     #[test]
+    fn healer_service_action_accepts_c_h_r_and_exit_keys() {
+        // shops.md §8.3
+        assert_eq!(
+            healer_service_action(b'C'),
+            HealerServiceAction::Treatment(HealerTreatment::Cure)
+        );
+        assert_eq!(
+            healer_service_action(b'c'),
+            HealerServiceAction::Treatment(HealerTreatment::Cure)
+        );
+        assert_eq!(
+            healer_service_action(b'H'),
+            HealerServiceAction::Treatment(HealerTreatment::Heal)
+        );
+        assert_eq!(
+            healer_service_action(b'h'),
+            HealerServiceAction::Treatment(HealerTreatment::Heal)
+        );
+        assert_eq!(
+            healer_service_action(b'R'),
+            HealerServiceAction::Treatment(HealerTreatment::Resurrect)
+        );
+        assert_eq!(
+            healer_service_action(b'r'),
+            HealerServiceAction::Treatment(HealerTreatment::Resurrect)
+        );
+        assert_eq!(healer_service_action(b' '), HealerServiceAction::Exit);
+        assert_eq!(healer_service_action(b'\r'), HealerServiceAction::Exit);
+        assert_eq!(healer_service_action(b'\n'), HealerServiceAction::Exit);
+        for byte in [b'A', b'D', b'M', b'S', b'X', b'Y', b'N', 0x00, 0x08, 0x1B, 0xFF] {
+            assert_eq!(
+                healer_service_action(byte),
+                HealerServiceAction::Discard,
+                "byte {byte:#04x}"
+            );
+        }
+    }
+
+    #[test]
     fn shipwright_menu_action_accepts_f_s_and_exit_keys() {
         // shops.md §8.7
         assert_eq!(

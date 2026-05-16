@@ -410,6 +410,35 @@ impl HealerTreatment {
     }
 }
 
+/// `shops.md §8.3` healer service-menu outcome. After the entry
+/// `Y`/`N` prompt accepts, the healer's service menu polls one
+/// keystroke: `C` Cure, `H` Heal, `R` Resurrect, Space or Return
+/// exits, anything else re-prompts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HealerServiceAction {
+    /// `C` (case-insensitive) — Cure: remove Poisoned status.
+    Treatment(HealerTreatment),
+    /// Space or Return — leave the service menu and print the
+    /// exit line.
+    Exit,
+    /// Any other byte — silently re-prompt.
+    Discard,
+}
+
+/// `shops.md §8.3`: classify one keystroke for the healer service
+/// menu. The caller has already applied the input case fold; this
+/// helper also accepts the lower-case `c` / `h` / `r` variants for
+/// uppercase-naive callers.
+pub const fn healer_service_action(byte: u8) -> HealerServiceAction {
+    match byte {
+        b'C' | b'c' => HealerServiceAction::Treatment(HealerTreatment::Cure),
+        b'H' | b'h' => HealerServiceAction::Treatment(HealerTreatment::Heal),
+        b'R' | b'r' => HealerServiceAction::Treatment(HealerTreatment::Resurrect),
+        b' ' | b'\r' | b'\n' => HealerServiceAction::Exit,
+        _ => HealerServiceAction::Discard,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HealerTreatmentFee {
     Bypass,
