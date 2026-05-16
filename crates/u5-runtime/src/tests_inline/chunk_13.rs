@@ -16,6 +16,14 @@
     }
 
     #[test]
+    fn sceptre_barrier_constants_match_catalog() {
+        // catalogs/item-list.md §8
+        assert_eq!(SCEPTRE_BARRIER_TILE_FIRST, 0x70);
+        assert_eq!(SCEPTRE_BARRIER_TILE_LAST, 0x7F);
+        assert_eq!(SCEPTRE_BARRIER_DISSOLVED_TILE, 0x44);
+    }
+
+    #[test]
     fn white_potion_sweep_constants_match_catalog() {
         // catalogs/item-list.md §7.2
         assert_eq!(POTION_WHITE_SWEEP_FRAMES, 20);

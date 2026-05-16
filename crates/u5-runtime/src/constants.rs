@@ -331,6 +331,15 @@ pub const POTION_PURPLE_INDEX: usize = 5;
 pub const POTION_BLACK_INDEX: usize = 6;
 pub const POTION_WHITE_INDEX: usize = 7;
 
+/// `catalogs/item-list.md §8` Sceptre of Lord British dissolves
+/// the top-down barrier/field family `0x70..=0x7F` into ordinary
+/// open ground `0x44` (cobble). The U-Use scan walks the
+/// party-centered nearby square and rewrites each accepted cell
+/// in place with the redraw / effect presentation.
+pub const SCEPTRE_BARRIER_TILE_FIRST: u8 = 0x70;
+pub const SCEPTRE_BARRIER_TILE_LAST: u8 = 0x7F;
+pub const SCEPTRE_BARRIER_DISSOLVED_TILE: u8 = 0x44;
+
 /// `catalogs/item-list.md §7.2` White-potion surface visibility-sweep
 /// frame count. In overworld and named interior scenes the white
 /// potion runs a twenty-frame visibility/animation sweep centred on

@@ -233,10 +233,10 @@ impl PlayState {
         let Some(index) = self.top_down_grid_index(x, y) else {
             return false;
         };
-        if !(0x70..=0x7f).contains(&self.grid[index]) {
+        if !(SCEPTRE_BARRIER_TILE_FIRST..=SCEPTRE_BARRIER_TILE_LAST).contains(&self.grid[index]) {
             return false;
         }
-        self.grid[index] = 0x44;
+        self.grid[index] = SCEPTRE_BARRIER_DISSOLVED_TILE;
         true
     }
 
