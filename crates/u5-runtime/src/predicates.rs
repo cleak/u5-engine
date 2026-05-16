@@ -673,6 +673,36 @@ pub const RANDOM_ENCOUNTER_NIGHT_HOUR_LAST: u8 = 4;
 /// underworld uses this value regardless of hour or tile.
 pub const RANDOM_ENCOUNTER_UNDERWORLD_THRESHOLD: u8 = 3;
 
+/// `encounters.md §3` surface no-encounter tile band (roads and similar
+/// safe surfaces). Tiles in this range suppress daytime encounters and
+/// take the smallest night-time boost.
+pub const RANDOM_ENCOUNTER_SAFE_TILE_FIRST: u8 = 0x20;
+pub const RANDOM_ENCOUNTER_SAFE_TILE_LAST: u8 = 0x26;
+
+/// `encounters.md §3` daytime threshold for the safe-tile band. Zero
+/// means the probe cannot fire at all during the day on these tiles.
+pub const RANDOM_ENCOUNTER_SAFE_DAY_THRESHOLD: u8 = 0;
+/// `encounters.md §3` night-time threshold for the safe-tile band
+/// (hours `0..=RANDOM_ENCOUNTER_NIGHT_HOUR_LAST`).
+pub const RANDOM_ENCOUNTER_SAFE_NIGHT_THRESHOLD: u8 = 3;
+
+/// `encounters.md §3` surface wilderness/swamp tile (`0x04`).
+pub const RANDOM_ENCOUNTER_WILDERNESS_SWAMP: u8 = 0x04;
+/// `encounters.md §3` surface wilderness band first tile (`0x09`).
+pub const RANDOM_ENCOUNTER_WILDERNESS_BAND_FIRST: u8 = 0x09;
+/// `encounters.md §3` surface wilderness band last tile (`0x0F`).
+pub const RANDOM_ENCOUNTER_WILDERNESS_BAND_LAST: u8 = 0x0F;
+/// `encounters.md §3` daytime threshold for wilderness/swamp tiles.
+pub const RANDOM_ENCOUNTER_WILDERNESS_DAY_THRESHOLD: u8 = 2;
+/// `encounters.md §3` night-time threshold for wilderness/swamp tiles.
+pub const RANDOM_ENCOUNTER_WILDERNESS_NIGHT_THRESHOLD: u8 = 5;
+
+/// `encounters.md §3` daytime threshold for any other surface tile not
+/// in the safe band or the wilderness/swamp band.
+pub const RANDOM_ENCOUNTER_DEFAULT_DAY_THRESHOLD: u8 = 1;
+/// `encounters.md §3` night-time threshold for any other surface tile.
+pub const RANDOM_ENCOUNTER_DEFAULT_NIGHT_THRESHOLD: u8 = 4;
+
 /// `overworld.md §7`: returns `true` when the random-encounter probe
 /// fires for the given threshold and uniform `1..=RANDOM_ENCOUNTER_DIE`
 /// draw. The spawner runs when `threshold` is nonzero and strictly
@@ -687,14 +717,27 @@ pub const fn random_encounter_threshold(underworld: bool, tile: u8, hour: u8) ->
     }
     let night = hour <= RANDOM_ENCOUNTER_NIGHT_HOUR_LAST;
     match tile {
-        0x20..=0x26 => {
-            if night { 3 } else { 0 }
+        RANDOM_ENCOUNTER_SAFE_TILE_FIRST..=RANDOM_ENCOUNTER_SAFE_TILE_LAST => {
+            if night {
+                RANDOM_ENCOUNTER_SAFE_NIGHT_THRESHOLD
+            } else {
+                RANDOM_ENCOUNTER_SAFE_DAY_THRESHOLD
+            }
         }
-        0x04 | 0x09..=0x0F => {
-            if night { 5 } else { 2 }
+        RANDOM_ENCOUNTER_WILDERNESS_SWAMP
+        | RANDOM_ENCOUNTER_WILDERNESS_BAND_FIRST..=RANDOM_ENCOUNTER_WILDERNESS_BAND_LAST => {
+            if night {
+                RANDOM_ENCOUNTER_WILDERNESS_NIGHT_THRESHOLD
+            } else {
+                RANDOM_ENCOUNTER_WILDERNESS_DAY_THRESHOLD
+            }
         }
         _ => {
-            if night { 4 } else { 1 }
+            if night {
+                RANDOM_ENCOUNTER_DEFAULT_NIGHT_THRESHOLD
+            } else {
+                RANDOM_ENCOUNTER_DEFAULT_DAY_THRESHOLD
+            }
         }
     }
 }

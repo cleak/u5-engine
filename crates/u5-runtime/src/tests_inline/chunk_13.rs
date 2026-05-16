@@ -1,4 +1,66 @@
     #[test]
+    fn random_encounter_threshold_band_constants_match_spec_table() {
+        // encounters.md §3: each row of the surface threshold table is
+        // a paired (day, night) value keyed on a tile band. Promote
+        // each value to a named constant so the table-driven helper
+        // does not encode the numbers as bare literals.
+        assert_eq!(RANDOM_ENCOUNTER_SAFE_TILE_FIRST, 0x20);
+        assert_eq!(RANDOM_ENCOUNTER_SAFE_TILE_LAST, 0x26);
+        assert_eq!(RANDOM_ENCOUNTER_SAFE_DAY_THRESHOLD, 0);
+        assert_eq!(RANDOM_ENCOUNTER_SAFE_NIGHT_THRESHOLD, 3);
+        assert_eq!(RANDOM_ENCOUNTER_WILDERNESS_SWAMP, 0x04);
+        assert_eq!(RANDOM_ENCOUNTER_WILDERNESS_BAND_FIRST, 0x09);
+        assert_eq!(RANDOM_ENCOUNTER_WILDERNESS_BAND_LAST, 0x0F);
+        assert_eq!(RANDOM_ENCOUNTER_WILDERNESS_DAY_THRESHOLD, 2);
+        assert_eq!(RANDOM_ENCOUNTER_WILDERNESS_NIGHT_THRESHOLD, 5);
+        assert_eq!(RANDOM_ENCOUNTER_DEFAULT_DAY_THRESHOLD, 1);
+        assert_eq!(RANDOM_ENCOUNTER_DEFAULT_NIGHT_THRESHOLD, 4);
+        // Spot-check that the threshold function still returns the
+        // documented value for each band, by day and by night.
+        let day = RANDOM_ENCOUNTER_NIGHT_HOUR_LAST + 1;
+        let night = 0;
+        for safe_tile in RANDOM_ENCOUNTER_SAFE_TILE_FIRST..=RANDOM_ENCOUNTER_SAFE_TILE_LAST {
+            assert_eq!(
+                random_encounter_threshold(false, safe_tile, day),
+                RANDOM_ENCOUNTER_SAFE_DAY_THRESHOLD
+            );
+            assert_eq!(
+                random_encounter_threshold(false, safe_tile, night),
+                RANDOM_ENCOUNTER_SAFE_NIGHT_THRESHOLD
+            );
+        }
+        assert_eq!(
+            random_encounter_threshold(false, RANDOM_ENCOUNTER_WILDERNESS_SWAMP, day),
+            RANDOM_ENCOUNTER_WILDERNESS_DAY_THRESHOLD
+        );
+        assert_eq!(
+            random_encounter_threshold(false, RANDOM_ENCOUNTER_WILDERNESS_SWAMP, night),
+            RANDOM_ENCOUNTER_WILDERNESS_NIGHT_THRESHOLD
+        );
+        for tile in
+            RANDOM_ENCOUNTER_WILDERNESS_BAND_FIRST..=RANDOM_ENCOUNTER_WILDERNESS_BAND_LAST
+        {
+            assert_eq!(
+                random_encounter_threshold(false, tile, day),
+                RANDOM_ENCOUNTER_WILDERNESS_DAY_THRESHOLD
+            );
+            assert_eq!(
+                random_encounter_threshold(false, tile, night),
+                RANDOM_ENCOUNTER_WILDERNESS_NIGHT_THRESHOLD
+            );
+        }
+        // Any other surface tile uses the default band.
+        assert_eq!(
+            random_encounter_threshold(false, 0x30, day),
+            RANDOM_ENCOUNTER_DEFAULT_DAY_THRESHOLD
+        );
+        assert_eq!(
+            random_encounter_threshold(false, 0x30, night),
+            RANDOM_ENCOUNTER_DEFAULT_NIGHT_THRESHOLD
+        );
+    }
+
+    #[test]
     fn npc_pathfind_visit_stamp_encodes_direction_in_high_nibble() {
         // npc-schedules.md §8.2: BFS overwrites each visited cell with
         // `direction << 4`. The shift width and seed value should be
