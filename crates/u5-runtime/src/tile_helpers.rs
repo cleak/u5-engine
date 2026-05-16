@@ -764,6 +764,42 @@ pub const fn dungeon_floor_wrap_coord(coord: i16) -> u8 {
     (coord.rem_euclid(8) & 7) as u8
 }
 
+/// `dungeon-mode.md §8` Search reveal of pit-class `0x61`. When the
+/// searched cell is the unmarked secret-pit byte, the handler reports
+/// "a found secret door", rewrites the searched cell to plain pit
+/// `0x60` for the rest of the visit, and — unless the party is already
+/// on the deepest level — stamps the runtime-variant visit bit on the
+/// same X/Y cell one level below. Other pit-family bytes do not take
+/// this branch. Returns the destination-level stamp instruction so
+/// the caller knows whether to write the visit bit on the cell below
+/// (or skip it on the deepest level).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonSearchSecretPitReveal {
+    /// Searched cell rewrites to `0x60` and the cell at the same X/Y
+    /// on level `z + 1` gets the runtime-variant visit bit stamped.
+    RewriteAndStampLevelBelow,
+    /// Same rewrite, but the party is already on the deepest level so
+    /// no cell-below stamp is performed.
+    RewriteOnly,
+}
+
+/// `dungeon-mode.md §8`: returns `Some(reveal)` when Search on a
+/// secret pit `0x61` should fire, and `None` for any other byte.
+/// `current_z` is the dungeon level the party is on (`0..=7`).
+pub const fn dungeon_search_secret_pit_reveal(
+    searched_byte: u8,
+    current_z: u8,
+) -> Option<DungeonSearchSecretPitReveal> {
+    if searched_byte != 0x61 {
+        return None;
+    }
+    if current_z >= DUNGEON_LEVEL_BOTTOM {
+        Some(DungeonSearchSecretPitReveal::RewriteOnly)
+    } else {
+        Some(DungeonSearchSecretPitReveal::RewriteAndStampLevelBelow)
+    }
+}
+
 /// `dungeon-mode.md §5`: visit-local patch a room-trigger cell
 /// receives after the room encounter resolves. The high nibble drops
 /// from `0xF` (room trigger) to `0xA` (room-helper state) while the

@@ -1,4 +1,33 @@
     #[test]
+    fn dungeon_search_secret_pit_reveal_matches_spec_table() {
+        // dungeon-mode.md §8: Search on 0x61 reports a secret door,
+        // rewrites the cell to 0x60, and unless on the deepest level
+        // stamps the visit bit on the same X/Y cell one level below.
+        for z in 0u8..=6 {
+            assert_eq!(
+                dungeon_search_secret_pit_reveal(0x61, z),
+                Some(DungeonSearchSecretPitReveal::RewriteAndStampLevelBelow),
+                "z {z} should stamp level below"
+            );
+        }
+        assert_eq!(
+            dungeon_search_secret_pit_reveal(0x61, DUNGEON_LEVEL_BOTTOM),
+            Some(DungeonSearchSecretPitReveal::RewriteOnly)
+        );
+        // Other bytes — including other pit-family bytes — do not take
+        // this branch.
+        for byte in [0x00u8, 0x60, 0x62, 0x68, 0x69, 0x6A, 0x6F, 0x71, 0xFF] {
+            for z in 0u8..=7 {
+                assert_eq!(
+                    dungeon_search_secret_pit_reveal(byte, z),
+                    None,
+                    "byte {byte:#04x} z {z} should not reveal"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn endgame_campaign_start_baseline_matches_spec() {
         // endgame.md §9: the certificate elapsed-time baseline is
         // year 139, month 4, day 5.
