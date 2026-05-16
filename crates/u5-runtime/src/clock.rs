@@ -193,6 +193,15 @@ pub enum SkyStripMarker {
 /// Width of the sky/status strip per `moons.md` §2.
 pub const SKY_STRIP_CELL_COUNT: u8 = 12;
 
+/// `moons.md §2` plot order. The renderer attempts hour first, then
+/// Trammel, then Felucca; later markers overwrite earlier ones when
+/// they select the same cell.
+pub const SKY_STRIP_RENDER_ORDER: [SkyStripMarker; 3] = [
+    SkyStripMarker::FixedHour,
+    SkyStripMarker::Trammel,
+    SkyStripMarker::Felucca,
+];
+
 /// `shops.md` §4.1 substitution placeholder `@` (and any caller that wants
 /// the same time-of-day word): returns `"morning"` for hours `0..12`,
 /// `"afternoon"` for hours `12..18`, and `"evening"` for hours `18..24`.

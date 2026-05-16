@@ -1,4 +1,13 @@
     #[test]
+    fn sky_strip_render_order_is_hour_then_trammel_then_felucca() {
+        // moons.md §2
+        assert_eq!(SKY_STRIP_RENDER_ORDER.len(), 3);
+        assert_eq!(SKY_STRIP_RENDER_ORDER[0], SkyStripMarker::FixedHour);
+        assert_eq!(SKY_STRIP_RENDER_ORDER[1], SkyStripMarker::Trammel);
+        assert_eq!(SKY_STRIP_RENDER_ORDER[2], SkyStripMarker::Felucca);
+    }
+
+    #[test]
     fn ship_broadside_direction_accepted_only_perpendicular_to_facing() {
         // vehicles.md §7
         // Ship facing N (0): broadsides E (1) and W (3); bow N (0) and stern S (2) refuse.
