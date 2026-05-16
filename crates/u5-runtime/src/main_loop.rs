@@ -283,6 +283,26 @@ pub const fn dungeon_facing_turn_around(facing: u8) -> u8 {
     (facing + 2) % 4
 }
 
+/// `dungeon-mode.md §3` surface-plane dungeon entry seed. Reached
+/// from the overworld surface, the party lands on the top floor
+/// (`Z=0`) at the published `(X, Y) = (1, 1)` cell, facing east.
+pub const DUNGEON_ENTRY_SURFACE_Z: u8 = 0;
+pub const DUNGEON_ENTRY_SURFACE_X: u8 = 1;
+pub const DUNGEON_ENTRY_SURFACE_Y: u8 = 1;
+
+/// `dungeon-mode.md §3` underworld-plane dungeon entry seed. Reached
+/// from the underworld plane (for every dungeon except Doom), the
+/// party lands on the deepest floor (`Z=7`) at the published
+/// `(X, Y) = (7, 7)` cell, facing west.
+pub const DUNGEON_ENTRY_UNDERWORLD_Z: u8 = 7;
+pub const DUNGEON_ENTRY_UNDERWORLD_X: u8 = 7;
+pub const DUNGEON_ENTRY_UNDERWORLD_Y: u8 = 7;
+
+/// `dungeon-mode.md §3` Doom-exception scene byte. The Doom dungeon
+/// uses the surface entry seed even when reached from the
+/// underworld plane.
+pub const DUNGEON_DOOM_SCENE_BYTE: u8 = 40;
+
 /// `catalogs/gazetteer.md §6`: pick the entry seed for the given
 /// dungeon scene byte and origin plane. Doom uses the surface seed
 /// even when reached from the underworld.
@@ -291,22 +311,21 @@ pub const fn dungeon_entry_seed(scene_byte: u8, from_underworld: bool) -> Option
         return None;
     }
     let surface_seed = DungeonEntrySeed {
-        z: 0,
-        x: 1,
-        y: 1,
+        z: DUNGEON_ENTRY_SURFACE_Z,
+        x: DUNGEON_ENTRY_SURFACE_X,
+        y: DUNGEON_ENTRY_SURFACE_Y,
         facing: DUNGEON_FACING_EAST,
     };
     let underworld_seed = DungeonEntrySeed {
-        z: 7,
-        x: 7,
-        y: 7,
+        z: DUNGEON_ENTRY_UNDERWORLD_Z,
+        x: DUNGEON_ENTRY_UNDERWORLD_X,
+        y: DUNGEON_ENTRY_UNDERWORLD_Y,
         facing: DUNGEON_FACING_WEST,
     };
     if !from_underworld {
         return Some(surface_seed);
     }
-    // Doom (scene 40) uses the surface seed regardless of origin.
-    if scene_byte == 40 {
+    if scene_byte == DUNGEON_DOOM_SCENE_BYTE {
         return Some(surface_seed);
     }
     Some(underworld_seed)

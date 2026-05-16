@@ -1,4 +1,25 @@
     #[test]
+    fn dungeon_entry_seed_constants_match_published_coordinates() {
+        // dungeon-mode.md §3: surface entry → (Z=0, X=1, Y=1) east;
+        // underworld entry into non-Doom dungeons → (Z=7, X=7, Y=7)
+        // west; Doom (scene 40) uses the surface seed even when
+        // reached from the underworld.
+        assert_eq!(DUNGEON_ENTRY_SURFACE_Z, 0);
+        assert_eq!(DUNGEON_ENTRY_SURFACE_X, 1);
+        assert_eq!(DUNGEON_ENTRY_SURFACE_Y, 1);
+        assert_eq!(DUNGEON_ENTRY_UNDERWORLD_Z, 7);
+        assert_eq!(DUNGEON_ENTRY_UNDERWORLD_X, 7);
+        assert_eq!(DUNGEON_ENTRY_UNDERWORLD_Y, 7);
+        assert_eq!(DUNGEON_DOOM_SCENE_BYTE, 40);
+        // Spot check Doom's exception against the existing helper.
+        let doom_from_under =
+            dungeon_entry_seed(DUNGEON_DOOM_SCENE_BYTE, true).unwrap();
+        assert_eq!(doom_from_under.z, DUNGEON_ENTRY_SURFACE_Z);
+        assert_eq!(doom_from_under.x, DUNGEON_ENTRY_SURFACE_X);
+        assert_eq!(doom_from_under.y, DUNGEON_ENTRY_SURFACE_Y);
+    }
+
+    #[test]
     fn chest_primary_and_secondary_pool_thresholds_match_published_table() {
         // containers.md §4: primary pool has 8 published rows with
         // fixed thresholds; secondary pool has 48 rows with several
