@@ -1,4 +1,22 @@
     #[test]
+    fn town_arrest_release_loop_constants_match_spec() {
+        // time.md §10 town-arrest surrender: 20-minute cleanup increments
+        // repeated until the hour byte reaches 08:00.
+        assert_eq!(TOWN_ARREST_CLEANUP_INCREMENT_MINUTES, 20);
+        assert_eq!(TOWN_ARREST_RELEASE_HOUR, 8);
+        assert!(town_arrest_release_loop_done(8));
+        for hour in 0u8..24 {
+            if hour == TOWN_ARREST_RELEASE_HOUR {
+                continue;
+            }
+            assert!(
+                !town_arrest_release_loop_done(hour),
+                "hour {hour} should keep the loop running"
+            );
+        }
+    }
+
+    #[test]
     fn sea_creature_spawn_aux_seed_only_for_water_creature_facing_frames() {
         // encounters.md §4: only the pirate-ship / water-creature facing-frame
         // family 0x2C..=0x2F receives the 100-unit aux seed at spawn time.

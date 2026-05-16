@@ -47,6 +47,24 @@ pub const fn sky_strip_renders(scene_byte: u8, underworld_plane: bool) -> bool {
 /// 06:00, 12:00, and 18:00 (when the food counter is non-zero).
 pub const PROVISION_DECREMENT_HOURS: [u8; 3] = [6, 12, 18];
 
+/// `time.md §10` town-arrest surrender path constants. The ordinary
+/// town arrest relocates the party to the Yew jail scene and then
+/// advances time through repeated cleanup calls of
+/// [`TOWN_ARREST_CLEANUP_INCREMENT_MINUTES`] minutes each until the
+/// hour byte reaches [`TOWN_ARREST_RELEASE_HOUR`]. The loop does not
+/// roll back partial time side effects if the start time is not
+/// aligned to the target hour.
+pub const TOWN_ARREST_CLEANUP_INCREMENT_MINUTES: u8 = 20;
+pub const TOWN_ARREST_RELEASE_HOUR: u8 = 8;
+
+/// `time.md §10`: returns `true` when the town-arrest release loop
+/// has reached its hour-byte target and the relocation timing burst
+/// can stop. The loop fires another 20-minute cleanup call whenever
+/// this returns `false`.
+pub const fn town_arrest_release_loop_done(hour: u8) -> bool {
+    hour == TOWN_ARREST_RELEASE_HOUR
+}
+
 /// `time.md §5`: `true` when the given hour is one of the three
 /// provision-decrement hours.
 pub const fn is_provision_decrement_hour(hour: u8) -> bool {

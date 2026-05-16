@@ -110,12 +110,13 @@ pub use clock::{
     PROVISION_DECREMENT_HOURS, SHADOWLORD_HIDEOUT_FIRST, SHADOWLORD_HIDEOUT_LAST,
     SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_NAME_ASTAROTH, SHADOWLORD_NAME_FAULINEI,
     SHADOWLORD_NAME_NOSFENTOR, SKY_STRIP_CELL_COUNT, SKY_STRIP_RENDER_ORDER,
-    SkyStripMarker,
+    SkyStripMarker, TOWN_ARREST_CLEANUP_INCREMENT_MINUTES,
+    TOWN_ARREST_RELEASE_HOUR,
     TIMING_TAG_NEGATE_TIME, TIMING_TAG_QUICKNESS, apply_timing_tag_increment,
     all_shadowlords_vanquished, display_hour_12h, is_provision_decrement_hour,
     shadowlord_hideout_is_live, shadowlord_hideout_is_vanquished,
     shadowlord_name_for_slot, shadowlord_slot_for_name, shop_time_of_day_word,
-    sky_strip_marker_position, sky_strip_renders,
+    sky_strip_marker_position, sky_strip_renders, town_arrest_release_loop_done,
 };
 pub use directed_step::{
     Axis, axis_first_choice, directed_step_offsets, terrain_chance_gate_denominator,
