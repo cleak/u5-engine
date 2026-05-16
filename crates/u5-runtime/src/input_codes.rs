@@ -42,6 +42,40 @@ pub const fn cardinal_direction_prompt_action(byte: u8) -> CardinalPromptAction 
     }
 }
 
+/// `input.md §10,§11` echoed labels the shared direction prompts
+/// print after a cardinal/Pass keystroke. The caller is responsible
+/// for emitting the prefix (the spell prompt prints `Direction-` and
+/// the adjacent-tile prompt prints its caller-owned verb prefix); the
+/// echo is the cardinal name or `Pass`.
+pub const DIRECTION_PROMPT_LABEL_NORTH: &str = "North";
+pub const DIRECTION_PROMPT_LABEL_SOUTH: &str = "South";
+pub const DIRECTION_PROMPT_LABEL_EAST: &str = "East";
+pub const DIRECTION_PROMPT_LABEL_WEST: &str = "West";
+pub const DIRECTION_PROMPT_LABEL_PASS: &str = "Pass";
+
+/// `input.md §11`: lead-in prefix the spell direction prompt prints
+/// before its echoed cardinal label or `Pass`. The adjacent-tile
+/// prompt's prefix is caller-owned (e.g. `Search-`, `Jimmy-`, etc.).
+pub const SPELL_DIRECTION_PROMPT_PREFIX: &str = "Direction-";
+
+/// `input.md §10,§11`: echoed label for one [`CardinalPromptAction`]
+/// outcome. `Ignored` returns `None` because the prompt does not
+/// echo anything on a re-poll.
+pub const fn direction_prompt_label(action: CardinalPromptAction) -> Option<&'static str> {
+    Some(match action {
+        CardinalPromptAction::Cardinal(InputDirection::North) => DIRECTION_PROMPT_LABEL_NORTH,
+        CardinalPromptAction::Cardinal(InputDirection::South) => DIRECTION_PROMPT_LABEL_SOUTH,
+        CardinalPromptAction::Cardinal(InputDirection::East) => DIRECTION_PROMPT_LABEL_EAST,
+        CardinalPromptAction::Cardinal(InputDirection::West) => DIRECTION_PROMPT_LABEL_WEST,
+        CardinalPromptAction::Pass => DIRECTION_PROMPT_LABEL_PASS,
+        // Diagonals cannot reach this helper through
+        // `cardinal_direction_prompt_action` (the classifier filters
+        // them to Ignored), and the prompt's re-poll path does not
+        // emit an echo either.
+        CardinalPromptAction::Cardinal(_) | CardinalPromptAction::Ignored => return None,
+    })
+}
+
 /// `input.md §2` prompt-mode discriminator. The shared wait-for-input
 /// routine reads the resident *prompt-character* byte: a printable
 /// ASCII byte (`0x20..=0x7E`) means a Y/N or text prompt is open and

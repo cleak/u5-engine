@@ -1,4 +1,33 @@
     #[test]
+    fn direction_prompt_label_echoes_published_cardinal_names() {
+        // input.md §10,§11: the shared direction prompts echo the
+        // cardinal name on a cardinal keystroke and `Pass` on Space.
+        // Ignored re-polls produce no echo.
+        assert_eq!(
+            direction_prompt_label(CardinalPromptAction::Cardinal(InputDirection::North)),
+            Some("North")
+        );
+        assert_eq!(
+            direction_prompt_label(CardinalPromptAction::Cardinal(InputDirection::South)),
+            Some("South")
+        );
+        assert_eq!(
+            direction_prompt_label(CardinalPromptAction::Cardinal(InputDirection::East)),
+            Some("East")
+        );
+        assert_eq!(
+            direction_prompt_label(CardinalPromptAction::Cardinal(InputDirection::West)),
+            Some("West")
+        );
+        assert_eq!(
+            direction_prompt_label(CardinalPromptAction::Pass),
+            Some("Pass")
+        );
+        assert_eq!(direction_prompt_label(CardinalPromptAction::Ignored), None);
+        assert_eq!(SPELL_DIRECTION_PROMPT_PREFIX, "Direction-");
+    }
+
+    #[test]
     fn numeric_prompt_accumulates_digits_and_pops_on_backspace() {
         // input.md §8: numeric prompts apply value = value * 10 +
         // digit and treat Backspace as integer-division by ten.
