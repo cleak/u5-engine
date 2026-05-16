@@ -32,6 +32,32 @@
     }
 
     #[test]
+    fn tlk_ask_party_name_match_returns_1_based_slot_index() {
+        // conversation.md §7.6: ASK-PARTY-NAME compares the typed
+        // answer to each live member's name with the bit-7-stripping
+        // case-insensitive convention. Returns the 1-based slot
+        // index on a match; 0 means no match.
+        let names: [&[u8]; 4] = [b"Avatar", b"Shamino", b"Iolo", b"Mariah"];
+        assert_eq!(tlk_ask_party_name_match(b"Avatar", &names), 1);
+        assert_eq!(tlk_ask_party_name_match(b"shamino", &names), 2);
+        assert_eq!(tlk_ask_party_name_match(b"IOLO", &names), 3);
+        assert_eq!(tlk_ask_party_name_match(b"Mariah", &names), 4);
+        // No match returns 0.
+        assert_eq!(tlk_ask_party_name_match(b"Dupre", &names), 0);
+        assert_eq!(tlk_ask_party_name_match(b"", &names), 0);
+        // Partial prefixes don't match (whole-string equality).
+        assert_eq!(tlk_ask_party_name_match(b"Shamin", &names), 0);
+        // High-bit-encoded name on the engine side matches a plain
+        // typed answer (the typed side is bit-7-stripped too).
+        let obfuscated: [u8; 4] = [b'I' | 0x80, b'o' | 0x80, b'l' | 0x80, b'o' | 0x80];
+        let obfuscated_names: [&[u8]; 1] = [obfuscated.as_slice()];
+        assert_eq!(tlk_ask_party_name_match(b"iolo", &obfuscated_names), 1);
+        // Empty roster slots are skipped.
+        let with_blank: [&[u8]; 3] = [b"", b"Geoffrey", b""];
+        assert_eq!(tlk_ask_party_name_match(b"Geoffrey", &with_blank), 2);
+    }
+
+    #[test]
     fn shop_refuses_mounted_horse_except_at_horse_trader() {
         // shops.md §2: ordinary shop arms refuse before opening
         // their menu when the party is mounted on a horse; only the

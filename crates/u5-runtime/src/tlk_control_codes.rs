@@ -218,6 +218,43 @@ pub const fn tlk_class_for_scene(scene_byte: u8) -> Option<TlkFileClass> {
 /// byte-range biases when reaching this same logical table.
 pub const COMMON_WORD_DICTIONARY_ENTRIES: usize = 128;
 
+/// `conversation.md §7.6` ASK-PARTY-NAME (`0x84`) match. The typed
+/// answer is compared against each live party member's name with
+/// the bit-7-stripping case-insensitive convention also used by
+/// the ordinary keyword scanner. Returns the matched 1-based slot
+/// index on a successful match, or `0` when no member's name
+/// matches.
+///
+/// The match is whole-string equality after stripping bit 7 and
+/// folding case; the function does not look for substrings or word
+/// boundaries. Empty names never match (callers should skip empty
+/// roster slots before passing them in).
+pub fn tlk_ask_party_name_match(
+    typed: &[u8],
+    party_member_names: &[&[u8]],
+) -> u8 {
+    for (zero_index, name) in party_member_names.iter().enumerate() {
+        if name.is_empty() || name.len() != typed.len() {
+            continue;
+        }
+        let mut matched = true;
+        let mut i = 0;
+        while i < name.len() {
+            let n = name[i] & 0x7F;
+            let t = typed[i] & 0x7F;
+            if !n.eq_ignore_ascii_case(&t) {
+                matched = false;
+                break;
+            }
+            i += 1;
+        }
+        if matched {
+            return (zero_index + 1) as u8;
+        }
+    }
+    0
+}
+
 /// `shops.md §4.2` shared common-word dictionary NUL-sentinel count.
 /// Eleven of the 128 dictionary entries are NUL pointers; the text
 /// consumers treat them as word-boundary sentinels rather than as
