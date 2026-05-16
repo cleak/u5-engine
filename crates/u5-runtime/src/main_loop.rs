@@ -1,5 +1,7 @@
 //! Outer-dispatch routing per `main-loop.md` §3-§4.
 
+use crate::InputDirection;
+
 /// `main-loop.md §11` Q-save scene-byte normalisation. Combat is not
 /// saved; if the active scene byte is the temporary combat marker
 /// (`0xFF`) when the save handler runs, the writer substitutes the
@@ -247,6 +249,41 @@ pub const DUNGEON_FACING_WEST: u8 = 3;
 /// supplied facing, with X west-to-east and Y north-to-south. The
 /// floor wraps modulo 8 in the caller; this helper returns the raw
 /// signed delta. Returns `None` for facing values outside `0..=3`.
+/// `dungeon-mode.md §9` movement-input action. The dungeon command
+/// parser intercepts numpad/arrow keys before the A-Z dispatcher
+/// sees them; each accepted code maps to one of these published
+/// actions. Unrecognized movement subcodes fall through to
+/// `TurnAround` (a 180-degree facing rotate, not a step).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonMovementAction {
+    /// Step one cell in the current facing direction.
+    Forward,
+    /// Step one cell opposite the current facing direction.
+    Back,
+    /// Decrement the facing byte by one (modulo four).
+    TurnLeft,
+    /// Increment the facing byte by one (modulo four).
+    TurnRight,
+    /// Rotate the party by 180 degrees (the fall-through for
+    /// unrecognized movement subcodes); does not step.
+    TurnAround,
+}
+
+/// `dungeon-mode.md §9`: classify one input direction code into a
+/// dungeon movement action. The published numpad/arrow mapping:
+/// `North` = Forward, `South` = Back, `West` = TurnLeft,
+/// `East` = TurnRight. Diagonal/Pass and any other value falls
+/// through to `TurnAround`.
+pub const fn dungeon_movement_action(input: InputDirection) -> DungeonMovementAction {
+    match input {
+        InputDirection::North => DungeonMovementAction::Forward,
+        InputDirection::South => DungeonMovementAction::Back,
+        InputDirection::West => DungeonMovementAction::TurnLeft,
+        InputDirection::East => DungeonMovementAction::TurnRight,
+        _ => DungeonMovementAction::TurnAround,
+    }
+}
+
 pub const fn dungeon_facing_forward_delta(facing: u8) -> Option<(i8, i8)> {
     match facing {
         DUNGEON_FACING_NORTH => Some((0, -1)),

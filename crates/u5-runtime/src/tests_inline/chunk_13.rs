@@ -32,6 +32,27 @@
     }
 
     #[test]
+    fn dungeon_movement_action_maps_published_numpad_directions() {
+        // dungeon-mode.md §9: numpad/arrow direction codes route to
+        // Forward (North), Back (South), TurnLeft (West),
+        // TurnRight (East); diagonals and other values fall through
+        // to TurnAround.
+        use DungeonMovementAction::*;
+        assert_eq!(dungeon_movement_action(InputDirection::North), Forward);
+        assert_eq!(dungeon_movement_action(InputDirection::South), Back);
+        assert_eq!(dungeon_movement_action(InputDirection::West), TurnLeft);
+        assert_eq!(dungeon_movement_action(InputDirection::East), TurnRight);
+        for diag in [
+            InputDirection::Northwest,
+            InputDirection::Northeast,
+            InputDirection::Southwest,
+            InputDirection::Southeast,
+        ] {
+            assert_eq!(dungeon_movement_action(diag), TurnAround);
+        }
+    }
+
+    #[test]
     fn dungeon_renderer_paints_wall_cue_for_published_classes() {
         // dungeon-mode.md §6: the first-person renderer paints a
         // wall cue for cells whose high nibble identifies a wall
