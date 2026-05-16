@@ -135,17 +135,27 @@ pub fn endgame_outcome(final_confirmation: bool, has_sandalwood_box: bool) -> En
     }
 }
 
+/// `endgame.md §9` certificate elapsed-time baseline. The certificate
+/// computes campaign elapsed time by subtracting this fixed date from
+/// the saved world clock under the thirteen-month / twenty-eight-day
+/// calendar model. Year 139, month 4, day 5 corresponds to the
+/// campaign-start date the certificate calls the "beginning of the
+/// quest".
+pub const ENDGAME_CAMPAIGN_START_YEAR: u16 = 139;
+pub const ENDGAME_CAMPAIGN_START_MONTH: u8 = 4;
+pub const ENDGAME_CAMPAIGN_START_DAY: u8 = 5;
+
 pub fn endgame_elapsed_campaign_time(clock: GameClock) -> (u16, u8, u8) {
-    let mut years = clock.year.saturating_sub(139);
-    let mut months = clock.month as i16 - 4;
-    let mut days = clock.day as i16 - 5;
+    let mut years = clock.year.saturating_sub(ENDGAME_CAMPAIGN_START_YEAR);
+    let mut months = clock.month as i16 - ENDGAME_CAMPAIGN_START_MONTH as i16;
+    let mut days = clock.day as i16 - ENDGAME_CAMPAIGN_START_DAY as i16;
 
     if days < 0 {
-        days += 28;
+        days += DAYS_PER_MONTH as i16;
         months -= 1;
     }
     if months < 0 {
-        months += 13;
+        months += MONTHS_PER_YEAR as i16;
         years = years.saturating_sub(1);
     }
 

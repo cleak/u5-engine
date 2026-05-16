@@ -1,4 +1,42 @@
     #[test]
+    fn endgame_campaign_start_baseline_matches_spec() {
+        // endgame.md §9: the certificate elapsed-time baseline is
+        // year 139, month 4, day 5.
+        assert_eq!(ENDGAME_CAMPAIGN_START_YEAR, 139);
+        assert_eq!(ENDGAME_CAMPAIGN_START_MONTH, 4);
+        assert_eq!(ENDGAME_CAMPAIGN_START_DAY, 5);
+        // A clock exactly at the baseline reports zero elapsed time.
+        let baseline = GameClock {
+            year: ENDGAME_CAMPAIGN_START_YEAR,
+            month: ENDGAME_CAMPAIGN_START_MONTH,
+            day: ENDGAME_CAMPAIGN_START_DAY,
+            hour: 0,
+            minute: 0,
+        };
+        assert_eq!(endgame_elapsed_campaign_time(baseline), (0, 0, 0));
+        // One day after the baseline.
+        let one_day_later = GameClock {
+            year: ENDGAME_CAMPAIGN_START_YEAR,
+            month: ENDGAME_CAMPAIGN_START_MONTH,
+            day: ENDGAME_CAMPAIGN_START_DAY + 1,
+            hour: 0,
+            minute: 0,
+        };
+        assert_eq!(endgame_elapsed_campaign_time(one_day_later), (0, 0, 1));
+        // Day-borrow case: clock day < baseline day. Reports one
+        // less month and 28-day wrap.
+        let day_borrow = GameClock {
+            year: ENDGAME_CAMPAIGN_START_YEAR,
+            month: ENDGAME_CAMPAIGN_START_MONTH + 1,
+            day: ENDGAME_CAMPAIGN_START_DAY - 1,
+            hour: 0,
+            minute: 0,
+        };
+        let (y, m, d) = endgame_elapsed_campaign_time(day_borrow);
+        assert_eq!((y, m, d), (0, 0, DAYS_PER_MONTH - 1));
+    }
+
+    #[test]
     fn npc_schedule_state_classify_round_trips_published_states() {
         // npc-schedules.md §7: the state byte takes values in 0..=8.
         let pairs: [(u8, NpcScheduleState); 9] = [
