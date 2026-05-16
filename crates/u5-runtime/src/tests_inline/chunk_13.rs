@@ -1,4 +1,23 @@
     #[test]
+    fn talk_through_tile_band_constants_match_spec() {
+        // conversation.md §2: Talk advances `(dx, dy)` once more when
+        // the facing tile is a talk-through tile (shop counter, low
+        // fence, etc.) so the player can address an NPC across the
+        // barrier. Promote the band edges to named constants so the
+        // is_talk_through_tile classifier does not bake `64..=71` as
+        // bare literals.
+        assert_eq!(TALK_THROUGH_TILE_FIRST, 64);
+        assert_eq!(TALK_THROUGH_TILE_LAST, 71);
+        // Every tile in the band classifies as talk-through.
+        for tile in TALK_THROUGH_TILE_FIRST..=TALK_THROUGH_TILE_LAST {
+            assert!(is_talk_through_tile(tile), "tile {tile:#04x}");
+        }
+        // The neighbouring tiles on either side do not.
+        assert!(!is_talk_through_tile(TALK_THROUGH_TILE_FIRST - 1));
+        assert!(!is_talk_through_tile(TALK_THROUGH_TILE_LAST + 1));
+    }
+
+    #[test]
     fn protection_active_effect_adds_three_to_defense() {
         // magic.md §8: while Protection's `P` active-effect tag is
         // live, the resident party-member defense helper adds three

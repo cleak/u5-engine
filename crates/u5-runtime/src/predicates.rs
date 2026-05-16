@@ -887,8 +887,16 @@ pub fn is_wall_or_closed_door_tile(tile: u8) -> bool {
     matches!(tile, 24..=79 | 96..=103)
 }
 
+/// `conversation.md §2`: first tile id of the talk-through band.
+/// Talk-through tiles let the Talk command advance one more cell
+/// past shop counters, low fences, and similar pass-through barriers
+/// to find an NPC on the far side.
+pub const TALK_THROUGH_TILE_FIRST: u8 = 64;
+/// `conversation.md §2`: last tile id of the talk-through band.
+pub const TALK_THROUGH_TILE_LAST: u8 = 71;
+
 pub fn is_talk_through_tile(tile: u8) -> bool {
-    (64..=71).contains(&tile)
+    (TALK_THROUGH_TILE_FIRST..=TALK_THROUGH_TILE_LAST).contains(&tile)
 }
 
 pub fn is_horse_fast_stride_tile(tile: u8) -> bool {
