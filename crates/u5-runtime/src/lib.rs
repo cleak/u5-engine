@@ -316,7 +316,8 @@ pub use tlk_control_codes::{
     is_tlk_label_byte, reserved_keyword_effect, shoppe_dictionary_index,
     talk_liveness_refusal, tlk_action_dispatch_is_signal_flag,
     tlk_action_dispatch_verb, tlk_byte_runner_class, tlk_class_for_scene,
-    tlk_dictionary_index, tlk_gold_payment_amount, tlk_introducer_argument_count,
+    tlk_dictionary_index, tlk_gold_payment_amount,
+    tlk_if_else_alt_branches, tlk_introducer_argument_count,
     tlk_keyword_matches, tlk_label_index, tlk_leading_entry_index,
     tlk_player_input_kind,
 };

@@ -332,6 +332,15 @@ pub const fn tlk_byte_runner_class(byte: u8) -> TlkByteRunnerClass {
     }
 }
 
+/// `conversation.md §7.6`: returns `true` when the `0xFE` IF-ELSE-ALT
+/// runner branches to the supplied target label. The runner branches
+/// when the shared moral-standing selector is at or above the
+/// threshold byte; below the threshold the runner falls through to
+/// the *then* arm without touching the target-label argument.
+pub const fn tlk_if_else_alt_branches(standing: u8, threshold: u8) -> bool {
+    standing >= threshold
+}
+
 /// `conversation.md §7.6` published `0x86` ACTION-DISPATCH letter
 /// verbs `A..=K`. The argument byte is masked to seven bits before
 /// dispatch; values below `b'A'` set generic one-conversation signal

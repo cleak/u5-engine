@@ -1,4 +1,19 @@
     #[test]
+    fn tlk_if_else_alt_branches_is_at_or_above_threshold() {
+        // conversation.md §7.6: 0xFE IF-ELSE-ALT branches when the
+        // shared moral-standing selector is at or above the threshold.
+        assert!(tlk_if_else_alt_branches(0, 0));
+        assert!(tlk_if_else_alt_branches(50, 0));
+        assert!(tlk_if_else_alt_branches(50, 50));
+        assert!(tlk_if_else_alt_branches(99, 75));
+        assert!(!tlk_if_else_alt_branches(74, 75));
+        assert!(!tlk_if_else_alt_branches(0, 1));
+        // Saturate at the byte cap.
+        assert!(tlk_if_else_alt_branches(255, 255));
+        assert!(!tlk_if_else_alt_branches(254, 255));
+    }
+
+    #[test]
     fn outdoor_active_object_class_immobile_matches_spec_range() {
         // movement.md §4: only 0xE8..=0xEB is the immobile / never-pass
         // family.
