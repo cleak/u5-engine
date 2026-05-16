@@ -196,6 +196,21 @@ pub const fn ship_xit_refused_under_sail(marker: u8) -> bool {
     matches!(transport_family(marker), Some(TransportFamily::ShipHoisted))
 }
 
+/// `vehicles.md §6` Y-Yell ship-sail toggle. Maps a hoisted-sail
+/// marker `0x20..=0x23` to the matching furled marker `0x24..=0x27`
+/// (and vice-versa) by flipping bit `0x04`. The low two bits encode
+/// heading and stay intact across the toggle. Returns `None` for
+/// markers outside the ship range so callers can fall through to
+/// the no-effect case without an extra range test.
+pub const fn ship_sail_toggle_marker(current_marker: u8) -> Option<u8> {
+    match transport_family(current_marker) {
+        Some(TransportFamily::ShipHoisted) | Some(TransportFamily::ShipFurled) => {
+            Some(current_marker ^ 0x04)
+        }
+        _ => None,
+    }
+}
+
 /// `vehicles.md §2`: typed [`Direction`] for the transport marker's
 /// facing. Decodes the low two bits via [`transport_facing_index`]
 /// and maps the four indices to the four cardinal directions:

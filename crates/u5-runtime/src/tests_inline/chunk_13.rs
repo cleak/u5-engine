@@ -7,6 +7,38 @@
     }
 
     #[test]
+    fn ship_sail_toggle_marker_round_trips_hoisted_and_furled() {
+        // vehicles.md §6: hoisted 0x20..=0x23 toggles to furled
+        // 0x24..=0x27 and vice-versa, preserving the heading
+        // encoded in the low two bits.
+        for hoisted in 0x20u8..=0x23 {
+            let furled = ship_sail_toggle_marker(hoisted).expect("hoisted -> furled");
+            assert_eq!(furled, hoisted + 4);
+            // Round-trip back to the original marker.
+            assert_eq!(ship_sail_toggle_marker(furled), Some(hoisted));
+        }
+        // Non-ship markers fall through.
+        for marker in [
+            0x00u8, 0x10, 0x12, 0x14, 0x17, 0x1C, 0x1F, 0x28, 0x2B, 0x2C, 0xFF,
+        ] {
+            assert_eq!(
+                ship_sail_toggle_marker(marker),
+                None,
+                "marker {marker:#04x} should not toggle"
+            );
+        }
+        // Heading is preserved across the toggle (low two bits stay).
+        assert_eq!(
+            ship_sail_toggle_marker(0x22).unwrap() & 0x03,
+            0x22 & 0x03
+        );
+        assert_eq!(
+            ship_sail_toggle_marker(0x25).unwrap() & 0x03,
+            0x25 & 0x03
+        );
+    }
+
+    #[test]
     fn ship_xit_refused_under_sail_only_for_hoisted_range() {
         // vehicles.md §5
         for marker in 0x20u8..=0x23 {
