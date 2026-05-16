@@ -1,4 +1,22 @@
     #[test]
+    fn reagent_recipe_bits_match_spell_list_md_section_3() {
+        // catalogs/spell-list.md §3
+        assert_eq!(Reagent::SulfurAsh.recipe_bit(), 0x80);
+        assert_eq!(Reagent::Ginseng.recipe_bit(), 0x40);
+        assert_eq!(Reagent::Garlic.recipe_bit(), 0x20);
+        assert_eq!(Reagent::SpiderSilk.recipe_bit(), 0x10);
+        assert_eq!(Reagent::BloodMoss.recipe_bit(), 0x08);
+        assert_eq!(Reagent::BlackPearl.recipe_bit(), 0x04);
+        assert_eq!(Reagent::Nightshade.recipe_bit(), 0x02);
+        assert_eq!(Reagent::Mandrake.recipe_bit(), 0x01);
+        // ORing a sample recipe (Heal: Ginseng + Spider Silk).
+        assert_eq!(
+            Reagent::Ginseng.recipe_bit() | Reagent::SpiderSilk.recipe_bit(),
+            0x50
+        );
+    }
+
+    #[test]
     fn scroll_grant_label_id_masks_low_three_bits() {
         // catalogs/item-list.md §7.1
         assert_eq!(SCROLL_GRANT_LABEL_MASK, 0x07);

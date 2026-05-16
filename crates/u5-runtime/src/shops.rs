@@ -498,6 +498,24 @@ impl Reagent {
         }
     }
 
+    /// `catalogs/spell-list.md §3`: one-byte recipe-mask bit. The
+    /// M-Mix command compares the player's selected reagent set
+    /// against the spell's recipe by ORing these bit values. Bit
+    /// order matches the published table: Sulfur Ash is the high
+    /// bit (`0x80`); Mandrake is the low bit (`0x01`).
+    pub const fn recipe_bit(self) -> u8 {
+        match self {
+            Self::SulfurAsh => 0x80,
+            Self::Ginseng => 0x40,
+            Self::Garlic => 0x20,
+            Self::SpiderSilk => 0x10,
+            Self::BloodMoss => 0x08,
+            Self::BlackPearl => 0x04,
+            Self::Nightshade => 0x02,
+            Self::Mandrake => 0x01,
+        }
+    }
+
     /// `magic.md §2`: short abbreviation used in the M-Mix prompt and
     /// other tight UI lines. Long names live in [`display_name`].
     pub const fn abbreviation(self) -> &'static str {
