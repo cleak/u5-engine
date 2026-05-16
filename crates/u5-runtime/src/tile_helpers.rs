@@ -628,6 +628,19 @@ pub enum DungeonCellClass {
     HeavyDoorOrRoomTrigger,
 }
 
+/// `dungeon-mode.md §8`: dungeon chest `Get` consumes the open chest
+/// by clearing its chest class in the loaded dungeon image. The
+/// visit-marker bit (`0x08`) is preserved so a follow-up Search /
+/// renderer pass still sees the cell as visited; every other bit is
+/// reset to passage. Returns `None` for any byte that is not in the
+/// `0x4?` chest class.
+pub const fn dungeon_chest_post_get_byte(tile: u8) -> Option<u8> {
+    if tile >> 4 != 0x4 {
+        return None;
+    }
+    Some(tile & DUNGEON_RUNTIME_VARIANT_BIT)
+}
+
 /// `dungeon-mode.md §6.1` runtime-variant bit (`0x08`). For dungeon
 /// cells below `0x90` the renderer clears this bit before class
 /// interpretation; for classes `0x9?` and higher the bit remains

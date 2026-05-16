@@ -1,4 +1,20 @@
     #[test]
+    fn dungeon_chest_post_get_clears_class_preserving_marker() {
+        // dungeon-mode.md §8
+        // Plain unmarked closed chest -> passage (no marker).
+        assert_eq!(dungeon_chest_post_get_byte(0x40), Some(0x00));
+        // Marked chest variants preserve the visit-marker bit.
+        assert_eq!(dungeon_chest_post_get_byte(0x48), Some(0x08));
+        // Other low-nibble bits are not preserved.
+        assert_eq!(dungeon_chest_post_get_byte(0x47), Some(0x00));
+        assert_eq!(dungeon_chest_post_get_byte(0x4F), Some(0x08));
+        // Non-chest bytes return None.
+        assert_eq!(dungeon_chest_post_get_byte(0x00), None);
+        assert_eq!(dungeon_chest_post_get_byte(0x60), None);
+        assert_eq!(dungeon_chest_post_get_byte(0xFF), None);
+    }
+
+    #[test]
     fn dungeon_renderer_cell_byte_strips_variant_below_0x90() {
         // dungeon-mode.md §6.1
         // Below 0x90 — runtime-variant bit cleared.
