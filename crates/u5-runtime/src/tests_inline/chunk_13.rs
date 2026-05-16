@@ -1,4 +1,21 @@
     #[test]
+    fn mmix_published_message_constants_match_spec_text() {
+        // magic.md §6: the world-mode M-Mix handler prints these
+        // exact strings at the named checkpoints, and combat refuses
+        // M with a distinct line.
+        assert_eq!(MMIX_NO_REAGENTS_OWNED_MESSAGE, "No reagents owned!");
+        assert_eq!(MMIX_EMPTY_SELECTION_MESSAGE, "Nothing to mix!");
+        assert_eq!(
+            MMIX_INSUFFICIENT_REAGENTS_MESSAGE,
+            "Insufficient reagents!"
+        );
+        assert_eq!(MMIX_SPELL_PROMPT_MESSAGE, "For what spell?");
+        assert_eq!(MMIX_QUANTITY_PROMPT_MESSAGE, "How much?");
+        assert_eq!(MMIX_MIXING_MESSAGE, "Mixing...");
+        assert_eq!(MMIX_COMBAT_REFUSAL_MESSAGE, "Mix-Not here");
+    }
+
+    #[test]
     fn door_auto_close_tick_counts_down_then_closes() {
         // doors-and-z-transitions.md §5: each turn-consuming pass
         // decrements the four-turn countdown; when it hits zero, the

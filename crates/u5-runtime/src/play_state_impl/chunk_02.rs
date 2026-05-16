@@ -911,7 +911,7 @@ impl PlayState {
 
     pub fn mix_reagents_from_suffix(&mut self, suffix: &str) -> MoveOutcome {
         if self.reagents.iter().all(|count| *count == 0) {
-            self.message = "No reagents owned!".to_string();
+            self.message = MMIX_NO_REAGENTS_OWNED_MESSAGE.to_string();
             return MoveOutcome::Blocked;
         }
         let request = match parse_inline_mix_request(suffix) {
@@ -930,12 +930,12 @@ impl PlayState {
             return MoveOutcome::PromptDeclined;
         }
         if request.reagent_mask == 0 {
-            self.message = "Nothing to mix!".to_string();
+            self.message = MMIX_EMPTY_SELECTION_MESSAGE.to_string();
             return MoveOutcome::Blocked;
         }
         for index in selected_reagent_indices(request.reagent_mask) {
             if self.reagents[index] < request.amount {
-                self.message = "Insufficient reagents!".to_string();
+                self.message = MMIX_INSUFFICIENT_REAGENTS_MESSAGE.to_string();
                 return MoveOutcome::Blocked;
             }
         }

@@ -482,6 +482,19 @@ pub const fn conjure_summon_for_roll(roll: u8) -> Option<ConjureSummon> {
     })
 }
 
+/// `magic.md §6` published M-Mix narration strings. The world-mode
+/// mixer prints these at the named pre-flight / selection / quantity
+/// / cleanup checkpoints; the combat handler prints
+/// [`MMIX_COMBAT_REFUSAL_MESSAGE`] when the player presses `M`
+/// during a combat round.
+pub const MMIX_NO_REAGENTS_OWNED_MESSAGE: &str = "No reagents owned!";
+pub const MMIX_EMPTY_SELECTION_MESSAGE: &str = "Nothing to mix!";
+pub const MMIX_INSUFFICIENT_REAGENTS_MESSAGE: &str = "Insufficient reagents!";
+pub const MMIX_SPELL_PROMPT_MESSAGE: &str = "For what spell?";
+pub const MMIX_QUANTITY_PROMPT_MESSAGE: &str = "How much?";
+pub const MMIX_MIXING_MESSAGE: &str = "Mixing...";
+pub const MMIX_COMBAT_REFUSAL_MESSAGE: &str = "Mix-Not here";
+
 /// `magic.md §6,§7` per-spell charge-counter add. After M-Mix's
 /// recipe-match step the requested quantity is added to the
 /// per-spell charge counter, capped at `SPELL_CHARGE_CAP` (99).
