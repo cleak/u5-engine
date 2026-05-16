@@ -1,4 +1,31 @@
     #[test]
+    fn conversation_cleanup_gold_debit_lands_in_one_through_fifteen() {
+        // quest-flags.md §5
+        assert_eq!(CONVERSATION_CLEANUP_GOLD_DEBIT_MIN, 1);
+        assert_eq!(CONVERSATION_CLEANUP_GOLD_DEBIT_MAX, 15);
+        // Walk the full 0..=255 seed domain and verify every result
+        // lands in 1..=15.
+        let mut seen = [false; 15];
+        for seed in 0u8..=255 {
+            let amount = conversation_cleanup_gold_debit_amount(seed);
+            assert!(
+                (CONVERSATION_CLEANUP_GOLD_DEBIT_MIN..=CONVERSATION_CLEANUP_GOLD_DEBIT_MAX)
+                    .contains(&amount),
+                "seed {seed} produced {amount}"
+            );
+            seen[(amount - 1) as usize] = true;
+        }
+        assert!(
+            seen.iter().all(|&v| v),
+            "every gold-debit amount in 1..=15 should be reachable"
+        );
+        // Specific anchor values.
+        assert_eq!(conversation_cleanup_gold_debit_amount(0), 1);
+        assert_eq!(conversation_cleanup_gold_debit_amount(14), 15);
+        assert_eq!(conversation_cleanup_gold_debit_amount(15), 1);
+    }
+
+    #[test]
     fn equipment_class_tag_slot_family_routes_per_spec() {
         // inventory.md §3.1
         assert_eq!(

@@ -112,6 +112,23 @@ pub const fn conversation_cleanup_runs_warning(sentinel: u8) -> bool {
 /// subtracts a random `1..=15` gold from the party's gold total
 /// (floored at zero).
 pub const CONVERSATION_CLEANUP_GOLD_DEBIT_MAX: u8 = 15;
+/// `quest-flags.md §5` random gold-debit lower bound. The cleanup
+/// always debits at least one gold when it reaches the gold
+/// fallback branch.
+pub const CONVERSATION_CLEANUP_GOLD_DEBIT_MIN: u8 = 1;
+
+/// `quest-flags.md §5`: deterministic mapping from a uniform
+/// `0..=255` random seed to the `1..=15` gold-debit amount the
+/// conversation-cleanup gold fallback subtracts. Computed as
+/// `(seed % CONVERSATION_CLEANUP_GOLD_DEBIT_MAX) +
+/// CONVERSATION_CLEANUP_GOLD_DEBIT_MIN`, which produces every value
+/// in the inclusive `1..=15` range exactly seventeen times across
+/// the 255-value domain and value 1 eighteen times (255 = 15*17).
+/// Caller is responsible for floor-at-zero gold subtraction after
+/// computing the amount.
+pub const fn conversation_cleanup_gold_debit_amount(roll_seed: u8) -> u8 {
+    (roll_seed % CONVERSATION_CLEANUP_GOLD_DEBIT_MAX) + CONVERSATION_CLEANUP_GOLD_DEBIT_MIN
+}
 
 /// `quest-flags.md §4`: confirmed letter effects for the `0x86`
 /// action-dispatch control code's letter-argument family. Returns
