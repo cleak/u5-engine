@@ -337,6 +337,26 @@ pub const fn tlk_action_dispatch_is_signal_flag(arg: u8) -> bool {
     arg < b'A'
 }
 
+/// `conversation.md §7.6`: decode the `0x85` GOLD-PAYMENT introducer's
+/// three argument bytes. Each byte is masked to seven bits and
+/// interpreted as an ASCII decimal digit; the three digits compose a
+/// hundreds/tens/units amount in the range `0..=999`. Returns `None`
+/// for any argument byte that does not yield an ASCII digit
+/// `0x30..=0x39` after the seven-bit mask.
+pub const fn tlk_gold_payment_amount(arg0: u8, arg1: u8, arg2: u8) -> Option<u16> {
+    let h = arg0 & 0x7F;
+    let t = arg1 & 0x7F;
+    let u = arg2 & 0x7F;
+    if h < b'0' || h > b'9' || t < b'0' || t > b'9' || u < b'0' || u > b'9' {
+        return None;
+    }
+    Some(
+        (h - b'0') as u16 * 100
+            + (t - b'0') as u16 * 10
+            + (u - b'0') as u16,
+    )
+}
+
 /// `conversation.md` §7.6: argument-byte width for each multi-byte
 /// introducer code. Returns `None` for codes that take no follow-up bytes.
 pub const fn tlk_introducer_argument_count(code: u8) -> Option<u8> {

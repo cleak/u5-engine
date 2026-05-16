@@ -1,4 +1,22 @@
     #[test]
+    fn tlk_gold_payment_amount_decodes_three_ascii_digits() {
+        // conversation.md §7.6
+        // Plain ASCII digits.
+        assert_eq!(tlk_gold_payment_amount(b'0', b'0', b'0'), Some(0));
+        assert_eq!(tlk_gold_payment_amount(b'1', b'2', b'3'), Some(123));
+        assert_eq!(tlk_gold_payment_amount(b'9', b'9', b'9'), Some(999));
+        // High-bit-set obfuscated digits — masked to seven bits before
+        // decoding (engine reads them straight from the stream).
+        assert_eq!(
+            tlk_gold_payment_amount(b'1' | 0x80, b'2' | 0x80, b'3' | 0x80),
+            Some(123)
+        );
+        // Non-digit arguments reject.
+        assert_eq!(tlk_gold_payment_amount(b'0', b'A', b'0'), None);
+        assert_eq!(tlk_gold_payment_amount(b':', b'0', b'0'), None);
+    }
+
+    #[test]
     fn tlk_player_input_kind_folds_keyword_loop_outcomes() {
         // conversation.md §6
         assert_eq!(
