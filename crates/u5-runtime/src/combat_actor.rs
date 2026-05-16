@@ -1644,6 +1644,7 @@ pub fn resolve_combat_defeat(party: &[PartyMember], actors: &[CombatActorDescrip
     !(0..COMBAT_PARTY_ACTOR_SLOTS).any(|slot| combat_party_slot_can_continue(slot, actors, party))
 }
 
+
 pub const fn resolve_combat_round_loop_control(
     defeat_flag: bool,
     leave_combat_flag: bool,

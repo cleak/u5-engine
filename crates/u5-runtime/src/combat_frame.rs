@@ -123,6 +123,19 @@ pub enum PostCombatTriggerReconcile {
     MissingSlot,
 }
 
+/// `active-objects.md §9` post-combat body/retrieval rewrite constants.
+/// When the resident terrain-target wrapper sees the restored
+/// trigger slot in the water-creature/body family
+/// (`WATER_CREATURE_BODY_TYPE_FIRST..=WATER_CREATURE_BODY_TYPE_LAST`)
+/// and combat set the exit-message state, it lowers both sprite
+/// bytes by [`WATER_CREATURE_BODY_SPRITE_SHIFT`] and stamps the
+/// auxiliary state (`aux1 = AUX1`, `aux3 = AUX3`).
+pub const WATER_CREATURE_BODY_TYPE_FIRST: u8 = 0x2C;
+pub const WATER_CREATURE_BODY_TYPE_LAST: u8 = 0x2F;
+pub const WATER_CREATURE_BODY_SPRITE_SHIFT: u8 = 8;
+pub const WATER_CREATURE_BODY_AUX1: u8 = 0x63;
+pub const WATER_CREATURE_BODY_AUX3: u8 = 0x02;
+
 pub fn reconcile_post_combat_terrain_trigger_slot(
     active_objects: &mut [ActiveObject],
     slot: usize,
@@ -132,11 +145,16 @@ pub fn reconcile_post_combat_terrain_trigger_slot(
         return PostCombatTriggerReconcile::MissingSlot;
     };
 
-    if body_retrieval_exit && (0x2c..=0x2f).contains(&object.type_byte) {
-        object.type_byte = object.type_byte.saturating_sub(8);
-        object.tile = object.tile.saturating_sub(8);
-        object.aux1 = 0x63;
-        object.aux3 = 0x02;
+    if body_retrieval_exit
+        && (WATER_CREATURE_BODY_TYPE_FIRST..=WATER_CREATURE_BODY_TYPE_LAST)
+            .contains(&object.type_byte)
+    {
+        object.type_byte = object
+            .type_byte
+            .saturating_sub(WATER_CREATURE_BODY_SPRITE_SHIFT);
+        object.tile = object.tile.saturating_sub(WATER_CREATURE_BODY_SPRITE_SHIFT);
+        object.aux1 = WATER_CREATURE_BODY_AUX1;
+        object.aux3 = WATER_CREATURE_BODY_AUX3;
         return PostCombatTriggerReconcile::BodyRetrieval;
     }
 

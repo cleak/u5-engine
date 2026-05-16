@@ -1,4 +1,17 @@
     #[test]
+    fn water_creature_body_retrieval_constants_match_spec() {
+        // active-objects.md §9: after combat exits with the body
+        // exit-message state, a restored water-creature trigger slot
+        // (0x2C..=0x2F) is rewritten by lowering both sprite bytes
+        // by 8 and stamping aux1 = 0x63, aux3 = 0x02.
+        assert_eq!(WATER_CREATURE_BODY_TYPE_FIRST, 0x2C);
+        assert_eq!(WATER_CREATURE_BODY_TYPE_LAST, 0x2F);
+        assert_eq!(WATER_CREATURE_BODY_SPRITE_SHIFT, 8);
+        assert_eq!(WATER_CREATURE_BODY_AUX1, 0x63);
+        assert_eq!(WATER_CREATURE_BODY_AUX3, 0x02);
+    }
+
+    #[test]
     fn blackthorn_failure_victim_slot_names_the_second_party_member() {
         // blackthorn.md §5: a punishable failure beat names the
         // party's second visible member (zero-based slot index 1)
