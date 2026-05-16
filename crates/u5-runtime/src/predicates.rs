@@ -187,6 +187,15 @@ pub const fn transport_facing_index(marker: u8) -> Option<u8> {
     }
 }
 
+/// `vehicles.md §5`: X-Xit refuses while the ship is in the
+/// wind-control sail range (`0x20..=0x23`). The player must furl
+/// sails through Y-Yell before X-Xit is accepted. Returns `true`
+/// only for the four hoisted-sail markers; the furled-ship markers
+/// `0x24..=0x27`, horse, carpet, skiff, and foot all return `false`.
+pub const fn ship_xit_refused_under_sail(marker: u8) -> bool {
+    matches!(transport_family(marker), Some(TransportFamily::ShipHoisted))
+}
+
 /// `vehicles.md §2`: typed [`Direction`] for the transport marker's
 /// facing. Decodes the low two bits via [`transport_facing_index`]
 /// and maps the four indices to the four cardinal directions:

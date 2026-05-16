@@ -7,6 +7,34 @@
     }
 
     #[test]
+    fn ship_xit_refused_under_sail_only_for_hoisted_range() {
+        // vehicles.md §5
+        for marker in 0x20u8..=0x23 {
+            assert!(
+                ship_xit_refused_under_sail(marker),
+                "marker {marker:#04x} should refuse X-Xit under sail"
+            );
+        }
+        // Furled-ship markers must accept X-Xit (subject to landing checks).
+        for marker in 0x24u8..=0x27 {
+            assert!(
+                !ship_xit_refused_under_sail(marker),
+                "marker {marker:#04x} (furled) should not refuse"
+            );
+        }
+        // Horse, carpet, foot, skiff, and out-of-range bytes never trigger
+        // the sail refusal.
+        for marker in [
+            0x00u8, 0x10, 0x11, 0x12, 0x14, 0x17, 0x1C, 0x1F, 0x28, 0x2B, 0x2C, 0xFF,
+        ] {
+            assert!(
+                !ship_xit_refused_under_sail(marker),
+                "marker {marker:#04x} should not refuse"
+            );
+        }
+    }
+
+    #[test]
     fn cardinal_direction_prompt_action_accepts_cardinals_and_space() {
         // input.md §10,§11
         assert_eq!(
