@@ -1,4 +1,49 @@
     #[test]
+    fn active_object_eviction_phase_class_ranges_match_spec() {
+        // active-objects.md §4: the eviction cascade names four class
+        // ranges paired across phases 2..=5 (off-screen) and 6..=9
+        // (visible-allowed). Promote each range to a named constant
+        // so the eviction predicate does not bake `0x01..=0x0F`,
+        // `0x80..`, `0x10`/`0x11`, and `0x30..=0x7F` as bare hex
+        // literals.
+        assert_eq!(ACTIVE_OBJECT_EVICTION_SCENERY_FIRST, 0x01);
+        assert_eq!(ACTIVE_OBJECT_EVICTION_SCENERY_LAST, 0x0F);
+        assert_eq!(ACTIVE_OBJECT_EVICTION_DYNAMIC_FIRST, 0x80);
+        assert_eq!(ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_FIRST, 0x10);
+        assert_eq!(ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_LAST, 0x11);
+        assert_eq!(ACTIVE_OBJECT_EVICTION_MIDRANGE_FIRST, 0x30);
+        assert_eq!(ACTIVE_OBJECT_EVICTION_MIDRANGE_LAST, 0x7F);
+        // Scenery range — phases 2 and 6 accept every byte in the
+        // band, reject every byte outside it.
+        for byte in
+            ACTIVE_OBJECT_EVICTION_SCENERY_FIRST..=ACTIVE_OBJECT_EVICTION_SCENERY_LAST
+        {
+            assert!(active_object_eviction_byte_accepted(byte, 2));
+            assert!(active_object_eviction_byte_accepted(byte, 6));
+        }
+        // Dynamic-actor range, with the protected `0xB5` excluded.
+        for byte in ACTIVE_OBJECT_EVICTION_DYNAMIC_FIRST..=u8::MAX {
+            let expected = byte != ACTIVE_OBJECT_EVICTION_PROTECTED_TYPE;
+            assert_eq!(active_object_eviction_byte_accepted(byte, 3), expected);
+            assert_eq!(active_object_eviction_byte_accepted(byte, 7), expected);
+        }
+        // Door/fixture-like pair.
+        for byte in 0u8..=u8::MAX {
+            let expected = byte == ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_FIRST
+                || byte == ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_LAST;
+            assert_eq!(active_object_eviction_byte_accepted(byte, 4), expected);
+            assert_eq!(active_object_eviction_byte_accepted(byte, 8), expected);
+        }
+        // Midrange object range.
+        for byte in
+            ACTIVE_OBJECT_EVICTION_MIDRANGE_FIRST..=ACTIVE_OBJECT_EVICTION_MIDRANGE_LAST
+        {
+            assert!(active_object_eviction_byte_accepted(byte, 5));
+            assert!(active_object_eviction_byte_accepted(byte, 9));
+        }
+    }
+
+    #[test]
     fn chargen_starting_calendar_matches_init_gam_seed() {
         // chargen.md §8: a fresh-from-questionnaire save begins at
         // year 139, month 4, day 5, 08:35 of the in-world calendar.

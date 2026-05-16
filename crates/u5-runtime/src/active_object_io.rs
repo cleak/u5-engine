@@ -150,6 +150,27 @@ pub const WHIRLPOOL_EMERGENCE_Y: u8 = 18;
 /// excludes from every phase past phase 1 (the empty-slot phase).
 pub const ACTIVE_OBJECT_EVICTION_PROTECTED_TYPE: u8 = 0xB5;
 
+/// `active-objects.md §4` phase 2/6 low-priority scenery class range
+/// (`0x01..=0x0F`). Phase 2 also requires the off-screen viewport
+/// gate; phase 6 reuses the same byte range without that gate.
+pub const ACTIVE_OBJECT_EVICTION_SCENERY_FIRST: u8 = 0x01;
+pub const ACTIVE_OBJECT_EVICTION_SCENERY_LAST: u8 = 0x0F;
+
+/// `active-objects.md §4` phase 3/7 dynamic-actor class lower bound
+/// (`0x80..=0xFF` minus [`ACTIVE_OBJECT_EVICTION_PROTECTED_TYPE`]).
+pub const ACTIVE_OBJECT_EVICTION_DYNAMIC_FIRST: u8 = 0x80;
+
+/// `active-objects.md §4` phase 4/8 door/fixture-like low-class pair
+/// (`0x10` and `0x11`).
+pub const ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_FIRST: u8 = 0x10;
+pub const ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_LAST: u8 = 0x11;
+
+/// `active-objects.md §4` phase 5/9 midrange object class range
+/// (`0x30..=0x7F`). Phase 5 requires the off-screen gate; phase 9
+/// reuses the same byte range without it.
+pub const ACTIVE_OBJECT_EVICTION_MIDRANGE_FIRST: u8 = 0x30;
+pub const ACTIVE_OBJECT_EVICTION_MIDRANGE_LAST: u8 = 0x7F;
+
 /// `active-objects.md §4`: returns `true` when an active-object
 /// type byte is acceptable as a candidate for eviction phase
 /// 2..=5 (the off-screen phases) or 6..=9 (the same classes,
@@ -161,10 +182,22 @@ pub const ACTIVE_OBJECT_EVICTION_PROTECTED_TYPE: u8 = 0xB5;
 pub const fn active_object_eviction_byte_accepted(byte: u8, phase: u8) -> bool {
     match phase {
         1 => byte == 0x00,
-        2 | 6 => byte >= 0x01 && byte <= 0x0F,
-        3 | 7 => byte >= 0x80 && byte != ACTIVE_OBJECT_EVICTION_PROTECTED_TYPE,
-        4 | 8 => byte == 0x10 || byte == 0x11,
-        5 | 9 => byte >= 0x30 && byte <= 0x7F,
+        2 | 6 => {
+            byte >= ACTIVE_OBJECT_EVICTION_SCENERY_FIRST
+                && byte <= ACTIVE_OBJECT_EVICTION_SCENERY_LAST
+        }
+        3 | 7 => {
+            byte >= ACTIVE_OBJECT_EVICTION_DYNAMIC_FIRST
+                && byte != ACTIVE_OBJECT_EVICTION_PROTECTED_TYPE
+        }
+        4 | 8 => {
+            byte == ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_FIRST
+                || byte == ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_LAST
+        }
+        5 | 9 => {
+            byte >= ACTIVE_OBJECT_EVICTION_MIDRANGE_FIRST
+                && byte <= ACTIVE_OBJECT_EVICTION_MIDRANGE_LAST
+        }
         10 => byte != ACTIVE_OBJECT_EVICTION_PROTECTED_TYPE,
         _ => false,
     }
