@@ -215,6 +215,19 @@ pub fn wishing_well_wish_accepted(typed: &str) -> bool {
         .any(|word| word.to_ascii_uppercase() == upper)
 }
 
+/// `view.md §4` Britannia chunk-map renderer dimensions. The full
+/// chunk-map view paints an eight-row by twenty-two-column shorthand
+/// map of Britannia chunks, wrapping the chunk walk at the world
+/// edges and marking the party's current chunk with a crosshair-style
+/// marker.
+pub const BRITANNIA_CHUNK_MAP_ROWS: u8 = 8;
+pub const BRITANNIA_CHUNK_MAP_COLUMNS: u8 = 22;
+
+/// `view.md §4`: the LOOKOBJ chunk-map renderer is entered from
+/// ordinary Look via this tile id. Final tile-catalog naming for
+/// `0x59` is a separate verification item.
+pub const BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE: u8 = 0x59;
+
 /// `view.md §2` V-View command outcome. Dispatcher inputs a single
 /// gem stock and the active scene's combat marker; the helper
 /// reports whether the call should consume a gem and whether the

@@ -1,4 +1,25 @@
     #[test]
+    fn britannia_chunk_map_renderer_dimensions_match_spec() {
+        // view.md §4: the full chunk-map view paints an eight-row by
+        // twenty-two-column shorthand map of Britannia chunks,
+        // wrapping the chunk walk at the world edges and marking the
+        // party's current chunk with a crosshair. The traced LOOKOBJ
+        // path that enters this renderer from ordinary Look is keyed
+        // by tile id 0x59. Promote the dimensions and trigger tile so
+        // future implementations have named constants instead of bare
+        // literals.
+        assert_eq!(BRITANNIA_CHUNK_MAP_ROWS, 8);
+        assert_eq!(BRITANNIA_CHUNK_MAP_COLUMNS, 22);
+        assert_eq!(BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE, 0x59);
+        // Sanity-check that 8x22 fits inside the message-panel cell
+        // dimensions used by other view-system rectangles (well under
+        // the 40-column screen width and 25-row height defined by
+        // TEXT_SCREEN_COLUMNS/_ROWS).
+        assert!(BRITANNIA_CHUNK_MAP_COLUMNS < TEXT_SCREEN_COLUMNS);
+        assert!(BRITANNIA_CHUNK_MAP_ROWS < TEXT_SCREEN_ROWS);
+    }
+
+    #[test]
     fn monster_reward_unit_derivation_constants_match_spec() {
         // catalogs/monster-bestiary.md §1: the per-class reward unit
         // returned by the damage/death handler is
