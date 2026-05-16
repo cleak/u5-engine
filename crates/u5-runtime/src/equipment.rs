@@ -57,6 +57,14 @@ pub const EQUIPMENT_NAMES: [&str; EQUIPMENT_COUNT] = [
 /// equipment bytes inside a character record.
 pub const EQUIPMENT_EMPTY_SLOT_SENTINEL: u8 = 0xFF;
 
+/// `inventory.md §6`: returns `true` when an R-Ready unequip should
+/// increment the shared equipment counter for the cleared item id. A
+/// counter already at the `EQUIPMENT_STOCK_CAP` discards the returned
+/// copy.
+pub const fn r_ready_unequip_returns_stock(current_counter: u8) -> bool {
+    current_counter < EQUIPMENT_STOCK_CAP
+}
+
 /// `catalogs/item-list.md §5.4`: rings of Invisibility and Regeneration
 /// have a 1-in-16 immediate vanish check after a successful R-Ready
 /// and another 1-in-16 removal check during the combat round loop.

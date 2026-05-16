@@ -1,4 +1,14 @@
     #[test]
+    fn r_ready_unequip_returns_stock_below_cap() {
+        // inventory.md §6
+        assert!(r_ready_unequip_returns_stock(0));
+        assert!(r_ready_unequip_returns_stock(1));
+        assert!(r_ready_unequip_returns_stock(EQUIPMENT_STOCK_CAP - 1));
+        assert!(!r_ready_unequip_returns_stock(EQUIPMENT_STOCK_CAP));
+        assert!(!r_ready_unequip_returns_stock(255));
+    }
+
+    #[test]
     fn r_ready_burden_gate_uses_strength_total() {
         // inventory.md §2.1
         // Empty member; light item; plenty of strength -> accept.
