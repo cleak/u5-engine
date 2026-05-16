@@ -1,4 +1,15 @@
     #[test]
+    fn chargen_avatar_seed_header_matches_chargen_md_section_8() {
+        // chargen.md §8
+        assert_eq!(CHARGEN_AVATAR_SEED_CURRENT_HP, 60);
+        assert_eq!(CHARGEN_AVATAR_SEED_MAX_HP, 60);
+        assert_eq!(CHARGEN_AVATAR_SEED_EXPERIENCE, 150);
+        assert_eq!(CHARGEN_AVATAR_SEED_LEVEL, 2);
+        assert_eq!(CHARGEN_AVATAR_SEED_CLASS_BYTE, b'A');
+        assert_eq!(CHARGEN_AVATAR_SEED_STATUS_BYTE, b'G');
+    }
+
+    #[test]
     fn outdoor_klimb_member_falls_when_dex_below_roll() {
         // doors-and-z-transitions.md §9
         assert_eq!(OUTDOOR_KLIMB_FALL_DIE_LOW, 1);

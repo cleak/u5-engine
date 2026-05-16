@@ -127,6 +127,17 @@ pub fn chargen_virtue_stat_delta(virtue: ShrineVirtue) -> ChargenStats {
 /// twenty Strength.
 pub const CHARGEN_STR_FLOOR: u8 = 20;
 
+/// `chargen.md §8` factory-seed Avatar header values the seed image
+/// dictates for a freshly questionnaire-created character. Chargen
+/// only customises the name, gender, STR, DEX, INT, and MP fields;
+/// these record bytes are inherited from `INIT.GAM` unchanged.
+pub const CHARGEN_AVATAR_SEED_CURRENT_HP: u16 = 60;
+pub const CHARGEN_AVATAR_SEED_MAX_HP: u16 = 60;
+pub const CHARGEN_AVATAR_SEED_EXPERIENCE: u16 = 150;
+pub const CHARGEN_AVATAR_SEED_LEVEL: u8 = 2;
+pub const CHARGEN_AVATAR_SEED_CLASS_BYTE: u8 = b'A';
+pub const CHARGEN_AVATAR_SEED_STATUS_BYTE: u8 = b'G';
+
 /// `chargen.md §8`: starting party size for a fresh-from-questionnaire
 /// save (Avatar plus Iolo and Shamino in scene 13, Iolo's Hut).
 pub const CHARGEN_STARTING_PARTY_SIZE: u8 = 3;
