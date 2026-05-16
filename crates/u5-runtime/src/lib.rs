@@ -247,6 +247,7 @@ pub use magic::{
 };
 pub use moongate::{
     MOONSTONE_GATE_INVALID_SCENE, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,
+    NATURAL_MOONGATE_LIVE_TILE, NATURAL_MOONGATE_UNDERLYING_TILE,
     NaturalMoongateCounterStep, SURFACE_CHASM_X, SURFACE_CHASM_Y,
     is_surface_chasm_cell, moonstone_burial_tile_accepted,
     natural_moongate_advance_counter, natural_moongate_cached_glyph_slot,

@@ -89,6 +89,20 @@ pub const fn natural_moongate_cached_glyph_slot(hour: u8) -> u8 {
     if hour < 12 { 0 } else { 1 }
 }
 
+/// `overworld.md §9` live moon-gate terrain byte. Eligible saved
+/// Moonstone slots are stamped with this tile while the shared
+/// gate-presence counter is nonzero; when the counter wanes to
+/// zero, the live cell is restored to
+/// [`NATURAL_MOONGATE_UNDERLYING_TILE`]. The overworld live-gate
+/// entry hook also keys its enter-portal branch off this byte.
+pub const NATURAL_MOONGATE_LIVE_TILE: u8 = 0xDC;
+
+/// `overworld.md §9` underlying terrain byte the natural-moongate
+/// refresh restores when the gate-presence counter wanes to zero.
+/// Also the byte the live-gate entry hook writes back when the
+/// portal animation finishes.
+pub const NATURAL_MOONGATE_UNDERLYING_TILE: u8 = 5;
+
 /// `overworld.md §9` fixed narrative gate location: surface plane
 /// world coordinate `(233, 235)` for the post-action special-tile
 /// branch.

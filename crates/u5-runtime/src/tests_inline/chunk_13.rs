@@ -1,4 +1,14 @@
     #[test]
+    fn natural_moongate_live_and_underlying_tile_constants_match_spec() {
+        // overworld.md §9: eligible saved Moonstone slots are stamped
+        // with the live moon-gate tile (0xDC) while the gate-presence
+        // counter is nonzero; when the counter reaches zero, the cell
+        // is restored to the underlying terrain tile 5.
+        assert_eq!(NATURAL_MOONGATE_LIVE_TILE, 0xDC);
+        assert_eq!(NATURAL_MOONGATE_UNDERLYING_TILE, 5);
+    }
+
+    #[test]
     fn moongate_animator_render_eligibility_gates_at_full_daylight() {
         // overworld.md §natural-gates: the per-frame natural-moongate
         // animator only stamps a frame when the ambient light is at
