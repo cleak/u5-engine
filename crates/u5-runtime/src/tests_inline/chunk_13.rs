@@ -7,6 +7,47 @@
     }
 
     #[test]
+    fn text_window_clamp_rectangle_normalises_per_spec() {
+        // text-output.md §9: clamp X to 0..=39, Y to 0..=24, then
+        // swap inverted pairs to enforce top_left <= bottom_right.
+        // Ordinary in-range rectangle round-trips.
+        assert_eq!(
+            text_window_clamp_rectangle(6, 5, 33, 18),
+            (6, 5, 33, 18)
+        );
+        // Inverted X pair: swap so left <= right.
+        assert_eq!(
+            text_window_clamp_rectangle(30, 5, 10, 18),
+            (10, 5, 30, 18)
+        );
+        // Inverted Y pair: swap so top <= bottom.
+        assert_eq!(
+            text_window_clamp_rectangle(0, 24, 39, 0),
+            (0, 0, 39, 24)
+        );
+        // Out-of-range X clamps to 39.
+        assert_eq!(
+            text_window_clamp_rectangle(50, 0, 200, 12),
+            (39, 0, 39, 12)
+        );
+        // Out-of-range Y clamps to 24.
+        assert_eq!(
+            text_window_clamp_rectangle(0, 30, 10, 50),
+            (0, 24, 10, 24)
+        );
+        // Full screen.
+        assert_eq!(
+            text_window_clamp_rectangle(0, 0, 39, 24),
+            (0, 0, 39, 24)
+        );
+        // Single-cell rectangle.
+        assert_eq!(
+            text_window_clamp_rectangle(20, 12, 20, 12),
+            (20, 12, 20, 12)
+        );
+    }
+
+    #[test]
     fn ship_boarding_warns_low_hull_below_ten() {
         // vehicles.md §4: low-hull warning fires strictly below 10.
         assert_eq!(SHIP_HULL_BOARDING_WARNING_THRESHOLD, 10);

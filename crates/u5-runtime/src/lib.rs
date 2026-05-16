@@ -299,8 +299,9 @@ pub use text_wrap::{
     TEXT_WINDOW_DEFAULT_BACKGROUND, TEXT_WINDOW_DEFAULT_FOREGROUND,
     TextControlByte, WRAP_MIN_LINE_BUFFER, WrapByteKind, WrappedLine,
     paragraph_byte_kind, text_control_byte, text_emitter_byte_kind,
-    text_window_centred_start_column, text_window_default_color_byte,
-    text_window_inner_width, wrap_byte_kind, wrap_text,
+    text_window_centred_start_column, text_window_clamp_rectangle,
+    text_window_default_color_byte, text_window_inner_width, wrap_byte_kind,
+    wrap_text,
 };
 pub use tlk_control_codes::{
     TLK_CODE_ACTION_DISPATCH, TLK_CODE_ASK_PARTY_NAME, TLK_CODE_ASK_WHO,

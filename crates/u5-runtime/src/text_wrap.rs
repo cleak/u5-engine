@@ -50,6 +50,31 @@ pub const fn text_window_centred_start_column(window_width: u8, line_chars: u8) 
     }
 }
 
+/// `text-output.md §9` rectangle-setter normaliser. The setter
+/// clamps each X to `0..=39` and each Y to `0..=24`, then swaps
+/// the X pair if `supplied_left > supplied_right` and the Y pair
+/// if `supplied_top > supplied_bottom`. Returns
+/// `(top_left_x, top_left_y, bottom_right_x, bottom_right_y)` with
+/// the rectangle invariant `top_left_x <= bottom_right_x` and
+/// `top_left_y <= bottom_right_y` enforced. Out-of-range window
+/// indices are the caller's silent no-op.
+pub const fn text_window_clamp_rectangle(
+    supplied_x1: u8,
+    supplied_y1: u8,
+    supplied_x2: u8,
+    supplied_y2: u8,
+) -> (u8, u8, u8, u8) {
+    let max_x = TEXT_SCREEN_COLUMNS - 1;
+    let max_y = TEXT_SCREEN_ROWS - 1;
+    let x1 = if supplied_x1 > max_x { max_x } else { supplied_x1 };
+    let x2 = if supplied_x2 > max_x { max_x } else { supplied_x2 };
+    let y1 = if supplied_y1 > max_y { max_y } else { supplied_y1 };
+    let y2 = if supplied_y2 > max_y { max_y } else { supplied_y2 };
+    let (left, right) = if x1 > x2 { (x2, x1) } else { (x1, x2) };
+    let (top, bottom) = if y1 > y2 { (y2, y1) } else { (y1, y2) };
+    (left, top, right, bottom)
+}
+
 /// `text-output.md §9` boot-time text-window defaults. After
 /// `Window descriptor defaults`, all four windows have:
 /// - rectangle `(0, 0)..=(39, 24)` (full 40-by-25 screen);
