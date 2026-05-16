@@ -1,4 +1,48 @@
     #[test]
+    fn movement_chair_force_reject_exempt_families_are_named() {
+        // movement.md §4: the chair-tile force-reject for `0x90..=0x93`
+        // is skipped for the on-foot/avatar query family
+        // `0x1C..=0x1F` and for the `0x40` single-tile query. Promote
+        // both exemption identities to named constants so the
+        // dispatcher does not encode them as bare hex literals inside
+        // the force-reject helper.
+        assert_eq!(MOVEMENT_QUERY_FOOT_AVATAR_FIRST, 0x1C);
+        assert_eq!(MOVEMENT_QUERY_FOOT_AVATAR_LAST, 0x1F);
+        assert_eq!(MOVEMENT_QUERY_SINGLE_TILE_0X40, 0x40);
+        // On-foot facings are exempt over every chair-variant id.
+        for facing in MOVEMENT_QUERY_FOOT_AVATAR_FIRST..=MOVEMENT_QUERY_FOOT_AVATAR_LAST {
+            for tile in MOVEMENT_CHAIR_FORCE_REJECT_FIRST..=MOVEMENT_CHAIR_FORCE_REJECT_LAST {
+                assert!(
+                    !movement_chair_force_reject_applies(facing, tile),
+                    "foot facing {facing:#04x} should not reject chair {tile:#04x}"
+                );
+            }
+        }
+        // The single-tile 0x40 query is exempt too.
+        for tile in MOVEMENT_CHAIR_FORCE_REJECT_FIRST..=MOVEMENT_CHAIR_FORCE_REJECT_LAST {
+            assert!(!movement_chair_force_reject_applies(
+                MOVEMENT_QUERY_SINGLE_TILE_0X40,
+                tile
+            ));
+        }
+        // A non-exempt query (e.g. mounted horse 0x12) does respect
+        // the force-reject for every chair-variant id.
+        for tile in MOVEMENT_CHAIR_FORCE_REJECT_FIRST..=MOVEMENT_CHAIR_FORCE_REJECT_LAST {
+            assert!(movement_chair_force_reject_applies(0x12, tile));
+        }
+        // Tiles outside the chair range are not subject to the
+        // force-reject regardless of query.
+        assert!(!movement_chair_force_reject_applies(
+            0x12,
+            MOVEMENT_CHAIR_FORCE_REJECT_FIRST - 1
+        ));
+        assert!(!movement_chair_force_reject_applies(
+            0x12,
+            MOVEMENT_CHAIR_FORCE_REJECT_LAST + 1
+        ));
+    }
+
+    #[test]
     fn tile_passability_bitset_uses_msb_first_packing() {
         // movement.md §4: the base terrain bitset is a thirty-two-
         // byte run where each byte packs one bit per tile id, read
