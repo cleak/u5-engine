@@ -868,6 +868,20 @@ pub fn world_surface_tile_blocks_sight(tile: u8) -> bool {
     is_mountain_tile(tile) || is_dense_forest_tile(tile)
 }
 
+/// `vehicles.md §8` town F-Fire moral-standing penalty after a
+/// successful active-object hit. The local cannon path subtracts
+/// five units from the shared moral-standing selector, floored at
+/// zero. The penalty does not apply to door-destroyed hits or to
+/// projectiles that scan empty cells.
+pub const TOWN_FIRE_ACTIVE_OBJECT_HIT_KARMA_DEBIT: u8 = 5;
+
+/// `vehicles.md §8`: apply the published town F-Fire karma debit
+/// to a standing byte. Returns the post-debit standing with the
+/// published five-unit subtraction floored at zero.
+pub const fn town_fire_active_object_hit_standing(standing: u8) -> u8 {
+    standing.saturating_sub(TOWN_FIRE_ACTIVE_OBJECT_HIT_KARMA_DEBIT)
+}
+
 pub fn town_fire_source_is_adjacent(entry: TownFireSourceEntry, x: usize, y: usize) -> bool {
     let dx = entry.x.abs_diff(x);
     let dy = entry.y.abs_diff(y);

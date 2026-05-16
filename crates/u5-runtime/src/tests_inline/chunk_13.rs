@@ -1,4 +1,21 @@
     #[test]
+    fn town_fire_active_object_hit_subtracts_five_karma_floored_at_zero() {
+        // vehicles.md §8: the local cannon path subtracts five units
+        // from the moral-standing selector on a successful active-
+        // object hit, floored at zero. Door-destroyed hits and empty
+        // shots don't apply this penalty (caller-gated).
+        assert_eq!(TOWN_FIRE_ACTIVE_OBJECT_HIT_KARMA_DEBIT, 5);
+        assert_eq!(town_fire_active_object_hit_standing(0), 0);
+        assert_eq!(town_fire_active_object_hit_standing(1), 0);
+        assert_eq!(town_fire_active_object_hit_standing(4), 0);
+        assert_eq!(town_fire_active_object_hit_standing(5), 0);
+        assert_eq!(town_fire_active_object_hit_standing(6), 1);
+        assert_eq!(town_fire_active_object_hit_standing(50), 45);
+        assert_eq!(town_fire_active_object_hit_standing(99), 94);
+        assert_eq!(town_fire_active_object_hit_standing(u8::MAX), 250);
+    }
+
+    #[test]
     fn chargen_seed_inventory_constants_match_published_seed() {
         // chargen.md §8: the seed file `INIT.GAM` supplies the
         // starting-inventory counters. Chargen does not customise
