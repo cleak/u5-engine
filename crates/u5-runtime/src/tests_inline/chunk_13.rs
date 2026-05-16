@@ -1,4 +1,34 @@
     #[test]
+    fn shop_placeholder_byte_constants_match_spec() {
+        // shops.md §4.1: the SHOPPE.DAT bark renderer reserves seven
+        // printable-ASCII bytes as substitution placeholders. None of
+        // the shipped record text uses these as literal punctuation,
+        // so the renderer always expands them. Promote each so a
+        // future renderer does not match `%`/`^`/`$`/`&`/`*`/`#`/`@`
+        // as bare literals.
+        assert_eq!(SHOP_PLACEHOLDER_GOLD, b'%');
+        assert_eq!(SHOP_PLACEHOLDER_QUANTITY, b'^');
+        assert_eq!(SHOP_PLACEHOLDER_VENDOR_NAME, b'$');
+        assert_eq!(SHOP_PLACEHOLDER_ITEM_NAME, b'&');
+        assert_eq!(SHOP_PLACEHOLDER_PLACE_NAME, b'*');
+        assert_eq!(SHOP_PLACEHOLDER_SHOP_NAME, b'#');
+        assert_eq!(SHOP_PLACEHOLDER_TIME_OF_DAY, b'@');
+        // Each named code resolves to the matching placeholder kind.
+        assert_eq!(
+            shop_placeholder_kind(SHOP_PLACEHOLDER_GOLD),
+            Some(ShopPlaceholderKind::Gold)
+        );
+        assert_eq!(
+            shop_placeholder_kind(SHOP_PLACEHOLDER_TIME_OF_DAY),
+            Some(ShopPlaceholderKind::TimeOfDay)
+        );
+        // Ordinary ASCII letters are not placeholders.
+        assert_eq!(shop_placeholder_kind(b'A'), None);
+        assert_eq!(shop_placeholder_kind(b' '), None);
+        assert_eq!(shop_placeholder_kind(0), None);
+    }
+
+    #[test]
     fn britannia_chunk_map_renderer_dimensions_match_spec() {
         // view.md §4: the full chunk-map view paints an eight-row by
         // twenty-two-column shorthand map of Britannia chunks,

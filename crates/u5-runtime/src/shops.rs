@@ -89,6 +89,55 @@ pub const SHOPPE_DAT_NONEMPTY_RECORDS: usize = 194;
 pub const SHOPPE_RECORDS_SHARED_BARKS_FIRST: usize = 0;
 pub const SHOPPE_RECORDS_SHARED_BARKS_LAST: usize = 7;
 
+/// `shops.md §4.1` substitution placeholder bytes the bark renderer
+/// expands inline from runtime shop state. None of the shipped record
+/// text uses these as literal punctuation, so the renderer always
+/// expands them rather than rendering the byte as itself.
+pub const SHOP_PLACEHOLDER_GOLD: u8 = b'%';
+pub const SHOP_PLACEHOLDER_QUANTITY: u8 = b'^';
+pub const SHOP_PLACEHOLDER_VENDOR_NAME: u8 = b'$';
+pub const SHOP_PLACEHOLDER_ITEM_NAME: u8 = b'&';
+pub const SHOP_PLACEHOLDER_PLACE_NAME: u8 = b'*';
+pub const SHOP_PLACEHOLDER_SHOP_NAME: u8 = b'#';
+pub const SHOP_PLACEHOLDER_TIME_OF_DAY: u8 = b'@';
+
+/// `shops.md §4.1` placeholder kind classifier for the bark renderer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShopPlaceholderKind {
+    /// `%` — gold amount; decimal digits with no thousands separator.
+    Gold,
+    /// `^` — quantity (bottles, ounces, hours, etc.).
+    Quantity,
+    /// `$` — vendor / shopkeeper display name.
+    VendorName,
+    /// `&` — item name (currently quoted item).
+    ItemName,
+    /// `*` — place name (town, landmark; sage rumour).
+    PlaceName,
+    /// `#` — shop name.
+    ShopName,
+    /// `@` — time-of-day word (morning/afternoon/evening, read fresh
+    /// from the world clock on every render).
+    TimeOfDay,
+}
+
+/// `shops.md §4.1`: classify a byte as one of the seven substitution
+/// placeholders, or `None` for any other byte (the renderer emits
+/// those literally or routes high-bit bytes through the phrase-token
+/// dictionary instead).
+pub const fn shop_placeholder_kind(byte: u8) -> Option<ShopPlaceholderKind> {
+    Some(match byte {
+        SHOP_PLACEHOLDER_GOLD => ShopPlaceholderKind::Gold,
+        SHOP_PLACEHOLDER_QUANTITY => ShopPlaceholderKind::Quantity,
+        SHOP_PLACEHOLDER_VENDOR_NAME => ShopPlaceholderKind::VendorName,
+        SHOP_PLACEHOLDER_ITEM_NAME => ShopPlaceholderKind::ItemName,
+        SHOP_PLACEHOLDER_PLACE_NAME => ShopPlaceholderKind::PlaceName,
+        SHOP_PLACEHOLDER_SHOP_NAME => ShopPlaceholderKind::ShopName,
+        SHOP_PLACEHOLDER_TIME_OF_DAY => ShopPlaceholderKind::TimeOfDay,
+        _ => return None,
+    })
+}
+
 pub const SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST: usize = 8;
 pub const SHOPPE_RECORDS_ARMS_DESCRIPTIONS_LAST: usize = 48;
 
