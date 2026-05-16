@@ -1,4 +1,27 @@
     #[test]
+    fn rest_duration_input_classifies_digits_cancel_and_discard() {
+        // rest-and-camp.md §4
+        for digit in 1u8..=9 {
+            assert_eq!(
+                rest_duration_input(b'0' + digit),
+                RestDurationInput::Hours(digit)
+            );
+        }
+        assert_eq!(rest_duration_input(b'0'), RestDurationInput::Cancel);
+        assert_eq!(rest_duration_input(b' '), RestDurationInput::Cancel);
+        // Other bytes silently re-prompt.
+        for byte in [
+            0x00u8, 0x08, 0x0D, 0x1B, b'a', b'A', b'/', b':', b'.', 0x7F, 0xFF,
+        ] {
+            assert_eq!(
+                rest_duration_input(byte),
+                RestDurationInput::Discard,
+                "byte {byte:#04x}"
+            );
+        }
+    }
+
+    #[test]
     fn chargen_name_input_limit_is_one_below_record_name_field() {
         // chargen.md §4: the prompt accepts up to 8 visible characters;
         // the save record's name field is 9 bytes so the trailing byte

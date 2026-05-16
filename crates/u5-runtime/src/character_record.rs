@@ -159,6 +159,33 @@ pub const fn rest_with_watch_recovers_hp(status: CharacterStatus) -> bool {
     matches!(status, CharacterStatus::Good | CharacterStatus::Sleeping)
 }
 
+/// `rest-and-camp.md §4` rest-handler duration prompt outcome. The
+/// shared rest-with-watch handler echoes a digit 1..=9 as the
+/// requested rest duration, cancels on Space or `0`, and silently
+/// re-prompts on any other key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RestDurationInput {
+    /// Digit `1..=9` — accepted duration (in hours for the
+    /// rest-with-watch handler, or as the relative target-hour offset
+    /// for the town bed-rest path).
+    Hours(u8),
+    /// Space or `0` — cancel; rest does not run.
+    Cancel,
+    /// Any other key — silently re-prompt; the handler reads the
+    /// next byte without echoing or advancing.
+    Discard,
+}
+
+/// `rest-and-camp.md §4`: classify one keystroke for the rest-handler
+/// duration prompt.
+pub const fn rest_duration_input(byte: u8) -> RestDurationInput {
+    match byte {
+        b'1'..=b'9' => RestDurationInput::Hours(byte - b'0'),
+        b'0' | b' ' => RestDurationInput::Cancel,
+        _ => RestDurationInput::Discard,
+    }
+}
+
 /// `formats/saved-gam.md §3.1`: classify a status byte at `+0x0B`.
 pub const fn character_status_for_byte(byte: u8) -> Option<CharacterStatus> {
     Some(match byte {
