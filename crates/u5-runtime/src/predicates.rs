@@ -225,6 +225,13 @@ pub const fn ship_boarding_warns_low_hull(hull_condition: u8) -> bool {
     hull_condition < SHIP_HULL_BOARDING_WARNING_THRESHOLD
 }
 
+/// `vehicles.md §4` shipwright-purchased Frigate starting state. A
+/// newly placed Frigate carries the published hull condition and
+/// skiff count when it appears at the stored sale coordinates on
+/// the next overworld entry.
+pub const FRIGATE_INITIAL_HULL_CONDITION: u8 = 100;
+pub const FRIGATE_INITIAL_SKIFFS: u8 = 2;
+
 /// `vehicles.md §2`: typed [`Direction`] for the transport marker's
 /// facing. Decodes the low two bits via [`transport_facing_index`]
 /// and maps the four indices to the four cardinal directions:

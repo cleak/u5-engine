@@ -32,6 +32,20 @@
     }
 
     #[test]
+    fn frigate_initial_starting_state_matches_published_table() {
+        // vehicles.md §4: a shipwright-purchased Frigate starts at
+        // hull condition 100 with two skiffs aboard when it is
+        // placed at the stored sale coordinates on the next
+        // overworld entry.
+        assert_eq!(FRIGATE_INITIAL_HULL_CONDITION, 100);
+        assert_eq!(FRIGATE_INITIAL_SKIFFS, 2);
+        // The starting hull is well above the low-hull warning
+        // threshold, so a freshly purchased Frigate never prints
+        // the low-hull warning on its first board.
+        assert!(!ship_boarding_warns_low_hull(FRIGATE_INITIAL_HULL_CONDITION));
+    }
+
+    #[test]
     fn town_entry_jail_wakeup_predicate_matches_published_coordinate() {
         // town-mode.md §5: surrendering at a guard-catch event sends
         // the party to Yew (scene 4) floor 0 cell (25, 4). The
