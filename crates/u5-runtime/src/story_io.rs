@@ -65,6 +65,19 @@ pub const fn intro_step_has_story6_secondary_pass(step: usize) -> bool {
     matches!(step, 15..=20)
 }
 
+/// `intro.md §10` secondary `STORY6.16` subimage selected for each
+/// art-pass step. Steps 15 and 20 use subimage 3; steps 16 and 18
+/// use subimage 5; steps 17 and 19 use subimage 7. Returns `None`
+/// for any other step.
+pub const fn intro_story6_secondary_subimage(step: usize) -> Option<u8> {
+    Some(match step {
+        15 | 20 => 3,
+        16 | 18 => 5,
+        17 | 19 => 7,
+        _ => return None,
+    })
+}
+
 /// `intro.md §10` — primary story-art placement for one zero-based intro
 /// step. Coordinates use 320-by-200 pixel space with origin at upper-left.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

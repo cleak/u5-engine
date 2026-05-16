@@ -1,4 +1,19 @@
     #[test]
+    fn intro_story6_secondary_subimage_matches_spec_table() {
+        // intro.md §10
+        assert_eq!(intro_story6_secondary_subimage(15), Some(3));
+        assert_eq!(intro_story6_secondary_subimage(20), Some(3));
+        assert_eq!(intro_story6_secondary_subimage(16), Some(5));
+        assert_eq!(intro_story6_secondary_subimage(18), Some(5));
+        assert_eq!(intro_story6_secondary_subimage(17), Some(7));
+        assert_eq!(intro_story6_secondary_subimage(19), Some(7));
+        // Steps outside the secondary art-pass have no subimage.
+        for step in [0usize, 7, 13, 14, 21, 99] {
+            assert_eq!(intro_story6_secondary_subimage(step), None);
+        }
+    }
+
+    #[test]
     fn conjure_summon_for_roll_distributes_per_spec_weights() {
         // magic.md §8
         assert_eq!(CONJURE_OUTCOME_COUNT, 15);
