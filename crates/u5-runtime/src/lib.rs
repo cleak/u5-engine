@@ -395,10 +395,12 @@ pub use town_mode::{
     TOWN_EXIT_THRESHOLD_TILE, TOWN_EXIT_UNDERWORLD_SCENE, TOWN_NIGHT_BAND_DAWN_HOUR,
     TOWN_NIGHT_BAND_DUSK_HOUR, TOWN_STAIR_TILE_FIRST, TOWN_STAIR_TILE_LAST,
     TOWN_TILE_NPC_START_B, TOWN_TILE_PERIOD_MARKER, TOWN_TILE_SPAWN_ASTERISK,
-    TownStairIntent, TownTileMarker, npc_schedule_waypoint_for_hour, npc_tlk_filename,
+    TownStairIntent, TownTileMarker, WORLD_LOCATION_TABLE_DUNGEON_ROWS,
+    WORLD_LOCATION_TABLE_TOTAL_ROWS, WORLD_LOCATION_TABLE_TOWN_ROWS,
+    npc_schedule_waypoint_for_hour, npc_tlk_filename,
     town_dawn_dusk_substitution_active, town_exit_lands_underworld, town_floor_offset,
     town_location_class, town_per_class_index, town_resident_name, town_stair_intent,
-    town_tile_marker,
+    town_tile_marker, world_location_table_scene_for_row,
 };
 pub use town_tables::*;
 pub use town_tables_io::*;

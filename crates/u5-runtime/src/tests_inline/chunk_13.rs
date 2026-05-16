@@ -1,4 +1,21 @@
     #[test]
+    fn world_location_table_scene_for_row_covers_towns_and_dungeons() {
+        // overworld.md §8
+        assert_eq!(WORLD_LOCATION_TABLE_TOWN_ROWS, 32);
+        assert_eq!(WORLD_LOCATION_TABLE_DUNGEON_ROWS, 8);
+        assert_eq!(WORLD_LOCATION_TABLE_TOTAL_ROWS, 40);
+        // Town-family rows.
+        assert_eq!(world_location_table_scene_for_row(0), Some(1));
+        assert_eq!(world_location_table_scene_for_row(31), Some(32));
+        // Dungeon-family rows.
+        assert_eq!(world_location_table_scene_for_row(32), Some(33));
+        assert_eq!(world_location_table_scene_for_row(39), Some(40));
+        // Out-of-range rows return None.
+        assert_eq!(world_location_table_scene_for_row(40), None);
+        assert_eq!(world_location_table_scene_for_row(255), None);
+    }
+
+    #[test]
     fn town_exit_lands_underworld_only_for_stonegate() {
         // overworld.md §2
         assert_eq!(TOWN_EXIT_UNDERWORLD_SCENE, 0x19);

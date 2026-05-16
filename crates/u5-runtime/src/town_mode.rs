@@ -159,6 +159,27 @@ pub const fn npc_tlk_filename(scene_byte: u8) -> Option<&'static str> {
 /// files are 4608 bytes each; each contains eight 576-byte sub-maps,
 /// each holding 32 schedule records (16 bytes each) plus a 32-byte
 /// type array and a 32-byte dialog index array.
+/// `overworld.md §8` `WorldLocationTable` row layout. The first 32
+/// rows map to town-family scenes (rows 0..=31 -> scenes 1..=32);
+/// the next 8 rows map to the dungeon-family scenes 33..=40 in
+/// shipped `DUNGEON.DAT` record order.
+pub const WORLD_LOCATION_TABLE_TOWN_ROWS: usize = 32;
+pub const WORLD_LOCATION_TABLE_DUNGEON_ROWS: usize = 8;
+pub const WORLD_LOCATION_TABLE_TOTAL_ROWS: usize =
+    WORLD_LOCATION_TABLE_TOWN_ROWS + WORLD_LOCATION_TABLE_DUNGEON_ROWS;
+
+/// `overworld.md §8`: returns the scene byte that the matched
+/// `WorldLocationTable` row binds to. Rows 0..=31 produce scene
+/// bytes 1..=32 (town-family); rows 32..=39 produce 33..=40
+/// (dungeons). Out-of-range rows return `None`.
+pub const fn world_location_table_scene_for_row(row: usize) -> Option<u8> {
+    if row < WORLD_LOCATION_TABLE_TOTAL_ROWS {
+        Some((row as u8) + 1)
+    } else {
+        None
+    }
+}
+
 /// `overworld.md §2` town-mover scene byte that lands the party on
 /// the underworld plane after an interior exit. Ordinary town
 /// exits restore the surface plane; this is the one traced
