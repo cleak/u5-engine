@@ -39,6 +39,17 @@ pub const TITLE_BIT_INITIAL_PLACEMENTS: [TitleBitPlacement; 7] = [
 pub const BRITISH_PTH_PEN_ORIGINS: [(u8, u8); 4] =
     [(68, 44), (94, 64), (78, 143), (105, 167)];
 
+/// `intro.md §3` remaining title-sequence bitmap placements drawn
+/// after the seven-slot initial title mark. Order is `TITLE.BIT` 7,
+/// `TITLE.BIT` 8, `BRITISH.BIT` 0, `TITLE.BIT` 9. The lower-band
+/// clear at [`TITLE_LOWER_BAND_CLEAR_Y`] runs before slot 7.
+pub const TITLE_BIT_REMAINING_PLACEMENTS: [TitleBitPlacement; 4] = [
+    TitleBitPlacement { asset: TitleBitAsset::Title, slot: 7, top_left_x: 108, top_left_y: 140, width: 104, height: 33 },
+    TitleBitPlacement { asset: TitleBitAsset::Title, slot: 8, top_left_x: 152, top_left_y: 0, width: 16, height: 15 },
+    TitleBitPlacement { asset: TitleBitAsset::British, slot: 0, top_left_x: 24, top_left_y: 66, width: 272, height: 62 },
+    TitleBitPlacement { asset: TitleBitAsset::Title, slot: 9, top_left_x: 104, top_left_y: 160, width: 112, height: 33 },
+];
+
 /// `intro.md §3` lower-screen Y where the title flow clears the
 /// lower band before drawing `TITLE.BIT` slot 7.
 pub const TITLE_LOWER_BAND_CLEAR_Y: u16 = 140;

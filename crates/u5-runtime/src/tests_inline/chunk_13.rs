@@ -1,4 +1,57 @@
     #[test]
+    fn title_bit_remaining_placements_match_published_table() {
+        // intro.md §3: after the seven-slot initial title mark, the
+        // title sequence draws TITLE.BIT 7, TITLE.BIT 8,
+        // BRITISH.BIT 0, and TITLE.BIT 9 in that order at the
+        // published 320x200 pixel rectangles.
+        assert_eq!(TITLE_BIT_REMAINING_PLACEMENTS.len(), 4);
+        assert_eq!(
+            TITLE_BIT_REMAINING_PLACEMENTS[0],
+            TitleBitPlacement {
+                asset: TitleBitAsset::Title,
+                slot: 7,
+                top_left_x: 108,
+                top_left_y: 140,
+                width: 104,
+                height: 33,
+            }
+        );
+        assert_eq!(
+            TITLE_BIT_REMAINING_PLACEMENTS[1],
+            TitleBitPlacement {
+                asset: TitleBitAsset::Title,
+                slot: 8,
+                top_left_x: 152,
+                top_left_y: 0,
+                width: 16,
+                height: 15,
+            }
+        );
+        assert_eq!(
+            TITLE_BIT_REMAINING_PLACEMENTS[2],
+            TitleBitPlacement {
+                asset: TitleBitAsset::British,
+                slot: 0,
+                top_left_x: 24,
+                top_left_y: 66,
+                width: 272,
+                height: 62,
+            }
+        );
+        assert_eq!(
+            TITLE_BIT_REMAINING_PLACEMENTS[3],
+            TitleBitPlacement {
+                asset: TitleBitAsset::Title,
+                slot: 9,
+                top_left_x: 104,
+                top_left_y: 160,
+                width: 112,
+                height: 33,
+            }
+        );
+    }
+
+    #[test]
     fn intro_panel_asset_suffix_pairs_high_and_low_colour_drivers() {
         // boot.md §5 / intro.md §3: the driver family chooses the
         // paired screen-panel asset suffix. EGA and Tandy are
