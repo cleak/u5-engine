@@ -7,6 +7,40 @@ use std::path::{Path, PathBuf};
 
 use crate::*;
 
+/// `active-objects.md §4` typed slot-index role. The 32-slot active-
+/// object table is partitioned into three disjoint roles by index:
+/// slot 0 is the canonical player slot, slots 1..=23 are walked by
+/// the ordinary world/town acquisition allocator, and slots 24..=31
+/// are reserved for setup paths outside the allocator (combat
+/// placement, the player-as-NPC mirror helper, etc.).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ActiveObjectSlotRole {
+    /// Slot 0 — refreshed every frame from world-state globals.
+    Player,
+    /// Slots 1..=23 — ordinary world/town acquisition range. The
+    /// allocator's lowest-up scan walks this range.
+    OrdinaryAcquisition,
+    /// Slots 24..=31 — reserved for setup paths outside the
+    /// allocator (combat setup, player-as-NPC mirror, etc.).
+    Reserved,
+}
+
+/// `active-objects.md §4`: classify a slot index `0..=31` into its
+/// allocator role. Returns `None` for indices outside the 32-slot
+/// table.
+pub const fn active_object_slot_role(slot: usize) -> Option<ActiveObjectSlotRole> {
+    if slot >= OOL_SLOTS {
+        return None;
+    }
+    Some(if slot == ACTIVE_OBJECT_PLAYER_SLOT {
+        ActiveObjectSlotRole::Player
+    } else if slot >= ACTIVE_OBJECT_ORDINARY_FIRST && slot <= ACTIVE_OBJECT_ORDINARY_LAST {
+        ActiveObjectSlotRole::OrdinaryAcquisition
+    } else {
+        ActiveObjectSlotRole::Reserved
+    })
+}
+
 /// `active-objects.md §3` field offsets within the eight-byte record.
 pub const ACTIVE_OBJECT_FIELD_TYPE: usize = 0;
 pub const ACTIVE_OBJECT_FIELD_TILE: usize = 1;

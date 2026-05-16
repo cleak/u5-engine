@@ -1,4 +1,31 @@
     #[test]
+    fn active_object_slot_role_partitions_table_per_spec() {
+        // active-objects.md §4
+        assert_eq!(
+            active_object_slot_role(ACTIVE_OBJECT_PLAYER_SLOT),
+            Some(ActiveObjectSlotRole::Player)
+        );
+        for slot in ACTIVE_OBJECT_ORDINARY_FIRST..=ACTIVE_OBJECT_ORDINARY_LAST {
+            assert_eq!(
+                active_object_slot_role(slot),
+                Some(ActiveObjectSlotRole::OrdinaryAcquisition),
+                "slot {slot} should be OrdinaryAcquisition"
+            );
+        }
+        for slot in ACTIVE_OBJECT_RESERVED_FIRST..=ACTIVE_OBJECT_RESERVED_LAST {
+            assert_eq!(
+                active_object_slot_role(slot),
+                Some(ActiveObjectSlotRole::Reserved),
+                "slot {slot} should be Reserved"
+            );
+        }
+        // Out-of-range indices return None.
+        assert_eq!(active_object_slot_role(OOL_SLOTS), None);
+        assert_eq!(active_object_slot_role(64), None);
+        assert_eq!(active_object_slot_role(usize::MAX), None);
+    }
+
+    #[test]
     fn amulet_turning_scatter_threshold_is_byte_midpoint() {
         // combat.md §11
         assert_eq!(AMULET_TURNING_SCATTER_THRESHOLD, 128);
