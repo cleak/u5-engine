@@ -32,6 +32,27 @@
     }
 
     #[test]
+    fn tile_glyph_digraph_classifies_published_byte_codes() {
+        // formats/miscmsg-dat.md §4: Codex/prophecy tile-glyph
+        // records use `@` for inter-word space, `[` for TH, `]` for
+        // NG, `_` for ER. Other bytes are ordinary text glyphs.
+        use TileGlyphDigraph::*;
+        assert_eq!(tile_glyph_digraph(b'@'), Some(InterWordSpace));
+        assert_eq!(tile_glyph_digraph(b'['), Some(Th));
+        assert_eq!(tile_glyph_digraph(b']'), Some(Ng));
+        assert_eq!(tile_glyph_digraph(b'_'), Some(Er));
+        assert_eq!(InterWordSpace.expansion(), " ");
+        assert_eq!(Th.expansion(), "TH");
+        assert_eq!(Ng.expansion(), "NG");
+        assert_eq!(Er.expansion(), "ER");
+        // Ordinary ASCII letters and punctuation are not digraphs.
+        assert_eq!(tile_glyph_digraph(b'A'), None);
+        assert_eq!(tile_glyph_digraph(b' '), None);
+        assert_eq!(tile_glyph_digraph(b'.'), None);
+        assert_eq!(tile_glyph_digraph(0), None);
+    }
+
+    #[test]
     fn npc_schedule_hour_at_boundary_matches_published_equality_rule() {
         // npc-schedules.md §6: the boundary trigger fires only when
         // the current hour exactly matches one of the four time

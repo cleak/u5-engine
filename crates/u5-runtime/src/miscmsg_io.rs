@@ -23,6 +23,48 @@ pub const MISCMSG_DAT_LEN: usize = 2_745;
 /// `formats/miscmsg-dat.md §2`: NUL-terminated record count.
 pub const MISCMSG_DAT_RECORDS: usize = 47;
 
+/// `formats/miscmsg-dat.md §4` tile-glyph digraph classifier. Some
+/// Codex/prophecy records embed these byte codes that the
+/// sign-style tile-glyph renderer expands into multi-character
+/// graphemes. Ordinary prose records do not use them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TileGlyphDigraph {
+    /// `@` — inter-word space in tile-glyph text.
+    InterWordSpace,
+    /// `[` — `TH` digraph.
+    Th,
+    /// `]` — `NG` digraph.
+    Ng,
+    /// `_` — `ER` digraph.
+    Er,
+}
+
+impl TileGlyphDigraph {
+    /// `formats/miscmsg-dat.md §4`: expansion the tile-glyph
+    /// renderer prints for this digraph.
+    pub const fn expansion(self) -> &'static str {
+        match self {
+            Self::InterWordSpace => " ",
+            Self::Th => "TH",
+            Self::Ng => "NG",
+            Self::Er => "ER",
+        }
+    }
+}
+
+/// `formats/miscmsg-dat.md §4`: classify a record payload byte as a
+/// tile-glyph digraph code. Returns `None` for ordinary text bytes
+/// that the renderer prints as-is.
+pub const fn tile_glyph_digraph(byte: u8) -> Option<TileGlyphDigraph> {
+    Some(match byte {
+        b'@' => TileGlyphDigraph::InterWordSpace,
+        b'[' => TileGlyphDigraph::Th,
+        b']' => TileGlyphDigraph::Ng,
+        b'_' => TileGlyphDigraph::Er,
+        _ => return None,
+    })
+}
+
 /// `formats/miscmsg-dat.md §3` consumer cluster a record index belongs
 /// to. The clusters are consumer contracts, not in-file structure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

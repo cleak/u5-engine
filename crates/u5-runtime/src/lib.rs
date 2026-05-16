@@ -302,7 +302,8 @@ pub use endmsg_io::{
 };
 pub use miscmsg_io::{
     MISCMSG_DAT_FILE, MISCMSG_DAT_LEN, MISCMSG_DAT_RECORDS, MiscMessages,
-    MiscMsgFamily, load_misc_messages, miscmsg_family, parse_misc_messages,
+    MiscMsgFamily, TileGlyphDigraph, load_misc_messages, miscmsg_family,
+    parse_misc_messages, tile_glyph_digraph,
 };
 pub use quest_flags::{
     CONVERSATION_CLEANUP_GOLD_DEBIT_MAX, CONVERSATION_CLEANUP_GOLD_DEBIT_MIN,
