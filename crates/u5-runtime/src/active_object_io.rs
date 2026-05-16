@@ -86,6 +86,26 @@ pub const fn outdoor_serpent_dragon_triggers(roll_0_to_6: u8) -> bool {
 /// aligned with the player within this many cells.
 pub const OUTDOOR_WATER_CREATURE_ADJACENCY_RADIUS: i32 = 3;
 
+/// `active-objects.md §8`: returns `true` when a ship-like
+/// water-creature or pirate slot is orthogonally aligned with the
+/// player (sharing the same row or column) and the wrapped distance
+/// along the shared axis is within
+/// [`OUTDOOR_WATER_CREATURE_ADJACENCY_RADIUS`]. Diagonal offsets
+/// never trigger the attack-message / water-creature step path,
+/// regardless of distance.
+pub const fn outdoor_water_creature_attack_aligned(wrapped_dx: i32, wrapped_dy: i32) -> bool {
+    let abs_dx = if wrapped_dx < 0 { -wrapped_dx } else { wrapped_dx };
+    let abs_dy = if wrapped_dy < 0 { -wrapped_dy } else { wrapped_dy };
+    if abs_dx != 0 && abs_dy != 0 {
+        return false;
+    }
+    if abs_dx == 0 && abs_dy == 0 {
+        return false;
+    }
+    let along_axis = if abs_dx == 0 { abs_dy } else { abs_dx };
+    along_axis <= OUTDOOR_WATER_CREATURE_ADJACENCY_RADIUS
+}
+
 /// `active-objects.md §2,§7` (whirlpool emergence) coordinates the
 /// outdoor whirlpool transition writes when the party is moved to
 /// the underworld plane.

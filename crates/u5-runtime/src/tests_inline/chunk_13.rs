@@ -1,4 +1,46 @@
     #[test]
+    fn outdoor_water_creature_attack_aligned_orthogonal_within_three() {
+        // active-objects.md §8: ship-like water-creature and pirate frames
+        // trigger the attack message + water-creature step path when they
+        // share a row or column with the player and the wrapped distance
+        // along that axis is within three cells.
+        assert_eq!(OUTDOOR_WATER_CREATURE_ADJACENCY_RADIUS, 3);
+        // Same-column hits 1..=3 north and south.
+        for dy in [-3, -2, -1, 1, 2, 3] {
+            assert!(
+                outdoor_water_creature_attack_aligned(0, dy),
+                "column dy {dy} should align"
+            );
+        }
+        // Same-row hits 1..=3 west and east.
+        for dx in [-3, -2, -1, 1, 2, 3] {
+            assert!(
+                outdoor_water_creature_attack_aligned(dx, 0),
+                "row dx {dx} should align"
+            );
+        }
+        // Beyond the radius along the shared axis is not aligned.
+        assert!(!outdoor_water_creature_attack_aligned(0, 4));
+        assert!(!outdoor_water_creature_attack_aligned(0, -4));
+        assert!(!outdoor_water_creature_attack_aligned(4, 0));
+        assert!(!outdoor_water_creature_attack_aligned(-4, 0));
+        // Zero displacement (same cell as the player) does not trigger.
+        assert!(!outdoor_water_creature_attack_aligned(0, 0));
+        // Diagonal offsets never trigger, regardless of distance.
+        for dx in 1..=3 {
+            for dy in 1..=3 {
+                assert!(
+                    !outdoor_water_creature_attack_aligned(dx, dy),
+                    "diagonal ({dx},{dy}) should not align"
+                );
+                assert!(!outdoor_water_creature_attack_aligned(-dx, dy));
+                assert!(!outdoor_water_creature_attack_aligned(dx, -dy));
+                assert!(!outdoor_water_creature_attack_aligned(-dx, -dy));
+            }
+        }
+    }
+
+    #[test]
     fn combat_ambush_reveal_slots_max_matches_spec() {
         // combat.md §5
         assert_eq!(COMBAT_AMBUSH_REVEAL_SLOTS_MAX, 8);
