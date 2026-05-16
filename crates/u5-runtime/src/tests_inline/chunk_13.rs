@@ -1,4 +1,28 @@
     #[test]
+    fn overworld_klimb_entry_gate_orders_grapple_before_on_foot() {
+        // doors-and-z-transitions.md §9: the Grapple-flag check is
+        // consulted first; the vehicle gate is only reached when the
+        // Grapple flag is set.
+        assert_eq!(
+            overworld_klimb_entry_gate(false, true),
+            OverworldKlimbEntryGate::NoGrapple
+        );
+        // Without the Grapple flag the vehicle state does not matter.
+        assert_eq!(
+            overworld_klimb_entry_gate(false, false),
+            OverworldKlimbEntryGate::NoGrapple
+        );
+        assert_eq!(
+            overworld_klimb_entry_gate(true, false),
+            OverworldKlimbEntryGate::NotOnFoot
+        );
+        assert_eq!(
+            overworld_klimb_entry_gate(true, true),
+            OverworldKlimbEntryGate::Proceed
+        );
+    }
+
+    #[test]
     fn spell_field_placement_byte_maps_three_field_spells_per_spec() {
         // magic.md §8 + dungeon-mode.md §8: field-placement spells
         // 14/15/16 write energy-field cell bytes 0x82/0x81/0x80.

@@ -15,6 +15,37 @@
 pub const OUTDOOR_KLIMB_FALL_DIE_LOW: u8 = 1;
 pub const OUTDOOR_KLIMB_FALL_DIE_HIGH: u8 = 30;
 
+/// `doors-and-z-transitions.md §9` outdoor K-Klimb entry-gate
+/// outcome. The handler refuses before probing the target cell when
+/// the party lacks the Grapple quest flag or is in a vehicle state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OverworldKlimbEntryGate {
+    /// Party lacks the Grapple flag — handler prints "With what?"
+    /// and exits.
+    NoGrapple,
+    /// Party is in a vehicle state (not on foot) — handler prints
+    /// "On foot!" and exits.
+    NotOnFoot,
+    /// Both gates passed — handler proceeds to the target-tile probe.
+    Proceed,
+}
+
+/// `doors-and-z-transitions.md §9`: classify the outdoor K-Klimb
+/// entry gate result. The Grapple check is consulted first; the
+/// vehicle check is only reached when the Grapple flag is set.
+pub const fn overworld_klimb_entry_gate(
+    has_grapple: bool,
+    on_foot: bool,
+) -> OverworldKlimbEntryGate {
+    if !has_grapple {
+        return OverworldKlimbEntryGate::NoGrapple;
+    }
+    if !on_foot {
+        return OverworldKlimbEntryGate::NotOnFoot;
+    }
+    OverworldKlimbEntryGate::Proceed
+}
+
 /// `doors-and-z-transitions.md §9`: returns `true` when the
 /// supplied member falls during the outdoor Klimb risk roll. The
 /// fall fires when the rolled value is strictly greater than the
