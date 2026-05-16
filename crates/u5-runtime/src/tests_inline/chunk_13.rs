@@ -1,4 +1,14 @@
     #[test]
+    fn dungeon_chest_reward_ranges_match_published_table() {
+        // containers.md §6: per-row quantity / subtype ranges.
+        // Food rolls 1..=31, Keys/Gems/Torches roll 1..=3, potion
+        // and scroll subtypes roll 0..=7.
+        assert_eq!(DUNGEON_CHEST_FOOD_MAX, 31);
+        assert_eq!(DUNGEON_CHEST_SMALL_MAX, 3);
+        assert_eq!(DUNGEON_CHEST_SUBTYPE_MAX, 7);
+    }
+
+    #[test]
     fn inventory_add_equipment_units_grants_ammo_five_others_one() {
         // containers.md §8: equipment-class inventory adds grant
         // one unit per award except for Arrows (id 27) and Quarrels

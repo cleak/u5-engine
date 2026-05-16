@@ -158,8 +158,9 @@ pub use commands::{
     view_command_outcome, wishing_well_wish_accepted,
 };
 pub use containers::{
-    DUNGEON_CHEST_ROWS, DungeonChestReward, DungeonChestRow, DungeonChestTrapTier,
-    INVENTORY_ADD_AMMO_UNITS, INVENTORY_ADD_EQUIPMENT_UNITS,
+    DUNGEON_CHEST_FOOD_MAX, DUNGEON_CHEST_ROWS, DUNGEON_CHEST_SMALL_MAX,
+    DUNGEON_CHEST_SUBTYPE_MAX, DungeonChestReward, DungeonChestRow,
+    DungeonChestTrapTier, INVENTORY_ADD_AMMO_UNITS, INVENTORY_ADD_EQUIPMENT_UNITS,
     InventoryAddClass, SearchLocationPrefix, SearchTrapVisibility, TABLE_FOOD_TILE_A,
     TABLE_FOOD_TILE_B, chest_primary_pool_row_succeeds, chest_secondary_pool_attempts,
     dungeon_chest_row_awarded, dungeon_chest_row_gate_max, dungeon_chest_trap_tier,
