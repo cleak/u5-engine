@@ -32,6 +32,26 @@
     }
 
     #[test]
+    fn dungeon_renderer_paints_wall_cue_for_published_classes() {
+        // dungeon-mode.md §6: the first-person renderer paints a
+        // wall cue for cells whose high nibble identifies a wall
+        // class (0xB..=0xE) or the 0xF? heavy-door / room-trigger
+        // family. Open passages and other low classes paint as void.
+        for tile in 0x00u8..=0xAF {
+            assert!(
+                !dungeon_renderer_paints_wall_cue(tile),
+                "tile {tile:#04x} should not paint wall cue"
+            );
+        }
+        for tile in 0xB0u8..=0xFF {
+            assert!(
+                dungeon_renderer_paints_wall_cue(tile),
+                "tile {tile:#04x} should paint wall cue"
+            );
+        }
+    }
+
+    #[test]
     fn dungeon_bomb_search_outcome_dispatches_strictly_above_threshold() {
         // dungeon-mode.md §8: Search-on-0x62 rolls 1..=30 against
         // the shared dungeon-chest threshold. Roll above threshold

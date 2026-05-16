@@ -604,6 +604,21 @@ pub const fn dungeon_fountain_effect(tile: u8) -> Option<DungeonFountainEffect> 
     })
 }
 
+/// `dungeon-mode.md §6` first-person renderer wall-class predicate.
+/// The renderer paints a wall cue when the high nibble identifies a
+/// wall class (`0xB..=0xE`) or one of the closed sub-cases of the
+/// `0xF?` heavy-door / room-trigger family. Open passages and the
+/// other low-nibble classes paint as void/floor instead.
+///
+/// Caller is responsible for picking the closed-door sub-case for
+/// `0xF?` cells; the published table doesn't enumerate the exact
+/// door sub-bytes, so this helper conservatively treats every `0xF?`
+/// cell as a wall-cue paint candidate. Open doors are then rendered
+/// as a passage by the caller's door-state check.
+pub const fn dungeon_renderer_paints_wall_cue(tile: u8) -> bool {
+    matches!(tile >> 4, 0xB..=0xE | 0xF)
+}
+
 /// `dungeon-mode.md §13` K-Klimb apply-path outcome for the underfoot
 /// dungeon cell. The handler reads only the high nibble (and the
 /// exact `0x60` byte) to decide whether to change Z, prompt the
