@@ -1011,6 +1011,39 @@ pub const SAGE_TOPIC_INPUT_LIMIT: usize = 15;
 /// be end-of-input or a space).
 pub const SAGE_RUMOUR_TOPIC_COUNT: usize = 26;
 
+/// `shops.md §8.8` sage rumour-keyword input cap. The sage's
+/// keyword prompt accepts up to fifteen characters; longer input is
+/// rejected at the input pipeline.
+pub const SAGE_KEYWORD_INPUT_LIMIT: usize = 15;
+
+/// `shops.md §8.8`: returns `true` when `typed` matches `topic` per
+/// the sage's strict topic-boundary rule: case-insensitive prefix
+/// equality with the next character either end-of-input or a space.
+/// Empty topic strings are rejected; partial prefixes never match
+/// longer topics, and longer words that merely start with a topic
+/// are rejected.
+pub fn sage_topic_matches(typed: &str, topic: &str) -> bool {
+    if topic.is_empty() {
+        return false;
+    }
+    let typed_bytes = typed.as_bytes();
+    let topic_bytes = topic.as_bytes();
+    if typed_bytes.len() < topic_bytes.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < topic_bytes.len() {
+        if !typed_bytes[i].eq_ignore_ascii_case(&topic_bytes[i]) {
+            return false;
+        }
+        i += 1;
+    }
+    if typed_bytes.len() == topic_bytes.len() {
+        return true;
+    }
+    typed_bytes[topic_bytes.len()] == b' '
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SageTopic {
     pub topic: &'static str,

@@ -32,6 +32,31 @@
     }
 
     #[test]
+    fn sage_topic_matches_uses_space_boundary_prefix_per_spec() {
+        // shops.md §8.8: the sage uses case-insensitive prefix
+        // matching with a strict boundary: the byte after the
+        // matched topic must be end-of-input or a space.
+        assert_eq!(SAGE_KEYWORD_INPUT_LIMIT, 15);
+
+        // Exact match.
+        assert!(sage_topic_matches("LORD", "LORD"));
+        // Case-insensitive.
+        assert!(sage_topic_matches("lord", "LORD"));
+        assert!(sage_topic_matches("Lord", "lord"));
+        // Topic followed by space.
+        assert!(sage_topic_matches("LORD BRITISH", "LORD"));
+        // Longer typed word without a space boundary is rejected.
+        assert!(!sage_topic_matches("LORDS", "LORD"));
+        assert!(!sage_topic_matches("lordly", "lord"));
+        // Typed string too short can't match.
+        assert!(!sage_topic_matches("LOR", "LORD"));
+        // Empty topic never matches.
+        assert!(!sage_topic_matches("LORD", ""));
+        // Empty typed input never matches a non-empty topic.
+        assert!(!sage_topic_matches("", "LORD"));
+    }
+
+    #[test]
     fn inn_per_instance_base_rate_and_gold_gate_match_published_table() {
         // shops.md §8.4 stock inn rate rows. Spot-check every inn
         // against the published base room rate and minimum-gold gate.
