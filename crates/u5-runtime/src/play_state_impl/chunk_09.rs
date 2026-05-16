@@ -815,18 +815,14 @@ impl PlayState {
     }
 
     pub fn base_daylight(&self) -> u8 {
-        match self.area {
-            Area::Dungeon { .. }
-            | Area::World {
+        let (underworld, depth_z) = match self.area {
+            Area::Dungeon { level, .. } => (false, level.saturating_add(1)),
+            Area::World {
                 plane: WorldPlane::Underworld,
-            } => FULL_DARKNESS,
-            _ => match self.clock.hour {
-                0..=4 | 20..=23 => FULL_DARKNESS,
-                5 => DAWN_DUSK_LIGHT[(self.clock.minute / 10).min(5) as usize],
-                19 => DAWN_DUSK_LIGHT[((59 - self.clock.minute) / 10).min(5) as usize],
-                _ => FULL_DAYLIGHT,
-            },
-        }
+            } => (true, 0),
+            _ => (false, 0),
+        };
+        daylight_base_value(self.clock.hour, self.clock.minute, underworld, depth_z)
     }
 
     pub fn advance_visual_tick(&mut self) {

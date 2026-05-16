@@ -1,4 +1,52 @@
     #[test]
+    fn dawn_dusk_hour_constants_match_spec() {
+        // lighting.md §3: the surface day-night cycle uses two named
+        // gradient hours and six ten-minute levels. Promote the dawn
+        // hour, dusk hour, step width, and last-minute boundary to
+        // named constants so the daylight_base_value helper does not
+        // bake `5`, `19`, `10`, and `59` as bare literals.
+        assert_eq!(DAWN_HOUR, 5);
+        assert_eq!(DUSK_HOUR, 19);
+        assert_eq!(DAWN_DUSK_STEP_MINUTES, 10);
+        assert_eq!(LAST_IN_HOUR_MINUTE, 59);
+        assert_eq!(DAWN_DUSK_LAST_INDEX, 5);
+        assert_eq!(DAWN_DUSK_LIGHT.len(), 6);
+        // Six 10-minute levels exactly fill the dawn hour.
+        assert_eq!(
+            DAWN_DUSK_LIGHT.len() as u8 * DAWN_DUSK_STEP_MINUTES,
+            60,
+            "six ten-minute steps cover the full dawn/dusk hour"
+        );
+        // 05:00 starts at the darkest published level and 05:59
+        // settles at the brightest published level.
+        assert_eq!(daylight_base_value(DAWN_HOUR, 0, false, 0), DAWN_DUSK_LIGHT[0]);
+        assert_eq!(
+            daylight_base_value(DAWN_HOUR, LAST_IN_HOUR_MINUTE, false, 0),
+            DAWN_DUSK_LIGHT[DAWN_DUSK_LAST_INDEX]
+        );
+        // 19:00 starts at the brightest level (dusk reverses the
+        // gradient) and 19:59 settles at the darkest.
+        assert_eq!(
+            daylight_base_value(DUSK_HOUR, 0, false, 0),
+            DAWN_DUSK_LIGHT[DAWN_DUSK_LAST_INDEX]
+        );
+        assert_eq!(
+            daylight_base_value(DUSK_HOUR, LAST_IN_HOUR_MINUTE, false, 0),
+            DAWN_DUSK_LIGHT[0]
+        );
+        // 04:59 and 20:00 are full darkness on the surface.
+        assert_eq!(
+            daylight_base_value(DAWN_HOUR - 1, LAST_IN_HOUR_MINUTE, false, 0),
+            FULL_DARKNESS
+        );
+        assert_eq!(daylight_base_value(DUSK_HOUR + 1, 0, false, 0), FULL_DARKNESS);
+        // The underworld and dungeon depths force full darkness
+        // regardless of the hour.
+        assert_eq!(daylight_base_value(12, 0, true, 0), FULL_DARKNESS);
+        assert_eq!(daylight_base_value(12, 0, false, 1), FULL_DARKNESS);
+    }
+
+    #[test]
     fn town_cannon_named_constants_match_spec() {
         // vehicles.md §8: the town F-Fire path traces a short fixed
         // line for the first blocking target, and on an active-object

@@ -142,12 +142,37 @@ pub const DUNGEON_TORCH_INCREMENT_MAX: u8 = 127;
 pub const LIGHT_SPELL_DURATION: u8 = 100;
 pub const GREAT_LIGHT_SPELL_DURATION: u8 = 255;
 
+/// `lighting.md §3`: hour at which the surface dawn gradient is played
+/// (06:00 transition window — hours below this are full darkness).
+pub const DAWN_HOUR: u8 = 5;
+
+/// `lighting.md §3`: hour at which the surface dusk gradient is played
+/// (hours above this are full darkness).
+pub const DUSK_HOUR: u8 = 19;
+
+/// `lighting.md §3`: each dawn/dusk gradient step covers this many
+/// minutes. Six ten-minute levels exactly fill the dawn or dusk hour.
+pub const DAWN_DUSK_STEP_MINUTES: u8 = 10;
+
+/// `lighting.md §3`: highest index into [`DAWN_DUSK_LIGHT`]. The dawn
+/// and dusk paths clamp to this index so a minute byte that has
+/// somehow advanced past 59 still selects the last published level
+/// rather than indexing out of the table.
+pub const DAWN_DUSK_LAST_INDEX: usize = DAWN_DUSK_LIGHT.len() - 1;
+
+/// `lighting.md §3`: last in-hour minute. Dusk reverses the gradient
+/// by indexing on `(LAST_IN_HOUR_MINUTE - minute) / DAWN_DUSK_STEP_MINUTES`
+/// so 19:00 starts at the brightest gradient level and 19:59 ends at
+/// the darkest.
+pub const LAST_IN_HOUR_MINUTE: u8 = 59;
+
 /// `time.md §6` Stage-1 base daylight value computed from hour/minute and
 /// scene. Returns the cached ambient base before personal-light floors:
 ///   - underworld plane or dungeon depth (`z != 0`) → full darkness;
-///   - hour < 5 or hour > 19 → full darkness;
-///   - hour == 5 → dawn gradient indexed by `minute / 10`;
-///   - hour == 19 → dusk gradient indexed by `(59 - minute) / 10`;
+///   - hour < DAWN_HOUR or hour > DUSK_HOUR → full darkness;
+///   - hour == DAWN_HOUR → dawn gradient indexed by `minute / DAWN_DUSK_STEP_MINUTES`;
+///   - hour == DUSK_HOUR → dusk gradient indexed by
+///     `(LAST_IN_HOUR_MINUTE - minute) / DAWN_DUSK_STEP_MINUTES`;
 ///   - otherwise (06..=18 surface) → full daylight.
 /// Caller still applies the personal-light floors in [`apply_personal_light`]
 /// and the [`ambient_is_sentinel`] skip rule before writing the result.
@@ -155,17 +180,25 @@ pub const fn daylight_base_value(hour: u8, minute: u8, underworld: bool, depth_z
     if underworld || depth_z != 0 {
         return FULL_DARKNESS;
     }
-    if hour < 5 || hour > 19 {
+    if hour < DAWN_HOUR || hour > DUSK_HOUR {
         return FULL_DARKNESS;
     }
-    if hour == 5 {
-        let raw = (minute / 10) as usize;
-        let idx = if raw > 5 { 5 } else { raw };
+    if hour == DAWN_HOUR {
+        let raw = (minute / DAWN_DUSK_STEP_MINUTES) as usize;
+        let idx = if raw > DAWN_DUSK_LAST_INDEX {
+            DAWN_DUSK_LAST_INDEX
+        } else {
+            raw
+        };
         return DAWN_DUSK_LIGHT[idx];
     }
-    if hour == 19 {
-        let raw = ((59 - minute) / 10) as usize;
-        let idx = if raw > 5 { 5 } else { raw };
+    if hour == DUSK_HOUR {
+        let raw = ((LAST_IN_HOUR_MINUTE - minute) / DAWN_DUSK_STEP_MINUTES) as usize;
+        let idx = if raw > DAWN_DUSK_LAST_INDEX {
+            DAWN_DUSK_LAST_INDEX
+        } else {
+            raw
+        };
         return DAWN_DUSK_LIGHT[idx];
     }
     FULL_DAYLIGHT
