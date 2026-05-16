@@ -149,6 +149,24 @@ pub fn terrain_combat_replacement_threshold(count: u8) -> u8 {
     (count / 4) + 1
 }
 
+/// `encounters.md §4` + `combat.md §5` terrain-replacement chance
+/// denominator. Each spawn index below
+/// [`terrain_combat_replacement_threshold`] rolls modulo this
+/// denominator; only a zero result swaps the arena's base tile for
+/// the per-arena replacement tile. Later spawn indexes never roll
+/// for the replacement.
+pub const TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR: u8 = 9;
+
+/// `encounters.md §4` + `combat.md §5`: returns `true` when an
+/// early-spawn replacement roll selects the per-arena replacement
+/// tile. The caller is responsible for the spawn-index threshold
+/// gate; this helper only encodes the one-in-nine die.
+pub const fn terrain_combat_replacement_roll_picks_replacement(
+    replacement_roll_seed: u8,
+) -> bool {
+    replacement_roll_seed % TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR == 0
+}
+
 /// `encounters.md §8` shipped dungeon-encounter arena bank size.
 /// 112 arenas are stored in the on-disk `DUNGEON.CBT` file and are
 /// indexed as `bank * 16 + (tile & 0x0F)` from the dungeon-room
@@ -177,7 +195,9 @@ pub fn terrain_combat_tile_for_spawn_index(
         return base_tile;
     }
     match replacement_tile {
-        Some(tile) if replacement_roll_seed % 9 == 0 => tile,
+        Some(tile) if terrain_combat_replacement_roll_picks_replacement(replacement_roll_seed) => {
+            tile
+        }
         _ => base_tile,
     }
 }

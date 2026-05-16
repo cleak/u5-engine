@@ -1,4 +1,23 @@
     #[test]
+    fn terrain_combat_replacement_roll_one_in_nine() {
+        // encounters.md §4 + combat.md §5
+        assert_eq!(TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR, 9);
+        // Walk a full 0..=255 seed domain. Exactly the multiples of 9
+        // should pick the replacement tile.
+        let mut hits = 0;
+        for seed in 0u8..=255 {
+            let picks = terrain_combat_replacement_roll_picks_replacement(seed);
+            assert_eq!(picks, seed % 9 == 0, "seed {seed}");
+            if picks {
+                hits += 1;
+            }
+        }
+        // 256 seeds; multiples of 9 in 0..=255 are 0, 9, 18, ... 252 → 29
+        // values.
+        assert_eq!(hits, 29);
+    }
+
+    #[test]
     fn combat_arena_file_offsets_match_spec_arithmetic() {
         // formats/cbt.md §3: arena_start = arena_index * 352;
         // row_start = arena_start + row * 32.
