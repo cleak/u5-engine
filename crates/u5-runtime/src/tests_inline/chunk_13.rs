@@ -1,4 +1,50 @@
     #[test]
+    fn shared_trap_effect_family_classifies_combat_and_non_combat() {
+        // traps.md §3: combat scenes resolve only to Acid (id 0) or
+        // Poison (id 1); non-combat scenes follow the 3/2/2/1 outcome
+        // distribution Acid/Poison/Bomb/Gas across 8 equiprobable rolls.
+        for index in 0u8..=255 {
+            let combat = shared_trap_effect_family_from_index(index, true);
+            assert!(matches!(combat, TrapEffect::Acid | TrapEffect::Poison));
+            assert!(trap_effect_appears_in_combat(combat));
+        }
+        // Non-combat distribution mirrors trap_non_combat_outcomes.
+        let mut counts = [0u32; 4];
+        for index in 0u8..=7 {
+            let fam = shared_trap_effect_family_from_index(index, false);
+            let bucket = match fam {
+                TrapEffect::Acid => 0,
+                TrapEffect::Poison => 1,
+                TrapEffect::Bomb => 2,
+                TrapEffect::Gas => 3,
+            };
+            counts[bucket] += 1;
+        }
+        assert_eq!(
+            counts[0],
+            u32::from(trap_non_combat_outcomes(TrapEffect::Acid))
+        );
+        assert_eq!(
+            counts[1],
+            u32::from(trap_non_combat_outcomes(TrapEffect::Poison))
+        );
+        assert_eq!(
+            counts[2],
+            u32::from(trap_non_combat_outcomes(TrapEffect::Bomb))
+        );
+        assert_eq!(
+            counts[3],
+            u32::from(trap_non_combat_outcomes(TrapEffect::Gas))
+        );
+        // High bits beyond the low 3 must not change the non-combat
+        // family — the resolver masks `index & 7`.
+        assert_eq!(
+            shared_trap_effect_family_from_index(0xF8, false),
+            shared_trap_effect_family_from_index(0x00, false)
+        );
+    }
+
+    #[test]
     fn light_counter_spend_with_tag_threads_timing_tag() {
         // lighting.md §5: per-turn cleanup applies the same Q/T
         // adjustments to the light-counter spend that it applies to
