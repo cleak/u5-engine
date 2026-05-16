@@ -612,11 +612,35 @@ pub const fn random_encounter_spawn_outcomes(threshold: u8) -> u8 {
     }
 }
 
+/// `overworld.md §7` / `encounters.md §3` random-encounter probe die.
+/// The mode loop draws a uniform integer in `[1, RANDOM_ENCOUNTER_DIE]`
+/// and fires the spawner when [`random_encounter_threshold`] exceeds
+/// the draw.
+pub const RANDOM_ENCOUNTER_DIE: u8 = 30;
+
+/// `encounters.md §3` last hour of the surface night-boost band.
+/// Hours `0..=RANDOM_ENCOUNTER_NIGHT_HOUR_LAST` add the published
+/// night-time boost to the surface encounter threshold; daytime
+/// hours use the lower base threshold.
+pub const RANDOM_ENCOUNTER_NIGHT_HOUR_LAST: u8 = 4;
+
+/// `encounters.md §3` underworld-plane fixed encounter threshold. The
+/// underworld uses this value regardless of hour or tile.
+pub const RANDOM_ENCOUNTER_UNDERWORLD_THRESHOLD: u8 = 3;
+
+/// `overworld.md §7`: returns `true` when the random-encounter probe
+/// fires for the given threshold and uniform `1..=RANDOM_ENCOUNTER_DIE`
+/// draw. The spawner runs when `threshold` is nonzero and strictly
+/// greater than the draw.
+pub const fn random_encounter_probe_fires(threshold: u8, roll_1_to_30: u8) -> bool {
+    threshold != 0 && threshold > roll_1_to_30
+}
+
 pub const fn random_encounter_threshold(underworld: bool, tile: u8, hour: u8) -> u8 {
     if underworld {
-        return 3;
+        return RANDOM_ENCOUNTER_UNDERWORLD_THRESHOLD;
     }
-    let night = hour <= 4;
+    let night = hour <= RANDOM_ENCOUNTER_NIGHT_HOUR_LAST;
     match tile {
         0x20..=0x26 => {
             if night { 3 } else { 0 }

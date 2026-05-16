@@ -1,4 +1,38 @@
     #[test]
+    fn random_encounter_probe_fires_strictly_above_draw() {
+        // overworld.md §7 / encounters.md §3: the encounter probe
+        // rolls 1..=30 and fires when the threshold is nonzero and
+        // strictly greater than the draw. Zero thresholds never fire.
+        assert_eq!(RANDOM_ENCOUNTER_DIE, 30);
+        assert_eq!(RANDOM_ENCOUNTER_NIGHT_HOUR_LAST, 4);
+        assert_eq!(RANDOM_ENCOUNTER_UNDERWORLD_THRESHOLD, 3);
+
+        // Zero threshold rejects every draw.
+        for roll in 1..=RANDOM_ENCOUNTER_DIE {
+            assert!(!random_encounter_probe_fires(0, roll));
+        }
+        // For threshold = 5, draws 1..=4 fire, draw 5 does not.
+        for roll in 1..=4 {
+            assert!(random_encounter_probe_fires(5, roll));
+        }
+        assert!(!random_encounter_probe_fires(5, 5));
+        assert!(!random_encounter_probe_fires(5, RANDOM_ENCOUNTER_DIE));
+        // Underworld threshold of 3 fires on rolls 1 and 2 only.
+        assert!(random_encounter_probe_fires(
+            RANDOM_ENCOUNTER_UNDERWORLD_THRESHOLD,
+            1
+        ));
+        assert!(random_encounter_probe_fires(
+            RANDOM_ENCOUNTER_UNDERWORLD_THRESHOLD,
+            2
+        ));
+        assert!(!random_encounter_probe_fires(
+            RANDOM_ENCOUNTER_UNDERWORLD_THRESHOLD,
+            3
+        ));
+    }
+
+    #[test]
     fn per_turn_minute_increments_match_published_mode_costs() {
         // time.md §10: indoor mode loops pass one minute per turn,
         // the overworld passes two, the town rest path uses

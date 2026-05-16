@@ -102,7 +102,7 @@ impl PlayState {
             ^ entry.type_byte.wrapping_mul(17)
             ^ (entry.dx as u8).wrapping_mul(19)
             ^ (entry.dy as u8).wrapping_mul(23);
-        1 + (seed % 30)
+        1 + (seed % RANDOM_ENCOUNTER_DIE)
     }
 
     pub fn apply_world_waterfall_sweep(
