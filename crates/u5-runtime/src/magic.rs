@@ -18,6 +18,26 @@ pub const fn spell_mana_cost(circle: u8) -> u8 {
     circle
 }
 
+/// `magic.md §8` field-placement spell -> energy-field cell byte
+/// the placement writes into the dungeon image. `In Flam Grav`
+/// (spell 14, Fire Field) writes `0x82`; `In Nox Grav` (spell 15,
+/// Poison Field) writes `0x81`; `In Zu Grav` (spell 16, Sleep
+/// Field) writes `0x80`. Magic field placement preserves the
+/// dungeon visit-marker bit, producing the matching `0x88..=0x8A`
+/// variants when the cell already carries that bit; the marker-bit
+/// preservation is the caller's responsibility, not this helper's.
+/// Returns `None` for any other spell index — including `Dispel
+/// Field` (18), which removes a placed field rather than writing
+/// one.
+pub const fn spell_field_placement_byte(spell_index: usize) -> Option<u8> {
+    Some(match spell_index {
+        FIRE_FIELD_SPELL_INDEX => 0x82,
+        POISON_FIELD_SPELL_INDEX => 0x81,
+        SLEEP_FIELD_SPELL_INDEX => 0x80,
+        _ => return None,
+    })
+}
+
 /// `magic.md §4`: minimum caster level required for a spell of the
 /// supplied circle (level == circle). The level gate accepts the
 /// cast and debits mana even when below — only the *effect* fails.

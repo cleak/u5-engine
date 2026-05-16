@@ -1,4 +1,27 @@
     #[test]
+    fn spell_field_placement_byte_maps_three_field_spells_per_spec() {
+        // magic.md §8 + dungeon-mode.md §8: field-placement spells
+        // 14/15/16 write energy-field cell bytes 0x82/0x81/0x80.
+        assert_eq!(spell_field_placement_byte(FIRE_FIELD_SPELL_INDEX), Some(0x82));
+        assert_eq!(
+            spell_field_placement_byte(POISON_FIELD_SPELL_INDEX),
+            Some(0x81)
+        );
+        assert_eq!(spell_field_placement_byte(SLEEP_FIELD_SPELL_INDEX), Some(0x80));
+        // Dispel Field (18) removes a field rather than placing one;
+        // the helper returns None.
+        assert_eq!(spell_field_placement_byte(DISPEL_FIELD_SPELL_INDEX), None);
+        // Spot-check a handful of unrelated spell ids.
+        for idx in [0usize, 1, 2, 5, 12, 13, 17, 19, 47] {
+            assert_eq!(
+                spell_field_placement_byte(idx),
+                None,
+                "spell {idx} should not place a field"
+            );
+        }
+    }
+
+    #[test]
     fn intro_story_step_waits_for_input_skips_auto_opening_only() {
         // intro.md §10: step 0 is the automatic opening transition;
         // steps 1..=20 wait for a non-zero keyboard poll before
