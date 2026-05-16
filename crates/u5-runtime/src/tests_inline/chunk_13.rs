@@ -1,4 +1,19 @@
     #[test]
+    fn spell_charge_add_capped_clamps_at_99() {
+        // magic.md §6,§7
+        assert_eq!(spell_charge_add_capped(0, 0), 0);
+        assert_eq!(spell_charge_add_capped(0, 5), 5);
+        assert_eq!(spell_charge_add_capped(95, 4), 99);
+        // Exact cap reached.
+        assert_eq!(spell_charge_add_capped(50, 49), 99);
+        // Cap clamps overflow.
+        assert_eq!(spell_charge_add_capped(98, 5), 99);
+        assert_eq!(spell_charge_add_capped(99, 1), 99);
+        // Saturating add prevents wrap; cap enforces 99.
+        assert_eq!(spell_charge_add_capped(200, 200), 99);
+    }
+
+    #[test]
     fn shrine_offering_cost_charges_digit_times_100() {
         // karma.md §7
         assert_eq!(ShrineVirtue::shrine_offering_cost(0), None);

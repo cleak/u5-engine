@@ -198,9 +198,9 @@ pub use magic::{
     SPELL_SELECTOR_IGNORED_LETTERS, SPELL_SELECTOR_MAX_LEN, SpellSceneClass,
     active_effect_tag_for_byte, cast_dispatcher_gate, combat_interference_blocks,
     field_spell_kind_for_dungeon_byte, heal_spell_amount_from_raw_roll_u8,
-    is_resident_rune_syllable, spell_allowed_in_scene, spell_circle_for,
-    spell_common_name, spell_indoor_absorbs, spell_mana_cost, spell_min_caster_level,
-    spell_selector_is_ignored,
+    is_resident_rune_syllable, spell_allowed_in_scene, spell_charge_add_capped,
+    spell_circle_for, spell_common_name, spell_indoor_absorbs, spell_mana_cost,
+    spell_min_caster_level, spell_selector_is_ignored,
 };
 pub use moongate::{
     MOONSTONE_GATE_INVALID_SCENE, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,

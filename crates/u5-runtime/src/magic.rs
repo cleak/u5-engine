@@ -381,6 +381,16 @@ pub const fn spell_indoor_absorbs(scene_blackthorn_castle: bool, has_crown: bool
     scene_blackthorn_castle && !has_crown
 }
 
+/// `magic.md §6,§7` per-spell charge-counter add. After M-Mix's
+/// recipe-match step the requested quantity is added to the
+/// per-spell charge counter, capped at `SPELL_CHARGE_CAP` (99).
+/// Returns the new counter value clamped to the cap. Caller has
+/// already validated the recipe match and debited reagents.
+pub const fn spell_charge_add_capped(current: u8, qty: u8) -> u8 {
+    let sum = current.saturating_add(qty);
+    if sum > SPELL_CHARGE_CAP { SPELL_CHARGE_CAP } else { sum }
+}
+
 /// `magic.md §3` canonical Britannian magic-rune syllable vocabulary.
 /// The twenty-four entries are returned in the spec's table order.
 pub const RUNE_SYLLABLE_VOCABULARY: [&str; 24] = [
