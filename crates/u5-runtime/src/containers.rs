@@ -366,6 +366,31 @@ pub const fn dungeon_chest_gold_is_zero_width(dungeon_depth: u8) -> bool {
     dungeon_chest_gold_upper(dungeon_depth) == 0
 }
 
+/// `containers.md §5` rare-reagent harvest quantity bounds. On a
+/// successful midnight harvest at a published harvest point the
+/// generator rolls in the inclusive `2..=15` range and adds the
+/// rolled amount to the matching reagent counter with the published
+/// 99-unit cap.
+pub const RARE_REAGENT_HARVEST_QUANTITY_MIN: u8 = 2;
+pub const RARE_REAGENT_HARVEST_QUANTITY_MAX: u8 = 15;
+pub const RARE_REAGENT_HARVEST_HOUR: u8 = 0;
+pub const RARE_REAGENT_HARVEST_MINUTE_BOUND: u8 = 60;
+
+/// `containers.md §5`: returns the harvest-quantity amount for one
+/// uniform seed byte. The shipped helper rolls `2 + (seed % 14)`,
+/// which produces every value in `2..=15` either 18 or 19 times
+/// across the 256-value seed domain.
+pub const fn rare_reagent_harvest_quantity(seed: u8) -> u8 {
+    RARE_REAGENT_HARVEST_QUANTITY_MIN + (seed % 14)
+}
+
+/// `containers.md §5`: returns `true` when the in-game hour qualifies
+/// as midnight for the rare-reagent harvest gate. The shipped check
+/// requires `hour == 0` regardless of minute.
+pub const fn rare_reagent_harvest_hour_accepted(hour: u8) -> bool {
+    hour == RARE_REAGENT_HARVEST_HOUR
+}
+
 /// `containers.md §6` per-row reward quantity / subtype ranges
 /// the dungeon chest generator passes to the shared random helper
 /// after the gate succeeds.

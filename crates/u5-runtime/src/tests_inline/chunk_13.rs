@@ -1,4 +1,25 @@
     #[test]
+    fn rare_reagent_harvest_quantity_stays_in_2_to_15_range() {
+        // containers.md §5: a successful midnight harvest rolls
+        // 2..=15 sprigs of the matching reagent.
+        assert_eq!(RARE_REAGENT_HARVEST_QUANTITY_MIN, 2);
+        assert_eq!(RARE_REAGENT_HARVEST_QUANTITY_MAX, 15);
+        for seed in 0u8..=255 {
+            let q = rare_reagent_harvest_quantity(seed);
+            assert!(
+                (RARE_REAGENT_HARVEST_QUANTITY_MIN..=RARE_REAGENT_HARVEST_QUANTITY_MAX)
+                    .contains(&q),
+                "seed {seed} produced {q}"
+            );
+        }
+        // Hour gate accepts only midnight.
+        assert!(rare_reagent_harvest_hour_accepted(0));
+        for hour in 1u8..=23 {
+            assert!(!rare_reagent_harvest_hour_accepted(hour));
+        }
+    }
+
+    #[test]
     fn dungeon_chest_reward_ranges_match_published_table() {
         // containers.md §6: per-row quantity / subtype ranges.
         // Food rolls 1..=31, Keys/Gems/Torches roll 1..=3, potion

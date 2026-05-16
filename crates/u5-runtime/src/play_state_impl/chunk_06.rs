@@ -1234,7 +1234,7 @@ impl PlayState {
     }
 
     pub fn rare_reagent_harvest_amount(&self, point_index: usize) -> u8 {
-        2 + (self.rare_reagent_harvest_seed(point_index) % 14)
+        rare_reagent_harvest_quantity(self.rare_reagent_harvest_seed(point_index))
     }
 
     pub fn rare_reagent_harvest_seed(&self, point_index: usize) -> u8 {
