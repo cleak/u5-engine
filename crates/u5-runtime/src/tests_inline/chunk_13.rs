@@ -1,4 +1,30 @@
     #[test]
+    fn input_code_direction_range_bounds_match_spec() {
+        // input.md §5: the eight published direction codes occupy two
+        // contiguous high-byte ranges — diagonals 0xD3..=0xD6 and
+        // cardinals 0xFB..=0xFE. Promote both range bounds so callers
+        // that probe whether a returned byte is a direction can use a
+        // named range pair instead of bare hex literals.
+        assert_eq!(INPUT_CODE_DIAGONAL_FIRST, 0xD3);
+        assert_eq!(INPUT_CODE_DIAGONAL_LAST, 0xD6);
+        assert_eq!(INPUT_CODE_CARDINAL_FIRST, 0xFB);
+        assert_eq!(INPUT_CODE_CARDINAL_LAST, 0xFE);
+        for byte in INPUT_CODE_DIAGONAL_FIRST..=INPUT_CODE_DIAGONAL_LAST {
+            let dir = input_code_direction(byte).unwrap();
+            assert!(!dir.is_cardinal(), "byte {byte:#04x} should be diagonal");
+        }
+        for byte in INPUT_CODE_CARDINAL_FIRST..=INPUT_CODE_CARDINAL_LAST {
+            let dir = input_code_direction(byte).unwrap();
+            assert!(dir.is_cardinal(), "byte {byte:#04x} should be cardinal");
+        }
+        // Bytes just outside each range do not classify as directions.
+        assert_eq!(input_code_direction(INPUT_CODE_DIAGONAL_FIRST - 1), None);
+        assert_eq!(input_code_direction(INPUT_CODE_DIAGONAL_LAST + 1), None);
+        assert_eq!(input_code_direction(INPUT_CODE_CARDINAL_FIRST - 1), None);
+        assert_eq!(input_code_direction(INPUT_CODE_CARDINAL_LAST + 1), None);
+    }
+
+    #[test]
     fn text_extended_control_byte_constants_match_spec_codes() {
         // text-output.md §3 / §5: the per-cell emitter recognises five
         // extended high-bit control bytes (0xFB..=0xFF) that mutate

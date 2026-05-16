@@ -125,6 +125,21 @@ pub const INPUT_CODE_EAST: u8 = 0xFC;
 pub const INPUT_CODE_NORTH: u8 = 0xFD;
 pub const INPUT_CODE_SOUTH: u8 = 0xFE;
 
+/// `input.md §5` first byte of the contiguous diagonal-direction range
+/// (`0xD3..=0xD6`). Diagonals sit between the function-key remap range
+/// and the cardinal range so a single byte unambiguously distinguishes
+/// the three families.
+pub const INPUT_CODE_DIAGONAL_FIRST: u8 = INPUT_CODE_NORTHWEST;
+/// `input.md §5` last byte of the diagonal-direction range.
+pub const INPUT_CODE_DIAGONAL_LAST: u8 = INPUT_CODE_SOUTHEAST;
+/// `input.md §5` first byte of the contiguous cardinal-direction
+/// range (`0xFB..=0xFE`). Cardinals occupy the high tail of the byte
+/// space just below `0xFF` and are accepted by every movement
+/// consumer.
+pub const INPUT_CODE_CARDINAL_FIRST: u8 = INPUT_CODE_WEST;
+/// `input.md §5` last byte of the cardinal-direction range.
+pub const INPUT_CODE_CARDINAL_LAST: u8 = INPUT_CODE_SOUTH;
+
 /// `input.md §5` direction-code classification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InputDirection {
