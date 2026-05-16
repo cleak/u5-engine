@@ -628,6 +628,19 @@ pub enum DungeonCellClass {
     HeavyDoorOrRoomTrigger,
 }
 
+/// `dungeon-mode.md §5`: visit-local patch a room-trigger cell
+/// receives after the room encounter resolves. The high nibble drops
+/// from `0xF` (room trigger) to `0xA` (room-helper state) while the
+/// low nibble (room-arena slot id) is preserved. Returns `None` for
+/// any byte that is not in the `0xF?` room-trigger range — the
+/// caller should not patch other classes.
+pub const fn dungeon_room_post_combat_patch_byte(tile: u8) -> Option<u8> {
+    if tile >> 4 != 0xF {
+        return None;
+    }
+    Some(0xA0 | (tile & 0x0F))
+}
+
 /// `dungeon-mode.md §3`: L-Look description-byte normalisation. The
 /// exact byte `0x61` is rewritten to `0x00` before the cell-class
 /// description string is looked up, so it reports as passage even

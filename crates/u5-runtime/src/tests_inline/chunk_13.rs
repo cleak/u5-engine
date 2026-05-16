@@ -1,4 +1,32 @@
     #[test]
+    fn dungeon_room_post_combat_patch_demotes_high_nibble_only() {
+        // dungeon-mode.md §5
+        assert_eq!(
+            dungeon_room_post_combat_patch_byte(0xF0),
+            Some(0xA0)
+        );
+        assert_eq!(
+            dungeon_room_post_combat_patch_byte(0xF5),
+            Some(0xA5)
+        );
+        assert_eq!(
+            dungeon_room_post_combat_patch_byte(0xFF),
+            Some(0xAF)
+        );
+        // Non-room-trigger cells must not be patched.
+        assert_eq!(dungeon_room_post_combat_patch_byte(0x00), None);
+        assert_eq!(dungeon_room_post_combat_patch_byte(0xA0), None);
+        assert_eq!(dungeon_room_post_combat_patch_byte(0xB7), None);
+        // The patched byte's class is now RoomHelperState (0xA?).
+        assert_eq!(
+            dungeon_cell_class_of(
+                dungeon_room_post_combat_patch_byte(0xF3).unwrap()
+            ),
+            DungeonCellClass::RoomHelperState
+        );
+    }
+
+    #[test]
     fn dungeon_look_description_byte_normalises_only_0x61() {
         // dungeon-mode.md §3
         assert_eq!(dungeon_look_description_byte(0x61), 0x00);
