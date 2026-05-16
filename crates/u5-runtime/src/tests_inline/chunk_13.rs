@@ -1,4 +1,14 @@
     #[test]
+    fn text_window_boot_defaults_match_spec() {
+        // text-output.md §9
+        assert_eq!(TEXT_WINDOW_DEFAULT_FOREGROUND, 15);
+        assert_eq!(TEXT_WINDOW_DEFAULT_BACKGROUND, 0);
+        assert_eq!(TEXT_WINDOW_DEFAULT_ACTIVE_INDEX, 0);
+        // Packed colour byte: bg in high nibble, fg in low nibble.
+        assert_eq!(text_window_default_color_byte(), 0x0F);
+    }
+
+    #[test]
     fn text_emitter_byte_kind_classifies_per_spec() {
         // text-output.md §5
         // Newline / carriage return — cursor moves without a glyph.

@@ -21,6 +21,23 @@ pub const TEXT_WINDOW_COUNT: usize = 4;
 pub const TEXT_SCREEN_COLUMNS: u8 = 40;
 pub const TEXT_SCREEN_ROWS: u8 = 25;
 
+/// `text-output.md §9` boot-time text-window defaults. After
+/// `Window descriptor defaults`, all four windows have:
+/// - rectangle `(0, 0)..=(39, 24)` (full 40-by-25 screen);
+/// - cursor `(0, 0)` (window-local);
+/// - colour foreground 15 (bright white) on background 0 (black);
+/// - all style flags cleared.
+/// The active window is index 0.
+pub const TEXT_WINDOW_DEFAULT_FOREGROUND: u8 = 15;
+pub const TEXT_WINDOW_DEFAULT_BACKGROUND: u8 = 0;
+pub const TEXT_WINDOW_DEFAULT_ACTIVE_INDEX: u8 = 0;
+
+/// `text-output.md §9`: the packed colour byte produced by the
+/// boot defaults (low nibble fg, high nibble bg).
+pub const fn text_window_default_color_byte() -> u8 {
+    (TEXT_WINDOW_DEFAULT_BACKGROUND << 4) | TEXT_WINDOW_DEFAULT_FOREGROUND
+}
+
 /// `text-output.md §3` extended text-control bytes that mutate the
 /// active window's cached style without rendering as glyphs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
