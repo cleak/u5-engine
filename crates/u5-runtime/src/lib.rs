@@ -282,7 +282,7 @@ pub use story_io::{
     STORY_DAT_LEN, STORY_DAT_RECORDS, StoryRecords, intro_step_has_story6_secondary_pass,
     intro_step_has_transition_strip, intro_story6_secondary_subimage,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
-    load_story_records, parse_story_records,
+    intro_story_step_waits_for_input, load_story_records, parse_story_records,
 };
 pub use text_wrap::{
     EmitterByteKind, ParagraphByteKind, TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS,

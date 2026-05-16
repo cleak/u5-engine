@@ -1,4 +1,26 @@
     #[test]
+    fn intro_story_step_waits_for_input_skips_auto_opening_only() {
+        // intro.md §10: step 0 is the automatic opening transition;
+        // steps 1..=20 wait for a non-zero keyboard poll before
+        // advancing. Steps outside 0..=20 are not produced by the loop.
+        assert!(!intro_story_step_waits_for_input(INTRO_AUTO_OPENING_STEP));
+        for step in 1usize..=20 {
+            assert!(
+                intro_story_step_waits_for_input(step),
+                "step {step} should wait for input"
+            );
+        }
+        assert_eq!(INTRO_STORY_STEP_COUNT, 21);
+        // Out-of-range steps: not produced.
+        for step in [INTRO_STORY_STEP_COUNT, 22, 50, 100] {
+            assert!(
+                !intro_story_step_waits_for_input(step),
+                "step {step} is out of range"
+            );
+        }
+    }
+
+    #[test]
     fn dungeon_search_secret_pit_reveal_matches_spec_table() {
         // dungeon-mode.md §8: Search on 0x61 reports a secret door,
         // rewrites the cell to 0x60, and unless on the deepest level

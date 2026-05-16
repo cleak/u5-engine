@@ -59,6 +59,16 @@ pub const fn intro_step_has_transition_strip(step: usize) -> bool {
     matches!(step, 0 | 7 | 14)
 }
 
+/// `intro.md §10`: returns `true` when the intro story-loop step
+/// blocks on a keyboard poll before advancing. Step 0 is the
+/// automatic opening transition that advances on its own; every
+/// other step in `1..=20` waits for a non-zero key. Steps outside
+/// the published `0..=20` range are not produced by the loop and
+/// return `false`.
+pub const fn intro_story_step_waits_for_input(step: usize) -> bool {
+    matches!(step, 1..=20)
+}
+
 /// `intro.md §10`: returns `true` for the six secondary
 /// `STORY6.16` art-pass steps.
 pub const fn intro_step_has_story6_secondary_pass(step: usize) -> bool {
