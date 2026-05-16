@@ -1,4 +1,35 @@
     #[test]
+    fn combat_field_kind_constants_match_published_spell_helper_table() {
+        // catalogs/spell-list.md §6: the combat-side field helper
+        // consumes one of four kind bytes per field spell —
+        // Poison 0x33, Sleep 0x34, Fire 0x35, Energy 0x36 —
+        // separate from the dungeon image bytes 0x80..0x83.
+        assert_eq!(COMBAT_FIELD_KIND_POISON, 0x33);
+        assert_eq!(COMBAT_FIELD_KIND_SLEEP, 0x34);
+        assert_eq!(COMBAT_FIELD_KIND_FIRE, 0x35);
+        assert_eq!(COMBAT_FIELD_KIND_ENERGY, 0x36);
+        assert_eq!(
+            spell_combat_field_kind(FIRE_FIELD_SPELL_INDEX),
+            Some(COMBAT_FIELD_KIND_FIRE)
+        );
+        assert_eq!(
+            spell_combat_field_kind(POISON_FIELD_SPELL_INDEX),
+            Some(COMBAT_FIELD_KIND_POISON)
+        );
+        assert_eq!(
+            spell_combat_field_kind(SLEEP_FIELD_SPELL_INDEX),
+            Some(COMBAT_FIELD_KIND_SLEEP)
+        );
+        assert_eq!(
+            spell_combat_field_kind(ENERGY_FIELD_SPELL_INDEX),
+            Some(COMBAT_FIELD_KIND_ENERGY)
+        );
+        // Non-field spells have no combat kind byte.
+        assert_eq!(spell_combat_field_kind(0), None);
+        assert_eq!(spell_combat_field_kind(DISPEL_FIELD_SPELL_INDEX), None);
+    }
+
+    #[test]
     fn negate_time_spell_install_counter_matches_time_stop_duration() {
         // catalogs/spell-list.md §6: Negate Time (An Tym) starts the
         // shared `T` runtime tag with a 10-count countdown.

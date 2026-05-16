@@ -52,6 +52,16 @@ pub const fn spell_field_placement_byte(spell_index: usize) -> Option<u8> {
     })
 }
 
+/// `catalogs/spell-list.md §6` per-spell combat field-kind bytes.
+/// The combat arena field helper consumes one of these four kind
+/// bytes after combat field casting — separate from the
+/// `0x80..0x83` dungeon image bytes returned by
+/// [`spell_field_placement_byte`].
+pub const COMBAT_FIELD_KIND_POISON: u8 = 0x33;
+pub const COMBAT_FIELD_KIND_SLEEP: u8 = 0x34;
+pub const COMBAT_FIELD_KIND_FIRE: u8 = 0x35;
+pub const COMBAT_FIELD_KIND_ENERGY: u8 = 0x36;
+
 /// `magic.md §8` field-placement spell -> combat field-kind byte
 /// the shared arena helper consumes in combat / non-dungeon scenes.
 /// This is a separate dispatch table from the dungeon image bytes
@@ -64,10 +74,10 @@ pub const fn spell_field_placement_byte(spell_index: usize) -> Option<u8> {
 /// helper).
 pub const fn spell_combat_field_kind(spell_index: usize) -> Option<u8> {
     Some(match spell_index {
-        FIRE_FIELD_SPELL_INDEX => 0x35,
-        POISON_FIELD_SPELL_INDEX => 0x33,
-        SLEEP_FIELD_SPELL_INDEX => 0x34,
-        ENERGY_FIELD_SPELL_INDEX => 0x36,
+        FIRE_FIELD_SPELL_INDEX => COMBAT_FIELD_KIND_FIRE,
+        POISON_FIELD_SPELL_INDEX => COMBAT_FIELD_KIND_POISON,
+        SLEEP_FIELD_SPELL_INDEX => COMBAT_FIELD_KIND_SLEEP,
+        ENERGY_FIELD_SPELL_INDEX => COMBAT_FIELD_KIND_ENERGY,
         _ => return None,
     })
 }
