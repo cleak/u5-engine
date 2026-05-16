@@ -1,4 +1,29 @@
     #[test]
+    fn karma_dat_band_width_matches_rescue_and_camp_selectors() {
+        // blackthorn.md §7 and formats/karma-dat.md §4 describe the
+        // KARMA.DAT verdict selectors as five (or six) twenty-point
+        // bands. Promote the shared band width so the rescue/refuge
+        // selector and the Lord British-in-disguise camp selector
+        // agree at one named source of truth instead of repeating
+        // `20`/`19`/`39`/... as bare literals.
+        assert_eq!(KARMA_DAT_BAND_WIDTH, 20);
+        // Every band boundary aligns to a multiple of the width.
+        // The rescue selector caps at four bands (records 0..=4);
+        // the camp selector also seeks directly to record 5 for the
+        // top 80..=99 band but does not use the lower bands beyond
+        // 0..=3.
+        for band in 0u8..5 {
+            let lo = band * KARMA_DAT_BAND_WIDTH;
+            let hi = lo + KARMA_DAT_BAND_WIDTH - 1;
+            assert_eq!(blackthorn_rescue_verdict_record(lo), band);
+            assert_eq!(blackthorn_rescue_verdict_record(hi), band);
+        }
+        // Sanity: the moral-standing selector caps at 99, so the top
+        // band's upper edge is exactly 99 (= 4 * 20 + 19).
+        assert_eq!(4 * KARMA_DAT_BAND_WIDTH + KARMA_DAT_BAND_WIDTH - 1, 99);
+    }
+
+    #[test]
     fn input_code_direction_range_bounds_match_spec() {
         // input.md §5: the eight published direction codes occupy two
         // contiguous high-byte ranges — diagonals 0xD3..=0xD6 and

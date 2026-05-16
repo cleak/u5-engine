@@ -185,6 +185,14 @@ pub const fn karma_dat_tier(record_index: usize) -> Option<KarmaDatTier> {
     })
 }
 
+/// `blackthorn.md §7` / `formats/karma-dat.md §4` shared band width
+/// for the `KARMA.DAT` twenty-point selector. Both the rescue/refuge
+/// path and the Lord British-in-disguise camp verdict path divide
+/// the one-byte standing input into bands of this width before
+/// indexing the per-band record. Promote it so the band edges are
+/// not encoded as bare literal pairs at each call site.
+pub const KARMA_DAT_BAND_WIDTH: u8 = 20;
+
 /// `blackthorn.md §7`: rescue/refuge `KARMA.DAT` verdict band selector.
 /// Divides the one-byte standing input into five twenty-point bands and
 /// returns the matching record index `0..=4`. The shipped sixth record
