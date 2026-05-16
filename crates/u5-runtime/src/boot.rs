@@ -2,6 +2,15 @@
 
 use crate::input_case_fold;
 
+/// `launcher.md §2,§5` published file names that make up the
+/// game-owned startup boundary. The DOS MZ image, the resident
+/// shared data image, and the boot-time intro overlay are the
+/// minimum executable-side files; display drivers and asset OVLs
+/// are loaded later through their own paths.
+pub const ULTIMA_EXE_FILENAME: &str = "ULTIMA.EXE";
+pub const DATA_OVL_FILENAME: &str = "DATA.OVL";
+pub const INTRO_OVL_FILENAME: &str = "INTRO.OVL";
+
 /// `boot.md §4` graphics-capability classes the auto-detect path can
 /// produce. The "EGA sentinel" variant marks an EGA extension present in
 /// an unusual current mode; the loader treats it as unresolved and must

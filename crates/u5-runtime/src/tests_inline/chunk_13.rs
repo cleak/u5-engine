@@ -1,4 +1,12 @@
     #[test]
+    fn launcher_executable_boundary_filenames_match_spec() {
+        // launcher.md §2,§5
+        assert_eq!(ULTIMA_EXE_FILENAME, "ULTIMA.EXE");
+        assert_eq!(DATA_OVL_FILENAME, "DATA.OVL");
+        assert_eq!(INTRO_OVL_FILENAME, "INTRO.OVL");
+    }
+
+    #[test]
     fn text_window_boot_defaults_match_spec() {
         // text-output.md §9
         assert_eq!(TEXT_WINDOW_DEFAULT_FOREGROUND, 15);
