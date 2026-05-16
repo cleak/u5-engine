@@ -1,4 +1,28 @@
     #[test]
+    fn party_target_selector_result_distinguishes_explicit_none_from_cancel() {
+        // input.md §9: the selector returns three semantic families:
+        // a non-negative slot index, an Escape/cancel result, and a
+        // distinct explicit-none result produced only by the `0` key.
+        use PartyTargetSelectorResult::*;
+        // Digits 1..=6 land on slots 0..=5.
+        for digit in 1u8..=6 {
+            assert_eq!(
+                party_target_selector_result(b'0' + digit),
+                Some(Slot(digit - 1))
+            );
+        }
+        // `0` is the explicit-none result, distinct from Escape's cancel.
+        assert_eq!(party_target_selector_result(b'0'), Some(ExplicitNone));
+        assert_eq!(party_target_selector_result(0x1B), Some(Cancel));
+        // Other digits, Space/Enter (caller-driven highlight confirm),
+        // and arbitrary bytes do not yield a three-family result.
+        assert_eq!(party_target_selector_result(b'7'), None);
+        assert_eq!(party_target_selector_result(b' '), None);
+        assert_eq!(party_target_selector_result(b'\r'), None);
+        assert_eq!(party_target_selector_result(b'X'), None);
+    }
+
+    #[test]
     fn direction_prompt_label_echoes_published_cardinal_names() {
         // input.md §10,§11: the shared direction prompts echo the
         // cardinal name on a cardinal keystroke and `Pass` on Space.

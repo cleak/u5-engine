@@ -191,11 +191,12 @@ pub use input_codes::{
     DIRECTION_PROMPT_LABEL_PASS, DIRECTION_PROMPT_LABEL_SOUTH,
     DIRECTION_PROMPT_LABEL_WEST, FreeTextInputAction, InputByteClass,
     InputDirection, NumericPromptAction, PartyTargetSelectorAction,
-    SPELL_DIRECTION_PROMPT_PREFIX, cardinal_direction_prompt_action,
-    direction_prompt_label, free_text_input_action, input_byte_class,
-    input_case_fold, input_code_direction, input_function_key_index,
-    input_prompt_mode_active, numeric_prompt_action, numeric_prompt_apply,
-    party_target_selector_action,
+    PartyTargetSelectorResult, SPELL_DIRECTION_PROMPT_PREFIX,
+    cardinal_direction_prompt_action, direction_prompt_label,
+    free_text_input_action, input_byte_class, input_case_fold,
+    input_code_direction, input_function_key_index, input_prompt_mode_active,
+    numeric_prompt_action, numeric_prompt_apply,
+    party_target_selector_action, party_target_selector_result,
 };
 pub use jimmy::{
     DOOR_AUTO_CLOSE_TURNS, DoorAutoCloseTick, JIMMY_DOOR_DIE_HIGH, JIMMY_DOOR_DIE_LOW,

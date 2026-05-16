@@ -246,6 +246,42 @@ pub const fn party_target_selector_action(byte: u8) -> PartyTargetSelectorAction
     }
 }
 
+/// `input.md §9` semantic result family the party-member selector
+/// returns to its caller. The spec defines three families:
+/// a non-negative selected slot, an Escape/cancel negative result,
+/// and the distinct explicit-none negative result produced by the
+/// `0` key. Most callers collapse both negative results to one
+/// no-target branch; compatibility code that inspects them
+/// separately can use this enum.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PartyTargetSelectorResult {
+    /// Zero-based active-party slot the player chose.
+    Slot(u8),
+    /// `0` key — explicit "none" result, distinct from cancel.
+    ExplicitNone,
+    /// Escape — cancel the prompt.
+    Cancel,
+}
+
+/// `input.md §9`: classify one keystroke into the published
+/// three-family selector result, projecting Space/Enter/`0` from
+/// [`party_target_selector_action`]'s `Confirm` into the explicit
+/// branches. Visible digits `1..=6` resolve to `Slot(digit - 1)`;
+/// the caller still caps the slot index against the live party size.
+/// Returns `None` for keystrokes that should re-prompt without
+/// producing a result (the underlying [`PartyTargetSelectorAction::Discard`]
+/// branch, plus `Confirm` keystrokes that are not the explicit-none
+/// `0` key — Space and Enter belong to the caller-driven highlight
+/// confirmation rather than to this distinct three-family result).
+pub const fn party_target_selector_result(byte: u8) -> Option<PartyTargetSelectorResult> {
+    Some(match byte {
+        b'1'..=b'6' => PartyTargetSelectorResult::Slot(byte - b'1'),
+        b'0' => PartyTargetSelectorResult::ExplicitNone,
+        0x1B => PartyTargetSelectorResult::Cancel,
+        _ => return None,
+    })
+}
+
 /// `input.md §8` free-text-input prompt action classified from one
 /// keystroke. The line buffer reader appends printable ASCII into
 /// the caller's small line buffer, pops on Backspace, terminates on
