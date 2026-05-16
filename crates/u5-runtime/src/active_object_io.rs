@@ -84,6 +84,37 @@ pub const OUTDOOR_WATER_CREATURE_ADJACENCY_RADIUS: i32 = 3;
 pub const WHIRLPOOL_EMERGENCE_X: u8 = 34;
 pub const WHIRLPOOL_EMERGENCE_Y: u8 = 18;
 
+/// `active-objects.md §4` table-class byte the eviction cascade
+/// excludes from every phase past phase 1 (the empty-slot phase).
+pub const ACTIVE_OBJECT_EVICTION_PROTECTED_TYPE: u8 = 0xB5;
+
+/// `active-objects.md §4`: returns `true` when an active-object
+/// type byte is acceptable as a candidate for eviction phase
+/// 2..=5 (the off-screen phases) or 6..=9 (the same classes,
+/// visible allowed). Phase 1 accepts only the empty-slot byte
+/// (`0x00`); phase 10 is the last-resort eviction and accepts any
+/// type byte except `0xB5`.
+///
+/// `phase` is the one-based eviction phase index `1..=10`.
+pub const fn active_object_eviction_byte_accepted(byte: u8, phase: u8) -> bool {
+    match phase {
+        1 => byte == 0x00,
+        2 | 6 => byte >= 0x01 && byte <= 0x0F,
+        3 | 7 => byte >= 0x80 && byte != ACTIVE_OBJECT_EVICTION_PROTECTED_TYPE,
+        4 | 8 => byte == 0x10 || byte == 0x11,
+        5 | 9 => byte >= 0x30 && byte <= 0x7F,
+        10 => byte != ACTIVE_OBJECT_EVICTION_PROTECTED_TYPE,
+        _ => false,
+    }
+}
+
+/// `active-objects.md §4`: returns `true` when the eviction phase
+/// requires the off-screen viewport gate. Phases 2..=5 are
+/// off-screen-only; phases 1, 6..=10 do not consult the gate.
+pub const fn active_object_eviction_phase_is_off_screen(phase: u8) -> bool {
+    matches!(phase, 2 | 3 | 4 | 5)
+}
+
 /// `active-objects.md §4` viewport-relative off-screen test for the
 /// eviction cascade. A candidate slot more than this many cells from
 /// the player in either axis qualifies for the off-screen phases

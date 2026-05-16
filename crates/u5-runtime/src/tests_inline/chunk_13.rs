@@ -1,4 +1,57 @@
     #[test]
+    fn active_object_eviction_phase_byte_acceptance() {
+        // active-objects.md §4
+        // Phase 1: only empty slot.
+        assert!(active_object_eviction_byte_accepted(0x00, 1));
+        assert!(!active_object_eviction_byte_accepted(0x01, 1));
+        // Phase 2 + 6: 0x01..=0x0F low-priority scenery.
+        for phase in [2u8, 6] {
+            assert!(active_object_eviction_byte_accepted(0x01, phase));
+            assert!(active_object_eviction_byte_accepted(0x0F, phase));
+            assert!(!active_object_eviction_byte_accepted(0x00, phase));
+            assert!(!active_object_eviction_byte_accepted(0x10, phase));
+        }
+        // Phase 3 + 7: 0x80..=0xFF except 0xB5.
+        for phase in [3u8, 7] {
+            assert!(active_object_eviction_byte_accepted(0x80, phase));
+            assert!(active_object_eviction_byte_accepted(0xFF, phase));
+            assert!(!active_object_eviction_byte_accepted(
+                ACTIVE_OBJECT_EVICTION_PROTECTED_TYPE,
+                phase
+            ));
+            assert!(!active_object_eviction_byte_accepted(0x7F, phase));
+        }
+        // Phase 4 + 8: 0x10 or 0x11.
+        for phase in [4u8, 8] {
+            assert!(active_object_eviction_byte_accepted(0x10, phase));
+            assert!(active_object_eviction_byte_accepted(0x11, phase));
+            assert!(!active_object_eviction_byte_accepted(0x12, phase));
+        }
+        // Phase 5 + 9: 0x30..=0x7F.
+        for phase in [5u8, 9] {
+            assert!(active_object_eviction_byte_accepted(0x30, phase));
+            assert!(active_object_eviction_byte_accepted(0x7F, phase));
+            assert!(!active_object_eviction_byte_accepted(0x2F, phase));
+            assert!(!active_object_eviction_byte_accepted(0x80, phase));
+        }
+        // Phase 10: any except 0xB5.
+        assert!(active_object_eviction_byte_accepted(0x00, 10));
+        assert!(active_object_eviction_byte_accepted(0x80, 10));
+        assert!(active_object_eviction_byte_accepted(0xFF, 10));
+        assert!(!active_object_eviction_byte_accepted(
+            ACTIVE_OBJECT_EVICTION_PROTECTED_TYPE,
+            10
+        ));
+        // Off-screen gate matches phases 2..=5.
+        for phase in [2u8, 3, 4, 5] {
+            assert!(active_object_eviction_phase_is_off_screen(phase));
+        }
+        for phase in [0u8, 1, 6, 7, 8, 9, 10, 11, 99] {
+            assert!(!active_object_eviction_phase_is_off_screen(phase));
+        }
+    }
+
+    #[test]
     fn chest_primary_pool_row_succeeds_uses_class_and_roll_gates() {
         // containers.md §4
         // Threshold 7 (Food), chest class 5 -> ineligible.
