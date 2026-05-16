@@ -1,4 +1,66 @@
     #[test]
+    fn sky_strip_composed_cells_respects_plot_order_and_visibility() {
+        // moons.md §2: hour 0 has FixedHour off-strip (visible only 6..=17),
+        // Trammel visible (cell 8 - 0 = 8), Felucca visible (cell 2 - 0 = 2).
+        let cells = sky_strip_composed_cells(0);
+        assert_eq!(cells[8], Some(SkyStripMarker::Trammel));
+        assert_eq!(cells[2], Some(SkyStripMarker::Felucca));
+        // All other cells stay blank.
+        for (cell_index, slot) in cells.iter().enumerate() {
+            if cell_index != 2 && cell_index != 8 {
+                assert!(slot.is_none(), "cell {cell_index} should be blank");
+            }
+        }
+
+        // Hour 6: FixedHour at 17-6=11; Trammel at 8-6=2; Felucca off.
+        let cells = sky_strip_composed_cells(6);
+        assert_eq!(cells[11], Some(SkyStripMarker::FixedHour));
+        assert_eq!(cells[2], Some(SkyStripMarker::Trammel));
+        assert!(cells[0].is_none());
+
+        // Hour 8: FixedHour at 9; Trammel at 0; Felucca off.
+        let cells = sky_strip_composed_cells(8);
+        assert_eq!(cells[9], Some(SkyStripMarker::FixedHour));
+        assert_eq!(cells[0], Some(SkyStripMarker::Trammel));
+
+        // Hour 17: FixedHour at 0; Trammel off; Felucca at 26-17=9.
+        let cells = sky_strip_composed_cells(17);
+        assert_eq!(cells[0], Some(SkyStripMarker::FixedHour));
+        assert_eq!(cells[9], Some(SkyStripMarker::Felucca));
+
+        // Plot order: later marker overwrites earlier when they pick
+        // the same cell. At hour 15, FixedHour=17-15=2 and Felucca=26-15=11.
+        // Trammel is off. Neither overlap. Construct a collision case:
+        // hour 6 produces FixedHour=11; Trammel=2; Felucca=20 (off-strip).
+        // hour 8 produces FixedHour=9; Trammel=0; Felucca off.
+        // Trammel at hour 21 → 32-21=11; FixedHour off (hour > 17).
+        // To get a real overwrite we need two markers landing on the
+        // same cell. At hour 0: Trammel=8, Felucca=2 — no overlap.
+        // At hour 8: FixedHour=9, Trammel=0 — no overlap. The render
+        // order itself is what callers depend on; verify the
+        // SKY_STRIP_RENDER_ORDER constant is hour, Trammel, Felucca.
+        assert_eq!(
+            SKY_STRIP_RENDER_ORDER,
+            [
+                SkyStripMarker::FixedHour,
+                SkyStripMarker::Trammel,
+                SkyStripMarker::Felucca,
+            ]
+        );
+
+        // Hour 13 is fully off-strip: FixedHour at 17-13=4 in-range,
+        // but Trammel (0..=8 or 21..=23) and Felucca (0..=2 or
+        // 15..=23) are both above the horizon, so only FixedHour is set.
+        let cells = sky_strip_composed_cells(13);
+        assert_eq!(cells[4], Some(SkyStripMarker::FixedHour));
+        for (cell_index, slot) in cells.iter().enumerate() {
+            if cell_index != 4 {
+                assert!(slot.is_none(), "cell {cell_index} should be blank");
+            }
+        }
+    }
+
+    #[test]
     fn shared_trap_effect_family_classifies_combat_and_non_combat() {
         // traps.md §3: combat scenes resolve only to Acid (id 0) or
         // Poison (id 1); non-combat scenes follow the 3/2/2/1 outcome

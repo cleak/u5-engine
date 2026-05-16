@@ -280,6 +280,26 @@ pub const fn shop_time_of_day_word(hour: u8) -> &'static str {
     }
 }
 
+/// `moons.md §2`: compose the twelve-cell sky strip for the given
+/// `hour` into a `[Option<SkyStripMarker>; 12]` array. Each cell
+/// records the marker that the renderer would paint there, applying
+/// the published plot order (hour → Trammel → Felucca, later
+/// overwrites earlier when two markers select the same cell). Cells
+/// the markers do not reach stay `None`, which the renderer paints
+/// blank.
+pub fn sky_strip_composed_cells(
+    hour: u8,
+) -> [Option<SkyStripMarker>; SKY_STRIP_CELL_COUNT as usize] {
+    let mut cells: [Option<SkyStripMarker>; SKY_STRIP_CELL_COUNT as usize] =
+        [None; SKY_STRIP_CELL_COUNT as usize];
+    for marker in SKY_STRIP_RENDER_ORDER {
+        if let Some(cell) = sky_strip_marker_position(hour, marker) {
+            cells[usize::from(cell)] = Some(marker);
+        }
+    }
+    cells
+}
+
 /// Per `moons.md` §2: compute the cell index `0..11` where the given marker
 /// is visible at the given hour. Returns `None` when the marker is below the
 /// strip's visible horizon.
