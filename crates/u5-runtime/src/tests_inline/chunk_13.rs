@@ -1,4 +1,34 @@
     #[test]
+    fn dungeon_active_object_spawn_band_matches_spec() {
+        // dungeon-mode.md §4.1: dungeon view initialisation accepts
+        // only cells in the pit (0x6?) or corridor (0x7?) classes
+        // when placing the active-object, and bails after eight
+        // random attempts. Promote both edges of the spawn band and
+        // the attempt cap to named constants.
+        assert_eq!(DUNGEON_ACTIVE_OBJECT_PLACEMENT_ATTEMPTS, 8);
+        assert_eq!(DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_FIRST, 0x60);
+        assert_eq!(DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_LAST, 0x7F);
+        // Every tile in the band is a legal spawn target.
+        for tile in
+            DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_FIRST..=DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_LAST
+        {
+            assert!(dungeon_active_object_spawn_accepts(tile), "tile {tile:#04x}");
+        }
+        // Tiles just outside the band are rejected: 0x5F (fountain)
+        // and 0x80 (sleep field).
+        assert!(!dungeon_active_object_spawn_accepts(
+            DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_FIRST - 1
+        ));
+        assert!(!dungeon_active_object_spawn_accepts(
+            DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_LAST + 1
+        ));
+        // Passage (0x00) and wall classes are rejected too — only
+        // the pit/corridor band is a legal spawn cell.
+        assert!(!dungeon_active_object_spawn_accepts(0x00));
+        assert!(!dungeon_active_object_spawn_accepts(0xB0));
+    }
+
+    #[test]
     fn talk_branch_flag_bank_caps_at_thirty_two_bits() {
         // conversation.md §10: "Branch bit indices `32` and above
         // build a zero mask rather than wrapping, so such tests read
