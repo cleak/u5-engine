@@ -117,6 +117,20 @@ pub const fn movement_chair_force_reject_applies(query_class: u8, tile: u8) -> b
     true
 }
 
+/// `movement.md §4` outdoor active-object query families that
+/// accept exactly one static tile id rather than running a wider
+/// predicate. Returns `Some(tile_id)` for the four named single-
+/// tile families and `None` for any other class byte.
+pub const fn outdoor_active_object_single_tile_query(class_byte: u8) -> Option<u8> {
+    Some(match class_byte {
+        0xE0..=0xE3 => 0x07,
+        0xEC..=0xEF => 0x01,
+        0xF4..=0xF7 => 0x05,
+        0xF8..=0xFB => 0x04,
+        _ => return None,
+    })
+}
+
 /// `vehicles.md §2` transport/action marker family. Classifies the
 /// party transport state byte into one of the documented ranges. The
 /// low two bits within each family encode N/E/S/W facing using the

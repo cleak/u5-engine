@@ -1,4 +1,43 @@
     #[test]
+    fn outdoor_active_object_single_tile_query_matches_spec_table() {
+        // movement.md §4
+        // 0xE0..=0xE3 sea-serpent adjacency -> tile 0x07.
+        for cls in 0xE0u8..=0xE3 {
+            assert_eq!(
+                outdoor_active_object_single_tile_query(cls),
+                Some(0x07)
+            );
+        }
+        // 0xEC..=0xEF outdoor whirlpool -> tile 0x01.
+        for cls in 0xECu8..=0xEF {
+            assert_eq!(
+                outdoor_active_object_single_tile_query(cls),
+                Some(0x01)
+            );
+        }
+        // 0xF4..=0xF7 Corpser -> tile 0x05.
+        for cls in 0xF4u8..=0xF7 {
+            assert_eq!(
+                outdoor_active_object_single_tile_query(cls),
+                Some(0x05)
+            );
+        }
+        // 0xF8..=0xFB Rot Worm -> tile 0x04.
+        for cls in 0xF8u8..=0xFB {
+            assert_eq!(
+                outdoor_active_object_single_tile_query(cls),
+                Some(0x04)
+            );
+        }
+        // Other classes return None.
+        for cls in [
+            0x00u8, 0x10, 0x80, 0xC0, 0xE4, 0xEB, 0xF0, 0xF3, 0xFC, 0xFF,
+        ] {
+            assert_eq!(outdoor_active_object_single_tile_query(cls), None);
+        }
+    }
+
+    #[test]
     fn shadowlord_hideout_predicates_match_spec() {
         // time.md §7
         assert_eq!(SHADOWLORD_HIDEOUT_FIRST, 1);
