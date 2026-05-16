@@ -1,4 +1,20 @@
     #[test]
+    fn amulet_turning_scatter_threshold_is_byte_midpoint() {
+        // combat.md §11
+        assert_eq!(AMULET_TURNING_SCATTER_THRESHOLD, 128);
+        // The scatter gate fires only when every prerequisite holds and the
+        // roll is strictly below the threshold.
+        assert!(resolve_amulet_turning_scatter(true, true, true, 0));
+        assert!(resolve_amulet_turning_scatter(true, true, true, 127));
+        assert!(!resolve_amulet_turning_scatter(true, true, true, 128));
+        assert!(!resolve_amulet_turning_scatter(true, true, true, 255));
+        // Any missing precondition skips the scatter path, even on a low roll.
+        assert!(!resolve_amulet_turning_scatter(false, true, true, 0));
+        assert!(!resolve_amulet_turning_scatter(true, false, true, 0));
+        assert!(!resolve_amulet_turning_scatter(true, true, false, 0));
+    }
+
+    #[test]
     fn terrain_combat_replacement_roll_one_in_nine() {
         // encounters.md §4 + combat.md §5
         assert_eq!(TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR, 9);

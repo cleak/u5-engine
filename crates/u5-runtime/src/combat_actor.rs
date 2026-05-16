@@ -2537,13 +2537,24 @@ pub fn resolve_combat_arena_field_contact_for_non_party_target(
     }
 }
 
+/// `combat.md §11` Amulet/Turning scatter-mode roll threshold. The
+/// turnable-attack helper rolls a uniform `[0, 255]` byte; rolls
+/// strictly below this threshold force the ranged/effect helper
+/// into scatter mode, while rolls at or above it use the ordinary
+/// hit-roll path. The threshold is the midpoint of the byte
+/// domain, so the scatter outcome fires at exactly 1-in-2 odds.
+pub const AMULET_TURNING_SCATTER_THRESHOLD: u8 = 128;
+
 pub const fn resolve_amulet_turning_scatter(
     turnable_attack: bool,
     living_party_target: bool,
     amulet_turning_readied: bool,
     roll: u8,
 ) -> bool {
-    turnable_attack && living_party_target && amulet_turning_readied && roll < 128
+    turnable_attack
+        && living_party_target
+        && amulet_turning_readied
+        && roll < AMULET_TURNING_SCATTER_THRESHOLD
 }
 
 pub fn resolve_amulet_turning_scatter_for_class(
