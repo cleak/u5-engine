@@ -1,4 +1,60 @@
     #[test]
+    fn input_byte_class_partitions_keyboard_return_bytes_per_spec() {
+        // input.md §4: three non-overlapping return families plus the
+        // catch-all "no key" outcome.
+
+        // Regular ASCII: printable letters, digits, punctuation, and the
+        // accepted control bytes (Enter 0x0D, Backspace 0x08, Escape 0x1B).
+        for byte in [
+            0x08u8, 0x0D, 0x1B, b' ', b'!', b'0', b'9', b'A', b'Z', b'a', b'z',
+            b'~',
+        ] {
+            assert_eq!(
+                input_byte_class(byte),
+                InputByteClass::RegularAscii,
+                "{byte:#04x} should be RegularAscii"
+            );
+        }
+
+        // Function-key remap 0xC9..=0xD2.
+        for byte in INPUT_CODE_FUNCTION_FIRST..=INPUT_CODE_FUNCTION_LAST {
+            assert_eq!(
+                input_byte_class(byte),
+                InputByteClass::FunctionKey,
+                "{byte:#04x} should be FunctionKey"
+            );
+        }
+
+        // Direction codes: diagonals 0xD3..=0xD6 and cardinals 0xFB..=0xFE.
+        for byte in [
+            INPUT_CODE_NORTHWEST,
+            INPUT_CODE_SOUTHWEST,
+            INPUT_CODE_NORTHEAST,
+            INPUT_CODE_SOUTHEAST,
+            INPUT_CODE_WEST,
+            INPUT_CODE_EAST,
+            INPUT_CODE_NORTH,
+            INPUT_CODE_SOUTH,
+        ] {
+            assert_eq!(
+                input_byte_class(byte),
+                InputByteClass::Direction,
+                "{byte:#04x} should be Direction"
+            );
+        }
+
+        // "No key" — unbound control bytes, the gap between function keys
+        // and diagonals, the gap between diagonals and cardinals, and 0xFF.
+        for byte in [0x00u8, 0x01, 0x07, 0x09, 0x1A, 0x7F, 0x80, 0xC8, 0xD7, 0xFA, 0xFF] {
+            assert_eq!(
+                input_byte_class(byte),
+                InputByteClass::None,
+                "{byte:#04x} should be None"
+            );
+        }
+    }
+
+    #[test]
     fn town_arrest_release_loop_constants_match_spec() {
         // time.md §10 town-arrest surrender: 20-minute cleanup increments
         // repeated until the hour byte reaches 08:00.

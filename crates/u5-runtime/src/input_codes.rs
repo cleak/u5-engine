@@ -88,6 +88,48 @@ pub const fn input_code_direction(byte: u8) -> Option<InputDirection> {
     })
 }
 
+/// `input.md §4` keyboard-layer return-byte family. After the peek
+/// routine reads, classifies, and translates a raw byte, the value it
+/// hands the rest of the engine falls into one of these three
+/// non-overlapping ranges (plus the catch-all "no key" outcome that
+/// the upper layer represents by simply not seeing one of the bytes
+/// below).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InputByteClass {
+    /// Printable ASCII, plus the small set of accepted control bytes
+    /// (Enter `0x0D`, Backspace `0x08`, Escape `0x1B`). The keyboard
+    /// layer passes regular keys straight through.
+    RegularAscii,
+    /// Function-key remap: F1..F10 become the contiguous internal
+    /// byte range `0xC9..=0xD2`, disjoint from printable ASCII and
+    /// the direction codes.
+    FunctionKey,
+    /// One of the eight direction codes `0xD3..=0xD6` (diagonals) or
+    /// `0xFB..=0xFE` (cardinals). World/town/dungeon/combat movement
+    /// consumes only the cardinal subset; diagonals reach specialised
+    /// prompts and otherwise fall through as non-movement input.
+    Direction,
+    /// Any other byte — the keyboard layer treats it as "no key" and
+    /// the upper layer continues polling without firing a command.
+    None,
+}
+
+/// `input.md §4`: classify a final post-translation keyboard byte
+/// into its return family. Backspace, Enter, and Escape are accepted
+/// as control bytes inside the regular-ASCII band; other low control
+/// bytes (`0x00..=0x1F` outside that trio) fall through to the
+/// "no key" branch because the engine does not bind them.
+pub const fn input_byte_class(byte: u8) -> InputByteClass {
+    match byte {
+        0x08 | 0x0D | 0x1B => InputByteClass::RegularAscii,
+        0x20..=0x7E => InputByteClass::RegularAscii,
+        0xC9..=0xD2 => InputByteClass::FunctionKey,
+        0xD3..=0xD6 => InputByteClass::Direction,
+        0xFB..=0xFE => InputByteClass::Direction,
+        _ => InputByteClass::None,
+    }
+}
+
 /// `input.md §9` party-member selector outcome from one keystroke.
 /// The shared selector is slot-based: visible digits `1..=6`
 /// directly choose the matching active-party slot; `0`, Space, and
