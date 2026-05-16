@@ -53,6 +53,19 @@ pub const fn light_counter_increment(cadence: LightDecayCadence) -> u8 {
     }
 }
 
+/// `lighting.md §5`: returns the light-counter spend for `cadence`
+/// after the per-turn cleanup applies the same `tag_byte` timing-tag
+/// adjustment it applies to the minute counter. `T` suppresses the
+/// light-counter write entirely (returns `None`); `Q` halves the
+/// spend with the same one-unit floor the minute increment uses;
+/// other tag bytes pass the cadence spend through unchanged.
+pub const fn light_counter_spend_with_tag(
+    cadence: LightDecayCadence,
+    tag_byte: u8,
+) -> Option<u8> {
+    apply_timing_tag_increment(light_counter_increment(cadence), tag_byte)
+}
+
 /// `lighting.md §5`: saturating per-turn light counter decrement. The
 /// counter is the turn-local light/torch byte; the increment is how many
 /// counter units the current turn spends (1 for town/dungeon/combat, 2

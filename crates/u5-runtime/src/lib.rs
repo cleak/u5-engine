@@ -254,7 +254,8 @@ pub use lighting::{
     OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG, OVERWORLD_UNDERFOOT_BLACKOUT_TILE,
     ambient_is_sentinel, apply_personal_light, daylight_base_value,
     decay_light_counter, dungeon_blackout, ignite_torch_dungeon, ignite_torch_surface,
-    light_counter_increment, overworld_underfoot_forces_dark,
+    light_counter_increment, light_counter_spend_with_tag,
+    overworld_underfoot_forces_dark,
 };
 pub use endmsg_io::{
     ENDMSG_DAT_LEN, ENDMSG_DAT_RECORDS, EndgameMessages, load_endgame_messages,

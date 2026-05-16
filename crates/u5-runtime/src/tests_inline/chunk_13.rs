@@ -1,4 +1,74 @@
     #[test]
+    fn light_counter_spend_with_tag_threads_timing_tag() {
+        // lighting.md §5: per-turn cleanup applies the same Q/T
+        // adjustments to the light-counter spend that it applies to
+        // the minute increment before decaying the counter.
+        // No tag => cadence spend passes through.
+        assert_eq!(
+            light_counter_spend_with_tag(LightDecayCadence::TownDungeonCombatTurn, 0),
+            Some(1)
+        );
+        assert_eq!(
+            light_counter_spend_with_tag(LightDecayCadence::OverworldTurn, 0),
+            Some(2)
+        );
+        assert_eq!(
+            light_counter_spend_with_tag(LightDecayCadence::Wait(7), 0),
+            Some(7)
+        );
+        assert_eq!(
+            light_counter_spend_with_tag(LightDecayCadence::ModeZeroRefresh, 0),
+            Some(0)
+        );
+        // T tag suppresses the light-counter advance entirely.
+        assert_eq!(
+            light_counter_spend_with_tag(
+                LightDecayCadence::OverworldTurn,
+                TIMING_TAG_NEGATE_TIME
+            ),
+            None
+        );
+        assert_eq!(
+            light_counter_spend_with_tag(
+                LightDecayCadence::Wait(9),
+                TIMING_TAG_NEGATE_TIME
+            ),
+            None
+        );
+        // Q tag halves the spend with the same one-unit floor the
+        // minute increment uses: a town turn's spend of 1 stays at 1.
+        assert_eq!(
+            light_counter_spend_with_tag(
+                LightDecayCadence::TownDungeonCombatTurn,
+                TIMING_TAG_QUICKNESS
+            ),
+            Some(1)
+        );
+        assert_eq!(
+            light_counter_spend_with_tag(
+                LightDecayCadence::OverworldTurn,
+                TIMING_TAG_QUICKNESS
+            ),
+            Some(1)
+        );
+        assert_eq!(
+            light_counter_spend_with_tag(
+                LightDecayCadence::Wait(8),
+                TIMING_TAG_QUICKNESS
+            ),
+            Some(4)
+        );
+        // Mode-zero refresh stays at zero under Q.
+        assert_eq!(
+            light_counter_spend_with_tag(
+                LightDecayCadence::ModeZeroRefresh,
+                TIMING_TAG_QUICKNESS
+            ),
+            Some(0)
+        );
+    }
+
+    #[test]
     fn npc_and_tlk_family_filenames_match_published_extensions() {
         // formats/npc.md §2 / formats/tlk.md §2: the four town-family
         // roster and dialogue filenames are stable string constants
