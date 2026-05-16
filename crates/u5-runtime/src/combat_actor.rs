@@ -20,6 +20,15 @@ pub const fn monster_kill_xp_reward(class_max_hp: u16) -> u16 {
     (class_max_hp / 4).saturating_add(1)
 }
 
+/// `magic.md §8` directed target-walk maximum cell count. Wind- and
+/// vortex-style spells (In Zu, In Nox Hur, In Vas Grav Corp,
+/// In Flam Hur) build a directed set of up to this many arena cells
+/// from the active target/caster state before scanning the combat
+/// actor table for matches. The cap is shared spec data — the same
+/// twenty-one-cell area shape carries through every directed
+/// target-walk spell.
+pub const DIRECTED_TARGET_WALK_MAX_CELLS: usize = 21;
+
 /// `combat.md §11` Fire Field per-contact raw-damage roll. The
 /// post-step contact hook rolls a uniform `[1, 21]` value before the
 /// normal random defense subtraction. Caller passes the raw `0..=20`

@@ -1,4 +1,18 @@
     #[test]
+    fn directed_target_walk_max_cells_matches_spec() {
+        // magic.md §8: the directed target-walk family (In Zu, In Nox
+        // Hur, In Vas Grav Corp, In Flam Hur) builds a directed set
+        // of up to twenty-one arena cells from the active target/
+        // caster state before scanning combat actor slots for
+        // matches. Promote the cap so future target-walk
+        // implementations do not bake `21` as a bare literal.
+        assert_eq!(DIRECTED_TARGET_WALK_MAX_CELLS, 21);
+        // Sanity-check: a 21-cell directed area cannot exceed the
+        // 121-cell arena footprint.
+        assert!(DIRECTED_TARGET_WALK_MAX_CELLS <= COMBAT_ARENA_SIDE * COMBAT_ARENA_SIDE);
+    }
+
+    #[test]
     fn quest_password_constants_match_spec_strings() {
         // catalogs/quest-graph.md §3 names two passwords as graph
         // gates: `DAWN` for Resistance trust and `IMPERA` for the
