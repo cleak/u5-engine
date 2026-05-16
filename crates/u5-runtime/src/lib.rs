@@ -438,7 +438,8 @@ pub use ship_broadside::{
 };
 pub use shops::*;
 pub use shrine_virtue::{
-    CodexUrnReadOutcome, ShrineQuestState, ShrineVirtue, all_virtues_complete, read_codex_urn,
+    CodexUrnReadOutcome, ShrineMeditationOutcome, ShrineQuestState, ShrineVirtue,
+    all_virtues_complete, read_codex_urn, shrine_meditation_outcome,
 };
 pub use start_validation::*;
 pub use tile_helpers::*;

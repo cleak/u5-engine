@@ -1,4 +1,28 @@
     #[test]
+    fn shrine_meditation_outcome_dispatches_by_quest_state() {
+        // karma.md §7: a wrong/blank mantra prints the no-effect
+        // branch; a correct mantra dispatches by the shrine quest
+        // state bits (ordained, codex-read).
+        use ShrineMeditationOutcome::*;
+
+        // Wrong mantra never consults the bits.
+        for ordained in [false, true] {
+            for codex_read in [false, true] {
+                assert_eq!(
+                    shrine_meditation_outcome(false, ordained, codex_read),
+                    NoEffect
+                );
+            }
+        }
+
+        // Correct mantra: dispatch by the quest-state bit pair.
+        assert_eq!(shrine_meditation_outcome(true, false, false), Ordain);
+        assert_eq!(shrine_meditation_outcome(true, true, false), AlreadyOrdained);
+        assert_eq!(shrine_meditation_outcome(true, true, true), CodexTurnIn);
+        assert_eq!(shrine_meditation_outcome(true, false, true), GoldOffering);
+    }
+
+    #[test]
     fn story_text_marker_classifies_published_renderer_bytes() {
         // formats/story-dat.md §3: the renderer recognises `{` as a
         // paragraph/page-start, `_` as a soft hyphen / syllable

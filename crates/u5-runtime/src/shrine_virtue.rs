@@ -176,6 +176,53 @@ pub const fn all_virtues_complete(ordained_mask: u8, codex_read_mask: u8) -> boo
     ordained_mask == 0 && codex_read_mask == 0xFF
 }
 
+/// `karma.md §7` mantra-matching outcome for one shrine meditation
+/// attempt. A correct mantra dispatches by the virtue's current
+/// [`ShrineQuestState`]; a wrong or blank mantra prints the no-effect
+/// meditation branch and does nothing else.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShrineMeditationOutcome {
+    /// Wrong or blank mantra — no shrine-side state change.
+    NoEffect,
+    /// First-time shrine visit (NotStarted). Sets the virtue's
+    /// ordained bit; no gold prompt, stat increase, or standing
+    /// change is applied.
+    Ordain,
+    /// Already ordained but Codex not yet read. Leaves the ordained
+    /// bit set and produces no further change.
+    AlreadyOrdained,
+    /// Codex-read turn-in. Clears the ordained bit, applies the
+    /// +3 standing reward (and the extra +3 for Humility), and
+    /// stamps the per-virtue Avatar stat rewards listed in the
+    /// catalog table.
+    CodexTurnIn,
+    /// Quest complete for this virtue — runs the ordinary gold
+    /// offering path. The caller then prompts for a digit `1..=9`
+    /// (zero exits) and applies `digit * 100` gold for `+digit`
+    /// standing if the party can afford it.
+    GoldOffering,
+}
+
+/// `karma.md §7`: classify the shrine handler's mantra-matched
+/// branch from the (ordained, codex_read) bit pair plus a
+/// `mantra_matches` predicate. Returns [`NoEffect`] for a wrong or
+/// blank mantra without consulting the bits.
+pub const fn shrine_meditation_outcome(
+    mantra_matches: bool,
+    ordained: bool,
+    codex_read: bool,
+) -> ShrineMeditationOutcome {
+    if !mantra_matches {
+        return ShrineMeditationOutcome::NoEffect;
+    }
+    match ShrineVirtue::shrine_quest_state(ordained, codex_read) {
+        ShrineQuestState::NotStarted => ShrineMeditationOutcome::Ordain,
+        ShrineQuestState::Ordained => ShrineMeditationOutcome::AlreadyOrdained,
+        ShrineQuestState::CodexRead => ShrineMeditationOutcome::CodexTurnIn,
+        ShrineQuestState::Complete => ShrineMeditationOutcome::GoldOffering,
+    }
+}
+
 /// Result of one Codex urn read per `karma.md §8`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CodexUrnReadOutcome {
