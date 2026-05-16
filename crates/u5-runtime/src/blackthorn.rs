@@ -13,6 +13,18 @@ pub const BLACKTHORN_RESCUE_HANDOFF_Y: u8 = 10;
 /// selector to at least this floor after printing the verdict.
 pub const BLACKTHORN_RESCUE_STANDING_FLOOR: u8 = 75;
 
+/// `blackthorn.md §3`: scene byte the audience cinematic hands the
+/// party off to after the throne cleanup beat. Eighteen is the
+/// gazetteer's `CASTLE:1` location associated with Lord
+/// Blackthorn's Castle; the captive cell sits inside that scene.
+pub const BLACKTHORN_CAPTIVE_CELL_SCENE: u8 = 18;
+
+/// `blackthorn.md §3`: local cell (X, Y) inside
+/// `BLACKTHORN_CAPTIVE_CELL_SCENE` the audience hand-off seeds the
+/// party at.
+pub const BLACKTHORN_CAPTIVE_CELL_X: u8 = 10;
+pub const BLACKTHORN_CAPTIVE_CELL_Y: u8 = 7;
+
 /// `blackthorn.md §2` two player-visible Blackthorn cinematic
 /// families. Both replace the ordinary map loop and hand control
 /// back through an explicit scene/position transition.

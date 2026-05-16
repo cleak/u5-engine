@@ -1,4 +1,12 @@
     #[test]
+    fn blackthorn_captive_cell_handoff_matches_spec_coordinates() {
+        // blackthorn.md §3
+        assert_eq!(BLACKTHORN_CAPTIVE_CELL_SCENE, 18);
+        assert_eq!(BLACKTHORN_CAPTIVE_CELL_X, 10);
+        assert_eq!(BLACKTHORN_CAPTIVE_CELL_Y, 7);
+    }
+
+    #[test]
     fn inn_pickup_morbid_path_targets_only_poisoned() {
         // shops.md §8.4
         assert!(inn_pickup_status_converts_to_dead(
