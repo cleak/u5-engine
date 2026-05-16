@@ -1,4 +1,33 @@
     #[test]
+    fn tile_passability_bitset_uses_msb_first_packing() {
+        // movement.md §4: the base terrain bitset is a thirty-two-
+        // byte run where each byte packs one bit per tile id, read
+        // most-significant first. Promote the MSB and the low-bit
+        // index mask so the lookup helper does not bake `0x80` and
+        // `7` as bare literals.
+        assert_eq!(TILE_PASSABILITY_BIT_MSB, 0x80);
+        assert_eq!(TILE_PASSABILITY_BIT_INDEX_MASK, 7);
+        // Build a one-tile bitset stamped at tile id 0 (bit 7 of the
+        // first byte) and confirm only that tile resolves passable.
+        let mut bytes = [0u8; TILE_PASSABILITY_LEN];
+        bytes[0] = TILE_PASSABILITY_BIT_MSB;
+        let passability = TilePassability::from_bytes(&bytes).unwrap();
+        assert!(passability.is_passable(0));
+        for tile in 1u8..=8 {
+            assert!(!passability.is_passable(tile));
+        }
+        // Stamp tile id 7 (bit 0 of the first byte) — the MSB-first
+        // shift makes this the last bit of the first byte.
+        let mut bytes = [0u8; TILE_PASSABILITY_LEN];
+        bytes[0] = 0x01;
+        let passability = TilePassability::from_bytes(&bytes).unwrap();
+        assert!(passability.is_passable(7));
+        for tile in 0u8..=6 {
+            assert!(!passability.is_passable(tile));
+        }
+    }
+
+    #[test]
     fn dungeon_active_object_spawn_band_matches_spec() {
         // dungeon-mode.md §4.1: dungeon view initialisation accepts
         // only cells in the pit (0x6?) or corridor (0x7?) classes

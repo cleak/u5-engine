@@ -101,6 +101,19 @@ pub struct TilePassability {
     pub bytes: [u8; TILE_PASSABILITY_LEN],
 }
 
+/// `movement.md §4`: the base terrain bitset packs one bit per tile id,
+/// read most-significant first within each byte. Bit 7 of byte
+/// `(tile_id >> 3)` corresponds to tile `(byte_index * 8 + 0)`, bit 6
+/// to tile `+1`, and so on through bit 0 for tile `+7`. Promote the
+/// MSB-first base mask so the lookup helper does not encode `0x80` as
+/// a bare literal.
+pub const TILE_PASSABILITY_BIT_MSB: u8 = 0x80;
+/// `movement.md §4`: low-bit mask used to extract the within-byte bit
+/// index from a tile id (`tile & 7`). The tile-id-to-byte mapping
+/// itself uses `tile >> 3` to pick the byte; the low three bits then
+/// select which bit within that byte applies.
+pub const TILE_PASSABILITY_BIT_INDEX_MASK: u8 = 7;
+
 impl TilePassability {
     pub fn from_bytes(bytes: &[u8]) -> io::Result<Self> {
         if bytes.len() != TILE_PASSABILITY_LEN {
@@ -119,7 +132,7 @@ impl TilePassability {
 
     pub fn is_passable(&self, tile: u8) -> bool {
         let byte = self.bytes[(tile >> 3) as usize];
-        let mask = 0x80u8 >> (tile & 7);
+        let mask = TILE_PASSABILITY_BIT_MSB >> (tile & TILE_PASSABILITY_BIT_INDEX_MASK);
         byte & mask != 0
     }
 }
