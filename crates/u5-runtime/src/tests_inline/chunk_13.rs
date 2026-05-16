@@ -1,4 +1,19 @@
     #[test]
+    fn save_prompt_decision_accepts_only_yn() {
+        // save-load.md §5.2
+        assert_eq!(save_prompt_decision(b'Y'), Some(true));
+        assert_eq!(save_prompt_decision(b'y'), Some(true));
+        assert_eq!(save_prompt_decision(b'N'), Some(false));
+        assert_eq!(save_prompt_decision(b'n'), Some(false));
+        // Other keys loop the prompt.
+        assert_eq!(save_prompt_decision(b'\r'), None);
+        assert_eq!(save_prompt_decision(b' '), None);
+        assert_eq!(save_prompt_decision(b'A'), None);
+        assert_eq!(save_prompt_decision(0x00), None);
+        assert_eq!(save_prompt_decision(0xFF), None);
+    }
+
+    #[test]
     fn save_image_has_active_avatar_checks_offset_0x0002() {
         // save-load.md §4.2
         let mut image = vec![0u8; SAVED_GAM_LEN];

@@ -517,6 +517,19 @@ pub const BRIT_OOL_FILENAME: &str = "BRIT.OOL";
 pub const UNDER_OOL_FILENAME: &str = "UNDER.OOL";
 pub const INIT_OOL_FILENAME: &str = "INIT.OOL";
 
+/// `save-load.md §5.2` "Save game?" prompt confirmation. The
+/// handler accepts only `Y` or `N`; any other key loops the prompt.
+/// Returns `Some(true)` for `Y` (commit save), `Some(false)` for
+/// `N` (return to gameplay), and `None` for any other byte
+/// (continue polling). Comparison is case-insensitive.
+pub const fn save_prompt_decision(byte: u8) -> Option<bool> {
+    match byte {
+        b'Y' | b'y' => Some(true),
+        b'N' | b'n' => Some(false),
+        _ => None,
+    }
+}
+
 /// `save-load.md §4.2` empty-save guard. Loading checks the byte at
 /// file offset `0x0002` — the first byte of the Avatar name field.
 /// A zero byte means the save is uninitialised; the intro prints
