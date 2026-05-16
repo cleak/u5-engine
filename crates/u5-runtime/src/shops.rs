@@ -271,6 +271,33 @@ pub enum ShipwrightPurchaseKind {
     Skiff,
 }
 
+/// `shops.md §8.7` shipwright entry menu outcome. The Talk-triggered
+/// vehicle-sale flow opens with a small letter menu: `F` offers
+/// Frigates, `S` offers Skiffs, while Space or Escape exits. Any
+/// other key silently re-prompts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShipwrightMenuAction {
+    /// `F` (case-insensitive) — Frigate purchase quote.
+    Purchase(ShipwrightPurchaseKind),
+    /// Space or Escape — exit the menu.
+    Exit,
+    /// Any other byte — silently re-prompt.
+    Discard,
+}
+
+/// `shops.md §8.7`: classify one keystroke for the shipwright entry
+/// menu. The caller has already applied the input-layer case fold;
+/// this helper also accepts the lower-case `f` / `s` variants for
+/// uppercase-naive callers.
+pub const fn shipwright_menu_action(byte: u8) -> ShipwrightMenuAction {
+    match byte {
+        b'F' | b'f' => ShipwrightMenuAction::Purchase(ShipwrightPurchaseKind::Frigate),
+        b'S' | b's' => ShipwrightMenuAction::Purchase(ShipwrightPurchaseKind::Skiff),
+        b' ' | 0x1B => ShipwrightMenuAction::Exit,
+        _ => ShipwrightMenuAction::Discard,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ShipwrightPurchaseQuote {
     pub shipwright: Shipwright,

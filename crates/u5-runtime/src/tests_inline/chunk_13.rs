@@ -7,6 +7,37 @@
     }
 
     #[test]
+    fn shipwright_menu_action_accepts_f_s_and_exit_keys() {
+        // shops.md §8.7
+        assert_eq!(
+            shipwright_menu_action(b'F'),
+            ShipwrightMenuAction::Purchase(ShipwrightPurchaseKind::Frigate)
+        );
+        assert_eq!(
+            shipwright_menu_action(b'f'),
+            ShipwrightMenuAction::Purchase(ShipwrightPurchaseKind::Frigate)
+        );
+        assert_eq!(
+            shipwright_menu_action(b'S'),
+            ShipwrightMenuAction::Purchase(ShipwrightPurchaseKind::Skiff)
+        );
+        assert_eq!(
+            shipwright_menu_action(b's'),
+            ShipwrightMenuAction::Purchase(ShipwrightPurchaseKind::Skiff)
+        );
+        assert_eq!(shipwright_menu_action(b' '), ShipwrightMenuAction::Exit);
+        assert_eq!(shipwright_menu_action(0x1B), ShipwrightMenuAction::Exit);
+        // Any other key silently re-prompts.
+        for byte in [b'A', b'M', b'Y', b'N', b'\r', b'\n', 0x00, 0x08, 0x09, 0xFF] {
+            assert_eq!(
+                shipwright_menu_action(byte),
+                ShipwrightMenuAction::Discard,
+                "byte {byte:#04x}"
+            );
+        }
+    }
+
+    #[test]
     fn text_window_clamp_rectangle_normalises_per_spec() {
         // text-output.md §9: clamp X to 0..=39, Y to 0..=24, then
         // swap inverted pairs to enforce top_left <= bottom_right.
