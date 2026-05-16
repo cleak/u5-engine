@@ -416,6 +416,28 @@ pub enum HealerTreatmentError {
     InsufficientGold { available: u16, required: u16 },
 }
 
+/// `shops.md §8.3` healer treatment eligibility per service letter.
+/// Returns `true` when the healer should accept the selected target
+/// for the requested treatment. Cure requires Poisoned status; Heal
+/// refuses Dead members and members already at maximum HP (any
+/// other status — including Poisoned — is eligible for the HP top-
+/// up); Resurrect requires Dead status. Ashes and other non-Dead
+/// statuses are never resurrected by the healer.
+pub const fn healer_treatment_accepts(
+    treatment: HealerTreatment,
+    status: CharacterStatus,
+    hp: u16,
+    max_hp: u16,
+) -> bool {
+    match treatment {
+        HealerTreatment::Cure => matches!(status, CharacterStatus::PoisonedOrRevived),
+        HealerTreatment::Heal => {
+            !matches!(status, CharacterStatus::Dead) && hp < max_hp
+        }
+        HealerTreatment::Resurrect => matches!(status, CharacterStatus::Dead),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Herbalist {
     TheHerbalist,

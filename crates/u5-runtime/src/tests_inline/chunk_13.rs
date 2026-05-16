@@ -1,4 +1,74 @@
     #[test]
+    fn healer_treatment_accepts_per_status_and_hp() {
+        // shops.md §8.3
+        // Cure: only Poisoned.
+        assert!(healer_treatment_accepts(
+            HealerTreatment::Cure,
+            CharacterStatus::PoisonedOrRevived,
+            20,
+            30
+        ));
+        for status in [
+            CharacterStatus::Good,
+            CharacterStatus::Sleeping,
+            CharacterStatus::Charmed,
+            CharacterStatus::Dead,
+            CharacterStatus::Ashes,
+        ] {
+            assert!(!healer_treatment_accepts(
+                HealerTreatment::Cure,
+                status,
+                20,
+                30
+            ));
+        }
+        // Heal: refuses Dead and at-max HP; otherwise accepts (including Poisoned).
+        assert!(healer_treatment_accepts(
+            HealerTreatment::Heal,
+            CharacterStatus::Good,
+            10,
+            30
+        ));
+        assert!(healer_treatment_accepts(
+            HealerTreatment::Heal,
+            CharacterStatus::PoisonedOrRevived,
+            10,
+            30
+        ));
+        assert!(!healer_treatment_accepts(
+            HealerTreatment::Heal,
+            CharacterStatus::Good,
+            30,
+            30
+        ));
+        assert!(!healer_treatment_accepts(
+            HealerTreatment::Heal,
+            CharacterStatus::Dead,
+            10,
+            30
+        ));
+        // Resurrect: only Dead; Ashes and others refused.
+        assert!(healer_treatment_accepts(
+            HealerTreatment::Resurrect,
+            CharacterStatus::Dead,
+            0,
+            30
+        ));
+        assert!(!healer_treatment_accepts(
+            HealerTreatment::Resurrect,
+            CharacterStatus::Ashes,
+            0,
+            30
+        ));
+        assert!(!healer_treatment_accepts(
+            HealerTreatment::Resurrect,
+            CharacterStatus::Good,
+            30,
+            30
+        ));
+    }
+
+    #[test]
     fn arms_shop_buy_quote_applies_intelligence_adjustment() {
         // shops.md §6
         // Speaker INT 0: quote = base + base * 100 / 100 = 2 * base.
