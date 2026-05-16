@@ -1,4 +1,37 @@
     #[test]
+    fn party_target_selector_action_decodes_keystrokes() {
+        // input.md §9
+        // Digits 1..=6 select the matching slot.
+        for d in 1u8..=6 {
+            assert_eq!(
+                party_target_selector_action(b'0' + d),
+                PartyTargetSelectorAction::SelectSlot(d - 1)
+            );
+        }
+        // 0, Space, Enter -> confirm.
+        for byte in [b'0', b' ', 0x0D, 0x0A] {
+            assert_eq!(
+                party_target_selector_action(byte),
+                PartyTargetSelectorAction::Confirm
+            );
+        }
+        // Escape -> cancel.
+        assert_eq!(
+            party_target_selector_action(0x1B),
+            PartyTargetSelectorAction::Cancel
+        );
+        // Other bytes are silently discarded.
+        for byte in [b'7', b'A', b'a', 0x00, 0xC9, 0xFB, 0xFF] {
+            assert_eq!(
+                party_target_selector_action(byte),
+                PartyTargetSelectorAction::Discard,
+                "byte {:#x} should be discarded",
+                byte
+            );
+        }
+    }
+
+    #[test]
     fn free_text_input_action_classifies_keystrokes() {
         // input.md §8
         assert_eq!(free_text_input_action(0x08), FreeTextInputAction::Backspace);

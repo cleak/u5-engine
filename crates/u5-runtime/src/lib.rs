@@ -173,8 +173,8 @@ pub use input_codes::{
     INPUT_CODE_F10, INPUT_CODE_FUNCTION_FIRST, INPUT_CODE_FUNCTION_LAST,
     INPUT_CODE_NORTH, INPUT_CODE_NORTHEAST, INPUT_CODE_NORTHWEST, INPUT_CODE_SOUTH,
     INPUT_CODE_SOUTHEAST, INPUT_CODE_SOUTHWEST, INPUT_CODE_WEST, FreeTextInputAction,
-    InputDirection, free_text_input_action, input_case_fold, input_code_direction,
-    input_function_key_index,
+    InputDirection, PartyTargetSelectorAction, free_text_input_action, input_case_fold,
+    input_code_direction, input_function_key_index, party_target_selector_action,
 };
 pub use jimmy::{
     DOOR_AUTO_CLOSE_TURNS, JIMMY_DOOR_DIE_HIGH, JIMMY_DOOR_DIE_LOW, JIMMY_OBJECT_DIE_HIGH,

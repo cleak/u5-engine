@@ -88,6 +88,40 @@ pub const fn input_code_direction(byte: u8) -> Option<InputDirection> {
     })
 }
 
+/// `input.md §9` party-member selector outcome from one keystroke.
+/// The shared selector is slot-based: visible digits `1..=6`
+/// directly choose the matching active-party slot; `0`, Space, and
+/// Enter confirm the currently highlighted slot (or the explicit-
+/// none branch when applicable); Escape cancels. Other bytes are
+/// silently discarded so the prompt re-reads input.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PartyTargetSelectorAction {
+    /// Digit `1..=6` — chose party slot `digit - 1`. Caller still
+    /// caps against the live party size.
+    SelectSlot(u8),
+    /// `0`, Space, or Enter — confirm. Resolves to the currently
+    /// highlighted slot or the explicit-none branch per the
+    /// caller's rules.
+    Confirm,
+    /// Escape — cancel the prompt.
+    Cancel,
+    /// Any other byte — silently discarded; prompt re-reads input.
+    Discard,
+}
+
+/// `input.md §9`: classify one keystroke for the shared
+/// party-member selector. Caller has already applied the case fold
+/// from [`input_case_fold`]; this helper does no further
+/// translation.
+pub const fn party_target_selector_action(byte: u8) -> PartyTargetSelectorAction {
+    match byte {
+        b'1'..=b'6' => PartyTargetSelectorAction::SelectSlot(byte - b'1'),
+        b'0' | b' ' | 0x0D | 0x0A => PartyTargetSelectorAction::Confirm,
+        0x1B => PartyTargetSelectorAction::Cancel,
+        _ => PartyTargetSelectorAction::Discard,
+    }
+}
+
 /// `input.md §8` free-text-input prompt action classified from one
 /// keystroke. The line buffer reader appends printable ASCII into
 /// the caller's small line buffer, pops on Backspace, terminates on
