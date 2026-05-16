@@ -378,7 +378,8 @@ pub use npc_runtime::{
 };
 pub use party::{
     Area, AvatarStats, MoonstoneGateSlot, PartyMember, Player, RESURRECTION_MAX_HP_PER_LEVEL,
-    class_refreshed_mana, default_party, default_party_experience,
+    RESURRECTION_REBUILT_CURRENT_HP, class_refreshed_mana, default_party,
+    default_party_experience,
     default_party_intelligence, default_party_names, default_party_stay_counters,
     heal_spell_amount_from_raw_roll, increase_capped_stat, party_member_unavailable_message,
     party_name_to_string, party_status_name, potion_effect_index_after_variation,

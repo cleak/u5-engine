@@ -216,6 +216,13 @@ pub const fn heal_spell_amount_from_raw_roll(raw_roll: u8) -> u16 {
 /// to `30 * level` after the experience-driven level recompute.
 pub const RESURRECTION_MAX_HP_PER_LEVEL: u16 = 30;
 
+/// `magic.md §8` post-rebuild current HP. The spell path stands the
+/// resurrected member up with exactly one hit point; healer-shop
+/// callers may immediately top the same member back up after
+/// invoking the spell helper, but the helper itself returns the
+/// member at 1 HP.
+pub const RESURRECTION_REBUILT_CURRENT_HP: u16 = 1;
+
 /// `magic.md §8`: maximum HP a resurrected member receives for the
 /// supplied recomputed level. Saturates at `u16::MAX` so callers do
 /// not need to guard absurd levels.

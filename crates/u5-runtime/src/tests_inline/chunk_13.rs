@@ -1,4 +1,12 @@
     #[test]
+    fn resurrection_rebuilt_current_hp_is_one() {
+        // magic.md §8: the spell helper stands the resurrected member
+        // up with exactly one hit point; healer callers may top up
+        // afterwards.
+        assert_eq!(RESURRECTION_REBUILT_CURRENT_HP, 1);
+    }
+
+    #[test]
     fn story_dat_file_constant_is_published() {
         // formats/story-dat.md §2: published filename.
         assert_eq!(STORY_DAT_FILE, "STORY.DAT");
