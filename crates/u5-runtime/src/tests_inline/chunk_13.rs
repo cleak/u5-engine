@@ -1,4 +1,16 @@
     #[test]
+    fn doom_entrance_unlocks_only_when_all_three_slots_vanquished() {
+        // catalogs/quest-graph.md §5
+        let v = SHADOWLORD_HIDEOUT_VANQUISHED;
+        assert!(all_shadowlords_vanquished([v, v, v]));
+        assert!(!all_shadowlords_vanquished([0, v, v]));
+        assert!(!all_shadowlords_vanquished([v, 0, v]));
+        assert!(!all_shadowlords_vanquished([v, v, 0]));
+        assert!(!all_shadowlords_vanquished([1, 2, 3]));
+        assert!(!all_shadowlords_vanquished([0xFE, v, v]));
+    }
+
+    #[test]
     fn shadowlord_names_match_quest_graph_md_section_5() {
         // catalogs/quest-graph.md §5
         assert_eq!(shadowlord_name_for_slot(0), Some("FAULINEI"));

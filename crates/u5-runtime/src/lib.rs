@@ -111,9 +111,9 @@ pub use clock::{
     SHADOWLORD_NAME_NOSFENTOR, SKY_STRIP_CELL_COUNT, SKY_STRIP_RENDER_ORDER,
     SkyStripMarker,
     TIMING_TAG_NEGATE_TIME, TIMING_TAG_QUICKNESS, apply_timing_tag_increment,
-    display_hour_12h, is_provision_decrement_hour, shadowlord_hideout_is_live,
-    shadowlord_hideout_is_vanquished, shadowlord_name_for_slot,
-    shadowlord_slot_for_name, shop_time_of_day_word,
+    all_shadowlords_vanquished, display_hour_12h, is_provision_decrement_hour,
+    shadowlord_hideout_is_live, shadowlord_hideout_is_vanquished,
+    shadowlord_name_for_slot, shadowlord_slot_for_name, shop_time_of_day_word,
     sky_strip_marker_position, sky_strip_renders,
 };
 pub use directed_step::{
