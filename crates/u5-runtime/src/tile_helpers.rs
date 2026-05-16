@@ -628,6 +628,32 @@ pub enum DungeonCellClass {
     HeavyDoorOrRoomTrigger,
 }
 
+/// `dungeon-mode.md §6.1` runtime-variant bit (`0x08`). For dungeon
+/// cells below `0x90` the renderer clears this bit before class
+/// interpretation; for classes `0x9?` and higher the bit remains
+/// meaningful as an extra-glyph / active-object overlay flag.
+pub const DUNGEON_RUNTIME_VARIANT_BIT: u8 = 0x08;
+
+/// `dungeon-mode.md §6.1`: returns the cell byte the first-person
+/// renderer's class-interpretation pass should see. Bytes below
+/// `0x90` strip the `0x08` runtime-variant bit; bytes from `0x90`
+/// onward are returned unchanged so the renderer can read the bit
+/// as an extra-glyph / active-object overlay.
+pub const fn dungeon_renderer_cell_byte(tile: u8) -> u8 {
+    if tile < 0x90 {
+        tile & !DUNGEON_RUNTIME_VARIANT_BIT
+    } else {
+        tile
+    }
+}
+
+/// `dungeon-mode.md §6.1`: every renderer-facing cell read wraps X
+/// and Y independently to the range `0..=7`. The 8-by-8 floor torus
+/// uses a simple low-three-bit mask for the wrap.
+pub const fn dungeon_floor_wrap_coord(coord: i16) -> u8 {
+    (coord.rem_euclid(8) & 7) as u8
+}
+
 /// `dungeon-mode.md §5`: visit-local patch a room-trigger cell
 /// receives after the room encounter resolves. The high nibble drops
 /// from `0xF` (room trigger) to `0xA` (room-helper state) while the

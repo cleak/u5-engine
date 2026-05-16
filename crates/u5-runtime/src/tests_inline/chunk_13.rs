@@ -1,4 +1,30 @@
     #[test]
+    fn dungeon_renderer_cell_byte_strips_variant_below_0x90() {
+        // dungeon-mode.md §6.1
+        // Below 0x90 — runtime-variant bit cleared.
+        assert_eq!(dungeon_renderer_cell_byte(0x60), 0x60);
+        assert_eq!(dungeon_renderer_cell_byte(0x68), 0x60);
+        assert_eq!(dungeon_renderer_cell_byte(0x69), 0x61);
+        assert_eq!(dungeon_renderer_cell_byte(0x88), 0x80);
+        // At/above 0x90 — variant bit preserved as overlay flag.
+        assert_eq!(dungeon_renderer_cell_byte(0x90), 0x90);
+        assert_eq!(dungeon_renderer_cell_byte(0x98), 0x98);
+        assert_eq!(dungeon_renderer_cell_byte(0xB8), 0xB8);
+        assert_eq!(dungeon_renderer_cell_byte(0xF8), 0xF8);
+    }
+
+    #[test]
+    fn dungeon_floor_wrap_coord_uses_8_torus() {
+        // dungeon-mode.md §6.1
+        assert_eq!(dungeon_floor_wrap_coord(0), 0);
+        assert_eq!(dungeon_floor_wrap_coord(7), 7);
+        assert_eq!(dungeon_floor_wrap_coord(8), 0);
+        assert_eq!(dungeon_floor_wrap_coord(-1), 7);
+        assert_eq!(dungeon_floor_wrap_coord(-8), 0);
+        assert_eq!(dungeon_floor_wrap_coord(15), 7);
+    }
+
+    #[test]
     fn dungeon_room_post_combat_patch_demotes_high_nibble_only() {
         // dungeon-mode.md §5
         assert_eq!(
