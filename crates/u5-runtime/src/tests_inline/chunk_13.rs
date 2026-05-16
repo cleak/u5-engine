@@ -1,4 +1,12 @@
     #[test]
+    fn sailing_wait_pass_minutes_responds_to_hms_cape_rigging_flag() {
+        // weather.md §5: ordinary sailing wait passes spend two
+        // outdoor minutes; HMS Cape rigging halves that to one.
+        assert_eq!(WindState::sailing_wait_pass_minutes(false), 2);
+        assert_eq!(WindState::sailing_wait_pass_minutes(true), 1);
+    }
+
+    #[test]
     fn transport_marker_facing_decodes_low_two_bits_per_spec() {
         // vehicles.md §2: low two bits of a recognised transport
         // marker decode N/E/S/W as 0/1/2/3. The MountedHorse range

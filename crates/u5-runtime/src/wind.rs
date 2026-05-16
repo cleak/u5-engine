@@ -113,6 +113,16 @@ impl WindState {
         }
     }
 
+    /// `weather.md §5` per-wait-pass cleanup minute increment for a
+    /// hoisted-sail player ship that is still waiting for the wind
+    /// release. Without the HMS Cape rigging flag the wait pass uses
+    /// the ordinary two-minute outdoor cleanup increment. With the
+    /// rigging flag active the wait pass uses a one-minute increment
+    /// and alternates the active-object epilogue.
+    pub const fn sailing_wait_pass_minutes(rigging_active: bool) -> u8 {
+        if rigging_active { 1 } else { 2 }
+    }
+
     /// `weather.md §7`: cadence cap for an autonomous active-ship slot
     /// under prevailing wind, given the slot's current frame heading.
     /// Returns `(numerator, denominator)` where the slot moves on
