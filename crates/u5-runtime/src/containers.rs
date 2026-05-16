@@ -24,6 +24,55 @@ pub const fn chest_secondary_pool_attempts(chest_class: u8) -> u8 {
     chest_class / 2 + 1
 }
 
+/// `containers.md §4` chest primary-pool published row count and
+/// per-row thresholds. Row ordering is one-based in the spec; this
+/// array is zero-indexed (row 1 → index 0, row 8 → index 7).
+pub const CHEST_PRIMARY_POOL_ROW_COUNT: usize = 8;
+pub const CHEST_PRIMARY_POOL_THRESHOLDS: [u8; CHEST_PRIMARY_POOL_ROW_COUNT] = [
+    7,  // 1 Food
+    7,  // 2 Torches
+    15, // 3 Gems
+    9,  // 4 Keys
+    17, // 5 Scroll
+    17, // 6 Potion
+    3,  // 7 Gold
+    25, // 8 Chest marker
+];
+
+/// `containers.md §4` chest secondary-pool published row count.
+pub const CHEST_SECONDARY_POOL_ROW_COUNT: usize = 48;
+
+/// `containers.md §4` chest secondary-pool per-row threshold table.
+/// `None` is the "Disabled" sentinel — those rows never succeed for
+/// ordinary chest classes. Indexed by the published 0..=47 pool
+/// index, which is also the equipment subtype passed to the
+/// inventory-add path on success.
+pub const CHEST_SECONDARY_POOL_THRESHOLDS: [Option<u8>; CHEST_SECONDARY_POOL_ROW_COUNT] = [
+    // 0..=8 Helm / Shield band
+    Some(10), Some(10), Some(15), Some(20),
+    Some(10), Some(15), Some(20), Some(28), None,
+    // 9..=15 Armour band
+    Some(15), Some(15), Some(20), Some(20), Some(20), Some(24), None,
+    // 16..=41 Weapon band
+    Some(5),  Some(10), Some(10), Some(10), Some(10), Some(10),
+    Some(10), Some(10), Some(15), Some(15), Some(15), Some(10),
+    Some(15), Some(10), Some(20), Some(20), Some(20), Some(20),
+    Some(20), None,     Some(23), Some(23), Some(23), None,
+    None,     None,
+    // 42..=47 Ring / Amulet band
+    Some(23), Some(23), Some(23), Some(23), Some(15), None,
+];
+
+/// `containers.md §4`: returns the secondary-pool row's threshold,
+/// or `None` for the published "Disabled" sentinel rows that never
+/// succeed for ordinary chest classes.
+pub const fn chest_secondary_pool_threshold(row_index: usize) -> Option<u8> {
+    if row_index >= CHEST_SECONDARY_POOL_ROW_COUNT {
+        return None;
+    }
+    CHEST_SECONDARY_POOL_THRESHOLDS[row_index]
+}
+
 /// `containers.md §8` shared inventory-add result family classified
 /// from the found-item class code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

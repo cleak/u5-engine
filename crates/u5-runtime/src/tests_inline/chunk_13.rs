@@ -1,4 +1,32 @@
     #[test]
+    fn chest_primary_and_secondary_pool_thresholds_match_published_table() {
+        // containers.md §4: primary pool has 8 published rows with
+        // fixed thresholds; secondary pool has 48 rows with several
+        // "Disabled" sentinel entries that never succeed.
+        assert_eq!(CHEST_PRIMARY_POOL_ROW_COUNT, 8);
+        assert_eq!(
+            CHEST_PRIMARY_POOL_THRESHOLDS,
+            [7, 7, 15, 9, 17, 17, 3, 25]
+        );
+        assert_eq!(CHEST_SECONDARY_POOL_ROW_COUNT, 48);
+
+        // Spot checks against the published 48-row table.
+        assert_eq!(chest_secondary_pool_threshold(0), Some(10)); // Helm
+        assert_eq!(chest_secondary_pool_threshold(7), Some(28)); // Spiked Shield
+        assert_eq!(chest_secondary_pool_threshold(8), None); // Shield disabled
+        assert_eq!(chest_secondary_pool_threshold(15), None); // Armour disabled
+        assert_eq!(chest_secondary_pool_threshold(16), Some(5)); // Dagger
+        assert_eq!(chest_secondary_pool_threshold(35), None); // Weapon disabled
+        assert_eq!(chest_secondary_pool_threshold(36), Some(23));
+        assert_eq!(chest_secondary_pool_threshold(42), Some(23));
+        assert_eq!(chest_secondary_pool_threshold(46), Some(15));
+        assert_eq!(chest_secondary_pool_threshold(47), None); // Amulet disabled
+        // Out-of-range indices.
+        assert_eq!(chest_secondary_pool_threshold(48), None);
+        assert_eq!(chest_secondary_pool_threshold(usize::MAX), None);
+    }
+
+    #[test]
     fn town_chest_open_standing_debits_two_floored_at_zero() {
         // containers.md §4: opening a town-family object-table chest
         // reduces the shared moral-standing selector by two units,
