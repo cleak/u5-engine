@@ -59,6 +59,53 @@ pub const fn npc_schedule_state_for_floor_transition(
     }
     NPC_STATE_PARKED_OFF_FLOOR
 }
+/// `formats/npc.md §6` published type-byte sentinels. The type byte
+/// at `+0x200..+0x21F` doubles as the slot's occupancy flag and the
+/// NPC's sprite/tile class. Three values are special-cased by the
+/// engine; every other non-zero byte is an ordinary sprite-class
+/// value derived by adding the byte to the NPC sprite page.
+pub const NPC_TYPE_EMPTY: u8 = 0x00;
+pub const NPC_TYPE_DEFAULT_HUMAN_SPRITE: u8 = 0x01;
+pub const NPC_TYPE_RUNTIME_PLAYER_MIRROR: u8 = 0xFC;
+
+/// `formats/npc.md §6`: classify a roster type byte. Combines the
+/// occupancy flag (zero = empty) and the three published sprite-class
+/// special cases (`0x01` default human, `0xFC` runtime player mirror)
+/// with the catch-all "ordinary derived sprite" path used for every
+/// other non-zero value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NpcTypeByteClass {
+    /// `0` — empty slot. The schedule processor skips the slot.
+    Empty,
+    /// `1` — occupied slot rendered with the default human/person
+    /// sprite instead of the ordinary derived-sprite path.
+    DefaultHumanSprite,
+    /// `0xFC` — runtime player-mirror marker written when the
+    /// town-mode player is attached to an NPC slot.
+    RuntimePlayerMirror,
+    /// Any other non-zero value — ordinary derived sprite class.
+    OrdinarySpriteClass,
+}
+
+/// `formats/npc.md §6`: classify a roster type byte into its engine
+/// contract category.
+pub const fn npc_type_byte_class(byte: u8) -> NpcTypeByteClass {
+    match byte {
+        NPC_TYPE_EMPTY => NpcTypeByteClass::Empty,
+        NPC_TYPE_DEFAULT_HUMAN_SPRITE => NpcTypeByteClass::DefaultHumanSprite,
+        NPC_TYPE_RUNTIME_PLAYER_MIRROR => NpcTypeByteClass::RuntimePlayerMirror,
+        _ => NpcTypeByteClass::OrdinarySpriteClass,
+    }
+}
+
+/// `formats/npc.md §6`: returns `true` when the schedule processor
+/// should treat the slot as occupied. Any non-zero type byte counts
+/// as occupied — the special sprite-class sentinels are still
+/// occupied slots.
+pub const fn npc_type_byte_occupied(byte: u8) -> bool {
+    byte != NPC_TYPE_EMPTY
+}
+
 /// `catalogs/npc-roster.md §4`: dialog-id `0` is the ordinary
 /// no-dialogue value (the engine prints the funny-look stub when the
 /// player Talks to such an NPC).

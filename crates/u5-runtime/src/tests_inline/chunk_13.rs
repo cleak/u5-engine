@@ -1,4 +1,31 @@
     #[test]
+    fn npc_type_byte_class_recognises_published_special_values() {
+        // formats/npc.md §6
+        assert_eq!(npc_type_byte_class(0x00), NpcTypeByteClass::Empty);
+        assert_eq!(
+            npc_type_byte_class(0x01),
+            NpcTypeByteClass::DefaultHumanSprite
+        );
+        assert_eq!(
+            npc_type_byte_class(0xFC),
+            NpcTypeByteClass::RuntimePlayerMirror
+        );
+        // Stable shipped sprite-class tags fall through to the
+        // ordinary derived-sprite path.
+        for tag in [0x50u8, 0x54, 0x70, 0x90, 0xD8] {
+            assert_eq!(
+                npc_type_byte_class(tag),
+                NpcTypeByteClass::OrdinarySpriteClass
+            );
+        }
+        // Occupancy: any non-zero byte is occupied; zero is empty.
+        assert!(!npc_type_byte_occupied(NPC_TYPE_EMPTY));
+        assert!(npc_type_byte_occupied(NPC_TYPE_DEFAULT_HUMAN_SPRITE));
+        assert!(npc_type_byte_occupied(NPC_TYPE_RUNTIME_PLAYER_MIRROR));
+        assert!(npc_type_byte_occupied(0x50));
+    }
+
+    #[test]
     fn world_tick_path_classifies_per_spec_branches() {
         // main-loop.md §9
         // Combat scene -> blat-copy regardless of dirty flag.
