@@ -1,4 +1,33 @@
     #[test]
+    fn tlk_action_dispatch_verb_covers_published_letters() {
+        // conversation.md §7.6
+        let cases: &[(u8, TlkActionDispatchVerb)] = &[
+            (b'A', TlkActionDispatchVerb::RaiseFood),
+            (b'B', TlkActionDispatchVerb::RaiseGold),
+            (b'C', TlkActionDispatchVerb::RaiseKeys),
+            (b'D', TlkActionDispatchVerb::RaiseGems),
+            (b'E', TlkActionDispatchVerb::RaiseTorches),
+            (b'F', TlkActionDispatchVerb::SetGrappleGate),
+            (b'G', TlkActionDispatchVerb::RaiseCarpets),
+            (b'H', TlkActionDispatchVerb::SetSextantCarried),
+            (b'I', TlkActionDispatchVerb::SetSpyglassCarried),
+            (b'J', TlkActionDispatchVerb::SetBlackBadgeCarried),
+            (b'K', TlkActionDispatchVerb::RaiseSkullKeys),
+        ];
+        for &(arg, verb) in cases {
+            assert_eq!(tlk_action_dispatch_verb(arg), Some(verb));
+            assert!(!tlk_action_dispatch_is_signal_flag(arg));
+        }
+        // Below the letter band are signal-flag values; above the
+        // letter band has no published meaning.
+        assert_eq!(tlk_action_dispatch_verb(b'L'), None);
+        assert_eq!(tlk_action_dispatch_verb(0x00), None);
+        assert!(tlk_action_dispatch_is_signal_flag(0x00));
+        assert!(tlk_action_dispatch_is_signal_flag(b'A' - 1));
+        assert!(!tlk_action_dispatch_is_signal_flag(b'L'));
+    }
+
+    #[test]
     fn tlk_class_for_scene_partitions_per_spec() {
         // conversation.md §3
         assert_eq!(tlk_class_for_scene(0), None);

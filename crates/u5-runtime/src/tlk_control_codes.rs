@@ -278,6 +278,65 @@ pub const TLK_CODE_GOTO_LABEL_FIRST: u8 = 0x9E;
 pub const TLK_CODE_GOTO_LABEL_LAST: u8 = 0x9F;
 pub const TLK_CODE_END_OF_RESPONSE: u8 = 0xFF;
 
+/// `conversation.md §7.6` published `0x86` ACTION-DISPATCH letter
+/// verbs `A..=K`. The argument byte is masked to seven bits before
+/// dispatch; values below `b'A'` set generic one-conversation signal
+/// flags rather than running the global action table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TlkActionDispatchVerb {
+    /// `A` — raise the shared food counter (and refresh presentation).
+    RaiseFood,
+    /// `B` — raise the shared gold counter.
+    RaiseGold,
+    /// `C` — raise the ordinary key counter.
+    RaiseKeys,
+    /// `D` — raise the gem counter.
+    RaiseGems,
+    /// `E` — raise the torch counter.
+    RaiseTorches,
+    /// `F` — set the outdoor Klimb-gear / Grapple-gate save byte.
+    SetGrappleGate,
+    /// `G` — raise the carried magic-carpet counter.
+    RaiseCarpets,
+    /// `H` — set the Sextant carried-item flag.
+    SetSextantCarried,
+    /// `I` — set the Spyglass carried-item flag.
+    SetSpyglassCarried,
+    /// `J` — set the Black Badge carried-item flag.
+    SetBlackBadgeCarried,
+    /// `K` — raise the skull/special-key counter.
+    RaiseSkullKeys,
+}
+
+/// `conversation.md §7.6`: classify the post-mask `0x86` action-dispatch
+/// argument byte. Returns the published letter verb for `A..=K`; any
+/// value below `b'A'` (the generic one-conversation signal-flag band)
+/// or above `b'K'` returns `None`.
+pub const fn tlk_action_dispatch_verb(arg: u8) -> Option<TlkActionDispatchVerb> {
+    Some(match arg {
+        b'A' => TlkActionDispatchVerb::RaiseFood,
+        b'B' => TlkActionDispatchVerb::RaiseGold,
+        b'C' => TlkActionDispatchVerb::RaiseKeys,
+        b'D' => TlkActionDispatchVerb::RaiseGems,
+        b'E' => TlkActionDispatchVerb::RaiseTorches,
+        b'F' => TlkActionDispatchVerb::SetGrappleGate,
+        b'G' => TlkActionDispatchVerb::RaiseCarpets,
+        b'H' => TlkActionDispatchVerb::SetSextantCarried,
+        b'I' => TlkActionDispatchVerb::SetSpyglassCarried,
+        b'J' => TlkActionDispatchVerb::SetBlackBadgeCarried,
+        b'K' => TlkActionDispatchVerb::RaiseSkullKeys,
+        _ => return None,
+    })
+}
+
+/// `conversation.md §7.6`: returns `true` when the `0x86` argument
+/// byte (after the seven-bit mask) falls in the generic
+/// one-conversation signal-flag band — values below `b'A'` set a
+/// per-conversation flag rather than running the global action table.
+pub const fn tlk_action_dispatch_is_signal_flag(arg: u8) -> bool {
+    arg < b'A'
+}
+
 /// `conversation.md` §7.6: argument-byte width for each multi-byte
 /// introducer code. Returns `None` for codes that take no follow-up bytes.
 pub const fn tlk_introducer_argument_count(code: u8) -> Option<u8> {
