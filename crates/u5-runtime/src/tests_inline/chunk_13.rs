@@ -1,4 +1,21 @@
     #[test]
+    fn quest_password_constants_match_spec_strings() {
+        // catalogs/quest-graph.md §3 names two passwords as graph
+        // gates: `DAWN` for Resistance trust and `IMPERA` for the
+        // Blackthorn-side oppression branches. Promote both so
+        // future conversation/data-authoring tooling can reference
+        // them as named constants instead of bare string literals.
+        assert_eq!(QUEST_PASSWORD_RESISTANCE, "DAWN");
+        assert_eq!(QUEST_PASSWORD_OPPRESSION, "IMPERA");
+        // The passwords are case-meaningful uppercase identifiers
+        // distinct from each other; they should not accidentally
+        // alias to the same string after any future normalisation.
+        assert_ne!(QUEST_PASSWORD_RESISTANCE, QUEST_PASSWORD_OPPRESSION);
+        assert!(QUEST_PASSWORD_RESISTANCE.chars().all(|c| c.is_ascii_uppercase()));
+        assert!(QUEST_PASSWORD_OPPRESSION.chars().all(|c| c.is_ascii_uppercase()));
+    }
+
+    #[test]
     fn dungeon_pit_fall_and_bomb_trap_byte_constants_match_spec() {
         // doors-and-z-transitions.md §10 names two fall-trap bytes
         // (0x61 visible, 0x69 hidden) that increment Z when stepped

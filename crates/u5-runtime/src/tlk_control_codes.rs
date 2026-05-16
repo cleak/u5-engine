@@ -218,6 +218,17 @@ pub const fn tlk_class_for_scene(scene_byte: u8) -> Option<TlkFileClass> {
 /// byte-range biases when reaching this same logical table.
 pub const COMMON_WORD_DICTIONARY_ENTRIES: usize = 128;
 
+/// `catalogs/quest-graph.md §3` Resistance-trust password. NPCs allied
+/// with the Resistance accept this typed answer as a trust gate that
+/// unlocks anti-Blackthorn branches, Council-member help, and useful
+/// item grants. The wider trust system is data-authored in each NPC's
+/// `.TLK` keyword tree; this constant just pins the spec-named string.
+pub const QUEST_PASSWORD_RESISTANCE: &str = "DAWN";
+/// `catalogs/quest-graph.md §3` Blackthorn-side oppression password.
+/// Typing this proves Blackthorn-aligned allegiance to NPCs that gate
+/// hostile or dangerous infiltration branches.
+pub const QUEST_PASSWORD_OPPRESSION: &str = "IMPERA";
+
 /// `conversation.md §7.6` ASK-PARTY-NAME (`0x84`) match. The typed
 /// answer is compared against each live party member's name with
 /// the bit-7-stripping case-insensitive convention also used by
