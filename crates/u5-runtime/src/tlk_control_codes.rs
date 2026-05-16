@@ -278,6 +278,60 @@ pub const TLK_CODE_GOTO_LABEL_FIRST: u8 = 0x9E;
 pub const TLK_CODE_GOTO_LABEL_LAST: u8 = 0x9F;
 pub const TLK_CODE_END_OF_RESPONSE: u8 = 0xFF;
 
+/// `conversation.md §7` top-level byte-runner dispatcher class. Each
+/// byte read from any text stream (the five leading entries, every
+/// keyword response, IF/ELSE arm bodies, GOTO targets) is classified
+/// by value range into exactly one of these branches. The classifier
+/// only names the dispatch class; the per-class side effects live in
+/// the dedicated control-code constants (`TLK_CODE_*`) and printable
+/// text path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TlkByteRunnerClass {
+    /// `0x01..=0x7F` — nonzero high-bit-clear dictionary token; the
+    /// byte indexes the shared 128-entry common-word pointer table
+    /// and the pointed word is expanded inline into the output.
+    DictionaryToken,
+    /// `0x9E..=0x9F` — GOTO-LABEL codes. Their high bit is set but
+    /// they participate in label dispatch, not the ordinary control
+    /// table.
+    GotoLabel,
+    /// `0xA0..=0xFD` — high-bit-set printable bytes. The word buffer
+    /// strips the high bit before glyph output; the `0x8E` print-mask
+    /// toggle controls whether the queued byte keeps that high bit as
+    /// a soft-break marker.
+    PrintableText,
+    /// `0x80..=0x9D` — engine control codes (the §7.2..§7.6 table).
+    /// `0x9E..=0x9F` are carved out to the `GotoLabel` branch above.
+    ControlCode,
+    /// `0xFE` — multi-byte command introducer that aliases `0x8C`
+    /// IF/ELSE.
+    IfElseAlias,
+    /// `0xFF` — end-of-response. The runner flushes the pending word
+    /// buffer and signals the keyword input loop to prompt again.
+    EndOfResponse,
+    /// `0x00` — null byte. Not a dispatcher class in the published
+    /// classification; appears as a blob terminator/skip-byte at the
+    /// I/O layer rather than reaching the dispatcher in normal flows.
+    NullByte,
+}
+
+/// `conversation.md §7`: classify a byte by the value-range table that
+/// the byte runner's top-level dispatcher follows in order. The order
+/// matters because `0x9E..=0x9F` would otherwise be subsumed by the
+/// `0x80..=0x9F` control-code range; the dispatcher carves the GOTO
+/// pair out first.
+pub const fn tlk_byte_runner_class(byte: u8) -> TlkByteRunnerClass {
+    match byte {
+        0x00 => TlkByteRunnerClass::NullByte,
+        0x01..=0x7F => TlkByteRunnerClass::DictionaryToken,
+        0x9E..=0x9F => TlkByteRunnerClass::GotoLabel,
+        0xA0..=0xFD => TlkByteRunnerClass::PrintableText,
+        0x80..=0x9D => TlkByteRunnerClass::ControlCode,
+        0xFE => TlkByteRunnerClass::IfElseAlias,
+        0xFF => TlkByteRunnerClass::EndOfResponse,
+    }
+}
+
 /// `conversation.md §7.6` published `0x86` ACTION-DISPATCH letter
 /// verbs `A..=K`. The argument byte is masked to seven bits before
 /// dispatch; values below `b'A'` set generic one-conversation signal

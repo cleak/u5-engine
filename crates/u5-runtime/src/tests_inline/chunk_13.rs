@@ -1,4 +1,75 @@
     #[test]
+    fn tlk_byte_runner_class_partitions_byte_space_per_spec() {
+        // conversation.md §7 top-level dispatcher ranges.
+        assert_eq!(tlk_byte_runner_class(0x00), TlkByteRunnerClass::NullByte);
+        // 0x01..=0x7F dictionary tokens.
+        for byte in [0x01u8, 0x10, 0x40, 0x7F] {
+            assert_eq!(
+                tlk_byte_runner_class(byte),
+                TlkByteRunnerClass::DictionaryToken,
+                "{byte:#04x} should be DictionaryToken"
+            );
+        }
+        // 0x80..=0x9D control codes — the 0x9E..=0x9F GOTO pair is
+        // carved out below.
+        for byte in [0x80u8, 0x83, 0x8C, 0x8E, 0x91, 0x9D] {
+            assert_eq!(
+                tlk_byte_runner_class(byte),
+                TlkByteRunnerClass::ControlCode,
+                "{byte:#04x} should be ControlCode"
+            );
+        }
+        // 0x9E..=0x9F GOTO-LABEL.
+        assert_eq!(tlk_byte_runner_class(0x9E), TlkByteRunnerClass::GotoLabel);
+        assert_eq!(tlk_byte_runner_class(0x9F), TlkByteRunnerClass::GotoLabel);
+        // 0xA0..=0xFD printable text path.
+        for byte in [0xA0u8, 0xC1, 0xE5, 0xFD] {
+            assert_eq!(
+                tlk_byte_runner_class(byte),
+                TlkByteRunnerClass::PrintableText,
+                "{byte:#04x} should be PrintableText"
+            );
+        }
+        // 0xFE IF/ELSE alias.
+        assert_eq!(
+            tlk_byte_runner_class(0xFE),
+            TlkByteRunnerClass::IfElseAlias
+        );
+        // 0xFF end-of-response.
+        assert_eq!(
+            tlk_byte_runner_class(0xFF),
+            TlkByteRunnerClass::EndOfResponse
+        );
+        // Cross-check the named control-code constants land in the
+        // ControlCode branch (not the GotoLabel carve-out).
+        for code in [
+            TLK_CODE_PRINT_AVATAR_NAME,
+            TLK_CODE_END_STREAM,
+            TLK_CODE_PAUSE,
+            TLK_CODE_PANEL_NEWLINE,
+            TLK_CODE_CURSE_CHECK,
+            TLK_CODE_LITERAL_NEWLINE,
+            TLK_CODE_PROTECT_RUN,
+            TLK_CODE_WAIT_KEY,
+        ] {
+            assert_eq!(
+                tlk_byte_runner_class(code),
+                TlkByteRunnerClass::ControlCode,
+                "{code:#04x} should classify as ControlCode"
+            );
+        }
+        // The GOTO-LABEL constants share the GotoLabel branch.
+        assert_eq!(
+            tlk_byte_runner_class(TLK_CODE_GOTO_LABEL_FIRST),
+            TlkByteRunnerClass::GotoLabel
+        );
+        assert_eq!(
+            tlk_byte_runner_class(TLK_CODE_GOTO_LABEL_LAST),
+            TlkByteRunnerClass::GotoLabel
+        );
+    }
+
+    #[test]
     fn rest_with_watch_recovers_hp_only_for_good_and_sleeping() {
         // rest-and-camp.md §5: HP recovery is for Good and Sleeping members
         // only. Poisoned members participate in the watch but do not receive
