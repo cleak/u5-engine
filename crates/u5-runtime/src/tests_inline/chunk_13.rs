@@ -58,6 +58,25 @@
     }
 
     #[test]
+    fn foot_avatar_transport_marker_default_and_band_match_spec() {
+        // vehicles.md §2: clean-seed foot/avatar transport marker is
+        // 0x1C (facing north); the foot family band is 0x1C..=0x1F.
+        assert_eq!(TRANSPORT_MARKER_FOOT_DEFAULT, 0x1C);
+        assert_eq!(TRANSPORT_MARKER_FOOT_FIRST, 0x1C);
+        assert_eq!(TRANSPORT_MARKER_FOOT_LAST, 0x1F);
+        // Each byte in the foot band classifies as the foot family.
+        for marker in TRANSPORT_MARKER_FOOT_FIRST..=TRANSPORT_MARKER_FOOT_LAST {
+            assert_eq!(
+                transport_family(marker),
+                Some(TransportFamily::Foot),
+                "marker {marker:#04x}"
+            );
+        }
+        // The byte just above the band leaves the foot family.
+        assert_ne!(transport_family(0x20), Some(TransportFamily::Foot));
+    }
+
+    #[test]
     fn encounter_spawn_separation_predicate_matches_published_band() {
         // encounters.md §4: candidate spawn coordinates must be
         // strictly between separations 6 and 250 on both axes. The

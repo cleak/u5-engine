@@ -619,6 +619,17 @@ pub const fn random_encounter_spawn_outcomes(threshold: u8) -> u8 {
     }
 }
 
+/// `vehicles.md §2` clean-seed foot/avatar transport marker. The
+/// shipped `INIT.GAM` party transport state starts at this value;
+/// the low two bits encode facing (0 = north).
+pub const TRANSPORT_MARKER_FOOT_DEFAULT: u8 = 0x1C;
+
+/// `vehicles.md §2` foot/avatar transport-family byte range. Any
+/// byte in this band identifies the party as on foot; the low two
+/// bits encode the party leader's facing.
+pub const TRANSPORT_MARKER_FOOT_FIRST: u8 = 0x1C;
+pub const TRANSPORT_MARKER_FOOT_LAST: u8 = 0x1F;
+
 /// `encounters.md §4` encounter-spawn coordinate-separation bounds.
 /// A candidate spawn coordinate is accepted only when both axes'
 /// absolute separation from the party is strictly greater than
