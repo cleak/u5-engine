@@ -2,6 +2,41 @@
 
 /// `main-loop.md §3` scene-byte ranges: well-known sentinels for the
 /// intro sub-states and the temporary combat marker.
+/// `main-loop.md §9` world-tick branch the redraw orchestrator
+/// dispatches to. The orchestrator runs between keystrokes from
+/// inside the input pipeline's idle wait; it does not run while
+/// prompt mode is active.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WorldTickPath {
+    /// Combat scene — blat-copy the precomputed combat terrain
+    /// grid into the viewport scratch grid; the orchestrator does
+    /// not run the producer.
+    CombatBlatCopy,
+    /// 2D scene with the visibility-dirty flag set — run the full
+    /// centre-out visibility producer against the active map.
+    ProducerFullRebuild,
+    /// 2D scene with the dirty flag clear — lazy refill only the
+    /// cells whose current value is the post-render zero sentinel.
+    LazyRefill,
+}
+
+/// `main-loop.md §9`: classify the world-tick branch from the
+/// scene byte and the visibility-dirty flag. Combat-class scenes
+/// use the blat-copy path regardless of the dirty flag; 2D scenes
+/// branch on the dirty flag.
+pub const fn world_tick_path(scene_byte: u8, visibility_dirty: bool) -> WorldTickPath {
+    match scene_route(scene_byte) {
+        SceneRoute::CombatTemporary => WorldTickPath::CombatBlatCopy,
+        _ => {
+            if visibility_dirty {
+                WorldTickPath::ProducerFullRebuild
+            } else {
+                WorldTickPath::LazyRefill
+            }
+        }
+    }
+}
+
 /// `main-loop.md §4` outer-loop bookkeeping flags. The router keeps
 /// two single-bit flags between iterations:
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

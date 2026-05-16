@@ -1,4 +1,38 @@
     #[test]
+    fn world_tick_path_classifies_per_spec_branches() {
+        // main-loop.md §9
+        // Combat scene -> blat-copy regardless of dirty flag.
+        assert_eq!(
+            world_tick_path(SCENE_COMBAT_TEMPORARY, true),
+            WorldTickPath::CombatBlatCopy
+        );
+        assert_eq!(
+            world_tick_path(SCENE_COMBAT_TEMPORARY, false),
+            WorldTickPath::CombatBlatCopy
+        );
+        // 2D scene + dirty flag set -> full rebuild.
+        assert_eq!(
+            world_tick_path(SCENE_OVERWORLD, true),
+            WorldTickPath::ProducerFullRebuild
+        );
+        assert_eq!(
+            world_tick_path(1, true),
+            WorldTickPath::ProducerFullRebuild
+        );
+        assert_eq!(
+            world_tick_path(33, true),
+            WorldTickPath::ProducerFullRebuild
+        );
+        // 2D scene + clear dirty flag -> lazy refill.
+        assert_eq!(
+            world_tick_path(SCENE_OVERWORLD, false),
+            WorldTickPath::LazyRefill
+        );
+        assert_eq!(world_tick_path(1, false), WorldTickPath::LazyRefill);
+        assert_eq!(world_tick_path(33, false), WorldTickPath::LazyRefill);
+    }
+
+    #[test]
     fn outer_loop_flags_skip_overworld_only_when_pending_and_zero_scene() {
         // main-loop.md §4
         let pending = OuterLoopFlags {
