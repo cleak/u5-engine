@@ -1,4 +1,32 @@
     #[test]
+    fn transport_marker_facing_decodes_low_two_bits_per_spec() {
+        // vehicles.md §2: low two bits of a recognised transport
+        // marker decode N/E/S/W as 0/1/2/3. The MountedHorse range
+        // only contains the boarded markers 0x12/0x13 (the parked
+        // horse objects 0x10/0x11 are not transport state), so the
+        // only mounted-horse facings expressible through this helper
+        // are South (bits 10) and West (bits 11).
+        assert_eq!(transport_marker_facing(0x12), Some(Direction::South));
+        assert_eq!(transport_marker_facing(0x13), Some(Direction::West));
+        assert_eq!(transport_marker_facing(0x14), Some(Direction::North));
+        assert_eq!(transport_marker_facing(0x17), Some(Direction::West));
+        assert_eq!(transport_marker_facing(0x1C), Some(Direction::North));
+        assert_eq!(transport_marker_facing(0x1F), Some(Direction::West));
+        assert_eq!(transport_marker_facing(0x20), Some(Direction::North));
+        assert_eq!(transport_marker_facing(0x22), Some(Direction::South));
+        assert_eq!(transport_marker_facing(0x25), Some(Direction::East));
+        assert_eq!(transport_marker_facing(0x2A), Some(Direction::South));
+        // Out-of-range markers stay opaque per spec.
+        for marker in [0x00u8, 0x0F, 0x10, 0x11, 0x18, 0x1B, 0x2C, 0xFF] {
+            assert_eq!(
+                transport_marker_facing(marker),
+                None,
+                "marker {marker:#04x} should be opaque"
+            );
+        }
+    }
+
+    #[test]
     fn overworld_klimb_entry_gate_orders_grapple_before_on_foot() {
         // doors-and-z-transitions.md §9: the Grapple-flag check is
         // consulted first; the vehicle gate is only reached when the

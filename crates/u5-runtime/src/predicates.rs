@@ -177,6 +177,23 @@ pub const fn transport_facing_index(marker: u8) -> Option<u8> {
     }
 }
 
+/// `vehicles.md §2`: typed [`Direction`] for the transport marker's
+/// facing. Decodes the low two bits via [`transport_facing_index`]
+/// and maps the four indices to the four cardinal directions:
+/// `0 -> North`, `1 -> East`, `2 -> South`, `3 -> West`. Returns
+/// `None` for markers outside the recognised transport families.
+pub const fn transport_marker_facing(marker: u8) -> Option<Direction> {
+    let Some(index) = transport_facing_index(marker) else {
+        return None;
+    };
+    Some(match index {
+        0 => Direction::North,
+        1 => Direction::East,
+        2 => Direction::South,
+        _ => Direction::West,
+    })
+}
+
 /// `stats-panel.md §5` middle-counter selection. The bottom block's
 /// middle counter shows the saved party gold word in ordinary and
 /// combat scenes; when the transport/action marker byte is in the
