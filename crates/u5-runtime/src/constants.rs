@@ -32,6 +32,13 @@ pub const LOCATION_FLOOR_TABLE_FILE: &str = "location_floor_pages.tsv";
 pub const LOCATION_ENTRY_Y_TABLE_FILE: &str = "location_entry_y.tsv";
 pub const TILE_PASSABILITY_FILE: &str = "tile_passability.bin";
 pub const LOOK2_DAT_FILE: &str = "LOOK2.DAT";
+
+/// `formats/look2-dat.md §6` legacy DOS end-of-file marker
+/// (`Ctrl-Z`, byte `0x1A`). Several shipped data files end with
+/// this byte; readers ignore it when computing the meaningful
+/// payload length. This is the historical CP/M / DOS text-file
+/// terminator; it never appears mid-record.
+pub const DOS_EOF_MARKER: u8 = 0x1A;
 /// `formats/look2-dat.md §2`: 1024-byte offset table holds 512
 /// little-endian word offsets — entries 0..=255 for terrain
 /// descriptions and 256..=511 for object descriptions.

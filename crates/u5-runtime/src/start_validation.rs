@@ -157,7 +157,7 @@ pub fn parse_look2_dat(bytes: &[u8]) -> io::Result<LookTable> {
             ),
         ));
     }
-    let meaningful_len = if bytes.last() == Some(&0x1a) {
+    let meaningful_len = if bytes.last() == Some(&DOS_EOF_MARKER) {
         bytes.len() - 1
     } else {
         bytes.len()

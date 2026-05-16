@@ -58,6 +58,15 @@
     }
 
     #[test]
+    fn dos_eof_marker_byte_is_ctrl_z() {
+        // formats/look2-dat.md §6 (and other format specs) refer to
+        // the legacy DOS end-of-file marker 0x1A (Ctrl-Z) as a byte
+        // readers ignore when computing meaningful payload length.
+        assert_eq!(DOS_EOF_MARKER, 0x1A);
+        assert_eq!(DOS_EOF_MARKER, b'\x1A');
+    }
+
+    #[test]
     fn foot_avatar_transport_marker_default_and_band_match_spec() {
         // vehicles.md §2: clean-seed foot/avatar transport marker is
         // 0x1C (facing north); the foot family band is 0x1C..=0x1F.
