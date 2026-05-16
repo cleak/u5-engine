@@ -7,6 +7,16 @@
     }
 
     #[test]
+    fn scroll_spell_labels_match_inventory_md_dispatch_order() {
+        // inventory.md §7 + formats/saved-gam.md §7
+        assert_eq!(SCROLL_SPELL_LABELS.len(), SCROLL_COUNT);
+        assert_eq!(
+            SCROLL_SPELL_LABELS,
+            ["LV", "HR", "IS", "AI", "IQW", "CKX", "CIM", "AT"]
+        );
+    }
+
+    #[test]
     fn tavern_drink_prompt_routes_y_n_space_and_discards_others() {
         // shops.md §8.5
         assert_eq!(tavern_drink_prompt(b'Y'), TavernDrinkPrompt::Enter);

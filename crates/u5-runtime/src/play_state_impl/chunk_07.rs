@@ -2099,6 +2099,5 @@ pub fn potion_label(index: usize) -> &'static str {
 }
 
 pub fn scroll_label(index: usize) -> &'static str {
-    const LABELS: [&str; SCROLL_COUNT] = ["LV", "HR", "IS", "AI", "IQW", "CKX", "CIM", "AT"];
-    LABELS.get(index).copied().unwrap_or("unknown")
+    SCROLL_SPELL_LABELS.get(index).copied().unwrap_or("unknown")
 }

@@ -1632,6 +1632,5 @@ pub fn sextant_coordinate(coordinate: usize) -> String {
 }
 
 pub fn scroll_label(index: usize) -> &'static str {
-    const LABELS: [&str; SCROLL_COUNT] = ["LV", "HR", "IS", "AI", "IQW", "CKX", "CIM", "AT"];
-    LABELS.get(index).copied().unwrap_or("Unknown")
+    SCROLL_SPELL_LABELS.get(index).copied().unwrap_or("Unknown")
 }

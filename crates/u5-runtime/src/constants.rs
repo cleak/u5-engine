@@ -310,6 +310,17 @@ pub const SPELL_CIRCLE_COUNT: usize = 8;
 pub const SPELLS_PER_CIRCLE: usize = 6;
 pub const EQUIPMENT_COUNT: usize = 48;
 pub const SCROLL_COUNT: usize = 8;
+
+/// `inventory.md §7` U-Use scroll display labels in storage order.
+/// `formats/saved-gam.md §7`: the per-scroll counters at
+/// `0x027A..0x0281` are eight bytes, one per scroll row. The label
+/// strings are the compact letter-coded spell selectors a player
+/// would type for the matching C-Cast spell (Vas Lor, Rel Hur,
+/// In Sanct, An In, In Quas Wis, Kal Xen Corp, In Mani Corp, An
+/// Tym), in the U-Use scroll-dispatch order.
+pub const SCROLL_SPELL_LABELS: [&str; SCROLL_COUNT] = [
+    "LV", "HR", "IS", "AI", "IQW", "CKX", "CIM", "AT",
+];
 pub const POTION_COUNT: usize = 8;
 pub const POTION_BLUE_INDEX: usize = 0;
 pub const POTION_YELLOW_INDEX: usize = 1;
