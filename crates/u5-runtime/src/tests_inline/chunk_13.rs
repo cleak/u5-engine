@@ -16,6 +16,41 @@
     }
 
     #[test]
+    fn active_effect_tag_scroll_install_counters_match_spec() {
+        // inventory.md §7
+        assert_eq!(
+            ActiveEffectTag::Protection.scroll_install_counter(),
+            Some(100)
+        );
+        assert_eq!(
+            ActiveEffectTag::NegateMagic.scroll_install_counter(),
+            Some(20)
+        );
+        assert_eq!(
+            ActiveEffectTag::NegateTime.scroll_install_counter(),
+            Some(20)
+        );
+        // No shipped scroll variants for Quickness or Mass Charm.
+        assert_eq!(
+            ActiveEffectTag::Quickness.scroll_install_counter(),
+            None
+        );
+        assert_eq!(
+            ActiveEffectTag::MassCharm.scroll_install_counter(),
+            None
+        );
+        // Sanity: scroll vs spell counters differ where both exist.
+        assert_ne!(
+            ActiveEffectTag::Protection.scroll_install_counter(),
+            ActiveEffectTag::Protection.spell_install_counter()
+        );
+        assert_ne!(
+            ActiveEffectTag::NegateMagic.scroll_install_counter(),
+            ActiveEffectTag::NegateMagic.spell_install_counter()
+        );
+    }
+
+    #[test]
     fn spell_combat_field_kind_dispatches_per_spec_table() {
         // magic.md §8 combat field-kind dispatch table.
         assert_eq!(spell_combat_field_kind(FIRE_FIELD_SPELL_INDEX), Some(0x35));

@@ -264,6 +264,24 @@ impl ActiveEffectTag {
             Self::NegateTime => None,
         }
     }
+
+    /// `inventory.md §7`: counter value installed when a U-Use
+    /// scroll writes the tag. Scrolls use different counters from
+    /// the C-Cast spell path - `IS` Protection installs P/100, `AI`
+    /// Negate Magic installs N/20, `AT` Negate Time installs T/20
+    /// (except in Stonegate and Doom, where the scroll reports no
+    /// effect and does not write the tag). Quickness and Mass Charm
+    /// do not have shipped scroll variants. The scene gate for
+    /// Negate Time remains a caller responsibility; this helper
+    /// only encodes the install-counter value.
+    pub const fn scroll_install_counter(self) -> Option<u8> {
+        match self {
+            Self::Protection => Some(100),
+            Self::NegateMagic => Some(20),
+            Self::NegateTime => Some(20),
+            Self::Quickness | Self::MassCharm => None,
+        }
+    }
 }
 
 /// `magic.md §8`: classify the global active-effect tag byte.
