@@ -392,10 +392,12 @@ pub use town_mode::{
     SCENE_SERPENTS_HOLD, SCENE_SKARA_BRAE, SCENE_STONEGATE, SCENE_STORMCROW,
     SCENE_THE_LYCAEUM, SCENE_TRINSIC, SCENE_WAVEGUIDE, SCENE_WEST_BRITANNY,
     SCENE_WINDEMERE, SCENE_YEW, TOWN_TILE_DASH_MARKER, TOWN_TILE_NPC_START_A,
+    TOWN_NIGHT_BAND_DAWN_HOUR, TOWN_NIGHT_BAND_DUSK_HOUR,
     TOWN_TILE_NPC_START_B, TOWN_TILE_PERIOD_MARKER, TOWN_TILE_SPAWN_ASTERISK,
     TownTileMarker,
-    npc_schedule_waypoint_for_hour, npc_tlk_filename, town_floor_offset,
-    town_location_class, town_per_class_index, town_resident_name, town_tile_marker,
+    npc_schedule_waypoint_for_hour, npc_tlk_filename, town_dawn_dusk_substitution_active,
+    town_floor_offset, town_location_class, town_per_class_index, town_resident_name,
+    town_tile_marker,
 };
 pub use town_tables::*;
 pub use town_tables_io::*;

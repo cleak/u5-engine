@@ -1,4 +1,27 @@
     #[test]
+    fn town_dawn_dusk_substitution_band_wraps_midnight() {
+        // town-mode.md §5,§6
+        assert_eq!(TOWN_NIGHT_BAND_DUSK_HOUR, 20);
+        assert_eq!(TOWN_NIGHT_BAND_DAWN_HOUR, 4);
+        // Day band (5..=19) is inactive.
+        for hour in 5u8..=19 {
+            assert!(
+                !town_dawn_dusk_substitution_active(hour),
+                "hour {} should be day",
+                hour
+            );
+        }
+        // Night band (20..=23, 0..=4) is active.
+        for hour in [0u8, 1, 2, 3, 4, 20, 21, 22, 23] {
+            assert!(
+                town_dawn_dusk_substitution_active(hour),
+                "hour {} should be night",
+                hour
+            );
+        }
+    }
+
+    #[test]
     fn npc_pathfind_workspace_dims_match_spec() {
         // npc-schedules.md §8.1
         assert_eq!(NPC_PATHFIND_WORKSPACE_SIDE, 32);

@@ -159,6 +159,22 @@ pub const fn npc_tlk_filename(scene_byte: u8) -> Option<&'static str> {
 /// files are 4608 bytes each; each contains eight 576-byte sub-maps,
 /// each holding 32 schedule records (16 bytes each) plus a 32-byte
 /// type array and a 32-byte dialog index array.
+/// `town-mode.md §5,§6` dawn/dusk substitution night-band hours.
+/// The shipped maps store gate cells in their daytime/open form;
+/// the location-load pass toggles paired archway cells into their
+/// closed/night form when the current hour is at or after 20 (8 PM)
+/// or at or before 4 (4 AM).
+pub const TOWN_NIGHT_BAND_DUSK_HOUR: u8 = 20;
+pub const TOWN_NIGHT_BAND_DAWN_HOUR: u8 = 4;
+
+/// `town-mode.md §5,§6`: returns `true` when the current hour is
+/// inside the night band that drives the dawn/dusk gate
+/// substitution. The band wraps midnight: hours `20..=23` and
+/// `0..=4` are night; `5..=19` are day.
+pub const fn town_dawn_dusk_substitution_active(hour: u8) -> bool {
+    hour >= TOWN_NIGHT_BAND_DUSK_HOUR || hour <= TOWN_NIGHT_BAND_DAWN_HOUR
+}
+
 pub const NPC_FILE_LEN: usize = 4608;
 pub const NPC_SUB_MAP_LEN: usize = 576;
 pub const NPC_SUB_MAPS_PER_FILE: usize = 8;
