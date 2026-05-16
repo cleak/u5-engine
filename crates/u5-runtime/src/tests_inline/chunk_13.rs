@@ -1,4 +1,16 @@
     #[test]
+    fn dungeon_torch_increment_bounds_match_spec() {
+        // lighting.md §8
+        assert_eq!(DUNGEON_TORCH_INCREMENT_MIN, 112);
+        assert_eq!(DUNGEON_TORCH_INCREMENT_MAX, 127);
+        // Boundary rolls applied to an empty counter.
+        assert_eq!(ignite_torch_dungeon(0, DUNGEON_TORCH_INCREMENT_MIN), 112);
+        assert_eq!(ignite_torch_dungeon(0, DUNGEON_TORCH_INCREMENT_MAX), 127);
+        // Saturating add caps at 255.
+        assert_eq!(ignite_torch_dungeon(200, DUNGEON_TORCH_INCREMENT_MAX), 255);
+    }
+
+    #[test]
     fn reagent_recipe_bits_match_spell_list_md_section_3() {
         // catalogs/spell-list.md §3
         assert_eq!(Reagent::SulfurAsh.recipe_bit(), 0x80);

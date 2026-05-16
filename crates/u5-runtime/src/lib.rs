@@ -236,6 +236,7 @@ pub use main_loop::{
     save_scene_byte_normalised, scene_route,
 };
 pub use lighting::{
+    DUNGEON_TORCH_INCREMENT_MAX, DUNGEON_TORCH_INCREMENT_MIN,
     GREAT_LIGHT_SPELL_DURATION, LIGHT_SPELL_DURATION, LightDecayCadence,
     OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG, OVERWORLD_UNDERFOOT_BLACKOUT_TILE,
     ambient_is_sentinel, apply_personal_light, daylight_base_value,

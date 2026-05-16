@@ -102,6 +102,10 @@ pub const fn ignite_torch_dungeon(current: u8, roll_112_to_127: u8) -> u8 {
     current.saturating_add(roll_112_to_127)
 }
 
+/// `lighting.md §8` dungeon Ignite random-increment bounds.
+pub const DUNGEON_TORCH_INCREMENT_MIN: u8 = 112;
+pub const DUNGEON_TORCH_INCREMENT_MAX: u8 = 127;
+
 /// `lighting.md §8`: *In Lor* (ordinary Light spell) overwrites the
 /// light-spell counter with 100 units; *Vas Lor* (Great Light) overwrites
 /// it with 255 units. Light spells do not stack with prior spell-light
