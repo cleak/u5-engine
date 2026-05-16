@@ -202,3 +202,27 @@ impl WindState {
         }
     }
 }
+
+/// `weather.md §3` shared wind-setter outcome. Rel Hur, the Wind
+/// Change scroll, and any caller that programmatically targets a
+/// wind state all funnel through the same setter; the setter's
+/// behaviour is determined by the `old → new` transition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindSetterOutcome {
+    /// Calm → Calm: the setter does nothing. No sound, no display
+    /// update, no stored-wind write.
+    NoOp,
+    /// Any other accepted target: the setter plays the wind sound,
+    /// stores the new wind, and refreshes its display.
+    Apply,
+}
+
+/// `weather.md §3`: classify a setter call by its `old → new`
+/// transition. Returns `WindSetterOutcome::NoOp` when both sides
+/// are `Calm`; otherwise `WindSetterOutcome::Apply`.
+pub const fn wind_setter_outcome(old: WindState, new: WindState) -> WindSetterOutcome {
+    match (old, new) {
+        (WindState::Calm, WindState::Calm) => WindSetterOutcome::NoOp,
+        _ => WindSetterOutcome::Apply,
+    }
+}

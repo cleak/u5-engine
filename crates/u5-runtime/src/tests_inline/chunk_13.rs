@@ -1,4 +1,42 @@
     #[test]
+    fn wind_setter_outcome_makes_calm_to_calm_a_noop() {
+        // weather.md §3: the shared wind setter treats Calm → Calm as
+        // a no-op; every other accepted transition plays the wind
+        // sound and refreshes the stored wind.
+        assert_eq!(
+            wind_setter_outcome(WindState::Calm, WindState::Calm),
+            WindSetterOutcome::NoOp
+        );
+        // Calm → cardinal is an Apply.
+        for new in [
+            WindState::North,
+            WindState::South,
+            WindState::East,
+            WindState::West,
+        ] {
+            assert_eq!(
+                wind_setter_outcome(WindState::Calm, new),
+                WindSetterOutcome::Apply
+            );
+        }
+        // Cardinal → Calm is an Apply (the setter accepts Calm
+        // programmatically; only Calm → Calm is the no-op).
+        assert_eq!(
+            wind_setter_outcome(WindState::North, WindState::Calm),
+            WindSetterOutcome::Apply
+        );
+        // Cardinal → cardinal (including same direction) applies.
+        assert_eq!(
+            wind_setter_outcome(WindState::East, WindState::East),
+            WindSetterOutcome::Apply
+        );
+        assert_eq!(
+            wind_setter_outcome(WindState::East, WindState::West),
+            WindSetterOutcome::Apply
+        );
+    }
+
+    #[test]
     fn sky_strip_composed_cells_respects_plot_order_and_visibility() {
         // moons.md §2: hour 0 has FixedHour off-strip (visible only 6..=17),
         // Trammel visible (cell 8 - 0 = 8), Felucca visible (cell 2 - 0 = 2).
