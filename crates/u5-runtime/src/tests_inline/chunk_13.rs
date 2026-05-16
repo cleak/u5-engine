@@ -16,6 +16,13 @@
     }
 
     #[test]
+    fn tlk_keyword_loop_envelope_strings_match_spec() {
+        // conversation.md §6
+        assert_eq!(TLK_KEYWORD_PROMPT, "Your interest?\n:");
+        assert_eq!(TLK_EMPTY_INPUT_BYE_MESSAGE, "BYE\n\n");
+    }
+
+    #[test]
     fn scroll_spell_labels_match_inventory_md_dispatch_order() {
         // inventory.md §7 + formats/saved-gam.md §7
         assert_eq!(SCROLL_SPELL_LABELS.len(), SCROLL_COUNT);

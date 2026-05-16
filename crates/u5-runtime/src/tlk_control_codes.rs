@@ -278,6 +278,19 @@ pub const TLK_CODE_GOTO_LABEL_FIRST: u8 = 0x9E;
 pub const TLK_CODE_GOTO_LABEL_LAST: u8 = 0x9F;
 pub const TLK_CODE_END_OF_RESPONSE: u8 = 0xFF;
 
+/// `conversation.md §6` keyword-input loop prompt. The conversation
+/// engine prints this string into the active text window at every
+/// loop iteration, leaving the cursor on the next line ready to
+/// accept input. The literal `\n` and trailing `:` are part of the
+/// published envelope; display layers that own their own newline
+/// handling may strip the embedded newline.
+pub const TLK_KEYWORD_PROMPT: &str = "Your interest?\n:";
+
+/// `conversation.md §6` empty-input shortcut. Pressing Enter on an
+/// empty line prints this line and runs the NPC's `Bye` entry; it
+/// is the most common way conversations end.
+pub const TLK_EMPTY_INPUT_BYE_MESSAGE: &str = "BYE\n\n";
+
 /// `conversation.md §6` no-match response. When both the reserved
 /// keyword scan and the ordinary keyword scan fail, the keyword
 /// input loop prints this line and returns to step 1 to prompt
