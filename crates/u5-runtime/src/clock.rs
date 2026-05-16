@@ -53,6 +53,37 @@ pub const fn is_provision_decrement_hour(hour: u8) -> bool {
     matches!(hour, 6 | 12 | 18)
 }
 
+/// `catalogs/quest-graph.md §5` Shadowlord-name vocabulary in slot
+/// order: Falsehood (0) = FAULINEI, Hatred (1) = ASTAROTH,
+/// Cowardice (2) = NOSFENTOR. The Yell handler and the shard /
+/// flame destruction path consume these case-insensitive strings.
+pub const SHADOWLORD_NAME_FAULINEI: &str = "FAULINEI";
+pub const SHADOWLORD_NAME_ASTAROTH: &str = "ASTAROTH";
+pub const SHADOWLORD_NAME_NOSFENTOR: &str = "NOSFENTOR";
+
+/// `catalogs/quest-graph.md §5`: returns the published Shadowlord
+/// name for one of the three hideout slots (`0..=2`).
+pub const fn shadowlord_name_for_slot(slot: usize) -> Option<&'static str> {
+    Some(match slot {
+        0 => SHADOWLORD_NAME_FAULINEI,
+        1 => SHADOWLORD_NAME_ASTAROTH,
+        2 => SHADOWLORD_NAME_NOSFENTOR,
+        _ => return None,
+    })
+}
+
+/// `catalogs/quest-graph.md §5`: returns the hideout-slot index
+/// for a typed Shadowlord name. Caller should uppercase the input
+/// (the Yell input pipeline already does this).
+pub fn shadowlord_slot_for_name(name: &str) -> Option<usize> {
+    match name {
+        SHADOWLORD_NAME_FAULINEI => Some(0),
+        SHADOWLORD_NAME_ASTAROTH => Some(1),
+        SHADOWLORD_NAME_NOSFENTOR => Some(2),
+        _ => None,
+    }
+}
+
 /// `time.md §7` Shadowlord hideout slot range and vanquished
 /// sentinel. The midnight pass picks a new hideout id in
 /// `1..=8` for each living slot and treats `0xFF` as the

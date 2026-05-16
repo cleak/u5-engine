@@ -1,4 +1,24 @@
     #[test]
+    fn shadowlord_names_match_quest_graph_md_section_5() {
+        // catalogs/quest-graph.md §5
+        assert_eq!(shadowlord_name_for_slot(0), Some("FAULINEI"));
+        assert_eq!(shadowlord_name_for_slot(1), Some("ASTAROTH"));
+        assert_eq!(shadowlord_name_for_slot(2), Some("NOSFENTOR"));
+        assert_eq!(shadowlord_name_for_slot(3), None);
+        // Reverse mapping.
+        assert_eq!(shadowlord_slot_for_name("FAULINEI"), Some(0));
+        assert_eq!(shadowlord_slot_for_name("ASTAROTH"), Some(1));
+        assert_eq!(shadowlord_slot_for_name("NOSFENTOR"), Some(2));
+        assert_eq!(shadowlord_slot_for_name("MONDAIN"), None);
+        assert_eq!(shadowlord_slot_for_name("faulinei"), None); // case sensitive
+        // Round-trip.
+        for slot in 0usize..=2 {
+            let name = shadowlord_name_for_slot(slot).unwrap();
+            assert_eq!(shadowlord_slot_for_name(name), Some(slot));
+        }
+    }
+
+    #[test]
     fn dungeon_word_of_power_matches_quest_graph_md_section_4() {
         // catalogs/quest-graph.md §4
         assert_eq!(dungeon_word_of_power(33), Some("FALLAX"));
