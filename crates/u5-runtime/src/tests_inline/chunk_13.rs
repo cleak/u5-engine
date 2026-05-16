@@ -1,4 +1,35 @@
     #[test]
+    fn pushable_floor_stamps_split_cannon_from_generic() {
+        // commands.md §8: cannon-family pushes leave the published
+        // 0x45 stamp on the vacated cell; every other pushable family
+        // leaves the generic 0x44 cobble stamp. Both render as cobble
+        // but the stamp byte is load-bearing for the family-matching
+        // push/pull rule.
+        assert_eq!(PUSHABLE_GENERIC_FLOOR_STAMP, 0x44);
+        assert_eq!(PUSHABLE_CANNON_FLOOR_STAMP, 0x45);
+        assert_eq!(
+            PushableTileFamily::NonRotating5B.floor_stamp(),
+            PUSHABLE_GENERIC_FLOOR_STAMP
+        );
+        assert_eq!(
+            PushableTileFamily::ChairFourFacing.floor_stamp(),
+            PUSHABLE_GENERIC_FLOOR_STAMP
+        );
+        assert_eq!(
+            PushableTileFamily::NonRotatingA5A6A8A9.floor_stamp(),
+            PUSHABLE_GENERIC_FLOOR_STAMP
+        );
+        assert_eq!(
+            PushableTileFamily::NonRotatingAdAf.floor_stamp(),
+            PUSHABLE_GENERIC_FLOOR_STAMP
+        );
+        assert_eq!(
+            PushableTileFamily::CannonFourFacing.floor_stamp(),
+            PUSHABLE_CANNON_FLOOR_STAMP
+        );
+    }
+
+    #[test]
     fn new_order_outcome_resolves_cancellation_refusal_and_swap() {
         // commands.md §6: cancelling either selector prompt aborts
         // without consuming a turn; a leader-slot selection refuses

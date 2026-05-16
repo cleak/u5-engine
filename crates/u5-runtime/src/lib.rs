@@ -146,7 +146,8 @@ pub use boot::{
     parse_explicit_driver_selector, resolve_driver_family, tandy_low_memory_downgrades,
 };
 pub use commands::{
-    Command, LocalViewClass, NewOrderOutcome, PushableTileFamily, ViewCommandOutcome,
+    Command, LocalViewClass, NewOrderOutcome, PUSHABLE_CANNON_FLOOR_STAMP,
+    PUSHABLE_GENERIC_FLOOR_STAMP, PushableTileFamily, ViewCommandOutcome,
     WISHING_WELL_WISH_KEYWORDS, YELL_INPUT_MAX_LEN, YellInputContext,
     command_for_letter, local_view_class_for_tile, new_order_outcome,
     new_order_swap_accepted, pushable_tile_family, town_fountain_drink_accepts,

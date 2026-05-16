@@ -304,7 +304,29 @@ impl PushableTileFamily {
     pub const fn rewrites_facing(self) -> bool {
         matches!(self, Self::ChairFourFacing | Self::CannonFourFacing)
     }
+
+    /// `commands.md §8`: per-family floor/occupancy stamp the push/pull
+    /// resolution writes into the vacated source cell on a successful
+    /// move. The cannon family uses its own stamp byte; every other
+    /// pushable family uses the generic cobble stamp. Both stamps render
+    /// as cobble in the LOOK2-backed tile catalog, but the byte is
+    /// load-bearing for P-Push's family-matching rule.
+    pub const fn floor_stamp(self) -> u8 {
+        match self {
+            Self::CannonFourFacing => PUSHABLE_CANNON_FLOOR_STAMP,
+            _ => PUSHABLE_GENERIC_FLOOR_STAMP,
+        }
+    }
 }
+
+/// `commands.md §8` generic cobble floor/occupancy stamp written by
+/// a successful P-Push when the moved object is *not* in the cannon
+/// family.
+pub const PUSHABLE_GENERIC_FLOOR_STAMP: u8 = 0x44;
+/// `commands.md §8` cannon-family floor/occupancy stamp. Renders the
+/// same as the generic cobble stamp; the byte is still load-bearing
+/// for the cannon family-matching rule.
+pub const PUSHABLE_CANNON_FLOOR_STAMP: u8 = 0x45;
 
 /// `commands.md §8`: classify a static tile byte into its pushable
 /// family for the P-Push command. Returns `None` when the static
