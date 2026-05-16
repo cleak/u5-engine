@@ -537,7 +537,10 @@ pub use visibility::{
     is_local_light_source_tile, light_radius_branch, visibility_in_radius,
     visibility_marker,
 };
-pub use wind::{WindSetterOutcome, WindState, wind_setter_outcome};
+pub use wind::{
+    WIND_DRIFT_CALM_ACCEPT_MIN, WIND_DRIFT_CANDIDATE_MODULUS, WIND_DRIFT_OUTER_ROLL_MASK,
+    WindSetterOutcome, WindState, wind_setter_outcome,
+};
 pub use world_tables::*;
 pub use world_tables_io::*;
 pub use world_tables_io_get_pickup::*;

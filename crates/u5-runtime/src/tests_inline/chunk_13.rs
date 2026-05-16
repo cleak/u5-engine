@@ -1,4 +1,34 @@
     #[test]
+    fn wind_drift_named_constants_match_spec() {
+        // weather.md §2: the autonomous wind-drift gates use three
+        // published thresholds. Promote each one to a named constant
+        // so call sites do not pass `0x3f`, `5`, or `192` as raw
+        // literals.
+        assert_eq!(WIND_DRIFT_OUTER_ROLL_MASK, 0x3F);
+        assert_eq!(WIND_DRIFT_CANDIDATE_MODULUS, 5);
+        assert_eq!(WIND_DRIFT_CALM_ACCEPT_MIN, 192);
+        // Outer gate: zero, and any roll whose low six bits are zero,
+        // is accepted. Every roll with at least one set bit in that
+        // window is rejected.
+        assert!(WindState::autonomous_drift_outer_accepted(0));
+        assert!(WindState::autonomous_drift_outer_accepted(0x40));
+        assert!(WindState::autonomous_drift_outer_accepted(0xC0));
+        for r in 1u8..=63 {
+            assert!(!WindState::autonomous_drift_outer_accepted(r));
+        }
+        // Calm acceptance: strictly below the published threshold is
+        // rejected; the threshold and above is accepted.
+        assert_eq!(
+            WindState::autonomous_drift_accept_candidate(0, WIND_DRIFT_CALM_ACCEPT_MIN - 1),
+            None
+        );
+        assert_eq!(
+            WindState::autonomous_drift_accept_candidate(0, WIND_DRIFT_CALM_ACCEPT_MIN),
+            Some(WindState::Calm)
+        );
+    }
+
+    #[test]
     fn dungeon_minimap_glyph_matches_published_class_table() {
         // dungeon-mode.md §12: spot-check the published high-nibble
         // class -> minimap glyph map. Blank classes return None.

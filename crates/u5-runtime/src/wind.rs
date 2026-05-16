@@ -163,7 +163,7 @@ impl WindState {
     /// `weather.md §2` autonomous wind-drift acceptance: only the
     /// zero outer roll over `0..=63` advances to candidate selection.
     pub const fn autonomous_drift_outer_accepted(outer_roll: u8) -> bool {
-        outer_roll == 0
+        (outer_roll & WIND_DRIFT_OUTER_ROLL_MASK) == 0
     }
 
     /// `weather.md §2` autonomous wind-drift candidate gate. Cardinal
@@ -178,7 +178,7 @@ impl WindState {
     ) -> Option<Self> {
         match candidate {
             0 => {
-                if calm_followup_roll >= 192 {
+                if calm_followup_roll >= WIND_DRIFT_CALM_ACCEPT_MIN {
                     Some(Self::Calm)
                 } else {
                     None
@@ -202,6 +202,23 @@ impl WindState {
         }
     }
 }
+
+/// `weather.md §2` autonomous wind-drift outer-roll mask. The selector
+/// rolls in `0..=63`; only the zero roll advances. Masking the low six
+/// bits of an arbitrary `u8` roll preserves this `0..=63` window without
+/// requiring callers to range-check the raw byte.
+pub const WIND_DRIFT_OUTER_ROLL_MASK: u8 = 0x3F;
+
+/// `weather.md §2` autonomous wind-drift candidate modulus. After the
+/// outer roll accepts, the selector picks a candidate in `0..=4` (Calm
+/// plus four cardinals) via a modulo-five reduction of a fresh roll.
+pub const WIND_DRIFT_CANDIDATE_MODULUS: u8 = 5;
+
+/// `weather.md §2` autonomous wind-drift Calm acceptance threshold.
+/// A `0` (Calm) candidate is accepted only when a follow-up roll over
+/// `0..=255` is at least this value, so Calm is much rarer than any
+/// cardinal.
+pub const WIND_DRIFT_CALM_ACCEPT_MIN: u8 = 192;
 
 /// `weather.md §3` shared wind-setter outcome. Rel Hur, the Wind
 /// Change scroll, and any caller that programmatically targets a

@@ -369,12 +369,16 @@ impl PlayState {
     }
 
     pub fn idle_wind_drift(&mut self) -> Option<WindState> {
-        if !matches!(self.area, Area::World { .. }) || self.idle_wind_roll(0) & 0x3f != 0 {
+        if !matches!(self.area, Area::World { .. })
+            || !WindState::autonomous_drift_outer_accepted(self.idle_wind_roll(0))
+        {
             return None;
         }
         for attempt in 0..=u8::MAX {
             let candidate = self.idle_wind_candidate(attempt);
-            if candidate != WindState::Calm || self.idle_wind_roll(attempt.wrapping_add(2)) >= 192 {
+            if candidate != WindState::Calm
+                || self.idle_wind_roll(attempt.wrapping_add(2)) >= WIND_DRIFT_CALM_ACCEPT_MIN
+            {
                 self.apply_wind_state(candidate);
                 return Some(candidate);
             }
@@ -383,7 +387,7 @@ impl PlayState {
     }
 
     pub fn idle_wind_candidate(&self, attempt: u8) -> WindState {
-        match self.idle_wind_roll(attempt.wrapping_add(1)) % 5 {
+        match self.idle_wind_roll(attempt.wrapping_add(1)) % WIND_DRIFT_CANDIDATE_MODULUS {
             0 => WindState::Calm,
             1 => WindState::North,
             2 => WindState::South,
