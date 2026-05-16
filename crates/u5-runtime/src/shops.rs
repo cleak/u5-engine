@@ -4,6 +4,34 @@ use crate::*;
 
 pub const SHOP_COMMODITY_STOCK_CAP: u8 = 99;
 
+/// `shops.md §6` arms-shop Buy quote. The shop's quote is the
+/// canonical base price plus the integer-truncated Intelligence
+/// adjustment `base * (100 - 3 * intelligence) / 100`. The same
+/// item therefore quotes differently when a different party member
+/// is speaking. Saturating math guards against absurd inputs.
+pub const fn arms_shop_buy_quote(base_price: u16, speaker_intelligence: u8) -> u16 {
+    let factor: i32 = 100 - 3 * speaker_intelligence as i32;
+    let adjustment = (base_price as i32 * factor) / 100;
+    let quoted = base_price as i32 + adjustment;
+    if quoted < 0 {
+        0
+    } else if quoted > u16::MAX as i32 {
+        u16::MAX
+    } else {
+        quoted as u16
+    }
+}
+
+/// `shops.md §6` arms-shop Sell offer. The accepted item's offer is
+/// `floor(base * 3 * intelligence / 100) + 1`. The party gold is
+/// raised by the offer and the shared equipment counter is
+/// decremented; this helper returns only the gold offer value.
+pub const fn arms_shop_sell_offer(base_price: u16, speaker_intelligence: u8) -> u16 {
+    let prod = base_price as u32 * 3 * speaker_intelligence as u32;
+    let offer = prod / 100 + 1;
+    if offer > u16::MAX as u32 { u16::MAX } else { offer as u16 }
+}
+
 /// `shops.md §4.1` `@` substitution time-of-day word the bark
 /// renderer expands inline. The hour byte is read fresh from the
 /// world clock on every render: hour < 12 → `morning`, hour < 18 →

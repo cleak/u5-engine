@@ -1,4 +1,32 @@
     #[test]
+    fn arms_shop_buy_quote_applies_intelligence_adjustment() {
+        // shops.md §6
+        // Speaker INT 0: quote = base + base * 100 / 100 = 2 * base.
+        assert_eq!(arms_shop_buy_quote(100, 0), 200);
+        // Speaker INT 33: factor = 100 - 99 = 1; adj = 100*1/100 = 1.
+        assert_eq!(arms_shop_buy_quote(100, 33), 101);
+        // Speaker INT 34: factor = 100 - 102 = -2; adj = -2.
+        assert_eq!(arms_shop_buy_quote(100, 34), 98);
+        // Speaker INT 50: factor = -50; adj = -50; quote = 50.
+        assert_eq!(arms_shop_buy_quote(100, 50), 50);
+        // Negative quote clamps at zero.
+        assert_eq!(arms_shop_buy_quote(10, 99), 0);
+    }
+
+    #[test]
+    fn arms_shop_sell_offer_uses_intelligence_proportional_floor() {
+        // shops.md §6: offer = floor(base * 3 * int / 100) + 1.
+        // base 100, int 0: floor(0)+1 = 1.
+        assert_eq!(arms_shop_sell_offer(100, 0), 1);
+        // base 100, int 30: floor(9000/100)+1 = 91.
+        assert_eq!(arms_shop_sell_offer(100, 30), 91);
+        // base 50, int 20: floor(3000/100)+1 = 31.
+        assert_eq!(arms_shop_sell_offer(50, 20), 31);
+        // base 33, int 7: floor(693/100)+1 = 6+1 = 7.
+        assert_eq!(arms_shop_sell_offer(33, 7), 7);
+    }
+
+    #[test]
     fn shoppe_time_of_day_word_matches_spec_bands() {
         // shops.md §4.1
         for hour in 0u8..12 {
