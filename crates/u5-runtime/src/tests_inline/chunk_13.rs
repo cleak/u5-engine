@@ -58,6 +58,29 @@
     }
 
     #[test]
+    fn encounter_spawn_separation_predicate_matches_published_band() {
+        // encounters.md §4: candidate spawn coordinates must be
+        // strictly between separations 6 and 250 on both axes. The
+        // retry budget is 128 candidates before silent giveup.
+        assert_eq!(ENCOUNTER_SPAWN_MIN_SEPARATION, 6);
+        assert_eq!(ENCOUNTER_SPAWN_MAX_SEPARATION, 250);
+        assert_eq!(ENCOUNTER_SPAWN_RETRY_BUDGET, 128);
+
+        assert!(encounter_spawn_separation_accepts(7, 7));
+        assert!(encounter_spawn_separation_accepts(100, 100));
+        assert!(encounter_spawn_separation_accepts(249, 249));
+        // Equal-to-bounds rejected.
+        assert!(!encounter_spawn_separation_accepts(6, 7));
+        assert!(!encounter_spawn_separation_accepts(7, 6));
+        assert!(!encounter_spawn_separation_accepts(250, 7));
+        assert!(!encounter_spawn_separation_accepts(7, 250));
+        // Either axis below or above bounds rejected.
+        assert!(!encounter_spawn_separation_accepts(0, 100));
+        assert!(!encounter_spawn_separation_accepts(5, 50));
+        assert!(!encounter_spawn_separation_accepts(255, 100));
+    }
+
+    #[test]
     fn shop_refuses_mounted_horse_except_at_horse_trader() {
         // shops.md §2: ordinary shop arms refuse before opening
         // their menu when the party is mounted on a horse; only the

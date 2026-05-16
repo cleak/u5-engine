@@ -619,6 +619,33 @@ pub const fn random_encounter_spawn_outcomes(threshold: u8) -> u8 {
     }
 }
 
+/// `encounters.md §4` encounter-spawn coordinate-separation bounds.
+/// A candidate spawn coordinate is accepted only when both axes'
+/// absolute separation from the party is strictly greater than
+/// [`ENCOUNTER_SPAWN_MIN_SEPARATION`] and strictly less than
+/// [`ENCOUNTER_SPAWN_MAX_SEPARATION`]. The first bound keeps the
+/// spawn outside the immediate visible centre; the second bound
+/// rejects wrapped-near coordinates on the 256-by-256 torus.
+pub const ENCOUNTER_SPAWN_MIN_SEPARATION: u16 = 6;
+pub const ENCOUNTER_SPAWN_MAX_SEPARATION: u16 = 250;
+
+/// `encounters.md §4`: returns `true` when a candidate spawn
+/// coordinate's `(dx, dy)` axis separations from the party fall in
+/// the accepted band (strictly between
+/// [`ENCOUNTER_SPAWN_MIN_SEPARATION`] and
+/// [`ENCOUNTER_SPAWN_MAX_SEPARATION`] on both axes).
+pub const fn encounter_spawn_separation_accepts(dx_abs: u16, dy_abs: u16) -> bool {
+    dx_abs > ENCOUNTER_SPAWN_MIN_SEPARATION
+        && dx_abs < ENCOUNTER_SPAWN_MAX_SEPARATION
+        && dy_abs > ENCOUNTER_SPAWN_MIN_SEPARATION
+        && dy_abs < ENCOUNTER_SPAWN_MAX_SEPARATION
+}
+
+/// `encounters.md §4` encounter-spawn retry budget. After this many
+/// rejected candidate coordinates, the spawner returns silently
+/// without writing a monster record.
+pub const ENCOUNTER_SPAWN_RETRY_BUDGET: u16 = 128;
+
 /// `overworld.md §7` / `encounters.md §3` random-encounter probe die.
 /// The mode loop draws a uniform integer in `[1, RANDOM_ENCOUNTER_DIE]`
 /// and fires the spawner when [`random_encounter_threshold`] exceeds
