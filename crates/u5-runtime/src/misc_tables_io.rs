@@ -655,8 +655,8 @@ pub fn load_world_overlay_objects(
     }
 
     let plane_file = game_dir.join(match plane {
-        WorldPlane::Britannia => "BRIT.OOL",
-        WorldPlane::Underworld => "UNDER.OOL",
+        WorldPlane::Britannia => BRIT_OOL_FILENAME,
+        WorldPlane::Underworld => UNDER_OOL_FILENAME,
     });
     if !plane_file.exists() {
         return Ok(Vec::new());

@@ -270,12 +270,12 @@ fn normalize_u4_transfer_name(
 }
 
 fn read_brit_ool_plane(game_dir: &Path) -> io::Result<Vec<u8>> {
-    let bytes = fs::read(game_dir.join("BRIT.OOL"))?;
+    let bytes = fs::read(game_dir.join(U4_TRANSFER_U5_SEED_OOL_FILENAME))?;
     if bytes.len() != OOL_PLANE_LEN {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "BRIT.OOL must be {OOL_PLANE_LEN} bytes, got {}",
+                "{U4_TRANSFER_U5_SEED_OOL_FILENAME} must be {OOL_PLANE_LEN} bytes, got {}",
                 bytes.len()
             ),
         ));

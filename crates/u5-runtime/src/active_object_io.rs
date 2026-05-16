@@ -327,8 +327,8 @@ pub const fn active_object_eviction_phase(byte0: u8, off_screen: bool) -> Option
 
 pub fn refresh_saved_ool_mirrors_for_load(game_dir: &Path) -> io::Result<()> {
     let bytes = read_saved_ool_bytes(game_dir)?;
-    fs::write(game_dir.join("BRIT.OOL"), &bytes[..OOL_PLANE_LEN])?;
-    fs::write(game_dir.join("UNDER.OOL"), &bytes[OOL_PLANE_LEN..])?;
+    fs::write(game_dir.join(BRIT_OOL_FILENAME), &bytes[..OOL_PLANE_LEN])?;
+    fs::write(game_dir.join(UNDER_OOL_FILENAME), &bytes[OOL_PLANE_LEN..])?;
     Ok(())
 }
 
