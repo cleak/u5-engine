@@ -1,4 +1,42 @@
     #[test]
+    fn text_emitter_byte_kind_classifies_per_spec() {
+        // text-output.md §5
+        // Newline / carriage return — cursor moves without a glyph.
+        assert_eq!(text_emitter_byte_kind(0x0A), EmitterByteKind::LineFeed);
+        assert_eq!(text_emitter_byte_kind(0x0D), EmitterByteKind::CarriageReturn);
+        // Printable ASCII -> glyph render.
+        assert_eq!(
+            text_emitter_byte_kind(b'A'),
+            EmitterByteKind::Glyph(b'A')
+        );
+        assert_eq!(
+            text_emitter_byte_kind(b' '),
+            EmitterByteKind::Glyph(b' ')
+        );
+        assert_eq!(
+            text_emitter_byte_kind(0x7E),
+            EmitterByteKind::Glyph(0x7E)
+        );
+        // Extended control bytes.
+        for (byte, kind) in [
+            (0xFBu8, TextControlByte::CentreOff),
+            (0xFC, TextControlByte::CentreOn),
+            (0xFD, TextControlByte::InverseToggle),
+            (0xFE, TextControlByte::UnderlineToggle),
+            (0xFF, TextControlByte::ClearWindow),
+        ] {
+            assert_eq!(
+                text_emitter_byte_kind(byte),
+                EmitterByteKind::Control(kind)
+            );
+        }
+        // Other high-bit bytes have no public glyph meaning.
+        for byte in [0x00u8, 0x07, 0x1B, 0x1F, 0x7F, 0x80, 0xA0, 0xFA] {
+            assert_eq!(text_emitter_byte_kind(byte), EmitterByteKind::Other);
+        }
+    }
+
+    #[test]
     fn save_scene_byte_normalised_swaps_combat_marker_for_home_scene() {
         // main-loop.md §11
         // Combat marker -> home scene byte.

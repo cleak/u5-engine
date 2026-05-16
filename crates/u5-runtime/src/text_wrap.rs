@@ -38,6 +38,44 @@ pub enum TextControlByte {
     ClearWindow,
 }
 
+/// `text-output.md §5` per-cell emitter action classified from one
+/// byte. The emitter's three behaviour families are: render a low
+/// printable byte as a glyph; treat LF/CR as cursor moves without a
+/// glyph; consume a confirmed extended control byte through the
+/// style/clear path. Other bytes have no public glyph meaning.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EmitterByteKind {
+    /// Low-bit-clear printable byte rendered as a glyph at the
+    /// active window's cursor; cursor advances one cell after.
+    Glyph(u8),
+    /// `0x0A` line-feed — cursor steps down one row, may scroll.
+    LineFeed,
+    /// `0x0D` carriage-return — cursor returns to the window's
+    /// left edge without changing the row.
+    CarriageReturn,
+    /// One of the published extended control bytes (Section 3).
+    Control(TextControlByte),
+    /// High-bit byte outside the confirmed control range. The
+    /// emitter does not render or move the cursor.
+    Other,
+}
+
+/// `text-output.md §5`: classify a single byte handed to the per-
+/// cell emitter. Caller has already done any case folding; this
+/// helper does no further translation.
+pub const fn text_emitter_byte_kind(byte: u8) -> EmitterByteKind {
+    match byte {
+        0x0A => EmitterByteKind::LineFeed,
+        0x0D => EmitterByteKind::CarriageReturn,
+        0x20..=0x7E => EmitterByteKind::Glyph(byte),
+        0xFB..=0xFF => match text_control_byte(byte) {
+            Some(c) => EmitterByteKind::Control(c),
+            None => EmitterByteKind::Other,
+        },
+        _ => EmitterByteKind::Other,
+    }
+}
+
 /// `text-output.md §3`: classify a high-bit byte against the spec's
 /// extended-control table. Returns `None` for bytes that are not one
 /// of the five confirmed control values; callers handle those through
