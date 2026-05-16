@@ -1,6 +1,6 @@
 //! Natural-moongate live-tile refresh helpers per `overworld.md` §9.
 
-use crate::NATURAL_MOONGATE_COUNTER_MAX;
+use crate::{DAWN_HOUR, DUSK_HOUR, NATURAL_MOONGATE_COUNTER_MAX};
 
 /// `overworld.md §9` shared natural-moongate gate-presence counter
 /// outcome for one cleanup pass.
@@ -14,11 +14,11 @@ pub enum NaturalMoongateCounterStep {
 }
 
 /// `overworld.md §9`: classify the cleanup pass for the shared
-/// gate-presence counter from the current hour. Hours `20..=23` and
-/// `0..=4` (inclusive) are the night band that grows the counter; all
-/// other hours shrink it.
+/// gate-presence counter from the current hour. Hours outside the
+/// `lighting.md §3` daylight band `DAWN_HOUR..=DUSK_HOUR` are the
+/// night band that grows the counter; daylight hours shrink it.
 pub const fn natural_moongate_counter_step(hour: u8) -> NaturalMoongateCounterStep {
-    if hour >= 20 || hour <= 4 {
+    if hour < DAWN_HOUR || hour > DUSK_HOUR {
         NaturalMoongateCounterStep::Increase
     } else {
         NaturalMoongateCounterStep::Decrease

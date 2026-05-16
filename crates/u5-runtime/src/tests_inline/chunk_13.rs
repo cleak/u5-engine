@@ -1,4 +1,38 @@
     #[test]
+    fn natural_moongate_counter_night_band_uses_shared_lighting_hours() {
+        // overworld.md §9: the natural-moongate gate-presence counter
+        // grows during the surface night band and shrinks during the
+        // daylight band. The day/night boundary is the same DAWN_HOUR
+        // / DUSK_HOUR pair lighting.md §3 already names. Route the
+        // counter-step classifier through those constants so the two
+        // specs stay aligned at the same byte boundaries.
+        // Every daylight hour produces Decrease.
+        for hour in DAWN_HOUR..=DUSK_HOUR {
+            assert_eq!(
+                natural_moongate_counter_step(hour),
+                NaturalMoongateCounterStep::Decrease,
+                "hour {hour}"
+            );
+        }
+        // Every night-band hour outside [DAWN_HOUR, DUSK_HOUR] grows
+        // the counter.
+        for hour in 0..DAWN_HOUR {
+            assert_eq!(
+                natural_moongate_counter_step(hour),
+                NaturalMoongateCounterStep::Increase,
+                "pre-dawn hour {hour}"
+            );
+        }
+        for hour in (DUSK_HOUR + 1)..24 {
+            assert_eq!(
+                natural_moongate_counter_step(hour),
+                NaturalMoongateCounterStep::Increase,
+                "post-dusk hour {hour}"
+            );
+        }
+    }
+
+    #[test]
     fn world_plane_fall_damage_max_routes_through_named_constant() {
         // overworld.md §2: chasm and whirlpool plane writers apply a
         // random fall-damage roll per conscious party member. Promote
