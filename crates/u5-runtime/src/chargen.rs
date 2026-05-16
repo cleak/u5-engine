@@ -253,12 +253,12 @@ fn normalize_chargen_name(
 }
 
 fn read_init_ool_plane(game_dir: &Path) -> io::Result<Vec<u8>> {
-    let bytes = fs::read(game_dir.join("INIT.OOL"))?;
+    let bytes = fs::read(game_dir.join(INIT_OOL_FILENAME))?;
     if bytes.len() != OOL_PLANE_LEN {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "INIT.OOL must be {OOL_PLANE_LEN} bytes, got {}",
+                "{INIT_OOL_FILENAME} must be {OOL_PLANE_LEN} bytes, got {}",
                 bytes.len()
             ),
         ));

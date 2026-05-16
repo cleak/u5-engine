@@ -666,13 +666,13 @@ pub fn load_world_overlay_objects(
 }
 
 pub fn load_init_overlay_objects(game_dir: &Path) -> io::Result<Vec<ActiveObject>> {
-    let path = game_dir.join("INIT.OOL");
+    let path = game_dir.join(INIT_OOL_FILENAME);
     let bytes = read(&path)?;
     if bytes.len() != OOL_PLANE_LEN {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "INIT.OOL must be {OOL_PLANE_LEN} bytes, got {}",
+                "{INIT_OOL_FILENAME} must be {OOL_PLANE_LEN} bytes, got {}",
                 bytes.len()
             ),
         ));
