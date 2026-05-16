@@ -1,4 +1,29 @@
     #[test]
+    fn ship_broadside_direction_accepted_only_perpendicular_to_facing() {
+        // vehicles.md §7
+        // Ship facing N (0): broadsides E (1) and W (3); bow N (0) and stern S (2) refuse.
+        assert!(ship_broadside_direction_accepted(0, 1));
+        assert!(ship_broadside_direction_accepted(0, 3));
+        assert!(!ship_broadside_direction_accepted(0, 0));
+        assert!(!ship_broadside_direction_accepted(0, 2));
+        // Ship facing E (1): broadsides N (0) and S (2); bow E (1) and stern W (3) refuse.
+        assert!(ship_broadside_direction_accepted(1, 0));
+        assert!(ship_broadside_direction_accepted(1, 2));
+        assert!(!ship_broadside_direction_accepted(1, 1));
+        assert!(!ship_broadside_direction_accepted(1, 3));
+        // Ship facing S (2): symmetric with N.
+        assert!(ship_broadside_direction_accepted(2, 1));
+        assert!(ship_broadside_direction_accepted(2, 3));
+        assert!(!ship_broadside_direction_accepted(2, 0));
+        assert!(!ship_broadside_direction_accepted(2, 2));
+        // Ship facing W (3): symmetric with E.
+        assert!(ship_broadside_direction_accepted(3, 0));
+        assert!(ship_broadside_direction_accepted(3, 2));
+        assert!(!ship_broadside_direction_accepted(3, 1));
+        assert!(!ship_broadside_direction_accepted(3, 3));
+    }
+
+    #[test]
     fn frigate_purchase_starts_with_full_hull_and_two_skiffs() {
         // vehicles.md §4
         assert_eq!(FRIGATE_PURCHASE_HULL, 100);

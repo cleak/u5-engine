@@ -370,7 +370,7 @@ pub use scene::{
 pub use ship_broadside::{
     SHIP_BROADSIDE_DAMAGE_MAX, SHIP_BROADSIDE_DAMAGE_MIN,
     SHIP_BROADSIDE_DEPLETION_BYTE_OFFSET, SHIP_BROADSIDE_RANGE_CELLS,
-    ship_broadside_apply_damage,
+    ship_broadside_apply_damage, ship_broadside_direction_accepted,
 };
 pub use shops::*;
 pub use shrine_virtue::{

@@ -3,6 +3,19 @@
 //! the ship-broadside helper; this module exposes the spec's
 //! observable constants and the per-hit byte mutation contract.
 
+/// `vehicles.md §7`: returns `true` when a requested fire direction
+/// is a legal broadside relative to the ship's facing. Bow/stern
+/// shots refuse with "Fire broadsides only!"; only directions
+/// perpendicular to the ship's heading are accepted. Both arguments
+/// use the published facing convention `0` north, `1` east,
+/// `2` south, `3` west.
+pub const fn ship_broadside_direction_accepted(ship_facing: u8, fire_direction: u8) -> bool {
+    let f = ship_facing & 0x03;
+    let d = fire_direction & 0x03;
+    // Perpendicular when the low bit (axis selector) differs.
+    (f & 0x01) != (d & 0x01)
+}
+
 /// `vehicles.md §7`: broadside trace length in cells. The projectile
 /// scans up to three cells from the ship in the chosen direction.
 pub const SHIP_BROADSIDE_RANGE_CELLS: u8 = 3;
