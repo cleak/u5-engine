@@ -7,6 +7,26 @@
     }
 
     #[test]
+    fn ship_boarding_warns_low_hull_below_ten() {
+        // vehicles.md §4: low-hull warning fires strictly below 10.
+        assert_eq!(SHIP_HULL_BOARDING_WARNING_THRESHOLD, 10);
+        for hull in 0u8..10 {
+            assert!(
+                ship_boarding_warns_low_hull(hull),
+                "hull {hull} should warn"
+            );
+        }
+        for hull in 10u8..=20 {
+            assert!(
+                !ship_boarding_warns_low_hull(hull),
+                "hull {hull} should not warn"
+            );
+        }
+        // The shipped Frigate-purchase hull starts at 100 — no warning.
+        assert!(!ship_boarding_warns_low_hull(100));
+    }
+
+    #[test]
     fn ship_sail_toggle_marker_round_trips_hoisted_and_furled() {
         // vehicles.md §6: hoisted 0x20..=0x23 toggles to furled
         // 0x24..=0x27 and vice-versa, preserving the heading

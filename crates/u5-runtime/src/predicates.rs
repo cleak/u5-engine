@@ -211,6 +211,20 @@ pub const fn ship_sail_toggle_marker(current_marker: u8) -> Option<u8> {
     }
 }
 
+/// `vehicles.md §4` ship-boarding hull-condition warning threshold.
+/// After a successful ship board, the handler warns the player if
+/// the boarded ship's `+5` hull-condition byte is strictly less than
+/// this threshold. The ship still boards; the warning is presentation
+/// only.
+pub const SHIP_HULL_BOARDING_WARNING_THRESHOLD: u8 = 10;
+
+/// `vehicles.md §4`: returns `true` when ship boarding should print
+/// the low-hull warning after a successful board. The ship is still
+/// boarded either way; the helper only encodes the presentation gate.
+pub const fn ship_boarding_warns_low_hull(hull_condition: u8) -> bool {
+    hull_condition < SHIP_HULL_BOARDING_WARNING_THRESHOLD
+}
+
 /// `vehicles.md §2`: typed [`Direction`] for the transport marker's
 /// facing. Decodes the low two bits via [`transport_facing_index`]
 /// and maps the four indices to the four cardinal directions:
