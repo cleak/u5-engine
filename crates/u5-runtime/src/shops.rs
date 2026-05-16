@@ -813,6 +813,36 @@ impl Inn {
     }
 }
 
+/// `shops.md §8.4` inn main-menu outcome. After the inn-entry guest
+/// scan, the main menu accepts three actions: `R` Rest for the
+/// night, `L` Leave a companion, `P` Pick up a companion. Other
+/// keys silently re-prompt; Space/Escape exit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InnMainAction {
+    /// `R` (case-insensitive) — Rest for the night.
+    Rest,
+    /// `L` (case-insensitive) — Leave a companion at the inn.
+    LeaveCompanion,
+    /// `P` (case-insensitive) — Pick up a previously-left companion.
+    PickUpCompanion,
+    /// Space or Escape — exit the menu.
+    Exit,
+    /// Any other byte — silently re-prompt.
+    Discard,
+}
+
+/// `shops.md §8.4`: classify one keystroke for the inn main menu.
+/// Lower-case `r`/`l`/`p` accepted for uppercase-naive callers.
+pub const fn inn_main_action(byte: u8) -> InnMainAction {
+    match byte {
+        b'R' | b'r' => InnMainAction::Rest,
+        b'L' | b'l' => InnMainAction::LeaveCompanion,
+        b'P' | b'p' => InnMainAction::PickUpCompanion,
+        b' ' | 0x1B => InnMainAction::Exit,
+        _ => InnMainAction::Discard,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct InnGuestRecord {
     pub scene_marker: u8,

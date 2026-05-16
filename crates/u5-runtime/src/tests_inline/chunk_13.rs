@@ -7,6 +7,26 @@
     }
 
     #[test]
+    fn inn_main_action_routes_r_l_p_exit_and_discard() {
+        // shops.md §8.4
+        assert_eq!(inn_main_action(b'R'), InnMainAction::Rest);
+        assert_eq!(inn_main_action(b'r'), InnMainAction::Rest);
+        assert_eq!(inn_main_action(b'L'), InnMainAction::LeaveCompanion);
+        assert_eq!(inn_main_action(b'l'), InnMainAction::LeaveCompanion);
+        assert_eq!(inn_main_action(b'P'), InnMainAction::PickUpCompanion);
+        assert_eq!(inn_main_action(b'p'), InnMainAction::PickUpCompanion);
+        assert_eq!(inn_main_action(b' '), InnMainAction::Exit);
+        assert_eq!(inn_main_action(0x1B), InnMainAction::Exit);
+        for byte in [b'A', b'B', b'C', b'X', b'Y', b'N', b'\r', 0x00, 0x08, 0xFF] {
+            assert_eq!(
+                inn_main_action(byte),
+                InnMainAction::Discard,
+                "byte {byte:#04x}"
+            );
+        }
+    }
+
+    #[test]
     fn arms_shop_action_routes_b_s_and_exits_on_anything_else() {
         // shops.md §8.1
         assert_eq!(arms_shop_action(b'B'), ArmsShopAction::Buy);
