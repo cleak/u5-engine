@@ -1,4 +1,16 @@
     #[test]
+    fn save_scene_overworld_matches_main_loop_scene_overworld() {
+        // save-load.md §4.2 names the overworld scene byte as
+        // SAVE_SCENE_OVERWORLD; main-loop.md §3 names the same value
+        // as SCENE_OVERWORLD when classifying the outer-dispatch
+        // branch. Both spell out the same byte value (`0`). Pin
+        // equality so a future rename or value change on either side
+        // cannot silently desync the save-side underworld disk-swap
+        // check from the outer-loop scene routing.
+        assert_eq!(SAVE_SCENE_OVERWORLD, SCENE_OVERWORLD);
+    }
+
+    #[test]
     fn chargen_starting_calendar_matches_endgame_elapsed_time_baseline() {
         // chargen.md §8 names the seeded starting calendar; endgame.md
         // §9 names the elapsed-time baseline the Avatarhood certificate
