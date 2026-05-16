@@ -32,6 +32,24 @@
     }
 
     #[test]
+    fn inn_per_instance_base_rate_and_gold_gate_match_published_table() {
+        // shops.md §8.4 stock inn rate rows. Spot-check every inn
+        // against the published base room rate and minimum-gold gate.
+        let cases = [
+            (Inn::TheWayfarerInn, 2u16, 3u16),
+            (Inn::TheWarriorsStead, 3, 4),
+            (Inn::TheHauntingInn, 2, 3),
+            (Inn::HotelBrittany, 3, 2),
+            (Inn::TheSmugglersInn, 2, 2),
+            (Inn::TheKingsRansomInn, 3, 2),
+        ];
+        for (inn, base, gate) in cases {
+            assert_eq!(inn.base_room_rate(), base, "{:?} base", inn);
+            assert_eq!(inn.minimum_gold_gate(), gate, "{:?} gate", inn);
+        }
+    }
+
+    #[test]
     fn frigate_initial_starting_state_matches_published_table() {
         // vehicles.md §4: a shipwright-purchased Frigate starts at
         // hull condition 100 with two skiffs aboard when it is

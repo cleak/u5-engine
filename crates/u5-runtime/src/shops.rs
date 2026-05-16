@@ -861,6 +861,34 @@ impl Inn {
             Self::TheKingsRansomInn => "The King's Ransom Inn",
         }
     }
+
+    /// `shops.md §8.4` per-inn base room rate before the speaking
+    /// member's Intelligence adjustment. The rest quote is
+    /// `base_rate * party_size` then Intelligence-scaled; the leave
+    /// deposit uses `INN_LEAVE_DEPOSIT_ROOM_RATE_UNITS * adjusted_rate`.
+    pub const fn base_room_rate(self) -> u16 {
+        match self {
+            Self::TheWayfarerInn => 2,
+            Self::TheWarriorsStead => 3,
+            Self::TheHauntingInn => 2,
+            Self::HotelBrittany => 3,
+            Self::TheSmugglersInn => 2,
+            Self::TheKingsRansomInn => 3,
+        }
+    }
+
+    /// `shops.md §8.4` per-inn minimum-gold gate. The inn refuses to
+    /// open the main menu when party gold is below this floor.
+    pub const fn minimum_gold_gate(self) -> u16 {
+        match self {
+            Self::TheWayfarerInn => 3,
+            Self::TheWarriorsStead => 4,
+            Self::TheHauntingInn => 3,
+            Self::HotelBrittany => 2,
+            Self::TheSmugglersInn => 2,
+            Self::TheKingsRansomInn => 2,
+        }
+    }
 }
 
 /// `shops.md §8.4` inn main-menu outcome. After the inn-entry guest
