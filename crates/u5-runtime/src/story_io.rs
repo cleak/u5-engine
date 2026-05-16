@@ -90,6 +90,49 @@ pub const fn intro_story6_secondary_subimage(step: usize) -> Option<u8> {
     })
 }
 
+/// `intro.md §10` step 1 post-wait `STORY1.16` extra draw. After the
+/// player advances step 1, the intro draws subimage 2 at this fixed
+/// pixel coordinate, then runs the local rectangular transition over
+/// [`INTRO_STEP_1_RECT_TRANSITION`] (inclusive on both ends).
+pub const INTRO_STEP_1_EXTRA_ART_X: u16 = 40;
+pub const INTRO_STEP_1_EXTRA_ART_Y: u16 = 86;
+pub const INTRO_STEP_1_EXTRA_SUBIMAGE: u8 = 2;
+pub const INTRO_STEP_1_RECT_TRANSITION: (u16, u16, u16, u16) = (40, 86, 75, 120);
+
+/// `intro.md §10` step 6 extra `STORY2.16` doorway-transition art
+/// draw. Step 6 also replaces the usual `STORY.DAT` record with two
+/// inline doorway-transition text lines; the strings are owned by
+/// the intro code itself and are not part of the published spec
+/// text.
+pub const INTRO_STEP_6_EXTRA_ART_X: u16 = 96;
+pub const INTRO_STEP_6_EXTRA_ART_Y: u16 = 39;
+pub const INTRO_STEP_6_EXTRA_SUBIMAGE: u8 = 3;
+
+/// `intro.md §10` static transition-strip pre-draws for the three
+/// steps that draw two `TEXT.16` transition subimages before the
+/// primary story-art draw. Each entry is `(subimage_a, x_a, y_a,
+/// subimage_b, x_b, y_b)`.
+pub const INTRO_STEP_0_TRANSITION_STRIPS: [(u8, u16, u16); 2] =
+    [(0, 224, 30), (1, 168, 58)];
+pub const INTRO_STEP_7_TRANSITION_STRIPS: [(u8, u16, u16); 2] =
+    [(0, 232, 26), (2, 200, 54)];
+pub const INTRO_STEP_14_TRANSITION_STRIPS: [(u8, u16, u16); 2] =
+    [(0, 184, 0), (3, 248, 0)];
+
+/// `intro.md §10`: returns the two `TEXT.16` transition-strip
+/// placements for steps 0, 7, and 14; returns `None` for any other
+/// step (which has no transition-strip pre-draw).
+pub const fn intro_step_transition_strips(
+    step: usize,
+) -> Option<[(u8, u16, u16); 2]> {
+    Some(match step {
+        0 => INTRO_STEP_0_TRANSITION_STRIPS,
+        7 => INTRO_STEP_7_TRANSITION_STRIPS,
+        14 => INTRO_STEP_14_TRANSITION_STRIPS,
+        _ => return None,
+    })
+}
+
 /// `intro.md §10` — primary story-art placement for one zero-based intro
 /// step. Coordinates use 320-by-200 pixel space with origin at upper-left.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

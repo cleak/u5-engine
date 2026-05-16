@@ -1,4 +1,39 @@
     #[test]
+    fn intro_step_extras_match_published_pixel_coordinates() {
+        // intro.md §10: step 1 draws STORY1 subimage 2 at (40, 86)
+        // then runs a rectangular transition over (40, 86)..(75, 120);
+        // step 6 draws STORY2 subimage 3 at (96, 39); steps 0, 7, 14
+        // each pre-draw two TEXT.16 transition subimages at the
+        // published pixel coordinates.
+        assert_eq!(INTRO_STEP_1_EXTRA_ART_X, 40);
+        assert_eq!(INTRO_STEP_1_EXTRA_ART_Y, 86);
+        assert_eq!(INTRO_STEP_1_EXTRA_SUBIMAGE, 2);
+        assert_eq!(INTRO_STEP_1_RECT_TRANSITION, (40, 86, 75, 120));
+
+        assert_eq!(INTRO_STEP_6_EXTRA_ART_X, 96);
+        assert_eq!(INTRO_STEP_6_EXTRA_ART_Y, 39);
+        assert_eq!(INTRO_STEP_6_EXTRA_SUBIMAGE, 3);
+
+        assert_eq!(
+            intro_step_transition_strips(0),
+            Some([(0, 224, 30), (1, 168, 58)])
+        );
+        assert_eq!(
+            intro_step_transition_strips(7),
+            Some([(0, 232, 26), (2, 200, 54)])
+        );
+        assert_eq!(
+            intro_step_transition_strips(14),
+            Some([(0, 184, 0), (3, 248, 0)])
+        );
+        // Steps without the pre-draw return None.
+        assert_eq!(intro_step_transition_strips(1), None);
+        assert_eq!(intro_step_transition_strips(6), None);
+        assert_eq!(intro_step_transition_strips(20), None);
+        assert_eq!(intro_step_transition_strips(21), None);
+    }
+
+    #[test]
     fn title_bit_remaining_placements_match_published_table() {
         // intro.md §3: after the seven-slot initial title mark, the
         // title sequence draws TITLE.BIT 7, TITLE.BIT 8,

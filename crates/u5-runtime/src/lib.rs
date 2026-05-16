@@ -305,11 +305,17 @@ pub use signs_io::{
 pub use stat_arithmetic::{capped_add_u8, capped_add_word, floor_sub_u8, floor_sub_word};
 pub use story_io::{
     INTRO_AUTO_OPENING_STEP, INTRO_INLINE_DOORWAY_STEP,
+    INTRO_STEP_0_TRANSITION_STRIPS, INTRO_STEP_14_TRANSITION_STRIPS,
+    INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
+    INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
+    INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y,
+    INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STEP_7_TRANSITION_STRIPS,
     INTRO_STORY6_SECONDARY_PASS_STEPS, INTRO_STORY6_SECONDARY_Y_DELTA,
     INTRO_STORY_STEP_COUNT, INTRO_TRANSITION_STRIP_STEPS, IntroStoryArtPlacement,
     STORY_DAT_FILE, STORY_DAT_LEN, STORY_DAT_RECORDS, StoryRecords,
     intro_step_has_story6_secondary_pass,
-    intro_step_has_transition_strip, intro_story6_secondary_subimage,
+    intro_step_has_transition_strip, intro_step_transition_strips,
+    intro_story6_secondary_subimage,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
     intro_story_step_waits_for_input, load_story_records, parse_story_records,
 };
