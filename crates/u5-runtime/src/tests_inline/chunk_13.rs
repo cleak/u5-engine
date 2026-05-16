@@ -1,4 +1,39 @@
     #[test]
+    fn free_text_input_action_classifies_keystrokes() {
+        // input.md §8
+        assert_eq!(free_text_input_action(0x08), FreeTextInputAction::Backspace);
+        assert_eq!(free_text_input_action(0x0D), FreeTextInputAction::Submit);
+        assert_eq!(free_text_input_action(0x0A), FreeTextInputAction::Submit);
+        assert_eq!(free_text_input_action(0x1B), FreeTextInputAction::Cancel);
+        // Printable ASCII appends.
+        assert_eq!(
+            free_text_input_action(b'A'),
+            FreeTextInputAction::Append(b'A')
+        );
+        assert_eq!(
+            free_text_input_action(b'7'),
+            FreeTextInputAction::Append(b'7')
+        );
+        assert_eq!(
+            free_text_input_action(b' '),
+            FreeTextInputAction::Append(b' ')
+        );
+        assert_eq!(
+            free_text_input_action(0x7E),
+            FreeTextInputAction::Append(0x7E)
+        );
+        // Other bytes (function keys, direction codes) are discarded.
+        for byte in [0x00u8, 0x01, 0x07, 0x1A, 0x7F, 0xC9, 0xFB, 0xFF] {
+            assert_eq!(
+                free_text_input_action(byte),
+                FreeTextInputAction::Discard,
+                "byte {:#x} should be discarded",
+                byte
+            );
+        }
+    }
+
+    #[test]
     fn visibility_cheap_path_needs_refill_targets_zero_cells() {
         // visibility.md §10
         assert!(visibility_cheap_path_needs_refill(VISIBILITY_USE_COMPANION));

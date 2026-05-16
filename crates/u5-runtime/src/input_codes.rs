@@ -88,6 +88,46 @@ pub const fn input_code_direction(byte: u8) -> Option<InputDirection> {
     })
 }
 
+/// `input.md §8` free-text-input prompt action classified from one
+/// keystroke. The line buffer reader appends printable ASCII into
+/// the caller's small line buffer, pops on Backspace, terminates on
+/// Enter, cancels on Escape (when the prompt allows it), and
+/// silently discards every other byte (function keys, direction
+/// codes, etc.).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FreeTextInputAction {
+    /// Printable ASCII (`0x20..=0x7E`) — append to the line buffer
+    /// (subject to a caller-supplied max length) and echo at the
+    /// cursor.
+    Append(u8),
+    /// Backspace (`0x08`) — pop the most recent character from the
+    /// buffer and overwrite the previous cell with a space. No-op
+    /// when the buffer is already empty.
+    Backspace,
+    /// Enter (`0x0D` or `0x0A`) — terminate the prompt and return
+    /// the accumulated string to the caller.
+    Submit,
+    /// Escape (`0x1B`) — terminate with the cancelled indication on
+    /// prompts that allow it; the line buffer is cleared.
+    Cancel,
+    /// Any other byte (function keys, direction codes, raw control
+    /// bytes) — silently discarded.
+    Discard,
+}
+
+/// `input.md §8`: classify one input byte for the free-text prompt
+/// reader. Caller already has the byte case-folded by
+/// [`input_case_fold`]; this helper does no further translation.
+pub const fn free_text_input_action(byte: u8) -> FreeTextInputAction {
+    match byte {
+        0x08 => FreeTextInputAction::Backspace,
+        0x0A | 0x0D => FreeTextInputAction::Submit,
+        0x1B => FreeTextInputAction::Cancel,
+        0x20..=0x7E => FreeTextInputAction::Append(byte),
+        _ => FreeTextInputAction::Discard,
+    }
+}
+
 /// `input.md §6` case fold: lowercase ASCII letters are folded to upper
 /// case by simple subtraction; other bytes pass through unchanged. This
 /// is locale-free and table-free, and is a no-op for higher-byte codes
