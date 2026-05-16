@@ -1,4 +1,35 @@
     #[test]
+    fn monster_reward_unit_derivation_constants_match_spec() {
+        // catalogs/monster-bestiary.md §1: the per-class reward unit
+        // returned by the damage/death handler is
+        // `floor(class_max_hp / 4) + 1`. Promote the divisor and
+        // bias so CombatClassStats::reward_unit does not bake `4`
+        // and `+ 1` as bare literals.
+        assert_eq!(MONSTER_REWARD_UNIT_HP_DIVISOR, 4);
+        assert_eq!(MONSTER_REWARD_UNIT_BIAS, 1);
+        // Spot-check a few HP totals.
+        let stats = |hp: u8| CombatClassStats {
+            class: 0,
+            name: "test",
+            tier: 0,
+            speed_seed: 0,
+            hp_comparison: 0,
+            defense: 0,
+            attack_cap: 0,
+            max_hp: hp,
+            default_spawn_count: 0,
+            default_drop_cap: 0,
+        };
+        // A 0-HP class still credits one unit (the +1 bias).
+        assert_eq!(stats(0).reward_unit(), MONSTER_REWARD_UNIT_BIAS);
+        // 4 HP -> 4/4 + 1 = 2; 100 HP -> 100/4 + 1 = 26.
+        assert_eq!(stats(4).reward_unit(), 2);
+        assert_eq!(stats(100).reward_unit(), 26);
+        // 255 HP saturates at 255/4 + 1 = 64.
+        assert_eq!(stats(255).reward_unit(), 64);
+    }
+
+    #[test]
     fn directed_target_walk_max_cells_matches_spec() {
         // magic.md §8: the directed target-walk family (In Zu, In Nox
         // Hur, In Vas Grav Corp, In Flam Hur) builds a directed set
