@@ -32,6 +32,23 @@ pub const CBT_PLACEMENT_SLOT_COUNT: usize = 16;
 /// `formats/cbt.md §2` expected total file lengths.
 pub const BRIT_CBT_FILE_LEN: usize = COMBAT_ARENA_RECORD_LEN * BRIT_CBT_RECORDS;
 pub const DUNGEON_CBT_FILE_LEN: usize = COMBAT_ARENA_RECORD_LEN * DUNGEON_CBT_RECORDS;
+
+/// `formats/cbt.md §3` file arithmetic: byte offset of arena
+/// `arena_index` inside a `.CBT` file. The arena record is
+/// `COMBAT_ARENA_RECORD_LEN` (352) bytes long with no leading
+/// directory; the offset is therefore a plain index-times-stride
+/// multiply with no further normalisation.
+pub const fn combat_arena_file_offset(arena_index: usize) -> usize {
+    arena_index * COMBAT_ARENA_RECORD_LEN
+}
+
+/// `formats/cbt.md §3` file arithmetic: byte offset of row `row`
+/// inside arena `arena_index`. Each row is `COMBAT_ARENA_ROW_STRIDE`
+/// (32) bytes — the 11 visible terrain cells followed by 21 bytes of
+/// metadata. Caller adds the column index for a per-cell offset.
+pub const fn combat_arena_row_offset(arena_index: usize, row: usize) -> usize {
+    combat_arena_file_offset(arena_index) + row * COMBAT_ARENA_ROW_STRIDE
+}
 pub const DEFAULT_COMBAT_ARENA_TERRAIN: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] =
     [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
 

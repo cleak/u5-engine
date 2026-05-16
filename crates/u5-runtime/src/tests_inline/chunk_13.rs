@@ -1,4 +1,27 @@
     #[test]
+    fn combat_arena_file_offsets_match_spec_arithmetic() {
+        // formats/cbt.md §3: arena_start = arena_index * 352;
+        // row_start = arena_start + row * 32.
+        assert_eq!(COMBAT_ARENA_RECORD_LEN, 352);
+        assert_eq!(COMBAT_ARENA_ROW_STRIDE, 32);
+        assert_eq!(combat_arena_file_offset(0), 0);
+        assert_eq!(combat_arena_file_offset(1), 352);
+        assert_eq!(combat_arena_file_offset(15), 15 * 352);
+        // The 16-arena BRIT.CBT total length equals the next index's
+        // base offset.
+        assert_eq!(combat_arena_file_offset(BRIT_CBT_RECORDS), BRIT_CBT_FILE_LEN);
+        // Row offsets within an arena.
+        assert_eq!(combat_arena_row_offset(0, 0), 0);
+        assert_eq!(combat_arena_row_offset(0, 5), 5 * 32);
+        assert_eq!(combat_arena_row_offset(2, 7), 2 * 352 + 7 * 32);
+        // The last row's start sits at offset 352 - 32 within the arena.
+        assert_eq!(
+            combat_arena_row_offset(0, COMBAT_ARENA_SIDE - 1),
+            COMBAT_ARENA_RECORD_LEN - COMBAT_ARENA_ROW_STRIDE
+        );
+    }
+
+    #[test]
     fn u4_transfer_published_filenames_match_spec() {
         // u4-transfer.md §5,§11
         assert_eq!(U4_TRANSFER_U5_SEED_GAM_FILENAME, "BRIT.GAM");
