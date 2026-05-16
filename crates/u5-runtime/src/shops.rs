@@ -923,7 +923,15 @@ pub enum InnError {
     },
 }
 
+/// `shops.md §8.8` sage free-text input character cap.
 pub const SAGE_TOPIC_INPUT_LIMIT: usize = 15;
+
+/// `shops.md §8.8` shipped resident sage rumour-topic count. The
+/// fixed resident topic list contains twenty-six rumour topics; the
+/// sage matches typed input case-insensitively against this list
+/// with a strict topic-boundary check (the next input character must
+/// be end-of-input or a space).
+pub const SAGE_RUMOUR_TOPIC_COUNT: usize = 26;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SageTopic {

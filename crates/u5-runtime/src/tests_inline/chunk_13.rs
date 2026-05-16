@@ -7,6 +7,15 @@
     }
 
     #[test]
+    fn sage_rumour_topic_count_matches_resident_table_size() {
+        // shops.md §8.8: shipped resident topic list contains 26 rumour
+        // topics.
+        assert_eq!(SAGE_RUMOUR_TOPIC_COUNT, 26);
+        // Sanity: the input cap stays at 15 chars for free-text entry.
+        assert_eq!(SAGE_TOPIC_INPUT_LIMIT, 15);
+    }
+
+    #[test]
     fn inn_main_action_routes_r_l_p_exit_and_discard() {
         // shops.md §8.4
         assert_eq!(inn_main_action(b'R'), InnMainAction::Rest);
