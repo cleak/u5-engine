@@ -19,6 +19,16 @@ pub const DUNGEON_DOOR_TABLE_FILE: &str = "dungeon_doors.tsv";
 pub const DUNGEON_CHEST_TABLE_FILE: &str = "dungeon_chests.tsv";
 pub const SECRET_DOOR_TABLE_FILE: &str = "secret_doors.tsv";
 pub const TOWN_FIRE_SOURCE_TABLE_FILE: &str = "town_fire_sources.tsv";
+/// `vehicles.md §8`: town F-Fire scans a short fixed line for the
+/// first blocking target. This is the maximum distance, in cells,
+/// from the fire-source tile that the cannon-line tracer probes.
+pub const TOWN_CANNON_RANGE_CELLS: i32 = 3;
+/// `vehicles.md §8`: on a successful town F-Fire hit against an
+/// active object, the shared moral-standing selector is reduced by
+/// this many units (floored at zero by the karma helper). The
+/// overworld broadside path does not apply this debit; only the
+/// local cannon path does.
+pub const TOWN_CANNON_HIT_KARMA_DEBIT: u8 = 5;
 pub const TOWN_PUSHABLE_TABLE_FILE: &str = "town_pushables.tsv";
 pub const TOWN_GET_TILE_TABLE_FILE: &str = "town_get_tiles.tsv";
 pub const TOWN_REST_BED_TABLE_FILE: &str = "town_rest_beds.tsv";

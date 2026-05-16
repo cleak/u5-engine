@@ -1195,7 +1195,7 @@ impl PlayState {
             TownFireTarget::Object { slot, object } => {
                 self.free_active_object_slot(slot);
                 self.mark_visibility_dirty();
-                let moral_delta = self.decrease_moral_standing(5);
+                let moral_delta = self.decrease_moral_standing(TOWN_CANNON_HIT_KARMA_DEBIT);
                 self.advance_turn_without_door_tick();
                 self.message = format!(
                     "BOOOM! Town fire source at ({}, {}) fired {} and hit object tile {} at ({}, {}); target removed and moral standing decreased by {moral_delta}.",
@@ -1247,7 +1247,7 @@ impl PlayState {
 
     pub fn town_fire_target(&self, source: TownFireSourceEntry) -> TownFireTarget {
         let (dx, dy) = source.direction.delta();
-        for distance in 1..=3 {
+        for distance in 1..=(TOWN_CANNON_RANGE_CELLS as isize) {
             let x = source.x as isize + dx * distance;
             let y = source.y as isize + dy * distance;
             if !(0..32).contains(&x) || !(0..32).contains(&y) {

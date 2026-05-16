@@ -1,4 +1,26 @@
     #[test]
+    fn town_cannon_named_constants_match_spec() {
+        // vehicles.md §8: the town F-Fire path traces a short fixed
+        // line for the first blocking target, and on an active-object
+        // hit it reduces the shared moral-standing selector by five
+        // units (floored at zero by the karma helper). Promote both
+        // numbers to named constants so the F-Fire handler does not
+        // bake `3` and `5` as bare literals.
+        assert_eq!(TOWN_CANNON_RANGE_CELLS, 3);
+        assert_eq!(TOWN_CANNON_HIT_KARMA_DEBIT, 5);
+        // The town cannon range is the same magnitude as the ship
+        // broadside range, but the spec keeps them as independent
+        // contracts (one ship-only, one town-only). Both being 3 is
+        // a coincidence of the published data, not a shared constant.
+        assert_eq!(
+            TOWN_CANNON_RANGE_CELLS as u8,
+            SHIP_BROADSIDE_RANGE_CELLS,
+            "spec keeps these contracts independent even though the v1 \
+             values both happen to be three"
+        );
+    }
+
+    #[test]
     fn random_encounter_threshold_band_constants_match_spec_table() {
         // encounters.md §3: each row of the surface threshold table is
         // a paired (day, night) value keyed on a tile band. Promote
