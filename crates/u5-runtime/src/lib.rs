@@ -106,9 +106,11 @@ pub use character_record::{
 pub use chargen::*;
 pub use clock::{
     DAYS_PER_MONTH, GameClock, HOURS_PER_DAY, MINUTES_PER_HOUR, MONTHS_PER_YEAR,
-    PROVISION_DECREMENT_HOURS, SKY_STRIP_CELL_COUNT, SkyStripMarker,
+    PROVISION_DECREMENT_HOURS, SHADOWLORD_HIDEOUT_FIRST, SHADOWLORD_HIDEOUT_LAST,
+    SHADOWLORD_HIDEOUT_VANQUISHED, SKY_STRIP_CELL_COUNT, SkyStripMarker,
     TIMING_TAG_NEGATE_TIME, TIMING_TAG_QUICKNESS, apply_timing_tag_increment,
-    display_hour_12h, is_provision_decrement_hour, shop_time_of_day_word,
+    display_hour_12h, is_provision_decrement_hour, shadowlord_hideout_is_live,
+    shadowlord_hideout_is_vanquished, shop_time_of_day_word,
     sky_strip_marker_position, sky_strip_renders,
 };
 pub use directed_step::{

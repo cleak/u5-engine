@@ -1,4 +1,24 @@
     #[test]
+    fn shadowlord_hideout_predicates_match_spec() {
+        // time.md §7
+        assert_eq!(SHADOWLORD_HIDEOUT_FIRST, 1);
+        assert_eq!(SHADOWLORD_HIDEOUT_LAST, 8);
+        assert_eq!(SHADOWLORD_HIDEOUT_VANQUISHED, 0xFF);
+        // Vanquished sentinel.
+        assert!(shadowlord_hideout_is_vanquished(SHADOWLORD_HIDEOUT_VANQUISHED));
+        for v in [0u8, 1, 7, 8, 0xFE] {
+            assert!(!shadowlord_hideout_is_vanquished(v));
+        }
+        // Live hideout id range.
+        for v in 1u8..=8 {
+            assert!(shadowlord_hideout_is_live(v));
+        }
+        for v in [0u8, 9, 32, 0xFE, 0xFF] {
+            assert!(!shadowlord_hideout_is_live(v));
+        }
+    }
+
+    #[test]
     fn party_target_selector_action_decodes_keystrokes() {
         // input.md §9
         // Digits 1..=6 select the matching slot.

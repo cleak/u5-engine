@@ -53,6 +53,28 @@ pub const fn is_provision_decrement_hour(hour: u8) -> bool {
     matches!(hour, 6 | 12 | 18)
 }
 
+/// `time.md §7` Shadowlord hideout slot range and vanquished
+/// sentinel. The midnight pass picks a new hideout id in
+/// `1..=8` for each living slot and treats `0xFF` as the
+/// vanquished marker (the daily walker skips those slots).
+pub const SHADOWLORD_HIDEOUT_FIRST: u8 = 1;
+pub const SHADOWLORD_HIDEOUT_LAST: u8 = 8;
+pub const SHADOWLORD_HIDEOUT_VANQUISHED: u8 = 0xFF;
+
+/// `time.md §7`: returns `true` when a Shadowlord hideout slot
+/// holds the vanquished sentinel; the daily walker skips it
+/// without rerolling.
+pub const fn shadowlord_hideout_is_vanquished(slot: u8) -> bool {
+    slot == SHADOWLORD_HIDEOUT_VANQUISHED
+}
+
+/// `time.md §7`: returns `true` when a Shadowlord hideout slot
+/// holds a live hideout id in the published `1..=8` range. The
+/// midnight rotation only picks values in this band.
+pub const fn shadowlord_hideout_is_live(slot: u8) -> bool {
+    slot >= SHADOWLORD_HIDEOUT_FIRST && slot <= SHADOWLORD_HIDEOUT_LAST
+}
+
 /// `time.md §4` per-turn cleanup state-tag modifier byte values. The
 /// `Q` tag halves the minute increment with a 1-minute floor; the
 /// `T` tag suppresses the minute-counter and light-counter writes
