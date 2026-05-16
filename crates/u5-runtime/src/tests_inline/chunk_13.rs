@@ -1,4 +1,30 @@
     #[test]
+    fn chest_primary_pool_row_succeeds_uses_class_and_roll_gates() {
+        // containers.md §4
+        // Threshold 7 (Food), chest class 5 -> ineligible.
+        assert!(!chest_primary_pool_row_succeeds(5, 7, 30));
+        // Threshold 7 (Food), chest class 7 -> eligible; roll 7 succeeds.
+        assert!(chest_primary_pool_row_succeeds(7, 7, 7));
+        // Threshold 7, chest class 30 -> eligible; roll 6 fails.
+        assert!(!chest_primary_pool_row_succeeds(30, 7, 6));
+        // Threshold 17 (Scroll/Potion), chest class 25, roll 30 -> succeeds.
+        assert!(chest_primary_pool_row_succeeds(25, 17, 30));
+        // Threshold 25 (Chest marker), chest class 24 -> ineligible.
+        assert!(!chest_primary_pool_row_succeeds(24, 25, 30));
+    }
+
+    #[test]
+    fn chest_secondary_pool_attempts_uses_floor_half_plus_one() {
+        // containers.md §4
+        assert_eq!(chest_secondary_pool_attempts(0), 1);
+        assert_eq!(chest_secondary_pool_attempts(1), 1);
+        assert_eq!(chest_secondary_pool_attempts(2), 2);
+        assert_eq!(chest_secondary_pool_attempts(7), 4);
+        assert_eq!(chest_secondary_pool_attempts(30), 16);
+        assert_eq!(chest_secondary_pool_attempts(127), 64);
+    }
+
+    #[test]
     fn u4_transfer_no_transferable_data_fires_only_when_all_zero() {
         // u4-transfer.md §5
         assert_eq!(U4_TRANSFER_VIRTUE_STANDING_COUNT, 8);

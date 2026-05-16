@@ -2,6 +2,28 @@
 //! covers the dungeon-chest reward generator (§6) and the directional
 //! table-food consumption rule (§7).
 
+/// `containers.md §4` surface/town chest content primary-pool roll
+/// gate. A pool row is eligible only when its threshold is less
+/// than or equal to the chest class; eligible rows then roll
+/// `1..=30` and succeed when the roll is greater than or equal to
+/// the same threshold. Caller passes the chest's seven-bit class
+/// (after the trap bit is removed) and the per-row threshold.
+pub const fn chest_primary_pool_row_succeeds(
+    chest_class: u8,
+    threshold: u8,
+    roll_1_to_30: u8,
+) -> bool {
+    threshold <= chest_class && roll_1_to_30 >= threshold
+}
+
+/// `containers.md §4` surface/town chest content secondary-pool
+/// attempt count. After the primary pool is evaluated, the
+/// secondary pool runs `floor(chest_class / 2) + 1` independent
+/// attempts at random rows from the 48-entry equipment table.
+pub const fn chest_secondary_pool_attempts(chest_class: u8) -> u8 {
+    chest_class / 2 + 1
+}
+
 /// `containers.md §8` shared inventory-add result family classified
 /// from the found-item class code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
