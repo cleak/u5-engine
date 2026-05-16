@@ -7,6 +7,15 @@
     }
 
     #[test]
+    fn tlk_no_keyword_match_message_matches_published_envelope() {
+        // conversation.md §6
+        assert_eq!(
+            TLK_NO_KEYWORD_MATCH_MESSAGE,
+            "I cannot help thee with that."
+        );
+    }
+
+    #[test]
     fn scroll_spell_labels_match_inventory_md_dispatch_order() {
         // inventory.md §7 + formats/saved-gam.md §7
         assert_eq!(SCROLL_SPELL_LABELS.len(), SCROLL_COUNT);

@@ -1566,7 +1566,7 @@ impl PlayState {
             }
             let response = talk_keyword_response(fields, keyword)
                 .filter(|response| !response.is_empty())
-                .unwrap_or("I cannot help thee with that.");
+                .unwrap_or(TLK_NO_KEYWORD_MATCH_MESSAGE);
             let (response, actions) = talk_response_text_and_actions(response);
             self.apply_talk_action_grants(&actions);
             self.message = format!("Talked to {name}: {response}");

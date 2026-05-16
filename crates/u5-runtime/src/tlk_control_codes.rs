@@ -278,6 +278,14 @@ pub const TLK_CODE_GOTO_LABEL_FIRST: u8 = 0x9E;
 pub const TLK_CODE_GOTO_LABEL_LAST: u8 = 0x9F;
 pub const TLK_CODE_END_OF_RESPONSE: u8 = 0xFF;
 
+/// `conversation.md §6` no-match response. When both the reserved
+/// keyword scan and the ordinary keyword scan fail, the keyword
+/// input loop prints this line and returns to step 1 to prompt
+/// again. The trailing `\n\n` is part of the spec's published
+/// envelope; callers may strip the spacing in display layers that
+/// own their own line breaks.
+pub const TLK_NO_KEYWORD_MATCH_MESSAGE: &str = "I cannot help thee with that.";
+
 /// `conversation.md §7` top-level byte-runner dispatcher class. Each
 /// byte read from any text stream (the five leading entries, every
 /// keyword response, IF/ELSE arm bodies, GOTO targets) is classified
