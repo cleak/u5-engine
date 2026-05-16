@@ -59,6 +59,24 @@ pub const fn npc_schedule_state_for_floor_transition(
     }
     NPC_STATE_PARKED_OFF_FLOOR
 }
+/// `npc-schedules.md §8.1` pathfinder workspace shape. The flood-fill
+/// pathfinder operates on a 32x32 byte scratch grid (1,024 bytes
+/// total) keyed by `(row, col)` in row-major order. The workspace
+/// is rebuilt from scratch on every pathfinding call — it carries
+/// no incremental state between ticks.
+pub const NPC_PATHFIND_WORKSPACE_SIDE: usize = 32;
+pub const NPC_PATHFIND_WORKSPACE_LEN: usize =
+    NPC_PATHFIND_WORKSPACE_SIDE * NPC_PATHFIND_WORKSPACE_SIDE;
+
+/// `npc-schedules.md §7`: returns `true` when the NPC's state byte
+/// represents a parked/off-floor or empty slot — the per-tick
+/// walker has no movement dispatch arm for these states. Empty (0)
+/// and parked (8) both qualify; every other state byte is a live
+/// movement state the dispatcher acts on.
+pub const fn npc_state_off_floor_or_empty(state: u8) -> bool {
+    matches!(state, NPC_STATE_EMPTY | NPC_STATE_PARKED_OFF_FLOOR)
+}
+
 /// `formats/npc.md §6` published type-byte sentinels. The type byte
 /// at `+0x200..+0x21F` doubles as the slot's occupancy flag and the
 /// NPC's sprite/tile class. Three values are special-cased by the

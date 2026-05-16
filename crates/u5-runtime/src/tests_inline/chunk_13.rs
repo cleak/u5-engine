@@ -1,4 +1,33 @@
     #[test]
+    fn npc_pathfind_workspace_dims_match_spec() {
+        // npc-schedules.md §8.1
+        assert_eq!(NPC_PATHFIND_WORKSPACE_SIDE, 32);
+        assert_eq!(NPC_PATHFIND_WORKSPACE_LEN, 1024);
+    }
+
+    #[test]
+    fn npc_state_off_floor_or_empty_covers_states_0_and_8() {
+        // npc-schedules.md §7
+        assert!(npc_state_off_floor_or_empty(NPC_STATE_EMPTY));
+        assert!(npc_state_off_floor_or_empty(NPC_STATE_PARKED_OFF_FLOOR));
+        for state in [
+            NPC_STATE_IDLE,
+            NPC_STATE_INPLANE_MOVE,
+            NPC_STATE_REPLAY_QUEUE,
+            NPC_STATE_DESCEND_TOWARD_TARGET,
+            NPC_STATE_ASCEND_TOWARD_TARGET,
+            NPC_STATE_CLIMB_UP_OFF_FLOOR,
+            NPC_STATE_CLIMB_DOWN_OFF_FLOOR,
+        ] {
+            assert!(
+                !npc_state_off_floor_or_empty(state),
+                "state {} should run a movement dispatch arm",
+                state
+            );
+        }
+    }
+
+    #[test]
     fn active_object_eviction_phase_byte_acceptance() {
         // active-objects.md §4
         // Phase 1: only empty slot.

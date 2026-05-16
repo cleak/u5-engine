@@ -334,12 +334,14 @@ pub use npc_runtime::{
     NPC_PATH_DIR_SOUTH, NPC_PATH_DIR_WEST, NPC_PATHFIND_QUEUE_CAPACITY,
     NPC_DIALOG_ID_HIGH_FALLBACK, NPC_DIALOG_ID_HIGH_FIRST, NPC_DIALOG_ID_HIGH_LAST,
     NPC_DIALOG_ID_NONE, NPC_DIALOG_ID_TLK_SENTINEL, NPC_RUNTIME_DESCRIPTOR_BYTES,
+    NPC_PATHFIND_WORKSPACE_LEN, NPC_PATHFIND_WORKSPACE_SIDE,
     NPC_STUCK_REPLAN_THRESHOLD, NPC_TYPE_DEFAULT_HUMAN_SPRITE, NPC_TYPE_EMPTY,
     NPC_TYPE_RUNTIME_PLAYER_MIRROR, NpcAiBehavior, NpcDialogIdKind, NpcLinkAction,
     NpcShopTrigger, NpcTypeByteClass, RuntimeNpc, npc_ai_behavior, npc_dialog_id_kind,
     npc_link_action, npc_path_direction_offset, npc_path_direction_opposite,
-    npc_schedule_state_for_floor_transition, npc_shop_trigger, npc_type_byte_class,
-    npc_type_byte_occupied, schedule_floor_state,
+    npc_schedule_state_for_floor_transition, npc_shop_trigger,
+    npc_state_off_floor_or_empty, npc_type_byte_class, npc_type_byte_occupied,
+    schedule_floor_state,
 };
 pub use party::{
     Area, AvatarStats, MoonstoneGateSlot, PartyMember, Player, RESURRECTION_MAX_HP_PER_LEVEL,
