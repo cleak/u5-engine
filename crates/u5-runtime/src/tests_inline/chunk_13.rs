@@ -1,4 +1,43 @@
     #[test]
+    fn text_extended_control_byte_constants_match_spec_codes() {
+        // text-output.md §3 / §5: the per-cell emitter recognises five
+        // extended high-bit control bytes (0xFB..=0xFF) that mutate
+        // the active window's cached style without rendering a glyph.
+        // Promote each value so text_control_byte and the emitter's
+        // range probe do not bake the hex codes as bare literals.
+        assert_eq!(TEXT_CTRL_CENTRE_OFF, 0xFB);
+        assert_eq!(TEXT_CTRL_CENTRE_ON, 0xFC);
+        assert_eq!(TEXT_CTRL_INVERSE_TOGGLE, 0xFD);
+        assert_eq!(TEXT_CTRL_UNDERLINE_TOGGLE, 0xFE);
+        assert_eq!(TEXT_CTRL_CLEAR_WINDOW, 0xFF);
+        assert_eq!(TEXT_CTRL_RANGE_FIRST, TEXT_CTRL_CENTRE_OFF);
+        assert_eq!(TEXT_CTRL_RANGE_LAST, TEXT_CTRL_CLEAR_WINDOW);
+        // Each named code resolves to the matching TextControlByte
+        // variant; bytes just outside the band are not control bytes.
+        assert_eq!(
+            text_control_byte(TEXT_CTRL_CENTRE_OFF),
+            Some(TextControlByte::CentreOff)
+        );
+        assert_eq!(
+            text_control_byte(TEXT_CTRL_CENTRE_ON),
+            Some(TextControlByte::CentreOn)
+        );
+        assert_eq!(
+            text_control_byte(TEXT_CTRL_INVERSE_TOGGLE),
+            Some(TextControlByte::InverseToggle)
+        );
+        assert_eq!(
+            text_control_byte(TEXT_CTRL_UNDERLINE_TOGGLE),
+            Some(TextControlByte::UnderlineToggle)
+        );
+        assert_eq!(
+            text_control_byte(TEXT_CTRL_CLEAR_WINDOW),
+            Some(TextControlByte::ClearWindow)
+        );
+        assert_eq!(text_control_byte(TEXT_CTRL_RANGE_FIRST - 1), None);
+    }
+
+    #[test]
     fn viewport_center_and_max_index_match_viewport_side() {
         // visibility.md §2,§7: the player sits at the viewport centre
         // and the grid is 11 wide. Promote the centre column/row

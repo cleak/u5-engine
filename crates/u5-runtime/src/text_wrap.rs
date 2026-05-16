@@ -92,6 +92,23 @@ pub const fn text_window_default_color_byte() -> u8 {
     (TEXT_WINDOW_DEFAULT_BACKGROUND << 4) | TEXT_WINDOW_DEFAULT_FOREGROUND
 }
 
+/// `text-output.md §3` extended text-control byte values. The per-
+/// cell emitter consumes these high-bit bytes through the
+/// style/clear path rather than rendering them as glyphs.
+pub const TEXT_CTRL_CENTRE_OFF: u8 = 0xFB;
+pub const TEXT_CTRL_CENTRE_ON: u8 = 0xFC;
+pub const TEXT_CTRL_INVERSE_TOGGLE: u8 = 0xFD;
+pub const TEXT_CTRL_UNDERLINE_TOGGLE: u8 = 0xFE;
+pub const TEXT_CTRL_CLEAR_WINDOW: u8 = 0xFF;
+/// `text-output.md §5` low end of the extended text-control range
+/// the per-cell emitter probes. Bytes below this value with the high
+/// bit set are routed through the ordinary code-byte path with no
+/// public glyph meaning.
+pub const TEXT_CTRL_RANGE_FIRST: u8 = TEXT_CTRL_CENTRE_OFF;
+/// `text-output.md §5` high end of the extended text-control range
+/// (`0xFF`).
+pub const TEXT_CTRL_RANGE_LAST: u8 = TEXT_CTRL_CLEAR_WINDOW;
+
 /// `text-output.md §3` extended text-control bytes that mutate the
 /// active window's cached style without rendering as glyphs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -139,7 +156,7 @@ pub const fn text_emitter_byte_kind(byte: u8) -> EmitterByteKind {
         0x0A => EmitterByteKind::LineFeed,
         0x0D => EmitterByteKind::CarriageReturn,
         0x20..=0x7E => EmitterByteKind::Glyph(byte),
-        0xFB..=0xFF => match text_control_byte(byte) {
+        TEXT_CTRL_RANGE_FIRST..=TEXT_CTRL_RANGE_LAST => match text_control_byte(byte) {
             Some(c) => EmitterByteKind::Control(c),
             None => EmitterByteKind::Other,
         },
@@ -153,11 +170,11 @@ pub const fn text_emitter_byte_kind(byte: u8) -> EmitterByteKind {
 /// the per-cell emitter's ordinary code-byte path.
 pub const fn text_control_byte(byte: u8) -> Option<TextControlByte> {
     Some(match byte {
-        0xFB => TextControlByte::CentreOff,
-        0xFC => TextControlByte::CentreOn,
-        0xFD => TextControlByte::InverseToggle,
-        0xFE => TextControlByte::UnderlineToggle,
-        0xFF => TextControlByte::ClearWindow,
+        TEXT_CTRL_CENTRE_OFF => TextControlByte::CentreOff,
+        TEXT_CTRL_CENTRE_ON => TextControlByte::CentreOn,
+        TEXT_CTRL_INVERSE_TOGGLE => TextControlByte::InverseToggle,
+        TEXT_CTRL_UNDERLINE_TOGGLE => TextControlByte::UnderlineToggle,
+        TEXT_CTRL_CLEAR_WINDOW => TextControlByte::ClearWindow,
         _ => return None,
     })
 }
