@@ -18,6 +18,11 @@ pub const HOURS_PER_DAY: u8 = 24;
 pub const DAYS_PER_MONTH: u8 = 28;
 pub const MONTHS_PER_YEAR: u8 = 13;
 
+/// `time.md §12` Britannian calendar year length: thirteen months
+/// of twenty-eight days each = 364 days. Implementations must not
+/// normalise the calendar to a twelve-month / 365-day year.
+pub const DAYS_PER_YEAR: u16 = DAYS_PER_MONTH as u16 * MONTHS_PER_YEAR as u16;
+
 /// `time.md §2`: convert the underlying 0..=23 hour to the 12-hour
 /// display value used by status-row presentation. Hour 0 displays as
 /// 12; 1..=12 display as themselves; 13..=23 display as `hour - 12`.

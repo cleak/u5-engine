@@ -1,4 +1,14 @@
     #[test]
+    fn days_per_year_matches_thirteen_month_calendar() {
+        // time.md §12: 13 months x 28 days = 364 days/year.
+        assert_eq!(DAYS_PER_YEAR, 364);
+        assert_eq!(
+            DAYS_PER_YEAR,
+            DAYS_PER_MONTH as u16 * MONTHS_PER_YEAR as u16
+        );
+    }
+
+    #[test]
     fn rest_duration_input_classifies_digits_cancel_and_discard() {
         // rest-and-camp.md §4
         for digit in 1u8..=9 {
