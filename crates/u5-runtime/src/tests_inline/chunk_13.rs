@@ -1,4 +1,36 @@
     #[test]
+    fn end_narrative_window_groups_split_return_home_from_blackthorn_arc() {
+        // endgame.md §8: the six fixed END.DAT windows split into
+        // two narrative arcs. Windows 1-3 are the return-home arc;
+        // windows 4-6 are the Blackthorn judgment / orb arc.
+        assert_eq!(
+            EndNarrativeWindow::ReturnHomeOpening.group(),
+            EndNarrativeGroup::ReturnHome
+        );
+        assert_eq!(
+            EndNarrativeWindow::Homecoming.group(),
+            EndNarrativeGroup::ReturnHome
+        );
+        assert_eq!(
+            EndNarrativeWindow::RestlessNight.group(),
+            EndNarrativeGroup::ReturnHome
+        );
+        assert_eq!(
+            EndNarrativeWindow::BlackthornJudgmentOpen.group(),
+            EndNarrativeGroup::BlackthornJudgment
+        );
+        assert_eq!(
+            EndNarrativeWindow::BlackthornSentence.group(),
+            EndNarrativeGroup::BlackthornJudgment
+        );
+        assert_eq!(
+            EndNarrativeWindow::OrbExileResolution.group(),
+            EndNarrativeGroup::BlackthornJudgment
+        );
+        assert_eq!(END_DAT_FILE, "END.DAT");
+    }
+
+    #[test]
     fn shrine_meditation_outcome_dispatches_by_quest_state() {
         // karma.md §7: a wrong/blank mantra prints the no-effect
         // branch; a correct mantra dispatches by the shrine quest

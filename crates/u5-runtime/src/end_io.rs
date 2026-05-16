@@ -12,7 +12,9 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-const END_DAT_FILE: &str = "END.DAT";
+/// `formats/end-dat.md §2` published filename for the final-narrative
+/// text file.
+pub const END_DAT_FILE: &str = "END.DAT";
 
 /// `formats/end-dat.md §2`: shipped DOS file size in bytes.
 pub const END_DAT_LEN: usize = 3_698;
@@ -50,6 +52,36 @@ impl EndNarrativeWindow {
             EndNarrativeWindow::OrbExileResolution => 6,
         }
     }
+
+    /// `systems/endgame.md §8` narrative-arc group this window belongs
+    /// to. Windows 1-3 form the return-home arc; windows 4-6 form the
+    /// Blackthorn judgment and gate arc.
+    pub const fn group(self) -> EndNarrativeGroup {
+        match self {
+            EndNarrativeWindow::ReturnHomeOpening
+            | EndNarrativeWindow::Homecoming
+            | EndNarrativeWindow::RestlessNight => EndNarrativeGroup::ReturnHome,
+            EndNarrativeWindow::BlackthornJudgmentOpen
+            | EndNarrativeWindow::BlackthornSentence
+            | EndNarrativeWindow::OrbExileResolution => EndNarrativeGroup::BlackthornJudgment,
+        }
+    }
+}
+
+/// `systems/endgame.md §8` two-group narrative split inside the six
+/// fixed `END.DAT` windows. The endgame draws the return-home arc
+/// first, then the Blackthorn judgment / orb arc, with blocking
+/// waits between narrative beats.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EndNarrativeGroup {
+    /// Windows 1-3 — the Avatar returns from Britannia to the
+    /// familiar circle of stones, enters the old home, and confronts
+    /// the emotional aftermath.
+    ReturnHome,
+    /// Windows 4-6 — Lord British and Blackthorn share the closing
+    /// judgment scene, the Orb/Gate choice is presented, and
+    /// Blackthorn's exile resolution is shown.
+    BlackthornJudgment,
 }
 
 /// `formats/end-dat.md §4`: classify a one-based window number into

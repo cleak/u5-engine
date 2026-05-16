@@ -21,7 +21,8 @@ use std::path::Path;
 const SCENE_DIRECTORY_SLOTS: usize = 33;
 const SCENE_DIRECTORY_BYTES: usize = SCENE_DIRECTORY_SLOTS * 2;
 const RECORD_HEADER_LEN: usize = 4;
-const SIGNS_DAT_FILE: &str = "SIGNS.DAT";
+/// `formats/signs-dat.md §2` published filename for the sign-record file.
+pub const SIGNS_DAT_FILE: &str = "SIGNS.DAT";
 
 /// `formats/signs-dat.md §2`: scene directory holds 33 little-endian
 /// scene-block offsets in the leading 66 bytes of the file.

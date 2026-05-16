@@ -126,8 +126,9 @@ pub use directed_step::{
     type_bypasses_terrain_chance_gate,
 };
 pub use end_io::{
-    END_DAT_LEN, END_DAT_WINDOW_COUNT, EndNarrative, EndNarrativeWindow,
-    decode_end_window, end_narrative_window, load_end_narrative,
+    END_DAT_FILE, END_DAT_LEN, END_DAT_WINDOW_COUNT, EndNarrative,
+    EndNarrativeGroup, EndNarrativeWindow, decode_end_window,
+    end_narrative_window, load_end_narrative,
 };
 pub use blackthorn::{
     BLACKTHORN_CAPTIVE_CELL_SCENE, BLACKTHORN_CAPTIVE_CELL_X, BLACKTHORN_CAPTIVE_CELL_Y,
@@ -297,7 +298,7 @@ pub use question_io::{
     parse_question_records, question_dat_dilemma_record_for_pair,
 };
 pub use signs_io::{
-    SIGNS_DAT_RECORD_HEADER_LEN, SIGNS_DAT_SCENE_DIRECTORY_BYTES,
+    SIGNS_DAT_FILE, SIGNS_DAT_RECORD_HEADER_LEN, SIGNS_DAT_SCENE_DIRECTORY_BYTES,
     SIGNS_DAT_SCENE_DIRECTORY_SLOTS, SignBodyByteKind, SignRecord,
     decode_sign_payload, find_sign, load_sign_records, parse_sign_records,
     sign_body_byte_kind,
