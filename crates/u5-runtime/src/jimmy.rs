@@ -111,6 +111,44 @@ pub const fn dungeon_chest_jimmy_succeeds(threshold: u8, roll_1_to_30: u8) -> bo
 /// decrements it.
 pub const DOOR_AUTO_CLOSE_TURNS: u8 = 4;
 
+/// `doors-and-z-transitions.md §5` per-turn outcome for the door
+/// auto-close tracker. Each turn-consuming pass decrements the
+/// countdown; when it reaches zero the saved cell is rewritten back
+/// to the previous (closed but unlocked) tile.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DoorAutoCloseTick {
+    /// No door is currently being tracked (idle slot).
+    Idle,
+    /// The countdown still has turns remaining; the helper rewrites
+    /// the slot with the decremented countdown and leaves the cell
+    /// open. Carries the remaining countdown.
+    DecrementInPlace(u8),
+    /// The countdown reached zero this turn; the cell is rewritten
+    /// to the saved previous tile (closed/unlocked) and the slot
+    /// becomes idle.
+    CloseAndClear,
+}
+
+/// `doors-and-z-transitions.md §5`: drive one turn of the door
+/// auto-close tracker. Caller passes `Some(current_countdown)` for
+/// an active slot or `None` for an idle slot. Dungeon mode is
+/// suppressed at the caller — pass `None` (or skip this call) when
+/// the active scene is a dungeon.
+pub const fn door_auto_close_tick(slot_countdown: Option<u8>) -> DoorAutoCloseTick {
+    match slot_countdown {
+        None => DoorAutoCloseTick::Idle,
+        Some(0) => DoorAutoCloseTick::CloseAndClear,
+        Some(remaining) => {
+            let next = remaining - 1;
+            if next == 0 {
+                DoorAutoCloseTick::CloseAndClear
+            } else {
+                DoorAutoCloseTick::DecrementInPlace(next)
+            }
+        }
+    }
+}
+
 /// `doors-and-z-transitions.md §7` magic Open/Unlock helper. The
 /// helper opens only ordinary closed wooden-door variants and uses
 /// fixed per-variant rewrites. Returns `None` for any other tile —

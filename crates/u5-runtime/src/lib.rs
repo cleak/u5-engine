@@ -194,11 +194,12 @@ pub use input_codes::{
     party_target_selector_action,
 };
 pub use jimmy::{
-    DOOR_AUTO_CLOSE_TURNS, JIMMY_DOOR_DIE_HIGH, JIMMY_DOOR_DIE_LOW, JIMMY_OBJECT_DIE_HIGH,
-    JIMMY_OBJECT_DIE_LOW, MAGIC_UNLOCK_CLOSED_WOODEN_A, MAGIC_UNLOCK_CLOSED_WOODEN_B,
-    MAGIC_UNLOCK_OPEN_WOODEN_A, MAGIC_UNLOCK_OPEN_WOODEN_B,
-    OUTDOOR_KLIMB_FALL_DAMAGE_MAX, OUTDOOR_KLIMB_FALL_DAMAGE_MIN,
-    OUTDOOR_KLIMB_FALL_DIE_HIGH, OUTDOOR_KLIMB_FALL_DIE_LOW, OverworldKlimbEntryGate,
+    DOOR_AUTO_CLOSE_TURNS, DoorAutoCloseTick, JIMMY_DOOR_DIE_HIGH, JIMMY_DOOR_DIE_LOW,
+    JIMMY_OBJECT_DIE_HIGH, JIMMY_OBJECT_DIE_LOW, MAGIC_UNLOCK_CLOSED_WOODEN_A,
+    MAGIC_UNLOCK_CLOSED_WOODEN_B, MAGIC_UNLOCK_OPEN_WOODEN_A,
+    MAGIC_UNLOCK_OPEN_WOODEN_B, OUTDOOR_KLIMB_FALL_DAMAGE_MAX,
+    OUTDOOR_KLIMB_FALL_DAMAGE_MIN, OUTDOOR_KLIMB_FALL_DIE_HIGH,
+    OUTDOOR_KLIMB_FALL_DIE_LOW, OverworldKlimbEntryGate, door_auto_close_tick,
     dungeon_chest_jimmy_succeeds, dungeon_chest_jimmy_threshold, jimmy_door_succeeds,
     magic_unlock_door_rewrite, object_chest_jimmy_succeeds,
     object_chest_jimmy_threshold, outdoor_klimb_member_falls,

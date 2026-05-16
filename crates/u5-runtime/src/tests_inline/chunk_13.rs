@@ -1,4 +1,37 @@
     #[test]
+    fn door_auto_close_tick_counts_down_then_closes() {
+        // doors-and-z-transitions.md §5: each turn-consuming pass
+        // decrements the four-turn countdown; when it hits zero, the
+        // door auto-closes. An idle slot stays idle.
+        assert_eq!(door_auto_close_tick(None), DoorAutoCloseTick::Idle);
+        assert_eq!(
+            door_auto_close_tick(Some(DOOR_AUTO_CLOSE_TURNS)),
+            DoorAutoCloseTick::DecrementInPlace(DOOR_AUTO_CLOSE_TURNS - 1)
+        );
+        assert_eq!(
+            door_auto_close_tick(Some(3)),
+            DoorAutoCloseTick::DecrementInPlace(2)
+        );
+        assert_eq!(
+            door_auto_close_tick(Some(2)),
+            DoorAutoCloseTick::DecrementInPlace(1)
+        );
+        // 1 → 0 reaches zero this tick, so the door closes.
+        assert_eq!(
+            door_auto_close_tick(Some(1)),
+            DoorAutoCloseTick::CloseAndClear
+        );
+        // Already-zero slots also close (and the cell rewrite fires
+        // before the slot becomes idle).
+        assert_eq!(
+            door_auto_close_tick(Some(0)),
+            DoorAutoCloseTick::CloseAndClear
+        );
+        // The countdown initialiser is four turns.
+        assert_eq!(DOOR_AUTO_CLOSE_TURNS, 4);
+    }
+
+    #[test]
     fn dungeon_room_trigger_promoted_visit_byte_remaps_to_0xa_family() {
         // dungeon-mode.md §5: the room-entry helper patches the
         // loaded dungeon image by rewriting the 0xF? trigger to the
