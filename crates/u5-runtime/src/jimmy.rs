@@ -9,6 +9,25 @@
 //! These helpers implement only the success/failure decision; key counter
 //! mutation, narration, and tile rewrites are caller responsibilities.
 
+/// `doors-and-z-transitions.md §9` outdoor Klimb fall risk roll
+/// die. Each living party member rolls `1..=30` against their
+/// Dexterity byte; a roll above the Dex byte is a fall.
+pub const OUTDOOR_KLIMB_FALL_DIE_LOW: u8 = 1;
+pub const OUTDOOR_KLIMB_FALL_DIE_HIGH: u8 = 30;
+
+/// `doors-and-z-transitions.md §9`: returns `true` when the
+/// supplied member falls during the outdoor Klimb risk roll. The
+/// fall fires when the rolled value is strictly greater than the
+/// member's Dexterity byte.
+pub const fn outdoor_klimb_member_falls(dexterity: u8, roll_1_to_30: u8) -> bool {
+    roll_1_to_30 > dexterity
+}
+
+/// `doors-and-z-transitions.md §9` fall damage roll bounds applied
+/// to a member that fell during the outdoor Klimb pass.
+pub const OUTDOOR_KLIMB_FALL_DAMAGE_MIN: u8 = 1;
+pub const OUTDOOR_KLIMB_FALL_DAMAGE_MAX: u8 = 5;
+
 /// `doors-and-z-transitions.md §3`: door / visible-chest / NPC pickpocket
 /// success predicate. Roll is uniform `[1, 29]`; success when the
 /// picker's class byte is strictly greater than the roll.

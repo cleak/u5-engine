@@ -1,4 +1,24 @@
     #[test]
+    fn outdoor_klimb_member_falls_when_dex_below_roll() {
+        // doors-and-z-transitions.md §9
+        assert_eq!(OUTDOOR_KLIMB_FALL_DIE_LOW, 1);
+        assert_eq!(OUTDOOR_KLIMB_FALL_DIE_HIGH, 30);
+        assert_eq!(OUTDOOR_KLIMB_FALL_DAMAGE_MIN, 1);
+        assert_eq!(OUTDOOR_KLIMB_FALL_DAMAGE_MAX, 5);
+        // Roll <= Dex: member holds.
+        assert!(!outdoor_klimb_member_falls(20, 1));
+        assert!(!outdoor_klimb_member_falls(20, 20));
+        // Roll > Dex: member falls.
+        assert!(outdoor_klimb_member_falls(20, 21));
+        assert!(outdoor_klimb_member_falls(20, 30));
+        // Edge: Dex 0 always falls (any roll >= 1 > 0).
+        assert!(outdoor_klimb_member_falls(0, 1));
+        assert!(outdoor_klimb_member_falls(0, 30));
+        // Edge: Dex 30 never falls (max roll 30 == dex).
+        assert!(!outdoor_klimb_member_falls(30, 30));
+    }
+
+    #[test]
     fn sky_strip_render_order_is_hour_then_trammel_then_felucca() {
         // moons.md §2
         assert_eq!(SKY_STRIP_RENDER_ORDER.len(), 3);
