@@ -70,6 +70,27 @@ pub enum InventoryAddClass {
 
 /// `containers.md §8`: classify a found-item class code into the
 /// inventory-add result family the dispatcher applies.
+/// `containers.md §8` per-grant unit count the inventory-add
+/// dispatcher applies to one equipment-class result. The
+/// ammunition rows (Arrows id 27, Quarrels id 29) grant five units
+/// per award; every other equipment row grants one unit.
+pub const INVENTORY_ADD_AMMO_UNITS: u8 = 5;
+pub const INVENTORY_ADD_EQUIPMENT_UNITS: u8 = 1;
+
+/// `containers.md §8`: returns the per-grant unit count for one
+/// equipment-row inventory-add. Caller passes the equipment id; the
+/// helper returns five for Arrows or Quarrels and one for every
+/// other row.
+pub const fn inventory_add_equipment_units(equipment_id: usize) -> u8 {
+    if equipment_id == crate::EQUIPMENT_ID_ARROWS
+        || equipment_id == crate::EQUIPMENT_ID_QUARRELS
+    {
+        INVENTORY_ADD_AMMO_UNITS
+    } else {
+        INVENTORY_ADD_EQUIPMENT_UNITS
+    }
+}
+
 pub const fn inventory_add_class(class_code: u8) -> InventoryAddClass {
     match class_code {
         0x01 => InventoryAddClass::MustOpenFirst,

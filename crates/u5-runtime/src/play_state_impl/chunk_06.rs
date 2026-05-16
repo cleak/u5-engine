@@ -1439,11 +1439,7 @@ impl PlayState {
             | HiddenTreasurePickup::Amulet => {
                 let item = state as usize;
                 if item < EQUIPMENT_COUNT {
-                    let amount = if item == EQUIPMENT_ID_ARROWS || item == EQUIPMENT_ID_QUARRELS {
-                        5
-                    } else {
-                        1
-                    };
+                    let amount = inventory_add_equipment_units(item);
                     self.equipment_stock[item] =
                         self.equipment_stock[item].saturating_add(amount).min(99);
                     format!("; added equipment id {item}")

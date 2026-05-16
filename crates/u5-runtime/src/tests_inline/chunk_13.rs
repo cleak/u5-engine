@@ -1,4 +1,30 @@
     #[test]
+    fn inventory_add_equipment_units_grants_ammo_five_others_one() {
+        // containers.md §8: equipment-class inventory adds grant
+        // one unit per award except for Arrows (id 27) and Quarrels
+        // (id 29), which grant five units per award.
+        assert_eq!(INVENTORY_ADD_AMMO_UNITS, 5);
+        assert_eq!(INVENTORY_ADD_EQUIPMENT_UNITS, 1);
+        assert_eq!(
+            inventory_add_equipment_units(EQUIPMENT_ID_ARROWS),
+            INVENTORY_ADD_AMMO_UNITS
+        );
+        assert_eq!(
+            inventory_add_equipment_units(EQUIPMENT_ID_QUARRELS),
+            INVENTORY_ADD_AMMO_UNITS
+        );
+        // Spot checks: other equipment ids grant one.
+        for id in [
+            0, 1, 10, 14, 16, 23, 26, 28, 30, 33, 41, 42, 43, 45, 47,
+        ] {
+            assert_eq!(
+                inventory_add_equipment_units(id),
+                INVENTORY_ADD_EQUIPMENT_UNITS
+            );
+        }
+    }
+
+    #[test]
     fn proportional_renderer_byte_kind_classifies_published_markers() {
         // text-output.md §8: the proportional renderer consumes
         // text byte-by-byte until NUL. ' ' is a word-break, '\n'
