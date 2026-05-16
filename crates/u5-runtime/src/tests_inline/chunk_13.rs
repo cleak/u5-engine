@@ -1,4 +1,72 @@
     #[test]
+    fn tile_animation_family_classifies_published_ranges() {
+        // animation.md §6
+        // Water 0x01..=0x03 — four-frame cycle.
+        for tile in 0x01u8..=0x03 {
+            assert_eq!(
+                tile_animation_family(tile),
+                Some(TileAnimationFamily::Water)
+            );
+            assert_eq!(
+                tile_animation_family(tile).unwrap().frame_count(),
+                4
+            );
+        }
+        // 0x80..=0x83 short toggle (2 frames).
+        for tile in 0x80u8..=0x83 {
+            assert_eq!(
+                tile_animation_family(tile),
+                Some(TileAnimationFamily::EffectShortToggle)
+            );
+            assert_eq!(
+                tile_animation_family(tile).unwrap().frame_count(),
+                2
+            );
+        }
+        // 0xD4..=0xD7 first quad terrain.
+        for tile in 0xD4u8..=0xD7 {
+            assert_eq!(
+                tile_animation_family(tile),
+                Some(TileAnimationFamily::TerrainQuad1)
+            );
+        }
+        // 0xD8..=0xDB second quad terrain.
+        for tile in 0xD8u8..=0xDB {
+            assert_eq!(
+                tile_animation_family(tile),
+                Some(TileAnimationFamily::TerrainQuad2)
+            );
+        }
+        // 0xEC..=0xEF effect quad.
+        for tile in 0xECu8..=0xEF {
+            assert_eq!(
+                tile_animation_family(tile),
+                Some(TileAnimationFamily::EffectQuad)
+            );
+        }
+        // 0xFA..=0xFD long toggle (2 frames).
+        for tile in 0xFAu8..=0xFD {
+            assert_eq!(
+                tile_animation_family(tile),
+                Some(TileAnimationFamily::LongToggle)
+            );
+            assert_eq!(
+                tile_animation_family(tile).unwrap().frame_count(),
+                2
+            );
+        }
+        // Tiles outside the published animator ranges return None.
+        for tile in [0x00u8, 0x10, 0x40, 0x7F, 0x84, 0xD3, 0xDC, 0xEB, 0xF0, 0xF9, 0xFE] {
+            assert_eq!(
+                tile_animation_family(tile),
+                None,
+                "tile {:#x} should not be in any animator family",
+                tile
+            );
+        }
+    }
+
+    #[test]
     fn hidden_treasure_record_special_gates_match_spec() {
         // hidden-treasures.md §2
         // Record 13: requires keys >= 1 and not NPC-occupied.

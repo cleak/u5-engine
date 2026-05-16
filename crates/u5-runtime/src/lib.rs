@@ -307,8 +307,9 @@ pub use tile_classes::{
     TILE_NPC_FIRST, TILE_NPC_LAST, TILE_PATH_FIRST, TILE_PATH_LAST, TILE_SPECIAL_FIRST,
     TILE_SPECIAL_LAST, TILE_TERRAIN_FIRST, TILE_TERRAIN_LAST, TILE_VEHICLE_ART_FIRST,
     TILE_VEHICLE_ART_LAST, TILE_VEHICLE_FIRST, TILE_VEHICLE_LAST, TILE_WALL_FIRST,
-    TILE_WALL_LAST, TILE_WATER_FIRST, TILE_WATER_LAST, TileClass, TileSuperCategory,
-    coarse_tile_class, tile_animation_cycle_length, tile_super_category,
+    TILE_WALL_LAST, TILE_WATER_FIRST, TILE_WATER_LAST, TileAnimationFamily, TileClass,
+    TileSuperCategory, coarse_tile_class, tile_animation_cycle_length,
+    tile_animation_family, tile_super_category,
 };
 pub use view_classes::{fc_sprite_proximity_mask_hits, tile_view_class};
 pub use combat_actor::*;
