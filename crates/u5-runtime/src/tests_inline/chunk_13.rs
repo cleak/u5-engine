@@ -1,4 +1,19 @@
     #[test]
+    fn combat_range_effect_is_cast_like_recognises_selector_1() {
+        // combat.md §11
+        assert_eq!(RANGED_EFFECT_CAST_LIKE_SELECTOR, 1);
+        assert!(combat_range_effect_is_cast_like(1));
+        // Other selector values stay on the ordinary attack path.
+        for sel in [0u8, 2, 3, 8, 16, 99, 255] {
+            assert!(
+                !combat_range_effect_is_cast_like(sel),
+                "selector {} should not route cast-like",
+                sel
+            );
+        }
+    }
+
+    #[test]
     fn combat_exit_outcome_result_codes_match_spec() {
         // combat.md §14
         assert_eq!(CombatExitOutcome::Victory.result_code(), 1);

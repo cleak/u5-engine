@@ -3,6 +3,20 @@
 pub const COMBAT_CLASS_COUNT: usize = 48;
 pub const COMBAT_SPAWN_COUNT_CAP: u8 = 26;
 
+/// `combat.md §11` zero-damage sentinel value the COMSUBS spell/weapon
+/// dispatcher uses to route a class-indexed range/effect selector
+/// into the cast-like ranged/effect branch instead of the ordinary
+/// melee path.
+pub const RANGED_EFFECT_CAST_LIKE_SELECTOR: u8 = 1;
+
+/// `combat.md §11`: returns `true` when the per-class
+/// range/effect selector byte should route through the cast-like
+/// ranged/effect branch (selector value `1` is the published
+/// zero-damage sentinel).
+pub const fn combat_range_effect_is_cast_like(selector: u8) -> bool {
+    selector == RANGED_EFFECT_CAST_LIKE_SELECTOR
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CombatClassStats {
     pub class: u8,
