@@ -1,4 +1,39 @@
     #[test]
+    fn town_dawn_dusk_gate_toggle_round_trips_shipped_pair() {
+        // town-mode.md §6
+        assert_eq!(TOWN_DAWN_DUSK_GATE_MARKER_TILE, 0x87);
+        assert_eq!(TOWN_DAWN_DUSK_GATE_TOGGLE_XOR, 0xDD);
+        assert_eq!(TOWN_DAWN_DUSK_GATE_OPEN_TILE, 0x44);
+        assert_eq!(TOWN_DAWN_DUSK_GATE_CLOSED_TILE, 0x99);
+        // Cobble <-> portcullis.
+        assert_eq!(
+            town_dawn_dusk_gate_toggle(TOWN_DAWN_DUSK_GATE_OPEN_TILE),
+            TOWN_DAWN_DUSK_GATE_CLOSED_TILE
+        );
+        assert_eq!(
+            town_dawn_dusk_gate_toggle(TOWN_DAWN_DUSK_GATE_CLOSED_TILE),
+            TOWN_DAWN_DUSK_GATE_OPEN_TILE
+        );
+        // Idempotent on a second pass.
+        for byte in [0x00u8, 0x44, 0x55, 0x99, 0xAB, 0xFF] {
+            assert_eq!(
+                town_dawn_dusk_gate_toggle(town_dawn_dusk_gate_toggle(byte)),
+                byte,
+                "second toggle should restore byte {byte:#04x}"
+            );
+        }
+        // Hour-change boundaries: 5 (out of band) and 20 (into band).
+        assert!(town_dawn_dusk_gate_pass_fires_at_hour(5));
+        assert!(town_dawn_dusk_gate_pass_fires_at_hour(20));
+        for hour in [0u8, 1, 4, 6, 12, 19, 21, 23] {
+            assert!(
+                !town_dawn_dusk_gate_pass_fires_at_hour(hour),
+                "hour {hour} should not fire the gate pass"
+            );
+        }
+    }
+
+    #[test]
     fn sextant_coordinate_letters_split_byte_into_two_letters() {
         // magic.md §8: high and low nibbles map to letters A..=P.
         assert_eq!(sextant_coordinate_letters(0x00), (b'A', b'A'));

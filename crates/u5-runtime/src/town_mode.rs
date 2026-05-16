@@ -258,6 +258,42 @@ pub const fn town_dawn_dusk_substitution_active(hour: u8) -> bool {
     hour >= TOWN_NIGHT_BAND_DUSK_HOUR || hour <= TOWN_NIGHT_BAND_DAWN_HOUR
 }
 
+/// `town-mode.md §6` dawn/dusk gate marker tile. The town-mode loader's
+/// substitution pass scans for this byte; for every match it XORs the
+/// tile immediately south with [`TOWN_DAWN_DUSK_GATE_TOGGLE_XOR`]. The
+/// marker cell itself is not rewritten.
+pub const TOWN_DAWN_DUSK_GATE_MARKER_TILE: u8 = 0x87;
+
+/// `town-mode.md §6` XOR mask the substitution pass applies to the
+/// marker's southern paired cell. The shipped pair is `0x44`
+/// (cobble) <-> `0x99` (portcullis); applying the mask twice
+/// returns the cell to its original byte. The pass does not
+/// validate the paired byte before XORing it.
+pub const TOWN_DAWN_DUSK_GATE_TOGGLE_XOR: u8 = 0xDD;
+
+/// `town-mode.md §6` shipped paired bytes. The substitution pass
+/// converts the cobble byte (open gate) to the portcullis byte
+/// (closed gate) and back; both directions are the same XOR.
+pub const TOWN_DAWN_DUSK_GATE_OPEN_TILE: u8 = 0x44;
+pub const TOWN_DAWN_DUSK_GATE_CLOSED_TILE: u8 = 0x99;
+
+/// `town-mode.md §6`: returns the new byte after one application of
+/// the substitution pass to the supplied paired-cell byte.
+/// Idempotent on a second application.
+pub const fn town_dawn_dusk_gate_toggle(paired_byte: u8) -> u8 {
+    paired_byte ^ TOWN_DAWN_DUSK_GATE_TOGGLE_XOR
+}
+
+/// `town-mode.md §6`: returns `true` when the dawn/dusk substitution
+/// pass should re-fire as a hour-change boundary event. Town stays
+/// in the night band for hours `20..=23` and `0..=4`; when the
+/// per-turn epilogue observes the new hour as either `5` (dawn out
+/// of band) or `20` (dusk into band), it runs the same XOR pass
+/// against the live tile buffer to toggle the shipped paired bytes.
+pub const fn town_dawn_dusk_gate_pass_fires_at_hour(hour: u8) -> bool {
+    hour == TOWN_NIGHT_BAND_DAWN_HOUR + 1 || hour == TOWN_NIGHT_BAND_DUSK_HOUR
+}
+
 pub const NPC_FILE_LEN: usize = 4608;
 pub const NPC_SUB_MAP_LEN: usize = 576;
 pub const NPC_SUB_MAPS_PER_FILE: usize = 8;
