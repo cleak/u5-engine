@@ -1,4 +1,35 @@
     #[test]
+    fn viewport_center_and_max_index_match_viewport_side() {
+        // visibility.md §2,§7: the player sits at the viewport centre
+        // and the grid is 11 wide. Promote the centre column/row
+        // index and the maximum valid index so the fog-refine helpers
+        // do not bake `5` and `10` as bare literals next to a
+        // VIEWPORT_SIDE constant of 11.
+        assert_eq!(VIEWPORT_SIDE, 11);
+        assert_eq!(VIEWPORT_CENTER, 5);
+        assert_eq!(VIEWPORT_MAX_INDEX, 10);
+        assert_eq!(VIEWPORT_CENTER as usize, VIEWPORT_SIDE / 2);
+        assert_eq!(VIEWPORT_MAX_INDEX as usize + 1, VIEWPORT_SIDE);
+        // The centre cell is the only cell whose folded coordinate
+        // equals the centre, and its squared distance is zero.
+        assert_eq!(fog_refine_folded_coord(VIEWPORT_CENTER), VIEWPORT_CENTER);
+        assert_eq!(
+            fog_refine_squared_distance(VIEWPORT_CENTER, VIEWPORT_CENTER),
+            0
+        );
+        // The four viewport corners fold symmetrically back to (0, 0)
+        // and (10, 10), giving the same `((5 - 0)^2 + (5 - 0)^2) = 50`.
+        for &(col, row) in &[
+            (0u8, 0u8),
+            (VIEWPORT_MAX_INDEX, 0),
+            (0, VIEWPORT_MAX_INDEX),
+            (VIEWPORT_MAX_INDEX, VIEWPORT_MAX_INDEX),
+        ] {
+            assert_eq!(fog_refine_squared_distance(col, row), 50);
+        }
+    }
+
+    #[test]
     fn save_scene_overworld_matches_main_loop_scene_overworld() {
         // save-load.md §4.2 names the overworld scene byte as
         // SAVE_SCENE_OVERWORLD; main-loop.md §3 names the same value

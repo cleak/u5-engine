@@ -135,20 +135,28 @@ pub const VEHICLE_AVATAR_UNDERLAY_MARKER: u8 = 0x92;
 /// carrying the dim marker are upgraded to clear.
 pub const FOG_REFINE_SQUARED_THRESHOLD: u32 = 5;
 
-/// `visibility.md §7`: fold a viewport coordinate `0..=10` around
-/// the centre `5` so the squared-distance lookup can be computed
-/// as a 6x6 table (`folded = min(coord, 10 - coord)`).
+/// `visibility.md §2,§7`: viewport centre column/row index. The grid
+/// is `VIEWPORT_SIDE` (11) wide and 11 tall with the player at
+/// `(VIEWPORT_CENTER, VIEWPORT_CENTER)` = `(5, 5)`.
+pub const VIEWPORT_CENTER: u8 = (VIEWPORT_SIDE / 2) as u8;
+/// `visibility.md §2,§7`: highest valid viewport column/row index
+/// (`VIEWPORT_SIDE - 1` = 10).
+pub const VIEWPORT_MAX_INDEX: u8 = (VIEWPORT_SIDE - 1) as u8;
+
+/// `visibility.md §7`: fold a viewport coordinate `0..=VIEWPORT_MAX_INDEX`
+/// around the centre `VIEWPORT_CENTER` so the squared-distance lookup
+/// can be computed as a 6x6 table (`folded = min(coord, VIEWPORT_MAX_INDEX - coord)`).
 pub const fn fog_refine_folded_coord(coord: u8) -> u8 {
-    let mirrored = 10u8.saturating_sub(coord);
+    let mirrored = VIEWPORT_MAX_INDEX.saturating_sub(coord);
     if coord < mirrored { coord } else { mirrored }
 }
 
 /// `visibility.md §7`: squared centre-relative distance the fog
 /// post-pass uses, computed from a viewport `(col, row)`. Returns
-/// `(5 - folded_col)^2 + (5 - folded_row)^2`.
+/// `(VIEWPORT_CENTER - folded_col)^2 + (VIEWPORT_CENTER - folded_row)^2`.
 pub const fn fog_refine_squared_distance(col: u8, row: u8) -> u32 {
-    let dx = 5u8.saturating_sub(fog_refine_folded_coord(col));
-    let dy = 5u8.saturating_sub(fog_refine_folded_coord(row));
+    let dx = VIEWPORT_CENTER.saturating_sub(fog_refine_folded_coord(col));
+    let dy = VIEWPORT_CENTER.saturating_sub(fog_refine_folded_coord(row));
     (dx as u32) * (dx as u32) + (dy as u32) * (dy as u32)
 }
 
