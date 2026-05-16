@@ -72,6 +72,22 @@ pub const fn ambient_is_sentinel(ambient: u8) -> bool {
     ambient >= DAYLIGHT_SENTINEL_MIN
 }
 
+/// `lighting.md §3` overworld special-underfoot blackout markers. The
+/// overworld loop's environmental branch forces ambient light to zero
+/// while the party stands on the `0xFF` underfoot tile state, unless
+/// the opaque `0x0E` state tag exempts the pass.
+pub const OVERWORLD_UNDERFOOT_BLACKOUT_TILE: u8 = 0xFF;
+pub const OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG: u8 = 0x0E;
+
+/// `lighting.md §3`: returns `true` when the overworld loop's
+/// underfoot blackout branch forces ambient to zero. Active when the
+/// underfoot tile is the special `0xFF` state and the opaque-state
+/// tag is not the `0x0E` exemption.
+pub const fn overworld_underfoot_forces_dark(underfoot_tile: u8, opaque_state_tag: u8) -> bool {
+    underfoot_tile == OVERWORLD_UNDERFOOT_BLACKOUT_TILE
+        && opaque_state_tag != OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG
+}
+
 /// `lighting.md §8`: Ignite outside dungeon scenes sets the torch counter
 /// to a fixed 240-unit value, overwriting any prior burn.
 pub const fn ignite_torch_surface() -> u8 {

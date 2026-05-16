@@ -1,4 +1,23 @@
     #[test]
+    fn overworld_underfoot_blackout_obeys_opaque_exemption() {
+        // lighting.md §3
+        // Special 0xFF underfoot tile forces ambient zero.
+        assert!(overworld_underfoot_forces_dark(
+            OVERWORLD_UNDERFOOT_BLACKOUT_TILE,
+            0x00
+        ));
+        assert!(overworld_underfoot_forces_dark(0xFF, 0x42));
+        // The 0x0E opaque-state tag exempts the pass.
+        assert!(!overworld_underfoot_forces_dark(
+            OVERWORLD_UNDERFOOT_BLACKOUT_TILE,
+            OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG
+        ));
+        // Non-special underfoot tiles never trigger the override.
+        assert!(!overworld_underfoot_forces_dark(0x00, 0x00));
+        assert!(!overworld_underfoot_forces_dark(0xFE, 0x00));
+    }
+
+    #[test]
     fn tlk_gold_payment_amount_decodes_three_ascii_digits() {
         // conversation.md §7.6
         // Plain ASCII digits.
