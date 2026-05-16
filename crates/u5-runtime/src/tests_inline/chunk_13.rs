@@ -1,4 +1,36 @@
     #[test]
+    fn conjure_summon_for_roll_distributes_per_spec_weights() {
+        // magic.md §8
+        assert_eq!(CONJURE_OUTCOME_COUNT, 15);
+        // Six Giant Rat outcomes (rolls 0..=5).
+        for roll in 0u8..=5 {
+            assert_eq!(
+                conjure_summon_for_roll(roll),
+                Some(ConjureSummon::GiantRat)
+            );
+        }
+        // Five Giant Spider outcomes (rolls 6..=10).
+        for roll in 6u8..=10 {
+            assert_eq!(
+                conjure_summon_for_roll(roll),
+                Some(ConjureSummon::GiantSpider)
+            );
+        }
+        // Three Bat outcomes (rolls 11..=13).
+        for roll in 11u8..=13 {
+            assert_eq!(conjure_summon_for_roll(roll), Some(ConjureSummon::Bat));
+        }
+        // One Python outcome (roll 14).
+        assert_eq!(
+            conjure_summon_for_roll(14),
+            Some(ConjureSummon::Python)
+        );
+        // Out-of-range rolls return None.
+        assert_eq!(conjure_summon_for_roll(15), None);
+        assert_eq!(conjure_summon_for_roll(255), None);
+    }
+
+    #[test]
     fn resurrection_max_hp_for_level_is_30_per_level() {
         // magic.md §8
         assert_eq!(RESURRECTION_MAX_HP_PER_LEVEL, 30);

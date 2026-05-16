@@ -192,15 +192,16 @@ pub use lord_british_camp::{
     lord_british_camp_event_triggered, lord_british_camp_stat_reward,
 };
 pub use magic::{
-    ActiveEffectTag, CastGateOutcome, DIRECTED_WIND_MAX_CELLS, DirectedWindSpell,
+    ActiveEffectTag, CONJURE_OUTCOME_COUNT, CastGateOutcome, ConjureSummon,
+    DIRECTED_WIND_MAX_CELLS, DirectedWindSpell,
     FieldSpellKind, RUNE_SYLLABLE_VOCABULARY, SPELL_SCENE_BIT_COMBAT,
     SPELL_SCENE_BIT_DUNGEON, SPELL_SCENE_BIT_INDOOR, SPELL_SCENE_BIT_OVERWORLD,
     SPELL_SELECTOR_IGNORED_LETTERS, SPELL_SELECTOR_MAX_LEN, SpellSceneClass,
     active_effect_tag_for_byte, cast_dispatcher_gate, combat_interference_blocks,
     field_spell_kind_for_dungeon_byte, heal_spell_amount_from_raw_roll_u8,
-    is_resident_rune_syllable, spell_allowed_in_scene, spell_charge_add_capped,
-    spell_circle_for, spell_common_name, spell_indoor_absorbs, spell_mana_cost,
-    spell_min_caster_level, spell_selector_is_ignored,
+    conjure_summon_for_roll, is_resident_rune_syllable, spell_allowed_in_scene,
+    spell_charge_add_capped, spell_circle_for, spell_common_name, spell_indoor_absorbs,
+    spell_mana_cost, spell_min_caster_level, spell_selector_is_ignored,
 };
 pub use moongate::{
     MOONSTONE_GATE_INVALID_SCENE, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,

@@ -381,6 +381,35 @@ pub const fn spell_indoor_absorbs(scene_blackthorn_castle: bool, has_crown: bool
     scene_blackthorn_castle && !has_crown
 }
 
+/// `magic.md §8` Conjure spell weighted-summon class.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConjureSummon {
+    /// Six of fifteen outcomes — Giant Rat.
+    GiantRat,
+    /// Five of fifteen outcomes — Giant Spider.
+    GiantSpider,
+    /// Three of fifteen outcomes — Bat.
+    Bat,
+    /// One of fifteen outcomes — Python.
+    Python,
+}
+
+/// `magic.md §8` Conjure outcome bound — fifteen weighted outcomes.
+pub const CONJURE_OUTCOME_COUNT: u8 = 15;
+
+/// `magic.md §8`: classify the Conjure-roll outcome. Caller passes
+/// the raw `0..=14` roll the spell makes against its fifteen-row
+/// weighted table. Returns `None` for any roll outside the bound.
+pub const fn conjure_summon_for_roll(roll: u8) -> Option<ConjureSummon> {
+    Some(match roll {
+        0..=5 => ConjureSummon::GiantRat,
+        6..=10 => ConjureSummon::GiantSpider,
+        11..=13 => ConjureSummon::Bat,
+        14 => ConjureSummon::Python,
+        _ => return None,
+    })
+}
+
 /// `magic.md §6,§7` per-spell charge-counter add. After M-Mix's
 /// recipe-match step the requested quantity is added to the
 /// per-spell charge counter, capped at `SPELL_CHARGE_CAP` (99).
