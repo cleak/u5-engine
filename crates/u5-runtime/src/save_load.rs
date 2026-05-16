@@ -8,14 +8,16 @@ use std::path::{Path, PathBuf};
 use crate::*;
 
 pub fn load_play_options_from_save(game_dir: &Path) -> io::Result<PlayOptions> {
-    let mut options = load_play_options_from_save_file(game_dir, "SAVED.GAM", "--from-save", true)?;
+    let mut options =
+        load_play_options_from_save_file(game_dir, SAVED_GAM_FILENAME, "--from-save", true)?;
     refresh_saved_ool_mirrors_for_load(game_dir)?;
     options.save_template_source = SaveTemplateSource::SavedGame;
     Ok(options)
 }
 
 pub fn load_play_options_from_init(game_dir: &Path) -> io::Result<PlayOptions> {
-    let mut options = load_play_options_from_save_file(game_dir, "INIT.GAM", "--from-init", false)?;
+    let mut options =
+        load_play_options_from_save_file(game_dir, INIT_GAM_FILENAME, "--from-init", false)?;
     options.initial_britannia_overlay = Some(load_init_overlay_objects(game_dir)?);
     options.save_template_source = SaveTemplateSource::InitGame;
     Ok(options)
@@ -27,19 +29,19 @@ pub fn load_save_image_template(
 ) -> io::Result<Vec<u8>> {
     match source {
         SaveTemplateSource::SavedGame => {
-            read_save_image_file(&game_dir.join("SAVED.GAM"), "SAVED.GAM")
+            read_save_image_file(&game_dir.join(SAVED_GAM_FILENAME), SAVED_GAM_FILENAME)
         }
         SaveTemplateSource::InitGame => {
-            read_save_image_file(&game_dir.join("INIT.GAM"), "INIT.GAM")
+            read_save_image_file(&game_dir.join(INIT_GAM_FILENAME), INIT_GAM_FILENAME)
         }
         SaveTemplateSource::PreferSavedGame => {
-            let saved = game_dir.join("SAVED.GAM");
+            let saved = game_dir.join(SAVED_GAM_FILENAME);
             if saved.exists() {
-                return read_save_image_file(&saved, "SAVED.GAM");
+                return read_save_image_file(&saved, SAVED_GAM_FILENAME);
             }
-            let init = game_dir.join("INIT.GAM");
+            let init = game_dir.join(INIT_GAM_FILENAME);
             if init.exists() {
-                return read_save_image_file(&init, "INIT.GAM");
+                return read_save_image_file(&init, INIT_GAM_FILENAME);
             }
             Err(io::Error::new(
                 io::ErrorKind::NotFound,
@@ -549,6 +551,11 @@ pub fn save_image_has_active_avatar(image: &[u8]) -> bool {
 /// written out as `SAVED.GAM` (which has the same length).
 pub const INIT_GAM_FILE_LEN: usize = 4_192;
 pub const INIT_GAM_FILENAME: &str = "INIT.GAM";
+
+/// `formats/saved-gam.md §1` published runtime working-save filename
+/// (the 4,192-byte sibling of `INIT.GAM` that Journey Onward reads
+/// and Q-Save writes).
+pub const SAVED_GAM_FILENAME: &str = "SAVED.GAM";
 
 /// `formats/ool.md §3`: each plane table holds 32 active-object
 /// records (8 bytes each = 256 bytes per plane).

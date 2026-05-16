@@ -215,7 +215,10 @@ pub fn commit_chargen_save(
     male: bool,
     stats: ChargenStats,
 ) -> io::Result<ChargenAvatar> {
-    let mut save = read_save_image_file(&game_dir.join("INIT.GAM"), "INIT.GAM")?;
+    let mut save = read_save_image_file(
+        &game_dir.join(INIT_GAM_FILENAME),
+        INIT_GAM_FILENAME,
+    )?;
     let init_ool = read_init_ool_plane(game_dir)?;
     let avatar = apply_chargen_to_save(&mut save, name_bytes, male, stats)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
