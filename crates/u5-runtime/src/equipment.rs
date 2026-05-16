@@ -186,6 +186,22 @@ pub const fn potion_use_effect(index: usize) -> Option<PotionUseEffect> {
 /// uniformly random potion row.
 pub const POTION_VARIATION_DENOMINATOR: u8 = 16;
 
+/// `inventory.md §7` Sextant U-Use eligibility predicate. The
+/// Sextant is an outdoor night-only utility — it refuses outside
+/// the overworld or during the daytime interval. The "daytime
+/// interval" matches the surface daylight band where the daylight
+/// model produces full daylight (`hour 6..=18`); outside that band
+/// (hours `0..=5` and `19..=23`) the Sextant is usable on the
+/// overworld plane.
+pub const fn sextant_usable(scene_byte: u8, hour: u8) -> bool {
+    // Overworld scene byte is zero; any other scene refuses.
+    if scene_byte != 0 {
+        return false;
+    }
+    // Daytime interval is hours 6..=18; outside that, accept.
+    hour < 6 || hour > 18
+}
+
 /// `inventory.md §7` U-Use scroll family. The handler exposes eight
 /// scroll counters dispatching to spell-like effects in this order:
 /// Light, Wind Change, Protection, Negate Magic, View, Summon

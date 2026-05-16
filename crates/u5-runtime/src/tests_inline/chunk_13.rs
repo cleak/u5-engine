@@ -1,4 +1,26 @@
     #[test]
+    fn sextant_usable_only_at_overworld_night() {
+        // inventory.md §7
+        // Overworld at night (hours 0..=5 and 19..=23) -> usable.
+        for h in 0u8..=5 {
+            assert!(sextant_usable(0, h), "hour {h}");
+        }
+        for h in 19u8..=23 {
+            assert!(sextant_usable(0, h), "hour {h}");
+        }
+        // Overworld during daylight (hours 6..=18) -> refused.
+        for h in 6u8..=18 {
+            assert!(!sextant_usable(0, h), "hour {h}");
+        }
+        // Non-overworld scenes refuse regardless of hour.
+        for scene in [1u8, 17, 33, 0xFF] {
+            for h in 0u8..24 {
+                assert!(!sextant_usable(scene, h), "scene {scene} hour {h}");
+            }
+        }
+    }
+
+    #[test]
     fn intro_story_special_step_predicates_match_spec() {
         // intro.md §10
         assert_eq!(INTRO_TRANSITION_STRIP_STEPS, [0, 7, 14]);
