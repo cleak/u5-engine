@@ -7,6 +7,53 @@
     }
 
     #[test]
+    fn cardinal_direction_prompt_action_accepts_cardinals_and_space() {
+        // input.md §10,§11
+        assert_eq!(
+            cardinal_direction_prompt_action(INPUT_CODE_NORTH),
+            CardinalPromptAction::Cardinal(InputDirection::North)
+        );
+        assert_eq!(
+            cardinal_direction_prompt_action(INPUT_CODE_SOUTH),
+            CardinalPromptAction::Cardinal(InputDirection::South)
+        );
+        assert_eq!(
+            cardinal_direction_prompt_action(INPUT_CODE_EAST),
+            CardinalPromptAction::Cardinal(InputDirection::East)
+        );
+        assert_eq!(
+            cardinal_direction_prompt_action(INPUT_CODE_WEST),
+            CardinalPromptAction::Cardinal(InputDirection::West)
+        );
+        assert_eq!(
+            cardinal_direction_prompt_action(b' '),
+            CardinalPromptAction::Pass
+        );
+        // Diagonals, letters, function keys, control bytes — all ignored.
+        for byte in [
+            INPUT_CODE_NORTHWEST,
+            INPUT_CODE_NORTHEAST,
+            INPUT_CODE_SOUTHWEST,
+            INPUT_CODE_SOUTHEAST,
+            INPUT_CODE_F1,
+            INPUT_CODE_F10,
+            b'A',
+            b'1',
+            0x00,
+            0x08,
+            0x0D,
+            0x1B,
+            0xFF,
+        ] {
+            assert_eq!(
+                cardinal_direction_prompt_action(byte),
+                CardinalPromptAction::Ignored,
+                "byte {byte:#04x}"
+            );
+        }
+    }
+
+    #[test]
     fn story_dat_file_constant_is_published() {
         // formats/story-dat.md §2: published filename.
         assert_eq!(STORY_DAT_FILE, "STORY.DAT");

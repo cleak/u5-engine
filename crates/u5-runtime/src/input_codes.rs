@@ -4,6 +4,44 @@
 //! by the upper layers; gameplay mode loops handle these inline before
 //! the central command dispatcher sees ordinary letter keys.
 
+/// `input.md §10,§11` cardinal-direction prompt outcome. The shared
+/// adjacent-tile and spell-direction prompts both block on one
+/// keystroke and accept exactly the same vocabulary: a cardinal
+/// direction key adjusts the cached target by one cell and the
+/// caller reads the no-direction result on `Pass` (Space). Diagonal
+/// direction codes, function keys, ordinary letters, and unshifted
+/// top-row digits are ignored and the prompt reads again rather
+/// than returning to the caller.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CardinalPromptAction {
+    /// Cardinal direction — adjust the cached target by one cell.
+    /// The caller still tests the returned direction; this enum
+    /// only encodes the prompt-level discrimination.
+    Cardinal(InputDirection),
+    /// Space — `Pass`. Returns the no-direction result; callers
+    /// typically treat that as silent cancellation.
+    Pass,
+    /// Any other byte — silently re-prompt; the prompt reads the
+    /// next keystroke without echoing or returning.
+    Ignored,
+}
+
+/// `input.md §10,§11`: classify one keystroke for the shared
+/// adjacent-tile / spell-direction prompts. Only the four cardinal
+/// direction codes and Space round-trip through this classifier;
+/// every other byte (diagonals, letters, function keys, control
+/// bytes) lands in [`CardinalPromptAction::Ignored`].
+pub const fn cardinal_direction_prompt_action(byte: u8) -> CardinalPromptAction {
+    match byte {
+        INPUT_CODE_NORTH => CardinalPromptAction::Cardinal(InputDirection::North),
+        INPUT_CODE_SOUTH => CardinalPromptAction::Cardinal(InputDirection::South),
+        INPUT_CODE_EAST => CardinalPromptAction::Cardinal(InputDirection::East),
+        INPUT_CODE_WEST => CardinalPromptAction::Cardinal(InputDirection::West),
+        b' ' => CardinalPromptAction::Pass,
+        _ => CardinalPromptAction::Ignored,
+    }
+}
+
 /// `input.md §2` prompt-mode discriminator. The shared wait-for-input
 /// routine reads the resident *prompt-character* byte: a printable
 /// ASCII byte (`0x20..=0x7E`) means a Y/N or text prompt is open and
