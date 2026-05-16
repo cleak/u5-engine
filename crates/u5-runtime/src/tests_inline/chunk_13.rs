@@ -1,4 +1,18 @@
     #[test]
+    fn save_image_has_active_avatar_checks_offset_0x0002() {
+        // save-load.md §4.2
+        let mut image = vec![0u8; SAVED_GAM_LEN];
+        // Empty save: byte at 0x0002 is zero.
+        assert!(!save_image_has_active_avatar(&image));
+        // Active save: byte at 0x0002 is nonzero.
+        image[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        assert!(save_image_has_active_avatar(&image));
+        // Truncated buffer (no avatar-name byte) is treated as inactive.
+        let short = vec![0u8; SAVE_AVATAR_NAME_OFFSET];
+        assert!(!save_image_has_active_avatar(&short));
+    }
+
+    #[test]
     fn blackthorn_cutscene_actor_slots_match_spec_role_table() {
         // blackthorn.md §6
         assert_eq!(blackthorn_cutscene_actor(0), Some(BlackthornCutsceneActor::Avatar));

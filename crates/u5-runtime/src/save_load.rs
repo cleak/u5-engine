@@ -517,6 +517,18 @@ pub const BRIT_OOL_FILENAME: &str = "BRIT.OOL";
 pub const UNDER_OOL_FILENAME: &str = "UNDER.OOL";
 pub const INIT_OOL_FILENAME: &str = "INIT.OOL";
 
+/// `save-load.md §4.2` empty-save guard. Loading checks the byte at
+/// file offset `0x0002` — the first byte of the Avatar name field.
+/// A zero byte means the save is uninitialised; the intro prints
+/// the three-line "No active game" notice and returns to the title
+/// menu without entering gameplay.
+pub fn save_image_has_active_avatar(image: &[u8]) -> bool {
+    image
+        .get(SAVE_AVATAR_NAME_OFFSET)
+        .copied()
+        .map_or(false, |byte| byte != 0)
+}
+
 /// `chargen.md §3` shipped factory-seed `INIT.GAM` size in bytes.
 /// The seed image clones into the in-memory save buffer at chargen
 /// entry; chargen then overwrites only the Avatar's customisation
