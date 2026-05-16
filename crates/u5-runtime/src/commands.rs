@@ -262,6 +262,13 @@ pub const fn view_command_outcome(gems: u8, in_combat: bool) -> ViewCommandOutco
 /// typed word to the Shadowlord-name or Word-of-Power scanner.
 pub const YELL_INPUT_MAX_LEN: usize = 30;
 
+/// `commands.md §11` published Y-Yell narration strings. The
+/// ship-aboard branch prints the sail-state message; the free-text
+/// branch prints the nothing-said message on empty input.
+pub const YELL_SAILS_HOISTED_MESSAGE: &str = "Sails hoisted.";
+pub const YELL_SAILS_FURLED_MESSAGE: &str = "Sails furled.";
+pub const YELL_NOTHING_SAID_MESSAGE: &str = "Nothing said.";
+
 /// `commands.md §11` scene routing for the typed Y-Yell input. The
 /// engine selects the scanner family from the active scene context;
 /// other contexts produce no effect after the prompt.

@@ -1,4 +1,14 @@
     #[test]
+    fn yell_published_message_constants_match_spec_text() {
+        // commands.md §11: the ship-aboard Y branch prints the
+        // sail-state message; the free-text branch prints
+        // "Nothing said." on empty input. Spec text is verbatim.
+        assert_eq!(YELL_SAILS_HOISTED_MESSAGE, "Sails hoisted.");
+        assert_eq!(YELL_SAILS_FURLED_MESSAGE, "Sails furled.");
+        assert_eq!(YELL_NOTHING_SAID_MESSAGE, "Nothing said.");
+    }
+
+    #[test]
     fn jimmy_npc_pickpocket_karma_reward_is_two() {
         // doors-and-z-transitions.md §3: a successful NPC pickpocket
         // raises the shared moral-standing selector by +2, clamped

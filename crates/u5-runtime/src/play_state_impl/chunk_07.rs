@@ -580,9 +580,9 @@ impl PlayState {
         self.sail_stall_pending = false;
         self.advance_turn();
         self.message = if next {
-            "Sails hoisted.".to_string()
+            YELL_SAILS_HOISTED_MESSAGE.to_string()
         } else {
-            "Sails furled.".to_string()
+            YELL_SAILS_FURLED_MESSAGE.to_string()
         };
         MoveOutcome::SailToggled
     }
@@ -598,7 +598,7 @@ impl PlayState {
         };
         let word = Self::normalize_yell_word(word);
         if word.is_empty() {
-            self.message = "Nothing said.".to_string();
+            self.message = YELL_NOTHING_SAID_MESSAGE.to_string();
             return MoveOutcome::PromptDeclined;
         }
 
