@@ -713,6 +713,21 @@ pub const REST_WATCH_MINUTES_PER_TICK: u8 = 20;
 pub const TOWN_REST_TICKS_PER_HOUR: u8 = 6;
 pub const TOWN_REST_MINUTES_PER_TICK: u8 = 10;
 pub const TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS: u8 = 16;
+/// `rest-and-camp.md §4`: when the player's chosen rest digit lands the
+/// target hour past 23, the original engine subtracts 23 (not 24) to
+/// land on hour 1 instead of hour 0. Preserve this exact compatibility
+/// edge rather than applying a normal modulo-24 wrap.
+pub const TOWN_REST_HOUR_WRAP_SUBTRAHEND: u8 = 23;
+/// `rest-and-camp.md §4`: per-tick budget for the elapsed-time rest
+/// loop. A digit of `1..=9` plus the 23-not-24 wrap edge can advance
+/// at most this many ten-minute ticks before the loop bails, even if
+/// the target hour has not been reached, so a corrupted clock cannot
+/// spin forever.
+pub const TOWN_REST_TICK_BUDGET: u16 = 144;
+/// `rest-and-camp.md §4`: maximum accepted single-digit rest duration.
+/// `Space` and `0` cancel; `1..=9` are echoed and used as the target-
+/// hour offset.
+pub const TOWN_REST_DURATION_DIGIT_MAX: u8 = 9;
 pub const REST_MANA_CAP: u8 = 99;
 pub const DEFAULT_TORCH_STOCK: u8 = 4;
 pub const SURFACE_TORCH_DURATION: u8 = 240;

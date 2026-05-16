@@ -1,4 +1,25 @@
     #[test]
+    fn town_rest_hour_wrap_uses_compatibility_subtrahend() {
+        // rest-and-camp.md §4: "If current hour plus digit exceeds 23,
+        // the original subtracts 23 rather than applying a normal
+        // modulo-24 wrap; preserve that compatibility edge."
+        assert_eq!(TOWN_REST_HOUR_WRAP_SUBTRAHEND, 23);
+        assert_eq!(TOWN_REST_TICK_BUDGET, 144);
+        assert_eq!(TOWN_REST_DURATION_DIGIT_MAX, 9);
+        // 22 + 2 = 24 → 24 - 23 = 1 (not modulo 0).
+        assert_eq!(PlayState::town_rest_target_hour(22, 2), 1);
+        // 23 + 1 = 24 → 24 - 23 = 1 (not modulo 0).
+        assert_eq!(PlayState::town_rest_target_hour(23, 1), 1);
+        // 23 + 9 = 32 → 32 - 23 = 9 (this is the documented edge —
+        // ordinary modulo-24 would yield 8).
+        assert_eq!(PlayState::town_rest_target_hour(23, 9), 9);
+        // No-wrap path: 5 + 4 = 9 stays at 9.
+        assert_eq!(PlayState::town_rest_target_hour(5, 4), 9);
+        // Equal-to-23 boundary stays untouched (target == 23, not > 23).
+        assert_eq!(PlayState::town_rest_target_hour(22, 1), 23);
+    }
+
+    #[test]
     fn wind_drift_named_constants_match_spec() {
         // weather.md §2: the autonomous wind-drift gates use three
         // published thresholds. Promote each one to a named constant

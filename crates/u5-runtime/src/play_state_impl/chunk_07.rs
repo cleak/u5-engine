@@ -1988,7 +1988,11 @@ impl PlayState {
 
     pub fn town_rest_target_hour(current_hour: u8, duration_digit: u8) -> u8 {
         let target = current_hour.saturating_add(duration_digit);
-        if target > 23 { target - 23 } else { target }
+        if target > TOWN_REST_HOUR_WRAP_SUBTRAHEND {
+            target - TOWN_REST_HOUR_WRAP_SUBTRAHEND
+        } else {
+            target
+        }
     }
 
     pub fn advance_town_rest_until_target_hour(
@@ -1999,8 +2003,8 @@ impl PlayState {
         floor: i8,
     ) -> bool {
         let target_hour = Self::town_rest_target_hour(self.clock.hour, duration_digit);
-        let mut ticks = 0;
-        while self.clock.hour != target_hour && ticks < 144 {
+        let mut ticks: u16 = 0;
+        while self.clock.hour != target_hour && ticks < TOWN_REST_TICK_BUDGET {
             self.advance_turn_with_minutes(TOWN_REST_MINUTES_PER_TICK);
             ticks += 1;
             if !self.town_rest_bed_still_accepts(entries, scene, floor) {
