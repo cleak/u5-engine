@@ -52,6 +52,26 @@ pub const fn spell_field_placement_byte(spell_index: usize) -> Option<u8> {
     })
 }
 
+/// `magic.md §8` field-placement spell -> combat field-kind byte
+/// the shared arena helper consumes in combat / non-dungeon scenes.
+/// This is a separate dispatch table from the dungeon image bytes
+/// returned by [`spell_field_placement_byte`]: the dungeon path
+/// writes 0x80..0x83 directly into the loaded tile buffer, while
+/// the combat path passes the kind byte to the arena helper which
+/// then splits placement from per-field contact / application work.
+/// Returns `None` for any spell index that is not one of the four
+/// field-placement spells (Dispel Field 18 has its own removal
+/// helper).
+pub const fn spell_combat_field_kind(spell_index: usize) -> Option<u8> {
+    Some(match spell_index {
+        FIRE_FIELD_SPELL_INDEX => 0x35,
+        POISON_FIELD_SPELL_INDEX => 0x33,
+        SLEEP_FIELD_SPELL_INDEX => 0x34,
+        ENERGY_FIELD_SPELL_INDEX => 0x36,
+        _ => return None,
+    })
+}
+
 /// `magic.md §4`: minimum caster level required for a spell of the
 /// supplied circle (level == circle). The level gate accepts the
 /// cast and debits mana even when below — only the *effect* fails.

@@ -222,8 +222,9 @@ pub use magic::{
     field_spell_kind_for_dungeon_byte, heal_spell_amount_from_raw_roll_u8,
     conjure_summon_for_roll, is_resident_rune_syllable, spell_allowed_in_scene,
     sextant_coordinate_letters, spell_charge_add_capped, spell_circle_for,
-    spell_common_name, spell_field_placement_byte, spell_indoor_absorbs,
-    spell_mana_cost, spell_min_caster_level, spell_selector_is_ignored,
+    spell_combat_field_kind, spell_common_name, spell_field_placement_byte,
+    spell_indoor_absorbs, spell_mana_cost, spell_min_caster_level,
+    spell_selector_is_ignored,
 };
 pub use moongate::{
     MOONSTONE_GATE_INVALID_SCENE, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,

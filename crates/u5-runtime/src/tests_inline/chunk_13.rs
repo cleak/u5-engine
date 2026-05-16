@@ -16,6 +16,29 @@
     }
 
     #[test]
+    fn spell_combat_field_kind_dispatches_per_spec_table() {
+        // magic.md §8 combat field-kind dispatch table.
+        assert_eq!(spell_combat_field_kind(FIRE_FIELD_SPELL_INDEX), Some(0x35));
+        assert_eq!(
+            spell_combat_field_kind(POISON_FIELD_SPELL_INDEX),
+            Some(0x33)
+        );
+        assert_eq!(spell_combat_field_kind(SLEEP_FIELD_SPELL_INDEX), Some(0x34));
+        assert_eq!(spell_combat_field_kind(ENERGY_FIELD_SPELL_INDEX), Some(0x36));
+        // Dispel Field has its own removal helper; not a combat field
+        // placement.
+        assert_eq!(spell_combat_field_kind(DISPEL_FIELD_SPELL_INDEX), None);
+        // Spot-check unrelated spell ids.
+        for idx in [0usize, 1, 2, 5, 12, 13, 17, 19, 21, 47] {
+            assert_eq!(
+                spell_combat_field_kind(idx),
+                None,
+                "spell {idx} should not place a combat field"
+            );
+        }
+    }
+
+    #[test]
     fn tlk_keyword_loop_envelope_strings_match_spec() {
         // conversation.md §6
         assert_eq!(TLK_KEYWORD_PROMPT, "Your interest?\n:");
