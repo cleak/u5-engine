@@ -21,6 +21,79 @@ pub const NPC_STATE_CLIMB_UP_OFF_FLOOR: u8 = 6;
 pub const NPC_STATE_CLIMB_DOWN_OFF_FLOOR: u8 = 7;
 pub const NPC_STATE_PARKED_OFF_FLOOR: u8 = 8;
 
+/// `npc-schedules.md §7` typed enumeration of the NPC schedule
+/// state-machine byte. The dispatcher reads a raw `u8` from the
+/// runtime block; this enum lets callers exhaustively match the
+/// nine published states without juggling `NPC_STATE_*` integer
+/// constants. State byte values outside `0..=8` are not produced by
+/// the engine's own writers (initialisation writes 1/0, the
+/// boundary trigger writes 1/2/4/5/6/7/8, the pathfinder-success
+/// path writes 3, and the world-mutation primitive writes 1); this
+/// classifier returns `None` for those out-of-band values.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NpcScheduleState {
+    /// `0` — slot is empty; the walker skips before reading state.
+    Empty,
+    /// `1` — at the active waypoint; boundary trigger may upgrade.
+    Idle,
+    /// `2` — both NPC and target on the player's floor; probe and
+    /// step.
+    InPlaneMove,
+    /// `3` — replaying a cached path produced by the pathfinder;
+    /// pop the next direction byte and apply it.
+    ReplayQueue,
+    /// `4` — NPC is upstairs of the target; steer toward a
+    /// down-stairway on this floor.
+    DescendTowardTarget,
+    /// `5` — NPC is downstairs of the target; steer toward an
+    /// up-stairway on this floor.
+    AscendTowardTarget,
+    /// `6` — NPC is on this floor and target is above; steer
+    /// toward an up-stairway. Floor change happens via state 4/5.
+    ClimbUpOffFloor,
+    /// `7` — mirror of state 6 for a target below.
+    ClimbDownOffFloor,
+    /// `8` — neither end of the move is on the player's floor;
+    /// the walker has no movement arm for this state.
+    ParkedOffFloor,
+}
+
+/// `npc-schedules.md §7`: classify a raw state byte. Returns `None`
+/// for byte values outside the published `0..=8` set so callers can
+/// distinguish a missing slot from corrupted runtime state.
+pub const fn npc_schedule_state_classify(state: u8) -> Option<NpcScheduleState> {
+    Some(match state {
+        NPC_STATE_EMPTY => NpcScheduleState::Empty,
+        NPC_STATE_IDLE => NpcScheduleState::Idle,
+        NPC_STATE_INPLANE_MOVE => NpcScheduleState::InPlaneMove,
+        NPC_STATE_REPLAY_QUEUE => NpcScheduleState::ReplayQueue,
+        NPC_STATE_DESCEND_TOWARD_TARGET => NpcScheduleState::DescendTowardTarget,
+        NPC_STATE_ASCEND_TOWARD_TARGET => NpcScheduleState::AscendTowardTarget,
+        NPC_STATE_CLIMB_UP_OFF_FLOOR => NpcScheduleState::ClimbUpOffFloor,
+        NPC_STATE_CLIMB_DOWN_OFF_FLOOR => NpcScheduleState::ClimbDownOffFloor,
+        NPC_STATE_PARKED_OFF_FLOOR => NpcScheduleState::ParkedOffFloor,
+        _ => return None,
+    })
+}
+
+impl NpcScheduleState {
+    /// `npc-schedules.md §7`: returns the raw state byte the
+    /// engine's writers use for this state.
+    pub const fn save_byte(self) -> u8 {
+        match self {
+            Self::Empty => NPC_STATE_EMPTY,
+            Self::Idle => NPC_STATE_IDLE,
+            Self::InPlaneMove => NPC_STATE_INPLANE_MOVE,
+            Self::ReplayQueue => NPC_STATE_REPLAY_QUEUE,
+            Self::DescendTowardTarget => NPC_STATE_DESCEND_TOWARD_TARGET,
+            Self::AscendTowardTarget => NPC_STATE_ASCEND_TOWARD_TARGET,
+            Self::ClimbUpOffFloor => NPC_STATE_CLIMB_UP_OFF_FLOOR,
+            Self::ClimbDownOffFloor => NPC_STATE_CLIMB_DOWN_OFF_FLOOR,
+            Self::ParkedOffFloor => NPC_STATE_PARKED_OFF_FLOOR,
+        }
+    }
+}
+
 /// `npc-schedules.md §6` floor-classification mapper. The boundary
 /// trigger compares the NPC's current floor, the new waypoint's
 /// floor, and the location's current floor and chooses the new

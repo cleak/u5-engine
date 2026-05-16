@@ -1,4 +1,41 @@
     #[test]
+    fn npc_schedule_state_classify_round_trips_published_states() {
+        // npc-schedules.md §7: the state byte takes values in 0..=8.
+        let pairs: [(u8, NpcScheduleState); 9] = [
+            (NPC_STATE_EMPTY, NpcScheduleState::Empty),
+            (NPC_STATE_IDLE, NpcScheduleState::Idle),
+            (NPC_STATE_INPLANE_MOVE, NpcScheduleState::InPlaneMove),
+            (NPC_STATE_REPLAY_QUEUE, NpcScheduleState::ReplayQueue),
+            (
+                NPC_STATE_DESCEND_TOWARD_TARGET,
+                NpcScheduleState::DescendTowardTarget,
+            ),
+            (
+                NPC_STATE_ASCEND_TOWARD_TARGET,
+                NpcScheduleState::AscendTowardTarget,
+            ),
+            (NPC_STATE_CLIMB_UP_OFF_FLOOR, NpcScheduleState::ClimbUpOffFloor),
+            (
+                NPC_STATE_CLIMB_DOWN_OFF_FLOOR,
+                NpcScheduleState::ClimbDownOffFloor,
+            ),
+            (NPC_STATE_PARKED_OFF_FLOOR, NpcScheduleState::ParkedOffFloor),
+        ];
+        for (raw, state) in pairs {
+            assert_eq!(npc_schedule_state_classify(raw), Some(state));
+            assert_eq!(state.save_byte(), raw);
+        }
+        // Out-of-band bytes the engine's writers never produce.
+        for byte in 9u8..=255 {
+            assert_eq!(
+                npc_schedule_state_classify(byte),
+                None,
+                "byte {byte} should be out-of-band"
+            );
+        }
+    }
+
+    #[test]
     fn input_byte_class_partitions_keyboard_return_bytes_per_spec() {
         // input.md §4: three non-overlapping return families plus the
         // catch-all "no key" outcome.
