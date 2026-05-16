@@ -1,4 +1,37 @@
     #[test]
+    fn npc_file_arithmetic_helpers_match_spec_strides() {
+        // formats/npc.md §3,§4
+        assert_eq!(npc_sub_map_offset(0), 0);
+        assert_eq!(npc_sub_map_offset(1), NPC_SUB_MAP_LEN);
+        assert_eq!(npc_sub_map_offset(7), 7 * NPC_SUB_MAP_LEN);
+        // The eight-sub-map total equals the file length.
+        assert_eq!(
+            npc_sub_map_offset(NPC_SUB_MAPS_PER_FILE),
+            NPC_FILE_LEN
+        );
+        // Schedule record stride within a sub-map.
+        assert_eq!(npc_schedule_record_offset(0, 0), 0);
+        assert_eq!(npc_schedule_record_offset(0, 1), NPC_SCHEDULE_RECORD_LEN);
+        assert_eq!(
+            npc_schedule_record_offset(2, 5),
+            2 * NPC_SUB_MAP_LEN + 5 * NPC_SCHEDULE_RECORD_LEN
+        );
+        // Type byte sits inside the type array at sub-map offset
+        // NPC_TYPE_ARRAY_OFFSET.
+        assert_eq!(npc_type_byte_offset(0, 0), NPC_TYPE_ARRAY_OFFSET);
+        assert_eq!(
+            npc_type_byte_offset(3, 7),
+            3 * NPC_SUB_MAP_LEN + NPC_TYPE_ARRAY_OFFSET + 7
+        );
+        // Dialog-index byte sits inside the dialog array.
+        assert_eq!(npc_dialog_index_offset(0, 0), NPC_DIALOG_ARRAY_OFFSET);
+        assert_eq!(
+            npc_dialog_index_offset(1, 31),
+            NPC_SUB_MAP_LEN + NPC_DIALOG_ARRAY_OFFSET + 31
+        );
+    }
+
+    #[test]
     fn miscmsg_dat_file_constant_is_published() {
         // formats/miscmsg-dat.md §2: published filename for the
         // Blackthorn audience cluster + shrine/Codex prophecy file.

@@ -273,6 +273,34 @@ pub const NPC_SLOTS_PER_SUB_MAP: usize = 32;
 pub const NPC_SENTINEL_SLOT: usize = 0;
 pub const NPC_EFFECTIVE_SLOTS_PER_SUB_MAP: usize = NPC_SLOTS_PER_SUB_MAP - 1;
 
+/// `formats/npc.md §3` per-file byte offset of the supplied sub-map
+/// index within a `*.NPC` class file. The eight sub-maps are packed
+/// back-to-back with no header at `index * NPC_SUB_MAP_LEN`.
+pub const fn npc_sub_map_offset(sub_map_index: usize) -> usize {
+    sub_map_index * NPC_SUB_MAP_LEN
+}
+
+/// `formats/npc.md §4` per-sub-map byte offset of the supplied
+/// schedule-record slot. The schedule array sits at the start of
+/// each sub-map and stores 32 records of 16 bytes each.
+pub const fn npc_schedule_record_offset(sub_map_index: usize, slot: usize) -> usize {
+    npc_sub_map_offset(sub_map_index) + slot * NPC_SCHEDULE_RECORD_LEN
+}
+
+/// `formats/npc.md §4` per-sub-map byte offset of the supplied
+/// type-array slot. The 32-byte type array follows the schedule
+/// array at sub-map offset `NPC_TYPE_ARRAY_OFFSET`.
+pub const fn npc_type_byte_offset(sub_map_index: usize, slot: usize) -> usize {
+    npc_sub_map_offset(sub_map_index) + NPC_TYPE_ARRAY_OFFSET + slot
+}
+
+/// `formats/npc.md §4` per-sub-map byte offset of the supplied
+/// dialog-index slot. The 32-byte dialog-index array follows the
+/// type array at sub-map offset `NPC_DIALOG_ARRAY_OFFSET`.
+pub const fn npc_dialog_index_offset(sub_map_index: usize, slot: usize) -> usize {
+    npc_sub_map_offset(sub_map_index) + NPC_DIALOG_ARRAY_OFFSET + slot
+}
+
 /// `town-mode.md §4`: NPC roster size — up to 31 active NPC slots
 /// (slot zero is a sentinel) with three parallel 16/1/1-byte sub-blocks
 /// per slot for a total of 576 bytes per location.
