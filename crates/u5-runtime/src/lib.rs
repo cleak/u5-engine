@@ -185,7 +185,8 @@ pub use input_codes::{
     INPUT_CODE_SOUTHEAST, INPUT_CODE_SOUTHWEST, INPUT_CODE_WEST, FreeTextInputAction,
     InputByteClass, InputDirection, PartyTargetSelectorAction, free_text_input_action,
     input_byte_class, input_case_fold, input_code_direction,
-    input_function_key_index, party_target_selector_action,
+    input_function_key_index, input_prompt_mode_active,
+    party_target_selector_action,
 };
 pub use jimmy::{
     DOOR_AUTO_CLOSE_TURNS, JIMMY_DOOR_DIE_HIGH, JIMMY_DOOR_DIE_LOW, JIMMY_OBJECT_DIE_HIGH,

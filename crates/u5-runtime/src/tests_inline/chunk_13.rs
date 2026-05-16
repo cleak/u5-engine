@@ -1,4 +1,24 @@
     #[test]
+    fn input_prompt_mode_active_only_for_printable_ascii() {
+        // input.md §2: prompt mode is open iff the prompt-character
+        // byte is printable ASCII (0x20..=0x7E). Idle mode otherwise.
+        for byte in 0x20u8..=0x7E {
+            assert!(
+                input_prompt_mode_active(byte),
+                "{byte:#04x} should be prompt mode"
+            );
+        }
+        // Common idle-mode sentinel choices: 0x00, low-ASCII control,
+        // 0x7F, and the high-bit range used by direction/function codes.
+        for byte in [0x00u8, 0x01, 0x07, 0x08, 0x0D, 0x1B, 0x1F, 0x7F, 0x80, 0xC9, 0xFB, 0xFF] {
+            assert!(
+                !input_prompt_mode_active(byte),
+                "{byte:#04x} should be idle mode"
+            );
+        }
+    }
+
+    #[test]
     fn town_dawn_dusk_gate_toggle_round_trips_shipped_pair() {
         // town-mode.md §6
         assert_eq!(TOWN_DAWN_DUSK_GATE_MARKER_TILE, 0x87);

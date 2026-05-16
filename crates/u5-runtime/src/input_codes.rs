@@ -4,6 +4,16 @@
 //! by the upper layers; gameplay mode loops handle these inline before
 //! the central command dispatcher sees ordinary letter keys.
 
+/// `input.md §2` prompt-mode discriminator. The shared wait-for-input
+/// routine reads the resident *prompt-character* byte: a printable
+/// ASCII byte (`0x20..=0x7E`) means a Y/N or text prompt is open and
+/// the world tick is suppressed; any non-printable value is the idle
+/// sentinel and the world tick (NPC schedules excluded) runs between
+/// keystrokes.
+pub const fn input_prompt_mode_active(prompt_character_byte: u8) -> bool {
+    matches!(prompt_character_byte, 0x20..=0x7E)
+}
+
 /// `input.md §4` function-key remap. F1 through F10 become the
 /// contiguous internal byte range `0xC9..=0xD2`, disjoint from
 /// printable ASCII and the direction codes.
