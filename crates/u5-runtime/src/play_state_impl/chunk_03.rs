@@ -673,7 +673,7 @@ impl PlayState {
         );
         self.party_experience[target_index] = experience;
         let level = recompute_level_from_experience(experience);
-        let max_hp = u16::from(level) * 30;
+        let max_hp = u16::from(level) * RESURRECTION_MAX_HP_PER_LEVEL;
         let intelligence = if target_index == 0 {
             self.avatar_stats.intelligence
         } else {

@@ -1,4 +1,20 @@
     #[test]
+    fn resurrection_max_hp_per_level_matches_spec() {
+        // magic.md §8: a successful Resurrect rebuilds the revived
+        // member's record and sets maximum HP to thirty times the
+        // recomputed level. Promote the multiplier to a named
+        // constant so resurrect_party_member_to_hp does not bake
+        // `30` as a bare literal.
+        assert_eq!(RESURRECTION_MAX_HP_PER_LEVEL, 30);
+        // Spot-check a few resurrected-level → max-HP results so
+        // future edits cannot quietly change the multiplier.
+        for level in [1u16, 3, 5, 8] {
+            let max_hp = level * RESURRECTION_MAX_HP_PER_LEVEL;
+            assert_eq!(max_hp, level * 30);
+        }
+    }
+
+    #[test]
     fn karma_crop_or_table_food_debit_is_one() {
         // karma.md §4: picking a crop cell or eating reachable table
         // food reduces the shared moral-standing selector by one
