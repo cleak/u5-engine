@@ -252,6 +252,50 @@ pub const fn free_text_input_action(byte: u8) -> FreeTextInputAction {
     }
 }
 
+/// `input.md §8` numeric-prompt apply step. The shared numeric
+/// reader accumulates digits as `value = value * 10 + digit`,
+/// treats Backspace as `value = value / 10`, terminates on Enter,
+/// and silently discards anything else. The caller still owns the
+/// saturating cap on the accumulator (so a numeric prompt for a
+/// byte-sized counter can clamp at 255).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NumericPromptAction {
+    /// Decimal digit `0..=9` — multiply the accumulator by ten and
+    /// add the digit. Carries the digit value (`0..=9`).
+    AppendDigit(u8),
+    /// Backspace — integer-divide the accumulator by ten.
+    Pop,
+    /// Enter — terminate the prompt and return the accumulator.
+    Submit,
+    /// Any other byte (escape, function keys, direction codes) — the
+    /// shared numeric reader silently discards the byte and re-polls.
+    Discard,
+}
+
+/// `input.md §8`: classify one byte for the shared numeric-prompt
+/// reader. The byte is already case-folded by [`input_case_fold`];
+/// this helper does no further translation.
+pub const fn numeric_prompt_action(byte: u8) -> NumericPromptAction {
+    match byte {
+        b'0'..=b'9' => NumericPromptAction::AppendDigit(byte - b'0'),
+        0x08 => NumericPromptAction::Pop,
+        0x0A | 0x0D => NumericPromptAction::Submit,
+        _ => NumericPromptAction::Discard,
+    }
+}
+
+/// `input.md §8`: apply one [`NumericPromptAction`] to a `u16`
+/// accumulator. Returns the next accumulator value (saturating, so
+/// callers that need a tighter cap should clamp after this call).
+/// Submit/Discard leave the accumulator unchanged; Pop divides by ten.
+pub const fn numeric_prompt_apply(value: u16, action: NumericPromptAction) -> u16 {
+    match action {
+        NumericPromptAction::AppendDigit(digit) => value.saturating_mul(10).saturating_add(digit as u16),
+        NumericPromptAction::Pop => value / 10,
+        NumericPromptAction::Submit | NumericPromptAction::Discard => value,
+    }
+}
+
 /// `input.md §6` case fold: lowercase ASCII letters are folded to upper
 /// case by simple subtraction; other bytes pass through unchanged. This
 /// is locale-free and table-free, and is a no-op for higher-byte codes

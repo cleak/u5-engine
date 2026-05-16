@@ -1,4 +1,41 @@
     #[test]
+    fn numeric_prompt_accumulates_digits_and_pops_on_backspace() {
+        // input.md §8: numeric prompts apply value = value * 10 +
+        // digit and treat Backspace as integer-division by ten.
+        // Enter terminates and Discard leaves the accumulator alone.
+        use NumericPromptAction::*;
+        assert_eq!(numeric_prompt_action(b'3'), AppendDigit(3));
+        assert_eq!(numeric_prompt_action(b'0'), AppendDigit(0));
+        assert_eq!(numeric_prompt_action(b'9'), AppendDigit(9));
+        assert_eq!(numeric_prompt_action(0x08), Pop);
+        assert_eq!(numeric_prompt_action(b'\r'), Submit);
+        assert_eq!(numeric_prompt_action(b'\n'), Submit);
+        assert_eq!(numeric_prompt_action(0x1B), Discard);
+        assert_eq!(numeric_prompt_action(b' '), Discard);
+        assert_eq!(numeric_prompt_action(b'a'), Discard);
+
+        // Building "1234" digit by digit.
+        let mut v = 0u16;
+        for digit in [1, 2, 3, 4] {
+            v = numeric_prompt_apply(v, AppendDigit(digit));
+        }
+        assert_eq!(v, 1234);
+        // Backspace removes one digit (1234 / 10 = 123).
+        v = numeric_prompt_apply(v, Pop);
+        assert_eq!(v, 123);
+        // Submit/Discard leave the accumulator unchanged.
+        assert_eq!(numeric_prompt_apply(v, Submit), 123);
+        assert_eq!(numeric_prompt_apply(v, Discard), 123);
+        // Pop on zero stays zero.
+        assert_eq!(numeric_prompt_apply(0, Pop), 0);
+        // Saturating cap: appending digits past u16::MAX clamps.
+        assert_eq!(
+            numeric_prompt_apply(u16::MAX, AppendDigit(9)),
+            u16::MAX
+        );
+    }
+
+    #[test]
     fn talk_entry_refusal_strings_match_spec_text() {
         // conversation.md §2: the Talk command emits these exact
         // strings at the named entry-time gates before the

@@ -188,10 +188,10 @@ pub use input_codes::{
     INPUT_CODE_NORTH, INPUT_CODE_NORTHEAST, INPUT_CODE_NORTHWEST, INPUT_CODE_SOUTH,
     INPUT_CODE_SOUTHEAST, INPUT_CODE_SOUTHWEST, INPUT_CODE_WEST,
     CardinalPromptAction, FreeTextInputAction, InputByteClass, InputDirection,
-    PartyTargetSelectorAction, cardinal_direction_prompt_action,
+    NumericPromptAction, PartyTargetSelectorAction, cardinal_direction_prompt_action,
     free_text_input_action, input_byte_class, input_case_fold,
     input_code_direction, input_function_key_index, input_prompt_mode_active,
-    party_target_selector_action,
+    numeric_prompt_action, numeric_prompt_apply, party_target_selector_action,
 };
 pub use jimmy::{
     DOOR_AUTO_CLOSE_TURNS, DoorAutoCloseTick, JIMMY_DOOR_DIE_HIGH, JIMMY_DOOR_DIE_LOW,
