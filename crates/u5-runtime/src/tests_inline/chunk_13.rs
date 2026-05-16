@@ -1,4 +1,14 @@
     #[test]
+    fn talk_entry_refusal_strings_match_spec_text() {
+        // conversation.md §2: the Talk command emits these exact
+        // strings at the named entry-time gates before the
+        // conversation engine ever runs.
+        assert_eq!(TALK_NOBODY_HERE_MESSAGE, "Nobody's here!");
+        assert_eq!(TALK_SLEEPING_MESSAGE, "Zzzzzz...");
+        assert_eq!(TALK_NO_RESPONSE_MESSAGE, "No response!");
+    }
+
+    #[test]
     fn mmix_published_message_constants_match_spec_text() {
         // magic.md §6: the world-mode M-Mix handler prints these
         // exact strings at the named checkpoints, and combat refuses

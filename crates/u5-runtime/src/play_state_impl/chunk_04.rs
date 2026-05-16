@@ -1508,7 +1508,7 @@ impl PlayState {
         }
 
         let Some((dialog_id, x, y)) = self.facing_talk_target() else {
-            self.message = "Nobody's here!".to_string();
+            self.message = TALK_NOBODY_HERE_MESSAGE.to_string();
             return MoveOutcome::Blocked;
         };
 

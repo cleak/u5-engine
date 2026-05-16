@@ -49,6 +49,19 @@ impl TlkPrintMaskState {
 /// `WORK`, `BYE`, `THANK`) and twenty-nine profanity / default
 /// rebuke words. The table is checked before the per-NPC blob
 /// keyword scan.
+/// `conversation.md §2` published Talk-entry refusal strings the
+/// command emits before the conversation engine ever runs.
+///
+/// - [`TALK_NOBODY_HERE_MESSAGE`] — facing tile (and one talk-through
+///   step beyond) has no NPC.
+/// - [`TALK_SLEEPING_MESSAGE`] — located NPC's live tile is the
+///   sleeping form; conversation is skipped.
+/// - [`TALK_NO_RESPONSE_MESSAGE`] — located NPC's live tile is the
+///   praying/meditating/unavailable form.
+pub const TALK_NOBODY_HERE_MESSAGE: &str = "Nobody's here!";
+pub const TALK_SLEEPING_MESSAGE: &str = "Zzzzzz...";
+pub const TALK_NO_RESPONSE_MESSAGE: &str = "No response!";
+
 pub const RESERVED_KEYWORD_TABLE_ENTRIES: usize = 34;
 
 /// `conversation.md §5` count of functional-word entries in the
