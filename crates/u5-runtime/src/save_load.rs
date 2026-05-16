@@ -519,6 +519,24 @@ pub const BRIT_OOL_FILENAME: &str = "BRIT.OOL";
 pub const UNDER_OOL_FILENAME: &str = "UNDER.OOL";
 pub const INIT_OOL_FILENAME: &str = "INIT.OOL";
 
+/// `save-load.md §5.2` published Save-flow narration strings the
+/// Quit-and-Save handler prints in sequence: prompt the player,
+/// echo the chosen branch label, announce the disk activity, and
+/// confirm completion.
+pub const SAVE_PROMPT_MESSAGE: &str = "Save game?";
+pub const SAVE_PROMPT_YES_REPLY: &str = "Yes";
+pub const SAVE_PROMPT_NO_REPLY: &str = "No";
+pub const SAVE_IN_PROGRESS_MESSAGE: &str = "Saving...";
+pub const SAVE_DONE_MESSAGE: &str = "Done.";
+
+/// `save-load.md §4.2` three-line "No active game" notice the load
+/// flow prints when the empty-save guard fires. Lines are emitted
+/// in order; the intro then waits for a keystroke before returning
+/// to the title menu.
+pub const LOAD_EMPTY_SAVE_LINE_1: &str = "No active game";
+pub const LOAD_EMPTY_SAVE_LINE_2: &str = "Please create a character";
+pub const LOAD_EMPTY_SAVE_LINE_3: &str = "or transfer one from Ultima IV";
+
 /// `save-load.md §5.2` "Save game?" prompt confirmation. The
 /// handler accepts only `Y` or `N`; any other key loops the prompt.
 /// Returns `Some(true)` for `Y` (commit save), `Some(false)` for

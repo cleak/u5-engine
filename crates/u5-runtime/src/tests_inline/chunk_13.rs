@@ -1,4 +1,19 @@
     #[test]
+    fn save_load_published_messages_match_spec_text() {
+        // save-load.md §5.2 / §4.2: Quit-and-Save prints the prompt
+        // line, the Yes/No reply, "Saving..." and "Done."; the load
+        // flow's empty-save guard prints three named lines in order.
+        assert_eq!(SAVE_PROMPT_MESSAGE, "Save game?");
+        assert_eq!(SAVE_PROMPT_YES_REPLY, "Yes");
+        assert_eq!(SAVE_PROMPT_NO_REPLY, "No");
+        assert_eq!(SAVE_IN_PROGRESS_MESSAGE, "Saving...");
+        assert_eq!(SAVE_DONE_MESSAGE, "Done.");
+        assert_eq!(LOAD_EMPTY_SAVE_LINE_1, "No active game");
+        assert_eq!(LOAD_EMPTY_SAVE_LINE_2, "Please create a character");
+        assert_eq!(LOAD_EMPTY_SAVE_LINE_3, "or transfer one from Ultima IV");
+    }
+
+    #[test]
     fn yell_published_message_constants_match_spec_text() {
         // commands.md §11: the ship-aboard Y branch prints the
         // sail-state message; the free-text branch prints
