@@ -517,6 +517,14 @@ pub const BRIT_OOL_FILENAME: &str = "BRIT.OOL";
 pub const UNDER_OOL_FILENAME: &str = "UNDER.OOL";
 pub const INIT_OOL_FILENAME: &str = "INIT.OOL";
 
+/// `chargen.md §3` shipped factory-seed `INIT.GAM` size in bytes.
+/// The seed image clones into the in-memory save buffer at chargen
+/// entry; chargen then overwrites only the Avatar's customisation
+/// slice (name / gender / STR / DEX / INT / MP) before the image is
+/// written out as `SAVED.GAM` (which has the same length).
+pub const INIT_GAM_FILE_LEN: usize = 4_192;
+pub const INIT_GAM_FILENAME: &str = "INIT.GAM";
+
 /// `formats/ool.md §3`: each plane table holds 32 active-object
 /// records (8 bytes each = 256 bytes per plane).
 pub const OOL_PLANE_RECORD_COUNT: usize = 32;

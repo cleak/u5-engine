@@ -1,4 +1,13 @@
     #[test]
+    fn init_gam_constants_match_chargen_md_section_3() {
+        // chargen.md §3
+        assert_eq!(INIT_GAM_FILE_LEN, 4_192);
+        assert_eq!(INIT_GAM_FILENAME, "INIT.GAM");
+        // Seed and working-file lengths match.
+        assert_eq!(INIT_GAM_FILE_LEN, SAVED_GAM_LEN);
+    }
+
+    #[test]
     fn endgame_needs_tableau_restoration_targets_only_dead() {
         // endgame.md §4
         assert!(endgame_needs_tableau_restoration(CharacterStatus::Dead));
