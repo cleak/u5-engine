@@ -103,19 +103,25 @@ impl CombatArenaRecord {
     }
 
     pub fn outdoor_setup_table_a(&self) -> [u8; 6] {
-        self.slice_from_row::<6>(3, 11)
+        self.slice_from_row::<6>(CBT_SETUP_TABLE_ROW, *CBT_SETUP_TABLE_A_COLUMNS.start())
     }
 
     pub fn outdoor_setup_table_b(&self) -> [u8; 6] {
-        self.slice_from_row::<6>(3, 17)
+        self.slice_from_row::<6>(CBT_SETUP_TABLE_ROW, *CBT_SETUP_TABLE_B_COLUMNS.start())
     }
 
-    pub fn outdoor_placement_x(&self) -> [u8; 16] {
-        self.slice_from_row::<16>(6, 11)
+    pub fn outdoor_placement_x(&self) -> [u8; CBT_PLACEMENT_SLOT_COUNT] {
+        self.slice_from_row::<CBT_PLACEMENT_SLOT_COUNT>(
+            CBT_PLACEMENT_X_ROW,
+            *CBT_PLACEMENT_COLUMNS.start(),
+        )
     }
 
-    pub fn outdoor_placement_y(&self) -> [u8; 16] {
-        self.slice_from_row::<16>(7, 11)
+    pub fn outdoor_placement_y(&self) -> [u8; CBT_PLACEMENT_SLOT_COUNT] {
+        self.slice_from_row::<CBT_PLACEMENT_SLOT_COUNT>(
+            CBT_PLACEMENT_Y_ROW,
+            *CBT_PLACEMENT_COLUMNS.start(),
+        )
     }
 
     pub fn dungeon_room_sources(&self) -> [u8; 16] {

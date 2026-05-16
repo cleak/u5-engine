@@ -1,4 +1,40 @@
     #[test]
+    fn combat_arena_outdoor_slice_helpers_route_through_named_band_ranges() {
+        // formats/cbt.md §5: the outdoor metadata band on the
+        // 11-wide arena row holds two 6-byte setup tables on row 3
+        // (columns 11..=16 and 17..=22), and the sixteen placement
+        // X/Y slot coordinates on rows 6 and 7 (columns 11..=26).
+        // CBT_SETUP_TABLE_ROW, CBT_PLACEMENT_X_ROW,
+        // CBT_PLACEMENT_Y_ROW, and the column ranges already named
+        // those positions; route the record accessor methods through
+        // the published constants instead of bare numeric literals.
+        assert_eq!(CBT_SETUP_TABLE_ROW, 3);
+        assert_eq!(*CBT_SETUP_TABLE_A_COLUMNS.start(), 11);
+        assert_eq!(*CBT_SETUP_TABLE_B_COLUMNS.start(), 17);
+        assert_eq!(CBT_PLACEMENT_X_ROW, 6);
+        assert_eq!(CBT_PLACEMENT_Y_ROW, 7);
+        assert_eq!(*CBT_PLACEMENT_COLUMNS.start(), 11);
+        assert_eq!(CBT_PLACEMENT_SLOT_COUNT, 16);
+        // Stamp a synthetic record with monotonically increasing
+        // bytes so each slice extracts a known range.
+        let mut bytes = [0u8; COMBAT_ARENA_RECORD_LEN];
+        for (i, b) in bytes.iter_mut().enumerate() {
+            *b = (i % 256) as u8;
+        }
+        let record = CombatArenaRecord::from_record_bytes(&bytes).unwrap();
+        let row_a_base = CBT_SETUP_TABLE_ROW * COMBAT_ARENA_ROW_STRIDE;
+        let table_a = record.outdoor_setup_table_a();
+        for (i, value) in table_a.iter().enumerate() {
+            assert_eq!(
+                *value,
+                ((row_a_base + *CBT_SETUP_TABLE_A_COLUMNS.start() + i) % 256) as u8
+            );
+        }
+        let placement_x = record.outdoor_placement_x();
+        assert_eq!(placement_x.len(), CBT_PLACEMENT_SLOT_COUNT);
+    }
+
+    #[test]
     fn natural_moongate_counter_night_band_uses_shared_lighting_hours() {
         // overworld.md §9: the natural-moongate gate-presence counter
         // grows during the surface night band and shrinks during the
