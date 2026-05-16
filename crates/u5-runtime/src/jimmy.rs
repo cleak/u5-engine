@@ -68,6 +68,13 @@ pub const fn jimmy_door_succeeds(member_class: u8, roll_1_to_29: u8) -> bool {
     member_class > roll_1_to_29
 }
 
+/// `doors-and-z-transitions.md §3` shared moral-standing reward for
+/// a successful NPC pickpocket. The shared selector is raised by
+/// this many units on success, then clamped at the published
+/// 99 cap. Failure does not advance the picked/thanked state and
+/// does not apply this increase.
+pub const JIMMY_NPC_PICKPOCKET_KARMA_REWARD: u8 = 2;
+
 /// `doors-and-z-transitions.md §3`: per-map object chest pick. Returns
 /// `None` when the high bit of the object stat is clear (the chest is in
 /// the broken-lock state and no real pick can occur). Otherwise computes

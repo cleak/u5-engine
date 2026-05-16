@@ -1,4 +1,25 @@
     #[test]
+    fn jimmy_npc_pickpocket_karma_reward_is_two() {
+        // doors-and-z-transitions.md §3: a successful NPC pickpocket
+        // raises the shared moral-standing selector by +2, clamped
+        // at the published cap. Failure does not advance the
+        // picked/thanked state and does not apply this increase.
+        assert_eq!(JIMMY_NPC_PICKPOCKET_KARMA_REWARD, 2);
+        // The standing-clamp helper still owns the 0..=99 cap; the
+        // reward is the unclamped per-event delta.
+        let standing: u8 = 98;
+        let next = standing
+            .saturating_add(JIMMY_NPC_PICKPOCKET_KARMA_REWARD)
+            .min(MORAL_STANDING_MAX);
+        assert_eq!(next, MORAL_STANDING_MAX);
+        let standing: u8 = 0;
+        let next = standing
+            .saturating_add(JIMMY_NPC_PICKPOCKET_KARMA_REWARD)
+            .min(MORAL_STANDING_MAX);
+        assert_eq!(next, 2);
+    }
+
+    #[test]
     fn pushable_floor_stamps_split_cannon_from_generic() {
         // commands.md §8: cannon-family pushes leave the published
         // 0x45 stamp on the vacated cell; every other pushable family
