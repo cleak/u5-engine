@@ -1,4 +1,43 @@
     #[test]
+    fn question_dat_dilemma_record_for_pair_walks_lexicographic_order() {
+        // formats/question-dat.md §4 spot-checks against the published
+        // ordinal-to-pair table.
+        assert_eq!(QUESTION_DAT_FILE, "QUESTION.DAT");
+        assert_eq!(question_dat_dilemma_record_for_pair(0, 1), Some(2));
+        assert_eq!(question_dat_dilemma_record_for_pair(0, 7), Some(8));
+        assert_eq!(question_dat_dilemma_record_for_pair(1, 2), Some(9));
+        assert_eq!(question_dat_dilemma_record_for_pair(1, 7), Some(14));
+        assert_eq!(question_dat_dilemma_record_for_pair(2, 3), Some(15));
+        assert_eq!(question_dat_dilemma_record_for_pair(3, 4), Some(20));
+        assert_eq!(question_dat_dilemma_record_for_pair(4, 5), Some(24));
+        assert_eq!(question_dat_dilemma_record_for_pair(5, 6), Some(27));
+        assert_eq!(question_dat_dilemma_record_for_pair(6, 7), Some(29));
+        // Diagonal/inverted/out-of-range inputs are unrepresentable.
+        assert_eq!(question_dat_dilemma_record_for_pair(0, 0), None);
+        assert_eq!(question_dat_dilemma_record_for_pair(5, 5), None);
+        assert_eq!(question_dat_dilemma_record_for_pair(7, 0), None);
+        assert_eq!(question_dat_dilemma_record_for_pair(7, 8), None);
+        assert_eq!(question_dat_dilemma_record_for_pair(0, 8), None);
+        // Walking the full pair set covers every dilemma record exactly once
+        // in monotonically increasing order.
+        let mut expected = QUESTION_DAT_FIRST_DILEMMA_RECORD;
+        for lo in 0usize..7 {
+            for hi in (lo + 1)..=7 {
+                assert_eq!(
+                    question_dat_dilemma_record_for_pair(lo, hi),
+                    Some(expected),
+                    "({lo}, {hi})"
+                );
+                expected += 1;
+            }
+        }
+        assert_eq!(
+            expected,
+            QUESTION_DAT_FIRST_DILEMMA_RECORD + QUESTION_DAT_DILEMMA_COUNT
+        );
+    }
+
+    #[test]
     fn input_prompt_mode_active_only_for_printable_ascii() {
         // input.md §2: prompt mode is open iff the prompt-character
         // byte is printable ASCII (0x20..=0x7E). Idle mode otherwise.

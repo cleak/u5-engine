@@ -14,9 +14,35 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-const QUESTION_DAT_FILE: &str = "QUESTION.DAT";
+/// `formats/question-dat.md §2` published filename. Chargen reads
+/// virtue-pair dilemma paragraphs out of this file.
+pub const QUESTION_DAT_FILE: &str = "QUESTION.DAT";
 const EXPECTED_RECORD_COUNT: usize = 30;
 const FIRST_DILEMMA_RECORD: usize = 2;
+
+/// `formats/question-dat.md §4`: ordinal record number for a sorted
+/// virtue pair `(a, b)` with `a < b` and both indices in `0..=7`. The
+/// lexicographic walk starts at record 2 (Honesty/Compassion) and
+/// advances through every unique unordered pair to record 29
+/// (Spirituality/Humility). Returns `None` for `a >= b`, `a > 7`, or
+/// `b > 7`.
+pub const fn question_dat_dilemma_record_for_pair(
+    sorted_lo_virtue: usize,
+    sorted_hi_virtue: usize,
+) -> Option<usize> {
+    if sorted_lo_virtue >= sorted_hi_virtue {
+        return None;
+    }
+    if sorted_hi_virtue > 7 {
+        return None;
+    }
+    // Sum of pair-counts skipped before the lo-virtue's row: walking
+    // virtues 0..lo, each contributes (7 - virtue) records.
+    // a*(15-a)/2 closed form.
+    let prior = sorted_lo_virtue * (15 - sorted_lo_virtue) / 2;
+    let within_row = sorted_hi_virtue - sorted_lo_virtue - 1;
+    Some(QUESTION_DAT_FIRST_DILEMMA_RECORD + prior + within_row)
+}
 
 /// `formats/question-dat.md §2`: total NUL-terminated record count
 /// (two leading narrative records plus 28 virtue-dilemma paragraphs).

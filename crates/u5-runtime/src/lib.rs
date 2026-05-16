@@ -271,8 +271,9 @@ pub use quest_flags::{
     tlk_scene_branch_mask, tlk_scene_branch_set,
 };
 pub use question_io::{
-    QUESTION_DAT_DILEMMA_COUNT, QUESTION_DAT_FIRST_DILEMMA_RECORD, QUESTION_DAT_RECORDS,
-    QuestionRecords, load_question_records, parse_question_records,
+    QUESTION_DAT_DILEMMA_COUNT, QUESTION_DAT_FILE, QUESTION_DAT_FIRST_DILEMMA_RECORD,
+    QUESTION_DAT_RECORDS, QuestionRecords, load_question_records,
+    parse_question_records, question_dat_dilemma_record_for_pair,
 };
 pub use signs_io::{
     SIGNS_DAT_RECORD_HEADER_LEN, SIGNS_DAT_SCENE_DIRECTORY_BYTES,
