@@ -4,6 +4,21 @@ use crate::*;
 
 pub const SHOP_COMMODITY_STOCK_CAP: u8 = 99;
 
+/// `shops.md §4.1` `@` substitution time-of-day word the bark
+/// renderer expands inline. The hour byte is read fresh from the
+/// world clock on every render: hour < 12 → `morning`, hour < 18 →
+/// `afternoon`, otherwise `evening`. Hours outside the 0..=23 clock
+/// range fall through to the evening band.
+pub const fn shoppe_time_of_day_word(hour: u8) -> &'static str {
+    if hour < 12 {
+        "morning"
+    } else if hour < 18 {
+        "afternoon"
+    } else {
+        "evening"
+    }
+}
+
 /// `formats/shoppe-dat.md §2`: shipped DOS file size in bytes.
 pub const SHOPPE_DAT_LEN: usize = 10_135;
 /// `formats/shoppe-dat.md §2`: total record slots and non-empty

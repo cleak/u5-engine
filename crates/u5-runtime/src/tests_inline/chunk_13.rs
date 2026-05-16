@@ -1,4 +1,21 @@
     #[test]
+    fn shoppe_time_of_day_word_matches_spec_bands() {
+        // shops.md §4.1
+        for hour in 0u8..12 {
+            assert_eq!(shoppe_time_of_day_word(hour), "morning");
+        }
+        for hour in 12u8..18 {
+            assert_eq!(shoppe_time_of_day_word(hour), "afternoon");
+        }
+        for hour in 18u8..=23 {
+            assert_eq!(shoppe_time_of_day_word(hour), "evening");
+        }
+        // Out-of-range falls through to the evening band.
+        assert_eq!(shoppe_time_of_day_word(24), "evening");
+        assert_eq!(shoppe_time_of_day_word(255), "evening");
+    }
+
+    #[test]
     fn init_gam_constants_match_chargen_md_section_3() {
         // chargen.md §3
         assert_eq!(INIT_GAM_FILE_LEN, 4_192);
