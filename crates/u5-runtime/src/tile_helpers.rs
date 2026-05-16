@@ -62,12 +62,35 @@ pub fn dungeon_minimap_expands(tile: u8) -> bool {
     !matches!(tile >> 4, 0x0b..=0x0d)
 }
 
+/// `doors-and-z-transitions.md §10` dungeon fall-trap bytes. Walking
+/// onto either of these cells fires the pit/fall transition: print
+/// the messages, increment Z by one, land at the same X/Y on the
+/// next level, and update marker bits on the affected cells. If the
+/// destination is another fall-trap byte, the chain repeats.
+pub const DUNGEON_PIT_FALL_TRAP_VISIBLE: u8 = 0x61;
+/// `doors-and-z-transitions.md §10` second dungeon fall-trap byte
+/// (hidden variant — exact `0x69`).
+pub const DUNGEON_PIT_FALL_TRAP_HIDDEN: u8 = 0x69;
+
+/// `doors-and-z-transitions.md §10` dungeon bomb-trap bytes. These
+/// share the `0x6?` pit family with the fall traps but do not change
+/// Z. Search resolution narrates them separately from fall pits.
+pub const DUNGEON_PIT_BOMB_TRAP_VISIBLE: u8 = 0x62;
+/// `doors-and-z-transitions.md §10` hidden bomb-trap byte (`0x6A`).
+pub const DUNGEON_PIT_BOMB_TRAP_HIDDEN: u8 = 0x6A;
+
 pub fn is_dungeon_fall_trap(tile: u8) -> bool {
-    matches!(tile, 0x61 | 0x69)
+    matches!(
+        tile,
+        DUNGEON_PIT_FALL_TRAP_VISIBLE | DUNGEON_PIT_FALL_TRAP_HIDDEN
+    )
 }
 
 pub fn is_dungeon_bomb_trap(tile: u8) -> bool {
-    matches!(tile, 0x62 | 0x6a)
+    matches!(
+        tile,
+        DUNGEON_PIT_BOMB_TRAP_VISIBLE | DUNGEON_PIT_BOMB_TRAP_HIDDEN
+    )
 }
 
 /// `dungeon-mode.md §8` published energy-field base bytes. Magic

@@ -1,4 +1,32 @@
     #[test]
+    fn dungeon_pit_fall_and_bomb_trap_byte_constants_match_spec() {
+        // doors-and-z-transitions.md §10 names two fall-trap bytes
+        // (0x61 visible, 0x69 hidden) that increment Z when stepped
+        // on, and two bomb-trap bytes (0x62 visible, 0x6A hidden)
+        // that share the 0x6? pit family but do not change Z.
+        // Promote each so the trap classifiers do not bake the hex
+        // pairs as bare literals.
+        assert_eq!(DUNGEON_PIT_FALL_TRAP_VISIBLE, 0x61);
+        assert_eq!(DUNGEON_PIT_FALL_TRAP_HIDDEN, 0x69);
+        assert_eq!(DUNGEON_PIT_BOMB_TRAP_VISIBLE, 0x62);
+        assert_eq!(DUNGEON_PIT_BOMB_TRAP_HIDDEN, 0x6A);
+        // The fall-trap classifier accepts both fall bytes and
+        // rejects both bomb bytes (and vice versa).
+        assert!(is_dungeon_fall_trap(DUNGEON_PIT_FALL_TRAP_VISIBLE));
+        assert!(is_dungeon_fall_trap(DUNGEON_PIT_FALL_TRAP_HIDDEN));
+        assert!(!is_dungeon_fall_trap(DUNGEON_PIT_BOMB_TRAP_VISIBLE));
+        assert!(!is_dungeon_fall_trap(DUNGEON_PIT_BOMB_TRAP_HIDDEN));
+        assert!(is_dungeon_bomb_trap(DUNGEON_PIT_BOMB_TRAP_VISIBLE));
+        assert!(is_dungeon_bomb_trap(DUNGEON_PIT_BOMB_TRAP_HIDDEN));
+        assert!(!is_dungeon_bomb_trap(DUNGEON_PIT_FALL_TRAP_VISIBLE));
+        assert!(!is_dungeon_bomb_trap(DUNGEON_PIT_FALL_TRAP_HIDDEN));
+        // Neighbouring 0x6? bytes are neither — the 0x60 surface-
+        // reset pit and other 0x6? cells keep their own behaviour.
+        assert!(!is_dungeon_fall_trap(0x60));
+        assert!(!is_dungeon_bomb_trap(0x60));
+    }
+
+    #[test]
     fn jimmy_chest_threshold_bias_is_shared_across_object_and_dungeon_paths() {
         // doors-and-z-transitions.md §3: both the per-map object
         // chest and the dungeon chest pick the lock threshold by
