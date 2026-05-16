@@ -1,4 +1,23 @@
     #[test]
+    fn town_fountain_drink_accepts_excludes_dead_and_asleep() {
+        // view.md §3
+        for status in [
+            CharacterStatus::Good,
+            CharacterStatus::PoisonedOrRevived,
+            CharacterStatus::Charmed,
+            CharacterStatus::Ashes,
+        ] {
+            assert!(
+                town_fountain_drink_accepts(status),
+                "status {:?} should be eligible",
+                status
+            );
+        }
+        assert!(!town_fountain_drink_accepts(CharacterStatus::Dead));
+        assert!(!town_fountain_drink_accepts(CharacterStatus::Sleeping));
+    }
+
+    #[test]
     fn doom_entrance_unlocks_only_when_all_three_slots_vanquished() {
         // catalogs/quest-graph.md §5
         let v = SHADOWLORD_HIDEOUT_VANQUISHED;

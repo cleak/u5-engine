@@ -231,6 +231,19 @@ pub enum ViewCommandOutcome {
     EnterOverlay,
 }
 
+/// `view.md §3` overworld/town fountain drink eligibility. The
+/// LOOKOBJ fountain prompt asks the player to pick a drinker; dead
+/// or asleep members refuse as incapacitated, while every other
+/// status lets the drinker receive the (presentation-only) refresh
+/// result. Dungeon fountains use the separate state-changing
+/// fountain family in `dungeon-mode.md`.
+pub const fn town_fountain_drink_accepts(status: crate::CharacterStatus) -> bool {
+    !matches!(
+        status,
+        crate::CharacterStatus::Dead | crate::CharacterStatus::Sleeping,
+    )
+}
+
 /// `view.md §2`: classify a V-View command call. The dispatcher's
 /// gem-stock check happens before the overlay is invoked.
 pub const fn view_command_outcome(gems: u8, in_combat: bool) -> ViewCommandOutcome {
