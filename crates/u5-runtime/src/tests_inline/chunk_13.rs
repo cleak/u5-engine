@@ -1,4 +1,27 @@
     #[test]
+    fn combat_post_round_magic_effect_timer_ticks_in_open_interval() {
+        // combat.md §7: in the post-round maintenance pass, a terrain
+        // byte `0xDC` ticks the shared combat magic-effect timer
+        // while the timer is nonzero and strictly below sixteen.
+        // Promote both edges so a future post-round pass does not
+        // bake them as bare literals.
+        assert_eq!(COMBAT_POST_ROUND_NO_EFFECT_SENTINEL, 0x16);
+        assert_eq!(COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX, 16);
+        // The timer ticks for every value in the open interval
+        // (0, 16). Zero is inert and a timer at the cap stops.
+        assert!(!combat_post_round_magic_effect_timer_ticks(0));
+        for timer in 1u8..COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX {
+            assert!(combat_post_round_magic_effect_timer_ticks(timer));
+        }
+        assert!(!combat_post_round_magic_effect_timer_ticks(
+            COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX
+        ));
+        assert!(!combat_post_round_magic_effect_timer_ticks(
+            COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX + 1
+        ));
+    }
+
+    #[test]
     fn combat_arena_outdoor_slice_helpers_route_through_named_band_ranges() {
         // formats/cbt.md §5: the outdoor metadata band on the
         // 11-wide arena row holds two 6-byte setup tables on row 3

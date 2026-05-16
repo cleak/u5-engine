@@ -222,6 +222,30 @@ pub const COMBAT_TARGET_GROUP_PARTY: u8 = 1;
 pub const COMBAT_TARGET_GROUP_MONSTER: u8 = 2;
 pub const COMBAT_HIDDEN_ACTIVE_OBJECT_TILE: u8 = 0x00;
 pub const COMBAT_ARENA_CENTER_COORDINATE: u8 = (COMBAT_ARENA_SIDE / 2) as u8;
+
+/// `combat.md §7`: in the post-round maintenance pass, a terrain
+/// byte of `0x00` dispatches the magic/effect byte as a cell effect
+/// except for this sentinel value, which is the skipped no-effect
+/// marker. Treat the cell as already-resolved and continue to the
+/// next cell without invoking the effect handler.
+pub const COMBAT_POST_ROUND_NO_EFFECT_SENTINEL: u8 = 0x16;
+
+/// `combat.md §7`: in the post-round maintenance pass, a terrain
+/// byte of `0xDC` ticks the shared combat magic-effect timer only
+/// while that timer is nonzero and strictly below this value.
+/// Match the limit (the timer reaches this value and stops
+/// incrementing) so the post-round pass leaves expired effect
+/// fields stable.
+pub const COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX: u8 = 16;
+
+/// `combat.md §7`: returns `true` when the post-round maintenance
+/// pass at a `0xDC` cell should advance the shared magic-effect
+/// timer. The timer ticks only while it is strictly between zero
+/// and [`COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX`]; a zero timer
+/// is inert and a timer at the cap does not advance further.
+pub const fn combat_post_round_magic_effect_timer_ticks(timer: u8) -> bool {
+    timer != 0 && timer < COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX
+}
 pub const COMBAT_AI_ATTACK_COMMAND_KEY: char = 'A';
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
