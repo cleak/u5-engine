@@ -544,6 +544,42 @@ pub const fn dungeon_pit_trap_kind(tile: u8) -> Option<DungeonPitTrap> {
     })
 }
 
+/// `dungeon-mode.md §8` fountain sub-type classifier. The low nibble
+/// of a `0x5?` fountain cell drives the drink effect on the selected
+/// party member; the high nibble is the fountain class.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonFountainEffect {
+    /// `0x50` — Cure: status flips to Good. "Cured!".
+    Cure,
+    /// `0x51` — Heal: current HP rises to maximum. "Healed!".
+    Heal,
+    /// `0x52` — Poison: status flips to Poisoned. "Poisoned!".
+    Poison,
+    /// `0x53..=0x5F` — Bad taste: roll `0..=7` HP damage. "Bad taste.".
+    BadTaste,
+}
+
+/// `dungeon-mode.md §8` Bad-taste fountain damage upper bound. The
+/// shared helper rolls in the inclusive `0..=DUNGEON_FOUNTAIN_BAD_TASTE_DAMAGE_MAX`
+/// range; the spec's "random HP-damage roll in the inclusive range
+/// 0..7" exclusive-7 phrasing matches `seed % 8 = 0..=7`.
+pub const DUNGEON_FOUNTAIN_BAD_TASTE_DAMAGE_MAX: u8 = 7;
+
+/// `dungeon-mode.md §8`: classify a fountain cell byte by its low
+/// nibble. Returns `None` for cells outside the `0x5?` fountain
+/// class.
+pub const fn dungeon_fountain_effect(tile: u8) -> Option<DungeonFountainEffect> {
+    if tile >> 4 != 0x5 {
+        return None;
+    }
+    Some(match tile & 0x0F {
+        0 => DungeonFountainEffect::Cure,
+        1 => DungeonFountainEffect::Heal,
+        2 => DungeonFountainEffect::Poison,
+        _ => DungeonFountainEffect::BadTaste,
+    })
+}
+
 /// `dungeon-mode.md §13` K-Klimb apply-path outcome for the underfoot
 /// dungeon cell. The handler reads only the high nibble (and the
 /// exact `0x60` byte) to decide whether to change Z, prompt the

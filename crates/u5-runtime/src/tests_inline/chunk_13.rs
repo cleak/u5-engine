@@ -1,4 +1,24 @@
     #[test]
+    fn dungeon_fountain_effect_classifies_subtype_per_spec() {
+        // dungeon-mode.md §8: fountain cells use the high nibble 0x5
+        // and the low nibble selects the drink effect:
+        // 0 = Cure, 1 = Heal, 2 = Poison, 3+ = Bad taste.
+        use DungeonFountainEffect::*;
+        assert_eq!(dungeon_fountain_effect(0x50), Some(Cure));
+        assert_eq!(dungeon_fountain_effect(0x51), Some(Heal));
+        assert_eq!(dungeon_fountain_effect(0x52), Some(Poison));
+        for low in 3u8..=0x0F {
+            assert_eq!(dungeon_fountain_effect(0x50 | low), Some(BadTaste));
+        }
+        // Non-fountain cells return None.
+        assert_eq!(dungeon_fountain_effect(0x00), None);
+        assert_eq!(dungeon_fountain_effect(0x40), None);
+        assert_eq!(dungeon_fountain_effect(0x60), None);
+        assert_eq!(dungeon_fountain_effect(0x80), None);
+        assert_eq!(DUNGEON_FOUNTAIN_BAD_TASTE_DAMAGE_MAX, 7);
+    }
+
+    #[test]
     fn dungeon_klimb_apply_dispatches_by_high_nibble_and_plain_pit() {
         // dungeon-mode.md §13: K-Klimb reads the underfoot byte's
         // high nibble (and the exact 0x60 plain-pit byte) to decide
