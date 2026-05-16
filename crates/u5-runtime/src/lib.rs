@@ -102,7 +102,8 @@ pub use character_record::{
     character_class_for_byte, character_status_for_byte,
     RestDurationInput, rest_cleanup_transitions_to_good, rest_duration_input,
     rest_with_watch_participates, rest_with_watch_recovers_hp,
-    save_character_field_offset, town_rest_temp_sleep_marked,
+    save_character_field_offset, sleep_ambush_restored_status,
+    town_rest_temp_sleep_marked,
 };
 pub use chargen::*;
 pub use clock::{

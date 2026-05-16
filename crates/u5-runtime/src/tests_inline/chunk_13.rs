@@ -1,4 +1,37 @@
     #[test]
+    fn sleep_ambush_restored_status_preserves_poisoned_and_lifts_sleepers() {
+        // rest-and-camp.md §6: before handing the ambush row to
+        // combat setup, the rest helper restores each rest-local
+        // snapshot: Poisoned stays Poisoned; Good/Sleeping become
+        // Good; Charmed/Dead/Ashes pass through (they are not
+        // promoted to active combatants).
+        assert_eq!(
+            sleep_ambush_restored_status(CharacterStatus::PoisonedOrRevived),
+            CharacterStatus::PoisonedOrRevived
+        );
+        assert_eq!(
+            sleep_ambush_restored_status(CharacterStatus::Good),
+            CharacterStatus::Good
+        );
+        assert_eq!(
+            sleep_ambush_restored_status(CharacterStatus::Sleeping),
+            CharacterStatus::Good
+        );
+        assert_eq!(
+            sleep_ambush_restored_status(CharacterStatus::Charmed),
+            CharacterStatus::Charmed
+        );
+        assert_eq!(
+            sleep_ambush_restored_status(CharacterStatus::Dead),
+            CharacterStatus::Dead
+        );
+        assert_eq!(
+            sleep_ambush_restored_status(CharacterStatus::Ashes),
+            CharacterStatus::Ashes
+        );
+    }
+
+    #[test]
     fn blackthorn_rescue_post_print_standing_clamps_to_floor() {
         // karma.md §6: after the rescue path prints its verdict, the
         // moral-standing selector is raised to at least 75. Inputs

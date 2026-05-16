@@ -159,6 +159,24 @@ pub const fn rest_with_watch_recovers_hp(status: CharacterStatus) -> bool {
     matches!(status, CharacterStatus::Good | CharacterStatus::Sleeping)
 }
 
+/// `rest-and-camp.md §6` sleep-ambush rest-local status restoration.
+/// Before the rest handler hands the selected ambush row to combat
+/// setup, it restores each rest-local snapshot status: members who
+/// entered rest Poisoned stay Poisoned, and other eligible
+/// sleepers/watch participants are restored to Good. Dead, Charmed,
+/// and Ashes members are not turned into active combatants.
+///
+/// Returns the status the rest helper should write back for the
+/// member's combat-entry status, given the status the member held at
+/// rest entry.
+pub const fn sleep_ambush_restored_status(entry_status: CharacterStatus) -> CharacterStatus {
+    match entry_status {
+        CharacterStatus::PoisonedOrRevived => CharacterStatus::PoisonedOrRevived,
+        CharacterStatus::Good | CharacterStatus::Sleeping => CharacterStatus::Good,
+        other => other,
+    }
+}
+
 /// `rest-and-camp.md §4` rest-handler duration prompt outcome. The
 /// shared rest-with-watch handler echoes a digit 1..=9 as the
 /// requested rest duration, cancels on Space or `0`, and silently
