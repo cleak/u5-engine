@@ -1,4 +1,32 @@
     #[test]
+    fn age_character_month_counter_caps_at_twenty_five() {
+        // time.md §8: the 28-day rollover increments each character
+        // record's one-byte month counter, capped at 25. Pickup later
+        // treats a stored zero as one billable unit.
+        assert_eq!(age_character_month_counter(0), 1);
+        assert_eq!(age_character_month_counter(1), 2);
+        assert_eq!(
+            age_character_month_counter(CHARACTER_MONTH_COUNTER_CAP - 1),
+            CHARACTER_MONTH_COUNTER_CAP
+        );
+        assert_eq!(
+            age_character_month_counter(CHARACTER_MONTH_COUNTER_CAP),
+            CHARACTER_MONTH_COUNTER_CAP
+        );
+        // Values above the cap (which shouldn't occur in practice
+        // but might appear in malformed saves) clamp without wrapping.
+        assert_eq!(
+            age_character_month_counter(CHARACTER_MONTH_COUNTER_CAP + 1),
+            CHARACTER_MONTH_COUNTER_CAP
+        );
+        assert_eq!(
+            age_character_month_counter(u8::MAX),
+            CHARACTER_MONTH_COUNTER_CAP
+        );
+        assert_eq!(CHARACTER_MONTH_COUNTER_CAP, 25);
+    }
+
+    #[test]
     fn conversation_cleanup_reconciliation_follows_published_priority() {
         // quest-flags.md §5: zero-sentinel cleanup branches in fixed
         // priority order, decrementing at most one byte-sized signal

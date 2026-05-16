@@ -247,6 +247,25 @@ impl GameClock {
     }
 }
 
+/// `time.md §8` per-character month-counter cap. The month rollover
+/// increments each of the sixteen character records' one-byte counters
+/// (the inn's guest-stay counter), capped at this value. The inn
+/// pickup path treats a stored zero as one billable unit, so the cap
+/// gates the maximum bill at lodging-rate × 25.
+pub const CHARACTER_MONTH_COUNTER_CAP: u8 = 25;
+
+/// `time.md §8`: age one character record's month counter by the
+/// 28-day rollover. Increments the byte by one, clamped at
+/// [`CHARACTER_MONTH_COUNTER_CAP`]. Apply to every character record
+/// at the day-28 → day-1 rollover regardless of party/lodged state.
+pub const fn age_character_month_counter(counter: u8) -> u8 {
+    if counter >= CHARACTER_MONTH_COUNTER_CAP {
+        CHARACTER_MONTH_COUNTER_CAP
+    } else {
+        counter + 1
+    }
+}
+
 /// One of the three sky-strip markers per `moons.md` §2.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SkyStripMarker {
