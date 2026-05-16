@@ -795,6 +795,52 @@ pub const fn dungeon_minimap_flood_expands(tile: u8) -> bool {
     !matches!(tile >> 4, 0xB | 0xC | 0xD)
 }
 
+/// `dungeon-mode.md §12` V-View minimap glyph for one dungeon cell
+/// byte. Returns the printable glyph code (per the published table)
+/// or `None` for classes the painter intentionally leaves blank
+/// (`0x0?` without bit `0x08`, `0x7?`, and `0x9?`). The fountain
+/// class paints a six-cell icon rooted at the cell; this helper
+/// returns the glyph anchor (`0x12` for that one cell).
+pub const fn dungeon_minimap_glyph(tile: u8) -> Option<u8> {
+    // Exact-byte cases inside 0x6? must be tested before the band.
+    match tile {
+        0x60 => return Some(0x19),
+        0x61 | 0x69 => return Some(0x71),
+        0x68 => return Some(0x12),
+        _ => {}
+    }
+    Some(match tile >> 4 {
+        0x0 => {
+            if tile & DUNGEON_VISIT_MARKER_BIT != 0 {
+                0x18
+            } else {
+                return None;
+            }
+        }
+        0x1 => 0x2E,
+        0x2 => 0x2D,
+        0x3 => 0x2F,
+        0x4 => 0x70,
+        0x5 => 0x12, // fountain anchor; full six-cell icon painted by caller
+        0x6 => 0x72,
+        0x7 => return None,
+        0x8 => 0x18, // stair/field helper family
+        0x9 => return None,
+        0xA | 0xF => 0x73,
+        0xB => {
+            if tile == 0xB0 {
+                0x7F
+            } else {
+                0x74
+            }
+        }
+        0xC => 0x75,
+        0xD => 0x76,
+        0xE => 0x77,
+        _ => return None,
+    })
+}
+
 /// `dungeon-mode.md §10` post-combat Z-axis intent the dungeon
 /// A-Attack handler honours after combat returns. Result code 5
 /// requests one level deeper; code 6 requests one level shallower;

@@ -1,4 +1,37 @@
     #[test]
+    fn dungeon_minimap_glyph_matches_published_class_table() {
+        // dungeon-mode.md §12: spot-check the published high-nibble
+        // class -> minimap glyph map. Blank classes return None.
+        // Passage detail glyphs require bit 0x08 set on a 0x0? cell.
+        assert_eq!(dungeon_minimap_glyph(0x00), None);
+        assert_eq!(dungeon_minimap_glyph(0x08), Some(0x18));
+        assert_eq!(dungeon_minimap_glyph(0x10), Some(0x2E)); // Up ladder
+        assert_eq!(dungeon_minimap_glyph(0x20), Some(0x2D)); // Down ladder
+        assert_eq!(dungeon_minimap_glyph(0x30), Some(0x2F)); // Two-way ladder
+        assert_eq!(dungeon_minimap_glyph(0x40), Some(0x70)); // Closed chest
+        assert_eq!(dungeon_minimap_glyph(0x50), Some(0x12)); // Fountain anchor
+        // Exact 0x6? bytes carve out specific glyphs before band.
+        assert_eq!(dungeon_minimap_glyph(0x60), Some(0x19)); // Plain pit
+        assert_eq!(dungeon_minimap_glyph(0x61), Some(0x71)); // Hidden/fall pit
+        assert_eq!(dungeon_minimap_glyph(0x69), Some(0x71)); // Hidden/fall pit
+        assert_eq!(dungeon_minimap_glyph(0x68), Some(0x12)); // Fired pit
+        assert_eq!(dungeon_minimap_glyph(0x62), Some(0x72)); // Other 0x6?
+        assert_eq!(dungeon_minimap_glyph(0x6F), Some(0x72));
+        // Blank classes.
+        assert_eq!(dungeon_minimap_glyph(0x70), None);
+        assert_eq!(dungeon_minimap_glyph(0x90), None);
+        // Wall classes.
+        assert_eq!(dungeon_minimap_glyph(0xB0), Some(0x7F));
+        assert_eq!(dungeon_minimap_glyph(0xB1), Some(0x74));
+        assert_eq!(dungeon_minimap_glyph(0xC0), Some(0x75));
+        assert_eq!(dungeon_minimap_glyph(0xD0), Some(0x76));
+        assert_eq!(dungeon_minimap_glyph(0xE0), Some(0x77));
+        // Door/room families.
+        assert_eq!(dungeon_minimap_glyph(0xA0), Some(0x73));
+        assert_eq!(dungeon_minimap_glyph(0xF0), Some(0x73));
+    }
+
+    #[test]
     fn dungeon_field_base_byte_pairs_effect_with_published_byte() {
         // dungeon-mode.md §8: the four energy fields have published
         // base bytes (0x80..=0x83) with paired visit-marker variants
