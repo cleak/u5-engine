@@ -130,14 +130,30 @@ pub const fn location_dat_filename(scene_byte: u8) -> Option<&'static str> {
     })
 }
 
+/// `formats/npc.md §2` published per-family `.NPC` roster filenames.
+/// The town-family scene byte selects one of four classes; the
+/// engine reads the matching roster file at location-load time.
+pub const TOWNE_NPC_FILENAME: &str = "TOWNE.NPC";
+pub const DWELLING_NPC_FILENAME: &str = "DWELLING.NPC";
+pub const CASTLE_NPC_FILENAME: &str = "CASTLE.NPC";
+pub const KEEP_NPC_FILENAME: &str = "KEEP.NPC";
+
+/// `formats/tlk.md §2` published per-family `.TLK` dialog filenames.
+/// Parallel to the `.NPC` rosters above; the conversation engine
+/// loads the matching file for a town/dwelling/castle/keep scene.
+pub const TOWNE_TLK_FILENAME: &str = "TOWNE.TLK";
+pub const DWELLING_TLK_FILENAME: &str = "DWELLING.TLK";
+pub const CASTLE_TLK_FILENAME: &str = "CASTLE.TLK";
+pub const KEEP_TLK_FILENAME: &str = "KEEP.TLK";
+
 /// `formats/npc.md §2`: filename loaded for a town-family scene
 /// byte's NPC roster. Returns `None` for scene bytes outside `1..=32`.
 pub const fn npc_roster_filename(scene_byte: u8) -> Option<&'static str> {
     Some(match scene_byte {
-        1..=8 => "TOWNE.NPC",
-        9..=16 => "DWELLING.NPC",
-        17..=24 => "CASTLE.NPC",
-        25..=32 => "KEEP.NPC",
+        1..=8 => TOWNE_NPC_FILENAME,
+        9..=16 => DWELLING_NPC_FILENAME,
+        17..=24 => CASTLE_NPC_FILENAME,
+        25..=32 => KEEP_NPC_FILENAME,
         _ => return None,
     })
 }
@@ -147,10 +163,10 @@ pub const fn npc_roster_filename(scene_byte: u8) -> Option<&'static str> {
 /// `1..=32`.
 pub const fn npc_tlk_filename(scene_byte: u8) -> Option<&'static str> {
     Some(match scene_byte {
-        1..=8 => "TOWNE.TLK",
-        9..=16 => "DWELLING.TLK",
-        17..=24 => "CASTLE.TLK",
-        25..=32 => "KEEP.TLK",
+        1..=8 => TOWNE_TLK_FILENAME,
+        9..=16 => DWELLING_TLK_FILENAME,
+        17..=24 => CASTLE_TLK_FILENAME,
+        25..=32 => KEEP_TLK_FILENAME,
         _ => return None,
     })
 }

@@ -1,4 +1,32 @@
     #[test]
+    fn npc_and_tlk_family_filenames_match_published_extensions() {
+        // formats/npc.md §2 / formats/tlk.md §2: the four town-family
+        // roster and dialogue filenames are stable string constants
+        // and the per-scene-byte helpers must agree with them.
+        assert_eq!(TOWNE_NPC_FILENAME, "TOWNE.NPC");
+        assert_eq!(DWELLING_NPC_FILENAME, "DWELLING.NPC");
+        assert_eq!(CASTLE_NPC_FILENAME, "CASTLE.NPC");
+        assert_eq!(KEEP_NPC_FILENAME, "KEEP.NPC");
+        assert_eq!(TOWNE_TLK_FILENAME, "TOWNE.TLK");
+        assert_eq!(DWELLING_TLK_FILENAME, "DWELLING.TLK");
+        assert_eq!(CASTLE_TLK_FILENAME, "CASTLE.TLK");
+        assert_eq!(KEEP_TLK_FILENAME, "KEEP.TLK");
+
+        assert_eq!(npc_roster_filename(1), Some(TOWNE_NPC_FILENAME));
+        assert_eq!(npc_roster_filename(8), Some(TOWNE_NPC_FILENAME));
+        assert_eq!(npc_roster_filename(9), Some(DWELLING_NPC_FILENAME));
+        assert_eq!(npc_roster_filename(17), Some(CASTLE_NPC_FILENAME));
+        assert_eq!(npc_roster_filename(25), Some(KEEP_NPC_FILENAME));
+        assert_eq!(npc_roster_filename(0), None);
+        assert_eq!(npc_roster_filename(33), None);
+
+        assert_eq!(npc_tlk_filename(8), Some(TOWNE_TLK_FILENAME));
+        assert_eq!(npc_tlk_filename(16), Some(DWELLING_TLK_FILENAME));
+        assert_eq!(npc_tlk_filename(24), Some(CASTLE_TLK_FILENAME));
+        assert_eq!(npc_tlk_filename(32), Some(KEEP_TLK_FILENAME));
+    }
+
+    #[test]
     fn resurrection_rebuilt_current_hp_is_one() {
         // magic.md §8: the spell helper stands the resurrected member
         // up with exactly one hit point; healer callers may top up
