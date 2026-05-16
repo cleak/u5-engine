@@ -253,7 +253,7 @@ impl PlayState {
         member_index: usize,
         entry: WorldPlaneTransitionEntry,
     ) -> u8 {
-        1 + (self.world_plane_fall_damage_seed(member_index, entry) % 5)
+        1 + (self.world_plane_fall_damage_seed(member_index, entry) % WORLD_PLANE_FALL_DAMAGE_MAX)
     }
 
     pub fn world_plane_fall_damage_seed(

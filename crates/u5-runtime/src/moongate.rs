@@ -128,3 +128,10 @@ pub const SURFACE_CHASM_Y: u8 = 138;
 pub const fn is_surface_chasm_cell(x: u8, y: u8) -> bool {
     x == SURFACE_CHASM_X && y == SURFACE_CHASM_Y
 }
+
+/// `overworld.md §2`: maximum per-member fall-damage value rolled when
+/// the Britannia chasm or whirlpool plane writer transitions a
+/// conscious party member to the Underworld. The runtime draws a
+/// uniform `1..=WORLD_PLANE_FALL_DAMAGE_MAX` roll for each conscious
+/// member.
+pub const WORLD_PLANE_FALL_DAMAGE_MAX: u8 = 5;

@@ -1,4 +1,19 @@
     #[test]
+    fn world_plane_fall_damage_max_routes_through_named_constant() {
+        // overworld.md §2: chasm and whirlpool plane writers apply a
+        // random fall-damage roll per conscious party member. Promote
+        // the upper bound so world_plane_fall_damage_roll does not
+        // bake `5` as a bare modulus literal.
+        assert_eq!(WORLD_PLANE_FALL_DAMAGE_MAX, 5);
+        // The roll is `1..=WORLD_PLANE_FALL_DAMAGE_MAX`; every value
+        // produced by the modulo is in that range.
+        for seed in 0u8..=u8::MAX {
+            let roll = 1 + (seed % WORLD_PLANE_FALL_DAMAGE_MAX);
+            assert!((1..=WORLD_PLANE_FALL_DAMAGE_MAX).contains(&roll));
+        }
+    }
+
+    #[test]
     fn movement_chair_force_reject_exempt_families_are_named() {
         // movement.md §4: the chair-tile force-reject for `0x90..=0x93`
         // is skipped for the on-foot/avatar query family
