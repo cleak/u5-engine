@@ -7,6 +7,42 @@
     }
 
     #[test]
+    fn guild_shop_action_routes_a_b_c_and_exits_on_anything_else() {
+        // shops.md §8.2
+        assert_eq!(
+            guild_shop_action(b'a'),
+            GuildShopAction::Purchase(GuildCommodity::Keys)
+        );
+        assert_eq!(
+            guild_shop_action(b'A'),
+            GuildShopAction::Purchase(GuildCommodity::Keys)
+        );
+        assert_eq!(
+            guild_shop_action(b'b'),
+            GuildShopAction::Purchase(GuildCommodity::Gems)
+        );
+        assert_eq!(
+            guild_shop_action(b'B'),
+            GuildShopAction::Purchase(GuildCommodity::Gems)
+        );
+        assert_eq!(
+            guild_shop_action(b'c'),
+            GuildShopAction::Purchase(GuildCommodity::Torches)
+        );
+        assert_eq!(
+            guild_shop_action(b'C'),
+            GuildShopAction::Purchase(GuildCommodity::Torches)
+        );
+        for byte in [b'd', b'D', b' ', b'X', b'Y', b'N', b'\r', 0x00, 0x1B, 0xFF] {
+            assert_eq!(
+                guild_shop_action(byte),
+                GuildShopAction::Exit,
+                "byte {byte:#04x}"
+            );
+        }
+    }
+
+    #[test]
     fn sage_rumour_topic_count_matches_resident_table_size() {
         // shops.md §8.8: shipped resident topic list contains 26 rumour
         // topics.

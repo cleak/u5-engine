@@ -248,6 +248,31 @@ impl GuildCommodity {
     }
 }
 
+/// `shops.md §8.2` guildmaster (magic shop) entry-menu outcome.
+/// After the greeting, the player picks `a` Keys, `b` Gems, `c`
+/// Torches, or any other key (Exit). The shipped flow does not
+/// re-prompt: any non-`a`/`b`/`c` input including Space exits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GuildShopAction {
+    /// `a` (case-insensitive) — Keys.
+    Purchase(GuildCommodity),
+    /// Any other key — exit the menu.
+    Exit,
+}
+
+/// `shops.md §8.2`: classify one keystroke for the guildmaster
+/// entry menu. Caller has applied the input case fold; this helper
+/// also accepts the upper-case `A` / `B` / `C` variants so
+/// uppercase-naive callers pass through cleanly.
+pub const fn guild_shop_action(byte: u8) -> GuildShopAction {
+    match byte {
+        b'a' | b'A' => GuildShopAction::Purchase(GuildCommodity::Keys),
+        b'b' | b'B' => GuildShopAction::Purchase(GuildCommodity::Gems),
+        b'c' | b'C' => GuildShopAction::Purchase(GuildCommodity::Torches),
+        _ => GuildShopAction::Exit,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GuildPurchaseQuote {
     pub shop: GuildShop,
