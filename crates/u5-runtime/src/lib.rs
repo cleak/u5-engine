@@ -270,9 +270,10 @@ pub use miscmsg_io::{
 };
 pub use quest_flags::{
     CONVERSATION_CLEANUP_GOLD_DEBIT_MAX, CONVERSATION_CLEANUP_GOLD_DEBIT_MIN,
-    CONVERSATION_CLEANUP_SENTINEL_ALLOW, ConversationLetterAction,
-    ConversationPassword, QUEST_GRAPH_NODE_CLASSES, QuestGraphNodeClass,
-    conversation_cleanup_gold_debit_amount, conversation_cleanup_runs_warning,
+    CONVERSATION_CLEANUP_SENTINEL_ALLOW, ConversationCleanupReconciliation,
+    ConversationLetterAction, ConversationPassword, QUEST_GRAPH_NODE_CLASSES,
+    QuestGraphNodeClass, conversation_cleanup_gold_debit_amount,
+    conversation_cleanup_reconciliation, conversation_cleanup_runs_warning,
     conversation_letter_action, conversation_password, tlk_scene_branch_is_set,
     tlk_scene_branch_mask, tlk_scene_branch_set,
 };

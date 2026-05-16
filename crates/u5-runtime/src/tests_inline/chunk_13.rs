@@ -1,4 +1,42 @@
     #[test]
+    fn conversation_cleanup_reconciliation_follows_published_priority() {
+        // quest-flags.md §5: zero-sentinel cleanup branches in fixed
+        // priority order, decrementing at most one byte-sized signal
+        // per call. Gold-debit fallback only fires when every byte
+        // array is empty.
+        use ConversationCleanupReconciliation::*;
+
+        // Resource band wins outright when it has any nonzero entry.
+        assert_eq!(
+            conversation_cleanup_reconciliation(true, false, false),
+            ResourceBand
+        );
+        assert_eq!(
+            conversation_cleanup_reconciliation(true, true, true),
+            ResourceBand
+        );
+        // Generic signal array wins when the resource band is empty.
+        assert_eq!(
+            conversation_cleanup_reconciliation(false, true, false),
+            GenericSignalArray
+        );
+        assert_eq!(
+            conversation_cleanup_reconciliation(false, true, true),
+            GenericSignalArray
+        );
+        // Eight-slot arrays take the next priority.
+        assert_eq!(
+            conversation_cleanup_reconciliation(false, false, true),
+            EightSlotSignalArrays
+        );
+        // Gold debit only when everything else is empty.
+        assert_eq!(
+            conversation_cleanup_reconciliation(false, false, false),
+            GoldDebitFallback
+        );
+    }
+
+    #[test]
     fn equipped_item_weight_stat_sums_six_slots_with_protection_bonus() {
         // inventory.md §2.1 / catalogs/item-list.md §5.1: the
         // equipped-item statistic helper sums the published
