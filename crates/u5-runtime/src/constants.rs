@@ -701,6 +701,10 @@ pub const WORLD_SIDE: usize = 256;
 pub const WORLD_CELLS: usize = WORLD_SIDE * WORLD_SIDE;
 pub const UNDER_DAT_LEN: usize = WORLD_CELLS;
 pub const BRIT_DAT_LEN: usize = 52_480;
+/// `formats/world-map.md`: published surface and underworld
+/// world-map filenames.
+pub const BRIT_DAT_FILENAME: &str = "BRIT.DAT";
+pub const UNDER_DAT_FILENAME: &str = "UNDER.DAT";
 pub const CHUNK_SIDE: usize = 16;
 pub const CHUNK_BYTES: usize = CHUNK_SIDE * CHUNK_SIDE;
 pub const WORLD_CHUNKS_PER_SIDE: usize = WORLD_SIDE / CHUNK_SIDE;

@@ -267,8 +267,8 @@ impl WorldPlane {
 
     pub fn file_name(self) -> &'static str {
         match self {
-            Self::Britannia => "BRIT.DAT",
-            Self::Underworld => "UNDER.DAT",
+            Self::Britannia => crate::BRIT_DAT_FILENAME,
+            Self::Underworld => crate::UNDER_DAT_FILENAME,
         }
     }
 

@@ -22,7 +22,7 @@ pub fn decode_underworld_map_bytes(bytes: &[u8]) -> io::Result<Vec<u8>> {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
-                "UNDER.DAT must be {UNDER_DAT_LEN} bytes, got {}",
+                "{UNDER_DAT_FILENAME} must be {UNDER_DAT_LEN} bytes, got {}",
                 bytes.len()
             ),
         ));
@@ -107,7 +107,10 @@ pub fn decode_britannia_map_bytes(bytes: &[u8], table: &[u8]) -> io::Result<Vec<
     if bytes.len() != BRIT_DAT_LEN {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("BRIT.DAT must be {BRIT_DAT_LEN} bytes, got {}", bytes.len()),
+            format!(
+                "{BRIT_DAT_FILENAME} must be {BRIT_DAT_LEN} bytes, got {}",
+                bytes.len()
+            ),
         ));
     }
     validate_britannia_chunk_index(table)?;
