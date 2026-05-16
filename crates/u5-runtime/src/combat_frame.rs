@@ -13,6 +13,19 @@ pub struct CombatFrameSnapshot {
     pub combat_terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
 }
 
+/// `combat.md §12` split-on-damage placement-attempt cap. When a
+/// monster with the split-on-damage class flag is damaged but not
+/// killed, combat scans the actor table for an empty slot to copy
+/// the parent's class byte into. Up to this many attempts are made
+/// before the divide is dropped silently.
+pub const COMBAT_SPLIT_PLACEMENT_ATTEMPTS: u8 = 8;
+
+/// `combat.md §12` factory-seed cached combat-defense byte at
+/// character-record offset `+0x18`. Applies to fresh save images
+/// before any equipment/effect re-cache; the live combat damage
+/// roll subtracts a random value driven by this byte.
+pub const CHARACTER_DEFENSE_FACTORY_SEED: u8 = 7;
+
 /// `combat.md §11` step-or-attack direction codes. The world-mode
 /// loops and the combat dispatcher share this mapping: `1 = west`,
 /// `2 = east`, `3 = north`, `4 = south`. Code `0` (or any value out

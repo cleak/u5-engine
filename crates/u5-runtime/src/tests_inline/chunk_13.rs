@@ -1,4 +1,11 @@
     #[test]
+    fn combat_split_and_factory_defense_constants_match_spec() {
+        // combat.md §12
+        assert_eq!(COMBAT_SPLIT_PLACEMENT_ATTEMPTS, 8);
+        assert_eq!(CHARACTER_DEFENSE_FACTORY_SEED, 7);
+    }
+
+    #[test]
     fn combat_step_direction_delta_matches_spec_codes() {
         // combat.md §11
         assert_eq!(combat_step_direction_delta(COMBAT_DIRECTION_WEST), (-1, 0));
