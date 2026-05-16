@@ -1,4 +1,30 @@
     #[test]
+    fn sea_creature_spawn_aux_seed_only_for_water_creature_facing_frames() {
+        // encounters.md §4: only the pirate-ship / water-creature facing-frame
+        // family 0x2C..=0x2F receives the 100-unit aux seed at spawn time.
+        // Every other class spawned by the random-encounter spawner uses the
+        // default zero seed.
+        assert_eq!(SEA_CREATURE_SPAWN_AUX_SEED, 100);
+        for class in 0x2Cu8..=0x2F {
+            assert!(
+                sea_creature_spawn_seeds_aux(class),
+                "class {class:#04x} should seed the wander aux"
+            );
+        }
+        // Spot-check non-water-creature classes do not.
+        for class in [
+            0x00u8, 0x01, 0x2B, 0x30, 0x40, 0x80, 0x84, 0x88, 0x8C, 0x90, 0x94,
+            0x98, 0xC0, 0xC4, 0xC8, 0xCC, 0xD0, 0xD4, 0xD8, 0xDC, 0xE0, 0xE4,
+            0xEC, 0xF0, 0xF4, 0xF8, 0xFF,
+        ] {
+            assert!(
+                !sea_creature_spawn_seeds_aux(class),
+                "class {class:#04x} should not seed the wander aux"
+            );
+        }
+    }
+
+    #[test]
     fn tlk_byte_runner_class_partitions_byte_space_per_spec() {
         // conversation.md §7 top-level dispatcher ranges.
         assert_eq!(tlk_byte_runner_class(0x00), TlkByteRunnerClass::NullByte);

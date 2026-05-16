@@ -407,6 +407,22 @@ pub const SPAWN_LOW_TILE_ALLOWANCE_DENOMINATOR: u8 = 4;
 /// loop returns silently after this many rejected candidates.
 pub const ENCOUNTER_SPAWNER_RETRY_LIMIT: u8 = 128;
 
+/// `encounters.md §4` sea-creature spawner auxiliary seed. The
+/// pirate-ship / water-creature facing-frame family `0x2C..=0x2F`
+/// initialises its auxiliary byte to this value, which seeds the
+/// outdoor animation/wander counter. Every other spawned monster
+/// class initialises the auxiliary byte to zero.
+pub const SEA_CREATURE_SPAWN_AUX_SEED: u8 = 100;
+
+/// `encounters.md §4`: returns `true` when a newly-spawned
+/// active-object's class byte belongs to the pirate-ship /
+/// water-creature facing-frame family `0x2C..=0x2F` and should
+/// therefore receive [`SEA_CREATURE_SPAWN_AUX_SEED`] in its auxiliary
+/// byte rather than the default zero seed.
+pub const fn sea_creature_spawn_seeds_aux(class_byte: u8) -> bool {
+    matches!(class_byte, 0x2C..=0x2F)
+}
+
 /// `encounters.md §4` minimum/maximum candidate-coordinate
 /// separation from the party. Both X and Y separations must be
 /// strictly greater than `MIN` (keeps the spawn outside the
