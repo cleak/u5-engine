@@ -185,6 +185,16 @@ pub const CHARGEN_STARTING_Y: u8 = 15;
 pub const CHARGEN_STARTING_Z: u8 = 0;
 pub const CHARGEN_STARTING_SAVED_SCENE_SCRATCH: u8 = 0;
 
+/// `chargen.md §8` starting calendar values for a fresh-from-
+/// questionnaire save. The save clock begins at year 139, month 4,
+/// day 5, 08:35 of the in-world calendar. These bytes come from
+/// `INIT.GAM`; chargen does not customise them.
+pub const CHARGEN_STARTING_YEAR: u16 = 139;
+pub const CHARGEN_STARTING_MONTH: u8 = 4;
+pub const CHARGEN_STARTING_DAY: u8 = 5;
+pub const CHARGEN_STARTING_HOUR: u8 = 8;
+pub const CHARGEN_STARTING_MINUTE: u8 = 35;
+
 pub fn chargen_stats_from_winners(winners: &[ShrineVirtue]) -> ChargenStats {
     let mut strength = 0u8;
     let mut dexterity = 0u8;

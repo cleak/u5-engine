@@ -1,4 +1,26 @@
     #[test]
+    fn chargen_starting_calendar_matches_init_gam_seed() {
+        // chargen.md §8: a fresh-from-questionnaire save begins at
+        // year 139, month 4, day 5, 08:35 of the in-world calendar.
+        // The bytes come from INIT.GAM; chargen does not customise
+        // them. Promoting the values to named constants lets fixture
+        // builders and seed verifiers compare against the spec
+        // directly instead of literal magic numbers.
+        assert_eq!(CHARGEN_STARTING_YEAR, 139);
+        assert_eq!(CHARGEN_STARTING_MONTH, 4);
+        assert_eq!(CHARGEN_STARTING_DAY, 5);
+        assert_eq!(CHARGEN_STARTING_HOUR, 8);
+        assert_eq!(CHARGEN_STARTING_MINUTE, 35);
+        // Sanity-check that the seeded month/day are inside the
+        // documented calendar ranges (month one-based 1..=13, day
+        // one-based 1..=28 per saved-gam.md §5).
+        assert!((1..=13).contains(&CHARGEN_STARTING_MONTH));
+        assert!((1..=28).contains(&CHARGEN_STARTING_DAY));
+        assert!(CHARGEN_STARTING_HOUR < 24);
+        assert!(CHARGEN_STARTING_MINUTE < 60);
+    }
+
+    #[test]
     fn combat_post_round_magic_effect_timer_ticks_in_open_interval() {
         // combat.md §7: in the post-round maintenance pass, a terrain
         // byte `0xDC` ticks the shared combat magic-effect timer
