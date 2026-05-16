@@ -1,4 +1,18 @@
     #[test]
+    fn chargen_starting_map_tuple_matches_init_gam_seed() {
+        // chargen.md §8: scene 13 (Iolo's Hut), saved-scene scratch 0,
+        // floor/Z 0, X 15, Y 15.
+        assert_eq!(CHARGEN_STARTING_SCENE, 13);
+        assert_eq!(CHARGEN_STARTING_X, 15);
+        assert_eq!(CHARGEN_STARTING_Y, 15);
+        assert_eq!(CHARGEN_STARTING_Z, 0);
+        assert_eq!(CHARGEN_STARTING_SAVED_SCENE_SCRATCH, 0);
+        // Sanity: the starting scene is Iolo's Hut as named by the
+        // town_resident_name catalog.
+        assert_eq!(town_resident_name(CHARGEN_STARTING_SCENE), Some("Iolo's Hut"));
+    }
+
+    #[test]
     fn conversation_cleanup_gold_debit_lands_in_one_through_fifteen() {
         // quest-flags.md §5
         assert_eq!(CONVERSATION_CLEANUP_GOLD_DEBIT_MIN, 1);

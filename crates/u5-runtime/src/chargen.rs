@@ -142,6 +142,16 @@ pub const CHARGEN_AVATAR_SEED_STATUS_BYTE: u8 = b'G';
 /// save (Avatar plus Iolo and Shamino in scene 13, Iolo's Hut).
 pub const CHARGEN_STARTING_PARTY_SIZE: u8 = 3;
 
+/// `chargen.md §8` starting map tuple for a fresh-from-questionnaire
+/// save. The chargen writer seeds scene 13 (Iolo's Hut) on floor /
+/// Z 0 at local cell (15, 15) with a zero saved-scene scratch byte.
+/// These bytes come from `INIT.GAM`; chargen does not customise them.
+pub const CHARGEN_STARTING_SCENE: u8 = 13;
+pub const CHARGEN_STARTING_X: u8 = 15;
+pub const CHARGEN_STARTING_Y: u8 = 15;
+pub const CHARGEN_STARTING_Z: u8 = 0;
+pub const CHARGEN_STARTING_SAVED_SCENE_SCRATCH: u8 = 0;
+
 pub fn chargen_stats_from_winners(winners: &[ShrineVirtue]) -> ChargenStats {
     let mut strength = 0u8;
     let mut dexterity = 0u8;
