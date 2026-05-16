@@ -544,6 +544,46 @@ pub const fn dungeon_pit_trap_kind(tile: u8) -> Option<DungeonPitTrap> {
     })
 }
 
+/// `dungeon-mode.md §13` K-Klimb apply-path outcome for the underfoot
+/// dungeon cell. The handler reads only the high nibble (and the
+/// exact `0x60` byte) to decide whether to change Z, prompt the
+/// player, fire the surface-reset helper, or refuse the climb.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonKlimbApply {
+    /// `0x1?` up ladder — decrement Z. Refuses when already on
+    /// surface (`Z == 0`).
+    UpLadder,
+    /// `0x2?` down ladder — increment Z. Refuses when already on the
+    /// deepest level (`Z == DUNGEON_DEEPEST_LEVEL`).
+    DownLadder,
+    /// `0x3?` two-way ladder — prompt the player for up or down,
+    /// then dispatch.
+    TwoWayPrompt,
+    /// Exact byte `0x60` — plain pit. Bypass ordinary ladder apply
+    /// and invoke the surface-reset helper that returns the party to
+    /// the dungeon's exterior coordinate.
+    SurfaceResetPit,
+    /// Any other underfoot byte — K-Klimb returns without a level
+    /// change.
+    NoLevelChange,
+}
+
+/// `dungeon-mode.md §13`: classify the underfoot dungeon byte into
+/// the K-Klimb apply-path outcome. The plain `0x60` pit is checked
+/// before the high-nibble bucket so it does not fall through to the
+/// pit-family branch.
+pub const fn dungeon_klimb_apply(tile: u8) -> DungeonKlimbApply {
+    if tile == 0x60 {
+        return DungeonKlimbApply::SurfaceResetPit;
+    }
+    match tile >> 4 {
+        0x1 => DungeonKlimbApply::UpLadder,
+        0x2 => DungeonKlimbApply::DownLadder,
+        0x3 => DungeonKlimbApply::TwoWayPrompt,
+        _ => DungeonKlimbApply::NoLevelChange,
+    }
+}
+
 /// `dungeon-mode.md §8`: Search rewrites `0x61` (secret-door reveal)
 /// to `0x60` for the current visit and marks the same X/Y cell one
 /// level below with the visit bit `0x08` (when not already on the

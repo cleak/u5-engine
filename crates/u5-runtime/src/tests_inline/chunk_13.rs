@@ -1,4 +1,38 @@
     #[test]
+    fn dungeon_klimb_apply_dispatches_by_high_nibble_and_plain_pit() {
+        // dungeon-mode.md §13: K-Klimb reads the underfoot byte's
+        // high nibble (and the exact 0x60 plain-pit byte) to decide
+        // whether to move Z, prompt up/down, fire the surface-reset
+        // helper, or refuse the climb.
+        use DungeonKlimbApply::*;
+        // 0x60 is the surface-reset pit (must be checked before pit
+        // family classifies it as PlainPit).
+        assert_eq!(dungeon_klimb_apply(0x60), SurfaceResetPit);
+        // Up ladders.
+        for tile in 0x10u8..=0x1F {
+            assert_eq!(dungeon_klimb_apply(tile), UpLadder);
+        }
+        // Down ladders.
+        for tile in 0x20u8..=0x2F {
+            assert_eq!(dungeon_klimb_apply(tile), DownLadder);
+        }
+        // Two-way ladders.
+        for tile in 0x30u8..=0x3F {
+            assert_eq!(dungeon_klimb_apply(tile), TwoWayPrompt);
+        }
+        // Other 0x6? bytes (besides 0x60) are NoLevelChange — K-Klimb
+        // routes pit/bomb/secret traps elsewhere, not into the ladder
+        // apply path.
+        for tile in [0x61u8, 0x69, 0x62, 0x6A, 0x67, 0x6F] {
+            assert_eq!(dungeon_klimb_apply(tile), NoLevelChange);
+        }
+        // Wall/door classes and ordinary passages: no level change.
+        for tile in [0x00u8, 0x05, 0x80, 0x90, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0] {
+            assert_eq!(dungeon_klimb_apply(tile), NoLevelChange);
+        }
+    }
+
+    #[test]
     fn dungeon_entry_seed_constants_match_published_coordinates() {
         // dungeon-mode.md §3: surface entry → (Z=0, X=1, Y=1) east;
         // underworld entry into non-Doom dungeons → (Z=7, X=7, Y=7)
