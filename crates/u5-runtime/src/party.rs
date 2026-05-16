@@ -211,6 +211,18 @@ pub const fn heal_spell_amount_from_raw_roll(raw_roll: u8) -> u16 {
     if amount == 0 { 1 } else { amount as u16 }
 }
 
+/// `magic.md §8` per-level maximum-HP factor used when a successful
+/// Resurrect rebuilds the revived member's record. Maximum HP is set
+/// to `30 * level` after the experience-driven level recompute.
+pub const RESURRECTION_MAX_HP_PER_LEVEL: u16 = 30;
+
+/// `magic.md §8`: maximum HP a resurrected member receives for the
+/// supplied recomputed level. Saturates at `u16::MAX` so callers do
+/// not need to guard absurd levels.
+pub const fn resurrection_max_hp_for_level(level: u8) -> u16 {
+    (level as u16).saturating_mul(RESURRECTION_MAX_HP_PER_LEVEL)
+}
+
 pub fn resurrection_adjusted_experience(experience: u16, moral_standing: u8) -> u16 {
     if moral_standing >= 98 {
         return experience;

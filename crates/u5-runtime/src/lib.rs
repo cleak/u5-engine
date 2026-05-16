@@ -337,12 +337,13 @@ pub use npc_runtime::{
     npc_type_byte_occupied, schedule_floor_state,
 };
 pub use party::{
-    Area, AvatarStats, MoonstoneGateSlot, PartyMember, Player, class_refreshed_mana, default_party,
-    default_party_experience, default_party_intelligence, default_party_names,
-    default_party_stay_counters, heal_spell_amount_from_raw_roll, increase_capped_stat,
-    party_member_unavailable_message, party_name_to_string, party_status_name,
-    potion_effect_index_after_variation, potion_label, recompute_level_from_experience,
-    resurrection_adjusted_experience,
+    Area, AvatarStats, MoonstoneGateSlot, PartyMember, Player, RESURRECTION_MAX_HP_PER_LEVEL,
+    class_refreshed_mana, default_party, default_party_experience,
+    default_party_intelligence, default_party_names, default_party_stay_counters,
+    heal_spell_amount_from_raw_roll, increase_capped_stat, party_member_unavailable_message,
+    party_name_to_string, party_status_name, potion_effect_index_after_variation,
+    potion_label, recompute_level_from_experience, resurrection_adjusted_experience,
+    resurrection_max_hp_for_level,
 };
 pub use play_options::*;
 pub use play_state_struct::{PlayState, WorldOverlayCache, WorldReturn};

@@ -1,4 +1,16 @@
     #[test]
+    fn resurrection_max_hp_for_level_is_30_per_level() {
+        // magic.md §8
+        assert_eq!(RESURRECTION_MAX_HP_PER_LEVEL, 30);
+        assert_eq!(resurrection_max_hp_for_level(1), 30);
+        assert_eq!(resurrection_max_hp_for_level(5), 150);
+        assert_eq!(resurrection_max_hp_for_level(8), 240);
+        assert_eq!(resurrection_max_hp_for_level(0), 0);
+        // Saturating multiply prevents wrap.
+        assert_eq!(resurrection_max_hp_for_level(255), 7650);
+    }
+
+    #[test]
     fn spell_charge_add_capped_clamps_at_99() {
         // magic.md §6,§7
         assert_eq!(spell_charge_add_capped(0, 0), 0);
