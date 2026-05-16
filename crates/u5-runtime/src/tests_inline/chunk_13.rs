@@ -1,4 +1,38 @@
     #[test]
+    fn save_character_field_offsets_match_spec_record() {
+        // formats/saved-gam.md §3.1
+        assert_eq!(SAVE_CHARACTER_NAME_OFFSET, 0x00);
+        assert_eq!(SAVE_CHARACTER_NAME_LEN_BYTES, 9);
+        assert_eq!(SAVE_CHARACTER_STRENGTH_OFFSET, 0x0C);
+        assert_eq!(SAVE_CHARACTER_DEXTERITY_OFFSET, 0x0D);
+        assert_eq!(SAVE_CHARACTER_INTELLIGENCE_OFFSET, 0x0E);
+        assert_eq!(SAVE_CHARACTER_MAGIC_POINTS_OFFSET, 0x0F);
+        assert_eq!(SAVE_CHARACTER_HP_CURRENT_OFFSET, 0x10);
+        assert_eq!(SAVE_CHARACTER_HP_MAX_OFFSET, 0x12);
+        assert_eq!(SAVE_CHARACTER_EXPERIENCE_OFFSET, 0x14);
+        assert_eq!(SAVE_CHARACTER_LEVEL_OFFSET, 0x16);
+        assert_eq!(SAVE_CHARACTER_MONTH_COUNTER_OFFSET, 0x17);
+        assert_eq!(SAVE_CHARACTER_DEFENSE_BYTE_OFFSET, 0x18);
+        assert_eq!(SAVE_CHARACTER_RECORD_LEN, 32);
+
+        // Slot 0 record begins at file offset 0x0002 (two leading
+        // save-image bytes precede the roster).
+        assert_eq!(
+            save_character_field_offset(0, SAVE_CHARACTER_NAME_OFFSET),
+            0x0002
+        );
+        assert_eq!(
+            save_character_field_offset(0, SAVE_CHARACTER_LEVEL_OFFSET),
+            0x0002 + 0x16
+        );
+        // Slot 15 record fits inside the 512-byte roster region.
+        assert_eq!(
+            save_character_field_offset(15, SAVE_CHARACTER_DEFENSE_BYTE_OFFSET),
+            0x0002 + 15 * 32 + 0x18
+        );
+    }
+
+    #[test]
     fn spyglass_usable_requires_overworld_with_stars() {
         // inventory.md §7
         assert!(spyglass_usable(0, true));

@@ -92,9 +92,16 @@ pub mod world_tables_io_locations;
 pub use active_object_io::*;
 pub use animation::{ActiveObject, ActiveShipWind, AnimationClock, PhaseTick};
 pub use character_record::{
-    CharacterClass, CharacterStatus, character_class_for_byte, character_status_for_byte,
+    CharacterClass, CharacterStatus, SAVE_CHARACTER_DEFENSE_BYTE_OFFSET,
+    SAVE_CHARACTER_DEXTERITY_OFFSET, SAVE_CHARACTER_EXPERIENCE_OFFSET,
+    SAVE_CHARACTER_HP_CURRENT_OFFSET, SAVE_CHARACTER_HP_MAX_OFFSET,
+    SAVE_CHARACTER_INTELLIGENCE_OFFSET, SAVE_CHARACTER_LEVEL_OFFSET,
+    SAVE_CHARACTER_MAGIC_POINTS_OFFSET, SAVE_CHARACTER_MONTH_COUNTER_OFFSET,
+    SAVE_CHARACTER_NAME_LEN_BYTES, SAVE_CHARACTER_NAME_OFFSET,
+    SAVE_CHARACTER_RECORD_LEN, SAVE_CHARACTER_STRENGTH_OFFSET,
+    character_class_for_byte, character_status_for_byte,
     rest_cleanup_transitions_to_good, rest_with_watch_participates,
-    town_rest_temp_sleep_marked,
+    save_character_field_offset, town_rest_temp_sleep_marked,
 };
 pub use chargen::*;
 pub use clock::{

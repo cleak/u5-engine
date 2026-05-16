@@ -93,6 +93,33 @@ impl CharacterStatus {
     }
 }
 
+/// `formats/saved-gam.md §3.1` per-character byte offsets inside the
+/// 32-byte character record. The roster lays each record out
+/// contiguously from offset `0x00` (first name byte) through `0x1F`
+/// (last equipment-and-padding tail byte).
+pub const SAVE_CHARACTER_NAME_OFFSET: usize = 0x00;
+pub const SAVE_CHARACTER_NAME_LEN_BYTES: usize = 9;
+pub const SAVE_CHARACTER_STRENGTH_OFFSET: usize = 0x0C;
+pub const SAVE_CHARACTER_DEXTERITY_OFFSET: usize = 0x0D;
+pub const SAVE_CHARACTER_INTELLIGENCE_OFFSET: usize = 0x0E;
+pub const SAVE_CHARACTER_MAGIC_POINTS_OFFSET: usize = 0x0F;
+pub const SAVE_CHARACTER_HP_CURRENT_OFFSET: usize = 0x10;
+pub const SAVE_CHARACTER_HP_MAX_OFFSET: usize = 0x12;
+pub const SAVE_CHARACTER_EXPERIENCE_OFFSET: usize = 0x14;
+pub const SAVE_CHARACTER_LEVEL_OFFSET: usize = 0x16;
+pub const SAVE_CHARACTER_MONTH_COUNTER_OFFSET: usize = 0x17;
+pub const SAVE_CHARACTER_DEFENSE_BYTE_OFFSET: usize = 0x18;
+
+/// `formats/saved-gam.md §3.1` per-character record stride.
+pub const SAVE_CHARACTER_RECORD_LEN: usize = 32;
+
+/// `formats/saved-gam.md §3.1`: returns the file offset of the
+/// supplied `field_offset` within roster slot `slot` (0..=15).
+pub const fn save_character_field_offset(slot: usize, field_offset: usize) -> usize {
+    // Roster begins two leading save-image bytes into the file.
+    0x0002 + slot * SAVE_CHARACTER_RECORD_LEN + field_offset
+}
+
 /// `rest-and-camp.md §5` rest-with-watch participation classification.
 /// Good, Poisoned, and Sleeping members participate in the watch
 /// path; Charmed, Dead, and Ashes members are skipped and have no
