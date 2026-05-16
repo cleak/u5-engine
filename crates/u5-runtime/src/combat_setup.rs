@@ -149,6 +149,20 @@ pub fn terrain_combat_replacement_threshold(count: u8) -> u8 {
     (count / 4) + 1
 }
 
+/// `encounters.md §8` shipped dungeon-encounter arena bank size.
+/// 112 arenas are stored in the on-disk `DUNGEON.CBT` file and are
+/// indexed as `bank * 16 + (tile & 0x0F)` from the dungeon-room
+/// trigger tile.
+pub const DUNGEON_CBT_ARENA_COUNT: usize = 112;
+
+/// `encounters.md §8`: returns `true` when a computed dungeon arena
+/// index lies inside the shipped 112-record bank. Out-of-range
+/// indices indicate either an unrecognised dungeon scene or a
+/// corrupted room tile and should not be passed to the loader.
+pub const fn dungeon_room_arena_index_in_range(arena_index: usize) -> bool {
+    arena_index < DUNGEON_CBT_ARENA_COUNT
+}
+
 pub fn terrain_combat_tile_for_spawn_index(
     spawn_index: u8,
     count: u8,

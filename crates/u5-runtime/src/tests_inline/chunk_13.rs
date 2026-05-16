@@ -1,4 +1,14 @@
     #[test]
+    fn dungeon_room_arena_index_in_range_recognises_shipped_bank() {
+        // encounters.md §8
+        assert_eq!(DUNGEON_CBT_ARENA_COUNT, 112);
+        assert!(dungeon_room_arena_index_in_range(0));
+        assert!(dungeon_room_arena_index_in_range(111));
+        assert!(!dungeon_room_arena_index_in_range(112));
+        assert!(!dungeon_room_arena_index_in_range(usize::MAX));
+    }
+
+    #[test]
     fn r_ready_unequip_returns_stock_below_cap() {
         // inventory.md §6
         assert!(r_ready_unequip_returns_stock(0));
