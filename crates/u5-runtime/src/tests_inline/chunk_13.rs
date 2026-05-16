@@ -1,4 +1,17 @@
     #[test]
+    fn blackthorn_failure_victim_slot_names_the_second_party_member() {
+        // blackthorn.md §5: a punishable failure beat names the
+        // party's second visible member (zero-based slot index 1)
+        // as the dragged-away victim. The cutscene actor slot
+        // matches this index.
+        assert_eq!(BLACKTHORN_FAILURE_VICTIM_SLOT, 1);
+        assert_eq!(
+            BlackthornCutsceneActor::SecondPartyMember.slot_index() as usize,
+            BLACKTHORN_FAILURE_VICTIM_SLOT
+        );
+    }
+
+    #[test]
     fn end_narrative_window_groups_split_return_home_from_blackthorn_arc() {
         // endgame.md §8: the six fixed END.DAT windows split into
         // two narrative arcs. Windows 1-3 are the return-home arc;

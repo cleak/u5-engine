@@ -87,6 +87,14 @@ pub enum BlackthornEntryFamily {
     RescueRefuge,
 }
 
+/// `blackthorn.md §5` failure-reaction victim slot. When a
+/// punishable challenge branch fails, the failure beat names the
+/// party's second visible member (zero-based slot index `1`) as the
+/// dragged-away victim. Compatibility code should preserve the
+/// fixed slot index rather than searching for a "first non-leader"
+/// member.
+pub const BLACKTHORN_FAILURE_VICTIM_SLOT: usize = 1;
+
 /// `blackthorn.md §4`: Blackthorn challenge prompt input limit.
 pub const BLACKTHORN_CHALLENGE_INPUT_LIMIT: usize = 14;
 /// `blackthorn.md §4`: number of fixed prompt ordinals the challenge
