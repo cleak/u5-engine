@@ -98,6 +98,13 @@ impl ShrineVirtue {
         }
     }
 
+    /// `karma.md §4`: Codex shrine turn-in raises the shared moral-
+    /// standing selector by this many units. Humility receives this
+    /// increase again as a follow-up bonus; other virtues receive
+    /// only the base increase. The same +3 is also added to the
+    /// matching per-virtue shrine standing slot.
+    pub const SHRINE_CODEX_TURN_IN_MORAL_INCREASE: u8 = 3;
+
     /// `karma.md §7` Codex turn-in Avatar stat reward. Each touched stat
     /// increments by one and clamps at thirty (the avatar stat cap).
     /// Returns `(strength_step, dexterity_step, intelligence_step)` —

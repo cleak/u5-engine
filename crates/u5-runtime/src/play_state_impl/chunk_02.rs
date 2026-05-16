@@ -1158,17 +1158,25 @@ impl PlayState {
             }
             (true, true) => {
                 self.shrine_ordained_mask &= !bit;
-                let gained = self.add_shrine_standing(entry.virtue, 3);
+                let gained = self.add_shrine_standing(
+                    entry.virtue,
+                    ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE,
+                );
                 // karma.md §3-4: shared moral-standing selector +3 on Codex
                 // turn-in, with Humility receiving an additional +3.
-                let moral_gained = self.add_moral_standing(3);
+                let moral_gained =
+                    self.add_moral_standing(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE);
                 let mut stat_notes = self.apply_shrine_stat_reward(entry.virtue);
                 if entry.virtue == ShrineVirtue::Humility {
-                    let humility_gain = self.add_shrine_standing(entry.virtue, 3);
+                    let humility_gain = self.add_shrine_standing(
+                        entry.virtue,
+                        ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE,
+                    );
                     if humility_gain > 0 {
                         stat_notes.push(format!("standing +{humility_gain}"));
                     }
-                    let humility_moral = self.add_moral_standing(3);
+                    let humility_moral =
+                        self.add_moral_standing(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE);
                     if humility_moral > 0 {
                         stat_notes.push(format!("moral +{humility_moral}"));
                     }

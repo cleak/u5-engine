@@ -1,4 +1,32 @@
     #[test]
+    fn shrine_codex_turn_in_moral_increase_is_three() {
+        // karma.md §4: shrine Codex turn-in adds +3 to the shared
+        // moral-standing selector (and to the per-virtue shrine
+        // standing slot), with Humility receiving the same increase
+        // a second time as a follow-up bonus. Promote the value to a
+        // named associated constant so the shrine handler does not
+        // bake `3` as a bare literal in two places.
+        assert_eq!(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE, 3);
+        // Humility's documented follow-up bonus equals the same +3.
+        assert_eq!(
+            ShrineVirtue::Humility.codex_turn_in_humility_bonus(),
+            ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE
+        );
+        // Non-Humility virtues do not pay the follow-up bonus.
+        for virtue in [
+            ShrineVirtue::Honesty,
+            ShrineVirtue::Compassion,
+            ShrineVirtue::Valor,
+            ShrineVirtue::Justice,
+            ShrineVirtue::Sacrifice,
+            ShrineVirtue::Honor,
+            ShrineVirtue::Spirituality,
+        ] {
+            assert_eq!(virtue.codex_turn_in_humility_bonus(), 0);
+        }
+    }
+
+    #[test]
     fn dawn_dusk_hour_constants_match_spec() {
         // lighting.md §3: the surface day-night cycle uses two named
         // gradient hours and six ten-minute levels. Promote the dawn
