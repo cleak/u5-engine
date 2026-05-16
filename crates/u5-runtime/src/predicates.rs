@@ -294,6 +294,31 @@ pub const fn sleep_ambush_rest_interrupted(roll: u8) -> bool {
 ///   - Surface tile 0x04 or wilderness band 0x09..=0x0F: 2 by day, 5 at
 ///     hours 0..=4.
 ///   - Any other surface tile: 1 by day, 4 at hours 0..=4.
+/// `formats/saved-gam.md §10` dungeon room-clear bitmap shape. The
+/// 16-byte bitmap covers eight dungeons (`0..7`) by sixteen room
+/// ids (`0..15`), giving 128 bits total. Layout is dungeon-major
+/// then room-major: dungeon `D` occupies the bits at byte offsets
+/// `D*2..=D*2+1`, with low bit = room id 0.
+pub const SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON: usize = 2;
+pub const SAVE_DUNGEON_ROOM_CLEAR_ROOMS_PER_DUNGEON: usize = 16;
+
+/// `formats/saved-gam.md §10`: returns the (byte_offset_within_bitmap,
+/// bit_mask) pair for a (dungeon, room_id) coordinate. Returns
+/// `None` for out-of-range coordinates (dungeon `>= 8` or room id
+/// `>= 16`).
+pub const fn dungeon_room_clear_bit_position(
+    dungeon: u8,
+    room_id: u8,
+) -> Option<(usize, u8)> {
+    if dungeon >= 8 || room_id >= 16 {
+        return None;
+    }
+    let byte = dungeon as usize * SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON
+        + (room_id as usize) / 8;
+    let mask = 1u8 << (room_id % 8);
+    Some((byte, mask))
+}
+
 /// `encounters.md §4` candidate-terrain branch the encounter
 /// spawner takes once a coordinate has passed the separation gate.
 /// Caller supplies the world tile id and the underworld plane flag.

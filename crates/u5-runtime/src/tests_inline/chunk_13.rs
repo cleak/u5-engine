@@ -1,4 +1,42 @@
     #[test]
+    fn dungeon_room_clear_bit_position_packs_per_spec() {
+        // formats/saved-gam.md §10
+        assert_eq!(SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON, 2);
+        assert_eq!(SAVE_DUNGEON_ROOM_CLEAR_ROOMS_PER_DUNGEON, 16);
+
+        // Dungeon 0, room 0 -> byte 0 bit 0.
+        assert_eq!(dungeon_room_clear_bit_position(0, 0), Some((0, 0x01)));
+        // Dungeon 0, room 7 -> byte 0 bit 7.
+        assert_eq!(dungeon_room_clear_bit_position(0, 7), Some((0, 0x80)));
+        // Dungeon 0, room 8 -> byte 1 bit 0.
+        assert_eq!(dungeon_room_clear_bit_position(0, 8), Some((1, 0x01)));
+        // Dungeon 0, room 15 -> byte 1 bit 7.
+        assert_eq!(dungeon_room_clear_bit_position(0, 15), Some((1, 0x80)));
+        // Dungeon 1, room 0 -> byte 2 bit 0.
+        assert_eq!(dungeon_room_clear_bit_position(1, 0), Some((2, 0x01)));
+        // Dungeon 7, room 15 -> last bit (byte 15, bit 7).
+        assert_eq!(dungeon_room_clear_bit_position(7, 15), Some((15, 0x80)));
+        // Out-of-range coordinates.
+        assert_eq!(dungeon_room_clear_bit_position(8, 0), None);
+        assert_eq!(dungeon_room_clear_bit_position(0, 16), None);
+        assert_eq!(dungeon_room_clear_bit_position(255, 255), None);
+
+        // All 128 (dungeon, room) pairs map to distinct bit positions
+        // within the 16-byte bitmap.
+        use std::collections::HashSet;
+        let mut seen = HashSet::new();
+        for d in 0u8..8 {
+            for r in 0u8..16 {
+                let (byte, mask) = dungeon_room_clear_bit_position(d, r).unwrap();
+                let bit_index = byte * 8 + (mask.trailing_zeros() as usize);
+                assert!(seen.insert(bit_index), "duplicate ({d}, {r})");
+                assert!(bit_index < 128);
+            }
+        }
+        assert_eq!(seen.len(), 128);
+    }
+
+    #[test]
     fn save_character_field_offsets_match_spec_record() {
         // formats/saved-gam.md §3.1
         assert_eq!(SAVE_CHARACTER_NAME_OFFSET, 0x00);
