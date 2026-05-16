@@ -444,6 +444,21 @@ pub fn ready_burden(equipment: &[u8; EQUIPMENT_SLOT_COUNT]) -> u8 {
         .fold(0u8, u8::saturating_add)
 }
 
+/// `inventory.md §2.1` R-Ready strength gate. The command sums the
+/// member's existing readied-equipment burden, adds the candidate
+/// item's R-Ready burden, and compares the saturated total against
+/// the member's Strength byte. The ready is accepted only when the
+/// total is at most the Strength byte; a strictly greater total
+/// triggers the "not strong enough" refusal and makes no equipment
+/// change.
+pub const fn r_ready_burden_gate_accepts(
+    current_burden: u8,
+    candidate_burden: u8,
+    member_strength: u8,
+) -> bool {
+    current_burden.saturating_add(candidate_burden) <= member_strength
+}
+
 pub fn is_amulet_turning_readied(equipment: &[u8; EQUIPMENT_SLOT_COUNT]) -> bool {
     equipment[EQUIP_SLOT_AMULET] == EQUIPMENT_ID_AMULET_TURNING as u8
 }

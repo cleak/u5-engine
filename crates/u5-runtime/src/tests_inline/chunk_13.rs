@@ -1,4 +1,20 @@
     #[test]
+    fn r_ready_burden_gate_uses_strength_total() {
+        // inventory.md §2.1
+        // Empty member; light item; plenty of strength -> accept.
+        assert!(r_ready_burden_gate_accepts(0, 5, 18));
+        // Total exactly equals strength -> accept (≤ comparison).
+        assert!(r_ready_burden_gate_accepts(10, 8, 18));
+        // Total exceeds strength by one -> refuse.
+        assert!(!r_ready_burden_gate_accepts(10, 9, 18));
+        // Strength of zero refuses anything that has burden.
+        assert!(!r_ready_burden_gate_accepts(0, 1, 0));
+        assert!(r_ready_burden_gate_accepts(0, 0, 0));
+        // Saturating add prevents wrap; strength 250 still rejects.
+        assert!(!r_ready_burden_gate_accepts(200, 200, 250));
+    }
+
+    #[test]
     fn overworld_underfoot_blackout_obeys_opaque_exemption() {
         // lighting.md §3
         // Special 0xFF underfoot tile forces ambient zero.
