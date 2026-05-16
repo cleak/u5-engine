@@ -1,4 +1,19 @@
     #[test]
+    fn shrine_offering_cost_charges_digit_times_100() {
+        // karma.md §7
+        assert_eq!(ShrineVirtue::shrine_offering_cost(0), None);
+        for digit in 1u8..=9 {
+            assert_eq!(
+                ShrineVirtue::shrine_offering_cost(digit),
+                Some(digit as u16 * 100)
+            );
+        }
+        // Out-of-range digits return None.
+        assert_eq!(ShrineVirtue::shrine_offering_cost(10), None);
+        assert_eq!(ShrineVirtue::shrine_offering_cost(255), None);
+    }
+
+    #[test]
     fn combat_range_effect_is_cast_like_recognises_selector_1() {
         // combat.md §11
         assert_eq!(RANGED_EFFECT_CAST_LIKE_SELECTOR, 1);

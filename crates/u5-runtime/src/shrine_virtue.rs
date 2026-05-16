@@ -116,6 +116,18 @@ impl ShrineVirtue {
         }
     }
 
+    /// `karma.md §7` completed-shrine offering gold cost. For a digit
+    /// `1..=9` the prompt deducts `digit * 100` gold and adds `digit`
+    /// to the shared moral-standing selector. Digit `0` is the
+    /// no-effect exit and returns `None` (caller should leave the
+    /// prompt without prompting again or charging gold).
+    pub const fn shrine_offering_cost(digit: u8) -> Option<u16> {
+        if digit == 0 || digit > 9 {
+            return None;
+        }
+        Some(digit as u16 * 100)
+    }
+
     /// `karma.md §7`: Humility's Codex turn-in adds an additional `+3`
     /// to the shared moral-standing selector after the stat step. All
     /// other virtues add only the base `+3`.
