@@ -1,4 +1,40 @@
     #[test]
+    fn dungeon_minimap_flood_expands_except_through_walls() {
+        // dungeon-mode.md §12
+        // Wall presentation classes stop the flood walker.
+        for tile in [0xB0u8, 0xB7, 0xBF, 0xC0, 0xC8, 0xD0, 0xDF] {
+            assert!(
+                !dungeon_minimap_flood_expands(tile),
+                "wall class 0x{:02X} should stop flood",
+                tile
+            );
+        }
+        // Door / room-trigger families expand even though they paint
+        // a door glyph.
+        for tile in [0xA0u8, 0xA8, 0xE0, 0xE7, 0xF0, 0xFF] {
+            assert!(
+                dungeon_minimap_flood_expands(tile),
+                "door/trigger class 0x{:02X} should expand",
+                tile
+            );
+        }
+        // Open / passage / fountain / chest / pit / field expand.
+        for tile in [0x00u8, 0x10, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90] {
+            assert!(dungeon_minimap_flood_expands(tile));
+        }
+    }
+
+    #[test]
+    fn dungeon_attack_post_combat_z_intent_translates_result_code() {
+        // dungeon-mode.md §10
+        assert_eq!(dungeon_attack_post_combat_z_intent(5), Some(1));
+        assert_eq!(dungeon_attack_post_combat_z_intent(6), Some(-1));
+        for code in [0u8, 1, 2, 3, 4, 7, 8, 99, 255] {
+            assert_eq!(dungeon_attack_post_combat_z_intent(code), None);
+        }
+    }
+
+    #[test]
     fn dungeon_search_wall_rewrite_classifies_flavour_and_hidden_walls() {
         // dungeon-mode.md §8
         // Flavour 0xC1, 0xC2 narrate only.

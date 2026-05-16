@@ -628,6 +628,28 @@ pub enum DungeonCellClass {
     HeavyDoorOrRoomTrigger,
 }
 
+/// `dungeon-mode.md §12` V-View minimap flood expansion rule. The
+/// per-cell painter returns "expand" for most classes after painting
+/// the glyph; only the wall presentation classes `0xB?`, `0xC?`, and
+/// `0xD?` stop the flood walker. Door / room-trigger families
+/// (`0xA?`, `0xE?`, `0xF?`) still expand even though they paint a
+/// door glyph.
+pub const fn dungeon_minimap_flood_expands(tile: u8) -> bool {
+    !matches!(tile >> 4, 0xB | 0xC | 0xD)
+}
+
+/// `dungeon-mode.md §10` post-combat Z-axis intent the dungeon
+/// A-Attack handler honours after combat returns. Result code 5
+/// requests one level deeper; code 6 requests one level shallower;
+/// every other code keeps the party on the current level.
+pub const fn dungeon_attack_post_combat_z_intent(result_code: u8) -> Option<i8> {
+    match result_code {
+        5 => Some(1),
+        6 => Some(-1),
+        _ => None,
+    }
+}
+
 /// `dungeon-mode.md §8` Search-on-wall rewrite outcome. The Search
 /// command can convert flavour-wall and hidden-wall cells into the
 /// matching revealed sub-class for the current dungeon visit.
