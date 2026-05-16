@@ -218,6 +218,19 @@ pub const fn tlk_class_for_scene(scene_byte: u8) -> Option<TlkFileClass> {
 /// byte-range biases when reaching this same logical table.
 pub const COMMON_WORD_DICTIONARY_ENTRIES: usize = 128;
 
+/// `shops.md §4.2` shared common-word dictionary NUL-sentinel count.
+/// Eleven of the 128 dictionary entries are NUL pointers; the text
+/// consumers treat them as word-boundary sentinels rather than as
+/// word substitutions.
+pub const COMMON_WORD_DICTIONARY_NUL_SENTINELS: usize = 11;
+
+/// `shops.md §4.2` SHOPPE.DAT phrase-token byte range. Bytes
+/// `0x80..=0xFF` in a record payload index the 128-entry pointer
+/// table; the conversation engine uses the same table through its
+/// own low-byte range.
+pub const SHOPPE_PHRASE_TOKEN_FIRST: u8 = 0x80;
+pub const SHOPPE_PHRASE_TOKEN_LAST: u8 = 0xFF;
+
 /// `conversation.md §8`: TLK dialogue dictionary tokens are nonzero
 /// high-bit-clear bytes (`0x01..=0x7F`); the byte runner's range maps
 /// directly to the 128-entry index `0..=127` (less the NUL slot).

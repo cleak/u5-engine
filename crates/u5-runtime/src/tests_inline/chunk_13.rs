@@ -32,6 +32,23 @@
     }
 
     #[test]
+    fn common_word_dictionary_nul_sentinel_count_matches_spec() {
+        // shops.md §4.2: the shared 128-entry pointer dictionary
+        // includes 11 NUL pointers used as word-boundary sentinels.
+        // The SHOPPE.DAT phrase-token byte range is 0x80..=0xFF.
+        assert_eq!(COMMON_WORD_DICTIONARY_ENTRIES, 128);
+        assert_eq!(COMMON_WORD_DICTIONARY_NUL_SENTINELS, 11);
+        assert_eq!(SHOPPE_PHRASE_TOKEN_FIRST, 0x80);
+        assert_eq!(SHOPPE_PHRASE_TOKEN_LAST, 0xFF);
+        // The phrase-token range covers exactly the 128 dictionary
+        // entries.
+        assert_eq!(
+            (SHOPPE_PHRASE_TOKEN_LAST as usize - SHOPPE_PHRASE_TOKEN_FIRST as usize + 1),
+            COMMON_WORD_DICTIONARY_ENTRIES
+        );
+    }
+
+    #[test]
     fn healer_unmatched_row_fees_match_published_table() {
         // shops.md §8.3: the resident cost table has an eighth row
         // (Cure 1, Heal 70, Resurrect 270) that no shipped healer
