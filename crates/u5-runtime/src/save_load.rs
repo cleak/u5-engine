@@ -497,12 +497,25 @@ pub const fn save_flow_double_writes_underworld(entry_disk_prompt_mode: u8) -> b
     entry_disk_prompt_mode != 1
 }
 
+/// `screen-mode-dispatch.md §5`: canonical disk-prompt mode the
+/// normalizer folds the historical values `2` and `5` to.
+pub const DISK_PROMPT_MODE_CANONICAL: u8 = 1;
+/// `screen-mode-dispatch.md §5`: first historical disk-prompt mode
+/// value that the normalizer collapses to
+/// [`DISK_PROMPT_MODE_CANONICAL`]. Preserve the alias mapping rather
+/// than the input values themselves; gameplay-side callers should
+/// never depend on the raw input value.
+pub const DISK_PROMPT_MODE_ALIAS_A: u8 = 2;
+pub const DISK_PROMPT_MODE_ALIAS_B: u8 = 5;
+
 /// `screen-mode-dispatch.md §5`: the disk-prompt request normalizes the
 /// historical mode values `2` and `5` to mode `1`; other values pass
 /// through unchanged.
 pub const fn normalize_disk_prompt_mode(requested_mode: u8) -> u8 {
-    if requested_mode == 2 || requested_mode == 5 {
-        1
+    if requested_mode == DISK_PROMPT_MODE_ALIAS_A
+        || requested_mode == DISK_PROMPT_MODE_ALIAS_B
+    {
+        DISK_PROMPT_MODE_CANONICAL
     } else {
         requested_mode
     }

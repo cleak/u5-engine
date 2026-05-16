@@ -1,4 +1,31 @@
     #[test]
+    fn disk_prompt_mode_alias_constants_match_spec_normalisation() {
+        // screen-mode-dispatch.md §5: the disk-prompt request folds
+        // historical modes 2 and 5 to mode 1, and lets other values
+        // pass through. Promote the canonical mode and the two
+        // aliased inputs so the normalizer does not bake `1`, `2`,
+        // and `5` as bare literals.
+        assert_eq!(DISK_PROMPT_MODE_CANONICAL, 1);
+        assert_eq!(DISK_PROMPT_MODE_ALIAS_A, 2);
+        assert_eq!(DISK_PROMPT_MODE_ALIAS_B, 5);
+        assert_eq!(
+            normalize_disk_prompt_mode(DISK_PROMPT_MODE_ALIAS_A),
+            DISK_PROMPT_MODE_CANONICAL
+        );
+        assert_eq!(
+            normalize_disk_prompt_mode(DISK_PROMPT_MODE_ALIAS_B),
+            DISK_PROMPT_MODE_CANONICAL
+        );
+        // Every other input passes through unchanged.
+        for mode in 0u8..=u8::MAX {
+            if mode == DISK_PROMPT_MODE_ALIAS_A || mode == DISK_PROMPT_MODE_ALIAS_B {
+                continue;
+            }
+            assert_eq!(normalize_disk_prompt_mode(mode), mode);
+        }
+    }
+
+    #[test]
     fn active_object_eviction_phase_class_ranges_match_spec() {
         // active-objects.md §4: the eviction cascade names four class
         // ranges paired across phases 2..=5 (off-screen) and 6..=9
