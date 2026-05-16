@@ -1,4 +1,45 @@
     #[test]
+    fn protection_active_effect_adds_three_to_defense() {
+        // magic.md §8: while Protection's `P` active-effect tag is
+        // live, the resident party-member defense helper adds three
+        // points after equipment defense is summed. Promote the
+        // bonus to PROTECTION_ACTIVE_EFFECT_DEFENSE_BONUS so the
+        // resolve_protection_defense_bonus helper does not bake `3`
+        // as a bare literal.
+        assert_eq!(PROTECTION_ACTIVE_EFFECT_DEFENSE_BONUS, 3);
+        // While active, the helper raises the base defense by the
+        // bonus.
+        assert_eq!(
+            resolve_protection_defense_bonus(
+                10,
+                Some(PROTECTION_ACTIVE_EFFECT_TAG),
+                PROTECTION_ACTIVE_EFFECT_DURATION,
+            ),
+            10 + PROTECTION_ACTIVE_EFFECT_DEFENSE_BONUS
+        );
+        // The saturating_add must not wrap when base defense is at
+        // or near the byte ceiling.
+        assert_eq!(
+            resolve_protection_defense_bonus(
+                254,
+                Some(PROTECTION_ACTIVE_EFFECT_TAG),
+                PROTECTION_ACTIVE_EFFECT_DURATION,
+            ),
+            u8::MAX
+        );
+        // Without the live tag, base defense passes through
+        // unchanged.
+        assert_eq!(
+            resolve_protection_defense_bonus(
+                10,
+                Some(QUICKNESS_ACTIVE_EFFECT_TAG),
+                QUICKNESS_ACTIVE_EFFECT_DURATION,
+            ),
+            10
+        );
+    }
+
+    #[test]
     fn resurrection_max_hp_per_level_matches_spec() {
         // magic.md §8: a successful Resurrect rebuilds the revived
         // member's record and sets maximum HP to thirty times the

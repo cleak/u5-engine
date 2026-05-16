@@ -192,6 +192,11 @@ pub const COMBAT_MAGIC_MISSILE_DAMAGE_ROLL_MAX: u8 = 16;
 pub const COMBAT_FIREBALL_DAMAGE_ROLL_MAX: u8 = 30;
 pub const COMBAT_TREMOR_DAMAGE_ROLL_MAX: u8 = 20;
 pub const COMBAT_FLAME_WIND_DAMAGE_ROLL_MAX: u8 = 30;
+/// `magic.md §8`: Protection's `P` active-effect tag adds this many
+/// points to the resident party-member defense helper after equipment
+/// defense is summed. The bonus is applied through saturating_add so
+/// a defense byte already near `0xFF` does not wrap.
+pub const PROTECTION_ACTIVE_EFFECT_DEFENSE_BONUS: u8 = 3;
 pub const COMBAT_EXPERIENCE_CAP: u16 = 9999;
 pub const COMBAT_TARGET_PICK_COUNTED_PARTY_SLOTS: usize = 5;
 pub const COMBAT_ROUND_COUNTER_WRAP: u8 = 10;
@@ -2727,7 +2732,7 @@ pub const fn resolve_protection_defense_bonus(
     counter: u8,
 ) -> u8 {
     if active_effect_is_active(tag, counter, PROTECTION_ACTIVE_EFFECT_TAG) {
-        base_defense.saturating_add(3)
+        base_defense.saturating_add(PROTECTION_ACTIVE_EFFECT_DEFENSE_BONUS)
     } else {
         base_defense
     }
