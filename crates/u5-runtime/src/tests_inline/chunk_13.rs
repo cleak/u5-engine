@@ -1,4 +1,10 @@
     #[test]
+    fn combat_ambush_reveal_slots_max_matches_spec() {
+        // combat.md §5
+        assert_eq!(COMBAT_AMBUSH_REVEAL_SLOTS_MAX, 8);
+    }
+
+    #[test]
     fn sign_body_byte_kind_classifies_payload_per_spec() {
         // formats/signs-dat.md §4
         assert_eq!(sign_body_byte_kind(0x00), SignBodyByteKind::EndOfRecord);

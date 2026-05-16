@@ -13,6 +13,15 @@ pub struct CombatFrameSnapshot {
     pub combat_terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
 }
 
+/// `combat.md §5` ambush / camp-attack reveal-slot capacity.
+/// Ambush-style and camp-attack arenas can stamp up to eight
+/// hidden reveal coordinates; stepping onto one consumes the
+/// coordinate and rewrites one or two arena cells with the
+/// associated reveal tile when their target coordinates are
+/// inside the eleven-by-eleven arena. Coordinates outside the
+/// arena are sentinels for "no stamp" rather than map cells.
+pub const COMBAT_AMBUSH_REVEAL_SLOTS_MAX: u8 = 8;
+
 /// `combat.md §14` round-loop exit outcomes. The framer's restore
 /// phase runs identically for all three; only the result code the
 /// round loop returns to its caller differs. Victory and Escape
