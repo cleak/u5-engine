@@ -147,8 +147,19 @@ pub fn talk_response_text_and_actions(response: &str) -> (String, Vec<char>) {
     (compact(&text), actions)
 }
 
+/// `conversation.md §10`: per-scene TALK branch-flag bank width.
+/// The IF/ELSE branch (`0x8C`) tests one of 32 bits within the active
+/// scene's TALK branch-flag slot. Bit indices at or above this value
+/// build a zero mask rather than wrapping, so such IF tests read as
+/// clear and such SET-FLAG writes are no-ops.
+pub const TALK_BRANCH_FLAG_BANK_BITS: u8 = 32;
+
 pub const fn talk_branch_flag_mask(bit_index: u8) -> u32 {
-    if bit_index < 32 { 1u32 << bit_index } else { 0 }
+    if bit_index < TALK_BRANCH_FLAG_BANK_BITS {
+        1u32 << bit_index
+    } else {
+        0
+    }
 }
 
 pub const fn talk_branch_flag_is_set(slot: u32, bit_index: u8) -> bool {

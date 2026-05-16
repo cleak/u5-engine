@@ -1,4 +1,28 @@
     #[test]
+    fn talk_branch_flag_bank_caps_at_thirty_two_bits() {
+        // conversation.md §10: "Branch bit indices `32` and above
+        // build a zero mask rather than wrapping, so such tests read
+        // as clear and such setters are no-ops." Promote the bank
+        // width to a named constant so the mask helper does not
+        // bake `32` as a bare literal.
+        assert_eq!(TALK_BRANCH_FLAG_BANK_BITS, 32);
+        // Bits inside the bank produce nonzero, in-range masks.
+        for bit in 0..TALK_BRANCH_FLAG_BANK_BITS {
+            let mask = talk_branch_flag_mask(bit);
+            assert_eq!(mask, 1u32 << bit);
+        }
+        // Bits at or beyond the bank build a zero mask. An IF test
+        // therefore reads as clear, and a SET-FLAG write does not
+        // mutate the slot.
+        assert_eq!(talk_branch_flag_mask(TALK_BRANCH_FLAG_BANK_BITS), 0);
+        assert_eq!(talk_branch_flag_mask(50), 0);
+        assert!(!talk_branch_flag_is_set(u32::MAX, TALK_BRANCH_FLAG_BANK_BITS));
+        let mut slot = 0u32;
+        assert!(!set_talk_branch_flag(&mut slot, TALK_BRANCH_FLAG_BANK_BITS));
+        assert_eq!(slot, 0);
+    }
+
+    #[test]
     fn talk_through_tile_band_constants_match_spec() {
         // conversation.md §2: Talk advances `(dx, dy)` once more when
         // the facing tile is a talk-through tile (shop counter, low
