@@ -80,3 +80,16 @@ pub const fn trap_non_combat_outcomes(effect: TrapEffect) -> u8 {
 pub const fn trap_effect_appears_in_combat(effect: TrapEffect) -> bool {
     matches!(effect, TrapEffect::Acid | TrapEffect::Poison)
 }
+
+/// `traps.md §3` raw status byte written by the trap-effect
+/// resolver's revive helper. The helper rewrites Dead slots to the
+/// `'P'` status byte and refreshes the stats panel, without
+/// running the broader resurrection spell contract.
+pub const TRAP_REVIVE_STATUS_BYTE: u8 = b'P';
+
+/// `traps.md §3`: returns `true` when the trap-effect resolver's
+/// revive helper accepts the supplied slot status. Only Dead slots
+/// are revived; every other status is left unchanged.
+pub const fn trap_revive_accepts(status: crate::CharacterStatus) -> bool {
+    matches!(status, crate::CharacterStatus::Dead)
+}

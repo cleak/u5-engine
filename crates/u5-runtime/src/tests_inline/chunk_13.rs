@@ -1,4 +1,24 @@
     #[test]
+    fn trap_revive_only_accepts_dead_slots() {
+        // traps.md §3
+        assert_eq!(TRAP_REVIVE_STATUS_BYTE, b'P');
+        assert!(trap_revive_accepts(CharacterStatus::Dead));
+        for status in [
+            CharacterStatus::Good,
+            CharacterStatus::PoisonedOrRevived,
+            CharacterStatus::Sleeping,
+            CharacterStatus::Charmed,
+            CharacterStatus::Ashes,
+        ] {
+            assert!(
+                !trap_revive_accepts(status),
+                "status {:?} should not be revived",
+                status
+            );
+        }
+    }
+
+    #[test]
     fn dungeon_torch_increment_bounds_match_spec() {
         // lighting.md §8
         assert_eq!(DUNGEON_TORCH_INCREMENT_MIN, 112);
