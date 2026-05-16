@@ -1009,6 +1009,32 @@ pub const SAGE_TOPIC_INPUT_LIMIT: usize = 15;
 /// sage matches typed input case-insensitively against this list
 /// with a strict topic-boundary check (the next input character must
 /// be end-of-input or a space).
+/// `shops.md §8.10` stationary-display purchase prompt outcome.
+/// The Y/N loop accepts `Y` (offer and confirm), `N` or Space
+/// (exit), and silently re-prompts on any other byte.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StationaryDisplayPrompt {
+    /// `Y` (case-insensitive) — print the offer and ask for
+    /// confirmation.
+    Offer,
+    /// `N` (case-insensitive) or Space — exit through the shop
+    /// farewell path without changing party inventory.
+    Exit,
+    /// Any other byte — silently re-prompt the same line.
+    Discard,
+}
+
+/// `shops.md §8.10`: classify one keystroke for the stationary-
+/// display purchase Y/N prompt. Lower-case `y`/`n` accepted for
+/// uppercase-naive callers.
+pub const fn stationary_display_prompt(byte: u8) -> StationaryDisplayPrompt {
+    match byte {
+        b'Y' | b'y' => StationaryDisplayPrompt::Offer,
+        b'N' | b'n' | b' ' => StationaryDisplayPrompt::Exit,
+        _ => StationaryDisplayPrompt::Discard,
+    }
+}
+
 /// `shops.md §8.3` unmatched resident healer cost row. The resident
 /// healer cost table has eight rows; the seven shipped healers map
 /// to rows 0..=6, but row 7 carries the published `(Cure 1,
