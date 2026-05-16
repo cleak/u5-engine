@@ -328,11 +328,12 @@ pub use story_io::{
     intro_story_step_waits_for_input, load_story_records, parse_story_records,
 };
 pub use text_wrap::{
-    EmitterByteKind, ParagraphByteKind, TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS,
-    TEXT_WINDOW_COUNT, TEXT_WINDOW_DEFAULT_ACTIVE_INDEX,
-    TEXT_WINDOW_DEFAULT_BACKGROUND, TEXT_WINDOW_DEFAULT_FOREGROUND,
-    TextControlByte, WRAP_MIN_LINE_BUFFER, WrapByteKind, WrappedLine,
-    paragraph_byte_kind, text_control_byte, text_emitter_byte_kind,
+    EmitterByteKind, ParagraphByteKind, ProportionalRendererByteKind,
+    TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS, TEXT_WINDOW_COUNT,
+    TEXT_WINDOW_DEFAULT_ACTIVE_INDEX, TEXT_WINDOW_DEFAULT_BACKGROUND,
+    TEXT_WINDOW_DEFAULT_FOREGROUND, TextControlByte, WRAP_MIN_LINE_BUFFER,
+    WrapByteKind, WrappedLine, paragraph_byte_kind,
+    proportional_renderer_byte_kind, text_control_byte, text_emitter_byte_kind,
     text_window_centred_start_column, text_window_clamp_rectangle,
     text_window_default_color_byte, text_window_inner_width, wrap_byte_kind,
     wrap_text,

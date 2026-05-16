@@ -162,6 +162,50 @@ pub const fn text_control_byte(byte: u8) -> Option<TextControlByte> {
     })
 }
 
+/// `text-output.md §8` proportional-renderer byte vocabulary.
+/// The FONT-overlay proportional renderer (used by intro slides,
+/// chargen prompts, and other proportional-text screens) consumes
+/// text byte-by-byte until NUL.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProportionalRendererByteKind {
+    /// Ordinary visible byte — draw one proportional glyph at the
+    /// current pixel cursor and advance by the glyph's width.
+    Glyph(u8),
+    /// `' '` (space) — legal word-break candidate. The renderer
+    /// looks ahead to decide whether the next word fits before the
+    /// right edge and may break here instead of drawing the space
+    /// past the edge.
+    WordBreakSpace,
+    /// `'\n'` (line feed) — hard newline.
+    HardNewline,
+    /// `'_'` (underscore) — soft hyphen / syllable marker. Emits
+    /// no glyph but is a legal in-word break point.
+    SoftBreak,
+    /// `'{'` (left brace) — paragraph-start / page marker. Emits no
+    /// glyph; the renderer does not itself wait for input. The
+    /// caller's record loop supplies any pause.
+    ParagraphStart,
+    /// `\0` (NUL) — end of the text buffer. The renderer stops
+    /// consuming bytes here.
+    EndOfRecord,
+}
+
+/// `text-output.md §8`: classify one byte for the proportional
+/// renderer. Caller has already loaded the NUL-terminated text
+/// record into the working buffer.
+pub const fn proportional_renderer_byte_kind(
+    byte: u8,
+) -> ProportionalRendererByteKind {
+    match byte {
+        0 => ProportionalRendererByteKind::EndOfRecord,
+        b' ' => ProportionalRendererByteKind::WordBreakSpace,
+        b'\n' => ProportionalRendererByteKind::HardNewline,
+        b'_' => ProportionalRendererByteKind::SoftBreak,
+        b'{' => ProportionalRendererByteKind::ParagraphStart,
+        other => ProportionalRendererByteKind::Glyph(other),
+    }
+}
+
 /// `text-output.md §6` byte classification consumed by the wrap-aware
 /// printer. A `Break` byte is space/LF/CR/NUL; a `Visible` byte is any
 /// other low-ASCII printable; a `Control` byte is anything the per-cell

@@ -1,4 +1,26 @@
     #[test]
+    fn proportional_renderer_byte_kind_classifies_published_markers() {
+        // text-output.md §8: the proportional renderer consumes
+        // text byte-by-byte until NUL. ' ' is a word-break, '\n'
+        // is a hard newline, '_' is a soft break, '{' is a
+        // paragraph marker, '\0' ends the record.
+        use ProportionalRendererByteKind::*;
+        assert_eq!(proportional_renderer_byte_kind(0), EndOfRecord);
+        assert_eq!(proportional_renderer_byte_kind(b' '), WordBreakSpace);
+        assert_eq!(proportional_renderer_byte_kind(b'\n'), HardNewline);
+        assert_eq!(proportional_renderer_byte_kind(b'_'), SoftBreak);
+        assert_eq!(proportional_renderer_byte_kind(b'{'), ParagraphStart);
+        // Visible glyphs round-trip through Glyph.
+        assert_eq!(proportional_renderer_byte_kind(b'A'), Glyph(b'A'));
+        assert_eq!(proportional_renderer_byte_kind(b'z'), Glyph(b'z'));
+        assert_eq!(proportional_renderer_byte_kind(b'.'), Glyph(b'.'));
+        assert_eq!(proportional_renderer_byte_kind(b'9'), Glyph(b'9'));
+        // `{` is renderer-only — STORY.DAT marker `}` is not a
+        // proportional renderer marker.
+        assert_eq!(proportional_renderer_byte_kind(b'}'), Glyph(b'}'));
+    }
+
+    #[test]
     fn random_encounter_probe_fires_strictly_above_draw() {
         // overworld.md §7 / encounters.md §3: the encounter probe
         // rolls 1..=30 and fires when the threshold is nonzero and
