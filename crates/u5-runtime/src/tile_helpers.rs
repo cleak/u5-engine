@@ -89,6 +89,22 @@ pub fn is_dungeon_room_helper_state(tile: u8) -> bool {
     tile >> 4 == 0x0a
 }
 
+/// `dungeon-mode.md §5` per-visit room-trigger promotion. When a
+/// party walks onto a `0xF?` room-trigger cell, the room-entry
+/// helper patches the *loaded* dungeon image by rewriting the cell
+/// to the matching `0xA?` room-helper-state value (low nibble
+/// preserved so the helper still maps the cell back to the same
+/// arena slot). The on-disk `DUNGEON.DAT` source byte is unchanged.
+/// Returns `None` for cells outside the `0xF?` trigger family.
+pub const fn dungeon_room_trigger_promoted_visit_byte(tile: u8) -> Option<u8> {
+    if tile >> 4 == 0x0f {
+        Some((tile & 0x0f) | 0xa0)
+    } else {
+        None
+    }
+}
+
+
 pub fn dungeon_room_slot(tile: u8) -> u8 {
     tile & 0x0f
 }

@@ -1,4 +1,29 @@
     #[test]
+    fn dungeon_room_trigger_promoted_visit_byte_remaps_to_0xa_family() {
+        // dungeon-mode.md §5: the room-entry helper patches the
+        // loaded dungeon image by rewriting the 0xF? trigger to the
+        // matching 0xA? helper-state byte, preserving the low nibble
+        // (room/arena slot id). The on-disk source byte is unchanged.
+        for low in 0u8..=0x0f {
+            let trigger = 0xf0 | low;
+            assert_eq!(
+                dungeon_room_trigger_promoted_visit_byte(trigger),
+                Some(0xa0 | low)
+            );
+            // Round-trip predicates agree.
+            assert!(is_dungeon_room_trigger(trigger));
+            assert!(is_dungeon_room_helper_state(0xa0 | low));
+            assert_eq!(dungeon_room_slot(trigger), low);
+            assert_eq!(dungeon_room_slot(0xa0 | low), low);
+        }
+        // Bytes outside the trigger family return None.
+        assert_eq!(dungeon_room_trigger_promoted_visit_byte(0x00), None);
+        assert_eq!(dungeon_room_trigger_promoted_visit_byte(0x4a), None);
+        assert_eq!(dungeon_room_trigger_promoted_visit_byte(0xa3), None);
+        assert_eq!(dungeon_room_trigger_promoted_visit_byte(0xef), None);
+    }
+
+    #[test]
     fn town_fire_active_object_hit_subtracts_five_karma_floored_at_zero() {
         // vehicles.md §8: the local cannon path subtracts five units
         // from the moral-standing selector on a successful active-
