@@ -52,6 +52,14 @@ pub const fn outdoor_movement_chance_gate(destination_tile: u8) -> OutdoorMoveme
 /// / local-light terrain family), the moving slot is cleared.
 pub const OUTDOOR_STEP_CLEAR_DESTINATION_TILE: u8 = 0xDC;
 
+/// `active-objects.md §8`: returns `true` when an outdoor active-
+/// object's committed step lands on the auto-clear terrain tile
+/// (`0xDC`). The caller frees the moving slot rather than placing
+/// it on the moongate cell.
+pub const fn outdoor_step_clears_on_destination(destination_tile: u8) -> bool {
+    destination_tile == OUTDOOR_STEP_CLEAR_DESTINATION_TILE
+}
+
 /// `active-objects.md §8` `0xFC` proximity-mask age cap. Listed
 /// proximity cells increment the slot's first auxiliary byte as an
 /// age counter; while the counter remains below twenty, the slot

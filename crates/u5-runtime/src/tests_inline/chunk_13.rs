@@ -1,4 +1,19 @@
     #[test]
+    fn outdoor_step_clears_on_destination_targets_moongate_tile() {
+        // active-objects.md §8 + overworld.md §9
+        assert_eq!(OUTDOOR_STEP_CLEAR_DESTINATION_TILE, 0xDC);
+        assert!(outdoor_step_clears_on_destination(0xDC));
+        // Other terrain bytes do not auto-clear the slot.
+        for tile in [0x00u8, 0x05, 0x44, 0x99, 0xDB, 0xDD, 0xFF] {
+            assert!(
+                !outdoor_step_clears_on_destination(tile),
+                "tile {:#x} should not clear the slot",
+                tile
+            );
+        }
+    }
+
+    #[test]
     fn world_location_table_scene_for_row_covers_towns_and_dungeons() {
         // overworld.md §8
         assert_eq!(WORLD_LOCATION_TABLE_TOWN_ROWS, 32);
