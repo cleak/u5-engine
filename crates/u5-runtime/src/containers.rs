@@ -366,6 +366,21 @@ pub const fn dungeon_chest_gold_is_zero_width(dungeon_depth: u8) -> bool {
     dungeon_chest_gold_upper(dungeon_depth) == 0
 }
 
+/// `containers.md §4` town-family chest moral-standing penalty.
+/// When the chest helper opens a matching object-table chest in a
+/// town-family scene, it reduces the shared moral-standing selector
+/// by this many units, clamped at zero. Overworld chests do not
+/// apply this penalty.
+pub const TOWN_CHEST_OPEN_KARMA_DEBIT: u8 = 2;
+
+/// `containers.md §4`: returns the post-debit moral-standing
+/// selector after opening one town-family object-table chest. The
+/// helper subtracts [`TOWN_CHEST_OPEN_KARMA_DEBIT`] with the
+/// published zero-floor.
+pub const fn town_chest_open_standing(standing: u8) -> u8 {
+    standing.saturating_sub(TOWN_CHEST_OPEN_KARMA_DEBIT)
+}
+
 /// `containers.md §5` rare-reagent harvest quantity bounds. On a
 /// successful midnight harvest at a published harvest point the
 /// generator rolls in the inclusive `2..=15` range and adds the

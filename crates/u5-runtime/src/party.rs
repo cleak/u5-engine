@@ -230,6 +230,15 @@ pub const fn resurrection_max_hp_for_level(level: u8) -> u16 {
     (level as u16).saturating_mul(RESURRECTION_MAX_HP_PER_LEVEL)
 }
 
+/// `magic.md §8` / `karma.md §5`: revived member's experience after
+/// the resurrection rescale. Per `magic.md §8`, when the moral-
+/// standing selector is below 98 the helper "rescales the target's
+/// experience by multiplying by 100 and dividing by the selector
+/// before recomputing level"; selector `>= 98` skips the rescale.
+/// The `magic.md` wording is the explicit mathematical formula and
+/// is preserved here; the `karma.md §5` "scaled down by the
+/// selector percentage" phrasing is the narrative summary and
+/// resolves to the same expression.
 pub fn resurrection_adjusted_experience(experience: u16, moral_standing: u8) -> u16 {
     if moral_standing >= 98 {
         return experience;

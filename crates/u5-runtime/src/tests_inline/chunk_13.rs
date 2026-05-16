@@ -1,4 +1,20 @@
     #[test]
+    fn town_chest_open_standing_debits_two_floored_at_zero() {
+        // containers.md §4: opening a town-family object-table chest
+        // reduces the shared moral-standing selector by two units,
+        // clamped at zero. Overworld chests don't apply this penalty
+        // (caller-gated).
+        assert_eq!(TOWN_CHEST_OPEN_KARMA_DEBIT, 2);
+        assert_eq!(town_chest_open_standing(0), 0);
+        assert_eq!(town_chest_open_standing(1), 0);
+        assert_eq!(town_chest_open_standing(2), 0);
+        assert_eq!(town_chest_open_standing(3), 1);
+        assert_eq!(town_chest_open_standing(50), 48);
+        assert_eq!(town_chest_open_standing(99), 97);
+        assert_eq!(town_chest_open_standing(u8::MAX), 253);
+    }
+
+    #[test]
     fn combat_field_kind_constants_match_published_spell_helper_table() {
         // catalogs/spell-list.md §6: the combat-side field helper
         // consumes one of four kind bytes per field spell —
