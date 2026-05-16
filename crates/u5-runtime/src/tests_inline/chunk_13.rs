@@ -1,4 +1,25 @@
     #[test]
+    fn dungeon_look_description_byte_normalises_only_0x61() {
+        // dungeon-mode.md §3
+        assert_eq!(dungeon_look_description_byte(0x61), 0x00);
+        // Other 0x6? trap bytes keep their pit/trap class.
+        assert_eq!(dungeon_look_description_byte(0x60), 0x60);
+        assert_eq!(dungeon_look_description_byte(0x62), 0x62);
+        assert_eq!(dungeon_look_description_byte(0x69), 0x69);
+        assert_eq!(dungeon_look_description_byte(0x6A), 0x6A);
+        // Non-pit-class bytes pass through unchanged.
+        assert_eq!(dungeon_look_description_byte(0x00), 0x00);
+        assert_eq!(dungeon_look_description_byte(0xB0), 0xB0);
+        // Verified class still PitTrap for all 0x6? including 0x61
+        // (only the description byte is normalised; the cell class
+        // lookup still uses the raw tile).
+        assert_eq!(
+            dungeon_cell_class_of(0x61),
+            DungeonCellClass::PitTrap
+        );
+    }
+
+    #[test]
     fn dungeon_room_arena_index_in_range_recognises_shipped_bank() {
         // encounters.md §8
         assert_eq!(DUNGEON_CBT_ARENA_COUNT, 112);

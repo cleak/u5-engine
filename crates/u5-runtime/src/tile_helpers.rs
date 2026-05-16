@@ -628,6 +628,25 @@ pub enum DungeonCellClass {
     HeavyDoorOrRoomTrigger,
 }
 
+/// `dungeon-mode.md §3`: L-Look description-byte normalisation. The
+/// exact byte `0x61` is rewritten to `0x00` before the cell-class
+/// description string is looked up, so it reports as passage even
+/// though the underlying tile remains a pit-family variant. Other
+/// `0x6?` trap bytes (e.g. `0x69`, `0x62`, `0x6A`) keep their `0x6`
+/// pit/trap class description.
+pub const DUNGEON_LOOK_PASSAGE_NORMALISED_BYTE: u8 = 0x61;
+
+/// `dungeon-mode.md §3`: returns the cell byte L-Look should hand to
+/// the description-string lookup. Only the exact `0x61` byte is
+/// normalised; every other byte is returned unchanged.
+pub const fn dungeon_look_description_byte(tile: u8) -> u8 {
+    if tile == DUNGEON_LOOK_PASSAGE_NORMALISED_BYTE {
+        0x00
+    } else {
+        tile
+    }
+}
+
 /// `dungeon-mode.md §3`: classify a dungeon-cell byte by its high nibble.
 pub const fn dungeon_cell_class_of(tile: u8) -> DungeonCellClass {
     match tile >> 4 {
