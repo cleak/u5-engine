@@ -157,6 +157,26 @@ pub const fn scene_route(scene_byte: u8) -> SceneRoute {
     }
 }
 
+/// `catalogs/quest-graph.md §4` Word of Power for one of the eight
+/// stock dungeons indexed by scene byte `33..=40`. The Yell
+/// Word-of-Power handler matches these strings (uppercased) against
+/// the typed input and dispatches by dungeon. Doom's `VERAMOCOR`
+/// opens the chamber seal once the party is already inside Doom;
+/// it does not open Doom's exterior entrance.
+pub const fn dungeon_word_of_power(scene_byte: u8) -> Option<&'static str> {
+    Some(match scene_byte {
+        33 => "FALLAX",
+        34 => "VILIS",
+        35 => "INOPIA",
+        36 => "MALUM",
+        37 => "AVIDUS",
+        38 => "INFAMA",
+        39 => "IGNAVUS",
+        40 => "VERAMOCOR",
+        _ => return None,
+    })
+}
+
 /// `catalogs/gazetteer.md §6` resident name for one of the eight
 /// stock dungeons indexed by scene byte `33..=40`.
 pub const fn dungeon_resident_name(scene_byte: u8) -> Option<&'static str> {

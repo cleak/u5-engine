@@ -1,4 +1,21 @@
     #[test]
+    fn dungeon_word_of_power_matches_quest_graph_md_section_4() {
+        // catalogs/quest-graph.md §4
+        assert_eq!(dungeon_word_of_power(33), Some("FALLAX"));
+        assert_eq!(dungeon_word_of_power(34), Some("VILIS"));
+        assert_eq!(dungeon_word_of_power(35), Some("INOPIA"));
+        assert_eq!(dungeon_word_of_power(36), Some("MALUM"));
+        assert_eq!(dungeon_word_of_power(37), Some("AVIDUS"));
+        assert_eq!(dungeon_word_of_power(38), Some("INFAMA"));
+        assert_eq!(dungeon_word_of_power(39), Some("IGNAVUS"));
+        assert_eq!(dungeon_word_of_power(40), Some("VERAMOCOR"));
+        // Scenes outside the dungeon range have no word.
+        for scene in [0u8, 1, 32, 41, 99, 0xFF] {
+            assert_eq!(dungeon_word_of_power(scene), None);
+        }
+    }
+
+    #[test]
     fn trap_revive_only_accepts_dead_slots() {
         // traps.md §3
         assert_eq!(TRAP_REVIVE_STATUS_BYTE, b'P');
