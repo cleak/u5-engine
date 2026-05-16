@@ -1,4 +1,10 @@
     #[test]
+    fn story_dat_file_constant_is_published() {
+        // formats/story-dat.md §2: published filename.
+        assert_eq!(STORY_DAT_FILE, "STORY.DAT");
+    }
+
+    #[test]
     fn days_per_year_matches_thirteen_month_calendar() {
         // time.md §12: 13 months x 28 days = 364 days/year.
         assert_eq!(DAYS_PER_YEAR, 364);

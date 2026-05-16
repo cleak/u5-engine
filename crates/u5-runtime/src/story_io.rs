@@ -5,7 +5,9 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-const STORY_DAT_FILE: &str = "STORY.DAT";
+/// `formats/story-dat.md §2` published filename for the intro
+/// story sequence's 11,679-byte text file.
+pub const STORY_DAT_FILE: &str = "STORY.DAT";
 const EXPECTED_RECORD_COUNT: usize = 20;
 
 /// `formats/story-dat.md §2`: shipped DOS file size in bytes.
