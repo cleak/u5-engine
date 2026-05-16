@@ -1009,6 +1009,18 @@ pub const SAGE_TOPIC_INPUT_LIMIT: usize = 15;
 /// sage matches typed input case-insensitively against this list
 /// with a strict topic-boundary check (the next input character must
 /// be end-of-input or a space).
+/// `shops.md §6.1` published shop affordability refusal barks. The
+/// shop kind picks which line to print when the affordability gate
+/// rejects a purchase; the bark is presentation only and does not
+/// change gold or inventory.
+pub const TAVERN_AFFORDABILITY_REFUSAL_BARK: &str = "Beat it!";
+pub const UPMARKET_INN_AFFORDABILITY_REFUSAL_BARK: &str = "Highwaymen!";
+/// `shops.md §6.1` vehicle-broker partial-afford prefix. Vehicle
+/// brokers (horse trader, shipwright) print
+/// `"Thou canst afford only "` followed by the affordable count;
+/// callers compose the trailing quantity at format time.
+pub const VEHICLE_BROKER_PARTIAL_AFFORD_PREFIX: &str = "Thou canst afford only ";
+
 pub const SAGE_RUMOUR_TOPIC_COUNT: usize = 26;
 
 /// `shops.md §8.8` sage rumour-keyword input cap. The sage's

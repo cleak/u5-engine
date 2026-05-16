@@ -32,6 +32,19 @@
     }
 
     #[test]
+    fn shop_affordability_refusal_barks_match_spec_text() {
+        // shops.md §6.1: per-kind refusal lines printed when the
+        // affordability gate rejects a purchase. Bark text is
+        // presentation only; gold and inventory are unchanged.
+        assert_eq!(TAVERN_AFFORDABILITY_REFUSAL_BARK, "Beat it!");
+        assert_eq!(UPMARKET_INN_AFFORDABILITY_REFUSAL_BARK, "Highwaymen!");
+        assert_eq!(
+            VEHICLE_BROKER_PARTIAL_AFFORD_PREFIX,
+            "Thou canst afford only "
+        );
+    }
+
+    #[test]
     fn sage_topic_matches_uses_space_boundary_prefix_per_spec() {
         // shops.md §8.8: the sage uses case-insensitive prefix
         // matching with a strict boundary: the byte after the
