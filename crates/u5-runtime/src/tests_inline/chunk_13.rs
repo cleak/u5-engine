@@ -1,4 +1,41 @@
     #[test]
+    fn blackthorn_cutscene_actor_slots_match_spec_role_table() {
+        // blackthorn.md §6
+        assert_eq!(blackthorn_cutscene_actor(0), Some(BlackthornCutsceneActor::Avatar));
+        assert_eq!(
+            blackthorn_cutscene_actor(1),
+            Some(BlackthornCutsceneActor::SecondPartyMember)
+        );
+        assert_eq!(
+            blackthorn_cutscene_actor(6),
+            Some(BlackthornCutsceneActor::Blackthorn)
+        );
+        assert_eq!(
+            blackthorn_cutscene_actor(7),
+            Some(BlackthornCutsceneActor::Attendant)
+        );
+        assert_eq!(
+            blackthorn_cutscene_actor(8),
+            Some(BlackthornCutsceneActor::Throne)
+        );
+        // Slot indices outside the published roles are temporary
+        // (caller-private) and have no named role.
+        for slot in [2u8, 3, 4, 5, 9, 10, 32, 255] {
+            assert_eq!(blackthorn_cutscene_actor(slot), None);
+        }
+        // Round-trip: actor -> slot -> actor.
+        for actor in [
+            BlackthornCutsceneActor::Avatar,
+            BlackthornCutsceneActor::SecondPartyMember,
+            BlackthornCutsceneActor::Blackthorn,
+            BlackthornCutsceneActor::Attendant,
+            BlackthornCutsceneActor::Throne,
+        ] {
+            assert_eq!(blackthorn_cutscene_actor(actor.slot_index()), Some(actor));
+        }
+    }
+
+    #[test]
     fn blackthorn_captive_cell_handoff_matches_spec_coordinates() {
         // blackthorn.md §3
         assert_eq!(BLACKTHORN_CAPTIVE_CELL_SCENE, 18);

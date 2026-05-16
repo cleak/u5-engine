@@ -13,6 +13,53 @@ pub const BLACKTHORN_RESCUE_HANDOFF_Y: u8 = 10;
 /// selector to at least this floor after printing the verdict.
 pub const BLACKTHORN_RESCUE_STANDING_FLOOR: u8 = 75;
 
+/// `blackthorn.md §6` cutscene-VM actor families. The audience and
+/// failure beats reference these slots by index when emitting
+/// movement descriptors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlackthornCutsceneActor {
+    /// Slot 0 — Avatar / party-leader presentation actor.
+    Avatar,
+    /// Slot 1 — second party member; dragged-away victim of the
+    /// failed-challenge punishment beat.
+    SecondPartyMember,
+    /// Slot 6 — Blackthorn.
+    Blackthorn,
+    /// Slot 7 — attendant or guard.
+    Attendant,
+    /// Slot 8 — throne or throne-marker tile.
+    Throne,
+}
+
+impl BlackthornCutsceneActor {
+    /// `blackthorn.md §6`: returns the cinematic actor slot index
+    /// the script VM uses for this role.
+    pub const fn slot_index(self) -> u8 {
+        match self {
+            Self::Avatar => 0,
+            Self::SecondPartyMember => 1,
+            Self::Blackthorn => 6,
+            Self::Attendant => 7,
+            Self::Throne => 8,
+        }
+    }
+}
+
+/// `blackthorn.md §6`: classify a cutscene-VM actor slot byte.
+/// Returns `None` for indices outside the published role table; the
+/// script VM treats those as caller-private temporaries rather than
+/// named actors.
+pub const fn blackthorn_cutscene_actor(slot: u8) -> Option<BlackthornCutsceneActor> {
+    Some(match slot {
+        0 => BlackthornCutsceneActor::Avatar,
+        1 => BlackthornCutsceneActor::SecondPartyMember,
+        6 => BlackthornCutsceneActor::Blackthorn,
+        7 => BlackthornCutsceneActor::Attendant,
+        8 => BlackthornCutsceneActor::Throne,
+        _ => return None,
+    })
+}
+
 /// `blackthorn.md §3`: scene byte the audience cinematic hands the
 /// party off to after the throne cleanup beat. Eighteen is the
 /// gazetteer's `CASTLE:1` location associated with Lord
