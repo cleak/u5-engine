@@ -13,6 +13,21 @@ pub struct CombatFrameSnapshot {
     pub combat_terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
 }
 
+/// `combat.md §4` post-combat active-player restore. The framer
+/// restores the saved active-player slot only when the pre-combat
+/// active player has not died or fallen asleep during the fight; a
+/// `'D'` (Dead) or `'S'` (Sleeping) post-combat status keeps the
+/// active-player slot cleared so the player must re-select.
+pub const fn combat_restore_active_player_slot(
+    saved_slot: u8,
+    post_combat_status: CharacterStatus,
+) -> Option<u8> {
+    match post_combat_status {
+        CharacterStatus::Dead | CharacterStatus::Sleeping => None,
+        _ => Some(saved_slot),
+    }
+}
+
 pub fn decode_active_player_slot(byte: u8, party_size: usize) -> Option<usize> {
     if byte == 0xff {
         return None;

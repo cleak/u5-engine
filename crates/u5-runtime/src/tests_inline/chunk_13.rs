@@ -1,4 +1,32 @@
     #[test]
+    fn combat_restore_active_player_slot_clears_on_dead_or_sleeping() {
+        // combat.md §4
+        // Dead and Sleeping suppress the restore.
+        assert_eq!(
+            combat_restore_active_player_slot(2, CharacterStatus::Dead),
+            None
+        );
+        assert_eq!(
+            combat_restore_active_player_slot(2, CharacterStatus::Sleeping),
+            None
+        );
+        // All other statuses restore the saved slot.
+        for status in [
+            CharacterStatus::Good,
+            CharacterStatus::PoisonedOrRevived,
+            CharacterStatus::Charmed,
+            CharacterStatus::Ashes,
+        ] {
+            assert_eq!(
+                combat_restore_active_player_slot(2, status),
+                Some(2),
+                "status {:?} should restore",
+                status
+            );
+        }
+    }
+
+    #[test]
     fn dungeon_klimb_z_step_respects_level_bounds() {
         // dungeon-mode.md §13
         // Up from interior levels.
