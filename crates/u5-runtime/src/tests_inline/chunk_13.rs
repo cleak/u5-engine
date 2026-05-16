@@ -1,4 +1,41 @@
     #[test]
+    fn tlk_player_input_kind_folds_keyword_loop_outcomes() {
+        // conversation.md §6
+        assert_eq!(
+            tlk_player_input_kind(b""),
+            TlkPlayerInputKind::EmptyByeShortcut
+        );
+        assert_eq!(
+            tlk_player_input_kind(b"NAME"),
+            TlkPlayerInputKind::Reserved(ReservedKeywordEffect::NameEntry)
+        );
+        assert_eq!(
+            tlk_player_input_kind(b"JOB"),
+            TlkPlayerInputKind::Reserved(ReservedKeywordEffect::JobEntry)
+        );
+        assert_eq!(
+            tlk_player_input_kind(b"WORK"),
+            TlkPlayerInputKind::Reserved(ReservedKeywordEffect::JobEntry)
+        );
+        assert_eq!(
+            tlk_player_input_kind(b"BYE"),
+            TlkPlayerInputKind::Reserved(ReservedKeywordEffect::ByePath)
+        );
+        assert_eq!(
+            tlk_player_input_kind(b"THANK"),
+            TlkPlayerInputKind::Reserved(ReservedKeywordEffect::ByePath)
+        );
+        assert_eq!(
+            tlk_player_input_kind(b"JOIN"),
+            TlkPlayerInputKind::OrdinaryKeywordScan
+        );
+        assert_eq!(
+            tlk_player_input_kind(b"GRAN"),
+            TlkPlayerInputKind::OrdinaryKeywordScan
+        );
+    }
+
+    #[test]
     fn tlk_action_dispatch_verb_covers_published_letters() {
         // conversation.md §7.6
         let cases: &[(u8, TlkActionDispatchVerb)] = &[

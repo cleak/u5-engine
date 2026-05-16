@@ -409,6 +409,41 @@ pub fn reserved_keyword_effect(input: &[u8]) -> Option<ReservedKeywordEffect> {
 /// backspace handling).
 pub const TLK_INPUT_MAX_LEN: usize = 15;
 
+/// `conversation.md §6` three-way fan-out the keyword input loop
+/// performs after reading a free-text line. The empty-input shortcut
+/// runs the NPC's Bye entry; a reserved-table hit runs the published
+/// engine entry; everything else falls through to the per-NPC
+/// keyword-pair scan.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TlkPlayerInputKind {
+    /// Player pressed Enter on an empty line — engine prints
+    /// `BYE\n\n` and runs the NPC's Bye entry through the byte
+    /// runner.
+    EmptyByeShortcut,
+    /// Input matched one of the five reserved functional words —
+    /// engine runs the named published entry.
+    Reserved(ReservedKeywordEffect),
+    /// Reserved scan missed — engine walks the per-NPC ordinary
+    /// keyword/response pairs after the five mandatory leading
+    /// entries.
+    OrdinaryKeywordScan,
+}
+
+/// `conversation.md §6`: fold the keyword-loop's three observable
+/// outcomes for the typed input. Caller supplies an uppercased buffer
+/// (the input pipeline already capitalises the line). Profanity /
+/// default rebuke matching is not part of this fan-out — the engine
+/// sweeps it independently as a side-effect of the reserved scan.
+pub fn tlk_player_input_kind(input: &[u8]) -> TlkPlayerInputKind {
+    if input.is_empty() {
+        return TlkPlayerInputKind::EmptyByeShortcut;
+    }
+    if let Some(effect) = reserved_keyword_effect(input) {
+        return TlkPlayerInputKind::Reserved(effect);
+    }
+    TlkPlayerInputKind::OrdinaryKeywordScan
+}
+
 /// `conversation.md §6`: NPC ordinary-keyword space-boundary match. Both
 /// keyword and input are bit-7-stripped, case-folded to upper case, and
 /// compared from the start. The keyword must end cleanly; the typed
