@@ -1,4 +1,26 @@
     #[test]
+    fn chargen_seed_inventory_constants_match_published_seed() {
+        // chargen.md §8: the seed file `INIT.GAM` supplies the
+        // starting-inventory counters. Chargen does not customise
+        // them; the published seed values are the contract.
+        assert_eq!(CHARGEN_SEED_FOOD, 63);
+        assert_eq!(CHARGEN_SEED_GOLD, 150);
+        assert_eq!(CHARGEN_SEED_KEYS, 2);
+        assert_eq!(CHARGEN_SEED_GEMS, 0);
+        assert_eq!(CHARGEN_SEED_TORCHES, 4);
+        assert_eq!(CHARGEN_SEED_MAGIC_POWDER, 0);
+
+        assert_eq!(CHARGEN_SEED_REAGENT_BLACK_PEARL, 4);
+        assert_eq!(CHARGEN_SEED_REAGENT_BLOOD_MOSS, 6);
+        assert_eq!(CHARGEN_SEED_REAGENT_GARLIC, 7);
+        assert_eq!(CHARGEN_SEED_REAGENT_GINSENG, 6);
+        assert_eq!(CHARGEN_SEED_REAGENT_MANDRAKE, 0);
+        assert_eq!(CHARGEN_SEED_REAGENT_NIGHTSHADE, 3);
+        assert_eq!(CHARGEN_SEED_REAGENT_SPIDER_SILK, 0);
+        assert_eq!(CHARGEN_SEED_REAGENT_SULFUROUS_ASH, 0);
+    }
+
+    #[test]
     fn age_character_month_counter_caps_at_twenty_five() {
         // time.md §8: the 28-day rollover increments each character
         // record's one-byte month counter, capped at 25. Pickup later

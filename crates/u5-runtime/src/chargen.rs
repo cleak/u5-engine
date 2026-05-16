@@ -142,6 +142,31 @@ pub const CHARGEN_AVATAR_SEED_STATUS_BYTE: u8 = b'G';
 /// save (Avatar plus Iolo and Shamino in scene 13, Iolo's Hut).
 pub const CHARGEN_STARTING_PARTY_SIZE: u8 = 3;
 
+/// `chargen.md §8` seeded starting-inventory counters for a fresh
+/// questionnaire-created save. Chargen does not write these; they
+/// come from `INIT.GAM` unchanged. Listing them as named constants
+/// lets fixture builders and verification checks compare a freshly
+/// generated save against the published seed values.
+pub const CHARGEN_SEED_FOOD: u16 = 63;
+pub const CHARGEN_SEED_GOLD: u16 = 150;
+pub const CHARGEN_SEED_KEYS: u8 = 2;
+pub const CHARGEN_SEED_GEMS: u8 = 0;
+pub const CHARGEN_SEED_TORCHES: u8 = 4;
+pub const CHARGEN_SEED_MAGIC_POWDER: u8 = 0;
+
+/// `chargen.md §8` seeded reagent counters for a fresh
+/// questionnaire-created save. Mandrake, spider silk, and sulfurous
+/// ash start at zero — the player must source them before mixing the
+/// spells those reagents gate.
+pub const CHARGEN_SEED_REAGENT_BLACK_PEARL: u8 = 4;
+pub const CHARGEN_SEED_REAGENT_BLOOD_MOSS: u8 = 6;
+pub const CHARGEN_SEED_REAGENT_GARLIC: u8 = 7;
+pub const CHARGEN_SEED_REAGENT_GINSENG: u8 = 6;
+pub const CHARGEN_SEED_REAGENT_MANDRAKE: u8 = 0;
+pub const CHARGEN_SEED_REAGENT_NIGHTSHADE: u8 = 3;
+pub const CHARGEN_SEED_REAGENT_SPIDER_SILK: u8 = 0;
+pub const CHARGEN_SEED_REAGENT_SULFUROUS_ASH: u8 = 0;
+
 /// `chargen.md §4` maximum visible characters the name prompt accepts.
 /// The shipped prompt prints "By what name shalt thou be known?" and
 /// opens a free-text input prompt with this many characters of room.
