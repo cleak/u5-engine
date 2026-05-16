@@ -330,6 +330,15 @@ pub const POTION_ORANGE_INDEX: usize = 4;
 pub const POTION_PURPLE_INDEX: usize = 5;
 pub const POTION_BLACK_INDEX: usize = 6;
 pub const POTION_WHITE_INDEX: usize = 7;
+
+/// `catalogs/item-list.md §7.2` White-potion surface visibility-sweep
+/// frame count. In overworld and named interior scenes the white
+/// potion runs a twenty-frame visibility/animation sweep centred on
+/// the party with radius [`POTION_WHITE_SWEEP_RADIUS`] before
+/// finishing with a normal world redraw. Dungeon and combat scenes
+/// take the no-noticeable-effect branch instead.
+pub const POTION_WHITE_SWEEP_FRAMES: u8 = 20;
+pub const POTION_WHITE_SWEEP_RADIUS: u8 = 32;
 pub const SHADOWLORD_COUNT: usize = 3;
 pub const SHADOWLORD_FALSEHOOD_INDEX: usize = 0;
 pub const SHADOWLORD_HATRED_INDEX: usize = 1;

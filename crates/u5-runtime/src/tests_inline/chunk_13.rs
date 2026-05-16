@@ -16,6 +16,13 @@
     }
 
     #[test]
+    fn white_potion_sweep_constants_match_catalog() {
+        // catalogs/item-list.md §7.2
+        assert_eq!(POTION_WHITE_SWEEP_FRAMES, 20);
+        assert_eq!(POTION_WHITE_SWEEP_RADIUS, 32);
+    }
+
+    #[test]
     fn active_effect_tag_scroll_install_counters_match_spec() {
         // inventory.md §7
         assert_eq!(
