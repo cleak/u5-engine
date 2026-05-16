@@ -1,4 +1,23 @@
     #[test]
+    fn endgame_needs_tableau_restoration_targets_only_dead() {
+        // endgame.md §4
+        assert!(endgame_needs_tableau_restoration(CharacterStatus::Dead));
+        for status in [
+            CharacterStatus::Good,
+            CharacterStatus::PoisonedOrRevived,
+            CharacterStatus::Sleeping,
+            CharacterStatus::Charmed,
+            CharacterStatus::Ashes,
+        ] {
+            assert!(
+                !endgame_needs_tableau_restoration(status),
+                "status {:?} should not trigger tableau restoration",
+                status
+            );
+        }
+    }
+
+    #[test]
     fn intro_story6_secondary_subimage_matches_spec_table() {
         // intro.md §10
         assert_eq!(intro_story6_secondary_subimage(15), Some(3));

@@ -116,6 +116,17 @@ impl EndgameState {
     }
 }
 
+/// `endgame.md §4`: returns `true` when a party slot needs the
+/// dead-member restoration pass before the throne-room tableau. The
+/// pass announces the restoration, flips the slot back to a Good
+/// status, and restores current HP from the stored maximum. Only
+/// Dead status triggers it; Ashes remains outside the restoration
+/// per the documented per-slot loop, and other statuses keep
+/// whatever HP/status they brought into the endgame.
+pub const fn endgame_needs_tableau_restoration(status: CharacterStatus) -> bool {
+    matches!(status, CharacterStatus::Dead)
+}
+
 pub fn endgame_outcome(final_confirmation: bool, has_sandalwood_box: bool) -> EndgameOutcome {
     if final_confirmation && has_sandalwood_box {
         EndgameOutcome::Victory
