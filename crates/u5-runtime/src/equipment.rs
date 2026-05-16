@@ -194,6 +194,19 @@ pub const fn potion_use_effect(index: usize) -> Option<PotionUseEffect> {
 /// uniformly random potion row.
 pub const POTION_VARIATION_DENOMINATOR: u8 = 16;
 
+/// `catalogs/item-list.md §7.1` scroll-grant subtype mask. The
+/// scroll-family Search/container grant masks the grant subtype to
+/// the low three bits to select one of the eight published scroll
+/// labels (`0..=7`). High bits identify the special HMS Cape plans
+/// grant variant rather than the displayed scroll label.
+pub const SCROLL_GRANT_LABEL_MASK: u8 = 0x07;
+
+/// `catalogs/item-list.md §7.1`: returns the displayed scroll
+/// label id (`0..=7`) for a scroll-family grant subtype byte.
+pub const fn scroll_grant_label_id(grant_subtype: u8) -> u8 {
+    grant_subtype & SCROLL_GRANT_LABEL_MASK
+}
+
 /// `inventory.md §7` Spyglass U-Use eligibility predicate. The
 /// Spyglass is a surface-only utility; it refuses outside the
 /// overworld scene byte zero. The caller must additionally check

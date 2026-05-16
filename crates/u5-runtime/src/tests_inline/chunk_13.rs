@@ -1,4 +1,19 @@
     #[test]
+    fn scroll_grant_label_id_masks_low_three_bits() {
+        // catalogs/item-list.md §7.1
+        assert_eq!(SCROLL_GRANT_LABEL_MASK, 0x07);
+        // Low-three-bit values pass through.
+        for label in 0u8..=7 {
+            assert_eq!(scroll_grant_label_id(label), label);
+        }
+        // Higher bits are masked off.
+        assert_eq!(scroll_grant_label_id(0x08), 0);
+        assert_eq!(scroll_grant_label_id(0x0F), 7);
+        assert_eq!(scroll_grant_label_id(0x10), 0);
+        assert_eq!(scroll_grant_label_id(0xFF), 7);
+    }
+
+    #[test]
     fn launcher_executable_boundary_filenames_match_spec() {
         // launcher.md §2,§5
         assert_eq!(ULTIMA_EXE_FILENAME, "ULTIMA.EXE");
