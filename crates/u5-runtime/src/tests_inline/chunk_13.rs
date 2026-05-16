@@ -32,6 +32,27 @@
     }
 
     #[test]
+    fn npc_schedule_hour_at_boundary_matches_published_equality_rule() {
+        // npc-schedules.md §6: the boundary trigger fires only when
+        // the current hour exactly matches one of the four time
+        // boundary bytes. Hours strictly between boundaries leave
+        // the NPC idle.
+        let time = [6u8, 9, 17, 21];
+        for hour in 0u8..24 {
+            let expected = hour == 6 || hour == 9 || hour == 17 || hour == 21;
+            assert_eq!(
+                npc_schedule_hour_at_boundary(time, hour),
+                expected,
+                "hour {hour}"
+            );
+        }
+        // Boundary bytes modulo 24 — out-of-range bytes still fire
+        // when the wrapped value matches the wrapped hour.
+        assert!(npc_schedule_hour_at_boundary([24, 24, 24, 24], 0));
+        assert!(npc_schedule_hour_at_boundary([26, 0, 0, 0], 2));
+    }
+
+    #[test]
     fn npc_dynamic_obstacle_blocks_within_radius_strictly() {
         // npc-schedules.md §10: occupants strictly inside the
         // dynamic-obstacle radius (Manhattan distance < 4) are

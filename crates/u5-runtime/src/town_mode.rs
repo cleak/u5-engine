@@ -458,6 +458,19 @@ pub const fn town_tile_marker(byte: u8) -> Option<TownTileMarker> {
 /// (0..=23). The selection follows the spec's "most recent past
 /// boundary, with 24-hour wraparound" rule, so equality with a
 /// boundary picks that segment's waypoint.
+/// `npc-schedules.md §6`: boundary-equality test. Returns `true`
+/// when the current `hour` exactly matches any of the four schedule
+/// `time` boundary bytes. The boundary trigger only fires for an
+/// idle NPC on a tick where the hour equals one of these bytes;
+/// hours strictly between boundaries leave the NPC idle.
+pub const fn npc_schedule_hour_at_boundary(time: [u8; 4], hour: u8) -> bool {
+    let h = hour % 24;
+    time[0] % 24 == h
+        || time[1] % 24 == h
+        || time[2] % 24 == h
+        || time[3] % 24 == h
+}
+
 pub const fn npc_schedule_waypoint_for_hour(time: [u8; 4], hour: u8) -> u8 {
     // Map (boundary -> waypoint) per the spec table.
     let waypoints: [u8; 4] = [0, 1, 2, 1];
