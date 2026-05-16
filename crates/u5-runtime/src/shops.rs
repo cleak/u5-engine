@@ -684,6 +684,31 @@ pub enum ReagentPurchaseError {
     InsufficientGold { available: u16, required: u16 },
 }
 
+/// `shops.md §8.5` tavern entry-prompt outcome. The shopkeeper
+/// greets the Avatar and asks whether they want a drink: `Y`
+/// enters the local menu, `N` or Space leaves, any other key
+/// silently re-prompts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TavernDrinkPrompt {
+    /// `Y` (case-insensitive) — enter the tavern's drink menu.
+    Enter,
+    /// `N` (case-insensitive) or Space — leave with the farewell.
+    Leave,
+    /// Any other byte — silently re-prompt.
+    Discard,
+}
+
+/// `shops.md §8.5`: classify one keystroke for the tavern entry
+/// drink prompt. Lower-case `y` / `n` accepted for uppercase-naive
+/// callers.
+pub const fn tavern_drink_prompt(byte: u8) -> TavernDrinkPrompt {
+    match byte {
+        b'Y' | b'y' => TavernDrinkPrompt::Enter,
+        b'N' | b'n' | b' ' => TavernDrinkPrompt::Leave,
+        _ => TavernDrinkPrompt::Discard,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tavern {
     TheHonestMeal,

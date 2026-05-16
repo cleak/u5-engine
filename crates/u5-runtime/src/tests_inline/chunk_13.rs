@@ -7,6 +7,23 @@
     }
 
     #[test]
+    fn tavern_drink_prompt_routes_y_n_space_and_discards_others() {
+        // shops.md §8.5
+        assert_eq!(tavern_drink_prompt(b'Y'), TavernDrinkPrompt::Enter);
+        assert_eq!(tavern_drink_prompt(b'y'), TavernDrinkPrompt::Enter);
+        assert_eq!(tavern_drink_prompt(b'N'), TavernDrinkPrompt::Leave);
+        assert_eq!(tavern_drink_prompt(b'n'), TavernDrinkPrompt::Leave);
+        assert_eq!(tavern_drink_prompt(b' '), TavernDrinkPrompt::Leave);
+        for byte in [b'A', b'M', b'X', b'1', b'\r', b'\n', 0x00, 0x08, 0x1B, 0xFF] {
+            assert_eq!(
+                tavern_drink_prompt(byte),
+                TavernDrinkPrompt::Discard,
+                "byte {byte:#04x}"
+            );
+        }
+    }
+
+    #[test]
     fn guild_shop_action_routes_a_b_c_and_exits_on_anything_else() {
         // shops.md §8.2
         assert_eq!(
