@@ -32,6 +32,29 @@
     }
 
     #[test]
+    fn dungeon_bomb_search_outcome_dispatches_strictly_above_threshold() {
+        // dungeon-mode.md §8: Search-on-0x62 rolls 1..=30 against
+        // the shared dungeon-chest threshold. Roll above threshold
+        // springs the bomb; equal-or-below leaves the cell alone.
+        use DungeonBombSearchOutcome::*;
+        // At threshold 15: rolls 16..=30 spring; 1..=15 don't.
+        for roll in 1u8..=15 {
+            assert_eq!(dungeon_bomb_search_outcome(15, roll), NothingOnPit);
+        }
+        for roll in 16u8..=30 {
+            assert_eq!(dungeon_bomb_search_outcome(15, roll), SpringBomb);
+        }
+        // Threshold 30 means no roll can spring the bomb.
+        for roll in 1u8..=30 {
+            assert_eq!(dungeon_bomb_search_outcome(30, roll), NothingOnPit);
+        }
+        // Threshold 0 means every nonzero roll springs the bomb.
+        for roll in 1u8..=30 {
+            assert_eq!(dungeon_bomb_search_outcome(0, roll), SpringBomb);
+        }
+    }
+
+    #[test]
     fn dungeon_chest_search_outcome_dispatches_per_spec() {
         // dungeon-mode.md §8: Search uses the shared dungeon-chest
         // threshold. No-trap branch requires roll > threshold AND

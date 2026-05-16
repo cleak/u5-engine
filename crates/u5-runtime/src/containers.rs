@@ -251,6 +251,39 @@ pub const fn dungeon_chest_trap_tier(tier: u8) -> DungeonChestTrapTier {
     }
 }
 
+/// `dungeon-mode.md §8` Search-on-bomb-trap (exact byte `0x62`)
+/// outcome. Search rolls `1..=30` against the shared dungeon-chest
+/// threshold; a roll *above* the threshold springs the bomb and
+/// clears the searched cell to `0x00`, while a roll at or below the
+/// threshold leaves the cell unchanged with the generic "nothing"
+/// reply. The bomb-spring branch reuses the published byte `0x00`
+/// (passage / empty) for the cleared cell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonBombSearchOutcome {
+    /// Roll at or below the threshold — leaves the cell as `0x62`
+    /// and reports the generic "nothing on the pit" preamble.
+    NothingOnPit,
+    /// Roll above the threshold — springs the bomb, reports it, and
+    /// clears the searched cell to passage (`0x00`).
+    SpringBomb,
+}
+
+/// `dungeon-mode.md §8`: resolve the Search-on-bomb-trap outcome
+/// from the shared dungeon-chest threshold (computed by
+/// `dungeon_chest_jimmy_threshold`) and the `1..=30` die roll. The
+/// "spring" branch is `roll > threshold`; equal-or-below leaves the
+/// cell alone.
+pub const fn dungeon_bomb_search_outcome(
+    threshold: u8,
+    roll_1_to_30: u8,
+) -> DungeonBombSearchOutcome {
+    if roll_1_to_30 > threshold {
+        DungeonBombSearchOutcome::SpringBomb
+    } else {
+        DungeonBombSearchOutcome::NothingOnPit
+    }
+}
+
 /// `dungeon-mode.md §8` dungeon-chest Search outcome. Search shares
 /// the dungeon Jimmy threshold formula
 /// (`(2*depth - member_lockpick + 30) / 2`); the visible result then
