@@ -145,8 +145,17 @@ pub fn resolve_terrain_combat_setup_count(
     )
 }
 
+/// `combat.md §5` terrain-replacement early-spawn divisor. The
+/// early-spawn band — spawn indexes that may roll for the per-arena
+/// replacement tile — is `[0, count / DIVISOR + BIAS)`. Promote
+/// both halves so the threshold helper no longer encodes the
+/// "count / 4 + 1" rule as bare literals.
+pub const TERRAIN_COMBAT_REPLACEMENT_EARLY_SPAWN_DIVISOR: u8 = 4;
+pub const TERRAIN_COMBAT_REPLACEMENT_EARLY_SPAWN_BIAS: u8 = 1;
+
 pub fn terrain_combat_replacement_threshold(count: u8) -> u8 {
-    (count / 4) + 1
+    count / TERRAIN_COMBAT_REPLACEMENT_EARLY_SPAWN_DIVISOR
+        + TERRAIN_COMBAT_REPLACEMENT_EARLY_SPAWN_BIAS
 }
 
 /// `encounters.md §4` + `combat.md §5` terrain-replacement chance

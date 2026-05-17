@@ -1,4 +1,19 @@
     #[test]
+    fn terrain_combat_early_spawn_threshold_matches_spec() {
+        // combat.md §5: early-spawn band is spawn indexes below
+        // `count / 4 + 1`. Each early spawn rolls a one-in-nine
+        // replacement check; later spawn indexes never roll.
+        assert_eq!(TERRAIN_COMBAT_REPLACEMENT_EARLY_SPAWN_DIVISOR, 4);
+        assert_eq!(TERRAIN_COMBAT_REPLACEMENT_EARLY_SPAWN_BIAS, 1);
+        // A count of 8 admits early spawn indexes 0..=2 (threshold 3).
+        assert_eq!(terrain_combat_replacement_threshold(8), 3);
+        // A count of 1 admits only spawn index 0 (threshold 1).
+        assert_eq!(terrain_combat_replacement_threshold(1), 1);
+        // A count of 0 still admits the bias band (threshold 1).
+        assert_eq!(terrain_combat_replacement_threshold(0), 1);
+    }
+
+    #[test]
     fn combat_spawn_count_exact_sentinels_match_spec() {
         // combat.md §5: the per-arena spawn-count byte values 1, 8,
         // and 16 are exact counts used unchanged; every other nonzero
