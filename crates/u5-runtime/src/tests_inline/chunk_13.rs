@@ -1,4 +1,19 @@
     #[test]
+    fn save_active_object_table_offset_derives_from_upstream_blocks() {
+        // formats/saved-gam.md §8.1 places the 256-byte active-object
+        // table at 0x06B4..0x07B3 — immediately after the 512-byte
+        // dungeon working buffer (0x03B4..0x05B3) and the 256-byte
+        // mixed-state band (0x05B4..0x06B3). Anchor the active-
+        // object-table offset to that upstream-block sum so moving
+        // an earlier block automatically shifts the table.
+        assert_eq!(
+            SAVE_ACTIVE_OBJECT_TABLE_OFFSET,
+            SAVE_DUNGEON_WORKING_BUFFER_OFFSET + SAVE_DUNGEON_WORKING_BUFFER_LEN + OOL_PLANE_LEN,
+        );
+        assert_eq!(SAVE_ACTIVE_OBJECT_TABLE_OFFSET, 0x06B4);
+    }
+
+    #[test]
     fn save_dungeon_working_buffer_offset_anchors_to_fortunes_of_war() {
         // formats/saved-gam.md §8.2: the 512-byte dungeon/map-cell
         // working buffer at 0x03B4..0x05B3 begins immediately after

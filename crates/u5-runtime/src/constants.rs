@@ -375,8 +375,13 @@ pub const SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET: usize = 0x033A;
 pub const SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN: usize = 16;
 /// `formats/saved-gam.md §8.1`: the live active-object table snapshot
 /// occupies 256 bytes at file offset `0x06B4..=0x07B3`. Layout matches
-/// the in-memory table (32 records × 8 bytes).
-pub const SAVE_ACTIVE_OBJECT_TABLE_OFFSET: usize = 0x06B4;
+/// the in-memory table (32 records × 8 bytes). The table starts
+/// immediately after the 512-byte dungeon working buffer and the
+/// 256-byte mixed-state band; anchor the offset to that sum so the
+/// active-object-table position derives from the upstream block
+/// layout.
+pub const SAVE_ACTIVE_OBJECT_TABLE_OFFSET: usize =
+    SAVE_DUNGEON_WORKING_BUFFER_OFFSET + SAVE_DUNGEON_WORKING_BUFFER_LEN + OOL_PLANE_LEN;
 /// `formats/saved-gam.md §8.2`: the dungeon/map-cell working buffer
 /// occupies 512 bytes at file offset `0x03B4..=0x05B3` and matches the
 /// 512-byte dungeon-record stride. The buffer begins immediately
