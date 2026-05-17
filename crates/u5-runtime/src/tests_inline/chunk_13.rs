@@ -1,4 +1,21 @@
     #[test]
+    fn combat_target_group_and_round_result_chains() {
+        // combat.md §7: combat-round results and target groups
+        // are sequential byte enums. combat_actor.rs declared
+        // each value as a bare literal. Chain
+        // COMBAT_ROUND_RESULT_SUCCESS from COMBAT_ROUND_RESULT_DEFEAT
+        // and COMBAT_TARGET_GROUP_PARTY/MONSTER from
+        // COMBAT_TARGET_GROUP_NEUTRAL so the published enum
+        // ordering stays explicit.
+        assert_eq!(COMBAT_ROUND_RESULT_DEFEAT, 0);
+        assert_eq!(COMBAT_ROUND_RESULT_SUCCESS, COMBAT_ROUND_RESULT_DEFEAT + 1);
+        assert_eq!(COMBAT_TARGET_GROUP_NEUTRAL, 0);
+        assert_eq!(COMBAT_TARGET_GROUP_PARTY, COMBAT_TARGET_GROUP_NEUTRAL + 1);
+        assert_eq!(COMBAT_TARGET_GROUP_MONSTER, COMBAT_TARGET_GROUP_PARTY + 1);
+        assert_eq!(COMBAT_TARGET_GROUP_MONSTER, 2);
+    }
+
+    #[test]
     fn conjure_animal_outcome_count_aliases_to_conjure_outcome_count() {
         // magic.md §8: the Conjure spell rolls one of fifteen
         // weighted outcomes. combat_actor.rs declared
