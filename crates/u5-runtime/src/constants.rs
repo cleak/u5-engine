@@ -319,9 +319,18 @@ pub const SAVE_AVATAR_NAME_LEN: usize = 9;
 pub const SAVE_ACTIVE_OBJECTS_OFFSET: usize = 0x06b4;
 pub const SAVE_PARTY_SIZE_OFFSET: usize = 0x02b5;
 pub const SAVE_ROSTER_OFFSET: usize = 0x0002;
+/// `formats/saved-gam.md §3`: number of character records the roster
+/// holds. Record zero is structurally the Avatar; records one through
+/// fifteen are the canonical companion list. Slots beyond the
+/// `party-size` index hold characters who exist in Britannia but are
+/// not currently travelling with the player.
+pub const SAVE_ROSTER_SLOT_COUNT: usize = 16;
 pub const SAVE_INN_REGISTRY_OFFSET: usize = 0x0021;
 pub const SAVE_INN_REGISTRY_COUNT: usize = 16;
 pub const SAVE_CHARACTER_RECORD_LEN: usize = 32;
+/// `formats/saved-gam.md §3` total roster region length:
+/// sixteen records of thirty-two bytes each.
+pub const SAVE_ROSTER_REGION_LEN: usize = SAVE_ROSTER_SLOT_COUNT * SAVE_CHARACTER_RECORD_LEN;
 pub const SAVE_CHARACTER_NAME_LEN: usize = 9;
 pub const SAVE_CHARACTER_GENDER_OFFSET: usize = 0x09;
 pub const SAVE_GENDER_MALE_BYTE: u8 = 0x0b;

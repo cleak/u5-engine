@@ -1,4 +1,22 @@
     #[test]
+    fn save_roster_region_matches_spec() {
+        // formats/saved-gam.md §3: the character roster begins two
+        // bytes into the file and holds sixteen records of thirty-two
+        // bytes each, packed back-to-back with no separator.
+        assert_eq!(SAVE_ROSTER_OFFSET, 0x0002);
+        assert_eq!(SAVE_ROSTER_SLOT_COUNT, 16);
+        assert_eq!(SAVE_CHARACTER_RECORD_LEN, 32);
+        assert_eq!(SAVE_ROSTER_REGION_LEN, 512);
+        assert_eq!(
+            SAVE_ROSTER_REGION_LEN,
+            SAVE_ROSTER_SLOT_COUNT * SAVE_CHARACTER_RECORD_LEN,
+        );
+        // The roster region ends one byte before file offset 0x0202
+        // (start of the shared inventory block).
+        assert_eq!(SAVE_ROSTER_OFFSET + SAVE_ROSTER_REGION_LEN, SAVE_FOOD_OFFSET);
+    }
+
+    #[test]
     fn save_party_size_max_caps_iteration() {
         // formats/saved-gam.md §4: the party-size field at 0x02B5 is
         // the iteration cap for any "for each party member" pass and
