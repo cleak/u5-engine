@@ -1,4 +1,19 @@
     #[test]
+    fn trap_effect_damage_max_routes_through_named_constants() {
+        // traps.md §3: Acid effect rolls 1..=30 damage; Bomb effect
+        // rolls 1..=8 damage. Both upper bounds must route through
+        // the named TRAP_ACID_DAMAGE_MAX / TRAP_BOMB_DAMAGE_MAX
+        // constants, not bare literals.
+        assert_eq!(TRAP_ACID_DAMAGE_MAX, 30);
+        assert_eq!(TRAP_BOMB_DAMAGE_MAX, 8);
+        assert_eq!(trap_effect_damage_max(TrapEffect::Acid), Some(TRAP_ACID_DAMAGE_MAX));
+        assert_eq!(trap_effect_damage_max(TrapEffect::Bomb), Some(TRAP_BOMB_DAMAGE_MAX));
+        // Poison and Gas use the revive helper, not damage.
+        assert_eq!(trap_effect_damage_max(TrapEffect::Poison), None);
+        assert_eq!(trap_effect_damage_max(TrapEffect::Gas), None);
+    }
+
+    #[test]
     fn dungeon_chest_row_gate_formula_matches_spec() {
         // containers.md §6: per-row gate roll is uniform in
         // 1..=(4 * dungeon_depth + 4). Promote the multiplier and bias

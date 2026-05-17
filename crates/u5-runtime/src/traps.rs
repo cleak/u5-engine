@@ -1,4 +1,4 @@
-use crate::TRAP_NON_COMBAT_EFFECT_TABLE;
+use crate::{TRAP_ACID_DAMAGE_MAX, TRAP_BOMB_DAMAGE_MAX, TRAP_NON_COMBAT_EFFECT_TABLE};
 
 pub fn shared_trap_effect_id_from_index(index: u8, combat_active: bool) -> u8 {
     if combat_active {
@@ -61,8 +61,8 @@ pub const fn trap_effect_for_id(effect_id: u8) -> Option<TrapEffect> {
 /// roll damage. Returns `None` for revive-helper families.
 pub const fn trap_effect_damage_max(effect: TrapEffect) -> Option<u8> {
     match effect {
-        TrapEffect::Acid => Some(30),
-        TrapEffect::Bomb => Some(8),
+        TrapEffect::Acid => Some(TRAP_ACID_DAMAGE_MAX),
+        TrapEffect::Bomb => Some(TRAP_BOMB_DAMAGE_MAX),
         TrapEffect::Poison | TrapEffect::Gas => None,
     }
 }
