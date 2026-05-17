@@ -683,9 +683,11 @@ pub const TRANSPORT_MARKER_FOOT_DEFAULT: u8 = 0x1C;
 
 /// `vehicles.md §2` foot/avatar transport-family byte range. Any
 /// byte in this band identifies the party as on foot; the low two
-/// bits encode the party leader's facing.
+/// bits encode the party leader's facing. Like the other
+/// transport families, the band is four markers wide; anchor
+/// FOOT_LAST to FIRST + TRANSPORT_FACING_MASK.
 pub const TRANSPORT_MARKER_FOOT_FIRST: u8 = 0x1C;
-pub const TRANSPORT_MARKER_FOOT_LAST: u8 = 0x1F;
+pub const TRANSPORT_MARKER_FOOT_LAST: u8 = TRANSPORT_MARKER_FOOT_FIRST + TRANSPORT_FACING_MASK;
 
 /// `encounters.md §4` encounter-spawn coordinate-separation bounds.
 /// A candidate spawn coordinate is accepted only when both axes'

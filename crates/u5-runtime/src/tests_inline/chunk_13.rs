@@ -1,4 +1,19 @@
     #[test]
+    fn transport_marker_foot_band_anchors_to_facing_mask() {
+        // vehicles.md §2: the foot/avatar transport family is
+        // four markers wide (facing in low 2 bits). Anchor
+        // TRANSPORT_MARKER_FOOT_LAST to FIRST + TRANSPORT_FACING_MASK
+        // so the foot band uses the same chain as the other
+        // transport families.
+        assert_eq!(
+            TRANSPORT_MARKER_FOOT_LAST,
+            TRANSPORT_MARKER_FOOT_FIRST + TRANSPORT_FACING_MASK,
+        );
+        assert_eq!(TRANSPORT_MARKER_FOOT_FIRST, 0x1C);
+        assert_eq!(TRANSPORT_MARKER_FOOT_LAST, 0x1F);
+    }
+
+    #[test]
     fn transport_marker_families_chain_through_facing_mask() {
         // vehicles.md §2: each transport-marker family is four
         // markers wide (facing carried in low two bits =
