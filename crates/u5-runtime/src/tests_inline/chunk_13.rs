@@ -1,4 +1,27 @@
     #[test]
+    fn town_and_village_scene_bytes_chain_sequentially() {
+        // catalogs/npc-roster.md §1: scene bytes 1..=8 cover the
+        // eight towns (Moonglow..New Magincia) and 9..=13 cover the
+        // five villages (Fogsbane..Iolo's Hut). Chain the named
+        // scene-byte constants so adding a town/village shifts the
+        // later names automatically and the published per-name
+        // ordering has one source of truth.
+        assert_eq!(SCENE_JHELOM, SCENE_BRITAIN + 1);
+        assert_eq!(SCENE_YEW, SCENE_JHELOM + 1);
+        assert_eq!(SCENE_MINOC, SCENE_YEW + 1);
+        assert_eq!(SCENE_TRINSIC, SCENE_MINOC + 1);
+        assert_eq!(SCENE_SKARA_BRAE, SCENE_TRINSIC + 1);
+        assert_eq!(SCENE_NEW_MAGINCIA, SCENE_SKARA_BRAE + 1);
+        assert_eq!(SCENE_NEW_MAGINCIA, 8);
+        assert_eq!(SCENE_FOGSBANE, SCENE_NEW_MAGINCIA + 1);
+        assert_eq!(SCENE_STORMCROW, SCENE_FOGSBANE + 1);
+        assert_eq!(SCENE_GREYHAVEN, SCENE_STORMCROW + 1);
+        assert_eq!(SCENE_WAVEGUIDE, SCENE_GREYHAVEN + 1);
+        assert_eq!(SCENE_IOLOS_HUT, SCENE_WAVEGUIDE + 1);
+        assert_eq!(SCENE_IOLOS_HUT, 13);
+    }
+
+    #[test]
     fn scene_moonglow_anchors_to_town_family_first() {
         // catalogs/npc-roster.md §1: Moonglow (scene 1) is the
         // first town-family scene — the slot immediately after the

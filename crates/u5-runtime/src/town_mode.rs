@@ -445,18 +445,18 @@ pub const NPC_WORLD_ROSTER_MAX: usize =
 /// town-family band share one source of truth.
 pub const SCENE_MOONGLOW: u8 = crate::SCENE_TOWN_FAMILY_FIRST;
 pub const SCENE_BRITAIN: u8 = SCENE_MOONGLOW + 1;
-pub const SCENE_JHELOM: u8 = 3;
-pub const SCENE_YEW: u8 = 4;
-pub const SCENE_MINOC: u8 = 5;
-pub const SCENE_TRINSIC: u8 = 6;
-pub const SCENE_SKARA_BRAE: u8 = 7;
-pub const SCENE_NEW_MAGINCIA: u8 = 8;
+pub const SCENE_JHELOM: u8 = SCENE_BRITAIN + 1;
+pub const SCENE_YEW: u8 = SCENE_JHELOM + 1;
+pub const SCENE_MINOC: u8 = SCENE_YEW + 1;
+pub const SCENE_TRINSIC: u8 = SCENE_MINOC + 1;
+pub const SCENE_SKARA_BRAE: u8 = SCENE_TRINSIC + 1;
+pub const SCENE_NEW_MAGINCIA: u8 = SCENE_SKARA_BRAE + 1;
 
-pub const SCENE_FOGSBANE: u8 = 9;
-pub const SCENE_STORMCROW: u8 = 10;
-pub const SCENE_GREYHAVEN: u8 = 11;
-pub const SCENE_WAVEGUIDE: u8 = 12;
-pub const SCENE_IOLOS_HUT: u8 = 13;
+pub const SCENE_FOGSBANE: u8 = SCENE_NEW_MAGINCIA + 1;
+pub const SCENE_STORMCROW: u8 = SCENE_FOGSBANE + 1;
+pub const SCENE_GREYHAVEN: u8 = SCENE_STORMCROW + 1;
+pub const SCENE_WAVEGUIDE: u8 = SCENE_GREYHAVEN + 1;
+pub const SCENE_IOLOS_HUT: u8 = SCENE_WAVEGUIDE + 1;
 
 pub const SCENE_LORD_BRITISHS_CASTLE: u8 = 17;
 pub const SCENE_LORD_BLACKTHORNS_CASTLE: u8 = 18;
