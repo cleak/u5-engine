@@ -925,12 +925,15 @@ pub const KILL_SPELL_INDEX: usize = 37;
 /// Field supplies raw zero to the same damage path; that case has no cap.
 pub const FIRE_FIELD_RAW_DAMAGE_MAX: u8 = 21;
 
-/// Inclusive town/world door tile-id range per `catalogs/tile-catalog.md` §6:
-/// indices `96..=103` are the door family used by O-Open / J-Jimmy / magic
-/// Open. Open variants written by the O command live in this range alongside
-/// the closed forms.
-pub const TOWN_DOOR_TILE_FIRST: u8 = 96;
-pub const TOWN_DOOR_TILE_LAST: u8 = 103;
+/// Inclusive town/world door tile-id range per
+/// `catalogs/tile-catalog.md §6`: indices `0x60..=0x67` are the
+/// door family used by O-Open / J-Jimmy / magic Open. Open
+/// variants written by the O command live in this range alongside
+/// the closed forms. Anchored to [`crate::TILE_DOOR_FIRST`] /
+/// [`crate::TILE_DOOR_LAST`] so the two parallel range
+/// definitions share one source of truth.
+pub const TOWN_DOOR_TILE_FIRST: u8 = crate::TILE_DOOR_FIRST;
+pub const TOWN_DOOR_TILE_LAST: u8 = crate::TILE_DOOR_LAST;
 /// Inclusive town stair tile-id range per `catalogs/tile-catalog.md` §6:
 /// `0xC4..=0xC7` is the facing-sensitive stairway family whose low two bits
 /// encode movement-wrapper-normalised facing.

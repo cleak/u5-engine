@@ -1,4 +1,20 @@
     #[test]
+    fn town_door_tile_range_anchors_to_tile_door_range() {
+        // catalogs/tile-catalog.md §6: door tile-ids occupy
+        // 0x60..=0x67. constants.rs declared TOWN_DOOR_TILE_FIRST
+        // = 96 / TOWN_DOOR_TILE_LAST = 103 as bare decimal
+        // literals in parallel with tile_classes.rs's
+        // TILE_DOOR_FIRST / TILE_DOOR_LAST. Anchor each end of
+        // the town-door range to the tile-catalog constants so
+        // the two parallel range definitions share one source of
+        // truth.
+        assert_eq!(TOWN_DOOR_TILE_FIRST, TILE_DOOR_FIRST);
+        assert_eq!(TOWN_DOOR_TILE_LAST, TILE_DOOR_LAST);
+        assert_eq!(TOWN_DOOR_TILE_FIRST, 96);
+        assert_eq!(TOWN_DOOR_TILE_LAST, 103);
+    }
+
+    #[test]
     fn sceptre_barrier_tile_range_anchors_to_tile_barrier_range() {
         // catalogs/item-list.md §8: the Sceptre's U-Use dissolve
         // scan rewrites the Sceptre-dissolvable barrier/field
