@@ -346,7 +346,12 @@ pub const SAVE_HOUR_MAX: u8 = crate::HOURS_PER_DAY - 1;
 pub const SAVE_MINUTE_MAX: u8 = crate::MINUTES_PER_HOUR - 1;
 pub const SAVE_MORAL_STANDING_OFFSET: usize = 0x02e2;
 pub const SAVE_WIND_OFFSET: usize = 0x02ec;
-pub const SAVE_SCENE_OFFSET: usize = 0x02ed;
+/// `formats/saved-gam.md §5`: "The five bytes after wind form the
+/// persisted location cluster" — scene byte sits immediately
+/// after the one-byte wind state. Anchor SAVE_SCENE_OFFSET to
+/// SAVE_WIND_OFFSET + 1 so the wind→location adjacency has one
+/// source of truth.
+pub const SAVE_SCENE_OFFSET: usize = SAVE_WIND_OFFSET + 1;
 /// `formats/saved-gam.md §5`: the persisted location cluster
 /// occupies `0x02ed..=0x02f1` — scene byte, saved-scene/mode
 /// scratch (one byte), party Z, party X, party Y. Anchor Z, X,

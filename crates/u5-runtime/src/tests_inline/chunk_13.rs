@@ -1,4 +1,16 @@
     #[test]
+    fn save_scene_offset_anchors_to_wind_offset() {
+        // formats/saved-gam.md §5: "The five bytes after wind form
+        // the persisted location cluster" — scene at 0x02ed sits
+        // immediately after the one-byte wind state at 0x02ec.
+        // Anchor SAVE_SCENE_OFFSET to SAVE_WIND_OFFSET + 1 so the
+        // wind→location adjacency has one source of truth.
+        assert_eq!(SAVE_SCENE_OFFSET, SAVE_WIND_OFFSET + 1);
+        assert_eq!(SAVE_SCENE_OFFSET, 0x02ed);
+        assert_eq!(SAVE_WIND_OFFSET, 0x02ec);
+    }
+
+    #[test]
     fn save_food_stock_offset_anchors_to_roster_region_end() {
         // formats/saved-gam.md §2, §4: the party inventory band
         // begins immediately after the 512-byte character roster
