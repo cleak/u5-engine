@@ -179,8 +179,13 @@ pub const fn npc_tlk_filename(scene_byte: u8) -> Option<&'static str> {
 /// rows map to town-family scenes (rows 0..=31 -> scenes 1..=32);
 /// the next 8 rows map to the dungeon-family scenes 33..=40 in
 /// shipped `DUNGEON.DAT` record order.
-pub const WORLD_LOCATION_TABLE_TOWN_ROWS: usize = 32;
-pub const WORLD_LOCATION_TABLE_DUNGEON_ROWS: usize = 8;
+/// `overworld.md §8` WorldLocationTable row layout. Town-family
+/// rows map to scenes 1..=SCENE_TOWN_FAMILY_LAST (32 rows);
+/// dungeon-family rows map to the eight DUNGEON.DAT records.
+/// Anchor each block to its scene-byte/record-count constant
+/// so the table layout derives from the scene partition.
+pub const WORLD_LOCATION_TABLE_TOWN_ROWS: usize = crate::SCENE_TOWN_FAMILY_LAST as usize;
+pub const WORLD_LOCATION_TABLE_DUNGEON_ROWS: usize = crate::DUNGEON_DAT_RECORD_COUNT;
 pub const WORLD_LOCATION_TABLE_TOTAL_ROWS: usize =
     WORLD_LOCATION_TABLE_TOWN_ROWS + WORLD_LOCATION_TABLE_DUNGEON_ROWS;
 

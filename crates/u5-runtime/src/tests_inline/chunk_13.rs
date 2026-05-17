@@ -1,4 +1,19 @@
     #[test]
+    fn world_location_table_rows_anchor_to_scene_partition() {
+        // overworld.md §8: WorldLocationTable town-family rows map
+        // to scenes 1..=SCENE_TOWN_FAMILY_LAST (32); dungeon-family
+        // rows map to the eight DUNGEON.DAT records. Anchor the
+        // two block sizes to SCENE_TOWN_FAMILY_LAST and
+        // DUNGEON_DAT_RECORD_COUNT so the table layout derives
+        // from the scene partition.
+        assert_eq!(WORLD_LOCATION_TABLE_TOWN_ROWS, SCENE_TOWN_FAMILY_LAST as usize);
+        assert_eq!(WORLD_LOCATION_TABLE_DUNGEON_ROWS, DUNGEON_DAT_RECORD_COUNT);
+        assert_eq!(WORLD_LOCATION_TABLE_TOWN_ROWS, 32);
+        assert_eq!(WORLD_LOCATION_TABLE_DUNGEON_ROWS, 8);
+        assert_eq!(WORLD_LOCATION_TABLE_TOTAL_ROWS, 40);
+    }
+
+    #[test]
     fn cbt_metadata_column_ranges_anchor_to_arena_metadata_start() {
         // formats/cbt.md §5: outdoor metadata band columns start
         // at the metadata-start column. Anchor the setup-table-A
