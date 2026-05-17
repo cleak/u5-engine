@@ -1,4 +1,16 @@
     #[test]
+    fn chargen_starting_x_anchors_to_location_default_entry_x() {
+        // chargen.md §8 places the post-questionnaire party at
+        // Iolo's Hut local cell (15, 15). The X column matches the
+        // engine-wide town-entry default column. Anchor
+        // CHARGEN_STARTING_X to LOCATION_DEFAULT_ENTRY_X so the
+        // chargen exit and the town-entry default share one value.
+        assert_eq!(CHARGEN_STARTING_X as usize, LOCATION_DEFAULT_ENTRY_X);
+        assert_eq!(CHARGEN_STARTING_X, 15);
+        assert_eq!(LOCATION_DEFAULT_ENTRY_X, 15);
+    }
+
+    #[test]
     fn play_start_date_anchors_to_chargen_starting_date() {
         // systems/chargen.md §6 sets the campaign start year, month,
         // and day (139, 4, 5); the play-mode entry uses the same

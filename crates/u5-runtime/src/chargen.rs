@@ -180,7 +180,11 @@ pub const CHARGEN_NAME_INPUT_LIMIT: usize = SAVE_CHARACTER_NAME_LEN - 1;
 /// Z 0 at local cell (15, 15) with a zero saved-scene scratch byte.
 /// These bytes come from `INIT.GAM`; chargen does not customise them.
 pub const CHARGEN_STARTING_SCENE: u8 = 13;
-pub const CHARGEN_STARTING_X: u8 = 15;
+/// `chargen.md §8` / `town-mode.md §3`: the chargen exit cell
+/// uses the engine-wide town-entry default column (X = 15).
+/// Anchored to [`crate::LOCATION_DEFAULT_ENTRY_X`] so the
+/// town-entry default and the chargen exit column stay one value.
+pub const CHARGEN_STARTING_X: u8 = crate::LOCATION_DEFAULT_ENTRY_X as u8;
 pub const CHARGEN_STARTING_Y: u8 = 15;
 pub const CHARGEN_STARTING_Z: u8 = 0;
 pub const CHARGEN_STARTING_SAVED_SCENE_SCRATCH: u8 = 0;
