@@ -125,8 +125,11 @@ impl std::error::Error for U4TransferError {}
 /// `u4-transfer.md §5` virtue-standing word count tested by the
 /// "no transferable data" guard. The transfer reads the eight
 /// consecutive virtue/karma standing words for Honesty, Compassion,
-/// Valor, Justice, Sacrifice, Honor, Spirituality, and Humility.
-pub const U4_TRANSFER_VIRTUE_STANDING_COUNT: usize = 8;
+/// Valor, Justice, Sacrifice, Honor, Spirituality, and Humility —
+/// one word per published virtue. Anchored to
+/// [`crate::VIRTUE_COUNT`] so the transfer-guard word count and
+/// the published virtue count share one source of truth.
+pub const U4_TRANSFER_VIRTUE_STANDING_COUNT: usize = crate::VIRTUE_COUNT;
 
 /// `u4-transfer.md §5`: returns `true` when the transfer guard
 /// should present the "no transferable data" branch instead of the

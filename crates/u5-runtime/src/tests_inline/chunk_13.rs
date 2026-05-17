@@ -1,4 +1,18 @@
     #[test]
+    fn u4_transfer_virtue_standing_count_aliases_to_virtue_count() {
+        // u4-transfer.md §5: the transfer "no transferable data"
+        // guard reads the eight consecutive virtue/karma standing
+        // words — one word per published virtue. u4_transfer.rs
+        // declared U4_TRANSFER_VIRTUE_STANDING_COUNT = 8 as a
+        // bare literal in parallel with constants::VIRTUE_COUNT
+        // = 8. Anchor the transfer-guard word count through to
+        // VIRTUE_COUNT so the count and the published virtue
+        // count share one source of truth.
+        assert_eq!(U4_TRANSFER_VIRTUE_STANDING_COUNT, VIRTUE_COUNT);
+        assert_eq!(U4_TRANSFER_VIRTUE_STANDING_COUNT, 8);
+    }
+
+    #[test]
     fn animation_phase_steady_nibble_anchors_to_low_nibble_mask() {
         // active-objects.md §8: the "steady, do not animate"
         // sentinel in byte 6 is the all-ones nibble (0x0F) — the
