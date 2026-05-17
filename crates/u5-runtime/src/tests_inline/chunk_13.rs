@@ -1,4 +1,28 @@
     #[test]
+    fn encounter_spawner_separation_bounds_alias_to_axis_bounds() {
+        // encounters.md §4: the spawner per-axis separation gate
+        // (MIN=6, MAX=250) matches the axis-distance separation
+        // bounds in the same spec section. predicates.rs declared
+        // ENCOUNTER_SPAWNER_MIN_SEPARATION and
+        // ENCOUNTER_SPAWNER_MAX_SEPARATION as bare u8 literals
+        // parallel with the u16 ENCOUNTER_SPAWN_*_SEPARATION
+        // anchors (the latter already chained to WORLD_SIDE).
+        // Anchor the u8 spawner constants through to the u16
+        // axis anchors so the gate bounds and the axis bounds
+        // share one source of truth.
+        assert_eq!(
+            ENCOUNTER_SPAWNER_MIN_SEPARATION,
+            ENCOUNTER_SPAWN_MIN_SEPARATION as u8,
+        );
+        assert_eq!(
+            ENCOUNTER_SPAWNER_MAX_SEPARATION,
+            ENCOUNTER_SPAWN_MAX_SEPARATION as u8,
+        );
+        assert_eq!(ENCOUNTER_SPAWNER_MIN_SEPARATION, 6);
+        assert_eq!(ENCOUNTER_SPAWNER_MAX_SEPARATION, 250);
+    }
+
+    #[test]
     fn tlk_label_byte_count_anchors_to_label_band_width() {
         // conversation.md §7.7: per-blob label bytes occupy
         // `0x91..=0x9F`, so the count is TLK_LABEL_LAST -

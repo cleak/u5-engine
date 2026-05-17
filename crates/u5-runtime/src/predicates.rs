@@ -555,8 +555,8 @@ pub const fn sea_creature_spawn_seeds_aux(class_byte: u8) -> bool {
 /// strictly greater than `MIN` (keeps the spawn outside the
 /// immediate visible centre) and strictly less than `MAX` (rejects
 /// wrapped-near coordinates on the 256-by-256 torus).
-pub const ENCOUNTER_SPAWNER_MIN_SEPARATION: u8 = 6;
-pub const ENCOUNTER_SPAWNER_MAX_SEPARATION: u8 = 250;
+pub const ENCOUNTER_SPAWNER_MIN_SEPARATION: u8 = ENCOUNTER_SPAWN_MIN_SEPARATION as u8;
+pub const ENCOUNTER_SPAWNER_MAX_SEPARATION: u8 = ENCOUNTER_SPAWN_MAX_SEPARATION as u8;
 
 /// `encounters.md §4`: returns `true` when a candidate `(slot_x,
 /// slot_y)` passes the spawner's separation gate against the
