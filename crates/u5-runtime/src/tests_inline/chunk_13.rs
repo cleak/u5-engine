@@ -1,4 +1,20 @@
     #[test]
+    fn mmix_quantity_prompt_width_matches_spec() {
+        // magic.md §6: M-Mix step 4 reads a two-digit unsigned
+        // quantity. The maximum accepted value is 99 and matches the
+        // shared SPELL_CHARGE_CAP.
+        assert_eq!(MMIX_QUANTITY_PROMPT_DIGITS, 2);
+        assert_eq!(MMIX_QUANTITY_PROMPT_MAX, 99);
+        assert_eq!(MMIX_QUANTITY_PROMPT_MAX, SPELL_CHARGE_CAP);
+        // The maximum equals 10^digits - 1.
+        let mut ten_pow_digits: u32 = 1;
+        for _ in 0..MMIX_QUANTITY_PROMPT_DIGITS {
+            ten_pow_digits *= 10;
+        }
+        assert_eq!(ten_pow_digits as u8 - 1, MMIX_QUANTITY_PROMPT_MAX);
+    }
+
+    #[test]
     fn title_surface_dimensions_match_spec() {
         // intro.md §3: title-screen 320x200 pixel coordinate system
         // with the origin at the upper-left corner.
