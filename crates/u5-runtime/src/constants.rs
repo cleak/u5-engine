@@ -343,11 +343,21 @@ pub const SAVE_MINUTE_MAX: u8 = crate::MINUTES_PER_HOUR - 1;
 pub const SAVE_MORAL_STANDING_OFFSET: usize = 0x02e2;
 pub const SAVE_WIND_OFFSET: usize = 0x02ec;
 pub const SAVE_SCENE_OFFSET: usize = 0x02ed;
-pub const SAVE_Z_OFFSET: usize = 0x02ef;
-pub const SAVE_X_OFFSET: usize = 0x02f0;
-pub const SAVE_Y_OFFSET: usize = 0x02f1;
+/// `formats/saved-gam.md §5`: the persisted location cluster
+/// occupies `0x02ed..=0x02f1` — scene byte, saved-scene/mode
+/// scratch (one byte), party Z, party X, party Y. Anchor Z, X,
+/// and Y to the per-byte chain rooted at SAVE_SCENE_OFFSET so
+/// inserting or resizing the scratch byte automatically shifts
+/// the coordinate offsets.
+pub const SAVE_Z_OFFSET: usize = SAVE_SCENE_OFFSET + 2;
+pub const SAVE_X_OFFSET: usize = SAVE_Z_OFFSET + 1;
+pub const SAVE_Y_OFFSET: usize = SAVE_X_OFFSET + 1;
 pub const SAVE_LIGHT_SPELL_COUNTER_OFFSET: usize = 0x0300;
-pub const SAVE_TORCH_COUNTER_OFFSET: usize = 0x0301;
+/// `formats/saved-gam.md §6`: the torch-duration counter sits
+/// immediately after the light-spell counter. Anchor to
+/// SAVE_LIGHT_SPELL_COUNTER_OFFSET + 1 so the two adjacent
+/// lighting counters share one source of truth.
+pub const SAVE_TORCH_COUNTER_OFFSET: usize = SAVE_LIGHT_SPELL_COUNTER_OFFSET + 1;
 pub const SAVE_SHRINE_ORDAINED_MASK_OFFSET: usize = 0x0326;
 pub const SAVE_SHRINE_CODEX_MASK_OFFSET: usize = 0x0328;
 pub const SAVE_FORTUNES_OF_WAR_OFFSET: usize = 0x03b3;

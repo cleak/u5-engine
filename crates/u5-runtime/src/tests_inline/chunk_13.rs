@@ -1,4 +1,22 @@
     #[test]
+    fn save_location_and_lighting_offsets_chain() {
+        // formats/saved-gam.md §5 location cluster: scene byte at
+        // 0x02ed, scratch byte at 0x02ee, party Z/X/Y at
+        // 0x02ef/0x02f0/0x02f1. formats/saved-gam.md §6: torch
+        // counter follows light-spell counter at 0x0300/0x0301.
+        // Anchor Z, X, Y to the chain rooted at SAVE_SCENE_OFFSET;
+        // anchor SAVE_TORCH_COUNTER to SAVE_LIGHT_SPELL_COUNTER.
+        assert_eq!(SAVE_Z_OFFSET, SAVE_SCENE_OFFSET + 2);
+        assert_eq!(SAVE_X_OFFSET, SAVE_Z_OFFSET + 1);
+        assert_eq!(SAVE_Y_OFFSET, SAVE_X_OFFSET + 1);
+        assert_eq!(SAVE_TORCH_COUNTER_OFFSET, SAVE_LIGHT_SPELL_COUNTER_OFFSET + 1);
+        assert_eq!(SAVE_Z_OFFSET, 0x02ef);
+        assert_eq!(SAVE_X_OFFSET, 0x02f0);
+        assert_eq!(SAVE_Y_OFFSET, 0x02f1);
+        assert_eq!(SAVE_TORCH_COUNTER_OFFSET, 0x0301);
+    }
+
+    #[test]
     fn save_calendar_bounds_anchor_to_time_constants() {
         // formats/saved-gam.md §5 documents one-based months
         // 1..=13, one-based days 1..=28, zero-based hours 0..=23
