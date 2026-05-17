@@ -1,4 +1,15 @@
     #[test]
+    fn play_start_hour_anchors_to_hours_per_day_half() {
+        // save-load.md: the post-chargen play-mode entry
+        // normalises the clock to noon (half-way through the
+        // 24-hour day). Anchor PLAY_START_HOUR to HOURS_PER_DAY
+        // / 2 so the "noon" hour derives from the clock day
+        // length.
+        assert_eq!(PLAY_START_HOUR, HOURS_PER_DAY / 2);
+        assert_eq!(PLAY_START_HOUR, 12);
+    }
+
+    #[test]
     fn save_gender_female_byte_anchors_to_male_byte() {
         // formats/saved-gam.md §3: the two shipped genders use
         // consecutive opaque sentinel bytes 0x0B (male) and 0x0C

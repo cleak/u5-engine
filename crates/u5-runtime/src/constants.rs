@@ -302,7 +302,11 @@ pub const STEADY_PHASE: u8 = 0x0f;
 pub const PLAY_START_YEAR: u16 = crate::CHARGEN_STARTING_YEAR;
 pub const PLAY_START_MONTH: u8 = crate::CHARGEN_STARTING_MONTH;
 pub const PLAY_START_DAY: u8 = crate::CHARGEN_STARTING_DAY;
-pub const PLAY_START_HOUR: u8 = 12;
+/// `systems/save-load.md`: the post-chargen play-mode entry
+/// normalises the clock to noon (half-way through the 24-hour
+/// day). Anchored to [`crate::HOURS_PER_DAY`] / 2 so the
+/// "noon" hour derives from the clock day length.
+pub const PLAY_START_HOUR: u8 = crate::HOURS_PER_DAY / 2;
 /// `formats/saved-gam.md §2`: SAVED.GAM is exactly 4,192 bytes —
 /// the reserved-tail span ending at file offset 0x105F. Anchored
 /// to [`SAVE_RESERVED_TAIL_OFFSET`] + [`SAVE_RESERVED_TAIL_LEN`]
