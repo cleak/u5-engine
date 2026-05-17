@@ -1,4 +1,16 @@
     #[test]
+    fn shadowlord_indices_chain_sequentially() {
+        // endgame.md §2: Shadow Lord enumeration indices are
+        // Falsehood (0), Hatred (1), Cowardice (2). Anchor each
+        // successor to the chain so the triplet stays sequential.
+        assert_eq!(SHADOWLORD_HATRED_INDEX, SHADOWLORD_FALSEHOOD_INDEX + 1);
+        assert_eq!(SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_HATRED_INDEX + 1);
+        assert_eq!(SHADOWLORD_FALSEHOOD_INDEX, 0);
+        assert_eq!(SHADOWLORD_HATRED_INDEX, 1);
+        assert_eq!(SHADOWLORD_COWARDICE_INDEX, 2);
+    }
+
+    #[test]
     fn special_item_shard_indices_chain_sequentially() {
         // catalogs/item-list.md §6: the three Shard special-items
         // occupy consecutive indices 0x06..=0x08 in the same

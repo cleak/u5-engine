@@ -661,9 +661,12 @@ pub const POTION_WHITE_SWEEP_RADIUS: u8 = 32;
 /// count to [`SHADOWLORD_COWARDICE_INDEX`] + 1 so adding or
 /// renaming a Shadow Lord only happens in one place.
 pub const SHADOWLORD_COUNT: usize = SHADOWLORD_COWARDICE_INDEX + 1;
+/// `endgame.md §2` Shadow Lord enumeration indices: Falsehood,
+/// Hatred, Cowardice. Anchor each successor to the chain so the
+/// triplet stays sequential.
 pub const SHADOWLORD_FALSEHOOD_INDEX: usize = 0;
-pub const SHADOWLORD_HATRED_INDEX: usize = 1;
-pub const SHADOWLORD_COWARDICE_INDEX: usize = 2;
+pub const SHADOWLORD_HATRED_INDEX: usize = SHADOWLORD_FALSEHOOD_INDEX + 1;
+pub const SHADOWLORD_COWARDICE_INDEX: usize = SHADOWLORD_HATRED_INDEX + 1;
 pub const SHADOWLORD_HIDEOUT_MIN: u8 = 1;
 pub const SHADOWLORD_HIDEOUT_MAX: u8 = 8;
 pub const SHADOWLORD_VANQUISHED: u8 = 0xff;
