@@ -362,11 +362,16 @@ pub const DUNGEON_ENTRY_SURFACE_Y: u8 = 1;
 
 /// `dungeon-mode.md §3` underworld-plane dungeon entry seed. Reached
 /// from the underworld plane (for every dungeon except Doom), the
-/// party lands on the deepest floor (`Z=7`) at the published
-/// `(X, Y) = (7, 7)` cell, facing west.
-pub const DUNGEON_ENTRY_UNDERWORLD_Z: u8 = 7;
-pub const DUNGEON_ENTRY_UNDERWORLD_X: u8 = 7;
-pub const DUNGEON_ENTRY_UNDERWORLD_Y: u8 = 7;
+/// party lands on the deepest floor (`Z = DUNGEON_DEEPEST_LEVEL`)
+/// at the published `(X, Y) = (DUNGEON_SIDE - 1, DUNGEON_SIDE - 1)`
+/// south-east corner cell, facing west. Anchor the Z to
+/// [`crate::DUNGEON_DEEPEST_LEVEL`] and the X/Y to the
+/// [`crate::DUNGEON_SIDE`]-derived corner index so the underworld
+/// entry seed derives from the dungeon's published 8x8 floor
+/// dimensions.
+pub const DUNGEON_ENTRY_UNDERWORLD_Z: u8 = crate::DUNGEON_DEEPEST_LEVEL;
+pub const DUNGEON_ENTRY_UNDERWORLD_X: u8 = crate::DUNGEON_SIDE as u8 - 1;
+pub const DUNGEON_ENTRY_UNDERWORLD_Y: u8 = crate::DUNGEON_SIDE as u8 - 1;
 
 /// `dungeon-mode.md §3` Doom-exception scene byte. The Doom dungeon
 /// uses the surface entry seed even when reached from the

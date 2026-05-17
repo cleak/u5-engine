@@ -1,4 +1,20 @@
     #[test]
+    fn dungeon_underworld_entry_anchors_to_deepest_corner() {
+        // dungeon-mode.md §3: the underworld dungeon entry seed
+        // places the party on the deepest floor at the south-east
+        // corner of the 8x8 floor — (Z, X, Y) = (7, 7, 7). Anchor
+        // Z to DUNGEON_DEEPEST_LEVEL and X/Y to DUNGEON_SIDE - 1 so
+        // the entry seed derives from the published 8x8 dungeon
+        // dimensions.
+        assert_eq!(DUNGEON_ENTRY_UNDERWORLD_Z, DUNGEON_DEEPEST_LEVEL);
+        assert_eq!(DUNGEON_ENTRY_UNDERWORLD_X, DUNGEON_SIDE as u8 - 1);
+        assert_eq!(DUNGEON_ENTRY_UNDERWORLD_Y, DUNGEON_SIDE as u8 - 1);
+        assert_eq!(DUNGEON_ENTRY_UNDERWORLD_Z, 7);
+        assert_eq!(DUNGEON_ENTRY_UNDERWORLD_X, 7);
+        assert_eq!(DUNGEON_ENTRY_UNDERWORLD_Y, 7);
+    }
+
+    #[test]
     fn dungeon_facing_constants_chain_clockwise() {
         // dungeon-mode.md §9: the facing byte cycles clockwise
         // North=0 -> East=1 -> South=2 -> West=3. main_loop.rs
