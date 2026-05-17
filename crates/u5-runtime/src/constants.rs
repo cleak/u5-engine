@@ -110,10 +110,15 @@ pub const HCS_FONT_LEN: usize = HCS_GLYPH_COUNT * HCS_GLYPH_BYTES;
 /// 128-entry character set the .CH catalog ships. Anchored to
 /// [`CH_GLYPH_COUNT`] so the two font catalogs stay one value.
 pub const HCS_GLYPH_COUNT: usize = CH_GLYPH_COUNT;
-pub const HCS_GLYPH_BYTES: usize = 24;
 pub const HCS_CELL_WIDTH: usize = 16;
 pub const HCS_CELL_HEIGHT: usize = 12;
 pub const HCS_BYTES_PER_ROW: usize = 2;
+/// `formats/font-hcs.md §2`: per-glyph byte count derived from the
+/// cell geometry — twelve rows × two bytes per row = 24 bytes per
+/// glyph. Anchored to [`HCS_CELL_HEIGHT`] × [`HCS_BYTES_PER_ROW`]
+/// so the per-glyph byte count and the cell geometry stay one
+/// value.
+pub const HCS_GLYPH_BYTES: usize = HCS_CELL_HEIGHT * HCS_BYTES_PER_ROW;
 #[cfg(test)]
 pub const TITLE_BIT_FILE: &str = "TITLE.BIT";
 #[cfg(test)]

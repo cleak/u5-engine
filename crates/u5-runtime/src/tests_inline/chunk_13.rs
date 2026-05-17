@@ -1,4 +1,15 @@
     #[test]
+    fn hcs_glyph_bytes_anchors_to_cell_height_times_row_bytes() {
+        // formats/font-hcs.md §2: each .HCS glyph is a 16x12 cell
+        // with two bytes per row, so per-glyph byte count = 12 * 2
+        // = 24. Anchor HCS_GLYPH_BYTES to HCS_CELL_HEIGHT *
+        // HCS_BYTES_PER_ROW so the per-glyph byte count and the
+        // cell geometry stay one value.
+        assert_eq!(HCS_GLYPH_BYTES, HCS_CELL_HEIGHT * HCS_BYTES_PER_ROW);
+        assert_eq!(HCS_GLYPH_BYTES, 24);
+    }
+
+    #[test]
     fn font_byte_lengths_anchor_to_catalog_times_glyph_bytes() {
         // formats/font-ch.md §2 and formats/font-hcs.md §2 fix each
         // font's total byte length at `glyph_count * glyph_bytes`.
