@@ -1207,11 +1207,11 @@ pub fn render_class_byte(tile: u8) -> u8 {
     }
 }
 
-pub fn waypoint_for_hour(schedule: &[u8; 16], hour: u8) -> usize {
-    let t0 = schedule[12];
-    let t1 = schedule[13];
-    let t2 = schedule[14];
-    let t3 = schedule[15];
+pub fn waypoint_for_hour(schedule: &[u8; NPC_SCHEDULE_RECORD_LEN], hour: u8) -> usize {
+    let t0 = schedule[NPC_SCHEDULE_TIME_OFFSET];
+    let t1 = schedule[NPC_SCHEDULE_TIME_OFFSET + 1];
+    let t2 = schedule[NPC_SCHEDULE_TIME_OFFSET + 2];
+    let t3 = schedule[NPC_SCHEDULE_TIME_OFFSET + 3];
     if in_wrapping_range(hour, t0, t1) {
         0
     } else if in_wrapping_range(hour, t2, t3) {

@@ -340,6 +340,25 @@ pub const NPC_TYPE_ARRAY_LEN: usize = 32;
 pub const NPC_DIALOG_ARRAY_OFFSET: usize = 544;
 pub const NPC_DIALOG_ARRAY_LEN: usize = 32;
 pub const NPC_SLOTS_PER_SUB_MAP: usize = 32;
+
+/// `formats/npc.md §5` schedule-record sub-field widths. Each
+/// 16-byte schedule record packs three waypoints (`AI[3]`, `X[3]`,
+/// `Y[3]`, `Z[3]`) plus four hour-of-day boundaries (`time[4]`).
+pub const NPC_SCHEDULE_WAYPOINT_COUNT: usize = 3;
+pub const NPC_SCHEDULE_TIME_BOUNDARY_COUNT: usize = 4;
+
+/// `formats/npc.md §5` schedule-record field offsets (in bytes from
+/// the start of the 16-byte record). The four arrays are packed
+/// back-to-back in the order AI, X, Y, Z, time.
+pub const NPC_SCHEDULE_AI_OFFSET: usize = 0;
+pub const NPC_SCHEDULE_X_OFFSET: usize =
+    NPC_SCHEDULE_AI_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
+pub const NPC_SCHEDULE_Y_OFFSET: usize =
+    NPC_SCHEDULE_X_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
+pub const NPC_SCHEDULE_Z_OFFSET: usize =
+    NPC_SCHEDULE_Y_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
+pub const NPC_SCHEDULE_TIME_OFFSET: usize =
+    NPC_SCHEDULE_Z_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
 /// Slot zero of every sub-map is the unused-sentinel slot the schedule
 /// processor skips; effective capacity per sub-map is therefore 31.
 pub const NPC_SENTINEL_SLOT: usize = 0;

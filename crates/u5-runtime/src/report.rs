@@ -168,9 +168,9 @@ pub fn run_report(game_dir: &Path) -> io::Result<()> {
             slot.dialog_id,
             name,
             wp,
-            slot.schedule[3 + wp],
-            slot.schedule[6 + wp],
-            slot.schedule[9 + wp] as i8
+            slot.schedule[NPC_SCHEDULE_X_OFFSET + wp],
+            slot.schedule[NPC_SCHEDULE_Y_OFFSET + wp],
+            slot.schedule[NPC_SCHEDULE_Z_OFFSET + wp] as i8
         ));
     }
     if let Some(slot) = lb_slots

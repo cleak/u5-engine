@@ -1,4 +1,24 @@
     #[test]
+    fn npc_schedule_record_field_offsets_match_spec() {
+        // formats/npc.md §5: each 16-byte schedule record packs three
+        // waypoints (AI[3], X[3], Y[3], Z[3]) and four hour-of-day
+        // boundaries (time[4]) in that order.
+        assert_eq!(NPC_SCHEDULE_WAYPOINT_COUNT, 3);
+        assert_eq!(NPC_SCHEDULE_TIME_BOUNDARY_COUNT, 4);
+        assert_eq!(NPC_SCHEDULE_AI_OFFSET, 0);
+        assert_eq!(NPC_SCHEDULE_X_OFFSET, 3);
+        assert_eq!(NPC_SCHEDULE_Y_OFFSET, 6);
+        assert_eq!(NPC_SCHEDULE_Z_OFFSET, 9);
+        assert_eq!(NPC_SCHEDULE_TIME_OFFSET, 12);
+        // Total record width is four 3-byte slices plus the 4-byte
+        // time array.
+        assert_eq!(
+            NPC_SCHEDULE_TIME_OFFSET + NPC_SCHEDULE_TIME_BOUNDARY_COUNT,
+            NPC_SCHEDULE_RECORD_LEN,
+        );
+    }
+
+    #[test]
     fn save_roster_region_matches_spec() {
         // formats/saved-gam.md §3: the character roster begins two
         // bytes into the file and holds sixteen records of thirty-two

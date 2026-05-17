@@ -586,9 +586,9 @@ impl RuntimeNpc {
             type_byte: slot.type_byte,
             dialog_id: slot.dialog_id,
             schedule: slot.schedule,
-            x: slot.schedule[3 + wp] as usize,
-            y: slot.schedule[6 + wp] as usize,
-            z: slot.schedule[9 + wp],
+            x: slot.schedule[NPC_SCHEDULE_X_OFFSET + wp] as usize,
+            y: slot.schedule[NPC_SCHEDULE_Y_OFFSET + wp] as usize,
+            z: slot.schedule[NPC_SCHEDULE_Z_OFFSET + wp],
             cached_wp: wp,
             active_object: None,
             player_phantom: false,
@@ -596,11 +596,11 @@ impl RuntimeNpc {
     }
 
     pub fn from_player_phantom(x: usize, y: usize, z: u8, hour: u8) -> Self {
-        let mut schedule = [0u8; 16];
-        for wp in 0..3 {
-            schedule[3 + wp] = x as u8;
-            schedule[6 + wp] = y as u8;
-            schedule[9 + wp] = z;
+        let mut schedule = [0u8; NPC_SCHEDULE_RECORD_LEN];
+        for wp in 0..NPC_SCHEDULE_WAYPOINT_COUNT {
+            schedule[NPC_SCHEDULE_X_OFFSET + wp] = x as u8;
+            schedule[NPC_SCHEDULE_Y_OFFSET + wp] = y as u8;
+            schedule[NPC_SCHEDULE_Z_OFFSET + wp] = z;
         }
         let cached_wp = waypoint_for_hour(&schedule, hour);
         Self {
@@ -623,17 +623,17 @@ impl RuntimeNpc {
 
     pub fn sync_player_phantom_floor(&mut self, floor: u8, hour: u8) {
         self.z = floor;
-        for wp in 0..3 {
-            self.schedule[9 + wp] = floor;
+        for wp in 0..NPC_SCHEDULE_WAYPOINT_COUNT {
+            self.schedule[NPC_SCHEDULE_Z_OFFSET + wp] = floor;
         }
         self.cached_wp = waypoint_for_hour(&self.schedule, hour);
     }
 
     pub fn waypoint_position(&self, wp: usize) -> (usize, usize, u8) {
         (
-            self.schedule[3 + wp] as usize,
-            self.schedule[6 + wp] as usize,
-            self.schedule[9 + wp],
+            self.schedule[NPC_SCHEDULE_X_OFFSET + wp] as usize,
+            self.schedule[NPC_SCHEDULE_Y_OFFSET + wp] as usize,
+            self.schedule[NPC_SCHEDULE_Z_OFFSET + wp],
         )
     }
 }
