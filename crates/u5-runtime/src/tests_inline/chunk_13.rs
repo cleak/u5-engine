@@ -1,4 +1,20 @@
     #[test]
+    fn tile_image_block_header_anchors_to_directory_word_size() {
+        // formats/tiles.md §5.2: each image block opens with a
+        // width word (2 bytes) and a height word (2 bytes), the
+        // same two-byte unsigned-word type the directory header
+        // uses. Anchor TILE_IMAGE_BLOCK_HEADER_BYTES to
+        // 2 × TILE_IMAGE_DIRECTORY_COUNT_BYTES so the per-image
+        // header width derives from the format word size.
+        assert_eq!(
+            TILE_IMAGE_BLOCK_HEADER_BYTES,
+            2 * TILE_IMAGE_DIRECTORY_COUNT_BYTES,
+        );
+        assert_eq!(TILE_IMAGE_BLOCK_HEADER_BYTES, 4);
+        assert_eq!(TILE_IMAGE_DIRECTORY_COUNT_BYTES, 2);
+    }
+
+    #[test]
     fn tile_atlas_strides_anchor_to_pixels_per_byte() {
         // formats/tiles.md §3, §4: EGA and CGA tile pixel data
         // pack at EGA_PIXELS_PER_BYTE (2) and CGA_PIXELS_PER_BYTE

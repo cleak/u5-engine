@@ -201,8 +201,11 @@ pub const TILE_IMAGE_DIRECTORY_COUNT_BYTES: usize = 2;
 /// offset table is a little-endian unsigned doubleword.
 pub const TILE_IMAGE_DIRECTORY_OFFSET_BYTES: usize = 4;
 /// `formats/tiles.md §5.2` per-image header width. Each image block
-/// opens with a width word and a height word, two bytes each.
-pub const TILE_IMAGE_BLOCK_HEADER_BYTES: usize = 4;
+/// opens with a width word (2 bytes) and a height word (2 bytes).
+/// Anchored to twice the directory count-word width (the same
+/// two-byte unsigned-word type the directory itself uses) so the
+/// per-image header derives from the format's word size.
+pub const TILE_IMAGE_BLOCK_HEADER_BYTES: usize = 2 * TILE_IMAGE_DIRECTORY_COUNT_BYTES;
 #[cfg(test)]
 pub const SINGLE_IMAGE_BIT_FORMAT_MARKER: u16 = 1;
 #[cfg(test)]
