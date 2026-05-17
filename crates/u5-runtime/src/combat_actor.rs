@@ -242,18 +242,26 @@ pub const COMBAT_ROUND_COUNTER_WRAP: u8 = 10;
 pub const COMBAT_ROUND_WRAP_TIME_ADVANCE_MINUTES: u8 = 1;
 pub const COMBAT_CLASS_GIANT_RAT: u8 = 20;
 pub const COMBAT_CLASS_GIANT_RAT_SPRITE_BASE: u8 = 0x90;
-pub const COMBAT_CLASS_BAT: u8 = 21;
-pub const COMBAT_CLASS_GIANT_SPIDER: u8 = 22;
+/// `catalogs/monster-bestiary.md §2` consecutive small-monster
+/// combat class ids (Giant Rat 20 / Bat 21 / Giant Spider 22).
+/// Anchor each successor to the chain.
+pub const COMBAT_CLASS_BAT: u8 = COMBAT_CLASS_GIANT_RAT + 1;
+pub const COMBAT_CLASS_GIANT_SPIDER: u8 = COMBAT_CLASS_BAT + 1;
 pub const COMBAT_CLASS_INSECT_SWARM: u8 = 31;
 pub const COMBAT_CLASS_PYTHON: u8 = 34;
 pub const COMBAT_CLASS_DAEMON: u8 = 38;
-pub const COMBAT_CLASS_DRAGON: u8 = 39;
+/// `catalogs/monster-bestiary.md §2`: Dragon (39) follows Daemon
+/// (38) consecutively. Anchor DRAGON to DAEMON + 1.
+pub const COMBAT_CLASS_DRAGON: u8 = COMBAT_CLASS_DAEMON + 1;
 pub const COMBAT_CLASS_SHADOW_LORD: u8 = 47;
 pub const CONJURE_ANIMAL_OUTCOME_COUNT: u8 = 15;
+/// `combat.md §11` field-kind byte enumeration. Poison, Sleep,
+/// Fire, and Energy field kinds occupy four consecutive class
+/// bytes 0x33..=0x36. Anchor each successor to the chain.
 pub const COMBAT_FIELD_KIND_POISON: u8 = 0x33;
-pub const COMBAT_FIELD_KIND_SLEEP: u8 = 0x34;
-pub const COMBAT_FIELD_KIND_FIRE: u8 = 0x35;
-pub const COMBAT_FIELD_KIND_ENERGY: u8 = 0x36;
+pub const COMBAT_FIELD_KIND_SLEEP: u8 = COMBAT_FIELD_KIND_POISON + 1;
+pub const COMBAT_FIELD_KIND_FIRE: u8 = COMBAT_FIELD_KIND_SLEEP + 1;
+pub const COMBAT_FIELD_KIND_ENERGY: u8 = COMBAT_FIELD_KIND_FIRE + 1;
 pub const COMBAT_ROUND_RESULT_DEFEAT: u8 = 0;
 pub const COMBAT_ROUND_RESULT_SUCCESS: u8 = 1;
 pub const COMBAT_TARGET_GROUP_NEUTRAL: u8 = 0;

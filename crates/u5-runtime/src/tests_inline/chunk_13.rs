@@ -1,4 +1,23 @@
     #[test]
+    fn combat_class_and_field_kind_consecutive_runs_chain() {
+        // monster-bestiary.md §2 / combat.md §11: a handful of
+        // combat-class ids and all four field-kind bytes occupy
+        // consecutive byte ranges. Anchor each successor to the
+        // chain so the runs stay contiguous.
+        assert_eq!(COMBAT_CLASS_BAT, COMBAT_CLASS_GIANT_RAT + 1);
+        assert_eq!(COMBAT_CLASS_GIANT_SPIDER, COMBAT_CLASS_BAT + 1);
+        assert_eq!(COMBAT_CLASS_DRAGON, COMBAT_CLASS_DAEMON + 1);
+        assert_eq!(COMBAT_FIELD_KIND_SLEEP, COMBAT_FIELD_KIND_POISON + 1);
+        assert_eq!(COMBAT_FIELD_KIND_FIRE, COMBAT_FIELD_KIND_SLEEP + 1);
+        assert_eq!(COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE + 1);
+        assert_eq!(COMBAT_CLASS_GIANT_RAT, 20);
+        assert_eq!(COMBAT_CLASS_GIANT_SPIDER, 22);
+        assert_eq!(COMBAT_CLASS_DRAGON, 39);
+        assert_eq!(COMBAT_FIELD_KIND_POISON, 0x33);
+        assert_eq!(COMBAT_FIELD_KIND_ENERGY, 0x36);
+    }
+
+    #[test]
     fn u4_transfer_gold_gem_food_max_anchors_to_party_gold_cap() {
         // u4-transfer.md §5: the accepted source-side
         // gold/gems/food range is 0..=9999 — matching the U5
