@@ -26,22 +26,26 @@ pub enum TileClass {
 /// Inclusive water tile range `0x01..=0x04` (deep / coastal / shoals / swamp).
 pub const TILE_WATER_FIRST: u8 = 0x01;
 pub const TILE_WATER_LAST: u8 = 0x04;
-/// Inclusive terrain tile range `0x05..=0x0F` (grass through hills/peaks).
-pub const TILE_TERRAIN_FIRST: u8 = 0x05;
+/// `catalogs/tile-catalog.md §2`: the lower-half tile classes
+/// (terrain, path, wall, furniture, door) tile contiguously from
+/// the water range upward. Anchor each *_FIRST to the previous
+/// class's *_LAST + 1 so adding or resizing a class automatically
+/// shifts the later ranges.
+pub const TILE_TERRAIN_FIRST: u8 = TILE_WATER_LAST + 1;
 pub const TILE_TERRAIN_LAST: u8 = 0x0F;
 /// Inclusive path tile range `0x10..=0x17` (stone + brick paved paths).
-pub const TILE_PATH_FIRST: u8 = 0x10;
+pub const TILE_PATH_FIRST: u8 = TILE_TERRAIN_LAST + 1;
 pub const TILE_PATH_LAST: u8 = 0x17;
 /// Inclusive wall tile range `0x18..=0x3F` (castle/town/dungeon walls plus
 /// decorative wall variants).
-pub const TILE_WALL_FIRST: u8 = 0x18;
+pub const TILE_WALL_FIRST: u8 = TILE_PATH_LAST + 1;
 pub const TILE_WALL_LAST: u8 = 0x3F;
 /// Inclusive furniture tile range `0x40..=0x5F` (tables, beds, bookshelves,
 /// stairs, ladders, sign posts, brazier).
-pub const TILE_FURNITURE_FIRST: u8 = 0x40;
+pub const TILE_FURNITURE_FIRST: u8 = TILE_WALL_LAST + 1;
 pub const TILE_FURNITURE_LAST: u8 = 0x5F;
 /// Inclusive door tile range `0x60..=0x67` (door variants).
-pub const TILE_DOOR_FIRST: u8 = 0x60;
+pub const TILE_DOOR_FIRST: u8 = TILE_FURNITURE_LAST + 1;
 pub const TILE_DOOR_LAST: u8 = 0x67;
 /// `catalogs/tile-catalog.md §2`: the upper-half tile classes
 /// (decoration, barrier, special, vehicle, vehicle-art, NPC)

@@ -1,4 +1,20 @@
     #[test]
+    fn lower_tile_class_first_offsets_chain_to_previous_last() {
+        // catalogs/tile-catalog.md §2: the lower-half tile classes
+        // (terrain, path, wall, furniture, door) tile contiguously
+        // from the water range upward. Anchor each *_FIRST to the
+        // previous class's *_LAST + 1 so resizing any class
+        // automatically shifts the later ranges.
+        assert_eq!(TILE_TERRAIN_FIRST, TILE_WATER_LAST + 1);
+        assert_eq!(TILE_PATH_FIRST, TILE_TERRAIN_LAST + 1);
+        assert_eq!(TILE_WALL_FIRST, TILE_PATH_LAST + 1);
+        assert_eq!(TILE_FURNITURE_FIRST, TILE_WALL_LAST + 1);
+        assert_eq!(TILE_DOOR_FIRST, TILE_FURNITURE_LAST + 1);
+        assert_eq!(TILE_TERRAIN_FIRST, 0x05);
+        assert_eq!(TILE_DOOR_FIRST, 0x60);
+    }
+
+    #[test]
     fn tile_class_first_offsets_chain_to_previous_last() {
         // catalogs/tile-catalog.md §2: the upper-half tile classes
         // tile contiguously from the door range upward. Anchor
