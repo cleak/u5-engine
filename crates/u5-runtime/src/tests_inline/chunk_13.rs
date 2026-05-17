@@ -1,4 +1,15 @@
     #[test]
+    fn save_roster_offset_anchors_to_leading_bytes_len() {
+        // formats/saved-gam.md §2: the character roster begins
+        // immediately after the two leading bytes of the save
+        // image. Anchor SAVE_ROSTER_OFFSET to SAVE_LEADING_BYTES_LEN
+        // so the roster start derives from the leading-bytes span.
+        assert_eq!(SAVE_ROSTER_OFFSET, SAVE_LEADING_BYTES_LEN);
+        assert_eq!(SAVE_ROSTER_OFFSET, 0x0002);
+        assert_eq!(SAVE_LEADING_BYTES_LEN, 2);
+    }
+
+    #[test]
     fn save_reserved_tail_and_file_length_chain_through_active_object_table() {
         // formats/saved-gam.md §2, §8.1: the reserved tail begins
         // immediately after the 256-byte active-object table; the
