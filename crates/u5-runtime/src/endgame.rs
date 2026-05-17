@@ -107,7 +107,11 @@ impl MainQuestRequirement {
 /// non-speaking object slot 31 in `CASTLE:0` at local (X=18, Y=12, Z=2)
 /// with object tag `0x0E` (the pickup runs through the shared
 /// item-add path, sets the save-backed box flag).
-pub const SANDALWOOD_BOX_PICKUP_SCENE: u8 = 17;
+/// `catalogs/quest-graph.md §7`: the Sandalwood Box ships in
+/// Lord British's Castle (`CASTLE:0`, scene byte 17). Anchored
+/// to [`crate::SCENE_LORD_BRITISHS_CASTLE`] so the box's scene
+/// and the named scene constant share one source of truth.
+pub const SANDALWOOD_BOX_PICKUP_SCENE: u8 = crate::SCENE_LORD_BRITISHS_CASTLE;
 pub const SANDALWOOD_BOX_PICKUP_X: u8 = 18;
 pub const SANDALWOOD_BOX_PICKUP_Y: u8 = 12;
 pub const SANDALWOOD_BOX_PICKUP_Z: u8 = 2;

@@ -1,4 +1,15 @@
     #[test]
+    fn sandalwood_box_pickup_scene_anchors_to_lord_britishs_castle() {
+        // catalogs/quest-graph.md §7: the Sandalwood Box ships in
+        // Lord British's Castle (CASTLE:0, scene byte 17). Anchor
+        // SANDALWOOD_BOX_PICKUP_SCENE to SCENE_LORD_BRITISHS_CASTLE
+        // so the box's scene and the named scene constant share
+        // one source of truth.
+        assert_eq!(SANDALWOOD_BOX_PICKUP_SCENE, SCENE_LORD_BRITISHS_CASTLE);
+        assert_eq!(SANDALWOOD_BOX_PICKUP_SCENE, 17);
+    }
+
+    #[test]
     fn sandalwood_box_pickup_slot_anchors_to_ool_slots() {
         // catalogs/quest-graph.md §7: the Sandalwood Box pickup
         // lives in active-object slot 31 of the 32-record
