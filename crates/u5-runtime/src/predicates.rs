@@ -98,14 +98,28 @@ pub const fn water_creature_terrain_accepts(tile: u8) -> bool {
 /// force reject: the on-foot/avatar family `0x1C..=0x1F` and the
 /// `0x40` query family (single-id query).
 pub const MOVEMENT_CHAIR_FORCE_REJECT_FIRST: u8 = 0x90;
-pub const MOVEMENT_CHAIR_FORCE_REJECT_LAST: u8 = 0x93;
+/// `movement.md §4` chair-tile force-reject range upper bound. The
+/// range covers four facings (N/E/S/W) of the chair tile, so it
+/// extends FIRST + TRANSPORT_FACING_MASK = `0x90 + 0b11` = `0x93`.
+/// Anchored to `MOVEMENT_CHAIR_FORCE_REJECT_FIRST +
+/// TRANSPORT_FACING_MASK` so the chair-tile range derives from the
+/// transport facing-mask convention.
+pub const MOVEMENT_CHAIR_FORCE_REJECT_LAST: u8 =
+    MOVEMENT_CHAIR_FORCE_REJECT_FIRST + TRANSPORT_FACING_MASK;
 
 /// `movement.md §4` on-foot/avatar query family (low two bits select
 /// facing). This family is exempt from the chair-tile force-reject so
 /// the avatar can sit on chair variants; see `vehicles.md §2` for the
 /// matching transport-marker range.
 pub const MOVEMENT_QUERY_FOOT_AVATAR_FIRST: u8 = 0x1C;
-pub const MOVEMENT_QUERY_FOOT_AVATAR_LAST: u8 = 0x1F;
+/// `movement.md §4` on-foot/avatar query family upper bound. The
+/// family covers four facings (low two bits), so it extends
+/// FIRST + TRANSPORT_FACING_MASK = `0x1C + 0b11` = `0x1F`.
+/// Anchored to `MOVEMENT_QUERY_FOOT_AVATAR_FIRST +
+/// TRANSPORT_FACING_MASK` so the on-foot query range derives from
+/// the transport facing-mask convention.
+pub const MOVEMENT_QUERY_FOOT_AVATAR_LAST: u8 =
+    MOVEMENT_QUERY_FOOT_AVATAR_FIRST + TRANSPORT_FACING_MASK;
 
 /// `movement.md §4` single-id `0x40` query class. The chair-tile
 /// force-reject does not apply to this family either.

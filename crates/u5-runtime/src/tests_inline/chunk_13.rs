@@ -1,4 +1,26 @@
     #[test]
+    fn movement_facing_range_uppers_anchor_to_facing_mask() {
+        // movement.md §4: the chair-tile force-reject range
+        // (0x90..=0x93) and the on-foot/avatar query family
+        // (0x1C..=0x1F) each cover four facings — FIRST +
+        // TRANSPORT_FACING_MASK (= FIRST + 3). predicates.rs
+        // declared the LAST values as bare literals. Anchor each
+        // LAST through FIRST + TRANSPORT_FACING_MASK so the
+        // four-facing ranges derive from the facing-mask convention.
+        assert_eq!(
+            MOVEMENT_CHAIR_FORCE_REJECT_LAST,
+            MOVEMENT_CHAIR_FORCE_REJECT_FIRST + TRANSPORT_FACING_MASK,
+        );
+        assert_eq!(MOVEMENT_CHAIR_FORCE_REJECT_LAST, 0x93);
+        assert_eq!(
+            MOVEMENT_QUERY_FOOT_AVATAR_LAST,
+            MOVEMENT_QUERY_FOOT_AVATAR_FIRST + TRANSPORT_FACING_MASK,
+        );
+        assert_eq!(MOVEMENT_QUERY_FOOT_AVATAR_LAST, 0x1F);
+        assert_eq!(TRANSPORT_FACING_MASK, 0b11);
+    }
+
+    #[test]
     fn encounter_spawner_separation_bounds_alias_to_axis_bounds() {
         // encounters.md §4: the spawner per-axis separation gate
         // (MIN=6, MAX=250) matches the axis-distance separation
