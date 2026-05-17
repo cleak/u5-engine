@@ -1,4 +1,15 @@
     #[test]
+    fn rare_reagent_harvest_minute_bound_anchors_to_minutes_per_hour() {
+        // containers.md §5: the rare-reagent harvest pass accepts
+        // any minute within the hour-0 hour. Anchor
+        // RARE_REAGENT_HARVEST_MINUTE_BOUND to MINUTES_PER_HOUR so
+        // the minute bound and the published hour length share
+        // one source of truth.
+        assert_eq!(RARE_REAGENT_HARVEST_MINUTE_BOUND, MINUTES_PER_HOUR);
+        assert_eq!(RARE_REAGENT_HARVEST_MINUTE_BOUND, 60);
+    }
+
+    #[test]
     fn dungeon_cbt_bank_count_anchors_to_dungeon_records_minus_one() {
         // formats/cbt.md §2: seven of the eight stock dungeons
         // have authored DUNGEON.CBT room triggers (Despise carries

@@ -536,7 +536,11 @@ pub const fn town_chest_open_standing(standing: u8) -> u8 {
 pub const RARE_REAGENT_HARVEST_QUANTITY_MIN: u8 = 2;
 pub const RARE_REAGENT_HARVEST_QUANTITY_MAX: u8 = 15;
 pub const RARE_REAGENT_HARVEST_HOUR: u8 = 0;
-pub const RARE_REAGENT_HARVEST_MINUTE_BOUND: u8 = 60;
+/// `containers.md §5` minute bound the harvest pass accepts.
+/// Anchored to [`crate::MINUTES_PER_HOUR`] so the harvest minute
+/// bound and the published hour length share one source of truth
+/// — any minute in the hour-0 hour is eligible.
+pub const RARE_REAGENT_HARVEST_MINUTE_BOUND: u8 = crate::MINUTES_PER_HOUR;
 
 /// `containers.md §5`: width of the rare-reagent harvest band
 /// (`MAX - MIN + 1`). Used as the modulus on the harvest-quantity
