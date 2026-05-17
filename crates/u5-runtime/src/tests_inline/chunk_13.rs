@@ -1,4 +1,21 @@
     #[test]
+    fn npc_file_and_sub_map_lengths_anchor_to_block_sums() {
+        // formats/npc.md §2, §3: an .NPC file packs eight 576-byte
+        // sub-maps for 4,608 bytes total; each sub-map is the sum
+        // of the schedule, type, and dialog blocks (512 + 32 + 32).
+        // Anchor NPC_FILE_LEN to maps × sub-map length and
+        // NPC_SUB_MAP_LEN to the block sum so the file and
+        // sub-map sizes derive from the per-block constants.
+        assert_eq!(NPC_FILE_LEN, NPC_SUB_MAPS_PER_FILE * NPC_SUB_MAP_LEN);
+        assert_eq!(
+            NPC_SUB_MAP_LEN,
+            NPC_SCHEDULE_ARRAY_LEN + NPC_TYPE_ARRAY_LEN + NPC_DIALOG_ARRAY_LEN,
+        );
+        assert_eq!(NPC_FILE_LEN, 4608);
+        assert_eq!(NPC_SUB_MAP_LEN, 576);
+    }
+
+    #[test]
     fn npc_block_offsets_chain_through_slots_per_sub_map() {
         // formats/npc.md §3: each sub-map ships 32 NPC slots; the
         // schedule array packs 32 × 16 = 512 bytes, then the type

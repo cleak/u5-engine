@@ -330,8 +330,15 @@ pub const fn town_dawn_dusk_gate_pass_fires_at_hour(hour: u8) -> bool {
     hour == TOWN_NIGHT_BAND_DAWN_HOUR + 1 || hour == TOWN_NIGHT_BAND_DUSK_HOUR
 }
 
-pub const NPC_FILE_LEN: usize = 4608;
-pub const NPC_SUB_MAP_LEN: usize = 576;
+/// `formats/npc.md §2,§3`: an `.NPC` file packs eight 576-byte
+/// sub-maps for a total of 4,608 bytes. Each sub-map carries a
+/// schedule array, type array, and dialog array. Anchor the file
+/// length to NPC_SUB_MAPS_PER_FILE × NPC_SUB_MAP_LEN, and the
+/// sub-map length to the sum of its three blocks, so the file
+/// layout derives from the per-block constants.
+pub const NPC_FILE_LEN: usize = NPC_SUB_MAPS_PER_FILE * NPC_SUB_MAP_LEN;
+pub const NPC_SUB_MAP_LEN: usize =
+    NPC_SCHEDULE_ARRAY_LEN + NPC_TYPE_ARRAY_LEN + NPC_DIALOG_ARRAY_LEN;
 pub const NPC_SUB_MAPS_PER_FILE: usize = 8;
 pub const NPC_SCHEDULE_RECORD_LEN: usize = 16;
 /// `formats/npc.md §3` per-NPC-block layout. Each sub-map ships
