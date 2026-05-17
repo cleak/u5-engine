@@ -142,10 +142,15 @@ pub const DUNGEON_TORCH_INCREMENT_MAX: u8 =
 
 /// `lighting.md §8`: *In Lor* (ordinary Light spell) overwrites the
 /// light-spell counter with 100 units; *Vas Lor* (Great Light) overwrites
-/// it with 255 units. Light spells do not stack with prior spell-light
-/// duration.
+/// it with 255 units (the largest representable byte — the counter
+/// saturates rather than wrapping). Light spells do not stack with
+/// prior spell-light duration.
 pub const LIGHT_SPELL_DURATION: u8 = 100;
-pub const GREAT_LIGHT_SPELL_DURATION: u8 = 255;
+/// `lighting.md §8`: Great Light overwrites the light-spell counter
+/// with the largest representable byte value, so the counter saturates
+/// at the byte width rather than restating `255` as a bare literal.
+/// Anchored to [`u8::MAX`].
+pub const GREAT_LIGHT_SPELL_DURATION: u8 = u8::MAX;
 
 /// `lighting.md §3`: hour at which the surface dawn gradient is played
 /// (06:00 transition window — hours below this are full darkness).

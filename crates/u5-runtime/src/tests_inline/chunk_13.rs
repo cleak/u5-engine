@@ -1,4 +1,16 @@
     #[test]
+    fn great_light_spell_duration_anchors_to_u8_max() {
+        // lighting.md §8: Great Light (Vas Lor) overwrites the
+        // light-spell counter with 255 units — the largest byte
+        // value, so the counter saturates at the byte width rather
+        // than wrapping. Anchor GREAT_LIGHT_SPELL_DURATION to
+        // u8::MAX so the saturating value derives from the
+        // counter's byte width.
+        assert_eq!(GREAT_LIGHT_SPELL_DURATION, u8::MAX);
+        assert_eq!(GREAT_LIGHT_SPELL_DURATION, 255);
+    }
+
+    #[test]
     fn last_in_hour_minute_anchors_to_minutes_per_hour_minus_one() {
         // lighting.md §3: the last in-hour minute (59) is one
         // below MINUTES_PER_HOUR (60). Anchor LAST_IN_HOUR_MINUTE
