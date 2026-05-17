@@ -1,4 +1,16 @@
     #[test]
+    fn look2_dat_object_domain_base_anchors_to_terrain_entries() {
+        // formats/look2-dat.md §3: the LOOK2.DAT offset table is
+        // a contiguous flat array; object-domain entries begin
+        // immediately after the 256 terrain entries (2 bytes each
+        // = 512 bytes). Anchor LOOK2_DAT_OBJECT_DOMAIN_BASE to
+        // LOOK2_DAT_TERRAIN_ENTRIES × 2 so the object base
+        // derives from the terrain-entry count.
+        assert_eq!(LOOK2_DAT_OBJECT_DOMAIN_BASE, LOOK2_DAT_TERRAIN_ENTRIES * 2);
+        assert_eq!(LOOK2_DAT_OBJECT_DOMAIN_BASE, 0x200);
+    }
+
+    #[test]
     fn look2_dat_offset_table_len_anchors_to_look2_table_len() {
         // formats/look2-dat.md §2: the LOOK2.DAT offset table is
         // 1024 bytes — 512 little-endian word offsets (terrain
