@@ -38,23 +38,21 @@ impl KarmaAction {
         match self {
             KarmaAction::CompletedShrineOffering { digit } => digit as i16,
             KarmaAction::CodexShrineTurnIn { humility } => {
-                if humility {
-                    6
-                } else {
-                    3
-                }
+                let base = ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE as i16;
+                if humility { base * 2 } else { base }
             }
-            KarmaAction::TownChestOpened => -2,
+            KarmaAction::TownChestOpened => -(TOWN_CHEST_OPEN_KARMA_DEBIT as i16),
             KarmaAction::CropOrTableFoodTaken => -(KARMA_CROP_OR_TABLE_FOOD_DEBIT as i16),
-            KarmaAction::TownCannonHit => -5,
-            KarmaAction::HelpedNpcThankYou => 2,
+            KarmaAction::TownCannonHit => -(TOWN_CANNON_HIT_KARMA_DEBIT as i16),
+            KarmaAction::HelpedNpcThankYou => KARMA_HELPED_NPC_THANK_YOU_GAIN as i16,
             KarmaAction::TollMilestone {
                 left_party_with_zero_gold,
             } => {
+                let base = KARMA_TOLL_MILESTONE_GAIN as i16;
                 if left_party_with_zero_gold {
-                    3
+                    base + KARMA_TOLL_MILESTONE_ZERO_GOLD_BONUS as i16
                 } else {
-                    1
+                    base
                 }
             }
         }
@@ -67,6 +65,17 @@ impl KarmaAction {
 /// take; if the selector is already zero, the path is a no-op rather
 /// than a wrap.
 pub const KARMA_CROP_OR_TABLE_FOOD_DEBIT: u8 = 1;
+/// `karma.md §4` shared moral-standing bonus the helped/pickpocket-style
+/// NPC thank-you path adds to the selector.
+pub const KARMA_HELPED_NPC_THANK_YOU_GAIN: u8 = 2;
+/// `karma.md §4` shared moral-standing bonus the three-digit
+/// conversation gold-payment milestone adds when the toll-progress
+/// counter has reached its milestone.
+pub const KARMA_TOLL_MILESTONE_GAIN: u8 = 1;
+/// `karma.md §4` extra moral-standing bonus added on top of
+/// [`KARMA_TOLL_MILESTONE_GAIN`] when the milestone payment leaves
+/// the party with zero gold.
+pub const KARMA_TOLL_MILESTONE_ZERO_GOLD_BONUS: u8 = 2;
 
 /// `karma.md §7` shrine meditation mantra-input cap. The handler
 /// reads up to twelve characters before comparing against the

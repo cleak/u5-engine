@@ -1,4 +1,54 @@
     #[test]
+    fn karma_action_signed_deltas_route_through_named_constants() {
+        // karma.md §4 confirmed scalar mutators. Route each non-shrine
+        // delta through its named promoted constant so the table here
+        // can be audited against the spec without re-checking the
+        // signed_delta arithmetic for bare literals.
+        assert_eq!(KARMA_HELPED_NPC_THANK_YOU_GAIN, 2);
+        assert_eq!(KARMA_TOLL_MILESTONE_GAIN, 1);
+        assert_eq!(KARMA_TOLL_MILESTONE_ZERO_GOLD_BONUS, 2);
+        assert_eq!(
+            KarmaAction::TownChestOpened.signed_delta(),
+            -(TOWN_CHEST_OPEN_KARMA_DEBIT as i16),
+        );
+        assert_eq!(
+            KarmaAction::CropOrTableFoodTaken.signed_delta(),
+            -(KARMA_CROP_OR_TABLE_FOOD_DEBIT as i16),
+        );
+        assert_eq!(
+            KarmaAction::TownCannonHit.signed_delta(),
+            -(TOWN_CANNON_HIT_KARMA_DEBIT as i16),
+        );
+        assert_eq!(
+            KarmaAction::HelpedNpcThankYou.signed_delta(),
+            KARMA_HELPED_NPC_THANK_YOU_GAIN as i16,
+        );
+        assert_eq!(
+            KarmaAction::TollMilestone {
+                left_party_with_zero_gold: false
+            }
+            .signed_delta(),
+            KARMA_TOLL_MILESTONE_GAIN as i16,
+        );
+        assert_eq!(
+            KarmaAction::TollMilestone {
+                left_party_with_zero_gold: true
+            }
+            .signed_delta(),
+            (KARMA_TOLL_MILESTONE_GAIN + KARMA_TOLL_MILESTONE_ZERO_GOLD_BONUS) as i16,
+        );
+        // Codex turn-in: base +3, Humility doubles to +6.
+        assert_eq!(
+            KarmaAction::CodexShrineTurnIn { humility: false }.signed_delta(),
+            ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE as i16,
+        );
+        assert_eq!(
+            KarmaAction::CodexShrineTurnIn { humility: true }.signed_delta(),
+            (ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE as i16) * 2,
+        );
+    }
+
+    #[test]
     fn daylight_sentinel_min_anchors_to_full_daylight() {
         // time.md §6 / lighting.md §3: values strictly above
         // FULL_DAYLIGHT (= 50) are the "skip recompute" sentinel

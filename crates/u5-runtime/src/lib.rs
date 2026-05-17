@@ -245,7 +245,9 @@ pub use jimmy::{
 };
 pub use karma::{
     CODEX_TURNIN_STAT_CAP, CODEX_TURNIN_STAT_INCREMENT, KARMA_CROP_OR_TABLE_FOOD_DEBIT,
-    KarmaAction, RESURRECTION_PENALTY_SKIP_THRESHOLD, SHRINE_MANTRA_INPUT_LIMIT,
+    KARMA_HELPED_NPC_THANK_YOU_GAIN, KARMA_TOLL_MILESTONE_GAIN,
+    KARMA_TOLL_MILESTONE_ZERO_GOLD_BONUS, KarmaAction,
+    RESURRECTION_PENALTY_SKIP_THRESHOLD, SHRINE_MANTRA_INPUT_LIMIT,
     apply_karma_action, codex_turnin_stat_reward, resurrection_penalty_skipped,
     resurrection_scaled_xp, shrine_mantra_for,
 };
