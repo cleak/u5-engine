@@ -169,8 +169,12 @@ pub const U4_TRANSFER_ATTRIBUTE_HIGH_BAND_DIVISOR: u16 = 4;
 pub const U4_TRANSFER_ATTRIBUTE_HIGH_BAND_BIAS_OUT: u16 = 20;
 /// `u4-transfer.md §7` Strength floor: after the band-translator
 /// runs, Strength alone is floored to 20. Dexterity and Intelligence
-/// are not floored.
-pub const U4_TRANSFER_STRENGTH_FLOOR: u8 = 20;
+/// are not floored. This floor matches the chargen Strength floor
+/// (the questionnaire pass also caps Strength below at 20).
+/// Anchored to [`crate::CHARGEN_STR_FLOOR`] so the published "20
+/// is the minimum starting Strength" rule has one source of truth
+/// for both chargen and U4 transfer.
+pub const U4_TRANSFER_STRENGTH_FLOOR: u8 = crate::CHARGEN_STR_FLOOR;
 /// `u4-transfer.md §7` experience-translator divisor. Source XP is
 /// divided by this value, truncating toward zero.
 pub const U4_TRANSFER_EXPERIENCE_DIVISOR: u32 = 10;

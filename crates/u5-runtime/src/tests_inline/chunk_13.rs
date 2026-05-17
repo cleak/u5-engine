@@ -1,4 +1,16 @@
     #[test]
+    fn u4_transfer_strength_floor_aliases_to_chargen_floor() {
+        // u4-transfer.md §7 (and chargen): the published "20 is
+        // the minimum starting Strength" rule applies to both the
+        // questionnaire-driven chargen pass and the U4 transfer
+        // band-translator pass. Anchor U4_TRANSFER_STRENGTH_FLOOR
+        // to CHARGEN_STR_FLOOR so the floor has one source of
+        // truth across both entry paths.
+        assert_eq!(U4_TRANSFER_STRENGTH_FLOOR, CHARGEN_STR_FLOOR);
+        assert_eq!(U4_TRANSFER_STRENGTH_FLOOR, 20);
+    }
+
+    #[test]
     fn chargen_avatar_hp_seeds_alias_to_default_party_hp() {
         // chargen.md §8: the freshly seeded Avatar current-HP and
         // max-HP both equal the global DEFAULT_PARTY_HP starting-HP
