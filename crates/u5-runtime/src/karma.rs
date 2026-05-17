@@ -125,8 +125,12 @@ pub const fn codex_turnin_stat_reward(virtue: ShrineVirtue) -> (u8, u8, u8) {
 
 /// `karma.md §5` resurrection-penalty threshold. At a moral-standing
 /// selector of 98 or higher, the revived member's XP is unchanged;
-/// below 98 the XP is scaled down by the selector percentage.
-pub const RESURRECTION_PENALTY_SKIP_THRESHOLD: u8 = 98;
+/// below 98 the XP is scaled down by the selector percentage. The
+/// threshold sits one selector step below [`crate::MORAL_STANDING_MAX`]
+/// (`99`), so only the top two selector values (`98` and `99`) skip
+/// the penalty. Anchored to `MORAL_STANDING_MAX - 1` so the skip
+/// band derives from the published standing maximum.
+pub const RESURRECTION_PENALTY_SKIP_THRESHOLD: u8 = crate::MORAL_STANDING_MAX - 1;
 
 /// `karma.md §5` resurrection-penalty percentage divisor. The
 /// revived member's experience is multiplied by `standing` and then

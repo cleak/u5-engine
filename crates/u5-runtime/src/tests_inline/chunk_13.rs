@@ -1,4 +1,20 @@
     #[test]
+    fn resurrection_penalty_skip_threshold_chains_below_moral_standing_max() {
+        // karma.md §5: the resurrection-penalty skip threshold (98)
+        // is one selector step below MORAL_STANDING_MAX (99), so
+        // only the top two selector values (98 and 99) skip the
+        // XP scale. Anchor the threshold to MORAL_STANDING_MAX - 1
+        // so the skip band derives from the published standing
+        // maximum.
+        assert_eq!(
+            RESURRECTION_PENALTY_SKIP_THRESHOLD,
+            MORAL_STANDING_MAX - 1,
+        );
+        assert_eq!(MORAL_STANDING_MAX, 99);
+        assert_eq!(RESURRECTION_PENALTY_SKIP_THRESHOLD, 98);
+    }
+
+    #[test]
     fn lord_british_camp_event_threshold_is_quarter_of_roll_bound() {
         // rest-and-camp.md §7: Lord British camp event fires on a
         // 25% probability — one quarter of the random(0, 99) roll
