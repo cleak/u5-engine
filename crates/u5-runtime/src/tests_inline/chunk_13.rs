@@ -1,4 +1,12 @@
     #[test]
+    fn location_default_entry_x_matches_spec() {
+        // formats/location-dat.md §6: the default per-scene town-entry
+        // coordinate is not stored in the .DAT file; X is fixed at
+        // fifteen and Y comes from the per-scene LocationEntryYTable.
+        assert_eq!(LOCATION_DEFAULT_ENTRY_X, 15);
+    }
+
+    #[test]
     fn dungeon_cell_nibble_mask_and_shift_match_spec() {
         // formats/dungeon-dat.md §3: each cell byte's upper nibble
         // selects the broad dispatch class, and the lower nibble

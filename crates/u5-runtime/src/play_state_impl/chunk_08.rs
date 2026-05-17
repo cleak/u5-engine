@@ -1015,10 +1015,10 @@ impl PlayState {
         let mut next = match target {
             PlayTarget::Town(scene) => {
                 options.start = town_entry_y
-                    .map(|entry_y| Ok(Some((15, entry_y))))
+                    .map(|entry_y| Ok(Some((LOCATION_DEFAULT_ENTRY_X, entry_y))))
                     .unwrap_or_else(|| {
                         load_location_entry_y(game_dir, scene)
-                            .map(|entry_y| entry_y.map(|y| (15, y)))
+                            .map(|entry_y| entry_y.map(|y| (LOCATION_DEFAULT_ENTRY_X, y)))
                     })?;
                 Self::load_town_scene(game_dir, scene, options)?
             }

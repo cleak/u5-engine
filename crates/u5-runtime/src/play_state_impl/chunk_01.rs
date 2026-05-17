@@ -266,7 +266,7 @@ impl PlayState {
         let markers = harvest_location_markers(&grid);
         normalize_town_runtime_floor(&mut grid, options.clock.hour);
         let table_start = if options.floor == 0 {
-            load_location_entry_y(game_dir, scene)?.map(|entry_y| (15, entry_y))
+            load_location_entry_y(game_dir, scene)?.map(|entry_y| (LOCATION_DEFAULT_ENTRY_X, entry_y))
         } else {
             None
         };

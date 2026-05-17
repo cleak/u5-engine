@@ -40,6 +40,14 @@ pub const BLINK_TARGET_TABLE_FILE: &str = "blink_targets.tsv";
 pub const MOONGATE_TABLE_FILE: &str = "moongates.tsv";
 pub const LOCATION_FLOOR_TABLE_FILE: &str = "location_floor_pages.tsv";
 pub const LOCATION_ENTRY_Y_TABLE_FILE: &str = "location_entry_y.tsv";
+
+/// `formats/location-dat.md §6` default per-scene town-entry X
+/// coordinate. The published rule fixes the entry X column at
+/// fifteen; the entry Y comes from the per-scene `LocationEntryYTable`
+/// (loaded from `location_entry_y.tsv`) and the entry floor is zero.
+/// Promote the X constant so the town-entry seed sites can name the
+/// column instead of repeating the bare literal `15`.
+pub const LOCATION_DEFAULT_ENTRY_X: usize = 15;
 pub const TILE_PASSABILITY_FILE: &str = "tile_passability.bin";
 pub const LOOK2_DAT_FILE: &str = "LOOK2.DAT";
 
