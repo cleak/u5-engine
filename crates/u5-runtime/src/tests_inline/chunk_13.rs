@@ -1,4 +1,23 @@
     #[test]
+    fn first_dungeon_scene_byte_matches_spec_arithmetic() {
+        // formats/cbt.md §7 and formats/dungeon-dat.md §2: the
+        // scene-byte range for the eight dungeons is 33..=40, and the
+        // zero-based DUNGEON.DAT record number is recovered by
+        // subtracting FIRST_DUNGEON_SCENE_BYTE from the scene byte.
+        assert_eq!(FIRST_DUNGEON_SCENE_BYTE, 33);
+        assert_eq!(LAST_DUNGEON_SCENE_BYTE, 40);
+        assert_eq!(
+            (LAST_DUNGEON_SCENE_BYTE - FIRST_DUNGEON_SCENE_BYTE + 1) as usize,
+            8,
+        );
+        // Round-trip through DungeonScene for the first and last entries.
+        let deceit = DungeonScene::new(FIRST_DUNGEON_SCENE_BYTE).unwrap();
+        assert_eq!(deceit.record, 0);
+        let doom = DungeonScene::new(LAST_DUNGEON_SCENE_BYTE).unwrap();
+        assert_eq!(doom.record, 7);
+    }
+
+    #[test]
     fn signs_dat_alias_bridge_length_matches_spec() {
         // formats/signs-dat.md §3: the on-disk alias bridge that
         // shares one body across multiple coordinate headers is a

@@ -107,6 +107,18 @@ impl Scene {
     }
 }
 
+/// `formats/cbt.md §7` / `formats/dungeon-dat.md §2` scene-byte
+/// base for the dungeon family. Dungeon scene bytes occupy
+/// `FIRST_DUNGEON_SCENE_BYTE..=LAST_DUNGEON_SCENE_BYTE` and the
+/// zero-based `DUNGEON.DAT` record number is recovered by
+/// subtracting `FIRST_DUNGEON_SCENE_BYTE`. Promote the literals so
+/// the scene-to-record arithmetic is not duplicated as bare `33`s.
+pub const FIRST_DUNGEON_SCENE_BYTE: u8 = 33;
+/// `formats/dungeon-dat.md §2` highest dungeon scene byte
+/// (`FIRST_DUNGEON_SCENE_BYTE + 7` — the eighth and last dungeon
+/// record is Doom).
+pub const LAST_DUNGEON_SCENE_BYTE: u8 = FIRST_DUNGEON_SCENE_BYTE + 7;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DungeonScene {
     pub byte: u8,
@@ -115,7 +127,7 @@ pub struct DungeonScene {
 
 impl DungeonScene {
     pub fn new(byte: u8) -> io::Result<Self> {
-        if !(33..=40).contains(&byte) {
+        if !(FIRST_DUNGEON_SCENE_BYTE..=LAST_DUNGEON_SCENE_BYTE).contains(&byte) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!("invalid dungeon scene byte {byte}"),
@@ -123,7 +135,7 @@ impl DungeonScene {
         }
         Ok(Self {
             byte,
-            record: (byte - 33) as usize,
+            record: (byte - FIRST_DUNGEON_SCENE_BYTE) as usize,
         })
     }
 
@@ -134,7 +146,7 @@ impl DungeonScene {
                 format!("dungeon record must be 0..7, got {record}"),
             ));
         }
-        Self::new(33 + record)
+        Self::new(FIRST_DUNGEON_SCENE_BYTE + record)
     }
 
     pub fn key(self) -> String {
@@ -210,7 +222,7 @@ impl PlayTarget {
             Ok(Self::World(WorldPlane::Britannia))
         } else if (1..=32).contains(&byte) {
             Ok(Self::Town(Scene::new(byte)?))
-        } else if (33..=40).contains(&byte) {
+        } else if (FIRST_DUNGEON_SCENE_BYTE..=LAST_DUNGEON_SCENE_BYTE).contains(&byte) {
             Ok(Self::Dungeon(DungeonScene::new(byte)?))
         } else {
             Err(io::Error::new(

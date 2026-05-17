@@ -485,7 +485,8 @@ pub use pth::{
 pub use report::run_report;
 pub use save_load::*;
 pub use scene::{
-    DungeonPresentationFlavour, DungeonScene, Family, PlayTarget, Scene, WorldPlane,
+    DungeonPresentationFlavour, DungeonScene, FIRST_DUNGEON_SCENE_BYTE, Family,
+    LAST_DUNGEON_SCENE_BYTE, PlayTarget, Scene, WorldPlane,
 };
 pub use ship_broadside::{
     SHIP_BROADSIDE_DAMAGE_MAX, SHIP_BROADSIDE_DAMAGE_MIN,
