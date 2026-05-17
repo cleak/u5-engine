@@ -535,8 +535,10 @@ pub const SAVE_CHARACTER_LEVEL_OFFSET: usize = SAVE_CHARACTER_EXPERIENCE_OFFSET 
 pub const SAVE_CHARACTER_STAY_COUNTER_OFFSET: usize = SAVE_CHARACTER_LEVEL_OFFSET + 1;
 pub const SAVE_CHARACTER_EQUIPMENT_OFFSET: usize = SAVE_CHARACTER_STAY_COUNTER_OFFSET + 2;
 /// `formats/tiles.md §1,§5.1`: 16x16 tile pixel side and the flat
-/// atlas's 512-entry capacity.
-pub const TILE_PIXEL_SIDE: usize = 16;
+/// atlas's 512-entry capacity. Anchored to [`TILE_ATLAS_SIDE`] so
+/// the tile-format pixel side and the atlas tile-side share one
+/// source of truth.
+pub const TILE_PIXEL_SIDE: usize = TILE_ATLAS_SIDE;
 /// `formats/tiles.md §5.1`: the flat-format tile atlas holds one
 /// entry per shared world tile id. Anchored to
 /// [`TILE_ATLAS_TILE_COUNT`] so the flat-atlas capacity and the

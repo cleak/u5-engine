@@ -1,4 +1,16 @@
     #[test]
+    fn tile_pixel_side_anchors_to_tile_atlas_side() {
+        // formats/tiles.md §1, §5.1: each shared world tile is
+        // 16 pixels on a side. constants.rs declared TILE_PIXEL_SIDE
+        // = 16 and TILE_ATLAS_SIDE = 16 as parallel bare literals.
+        // Anchor TILE_PIXEL_SIDE to TILE_ATLAS_SIDE so the tile-
+        // format side and the atlas tile-side share one source of
+        // truth.
+        assert_eq!(TILE_PIXEL_SIDE, TILE_ATLAS_SIDE);
+        assert_eq!(TILE_PIXEL_SIDE, 16);
+    }
+
+    #[test]
     fn tile_catalog_count_aliases_anchor_to_tile_atlas_tile_count() {
         // formats/look2-dat.md §2, formats/tiles.md §5.1,
         // catalogs/tile-catalog.md §1: the shared world tile
