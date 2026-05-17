@@ -372,13 +372,17 @@ pub const SKY_STRIP_TRAMMEL_MORNING_BAND_FIRST: u8 = 0;
 pub const SKY_STRIP_TRAMMEL_MORNING_BAND_LAST: u8 = 8;
 pub const SKY_STRIP_TRAMMEL_MORNING_OFFSET: u8 = 8;
 pub const SKY_STRIP_TRAMMEL_NIGHT_BAND_FIRST: u8 = 21;
-pub const SKY_STRIP_TRAMMEL_NIGHT_BAND_LAST: u8 = 23;
+/// `moons.md §2`: Trammel night-band runs through the last hour
+/// of the day. Anchored to HOURS_PER_DAY - 1.
+pub const SKY_STRIP_TRAMMEL_NIGHT_BAND_LAST: u8 = HOURS_PER_DAY - 1;
 pub const SKY_STRIP_TRAMMEL_NIGHT_OFFSET: u8 = 32;
 pub const SKY_STRIP_FELUCCA_MORNING_BAND_FIRST: u8 = 0;
 pub const SKY_STRIP_FELUCCA_MORNING_BAND_LAST: u8 = 2;
 pub const SKY_STRIP_FELUCCA_MORNING_OFFSET: u8 = 2;
 pub const SKY_STRIP_FELUCCA_AFTERNOON_BAND_FIRST: u8 = 15;
-pub const SKY_STRIP_FELUCCA_AFTERNOON_BAND_LAST: u8 = 23;
+/// `moons.md §2`: Felucca afternoon-band runs through the last
+/// hour of the day. Anchored to HOURS_PER_DAY - 1.
+pub const SKY_STRIP_FELUCCA_AFTERNOON_BAND_LAST: u8 = HOURS_PER_DAY - 1;
 pub const SKY_STRIP_FELUCCA_AFTERNOON_OFFSET: u8 = 26;
 
 pub fn sky_strip_marker_position(hour: u8, marker: SkyStripMarker) -> Option<u8> {

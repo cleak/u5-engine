@@ -1,4 +1,17 @@
     #[test]
+    fn sky_strip_night_band_endings_anchor_to_hours_per_day() {
+        // moons.md §2: Trammel night-band and Felucca afternoon-
+        // band both run through the last hour of the day
+        // (HOURS_PER_DAY - 1 = 23). Anchor both *_LAST values to
+        // HOURS_PER_DAY - 1 so the day-end boundary has one
+        // source of truth.
+        assert_eq!(SKY_STRIP_TRAMMEL_NIGHT_BAND_LAST, HOURS_PER_DAY - 1);
+        assert_eq!(SKY_STRIP_FELUCCA_AFTERNOON_BAND_LAST, HOURS_PER_DAY - 1);
+        assert_eq!(SKY_STRIP_TRAMMEL_NIGHT_BAND_LAST, 23);
+        assert_eq!(SKY_STRIP_FELUCCA_AFTERNOON_BAND_LAST, 23);
+    }
+
+    #[test]
     fn shop_time_of_day_boundaries_anchor_to_clock_day_partitions() {
         // shops.md §4.1: time-of-day boundaries split the day
         // into morning (0..=11), afternoon (12..=17), and
