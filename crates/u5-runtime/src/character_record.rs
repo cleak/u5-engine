@@ -103,15 +103,22 @@ pub const SAVE_CHARACTER_NAME_OFFSET: usize = 0x00;
 /// character-record-module alias and the constants-module
 /// declaration share one source of truth.
 pub const SAVE_CHARACTER_NAME_LEN_BYTES: usize = crate::SAVE_CHARACTER_NAME_LEN;
-pub const SAVE_CHARACTER_STRENGTH_OFFSET: usize = 0x0C;
-pub const SAVE_CHARACTER_DEXTERITY_OFFSET: usize = 0x0D;
-pub const SAVE_CHARACTER_INTELLIGENCE_OFFSET: usize = 0x0E;
-pub const SAVE_CHARACTER_MAGIC_POINTS_OFFSET: usize = 0x0F;
-pub const SAVE_CHARACTER_HP_CURRENT_OFFSET: usize = 0x10;
-pub const SAVE_CHARACTER_HP_MAX_OFFSET: usize = 0x12;
-pub const SAVE_CHARACTER_EXPERIENCE_OFFSET: usize = 0x14;
-pub const SAVE_CHARACTER_LEVEL_OFFSET: usize = 0x16;
-pub const SAVE_CHARACTER_MONTH_COUNTER_OFFSET: usize = 0x17;
+/// `formats/saved-gam.md §3.1` per-character byte offsets. Each
+/// of these constants is anchored to the canonical constants.rs
+/// declaration (which lives in the per-byte chain rooted at
+/// SAVE_CHARACTER_STATUS_OFFSET) so the duplicate aliases here
+/// cannot drift from the single source of truth.
+pub const SAVE_CHARACTER_STRENGTH_OFFSET: usize = crate::constants::SAVE_CHARACTER_STR_OFFSET;
+pub const SAVE_CHARACTER_DEXTERITY_OFFSET: usize = crate::constants::SAVE_CHARACTER_DEX_OFFSET;
+pub const SAVE_CHARACTER_INTELLIGENCE_OFFSET: usize = crate::constants::SAVE_CHARACTER_INT_OFFSET;
+pub const SAVE_CHARACTER_MAGIC_POINTS_OFFSET: usize = crate::constants::SAVE_CHARACTER_MANA_OFFSET;
+pub const SAVE_CHARACTER_HP_CURRENT_OFFSET: usize = crate::constants::SAVE_CHARACTER_HP_OFFSET;
+pub const SAVE_CHARACTER_HP_MAX_OFFSET: usize = crate::constants::SAVE_CHARACTER_MAX_HP_OFFSET;
+pub const SAVE_CHARACTER_EXPERIENCE_OFFSET: usize =
+    crate::constants::SAVE_CHARACTER_EXPERIENCE_OFFSET;
+pub const SAVE_CHARACTER_LEVEL_OFFSET: usize = crate::constants::SAVE_CHARACTER_LEVEL_OFFSET;
+pub const SAVE_CHARACTER_MONTH_COUNTER_OFFSET: usize =
+    crate::constants::SAVE_CHARACTER_STAY_COUNTER_OFFSET;
 pub const SAVE_CHARACTER_DEFENSE_BYTE_OFFSET: usize = 0x18;
 
 /// `formats/saved-gam.md §3.1` per-character record stride.

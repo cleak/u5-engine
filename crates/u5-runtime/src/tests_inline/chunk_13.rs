@@ -1,4 +1,42 @@
     #[test]
+    fn character_record_offsets_anchor_to_constants_per_byte_chain() {
+        // formats/saved-gam.md §3.1: per-character byte offsets
+        // form the chain Status (0x0b), Str/Dex/Int (3 bytes), Mana,
+        // HP(2), MaxHP(2), Experience(2), Level, MonthCounter,
+        // Defense(1), Equipment(6). character_record.rs declared
+        // each offset as a parallel bare 0x0C..0x17 literal in
+        // parallel with constants.rs's per-byte chain. Anchor the
+        // character-record-module offsets to the constants-side
+        // chain so the duplicate aliases cannot drift.
+        assert_eq!(
+            crate::character_record::SAVE_CHARACTER_STRENGTH_OFFSET,
+            crate::SAVE_CHARACTER_STR_OFFSET,
+        );
+        assert_eq!(
+            crate::character_record::SAVE_CHARACTER_DEXTERITY_OFFSET,
+            crate::SAVE_CHARACTER_DEX_OFFSET,
+        );
+        assert_eq!(
+            crate::character_record::SAVE_CHARACTER_INTELLIGENCE_OFFSET,
+            crate::SAVE_CHARACTER_INT_OFFSET,
+        );
+        assert_eq!(
+            crate::character_record::SAVE_CHARACTER_MAGIC_POINTS_OFFSET,
+            crate::SAVE_CHARACTER_MANA_OFFSET,
+        );
+        assert_eq!(
+            crate::character_record::SAVE_CHARACTER_HP_CURRENT_OFFSET,
+            crate::SAVE_CHARACTER_HP_OFFSET,
+        );
+        assert_eq!(
+            crate::character_record::SAVE_CHARACTER_HP_MAX_OFFSET,
+            crate::SAVE_CHARACTER_MAX_HP_OFFSET,
+        );
+        assert_eq!(crate::character_record::SAVE_CHARACTER_STRENGTH_OFFSET, 0x0C);
+        assert_eq!(crate::character_record::SAVE_CHARACTER_MONTH_COUNTER_OFFSET, 0x17);
+    }
+
+    #[test]
     fn character_record_name_len_bytes_anchors_to_constants_name_len() {
         // formats/saved-gam.md §3: the per-character name field is
         // nine bytes. character_record.rs declared
