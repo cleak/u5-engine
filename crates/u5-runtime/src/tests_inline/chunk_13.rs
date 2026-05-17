@@ -1,4 +1,20 @@
     #[test]
+    fn encounter_spawn_retry_budget_anchors_to_spawner_retry_limit() {
+        // encounters.md §4: same retry budget applies to both the
+        // spawner retry loop and the coordinate retry loop.
+        // predicates.rs declared ENCOUNTER_SPAWNER_RETRY_LIMIT
+        // (u8 = 128) and ENCOUNTER_SPAWN_RETRY_BUDGET (u16 =
+        // 128) as bare parallel literals. Anchor the budget to
+        // the limit so the encounters.md §4 retry-budget value
+        // has one source of truth.
+        assert_eq!(
+            ENCOUNTER_SPAWN_RETRY_BUDGET,
+            ENCOUNTER_SPAWNER_RETRY_LIMIT as u16,
+        );
+        assert_eq!(ENCOUNTER_SPAWN_RETRY_BUDGET, 128);
+    }
+
+    #[test]
     fn mmix_quantity_prompt_max_anchors_to_spell_charge_cap() {
         // magic.md §6: the largest quantity the two-digit M-Mix
         // prompt can accept matches the shared SPELL_CHARGE_CAP

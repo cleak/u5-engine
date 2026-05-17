@@ -713,8 +713,11 @@ pub const fn encounter_spawn_separation_accepts(dx_abs: u16, dy_abs: u16) -> boo
 
 /// `encounters.md §4` encounter-spawn retry budget. After this many
 /// rejected candidate coordinates, the spawner returns silently
-/// without writing a monster record.
-pub const ENCOUNTER_SPAWN_RETRY_BUDGET: u16 = 128;
+/// without writing a monster record. Anchored to
+/// [`ENCOUNTER_SPAWNER_RETRY_LIMIT`] so the same retry budget
+/// applies to both the spawner retry loop and the coordinate
+/// retry loop.
+pub const ENCOUNTER_SPAWN_RETRY_BUDGET: u16 = ENCOUNTER_SPAWNER_RETRY_LIMIT as u16;
 
 /// `overworld.md §7` / `encounters.md §3` random-encounter probe die.
 /// The mode loop draws a uniform integer in `[1, RANDOM_ENCOUNTER_DIE]`
