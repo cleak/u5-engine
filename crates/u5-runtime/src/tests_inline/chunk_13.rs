@@ -1,4 +1,15 @@
     #[test]
+    fn dungeon_level_spell_pair_chains_sequentially() {
+        // catalogs/spell-list.md §5: Uus Por (Up) and Des Por
+        // (Down) form the dungeon-level spell pair at indices
+        // 21..=22. Anchor DES_POR to UUS_POR + 1 so the pair
+        // stays consecutive.
+        assert_eq!(DES_POR_SPELL_INDEX, UUS_POR_SPELL_INDEX + 1);
+        assert_eq!(UUS_POR_SPELL_INDEX, 21);
+        assert_eq!(DES_POR_SPELL_INDEX, 22);
+    }
+
+    #[test]
     fn field_spell_indices_chain_sequentially() {
         // catalogs/spell-list.md §5: Fire/Poison/Sleep Field
         // spells occupy consecutive indices 14..=16 in the same

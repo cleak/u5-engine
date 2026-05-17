@@ -930,8 +930,11 @@ pub const PROTECTION_SPELL_INDEX: usize = 19;
 pub const PROTECTION_COST: u8 = (PROTECTION_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const PROTECTION_ACTIVE_EFFECT_TAG: u8 = b'P';
 pub const PROTECTION_ACTIVE_EFFECT_DURATION: u8 = 20;
+/// `catalogs/spell-list.md §5`: Uus Por (Up) and Des Por (Down)
+/// are the paired dungeon-level spells; the pair occupies
+/// consecutive indices 21..=22. Anchor DES_POR to UUS_POR + 1.
 pub const UUS_POR_SPELL_INDEX: usize = 21;
-pub const DES_POR_SPELL_INDEX: usize = 22;
+pub const DES_POR_SPELL_INDEX: usize = UUS_POR_SPELL_INDEX + 1;
 /// `combat.md §10`: Uus Por / Des Por dungeon-level spells share
 /// circle 3 (indices 21, 22) and therefore an MP cost of 4.
 /// Anchored to the Uus Por representative index.
