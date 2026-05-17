@@ -511,11 +511,12 @@ pub const MMIX_COMBAT_REFUSAL_MESSAGE: &str = "Mix-Not here";
 /// player can therefore request 0..=99 charges in one mix.
 pub const MMIX_QUANTITY_PROMPT_DIGITS: usize = 2;
 /// `magic.md §6` largest quantity the two-digit M-Mix prompt can
-/// accept (`10.pow(MMIX_QUANTITY_PROMPT_DIGITS) - 1`). Matches the
-/// shared `SPELL_CHARGE_CAP` (a successful mix that would push the
-/// counter above the cap is clamped at 99 by
-/// [`spell_charge_add_capped`]).
-pub const MMIX_QUANTITY_PROMPT_MAX: u8 = 99;
+/// accept. Matches the shared `SPELL_CHARGE_CAP` (a successful
+/// mix that would push the counter above the cap is clamped at
+/// 99 by [`spell_charge_add_capped`]). Anchored to
+/// [`crate::SPELL_CHARGE_CAP`] so the prompt-accepting cap and
+/// the spell-charge cap stay one value.
+pub const MMIX_QUANTITY_PROMPT_MAX: u8 = crate::SPELL_CHARGE_CAP;
 
 /// `magic.md §6,§7` per-spell charge-counter add. After M-Mix's
 /// recipe-match step the requested quantity is added to the

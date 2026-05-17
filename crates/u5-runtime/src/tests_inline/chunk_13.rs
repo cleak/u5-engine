@@ -1,4 +1,17 @@
     #[test]
+    fn mmix_quantity_prompt_max_anchors_to_spell_charge_cap() {
+        // magic.md §6: the largest quantity the two-digit M-Mix
+        // prompt can accept matches the shared SPELL_CHARGE_CAP
+        // (= 99). magic.rs declared MMIX_QUANTITY_PROMPT_MAX = 99
+        // as a bare literal alongside SPELL_CHARGE_CAP = 99.
+        // Anchor the prompt cap to SPELL_CHARGE_CAP so the
+        // prompt-accepting cap and the spell-charge cap stay one
+        // value.
+        assert_eq!(MMIX_QUANTITY_PROMPT_MAX, SPELL_CHARGE_CAP);
+        assert_eq!(MMIX_QUANTITY_PROMPT_MAX, 99);
+    }
+
+    #[test]
     fn town_rest_tick_budget_anchors_to_hours_per_day_times_ticks_per_hour() {
         // rest-and-camp.md §4: the town-rest tick budget caps at
         // exactly one day of town-rest ticks (24 hours × 6
