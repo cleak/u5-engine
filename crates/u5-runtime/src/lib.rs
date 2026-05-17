@@ -332,9 +332,11 @@ pub use question_io::{
     parse_question_records, question_dat_dilemma_record_for_pair,
 };
 pub use signs_io::{
-    SIGNS_DAT_FILE, SIGNS_DAT_RECORD_HEADER_LEN, SIGNS_DAT_SCENE_DIRECTORY_BYTES,
-    SIGNS_DAT_SCENE_DIRECTORY_SLOTS, SignBodyByteKind, SignRecord,
-    decode_sign_payload, find_sign, load_sign_records, parse_sign_records,
+    SIGN_BODY_CHARACTER_MASK, SIGN_BODY_END_OF_RECORD, SIGN_BODY_MACRO_FIRST,
+    SIGN_BODY_MACRO_LAST, SIGN_BODY_PAUSE_FOR_KEY, SIGN_BODY_SEPARATOR_GLYPH_A,
+    SIGN_BODY_SEPARATOR_GLYPH_B, SIGNS_DAT_FILE, SIGNS_DAT_RECORD_HEADER_LEN,
+    SIGNS_DAT_SCENE_DIRECTORY_BYTES, SIGNS_DAT_SCENE_DIRECTORY_SLOTS, SignBodyByteKind,
+    SignRecord, decode_sign_payload, find_sign, load_sign_records, parse_sign_records,
     sign_body_byte_kind,
 };
 pub use stat_arithmetic::{capped_add_u8, capped_add_word, floor_sub_u8, floor_sub_word};

@@ -55,15 +55,43 @@ pub enum SignBodyByteKind {
     Character(u8),
 }
 
+/// `formats/signs-dat.md §4` end-of-record byte. The byte `0x00`
+/// terminates the current sign record; the record scanner advances
+/// to the next record after seeing it.
+pub const SIGN_BODY_END_OF_RECORD: u8 = 0x00;
+/// `formats/signs-dat.md §4` pause-for-key byte. The byte `0x0D`
+/// pauses sign rendering until the player presses a key and then
+/// resumes printing.
+pub const SIGN_BODY_PAUSE_FOR_KEY: u8 = 0x0D;
+/// `formats/signs-dat.md §4` first byte in the contiguous macro
+/// range (`0x29..=0x31`). Macro bytes select NUL-terminated
+/// decoration fragments from a small resident pool rather than
+/// printing the byte directly.
+pub const SIGN_BODY_MACRO_FIRST: u8 = 0x29;
+/// `formats/signs-dat.md §4` last byte in the macro range.
+pub const SIGN_BODY_MACRO_LAST: u8 = 0x31;
+/// `formats/signs-dat.md §4` first separator-glyph byte (`0x26`).
+/// Shipped records pair this with `SIGN_BODY_SEPARATOR_GLYPH_B` as
+/// a decorative divider; both render the same separator glyph.
+pub const SIGN_BODY_SEPARATOR_GLYPH_A: u8 = 0x26;
+/// `formats/signs-dat.md §4` second separator-glyph byte (`0x27`).
+pub const SIGN_BODY_SEPARATOR_GLYPH_B: u8 = 0x27;
+/// `formats/signs-dat.md §4` low-seven-bit character mask. Ordinary
+/// printable bytes render the low seven bits; the high bit is a
+/// presentation-mode toggle owned by the surrounding Look renderer.
+pub const SIGN_BODY_CHARACTER_MASK: u8 = 0x7F;
+
 /// `formats/signs-dat.md §4`: classify a single payload byte for
 /// the sign-body formatter.
 pub const fn sign_body_byte_kind(byte: u8) -> SignBodyByteKind {
     match byte {
-        0x00 => SignBodyByteKind::EndOfRecord,
-        0x0D => SignBodyByteKind::PauseForKey,
-        0x29..=0x31 => SignBodyByteKind::Macro(byte),
-        0x26 | 0x27 => SignBodyByteKind::SeparatorGlyph,
-        other => SignBodyByteKind::Character(other & 0x7F),
+        SIGN_BODY_END_OF_RECORD => SignBodyByteKind::EndOfRecord,
+        SIGN_BODY_PAUSE_FOR_KEY => SignBodyByteKind::PauseForKey,
+        SIGN_BODY_MACRO_FIRST..=SIGN_BODY_MACRO_LAST => SignBodyByteKind::Macro(byte),
+        SIGN_BODY_SEPARATOR_GLYPH_A | SIGN_BODY_SEPARATOR_GLYPH_B => {
+            SignBodyByteKind::SeparatorGlyph
+        }
+        other => SignBodyByteKind::Character(other & SIGN_BODY_CHARACTER_MASK),
     }
 }
 

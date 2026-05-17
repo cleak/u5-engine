@@ -472,6 +472,49 @@
     }
 
     #[test]
+    fn sign_body_byte_constants_match_spec_formatter_table() {
+        // formats/signs-dat.md §4: the sign-body formatter recognises
+        // end-of-record (0x00), pause-for-key (0x0D), a contiguous
+        // macro range (0x29..=0x31), two equivalent separator-glyph
+        // bytes (0x26 and 0x27), and renders every other byte as
+        // its low-seven-bit character. Promote each value so
+        // sign_body_byte_kind does not bake them as bare match arms.
+        assert_eq!(SIGN_BODY_END_OF_RECORD, 0x00);
+        assert_eq!(SIGN_BODY_PAUSE_FOR_KEY, 0x0D);
+        assert_eq!(SIGN_BODY_MACRO_FIRST, 0x29);
+        assert_eq!(SIGN_BODY_MACRO_LAST, 0x31);
+        assert_eq!(SIGN_BODY_SEPARATOR_GLYPH_A, 0x26);
+        assert_eq!(SIGN_BODY_SEPARATOR_GLYPH_B, 0x27);
+        assert_eq!(SIGN_BODY_CHARACTER_MASK, 0x7F);
+        // Classifier returns the right variant for each named byte.
+        assert_eq!(
+            sign_body_byte_kind(SIGN_BODY_END_OF_RECORD),
+            SignBodyByteKind::EndOfRecord
+        );
+        assert_eq!(
+            sign_body_byte_kind(SIGN_BODY_PAUSE_FOR_KEY),
+            SignBodyByteKind::PauseForKey
+        );
+        for b in SIGN_BODY_MACRO_FIRST..=SIGN_BODY_MACRO_LAST {
+            assert_eq!(sign_body_byte_kind(b), SignBodyByteKind::Macro(b));
+        }
+        assert_eq!(
+            sign_body_byte_kind(SIGN_BODY_SEPARATOR_GLYPH_A),
+            SignBodyByteKind::SeparatorGlyph
+        );
+        assert_eq!(
+            sign_body_byte_kind(SIGN_BODY_SEPARATOR_GLYPH_B),
+            SignBodyByteKind::SeparatorGlyph
+        );
+        // A high-bit byte still falls into the Character branch with
+        // the high bit stripped.
+        assert_eq!(
+            sign_body_byte_kind(0xC1),
+            SignBodyByteKind::Character(0x41)
+        );
+    }
+
+    #[test]
     fn dungeon_cbt_records_derived_from_bank_count_and_slots() {
         // formats/cbt.md §2: DUNGEON.CBT has seven dungeon banks of
         // sixteen records each (one slot per low-nibble of an `0xF?`
