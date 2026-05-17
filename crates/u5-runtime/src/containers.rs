@@ -567,11 +567,17 @@ pub const DUNGEON_CHEST_FOOD_MAX: u8 = 31;
 pub const DUNGEON_CHEST_SMALL_MAX: u8 = 3;
 pub const DUNGEON_CHEST_SUBTYPE_MAX: u8 = 7;
 
+/// `containers.md §6` per-row gate roll formula multiplier and bias.
+/// The first roll is uniform in `1..=(MULTIPLIER * dungeon_depth + BIAS)`;
+/// the row is awarded when its gate threshold is `<=` the roll.
+pub const DUNGEON_CHEST_ROW_GATE_DEPTH_MULTIPLIER: u8 = 4;
+pub const DUNGEON_CHEST_ROW_GATE_BIAS: u8 = 4;
+
 /// `containers.md §6`: per-row gate. The first roll is uniform in
 /// `1..=(4 * dungeon_depth + 4)`; the row is awarded when its threshold is
 /// `<=` the roll. Caller passes the raw die roll and the row.
 pub const fn dungeon_chest_row_gate_max(dungeon_depth: u8) -> u8 {
-    4 * dungeon_depth + 4
+    DUNGEON_CHEST_ROW_GATE_DEPTH_MULTIPLIER * dungeon_depth + DUNGEON_CHEST_ROW_GATE_BIAS
 }
 pub const fn dungeon_chest_row_awarded(row: DungeonChestRow, gate_roll: u8) -> bool {
     row.gate_threshold <= gate_roll

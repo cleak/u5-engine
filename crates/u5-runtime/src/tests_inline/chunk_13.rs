@@ -1,4 +1,16 @@
     #[test]
+    fn dungeon_chest_row_gate_formula_matches_spec() {
+        // containers.md §6: per-row gate roll is uniform in
+        // 1..=(4 * dungeon_depth + 4). Promote the multiplier and bias
+        // so the helper's arithmetic has named pieces.
+        assert_eq!(DUNGEON_CHEST_ROW_GATE_DEPTH_MULTIPLIER, 4);
+        assert_eq!(DUNGEON_CHEST_ROW_GATE_BIAS, 4);
+        assert_eq!(dungeon_chest_row_gate_max(0), DUNGEON_CHEST_ROW_GATE_BIAS);
+        assert_eq!(dungeon_chest_row_gate_max(1), 8);
+        assert_eq!(dungeon_chest_row_gate_max(7), 32);
+    }
+
+    #[test]
     fn dungeon_chest_gold_depth_multiplier_matches_spec() {
         // containers.md §6: gold-row upper bound is
         // `DUNGEON_CHEST_GOLD_DEPTH_MULTIPLIER * dungeon_depth`
