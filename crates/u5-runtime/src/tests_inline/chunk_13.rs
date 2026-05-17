@@ -1,4 +1,18 @@
     #[test]
+    fn tlk_goto_label_pair_anchors_to_control_code_band_end() {
+        // conversation.md §7.7: the GOTO-label pair (0x9E, 0x9F)
+        // sits immediately past the engine-control byte band
+        // (0x80..=0x9D). Anchor TLK_CODE_GOTO_LABEL_FIRST to
+        // TLK_CONTROL_CODE_LAST + 1 and TLK_CODE_GOTO_LABEL_LAST
+        // to FIRST + 1 so the GOTO-label adjacency has one source
+        // of truth.
+        assert_eq!(TLK_CODE_GOTO_LABEL_FIRST, TLK_CONTROL_CODE_LAST + 1);
+        assert_eq!(TLK_CODE_GOTO_LABEL_LAST, TLK_CODE_GOTO_LABEL_FIRST + 1);
+        assert_eq!(TLK_CODE_GOTO_LABEL_FIRST, 0x9E);
+        assert_eq!(TLK_CODE_GOTO_LABEL_LAST, 0x9F);
+    }
+
+    #[test]
     fn tlk_control_code_first_anchors_to_dictionary_token_last() {
         // conversation.md §7: the engine-control byte band
         // (0x80..=0x9D) begins one byte past the dictionary-

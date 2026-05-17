@@ -365,8 +365,14 @@ pub const TLK_CODE_IF_ELSE_ALT: u8 = 0xFE;
 // §7.7 labels, GOTO, and scoped prompts (and §7 dispatcher boundaries)
 pub const TLK_LABEL_FIRST: u8 = 0x91;
 pub const TLK_LABEL_LAST: u8 = 0x9F;
-pub const TLK_CODE_GOTO_LABEL_FIRST: u8 = 0x9E;
-pub const TLK_CODE_GOTO_LABEL_LAST: u8 = 0x9F;
+/// `conversation.md §7.7`: the GOTO-label pair (0x9E, 0x9F) sits
+/// immediately past the engine-control byte band and forms a
+/// two-byte pair. Anchor the first label to
+/// [`TLK_CONTROL_CODE_LAST`] + 1 and the last label to
+/// FIRST + 1 so the GOTO-label adjacency has one source of
+/// truth.
+pub const TLK_CODE_GOTO_LABEL_FIRST: u8 = TLK_CONTROL_CODE_LAST + 1;
+pub const TLK_CODE_GOTO_LABEL_LAST: u8 = TLK_CODE_GOTO_LABEL_FIRST + 1;
 pub const TLK_CODE_END_OF_RESPONSE: u8 = 0xFF;
 
 /// `conversation.md §6` keyword-input loop prompt. The conversation
