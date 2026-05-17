@@ -705,7 +705,12 @@ pub const SCROLL_NEGATE_TIME_INDEX: usize = SCROLL_RESURRECTION_INDEX + 1;
 pub const SCROLL_LIGHT_DURATION: u8 = 240;
 pub const SCROLL_PROTECTION_DURATION: u8 = 100;
 pub const SCROLL_NEGATE_MAGIC_DURATION: u8 = 20;
-pub const SCROLL_NEGATE_TIME_DURATION: u8 = 20;
+/// `inventory.md §7.1`: the Negate Time scroll (`AT`) installs
+/// the same 20-counter-unit duration as the Negate Magic scroll
+/// (`AI` installs `N`/20, `AT` installs `T`/20). Anchored to
+/// [`SCROLL_NEGATE_MAGIC_DURATION`] so the shared 20-unit
+/// duration has one source of truth.
+pub const SCROLL_NEGATE_TIME_DURATION: u8 = SCROLL_NEGATE_MAGIC_DURATION;
 /// `catalogs/item-list.md §6` total special-item catalog size.
 /// The named indices span MAGIC_CARPET (0x00) through WOODEN_BOX
 /// (0x0F); anchor the count to [`SPECIAL_ITEM_WOODEN_BOX_INDEX`]

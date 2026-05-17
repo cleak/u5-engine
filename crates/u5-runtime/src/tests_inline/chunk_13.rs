@@ -1,4 +1,16 @@
     #[test]
+    fn scroll_negate_time_duration_anchors_to_negate_magic_duration() {
+        // inventory.md §7.1: the Negate Time scroll (`AT`)
+        // installs the same 20-counter-unit duration as the
+        // Negate Magic scroll (`AI` installs `N`/20, `AT`
+        // installs `T`/20). Anchor SCROLL_NEGATE_TIME_DURATION
+        // to SCROLL_NEGATE_MAGIC_DURATION so the shared 20-unit
+        // duration has one source of truth.
+        assert_eq!(SCROLL_NEGATE_TIME_DURATION, SCROLL_NEGATE_MAGIC_DURATION);
+        assert_eq!(SCROLL_NEGATE_TIME_DURATION, 20);
+    }
+
+    #[test]
     fn fixed_hidden_treasure_found_bytes_derives_from_treasure_count() {
         // formats/saved-gam.md §11: each fixed-hidden-treasure
         // has one bit in the found-bitmap; the bitmap rounds up
