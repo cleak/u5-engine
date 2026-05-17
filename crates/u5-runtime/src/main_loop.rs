@@ -303,6 +303,28 @@ pub const fn dungeon_facing_back_delta(facing: u8) -> Option<(i8, i8)> {
     }
 }
 
+/// `dungeon-mode.md §6` per-facing left-cell `(dx, dy)` for the
+/// renderer's side-wall mirroring path. Rotating the forward delta
+/// 90 degrees counter-clockwise: `(dx, dy)` becomes `(dy, -dx)`.
+/// Returns `None` for facing values outside `0..=3`.
+pub const fn dungeon_facing_left_delta(facing: u8) -> Option<(i8, i8)> {
+    match dungeon_facing_forward_delta(facing) {
+        Some((dx, dy)) => Some((dy, -dx)),
+        None => None,
+    }
+}
+
+/// `dungeon-mode.md §6` per-facing right-cell `(dx, dy)` for the
+/// renderer's side-wall mirroring path. Rotating the forward delta
+/// 90 degrees clockwise: `(dx, dy)` becomes `(-dy, dx)`.
+/// Returns `None` for facing values outside `0..=3`.
+pub const fn dungeon_facing_right_delta(facing: u8) -> Option<(i8, i8)> {
+    match dungeon_facing_forward_delta(facing) {
+        Some((dx, dy)) => Some((-dy, dx)),
+        None => None,
+    }
+}
+
 /// `dungeon-mode.md §9` left turn — decrement facing modulo 4.
 pub const fn dungeon_facing_turn_left(facing: u8) -> u8 {
     (facing + 3) % 4

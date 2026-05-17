@@ -1,4 +1,32 @@
     #[test]
+    fn dungeon_facing_side_deltas_match_spec_rotations() {
+        // dungeon-mode.md §6: side-wall mirroring reads cells to the
+        // left and right of the forward path. Left rotates the
+        // forward delta 90 CCW; right rotates it 90 CW.
+        // Facing North: forward (0,-1), left (-1,0), right (1,0).
+        assert_eq!(dungeon_facing_left_delta(DUNGEON_FACING_NORTH), Some((-1, 0)));
+        assert_eq!(dungeon_facing_right_delta(DUNGEON_FACING_NORTH), Some((1, 0)));
+        // Facing East: forward (1,0), left (0,-1), right (0,1).
+        assert_eq!(dungeon_facing_left_delta(DUNGEON_FACING_EAST), Some((0, -1)));
+        assert_eq!(dungeon_facing_right_delta(DUNGEON_FACING_EAST), Some((0, 1)));
+        // Facing South: forward (0,1), left (1,0), right (-1,0).
+        assert_eq!(dungeon_facing_left_delta(DUNGEON_FACING_SOUTH), Some((1, 0)));
+        assert_eq!(dungeon_facing_right_delta(DUNGEON_FACING_SOUTH), Some((-1, 0)));
+        // Facing West: forward (-1,0), left (0,1), right (0,-1).
+        assert_eq!(dungeon_facing_left_delta(DUNGEON_FACING_WEST), Some((0, 1)));
+        assert_eq!(dungeon_facing_right_delta(DUNGEON_FACING_WEST), Some((0, -1)));
+        // Invalid facing returns None.
+        assert_eq!(dungeon_facing_left_delta(4), None);
+        assert_eq!(dungeon_facing_right_delta(255), None);
+        // Left + right = (0, 0) for every cardinal facing.
+        for facing in 0..=3u8 {
+            let (lx, ly) = dungeon_facing_left_delta(facing).unwrap();
+            let (rx, ry) = dungeon_facing_right_delta(facing).unwrap();
+            assert_eq!((lx + rx, ly + ry), (0, 0));
+        }
+    }
+
+    #[test]
     fn sky_strip_marker_band_offsets_match_spec() {
         // moons.md §2: per-marker visible-hour bands and cell-position
         // offsets. Each marker's cell is `offset - hour` when the
