@@ -2,6 +2,15 @@
 
 use crate::input_case_fold;
 
+/// `intro.md §3` title-screen surface dimensions. The title flow
+/// places its bitmap slots inside a fixed 320-by-200 pixel coordinate
+/// system with the origin at the upper-left corner. Promote the
+/// width and height so the title-tick rectangle and the bitmap
+/// placements share one named source of truth instead of comparing
+/// against bare `320` / `200` literals.
+pub const TITLE_SURFACE_WIDTH: u16 = 320;
+pub const TITLE_SURFACE_HEIGHT: u16 = 200;
+
 /// `intro.md §3`: title-screen 320x200 pixel placement for one
 /// bitmap slot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,7 +71,7 @@ pub const TITLE_LOWER_BAND_CLEAR_Y: u16 = 140;
 /// rectangle are part of the public contract.
 pub const TITLE_TICK_FRAME_X: u16 = 0;
 pub const TITLE_TICK_FRAME_Y: u16 = 65;
-pub const TITLE_TICK_FRAME_WIDTH: u16 = 320;
+pub const TITLE_TICK_FRAME_WIDTH: u16 = TITLE_SURFACE_WIDTH;
 pub const TITLE_TICK_FRAME_HEIGHT: u16 = 49;
 pub const TITLE_TICK_FRAME_COUNT: u8 = 4;
 

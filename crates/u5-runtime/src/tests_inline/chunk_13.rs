@@ -1,4 +1,29 @@
     #[test]
+    fn title_surface_dimensions_match_spec() {
+        // intro.md §3: title-screen 320x200 pixel coordinate system
+        // with the origin at the upper-left corner.
+        assert_eq!(TITLE_SURFACE_WIDTH, 320);
+        assert_eq!(TITLE_SURFACE_HEIGHT, 200);
+        // Every published title placement must stay inside the surface.
+        for placement in TITLE_BIT_INITIAL_PLACEMENTS
+            .iter()
+            .chain(TITLE_BIT_REMAINING_PLACEMENTS.iter())
+        {
+            assert!(
+                placement.top_left_x + placement.width <= TITLE_SURFACE_WIDTH,
+                "slot {} X exceeds surface", placement.slot,
+            );
+            assert!(
+                placement.top_left_y + placement.height <= TITLE_SURFACE_HEIGHT,
+                "slot {} Y exceeds surface", placement.slot,
+            );
+        }
+        // The title-tick frame rectangle also fits inside the surface.
+        assert!(TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH <= TITLE_SURFACE_WIDTH);
+        assert!(TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT <= TITLE_SURFACE_HEIGHT);
+    }
+
+    #[test]
     fn tile_pixel_packing_density_matches_spec() {
         // formats/tiles.md §3: the .16 files store two four-bit
         // pixels per byte (chunky packed, high nibble first).
