@@ -258,7 +258,11 @@ pub const PLAY_START_YEAR: u16 = 139;
 pub const PLAY_START_MONTH: u8 = 4;
 pub const PLAY_START_DAY: u8 = 5;
 pub const PLAY_START_HOUR: u8 = 12;
-pub const SAVED_GAM_LEN: usize = 4192;
+/// `formats/saved-gam.md §2`: SAVED.GAM is exactly 4,192 bytes —
+/// the reserved-tail span ending at file offset 0x105F. Anchored
+/// to [`SAVE_RESERVED_TAIL_OFFSET`] + [`SAVE_RESERVED_TAIL_LEN`]
+/// so the file length and the reserved-tail span stay one value.
+pub const SAVED_GAM_LEN: usize = SAVE_RESERVED_TAIL_OFFSET + SAVE_RESERVED_TAIL_LEN;
 /// `formats/saved-gam.md §2` top-level layout: leading two bytes
 /// precede the roster.
 pub const SAVE_LEADING_BYTES_LEN: usize = 2;
@@ -430,7 +434,7 @@ pub const SAVE_ACTIVE_OBJECTS_OFFSET: usize = 0x06b4;
 /// byte-compatible save editors must preserve them so unknown bytes
 /// survive a rewrite of an existing save. Promote the offset and
 /// length so the tail span has one named source of truth.
-pub const SAVE_RESERVED_TAIL_OFFSET: usize = 0x07B4;
+pub const SAVE_RESERVED_TAIL_OFFSET: usize = SAVE_ACTIVE_OBJECT_TABLE_OFFSET + OOL_PLANE_LEN;
 pub const SAVE_RESERVED_TAIL_LEN: usize = 2_220;
 pub const SAVE_PARTY_SIZE_OFFSET: usize = 0x02b5;
 pub const SAVE_ROSTER_OFFSET: usize = 0x0002;

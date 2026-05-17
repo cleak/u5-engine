@@ -1,4 +1,21 @@
     #[test]
+    fn save_reserved_tail_and_file_length_chain_through_active_object_table() {
+        // formats/saved-gam.md §2, §8.1: the reserved tail begins
+        // immediately after the 256-byte active-object table; the
+        // file ends at the reserved-tail span. Anchor
+        // SAVE_RESERVED_TAIL_OFFSET to the active-object-table end
+        // and SAVED_GAM_LEN to the reserved-tail span sum so the
+        // top-level file length derives from the upstream blocks.
+        assert_eq!(
+            SAVE_RESERVED_TAIL_OFFSET,
+            SAVE_ACTIVE_OBJECT_TABLE_OFFSET + OOL_PLANE_LEN,
+        );
+        assert_eq!(SAVED_GAM_LEN, SAVE_RESERVED_TAIL_OFFSET + SAVE_RESERVED_TAIL_LEN);
+        assert_eq!(SAVE_RESERVED_TAIL_OFFSET, 0x07B4);
+        assert_eq!(SAVED_GAM_LEN, 4192);
+    }
+
+    #[test]
     fn save_active_object_table_offset_derives_from_upstream_blocks() {
         // formats/saved-gam.md §8.1 places the 256-byte active-object
         // table at 0x06B4..0x07B3 — immediately after the 512-byte
