@@ -109,15 +109,18 @@ impl Scene {
 
 /// `formats/cbt.md §7` / `formats/dungeon-dat.md §2` scene-byte
 /// base for the dungeon family. Dungeon scene bytes occupy
-/// `FIRST_DUNGEON_SCENE_BYTE..=LAST_DUNGEON_SCENE_BYTE` and the
-/// zero-based `DUNGEON.DAT` record number is recovered by
-/// subtracting `FIRST_DUNGEON_SCENE_BYTE`. Promote the literals so
-/// the scene-to-record arithmetic is not duplicated as bare `33`s.
-pub const FIRST_DUNGEON_SCENE_BYTE: u8 = 33;
+/// `FIRST_DUNGEON_SCENE_BYTE..=LAST_DUNGEON_SCENE_BYTE`, picking
+/// up one past the town-family last byte (towns occupy 1..=32).
+/// Anchored to [`crate::SCENE_TOWN_FAMILY_LAST`] + 1 so adding a
+/// town slot automatically shifts the dungeon-family base.
+pub const FIRST_DUNGEON_SCENE_BYTE: u8 = crate::SCENE_TOWN_FAMILY_LAST + 1;
 /// `formats/dungeon-dat.md §2` highest dungeon scene byte
-/// (`FIRST_DUNGEON_SCENE_BYTE + 7` — the eighth and last dungeon
-/// record is Doom).
-pub const LAST_DUNGEON_SCENE_BYTE: u8 = FIRST_DUNGEON_SCENE_BYTE + 7;
+/// (`FIRST_DUNGEON_SCENE_BYTE + DUNGEON_DAT_RECORD_COUNT - 1` —
+/// the eighth and last dungeon record is Doom). Anchored to the
+/// record count so adding a dungeon record automatically extends
+/// the dungeon-family range.
+pub const LAST_DUNGEON_SCENE_BYTE: u8 =
+    FIRST_DUNGEON_SCENE_BYTE + crate::DUNGEON_DAT_RECORD_COUNT as u8 - 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DungeonScene {

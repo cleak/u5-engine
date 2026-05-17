@@ -1,4 +1,23 @@
     #[test]
+    fn dungeon_scene_byte_range_anchors_to_town_family_and_record_count() {
+        // formats/cbt.md §7 / dungeon-dat.md §2: dungeon scene
+        // bytes occupy 33..=40, picking up one past the town-
+        // family last byte (1..=32) and running for the eight
+        // dungeon records. Anchor FIRST_DUNGEON_SCENE_BYTE to
+        // SCENE_TOWN_FAMILY_LAST + 1 and LAST_DUNGEON_SCENE_BYTE
+        // to FIRST + DUNGEON_DAT_RECORD_COUNT - 1 so the dungeon
+        // family range derives from the town family and the
+        // dungeon record count.
+        assert_eq!(FIRST_DUNGEON_SCENE_BYTE, SCENE_TOWN_FAMILY_LAST + 1);
+        assert_eq!(
+            LAST_DUNGEON_SCENE_BYTE,
+            FIRST_DUNGEON_SCENE_BYTE + DUNGEON_DAT_RECORD_COUNT as u8 - 1,
+        );
+        assert_eq!(FIRST_DUNGEON_SCENE_BYTE, 33);
+        assert_eq!(LAST_DUNGEON_SCENE_BYTE, 40);
+    }
+
+    #[test]
     fn npc_schedule_record_len_anchors_to_waypoint_and_time_counts() {
         // formats/npc.md §5: each 16-byte schedule record packs
         // four 3-byte arrays (AI/X/Y/Z) plus a 4-byte time-of-day
