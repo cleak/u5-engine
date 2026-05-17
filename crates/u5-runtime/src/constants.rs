@@ -772,8 +772,11 @@ pub const EQUIPMENT_STOCK_CAP: u8 = 99;
 /// gameplay cap from the byte width.
 pub const PARTY_GOLD_CAP: u16 = 9999;
 /// `inventory.md §2`: word-sized party food counter caps at 9999 in
-/// ordinary play.
-pub const PARTY_FOOD_CAP: u16 = 9999;
+/// ordinary play. Same four-digit display cap as
+/// [`PARTY_GOLD_CAP`]. Anchored to that shared cap so the two
+/// word-sized counters' display ceiling derives from one source
+/// of truth.
+pub const PARTY_FOOD_CAP: u16 = PARTY_GOLD_CAP;
 /// `inventory.md §2`: byte-sized party spell-charge counter caps at
 /// 99 in ordinary play.
 pub const SPELL_CHARGE_CAP: u8 = 99;

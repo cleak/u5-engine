@@ -1,4 +1,15 @@
     #[test]
+    fn party_food_cap_anchors_to_party_gold_cap() {
+        // inventory.md §2: both PARTY_FOOD_CAP and PARTY_GOLD_CAP
+        // are word-sized counters that cap at 9999 in ordinary
+        // play — the same four-digit display ceiling. Anchor
+        // PARTY_FOOD_CAP to PARTY_GOLD_CAP so the shared display
+        // cap has one source of truth.
+        assert_eq!(PARTY_FOOD_CAP, PARTY_GOLD_CAP);
+        assert_eq!(PARTY_FOOD_CAP, 9999);
+    }
+
+    #[test]
     fn resurrection_penalty_divisor_anchors_above_moral_standing_max() {
         // karma.md §5: the resurrection-penalty percent divisor
         // (100) is one above the maximum moral-standing selector
