@@ -45,8 +45,13 @@ pub const fn question_dat_dilemma_record_for_pair(
 }
 
 /// `formats/question-dat.md §2`: total NUL-terminated record count
-/// (two leading narrative records plus 28 virtue-dilemma paragraphs).
-pub const QUESTION_DAT_RECORDS: usize = 30;
+/// (two leading narrative records plus 28 virtue-dilemma
+/// paragraphs). Anchored to
+/// [`QUESTION_DAT_FIRST_DILEMMA_RECORD`] +
+/// [`QUESTION_DAT_DILEMMA_COUNT`] so the total and the partition
+/// stay one value.
+pub const QUESTION_DAT_RECORDS: usize =
+    QUESTION_DAT_FIRST_DILEMMA_RECORD + QUESTION_DAT_DILEMMA_COUNT;
 /// `formats/question-dat.md §2`: first dilemma record (records 0 and
 /// 1 are the gypsy arrival narrative and the gypsy invitation).
 pub const QUESTION_DAT_FIRST_DILEMMA_RECORD: usize = 2;

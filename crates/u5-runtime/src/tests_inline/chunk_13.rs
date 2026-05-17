@@ -1,4 +1,20 @@
     #[test]
+    fn question_dat_records_anchor_to_narrative_plus_dilemmas() {
+        // formats/question-dat.md §2: QUESTION.DAT ships 30 NUL-
+        // terminated records — two leading narrative records (gypsy
+        // arrival, gypsy invitation) followed by 28 virtue-dilemma
+        // paragraphs (`C(8,2)`). Anchor the total to the sum so the
+        // record count and the partition stay one value.
+        assert_eq!(
+            QUESTION_DAT_RECORDS,
+            QUESTION_DAT_FIRST_DILEMMA_RECORD + QUESTION_DAT_DILEMMA_COUNT,
+        );
+        assert_eq!(QUESTION_DAT_RECORDS, 30);
+        assert_eq!(QUESTION_DAT_FIRST_DILEMMA_RECORD, 2);
+        assert_eq!(QUESTION_DAT_DILEMMA_COUNT, 28);
+    }
+
+    #[test]
     fn random_encounter_roll_bound_anchors_to_die() {
         // encounters.md §3: the random-encounter probe rolls a
         // uniform 1..=30. RANDOM_ENCOUNTER_DIE and
