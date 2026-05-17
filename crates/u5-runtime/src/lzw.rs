@@ -22,14 +22,18 @@ pub fn reset_lzw_dictionary(dictionary: &mut Vec<Vec<u8>>) {
 }
 
 pub fn decode_lzw_envelope(bytes: &[u8], resource_name: &str) -> io::Result<Vec<u8>> {
-    if bytes.len() < 4 {
+    if bytes.len() < LZW_ENVELOPE_LENGTH_HEADER_BYTES {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!("{resource_name} LZW envelope is shorter than its length header"),
         ));
     }
     let expected_len = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
-    decode_gif_lzw_payload(&bytes[4..], expected_len, resource_name)
+    decode_gif_lzw_payload(
+        &bytes[LZW_ENVELOPE_LENGTH_HEADER_BYTES..],
+        expected_len,
+        resource_name,
+    )
 }
 
 pub fn decode_gif_lzw_payload(

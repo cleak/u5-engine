@@ -123,6 +123,11 @@ pub const LZW_FIRST_USER_CODE: u16 = 258;
 pub const LZW_MAX_CODES: u16 = 4096;
 pub const LZW_INITIAL_CODE_SIZE: u8 = 9;
 pub const LZW_MAX_CODE_SIZE: u8 = 12;
+/// `formats/lzw.md §2`: the LZW envelope opens with a four-byte
+/// little-endian unsigned length giving the exact number of decoded
+/// bytes that follow the code stream. Promote the header width so
+/// decode_lzw_envelope does not encode `4` as a bare literal.
+pub const LZW_ENVELOPE_LENGTH_HEADER_BYTES: usize = 4;
 #[cfg(test)]
 pub const SINGLE_IMAGE_BIT_FORMAT_MARKER: u16 = 1;
 #[cfg(test)]

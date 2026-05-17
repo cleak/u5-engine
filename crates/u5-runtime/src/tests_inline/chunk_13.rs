@@ -1,4 +1,18 @@
     #[test]
+    fn lzw_envelope_length_header_is_four_bytes() {
+        // formats/lzw.md §2: the LZW envelope opens with a four-byte
+        // little-endian unsigned length followed by the code stream.
+        // Promote the header width so decode_lzw_envelope does not
+        // encode `4` as a bare literal in two places.
+        assert_eq!(LZW_ENVELOPE_LENGTH_HEADER_BYTES, 4);
+        assert_eq!(
+            LZW_ENVELOPE_LENGTH_HEADER_BYTES,
+            std::mem::size_of::<u32>(),
+            "the header width must match the u32 length the spec names"
+        );
+    }
+
+    #[test]
     fn shop_surcharge_band_constants_match_spec() {
         // shops.md §6.2: the post-transaction surcharge subtracts a
         // random `1..64` gold from the party's gold word on a hit;
