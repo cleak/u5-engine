@@ -56,8 +56,12 @@ pub const QUESTION_DAT_RECORDS: usize =
 /// 1 are the gypsy arrival narrative and the gypsy invitation).
 pub const QUESTION_DAT_FIRST_DILEMMA_RECORD: usize = 2;
 /// `formats/question-dat.md §4`: number of virtue-dilemma paragraphs
-/// (`C(8,2) = 28`).
-pub const QUESTION_DAT_DILEMMA_COUNT: usize = 28;
+/// (`C(8,2) = 28`). One paragraph per unordered pair of distinct
+/// virtues, so the count is `VIRTUE_COUNT * (VIRTUE_COUNT - 1) / 2`
+/// = `8 * 7 / 2` = 28. Anchored to [`crate::VIRTUE_COUNT`] so the
+/// dilemma count derives from the published virtue count.
+pub const QUESTION_DAT_DILEMMA_COUNT: usize =
+    crate::VIRTUE_COUNT * (crate::VIRTUE_COUNT - 1) / 2;
 /// `systems/chargen.md §5`: shipped `QUESTION.DAT` size in bytes.
 /// The thirty NUL-terminated text records pack to exactly this
 /// total in the DOS data set. A byte-compatible reader should still

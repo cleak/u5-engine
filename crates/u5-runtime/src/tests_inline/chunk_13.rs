@@ -1,4 +1,21 @@
     #[test]
+    fn question_dat_dilemma_count_anchors_to_virtue_pair_combinations() {
+        // formats/question-dat.md §4: the 28 virtue-dilemma
+        // paragraphs cover one per unordered pair of distinct
+        // virtues — `C(VIRTUE_COUNT, 2)` = `VIRTUE_COUNT *
+        // (VIRTUE_COUNT - 1) / 2` = `8 * 7 / 2` = 28. Anchor
+        // QUESTION_DAT_DILEMMA_COUNT to that pair-combination
+        // formula so the dilemma count derives from the
+        // published virtue count.
+        assert_eq!(
+            QUESTION_DAT_DILEMMA_COUNT,
+            VIRTUE_COUNT * (VIRTUE_COUNT - 1) / 2,
+        );
+        assert_eq!(QUESTION_DAT_DILEMMA_COUNT, 28);
+        assert_eq!(VIRTUE_COUNT, 8);
+    }
+
+    #[test]
     fn look2_object_entries_alias_to_terrain_entries() {
         // formats/look2-dat.md §2: both LOOK2.DAT domains
         // (terrain and object) hold 256 offset entries — one per
