@@ -472,6 +472,22 @@
     }
 
     #[test]
+    fn npc_world_roster_max_matches_spec_arithmetic() {
+        // formats/npc.md §2 + §4: the world's named-location NPC
+        // roster is bounded above by 31 effective slots per sub-map,
+        // 8 sub-maps per file, 4 file classes — `31 * 8 * 4 = 992`.
+        // Promote NPC_FILE_CLASS_COUNT and derive
+        // NPC_WORLD_ROSTER_MAX from the published arithmetic so a
+        // future partition change cannot silently desync the bound.
+        assert_eq!(NPC_FILE_CLASS_COUNT, 4);
+        assert_eq!(
+            NPC_WORLD_ROSTER_MAX,
+            NPC_EFFECTIVE_SLOTS_PER_SUB_MAP * NPC_SUB_MAPS_PER_FILE * NPC_FILE_CLASS_COUNT
+        );
+        assert_eq!(NPC_WORLD_ROSTER_MAX, 992);
+    }
+
+    #[test]
     fn sign_body_byte_constants_match_spec_formatter_table() {
         // formats/signs-dat.md §4: the sign-body formatter recognises
         // end-of-record (0x00), pause-for-key (0x0D), a contiguous

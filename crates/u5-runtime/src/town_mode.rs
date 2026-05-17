@@ -379,6 +379,17 @@ pub const fn npc_dialog_index_offset(sub_map_index: usize, slot: usize) -> usize
 pub const TOWN_NPC_ROSTER_SLOTS: usize = 31;
 pub const TOWN_NPC_BLOCK_BYTES: usize = 576;
 
+/// `formats/npc.md §2` number of `.NPC` file classes (one per
+/// town/dwelling/castle/keep partition). The four-way split mirrors
+/// the same partition used by `.DAT` and `.TLK` files.
+pub const NPC_FILE_CLASS_COUNT: usize = 4;
+
+/// `formats/npc.md §4` upper bound on the world's named-location
+/// NPC roster: thirty-one effective slots per sub-map, eight
+/// sub-maps per file, four file classes — `31 * 8 * 4 = 992`.
+pub const NPC_WORLD_ROSTER_MAX: usize =
+    NPC_EFFECTIVE_SLOTS_PER_SUB_MAP * NPC_SUB_MAPS_PER_FILE * NPC_FILE_CLASS_COUNT;
+
 /// `catalogs/npc-roster.md §1` named scene-byte constants for the
 /// stock locations the engine ships with. These match the scene-byte
 /// to-place-name table; runtime callers that need a specific scene
