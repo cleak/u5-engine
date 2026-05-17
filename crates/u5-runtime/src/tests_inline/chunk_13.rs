@@ -472,6 +472,32 @@
     }
 
     #[test]
+    fn dungeon_room_arena_index_formula_constants_match_spec() {
+        // formats/dungeon-dat.md §4: arena index is
+        // `(scene.record <= 1 ? 0 : scene.record - 1) * 16 + (cell & 0x0F)`.
+        // Promote the slot mask, slots-per-bank, and the
+        // shared-bank record threshold so the helper does not bake
+        // `0x0F`, `16`, and `1` as bare literals.
+        assert_eq!(DUNGEON_ROOM_SLOT_MASK, 0x0F);
+        assert_eq!(DUNGEON_ROOM_SLOTS_PER_BANK, 16);
+        assert_eq!(DUNGEON_ARENA_BANK_SHARED_RECORD_MAX, 1);
+        // Deceit (record 0) maps to arena bank 0.
+        let deceit = DungeonScene::new(33).unwrap();
+        assert_eq!(dungeon_room_arena_index(deceit, 0xF5), 5);
+        // Despise (record 1) shares arena bank 0 — see the spec
+        // note that no shipped Despise cells use room triggers, so
+        // the bank-0 fallback keeps the arithmetic dense.
+        let despise = DungeonScene::new(34).unwrap();
+        assert_eq!(dungeon_room_arena_index(despise, 0xF7), 7);
+        // Destard (record 2) starts arena bank 1 → arena 16 + slot.
+        let destard = DungeonScene::new(35).unwrap();
+        assert_eq!(
+            dungeon_room_arena_index(destard, 0xFA),
+            DUNGEON_ROOM_SLOTS_PER_BANK + 10
+        );
+    }
+
+    #[test]
     fn directed_step_world_side_matches_canonical_world_side() {
         // formats/under-dat.md (and overworld.md §3) state the world
         // plane is a 256-cell torus on both axes. The outdoor

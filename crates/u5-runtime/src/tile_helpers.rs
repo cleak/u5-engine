@@ -152,17 +152,30 @@ pub const fn dungeon_room_trigger_promoted_visit_byte(tile: u8) -> Option<u8> {
 }
 
 
+/// `formats/dungeon-dat.md §4`: mask isolating the room-trigger
+/// low-nibble slot index (`0..=15`) inside an `0xF?` cell byte.
+pub const DUNGEON_ROOM_SLOT_MASK: u8 = 0x0F;
+/// `formats/dungeon-dat.md §4`: number of room-arena slots per
+/// dungeon bank in `DUNGEON.CBT`. Each room-bearing dungeon
+/// contributes one 16-slot bank, indexed by the low-nibble slot.
+pub const DUNGEON_ROOM_SLOTS_PER_BANK: usize = 16;
+/// `formats/dungeon-dat.md §4`: highest dungeon record that shares
+/// arena bank `0` with Deceit. The shipped Despise record carries no
+/// `0xF?` room-trigger cells, so records `0..=DESPISE_RECORD` map to
+/// the same arena bank to keep the arithmetic dense.
+pub const DUNGEON_ARENA_BANK_SHARED_RECORD_MAX: usize = 1;
+
 pub fn dungeon_room_slot(tile: u8) -> u8 {
-    tile & 0x0f
+    tile & DUNGEON_ROOM_SLOT_MASK
 }
 
 pub fn dungeon_room_arena_index(scene: DungeonScene, tile: u8) -> usize {
-    let bank = if scene.record <= 1 {
+    let bank = if scene.record <= DUNGEON_ARENA_BANK_SHARED_RECORD_MAX {
         0
     } else {
         scene.record - 1
     };
-    bank * 16 + dungeon_room_slot(tile) as usize
+    bank * DUNGEON_ROOM_SLOTS_PER_BANK + dungeon_room_slot(tile) as usize
 }
 
 pub fn stair_delta(tile: u8, intent: ClimbIntent) -> Option<i8> {
