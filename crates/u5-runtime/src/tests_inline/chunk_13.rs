@@ -1,4 +1,17 @@
     #[test]
+    fn dungeon_dat_len_anchors_to_record_count_times_record_len() {
+        // formats/dungeon-dat.md §1, §6: DUNGEON.DAT ships exactly
+        // 4,096 bytes — eight 512-byte dungeon records. Anchor the
+        // file length to DUNGEON_DAT_RECORD_COUNT *
+        // DUNGEON_RECORD_LEN so adding a dungeon record or
+        // resizing one only happens in one place.
+        assert_eq!(DUNGEON_DAT_RECORD_COUNT, 8);
+        assert_eq!(DUNGEON_RECORD_LEN, 512);
+        assert_eq!(DUNGEON_DAT_LEN, DUNGEON_DAT_RECORD_COUNT * DUNGEON_RECORD_LEN);
+        assert_eq!(DUNGEON_DAT_LEN, 4096);
+    }
+
+    #[test]
     fn shrine_virtue_all_array_length_anchors_to_virtue_count() {
         // karma.md §8: the eight-virtue iteration order packs into
         // ShrineVirtue::ALL. The array length is now anchored to

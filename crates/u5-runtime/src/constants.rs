@@ -945,7 +945,15 @@ pub const SAVED_OOL_LEN: usize = OOL_PLANE_LEN * 2;
 /// `formats/dungeon-dat.md §1` published filename for the 4,096-byte
 /// dungeon-record file.
 pub const DUNGEON_DAT_FILENAME: &str = "DUNGEON.DAT";
-pub const DUNGEON_DAT_LEN: usize = 4096;
+/// `formats/dungeon-dat.md §1,§2` number of dungeon records the
+/// file ships: "Eight dungeon records." The file is dungeon-major
+/// with each record occupying [`DUNGEON_RECORD_LEN`] bytes.
+pub const DUNGEON_DAT_RECORD_COUNT: usize = 8;
+/// `formats/dungeon-dat.md §1,§6` total file length: 4,096 bytes
+/// = 8 records × 512 bytes per record. Anchored to
+/// [`DUNGEON_DAT_RECORD_COUNT`] × [`DUNGEON_RECORD_LEN`] so the
+/// file length and the record layout stay one value.
+pub const DUNGEON_DAT_LEN: usize = DUNGEON_DAT_RECORD_COUNT * DUNGEON_RECORD_LEN;
 pub const DUNGEON_RECORD_LEN: usize = 512;
 pub const DUNGEON_LEVEL_LEN: usize = 64;
 pub const DUNGEON_SIDE: usize = 8;
