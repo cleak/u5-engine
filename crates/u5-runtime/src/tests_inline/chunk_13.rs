@@ -1,4 +1,42 @@
     #[test]
+    fn transport_marker_families_chain_through_facing_mask() {
+        // vehicles.md §2: each transport-marker family is four
+        // markers wide (facing carried in low two bits =
+        // TRANSPORT_FACING_MASK). The ship-hoisted/ship-furled/
+        // skiff bands tile contiguously from 0x20. Anchor each
+        // *_LAST to FIRST + TRANSPORT_FACING_MASK and chain
+        // SHIP_FURLED/SKIFF *_FIRST to the previous family's
+        // *_LAST + 1.
+        assert_eq!(
+            TRANSPORT_MARKER_MAGIC_CARPET_LAST,
+            TRANSPORT_MARKER_MAGIC_CARPET_FIRST + TRANSPORT_FACING_MASK,
+        );
+        assert_eq!(
+            TRANSPORT_MARKER_SHIP_HOISTED_LAST,
+            TRANSPORT_MARKER_SHIP_HOISTED_FIRST + TRANSPORT_FACING_MASK,
+        );
+        assert_eq!(
+            TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+            TRANSPORT_MARKER_SHIP_HOISTED_LAST + 1,
+        );
+        assert_eq!(
+            TRANSPORT_MARKER_SHIP_FURLED_LAST,
+            TRANSPORT_MARKER_SHIP_FURLED_FIRST + TRANSPORT_FACING_MASK,
+        );
+        assert_eq!(
+            TRANSPORT_MARKER_SKIFF_FIRST,
+            TRANSPORT_MARKER_SHIP_FURLED_LAST + 1,
+        );
+        assert_eq!(
+            TRANSPORT_MARKER_SKIFF_LAST,
+            TRANSPORT_MARKER_SKIFF_FIRST + TRANSPORT_FACING_MASK,
+        );
+        assert_eq!(TRANSPORT_MARKER_MAGIC_CARPET_LAST, 0x17);
+        assert_eq!(TRANSPORT_MARKER_SHIP_HOISTED_LAST, 0x23);
+        assert_eq!(TRANSPORT_MARKER_SKIFF_LAST, 0x2B);
+    }
+
+    #[test]
     fn equip_slot_indices_chain_sequentially() {
         // inventory.md §3: per-character equipment slot indices
         // occupy 0..=5 in the published order (Helm, Armour,

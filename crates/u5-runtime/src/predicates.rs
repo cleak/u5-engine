@@ -175,15 +175,24 @@ pub enum TransportFamily {
 }
 
 /// `vehicles.md §2` transport/action marker ranges. Each four-marker
-/// family carries facing in its low two bits.
+/// family carries facing in its low two bits (so width = facing
+/// mask + 1 = 4). Magic-carpet sits in its own 0x14..=0x17 slot;
+/// the ship-hoisted/ship-furled/skiff bands tile contiguously from
+/// 0x20 upward. Anchor each *_LAST to FIRST + TRANSPORT_FACING_MASK
+/// (4-marker family width) and chain SHIP_FURLED/SKIFF *_FIRST to
+/// the previous family's *_LAST + 1.
 pub const TRANSPORT_MARKER_MAGIC_CARPET_FIRST: u8 = 0x14;
-pub const TRANSPORT_MARKER_MAGIC_CARPET_LAST: u8 = 0x17;
+pub const TRANSPORT_MARKER_MAGIC_CARPET_LAST: u8 =
+    TRANSPORT_MARKER_MAGIC_CARPET_FIRST + TRANSPORT_FACING_MASK;
 pub const TRANSPORT_MARKER_SHIP_HOISTED_FIRST: u8 = 0x20;
-pub const TRANSPORT_MARKER_SHIP_HOISTED_LAST: u8 = 0x23;
-pub const TRANSPORT_MARKER_SHIP_FURLED_FIRST: u8 = 0x24;
-pub const TRANSPORT_MARKER_SHIP_FURLED_LAST: u8 = 0x27;
-pub const TRANSPORT_MARKER_SKIFF_FIRST: u8 = 0x28;
-pub const TRANSPORT_MARKER_SKIFF_LAST: u8 = 0x2B;
+pub const TRANSPORT_MARKER_SHIP_HOISTED_LAST: u8 =
+    TRANSPORT_MARKER_SHIP_HOISTED_FIRST + TRANSPORT_FACING_MASK;
+pub const TRANSPORT_MARKER_SHIP_FURLED_FIRST: u8 = TRANSPORT_MARKER_SHIP_HOISTED_LAST + 1;
+pub const TRANSPORT_MARKER_SHIP_FURLED_LAST: u8 =
+    TRANSPORT_MARKER_SHIP_FURLED_FIRST + TRANSPORT_FACING_MASK;
+pub const TRANSPORT_MARKER_SKIFF_FIRST: u8 = TRANSPORT_MARKER_SHIP_FURLED_LAST + 1;
+pub const TRANSPORT_MARKER_SKIFF_LAST: u8 =
+    TRANSPORT_MARKER_SKIFF_FIRST + TRANSPORT_FACING_MASK;
 
 /// `vehicles.md §2` low-bit mask the transport-marker facing decoder
 /// applies. Bit 0 selects east/west; bit 1 selects south/north; the
