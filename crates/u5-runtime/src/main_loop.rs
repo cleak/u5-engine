@@ -113,8 +113,13 @@ impl CommandDispatchStatus {
     }
 }
 
+/// `main-loop.md §3` scene-byte zero is the overworld; the town
+/// family picks up immediately after at scene byte 1 and runs
+/// through scene byte 32. Anchor SCENE_TOWN_FAMILY_FIRST to
+/// SCENE_OVERWORLD + 1 so the overworld→town adjacency has one
+/// source of truth.
 pub const SCENE_OVERWORLD: u8 = 0;
-pub const SCENE_TOWN_FAMILY_FIRST: u8 = 1;
+pub const SCENE_TOWN_FAMILY_FIRST: u8 = SCENE_OVERWORLD + 1;
 pub const SCENE_TOWN_FAMILY_LAST: u8 = 32;
 /// `main-loop.md §3` dungeon-class scene-byte range. The full
 /// classification accepts `33..=127`; the stock named dungeons

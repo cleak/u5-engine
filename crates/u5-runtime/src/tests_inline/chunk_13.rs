@@ -1,4 +1,16 @@
     #[test]
+    fn scene_town_family_first_anchors_to_overworld_plus_one() {
+        // main-loop.md §3: scene byte 0 is the overworld; the
+        // town family picks up immediately after at scene byte 1.
+        // Anchor SCENE_TOWN_FAMILY_FIRST to SCENE_OVERWORLD + 1
+        // so the overworld→town adjacency has one source of
+        // truth.
+        assert_eq!(SCENE_TOWN_FAMILY_FIRST, SCENE_OVERWORLD + 1);
+        assert_eq!(SCENE_OVERWORLD, 0);
+        assert_eq!(SCENE_TOWN_FAMILY_FIRST, 1);
+    }
+
+    #[test]
     fn dungeon_scene_byte_range_anchors_to_town_family_and_record_count() {
         // formats/cbt.md §7 / dungeon-dat.md §2: dungeon scene
         // bytes occupy 33..=40, picking up one past the town-
