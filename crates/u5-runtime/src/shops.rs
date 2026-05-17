@@ -189,7 +189,11 @@ pub const SHOPPE_RECORDS_HEALER_FIRST: usize = SHOPPE_RECORDS_GUILD_LAST + 1;
 pub const SHOPPE_RECORDS_HEALER_LAST: usize = 173;
 
 pub const SHOPPE_RECORDS_INNKEEPER_FIRST: usize = SHOPPE_RECORDS_HEALER_LAST + 1;
-pub const SHOPPE_RECORDS_INNKEEPER_LAST: usize = 193;
+/// `formats/shoppe-dat.md §3`: the innkeeper band ends at the
+/// last non-empty record. Anchored to
+/// SHOPPE_DAT_NONEMPTY_RECORDS - 1 so the last band end
+/// derives from the non-empty record count.
+pub const SHOPPE_RECORDS_INNKEEPER_LAST: usize = SHOPPE_DAT_NONEMPTY_RECORDS - 1;
 
 /// `formats/shoppe-dat.md §4`: substitution placeholder a `SHOPPE.DAT`
 /// renderer recognises in the literal-byte stream.

@@ -1,4 +1,18 @@
     #[test]
+    fn shoppe_innkeeper_last_anchors_to_nonempty_record_count() {
+        // formats/shoppe-dat.md §3: the innkeeper band ends at
+        // the last non-empty record (194 - 1 = 193). shops.rs
+        // declared SHOPPE_RECORDS_INNKEEPER_LAST = 193 as a bare
+        // literal alongside SHOPPE_DAT_NONEMPTY_RECORDS = 194.
+        // Anchor the last band end to SHOPPE_DAT_NONEMPTY_RECORDS
+        // - 1 so the last band end derives from the non-empty
+        // record count.
+        assert_eq!(SHOPPE_RECORDS_INNKEEPER_LAST, SHOPPE_DAT_NONEMPTY_RECORDS - 1);
+        assert_eq!(SHOPPE_RECORDS_INNKEEPER_LAST, 193);
+        assert_eq!(SHOPPE_DAT_NONEMPTY_RECORDS, 194);
+    }
+
+    #[test]
     fn viewport_row_stride_anchors_to_combat_arena_row_stride() {
         // visibility.md §2 / formats/cbt.md §3: the visibility
         // grid and the combat arena row both share a 32-byte
