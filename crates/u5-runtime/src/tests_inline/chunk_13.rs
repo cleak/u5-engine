@@ -1,4 +1,18 @@
     #[test]
+    fn save_food_stock_offset_anchors_to_roster_region_end() {
+        // formats/saved-gam.md §2, §4: the party inventory band
+        // begins immediately after the 512-byte character roster
+        // region (16 records × 32 bytes). Anchor SAVE_FOOD_STOCK_
+        // OFFSET to SAVE_ROSTER_OFFSET + SAVE_ROSTER_REGION_LEN
+        // so the inventory band derives from the roster layout.
+        assert_eq!(
+            SAVE_FOOD_STOCK_OFFSET,
+            SAVE_ROSTER_OFFSET + SAVE_ROSTER_REGION_LEN,
+        );
+        assert_eq!(SAVE_FOOD_STOCK_OFFSET, 0x0202);
+    }
+
+    #[test]
     fn save_roster_offset_anchors_to_leading_bytes_len() {
         // formats/saved-gam.md §2: the character roster begins
         // immediately after the two leading bytes of the save

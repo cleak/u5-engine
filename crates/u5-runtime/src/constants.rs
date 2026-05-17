@@ -280,7 +280,7 @@ pub const SAVE_PARTY_SIZE_MAX: u8 = 6;
 /// (2 bytes each); key/gem/torch/climbing gear are single
 /// bytes. Anchor each offset to the chain so resizing any
 /// stock counter automatically shifts the later offsets.
-pub const SAVE_FOOD_STOCK_OFFSET: usize = 0x0202;
+pub const SAVE_FOOD_STOCK_OFFSET: usize = SAVE_ROSTER_OFFSET + SAVE_ROSTER_REGION_LEN;
 pub const SAVE_GOLD_STOCK_OFFSET: usize = SAVE_FOOD_STOCK_OFFSET + 2;
 pub const SAVE_KEY_STOCK_OFFSET: usize = SAVE_GOLD_STOCK_OFFSET + 2;
 pub const SAVE_GEM_STOCK_OFFSET: usize = SAVE_KEY_STOCK_OFFSET + 1;
