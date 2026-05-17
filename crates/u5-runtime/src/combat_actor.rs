@@ -232,12 +232,25 @@ pub const COMBAT_TARGET_GROUP_MONSTER: u8 = 2;
 pub const COMBAT_HIDDEN_ACTIVE_OBJECT_TILE: u8 = 0x00;
 pub const COMBAT_ARENA_CENTER_COORDINATE: u8 = (COMBAT_ARENA_SIDE / 2) as u8;
 
+/// `combat.md §7` post-round maintenance pass terrain-byte that
+/// dispatches the parallel magic/effect byte as a cell effect. A
+/// zero terrain/state byte means "ordinary arena cell — read the
+/// effect plane next". Other terrain bytes route through the
+/// combat tile-effect translation table before dispatch.
+pub const COMBAT_POST_ROUND_TERRAIN_EFFECT_DISPATCH_BYTE: u8 = 0x00;
+
 /// `combat.md §7`: in the post-round maintenance pass, a terrain
 /// byte of `0x00` dispatches the magic/effect byte as a cell effect
 /// except for this sentinel value, which is the skipped no-effect
 /// marker. Treat the cell as already-resolved and continue to the
 /// next cell without invoking the effect handler.
 pub const COMBAT_POST_ROUND_NO_EFFECT_SENTINEL: u8 = 0x16;
+
+/// `combat.md §7` post-round maintenance pass terrain-byte that
+/// gates the shared combat magic-effect timer tick. The pass advances
+/// the timer only while the timer is nonzero and below
+/// [`COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX`].
+pub const COMBAT_POST_ROUND_MAGIC_TIMER_TILE: u8 = 0xDC;
 
 /// `combat.md §7`: in the post-round maintenance pass, a terrain
 /// byte of `0xDC` ticks the shared combat magic-effect timer only

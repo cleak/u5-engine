@@ -1,4 +1,26 @@
     #[test]
+    fn combat_post_round_terrain_dispatch_bytes_match_spec() {
+        // combat.md §7: post-round maintenance sweeps the 11x11
+        // combat arena and dispatches based on the terrain/state byte.
+        // A 0x00 byte hands the parallel magic/effect byte to the
+        // cell-effect dispatcher; a 0xDC byte gates the shared
+        // magic-effect timer tick.
+        assert_eq!(COMBAT_POST_ROUND_TERRAIN_EFFECT_DISPATCH_BYTE, 0x00);
+        assert_eq!(COMBAT_POST_ROUND_MAGIC_TIMER_TILE, 0xDC);
+        assert_eq!(COMBAT_POST_ROUND_NO_EFFECT_SENTINEL, 0x16);
+        assert_eq!(COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX, 16);
+        // Timer ticks only in (0, MAX).
+        assert!(!combat_post_round_magic_effect_timer_ticks(0));
+        assert!(combat_post_round_magic_effect_timer_ticks(1));
+        assert!(combat_post_round_magic_effect_timer_ticks(
+            COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX - 1,
+        ));
+        assert!(!combat_post_round_magic_effect_timer_ticks(
+            COMBAT_POST_ROUND_MAGIC_EFFECT_TIMER_MAX,
+        ));
+    }
+
+    #[test]
     fn terrain_combat_early_spawn_threshold_matches_spec() {
         // combat.md §5: early-spawn band is spawn indexes below
         // `count / 4 + 1`. Each early spawn rolls a one-in-nine
