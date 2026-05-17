@@ -134,8 +134,15 @@ pub const CHARGEN_STR_FLOOR: u8 = 20;
 /// dictates for a freshly questionnaire-created character. Chargen
 /// only customises the name, gender, STR, DEX, INT, and MP fields;
 /// these record bytes are inherited from `INIT.GAM` unchanged.
-pub const CHARGEN_AVATAR_SEED_CURRENT_HP: u16 = 60;
-pub const CHARGEN_AVATAR_SEED_MAX_HP: u16 = 60;
+///
+/// The freshly seeded current-HP value matches the global
+/// [`crate::DEFAULT_PARTY_HP`] starting-HP anchor; the seeded
+/// max-HP value equals the current-HP value because chargen sets
+/// both to the same starting value. Anchor both through to those
+/// chains so a chargen-HP rebalance flows through one source of
+/// truth.
+pub const CHARGEN_AVATAR_SEED_CURRENT_HP: u16 = crate::DEFAULT_PARTY_HP;
+pub const CHARGEN_AVATAR_SEED_MAX_HP: u16 = CHARGEN_AVATAR_SEED_CURRENT_HP;
 pub const CHARGEN_AVATAR_SEED_EXPERIENCE: u16 = 150;
 pub const CHARGEN_AVATAR_SEED_LEVEL: u8 = 2;
 pub const CHARGEN_AVATAR_SEED_CLASS_BYTE: u8 = b'A';

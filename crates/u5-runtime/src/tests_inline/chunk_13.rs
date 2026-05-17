@@ -1,4 +1,21 @@
     #[test]
+    fn chargen_avatar_hp_seeds_alias_to_default_party_hp() {
+        // chargen.md §8: the freshly seeded Avatar current-HP and
+        // max-HP both equal the global DEFAULT_PARTY_HP starting-HP
+        // anchor (60). Anchor CHARGEN_AVATAR_SEED_CURRENT_HP to
+        // DEFAULT_PARTY_HP and CHARGEN_AVATAR_SEED_MAX_HP to the
+        // current-HP value so a chargen-HP rebalance flows through
+        // one source of truth.
+        assert_eq!(CHARGEN_AVATAR_SEED_CURRENT_HP, DEFAULT_PARTY_HP);
+        assert_eq!(
+            CHARGEN_AVATAR_SEED_MAX_HP,
+            CHARGEN_AVATAR_SEED_CURRENT_HP,
+        );
+        assert_eq!(CHARGEN_AVATAR_SEED_CURRENT_HP, 60);
+        assert_eq!(CHARGEN_AVATAR_SEED_MAX_HP, 60);
+    }
+
+    #[test]
     fn chargen_inventory_seeds_alias_to_default_stocks() {
         // chargen.md §8: the chargen seeded inventory counters
         // (food=63, gold=150, keys=2, gems=0, torches=4) are the
