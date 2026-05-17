@@ -110,9 +110,16 @@ pub struct TilePassability {
 pub const TILE_PASSABILITY_BIT_MSB: u8 = 0x80;
 /// `movement.md §4`: low-bit mask used to extract the within-byte bit
 /// index from a tile id (`tile & 7`). The tile-id-to-byte mapping
-/// itself uses `tile >> 3` to pick the byte; the low three bits then
-/// select which bit within that byte applies.
+/// itself uses `tile >> TILE_PASSABILITY_BIT_INDEX_SHIFT` to pick
+/// the byte; the low three bits then select which bit within that
+/// byte applies.
 pub const TILE_PASSABILITY_BIT_INDEX_MASK: u8 = 7;
+/// `movement.md §4`: tile-id right-shift that selects the bitset
+/// byte. Each base bitset byte holds eight tile-id bits, so dividing
+/// the tile id by eight (= `>> 3`) yields the byte index. Anchored
+/// here so the lookup helper does not encode the `3` as a bare
+/// literal.
+pub const TILE_PASSABILITY_BIT_INDEX_SHIFT: u32 = 3;
 
 impl TilePassability {
     pub fn from_bytes(bytes: &[u8]) -> io::Result<Self> {
@@ -131,7 +138,7 @@ impl TilePassability {
     }
 
     pub fn is_passable(&self, tile: u8) -> bool {
-        let byte = self.bytes[(tile >> 3) as usize];
+        let byte = self.bytes[(tile >> TILE_PASSABILITY_BIT_INDEX_SHIFT) as usize];
         let mask = TILE_PASSABILITY_BIT_MSB >> (tile & TILE_PASSABILITY_BIT_INDEX_MASK);
         byte & mask != 0
     }

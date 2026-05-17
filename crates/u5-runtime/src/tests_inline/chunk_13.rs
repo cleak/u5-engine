@@ -1,4 +1,23 @@
     #[test]
+    fn tile_passability_bit_shift_and_mask_align_with_spec() {
+        // movement.md §4: the base terrain bitset packs eight tile-id
+        // bits per byte; byte index is `tile >> 3` and within-byte bit
+        // is selected by `tile & 7`, MSB-first.
+        assert_eq!(TILE_PASSABILITY_BIT_INDEX_SHIFT, 3);
+        assert_eq!(TILE_PASSABILITY_BIT_INDEX_MASK, 7);
+        // `1 << SHIFT` is the bit-width per byte and equals
+        // `MASK + 1` (the number of distinct within-byte positions).
+        assert_eq!(1u8 << TILE_PASSABILITY_BIT_INDEX_SHIFT,
+            TILE_PASSABILITY_BIT_INDEX_MASK + 1);
+        // The 32-byte bitset times eight bits per byte covers every
+        // tile id in 0..=255.
+        assert_eq!(
+            TILE_PASSABILITY_LEN * (1usize << TILE_PASSABILITY_BIT_INDEX_SHIFT),
+            256,
+        );
+    }
+
+    #[test]
     fn dungeon_render_cell_byte_strips_visit_bit_below_wall_band() {
         // dungeon-mode.md §6.1: renderer-facing cell reads strip
         // bit 0x08 from cell bytes below 0x90 before class
