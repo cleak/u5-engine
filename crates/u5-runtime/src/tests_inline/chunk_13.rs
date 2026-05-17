@@ -1,4 +1,18 @@
     #[test]
+    fn lzw_marker_codes_chain_from_clear_code() {
+        // formats/lzw.md §3: LZW code 256 is the "clear table"
+        // marker; 257 is the end-of-stream marker; user codes
+        // start at 258 (one past end-of-stream). Anchor
+        // LZW_END_CODE and LZW_FIRST_USER_CODE to the per-step
+        // chain so the marker layout has one source of truth.
+        assert_eq!(LZW_END_CODE, LZW_CLEAR_CODE + 1);
+        assert_eq!(LZW_FIRST_USER_CODE, LZW_END_CODE + 1);
+        assert_eq!(LZW_CLEAR_CODE, 256);
+        assert_eq!(LZW_END_CODE, 257);
+        assert_eq!(LZW_FIRST_USER_CODE, 258);
+    }
+
+    #[test]
     fn tile_image_block_header_anchors_to_directory_word_size() {
         // formats/tiles.md §5.2: each image block opens with a
         // width word (2 bytes) and a height word (2 bytes), the

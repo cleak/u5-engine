@@ -172,9 +172,14 @@ pub const TILE_ATLAS_EGA_TILE_STRIDE: usize = TILE_ATLAS_TILE_PIXELS / EGA_PIXEL
 pub const TILE_ATLAS_CGA_TILE_STRIDE: usize = TILE_ATLAS_TILE_PIXELS / CGA_PIXELS_PER_BYTE;
 pub const TILE_ATLAS_EGA_BODY_LEN: usize = TILE_ATLAS_TILE_COUNT * TILE_ATLAS_EGA_TILE_STRIDE;
 pub const TILE_ATLAS_CGA_BODY_LEN: usize = TILE_ATLAS_TILE_COUNT * TILE_ATLAS_CGA_TILE_STRIDE;
+/// `formats/lzw.md §3`: LZW code 256 is the "clear table" marker;
+/// 257 is the end-of-stream marker; user codes start at 258 (one
+/// past end-of-stream). Anchor END_CODE and FIRST_USER_CODE to
+/// the per-step chain so the marker layout has one source of
+/// truth.
 pub const LZW_CLEAR_CODE: u16 = 256;
-pub const LZW_END_CODE: u16 = 257;
-pub const LZW_FIRST_USER_CODE: u16 = 258;
+pub const LZW_END_CODE: u16 = LZW_CLEAR_CODE + 1;
+pub const LZW_FIRST_USER_CODE: u16 = LZW_END_CODE + 1;
 pub const LZW_MAX_CODES: u16 = 4096;
 pub const LZW_INITIAL_CODE_SIZE: u8 = 9;
 pub const LZW_MAX_CODE_SIZE: u8 = 12;
