@@ -25,7 +25,12 @@ pub const VIEWPORT_PLAYER_ROW: usize = (VIEWPORT_SIDE - 1) / 2;
 pub const VIEWPORT_PLAYER_COL: usize = (VIEWPORT_SIDE - 1) / 2;
 
 /// `visibility.md §2`: well-known visibility-grid byte markers.
-pub const VISIBILITY_HIDDEN: u8 = 0xFF;
+/// The fully-obscured marker is the largest representable byte
+/// value (`0xFF`) — the renderer treats this as "leave the
+/// previous-frame pixels untouched". Anchored to [`u8::MAX`] so
+/// the hidden sentinel derives from the byte width rather than
+/// restating `0xFF` as a bare literal.
+pub const VISIBILITY_HIDDEN: u8 = u8::MAX;
 pub const VISIBILITY_USE_COMPANION: u8 = 0x00;
 pub const VISIBILITY_CLEAR: u8 = 0xDD;
 pub const VISIBILITY_DIM_PERIPHERY: u8 = 0x1C;

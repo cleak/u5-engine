@@ -1,4 +1,15 @@
     #[test]
+    fn visibility_hidden_anchors_to_u8_max() {
+        // visibility.md §2: the fully-obscured marker is the
+        // largest representable byte value (0xFF) — the renderer
+        // treats this as "leave the previous-frame pixels
+        // untouched". Anchor VISIBILITY_HIDDEN to u8::MAX so the
+        // hidden sentinel derives from the byte width.
+        assert_eq!(VISIBILITY_HIDDEN, u8::MAX);
+        assert_eq!(VISIBILITY_HIDDEN, 0xFF);
+    }
+
+    #[test]
     fn u4_transfer_virtue_standing_count_aliases_to_virtue_count() {
         // u4-transfer.md §5: the transfer "no transferable data"
         // guard reads the eight consecutive virtue/karma standing
