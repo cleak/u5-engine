@@ -64,7 +64,12 @@ pub const DOS_EOF_MARKER: u8 = 0x1A;
 /// the look2-table length share one source of truth.
 pub const LOOK2_DAT_OFFSET_TABLE_LEN: usize = LOOK2_TABLE_LEN;
 pub const LOOK2_DAT_TERRAIN_ENTRIES: usize = 256;
-pub const LOOK2_DAT_OBJECT_ENTRIES: usize = 256;
+/// `formats/look2-dat.md §2`: 256 object-domain offset entries —
+/// one per object byte value. Same fundamental count as
+/// [`LOOK2_DAT_TERRAIN_ENTRIES`] (both domains index by a full
+/// byte). Anchored through to the terrain-entries count so the
+/// per-domain entry count has one source of truth.
+pub const LOOK2_DAT_OBJECT_ENTRIES: usize = LOOK2_DAT_TERRAIN_ENTRIES;
 /// `formats/look2-dat.md §3`: byte offset where the object-domain
 /// portion of the LOOK2.DAT offset table begins. The first
 /// `LOOK2_DAT_TERRAIN_ENTRIES` entries (256) occupy 2 bytes each,

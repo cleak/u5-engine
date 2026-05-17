@@ -1,4 +1,16 @@
     #[test]
+    fn look2_object_entries_alias_to_terrain_entries() {
+        // formats/look2-dat.md §2: both LOOK2.DAT domains
+        // (terrain and object) hold 256 offset entries — one per
+        // byte value. constants.rs declared each as a bare 256
+        // literal. Anchor LOOK2_DAT_OBJECT_ENTRIES through to
+        // LOOK2_DAT_TERRAIN_ENTRIES so the per-domain entry
+        // count has one source of truth.
+        assert_eq!(LOOK2_DAT_OBJECT_ENTRIES, LOOK2_DAT_TERRAIN_ENTRIES);
+        assert_eq!(LOOK2_DAT_OBJECT_ENTRIES, 256);
+    }
+
+    #[test]
     fn dungeon_room_source_count_aliases_to_slots_per_bank() {
         // formats/cbt.md §5: each dungeon bank's source records
         // occupy the same 16 slots as the bank's room table.
