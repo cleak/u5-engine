@@ -1,4 +1,20 @@
     #[test]
+    fn fixed_font_parser_dimensions_anchor_to_format_constants() {
+        // formats/font-ch.md §2: .CH fonts ship 128 glyphs of 8x8.
+        // formats/font-hcs.md §2: .HCS fonts also ship 128 glyphs
+        // (in 16x12 cells). The test-only parser-side constants now
+        // anchor to the format-side catalog/cell constants so adding
+        // a glyph slot or resizing a cell only happens in one place.
+        assert_eq!(FIXED_FONT_GLYPH_COUNT, CH_GLYPH_COUNT);
+        assert_eq!(FIXED_FONT_GLYPH_COUNT, HCS_GLYPH_COUNT);
+        assert_eq!(CH_FONT_CELL_WIDTH, CH_CELL_SIDE);
+        assert_eq!(CH_FONT_CELL_HEIGHT, CH_CELL_SIDE);
+        assert_eq!(FIXED_FONT_GLYPH_COUNT, 128);
+        assert_eq!(CH_FONT_CELL_WIDTH, 8);
+        assert_eq!(CH_FONT_CELL_HEIGHT, 8);
+    }
+
+    #[test]
     fn carrier_band_lengths_anchor_to_catalog_sizes() {
         // inventory.md §2: the per-equipment stock band carries one
         // counter per equipment id (`0..=47`) and the per-spell

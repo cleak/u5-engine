@@ -169,12 +169,21 @@ pub const TILE_IMAGE_BLOCK_HEADER_BYTES: usize = 4;
 pub const SINGLE_IMAGE_BIT_FORMAT_MARKER: u16 = 1;
 #[cfg(test)]
 pub const SINGLE_IMAGE_BIT_MODE_MARKER: u16 = 4;
+/// Both shipped fixed-cell fonts (.CH and .HCS) carry exactly 128
+/// glyphs (`formats/font-ch.md §2`, `formats/font-hcs.md §2`).
+/// Anchored to [`CH_GLYPH_COUNT`] so the parse-side glyph count
+/// stays one value with the .CH catalog size; [`HCS_GLYPH_COUNT`]
+/// is required to match.
 #[cfg(test)]
-pub const FIXED_FONT_GLYPH_COUNT: usize = 128;
+pub const FIXED_FONT_GLYPH_COUNT: usize = CH_GLYPH_COUNT;
+/// `formats/font-ch.md §2`: .CH cells are 8x8. Anchored to
+/// [`CH_CELL_SIDE`] so the parse-side cell width stays one value.
 #[cfg(test)]
-pub const CH_FONT_CELL_WIDTH: usize = 8;
+pub const CH_FONT_CELL_WIDTH: usize = CH_CELL_SIDE;
+/// `formats/font-ch.md §2`: .CH cells are 8x8. Anchored to
+/// [`CH_CELL_SIDE`] so the parse-side cell height stays one value.
 #[cfg(test)]
-pub const CH_FONT_CELL_HEIGHT: usize = 8;
+pub const CH_FONT_CELL_HEIGHT: usize = CH_CELL_SIDE;
 #[cfg(test)]
 pub const HCS_FONT_CELL_WIDTH: usize = 16;
 #[cfg(test)]
