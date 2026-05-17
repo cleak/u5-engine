@@ -1,4 +1,19 @@
     #[test]
+    fn combat_max_combatants_and_record_len_anchor() {
+        // active-objects.md §7: combat caps total combatants at
+        // the last monster slot index + 1 (slots 0..=25 = 26
+        // records); each combat actor record shares the 8-byte
+        // active-object record layout. Anchor COMBAT_MAX_COMBATANTS
+        // to COMBAT_MONSTER_SLOT_LAST + 1 and COMBAT_ACTOR_RECORD_LEN
+        // to OOL_RECORD_LEN so the combat-side counts and the
+        // format-side record stride share one source of truth.
+        assert_eq!(COMBAT_MAX_COMBATANTS, COMBAT_MONSTER_SLOT_LAST + 1);
+        assert_eq!(COMBAT_ACTOR_RECORD_LEN, OOL_RECORD_LEN);
+        assert_eq!(COMBAT_MAX_COMBATANTS, 26);
+        assert_eq!(COMBAT_ACTOR_RECORD_LEN, 8);
+    }
+
+    #[test]
     fn combat_actor_slots_anchor_to_ool_slots_and_party_size() {
         // active-objects.md §7: the combat actor table is a 32-
         // record view over the active-object table; party-actor

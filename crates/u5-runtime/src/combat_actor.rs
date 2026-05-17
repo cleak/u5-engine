@@ -14,10 +14,18 @@ pub const COMBAT_ACTOR_SLOTS: usize = crate::OOL_SLOTS;
 pub const COMBAT_PARTY_ACTOR_SLOTS: usize = crate::SAVE_PARTY_SIZE_MAX as usize;
 /// `active-objects.md §7`: combat caps total combatants (party + monsters)
 /// at twenty-six. Monster placement runs in slots 1..=25.
-pub const COMBAT_MAX_COMBATANTS: usize = 26;
 pub const COMBAT_MONSTER_SLOT_FIRST: usize = 1;
 pub const COMBAT_MONSTER_SLOT_LAST: usize = 25;
-pub const COMBAT_ACTOR_RECORD_LEN: usize = 8;
+/// `active-objects.md §7`: combat caps total combatants at the
+/// last monster slot index plus one (slots 0..=25 = 26 records).
+/// Anchored to [`COMBAT_MONSTER_SLOT_LAST`] + 1 so resizing the
+/// monster band only happens in one place.
+pub const COMBAT_MAX_COMBATANTS: usize = COMBAT_MONSTER_SLOT_LAST + 1;
+/// `active-objects.md §7`: each combat actor record shares the
+/// 8-byte active-object record layout. Anchored to
+/// [`crate::OOL_RECORD_LEN`] so the combat-side record stride
+/// and the format-side record length share one value.
+pub const COMBAT_ACTOR_RECORD_LEN: usize = crate::OOL_RECORD_LEN;
 
 /// `combat.md §12` per-kill raw experience-reward unit. Each monster
 /// killed produces "roughly a quarter of max-HP plus one" credited to
