@@ -1,4 +1,21 @@
     #[test]
+    fn miniature_tile_glyph_record_layout_matches_spec() {
+        // formats/tiles.md §5.1.1: each resident miniature tile glyph
+        // record describes sixteen rows with two offset bytes per row,
+        // for thirty-two bytes per tile. Promote the row count, the
+        // bytes-per-row, and the derived record length so a future
+        // miniature-glyph decoder has named constants instead of bare
+        // literals.
+        assert_eq!(MINIATURE_TILE_ROWS, 16);
+        assert_eq!(MINIATURE_TILE_OFFSET_BYTES_PER_ROW, 2);
+        assert_eq!(MINIATURE_TILE_RECORD_BYTES, 32);
+        assert_eq!(
+            MINIATURE_TILE_RECORD_BYTES,
+            MINIATURE_TILE_ROWS * MINIATURE_TILE_OFFSET_BYTES_PER_ROW
+        );
+    }
+
+    #[test]
     fn lzw_envelope_length_header_is_four_bytes() {
         // formats/lzw.md §2: the LZW envelope opens with a four-byte
         // little-endian unsigned length followed by the code stream.

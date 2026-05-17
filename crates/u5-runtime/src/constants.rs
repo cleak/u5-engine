@@ -128,6 +128,15 @@ pub const LZW_MAX_CODE_SIZE: u8 = 12;
 /// bytes that follow the code stream. Promote the header width so
 /// decode_lzw_envelope does not encode `4` as a bare literal.
 pub const LZW_ENVELOPE_LENGTH_HEADER_BYTES: usize = 4;
+
+/// `formats/tiles.md §5.1.1` resident miniature tile-glyph encoding.
+/// The stats panel and a few inventory-style contexts render a
+/// compact per-tile miniature whose record describes sixteen rows
+/// with two offset bytes per row, for thirty-two bytes per tile.
+pub const MINIATURE_TILE_ROWS: usize = 16;
+pub const MINIATURE_TILE_OFFSET_BYTES_PER_ROW: usize = 2;
+pub const MINIATURE_TILE_RECORD_BYTES: usize =
+    MINIATURE_TILE_ROWS * MINIATURE_TILE_OFFSET_BYTES_PER_ROW;
 #[cfg(test)]
 pub const SINGLE_IMAGE_BIT_FORMAT_MARKER: u16 = 1;
 #[cfg(test)]
