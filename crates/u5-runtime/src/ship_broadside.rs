@@ -18,7 +18,10 @@ pub const fn ship_broadside_direction_accepted(ship_facing: u8, fire_direction: 
 
 /// `vehicles.md §7`: broadside trace length in cells. The projectile
 /// scans up to three cells from the ship in the chosen direction.
-pub const SHIP_BROADSIDE_RANGE_CELLS: u8 = 3;
+/// Same range as the town-cannon projectile (both fire the same
+/// cannonball). Anchored to [`crate::TOWN_CANNON_RANGE_CELLS`] so
+/// the two cannon-range constants share one source of truth.
+pub const SHIP_BROADSIDE_RANGE_CELLS: u8 = crate::TOWN_CANNON_RANGE_CELLS as u8;
 
 /// `vehicles.md §7`: per-hit damage roll. A successful broadside
 /// subtracts a random `1..=20` amount from the target object's

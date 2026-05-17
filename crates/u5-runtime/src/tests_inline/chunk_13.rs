@@ -1,4 +1,22 @@
     #[test]
+    fn ship_broadside_range_anchors_to_town_cannon_range() {
+        // vehicles.md §7: the ship broadside projectile and the
+        // town cannon projectile both scan 3 cells from the firer
+        // (both fire the same cannonball). ship_broadside.rs
+        // declared SHIP_BROADSIDE_RANGE_CELLS = 3 as a bare
+        // literal in parallel with constants::TOWN_CANNON_RANGE_CELLS
+        // = 3. Anchor the ship-broadside range through to the
+        // town-cannon range so the two cannon-range constants
+        // share one source of truth.
+        assert_eq!(
+            SHIP_BROADSIDE_RANGE_CELLS,
+            TOWN_CANNON_RANGE_CELLS as u8,
+        );
+        assert_eq!(SHIP_BROADSIDE_RANGE_CELLS, 3);
+        assert_eq!(TOWN_CANNON_RANGE_CELLS, 3);
+    }
+
+    #[test]
     fn rare_reagent_harvest_minute_bound_anchors_to_minutes_per_hour() {
         // containers.md §5: the rare-reagent harvest pass accepts
         // any minute within the hour-0 hour. Anchor
