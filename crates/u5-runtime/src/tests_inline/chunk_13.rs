@@ -1,4 +1,32 @@
     #[test]
+    fn mid_circle_spell_costs_anchor_to_circle_derived_formula() {
+        // combat.md §10: per-spell MP cost is
+        // `(spell_index / SPELLS_PER_CIRCLE) + 1`. Anchor the
+        // Quickness, Mass Charm, Negate Magic, X-Ray, Invisibility,
+        // Cause Fear, and Peer costs to that formula so renumbering
+        // a spell automatically updates its cost.
+        assert_eq!(QUICKNESS_COST, (QUICKNESS_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1);
+        assert_eq!(MASS_CHARM_COST, (MASS_CHARM_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1);
+        assert_eq!(
+            NEGATE_MAGIC_COST,
+            (NEGATE_MAGIC_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1,
+        );
+        assert_eq!(X_RAY_COST, (X_RAY_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1);
+        assert_eq!(
+            INVISIBILITY_COST,
+            (INVISIBILITY_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1,
+        );
+        assert_eq!(
+            CAUSE_FEAR_COST,
+            (CAUSE_FEAR_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1,
+        );
+        assert_eq!(PEER_COST, (PEER_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1);
+        assert_eq!(QUICKNESS_COST, 5);
+        assert_eq!(MASS_CHARM_COST, 6);
+        assert_eq!(INVISIBILITY_COST, 7);
+    }
+
+    #[test]
     fn high_circle_spell_costs_anchor_to_index_divided_by_circle_size() {
         // combat.md §10: per-spell MP cost is
         // `(spell_index / SPELLS_PER_CIRCLE) + 1`. Anchor the
