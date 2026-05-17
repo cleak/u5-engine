@@ -1,4 +1,32 @@
     #[test]
+    fn low_circle_spell_costs_anchor_to_circle_derived_formula() {
+        // combat.md §10: per-spell MP cost is
+        // `(spell_index / SPELLS_PER_CIRCLE) + 1`. The first four
+        // circles' named spells now anchor to that formula so
+        // renumbering any spell automatically updates its cost.
+        assert_eq!(IN_LOR_COST, 1);
+        assert_eq!(AWAKEN_COST, 1);
+        assert_eq!(CURE_COST, 1);
+        assert_eq!(HEAL_COST, 1);
+        assert_eq!(VANISH_COST, 1);
+        assert_eq!(OPEN_SPELL_COST, 2);
+        assert_eq!(REL_HUR_COST, 2);
+        assert_eq!(IN_WIS_COST, 2);
+        assert_eq!(CREATE_FOOD_COST, 2);
+        assert_eq!(VAS_LOR_COST, 3);
+        assert_eq!(FIELD_SPELL_COST, 3);
+        assert_eq!(BLINK_COST, 3);
+        assert_eq!(DISPEL_FIELD_COST, 4);
+        assert_eq!(PROTECTION_COST, 4);
+        assert_eq!(DUNGEON_LEVEL_SPELL_COST, 4);
+        assert_eq!(REVEAL_COST, 4);
+        assert_eq!(ENERGY_FIELD_COST, 4);
+        assert_eq!(MAGIC_LOCK_COST, 5);
+        assert_eq!(UNLOCK_MAGIC_COST, 5);
+        assert_eq!(GREAT_HEAL_COST, 5);
+    }
+
+    #[test]
     fn mid_circle_spell_costs_anchor_to_circle_derived_formula() {
         // combat.md §10: per-spell MP cost is
         // `(spell_index / SPELLS_PER_CIRCLE) + 1`. Anchor the
