@@ -1,4 +1,36 @@
     #[test]
+    fn tlk_dictionary_token_range_matches_spec() {
+        // conversation.md §8: dialogue dictionary tokens are nonzero
+        // high-bit-clear bytes (0x01..=0x7F); each token is the
+        // direct 0..=127 index into the 128-entry common-word table.
+        assert_eq!(TLK_DICTIONARY_TOKEN_FIRST, 0x01);
+        assert_eq!(TLK_DICTIONARY_TOKEN_LAST, 0x7F);
+        // Token 0 (NUL) and 0x80..=0xFF are not dictionary tokens
+        // (they hit other byte-runner branches).
+        assert_eq!(tlk_dictionary_index(0), None);
+        assert_eq!(tlk_dictionary_index(0x80), None);
+        // Boundary tokens round-trip through the index helper.
+        assert_eq!(
+            tlk_dictionary_index(TLK_DICTIONARY_TOKEN_FIRST),
+            Some(TLK_DICTIONARY_TOKEN_FIRST as usize),
+        );
+        assert_eq!(
+            tlk_dictionary_index(TLK_DICTIONARY_TOKEN_LAST),
+            Some(TLK_DICTIONARY_TOKEN_LAST as usize),
+        );
+        // The shop-renderer token range covers entries 0..=127 (one
+        // more than the dialogue range because the shop renderer
+        // reaches entry zero through its 0x80 bias). Dialogue
+        // excludes the NUL slot — that's why
+        // COMMON_WORD_DICTIONARY_NUL_SENTINELS counts the empty
+        // entries used as leading-space markers.
+        assert_eq!(
+            (TLK_DICTIONARY_TOKEN_LAST as usize) - (TLK_DICTIONARY_TOKEN_FIRST as usize) + 1,
+            COMMON_WORD_DICTIONARY_ENTRIES - 1,
+        );
+    }
+
+    #[test]
     fn tlk_printable_and_control_byte_ranges_match_spec() {
         // conversation.md §7: byte runner classifies high-bit-set
         // bytes in 0xA0..=0xFD as printable text and bytes in

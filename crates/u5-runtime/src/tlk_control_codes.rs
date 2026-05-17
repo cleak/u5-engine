@@ -279,11 +279,19 @@ pub const COMMON_WORD_DICTIONARY_NUL_SENTINELS: usize = 11;
 pub const SHOPPE_PHRASE_TOKEN_FIRST: u8 = 0x80;
 pub const SHOPPE_PHRASE_TOKEN_LAST: u8 = 0xFF;
 
+/// `conversation.md §8` TLK dialogue dictionary token range. The
+/// byte runner classifies any nonzero high-bit-clear byte as a
+/// dictionary token; the value is the direct 0..=127 index into the
+/// 128-entry common-word pointer table.
+pub const TLK_DICTIONARY_TOKEN_FIRST: u8 = 0x01;
+pub const TLK_DICTIONARY_TOKEN_LAST: u8 = 0x7F;
+
 /// `conversation.md §8`: TLK dialogue dictionary tokens are nonzero
-/// high-bit-clear bytes (`0x01..=0x7F`); the byte runner's range maps
-/// directly to the 128-entry index `0..=127` (less the NUL slot).
+/// high-bit-clear bytes (`TLK_DICTIONARY_TOKEN_FIRST..=TLK_DICTIONARY_TOKEN_LAST`);
+/// the byte runner's range maps directly to the 128-entry index
+/// `0..=127` (less the NUL slot).
 pub const fn tlk_dictionary_index(token: u8) -> Option<usize> {
-    if token == 0 || token & 0x80 != 0 {
+    if token < TLK_DICTIONARY_TOKEN_FIRST || token > TLK_DICTIONARY_TOKEN_LAST {
         None
     } else {
         Some(token as usize)
