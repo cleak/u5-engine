@@ -1,4 +1,17 @@
     #[test]
+    fn dungeon_doom_scene_byte_anchors_to_last_dungeon() {
+        // dungeon-mode.md §3: Doom is the eighth dungeon record
+        // (DUNGEON.DAT record 7). Its scene byte must equal the last
+        // value in the dungeon scene-byte range.
+        assert_eq!(DUNGEON_DOOM_SCENE_BYTE, 40);
+        assert_eq!(DUNGEON_DOOM_SCENE_BYTE, LAST_DUNGEON_SCENE_BYTE);
+        assert_eq!(
+            DUNGEON_DOOM_SCENE_BYTE - FIRST_DUNGEON_SCENE_BYTE,
+            7,
+        );
+    }
+
+    #[test]
     fn overworld_chunk_buffer_dimensions_match_spec() {
         // overworld.md §4: the live chunk buffer is four 16-by-16
         // chunks arranged as a 2-by-2 grid that together form a

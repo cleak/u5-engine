@@ -337,8 +337,10 @@ pub const DUNGEON_ENTRY_UNDERWORLD_Y: u8 = 7;
 
 /// `dungeon-mode.md §3` Doom-exception scene byte. The Doom dungeon
 /// uses the surface entry seed even when reached from the
-/// underworld plane.
-pub const DUNGEON_DOOM_SCENE_BYTE: u8 = 40;
+/// underworld plane. Doom is the eighth dungeon record
+/// (`DUNGEON.DAT` record 7), so its scene byte is the last value in
+/// the dungeon range `FIRST_DUNGEON_SCENE_BYTE..=LAST_DUNGEON_SCENE_BYTE`.
+pub const DUNGEON_DOOM_SCENE_BYTE: u8 = crate::LAST_DUNGEON_SCENE_BYTE;
 
 /// `catalogs/gazetteer.md §6`: pick the entry seed for the given
 /// dungeon scene byte and origin plane. Doom uses the surface seed
