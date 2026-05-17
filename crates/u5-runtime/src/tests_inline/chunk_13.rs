@@ -1,4 +1,21 @@
     #[test]
+    fn horse_object_and_transport_bands_chain_through_boarding_bias() {
+        // vehicles.md §4: horse object bytes are 0x10..=0x11
+        // (riderless) and 0x12..=0x13 (mounted). Boarding adds
+        // 2 to the riderless object byte. Both bands are two
+        // markers wide. Anchor *_LAST to FIRST + 1 and
+        // HORSE_TRANSPORT_FIRST to HORSE_OBJECT_FIRST +
+        // HORSE_BOARDING_BIAS so the horse band layout has one
+        // source of truth.
+        assert_eq!(HORSE_OBJECT_LAST, HORSE_OBJECT_FIRST + 1);
+        assert_eq!(HORSE_TRANSPORT_FIRST, HORSE_OBJECT_FIRST + HORSE_BOARDING_BIAS);
+        assert_eq!(HORSE_TRANSPORT_LAST, HORSE_TRANSPORT_FIRST + 1);
+        assert_eq!(HORSE_BOARDING_BIAS, 2);
+        assert_eq!(HORSE_OBJECT_FIRST, 0x10);
+        assert_eq!(HORSE_TRANSPORT_LAST, 0x13);
+    }
+
+    #[test]
     fn transport_marker_foot_band_anchors_to_facing_mask() {
         // vehicles.md §2: the foot/avatar transport family is
         // four markers wide (facing in low 2 bits). Anchor

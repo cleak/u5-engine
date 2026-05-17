@@ -998,12 +998,17 @@ pub const SHIP_TRANSPORT_FURLED_LAST: u8 = 0x27;
 pub const CARPET_TRANSPORT_FIRST: u8 = 0x14;
 pub const CARPET_TRANSPORT_LAST: u8 = 0x17;
 /// Horse object byte range `0x10..=0x11` (riderless) and `0x12..=0x13`
-/// (mounted). Boarding adds 2 to the riderless object byte to produce the
-/// mounted marker per `vehicles.md` §4.
+/// (mounted). Boarding adds 2 to the riderless object byte to produce
+/// the mounted marker per `vehicles.md §4`. Both bands are two
+/// markers wide (east-/west-facing only — no north/south for
+/// horses), so anchor each *_LAST to FIRST + 1 and chain
+/// HORSE_TRANSPORT_FIRST to HORSE_OBJECT_FIRST + 2 (the boarding
+/// bias) so the horse band layout has one source of truth.
 pub const HORSE_OBJECT_FIRST: u8 = 0x10;
-pub const HORSE_OBJECT_LAST: u8 = 0x11;
-pub const HORSE_TRANSPORT_FIRST: u8 = 0x12;
-pub const HORSE_TRANSPORT_LAST: u8 = 0x13;
+pub const HORSE_OBJECT_LAST: u8 = HORSE_OBJECT_FIRST + 1;
+pub const HORSE_BOARDING_BIAS: u8 = 2;
+pub const HORSE_TRANSPORT_FIRST: u8 = HORSE_OBJECT_FIRST + HORSE_BOARDING_BIAS;
+pub const HORSE_TRANSPORT_LAST: u8 = HORSE_TRANSPORT_FIRST + 1;
 
 /// Active-object slot allocator boundaries per `active-objects.md` §4.
 /// Slot 0 is the canonical player slot; the ordinary acquisition path
