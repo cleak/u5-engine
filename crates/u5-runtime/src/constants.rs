@@ -1258,7 +1258,11 @@ pub const DUNGEON_GEM_VIEW_RADIUS: isize = 5;
 pub const WORLD_SIDE: usize = 256;
 pub const WORLD_CELLS: usize = WORLD_SIDE * WORLD_SIDE;
 pub const UNDER_DAT_LEN: usize = WORLD_CELLS;
-pub const BRIT_DAT_LEN: usize = 52_480;
+/// `formats/brit-dat.md §2`: BRIT.DAT total file size = stored
+/// chunks × 256 bytes per chunk = 205 × 256 = 52,480 bytes.
+/// Anchored to BRIT_STORED_CHUNKS × CHUNK_BYTES so the file
+/// size derives from the stored-chunk count.
+pub const BRIT_DAT_LEN: usize = BRIT_STORED_CHUNKS * CHUNK_BYTES;
 /// `formats/world-map.md`: published surface and underworld
 /// world-map filenames.
 pub const BRIT_DAT_FILENAME: &str = "BRIT.DAT";
@@ -1267,7 +1271,10 @@ pub const CHUNK_SIDE: usize = 16;
 pub const CHUNK_BYTES: usize = CHUNK_SIDE * CHUNK_SIDE;
 pub const WORLD_CHUNKS_PER_SIDE: usize = WORLD_SIDE / CHUNK_SIDE;
 pub const WORLD_CHUNK_COUNT: usize = WORLD_CHUNKS_PER_SIDE * WORLD_CHUNKS_PER_SIDE;
-pub const BRIT_STORED_CHUNKS: usize = BRIT_DAT_LEN / CHUNK_BYTES;
+/// `formats/brit-dat.md §2`: 205 of the 256 logical chunks are
+/// stored on disk; the other 51 are the all-ocean filler chunks
+/// the loader synthesises rather than reading from BRIT.DAT.
+pub const BRIT_STORED_CHUNKS: usize = 205;
 
 /// `overworld.md §4` overworld live-chunk buffer dimensions. The
 /// engine keeps four 16-by-16 chunks live in a 1-KiB chunk buffer

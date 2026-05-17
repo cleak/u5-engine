@@ -1,4 +1,18 @@
     #[test]
+    fn brit_dat_len_anchors_to_stored_chunks_times_chunk_bytes() {
+        // formats/brit-dat.md §2: BRIT.DAT total file size = 205
+        // stored chunks × 256 bytes per chunk = 52,480 bytes.
+        // constants.rs declared BRIT_DAT_LEN = 52_480 as a bare
+        // literal in parallel with BRIT_STORED_CHUNKS and
+        // CHUNK_BYTES. Anchor the file size to BRIT_STORED_CHUNKS
+        // × CHUNK_BYTES so the file size derives from the
+        // stored-chunk count.
+        assert_eq!(BRIT_DAT_LEN, BRIT_STORED_CHUNKS * CHUNK_BYTES);
+        assert_eq!(BRIT_DAT_LEN, 52_480);
+        assert_eq!(BRIT_STORED_CHUNKS, 205);
+    }
+
+    #[test]
     fn shoppe_nonempty_records_anchors_to_record_slots() {
         // formats/shoppe-dat.md §2: 194 of the 196 record slots
         // are non-empty; the remaining 2 are empty-trailer
