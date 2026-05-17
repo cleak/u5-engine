@@ -338,7 +338,12 @@ pub const SAVE_ACTIVE_OBJECT_TABLE_OFFSET: usize = 0x06B4;
 /// occupies 512 bytes at file offset `0x03B4..=0x05B3` and matches the
 /// 512-byte dungeon-record stride.
 pub const SAVE_DUNGEON_WORKING_BUFFER_OFFSET: usize = 0x03B4;
-pub const SAVE_DUNGEON_WORKING_BUFFER_LEN: usize = 512;
+/// `formats/saved-gam.md §8.2`: the working-buffer byte length is
+/// the same 512-byte stride documented in
+/// `formats/dungeon-dat.md §2`. Anchored to
+/// [`DUNGEON_RECORD_LEN`] so the working buffer and the on-disk
+/// dungeon record share one source of truth.
+pub const SAVE_DUNGEON_WORKING_BUFFER_LEN: usize = DUNGEON_RECORD_LEN;
 /// `formats/saved-gam.md §10`: active-player sentinel value when no
 /// party member is currently selected to move. The byte holds an
 /// integer slot index when one is selected.

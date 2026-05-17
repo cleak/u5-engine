@@ -1,4 +1,16 @@
     #[test]
+    fn save_dungeon_working_buffer_len_anchors_to_dungeon_record_len() {
+        // formats/saved-gam.md §8.2: the dungeon/map-cell working
+        // buffer is 512 bytes — the same per-dungeon stride
+        // documented in formats/dungeon-dat.md §2. Anchor
+        // SAVE_DUNGEON_WORKING_BUFFER_LEN to DUNGEON_RECORD_LEN so
+        // the working buffer and the on-disk dungeon record share
+        // one source of truth.
+        assert_eq!(SAVE_DUNGEON_WORKING_BUFFER_LEN, DUNGEON_RECORD_LEN);
+        assert_eq!(SAVE_DUNGEON_WORKING_BUFFER_LEN, 512);
+    }
+
+    #[test]
     fn saved_ool_len_anchors_to_plane_count_times_plane_len() {
         // formats/saved-gam.md §11: SAVED.OOL is 512 bytes —
         // surface in the first 256 bytes, underworld in the second.
