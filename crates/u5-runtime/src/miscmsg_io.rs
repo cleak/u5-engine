@@ -87,23 +87,33 @@ pub enum MiscMsgFamily {
 }
 
 /// `formats/miscmsg-dat.md §3`: classify a record index `0..=46` into
+/// `formats/miscmsg-dat.md §3` record-family ranges. Each family is
+/// addressed by hardcoded ordinal or loaded-window offset by the
+/// owning system; this catalog publishes the cluster boundaries so
+/// the family classifier and the per-family slice accessors share
+/// one source of truth.
+pub const MISCMSG_BLACKTHORN_AUDIENCE_RANGE: std::ops::RangeInclusive<usize> = 0..=11;
+pub const MISCMSG_VIRTUE_FAILING_RANGE: std::ops::RangeInclusive<usize> = 12..=19;
+pub const MISCMSG_VIRTUE_APHORISM_RANGE: std::ops::RangeInclusive<usize> = 20..=27;
+pub const MISCMSG_SHRINE_MEDITATION_RANGE: std::ops::RangeInclusive<usize> = 28..=35;
+pub const MISCMSG_URN_CODEX_RANGE: std::ops::RangeInclusive<usize> = 36..=46;
+
 /// its consumer cluster. Returns `None` for indices outside the file.
 pub const fn miscmsg_family(record_index: usize) -> Option<MiscMsgFamily> {
-    Some(match record_index {
-        0..=11 => MiscMsgFamily::BlackthornAudience,
-        12..=19 => MiscMsgFamily::VirtueWeaknessPhrases,
-        20..=27 => MiscMsgFamily::VirtueAphorisms,
-        28..=35 => MiscMsgFamily::ShrineMeditation,
-        36..=46 => MiscMsgFamily::UrnCodexProphecy,
-        _ => return None,
+    Some(if record_index <= *MISCMSG_BLACKTHORN_AUDIENCE_RANGE.end() {
+        MiscMsgFamily::BlackthornAudience
+    } else if record_index <= *MISCMSG_VIRTUE_FAILING_RANGE.end() {
+        MiscMsgFamily::VirtueWeaknessPhrases
+    } else if record_index <= *MISCMSG_VIRTUE_APHORISM_RANGE.end() {
+        MiscMsgFamily::VirtueAphorisms
+    } else if record_index <= *MISCMSG_SHRINE_MEDITATION_RANGE.end() {
+        MiscMsgFamily::ShrineMeditation
+    } else if record_index <= *MISCMSG_URN_CODEX_RANGE.end() {
+        MiscMsgFamily::UrnCodexProphecy
+    } else {
+        return None;
     })
 }
-
-const BLACKTHORN_AUDIENCE_RANGE: std::ops::RangeInclusive<usize> = 0..=11;
-const VIRTUE_FAILING_RANGE: std::ops::RangeInclusive<usize> = 12..=19;
-const VIRTUE_APHORISM_RANGE: std::ops::RangeInclusive<usize> = 20..=27;
-const SHRINE_MEDITATION_RANGE: std::ops::RangeInclusive<usize> = 28..=35;
-const URN_CODEX_RANGE: std::ops::RangeInclusive<usize> = 36..=46;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MiscMessages {
@@ -116,23 +126,23 @@ impl MiscMessages {
     }
 
     pub fn blackthorn_audience(&self) -> &[String] {
-        slice_range(&self.records, &BLACKTHORN_AUDIENCE_RANGE)
+        slice_range(&self.records, &MISCMSG_BLACKTHORN_AUDIENCE_RANGE)
     }
 
     pub fn virtue_failing_text(&self) -> &[String] {
-        slice_range(&self.records, &VIRTUE_FAILING_RANGE)
+        slice_range(&self.records, &MISCMSG_VIRTUE_FAILING_RANGE)
     }
 
     pub fn virtue_aphorism(&self) -> &[String] {
-        slice_range(&self.records, &VIRTUE_APHORISM_RANGE)
+        slice_range(&self.records, &MISCMSG_VIRTUE_APHORISM_RANGE)
     }
 
     pub fn shrine_meditation(&self) -> &[String] {
-        slice_range(&self.records, &SHRINE_MEDITATION_RANGE)
+        slice_range(&self.records, &MISCMSG_SHRINE_MEDITATION_RANGE)
     }
 
     pub fn urn_codex(&self) -> &[String] {
-        slice_range(&self.records, &URN_CODEX_RANGE)
+        slice_range(&self.records, &MISCMSG_URN_CODEX_RANGE)
     }
 }
 
