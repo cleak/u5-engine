@@ -472,6 +472,25 @@
     }
 
     #[test]
+    fn combat_to_hit_bias_matches_spec_formula() {
+        // catalogs/item-list.md §5.3: the shared combat to-hit
+        // helper computes `(attacker - defender + 30) / 2` and
+        // compares it against a uniform random byte. Promote the
+        // +30 bias so combat_to_hit_score does not bake it as a
+        // bare literal. The bias is kept separate from the
+        // JIMMY_CHEST_THRESHOLD_BIAS (also 30) because the two
+        // contracts share only the magnitude, not the meaning.
+        assert_eq!(COMBAT_TO_HIT_BIAS, 30);
+        // Two equal-rating actors land at the bias / 2 = 15
+        // threshold; combat_hit succeeds against rolls below it.
+        assert_eq!(combat_to_hit_score(50, 50), 15);
+        assert_eq!(combat_to_hit_score(0, 0), 15);
+        // Higher attacker raises the score linearly; +20 difference
+        // adds 10 to the score.
+        assert_eq!(combat_to_hit_score(60, 50), 20);
+    }
+
+    #[test]
     fn moonstone_burial_band_constants_match_spec() {
         // formats/saved-gam.md §7.2: Moonstone burying is accepted on
         // tile ids 4..=10 (a contiguous overworld band) plus 44 and

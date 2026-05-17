@@ -2657,8 +2657,15 @@ pub fn find_combat_actor_at_field_coordinate_skipping(
         .map(|(slot, _)| slot)
 }
 
+/// `catalogs/item-list.md §5.3` shared combat to-hit score bias.
+/// The shared to-hit helper computes the score as
+/// `(attacker - defender + COMBAT_TO_HIT_BIAS) / 2` and compares it
+/// against a uniform random byte. The +30 bias balances the score
+/// so that two equal-rating actors clear the median of `0..=255`.
+pub const COMBAT_TO_HIT_BIAS: i16 = 30;
+
 pub const fn combat_to_hit_score(attacker_rating: u8, defender_rating: u8) -> i16 {
-    ((attacker_rating as i16 - defender_rating as i16) + 30) / 2
+    ((attacker_rating as i16 - defender_rating as i16) + COMBAT_TO_HIT_BIAS) / 2
 }
 
 pub const fn resolve_combat_hit(attacker_rating: u8, defender_rating: u8, roll: u8) -> bool {
