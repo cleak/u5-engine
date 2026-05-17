@@ -591,8 +591,10 @@ pub use visibility::{
     visibility_marker,
 };
 pub use wind::{
-    WIND_DRIFT_CALM_ACCEPT_MIN, WIND_DRIFT_CANDIDATE_MODULUS, WIND_DRIFT_OUTER_ROLL_MASK,
-    WindSetterOutcome, WindState, wind_setter_outcome,
+    ACTIVE_SHIP_CADENCE_EVERY_TURN, ACTIVE_SHIP_CADENCE_INTO_WIND,
+    ACTIVE_SHIP_CADENCE_WITH_WIND, WIND_DRIFT_CALM_ACCEPT_MIN,
+    WIND_DRIFT_CANDIDATE_MODULUS, WIND_DRIFT_OUTER_ROLL_MASK, WindSetterOutcome,
+    WindState, wind_setter_outcome,
 };
 pub use world_tables::*;
 pub use world_tables_io::*;

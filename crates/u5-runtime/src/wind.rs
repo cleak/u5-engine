@@ -149,14 +149,14 @@ impl WindState {
         );
         if perpendicular {
             // "Every turn" — bypasses the counter entirely.
-            return Some((1, 1));
+            return Some(ACTIVE_SHIP_CADENCE_EVERY_TURN);
         }
         if wind == heading {
             // Frame faces directly into wind — 2 of 3 turns.
-            Some((2, 3))
+            Some(ACTIVE_SHIP_CADENCE_INTO_WIND)
         } else {
             // Frame faces with wind (away from source) — 3 of 4 turns.
-            Some((3, 4))
+            Some(ACTIVE_SHIP_CADENCE_WITH_WIND)
         }
     }
 
@@ -202,6 +202,17 @@ impl WindState {
         }
     }
 }
+
+/// `weather.md §7` per-frame active-ship cadence caps. Each pair is
+/// `(numerator, denominator)`: the slot moves on `numerator` of every
+/// `denominator` eligible cleanup passes. The "every turn" case is
+/// `(1, 1)` and bypasses the counter; the spec uses two non-trivial
+/// cadence ratios — "into the wind" (frame faces directly into the
+/// wind source) and "with the wind" (frame faces away from the wind
+/// source).
+pub const ACTIVE_SHIP_CADENCE_EVERY_TURN: (u8, u8) = (1, 1);
+pub const ACTIVE_SHIP_CADENCE_INTO_WIND: (u8, u8) = (2, 3);
+pub const ACTIVE_SHIP_CADENCE_WITH_WIND: (u8, u8) = (3, 4);
 
 /// `weather.md §2` autonomous wind-drift outer-roll mask. The selector
 /// rolls in `0..=63`; only the zero roll advances. Masking the low six

@@ -1,4 +1,33 @@
     #[test]
+    fn active_ship_cadence_ratios_match_spec_table() {
+        // weather.md §7: per-frame active-ship cadence caps. Each pair
+        // is (numerator, denominator).
+        assert_eq!(ACTIVE_SHIP_CADENCE_EVERY_TURN, (1, 1));
+        assert_eq!(ACTIVE_SHIP_CADENCE_INTO_WIND, (2, 3));
+        assert_eq!(ACTIVE_SHIP_CADENCE_WITH_WIND, (3, 4));
+        // North wind + north-facing frame is "into wind" (2 of 3).
+        assert_eq!(
+            WindState::North.active_ship_cadence(Direction::North),
+            Some(ACTIVE_SHIP_CADENCE_INTO_WIND),
+        );
+        // North wind + south-facing frame is "with wind" (3 of 4).
+        assert_eq!(
+            WindState::North.active_ship_cadence(Direction::South),
+            Some(ACTIVE_SHIP_CADENCE_WITH_WIND),
+        );
+        // North wind + east-facing frame is perpendicular = every turn.
+        assert_eq!(
+            WindState::North.active_ship_cadence(Direction::East),
+            Some(ACTIVE_SHIP_CADENCE_EVERY_TURN),
+        );
+        // Calm suppresses cadence entirely.
+        assert_eq!(
+            WindState::Calm.active_ship_cadence(Direction::North),
+            None,
+        );
+    }
+
+    #[test]
     fn ship_broadside_damage_roll_routes_through_named_min_max() {
         // vehicles.md §7: a successful broadside subtracts a random
         // 1..20 amount from the target object's active-object byte +5.
