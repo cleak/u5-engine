@@ -1,4 +1,21 @@
     #[test]
+    fn first_playable_foot_transport_marker_anchors_to_foot_band_first() {
+        // vehicles.md §2: the foot/avatar transport-family first
+        // byte is the value the active player-marker is reset to
+        // on dismount. constants.rs declared
+        // FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER = 28 as a bare
+        // literal in parallel with predicates.rs's
+        // TRANSPORT_MARKER_FOOT_FIRST = 0x1C. Anchor the
+        // playable foot-marker to TRANSPORT_MARKER_FOOT_FIRST
+        // so the foot-band start has one source of truth.
+        assert_eq!(
+            FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER,
+            TRANSPORT_MARKER_FOOT_FIRST,
+        );
+        assert_eq!(FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER, 28);
+    }
+
+    #[test]
     fn playable_vehicle_tile_bands_chain_from_vehicle_range_start() {
         // catalogs/tile-catalog.md §6: playable-vehicle tile
         // bands start at TILE_VEHICLE_FIRST (0xA0). Each major

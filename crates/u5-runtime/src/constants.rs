@@ -1105,7 +1105,12 @@ pub const DEFAULT_CLIMBING_GEAR: u8 = 0;
 pub const DEFAULT_CLIMB_STAT: u8 = 30;
 pub const SHIP_BADLY_DAMAGED_WARNING: &str = "DANGER: SHIP BADLY DAMAGED!";
 pub const SHIP_NO_SKIFFS_WARNING: &str = "WARNING: NO SKIFFS ON BOARD!";
-pub const FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER: u8 = 28;
+/// `vehicles.md §2` foot/avatar transport-family first byte —
+/// the value the active player-marker is reset to on dismount or
+/// blank initialization. Anchored to
+/// [`crate::TRANSPORT_MARKER_FOOT_FIRST`] so the foot-band start
+/// and the playable foot-marker share one source of truth.
+pub const FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER: u8 = crate::TRANSPORT_MARKER_FOOT_FIRST;
 pub const FIRST_PLAYABLE_FULL_SHIP_HULL: u8 = 77;
 /// `catalogs/tile-catalog.md §6` playable-vehicle tile bands. The
 /// vehicle range starts at TILE_VEHICLE_FIRST (0xA0); each major
