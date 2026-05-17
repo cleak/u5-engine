@@ -522,10 +522,15 @@ pub const fn normalize_disk_prompt_mode(requested_mode: u8) -> u8 {
     }
 }
 
-/// `save-load.md §3.1`: file lengths in bytes for the `.OOL` family.
-pub const SAVED_OOL_FILE_LEN: usize = 512;
-pub const PER_PLANE_OOL_FILE_LEN: usize = 256;
-pub const INIT_OOL_FILE_LEN: usize = 256;
+/// `save-load.md §3.1`: file lengths in bytes for the `.OOL`
+/// family. SAVED.OOL packs both per-plane mirrors (surface and
+/// underworld); BRIT.OOL / UNDER.OOL / INIT.OOL each carry one
+/// 256-byte plane. Anchored to the format-side constants so the
+/// save-load file-length contract and the .OOL plane layout
+/// stay one value.
+pub const SAVED_OOL_FILE_LEN: usize = crate::SAVED_OOL_LEN;
+pub const PER_PLANE_OOL_FILE_LEN: usize = crate::OOL_PLANE_LEN;
+pub const INIT_OOL_FILE_LEN: usize = crate::OOL_PLANE_LEN;
 /// `formats/ool.md §2`: published `.OOL` file names for the four
 /// roles the `.OOL` family fills.
 pub const SAVED_OOL_FILENAME: &str = "SAVED.OOL";

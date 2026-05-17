@@ -1,4 +1,20 @@
     #[test]
+    fn ool_file_lengths_anchor_to_format_constants() {
+        // save-load.md §3.1: SAVED.OOL is two per-plane mirrors
+        // (512 bytes); BRIT.OOL / UNDER.OOL / INIT.OOL each carry
+        // one 256-byte plane. Anchor the save-load-side file
+        // lengths to SAVED_OOL_LEN and OOL_PLANE_LEN so the
+        // file-length contract and the format constants stay one
+        // value.
+        assert_eq!(SAVED_OOL_FILE_LEN, SAVED_OOL_LEN);
+        assert_eq!(PER_PLANE_OOL_FILE_LEN, OOL_PLANE_LEN);
+        assert_eq!(INIT_OOL_FILE_LEN, OOL_PLANE_LEN);
+        assert_eq!(SAVED_OOL_FILE_LEN, 512);
+        assert_eq!(PER_PLANE_OOL_FILE_LEN, 256);
+        assert_eq!(INIT_OOL_FILE_LEN, 256);
+    }
+
+    #[test]
     fn blackthorn_rescue_handoff_scene_anchors_to_lord_britishs_castle() {
         // blackthorn.md §7: the rescue/refuge path hands control
         // back to CASTLE:0 (Lord British's Castle, scene byte 17).
