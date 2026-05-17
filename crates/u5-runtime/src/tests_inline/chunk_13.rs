@@ -1,4 +1,17 @@
     #[test]
+    fn cleanup_increment_recompute_matches_spec() {
+        // time.md §3: the per-turn cleanup routine takes one word
+        // argument. Argument 0 is the "recompute, do not advance"
+        // mode-zero call used at scene transitions; arguments 1 and 2
+        // are the town/dungeon and overworld minute cadences.
+        assert_eq!(CLEANUP_INCREMENT_RECOMPUTE, 0);
+        assert_eq!(MINUTES_PER_INDOOR_TURN, 1);
+        assert_eq!(MINUTES_PER_OUTDOOR_TURN, 2);
+        assert_ne!(CLEANUP_INCREMENT_RECOMPUTE, MINUTES_PER_INDOOR_TURN);
+        assert_ne!(CLEANUP_INCREMENT_RECOMPUTE, MINUTES_PER_OUTDOOR_TURN);
+    }
+
+    #[test]
     fn level_from_experience_scaler_matches_spec() {
         // u4-transfer.md §7 / magic.md §8: level starts at 1; the
         // experience-to-level scaler divides by 100, then halves the

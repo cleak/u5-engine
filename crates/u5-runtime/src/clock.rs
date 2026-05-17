@@ -140,6 +140,15 @@ pub const fn shadowlord_hideout_is_live(slot: u8) -> bool {
     slot >= SHADOWLORD_HIDEOUT_FIRST && slot <= SHADOWLORD_HIDEOUT_LAST
 }
 
+/// `time.md §3` per-turn cleanup "recompute, do not advance"
+/// argument. Mode-zero callers (scene transitions, daylight
+/// re-evaluation) pass this value so the cleanup routine refreshes
+/// daylight and the visible clock without advancing the minute
+/// counter or light-source counters. The non-zero per-turn cadences
+/// are [`MINUTES_PER_INDOOR_TURN`] (= 1) and [`MINUTES_PER_OUTDOOR_TURN`]
+/// (= 2).
+pub const CLEANUP_INCREMENT_RECOMPUTE: u8 = 0;
+
 /// `time.md §4` per-turn cleanup state-tag modifier byte values. The
 /// `Q` tag halves the minute increment with a 1-minute floor; the
 /// `T` tag suppresses the minute-counter and light-counter writes
