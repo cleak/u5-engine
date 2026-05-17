@@ -184,10 +184,16 @@ pub const CH_FONT_CELL_WIDTH: usize = CH_CELL_SIDE;
 /// [`CH_CELL_SIDE`] so the parse-side cell height stays one value.
 #[cfg(test)]
 pub const CH_FONT_CELL_HEIGHT: usize = CH_CELL_SIDE;
+/// `formats/font-hcs.md §2`: .HCS cells are 16x12. Anchored to
+/// [`HCS_CELL_WIDTH`] so the parser-side cell width stays one
+/// value with the format-side cell width.
 #[cfg(test)]
-pub const HCS_FONT_CELL_WIDTH: usize = 16;
+pub const HCS_FONT_CELL_WIDTH: usize = HCS_CELL_WIDTH;
+/// `formats/font-hcs.md §2`: .HCS cells are 16x12. Anchored to
+/// [`HCS_CELL_HEIGHT`] so the parser-side cell height stays one
+/// value with the format-side cell height.
 #[cfg(test)]
-pub const HCS_FONT_CELL_HEIGHT: usize = 12;
+pub const HCS_FONT_CELL_HEIGHT: usize = HCS_CELL_HEIGHT;
 #[cfg(test)]
 pub const PCS_FIRST_CODE: u8 = 0x20;
 #[cfg(test)]

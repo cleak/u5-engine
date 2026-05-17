@@ -1,4 +1,17 @@
     #[test]
+    fn hcs_parser_cell_dimensions_anchor_to_format_constants() {
+        // formats/font-hcs.md §2: .HCS cells are 16x12. The
+        // parser-side dimensions HCS_FONT_CELL_WIDTH /
+        // HCS_FONT_CELL_HEIGHT now anchor to the format-side
+        // HCS_CELL_WIDTH / HCS_CELL_HEIGHT so the cell geometry has
+        // one source of truth.
+        assert_eq!(HCS_FONT_CELL_WIDTH, HCS_CELL_WIDTH);
+        assert_eq!(HCS_FONT_CELL_HEIGHT, HCS_CELL_HEIGHT);
+        assert_eq!(HCS_FONT_CELL_WIDTH, 16);
+        assert_eq!(HCS_FONT_CELL_HEIGHT, 12);
+    }
+
+    #[test]
     fn fixed_font_parser_dimensions_anchor_to_format_constants() {
         // formats/font-ch.md §2: .CH fonts ship 128 glyphs of 8x8.
         // formats/font-hcs.md §2: .HCS fonts also ship 128 glyphs
