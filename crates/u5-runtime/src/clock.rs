@@ -367,7 +367,15 @@ pub fn sky_strip_composed_cells(
 /// site instead of comparing against bare literals.
 pub const SKY_STRIP_FIXED_HOUR_BAND_FIRST: u8 = 6;
 pub const SKY_STRIP_FIXED_HOUR_BAND_LAST: u8 = 17;
-pub const SKY_STRIP_FIXED_HOUR_OFFSET: u8 = 17;
+/// `moons.md §2`: the fixed-hour marker's cell position is
+/// `OFFSET - hour`. When `hour == BAND_LAST`, the marker sits in
+/// cell `0`; when `hour == BAND_FIRST`, the marker sits in cell
+/// `OFFSET - BAND_FIRST`. The offset therefore equals
+/// [`SKY_STRIP_FIXED_HOUR_BAND_LAST`] by construction. Anchored
+/// to the band-last hour so the cell-zero edge derives from the
+/// last visible hour and the marker's offset and the band's
+/// upper bound share one source of truth.
+pub const SKY_STRIP_FIXED_HOUR_OFFSET: u8 = SKY_STRIP_FIXED_HOUR_BAND_LAST;
 pub const SKY_STRIP_TRAMMEL_MORNING_BAND_FIRST: u8 = 0;
 pub const SKY_STRIP_TRAMMEL_MORNING_BAND_LAST: u8 = 8;
 pub const SKY_STRIP_TRAMMEL_MORNING_OFFSET: u8 = 8;

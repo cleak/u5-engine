@@ -1,4 +1,20 @@
     #[test]
+    fn sky_strip_fixed_hour_offset_anchors_to_band_last() {
+        // moons.md §2: the fixed-hour marker's cell position is
+        // `OFFSET - hour`. At hour == BAND_LAST the marker sits in
+        // cell 0, so OFFSET equals BAND_LAST by construction.
+        // Anchor SKY_STRIP_FIXED_HOUR_OFFSET to
+        // SKY_STRIP_FIXED_HOUR_BAND_LAST so the cell-zero edge
+        // derives from the last visible hour.
+        assert_eq!(
+            SKY_STRIP_FIXED_HOUR_OFFSET,
+            SKY_STRIP_FIXED_HOUR_BAND_LAST,
+        );
+        assert_eq!(SKY_STRIP_FIXED_HOUR_OFFSET, 17);
+        assert_eq!(SKY_STRIP_FIXED_HOUR_BAND_LAST, 17);
+    }
+
+    #[test]
     fn resurrection_penalty_skip_threshold_chains_below_moral_standing_max() {
         // karma.md §5: the resurrection-penalty skip threshold (98)
         // is one selector step below MORAL_STANDING_MAX (99), so
