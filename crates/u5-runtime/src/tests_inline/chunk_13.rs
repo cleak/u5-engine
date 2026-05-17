@@ -1,4 +1,26 @@
     #[test]
+    fn save_inventory_band_offsets_chain_through_catalog_counts() {
+        // formats/saved-gam.md §4: the special-item, equipment,
+        // spell-charge, scroll, potion, and moonstone bands sit
+        // contiguously and are sized by their catalog counts. The
+        // band offsets now chain so adding a catalog entry shifts
+        // every later band offset automatically.
+        assert_eq!(
+            SAVE_EQUIPMENT_STOCK_OFFSET,
+            SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_COUNT,
+        );
+        assert_eq!(SAVE_EQUIPMENT_STOCK_OFFSET, 0x021a);
+        assert_eq!(SAVE_SPELL_CHARGES_OFFSET, 0x024a);
+        assert_eq!(SAVE_SCROLL_STOCK_OFFSET, 0x027a);
+        assert_eq!(SAVE_POTION_STOCK_OFFSET, 0x0282);
+        assert_eq!(SAVE_MOONSTONE_X_OFFSET, 0x028a);
+        assert_eq!(SAVE_MOONSTONE_Y_OFFSET, 0x0292);
+        assert_eq!(SAVE_MOONSTONE_SCENE_OFFSET, 0x029a);
+        assert_eq!(SAVE_MOONSTONE_Z_OFFSET, 0x02a2);
+        assert_eq!(SAVE_REAGENTS_OFFSET, 0x02aa);
+    }
+
+    #[test]
     fn save_party_inventory_offsets_chain_food_to_special_item() {
         // formats/saved-gam.md §4: party inventory band starts at
         // 0x0202 with the word-sized food counter, then gold (word),

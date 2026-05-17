@@ -283,15 +283,22 @@ pub const SAVE_GEM_STOCK_OFFSET: usize = SAVE_KEY_STOCK_OFFSET + 1;
 pub const SAVE_TORCH_STOCK_OFFSET: usize = SAVE_GEM_STOCK_OFFSET + 1;
 pub const SAVE_CLIMBING_GEAR_OFFSET: usize = SAVE_TORCH_STOCK_OFFSET + 1;
 pub const SAVE_SPECIAL_ITEM_OFFSET: usize = SAVE_CLIMBING_GEAR_OFFSET + 1;
-pub const SAVE_EQUIPMENT_STOCK_OFFSET: usize = 0x021a;
-pub const SAVE_SPELL_CHARGES_OFFSET: usize = 0x024a;
-pub const SAVE_SCROLL_STOCK_OFFSET: usize = 0x027a;
-pub const SAVE_POTION_STOCK_OFFSET: usize = 0x0282;
-pub const SAVE_MOONSTONE_X_OFFSET: usize = 0x028a;
-pub const SAVE_MOONSTONE_Y_OFFSET: usize = 0x0292;
-pub const SAVE_MOONSTONE_SCENE_OFFSET: usize = 0x029a;
-pub const SAVE_MOONSTONE_Z_OFFSET: usize = 0x02a2;
-pub const SAVE_REAGENTS_OFFSET: usize = 0x02aa;
+/// `formats/saved-gam.md §4` the special-item, equipment-stock,
+/// spell-charge, scroll, potion, and moonstone bands occupy
+/// contiguous fixed-length blocks sized by their catalog counts.
+/// Anchor each band offset to the previous-band chain so adding
+/// a special item, equipment id, or spell id automatically
+/// shifts the later band offsets.
+pub const SAVE_EQUIPMENT_STOCK_OFFSET: usize = SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_COUNT;
+pub const SAVE_SPELL_CHARGES_OFFSET: usize =
+    SAVE_EQUIPMENT_STOCK_OFFSET + EQUIPMENT_STOCK_BAND_LEN;
+pub const SAVE_SCROLL_STOCK_OFFSET: usize = SAVE_SPELL_CHARGES_OFFSET + SPELL_CHARGE_BAND_LEN;
+pub const SAVE_POTION_STOCK_OFFSET: usize = SAVE_SCROLL_STOCK_OFFSET + SCROLL_COUNT;
+pub const SAVE_MOONSTONE_X_OFFSET: usize = SAVE_POTION_STOCK_OFFSET + POTION_COUNT;
+pub const SAVE_MOONSTONE_Y_OFFSET: usize = SAVE_MOONSTONE_X_OFFSET + MOONSTONE_SLOT_COUNT;
+pub const SAVE_MOONSTONE_SCENE_OFFSET: usize = SAVE_MOONSTONE_Y_OFFSET + MOONSTONE_SLOT_COUNT;
+pub const SAVE_MOONSTONE_Z_OFFSET: usize = SAVE_MOONSTONE_SCENE_OFFSET + MOONSTONE_SLOT_COUNT;
+pub const SAVE_REAGENTS_OFFSET: usize = SAVE_MOONSTONE_Z_OFFSET + MOONSTONE_SLOT_COUNT;
 pub const SAVE_YEAR_OFFSET: usize = 0x02ce;
 pub const SAVE_TIMING_STATUS_TAG_OFFSET: usize = 0x02d4;
 pub const SAVE_ACTIVE_PLAYER_OFFSET: usize = 0x02d5;
