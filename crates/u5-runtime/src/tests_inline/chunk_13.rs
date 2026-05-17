@@ -1,4 +1,21 @@
     #[test]
+    fn tlk_printable_and_control_byte_ranges_match_spec() {
+        // conversation.md §7: byte runner classifies high-bit-set
+        // bytes in 0xA0..=0xFD as printable text and bytes in
+        // 0x80..=0x9D as engine control codes (with 0x9E..=0x9F
+        // carved out for the GOTO label range).
+        assert_eq!(TLK_PRINTABLE_TEXT_FIRST, 0xA0);
+        assert_eq!(TLK_PRINTABLE_TEXT_LAST, 0xFD);
+        assert_eq!(TLK_CONTROL_CODE_FIRST, 0x80);
+        assert_eq!(TLK_CONTROL_CODE_LAST, 0x9D);
+        // The control-code range ends one byte before the GOTO range
+        // begins; the GOTO range ends one byte before the printable
+        // range begins.
+        assert_eq!(TLK_CONTROL_CODE_LAST + 1, TLK_CODE_GOTO_LABEL_FIRST);
+        assert_eq!(TLK_CODE_GOTO_LABEL_LAST + 1, TLK_PRINTABLE_TEXT_FIRST);
+    }
+
+    #[test]
     fn player_sail_wait_ticks_route_through_named_constants() {
         // weather.md §5: hoisted-sail wait-tick release table.
         assert_eq!(PLAYER_SAIL_WAIT_TICKS_PERPENDICULAR, 0);

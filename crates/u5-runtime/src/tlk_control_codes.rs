@@ -419,6 +419,19 @@ pub enum TlkByteRunnerClass {
     NullByte,
 }
 
+/// `conversation.md §7` printable-text byte range. The byte runner's
+/// printable branch accepts high-bit-set bytes in `0xA0..=0xFD`. The
+/// word-buffer strips the high bit before glyph output.
+pub const TLK_PRINTABLE_TEXT_FIRST: u8 = 0xA0;
+pub const TLK_PRINTABLE_TEXT_LAST: u8 = 0xFD;
+
+/// `conversation.md §7` engine-control byte range. The byte runner's
+/// control-code branch accepts `0x80..=0x9D`; the `0x9E..=0x9F` GOTO
+/// label pair is carved out by [`TLK_CODE_GOTO_LABEL_FIRST`] /
+/// [`TLK_CODE_GOTO_LABEL_LAST`] before this range is matched.
+pub const TLK_CONTROL_CODE_FIRST: u8 = 0x80;
+pub const TLK_CONTROL_CODE_LAST: u8 = 0x9D;
+
 /// `conversation.md §7`: classify a byte by the value-range table that
 /// the byte runner's top-level dispatcher follows in order. The order
 /// matters because `0x9E..=0x9F` would otherwise be subsumed by the
@@ -428,11 +441,15 @@ pub const fn tlk_byte_runner_class(byte: u8) -> TlkByteRunnerClass {
     match byte {
         0x00 => TlkByteRunnerClass::NullByte,
         0x01..=0x7F => TlkByteRunnerClass::DictionaryToken,
-        0x9E..=0x9F => TlkByteRunnerClass::GotoLabel,
-        0xA0..=0xFD => TlkByteRunnerClass::PrintableText,
-        0x80..=0x9D => TlkByteRunnerClass::ControlCode,
-        0xFE => TlkByteRunnerClass::IfElseAlias,
-        0xFF => TlkByteRunnerClass::EndOfResponse,
+        TLK_CODE_GOTO_LABEL_FIRST..=TLK_CODE_GOTO_LABEL_LAST => {
+            TlkByteRunnerClass::GotoLabel
+        }
+        TLK_PRINTABLE_TEXT_FIRST..=TLK_PRINTABLE_TEXT_LAST => {
+            TlkByteRunnerClass::PrintableText
+        }
+        TLK_CONTROL_CODE_FIRST..=TLK_CONTROL_CODE_LAST => TlkByteRunnerClass::ControlCode,
+        TLK_CODE_IF_ELSE_ALT => TlkByteRunnerClass::IfElseAlias,
+        TLK_CODE_END_OF_RESPONSE => TlkByteRunnerClass::EndOfResponse,
     }
 }
 
@@ -681,9 +698,9 @@ pub const fn classify_tlk_byte(byte: u8) -> TlkByteKind {
     match byte {
         0x00 => TlkByteKind::Nul,
         0x01..=0x7F => TlkByteKind::DictionaryToken,
-        0x9E | 0x9F => TlkByteKind::GotoLabel,
-        0x80..=0x9F => TlkByteKind::ControlByte,
-        0xA0..=0xFD => TlkByteKind::PrintableText,
+        TLK_CODE_GOTO_LABEL_FIRST | TLK_CODE_GOTO_LABEL_LAST => TlkByteKind::GotoLabel,
+        TLK_CONTROL_CODE_FIRST..=TLK_CODE_GOTO_LABEL_LAST => TlkByteKind::ControlByte,
+        TLK_PRINTABLE_TEXT_FIRST..=TLK_PRINTABLE_TEXT_LAST => TlkByteKind::PrintableText,
         TLK_CODE_IF_ELSE_ALT => TlkByteKind::IfElseAlias,
         TLK_CODE_END_OF_RESPONSE => TlkByteKind::EndOfResponse,
     }
