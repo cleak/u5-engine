@@ -1,4 +1,18 @@
     #[test]
+    fn town_rest_tick_budget_anchors_to_hours_per_day_times_ticks_per_hour() {
+        // rest-and-camp.md §4: the town-rest tick budget caps at
+        // exactly one day of town-rest ticks (24 hours × 6
+        // ticks/hour = 144). Anchor TOWN_REST_TICK_BUDGET to
+        // HOURS_PER_DAY × TOWN_REST_TICKS_PER_HOUR so the budget
+        // tracks the time-system constants.
+        assert_eq!(
+            TOWN_REST_TICK_BUDGET,
+            HOURS_PER_DAY as u16 * TOWN_REST_TICKS_PER_HOUR as u16,
+        );
+        assert_eq!(TOWN_REST_TICK_BUDGET, 144);
+    }
+
+    #[test]
     fn rest_tick_minute_cadences_derive_from_minutes_per_hour() {
         // rest-and-camp.md §3, §4: rest tick cadences derive from
         // MINUTES_PER_HOUR. Watch-mode rest ticks 20 minutes each

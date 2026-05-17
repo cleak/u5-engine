@@ -1158,8 +1158,12 @@ pub const TOWN_REST_HOUR_WRAP_SUBTRAHEND: u8 = 23;
 /// loop. A digit of `1..=9` plus the 23-not-24 wrap edge can advance
 /// at most this many ten-minute ticks before the loop bails, even if
 /// the target hour has not been reached, so a corrupted clock cannot
-/// spin forever.
-pub const TOWN_REST_TICK_BUDGET: u16 = 144;
+/// spin forever. The budget caps at exactly one day of town-rest
+/// ticks (24 hours × 6 ticks/hour = 144). Anchored to
+/// HOURS_PER_DAY × TOWN_REST_TICKS_PER_HOUR so the budget tracks
+/// the time-system constants.
+pub const TOWN_REST_TICK_BUDGET: u16 =
+    crate::HOURS_PER_DAY as u16 * TOWN_REST_TICKS_PER_HOUR as u16;
 /// `rest-and-camp.md §4`: maximum accepted single-digit rest duration.
 /// `Space` and `0` cancel; `1..=9` are echoed and used as the target-
 /// hour offset.
