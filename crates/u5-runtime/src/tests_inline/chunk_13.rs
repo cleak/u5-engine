@@ -1,4 +1,17 @@
     #[test]
+    fn save_pre_calendar_state_offsets_chain_through_transport_marker() {
+        // formats/saved-gam.md §5: bytes 0x02d4..=0x02d6 are three
+        // adjacent state bytes — timing/status tag, active player
+        // slot, transport marker — preceding the calendar chain.
+        // Anchor each offset to the per-byte chain so resizing any
+        // of these bytes only happens in one place.
+        assert_eq!(SAVE_TIMING_STATUS_TAG_OFFSET, 0x02d4);
+        assert_eq!(SAVE_ACTIVE_PLAYER_OFFSET, 0x02d5);
+        assert_eq!(SAVE_TRANSPORT_MARKER_OFFSET, 0x02d6);
+        assert_eq!(SAVE_TRANSPORT_MARKER_OFFSET + 1, SAVE_MONTH_OFFSET);
+    }
+
+    #[test]
     fn save_calendar_offsets_chain_month_through_ampm() {
         // formats/saved-gam.md §5: calendar/clock bytes form a
         // contiguous per-byte chain at 0x02d7..=0x02de — month,

@@ -300,9 +300,14 @@ pub const SAVE_MOONSTONE_SCENE_OFFSET: usize = SAVE_MOONSTONE_Y_OFFSET + MOONSTO
 pub const SAVE_MOONSTONE_Z_OFFSET: usize = SAVE_MOONSTONE_SCENE_OFFSET + MOONSTONE_SLOT_COUNT;
 pub const SAVE_REAGENTS_OFFSET: usize = SAVE_MOONSTONE_Z_OFFSET + MOONSTONE_SLOT_COUNT;
 pub const SAVE_YEAR_OFFSET: usize = 0x02ce;
+/// `formats/saved-gam.md §5`: bytes 0x02d4..=0x02d6 are three
+/// adjacent state bytes — timing/status tag, active player slot,
+/// transport marker — preceding the calendar/clock chain at
+/// SAVE_MONTH_OFFSET. Anchor each offset to the per-byte chain
+/// so resizing any of these bytes only happens in one place.
 pub const SAVE_TIMING_STATUS_TAG_OFFSET: usize = 0x02d4;
-pub const SAVE_ACTIVE_PLAYER_OFFSET: usize = 0x02d5;
-pub const SAVE_TRANSPORT_MARKER_OFFSET: usize = 0x02d6;
+pub const SAVE_ACTIVE_PLAYER_OFFSET: usize = SAVE_TIMING_STATUS_TAG_OFFSET + 1;
+pub const SAVE_TRANSPORT_MARKER_OFFSET: usize = SAVE_ACTIVE_PLAYER_OFFSET + 1;
 /// `formats/saved-gam.md §5`: calendar/clock bytes at
 /// 0x02d7..=0x02de form a contiguous per-byte chain: month, day,
 /// hour, saved-hour snapshot, minute, combat-round counter,
