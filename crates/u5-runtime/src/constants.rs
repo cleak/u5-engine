@@ -410,8 +410,16 @@ pub const SAVE_CHARACTER_NAME_LEN: usize = 9;
 pub const SAVE_CHARACTER_GENDER_OFFSET: usize = SAVE_CHARACTER_NAME_LEN;
 pub const SAVE_GENDER_MALE_BYTE: u8 = 0x0b;
 pub const SAVE_GENDER_FEMALE_BYTE: u8 = 0x0c;
-pub const SAVE_CHARACTER_CLASS_OFFSET: usize = 0x0a;
-pub const SAVE_CHARACTER_STATUS_OFFSET: usize = 0x0b;
+/// `formats/saved-gam.md §3`: the class byte sits immediately
+/// after the one-byte gender field. Anchored to
+/// [`SAVE_CHARACTER_GENDER_OFFSET`] + 1 so the per-record
+/// gender→class adjacency has one source of truth.
+pub const SAVE_CHARACTER_CLASS_OFFSET: usize = SAVE_CHARACTER_GENDER_OFFSET + 1;
+/// `formats/saved-gam.md §3`: the status byte sits immediately
+/// after the one-byte class field. Anchored to
+/// [`SAVE_CHARACTER_CLASS_OFFSET`] + 1 so the per-record
+/// class→status adjacency has one source of truth.
+pub const SAVE_CHARACTER_STATUS_OFFSET: usize = SAVE_CHARACTER_CLASS_OFFSET + 1;
 pub const SAVE_CHARACTER_STR_OFFSET: usize = 0x0c;
 pub const SAVE_CHARACTER_DEX_OFFSET: usize = 0x0d;
 pub const SAVE_CHARACTER_INT_OFFSET: usize = 0x0e;

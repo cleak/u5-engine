@@ -1,4 +1,17 @@
     #[test]
+    fn save_character_class_and_status_offsets_chain_from_gender() {
+        // formats/saved-gam.md §3: per-record fields are gender at
+        // 0x09, class at 0x0a, status at 0x0b — each field is one
+        // byte and immediately follows the previous one. Anchor the
+        // class and status offsets to the chain so each per-byte
+        // adjacency has one source of truth.
+        assert_eq!(SAVE_CHARACTER_CLASS_OFFSET, SAVE_CHARACTER_GENDER_OFFSET + 1);
+        assert_eq!(SAVE_CHARACTER_STATUS_OFFSET, SAVE_CHARACTER_CLASS_OFFSET + 1);
+        assert_eq!(SAVE_CHARACTER_CLASS_OFFSET, 0x0a);
+        assert_eq!(SAVE_CHARACTER_STATUS_OFFSET, 0x0b);
+    }
+
+    #[test]
     fn save_character_gender_offset_anchors_to_name_len() {
         // formats/saved-gam.md §3: the per-record gender byte sits
         // at offset 0x09 — immediately after the nine-byte NUL-
