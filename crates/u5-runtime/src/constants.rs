@@ -943,7 +943,12 @@ pub const DAYLIGHT_SENTINEL_MIN: u8 = FULL_DAYLIGHT + 1;
 pub const TORCH_LIGHT_FLOOR: u8 = 18;
 pub const LIGHT_SPELL_FLOOR: u8 = 10;
 pub const DAWN_DUSK_LIGHT: [u8; 6] = [2, 5, 10, 20, 34, 49];
-pub const OOL_RECORD_LEN: usize = 8;
+/// `formats/saved-gam.md §11`: per-record byte length of an
+/// active-object slot — eight fields indexed
+/// `ACTIVE_OBJECT_FIELD_TYPE (0)` through `ACTIVE_OBJECT_FIELD_DEP3
+/// (7)`. Anchored to [`crate::ACTIVE_OBJECT_FIELD_DEP3`] + 1 so
+/// adding a field only happens in one place.
+pub const OOL_RECORD_LEN: usize = crate::ACTIVE_OBJECT_FIELD_DEP3 + 1;
 pub const OOL_SLOTS: usize = 32;
 pub const OOL_PLANE_LEN: usize = OOL_RECORD_LEN * OOL_SLOTS;
 /// `formats/saved-gam.md §11`: SAVED.OOL packs both per-plane

@@ -1,4 +1,17 @@
     #[test]
+    fn ool_record_len_anchors_to_last_active_object_field_index() {
+        // formats/saved-gam.md §11: each active-object slot is
+        // eight bytes — fields TYPE (0), TILE (1), X (2), Y (3),
+        // Z (4), DEP1 (5), PHASE (6), DEP3 (7). Anchor
+        // OOL_RECORD_LEN to ACTIVE_OBJECT_FIELD_DEP3 + 1 so adding
+        // a field only happens in one place.
+        assert_eq!(OOL_RECORD_LEN, ACTIVE_OBJECT_FIELD_DEP3 + 1);
+        assert_eq!(OOL_RECORD_LEN, 8);
+        assert_eq!(ACTIVE_OBJECT_FIELD_TYPE, 0);
+        assert_eq!(ACTIVE_OBJECT_FIELD_DEP3, 7);
+    }
+
+    #[test]
     fn save_dungeon_working_buffer_len_anchors_to_dungeon_record_len() {
         // formats/saved-gam.md §8.2: the dungeon/map-cell working
         // buffer is 512 bytes — the same per-dungeon stride
