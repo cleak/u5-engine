@@ -46,13 +46,16 @@ impl std::fmt::Display for ChargenError {
 
 impl std::error::Error for ChargenError {}
 
-/// `chargen.md §6` — total questions in the questionnaire tournament:
-/// round 1 = 4 questions, round 2 = 2 questions, round 3 = 1 question.
-pub const CHARGEN_QUESTION_COUNT: usize = 7;
 /// `chargen.md §6` — number of tournament rounds.
 pub const CHARGEN_ROUND_COUNT: usize = 3;
 /// `chargen.md §6` — questions per round, indexed by round (0..3).
 pub const CHARGEN_QUESTIONS_PER_ROUND: [usize; CHARGEN_ROUND_COUNT] = [4, 2, 1];
+/// `chargen.md §6` — total questions in the questionnaire
+/// tournament. Anchored to the sum of CHARGEN_QUESTIONS_PER_ROUND
+/// so the total derives from the per-round breakdown.
+pub const CHARGEN_QUESTION_COUNT: usize = CHARGEN_QUESTIONS_PER_ROUND[0]
+    + CHARGEN_QUESTIONS_PER_ROUND[1]
+    + CHARGEN_QUESTIONS_PER_ROUND[2];
 
 /// `chargen.md §4` Avatar name-prompt input limit. The free-text
 /// prompt accepts up to eight characters; shorter names are

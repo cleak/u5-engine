@@ -1,4 +1,20 @@
     #[test]
+    fn chargen_question_count_anchors_to_questions_per_round_sum() {
+        // chargen.md §6: the questionnaire tournament runs 4 + 2 + 1
+        // questions across three rounds (= 7 total). Anchor
+        // CHARGEN_QUESTION_COUNT to the sum of
+        // CHARGEN_QUESTIONS_PER_ROUND so resizing a round
+        // automatically updates the total.
+        assert_eq!(
+            CHARGEN_QUESTION_COUNT,
+            CHARGEN_QUESTIONS_PER_ROUND[0]
+                + CHARGEN_QUESTIONS_PER_ROUND[1]
+                + CHARGEN_QUESTIONS_PER_ROUND[2],
+        );
+        assert_eq!(CHARGEN_QUESTION_COUNT, 7);
+    }
+
+    #[test]
     fn save_inn_registry_offset_anchors_to_roster_and_record_len() {
         // formats/saved-gam.md §3: the inn registry view starts
         // at the inn-marker byte of the first character record.
