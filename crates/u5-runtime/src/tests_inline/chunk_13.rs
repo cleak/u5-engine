@@ -1,4 +1,16 @@
     #[test]
+    fn scroll_count_anchors_to_last_scroll_index() {
+        // inventory.md §7: eight U-Use scrolls at catalog indices
+        // LIGHT (0) through NEGATE_TIME (7). Anchor SCROLL_COUNT
+        // to SCROLL_NEGATE_TIME_INDEX + 1 so adding or renaming a
+        // scroll only happens in one place.
+        assert_eq!(SCROLL_COUNT, SCROLL_NEGATE_TIME_INDEX + 1);
+        assert_eq!(SCROLL_COUNT, 8);
+        assert_eq!(SCROLL_LIGHT_INDEX, 0);
+        assert_eq!(SCROLL_NEGATE_TIME_INDEX, 7);
+    }
+
+    #[test]
     fn shadowlord_count_anchors_to_last_shadowlord_index() {
         // endgame.md §2: the three Shadow Lords span the indices
         // FALSEHOOD (0), HATRED (1), COWARDICE (2). Anchor

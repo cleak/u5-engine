@@ -444,7 +444,11 @@ pub const SPELL_CIRCLE_COUNT: usize = 8;
 /// `magic.md §4`: each circle holds six spells.
 pub const SPELLS_PER_CIRCLE: usize = 6;
 pub const EQUIPMENT_COUNT: usize = 48;
-pub const SCROLL_COUNT: usize = 8;
+/// `inventory.md §7` U-Use scroll catalog size. The eight scroll
+/// indices span LIGHT (0) through NEGATE_TIME (7); anchor the
+/// count to [`SCROLL_NEGATE_TIME_INDEX`] + 1 so adding or
+/// renaming a scroll only happens in one place.
+pub const SCROLL_COUNT: usize = SCROLL_NEGATE_TIME_INDEX + 1;
 
 /// `inventory.md §7` U-Use scroll display labels in storage order.
 /// `formats/saved-gam.md §7`: the per-scroll counters at
