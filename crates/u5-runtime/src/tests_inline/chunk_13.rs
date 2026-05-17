@@ -1,4 +1,16 @@
     #[test]
+    fn npc_pathfind_workspace_side_anchors_to_town_grid_side() {
+        // npc-schedules.md §8.1: the NPC pathfinder workspace is
+        // a 32x32 byte scratch grid mirroring the town grid.
+        // Anchor NPC_PATHFIND_WORKSPACE_SIDE to TOWN_GRID_SIDE so
+        // the pathfinder workspace and the town grid share one
+        // source of truth.
+        assert_eq!(NPC_PATHFIND_WORKSPACE_SIDE, TOWN_GRID_SIDE);
+        assert_eq!(NPC_PATHFIND_WORKSPACE_SIDE, 32);
+        assert_eq!(NPC_PATHFIND_WORKSPACE_LEN, 32 * 32);
+    }
+
+    #[test]
     fn npc_file_and_sub_map_lengths_anchor_to_block_sums() {
         // formats/npc.md §2, §3: an .NPC file packs eight 576-byte
         // sub-maps for 4,608 bytes total; each sub-map is the sum

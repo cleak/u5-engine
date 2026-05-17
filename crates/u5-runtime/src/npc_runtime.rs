@@ -162,8 +162,10 @@ pub const fn npc_schedule_state_for_floor_transition(
 /// pathfinder operates on a 32x32 byte scratch grid (1,024 bytes
 /// total) keyed by `(row, col)` in row-major order. The workspace
 /// is rebuilt from scratch on every pathfinding call — it carries
-/// no incremental state between ticks.
-pub const NPC_PATHFIND_WORKSPACE_SIDE: usize = 32;
+/// no incremental state between ticks. The workspace mirrors the
+/// town grid; anchor to [`crate::TOWN_GRID_SIDE`] so the
+/// pathfinder workspace and the town grid share one value.
+pub const NPC_PATHFIND_WORKSPACE_SIDE: usize = crate::TOWN_GRID_SIDE;
 pub const NPC_PATHFIND_WORKSPACE_LEN: usize =
     NPC_PATHFIND_WORKSPACE_SIDE * NPC_PATHFIND_WORKSPACE_SIDE;
 
