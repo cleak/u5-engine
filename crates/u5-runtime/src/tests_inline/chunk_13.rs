@@ -1,4 +1,19 @@
     #[test]
+    fn daylight_sentinel_min_anchors_to_full_daylight() {
+        // time.md §6 / lighting.md §3: values strictly above
+        // FULL_DAYLIGHT (= 50) are the "skip recompute" sentinel
+        // band; DAYLIGHT_SENTINEL_MIN names the first byte in that
+        // band and must equal FULL_DAYLIGHT + 1.
+        assert_eq!(FULL_DAYLIGHT, 50);
+        assert_eq!(FULL_DARKNESS, 2);
+        assert_eq!(DAYLIGHT_SENTINEL_MIN, FULL_DAYLIGHT + 1);
+        assert_eq!(DAYLIGHT_SENTINEL_MIN, 51);
+        // ambient_is_sentinel must agree at the boundary.
+        assert!(!ambient_is_sentinel(FULL_DAYLIGHT));
+        assert!(ambient_is_sentinel(DAYLIGHT_SENTINEL_MIN));
+    }
+
+    #[test]
     fn cleanup_increment_recompute_matches_spec() {
         // time.md §3: the per-turn cleanup routine takes one word
         // argument. Argument 0 is the "recompute, do not advance"

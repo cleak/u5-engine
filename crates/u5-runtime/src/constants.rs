@@ -814,9 +814,13 @@ pub const REST_MANA_CAP: u8 = 99;
 pub const DEFAULT_TORCH_STOCK: u8 = 4;
 pub const SURFACE_TORCH_DURATION: u8 = 240;
 pub const DUNGEON_TORCH_DURATION_MIN: u8 = 112;
+/// `time.md §6` / `lighting.md §3` published ambient-light scale.
+/// Full daylight is 50 and full darkness is 2; values strictly above
+/// `FULL_DAYLIGHT` (`>= DAYLIGHT_SENTINEL_MIN`) are the "skip
+/// recompute" sentinel band the cleanup routine leaves alone.
 pub const FULL_DAYLIGHT: u8 = 50;
 pub const FULL_DARKNESS: u8 = 2;
-pub const DAYLIGHT_SENTINEL_MIN: u8 = 51;
+pub const DAYLIGHT_SENTINEL_MIN: u8 = FULL_DAYLIGHT + 1;
 pub const TORCH_LIGHT_FLOOR: u8 = 18;
 pub const LIGHT_SPELL_FLOOR: u8 = 10;
 pub const DAWN_DUSK_LIGHT: [u8; 6] = [2, 5, 10, 20, 34, 49];
