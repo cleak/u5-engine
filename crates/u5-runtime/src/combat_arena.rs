@@ -4,13 +4,20 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+use crate::DUNGEON_ROOM_SLOTS_PER_BANK;
+
 pub const COMBAT_ARENA_SIDE: usize = 11;
 pub const COMBAT_ARENA_ROW_STRIDE: usize = 32;
 pub const COMBAT_ARENA_METADATA_START: usize = 11;
 pub const COMBAT_ARENA_METADATA_LEN: usize = COMBAT_ARENA_ROW_STRIDE - COMBAT_ARENA_METADATA_START;
 pub const COMBAT_ARENA_RECORD_LEN: usize = COMBAT_ARENA_SIDE * COMBAT_ARENA_ROW_STRIDE;
 pub const BRIT_CBT_RECORDS: usize = 16;
-pub const DUNGEON_CBT_RECORDS: usize = 112;
+/// `formats/cbt.md §2`: number of dungeon-room arena banks in
+/// `DUNGEON.CBT`. Seven of the eight stock dungeons have authored
+/// room triggers (Despise carries none); each contributing dungeon
+/// owns one 16-slot bank.
+pub const DUNGEON_CBT_BANK_COUNT: usize = 7;
+pub const DUNGEON_CBT_RECORDS: usize = DUNGEON_CBT_BANK_COUNT * DUNGEON_ROOM_SLOTS_PER_BANK;
 pub const BRIT_CBT_FILE: &str = "BRIT.CBT";
 pub const DUNGEON_CBT_FILE: &str = "DUNGEON.CBT";
 pub const DUNGEON_ROOM_SOURCE_ROW: usize = 5;

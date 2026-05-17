@@ -472,6 +472,23 @@
     }
 
     #[test]
+    fn dungeon_cbt_records_derived_from_bank_count_and_slots() {
+        // formats/cbt.md §2: DUNGEON.CBT has seven dungeon banks of
+        // sixteen records each (one slot per low-nibble of an `0xF?`
+        // cell in the seven room-bearing dungeons). Promote
+        // DUNGEON_CBT_BANK_COUNT and derive DUNGEON_CBT_RECORDS
+        // from the bank count times DUNGEON_ROOM_SLOTS_PER_BANK so
+        // a future spec change to either side cannot silently
+        // desync the file-length expectation.
+        assert_eq!(DUNGEON_CBT_BANK_COUNT, 7);
+        assert_eq!(
+            DUNGEON_CBT_RECORDS,
+            DUNGEON_CBT_BANK_COUNT * DUNGEON_ROOM_SLOTS_PER_BANK
+        );
+        assert_eq!(DUNGEON_CBT_RECORDS, 112);
+    }
+
+    #[test]
     fn dungeon_room_arena_index_formula_constants_match_spec() {
         // formats/dungeon-dat.md §4: arena index is
         // `(scene.record <= 1 ? 0 : scene.record - 1) * 16 + (cell & 0x0F)`.
