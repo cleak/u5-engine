@@ -850,6 +850,21 @@ pub const CHUNK_BYTES: usize = CHUNK_SIDE * CHUNK_SIDE;
 pub const WORLD_CHUNKS_PER_SIDE: usize = WORLD_SIDE / CHUNK_SIDE;
 pub const WORLD_CHUNK_COUNT: usize = WORLD_CHUNKS_PER_SIDE * WORLD_CHUNKS_PER_SIDE;
 pub const BRIT_STORED_CHUNKS: usize = BRIT_DAT_LEN / CHUNK_BYTES;
+
+/// `overworld.md §4` overworld live-chunk buffer dimensions. The
+/// engine keeps four 16-by-16 chunks live in a 1-KiB chunk buffer
+/// arranged as a 2-by-2 grid; the four chunks together form a
+/// 32-by-32 cell window. The renderer projects an
+/// [`crate::VIEWPORT_SIDE`]-wide subwindow out of this buffer each
+/// frame, and chunk-aligned scroll-base movement reloads the buffer
+/// once every 16 cells of party motion.
+pub const OVERWORLD_CHUNK_BUFFER_GRID_SIDE: usize = 2;
+pub const OVERWORLD_CHUNK_BUFFER_CHUNKS: usize =
+    OVERWORLD_CHUNK_BUFFER_GRID_SIDE * OVERWORLD_CHUNK_BUFFER_GRID_SIDE;
+pub const OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE: usize =
+    OVERWORLD_CHUNK_BUFFER_GRID_SIDE * CHUNK_SIDE;
+pub const OVERWORLD_CHUNK_BUFFER_BYTES: usize =
+    OVERWORLD_CHUNK_BUFFER_CHUNKS * CHUNK_BYTES;
 pub const BRIT_WATER_SENTINEL: u8 = 0xff;
 pub const BRIT_DEEP_WATER_TILE: u8 = 1;
 pub const NPC_PATH_QUEUE_LIMIT: usize = 32;

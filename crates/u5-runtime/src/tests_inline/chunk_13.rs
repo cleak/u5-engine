@@ -1,4 +1,22 @@
     #[test]
+    fn overworld_chunk_buffer_dimensions_match_spec() {
+        // overworld.md §4: the live chunk buffer is four 16-by-16
+        // chunks arranged as a 2-by-2 grid that together form a
+        // 32-by-32 cell window — 1 KiB total.
+        assert_eq!(OVERWORLD_CHUNK_BUFFER_GRID_SIDE, 2);
+        assert_eq!(OVERWORLD_CHUNK_BUFFER_CHUNKS, 4);
+        assert_eq!(OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE, 32);
+        assert_eq!(OVERWORLD_CHUNK_BUFFER_BYTES, 1024);
+        assert_eq!(
+            OVERWORLD_CHUNK_BUFFER_BYTES,
+            OVERWORLD_CHUNK_BUFFER_CHUNKS * CHUNK_BYTES,
+        );
+        // The 11-by-11 viewport projects out of this buffer, so the
+        // window must comfortably cover the viewport on every axis.
+        assert!(OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE >= VIEWPORT_SIDE);
+    }
+
+    #[test]
     fn resurrection_penalty_percent_divisor_matches_spec() {
         // karma.md §5 / magic.md §8: the resurrection XP scaler
         // multiplies by the moral-standing selector and divides by
