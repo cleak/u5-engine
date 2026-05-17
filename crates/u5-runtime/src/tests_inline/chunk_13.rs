@@ -1,4 +1,14 @@
     #[test]
+    fn hcs_glyph_count_anchors_to_ch_glyph_count() {
+        // formats/font-ch.md §2 and formats/font-hcs.md §2 both
+        // ship 128 glyphs per font — the same character set, only
+        // the cell geometry differs. Anchor HCS_GLYPH_COUNT to
+        // CH_GLYPH_COUNT so the two font catalogs stay one value.
+        assert_eq!(HCS_GLYPH_COUNT, CH_GLYPH_COUNT);
+        assert_eq!(HCS_GLYPH_COUNT, 128);
+    }
+
+    #[test]
     fn question_dat_records_anchor_to_narrative_plus_dilemmas() {
         // formats/question-dat.md §2: QUESTION.DAT ships 30 NUL-
         // terminated records — two leading narrative records (gypsy

@@ -102,7 +102,10 @@ pub const CH_CELL_SIDE: usize = 8;
 /// 3072 bytes (128 glyphs × 24 bytes each), each glyph a 16x12 cell
 /// with two bytes per row.
 pub const HCS_FONT_LEN: usize = 3072;
-pub const HCS_GLYPH_COUNT: usize = 128;
+/// `formats/font-hcs.md §2`: 128 glyphs per HCS font — the same
+/// 128-entry character set the .CH catalog ships. Anchored to
+/// [`CH_GLYPH_COUNT`] so the two font catalogs stay one value.
+pub const HCS_GLYPH_COUNT: usize = CH_GLYPH_COUNT;
 pub const HCS_GLYPH_BYTES: usize = 24;
 pub const HCS_CELL_WIDTH: usize = 16;
 pub const HCS_CELL_HEIGHT: usize = 12;
