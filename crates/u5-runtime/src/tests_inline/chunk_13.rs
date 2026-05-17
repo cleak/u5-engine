@@ -1,4 +1,19 @@
     #[test]
+    fn play_start_date_anchors_to_chargen_starting_date() {
+        // systems/chargen.md §6 sets the campaign start year, month,
+        // and day (139, 4, 5); the play-mode entry uses the same
+        // year/month/day. Anchor PLAY_START_YEAR/MONTH/DAY to the
+        // CHARGEN_STARTING_* constants so the chargen exit and the
+        // play-start record share one source of truth.
+        assert_eq!(PLAY_START_YEAR, CHARGEN_STARTING_YEAR);
+        assert_eq!(PLAY_START_MONTH, CHARGEN_STARTING_MONTH);
+        assert_eq!(PLAY_START_DAY, CHARGEN_STARTING_DAY);
+        assert_eq!(PLAY_START_YEAR, 139);
+        assert_eq!(PLAY_START_MONTH, 4);
+        assert_eq!(PLAY_START_DAY, 5);
+    }
+
+    #[test]
     fn save_avatar_and_active_objects_aliases_anchor_to_canonical_constants() {
         // formats/saved-gam.md §3: the Avatar's name field is the
         // same nine-byte slot the character record format uses.

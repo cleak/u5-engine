@@ -254,9 +254,16 @@ pub const NATURAL_MOONGATE_TERRAIN_TILE: u8 = 0xDC;
 pub const NATURAL_MOONGATE_RESTORED_TERRAIN_TILE: u8 = 5;
 pub const NATURAL_MOONGATE_COUNTER_MAX: u8 = 16;
 pub const STEADY_PHASE: u8 = 0x0f;
-pub const PLAY_START_YEAR: u16 = 139;
-pub const PLAY_START_MONTH: u8 = 4;
-pub const PLAY_START_DAY: u8 = 5;
+/// `systems/chargen.md §6` / `systems/save-load.md`: the canonical
+/// campaign start date. The year/month/day match the chargen
+/// starting date documented in chargen.md; the start hour is
+/// the post-chargen play-mode entry hour (chargen itself stamps
+/// 8:35 AM, but the resumed-play save reader normalises to noon).
+/// Anchor the year/month/day to the chargen-side constants so
+/// the chargen exit and the play-start record share one value.
+pub const PLAY_START_YEAR: u16 = crate::CHARGEN_STARTING_YEAR;
+pub const PLAY_START_MONTH: u8 = crate::CHARGEN_STARTING_MONTH;
+pub const PLAY_START_DAY: u8 = crate::CHARGEN_STARTING_DAY;
 pub const PLAY_START_HOUR: u8 = 12;
 /// `formats/saved-gam.md §2`: SAVED.GAM is exactly 4,192 bytes —
 /// the reserved-tail span ending at file offset 0x105F. Anchored
