@@ -1,4 +1,15 @@
     #[test]
+    fn npc_path_queue_limit_anchors_to_pathfind_queue_capacity() {
+        // npc-schedules.md §8.4 BFS queue capacity used by the
+        // NPC pathfinder. constants.rs declared NPC_PATH_QUEUE_LIMIT
+        // = 32 as a bare literal in parallel with npc_runtime.rs's
+        // NPC_PATHFIND_QUEUE_CAPACITY = 32. Anchor the two parallel
+        // names so they share one source of truth.
+        assert_eq!(NPC_PATH_QUEUE_LIMIT, NPC_PATHFIND_QUEUE_CAPACITY);
+        assert_eq!(NPC_PATH_QUEUE_LIMIT, 32);
+    }
+
+    #[test]
     fn world_location_table_rows_anchor_to_scene_partition() {
         // overworld.md §8: WorldLocationTable town-family rows map
         // to scenes 1..=SCENE_TOWN_FAMILY_LAST (32); dungeon-family

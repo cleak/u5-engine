@@ -1177,7 +1177,11 @@ pub const OVERWORLD_CHUNK_BUFFER_BYTES: usize =
     OVERWORLD_CHUNK_BUFFER_CHUNKS * CHUNK_BYTES;
 pub const BRIT_WATER_SENTINEL: u8 = 0xff;
 pub const BRIT_DEEP_WATER_TILE: u8 = 1;
-pub const NPC_PATH_QUEUE_LIMIT: usize = 32;
+/// `npc-schedules.md §8.4` BFS queue capacity used by the NPC
+/// pathfinder. Anchored to the canonical
+/// [`crate::NPC_PATHFIND_QUEUE_CAPACITY`] so the two parallel
+/// names for the same BFS queue size share one source of truth.
+pub const NPC_PATH_QUEUE_LIMIT: usize = crate::NPC_PATHFIND_QUEUE_CAPACITY;
 pub const ACTIVE_OBJECT_NEIGHBORHOOD_RADIUS: usize = 32;
 pub const PLAYER_NPC_SLOT: usize = OOL_SLOTS - 1;
 pub const PLAYER_NPC_SENTINEL_TYPE: u8 = 0x7f;
