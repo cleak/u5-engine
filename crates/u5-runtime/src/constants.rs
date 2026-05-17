@@ -631,8 +631,15 @@ pub const POTION_WHITE_INDEX: usize = 7;
 /// open ground `0x44` (cobble). The U-Use scan walks the
 /// party-centered nearby square and rewrites each accepted cell
 /// in place with the redraw / effect presentation.
-pub const SCEPTRE_BARRIER_TILE_FIRST: u8 = 0x70;
-pub const SCEPTRE_BARRIER_TILE_LAST: u8 = 0x7F;
+/// `catalogs/item-list.md §8` Sceptre-dissolvable barrier tile
+/// range. The Sceptre's U-Use scan rewrites tiles in this range
+/// to ordinary cobble. The range is the same Sceptre-dissolvable
+/// barrier/field family the tile catalog names; anchor each end
+/// to [`crate::TILE_BARRIER_FIRST`] / [`crate::TILE_BARRIER_LAST`]
+/// so the two parallel range definitions share one source of
+/// truth.
+pub const SCEPTRE_BARRIER_TILE_FIRST: u8 = crate::TILE_BARRIER_FIRST;
+pub const SCEPTRE_BARRIER_TILE_LAST: u8 = crate::TILE_BARRIER_LAST;
 pub const SCEPTRE_BARRIER_DISSOLVED_TILE: u8 = 0x44;
 
 /// `catalogs/item-list.md §7.2` White-potion surface visibility-sweep

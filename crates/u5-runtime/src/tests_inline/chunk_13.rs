@@ -1,4 +1,19 @@
     #[test]
+    fn sceptre_barrier_tile_range_anchors_to_tile_barrier_range() {
+        // catalogs/item-list.md §8: the Sceptre's U-Use dissolve
+        // scan rewrites the Sceptre-dissolvable barrier/field
+        // family — the same 0x70..=0x7F range named in the tile
+        // catalog (catalogs/tile-catalog.md §6). Anchor each end
+        // of the Sceptre range to the tile-catalog constants so
+        // the two parallel range definitions share one source of
+        // truth.
+        assert_eq!(SCEPTRE_BARRIER_TILE_FIRST, TILE_BARRIER_FIRST);
+        assert_eq!(SCEPTRE_BARRIER_TILE_LAST, TILE_BARRIER_LAST);
+        assert_eq!(SCEPTRE_BARRIER_TILE_FIRST, 0x70);
+        assert_eq!(SCEPTRE_BARRIER_TILE_LAST, 0x7F);
+    }
+
+    #[test]
     fn npc_path_queue_limit_anchors_to_pathfind_queue_capacity() {
         // npc-schedules.md §8.4 BFS queue capacity used by the
         // NPC pathfinder. constants.rs declared NPC_PATH_QUEUE_LIMIT
