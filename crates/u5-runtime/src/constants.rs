@@ -830,7 +830,12 @@ pub const REAGENT_MANDRAKE: usize = REAGENT_NIGHTSHADE + 1;
 pub const RARE_REAGENT_HARVEST_POINT_COUNT: usize = 3;
 pub const RARE_REAGENT_HARVEST_UNSEEN_DAY: u8 = 0;
 pub const FIXED_HIDDEN_TREASURE_COUNT: usize = 113;
-pub const FIXED_HIDDEN_TREASURE_FOUND_BYTES: usize = 15;
+/// `formats/saved-gam.md §11` fixed-hidden-treasure found-bitmap
+/// byte length. Each treasure has one bit in the bitmap; the
+/// bitmap rounds up to the nearest byte. Anchored to
+/// `ceil(FIXED_HIDDEN_TREASURE_COUNT / 8)` = 15 so the
+/// found-bitmap byte count tracks the treasure count.
+pub const FIXED_HIDDEN_TREASURE_FOUND_BYTES: usize = FIXED_HIDDEN_TREASURE_COUNT.div_ceil(8);
 pub const FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY: u8 = 0;
 pub const FIXED_HIDDEN_TREASURE_OBJECT_TILE: u8 = 0x1f;
 pub const FIXED_HIDDEN_TREASURE_OBJECT_AUX3: u8 = 0xa5;

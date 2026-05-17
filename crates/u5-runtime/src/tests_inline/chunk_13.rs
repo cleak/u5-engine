@@ -1,4 +1,20 @@
     #[test]
+    fn fixed_hidden_treasure_found_bytes_derives_from_treasure_count() {
+        // formats/saved-gam.md §11: each fixed-hidden-treasure
+        // has one bit in the found-bitmap; the bitmap rounds up
+        // to the nearest byte. Anchor FIXED_HIDDEN_TREASURE_
+        // FOUND_BYTES to ceil(FIXED_HIDDEN_TREASURE_COUNT / 8)
+        // so the found-bitmap byte count tracks the treasure
+        // count.
+        assert_eq!(
+            FIXED_HIDDEN_TREASURE_FOUND_BYTES,
+            FIXED_HIDDEN_TREASURE_COUNT.div_ceil(8),
+        );
+        assert_eq!(FIXED_HIDDEN_TREASURE_FOUND_BYTES, 15);
+        assert_eq!(FIXED_HIDDEN_TREASURE_COUNT, 113);
+    }
+
+    #[test]
     fn active_object_field_offsets_chain_sequentially() {
         // formats/saved-gam.md §11: per-record active-object
         // field offsets pack contiguously 0..=7 (TYPE / TILE /
