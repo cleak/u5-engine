@@ -1355,7 +1355,12 @@ pub fn apply_arms_sale(
 /// the surcharge band is `1..=SHOP_SURCHARGE_GOLD_MAX`.
 pub const SHOP_SURCHARGE_GOLD_MIN: u16 = 1;
 /// `shops.md §6.2` shop surcharge maximum gold subtracted on a hit.
-pub const SHOP_SURCHARGE_GOLD_MAX: u16 = 64;
+/// The surcharge formula is `(roll & MASK) + MIN`, so the maximum
+/// value equals `MASK + MIN` by construction. Anchored to
+/// `SHOP_SURCHARGE_ROLL_MASK + SHOP_SURCHARGE_GOLD_MIN` so the
+/// surcharge band's upper bound derives from the mask and bias.
+pub const SHOP_SURCHARGE_GOLD_MAX: u16 =
+    SHOP_SURCHARGE_ROLL_MASK as u16 + SHOP_SURCHARGE_GOLD_MIN;
 /// `shops.md §6.2` mask applied to the surcharge roll seed before
 /// adding [`SHOP_SURCHARGE_GOLD_MIN`]. The low six bits give
 /// `0..=63`, which biases to a uniform `1..=64`-gold band.

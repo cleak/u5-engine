@@ -1,4 +1,21 @@
     #[test]
+    fn shop_surcharge_gold_max_anchors_to_mask_plus_min() {
+        // shops.md §6.2: the shop surcharge formula is
+        // `(roll & MASK) + MIN`, so the surcharge maximum equals
+        // `MASK + MIN` by construction (0x3F + 1 = 64). Anchor
+        // SHOP_SURCHARGE_GOLD_MAX to SHOP_SURCHARGE_ROLL_MASK +
+        // SHOP_SURCHARGE_GOLD_MIN so the band's upper bound
+        // derives from the mask and bias.
+        assert_eq!(
+            SHOP_SURCHARGE_GOLD_MAX,
+            SHOP_SURCHARGE_ROLL_MASK as u16 + SHOP_SURCHARGE_GOLD_MIN,
+        );
+        assert_eq!(SHOP_SURCHARGE_GOLD_MAX, 64);
+        assert_eq!(SHOP_SURCHARGE_ROLL_MASK, 0x3F);
+        assert_eq!(SHOP_SURCHARGE_GOLD_MIN, 1);
+    }
+
+    #[test]
     fn inn_stay_counter_cap_anchors_to_character_month_counter_cap() {
         // shops.md §8.4 + time.md §8: the inn's guest-stay counter
         // is stored in the character record's month-counter byte
