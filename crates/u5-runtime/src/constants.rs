@@ -509,7 +509,12 @@ pub const DOOM_FINAL_ROOM_Y: usize = 7;
 /// nibble is fifteen — the high end of the per-bank slot range
 /// promoted as DUNGEON_ROOM_SLOT_MASK.
 pub const DOOM_FINAL_ROOM_SLOT: u8 = crate::DUNGEON_ROOM_SLOT_MASK;
-pub const EQUIPMENT_SLOT_COUNT: usize = 6;
+/// `inventory.md §3` per-character equipment slot count. The six
+/// slot indices `EQUIP_SLOT_HELM .. EQUIP_SLOT_AMULET` (0..=5)
+/// cover the entire equip-slot family. Anchored to
+/// [`EQUIP_SLOT_AMULET`] + 1 so adding or renaming a slot only
+/// happens in one place.
+pub const EQUIPMENT_SLOT_COUNT: usize = EQUIP_SLOT_AMULET + 1;
 pub const EQUIPMENT_EMPTY: u8 = 0xff;
 pub const EQUIPMENT_STOCK_CAP: u8 = 99;
 /// `inventory.md §2`: word-sized party gold counter caps at 9999 in

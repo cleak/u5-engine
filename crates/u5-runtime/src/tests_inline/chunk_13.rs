@@ -1,4 +1,16 @@
     #[test]
+    fn equipment_slot_count_anchors_to_last_slot_index() {
+        // inventory.md §3: the six equipment slots span the indices
+        // EQUIP_SLOT_HELM..=EQUIP_SLOT_AMULET (0..=5). The slot
+        // count is now anchored to EQUIP_SLOT_AMULET + 1 so adding
+        // or renaming a slot only happens in one place.
+        assert_eq!(EQUIPMENT_SLOT_COUNT, EQUIP_SLOT_AMULET + 1);
+        assert_eq!(EQUIPMENT_SLOT_COUNT, 6);
+        assert_eq!(EQUIP_SLOT_HELM, 0);
+        assert_eq!(EQUIP_SLOT_AMULET, 5);
+    }
+
+    #[test]
     fn karma_record_count_anchors_to_karma_dat_format_records() {
         // formats/karma-dat.md §2: KARMA.DAT ships six NUL-
         // terminated text records. The runtime KARMA_RECORD_COUNT
