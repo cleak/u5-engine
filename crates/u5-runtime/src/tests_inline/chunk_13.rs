@@ -1,4 +1,16 @@
     #[test]
+    fn character_record_name_len_bytes_anchors_to_constants_name_len() {
+        // formats/saved-gam.md §3: the per-character name field is
+        // nine bytes. character_record.rs declared
+        // SAVE_CHARACTER_NAME_LEN_BYTES = 9 in parallel with
+        // constants.rs's SAVE_CHARACTER_NAME_LEN = 9. Anchor the
+        // character-record-module alias to SAVE_CHARACTER_NAME_LEN
+        // so the duplicate cannot drift.
+        assert_eq!(SAVE_CHARACTER_NAME_LEN_BYTES, SAVE_CHARACTER_NAME_LEN);
+        assert_eq!(SAVE_CHARACTER_NAME_LEN_BYTES, 9);
+    }
+
+    #[test]
     fn constants_save_character_record_len_anchors_to_character_record_module() {
         // formats/saved-gam.md §3.1: per-character record stride
         // is 32 bytes. constants.rs and character_record.rs both

@@ -98,7 +98,11 @@ impl CharacterStatus {
 /// contiguously from offset `0x00` (first name byte) through `0x1F`
 /// (last equipment-and-padding tail byte).
 pub const SAVE_CHARACTER_NAME_OFFSET: usize = 0x00;
-pub const SAVE_CHARACTER_NAME_LEN_BYTES: usize = 9;
+/// `formats/saved-gam.md §3`: per-character name-field byte
+/// length. Anchored to [`crate::SAVE_CHARACTER_NAME_LEN`] so the
+/// character-record-module alias and the constants-module
+/// declaration share one source of truth.
+pub const SAVE_CHARACTER_NAME_LEN_BYTES: usize = crate::SAVE_CHARACTER_NAME_LEN;
 pub const SAVE_CHARACTER_STRENGTH_OFFSET: usize = 0x0C;
 pub const SAVE_CHARACTER_DEXTERITY_OFFSET: usize = 0x0D;
 pub const SAVE_CHARACTER_INTELLIGENCE_OFFSET: usize = 0x0E;
