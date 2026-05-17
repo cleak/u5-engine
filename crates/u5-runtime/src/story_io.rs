@@ -38,9 +38,15 @@ pub enum StoryTextMarker {
 }
 
 /// `formats/story-dat.md §3` ASCII byte values for the four named
-/// markers above.
-pub const STORY_PARAGRAPH_START_MARKER: u8 = b'{';
-pub const STORY_SOFT_BREAK_MARKER: u8 = b'_';
+/// markers above. Paragraph-start and soft-break markers are the
+/// same `{` / `_` bytes the shared proportional-font paragraph
+/// renderer recognises across STORY.DAT / END.DAT / QUESTION.DAT
+/// (see formats/font-pcs.md). Anchored to
+/// [`crate::QUESTION_PARAGRAPH_START_MARKER`] /
+/// [`crate::QUESTION_SOFT_BREAK_MARKER`] so all three
+/// renderer-targeted formats share one source of truth.
+pub const STORY_PARAGRAPH_START_MARKER: u8 = crate::QUESTION_PARAGRAPH_START_MARKER;
+pub const STORY_SOFT_BREAK_MARKER: u8 = crate::QUESTION_SOFT_BREAK_MARKER;
 pub const STORY_HARD_NEWLINE_MARKER: u8 = b'\n';
 pub const STORY_RECORD_END_MARKER: u8 = 0;
 

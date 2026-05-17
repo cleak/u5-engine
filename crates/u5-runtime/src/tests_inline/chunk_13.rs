@@ -1,4 +1,19 @@
     #[test]
+    fn story_paragraph_markers_anchor_to_question_markers() {
+        // formats/story-dat.md §3 / formats/question-dat.md §3 /
+        // formats/font-pcs.md: the same proportional-font
+        // paragraph renderer handles STORY.DAT and QUESTION.DAT.
+        // Anchor the STORY.DAT paragraph/soft-break markers to
+        // the QUESTION.DAT markers so all three renderer-targeted
+        // formats (STORY/END/QUESTION) share one source of truth
+        // for the `{` paragraph and `_` soft-break bytes.
+        assert_eq!(STORY_PARAGRAPH_START_MARKER, QUESTION_PARAGRAPH_START_MARKER);
+        assert_eq!(STORY_SOFT_BREAK_MARKER, QUESTION_SOFT_BREAK_MARKER);
+        assert_eq!(STORY_PARAGRAPH_START_MARKER, b'{');
+        assert_eq!(STORY_SOFT_BREAK_MARKER, b'_');
+    }
+
+    #[test]
     fn end_paragraph_markers_anchor_to_question_markers() {
         // formats/end-dat.md §3 / formats/question-dat.md §3 /
         // formats/font-pcs.md: the same proportional-font
