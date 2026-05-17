@@ -1,4 +1,19 @@
     #[test]
+    fn save_avatar_and_active_objects_aliases_anchor_to_canonical_constants() {
+        // formats/saved-gam.md §3: the Avatar's name field is the
+        // same nine-byte slot the character record format uses.
+        // formats/saved-gam.md §8.1: SAVE_ACTIVE_OBJECTS_OFFSET is
+        // a legacy alias for SAVE_ACTIVE_OBJECT_TABLE_OFFSET; both
+        // name the same 0x06B4 file offset. Anchor each alias to
+        // its canonical constant so the duplicate names share one
+        // source of truth.
+        assert_eq!(SAVE_AVATAR_NAME_LEN, SAVE_CHARACTER_NAME_LEN);
+        assert_eq!(SAVE_AVATAR_NAME_LEN, 9);
+        assert_eq!(SAVE_ACTIVE_OBJECTS_OFFSET, SAVE_ACTIVE_OBJECT_TABLE_OFFSET);
+        assert_eq!(SAVE_ACTIVE_OBJECTS_OFFSET, 0x06b4);
+    }
+
+    #[test]
     fn save_scene_offset_anchors_to_wind_offset() {
         // formats/saved-gam.md §5: "The five bytes after wind form
         // the persisted location cluster" — scene at 0x02ed sits

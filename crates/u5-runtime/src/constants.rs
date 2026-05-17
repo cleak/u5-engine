@@ -428,8 +428,17 @@ pub const SAVE_PARTY_Y_OFFSET: usize = 0x02F1;
 /// `formats/saved-gam.md §6`: party Z `0xFF` is the "no active map"
 /// sentinel.
 pub const SAVE_PARTY_Z_NO_ACTIVE_MAP: u8 = 0xFF;
-pub const SAVE_AVATAR_NAME_LEN: usize = 9;
-pub const SAVE_ACTIVE_OBJECTS_OFFSET: usize = 0x06b4;
+/// `formats/saved-gam.md §3`: Avatar's name field is the same
+/// nine-byte NUL-padded slot every character record uses (record
+/// zero is the Avatar). Anchored to [`SAVE_CHARACTER_NAME_LEN`]
+/// so the two parallel name-length constants stay one value.
+pub const SAVE_AVATAR_NAME_LEN: usize = SAVE_CHARACTER_NAME_LEN;
+/// `formats/saved-gam.md §8.1`: legacy alias for
+/// [`SAVE_ACTIVE_OBJECT_TABLE_OFFSET`]; both name the same
+/// 0x06B4 file offset where the active-object table snapshot
+/// begins. Anchored so the two parallel names share one source
+/// of truth.
+pub const SAVE_ACTIVE_OBJECTS_OFFSET: usize = SAVE_ACTIVE_OBJECT_TABLE_OFFSET;
 /// `formats/saved-gam.md §12`: 2,220-byte reserved tail at file
 /// offsets `0x07B4..=0x105F` that follows the active-object table.
 /// In memory the region holds the NPC schedule blob, NPC runtime
