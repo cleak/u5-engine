@@ -188,7 +188,7 @@ pub const SHOPPE_RECORDS_GUILD_LAST: usize = 162;
 pub const SHOPPE_RECORDS_HEALER_FIRST: usize = SHOPPE_RECORDS_GUILD_LAST + 1;
 pub const SHOPPE_RECORDS_HEALER_LAST: usize = 173;
 
-pub const SHOPPE_RECORDS_INNKEEPER_FIRST: usize = 174;
+pub const SHOPPE_RECORDS_INNKEEPER_FIRST: usize = SHOPPE_RECORDS_HEALER_LAST + 1;
 pub const SHOPPE_RECORDS_INNKEEPER_LAST: usize = 193;
 
 /// `formats/shoppe-dat.md §4`: substitution placeholder a `SHOPPE.DAT`

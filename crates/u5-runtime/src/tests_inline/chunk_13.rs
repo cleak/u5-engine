@@ -1,4 +1,18 @@
     #[test]
+    fn shoppe_innkeeper_band_anchors_to_healer_band() {
+        // formats/shoppe-dat.md §3: the innkeeper band sits
+        // immediately after the healer band. Anchor
+        // SHOPPE_RECORDS_INNKEEPER_FIRST to
+        // SHOPPE_RECORDS_HEALER_LAST + 1 so the
+        // healer→innkeeper adjacency has one source of truth.
+        assert_eq!(
+            SHOPPE_RECORDS_INNKEEPER_FIRST,
+            SHOPPE_RECORDS_HEALER_LAST + 1,
+        );
+        assert_eq!(SHOPPE_RECORDS_INNKEEPER_FIRST, 174);
+    }
+
+    #[test]
     fn shoppe_record_bands_chain_to_previous_last() {
         // formats/shoppe-dat.md §3: shoppe-record bands tile
         // contiguously across the file (with two known gaps —
