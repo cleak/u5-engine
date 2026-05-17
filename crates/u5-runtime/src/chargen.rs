@@ -174,14 +174,28 @@ pub const CHARGEN_SEED_MAGIC_POWDER: u8 = 0;
 /// questionnaire-created save. Mandrake, spider silk, and sulfurous
 /// ash start at zero — the player must source them before mixing the
 /// spells those reagents gate.
-pub const CHARGEN_SEED_REAGENT_BLACK_PEARL: u8 = 4;
-pub const CHARGEN_SEED_REAGENT_BLOOD_MOSS: u8 = 6;
-pub const CHARGEN_SEED_REAGENT_GARLIC: u8 = 7;
-pub const CHARGEN_SEED_REAGENT_GINSENG: u8 = 6;
-pub const CHARGEN_SEED_REAGENT_MANDRAKE: u8 = 0;
-pub const CHARGEN_SEED_REAGENT_NIGHTSHADE: u8 = 3;
-pub const CHARGEN_SEED_REAGENT_SPIDER_SILK: u8 = 0;
-pub const CHARGEN_SEED_REAGENT_SULFUROUS_ASH: u8 = 0;
+///
+/// Each CHARGEN_SEED_REAGENT_* equals the matching
+/// `crate::DEFAULT_REAGENTS[crate::REAGENT_*]` slot. Anchor each
+/// seed through the storage-indexed array so a rebalance of either
+/// the chargen seed or the global default reagent stock flows
+/// through one source of truth.
+pub const CHARGEN_SEED_REAGENT_BLACK_PEARL: u8 =
+    crate::DEFAULT_REAGENTS[crate::REAGENT_BLACK_PEARL];
+pub const CHARGEN_SEED_REAGENT_BLOOD_MOSS: u8 =
+    crate::DEFAULT_REAGENTS[crate::REAGENT_BLOOD_MOSS];
+pub const CHARGEN_SEED_REAGENT_GARLIC: u8 =
+    crate::DEFAULT_REAGENTS[crate::REAGENT_GARLIC];
+pub const CHARGEN_SEED_REAGENT_GINSENG: u8 =
+    crate::DEFAULT_REAGENTS[crate::REAGENT_GINSENG];
+pub const CHARGEN_SEED_REAGENT_MANDRAKE: u8 =
+    crate::DEFAULT_REAGENTS[crate::REAGENT_MANDRAKE];
+pub const CHARGEN_SEED_REAGENT_NIGHTSHADE: u8 =
+    crate::DEFAULT_REAGENTS[crate::REAGENT_NIGHTSHADE];
+pub const CHARGEN_SEED_REAGENT_SPIDER_SILK: u8 =
+    crate::DEFAULT_REAGENTS[crate::REAGENT_SPIDER_SILK];
+pub const CHARGEN_SEED_REAGENT_SULFUROUS_ASH: u8 =
+    crate::DEFAULT_REAGENTS[crate::REAGENT_SULFUR_ASH];
 
 /// `chargen.md §4` maximum visible characters the name prompt accepts.
 /// The shipped prompt prints "By what name shalt thou be known?" and

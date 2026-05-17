@@ -1,4 +1,55 @@
     #[test]
+    fn chargen_reagent_seeds_alias_to_default_reagents_slots() {
+        // chargen.md §8: the chargen seeded reagent counters are
+        // the same values as the global DEFAULT_REAGENTS storage-
+        // indexed array (BlackPearl=4, BloodMoss=6, Garlic=7,
+        // Ginseng=6, Mandrake=0, Nightshade=3, SpiderSilk=0,
+        // SulfurousAsh=0). Anchor each CHARGEN_SEED_REAGENT_*
+        // through the matching DEFAULT_REAGENTS[REAGENT_*] slot
+        // so a rebalance flows through one source of truth.
+        assert_eq!(
+            CHARGEN_SEED_REAGENT_BLACK_PEARL,
+            DEFAULT_REAGENTS[REAGENT_BLACK_PEARL],
+        );
+        assert_eq!(
+            CHARGEN_SEED_REAGENT_BLOOD_MOSS,
+            DEFAULT_REAGENTS[REAGENT_BLOOD_MOSS],
+        );
+        assert_eq!(
+            CHARGEN_SEED_REAGENT_GARLIC,
+            DEFAULT_REAGENTS[REAGENT_GARLIC],
+        );
+        assert_eq!(
+            CHARGEN_SEED_REAGENT_GINSENG,
+            DEFAULT_REAGENTS[REAGENT_GINSENG],
+        );
+        assert_eq!(
+            CHARGEN_SEED_REAGENT_MANDRAKE,
+            DEFAULT_REAGENTS[REAGENT_MANDRAKE],
+        );
+        assert_eq!(
+            CHARGEN_SEED_REAGENT_NIGHTSHADE,
+            DEFAULT_REAGENTS[REAGENT_NIGHTSHADE],
+        );
+        assert_eq!(
+            CHARGEN_SEED_REAGENT_SPIDER_SILK,
+            DEFAULT_REAGENTS[REAGENT_SPIDER_SILK],
+        );
+        assert_eq!(
+            CHARGEN_SEED_REAGENT_SULFUROUS_ASH,
+            DEFAULT_REAGENTS[REAGENT_SULFUR_ASH],
+        );
+        assert_eq!(CHARGEN_SEED_REAGENT_BLACK_PEARL, 4);
+        assert_eq!(CHARGEN_SEED_REAGENT_BLOOD_MOSS, 6);
+        assert_eq!(CHARGEN_SEED_REAGENT_GARLIC, 7);
+        assert_eq!(CHARGEN_SEED_REAGENT_GINSENG, 6);
+        assert_eq!(CHARGEN_SEED_REAGENT_MANDRAKE, 0);
+        assert_eq!(CHARGEN_SEED_REAGENT_NIGHTSHADE, 3);
+        assert_eq!(CHARGEN_SEED_REAGENT_SPIDER_SILK, 0);
+        assert_eq!(CHARGEN_SEED_REAGENT_SULFUROUS_ASH, 0);
+    }
+
+    #[test]
     fn u4_transfer_strength_floor_aliases_to_chargen_floor() {
         // u4-transfer.md §7 (and chargen): the published "20 is
         // the minimum starting Strength" rule applies to both the
