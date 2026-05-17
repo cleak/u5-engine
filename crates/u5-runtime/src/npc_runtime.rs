@@ -487,9 +487,12 @@ pub const fn npc_pathfind_visit_stamp(direction: u8) -> u8 {
 }
 
 /// `npc-schedules.md §8.5` paired floor-link marker tile bytes used by
-/// the tile-ID variant of the pathfinder.
-pub const NPC_FLOOR_LINK_TILE_C8: u8 = 0xC8;
-pub const NPC_FLOOR_LINK_TILE_C9: u8 = 0xC9;
+/// the tile-ID variant of the pathfinder. The same byte pair is the
+/// town-mode marker family `NPC_FLOOR_LINK_TILE_A` / `_B`; anchor
+/// these aliases to that promoted source so the schedule-walker and
+/// the town-mode floor link share one definition.
+pub const NPC_FLOOR_LINK_TILE_C8: u8 = crate::NPC_FLOOR_LINK_TILE_A;
+pub const NPC_FLOOR_LINK_TILE_C9: u8 = crate::NPC_FLOOR_LINK_TILE_B;
 
 /// `npc-schedules.md §6`: classify a real boundary transition into the
 /// movement state byte the per-tick walker switches on, given the NPC's

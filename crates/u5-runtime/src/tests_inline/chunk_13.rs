@@ -1,4 +1,16 @@
     #[test]
+    fn npc_floor_link_tile_aliases_anchor_to_constants() {
+        // npc-schedules.md §8.5: floor-link marker tile bytes 0xC8 and
+        // 0xC9 are the same paired marker family the town-mode loader
+        // harvests at entry. The two callers (schedule walker, town
+        // entry) must share one source of truth.
+        assert_eq!(NPC_FLOOR_LINK_TILE_C8, NPC_FLOOR_LINK_TILE_A);
+        assert_eq!(NPC_FLOOR_LINK_TILE_C9, NPC_FLOOR_LINK_TILE_B);
+        assert_eq!(NPC_FLOOR_LINK_TILE_C8, 0xC8);
+        assert_eq!(NPC_FLOOR_LINK_TILE_C9, 0xC9);
+    }
+
+    #[test]
     fn town_arrest_jail_scene_anchors_to_yew() {
         // town-mode.md §5: the arrest path sends the party to scene
         // Yew (`TOWNE:3`, scene byte 4 = SCENE_YEW) at floor 0 cell
