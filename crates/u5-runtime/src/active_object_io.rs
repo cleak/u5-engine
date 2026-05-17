@@ -42,14 +42,19 @@ pub const fn active_object_slot_role(slot: usize) -> Option<ActiveObjectSlotRole
 }
 
 /// `active-objects.md §3` field offsets within the eight-byte record.
+/// `formats/saved-gam.md §11` per-record active-object field
+/// offsets. The eight fields pack contiguously from offset 0
+/// through 7 (TYPE / TILE / X / Y / Z / DEP1 / PHASE / DEP3).
+/// Anchor each successor to the chain so adding or reordering a
+/// field only happens in one place.
 pub const ACTIVE_OBJECT_FIELD_TYPE: usize = 0;
-pub const ACTIVE_OBJECT_FIELD_TILE: usize = 1;
-pub const ACTIVE_OBJECT_FIELD_X: usize = 2;
-pub const ACTIVE_OBJECT_FIELD_Y: usize = 3;
-pub const ACTIVE_OBJECT_FIELD_Z: usize = 4;
-pub const ACTIVE_OBJECT_FIELD_DEP1: usize = 5;
-pub const ACTIVE_OBJECT_FIELD_PHASE: usize = 6;
-pub const ACTIVE_OBJECT_FIELD_DEP3: usize = 7;
+pub const ACTIVE_OBJECT_FIELD_TILE: usize = ACTIVE_OBJECT_FIELD_TYPE + 1;
+pub const ACTIVE_OBJECT_FIELD_X: usize = ACTIVE_OBJECT_FIELD_TILE + 1;
+pub const ACTIVE_OBJECT_FIELD_Y: usize = ACTIVE_OBJECT_FIELD_X + 1;
+pub const ACTIVE_OBJECT_FIELD_Z: usize = ACTIVE_OBJECT_FIELD_Y + 1;
+pub const ACTIVE_OBJECT_FIELD_DEP1: usize = ACTIVE_OBJECT_FIELD_Z + 1;
+pub const ACTIVE_OBJECT_FIELD_PHASE: usize = ACTIVE_OBJECT_FIELD_DEP1 + 1;
+pub const ACTIVE_OBJECT_FIELD_DEP3: usize = ACTIVE_OBJECT_FIELD_PHASE + 1;
 
 /// `active-objects.md §8` outdoor step-committer destination-tile
 /// chance gate. After ordinary terrain/occupancy validation accepts

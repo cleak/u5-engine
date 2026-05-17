@@ -1,4 +1,22 @@
     #[test]
+    fn active_object_field_offsets_chain_sequentially() {
+        // formats/saved-gam.md §11: per-record active-object
+        // field offsets pack contiguously 0..=7 (TYPE / TILE /
+        // X / Y / Z / DEP1 / PHASE / DEP3). Anchor each
+        // successor to the chain so adding or reordering a
+        // field only happens in one place.
+        assert_eq!(ACTIVE_OBJECT_FIELD_TILE, ACTIVE_OBJECT_FIELD_TYPE + 1);
+        assert_eq!(ACTIVE_OBJECT_FIELD_X, ACTIVE_OBJECT_FIELD_TILE + 1);
+        assert_eq!(ACTIVE_OBJECT_FIELD_Y, ACTIVE_OBJECT_FIELD_X + 1);
+        assert_eq!(ACTIVE_OBJECT_FIELD_Z, ACTIVE_OBJECT_FIELD_Y + 1);
+        assert_eq!(ACTIVE_OBJECT_FIELD_DEP1, ACTIVE_OBJECT_FIELD_Z + 1);
+        assert_eq!(ACTIVE_OBJECT_FIELD_PHASE, ACTIVE_OBJECT_FIELD_DEP1 + 1);
+        assert_eq!(ACTIVE_OBJECT_FIELD_DEP3, ACTIVE_OBJECT_FIELD_PHASE + 1);
+        assert_eq!(ACTIVE_OBJECT_FIELD_TYPE, 0);
+        assert_eq!(ACTIVE_OBJECT_FIELD_DEP3, 7);
+    }
+
+    #[test]
     fn combat_class_and_field_kind_consecutive_runs_chain() {
         // monster-bestiary.md §2 / combat.md §11: a handful of
         // combat-class ids and all four field-kind bytes occupy
