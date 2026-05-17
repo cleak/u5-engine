@@ -545,8 +545,12 @@ pub const SAVE_CHARACTER_NAME_LEN: usize = 9;
 /// field's length. Anchored to [`SAVE_CHARACTER_NAME_LEN`] so
 /// adding or resizing the name field only happens in one place.
 pub const SAVE_CHARACTER_GENDER_OFFSET: usize = SAVE_CHARACTER_NAME_LEN;
+/// `formats/saved-gam.md §3` gender-byte encoding. The two
+/// shipped genders use consecutive opaque sentinel bytes 0x0B
+/// (male) and 0x0C (female). Anchor FEMALE to MALE + 1 so the
+/// adjacent pair stays consecutive.
 pub const SAVE_GENDER_MALE_BYTE: u8 = 0x0b;
-pub const SAVE_GENDER_FEMALE_BYTE: u8 = 0x0c;
+pub const SAVE_GENDER_FEMALE_BYTE: u8 = SAVE_GENDER_MALE_BYTE + 1;
 /// `formats/saved-gam.md §3`: the class byte sits immediately
 /// after the one-byte gender field. Anchored to
 /// [`SAVE_CHARACTER_GENDER_OFFSET`] + 1 so the per-record

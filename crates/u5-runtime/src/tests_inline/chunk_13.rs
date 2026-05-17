@@ -1,4 +1,16 @@
     #[test]
+    fn save_gender_female_byte_anchors_to_male_byte() {
+        // formats/saved-gam.md §3: the two shipped genders use
+        // consecutive opaque sentinel bytes 0x0B (male) and 0x0C
+        // (female). constants.rs declared both as parallel bare
+        // 0x0b/0x0c literals. Anchor FEMALE to MALE + 1 so the
+        // adjacent pair stays consecutive.
+        assert_eq!(SAVE_GENDER_FEMALE_BYTE, SAVE_GENDER_MALE_BYTE + 1);
+        assert_eq!(SAVE_GENDER_MALE_BYTE, 0x0b);
+        assert_eq!(SAVE_GENDER_FEMALE_BYTE, 0x0c);
+    }
+
+    #[test]
     fn story_paragraph_markers_anchor_to_question_markers() {
         // formats/story-dat.md §3 / formats/question-dat.md §3 /
         // formats/font-pcs.md: the same proportional-font
