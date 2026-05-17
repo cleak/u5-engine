@@ -349,22 +349,61 @@ pub fn sky_strip_composed_cells(
 /// Per `moons.md` §2: compute the cell index `0..11` where the given marker
 /// is visible at the given hour. Returns `None` when the marker is below the
 /// strip's visible horizon.
+/// `moons.md §2` published sky-strip marker hour bands and position
+/// offsets. Each marker's cell position is computed as
+/// `offset - hour`, only when the hour sits inside the corresponding
+/// visible band. Promote the per-marker constants so the renderer's
+/// cell-position math is auditable against the spec table at one
+/// site instead of comparing against bare literals.
+pub const SKY_STRIP_FIXED_HOUR_BAND_FIRST: u8 = 6;
+pub const SKY_STRIP_FIXED_HOUR_BAND_LAST: u8 = 17;
+pub const SKY_STRIP_FIXED_HOUR_OFFSET: u8 = 17;
+pub const SKY_STRIP_TRAMMEL_MORNING_BAND_FIRST: u8 = 0;
+pub const SKY_STRIP_TRAMMEL_MORNING_BAND_LAST: u8 = 8;
+pub const SKY_STRIP_TRAMMEL_MORNING_OFFSET: u8 = 8;
+pub const SKY_STRIP_TRAMMEL_NIGHT_BAND_FIRST: u8 = 21;
+pub const SKY_STRIP_TRAMMEL_NIGHT_BAND_LAST: u8 = 23;
+pub const SKY_STRIP_TRAMMEL_NIGHT_OFFSET: u8 = 32;
+pub const SKY_STRIP_FELUCCA_MORNING_BAND_FIRST: u8 = 0;
+pub const SKY_STRIP_FELUCCA_MORNING_BAND_LAST: u8 = 2;
+pub const SKY_STRIP_FELUCCA_MORNING_OFFSET: u8 = 2;
+pub const SKY_STRIP_FELUCCA_AFTERNOON_BAND_FIRST: u8 = 15;
+pub const SKY_STRIP_FELUCCA_AFTERNOON_BAND_LAST: u8 = 23;
+pub const SKY_STRIP_FELUCCA_AFTERNOON_OFFSET: u8 = 26;
+
 pub fn sky_strip_marker_position(hour: u8, marker: SkyStripMarker) -> Option<u8> {
     let position = match marker {
-        SkyStripMarker::FixedHour => match hour {
-            6..=17 => Some(17u8.wrapping_sub(hour)),
-            _ => None,
-        },
-        SkyStripMarker::Trammel => match hour {
-            0..=8 => Some(8u8.wrapping_sub(hour)),
-            21..=23 => Some(32u8.wrapping_sub(hour)),
-            _ => None,
-        },
-        SkyStripMarker::Felucca => match hour {
-            0..=2 => Some(2u8.wrapping_sub(hour)),
-            15..=23 => Some(26u8.wrapping_sub(hour)),
-            _ => None,
-        },
+        SkyStripMarker::FixedHour
+            if hour >= SKY_STRIP_FIXED_HOUR_BAND_FIRST
+                && hour <= SKY_STRIP_FIXED_HOUR_BAND_LAST =>
+        {
+            Some(SKY_STRIP_FIXED_HOUR_OFFSET.wrapping_sub(hour))
+        }
+        SkyStripMarker::Trammel
+            if hour >= SKY_STRIP_TRAMMEL_MORNING_BAND_FIRST
+                && hour <= SKY_STRIP_TRAMMEL_MORNING_BAND_LAST =>
+        {
+            Some(SKY_STRIP_TRAMMEL_MORNING_OFFSET.wrapping_sub(hour))
+        }
+        SkyStripMarker::Trammel
+            if hour >= SKY_STRIP_TRAMMEL_NIGHT_BAND_FIRST
+                && hour <= SKY_STRIP_TRAMMEL_NIGHT_BAND_LAST =>
+        {
+            Some(SKY_STRIP_TRAMMEL_NIGHT_OFFSET.wrapping_sub(hour))
+        }
+        SkyStripMarker::Felucca
+            if hour >= SKY_STRIP_FELUCCA_MORNING_BAND_FIRST
+                && hour <= SKY_STRIP_FELUCCA_MORNING_BAND_LAST =>
+        {
+            Some(SKY_STRIP_FELUCCA_MORNING_OFFSET.wrapping_sub(hour))
+        }
+        SkyStripMarker::Felucca
+            if hour >= SKY_STRIP_FELUCCA_AFTERNOON_BAND_FIRST
+                && hour <= SKY_STRIP_FELUCCA_AFTERNOON_BAND_LAST =>
+        {
+            Some(SKY_STRIP_FELUCCA_AFTERNOON_OFFSET.wrapping_sub(hour))
+        }
+        _ => None,
     };
     position.filter(|cell| *cell < SKY_STRIP_CELL_COUNT)
 }

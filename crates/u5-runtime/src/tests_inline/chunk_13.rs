@@ -1,4 +1,33 @@
     #[test]
+    fn sky_strip_marker_band_offsets_match_spec() {
+        // moons.md §2: per-marker visible-hour bands and cell-position
+        // offsets. Each marker's cell is `offset - hour` when the
+        // current hour is inside its band.
+        assert_eq!(SKY_STRIP_FIXED_HOUR_BAND_FIRST, 6);
+        assert_eq!(SKY_STRIP_FIXED_HOUR_BAND_LAST, 17);
+        assert_eq!(SKY_STRIP_FIXED_HOUR_OFFSET, 17);
+        assert_eq!(SKY_STRIP_TRAMMEL_MORNING_OFFSET, 8);
+        assert_eq!(SKY_STRIP_TRAMMEL_NIGHT_OFFSET, 32);
+        assert_eq!(SKY_STRIP_FELUCCA_MORNING_OFFSET, 2);
+        assert_eq!(SKY_STRIP_FELUCCA_AFTERNOON_OFFSET, 26);
+        // The renderer's cell-position computation lines up with the
+        // promoted offsets for in-band hours and returns None outside.
+        assert_eq!(
+            sky_strip_marker_position(12, SkyStripMarker::FixedHour),
+            Some(SKY_STRIP_FIXED_HOUR_OFFSET - 12),
+        );
+        assert_eq!(sky_strip_marker_position(0, SkyStripMarker::FixedHour), None);
+        assert_eq!(
+            sky_strip_marker_position(0, SkyStripMarker::Trammel),
+            Some(SKY_STRIP_TRAMMEL_MORNING_OFFSET),
+        );
+        assert_eq!(
+            sky_strip_marker_position(22, SkyStripMarker::Trammel),
+            Some(SKY_STRIP_TRAMMEL_NIGHT_OFFSET - 22),
+        );
+    }
+
+    #[test]
     fn dungeon_doom_scene_byte_anchors_to_last_dungeon() {
         // dungeon-mode.md §3: Doom is the eighth dungeon record
         // (DUNGEON.DAT record 7). Its scene byte must equal the last
