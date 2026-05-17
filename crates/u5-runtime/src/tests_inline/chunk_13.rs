@@ -1,4 +1,22 @@
     #[test]
+    fn potion_indices_chain_sequentially() {
+        // inventory.md §7: U-Use potion dispatch order packs the
+        // eight potion indices into 0..=7 in sequence (Blue,
+        // Yellow, Red, Green, Orange, Purple, Black, White).
+        // Anchor each successor to the chain so adding or
+        // reordering a potion only happens in one place.
+        assert_eq!(POTION_YELLOW_INDEX, POTION_BLUE_INDEX + 1);
+        assert_eq!(POTION_RED_INDEX, POTION_YELLOW_INDEX + 1);
+        assert_eq!(POTION_GREEN_INDEX, POTION_RED_INDEX + 1);
+        assert_eq!(POTION_ORANGE_INDEX, POTION_GREEN_INDEX + 1);
+        assert_eq!(POTION_PURPLE_INDEX, POTION_ORANGE_INDEX + 1);
+        assert_eq!(POTION_BLACK_INDEX, POTION_PURPLE_INDEX + 1);
+        assert_eq!(POTION_WHITE_INDEX, POTION_BLACK_INDEX + 1);
+        assert_eq!(POTION_BLUE_INDEX, 0);
+        assert_eq!(POTION_WHITE_INDEX, 7);
+    }
+
+    #[test]
     fn scroll_indices_chain_sequentially() {
         // inventory.md §7: U-Use scroll dispatch order packs the
         // eight scroll indices into 0..=7 in sequence. Anchor

@@ -623,14 +623,19 @@ pub const SCROLL_SPELL_LABELS: [&str; SCROLL_COUNT] = [
 /// [`POTION_WHITE_INDEX`] + 1 so adding or renaming a potion
 /// only happens in one place.
 pub const POTION_COUNT: usize = POTION_WHITE_INDEX + 1;
+/// `inventory.md §7` U-Use potion dispatch order. The eight
+/// potion indices occupy 0..=7 in sequence (Blue, Yellow, Red,
+/// Green, Orange, Purple, Black, White). Anchor each successor
+/// to the chain so adding or reordering a potion only happens
+/// in one place.
 pub const POTION_BLUE_INDEX: usize = 0;
-pub const POTION_YELLOW_INDEX: usize = 1;
-pub const POTION_RED_INDEX: usize = 2;
-pub const POTION_GREEN_INDEX: usize = 3;
-pub const POTION_ORANGE_INDEX: usize = 4;
-pub const POTION_PURPLE_INDEX: usize = 5;
-pub const POTION_BLACK_INDEX: usize = 6;
-pub const POTION_WHITE_INDEX: usize = 7;
+pub const POTION_YELLOW_INDEX: usize = POTION_BLUE_INDEX + 1;
+pub const POTION_RED_INDEX: usize = POTION_YELLOW_INDEX + 1;
+pub const POTION_GREEN_INDEX: usize = POTION_RED_INDEX + 1;
+pub const POTION_ORANGE_INDEX: usize = POTION_GREEN_INDEX + 1;
+pub const POTION_PURPLE_INDEX: usize = POTION_ORANGE_INDEX + 1;
+pub const POTION_BLACK_INDEX: usize = POTION_PURPLE_INDEX + 1;
+pub const POTION_WHITE_INDEX: usize = POTION_BLACK_INDEX + 1;
 
 /// `catalogs/item-list.md §8` Sceptre of Lord British dissolves
 /// the top-down barrier/field family `0x70..=0x7F` into ordinary
