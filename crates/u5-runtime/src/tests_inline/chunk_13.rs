@@ -1,4 +1,21 @@
     #[test]
+    fn scroll_indices_chain_sequentially() {
+        // inventory.md §7: U-Use scroll dispatch order packs the
+        // eight scroll indices into 0..=7 in sequence. Anchor
+        // each successor to the chain so adding or reordering a
+        // scroll only happens in one place.
+        assert_eq!(SCROLL_WIND_CHANGE_INDEX, SCROLL_LIGHT_INDEX + 1);
+        assert_eq!(SCROLL_PROTECTION_INDEX, SCROLL_WIND_CHANGE_INDEX + 1);
+        assert_eq!(SCROLL_NEGATE_MAGIC_INDEX, SCROLL_PROTECTION_INDEX + 1);
+        assert_eq!(SCROLL_VIEW_INDEX, SCROLL_NEGATE_MAGIC_INDEX + 1);
+        assert_eq!(SCROLL_SUMMON_DAEMON_INDEX, SCROLL_VIEW_INDEX + 1);
+        assert_eq!(SCROLL_RESURRECTION_INDEX, SCROLL_SUMMON_DAEMON_INDEX + 1);
+        assert_eq!(SCROLL_NEGATE_TIME_INDEX, SCROLL_RESURRECTION_INDEX + 1);
+        assert_eq!(SCROLL_LIGHT_INDEX, 0);
+        assert_eq!(SCROLL_NEGATE_TIME_INDEX, 7);
+    }
+
+    #[test]
     fn shadowlord_indices_chain_sequentially() {
         // endgame.md §2: Shadow Lord enumeration indices are
         // Falsehood (0), Hatred (1), Cowardice (2). Anchor each

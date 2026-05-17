@@ -672,14 +672,18 @@ pub const SHADOWLORD_HIDEOUT_MAX: u8 = 8;
 pub const SHADOWLORD_VANQUISHED: u8 = 0xff;
 pub const DEFAULT_SHADOWLORD_HIDEOUTS: [u8; SHADOWLORD_COUNT] = [1, 2, 3];
 pub const SHADOWLORD_OBJECT_TILE_BASE: u8 = 0xfd;
+/// `inventory.md §7` U-Use scroll dispatch order. The eight scroll
+/// indices occupy 0..=7 in sequence. Anchor each successor to
+/// the chain so adding or reordering a scroll only happens in
+/// one place.
 pub const SCROLL_LIGHT_INDEX: usize = 0;
-pub const SCROLL_WIND_CHANGE_INDEX: usize = 1;
-pub const SCROLL_PROTECTION_INDEX: usize = 2;
-pub const SCROLL_NEGATE_MAGIC_INDEX: usize = 3;
-pub const SCROLL_VIEW_INDEX: usize = 4;
-pub const SCROLL_SUMMON_DAEMON_INDEX: usize = 5;
-pub const SCROLL_RESURRECTION_INDEX: usize = 6;
-pub const SCROLL_NEGATE_TIME_INDEX: usize = 7;
+pub const SCROLL_WIND_CHANGE_INDEX: usize = SCROLL_LIGHT_INDEX + 1;
+pub const SCROLL_PROTECTION_INDEX: usize = SCROLL_WIND_CHANGE_INDEX + 1;
+pub const SCROLL_NEGATE_MAGIC_INDEX: usize = SCROLL_PROTECTION_INDEX + 1;
+pub const SCROLL_VIEW_INDEX: usize = SCROLL_NEGATE_MAGIC_INDEX + 1;
+pub const SCROLL_SUMMON_DAEMON_INDEX: usize = SCROLL_VIEW_INDEX + 1;
+pub const SCROLL_RESURRECTION_INDEX: usize = SCROLL_SUMMON_DAEMON_INDEX + 1;
+pub const SCROLL_NEGATE_TIME_INDEX: usize = SCROLL_RESURRECTION_INDEX + 1;
 pub const SCROLL_LIGHT_DURATION: u8 = 240;
 pub const SCROLL_PROTECTION_DURATION: u8 = 100;
 pub const SCROLL_NEGATE_MAGIC_DURATION: u8 = 20;
