@@ -1,4 +1,46 @@
     #[test]
+    fn spell_scene_bit_and_mp_cost_route_through_named_constants() {
+        // catalogs/spell-list.md §4: scene-byte classifier and §10
+        // spell-MP-cost formula both rely on already-promoted named
+        // constants.
+        assert_eq!(SPELLS_PER_CIRCLE, 6);
+        // Scene-byte classifier routes through the SCENE_* ranges.
+        assert_eq!(spell_scene_bit_for_scene_byte(SCENE_OVERWORLD), SPELL_SCENE_OVERWORLD);
+        assert_eq!(
+            spell_scene_bit_for_scene_byte(SCENE_TOWN_FAMILY_FIRST),
+            SPELL_SCENE_INDOOR,
+        );
+        assert_eq!(
+            spell_scene_bit_for_scene_byte(SCENE_TOWN_FAMILY_LAST),
+            SPELL_SCENE_INDOOR,
+        );
+        assert_eq!(
+            spell_scene_bit_for_scene_byte(SCENE_DUNGEON_FAMILY_FIRST),
+            SPELL_SCENE_DUNGEON,
+        );
+        assert_eq!(
+            spell_scene_bit_for_scene_byte(SCENE_DUNGEON_FAMILY_LAST),
+            SPELL_SCENE_DUNGEON,
+        );
+        assert_eq!(
+            spell_scene_bit_for_scene_byte(SCENE_COMBAT_TEMPORARY),
+            SPELL_SCENE_COMBAT,
+        );
+        // MP cost = (spell_index / SPELLS_PER_CIRCLE) + 1 — circle 1 = 1 MP,
+        // circle 8 = 8 MP.
+        assert_eq!(spell_mp_cost(0), Some(1));
+        assert_eq!(spell_mp_cost(SPELLS_PER_CIRCLE - 1), Some(1));
+        assert_eq!(spell_mp_cost(SPELLS_PER_CIRCLE), Some(2));
+        assert_eq!(spell_mp_cost(SPELL_COUNT - 1), Some(8));
+        assert_eq!(spell_mp_cost(SPELL_COUNT), None);
+        // Zero-based circle = spell_index / SPELLS_PER_CIRCLE.
+        assert_eq!(spell_circle_index(0), Some(0));
+        assert_eq!(spell_circle_index(SPELLS_PER_CIRCLE), Some(1));
+        assert_eq!(spell_circle_index(SPELL_COUNT - 1), Some(7));
+        assert_eq!(spell_circle_index(SPELL_COUNT), None);
+    }
+
+    #[test]
     fn ship_transport_heading_routes_through_named_facing_mask() {
         // vehicles.md §6: the ship transport marker's low two bits
         // decode heading as north(0)/east(1)/south(2)/west(3).

@@ -514,9 +514,9 @@ pub fn spell_scene_bit_for_area(area: Area) -> u8 {
 /// above `0x80` as combat-class".
 pub const fn spell_scene_bit_for_scene_byte(byte: u8) -> u8 {
     match byte {
-        0 => SPELL_SCENE_OVERWORLD,
-        1..=32 => SPELL_SCENE_INDOOR,
-        33..=127 => SPELL_SCENE_DUNGEON,
+        SCENE_OVERWORLD => SPELL_SCENE_OVERWORLD,
+        SCENE_TOWN_FAMILY_FIRST..=SCENE_TOWN_FAMILY_LAST => SPELL_SCENE_INDOOR,
+        SCENE_DUNGEON_FAMILY_FIRST..=SCENE_DUNGEON_FAMILY_LAST => SPELL_SCENE_DUNGEON,
         _ => SPELL_SCENE_COMBAT,
     }
 }
@@ -526,7 +526,7 @@ pub const fn spell_scene_bit_for_scene_byte(byte: u8) -> u8 {
 /// indices outside the 48-spell range.
 pub const fn spell_mp_cost(spell_index: usize) -> Option<u8> {
     if spell_index < SPELL_COUNT {
-        Some((spell_index / 6) as u8 + 1)
+        Some((spell_index / SPELLS_PER_CIRCLE) as u8 + 1)
     } else {
         None
     }
@@ -536,7 +536,7 @@ pub const fn spell_mp_cost(spell_index: usize) -> Option<u8> {
 /// `catalogs/spell-list.md` (caster must reach at least `circle + 1`).
 pub const fn spell_circle_index(spell_index: usize) -> Option<u8> {
     if spell_index < SPELL_COUNT {
-        Some((spell_index / 6) as u8)
+        Some((spell_index / SPELLS_PER_CIRCLE) as u8)
     } else {
         None
     }
