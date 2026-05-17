@@ -213,7 +213,10 @@ pub const CHARGEN_NAME_INPUT_LIMIT: usize = SAVE_CHARACTER_NAME_LEN - 1;
 /// save. The chargen writer seeds scene 13 (Iolo's Hut) on floor /
 /// Z 0 at local cell (15, 15) with a zero saved-scene scratch byte.
 /// These bytes come from `INIT.GAM`; chargen does not customise them.
-pub const CHARGEN_STARTING_SCENE: u8 = 13;
+/// Anchored to [`crate::SCENE_IOLOS_HUT`] so the chargen starting
+/// scene and the gazetteer-named Iolo's Hut scene share one
+/// source of truth.
+pub const CHARGEN_STARTING_SCENE: u8 = crate::SCENE_IOLOS_HUT;
 /// `chargen.md §8` / `town-mode.md §3`: the chargen exit cell
 /// uses the engine-wide town-entry default column (X = 15).
 /// Anchored to [`crate::LOCATION_DEFAULT_ENTRY_X`] so the

@@ -1,4 +1,17 @@
     #[test]
+    fn chargen_starting_scene_anchors_to_iolos_hut() {
+        // chargen.md §8: a fresh-from-questionnaire save seeds the
+        // party at scene 13 (Iolo's Hut). chargen.rs declared
+        // CHARGEN_STARTING_SCENE = 13 as a bare literal in
+        // parallel with town_mode::SCENE_IOLOS_HUT = 13. Anchor
+        // the chargen starting scene through to the named
+        // gazetteer scene so the two references share one source
+        // of truth.
+        assert_eq!(CHARGEN_STARTING_SCENE, SCENE_IOLOS_HUT);
+        assert_eq!(CHARGEN_STARTING_SCENE, 13);
+    }
+
+    #[test]
     fn chargen_name_field_and_input_max_anchor_to_save_name_len() {
         // chargen.md §4: the save record's name field is nine
         // bytes wide and chargen accepts up to eight characters of
