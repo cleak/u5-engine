@@ -185,6 +185,13 @@ pub const CHARGEN_STARTING_Y: u8 = 15;
 pub const CHARGEN_STARTING_Z: u8 = 0;
 pub const CHARGEN_STARTING_SAVED_SCENE_SCRATCH: u8 = 0;
 
+/// `formats/saved-gam.md §3.1` per-character defense byte the
+/// factory seed ships for every roster slot. No traced writer
+/// currently recomputes this byte from readied equipment, so the
+/// shipped value is also the runtime value the combat damage
+/// path's random defense subtraction reads.
+pub const CHARGEN_SEED_DEFENSE_BYTE: u8 = 7;
+
 /// `chargen.md §8` starting calendar values for a fresh-from-
 /// questionnaire save. The save clock begins at year 139, month 4,
 /// day 5, 08:35 of the in-world calendar. These bytes come from

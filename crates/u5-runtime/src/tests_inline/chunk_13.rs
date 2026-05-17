@@ -472,6 +472,16 @@
     }
 
     #[test]
+    fn chargen_seed_defense_byte_matches_saved_gam_spec() {
+        // formats/saved-gam.md §3.1: the per-character defense byte
+        // at record offset 0x18 is shipped as `7` for every roster
+        // slot, and no traced writer recomputes it from readied
+        // equipment. Promote the value so seed verifiers and combat
+        // damage code can compare against the spec.
+        assert_eq!(CHARGEN_SEED_DEFENSE_BYTE, 7);
+    }
+
+    #[test]
     fn chargen_starting_calendar_matches_init_gam_seed() {
         // chargen.md §8: a fresh-from-questionnaire save begins at
         // year 139, month 4, day 5, 08:35 of the in-world calendar.
