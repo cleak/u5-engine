@@ -508,7 +508,15 @@ pub const SAVE_ROSTER_OFFSET: usize = SAVE_LEADING_BYTES_LEN;
 /// `party-size` index hold characters who exist in Britannia but are
 /// not currently travelling with the player.
 pub const SAVE_ROSTER_SLOT_COUNT: usize = 16;
-pub const SAVE_INN_REGISTRY_OFFSET: usize = 0x0021;
+/// `formats/saved-gam.md §3` inn registry view starts at the
+/// inn-marker byte of the first character record. Each character
+/// record is SAVE_CHARACTER_RECORD_LEN bytes wide; the inn
+/// marker sits at the last byte (offset record_len - 1) of the
+/// record. So the registry view starts at
+/// SAVE_ROSTER_OFFSET + (SAVE_CHARACTER_RECORD_LEN - 1) = 0x21.
+/// Anchored so the inn-registry offset derives from the roster
+/// layout.
+pub const SAVE_INN_REGISTRY_OFFSET: usize = SAVE_ROSTER_OFFSET + SAVE_CHARACTER_RECORD_LEN - 1;
 /// `formats/saved-gam.md §3` / `shops.md §8.4`: the inn registry
 /// is "a 16-slot, save-backed resident view... a shifted legacy
 /// view over the save image rather than an independent

@@ -1,4 +1,21 @@
     #[test]
+    fn save_inn_registry_offset_anchors_to_roster_and_record_len() {
+        // formats/saved-gam.md §3: the inn registry view starts
+        // at the inn-marker byte of the first character record.
+        // Each character record is SAVE_CHARACTER_RECORD_LEN
+        // bytes wide; the inn marker sits at the last byte of
+        // the record. Anchor SAVE_INN_REGISTRY_OFFSET to
+        // SAVE_ROSTER_OFFSET + (SAVE_CHARACTER_RECORD_LEN - 1)
+        // so the inn-registry offset derives from the roster
+        // layout.
+        assert_eq!(
+            SAVE_INN_REGISTRY_OFFSET,
+            SAVE_ROSTER_OFFSET + SAVE_CHARACTER_RECORD_LEN - 1,
+        );
+        assert_eq!(SAVE_INN_REGISTRY_OFFSET, 0x0021);
+    }
+
+    #[test]
     fn first_playable_foot_transport_marker_anchors_to_foot_band_first() {
         // vehicles.md §2: the foot/avatar transport-family first
         // byte is the value the active player-marker is reset to
