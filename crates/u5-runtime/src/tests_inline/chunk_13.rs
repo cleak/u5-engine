@@ -1,4 +1,19 @@
     #[test]
+    fn constants_save_character_record_len_anchors_to_character_record_module() {
+        // formats/saved-gam.md §3.1: per-character record stride
+        // is 32 bytes. constants.rs and character_record.rs both
+        // declared SAVE_CHARACTER_RECORD_LEN = 32 as parallel
+        // bare literals. Anchor the constants-side declaration to
+        // crate::character_record::SAVE_CHARACTER_RECORD_LEN so
+        // the duplicate cannot drift.
+        assert_eq!(
+            crate::SAVE_CHARACTER_RECORD_LEN,
+            crate::character_record::SAVE_CHARACTER_RECORD_LEN,
+        );
+        assert_eq!(crate::SAVE_CHARACTER_RECORD_LEN, 32);
+    }
+
+    #[test]
     fn save_load_aliases_anchor_to_canonical_format_constants() {
         // formats/saved-gam.md §1: INIT.GAM is the factory seed
         // for SAVED.GAM and ships at the same 4,192-byte length.

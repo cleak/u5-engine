@@ -478,7 +478,12 @@ pub const SAVE_INN_REGISTRY_OFFSET: usize = 0x0021;
 /// [`SAVE_ROSTER_SLOT_COUNT`] so the registry and the roster
 /// share one source of truth.
 pub const SAVE_INN_REGISTRY_COUNT: usize = SAVE_ROSTER_SLOT_COUNT;
-pub const SAVE_CHARACTER_RECORD_LEN: usize = 32;
+/// `formats/saved-gam.md §3.1` per-character record stride.
+/// Anchored to the canonical
+/// [`crate::character_record::SAVE_CHARACTER_RECORD_LEN`] so the
+/// duplicate constants-side declaration cannot drift from the
+/// character-record-module source of truth.
+pub const SAVE_CHARACTER_RECORD_LEN: usize = crate::character_record::SAVE_CHARACTER_RECORD_LEN;
 /// `formats/saved-gam.md §3` total roster region length:
 /// sixteen records of thirty-two bytes each.
 pub const SAVE_ROSTER_REGION_LEN: usize = SAVE_ROSTER_SLOT_COUNT * SAVE_CHARACTER_RECORD_LEN;
