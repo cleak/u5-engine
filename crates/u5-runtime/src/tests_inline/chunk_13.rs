@@ -1,4 +1,19 @@
     #[test]
+    fn combat_actor_slots_anchor_to_ool_slots_and_party_size() {
+        // active-objects.md §7: the combat actor table is a 32-
+        // record view over the active-object table; party-actor
+        // slots match the engine-wide six-member party cap. Anchor
+        // COMBAT_ACTOR_SLOTS to OOL_SLOTS and
+        // COMBAT_PARTY_ACTOR_SLOTS to SAVE_PARTY_SIZE_MAX so the
+        // combat tables and the format constants share one source
+        // of truth.
+        assert_eq!(COMBAT_ACTOR_SLOTS, OOL_SLOTS);
+        assert_eq!(COMBAT_PARTY_ACTOR_SLOTS, SAVE_PARTY_SIZE_MAX as usize);
+        assert_eq!(COMBAT_ACTOR_SLOTS, 32);
+        assert_eq!(COMBAT_PARTY_ACTOR_SLOTS, 6);
+    }
+
+    #[test]
     fn character_record_defense_byte_offset_anchors_to_month_counter() {
         // formats/saved-gam.md §3.1: the per-record defense byte
         // at 0x18 sits immediately after the one-byte month

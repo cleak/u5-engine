@@ -2,8 +2,16 @@
 
 use crate::*;
 
-pub const COMBAT_ACTOR_SLOTS: usize = 32;
-pub const COMBAT_PARTY_ACTOR_SLOTS: usize = 6;
+/// `active-objects.md §7`: combat actor table is a 32-record
+/// view over the active-object table. Anchored to
+/// [`crate::OOL_SLOTS`] so the combat-side slot count and the
+/// .OOL record count share one source of truth.
+pub const COMBAT_ACTOR_SLOTS: usize = crate::OOL_SLOTS;
+/// `combat.md §3`: the combat actor table reserves party slots
+/// (one per travelling member). Anchored to
+/// [`crate::SAVE_PARTY_SIZE_MAX`] so the combat party cap and
+/// the save-file roster cap stay one value.
+pub const COMBAT_PARTY_ACTOR_SLOTS: usize = crate::SAVE_PARTY_SIZE_MAX as usize;
 /// `active-objects.md §7`: combat caps total combatants (party + monsters)
 /// at twenty-six. Monster placement runs in slots 1..=25.
 pub const COMBAT_MAX_COMBATANTS: usize = 26;
