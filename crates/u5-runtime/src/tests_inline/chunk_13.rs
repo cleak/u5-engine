@@ -1,4 +1,24 @@
     #[test]
+    fn sky_strip_morning_offsets_anchor_to_their_band_last() {
+        // moons.md §2: each sky-strip marker's morning-band cell
+        // position is `OFFSET - hour`. At hour == BAND_LAST the
+        // marker sits in cell 0, so OFFSET equals BAND_LAST by
+        // construction. The same identity applies to the Trammel
+        // and Felucca morning bands as it does to the fixed-hour
+        // band (see prior test).
+        assert_eq!(
+            SKY_STRIP_TRAMMEL_MORNING_OFFSET,
+            SKY_STRIP_TRAMMEL_MORNING_BAND_LAST,
+        );
+        assert_eq!(SKY_STRIP_TRAMMEL_MORNING_OFFSET, 8);
+        assert_eq!(
+            SKY_STRIP_FELUCCA_MORNING_OFFSET,
+            SKY_STRIP_FELUCCA_MORNING_BAND_LAST,
+        );
+        assert_eq!(SKY_STRIP_FELUCCA_MORNING_OFFSET, 2);
+    }
+
+    #[test]
     fn sky_strip_fixed_hour_offset_anchors_to_band_last() {
         // moons.md §2: the fixed-hour marker's cell position is
         // `OFFSET - hour`. At hour == BAND_LAST the marker sits in

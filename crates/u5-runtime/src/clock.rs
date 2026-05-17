@@ -378,7 +378,11 @@ pub const SKY_STRIP_FIXED_HOUR_BAND_LAST: u8 = 17;
 pub const SKY_STRIP_FIXED_HOUR_OFFSET: u8 = SKY_STRIP_FIXED_HOUR_BAND_LAST;
 pub const SKY_STRIP_TRAMMEL_MORNING_BAND_FIRST: u8 = 0;
 pub const SKY_STRIP_TRAMMEL_MORNING_BAND_LAST: u8 = 8;
-pub const SKY_STRIP_TRAMMEL_MORNING_OFFSET: u8 = 8;
+/// `moons.md §2`: Trammel morning marker's cell position is
+/// `OFFSET - hour`. At hour == BAND_LAST the marker sits in cell
+/// 0, so the offset equals the band-last hour by construction.
+/// Anchored to [`SKY_STRIP_TRAMMEL_MORNING_BAND_LAST`].
+pub const SKY_STRIP_TRAMMEL_MORNING_OFFSET: u8 = SKY_STRIP_TRAMMEL_MORNING_BAND_LAST;
 pub const SKY_STRIP_TRAMMEL_NIGHT_BAND_FIRST: u8 = 21;
 /// `moons.md §2`: Trammel night-band runs through the last hour
 /// of the day. Anchored to HOURS_PER_DAY - 1.
@@ -386,7 +390,11 @@ pub const SKY_STRIP_TRAMMEL_NIGHT_BAND_LAST: u8 = HOURS_PER_DAY - 1;
 pub const SKY_STRIP_TRAMMEL_NIGHT_OFFSET: u8 = 32;
 pub const SKY_STRIP_FELUCCA_MORNING_BAND_FIRST: u8 = 0;
 pub const SKY_STRIP_FELUCCA_MORNING_BAND_LAST: u8 = 2;
-pub const SKY_STRIP_FELUCCA_MORNING_OFFSET: u8 = 2;
+/// `moons.md §2`: Felucca morning marker's cell position is
+/// `OFFSET - hour`. At hour == BAND_LAST the marker sits in cell
+/// 0, so the offset equals the band-last hour by construction.
+/// Anchored to [`SKY_STRIP_FELUCCA_MORNING_BAND_LAST`].
+pub const SKY_STRIP_FELUCCA_MORNING_OFFSET: u8 = SKY_STRIP_FELUCCA_MORNING_BAND_LAST;
 pub const SKY_STRIP_FELUCCA_AFTERNOON_BAND_FIRST: u8 = 15;
 /// `moons.md §2`: Felucca afternoon-band runs through the last
 /// hour of the day. Anchored to HOURS_PER_DAY - 1.
