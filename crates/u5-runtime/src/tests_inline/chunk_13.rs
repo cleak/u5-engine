@@ -1,4 +1,35 @@
     #[test]
+    fn keep_and_dwelling_scene_bytes_chain_sequentially() {
+        // catalogs/npc-roster.md §1: scene bytes 17..=24 cover the
+        // eight castles/keeps/hamlets (Lord British's Castle..
+        // Buccaneer's Den) and 25..=32 cover the eight outlying
+        // dwellings/shrines (Ararat..Serpent's Hold). town_mode.rs
+        // declared each scene byte as a bare literal. Chain the
+        // named scene-byte constants so adding a keep/dwelling
+        // shifts the later names automatically.
+        assert_eq!(
+            SCENE_LORD_BLACKTHORNS_CASTLE,
+            SCENE_LORD_BRITISHS_CASTLE + 1,
+        );
+        assert_eq!(SCENE_WEST_BRITANNY, SCENE_LORD_BLACKTHORNS_CASTLE + 1);
+        assert_eq!(SCENE_NORTH_BRITANNY, SCENE_WEST_BRITANNY + 1);
+        assert_eq!(SCENE_EAST_BRITANNY, SCENE_NORTH_BRITANNY + 1);
+        assert_eq!(SCENE_PAWS, SCENE_EAST_BRITANNY + 1);
+        assert_eq!(SCENE_COVE, SCENE_PAWS + 1);
+        assert_eq!(SCENE_BUCCANEERS_DEN, SCENE_COVE + 1);
+        assert_eq!(SCENE_BUCCANEERS_DEN, 24);
+        assert_eq!(SCENE_ARARAT, SCENE_BUCCANEERS_DEN + 1);
+        assert_eq!(SCENE_BORDERMARCH, SCENE_ARARAT + 1);
+        assert_eq!(SCENE_FARTHING, SCENE_BORDERMARCH + 1);
+        assert_eq!(SCENE_WINDEMERE, SCENE_FARTHING + 1);
+        assert_eq!(SCENE_STONEGATE, SCENE_WINDEMERE + 1);
+        assert_eq!(SCENE_THE_LYCAEUM, SCENE_STONEGATE + 1);
+        assert_eq!(SCENE_EMPATH_ABBEY, SCENE_THE_LYCAEUM + 1);
+        assert_eq!(SCENE_SERPENTS_HOLD, SCENE_EMPATH_ABBEY + 1);
+        assert_eq!(SCENE_SERPENTS_HOLD, 32);
+    }
+
+    #[test]
     fn town_and_village_scene_bytes_chain_sequentially() {
         // catalogs/npc-roster.md §1: scene bytes 1..=8 cover the
         // eight towns (Moonglow..New Magincia) and 9..=13 cover the

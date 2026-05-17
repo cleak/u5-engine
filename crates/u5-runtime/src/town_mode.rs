@@ -459,22 +459,22 @@ pub const SCENE_WAVEGUIDE: u8 = SCENE_GREYHAVEN + 1;
 pub const SCENE_IOLOS_HUT: u8 = SCENE_WAVEGUIDE + 1;
 
 pub const SCENE_LORD_BRITISHS_CASTLE: u8 = 17;
-pub const SCENE_LORD_BLACKTHORNS_CASTLE: u8 = 18;
-pub const SCENE_WEST_BRITANNY: u8 = 19;
-pub const SCENE_NORTH_BRITANNY: u8 = 20;
-pub const SCENE_EAST_BRITANNY: u8 = 21;
-pub const SCENE_PAWS: u8 = 22;
-pub const SCENE_COVE: u8 = 23;
-pub const SCENE_BUCCANEERS_DEN: u8 = 24;
+pub const SCENE_LORD_BLACKTHORNS_CASTLE: u8 = SCENE_LORD_BRITISHS_CASTLE + 1;
+pub const SCENE_WEST_BRITANNY: u8 = SCENE_LORD_BLACKTHORNS_CASTLE + 1;
+pub const SCENE_NORTH_BRITANNY: u8 = SCENE_WEST_BRITANNY + 1;
+pub const SCENE_EAST_BRITANNY: u8 = SCENE_NORTH_BRITANNY + 1;
+pub const SCENE_PAWS: u8 = SCENE_EAST_BRITANNY + 1;
+pub const SCENE_COVE: u8 = SCENE_PAWS + 1;
+pub const SCENE_BUCCANEERS_DEN: u8 = SCENE_COVE + 1;
 
-pub const SCENE_ARARAT: u8 = 25;
-pub const SCENE_BORDERMARCH: u8 = 26;
-pub const SCENE_FARTHING: u8 = 27;
-pub const SCENE_WINDEMERE: u8 = 28;
-pub const SCENE_STONEGATE: u8 = 29;
-pub const SCENE_THE_LYCAEUM: u8 = 30;
-pub const SCENE_EMPATH_ABBEY: u8 = 31;
-pub const SCENE_SERPENTS_HOLD: u8 = 32;
+pub const SCENE_ARARAT: u8 = SCENE_BUCCANEERS_DEN + 1;
+pub const SCENE_BORDERMARCH: u8 = SCENE_ARARAT + 1;
+pub const SCENE_FARTHING: u8 = SCENE_BORDERMARCH + 1;
+pub const SCENE_WINDEMERE: u8 = SCENE_FARTHING + 1;
+pub const SCENE_STONEGATE: u8 = SCENE_WINDEMERE + 1;
+pub const SCENE_THE_LYCAEUM: u8 = SCENE_STONEGATE + 1;
+pub const SCENE_EMPATH_ABBEY: u8 = SCENE_THE_LYCAEUM + 1;
+pub const SCENE_SERPENTS_HOLD: u8 = SCENE_EMPATH_ABBEY + 1;
 
 /// `town-mode.md §3` per-cell tile-buffer markers the location-load
 /// pipeline harvests, rewrites, or consumes. These bytes appear in
