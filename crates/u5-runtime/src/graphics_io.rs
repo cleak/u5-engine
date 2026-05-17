@@ -133,20 +133,24 @@ pub fn parse_graphic_image_directory_body(
     depth: TileGraphicsDepth,
     resource_name: &str,
 ) -> io::Result<GraphicImageDirectory> {
-    if body.len() < 2 {
+    if body.len() < TILE_IMAGE_DIRECTORY_COUNT_BYTES {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!("{resource_name} image directory is shorter than its count word"),
         ));
     }
     let count = u16_at(body, 0) as usize;
-    let header_len = 2usize
-        .checked_add(count.checked_mul(4).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("{resource_name} image directory count overflows"),
-            )
-        })?)
+    let header_len = TILE_IMAGE_DIRECTORY_COUNT_BYTES
+        .checked_add(
+            count
+                .checked_mul(TILE_IMAGE_DIRECTORY_OFFSET_BYTES)
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("{resource_name} image directory count overflows"),
+                    )
+                })?,
+        )
         .ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -162,7 +166,10 @@ pub fn parse_graphic_image_directory_body(
 
     let mut images = Vec::with_capacity(count);
     for slot in 0..count {
-        let offset = u32_at(body, 2 + slot * 4) as usize;
+        let offset = u32_at(
+            body,
+            TILE_IMAGE_DIRECTORY_COUNT_BYTES + slot * TILE_IMAGE_DIRECTORY_OFFSET_BYTES,
+        ) as usize;
         if offset == 0 {
             images.push(None);
             continue;

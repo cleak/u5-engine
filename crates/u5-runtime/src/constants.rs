@@ -137,6 +137,17 @@ pub const MINIATURE_TILE_ROWS: usize = 16;
 pub const MINIATURE_TILE_OFFSET_BYTES_PER_ROW: usize = 2;
 pub const MINIATURE_TILE_RECORD_BYTES: usize =
     MINIATURE_TILE_ROWS * MINIATURE_TILE_OFFSET_BYTES_PER_ROW;
+
+/// `formats/tiles.md §5.2` image-directory count-word width. The
+/// directory opens with a little-endian unsigned word giving the
+/// number of slot entries that follow.
+pub const TILE_IMAGE_DIRECTORY_COUNT_BYTES: usize = 2;
+/// `formats/tiles.md §5.2` per-slot offset width. Each entry in the
+/// offset table is a little-endian unsigned doubleword.
+pub const TILE_IMAGE_DIRECTORY_OFFSET_BYTES: usize = 4;
+/// `formats/tiles.md §5.2` per-image header width. Each image block
+/// opens with a width word and a height word, two bytes each.
+pub const TILE_IMAGE_BLOCK_HEADER_BYTES: usize = 4;
 #[cfg(test)]
 pub const SINGLE_IMAGE_BIT_FORMAT_MARKER: u16 = 1;
 #[cfg(test)]

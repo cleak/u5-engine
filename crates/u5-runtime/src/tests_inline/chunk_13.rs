@@ -1,4 +1,17 @@
     #[test]
+    fn tile_image_directory_header_widths_match_spec() {
+        // formats/tiles.md §5.2: the image-directory layout opens
+        // with a two-byte count word, an array of four-byte
+        // doubleword offsets, and per-image blocks each opening with
+        // a width word and a height word (four bytes total).
+        // Promote the three widths so parse_graphic_image_directory_body
+        // does not bake `2` and `4` as bare literals.
+        assert_eq!(TILE_IMAGE_DIRECTORY_COUNT_BYTES, 2);
+        assert_eq!(TILE_IMAGE_DIRECTORY_OFFSET_BYTES, 4);
+        assert_eq!(TILE_IMAGE_BLOCK_HEADER_BYTES, 4);
+    }
+
+    #[test]
     fn miniature_tile_glyph_record_layout_matches_spec() {
         // formats/tiles.md §5.1.1: each resident miniature tile glyph
         // record describes sixteen rows with two offset bytes per row,
