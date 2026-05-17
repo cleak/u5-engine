@@ -1,4 +1,21 @@
     #[test]
+    fn tile_class_first_offsets_chain_to_previous_last() {
+        // catalogs/tile-catalog.md §2: the upper-half tile classes
+        // tile contiguously from the door range upward. Anchor
+        // each *_FIRST to the previous class's *_LAST + 1 so
+        // adding or resizing any class automatically shifts the
+        // later ranges.
+        assert_eq!(TILE_DECORATION_FIRST, TILE_DOOR_LAST + 1);
+        assert_eq!(TILE_BARRIER_FIRST, TILE_DECORATION_LAST + 1);
+        assert_eq!(TILE_SPECIAL_FIRST, TILE_BARRIER_LAST + 1);
+        assert_eq!(TILE_VEHICLE_FIRST, TILE_SPECIAL_LAST + 1);
+        assert_eq!(TILE_VEHICLE_ART_FIRST, TILE_VEHICLE_LAST + 1);
+        assert_eq!(TILE_NPC_FIRST, TILE_VEHICLE_ART_LAST + 1);
+        assert_eq!(TILE_DECORATION_FIRST, 0x68);
+        assert_eq!(TILE_NPC_FIRST, 0xC0);
+    }
+
+    #[test]
     fn constants_town_stair_range_anchors_to_town_mode_module() {
         // catalogs/tile-catalog.md §6: town stair tile-ids occupy
         // 0xC4..=0xC7. constants.rs and town_mode.rs both declared

@@ -43,24 +43,28 @@ pub const TILE_FURNITURE_LAST: u8 = 0x5F;
 /// Inclusive door tile range `0x60..=0x67` (door variants).
 pub const TILE_DOOR_FIRST: u8 = 0x60;
 pub const TILE_DOOR_LAST: u8 = 0x67;
-/// Inclusive decoration tile range `0x68..=0x6F` (mosaics, banners, glyphs).
-pub const TILE_DECORATION_FIRST: u8 = 0x68;
+/// `catalogs/tile-catalog.md §2`: the upper-half tile classes
+/// (decoration, barrier, special, vehicle, vehicle-art, NPC)
+/// tile contiguously from the door range upward. Anchor each
+/// *_FIRST to the previous class's *_LAST + 1 so adding or
+/// resizing a class automatically shifts the later ranges.
+pub const TILE_DECORATION_FIRST: u8 = TILE_DOOR_LAST + 1;
 pub const TILE_DECORATION_LAST: u8 = 0x6F;
 /// Inclusive Sceptre-dissolvable barrier/field range `0x70..=0x7F`.
-pub const TILE_BARRIER_FIRST: u8 = 0x70;
+pub const TILE_BARRIER_FIRST: u8 = TILE_DECORATION_LAST + 1;
 pub const TILE_BARRIER_LAST: u8 = 0x7F;
 /// Inclusive special-tile range `0x80..=0x9F` (pendulum, shrines, fountains,
 /// fields, fire/poison/sleep effects).
-pub const TILE_SPECIAL_FIRST: u8 = 0x80;
+pub const TILE_SPECIAL_FIRST: u8 = TILE_BARRIER_LAST + 1;
 pub const TILE_SPECIAL_LAST: u8 = 0x9F;
 /// Inclusive vehicle tile range `0xA0..=0xBB` (horse, ship, skiff, carpet).
-pub const TILE_VEHICLE_FIRST: u8 = 0xA0;
+pub const TILE_VEHICLE_FIRST: u8 = TILE_SPECIAL_LAST + 1;
 pub const TILE_VEHICLE_LAST: u8 = 0xBB;
 /// Inclusive vehicle-art-only range `0xBC..=0xBF` (balloon art).
-pub const TILE_VEHICLE_ART_FIRST: u8 = 0xBC;
+pub const TILE_VEHICLE_ART_FIRST: u8 = TILE_VEHICLE_LAST + 1;
 pub const TILE_VEHICLE_ART_LAST: u8 = 0xBF;
 /// Inclusive NPC sprite range `0xC0..=0xFF` (townspeople, guards, named).
-pub const TILE_NPC_FIRST: u8 = 0xC0;
+pub const TILE_NPC_FIRST: u8 = TILE_VEHICLE_ART_LAST + 1;
 pub const TILE_NPC_LAST: u8 = 0xFF;
 
 /// `catalogs/tile-catalog.md §2` super-category split. The fourteen
