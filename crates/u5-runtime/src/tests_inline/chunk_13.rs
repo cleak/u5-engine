@@ -1,4 +1,17 @@
     #[test]
+    fn dawn_dusk_light_endpoints_anchor_to_full_dark_and_full_day() {
+        // lighting.md §3: the dawn/dusk light ramp starts at
+        // FULL_DARKNESS and ends one step below FULL_DAYLIGHT
+        // (the next step jumps to full daylight). Anchor the
+        // first and last entries to those constants so the ramp
+        // endpoints derive from the lighting scale.
+        assert_eq!(DAWN_DUSK_LIGHT[0], FULL_DARKNESS);
+        assert_eq!(DAWN_DUSK_LIGHT[5], FULL_DAYLIGHT - 1);
+        assert_eq!(DAWN_DUSK_LIGHT[0], 2);
+        assert_eq!(DAWN_DUSK_LIGHT[5], 49);
+    }
+
+    #[test]
     fn encounter_spawn_retry_budget_anchors_to_spawner_retry_limit() {
         // encounters.md §4: same retry budget applies to both the
         // spawner retry loop and the coordinate retry loop.

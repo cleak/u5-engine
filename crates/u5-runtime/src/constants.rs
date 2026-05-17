@@ -1184,7 +1184,12 @@ pub const FULL_DARKNESS: u8 = 2;
 pub const DAYLIGHT_SENTINEL_MIN: u8 = FULL_DAYLIGHT + 1;
 pub const TORCH_LIGHT_FLOOR: u8 = 18;
 pub const LIGHT_SPELL_FLOOR: u8 = 10;
-pub const DAWN_DUSK_LIGHT: [u8; 6] = [2, 5, 10, 20, 34, 49];
+/// `lighting.md §3`: dawn/dusk light ramp values. The ramp starts
+/// at FULL_DARKNESS and ends one step below FULL_DAYLIGHT (the
+/// next step jumps to full daylight). Anchor the first and last
+/// entries to those constants so the ramp endpoints derive from
+/// the lighting scale.
+pub const DAWN_DUSK_LIGHT: [u8; 6] = [FULL_DARKNESS, 5, 10, 20, 34, FULL_DAYLIGHT - 1];
 /// `formats/saved-gam.md §11`: per-record byte length of an
 /// active-object slot — eight fields indexed
 /// `ACTIVE_OBJECT_FIELD_TYPE (0)` through `ACTIVE_OBJECT_FIELD_DEP3
