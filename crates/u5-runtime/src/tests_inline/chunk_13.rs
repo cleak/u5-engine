@@ -1,4 +1,13 @@
     #[test]
+    fn inn_registry_cap_anchors_to_save_roster_slot_count() {
+        // shops.md §8.4: the inn registry is a 16-slot shifted view
+        // over the save image's roster region — the registry cap and
+        // the save roster slot count are the same sixteen slots.
+        assert_eq!(INN_REGISTRY_CAP, SAVE_ROSTER_SLOT_COUNT);
+        assert_eq!(INN_REGISTRY_CAP, 16);
+    }
+
+    #[test]
     fn inn_party_cap_anchors_to_save_party_size_max() {
         // shops.md §8.4: the inn `L` Leave path refuses when the
         // travelling party already has six members — the same cap

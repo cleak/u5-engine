@@ -866,7 +866,13 @@ pub enum ProvisionPurchaseError {
     },
 }
 
-pub const INN_REGISTRY_CAP: usize = 16;
+/// `shops.md §8.4`: the inn registry is "a 16-slot, save-backed
+/// resident view... a shifted legacy view over the save image
+/// rather than an independent post-roster block" — so the registry
+/// cap is the same 16 roster slots the save file already exposes.
+/// Anchored to [`crate::SAVE_ROSTER_SLOT_COUNT`] to keep the shop
+/// path and the save image in lockstep.
+pub const INN_REGISTRY_CAP: usize = crate::SAVE_ROSTER_SLOT_COUNT;
 /// `shops.md §8.4` Active party-size gate for the inn `L` Leave
 /// flow: leave is rejected when the travelling party is already
 /// at the engine-wide party cap. Anchored to
