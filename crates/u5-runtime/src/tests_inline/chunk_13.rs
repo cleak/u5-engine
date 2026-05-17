@@ -1,4 +1,17 @@
     #[test]
+    fn combat_experience_cap_anchors_to_party_gold_cap() {
+        // combat.md §5: each per-attacker experience credit
+        // clamps at the same 9999 word-counter cap inventory.md
+        // §2 documents for the party gold counter. combat_actor.rs
+        // declared COMBAT_EXPERIENCE_CAP = 9999 as a bare literal
+        // in parallel with PARTY_GOLD_CAP. Anchor the experience
+        // cap to PARTY_GOLD_CAP so the word-counter cap has one
+        // source of truth.
+        assert_eq!(COMBAT_EXPERIENCE_CAP, PARTY_GOLD_CAP);
+        assert_eq!(COMBAT_EXPERIENCE_CAP, 9999);
+    }
+
+    #[test]
     fn dungeon_torch_increment_max_anchors_to_low_nibble_mask() {
         // lighting.md §8: dungeon Ignite rolls a uniform [MIN, MAX]
         // increment of 16 outcomes (the low nibble of a random

@@ -230,7 +230,13 @@ pub const COMBAT_FLAME_WIND_DAMAGE_ROLL_MAX: u8 = 30;
 /// defense is summed. The bonus is applied through saturating_add so
 /// a defense byte already near `0xFF` does not wrap.
 pub const PROTECTION_ACTIVE_EFFECT_DEFENSE_BONUS: u8 = 3;
-pub const COMBAT_EXPERIENCE_CAP: u16 = 9999;
+/// `combat.md §5` per-attacker experience cap. Each monster-kill
+/// or spell-cast experience credit clamps at this word-sized
+/// counter cap, identical to the gold-counter convention.
+/// Anchored to [`crate::PARTY_GOLD_CAP`] so the experience cap
+/// and the inventory.md §2 "9999" word-counter cap share one
+/// source of truth.
+pub const COMBAT_EXPERIENCE_CAP: u16 = crate::PARTY_GOLD_CAP;
 pub const COMBAT_TARGET_PICK_COUNTED_PARTY_SLOTS: usize = 5;
 pub const COMBAT_ROUND_COUNTER_WRAP: u8 = 10;
 pub const COMBAT_ROUND_WRAP_TIME_ADVANCE_MINUTES: u8 = 1;
