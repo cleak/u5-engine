@@ -1,4 +1,16 @@
     #[test]
+    fn saved_ool_len_anchors_to_plane_count_times_plane_len() {
+        // formats/saved-gam.md §11: SAVED.OOL is 512 bytes —
+        // surface in the first 256 bytes, underworld in the second.
+        // Promote SAVED_OOL_PLANE_COUNT = 2 and anchor SAVED_OOL_LEN
+        // to that product so the file length and the per-plane size
+        // stay one value.
+        assert_eq!(SAVED_OOL_PLANE_COUNT, 2);
+        assert_eq!(SAVED_OOL_LEN, SAVED_OOL_PLANE_COUNT * OOL_PLANE_LEN);
+        assert_eq!(SAVED_OOL_LEN, 512);
+    }
+
+    #[test]
     fn dungeon_record_len_anchors_to_levels_per_record_times_level_len() {
         // formats/dungeon-dat.md §1, §2, §6: each dungeon record
         // holds eight levels of 64 bytes each (512 bytes total).

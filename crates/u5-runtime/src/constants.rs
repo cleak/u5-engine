@@ -941,7 +941,15 @@ pub const DAWN_DUSK_LIGHT: [u8; 6] = [2, 5, 10, 20, 34, 49];
 pub const OOL_RECORD_LEN: usize = 8;
 pub const OOL_SLOTS: usize = 32;
 pub const OOL_PLANE_LEN: usize = OOL_RECORD_LEN * OOL_SLOTS;
-pub const SAVED_OOL_LEN: usize = OOL_PLANE_LEN * 2;
+/// `formats/saved-gam.md §11`: SAVED.OOL packs both per-plane
+/// object-overlay mirrors — surface (first plane) and underworld
+/// (second plane) — into a single 512-byte image.
+pub const SAVED_OOL_PLANE_COUNT: usize = 2;
+/// `formats/saved-gam.md §11`: SAVED.OOL is 512 bytes — two
+/// 256-byte planes. Anchored to [`SAVED_OOL_PLANE_COUNT`] ×
+/// [`OOL_PLANE_LEN`] so the file length and the per-plane size
+/// stay one value.
+pub const SAVED_OOL_LEN: usize = SAVED_OOL_PLANE_COUNT * OOL_PLANE_LEN;
 /// `formats/dungeon-dat.md §1` published filename for the 4,096-byte
 /// dungeon-record file.
 pub const DUNGEON_DAT_FILENAME: &str = "DUNGEON.DAT";
