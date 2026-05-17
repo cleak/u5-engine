@@ -1,4 +1,17 @@
     #[test]
+    fn shoppe_nonempty_records_anchors_to_record_slots() {
+        // formats/shoppe-dat.md §2: 194 of the 196 record slots
+        // are non-empty; the remaining 2 are empty-trailer
+        // padding. shops.rs declared SHOPPE_DAT_NONEMPTY_RECORDS
+        // = 194 as a bare literal alongside SHOPPE_DAT_RECORD_
+        // SLOTS = 196. Anchor the non-empty count to SHOPPE_DAT_
+        // RECORD_SLOTS - 2 so the non-empty record count tracks
+        // the slot count.
+        assert_eq!(SHOPPE_DAT_NONEMPTY_RECORDS, SHOPPE_DAT_RECORD_SLOTS - 2);
+        assert_eq!(SHOPPE_DAT_NONEMPTY_RECORDS, 194);
+    }
+
+    #[test]
     fn shoppe_innkeeper_last_anchors_to_nonempty_record_count() {
         // formats/shoppe-dat.md §3: the innkeeper band ends at
         // the last non-empty record (194 - 1 = 193). shops.rs

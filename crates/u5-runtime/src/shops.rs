@@ -97,7 +97,11 @@ pub const SHOPPE_DAT_LEN: usize = 10_135;
 /// `formats/shoppe-dat.md §2`: total record slots and non-empty
 /// records in the shipped data set.
 pub const SHOPPE_DAT_RECORD_SLOTS: usize = 196;
-pub const SHOPPE_DAT_NONEMPTY_RECORDS: usize = 194;
+/// `formats/shoppe-dat.md §2`: 194 of the 196 record slots are
+/// non-empty; the remaining 2 are empty-trailer padding.
+/// Anchored to SHOPPE_DAT_RECORD_SLOTS - 2 so the non-empty
+/// record count tracks the slot count.
+pub const SHOPPE_DAT_NONEMPTY_RECORDS: usize = SHOPPE_DAT_RECORD_SLOTS - 2;
 
 /// `shops.md §4` per-cluster `SHOPPE.DAT` record-id ranges. Each
 /// constant pair documents a shipped record cluster the per-shop-kind
