@@ -421,7 +421,13 @@ pub const SAVE_FORTUNES_OF_WAR_OFFSET: usize = 0x03b3;
 /// demote matching `0xF?` room-trigger cells to `0xA?` room-helper
 /// cells when rebuilding the loaded dungeon image from `DUNGEON.DAT`.
 pub const SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET: usize = 0x033A;
-pub const SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN: usize = 16;
+/// `formats/saved-gam.md §10`: the room-clear bitmap is sixteen
+/// bytes — two bytes per dungeon × eight dungeons = 128 bits.
+/// Anchored to `DUNGEON_DAT_RECORD_COUNT * SAVE_DUNGEON_ROOM_
+/// CLEAR_BYTES_PER_DUNGEON` so the bitmap size derives from the
+/// per-dungeon bitmap layout and the dungeon record count.
+pub const SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN: usize =
+    DUNGEON_DAT_RECORD_COUNT * crate::SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON;
 /// `formats/saved-gam.md §8.1`: the live active-object table snapshot
 /// occupies 256 bytes at file offset `0x06B4..=0x07B3`. Layout matches
 /// the in-memory table (32 records × 8 bytes). The table starts

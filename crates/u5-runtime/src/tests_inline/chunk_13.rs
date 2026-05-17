@@ -1,4 +1,19 @@
     #[test]
+    fn save_dungeon_room_clear_bitmap_len_derives_from_dungeon_count() {
+        // formats/saved-gam.md §10: the room-clear bitmap is
+        // sixteen bytes — two bytes per dungeon × eight dungeons.
+        // Anchor SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN to
+        // DUNGEON_DAT_RECORD_COUNT × SAVE_DUNGEON_ROOM_CLEAR_
+        // BYTES_PER_DUNGEON so the bitmap size derives from the
+        // per-dungeon bitmap layout and the dungeon record count.
+        assert_eq!(
+            SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN,
+            DUNGEON_DAT_RECORD_COUNT * SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON,
+        );
+        assert_eq!(SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN, 16);
+    }
+
+    #[test]
     fn signs_dat_scene_directory_slots_anchors_to_scene_partition() {
         // formats/signs-dat.md §2: the scene directory holds 33
         // slots — one per addressable scene byte, covering the
