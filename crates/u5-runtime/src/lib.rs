@@ -127,9 +127,9 @@ pub use directed_step::{
     type_bypasses_terrain_chance_gate,
 };
 pub use end_io::{
-    END_DAT_FILE, END_DAT_LEN, END_DAT_WINDOW_COUNT, EndNarrative,
-    EndNarrativeGroup, EndNarrativeWindow, decode_end_window,
-    end_narrative_window, load_end_narrative,
+    END_DAT_FILE, END_DAT_LEN, END_DAT_WINDOW_COUNT, END_PARAGRAPH_START_MARKER,
+    END_SOFT_BREAK_MARKER, EndNarrative, EndNarrativeGroup, EndNarrativeWindow,
+    decode_end_window, end_narrative_window, load_end_narrative,
 };
 pub use blackthorn::{
     BLACKTHORN_CAPTIVE_CELL_SCENE, BLACKTHORN_CAPTIVE_CELL_X, BLACKTHORN_CAPTIVE_CELL_Y,

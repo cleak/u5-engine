@@ -22,6 +22,16 @@ pub const END_DAT_LEN: usize = 3_698;
 /// windows the endgame helper selects from the loaded text.
 pub const END_DAT_WINDOW_COUNT: usize = 6;
 
+/// `formats/end-dat.md §3` page/paragraph-start marker the
+/// proportional-font renderer walks past without emitting a glyph.
+/// Identical convention to STORY_PARAGRAPH_START_MARKER; promoted
+/// here so the END.DAT decoder names its layout marker locally.
+pub const END_PARAGRAPH_START_MARKER: u8 = b'{';
+/// `formats/end-dat.md §3` soft-hyphen / syllable-break marker the
+/// proportional-font renderer treats as a line-break opportunity
+/// without rendering it as an underscore glyph.
+pub const END_SOFT_BREAK_MARKER: u8 = b'_';
+
 /// `formats/end-dat.md §4` semantic role for each fixed window.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EndNarrativeWindow {
@@ -137,9 +147,9 @@ pub fn decode_end_window(bytes: &[u8]) -> String {
         match byte {
             0x00 => break,
             0x0a | 0x0d => out.push('\n'),
-            // formats/end-dat.md §3: `{` is a page/paragraph marker and `_`
-            // is a soft hyphen; both are layout hints, not visible glyphs.
-            b'{' | b'_' => {}
+            // formats/end-dat.md §3: page/paragraph marker and soft hyphen
+            // are layout hints, not visible glyphs.
+            END_PARAGRAPH_START_MARKER | END_SOFT_BREAK_MARKER => {}
             ch if (0x20..=0x7e).contains(&ch) => out.push(ch as char),
             _ => {}
         }

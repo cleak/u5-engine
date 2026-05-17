@@ -1,4 +1,17 @@
     #[test]
+    fn end_dat_layout_markers_match_spec() {
+        // formats/end-dat.md §3: `{` is the page/paragraph-start
+        // marker and `_` is the soft hyphen / syllable-break marker.
+        // Both are layout hints that the proportional-font renderer
+        // walks past without emitting a glyph.
+        assert_eq!(END_PARAGRAPH_START_MARKER, b'{');
+        assert_eq!(END_SOFT_BREAK_MARKER, b'_');
+        // decode_end_window strips both markers from the visible text.
+        let stripped = decode_end_window(b"{Hello_world}");
+        assert_eq!(stripped, "Helloworld}");
+    }
+
+    #[test]
     fn save_reserved_tail_span_matches_spec() {
         // formats/saved-gam.md §12: 2,220-byte reserved tail at
         // 0x07B4..=0x105F follows the active-object table. The tail
