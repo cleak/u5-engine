@@ -1,4 +1,15 @@
     #[test]
+    fn combat_spawn_count_cap_anchors_to_max_combatants() {
+        // combat.md §5: the post-roll spawn-count clamp reduces
+        // the count to the combat actor table's total combatant
+        // capacity (26 records). Anchor COMBAT_SPAWN_COUNT_CAP to
+        // COMBAT_MAX_COMBATANTS so the spawn cap and the combat
+        // actor capacity stay one value.
+        assert_eq!(COMBAT_SPAWN_COUNT_CAP as usize, COMBAT_MAX_COMBATANTS);
+        assert_eq!(COMBAT_SPAWN_COUNT_CAP, 26);
+    }
+
+    #[test]
     fn chest_secondary_pool_row_count_anchors_to_equipment_count() {
         // containers.md §4: chest secondary-pool indices are the
         // same 0..=47 equipment ids passed to the inventory-add

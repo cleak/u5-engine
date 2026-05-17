@@ -1,7 +1,12 @@
 //! Published combat-class stat rows and encounter count helpers.
 
 pub const COMBAT_CLASS_COUNT: usize = 48;
-pub const COMBAT_SPAWN_COUNT_CAP: u8 = 26;
+/// `combat.md §5` shared spawn-count cap. The post-roll clamp
+/// reduces any spawn count to at most the combat actor table's
+/// total combatant capacity. Anchored to
+/// [`crate::COMBAT_MAX_COMBATANTS`] so the spawn cap and the
+/// combat-actor combatant capacity stay one value.
+pub const COMBAT_SPAWN_COUNT_CAP: u8 = crate::COMBAT_MAX_COMBATANTS as u8;
 
 /// `combat.md §5` per-arena spawn-count exact-count sentinels. The
 /// terrain setup helper treats these byte values as the exact spawn
