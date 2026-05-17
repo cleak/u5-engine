@@ -142,21 +142,50 @@ pub fn u4_transfer_class_byte(class_index: u8) -> Option<u8> {
     }
 }
 
+/// `u4-transfer.md §7` primary-attribute translator band boundaries.
+/// Values `0..LOW_BAND_END` (0..=9) pass through unchanged; values
+/// `LOW_BAND_END..MID_BAND_END` (10..=29) halve their excess over
+/// `LOW_BAND_BIAS` and add `MID_BAND_BIAS` (= 10); values
+/// `MID_BAND_END..` (30+) quarter their excess over `HIGH_BAND_BIAS`
+/// and add `HIGH_BAND_BIAS_OUT` (= 20). Promote the band edges,
+/// biases, and divisors so the translator's piecewise formula has
+/// one named source of truth.
+pub const U4_TRANSFER_ATTRIBUTE_LOW_BAND_END: u16 = 10;
+pub const U4_TRANSFER_ATTRIBUTE_MID_BAND_END: u16 = 30;
+pub const U4_TRANSFER_ATTRIBUTE_LOW_BAND_BIAS: u16 = 9;
+pub const U4_TRANSFER_ATTRIBUTE_MID_BAND_DIVISOR: u16 = 2;
+pub const U4_TRANSFER_ATTRIBUTE_MID_BAND_BIAS_OUT: u16 = 10;
+pub const U4_TRANSFER_ATTRIBUTE_HIGH_BAND_BIAS: u16 = 30;
+pub const U4_TRANSFER_ATTRIBUTE_HIGH_BAND_DIVISOR: u16 = 4;
+pub const U4_TRANSFER_ATTRIBUTE_HIGH_BAND_BIAS_OUT: u16 = 20;
+/// `u4-transfer.md §7` Strength floor: after the band-translator
+/// runs, Strength alone is floored to 20. Dexterity and Intelligence
+/// are not floored.
+pub const U4_TRANSFER_STRENGTH_FLOOR: u8 = 20;
+/// `u4-transfer.md §7` experience-translator divisor. Source XP is
+/// divided by this value, truncating toward zero.
+pub const U4_TRANSFER_EXPERIENCE_DIVISOR: u32 = 10;
+
 pub fn u4_transfer_attribute_to_u5(value: u16) -> u8 {
-    let converted = match value {
-        0..=9 => value,
-        10..=29 => ((value - 9) / 2) + 10,
-        _ => ((value - 30) / 4) + 20,
+    let converted = if value < U4_TRANSFER_ATTRIBUTE_LOW_BAND_END {
+        value
+    } else if value < U4_TRANSFER_ATTRIBUTE_MID_BAND_END {
+        (value - U4_TRANSFER_ATTRIBUTE_LOW_BAND_BIAS) / U4_TRANSFER_ATTRIBUTE_MID_BAND_DIVISOR
+            + U4_TRANSFER_ATTRIBUTE_MID_BAND_BIAS_OUT
+    } else {
+        (value - U4_TRANSFER_ATTRIBUTE_HIGH_BAND_BIAS) / U4_TRANSFER_ATTRIBUTE_HIGH_BAND_DIVISOR
+            + U4_TRANSFER_ATTRIBUTE_HIGH_BAND_BIAS_OUT
     };
     converted.min(u8::MAX as u16) as u8
 }
 
 pub fn u4_transfer_strength_to_u5(value: u16) -> u8 {
-    u4_transfer_attribute_to_u5(value).max(20)
+    u4_transfer_attribute_to_u5(value).max(U4_TRANSFER_STRENGTH_FLOOR)
 }
 
 pub fn u4_transfer_experience_to_u5(value: u32) -> u16 {
-    (value / 10).min(u16::MAX as u32) as u16
+    (value / U4_TRANSFER_EXPERIENCE_DIVISOR)
+        .min(u16::MAX as u32) as u16
 }
 
 pub fn apply_u4_transfer_to_save(

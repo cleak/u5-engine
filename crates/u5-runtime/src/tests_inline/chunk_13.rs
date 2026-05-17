@@ -1,4 +1,35 @@
     #[test]
+    fn u4_transfer_attribute_translator_bands_match_spec() {
+        // u4-transfer.md §7: three-band primary-attribute translator.
+        // Band edges: low 0..=9, mid 10..=29, high 30+.
+        assert_eq!(U4_TRANSFER_ATTRIBUTE_LOW_BAND_END, 10);
+        assert_eq!(U4_TRANSFER_ATTRIBUTE_MID_BAND_END, 30);
+        assert_eq!(U4_TRANSFER_ATTRIBUTE_LOW_BAND_BIAS, 9);
+        assert_eq!(U4_TRANSFER_ATTRIBUTE_MID_BAND_DIVISOR, 2);
+        assert_eq!(U4_TRANSFER_ATTRIBUTE_MID_BAND_BIAS_OUT, 10);
+        assert_eq!(U4_TRANSFER_ATTRIBUTE_HIGH_BAND_BIAS, 30);
+        assert_eq!(U4_TRANSFER_ATTRIBUTE_HIGH_BAND_DIVISOR, 4);
+        assert_eq!(U4_TRANSFER_ATTRIBUTE_HIGH_BAND_BIAS_OUT, 20);
+        assert_eq!(U4_TRANSFER_STRENGTH_FLOOR, 20);
+        assert_eq!(U4_TRANSFER_EXPERIENCE_DIVISOR, 10);
+        // Sample band boundaries: 0 -> 0, 9 -> 9, 10 -> 10
+        // (since (10-9)/2 = 0, +10 = 10), 29 -> 20 ((29-9)/2 = 10, +10 = 20),
+        // 30 -> 20 ((30-30)/4 = 0, +20 = 20), 99 -> 37
+        // ((99-30)/4 = 17, +20 = 37).
+        assert_eq!(u4_transfer_attribute_to_u5(0), 0);
+        assert_eq!(u4_transfer_attribute_to_u5(9), 9);
+        assert_eq!(u4_transfer_attribute_to_u5(10), 10);
+        assert_eq!(u4_transfer_attribute_to_u5(29), 20);
+        assert_eq!(u4_transfer_attribute_to_u5(30), 20);
+        assert_eq!(u4_transfer_attribute_to_u5(99), 37);
+        // Strength is floored to 20; Dex/Int are not floored.
+        assert_eq!(u4_transfer_strength_to_u5(0), U4_TRANSFER_STRENGTH_FLOOR);
+        assert_eq!(u4_transfer_strength_to_u5(99), 37);
+        // Experience divisor: 999 / 10 = 99.
+        assert_eq!(u4_transfer_experience_to_u5(999), 99);
+    }
+
+    #[test]
     fn save_flow_double_underworld_routes_through_canonical_mode() {
         // save-load.md §5.2 step 5: the underworld mirror double-flush
         // runs unless the entry disk-prompt mode is already canonical
