@@ -1,4 +1,21 @@
     #[test]
+    fn combat_spawn_count_exact_sentinels_match_spec() {
+        // combat.md §5: the per-arena spawn-count byte values 1, 8,
+        // and 16 are exact counts used unchanged; every other nonzero
+        // value is treated as a maximum and rolled uniformly in
+        // [1, max].
+        assert_eq!(COMBAT_SPAWN_COUNT_EXACT_VALUES, [1, 8, 16]);
+        for &exact in &COMBAT_SPAWN_COUNT_EXACT_VALUES {
+            assert_eq!(resolve_combat_spawn_count(exact, 99, None), exact);
+            assert_eq!(resolve_combat_spawn_count(exact, 99, Some(42)), exact);
+        }
+        // A non-exact maximum still rolls in [1, max] and is clamped
+        // by COMBAT_SPAWN_COUNT_CAP.
+        assert!(resolve_combat_spawn_count(5, 0, None) >= 1);
+        assert!(resolve_combat_spawn_count(5, 4, None) <= 5);
+    }
+
+    #[test]
     fn text_color_packed_byte_nibbles_match_spec() {
         // text-output.md §3: the active window's colour attribute
         // carries the foreground palette index in its low nibble and

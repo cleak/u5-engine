@@ -3,6 +3,14 @@
 pub const COMBAT_CLASS_COUNT: usize = 48;
 pub const COMBAT_SPAWN_COUNT_CAP: u8 = 26;
 
+/// `combat.md §5` per-arena spawn-count exact-count sentinels. The
+/// terrain setup helper treats these byte values as the exact spawn
+/// count and uses them unchanged; any other nonzero value is treated
+/// as a maximum and uniformly rolled in `[1, max]`. The
+/// fortunes-of-war flag re-rolls the maximum case once before the
+/// shared cap clamp.
+pub const COMBAT_SPAWN_COUNT_EXACT_VALUES: [u8; 3] = [1, 8, 16];
+
 /// `combat.md §11` zero-damage sentinel value the COMSUBS spell/weapon
 /// dispatcher uses to route a class-indexed range/effect selector
 /// into the cast-like ranged/effect branch instead of the ordinary
