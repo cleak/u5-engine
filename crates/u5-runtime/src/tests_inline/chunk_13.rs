@@ -1,4 +1,19 @@
     #[test]
+    fn dungeon_record_len_anchors_to_levels_per_record_times_level_len() {
+        // formats/dungeon-dat.md §1, §2, §6: each dungeon record
+        // holds eight levels of 64 bytes each (512 bytes total).
+        // Anchor DUNGEON_RECORD_LEN to DUNGEON_LEVELS_PER_RECORD
+        // * DUNGEON_LEVEL_LEN so the record byte length and the
+        // level layout stay one value.
+        assert_eq!(DUNGEON_LEVELS_PER_RECORD, 8);
+        assert_eq!(
+            DUNGEON_RECORD_LEN,
+            DUNGEON_LEVELS_PER_RECORD * DUNGEON_LEVEL_LEN,
+        );
+        assert_eq!(DUNGEON_RECORD_LEN, 512);
+    }
+
+    #[test]
     fn dungeon_level_len_anchors_to_dungeon_side_squared() {
         // formats/dungeon-dat.md §2, §6: each dungeon level is an
         // eight-by-eight row-major grid of packed cell bytes, so

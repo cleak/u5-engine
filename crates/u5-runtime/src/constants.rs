@@ -954,8 +954,16 @@ pub const DUNGEON_DAT_RECORD_COUNT: usize = 8;
 /// [`DUNGEON_DAT_RECORD_COUNT`] × [`DUNGEON_RECORD_LEN`] so the
 /// file length and the record layout stay one value.
 pub const DUNGEON_DAT_LEN: usize = DUNGEON_DAT_RECORD_COUNT * DUNGEON_RECORD_LEN;
-pub const DUNGEON_RECORD_LEN: usize = 512;
 pub const DUNGEON_SIDE: usize = 8;
+/// `formats/dungeon-dat.md §1,§2`: each dungeon record holds
+/// eight levels (level zero is the surface-entry level, level
+/// seven is the deepest).
+pub const DUNGEON_LEVELS_PER_RECORD: usize = 8;
+/// `formats/dungeon-dat.md §2,§6`: each dungeon record is 512
+/// bytes — eight 64-byte levels. Anchored to
+/// [`DUNGEON_LEVELS_PER_RECORD`] × [`DUNGEON_LEVEL_LEN`] so the
+/// record byte length and the level layout stay one value.
+pub const DUNGEON_RECORD_LEN: usize = DUNGEON_LEVELS_PER_RECORD * DUNGEON_LEVEL_LEN;
 /// `formats/dungeon-dat.md §2,§6`: each dungeon level is an
 /// eight-by-eight row-major grid of packed cell bytes, so the
 /// level block is `8 * 8 = 64` bytes. Anchored to
