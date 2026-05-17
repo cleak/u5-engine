@@ -2,6 +2,19 @@
 //! covers the dungeon-chest reward generator (§6) and the directional
 //! table-food consumption rule (§7).
 
+/// `containers.md §4` surface/town chest content roll die. Both the
+/// primary-pool per-row gate and the secondary-pool per-attempt gate
+/// roll uniformly in `1..=CHEST_CONTENT_ROLL_DIE` (1..=30).
+pub const CHEST_CONTENT_ROLL_DIE: u8 = 30;
+
+/// `containers.md §4` secondary-pool attempt divisor. Attempt count
+/// is `floor(chest_class / CHEST_SECONDARY_POOL_ATTEMPT_DIVISOR) +
+/// CHEST_SECONDARY_POOL_ATTEMPT_BIAS`, so a chest class of zero
+/// still runs one attempt.
+pub const CHEST_SECONDARY_POOL_ATTEMPT_DIVISOR: u8 = 2;
+/// `containers.md §4` secondary-pool attempt bias.
+pub const CHEST_SECONDARY_POOL_ATTEMPT_BIAS: u8 = 1;
+
 /// `containers.md §4` surface/town chest content primary-pool roll
 /// gate. A pool row is eligible only when its threshold is less
 /// than or equal to the chest class; eligible rows then roll
@@ -21,7 +34,7 @@ pub const fn chest_primary_pool_row_succeeds(
 /// secondary pool runs `floor(chest_class / 2) + 1` independent
 /// attempts at random rows from the 48-entry equipment table.
 pub const fn chest_secondary_pool_attempts(chest_class: u8) -> u8 {
-    chest_class / 2 + 1
+    chest_class / CHEST_SECONDARY_POOL_ATTEMPT_DIVISOR + CHEST_SECONDARY_POOL_ATTEMPT_BIAS
 }
 
 /// `containers.md §4` chest primary-pool published row count and

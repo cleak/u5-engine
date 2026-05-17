@@ -472,6 +472,23 @@
     }
 
     #[test]
+    fn chest_content_roll_die_and_secondary_attempt_formula_match_spec() {
+        // containers.md §4: chest content gates use a `1..=30` die,
+        // and the secondary-pool attempt count is `floor(chest_class
+        // / 2) + 1`. Promote the die size, the divisor, and the
+        // attempt bias so chest_primary_pool_row_succeeds and
+        // chest_secondary_pool_attempts do not bake `30`, `2`, and
+        // `+1` as bare literals.
+        assert_eq!(CHEST_CONTENT_ROLL_DIE, 30);
+        assert_eq!(CHEST_SECONDARY_POOL_ATTEMPT_DIVISOR, 2);
+        assert_eq!(CHEST_SECONDARY_POOL_ATTEMPT_BIAS, 1);
+        // Attempt count grows linearly with chest class.
+        assert_eq!(chest_secondary_pool_attempts(0), CHEST_SECONDARY_POOL_ATTEMPT_BIAS);
+        assert_eq!(chest_secondary_pool_attempts(8), 5);
+        assert_eq!(chest_secondary_pool_attempts(30), 16);
+    }
+
+    #[test]
     fn rare_reagent_harvest_quantity_span_matches_min_max_band() {
         // containers.md §5: the rare-reagent harvest rolls in the
         // inclusive `2..=15` range; the modulus on the seed must be
