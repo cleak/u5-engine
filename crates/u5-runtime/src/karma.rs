@@ -136,8 +136,12 @@ pub const RESURRECTION_PENALTY_SKIP_THRESHOLD: u8 = crate::MORAL_STANDING_MAX - 
 /// revived member's experience is multiplied by `standing` and then
 /// divided by this value to apply the selector percentage; promoting
 /// it lets the helper name the divisor instead of repeating `100`
-/// as a bare literal.
-pub const RESURRECTION_PENALTY_PERCENT_DIVISOR: u32 = 100;
+/// as a bare literal. The divisor is one above the maximum moral-
+/// standing selector value, so the formula `xp * standing /
+/// (MORAL_STANDING_MAX + 1)` treats standing as a percentage of the
+/// full XP. Anchored to [`crate::MORAL_STANDING_MAX`] + 1 so the
+/// percent divisor derives from the published standing maximum.
+pub const RESURRECTION_PENALTY_PERCENT_DIVISOR: u32 = crate::MORAL_STANDING_MAX as u32 + 1;
 
 /// `karma.md §5`: returns `true` when the selector is high enough to
 /// skip the resurrection XP penalty.

@@ -1,4 +1,21 @@
     #[test]
+    fn resurrection_penalty_divisor_anchors_above_moral_standing_max() {
+        // karma.md §5: the resurrection-penalty percent divisor
+        // (100) is one above the maximum moral-standing selector
+        // value (MORAL_STANDING_MAX = 99), so the formula
+        // `xp * standing / (MORAL_STANDING_MAX + 1)` treats
+        // standing as a percentage of the full XP. Anchor the
+        // divisor to MORAL_STANDING_MAX + 1 so the percent
+        // divisor derives from the published standing maximum.
+        assert_eq!(
+            RESURRECTION_PENALTY_PERCENT_DIVISOR,
+            MORAL_STANDING_MAX as u32 + 1,
+        );
+        assert_eq!(RESURRECTION_PENALTY_PERCENT_DIVISOR, 100);
+        assert_eq!(MORAL_STANDING_MAX, 99);
+    }
+
+    #[test]
     fn shop_surcharge_gold_max_anchors_to_mask_plus_min() {
         // shops.md §6.2: the shop surcharge formula is
         // `(roll & MASK) + MIN`, so the surcharge maximum equals
