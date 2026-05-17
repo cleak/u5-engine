@@ -149,7 +149,12 @@ pub const RUNES_HCS_FILE: &str = "RUNES.HCS";
 #[cfg(test)]
 pub const PROPORT_PCS_FILE: &str = "PROPORT.PCS";
 pub const TILE_PASSABILITY_LEN: usize = 32;
-pub const LOOK2_TILE_COUNT: usize = 512;
+/// `formats/look2-dat.md §2` & `catalogs/tile-catalog.md §1`: the
+/// LOOK2 lookup table holds one offset per shared world tile id
+/// (512 total — terrain 0..=255 and object 256..=511). Anchored
+/// to [`TILE_ATLAS_TILE_COUNT`] so the LOOK2 table size and the
+/// shared tile catalog share one source of truth.
+pub const LOOK2_TILE_COUNT: usize = TILE_ATLAS_TILE_COUNT;
 pub const LOOK2_TABLE_LEN: usize = LOOK2_TILE_COUNT * 2;
 pub const TILE_ATLAS_TILE_COUNT: usize = 512;
 pub const TILE_ATLAS_SIDE: usize = 16;
@@ -532,7 +537,11 @@ pub const SAVE_CHARACTER_EQUIPMENT_OFFSET: usize = SAVE_CHARACTER_STAY_COUNTER_O
 /// `formats/tiles.md §1,§5.1`: 16x16 tile pixel side and the flat
 /// atlas's 512-entry capacity.
 pub const TILE_PIXEL_SIDE: usize = 16;
-pub const FLAT_TILE_ATLAS_TILES: usize = 512;
+/// `formats/tiles.md §5.1`: the flat-format tile atlas holds one
+/// entry per shared world tile id. Anchored to
+/// [`TILE_ATLAS_TILE_COUNT`] so the flat-atlas capacity and the
+/// shared tile catalog share one source of truth.
+pub const FLAT_TILE_ATLAS_TILES: usize = TILE_ATLAS_TILE_COUNT;
 /// `formats/tiles.md §3` EGA pixel-packing density. The `.16` files
 /// store two four-bit pixels per byte (chunky packed, high nibble
 /// first); the pixel's index is its position in the 16-entry EGA

@@ -1,4 +1,17 @@
     #[test]
+    fn tile_catalog_count_aliases_anchor_to_tile_atlas_tile_count() {
+        // formats/look2-dat.md §2, formats/tiles.md §5.1,
+        // catalogs/tile-catalog.md §1: the shared world tile
+        // catalog holds 512 entries (terrain 0..=255 + object
+        // 256..=511). LOOK2_TILE_COUNT and FLAT_TILE_ATLAS_TILES
+        // are now anchored to TILE_ATLAS_TILE_COUNT so the
+        // tile-catalog size has one source of truth.
+        assert_eq!(LOOK2_TILE_COUNT, TILE_ATLAS_TILE_COUNT);
+        assert_eq!(FLAT_TILE_ATLAS_TILES, TILE_ATLAS_TILE_COUNT);
+        assert_eq!(TILE_ATLAS_TILE_COUNT, 512);
+    }
+
+    #[test]
     fn look2_dat_object_domain_base_anchors_to_terrain_entries() {
         // formats/look2-dat.md §3: the LOOK2.DAT offset table is
         // a contiguous flat array; object-domain entries begin
