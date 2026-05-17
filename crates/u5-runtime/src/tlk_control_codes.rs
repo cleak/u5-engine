@@ -320,6 +320,15 @@ pub const TLK_BLOB_FIXED_WINDOW: usize = 1024;
 /// carry on disk. Stripping it recovers low-ASCII.
 pub const TLK_TEXT_XOR_MASK: u8 = 0x80;
 
+/// `formats/tlk.md §9.2`: on-disk encoding of the printable double
+/// quote (`"`, low-ASCII `0x22`) under the bit-7 XOR scheme. The
+/// byte runner remembers the previous emitted printable byte and
+/// suppresses a quote when that previous byte was also a quote so
+/// adjacent `""` segments collapse to a single visible quote.
+/// Promote the sentinel so the dedup helper can name the on-disk
+/// byte instead of repeating the bare literal `0xA2`.
+pub const TLK_DOUBLE_QUOTE_ENCODED: u8 = b'"' ^ TLK_TEXT_XOR_MASK;
+
 // §7.2 player-name and stream-control codes
 pub const TLK_CODE_PRINT_AVATAR_NAME: u8 = 0x81;
 pub const TLK_CODE_END_STREAM: u8 = 0x82;

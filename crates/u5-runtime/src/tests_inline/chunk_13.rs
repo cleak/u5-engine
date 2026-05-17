@@ -1,4 +1,14 @@
     #[test]
+    fn tlk_double_quote_encoded_matches_spec() {
+        // formats/tlk.md §9.2: the on-disk encoding of the printable
+        // double quote (`"`) under the bit-7 XOR scheme is 0xA2 —
+        // the byte runner uses this exact value to detect adjacent
+        // quotes and collapse `""` to a single visible quote.
+        assert_eq!(TLK_DOUBLE_QUOTE_ENCODED, 0xA2);
+        assert_eq!(TLK_DOUBLE_QUOTE_ENCODED ^ TLK_TEXT_XOR_MASK, b'"');
+    }
+
+    #[test]
     fn active_object_phase_byte_nibble_layout_matches_spec() {
         // active-objects.md §3 and formats/ool.md §4: byte 6 packs
         // the animation phase in its low nibble and the direction-step
