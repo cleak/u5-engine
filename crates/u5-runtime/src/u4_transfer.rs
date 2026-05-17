@@ -26,7 +26,13 @@ pub const U4_TRANSFER_U4_SOURCE_FILENAME: &str = "PARTY.SAV";
 /// transfer rejects the entire attempt before writing the
 /// destination save when any leading-record value falls outside
 /// these bounds.
-pub const U4_TRANSFER_GOLD_GEM_FOOD_MAX: u16 = 9999;
+/// `u4-transfer.md §5` source-side gold/gems/food counter bound.
+/// The accepted range `0..=9999` matches the U5 word-counter
+/// cap inventory.md §2 documents — a U4 character at the cap
+/// transfers without truncation into the U5 carriers. Anchored
+/// to [`crate::PARTY_GOLD_CAP`] so the U4-transfer source bound
+/// and the U5 carrier cap stay one value.
+pub const U4_TRANSFER_GOLD_GEM_FOOD_MAX: u16 = crate::PARTY_GOLD_CAP;
 pub const U4_TRANSFER_MOVE_MOON_DUNGEON_MAX: u16 = 70;
 pub const U4_TRANSFER_CLASS_INDEX_MAX: u8 = 7;
 

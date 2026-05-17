@@ -1,4 +1,18 @@
     #[test]
+    fn u4_transfer_gold_gem_food_max_anchors_to_party_gold_cap() {
+        // u4-transfer.md §5: the accepted source-side
+        // gold/gems/food range is 0..=9999 — matching the U5
+        // word-counter cap inventory.md §2 documents, so a U4
+        // character at the cap transfers without truncation.
+        // u4_transfer.rs declared U4_TRANSFER_GOLD_GEM_FOOD_MAX
+        // = 9999 as a bare literal in parallel with PARTY_GOLD_CAP.
+        // Anchor the U4-transfer source bound to PARTY_GOLD_CAP so
+        // both share one source of truth.
+        assert_eq!(U4_TRANSFER_GOLD_GEM_FOOD_MAX, PARTY_GOLD_CAP);
+        assert_eq!(U4_TRANSFER_GOLD_GEM_FOOD_MAX, 9999);
+    }
+
+    #[test]
     fn combat_experience_cap_anchors_to_party_gold_cap() {
         // combat.md §5: each per-attacker experience credit
         // clamps at the same 9999 word-counter cap inventory.md
