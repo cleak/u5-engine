@@ -1,4 +1,16 @@
     #[test]
+    fn tlk_control_code_first_anchors_to_dictionary_token_last() {
+        // conversation.md §7: the engine-control byte band
+        // (0x80..=0x9D) begins one byte past the dictionary-
+        // token band (0x01..=0x7F). Anchor TLK_CONTROL_CODE_FIRST
+        // to TLK_DICTIONARY_TOKEN_LAST + 1 so the adjacency has
+        // one source of truth.
+        assert_eq!(TLK_CONTROL_CODE_FIRST, TLK_DICTIONARY_TOKEN_LAST + 1);
+        assert_eq!(TLK_CONTROL_CODE_FIRST, 0x80);
+        assert_eq!(TLK_DICTIONARY_TOKEN_LAST, 0x7F);
+    }
+
+    #[test]
     fn shoppe_innkeeper_band_anchors_to_healer_band() {
         // formats/shoppe-dat.md §3: the innkeeper band sits
         // immediately after the healer band. Anchor

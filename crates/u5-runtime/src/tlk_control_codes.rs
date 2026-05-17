@@ -436,8 +436,11 @@ pub const TLK_PRINTABLE_TEXT_LAST: u8 = 0xFD;
 /// `conversation.md §7` engine-control byte range. The byte runner's
 /// control-code branch accepts `0x80..=0x9D`; the `0x9E..=0x9F` GOTO
 /// label pair is carved out by [`TLK_CODE_GOTO_LABEL_FIRST`] /
-/// [`TLK_CODE_GOTO_LABEL_LAST`] before this range is matched.
-pub const TLK_CONTROL_CODE_FIRST: u8 = 0x80;
+/// [`TLK_CODE_GOTO_LABEL_LAST`] before this range is matched. The
+/// control-code range begins one byte past the dictionary-token
+/// band; anchor to [`TLK_DICTIONARY_TOKEN_LAST`] + 1 so the
+/// adjacency has one source of truth.
+pub const TLK_CONTROL_CODE_FIRST: u8 = TLK_DICTIONARY_TOKEN_LAST + 1;
 pub const TLK_CONTROL_CODE_LAST: u8 = 0x9D;
 
 /// `conversation.md §7`: classify a byte by the value-range table that
