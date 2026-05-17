@@ -358,8 +358,13 @@ pub const SAVE_LIGHT_SPELL_COUNTER_OFFSET: usize = 0x0300;
 /// SAVE_LIGHT_SPELL_COUNTER_OFFSET + 1 so the two adjacent
 /// lighting counters share one source of truth.
 pub const SAVE_TORCH_COUNTER_OFFSET: usize = SAVE_LIGHT_SPELL_COUNTER_OFFSET + 1;
+/// `formats/saved-gam.md §9`: the two shrine progress masks sit
+/// at file offsets 0x0326 and 0x0328 with an unnamed opaque byte
+/// between them. Anchor the codex mask to the ordained mask + 2
+/// so the two-byte stride between the parallel virtue bitmasks
+/// has one source of truth.
 pub const SAVE_SHRINE_ORDAINED_MASK_OFFSET: usize = 0x0326;
-pub const SAVE_SHRINE_CODEX_MASK_OFFSET: usize = 0x0328;
+pub const SAVE_SHRINE_CODEX_MASK_OFFSET: usize = SAVE_SHRINE_ORDAINED_MASK_OFFSET + 2;
 pub const SAVE_FORTUNES_OF_WAR_OFFSET: usize = 0x03b3;
 /// `formats/saved-gam.md §10`: durable dungeon room-clear bitmap. The
 /// 16-byte block at `0x033A..0x0349` records which dungeon room

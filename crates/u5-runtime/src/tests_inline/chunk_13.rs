@@ -1,4 +1,20 @@
     #[test]
+    fn save_shrine_codex_mask_offset_anchors_to_ordained_mask() {
+        // formats/saved-gam.md §9: the two shrine progress masks
+        // sit at file offsets 0x0326 (ordained) and 0x0328 (codex
+        // visited) with an unnamed opaque byte between them.
+        // Anchor SAVE_SHRINE_CODEX_MASK_OFFSET to
+        // SAVE_SHRINE_ORDAINED_MASK_OFFSET + 2 so the two-byte
+        // stride has one source of truth.
+        assert_eq!(
+            SAVE_SHRINE_CODEX_MASK_OFFSET,
+            SAVE_SHRINE_ORDAINED_MASK_OFFSET + 2,
+        );
+        assert_eq!(SAVE_SHRINE_ORDAINED_MASK_OFFSET, 0x0326);
+        assert_eq!(SAVE_SHRINE_CODEX_MASK_OFFSET, 0x0328);
+    }
+
+    #[test]
     fn save_location_and_lighting_offsets_chain() {
         // formats/saved-gam.md §5 location cluster: scene byte at
         // 0x02ed, scratch byte at 0x02ee, party Z/X/Y at
