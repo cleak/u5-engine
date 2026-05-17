@@ -1,4 +1,22 @@
     #[test]
+    fn save_calendar_bounds_anchor_to_time_constants() {
+        // formats/saved-gam.md §5 documents one-based months
+        // 1..=13, one-based days 1..=28, zero-based hours 0..=23
+        // and zero-based minutes 0..=59. The save-side bounds are
+        // now anchored to the clock-side time constants so the
+        // calendar bounds and time-system constants stay one
+        // value.
+        assert_eq!(SAVE_MONTH_MAX, MONTHS_PER_YEAR);
+        assert_eq!(SAVE_DAY_MAX, DAYS_PER_MONTH);
+        assert_eq!(SAVE_HOUR_MAX, HOURS_PER_DAY - 1);
+        assert_eq!(SAVE_MINUTE_MAX, MINUTES_PER_HOUR - 1);
+        assert_eq!(SAVE_MONTH_MAX, 13);
+        assert_eq!(SAVE_DAY_MAX, 28);
+        assert_eq!(SAVE_HOUR_MAX, 23);
+        assert_eq!(SAVE_MINUTE_MAX, 59);
+    }
+
+    #[test]
     fn save_pre_calendar_state_offsets_chain_through_transport_marker() {
         // formats/saved-gam.md §5: bytes 0x02d4..=0x02d6 are three
         // adjacent state bytes — timing/status tag, active player

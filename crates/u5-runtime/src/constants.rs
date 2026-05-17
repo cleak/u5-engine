@@ -330,12 +330,16 @@ pub const SAVE_AMPM_DISPLAY_OFFSET: usize = SAVE_PER_TURN_STATE_OFFSET + 1;
 /// `formats/saved-gam.md §5`: in-game calendar bounds. Months are
 /// one-based 1..=13 (thirteen 28-day months per year), days are
 /// one-based 1..=28, hours are zero-based 0..=23, minutes 0..=59.
+/// The save-side bounds are anchored to the clock-side
+/// MONTHS_PER_YEAR / DAYS_PER_MONTH / HOURS_PER_DAY /
+/// MINUTES_PER_HOUR so the calendar bounds and the time-system
+/// constants stay one value.
 pub const SAVE_MONTH_MIN: u8 = 1;
-pub const SAVE_MONTH_MAX: u8 = 13;
+pub const SAVE_MONTH_MAX: u8 = crate::MONTHS_PER_YEAR;
 pub const SAVE_DAY_MIN: u8 = 1;
-pub const SAVE_DAY_MAX: u8 = 28;
-pub const SAVE_HOUR_MAX: u8 = 23;
-pub const SAVE_MINUTE_MAX: u8 = 59;
+pub const SAVE_DAY_MAX: u8 = crate::DAYS_PER_MONTH;
+pub const SAVE_HOUR_MAX: u8 = crate::HOURS_PER_DAY - 1;
+pub const SAVE_MINUTE_MAX: u8 = crate::MINUTES_PER_HOUR - 1;
 pub const SAVE_MORAL_STANDING_OFFSET: usize = 0x02e2;
 pub const SAVE_WIND_OFFSET: usize = 0x02ec;
 pub const SAVE_SCENE_OFFSET: usize = 0x02ed;
