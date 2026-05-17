@@ -1,4 +1,19 @@
     #[test]
+    fn tile_pixel_packing_density_matches_spec() {
+        // formats/tiles.md §3: the .16 files store two four-bit
+        // pixels per byte (chunky packed, high nibble first).
+        // formats/tiles.md §4: the .4 files store four two-bit pixels
+        // per byte (packed, most-significant bits first).
+        assert_eq!(EGA_PIXELS_PER_BYTE, 2);
+        assert_eq!(CGA_PIXELS_PER_BYTE, 4);
+        // Derived tile cost: a 16x16 tile becomes 128 EGA bytes or
+        // 64 CGA bytes; CGA is exactly half the EGA cost.
+        assert_eq!(EGA_TILE_BYTES, 128);
+        assert_eq!(CGA_TILE_BYTES, 64);
+        assert_eq!(EGA_TILE_BYTES, CGA_TILE_BYTES * 2);
+    }
+
+    #[test]
     fn bit_strip_header_widths_match_spec() {
         // formats/bit.md §3: each strip body opens with a
         // width-related word and a row-count word before the packed

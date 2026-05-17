@@ -371,12 +371,22 @@ pub const SAVE_CHARACTER_EQUIPMENT_OFFSET: usize = 0x19;
 /// atlas's 512-entry capacity.
 pub const TILE_PIXEL_SIDE: usize = 16;
 pub const FLAT_TILE_ATLAS_TILES: usize = 512;
-/// `formats/tiles.md §3`: each EGA tile costs 128 bytes (16 rows × 16
-/// pixels / 2 pixels per byte).
-pub const EGA_TILE_BYTES: usize = 128;
-/// `formats/tiles.md §4`: each CGA tile costs 64 bytes (16 rows × 4
-/// bytes per row at 4 pixels/byte).
-pub const CGA_TILE_BYTES: usize = 64;
+/// `formats/tiles.md §3` EGA pixel-packing density. The `.16` files
+/// store two four-bit pixels per byte (chunky packed, high nibble
+/// first); the pixel's index is its position in the 16-entry EGA
+/// palette.
+pub const EGA_PIXELS_PER_BYTE: usize = 2;
+/// `formats/tiles.md §4` CGA pixel-packing density. The `.4` files
+/// store four two-bit pixels per byte (packed, most-significant bits
+/// first); the pixel's index is its position in the 4-entry CGA
+/// palette set by the display driver.
+pub const CGA_PIXELS_PER_BYTE: usize = 4;
+/// `formats/tiles.md §3`: each EGA tile costs 128 bytes
+/// (`TILE_PIXEL_SIDE * TILE_PIXEL_SIDE / EGA_PIXELS_PER_BYTE`).
+pub const EGA_TILE_BYTES: usize = TILE_PIXEL_SIDE * TILE_PIXEL_SIDE / EGA_PIXELS_PER_BYTE;
+/// `formats/tiles.md §4`: each CGA tile costs 64 bytes
+/// (`TILE_PIXEL_SIDE * TILE_PIXEL_SIDE / CGA_PIXELS_PER_BYTE`).
+pub const CGA_TILE_BYTES: usize = TILE_PIXEL_SIDE * TILE_PIXEL_SIDE / CGA_PIXELS_PER_BYTE;
 /// `formats/tiles.md §3,§4` total uncompressed flat-atlas size in
 /// bytes per encoding.
 pub const EGA_FLAT_TILE_ATLAS_BYTES: usize = FLAT_TILE_ATLAS_TILES * EGA_TILE_BYTES;
