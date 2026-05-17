@@ -7,7 +7,11 @@
 /// Trigger roll bound: `random(0, 99)`.
 pub const LORD_BRITISH_CAMP_EVENT_ROLL_BOUND: u8 = 100;
 /// Threshold below which the event fires (results `0..=24`, 25%).
-pub const LORD_BRITISH_CAMP_EVENT_THRESHOLD: u8 = 25;
+/// `rest-and-camp.md §7` specifies a 25% probability, i.e. one quarter
+/// of the `random(0, 99)` range. Anchored to `ROLL_BOUND / 4` so the
+/// threshold derives from the roll bound and the published 25%
+/// probability has one source of truth.
+pub const LORD_BRITISH_CAMP_EVENT_THRESHOLD: u8 = LORD_BRITISH_CAMP_EVENT_ROLL_BOUND / 4;
 
 /// `rest-and-camp.md §7`: returns `true` when the `random(0, 99)`
 /// roll selects the Lord British camp event.

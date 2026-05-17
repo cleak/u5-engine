@@ -1,4 +1,19 @@
     #[test]
+    fn lord_british_camp_event_threshold_is_quarter_of_roll_bound() {
+        // rest-and-camp.md §7: Lord British camp event fires on a
+        // 25% probability — one quarter of the random(0, 99) roll
+        // bound. Anchor THRESHOLD to ROLL_BOUND / 4 so the
+        // published 25% probability has one source of truth and
+        // accepts results 0..=24.
+        assert_eq!(
+            LORD_BRITISH_CAMP_EVENT_THRESHOLD,
+            LORD_BRITISH_CAMP_EVENT_ROLL_BOUND / 4,
+        );
+        assert_eq!(LORD_BRITISH_CAMP_EVENT_ROLL_BOUND, 100);
+        assert_eq!(LORD_BRITISH_CAMP_EVENT_THRESHOLD, 25);
+    }
+
+    #[test]
     fn encounter_spawn_max_separation_anchors_to_world_side_minus_min() {
         // encounters.md §4: the max-separation bound (250) is
         // the world side (256) minus the min-separation bound
