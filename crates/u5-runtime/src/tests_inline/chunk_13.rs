@@ -1,4 +1,17 @@
     #[test]
+    fn sandalwood_box_pickup_slot_anchors_to_ool_slots() {
+        // catalogs/quest-graph.md §7: the Sandalwood Box pickup
+        // lives in active-object slot 31 of the 32-record
+        // CASTLE:0 active-object table — the last slot. Anchor
+        // SANDALWOOD_BOX_PICKUP_OBJECT_SLOT to OOL_SLOTS - 1 so
+        // the highest active-object slot index has one source of
+        // truth.
+        assert_eq!(SANDALWOOD_BOX_PICKUP_OBJECT_SLOT, OOL_SLOTS - 1);
+        assert_eq!(SANDALWOOD_BOX_PICKUP_OBJECT_SLOT, 31);
+        assert_eq!(OOL_SLOTS, 32);
+    }
+
+    #[test]
     fn chargen_starting_x_anchors_to_location_default_entry_x() {
         // chargen.md §8 places the post-questionnaire party at
         // Iolo's Hut local cell (15, 15). The X column matches the

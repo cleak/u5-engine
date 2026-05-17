@@ -111,7 +111,12 @@ pub const SANDALWOOD_BOX_PICKUP_SCENE: u8 = 17;
 pub const SANDALWOOD_BOX_PICKUP_X: u8 = 18;
 pub const SANDALWOOD_BOX_PICKUP_Y: u8 = 12;
 pub const SANDALWOOD_BOX_PICKUP_Z: u8 = 2;
-pub const SANDALWOOD_BOX_PICKUP_OBJECT_SLOT: usize = 31;
+/// `catalogs/quest-graph.md §7` shipped Sandalwood Box pickup —
+/// the box lives in the last active-object slot of the
+/// 32-record CASTLE:0 active-object table. Anchored to
+/// [`crate::OOL_SLOTS`] - 1 so the highest active-object slot
+/// index has one source of truth.
+pub const SANDALWOOD_BOX_PICKUP_OBJECT_SLOT: usize = crate::OOL_SLOTS - 1;
 pub const SANDALWOOD_BOX_PICKUP_TAG: u8 = 0x0E;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
