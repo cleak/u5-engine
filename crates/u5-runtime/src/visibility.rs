@@ -9,7 +9,11 @@
 pub const VIEWPORT_SIDE: usize = 11;
 /// `visibility.md §2`: row stride of the visibility grid in bytes
 /// (eleven active cells plus twenty-one trailing scratch bytes).
-pub const VIEWPORT_ROW_STRIDE: usize = 32;
+/// Same 32-byte stride the combat arena row uses (11 visible
+/// terrain + 21 metadata bytes per formats/cbt.md §3). Anchored
+/// to [`crate::COMBAT_ARENA_ROW_STRIDE`] so the two 11-cell-
+/// viewport-with-scratch row strides share one source of truth.
+pub const VIEWPORT_ROW_STRIDE: usize = crate::COMBAT_ARENA_ROW_STRIDE;
 /// `visibility.md §2`: row stride of the terrain band in bytes.
 pub const TERRAIN_BAND_ROW_STRIDE: usize = 16;
 /// `visibility.md §2`: zero-based player position inside the active

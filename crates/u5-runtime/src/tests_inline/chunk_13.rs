@@ -1,4 +1,18 @@
     #[test]
+    fn viewport_row_stride_anchors_to_combat_arena_row_stride() {
+        // visibility.md §2 / formats/cbt.md §3: the visibility
+        // grid and the combat arena row both share a 32-byte
+        // per-row stride (11 visible cells + 21 metadata/scratch
+        // bytes). visibility.rs declared VIEWPORT_ROW_STRIDE = 32
+        // as a bare literal in parallel with COMBAT_ARENA_ROW_
+        // STRIDE = 32. Anchor the viewport stride to the arena
+        // stride so the two 11-cell-with-scratch row strides
+        // share one source of truth.
+        assert_eq!(VIEWPORT_ROW_STRIDE, COMBAT_ARENA_ROW_STRIDE);
+        assert_eq!(VIEWPORT_ROW_STRIDE, 32);
+    }
+
+    #[test]
     fn sky_strip_night_band_endings_anchor_to_hours_per_day() {
         // moons.md §2: Trammel night-band and Felucca afternoon-
         // band both run through the last hour of the day
