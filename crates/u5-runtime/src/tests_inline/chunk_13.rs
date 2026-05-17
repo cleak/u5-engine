@@ -1,4 +1,24 @@
     #[test]
+    fn dungeon_cell_nibble_mask_and_shift_match_spec() {
+        // formats/dungeon-dat.md §3: each cell byte's upper nibble
+        // selects the broad dispatch class, and the lower nibble
+        // carries the class-specific attribute/subtype/sentinel.
+        assert_eq!(DUNGEON_CELL_LOW_NIBBLE_MASK, 0x0F);
+        assert_eq!(DUNGEON_CELL_HIGH_NIBBLE_SHIFT, 4);
+        // 0x5A is a fountain (class 0x5) with low nibble 0xA — the
+        // subtype falls outside the named 0..=2 effects and collapses
+        // to the BadTaste catch-all.
+        let cell = 0x5A;
+        assert_eq!(cell >> DUNGEON_CELL_HIGH_NIBBLE_SHIFT, 0x5);
+        assert_eq!(cell & DUNGEON_CELL_LOW_NIBBLE_MASK, 0xA);
+        assert_eq!(fountain_effect_from_byte(cell), FountainEffect::BadTaste);
+        // dungeon_cell_class_of routes its dispatch through the named shift
+        // and round-trips every named class.
+        assert_eq!(dungeon_cell_class_of(0x00), DungeonCellClass::Passage);
+        assert_eq!(dungeon_cell_class_of(0xFF), DungeonCellClass::HeavyDoorOrRoomTrigger);
+    }
+
+    #[test]
     fn tlk_double_quote_encoded_matches_spec() {
         // formats/tlk.md §9.2: the on-disk encoding of the printable
         // double quote (`"`) under the bit-7 XOR scheme is 0xA2 —

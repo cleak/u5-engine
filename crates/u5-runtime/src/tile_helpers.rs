@@ -735,7 +735,7 @@ pub enum FountainEffect {
 
 /// `dungeon-mode.md §8`: classify a fountain cell byte's low nibble.
 pub const fn fountain_effect_from_byte(tile: u8) -> FountainEffect {
-    match tile & 0x0F {
+    match tile & DUNGEON_CELL_LOW_NIBBLE_MASK {
         0 => FountainEffect::Cure,
         1 => FountainEffect::Heal,
         2 => FountainEffect::Poison,
@@ -774,6 +774,21 @@ pub const fn energy_field_kind_from_byte(tile: u8) -> EnergyFieldKind {
         _ => EnergyFieldKind::Generic,
     }
 }
+
+/// `formats/dungeon-dat.md §3` low-nibble mask for dungeon cell bytes.
+/// The cell byte's upper nibble selects the broad dispatch class; its
+/// lower nibble carries the class-specific attribute/subtype/sentinel.
+/// Promote the mask so subtype helpers (fountain effect, energy-field
+/// sub-type, etc.) share one source of truth instead of repeating
+/// `& 0x0F`.
+pub const DUNGEON_CELL_LOW_NIBBLE_MASK: u8 = 0x0F;
+
+/// `formats/dungeon-dat.md §3` high-nibble right shift for dungeon
+/// cell bytes. Shifting the cell byte right by this amount yields
+/// the broad cell-class index in `0..=15` consumed by
+/// `dungeon_cell_class_of` and the renderer's wall/door/passage
+/// dispatch.
+pub const DUNGEON_CELL_HIGH_NIBBLE_SHIFT: u32 = 4;
 
 /// `dungeon-mode.md §3` typed dungeon-cell class derived from the cell
 /// byte's high nibble. Renderer wall checks, L-Look description routing,
@@ -1068,7 +1083,7 @@ pub const fn dungeon_look_description_byte(tile: u8) -> u8 {
 
 /// `dungeon-mode.md §3`: classify a dungeon-cell byte by its high nibble.
 pub const fn dungeon_cell_class_of(tile: u8) -> DungeonCellClass {
-    match tile >> 4 {
+    match tile >> DUNGEON_CELL_HIGH_NIBBLE_SHIFT {
         0x0 => DungeonCellClass::Passage,
         0x1 => DungeonCellClass::UpLadder,
         0x2 => DungeonCellClass::DownLadder,
