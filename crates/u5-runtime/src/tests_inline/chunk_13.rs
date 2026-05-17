@@ -1,4 +1,17 @@
     #[test]
+    fn save_inn_registry_count_anchors_to_save_roster_slot_count() {
+        // shops.md §8.4: the inn registry is "a 16-slot, save-
+        // backed resident view... a shifted legacy view over the
+        // save image rather than an independent post-roster
+        // block" — the registry's slot count is the same sixteen
+        // slots the character roster carries. Anchor
+        // SAVE_INN_REGISTRY_COUNT to SAVE_ROSTER_SLOT_COUNT so
+        // the registry and the roster share one source of truth.
+        assert_eq!(SAVE_INN_REGISTRY_COUNT, SAVE_ROSTER_SLOT_COUNT);
+        assert_eq!(SAVE_INN_REGISTRY_COUNT, 16);
+    }
+
+    #[test]
     fn save_character_roster_slots_anchors_to_save_roster_slot_count() {
         // formats/saved-gam.md §3: the character roster region in
         // the save image carries sixteen character-record slots.

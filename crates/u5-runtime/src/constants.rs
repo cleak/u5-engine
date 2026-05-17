@@ -385,7 +385,14 @@ pub const SAVE_ROSTER_OFFSET: usize = 0x0002;
 /// not currently travelling with the player.
 pub const SAVE_ROSTER_SLOT_COUNT: usize = 16;
 pub const SAVE_INN_REGISTRY_OFFSET: usize = 0x0021;
-pub const SAVE_INN_REGISTRY_COUNT: usize = 16;
+/// `formats/saved-gam.md §3` / `shops.md §8.4`: the inn registry
+/// is "a 16-slot, save-backed resident view... a shifted legacy
+/// view over the save image rather than an independent
+/// post-roster block." Its slot count is the same sixteen slots
+/// the character roster carries. Anchored to
+/// [`SAVE_ROSTER_SLOT_COUNT`] so the registry and the roster
+/// share one source of truth.
+pub const SAVE_INN_REGISTRY_COUNT: usize = SAVE_ROSTER_SLOT_COUNT;
 pub const SAVE_CHARACTER_RECORD_LEN: usize = 32;
 /// `formats/saved-gam.md §3` total roster region length:
 /// sixteen records of thirty-two bytes each.
