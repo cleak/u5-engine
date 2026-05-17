@@ -203,11 +203,11 @@ pub const fn world_location_table_scene_for_row(row: usize) -> Option<u8> {
 pub const TOWN_EXIT_UNDERWORLD_SCENE: u8 = 0x19;
 
 /// `town-mode.md §5` Yew-jail surrender destination. The arrest
-/// path sends the party to scene Yew (`TOWNE:3`, scene byte 4) at
-/// floor 0 cell `(25, 4)`. The town setup pass recognises this
-/// local `Y == 4` as a special case that skips the
+/// path sends the party to scene Yew (`TOWNE:3`, scene byte 4 =
+/// SCENE_YEW) at floor 0 cell `(25, 4)`. The town setup pass
+/// recognises this local `Y == 4` as a special case that skips the
 /// permanent-location queue lookup before allocating a phantom NPC.
-pub const TOWN_ARREST_JAIL_SCENE: u8 = 4;
+pub const TOWN_ARREST_JAIL_SCENE: u8 = SCENE_YEW;
 pub const TOWN_ARREST_JAIL_FLOOR: u8 = 0;
 pub const TOWN_ARREST_JAIL_X: u8 = 25;
 pub const TOWN_ARREST_JAIL_Y: u8 = 4;

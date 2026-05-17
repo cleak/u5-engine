@@ -1,4 +1,22 @@
     #[test]
+    fn town_arrest_jail_scene_anchors_to_yew() {
+        // town-mode.md §5: the arrest path sends the party to scene
+        // Yew (`TOWNE:3`, scene byte 4 = SCENE_YEW) at floor 0 cell
+        // (25, 4). Anchor the jail scene byte to SCENE_YEW so the
+        // two specs share one source of truth.
+        assert_eq!(TOWN_ARREST_JAIL_SCENE, SCENE_YEW);
+        assert_eq!(TOWN_ARREST_JAIL_SCENE, 4);
+        // Sanity: town_entry_is_jail_wakeup picks the jail cell only
+        // when scene, floor, and Y all match.
+        assert!(town_entry_is_jail_wakeup(
+            SCENE_YEW,
+            TOWN_ARREST_JAIL_FLOOR,
+            TOWN_ARREST_JAIL_Y,
+        ));
+        assert!(!town_entry_is_jail_wakeup(SCENE_BRITAIN, 0, 4));
+    }
+
+    #[test]
     fn endgame_campaign_start_constants_anchor_to_chargen() {
         // endgame.md §9 / chargen.md §11: the certificate's
         // "beginning of the quest" date is the same Year/Month/Day
