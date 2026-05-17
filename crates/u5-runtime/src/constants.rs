@@ -263,8 +263,10 @@ pub const SAVED_GAM_LEN: usize = 4192;
 /// precede the roster.
 pub const SAVE_LEADING_BYTES_LEN: usize = 2;
 /// `formats/saved-gam.md §3`: number of character-record slots in the
-/// roster.
-pub const SAVE_CHARACTER_ROSTER_SLOTS: usize = 16;
+/// roster. Anchored to [`SAVE_ROSTER_SLOT_COUNT`] so the two
+/// parallel names for the same sixteen-slot character region share
+/// one source of truth.
+pub const SAVE_CHARACTER_ROSTER_SLOTS: usize = SAVE_ROSTER_SLOT_COUNT;
 /// `formats/saved-gam.md §4`: party-size byte range (`1..=6`).
 pub const SAVE_PARTY_SIZE_MIN: u8 = 1;
 pub const SAVE_PARTY_SIZE_MAX: u8 = 6;

@@ -1,4 +1,16 @@
     #[test]
+    fn save_character_roster_slots_anchors_to_save_roster_slot_count() {
+        // formats/saved-gam.md §3: the character roster region in
+        // the save image carries sixteen character-record slots.
+        // constants.rs declared SAVE_CHARACTER_ROSTER_SLOTS = 16
+        // and SAVE_ROSTER_SLOT_COUNT = 16 as parallel names for
+        // the same region. Anchor the former to the latter so the
+        // sixteen-slot roster has one source of truth.
+        assert_eq!(SAVE_CHARACTER_ROSTER_SLOTS, SAVE_ROSTER_SLOT_COUNT);
+        assert_eq!(SAVE_CHARACTER_ROSTER_SLOTS, 16);
+    }
+
+    #[test]
     fn ch_glyph_bytes_anchors_to_cell_side() {
         // formats/font-ch.md §2: each .CH glyph is an 8x8 cell with
         // one byte per row, so per-glyph byte count = 8 rows × 1
