@@ -898,7 +898,12 @@ pub const REAGENT_SAVE_ORDER: [usize; REAGENT_COUNT] = [
 pub const DEFAULT_REAGENTS: [u8; REAGENT_COUNT] = [0, 6, 7, 0, 6, 4, 3, 0];
 pub const IN_LOR_SPELL_INDEX: usize = 0;
 pub const IN_LOR_COST: u8 = (IN_LOR_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
-pub const IN_LOR_LIGHT_DURATION: u8 = 100;
+/// `lighting.md §8`: In Lor (ordinary Light spell) overwrites the
+/// light-spell counter with 100 units. Same value as
+/// [`crate::LIGHT_SPELL_DURATION`] in lighting.rs (both name the
+/// same shipped spell duration). Anchored through to that
+/// lighting-side anchor.
+pub const IN_LOR_LIGHT_DURATION: u8 = crate::LIGHT_SPELL_DURATION;
 pub const AWAKEN_SPELL_INDEX: usize = 2;
 pub const AWAKEN_COST: u8 = (AWAKEN_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const CURE_SPELL_INDEX: usize = 3;

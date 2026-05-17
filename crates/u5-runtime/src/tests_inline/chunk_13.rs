@@ -1,4 +1,17 @@
     #[test]
+    fn in_lor_light_duration_aliases_to_light_spell_duration() {
+        // lighting.md §8: In Lor (ordinary Light spell) overwrites
+        // the light-spell counter with 100 units. constants.rs
+        // declared IN_LOR_LIGHT_DURATION = 100 as a bare literal in
+        // parallel with lighting::LIGHT_SPELL_DURATION = 100.
+        // Anchor IN_LOR_LIGHT_DURATION through to
+        // LIGHT_SPELL_DURATION so both spell-duration names share
+        // one source of truth.
+        assert_eq!(IN_LOR_LIGHT_DURATION, LIGHT_SPELL_DURATION);
+        assert_eq!(IN_LOR_LIGHT_DURATION, 100);
+    }
+
+    #[test]
     fn chargen_starting_scene_anchors_to_iolos_hut() {
         // chargen.md §8: a fresh-from-questionnaire save seeds the
         // party at scene 13 (Iolo's Hut). chargen.rs declared
