@@ -5,7 +5,9 @@
 //! to the player, and exposes a one-bit "axis first" selector. Caller wires
 //! the random roll, walkability check, target-cell check, and committer.
 
-const WORLD_SIDE: i32 = 256;
+// Module-local i32 view of the canonical `crate::WORLD_SIDE` so the
+// rem_euclid arithmetic below does not require a usize cast per call.
+const WORLD_SIDE: i32 = crate::WORLD_SIDE as i32;
 
 /// Cardinal axis pair.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

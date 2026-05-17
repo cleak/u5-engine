@@ -472,6 +472,25 @@
     }
 
     #[test]
+    fn directed_step_world_side_matches_canonical_world_side() {
+        // formats/under-dat.md (and overworld.md §3) state the world
+        // plane is a 256-cell torus on both axes. The outdoor
+        // directed-step planner had been carrying its own private
+        // `WORLD_SIDE: i32 = 256` constant for the rem_euclid
+        // arithmetic. Pin equality with the canonical WORLD_SIDE so
+        // a future plane resize cannot silently desync the wrap math
+        // from the on-disk grid size.
+        assert_eq!(WORLD_SIDE, 256);
+        let canonical: i32 = WORLD_SIDE.try_into().unwrap();
+        // Sanity-check that the directed_step planner sees the same
+        // wrap modulus through wrapped_step results that span the
+        // torus boundary.
+        let (dx, _) = directed_step_offsets(0, 0, (canonical - 1) as u8, 0);
+        // Going from 0 backward by 1 reaches 255 (one cell behind).
+        assert_eq!(dx, -1);
+    }
+
+    #[test]
     fn pth_byte_decoder_constants_match_spec() {
         // formats/pth.md §3,§5: each non-zero PTH byte packs a
         // signed-magnitude nibble pair (low three bits = magnitude,
