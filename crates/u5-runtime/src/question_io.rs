@@ -60,6 +60,15 @@ pub const QUESTION_DAT_DILEMMA_COUNT: usize = 28;
 /// number to delimit records.
 pub const QUESTION_DAT_LEN: usize = 7_746;
 
+/// `formats/question-dat.md §3` paragraph/page-start marker consumed
+/// by the proportional-font paragraph renderer. The renderer walks
+/// past it without emitting a glyph; it is layout markup only.
+pub const QUESTION_PARAGRAPH_START_MARKER: u8 = b'{';
+/// `formats/question-dat.md §3` soft-hyphen / syllable-break marker.
+/// Gives the renderer an additional wrap point inside a word; not
+/// emitted as an underscore glyph.
+pub const QUESTION_SOFT_BREAK_MARKER: u8 = b'_';
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuestionRecords {
     pub records: Vec<String>,
@@ -138,10 +147,9 @@ fn decode_question_record(bytes: &[u8]) -> String {
     for &byte in bytes {
         match byte {
             0x0a | 0x0d => out.push('\n'),
-            // formats/question-dat.md §3: `{` is a paragraph-start renderer
-            // marker and `_` is a soft hyphen / syllable-break marker; both
-            // are layout markup, not visible glyphs.
-            b'{' | b'_' => {}
+            // formats/question-dat.md §3: paragraph-start and soft-hyphen
+            // markers are layout markup, not visible glyphs.
+            QUESTION_PARAGRAPH_START_MARKER | QUESTION_SOFT_BREAK_MARKER => {}
             ch if (0x20..=0x7e).contains(&ch) => out.push(ch as char),
             _ => {}
         }

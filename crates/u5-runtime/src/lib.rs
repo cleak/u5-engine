@@ -333,7 +333,8 @@ pub use quest_flags::{
 };
 pub use question_io::{
     QUESTION_DAT_DILEMMA_COUNT, QUESTION_DAT_FILE, QUESTION_DAT_FIRST_DILEMMA_RECORD,
-    QUESTION_DAT_LEN, QUESTION_DAT_RECORDS, QuestionRecords, load_question_records,
+    QUESTION_DAT_LEN, QUESTION_DAT_RECORDS, QUESTION_PARAGRAPH_START_MARKER,
+    QUESTION_SOFT_BREAK_MARKER, QuestionRecords, load_question_records,
     parse_question_records, question_dat_dilemma_record_for_pair,
 };
 pub use signs_io::{

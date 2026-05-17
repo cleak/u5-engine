@@ -1,4 +1,13 @@
     #[test]
+    fn question_dat_layout_markers_match_spec() {
+        // formats/question-dat.md §3: `{` is the paragraph-start
+        // marker and `_` is the soft-hyphen / syllable-break marker.
+        // Both are layout markup, not visible glyphs.
+        assert_eq!(QUESTION_PARAGRAPH_START_MARKER, b'{');
+        assert_eq!(QUESTION_SOFT_BREAK_MARKER, b'_');
+    }
+
+    #[test]
     fn end_dat_layout_markers_match_spec() {
         // formats/end-dat.md §3: `{` is the page/paragraph-start
         // marker and `_` is the soft hyphen / syllable-break marker.
