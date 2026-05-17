@@ -1,4 +1,27 @@
     #[test]
+    fn shop_surcharge_band_constants_match_spec() {
+        // shops.md §6.2: the post-transaction surcharge subtracts a
+        // random `1..64` gold from the party's gold word on a hit;
+        // it runs only when the shared town/conversation sentinel is
+        // zero. Promote the band edges, the roll mask, and the
+        // sentinel value so shop_surcharge_from_roll_seed and
+        // apply_shop_surcharge do not bake `1`, `64`, `0x3F`, and
+        // the `== 0` enable check as bare literals.
+        assert_eq!(SHOP_SURCHARGE_GOLD_MIN, 1);
+        assert_eq!(SHOP_SURCHARGE_GOLD_MAX, 64);
+        assert_eq!(SHOP_SURCHARGE_ROLL_MASK, 0x3F);
+        assert_eq!(SHOP_SURCHARGE_SENTINEL_ENABLES, 0);
+        // Every roll seed lands inside the published band.
+        for seed in 0u8..=u8::MAX {
+            let charge = shop_surcharge_from_roll_seed(seed);
+            assert!(
+                (SHOP_SURCHARGE_GOLD_MIN..=SHOP_SURCHARGE_GOLD_MAX).contains(&charge),
+                "seed {seed} produced {charge}"
+            );
+        }
+    }
+
+    #[test]
     fn arms_shop_pricing_formula_constants_match_spec() {
         // shops.md §6: the arms-shop Buy quote is
         // `base + base * (100 - 3 * intelligence) / 100`, and the

@@ -1309,8 +1309,23 @@ pub fn apply_arms_sale(
     })
 }
 
+/// `shops.md §6.2` shop surcharge minimum gold subtracted on a hit.
+/// The roll is masked to the low six bits and biased by this value so
+/// the surcharge band is `1..=SHOP_SURCHARGE_GOLD_MAX`.
+pub const SHOP_SURCHARGE_GOLD_MIN: u16 = 1;
+/// `shops.md §6.2` shop surcharge maximum gold subtracted on a hit.
+pub const SHOP_SURCHARGE_GOLD_MAX: u16 = 64;
+/// `shops.md §6.2` mask applied to the surcharge roll seed before
+/// adding [`SHOP_SURCHARGE_GOLD_MIN`]. The low six bits give
+/// `0..=63`, which biases to a uniform `1..=64`-gold band.
+pub const SHOP_SURCHARGE_ROLL_MASK: u8 = 0x3F;
+/// `shops.md §6.2` shared town/conversation sentinel value that
+/// enables the surcharge. Slot value `0` runs the extra charge;
+/// slot values `1`/`2` and the no-slot marker suppress it.
+pub const SHOP_SURCHARGE_SENTINEL_ENABLES: u8 = 0;
+
 pub const fn shop_surcharge_from_roll_seed(roll_seed: u8) -> u16 {
-    1 + (roll_seed & 0x3f) as u16
+    SHOP_SURCHARGE_GOLD_MIN + (roll_seed & SHOP_SURCHARGE_ROLL_MASK) as u16
 }
 
 pub fn apply_shop_surcharge(
@@ -1320,7 +1335,7 @@ pub fn apply_shop_surcharge(
 ) -> ShopSurchargeOutcome {
     let surcharge = shop_surcharge_from_roll_seed(roll_seed);
     let gold_before = *gold;
-    let applied = shared_town_conversation_sentinel == 0;
+    let applied = shared_town_conversation_sentinel == SHOP_SURCHARGE_SENTINEL_ENABLES;
     if applied {
         *gold = (*gold).saturating_sub(surcharge);
     }
