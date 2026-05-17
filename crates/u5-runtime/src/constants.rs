@@ -203,7 +203,12 @@ pub const PCS_GLYPH_HEIGHT: usize = 11;
 #[cfg(test)]
 pub const PCS_GLYPH_BLOCK_LEN: usize = 1 + PCS_GLYPH_HEIGHT;
 pub const PLAY_SCRIPT_MAX_IDLE_TICKS: usize = 1024;
-pub const KARMA_RECORD_COUNT: usize = 6;
+/// Runtime count of karma reaction records. The KARMA.DAT parser
+/// uses this same loop bound to walk the six NUL-terminated text
+/// records the format spec documents. Anchored to
+/// [`KARMA_DAT_RECORDS`] so the parser-side loop bound and the
+/// format-side record count stay one value.
+pub const KARMA_RECORD_COUNT: usize = KARMA_DAT_RECORDS;
 pub const PLAY_IGNORED_INPUT_KEY: char = '\u{1e}';
 pub const PLAY_TYPEAHEAD_TOGGLE_KEY: char = '\u{1f}';
 pub const TRAP_NON_COMBAT_EFFECT_TABLE: [u8; 8] = [0, 0, 0, 1, 1, 2, 2, 3];

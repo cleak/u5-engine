@@ -1,4 +1,15 @@
     #[test]
+    fn karma_record_count_anchors_to_karma_dat_format_records() {
+        // formats/karma-dat.md §2: KARMA.DAT ships six NUL-
+        // terminated text records. The runtime KARMA_RECORD_COUNT
+        // (used by parse_karma_dat to drive the record loop) is the
+        // same six records, now anchored to KARMA_DAT_RECORDS so
+        // the format-side and parser-side counts move together.
+        assert_eq!(KARMA_RECORD_COUNT, KARMA_DAT_RECORDS);
+        assert_eq!(KARMA_RECORD_COUNT, 6);
+    }
+
+    #[test]
     fn hcs_parser_cell_dimensions_anchor_to_format_constants() {
         // formats/font-hcs.md §2: .HCS cells are 16x12. The
         // parser-side dimensions HCS_FONT_CELL_WIDTH /
