@@ -1,4 +1,19 @@
     #[test]
+    fn tlk_label_and_printable_text_bands_chain() {
+        // conversation.md §7, §7.7: the label band ends at the
+        // last GOTO-label byte (0x9F), and the printable-text
+        // band begins immediately past the label band. Anchor
+        // TLK_LABEL_LAST to TLK_CODE_GOTO_LABEL_LAST and
+        // TLK_PRINTABLE_TEXT_FIRST to TLK_LABEL_LAST + 1 so the
+        // label/printable-text adjacencies have one source of
+        // truth.
+        assert_eq!(TLK_LABEL_LAST, TLK_CODE_GOTO_LABEL_LAST);
+        assert_eq!(TLK_PRINTABLE_TEXT_FIRST, TLK_LABEL_LAST + 1);
+        assert_eq!(TLK_LABEL_LAST, 0x9F);
+        assert_eq!(TLK_PRINTABLE_TEXT_FIRST, 0xA0);
+    }
+
+    #[test]
     fn tlk_goto_label_pair_anchors_to_control_code_band_end() {
         // conversation.md §7.7: the GOTO-label pair (0x9E, 0x9F)
         // sits immediately past the engine-control byte band

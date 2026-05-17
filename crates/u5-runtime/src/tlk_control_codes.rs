@@ -364,7 +364,11 @@ pub const TLK_CODE_IF_ELSE_ALT: u8 = 0xFE;
 
 // §7.7 labels, GOTO, and scoped prompts (and §7 dispatcher boundaries)
 pub const TLK_LABEL_FIRST: u8 = 0x91;
-pub const TLK_LABEL_LAST: u8 = 0x9F;
+/// `conversation.md §7.7`: the label band ends at the last
+/// GOTO-label byte (0x9F). Anchored to
+/// [`TLK_CODE_GOTO_LABEL_LAST`] so the label band end and the
+/// GOTO-label pair end share one source of truth.
+pub const TLK_LABEL_LAST: u8 = TLK_CODE_GOTO_LABEL_LAST;
 /// `conversation.md §7.7`: the GOTO-label pair (0x9E, 0x9F) sits
 /// immediately past the engine-control byte band and forms a
 /// two-byte pair. Anchor the first label to
@@ -436,7 +440,11 @@ pub enum TlkByteRunnerClass {
 /// `conversation.md §7` printable-text byte range. The byte runner's
 /// printable branch accepts high-bit-set bytes in `0xA0..=0xFD`. The
 /// word-buffer strips the high bit before glyph output.
-pub const TLK_PRINTABLE_TEXT_FIRST: u8 = 0xA0;
+/// `conversation.md §7`: the printable-text byte band begins
+/// immediately past the label band end (0x9F). Anchored to
+/// [`TLK_LABEL_LAST`] + 1 so the label→printable-text adjacency
+/// has one source of truth.
+pub const TLK_PRINTABLE_TEXT_FIRST: u8 = TLK_LABEL_LAST + 1;
 pub const TLK_PRINTABLE_TEXT_LAST: u8 = 0xFD;
 
 /// `conversation.md §7` engine-control byte range. The byte runner's
