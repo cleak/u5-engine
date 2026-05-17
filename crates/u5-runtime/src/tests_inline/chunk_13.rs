@@ -1,4 +1,39 @@
     #[test]
+    fn transport_marker_ranges_match_spec_table() {
+        // vehicles.md §2: each four-marker transport family carries
+        // facing in its low two bits.
+        assert_eq!(TRANSPORT_FACING_MASK, 0b0000_0011);
+        assert_eq!(TRANSPORT_MARKER_MAGIC_CARPET_FIRST, 0x14);
+        assert_eq!(TRANSPORT_MARKER_MAGIC_CARPET_LAST, 0x17);
+        assert_eq!(TRANSPORT_MARKER_SHIP_HOISTED_FIRST, 0x20);
+        assert_eq!(TRANSPORT_MARKER_SHIP_HOISTED_LAST, 0x23);
+        assert_eq!(TRANSPORT_MARKER_SHIP_FURLED_FIRST, 0x24);
+        assert_eq!(TRANSPORT_MARKER_SHIP_FURLED_LAST, 0x27);
+        assert_eq!(TRANSPORT_MARKER_SKIFF_FIRST, 0x28);
+        assert_eq!(TRANSPORT_MARKER_SKIFF_LAST, 0x2B);
+        // Every range is exactly four markers wide.
+        for (first, last) in [
+            (HORSE_TRANSPORT_FIRST, HORSE_TRANSPORT_LAST),
+            (TRANSPORT_MARKER_MAGIC_CARPET_FIRST, TRANSPORT_MARKER_MAGIC_CARPET_LAST),
+            (TRANSPORT_MARKER_FOOT_FIRST, TRANSPORT_MARKER_FOOT_LAST),
+            (TRANSPORT_MARKER_SHIP_HOISTED_FIRST, TRANSPORT_MARKER_SHIP_HOISTED_LAST),
+            (TRANSPORT_MARKER_SHIP_FURLED_FIRST, TRANSPORT_MARKER_SHIP_FURLED_LAST),
+            (TRANSPORT_MARKER_SKIFF_FIRST, TRANSPORT_MARKER_SKIFF_LAST),
+        ] {
+            // Mounted horse is the only two-marker family (0x12..=0x13);
+            // every other family is four wide. Both shapes need their
+            // low-bit facing nibble to round-trip through the mask.
+            assert!(last >= first);
+            for marker in first..=last {
+                assert_eq!(
+                    transport_facing_index(marker),
+                    Some(marker & TRANSPORT_FACING_MASK),
+                );
+            }
+        }
+    }
+
+    #[test]
     fn tile_passability_bit_shift_and_mask_align_with_spec() {
         // movement.md §4: the base terrain bitset packs eight tile-id
         // bits per byte; byte index is `tile >> 3` and within-byte bit

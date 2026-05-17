@@ -174,17 +174,40 @@ pub enum TransportFamily {
     Skiff,
 }
 
+/// `vehicles.md §2` transport/action marker ranges. Each four-marker
+/// family carries facing in its low two bits.
+pub const TRANSPORT_MARKER_MAGIC_CARPET_FIRST: u8 = 0x14;
+pub const TRANSPORT_MARKER_MAGIC_CARPET_LAST: u8 = 0x17;
+pub const TRANSPORT_MARKER_SHIP_HOISTED_FIRST: u8 = 0x20;
+pub const TRANSPORT_MARKER_SHIP_HOISTED_LAST: u8 = 0x23;
+pub const TRANSPORT_MARKER_SHIP_FURLED_FIRST: u8 = 0x24;
+pub const TRANSPORT_MARKER_SHIP_FURLED_LAST: u8 = 0x27;
+pub const TRANSPORT_MARKER_SKIFF_FIRST: u8 = 0x28;
+pub const TRANSPORT_MARKER_SKIFF_LAST: u8 = 0x2B;
+
+/// `vehicles.md §2` low-bit mask the transport-marker facing decoder
+/// applies. Bit 0 selects east/west; bit 1 selects south/north; the
+/// pair yields the published `0` north / `1` east / `2` south /
+/// `3` west convention.
+pub const TRANSPORT_FACING_MASK: u8 = 0b0000_0011;
+
 /// `vehicles.md §2`: classify a transport/action marker byte into
 /// its family. Returns `None` for marker values outside the known
 /// transport ranges (those remain opaque transport state, per spec).
 pub const fn transport_family(marker: u8) -> Option<TransportFamily> {
     Some(match marker {
-        0x12..=0x13 => TransportFamily::MountedHorse,
-        0x14..=0x17 => TransportFamily::MagicCarpet,
-        0x1C..=0x1F => TransportFamily::Foot,
-        0x20..=0x23 => TransportFamily::ShipHoisted,
-        0x24..=0x27 => TransportFamily::ShipFurled,
-        0x28..=0x2B => TransportFamily::Skiff,
+        HORSE_TRANSPORT_FIRST..=HORSE_TRANSPORT_LAST => TransportFamily::MountedHorse,
+        TRANSPORT_MARKER_MAGIC_CARPET_FIRST..=TRANSPORT_MARKER_MAGIC_CARPET_LAST => {
+            TransportFamily::MagicCarpet
+        }
+        TRANSPORT_MARKER_FOOT_FIRST..=TRANSPORT_MARKER_FOOT_LAST => TransportFamily::Foot,
+        TRANSPORT_MARKER_SHIP_HOISTED_FIRST..=TRANSPORT_MARKER_SHIP_HOISTED_LAST => {
+            TransportFamily::ShipHoisted
+        }
+        TRANSPORT_MARKER_SHIP_FURLED_FIRST..=TRANSPORT_MARKER_SHIP_FURLED_LAST => {
+            TransportFamily::ShipFurled
+        }
+        TRANSPORT_MARKER_SKIFF_FIRST..=TRANSPORT_MARKER_SKIFF_LAST => TransportFamily::Skiff,
         _ => return None,
     })
 }
@@ -194,7 +217,7 @@ pub const fn transport_family(marker: u8) -> Option<TransportFamily> {
 /// markers outside the recognised transport families.
 pub const fn transport_facing_index(marker: u8) -> Option<u8> {
     if transport_family(marker).is_some() {
-        Some(marker & 0x03)
+        Some(marker & TRANSPORT_FACING_MASK)
     } else {
         None
     }
