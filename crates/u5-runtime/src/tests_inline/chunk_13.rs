@@ -1,4 +1,17 @@
     #[test]
+    fn combat_arena_metadata_start_anchors_to_arena_side() {
+        // formats/cbt.md §3: each arena row carries 11 visible
+        // terrain bytes followed by 21 metadata bytes (32-byte
+        // stride). The metadata band starts immediately after the
+        // visible terrain columns. Anchor
+        // COMBAT_ARENA_METADATA_START to COMBAT_ARENA_SIDE so the
+        // visible/metadata split has one source of truth.
+        assert_eq!(COMBAT_ARENA_METADATA_START, COMBAT_ARENA_SIDE);
+        assert_eq!(COMBAT_ARENA_METADATA_START, 11);
+        assert_eq!(COMBAT_ARENA_METADATA_LEN, 21);
+    }
+
+    #[test]
     fn active_map_window_aliases_anchor_to_town_grid_side() {
         // visibility.md §12 and view.md §4 both describe overlays
         // that span the full 32x32 active map window. Anchor

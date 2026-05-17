@@ -8,7 +8,12 @@ use crate::DUNGEON_ROOM_SLOTS_PER_BANK;
 
 pub const COMBAT_ARENA_SIDE: usize = 11;
 pub const COMBAT_ARENA_ROW_STRIDE: usize = 32;
-pub const COMBAT_ARENA_METADATA_START: usize = 11;
+/// `formats/cbt.md §3`: each arena row carries `COMBAT_ARENA_SIDE`
+/// visible terrain bytes followed by 21 metadata bytes. The
+/// metadata band starts immediately after the visible terrain
+/// columns; anchor to [`COMBAT_ARENA_SIDE`] so the visible/metadata
+/// split has one source of truth.
+pub const COMBAT_ARENA_METADATA_START: usize = COMBAT_ARENA_SIDE;
 pub const COMBAT_ARENA_METADATA_LEN: usize = COMBAT_ARENA_ROW_STRIDE - COMBAT_ARENA_METADATA_START;
 pub const COMBAT_ARENA_RECORD_LEN: usize = COMBAT_ARENA_SIDE * COMBAT_ARENA_ROW_STRIDE;
 pub const BRIT_CBT_RECORDS: usize = 16;
