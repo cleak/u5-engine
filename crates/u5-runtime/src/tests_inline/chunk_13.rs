@@ -1,4 +1,18 @@
     #[test]
+    fn save_dungeon_working_buffer_offset_anchors_to_fortunes_of_war() {
+        // formats/saved-gam.md §8.2: the 512-byte dungeon/map-cell
+        // working buffer at 0x03B4..0x05B3 begins immediately after
+        // the one-byte fortunes-of-war flag at 0x03B3. Anchor the
+        // buffer offset to SAVE_FORTUNES_OF_WAR_OFFSET + 1 so the
+        // adjacency has one source of truth.
+        assert_eq!(
+            SAVE_DUNGEON_WORKING_BUFFER_OFFSET,
+            SAVE_FORTUNES_OF_WAR_OFFSET + 1,
+        );
+        assert_eq!(SAVE_DUNGEON_WORKING_BUFFER_OFFSET, 0x03B4);
+    }
+
+    #[test]
     fn save_shrine_codex_mask_offset_anchors_to_ordained_mask() {
         // formats/saved-gam.md §9: the two shrine progress masks
         // sit at file offsets 0x0326 (ordained) and 0x0328 (codex

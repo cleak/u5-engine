@@ -379,8 +379,11 @@ pub const SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN: usize = 16;
 pub const SAVE_ACTIVE_OBJECT_TABLE_OFFSET: usize = 0x06B4;
 /// `formats/saved-gam.md §8.2`: the dungeon/map-cell working buffer
 /// occupies 512 bytes at file offset `0x03B4..=0x05B3` and matches the
-/// 512-byte dungeon-record stride.
-pub const SAVE_DUNGEON_WORKING_BUFFER_OFFSET: usize = 0x03B4;
+/// 512-byte dungeon-record stride. The buffer begins immediately
+/// after the one-byte fortunes-of-war flag at 0x03B3; anchor the
+/// offset to SAVE_FORTUNES_OF_WAR_OFFSET + 1 so the adjacency has
+/// one source of truth.
+pub const SAVE_DUNGEON_WORKING_BUFFER_OFFSET: usize = SAVE_FORTUNES_OF_WAR_OFFSET + 1;
 /// `formats/saved-gam.md §8.2`: the working-buffer byte length is
 /// the same 512-byte stride documented in
 /// `formats/dungeon-dat.md §2`. Anchored to
