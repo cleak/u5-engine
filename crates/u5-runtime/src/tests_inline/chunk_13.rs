@@ -1,4 +1,15 @@
     #[test]
+    fn dungeon_room_source_column_anchors_to_arena_metadata_start() {
+        // formats/cbt.md §5: the dungeon-room source band starts
+        // in the metadata column (one past the visible 11-cell
+        // terrain band). Anchor DUNGEON_ROOM_SOURCE_COLUMN to
+        // COMBAT_ARENA_METADATA_START so the source column
+        // derives from the arena visible/metadata split.
+        assert_eq!(DUNGEON_ROOM_SOURCE_COLUMN, COMBAT_ARENA_METADATA_START);
+        assert_eq!(DUNGEON_ROOM_SOURCE_COLUMN, 11);
+    }
+
+    #[test]
     fn dungeon_deepest_level_anchors_to_levels_per_record() {
         // dungeon-mode.md §8: dungeons have eight levels (0..=7);
         // the deepest level index is one less than the per-record

@@ -30,7 +30,12 @@ pub const DUNGEON_CBT_RECORDS: usize = DUNGEON_CBT_BANK_COUNT * DUNGEON_ROOM_SLO
 pub const BRIT_CBT_FILE: &str = "BRIT.CBT";
 pub const DUNGEON_CBT_FILE: &str = "DUNGEON.CBT";
 pub const DUNGEON_ROOM_SOURCE_ROW: usize = 5;
-pub const DUNGEON_ROOM_SOURCE_COLUMN: usize = 11;
+/// `formats/cbt.md §5`: the dungeon-room source band starts in
+/// the metadata column (one past the visible 11-cell terrain
+/// band). Anchored to [`COMBAT_ARENA_METADATA_START`] so the
+/// dungeon-room source column derives from the visible/metadata
+/// split.
+pub const DUNGEON_ROOM_SOURCE_COLUMN: usize = COMBAT_ARENA_METADATA_START;
 pub const DUNGEON_ROOM_SOURCE_COUNT: usize = 16;
 pub const DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE: u8 = 0x3c;
 
