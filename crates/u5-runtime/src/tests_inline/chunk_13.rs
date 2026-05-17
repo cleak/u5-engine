@@ -1,4 +1,18 @@
     #[test]
+    fn u4_transfer_u5_seed_ool_filename_anchors_to_brit_ool() {
+        // u4-transfer.md §5, §11: the U5-side seed object-overlay
+        // file is the same BRIT.OOL filename the ordinary engine
+        // reads. u4_transfer.rs declared
+        // U4_TRANSFER_U5_SEED_OOL_FILENAME = "BRIT.OOL" as a
+        // parallel string literal alongside save_load.rs's
+        // BRIT_OOL_FILENAME. Anchor the transfer seed alias to
+        // the canonical filename so the two share one source of
+        // truth.
+        assert_eq!(U4_TRANSFER_U5_SEED_OOL_FILENAME, BRIT_OOL_FILENAME);
+        assert_eq!(U4_TRANSFER_U5_SEED_OOL_FILENAME, "BRIT.OOL");
+    }
+
+    #[test]
     fn chargen_question_count_anchors_to_questions_per_round_sum() {
         // chargen.md §6: the questionnaire tournament runs 4 + 2 + 1
         // questions across three rounds (= 7 total). Anchor

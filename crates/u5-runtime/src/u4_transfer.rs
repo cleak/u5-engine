@@ -16,7 +16,10 @@ pub const U5_TRANSFER_FEMALE_BYTE: u8 = SAVE_GENDER_FEMALE_BYTE;
 /// the ordinary U5 save pair `SAVED.GAM` / `SAVED.OOL`. The seeds
 /// are read-only; only the commit step writes anything to disk.
 pub const U4_TRANSFER_U5_SEED_GAM_FILENAME: &str = "BRIT.GAM";
-pub const U4_TRANSFER_U5_SEED_OOL_FILENAME: &str = "BRIT.OOL";
+/// `u4-transfer.md §5,§11` U5-side seed object-overlay filename.
+/// Anchored to [`crate::BRIT_OOL_FILENAME`] so the transfer seed
+/// alias and the canonical filename stay one value.
+pub const U4_TRANSFER_U5_SEED_OOL_FILENAME: &str = crate::BRIT_OOL_FILENAME;
 pub const U4_TRANSFER_U4_SOURCE_FILENAME: &str = "PARTY.SAV";
 
 /// `u4-transfer.md §5` accepted source-side counter ranges. The
