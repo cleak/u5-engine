@@ -1,4 +1,23 @@
     #[test]
+    fn dungeon_torch_increment_max_anchors_to_low_nibble_mask() {
+        // lighting.md §8: dungeon Ignite rolls a uniform [MIN, MAX]
+        // increment of 16 outcomes (the low nibble of a random
+        // byte plus MIN). Anchor DUNGEON_TORCH_INCREMENT_MAX to
+        // DUNGEON_TORCH_INCREMENT_MIN + DUNGEON_CELL_LOW_NIBBLE_MASK
+        // so the 16-value width derives from the same low-nibble
+        // mask the dungeon-cell parser uses.
+        assert_eq!(
+            DUNGEON_TORCH_INCREMENT_MAX,
+            DUNGEON_TORCH_INCREMENT_MIN + DUNGEON_CELL_LOW_NIBBLE_MASK,
+        );
+        assert_eq!(DUNGEON_TORCH_INCREMENT_MAX, 127);
+        assert_eq!(
+            (DUNGEON_TORCH_INCREMENT_MAX - DUNGEON_TORCH_INCREMENT_MIN + 1) as usize,
+            16,
+        );
+    }
+
+    #[test]
     fn dawn_dusk_light_endpoints_anchor_to_full_dark_and_full_day() {
         // lighting.md §3: the dawn/dusk light ramp starts at
         // FULL_DARKNESS and ends one step below FULL_DAYLIGHT

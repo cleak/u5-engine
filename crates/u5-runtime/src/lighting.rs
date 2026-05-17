@@ -131,9 +131,14 @@ pub const fn ignite_torch_dungeon(current: u8, roll_112_to_127: u8) -> u8 {
     current.saturating_add(roll_112_to_127)
 }
 
-/// `lighting.md §8` dungeon Ignite random-increment bounds.
+/// `lighting.md §8` dungeon Ignite random-increment bounds. The
+/// increment rolls a uniform `[MIN, MAX]` for 16 outcomes (the
+/// low nibble of a random byte plus MIN). Anchor MAX to MIN +
+/// DUNGEON_CELL_LOW_NIBBLE_MASK so the 16-value width derives
+/// from the same low-nibble mask the dungeon-cell parser uses.
 pub const DUNGEON_TORCH_INCREMENT_MIN: u8 = 112;
-pub const DUNGEON_TORCH_INCREMENT_MAX: u8 = 127;
+pub const DUNGEON_TORCH_INCREMENT_MAX: u8 =
+    DUNGEON_TORCH_INCREMENT_MIN + crate::DUNGEON_CELL_LOW_NIBBLE_MASK;
 
 /// `lighting.md §8`: *In Lor* (ordinary Light spell) overwrites the
 /// light-spell counter with 100 units; *Vas Lor* (Great Light) overwrites
