@@ -1,4 +1,21 @@
     #[test]
+    fn playable_vehicle_tile_bands_chain_from_vehicle_range_start() {
+        // catalogs/tile-catalog.md §6: playable-vehicle tile
+        // bands start at TILE_VEHICLE_FIRST (0xA0). Each major
+        // vehicle (horse, frigate, skiff, carpet) occupies an
+        // 8-tile band; the balloon band starts 4 tiles past the
+        // carpet. Anchor the chain so adding or resizing a
+        // vehicle automatically shifts the later bands.
+        assert_eq!(FIRST_PLAYABLE_HORSE_TILE, TILE_VEHICLE_FIRST);
+        assert_eq!(FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_HORSE_TILE + 8);
+        assert_eq!(FIRST_PLAYABLE_SKIFF_TILE, FIRST_PLAYABLE_FRIGATE_TILE + 8);
+        assert_eq!(FIRST_PLAYABLE_MAGIC_CARPET_TILE, FIRST_PLAYABLE_SKIFF_TILE + 8);
+        assert_eq!(FIRST_PLAYABLE_BALLOON_TILE, FIRST_PLAYABLE_MAGIC_CARPET_TILE + 4);
+        assert_eq!(FIRST_PLAYABLE_HORSE_TILE, 160);
+        assert_eq!(FIRST_PLAYABLE_BALLOON_TILE, 188);
+    }
+
+    #[test]
     fn horse_object_and_transport_bands_chain_through_boarding_bias() {
         // vehicles.md §4: horse object bytes are 0x10..=0x11
         // (riderless) and 0x12..=0x13 (mounted). Boarding adds

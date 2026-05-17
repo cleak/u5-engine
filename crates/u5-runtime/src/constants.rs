@@ -1107,11 +1107,17 @@ pub const SHIP_BADLY_DAMAGED_WARNING: &str = "DANGER: SHIP BADLY DAMAGED!";
 pub const SHIP_NO_SKIFFS_WARNING: &str = "WARNING: NO SKIFFS ON BOARD!";
 pub const FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER: u8 = 28;
 pub const FIRST_PLAYABLE_FULL_SHIP_HULL: u8 = 77;
-pub const FIRST_PLAYABLE_HORSE_TILE: u8 = 160;
-pub const FIRST_PLAYABLE_FRIGATE_TILE: u8 = 168;
-pub const FIRST_PLAYABLE_SKIFF_TILE: u8 = 176;
-pub const FIRST_PLAYABLE_MAGIC_CARPET_TILE: u8 = 184;
-pub const FIRST_PLAYABLE_BALLOON_TILE: u8 = 188;
+/// `catalogs/tile-catalog.md §6` playable-vehicle tile bands. The
+/// vehicle range starts at TILE_VEHICLE_FIRST (0xA0); each major
+/// vehicle (horse, frigate, skiff, carpet) occupies an 8-tile
+/// band; the balloon band starts 4 tiles past the carpet band.
+/// Anchor the chain so adding a vehicle automatically shifts the
+/// later bands.
+pub const FIRST_PLAYABLE_HORSE_TILE: u8 = crate::TILE_VEHICLE_FIRST;
+pub const FIRST_PLAYABLE_FRIGATE_TILE: u8 = FIRST_PLAYABLE_HORSE_TILE + 8;
+pub const FIRST_PLAYABLE_SKIFF_TILE: u8 = FIRST_PLAYABLE_FRIGATE_TILE + 8;
+pub const FIRST_PLAYABLE_MAGIC_CARPET_TILE: u8 = FIRST_PLAYABLE_SKIFF_TILE + 8;
+pub const FIRST_PLAYABLE_BALLOON_TILE: u8 = FIRST_PLAYABLE_MAGIC_CARPET_TILE + 4;
 pub const DEFAULT_PARTY_HP: u16 = 60;
 pub const DEFAULT_PARTY_MAX_HP: u16 = 150;
 pub const REST_WATCH_TICKS_PER_HOUR: u8 = 3;
