@@ -63,10 +63,12 @@ pub const fn blackthorn_cutscene_actor(slot: u8) -> Option<BlackthornCutsceneAct
 }
 
 /// `blackthorn.md §3`: scene byte the audience cinematic hands the
-/// party off to after the throne cleanup beat. Eighteen is the
-/// gazetteer's `CASTLE:1` location associated with Lord
-/// Blackthorn's Castle; the captive cell sits inside that scene.
-pub const BLACKTHORN_CAPTIVE_CELL_SCENE: u8 = 18;
+/// party off to after the throne cleanup beat. The captive cell
+/// sits inside Lord Blackthorn's Castle (scene byte 18). Anchored
+/// to [`crate::SCENE_LORD_BLACKTHORNS_CASTLE`] so the captive-cell
+/// scene reference and the named castle-scene anchor share one
+/// source of truth.
+pub const BLACKTHORN_CAPTIVE_CELL_SCENE: u8 = crate::SCENE_LORD_BLACKTHORNS_CASTLE;
 
 /// `blackthorn.md §3`: local cell (X, Y) inside
 /// `BLACKTHORN_CAPTIVE_CELL_SCENE` the audience hand-off seeds the

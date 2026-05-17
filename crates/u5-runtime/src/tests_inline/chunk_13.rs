@@ -1,4 +1,20 @@
     #[test]
+    fn blackthorn_captive_cell_scene_anchors_to_blackthorns_castle() {
+        // blackthorn.md §3: the audience cinematic hands the party
+        // off to a captive cell inside Lord Blackthorn's Castle
+        // (scene byte 18). blackthorn.rs declared
+        // BLACKTHORN_CAPTIVE_CELL_SCENE = 18 as a bare literal in
+        // parallel with town_mode::SCENE_LORD_BLACKTHORNS_CASTLE
+        // = 18. Anchor the captive-cell scene through to the
+        // named castle-scene anchor.
+        assert_eq!(
+            BLACKTHORN_CAPTIVE_CELL_SCENE,
+            SCENE_LORD_BLACKTHORNS_CASTLE,
+        );
+        assert_eq!(BLACKTHORN_CAPTIVE_CELL_SCENE, 18);
+    }
+
+    #[test]
     fn combat_target_group_and_round_result_chains() {
         // combat.md §7: combat-round results and target groups
         // are sequential byte enums. combat_actor.rs declared
