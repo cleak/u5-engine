@@ -955,8 +955,13 @@ pub const DUNGEON_DAT_RECORD_COUNT: usize = 8;
 /// file length and the record layout stay one value.
 pub const DUNGEON_DAT_LEN: usize = DUNGEON_DAT_RECORD_COUNT * DUNGEON_RECORD_LEN;
 pub const DUNGEON_RECORD_LEN: usize = 512;
-pub const DUNGEON_LEVEL_LEN: usize = 64;
 pub const DUNGEON_SIDE: usize = 8;
+/// `formats/dungeon-dat.md §2,§6`: each dungeon level is an
+/// eight-by-eight row-major grid of packed cell bytes, so the
+/// level block is `8 * 8 = 64` bytes. Anchored to
+/// [`DUNGEON_SIDE`] squared so the level byte length and the
+/// grid side stay one value.
+pub const DUNGEON_LEVEL_LEN: usize = DUNGEON_SIDE * DUNGEON_SIDE;
 pub const DUNGEON_VIEW_DEPTH: usize = 4;
 pub const DUNGEON_GEM_VIEW_RADIUS: isize = 5;
 pub const WORLD_SIDE: usize = 256;
