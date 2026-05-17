@@ -1,4 +1,22 @@
     #[test]
+    fn chargen_inventory_seeds_alias_to_default_stocks() {
+        // chargen.md §8: the chargen seeded inventory counters
+        // (food=63, gold=150, keys=2, gems=0, torches=4) are the
+        // same values as the global DEFAULT_*_STOCK initial-
+        // inventory anchors in constants.rs. Anchor each
+        // CHARGEN_SEED_* through to its DEFAULT_* counterpart so a
+        // future rebalance flows through both names.
+        assert_eq!(CHARGEN_SEED_FOOD, DEFAULT_FOOD_STOCK);
+        assert_eq!(CHARGEN_SEED_GOLD, DEFAULT_GOLD_STOCK);
+        assert_eq!(CHARGEN_SEED_KEYS, DEFAULT_KEY_STOCK);
+        assert_eq!(CHARGEN_SEED_GEMS, DEFAULT_GEM_STOCK);
+        assert_eq!(CHARGEN_SEED_TORCHES, DEFAULT_TORCH_STOCK);
+        assert_eq!(CHARGEN_SEED_FOOD, 63);
+        assert_eq!(CHARGEN_SEED_GOLD, 150);
+        assert_eq!(CHARGEN_SEED_TORCHES, 4);
+    }
+
+    #[test]
     fn dungeon_underworld_entry_anchors_to_deepest_corner() {
         // dungeon-mode.md §3: the underworld dungeon entry seed
         // places the party on the deepest floor at the south-east

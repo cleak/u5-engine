@@ -150,11 +150,17 @@ pub const CHARGEN_STARTING_PARTY_SIZE: u8 = 3;
 /// come from `INIT.GAM` unchanged. Listing them as named constants
 /// lets fixture builders and verification checks compare a freshly
 /// generated save against the published seed values.
-pub const CHARGEN_SEED_FOOD: u16 = 63;
-pub const CHARGEN_SEED_GOLD: u16 = 150;
-pub const CHARGEN_SEED_KEYS: u8 = 2;
-pub const CHARGEN_SEED_GEMS: u8 = 0;
-pub const CHARGEN_SEED_TORCHES: u8 = 4;
+///
+/// The seeded counters are the same values as the global
+/// `DEFAULT_*` initial-inventory anchors in `constants.rs`, so
+/// they are aliased through to those constants. A future
+/// rebalance of either the chargen seed or the global default
+/// flows through both names.
+pub const CHARGEN_SEED_FOOD: u16 = crate::DEFAULT_FOOD_STOCK;
+pub const CHARGEN_SEED_GOLD: u16 = crate::DEFAULT_GOLD_STOCK;
+pub const CHARGEN_SEED_KEYS: u8 = crate::DEFAULT_KEY_STOCK;
+pub const CHARGEN_SEED_GEMS: u8 = crate::DEFAULT_GEM_STOCK;
+pub const CHARGEN_SEED_TORCHES: u8 = crate::DEFAULT_TORCH_STOCK;
 pub const CHARGEN_SEED_MAGIC_POWDER: u8 = 0;
 
 /// `chargen.md §8` seeded reagent counters for a fresh
