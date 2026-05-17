@@ -912,9 +912,12 @@ pub const CREATE_FOOD_AMOUNT: u16 = 100;
 pub const VAS_LOR_SPELL_INDEX: usize = 12;
 pub const VAS_LOR_COST: u8 = (VAS_LOR_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const VAS_LOR_LIGHT_DURATION: u8 = 255;
+/// `catalogs/spell-list.md §5`: Fire/Poison/Sleep Field spells
+/// occupy consecutive indices 14..=16 in the same field-spell
+/// triplet. Anchor each successor to the chain.
 pub const FIRE_FIELD_SPELL_INDEX: usize = 14;
-pub const POISON_FIELD_SPELL_INDEX: usize = 15;
-pub const SLEEP_FIELD_SPELL_INDEX: usize = 16;
+pub const POISON_FIELD_SPELL_INDEX: usize = FIRE_FIELD_SPELL_INDEX + 1;
+pub const SLEEP_FIELD_SPELL_INDEX: usize = POISON_FIELD_SPELL_INDEX + 1;
 /// `combat.md §10`: Fire/Poison/Sleep Field spells all share
 /// circle 2 (spell indices 14, 15, 16) and therefore an MP cost
 /// of 3. Anchored to the Sleep Field representative index.

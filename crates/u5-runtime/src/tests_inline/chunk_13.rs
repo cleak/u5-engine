@@ -1,4 +1,17 @@
     #[test]
+    fn field_spell_indices_chain_sequentially() {
+        // catalogs/spell-list.md §5: Fire/Poison/Sleep Field
+        // spells occupy consecutive indices 14..=16 in the same
+        // field-spell triplet. Anchor each successor to the chain
+        // so the triplet stays sequential.
+        assert_eq!(POISON_FIELD_SPELL_INDEX, FIRE_FIELD_SPELL_INDEX + 1);
+        assert_eq!(SLEEP_FIELD_SPELL_INDEX, POISON_FIELD_SPELL_INDEX + 1);
+        assert_eq!(FIRE_FIELD_SPELL_INDEX, 14);
+        assert_eq!(POISON_FIELD_SPELL_INDEX, 15);
+        assert_eq!(SLEEP_FIELD_SPELL_INDEX, 16);
+    }
+
+    #[test]
     fn sign_body_separator_glyph_b_anchors_to_separator_glyph_a() {
         // formats/signs-dat.md §4: shipped records pair separator
         // glyphs at 0x26 and 0x27 as decorative dividers; both
