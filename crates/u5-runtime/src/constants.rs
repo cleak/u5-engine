@@ -1138,10 +1138,16 @@ pub const FIRST_PLAYABLE_MAGIC_CARPET_TILE: u8 = FIRST_PLAYABLE_SKIFF_TILE + 8;
 pub const FIRST_PLAYABLE_BALLOON_TILE: u8 = FIRST_PLAYABLE_MAGIC_CARPET_TILE + 4;
 pub const DEFAULT_PARTY_HP: u16 = 60;
 pub const DEFAULT_PARTY_MAX_HP: u16 = 150;
+/// `rest-and-camp.md §3,§4`: rest tick cadences derive from
+/// MINUTES_PER_HOUR. Watch-mode rest ticks at MINUTES_PER_HOUR /
+/// REST_WATCH_TICKS_PER_HOUR = 60/3 = 20 minutes each; town
+/// rest ticks at MINUTES_PER_HOUR / TOWN_REST_TICKS_PER_HOUR =
+/// 60/6 = 10 minutes each. Anchor the per-tick minute lengths so
+/// the cadence/tick-count partition has one source of truth.
 pub const REST_WATCH_TICKS_PER_HOUR: u8 = 3;
-pub const REST_WATCH_MINUTES_PER_TICK: u8 = 20;
+pub const REST_WATCH_MINUTES_PER_TICK: u8 = crate::MINUTES_PER_HOUR / REST_WATCH_TICKS_PER_HOUR;
 pub const TOWN_REST_TICKS_PER_HOUR: u8 = 6;
-pub const TOWN_REST_MINUTES_PER_TICK: u8 = 10;
+pub const TOWN_REST_MINUTES_PER_TICK: u8 = crate::MINUTES_PER_HOUR / TOWN_REST_TICKS_PER_HOUR;
 pub const TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS: u8 = 16;
 /// `rest-and-camp.md §4`: when the player's chosen rest digit lands the
 /// target hour past 23, the original engine subtracts 23 (not 24) to

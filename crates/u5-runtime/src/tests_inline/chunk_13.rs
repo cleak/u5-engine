@@ -1,4 +1,24 @@
     #[test]
+    fn rest_tick_minute_cadences_derive_from_minutes_per_hour() {
+        // rest-and-camp.md §3, §4: rest tick cadences derive from
+        // MINUTES_PER_HOUR. Watch-mode rest ticks 20 minutes each
+        // (60/3); town rest ticks 10 minutes each (60/6). Anchor
+        // the per-tick minute lengths to MINUTES_PER_HOUR /
+        // ticks-per-hour so the cadence/tick-count partition has
+        // one source of truth.
+        assert_eq!(
+            REST_WATCH_MINUTES_PER_TICK,
+            MINUTES_PER_HOUR / REST_WATCH_TICKS_PER_HOUR,
+        );
+        assert_eq!(
+            TOWN_REST_MINUTES_PER_TICK,
+            MINUTES_PER_HOUR / TOWN_REST_TICKS_PER_HOUR,
+        );
+        assert_eq!(REST_WATCH_MINUTES_PER_TICK, 20);
+        assert_eq!(TOWN_REST_MINUTES_PER_TICK, 10);
+    }
+
+    #[test]
     fn hcs_bytes_per_row_anchors_to_cell_width_div_8() {
         // formats/font-hcs.md §2: each .HCS row encodes
         // HCS_CELL_WIDTH pixels at one bit per pixel, so the row
