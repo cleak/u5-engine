@@ -31,7 +31,10 @@ pub const SHIP_BROADSIDE_DAMAGE_MAX: u8 = 20;
 /// from. For ship/frigate targets this byte doubles as hull
 /// condition; non-ship targets carry an ordinary family-specific
 /// meaning that broadside damage still depletes generically.
-pub const SHIP_BROADSIDE_DEPLETION_BYTE_OFFSET: usize = 5;
+/// Anchored to [`crate::ACTIVE_OBJECT_FIELD_DEP1`] so the
+/// depletion offset and the active-object field layout stay one
+/// value.
+pub const SHIP_BROADSIDE_DEPLETION_BYTE_OFFSET: usize = crate::ACTIVE_OBJECT_FIELD_DEP1;
 
 /// `vehicles.md §7`: per-hit depletion-and-clear rule. Subtracts
 /// `damage` from the target's `+5` byte. If the subtraction wraps

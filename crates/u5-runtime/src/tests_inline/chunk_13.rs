@@ -1,4 +1,22 @@
     #[test]
+    fn ship_broadside_depletion_byte_anchors_to_active_object_dep1() {
+        // vehicles.md §7: the ship-broadside damage path
+        // subtracts from active-object field DEP1 (offset 5 in
+        // the 8-byte record). ship_broadside.rs declared
+        // SHIP_BROADSIDE_DEPLETION_BYTE_OFFSET = 5 as a bare
+        // literal in parallel with active_object_io.rs's
+        // ACTIVE_OBJECT_FIELD_DEP1 = 5. Anchor the depletion
+        // offset to ACTIVE_OBJECT_FIELD_DEP1 so the
+        // depletion offset and the active-object field layout
+        // stay one value.
+        assert_eq!(
+            SHIP_BROADSIDE_DEPLETION_BYTE_OFFSET,
+            ACTIVE_OBJECT_FIELD_DEP1,
+        );
+        assert_eq!(SHIP_BROADSIDE_DEPLETION_BYTE_OFFSET, 5);
+    }
+
+    #[test]
     fn random_encounter_night_hour_last_anchors_to_town_dawn_hour() {
         // encounters.md §3 / town-mode.md §5, §6: both the
         // surface encounter night-boost band and the town
