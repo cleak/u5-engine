@@ -1,4 +1,18 @@
     #[test]
+    fn dungeon_chest_gold_depth_multiplier_matches_spec() {
+        // containers.md §6: gold-row upper bound is
+        // `DUNGEON_CHEST_GOLD_DEPTH_MULTIPLIER * dungeon_depth`
+        // (= 8 * depth in the shipped data set). At depth 0 the
+        // helper preserves the original zero-width range.
+        assert_eq!(DUNGEON_CHEST_GOLD_DEPTH_MULTIPLIER, 8);
+        assert_eq!(dungeon_chest_gold_upper(0), 0);
+        assert_eq!(dungeon_chest_gold_upper(1), DUNGEON_CHEST_GOLD_DEPTH_MULTIPLIER);
+        assert_eq!(dungeon_chest_gold_upper(7), 56);
+        assert!(dungeon_chest_gold_is_zero_width(0));
+        assert!(!dungeon_chest_gold_is_zero_width(1));
+    }
+
+    #[test]
     fn reagent_recipe_masks_match_spec_table() {
         // catalogs/spell-list.md §3: per-reagent recipe-mask bits.
         // Bit 0x80 selects Sulfur Ash (index 0); each subsequent

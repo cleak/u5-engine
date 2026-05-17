@@ -489,13 +489,18 @@ pub const DUNGEON_CHEST_ROWS: [DungeonChestRow; 7] = [
     },
 ];
 
+/// `containers.md §6` dungeon-chest gold-row multiplier. The gold
+/// row's upper roll bound is computed as `MULTIPLIER * dungeon_depth`
+/// before being passed to the shared one-based random helper.
+pub const DUNGEON_CHEST_GOLD_DEPTH_MULTIPLIER: u8 = 8;
+
 /// `containers.md §6` upper endpoint the gold row passes to the
 /// shared one-based random helper: `8 * dungeon_depth`. At
 /// `dungeon_depth == 0` this collapses to a `1..0` zero-width range
 /// — compatible implementations preserve the PRNG advance and the
 /// original divide-by-zero edge rather than clamping to 1.
 pub const fn dungeon_chest_gold_upper(dungeon_depth: u8) -> u8 {
-    8u8.wrapping_mul(dungeon_depth)
+    DUNGEON_CHEST_GOLD_DEPTH_MULTIPLIER.wrapping_mul(dungeon_depth)
 }
 
 /// `containers.md §6`: returns `true` when the gold row would invoke
