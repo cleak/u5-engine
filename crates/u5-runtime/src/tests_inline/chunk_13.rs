@@ -472,6 +472,40 @@
     }
 
     #[test]
+    fn tlk_introducer_argument_widths_match_spec_table() {
+        // formats/tlk.md §9.1 publishes the multi-byte introducer
+        // argument widths: GOLD-PAYMENT (0x85) takes three ASCII
+        // digit bytes, ACTION-DISPATCH (0x86) and IF-ELSE (0x8C)
+        // take one byte each, and IF-ELSE-ALT (0xFE) takes two
+        // bytes. Promote the three widths so
+        // tlk_introducer_argument_count does not bake `3`, `1`, `2`
+        // as bare Some-arms.
+        assert_eq!(TLK_GOLD_PAYMENT_ARGUMENT_BYTES, 3);
+        assert_eq!(TLK_ONE_BYTE_INTRODUCER_ARGUMENT_BYTES, 1);
+        assert_eq!(TLK_IF_ELSE_ALT_ARGUMENT_BYTES, 2);
+        // Helper returns the named widths.
+        assert_eq!(
+            tlk_introducer_argument_count(TLK_CODE_GOLD_PAYMENT),
+            Some(TLK_GOLD_PAYMENT_ARGUMENT_BYTES)
+        );
+        assert_eq!(
+            tlk_introducer_argument_count(TLK_CODE_ACTION_DISPATCH),
+            Some(TLK_ONE_BYTE_INTRODUCER_ARGUMENT_BYTES)
+        );
+        assert_eq!(
+            tlk_introducer_argument_count(TLK_CODE_IF_ELSE),
+            Some(TLK_ONE_BYTE_INTRODUCER_ARGUMENT_BYTES)
+        );
+        assert_eq!(
+            tlk_introducer_argument_count(TLK_CODE_IF_ELSE_ALT),
+            Some(TLK_IF_ELSE_ALT_ARGUMENT_BYTES)
+        );
+        // Non-introducer codes still return None.
+        assert_eq!(tlk_introducer_argument_count(TLK_CODE_PAUSE), None);
+        assert_eq!(tlk_introducer_argument_count(0), None);
+    }
+
+    #[test]
     fn npc_world_roster_max_matches_spec_arithmetic() {
         // formats/npc.md §2 + §4: the world's named-location NPC
         // roster is bounded above by 31 effective slots per sub-map,

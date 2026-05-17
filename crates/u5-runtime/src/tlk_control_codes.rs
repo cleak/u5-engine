@@ -515,13 +515,28 @@ pub const fn tlk_gold_payment_amount(arg0: u8, arg1: u8, arg2: u8) -> Option<u16
     )
 }
 
+/// `formats/tlk.md §9.1` argument-byte width for the GOLD-PAYMENT
+/// introducer (`0x85`): three ASCII digit bytes encoding the decimal
+/// gold amount.
+pub const TLK_GOLD_PAYMENT_ARGUMENT_BYTES: u8 = 3;
+/// `formats/tlk.md §9.1` argument-byte width for the ACTION-DISPATCH
+/// (`0x86`) and IF-ELSE (`0x8C`) introducers: a single argument byte
+/// each, masked to seven bits at the runtime layer.
+pub const TLK_ONE_BYTE_INTRODUCER_ARGUMENT_BYTES: u8 = 1;
+/// `formats/tlk.md §9.1` argument-byte width for the IF-ELSE-ALT
+/// introducer (`0xFE`): two argument bytes (a moral-standing threshold
+/// followed by a target label byte).
+pub const TLK_IF_ELSE_ALT_ARGUMENT_BYTES: u8 = 2;
+
 /// `conversation.md` §7.6: argument-byte width for each multi-byte
 /// introducer code. Returns `None` for codes that take no follow-up bytes.
 pub const fn tlk_introducer_argument_count(code: u8) -> Option<u8> {
     match code {
-        TLK_CODE_GOLD_PAYMENT => Some(3),
-        TLK_CODE_ACTION_DISPATCH | TLK_CODE_IF_ELSE => Some(1),
-        TLK_CODE_IF_ELSE_ALT => Some(2),
+        TLK_CODE_GOLD_PAYMENT => Some(TLK_GOLD_PAYMENT_ARGUMENT_BYTES),
+        TLK_CODE_ACTION_DISPATCH | TLK_CODE_IF_ELSE => {
+            Some(TLK_ONE_BYTE_INTRODUCER_ARGUMENT_BYTES)
+        }
+        TLK_CODE_IF_ELSE_ALT => Some(TLK_IF_ELSE_ALT_ARGUMENT_BYTES),
         _ => None,
     }
 }
