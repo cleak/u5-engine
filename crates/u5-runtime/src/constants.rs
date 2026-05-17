@@ -180,7 +180,11 @@ pub const TILE_ATLAS_CGA_BODY_LEN: usize = TILE_ATLAS_TILE_COUNT * TILE_ATLAS_CG
 pub const LZW_CLEAR_CODE: u16 = 256;
 pub const LZW_END_CODE: u16 = LZW_CLEAR_CODE + 1;
 pub const LZW_FIRST_USER_CODE: u16 = LZW_END_CODE + 1;
-pub const LZW_MAX_CODES: u16 = 4096;
+/// `formats/lzw.md §3`: maximum LZW dictionary size = `2^max_code_size`
+/// (4096 codes at a 12-bit max code width). Anchored to
+/// `1 << LZW_MAX_CODE_SIZE` so the dictionary cap and the
+/// code-width ceiling stay one value.
+pub const LZW_MAX_CODES: u16 = 1 << LZW_MAX_CODE_SIZE;
 pub const LZW_INITIAL_CODE_SIZE: u8 = 9;
 pub const LZW_MAX_CODE_SIZE: u8 = 12;
 /// `formats/lzw.md §2`: the LZW envelope opens with a four-byte

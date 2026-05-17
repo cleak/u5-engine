@@ -1,4 +1,16 @@
     #[test]
+    fn lzw_max_codes_anchors_to_max_code_size() {
+        // formats/lzw.md §3: the maximum LZW dictionary size is
+        // 2^max_code_size (4096 codes at a 12-bit max code width).
+        // Anchor LZW_MAX_CODES to 1 << LZW_MAX_CODE_SIZE so the
+        // dictionary cap and the code-width ceiling stay one
+        // value.
+        assert_eq!(LZW_MAX_CODES, 1 << LZW_MAX_CODE_SIZE);
+        assert_eq!(LZW_MAX_CODES, 4096);
+        assert_eq!(LZW_MAX_CODE_SIZE, 12);
+    }
+
+    #[test]
     fn lzw_marker_codes_chain_from_clear_code() {
         // formats/lzw.md §3: LZW code 256 is the "clear table"
         // marker; 257 is the end-of-stream marker; user codes
