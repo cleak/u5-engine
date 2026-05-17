@@ -83,6 +83,15 @@ pub const BIT_STRIP_POINTER_NONE: u16 = 0;
 /// `formats/bit.md §4.3`: `WD.BIT` is a single-entry resource whose
 /// "Warriors of Destiny" lettering is exactly 49 rows tall.
 pub const WD_BIT_LETTERING_ROWS: u16 = 49;
+/// `formats/bit.md §3` strip-body header word widths. Each strip
+/// body opens with a width-related word and a row-count word before
+/// its packed pixel payload — four bytes of header total. Promote
+/// the widths so a future driver/bitmap decoder names the strip
+/// header instead of repeating `2` as a bare literal.
+pub const BIT_STRIP_WIDTH_WORD_LEN: usize = 2;
+pub const BIT_STRIP_ROW_COUNT_WORD_LEN: usize = 2;
+pub const BIT_STRIP_HEADER_LEN: usize =
+    BIT_STRIP_WIDTH_WORD_LEN + BIT_STRIP_ROW_COUNT_WORD_LEN;
 /// `formats/font-ch.md §2,§3`: a shipped `.CH` font is exactly
 /// 1024 bytes (128 glyphs × 8 bytes each).
 pub const CH_FONT_LEN: usize = 1024;

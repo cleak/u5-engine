@@ -1,4 +1,14 @@
     #[test]
+    fn bit_strip_header_widths_match_spec() {
+        // formats/bit.md §3: each strip body opens with a
+        // width-related word and a row-count word before the packed
+        // pixel payload — four bytes of header total.
+        assert_eq!(BIT_STRIP_WIDTH_WORD_LEN, 2);
+        assert_eq!(BIT_STRIP_ROW_COUNT_WORD_LEN, 2);
+        assert_eq!(BIT_STRIP_HEADER_LEN, 4);
+    }
+
+    #[test]
     fn question_dat_layout_markers_match_spec() {
         // formats/question-dat.md §3: `{` is the paragraph-start
         // marker and `_` is the soft-hyphen / syllable-break marker.
