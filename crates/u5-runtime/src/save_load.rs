@@ -586,7 +586,11 @@ pub fn save_image_has_active_avatar(image: &[u8]) -> bool {
 /// entry; chargen then overwrites only the Avatar's customisation
 /// slice (name / gender / STR / DEX / INT / MP) before the image is
 /// written out as `SAVED.GAM` (which has the same length).
-pub const INIT_GAM_FILE_LEN: usize = 4_192;
+/// `formats/saved-gam.md §1`: INIT.GAM is the factory seed for
+/// SAVED.GAM and ships at the same 4,192-byte total file length.
+/// Anchored to [`crate::SAVED_GAM_LEN`] so the seed and save
+/// images stay one value.
+pub const INIT_GAM_FILE_LEN: usize = crate::SAVED_GAM_LEN;
 pub const INIT_GAM_FILENAME: &str = "INIT.GAM";
 
 /// `formats/saved-gam.md §1` published runtime working-save filename
@@ -595,11 +599,13 @@ pub const INIT_GAM_FILENAME: &str = "INIT.GAM";
 pub const SAVED_GAM_FILENAME: &str = "SAVED.GAM";
 
 /// `formats/ool.md §3`: each plane table holds 32 active-object
-/// records (8 bytes each = 256 bytes per plane).
-pub const OOL_PLANE_RECORD_COUNT: usize = 32;
-pub const OOL_PLANE_RECORD_LEN: usize = 8;
-pub const OOL_PLANE_TABLE_LEN: usize =
-    OOL_PLANE_RECORD_COUNT * OOL_PLANE_RECORD_LEN;
+/// records (8 bytes each = 256 bytes per plane). Anchored to the
+/// format-side [`crate::OOL_SLOTS`] / [`crate::OOL_RECORD_LEN`] /
+/// [`crate::OOL_PLANE_LEN`] so the save-load contract and the
+/// .OOL format share one source of truth.
+pub const OOL_PLANE_RECORD_COUNT: usize = crate::OOL_SLOTS;
+pub const OOL_PLANE_RECORD_LEN: usize = crate::OOL_RECORD_LEN;
+pub const OOL_PLANE_TABLE_LEN: usize = crate::OOL_PLANE_LEN;
 
 /// `save-load.md §3.1`: the "above-ground / no z" sentinel used in the
 /// eight-byte `.OOL` record's `z` byte.

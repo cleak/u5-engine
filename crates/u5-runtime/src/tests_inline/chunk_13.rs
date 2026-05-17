@@ -1,4 +1,25 @@
     #[test]
+    fn save_load_aliases_anchor_to_canonical_format_constants() {
+        // formats/saved-gam.md §1: INIT.GAM is the factory seed
+        // for SAVED.GAM and ships at the same 4,192-byte length.
+        // formats/ool.md §3: each .OOL plane table holds 32
+        // 8-byte active-object records (256 bytes per plane).
+        // Anchor save_load.rs's INIT_GAM_FILE_LEN /
+        // OOL_PLANE_RECORD_COUNT / OOL_PLANE_RECORD_LEN /
+        // OOL_PLANE_TABLE_LEN to the canonical format-side
+        // constants so the save-load contract and the format
+        // share one source of truth.
+        assert_eq!(INIT_GAM_FILE_LEN, SAVED_GAM_LEN);
+        assert_eq!(OOL_PLANE_RECORD_COUNT, OOL_SLOTS);
+        assert_eq!(OOL_PLANE_RECORD_LEN, OOL_RECORD_LEN);
+        assert_eq!(OOL_PLANE_TABLE_LEN, OOL_PLANE_LEN);
+        assert_eq!(INIT_GAM_FILE_LEN, 4192);
+        assert_eq!(OOL_PLANE_RECORD_COUNT, 32);
+        assert_eq!(OOL_PLANE_RECORD_LEN, 8);
+        assert_eq!(OOL_PLANE_TABLE_LEN, 256);
+    }
+
+    #[test]
     fn ool_file_lengths_anchor_to_format_constants() {
         // save-load.md §3.1: SAVED.OOL is two per-plane mirrors
         // (512 bytes); BRIT.OOL / UNDER.OOL / INIT.OOL each carry
