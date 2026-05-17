@@ -1,4 +1,14 @@
     #[test]
+    fn inn_party_cap_anchors_to_save_party_size_max() {
+        // shops.md §8.4: the inn `L` Leave path refuses when the
+        // travelling party already has six members — the same cap
+        // enforced by the save-file roster. Anchor INN_PARTY_CAP to
+        // SAVE_PARTY_SIZE_MAX so the two stay coupled.
+        assert_eq!(INN_PARTY_CAP, SAVE_PARTY_SIZE_MAX as usize);
+        assert_eq!(INN_PARTY_CAP, 6);
+    }
+
+    #[test]
     fn inn_stay_counter_month_rollover_cap_anchors_to_persistence_cap() {
         // shops.md §6 & §8.4: the inn registry's stored stay counter
         // is bumped each 28-day month rollover and capped at 25; the

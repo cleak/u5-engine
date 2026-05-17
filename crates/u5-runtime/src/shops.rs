@@ -867,7 +867,12 @@ pub enum ProvisionPurchaseError {
 }
 
 pub const INN_REGISTRY_CAP: usize = 16;
-pub const INN_PARTY_CAP: usize = 6;
+/// `shops.md §8.4` Active party-size gate for the inn `L` Leave
+/// flow: leave is rejected when the travelling party is already
+/// at the engine-wide party cap. Anchored to
+/// [`crate::SAVE_PARTY_SIZE_MAX`] so the inn gate and the save
+/// file's roster cap stay a single value.
+pub const INN_PARTY_CAP: usize = crate::SAVE_PARTY_SIZE_MAX as usize;
 pub const INN_STAY_COUNTER_CAP: u8 = 25;
 
 /// `shops.md §8.4` Leave-companion deposit unit count. The deposit
