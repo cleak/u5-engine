@@ -472,6 +472,40 @@
     }
 
     #[test]
+    fn potion_variation_threshold_constants_match_spec() {
+        // inventory.md §7: the consumed-potion variation roll has
+        // fourteen of sixteen outcomes (0..=13) preserve the chosen
+        // colour's effect; roll value 14 forces Orange sleep; the
+        // remaining outcome (15) substitutes a uniformly random
+        // potion id from `0..=7`. Promote the threshold, the forced-
+        // Orange exact roll, and the random-substitution mask so
+        // potion_effect_index_after_variation does not bake `13`,
+        // `14`, `0x0F`, and `0x07` as bare literals.
+        assert_eq!(POTION_VARIATION_ROLL_MASK, 0x0F);
+        assert_eq!(POTION_VARIATION_SELECTED_THRESHOLD, 13);
+        assert_eq!(POTION_VARIATION_FORCED_ORANGE_ROLL, 14);
+        assert_eq!(POTION_VARIATION_RANDOM_INDEX_MASK, 0x07);
+        // Roll 0..=13 -> selected colour.
+        for roll in 0u8..=POTION_VARIATION_SELECTED_THRESHOLD {
+            assert_eq!(
+                potion_effect_index_after_variation(POTION_RED_INDEX, roll, 0),
+                POTION_RED_INDEX
+            );
+        }
+        // Roll 14 -> Orange.
+        assert_eq!(
+            potion_effect_index_after_variation(POTION_RED_INDEX, 14, 0),
+            POTION_ORANGE_INDEX
+        );
+        // Roll 15 -> random potion (the helper masks the random byte
+        // to POTION_VARIATION_RANDOM_INDEX_MASK).
+        assert_eq!(
+            potion_effect_index_after_variation(POTION_RED_INDEX, 15, 3),
+            3
+        );
+    }
+
+    #[test]
     fn weapon_range_arena_wide_cap_covers_full_arena_diagonal() {
         // catalogs/item-list.md §5.3: Magic Bow and Magic Axe use
         // non-adjacent range cap 15, which reaches every cell on the

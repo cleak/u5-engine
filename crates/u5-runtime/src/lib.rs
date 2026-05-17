@@ -456,6 +456,8 @@ pub use party::{
     default_party_experience,
     default_party_intelligence, default_party_names, default_party_stay_counters,
     heal_spell_amount_from_raw_roll, increase_capped_stat, party_member_unavailable_message,
+    POTION_VARIATION_FORCED_ORANGE_ROLL, POTION_VARIATION_RANDOM_INDEX_MASK,
+    POTION_VARIATION_ROLL_MASK, POTION_VARIATION_SELECTED_THRESHOLD,
     party_name_to_string, party_status_name, potion_effect_index_after_variation,
     potion_label, recompute_level_from_experience, resurrection_adjusted_experience,
     resurrection_max_hp_for_level,

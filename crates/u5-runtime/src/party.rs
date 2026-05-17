@@ -274,14 +274,31 @@ pub fn potion_label(index: usize) -> &'static str {
     LABELS.get(index).copied().unwrap_or("unknown")
 }
 
+/// `inventory.md §7` potion variation roll mask. The variation roll
+/// is reduced modulo [`POTION_VARIATION_DENOMINATOR`] (16) by masking
+/// the low four bits before the threshold compare.
+pub const POTION_VARIATION_ROLL_MASK: u8 = 0x0F;
+/// `inventory.md §7` last roll value (inclusive) that keeps the
+/// selected colour's effect. Fourteen of the sixteen outcomes
+/// (`0..=13`) preserve the chosen potion's effect; the remaining two
+/// outcomes force Orange or substitute a random potion.
+pub const POTION_VARIATION_SELECTED_THRESHOLD: u8 = 13;
+/// `inventory.md §7` exact roll value that forces the Orange sleep
+/// effect.
+pub const POTION_VARIATION_FORCED_ORANGE_ROLL: u8 = 14;
+/// `inventory.md §7` random-replacement mask. The random potion
+/// substitution masks the secondary roll to `POTION_COUNT - 1`
+/// (`0x07`) to pick uniformly from rows `0..=7`.
+pub const POTION_VARIATION_RANDOM_INDEX_MASK: u8 = (POTION_COUNT - 1) as u8;
+
 pub fn potion_effect_index_after_variation(
     selected_index: usize,
     variation_roll: u8,
     random_roll: u8,
 ) -> usize {
-    match variation_roll & 0x0f {
-        0..=13 => selected_index,
-        14 => POTION_ORANGE_INDEX,
-        _ => (random_roll as usize) & 0x07,
+    match variation_roll & POTION_VARIATION_ROLL_MASK {
+        roll if roll <= POTION_VARIATION_SELECTED_THRESHOLD => selected_index,
+        POTION_VARIATION_FORCED_ORANGE_ROLL => POTION_ORANGE_INDEX,
+        _ => (random_roll as usize) & POTION_VARIATION_RANDOM_INDEX_MASK as usize,
     }
 }
