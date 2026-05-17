@@ -68,8 +68,12 @@ pub const TILE_VEHICLE_LAST: u8 = 0xBB;
 pub const TILE_VEHICLE_ART_FIRST: u8 = TILE_VEHICLE_LAST + 1;
 pub const TILE_VEHICLE_ART_LAST: u8 = 0xBF;
 /// Inclusive NPC sprite range `0xC0..=0xFF` (townspeople, guards, named).
+/// The NPC band runs to the top of the 8-bit tile-id space, so the
+/// last NPC tile id is the largest representable byte. Anchored to
+/// [`u8::MAX`] so the band-last value derives from the tile-id width
+/// rather than restating `0xFF` as a bare literal.
 pub const TILE_NPC_FIRST: u8 = TILE_VEHICLE_ART_LAST + 1;
-pub const TILE_NPC_LAST: u8 = 0xFF;
+pub const TILE_NPC_LAST: u8 = u8::MAX;
 
 /// `catalogs/tile-catalog.md §2` super-category split. The fourteen
 /// concrete classes group into three super-categories that decide

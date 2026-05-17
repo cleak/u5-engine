@@ -1,4 +1,16 @@
     #[test]
+    fn tile_npc_last_anchors_to_u8_max() {
+        // catalogs/tile-catalog.md §2: the NPC sprite band runs
+        // `0xC0..=0xFF` — the upper quarter of the 8-bit tile-id
+        // space, ending at the largest representable byte. Anchor
+        // TILE_NPC_LAST to u8::MAX so the band-last value derives
+        // from the tile-id width.
+        assert_eq!(TILE_NPC_LAST, u8::MAX);
+        assert_eq!(TILE_NPC_LAST, 0xFF);
+        assert_eq!(TILE_NPC_FIRST, 0xC0);
+    }
+
+    #[test]
     fn sky_strip_morning_offsets_anchor_to_their_band_last() {
         // moons.md §2: each sky-strip marker's morning-band cell
         // position is `OFFSET - hour`. At hour == BAND_LAST the
