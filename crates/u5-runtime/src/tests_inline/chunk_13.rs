@@ -1,4 +1,22 @@
     #[test]
+    fn save_calendar_offsets_chain_month_through_ampm() {
+        // formats/saved-gam.md §5: calendar/clock bytes form a
+        // contiguous per-byte chain at 0x02d7..=0x02de — month,
+        // day, hour, saved-hour snapshot, minute, combat-round
+        // counter, per-turn state, AM/PM display. Anchor each
+        // offset to the chain so resizing any calendar field
+        // automatically shifts the later offsets.
+        assert_eq!(SAVE_MONTH_OFFSET, 0x02d7);
+        assert_eq!(SAVE_DAY_OFFSET, 0x02d8);
+        assert_eq!(SAVE_HOUR_OFFSET, 0x02d9);
+        assert_eq!(SAVE_SAVED_HOUR_SNAPSHOT_OFFSET, 0x02da);
+        assert_eq!(SAVE_MINUTE_OFFSET, 0x02db);
+        assert_eq!(SAVE_COMBAT_ROUND_COUNTER_OFFSET, 0x02dc);
+        assert_eq!(SAVE_PER_TURN_STATE_OFFSET, 0x02dd);
+        assert_eq!(SAVE_AMPM_DISPLAY_OFFSET, 0x02de);
+    }
+
+    #[test]
     fn save_inventory_band_offsets_chain_through_catalog_counts() {
         // formats/saved-gam.md §4: the special-item, equipment,
         // spell-charge, scroll, potion, and moonstone bands sit

@@ -303,19 +303,25 @@ pub const SAVE_YEAR_OFFSET: usize = 0x02ce;
 pub const SAVE_TIMING_STATUS_TAG_OFFSET: usize = 0x02d4;
 pub const SAVE_ACTIVE_PLAYER_OFFSET: usize = 0x02d5;
 pub const SAVE_TRANSPORT_MARKER_OFFSET: usize = 0x02d6;
+/// `formats/saved-gam.md §5`: calendar/clock bytes at
+/// 0x02d7..=0x02de form a contiguous per-byte chain: month, day,
+/// hour, saved-hour snapshot, minute, combat-round counter,
+/// per-turn state, AM/PM display. Anchor each offset to the
+/// previous-byte chain so resizing or inserting a calendar field
+/// only happens in one place.
 pub const SAVE_MONTH_OFFSET: usize = 0x02d7;
-pub const SAVE_DAY_OFFSET: usize = 0x02d8;
-pub const SAVE_HOUR_OFFSET: usize = 0x02d9;
+pub const SAVE_DAY_OFFSET: usize = SAVE_MONTH_OFFSET + 1;
+pub const SAVE_HOUR_OFFSET: usize = SAVE_DAY_OFFSET + 1;
 /// `formats/saved-gam.md §5`: adjacent saved-hour snapshot byte the
 /// per-turn cleanup uses to detect hour crossings. Not the active
 /// hour; preserve byte-for-byte on round trip.
-pub const SAVE_SAVED_HOUR_SNAPSHOT_OFFSET: usize = 0x02da;
-pub const SAVE_MINUTE_OFFSET: usize = 0x02db;
-pub const SAVE_COMBAT_ROUND_COUNTER_OFFSET: usize = 0x02dc;
+pub const SAVE_SAVED_HOUR_SNAPSHOT_OFFSET: usize = SAVE_HOUR_OFFSET + 1;
+pub const SAVE_MINUTE_OFFSET: usize = SAVE_SAVED_HOUR_SNAPSHOT_OFFSET + 1;
+pub const SAVE_COMBAT_ROUND_COUNTER_OFFSET: usize = SAVE_MINUTE_OFFSET + 1;
 /// `formats/saved-gam.md §5` adjacent per-turn state byte; preserve
 /// byte-for-byte but no public calendar meaning.
-pub const SAVE_PER_TURN_STATE_OFFSET: usize = 0x02dd;
-pub const SAVE_AMPM_DISPLAY_OFFSET: usize = 0x02de;
+pub const SAVE_PER_TURN_STATE_OFFSET: usize = SAVE_COMBAT_ROUND_COUNTER_OFFSET + 1;
+pub const SAVE_AMPM_DISPLAY_OFFSET: usize = SAVE_PER_TURN_STATE_OFFSET + 1;
 /// `formats/saved-gam.md §5`: in-game calendar bounds. Months are
 /// one-based 1..=13 (thirteen 28-day months per year), days are
 /// one-based 1..=28, hours are zero-based 0..=23, minutes 0..=59.
