@@ -1,4 +1,14 @@
     #[test]
+    fn outdoor_arena_count_anchors_to_brit_cbt_records() {
+        // encounters.md §4: sixteen outdoor 11x11 arenas. The same
+        // sixteen records ship in BRIT.CBT per formats/cbt.md §2.
+        // Anchor OUTDOOR_ARENA_COUNT to BRIT_CBT_RECORDS so the
+        // encounters-side and format-side counts move as one value.
+        assert_eq!(OUTDOOR_ARENA_COUNT, BRIT_CBT_RECORDS);
+        assert_eq!(OUTDOOR_ARENA_COUNT, 16);
+    }
+
+    #[test]
     fn save_dungeon_room_clear_rooms_anchor_to_dungeon_room_slots_per_bank() {
         // formats/saved-gam.md §10 and formats/dungeon-dat.md §4
         // both describe the same sixteen room ids 0..15 per

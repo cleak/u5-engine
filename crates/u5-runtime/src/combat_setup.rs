@@ -5,8 +5,10 @@ use std::io;
 use crate::*;
 
 /// `encounters.md §4` outdoor arena bank size: sixteen 11x11 arenas
-/// stored in the on-disk `outdoor combat arena bank`.
-pub const OUTDOOR_ARENA_COUNT: usize = 16;
+/// stored in the on-disk `outdoor combat arena bank`. Anchored to
+/// [`BRIT_CBT_RECORDS`] so the encounters-side arena count and
+/// the format-side `.CBT` record count stay one value.
+pub const OUTDOOR_ARENA_COUNT: usize = BRIT_CBT_RECORDS;
 
 /// `encounters.md §4` outdoor-arena trigger-class window: the linear
 /// formula `arena_id = (class - 0x40) / 4` covers class bytes
