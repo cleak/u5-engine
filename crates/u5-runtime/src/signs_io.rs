@@ -26,10 +26,13 @@ pub const SIGNS_DAT_FILE: &str = "SIGNS.DAT";
 
 /// `formats/signs-dat.md §2`: scene directory holds 33 little-
 /// endian scene-block offsets in the leading 66 bytes of the
-/// file. Anchor the byte length to SLOTS × 2 (each entry is a
-/// 2-byte word) so resizing the slot count automatically shifts
-/// the leading-block byte length.
-pub const SIGNS_DAT_SCENE_DIRECTORY_SLOTS: usize = 33;
+/// file — one slot per addressable scene byte, indexed by the
+/// active scene byte. The directory covers the overworld (scene
+/// byte 0) and the 32 town-family scenes (1..=SCENE_TOWN_
+/// FAMILY_LAST). Anchored to `SCENE_TOWN_FAMILY_LAST as usize +
+/// 1` so the directory size derives from the scene partition.
+pub const SIGNS_DAT_SCENE_DIRECTORY_SLOTS: usize =
+    crate::SCENE_TOWN_FAMILY_LAST as usize + 1;
 pub const SIGNS_DAT_SCENE_DIRECTORY_BYTES: usize = SIGNS_DAT_SCENE_DIRECTORY_SLOTS * 2;
 /// `formats/signs-dat.md §3`: each sign record begins with a four-byte
 /// `(scene, z, y, x)` header followed by a NUL-terminated payload.

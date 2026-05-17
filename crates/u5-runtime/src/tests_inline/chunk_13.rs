@@ -1,4 +1,19 @@
     #[test]
+    fn signs_dat_scene_directory_slots_anchors_to_scene_partition() {
+        // formats/signs-dat.md §2: the scene directory holds 33
+        // slots — one per addressable scene byte, covering the
+        // overworld (scene byte 0) and the 32 town-family scenes
+        // (1..=SCENE_TOWN_FAMILY_LAST). Anchor the directory
+        // slot count to SCENE_TOWN_FAMILY_LAST + 1 so the
+        // directory size derives from the scene partition.
+        assert_eq!(
+            SIGNS_DAT_SCENE_DIRECTORY_SLOTS,
+            SCENE_TOWN_FAMILY_LAST as usize + 1,
+        );
+        assert_eq!(SIGNS_DAT_SCENE_DIRECTORY_SLOTS, 33);
+    }
+
+    #[test]
     fn signs_dat_scene_directory_bytes_anchors_to_slots() {
         // formats/signs-dat.md §2: the SIGNS.DAT scene directory
         // holds 33 little-endian scene-block offsets in the
