@@ -1,4 +1,29 @@
     #[test]
+    fn active_object_eviction_band_boundaries_chain() {
+        // active-objects.md §4: the eviction phase byte bands
+        // tile contiguously — door/fixture pair starts one byte
+        // past the scenery band's last byte; the midrange band
+        // ends one byte below the dynamic-actor lower bound.
+        // Anchor those boundaries so adding or resizing a band
+        // automatically shifts the adjacent bands.
+        assert_eq!(
+            ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_FIRST,
+            ACTIVE_OBJECT_EVICTION_SCENERY_LAST + 1,
+        );
+        assert_eq!(
+            ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_LAST,
+            ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_FIRST + 1,
+        );
+        assert_eq!(
+            ACTIVE_OBJECT_EVICTION_MIDRANGE_LAST,
+            ACTIVE_OBJECT_EVICTION_DYNAMIC_FIRST - 1,
+        );
+        assert_eq!(ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_FIRST, 0x10);
+        assert_eq!(ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_LAST, 0x11);
+        assert_eq!(ACTIVE_OBJECT_EVICTION_MIDRANGE_LAST, 0x7F);
+    }
+
+    #[test]
     fn lower_tile_class_first_offsets_chain_to_previous_last() {
         // catalogs/tile-catalog.md §2: the lower-half tile classes
         // (terrain, path, wall, furniture, door) tile contiguously

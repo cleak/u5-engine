@@ -161,15 +161,20 @@ pub const ACTIVE_OBJECT_EVICTION_SCENERY_LAST: u8 = 0x0F;
 pub const ACTIVE_OBJECT_EVICTION_DYNAMIC_FIRST: u8 = 0x80;
 
 /// `active-objects.md §4` phase 4/8 door/fixture-like low-class pair
-/// (`0x10` and `0x11`).
-pub const ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_FIRST: u8 = 0x10;
-pub const ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_LAST: u8 = 0x11;
+/// (`0x10` and `0x11`). The pair begins immediately after the
+/// scenery band; anchor to [`ACTIVE_OBJECT_EVICTION_SCENERY_LAST`]
+/// + 1 so the band adjacency has one source of truth.
+pub const ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_FIRST: u8 =
+    ACTIVE_OBJECT_EVICTION_SCENERY_LAST + 1;
+pub const ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_LAST: u8 =
+    ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_FIRST + 1;
 
 /// `active-objects.md §4` phase 5/9 midrange object class range
-/// (`0x30..=0x7F`). Phase 5 requires the off-screen gate; phase 9
-/// reuses the same byte range without it.
+/// (`0x30..=0x7F`). The midrange band ends one byte below the
+/// dynamic-actor lower bound at 0x80; anchor the upper bound to
+/// [`ACTIVE_OBJECT_EVICTION_DYNAMIC_FIRST`] - 1.
 pub const ACTIVE_OBJECT_EVICTION_MIDRANGE_FIRST: u8 = 0x30;
-pub const ACTIVE_OBJECT_EVICTION_MIDRANGE_LAST: u8 = 0x7F;
+pub const ACTIVE_OBJECT_EVICTION_MIDRANGE_LAST: u8 = ACTIVE_OBJECT_EVICTION_DYNAMIC_FIRST - 1;
 
 /// `active-objects.md §4`: returns `true` when an active-object
 /// type byte is acceptable as a candidate for eviction phase
