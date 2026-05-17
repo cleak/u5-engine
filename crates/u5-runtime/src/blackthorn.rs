@@ -1,8 +1,10 @@
 //! Blackthorn cutscene helpers per `blackthorn.md` §7.
 
 /// `blackthorn.md §7`: scene byte the rescue/refuge path hands control
-/// to (`CASTLE:0` — Lord British's Castle, scene byte 17).
-pub const BLACKTHORN_RESCUE_HANDOFF_SCENE: u8 = 17;
+/// to (`CASTLE:0` — Lord British's Castle, scene byte 17). Anchored
+/// to [`crate::SCENE_LORD_BRITISHS_CASTLE`] so the rescue handoff
+/// and the named scene constant share one source of truth.
+pub const BLACKTHORN_RESCUE_HANDOFF_SCENE: u8 = crate::SCENE_LORD_BRITISHS_CASTLE;
 
 /// `blackthorn.md §7`: local position (X, Y) the rescue path hands the
 /// party to inside the rescue handoff scene.

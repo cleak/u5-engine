@@ -1,4 +1,15 @@
     #[test]
+    fn blackthorn_rescue_handoff_scene_anchors_to_lord_britishs_castle() {
+        // blackthorn.md §7: the rescue/refuge path hands control
+        // back to CASTLE:0 (Lord British's Castle, scene byte 17).
+        // Anchor BLACKTHORN_RESCUE_HANDOFF_SCENE to
+        // SCENE_LORD_BRITISHS_CASTLE so the handoff and the named
+        // scene constant share one source of truth.
+        assert_eq!(BLACKTHORN_RESCUE_HANDOFF_SCENE, SCENE_LORD_BRITISHS_CASTLE);
+        assert_eq!(BLACKTHORN_RESCUE_HANDOFF_SCENE, 17);
+    }
+
+    #[test]
     fn sandalwood_box_pickup_scene_anchors_to_lord_britishs_castle() {
         // catalogs/quest-graph.md §7: the Sandalwood Box ships in
         // Lord British's Castle (CASTLE:0, scene byte 17). Anchor
