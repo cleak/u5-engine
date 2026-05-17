@@ -1,4 +1,15 @@
     #[test]
+    fn signs_dat_alias_bridge_length_matches_spec() {
+        // formats/signs-dat.md §3: the on-disk alias bridge that
+        // shares one body across multiple coordinate headers is a
+        // separator byte, a zero byte that terminates the scanner's
+        // current payload walk, and then another four-byte
+        // `[scene, z, y, x]` header — six bytes total.
+        assert_eq!(SIGNS_DAT_ALIAS_BRIDGE_LEN, 6);
+        assert_eq!(SIGNS_DAT_ALIAS_BRIDGE_LEN, 1 + 1 + SIGNS_DAT_RECORD_HEADER_LEN);
+    }
+
+    #[test]
     fn tile_image_directory_header_widths_match_spec() {
         // formats/tiles.md §5.2: the image-directory layout opens
         // with a two-byte count word, an array of four-byte

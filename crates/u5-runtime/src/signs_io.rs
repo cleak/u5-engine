@@ -32,6 +32,15 @@ pub const SIGNS_DAT_SCENE_DIRECTORY_BYTES: usize = 66;
 /// `(scene, z, y, x)` header followed by a NUL-terminated payload.
 pub const SIGNS_DAT_RECORD_HEADER_LEN: usize = 4;
 
+/// `formats/signs-dat.md §3` alias-bridge length. The on-disk alias
+/// bridge that lets multiple coordinate headers share one printed
+/// body is a separator byte, a zero byte that terminates the
+/// scanner's current payload walk, and then another four-byte
+/// `[scene, z, y, x]` header — six bytes total. Promote the length
+/// so content tools and the bridge-aware scanner can refer to one
+/// named value instead of re-deriving the sum at each call site.
+pub const SIGNS_DAT_ALIAS_BRIDGE_LEN: usize = 1 + 1 + SIGNS_DAT_RECORD_HEADER_LEN;
+
 /// `formats/signs-dat.md §4` formatter byte vocabulary for a sign
 /// payload byte. The formatter classifies each byte by value range
 /// and either ends the record, pauses for input, substitutes a
