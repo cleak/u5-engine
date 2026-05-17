@@ -116,10 +116,16 @@ impl CommandDispatchStatus {
 pub const SCENE_OVERWORLD: u8 = 0;
 pub const SCENE_TOWN_FAMILY_FIRST: u8 = 1;
 pub const SCENE_TOWN_FAMILY_LAST: u8 = 32;
-pub const SCENE_DUNGEON_FAMILY_FIRST: u8 = 33;
+/// `main-loop.md §3` dungeon-class scene-byte range. The full
+/// classification accepts `33..=127`; the stock named dungeons
+/// (Deceit through Doom) live in the sub-range
+/// `SCENE_DUNGEON_NAMED_FIRST..=SCENE_DUNGEON_NAMED_LAST`, which is
+/// the same boundary `FIRST_DUNGEON_SCENE_BYTE..=LAST_DUNGEON_SCENE_BYTE`
+/// promoted in `scene.rs`.
+pub const SCENE_DUNGEON_FAMILY_FIRST: u8 = crate::FIRST_DUNGEON_SCENE_BYTE;
 pub const SCENE_DUNGEON_FAMILY_LAST: u8 = 127;
-pub const SCENE_DUNGEON_NAMED_FIRST: u8 = 33;
-pub const SCENE_DUNGEON_NAMED_LAST: u8 = 40;
+pub const SCENE_DUNGEON_NAMED_FIRST: u8 = crate::FIRST_DUNGEON_SCENE_BYTE;
+pub const SCENE_DUNGEON_NAMED_LAST: u8 = crate::LAST_DUNGEON_SCENE_BYTE;
 pub const SCENE_INTRO_FIRST: u8 = 0x40;
 pub const SCENE_INTRO_LAST: u8 = 0x42;
 pub const SCENE_COMBAT_TEMPORARY: u8 = 0xFF;

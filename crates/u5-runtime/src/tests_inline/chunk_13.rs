@@ -1,4 +1,21 @@
     #[test]
+    fn scene_dungeon_ranges_anchor_to_scene_module() {
+        // main-loop.md §3 vs scene.rs: the dungeon-family scene-byte
+        // range and the named-dungeon sub-range both start at the
+        // FIRST_DUNGEON_SCENE_BYTE / LAST_DUNGEON_SCENE_BYTE values
+        // promoted in scene.rs; the family range extends to 127.
+        assert_eq!(SCENE_DUNGEON_FAMILY_FIRST, FIRST_DUNGEON_SCENE_BYTE);
+        assert_eq!(SCENE_DUNGEON_FAMILY_LAST, 127);
+        assert_eq!(SCENE_DUNGEON_NAMED_FIRST, FIRST_DUNGEON_SCENE_BYTE);
+        assert_eq!(SCENE_DUNGEON_NAMED_LAST, LAST_DUNGEON_SCENE_BYTE);
+        // The named sub-range is the eight stock dungeon scenes.
+        assert_eq!(
+            (SCENE_DUNGEON_NAMED_LAST - SCENE_DUNGEON_NAMED_FIRST + 1) as usize,
+            8,
+        );
+    }
+
+    #[test]
     fn prng_state_advance_constants_match_spec() {
         // prng.md §2: the state advance adds 0x9248, rotates right
         // by three bits, XORs with 0x9248 again, and adds 0x0011.
