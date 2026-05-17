@@ -1,4 +1,16 @@
     #[test]
+    fn save_character_gender_offset_anchors_to_name_len() {
+        // formats/saved-gam.md §3: the per-record gender byte sits
+        // at offset 0x09 — immediately after the nine-byte NUL-
+        // padded name field. Anchor SAVE_CHARACTER_GENDER_OFFSET
+        // to SAVE_CHARACTER_NAME_LEN so resizing the name field
+        // automatically shifts the gender offset.
+        assert_eq!(SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_NAME_LEN);
+        assert_eq!(SAVE_CHARACTER_GENDER_OFFSET, 0x09);
+        assert_eq!(SAVE_CHARACTER_NAME_LEN, 9);
+    }
+
+    #[test]
     fn ool_record_len_anchors_to_last_active_object_field_index() {
         // formats/saved-gam.md §11: each active-object slot is
         // eight bytes — fields TYPE (0), TILE (1), X (2), Y (3),

@@ -403,7 +403,11 @@ pub const SAVE_CHARACTER_RECORD_LEN: usize = 32;
 /// sixteen records of thirty-two bytes each.
 pub const SAVE_ROSTER_REGION_LEN: usize = SAVE_ROSTER_SLOT_COUNT * SAVE_CHARACTER_RECORD_LEN;
 pub const SAVE_CHARACTER_NAME_LEN: usize = 9;
-pub const SAVE_CHARACTER_GENDER_OFFSET: usize = 0x09;
+/// `formats/saved-gam.md §3`: the gender byte follows the nine-
+/// byte NUL-padded name field, so its offset equals the name
+/// field's length. Anchored to [`SAVE_CHARACTER_NAME_LEN`] so
+/// adding or resizing the name field only happens in one place.
+pub const SAVE_CHARACTER_GENDER_OFFSET: usize = SAVE_CHARACTER_NAME_LEN;
 pub const SAVE_GENDER_MALE_BYTE: u8 = 0x0b;
 pub const SAVE_GENDER_FEMALE_BYTE: u8 = 0x0c;
 pub const SAVE_CHARACTER_CLASS_OFFSET: usize = 0x0a;
