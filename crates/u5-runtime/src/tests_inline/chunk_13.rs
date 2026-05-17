@@ -472,6 +472,29 @@
     }
 
     #[test]
+    fn moonstone_burial_band_constants_match_spec() {
+        // formats/saved-gam.md §7.2: Moonstone burying is accepted on
+        // tile ids 4..=10 (a contiguous overworld band) plus 44 and
+        // 45 (two extras). Promote the band edges and the extra
+        // singletons so moonstone_burial_tile_accepted does not bake
+        // the values as a bare match arm.
+        assert_eq!(MOONSTONE_BURIAL_BAND_FIRST, 4);
+        assert_eq!(MOONSTONE_BURIAL_BAND_LAST, 10);
+        assert_eq!(MOONSTONE_BURIAL_TILE_EXTRA_A, 44);
+        assert_eq!(MOONSTONE_BURIAL_TILE_EXTRA_B, 45);
+        for tile in MOONSTONE_BURIAL_BAND_FIRST..=MOONSTONE_BURIAL_BAND_LAST {
+            assert!(moonstone_burial_tile_accepted(tile));
+        }
+        assert!(moonstone_burial_tile_accepted(MOONSTONE_BURIAL_TILE_EXTRA_A));
+        assert!(moonstone_burial_tile_accepted(MOONSTONE_BURIAL_TILE_EXTRA_B));
+        // The two extras are adjacent but a tile just outside either
+        // boundary is rejected.
+        assert!(!moonstone_burial_tile_accepted(MOONSTONE_BURIAL_BAND_FIRST - 1));
+        assert!(!moonstone_burial_tile_accepted(MOONSTONE_BURIAL_BAND_LAST + 1));
+        assert!(!moonstone_burial_tile_accepted(MOONSTONE_BURIAL_TILE_EXTRA_B + 1));
+    }
+
+    #[test]
     fn chargen_seed_defense_byte_matches_saved_gam_spec() {
         // formats/saved-gam.md §3.1: the per-character defense byte
         // at record offset 0x18 is shipped as `7` for every roster

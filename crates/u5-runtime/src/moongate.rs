@@ -109,11 +109,30 @@ pub const NATURAL_MOONGATE_UNDERLYING_TILE: u8 = 5;
 pub const NARRATIVE_GATE_X: u8 = 233;
 pub const NARRATIVE_GATE_Y: u8 = 235;
 
+/// `formats/saved-gam.md §7.2` first tile id of the contiguous burial
+/// terrain band. The Moonstone bury action accepts any tile in
+/// `MOONSTONE_BURIAL_BAND_FIRST..=MOONSTONE_BURIAL_BAND_LAST`.
+pub const MOONSTONE_BURIAL_BAND_FIRST: u8 = 4;
+/// `formats/saved-gam.md §7.2` last tile id of the contiguous burial
+/// terrain band.
+pub const MOONSTONE_BURIAL_BAND_LAST: u8 = 10;
+/// `formats/saved-gam.md §7.2` first single accepted Moonstone burial
+/// tile id outside the contiguous band (sand-style overworld tile).
+pub const MOONSTONE_BURIAL_TILE_EXTRA_A: u8 = 44;
+/// `formats/saved-gam.md §7.2` second single accepted Moonstone
+/// burial tile id outside the contiguous band.
+pub const MOONSTONE_BURIAL_TILE_EXTRA_B: u8 = 45;
+
 /// `formats/saved-gam.md §7.2`: Moonstone burying is accepted only
 /// outside dungeon/combat scenes and only when the tile under the
 /// party is one of these world-tile ids: `4..10`, `44`, or `45`.
 pub const fn moonstone_burial_tile_accepted(tile_id: u8) -> bool {
-    matches!(tile_id, 4..=10 | 44 | 45)
+    matches!(
+        tile_id,
+        MOONSTONE_BURIAL_BAND_FIRST..=MOONSTONE_BURIAL_BAND_LAST
+            | MOONSTONE_BURIAL_TILE_EXTRA_A
+            | MOONSTONE_BURIAL_TILE_EXTRA_B
+    )
 }
 
 /// `formats/saved-gam.md §7.2`: invalid Gate Travel target sentinel
