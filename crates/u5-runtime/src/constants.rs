@@ -125,7 +125,12 @@ pub const HCS_FONT_LEN: usize = HCS_GLYPH_COUNT * HCS_GLYPH_BYTES;
 pub const HCS_GLYPH_COUNT: usize = CH_GLYPH_COUNT;
 pub const HCS_CELL_WIDTH: usize = 16;
 pub const HCS_CELL_HEIGHT: usize = 12;
-pub const HCS_BYTES_PER_ROW: usize = 2;
+/// `formats/font-hcs.md §2`: each .HCS row encodes
+/// HCS_CELL_WIDTH pixels at one bit per pixel = HCS_CELL_WIDTH /
+/// 8 = 2 bytes per row. Anchored to that bit-packing arithmetic
+/// so resizing the cell width automatically updates the row
+/// stride.
+pub const HCS_BYTES_PER_ROW: usize = HCS_CELL_WIDTH / 8;
 /// `formats/font-hcs.md §2`: per-glyph byte count derived from the
 /// cell geometry — twelve rows × two bytes per row = 24 bytes per
 /// glyph. Anchored to [`HCS_CELL_HEIGHT`] × [`HCS_BYTES_PER_ROW`]

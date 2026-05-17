@@ -1,4 +1,16 @@
     #[test]
+    fn hcs_bytes_per_row_anchors_to_cell_width_div_8() {
+        // formats/font-hcs.md §2: each .HCS row encodes
+        // HCS_CELL_WIDTH pixels at one bit per pixel, so the row
+        // stride is HCS_CELL_WIDTH / 8 = 2 bytes. Anchor
+        // HCS_BYTES_PER_ROW to HCS_CELL_WIDTH / 8 so resizing
+        // the cell width automatically updates the row stride.
+        assert_eq!(HCS_BYTES_PER_ROW, HCS_CELL_WIDTH / 8);
+        assert_eq!(HCS_BYTES_PER_ROW, 2);
+        assert_eq!(HCS_CELL_WIDTH, 16);
+    }
+
+    #[test]
     fn u4_transfer_u5_seed_ool_filename_anchors_to_brit_ool() {
         // u4-transfer.md §5, §11: the U5-side seed object-overlay
         // file is the same BRIT.OOL filename the ordinary engine
