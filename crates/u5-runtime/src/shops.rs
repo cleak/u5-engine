@@ -220,8 +220,16 @@ pub const fn shoppe_placeholder(byte: u8) -> Option<ShoppePlaceholder> {
         _ => return None,
     })
 }
-pub const SHOP_FOOD_STOCK_CAP: u16 = 9999;
-pub const SHOP_GOLD_CAP: u16 = 9999;
+/// `shops.md §6` (provisions) caps purchased food at the
+/// engine-wide party food counter cap. Anchored to
+/// [`crate::PARTY_FOOD_CAP`] so the shop clamp and the carrier
+/// cap stay one value.
+pub const SHOP_FOOD_STOCK_CAP: u16 = crate::PARTY_FOOD_CAP;
+/// `shops.md §6` clamps the gold counter after every shop
+/// outcome (sale credit, surcharge, refund) at the same word-sized
+/// 9999 cap inventory.md §2 documents for the party gold counter.
+/// Anchored to [`crate::PARTY_GOLD_CAP`] for a single source.
+pub const SHOP_GOLD_CAP: u16 = crate::PARTY_GOLD_CAP;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ArmsPurchaseQuote {

@@ -1,4 +1,17 @@
     #[test]
+    fn shop_gold_and_food_caps_anchor_to_party_counters() {
+        // inventory.md §2: party gold and food counters cap at 9999.
+        // shops.md §6 applies the same caps when crediting sale gold
+        // and storing purchased provisions. The shop-side caps are
+        // now anchored to the party counter caps so both move as one
+        // value.
+        assert_eq!(SHOP_GOLD_CAP, PARTY_GOLD_CAP);
+        assert_eq!(SHOP_FOOD_STOCK_CAP, PARTY_FOOD_CAP);
+        assert_eq!(SHOP_GOLD_CAP, 9999);
+        assert_eq!(SHOP_FOOD_STOCK_CAP, 9999);
+    }
+
+    #[test]
     fn inn_registry_cap_anchors_to_save_roster_slot_count() {
         // shops.md §8.4: the inn registry is a 16-slot shifted view
         // over the save image's roster region — the registry cap and
