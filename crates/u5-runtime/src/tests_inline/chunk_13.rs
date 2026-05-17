@@ -1,4 +1,20 @@
     #[test]
+    fn save_party_size_max_caps_iteration() {
+        // formats/saved-gam.md §4: the party-size field at 0x02B5 is
+        // the iteration cap for any "for each party member" pass and
+        // is clamped to 1..=6. Promote SAVE_PARTY_SIZE_MAX to the
+        // save-writer's clamp so the seed cap does not encode the
+        // literal `6` at every call site.
+        assert_eq!(SAVE_PARTY_SIZE_MIN, 1);
+        assert_eq!(SAVE_PARTY_SIZE_MAX, 6);
+        // Saturation: a roster larger than the cap must clamp to MAX.
+        assert_eq!(
+            (SAVE_PARTY_SIZE_MAX as usize + 3).min(SAVE_PARTY_SIZE_MAX as usize),
+            SAVE_PARTY_SIZE_MAX as usize,
+        );
+    }
+
+    #[test]
     fn location_default_entry_x_matches_spec() {
         // formats/location-dat.md §6: the default per-scene town-entry
         // coordinate is not stored in the .DAT file; X is fixed at

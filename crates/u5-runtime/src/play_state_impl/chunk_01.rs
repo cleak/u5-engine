@@ -118,12 +118,12 @@ impl PlayState {
         save[SAVE_COMBAT_ROUND_COUNTER_OFFSET] = self.combat_round_counter;
         save[SAVE_TRANSPORT_MARKER_OFFSET] = self.player.transport.save_marker();
         save[SAVE_WIND_OFFSET] = self.wind_save_byte;
-        save[SAVE_PARTY_SIZE_OFFSET] = self.party.len().min(6) as u8;
+        save[SAVE_PARTY_SIZE_OFFSET] = self.party.len().min(SAVE_PARTY_SIZE_MAX as usize) as u8;
         let avatar_record = SAVE_ROSTER_OFFSET;
         save[avatar_record + SAVE_CHARACTER_STR_OFFSET] = self.avatar_stats.strength;
         save[avatar_record + SAVE_CHARACTER_DEX_OFFSET] = self.avatar_stats.dexterity;
         save[avatar_record + SAVE_CHARACTER_INT_OFFSET] = self.avatar_stats.intelligence;
-        for (party_index, member) in self.party.iter().take(6).enumerate() {
+        for (party_index, member) in self.party.iter().take(SAVE_PARTY_SIZE_MAX as usize).enumerate() {
             let record = SAVE_ROSTER_OFFSET + member.slot as usize * SAVE_CHARACTER_RECORD_LEN;
             if record + SAVE_CHARACTER_MAX_HP_OFFSET + 1 >= save.len() {
                 continue;
