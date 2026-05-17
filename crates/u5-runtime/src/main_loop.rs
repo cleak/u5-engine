@@ -251,9 +251,9 @@ pub struct DungeonEntrySeed {
 }
 
 pub const DUNGEON_FACING_NORTH: u8 = 0;
-pub const DUNGEON_FACING_EAST: u8 = 1;
-pub const DUNGEON_FACING_SOUTH: u8 = 2;
-pub const DUNGEON_FACING_WEST: u8 = 3;
+pub const DUNGEON_FACING_EAST: u8 = DUNGEON_FACING_NORTH + 1;
+pub const DUNGEON_FACING_SOUTH: u8 = DUNGEON_FACING_EAST + 1;
+pub const DUNGEON_FACING_WEST: u8 = DUNGEON_FACING_SOUTH + 1;
 
 /// `dungeon-mode.md §9` per-facing forward step `(dx, dy)` on the
 /// 8x8 floor. The party moves into `(x + dx, y + dy)` for the

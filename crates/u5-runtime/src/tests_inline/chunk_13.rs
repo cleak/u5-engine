@@ -1,4 +1,19 @@
     #[test]
+    fn dungeon_facing_constants_chain_clockwise() {
+        // dungeon-mode.md §9: the facing byte cycles clockwise
+        // North=0 -> East=1 -> South=2 -> West=3. main_loop.rs
+        // declared each facing as a bare literal. Chain the
+        // successive facings from NORTH so the cardinal cycle
+        // stays explicit and tightens against the facing-byte
+        // modulo-4 cycle.
+        assert_eq!(DUNGEON_FACING_NORTH, 0);
+        assert_eq!(DUNGEON_FACING_EAST, DUNGEON_FACING_NORTH + 1);
+        assert_eq!(DUNGEON_FACING_SOUTH, DUNGEON_FACING_EAST + 1);
+        assert_eq!(DUNGEON_FACING_WEST, DUNGEON_FACING_SOUTH + 1);
+        assert_eq!(DUNGEON_FACING_WEST, 3);
+    }
+
+    #[test]
     fn keep_and_dwelling_scene_bytes_chain_sequentially() {
         // catalogs/npc-roster.md §1: scene bytes 17..=24 cover the
         // eight castles/keeps/hamlets (Lord British's Castle..
