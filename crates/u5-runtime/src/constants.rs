@@ -936,9 +936,12 @@ pub const TOWN_DOOR_TILE_FIRST: u8 = crate::TILE_DOOR_FIRST;
 pub const TOWN_DOOR_TILE_LAST: u8 = crate::TILE_DOOR_LAST;
 /// Inclusive town stair tile-id range per `catalogs/tile-catalog.md` §6:
 /// `0xC4..=0xC7` is the facing-sensitive stairway family whose low two bits
-/// encode movement-wrapper-normalised facing.
-pub const TOWN_STAIR_TILE_FIRST: u8 = 0xC4;
-pub const TOWN_STAIR_TILE_LAST: u8 = 0xC7;
+/// encode movement-wrapper-normalised facing. Anchored to the canonical
+/// `crate::town_mode::TOWN_STAIR_TILE_FIRST` / `..LAST` so the duplicate
+/// constants-side declarations cannot drift from the town-mode source of
+/// truth.
+pub const TOWN_STAIR_TILE_FIRST: u8 = crate::town_mode::TOWN_STAIR_TILE_FIRST;
+pub const TOWN_STAIR_TILE_LAST: u8 = crate::town_mode::TOWN_STAIR_TILE_LAST;
 /// Town chair trigger tile per `catalogs/tile-catalog.md` §6.
 pub const TOWN_CHAIR_TILE: u8 = 0x8C;
 /// NPC floor-link marker tiles consumed by the schedule pathfinder per

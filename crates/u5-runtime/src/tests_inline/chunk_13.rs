@@ -1,4 +1,25 @@
     #[test]
+    fn constants_town_stair_range_anchors_to_town_mode_module() {
+        // catalogs/tile-catalog.md §6: town stair tile-ids occupy
+        // 0xC4..=0xC7. constants.rs and town_mode.rs both declared
+        // TOWN_STAIR_TILE_FIRST = 0xC4 and TOWN_STAIR_TILE_LAST =
+        // 0xC7 as parallel bare literals — a true duplicate
+        // across two modules. Anchor the constants-side
+        // declarations to the canonical town_mode versions so the
+        // duplicates cannot drift.
+        assert_eq!(
+            crate::constants::TOWN_STAIR_TILE_FIRST,
+            crate::town_mode::TOWN_STAIR_TILE_FIRST,
+        );
+        assert_eq!(
+            crate::constants::TOWN_STAIR_TILE_LAST,
+            crate::town_mode::TOWN_STAIR_TILE_LAST,
+        );
+        assert_eq!(crate::TOWN_STAIR_TILE_FIRST, 0xC4);
+        assert_eq!(crate::TOWN_STAIR_TILE_LAST, 0xC7);
+    }
+
+    #[test]
     fn town_door_tile_range_anchors_to_tile_door_range() {
         // catalogs/tile-catalog.md §6: door tile-ids occupy
         // 0x60..=0x67. constants.rs declared TOWN_DOOR_TILE_FIRST
