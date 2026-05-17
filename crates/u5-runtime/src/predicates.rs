@@ -697,7 +697,15 @@ pub const TRANSPORT_MARKER_FOOT_LAST: u8 = TRANSPORT_MARKER_FOOT_FIRST + TRANSPO
 /// spawn outside the immediate visible centre; the second bound
 /// rejects wrapped-near coordinates on the 256-by-256 torus.
 pub const ENCOUNTER_SPAWN_MIN_SEPARATION: u16 = 6;
-pub const ENCOUNTER_SPAWN_MAX_SEPARATION: u16 = 250;
+/// `encounters.md §4`: the max-separation bound is the
+/// world-side minus the min-separation bound — coordinates
+/// closer than `MIN_SEPARATION` to the wrapped party position
+/// on the 256-cell torus are also rejected. Anchored to
+/// `crate::WORLD_SIDE - ENCOUNTER_SPAWN_MIN_SEPARATION` so the
+/// torus-wrap bound derives from the world side and the
+/// minimum separation.
+pub const ENCOUNTER_SPAWN_MAX_SEPARATION: u16 =
+    crate::WORLD_SIDE as u16 - ENCOUNTER_SPAWN_MIN_SEPARATION;
 
 /// `encounters.md §4`: returns `true` when a candidate spawn
 /// coordinate's `(dx, dy)` axis separations from the party fall in

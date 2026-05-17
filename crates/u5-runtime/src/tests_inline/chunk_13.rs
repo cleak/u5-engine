@@ -1,4 +1,22 @@
     #[test]
+    fn encounter_spawn_max_separation_anchors_to_world_side_minus_min() {
+        // encounters.md §4: the max-separation bound (250) is
+        // the world side (256) minus the min-separation bound
+        // (6), rejecting coordinates that wrap to within
+        // MIN_SEPARATION of the party on the 256-cell torus.
+        // Anchor MAX_SEPARATION to WORLD_SIDE - MIN_SEPARATION
+        // so the torus-wrap bound derives from the world side
+        // and the minimum separation.
+        assert_eq!(
+            ENCOUNTER_SPAWN_MAX_SEPARATION,
+            WORLD_SIDE as u16 - ENCOUNTER_SPAWN_MIN_SEPARATION,
+        );
+        assert_eq!(ENCOUNTER_SPAWN_MAX_SEPARATION, 250);
+        assert_eq!(ENCOUNTER_SPAWN_MIN_SEPARATION, 6);
+        assert_eq!(WORLD_SIDE, 256);
+    }
+
+    #[test]
     fn magic_lock_unlock_pair_chains_sequentially() {
         // catalogs/spell-list.md §5: Magic Lock (An Por) and
         // Unlock Magic (Ex Por) form the paired lock-magic spell
