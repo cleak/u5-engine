@@ -1,4 +1,21 @@
     #[test]
+    fn jimmy_chest_threshold_arithmetic_uses_named_constants() {
+        // doors-and-z-transitions.md §3 chest-pick threshold:
+        //   object: (difficulty - member_class + 30) / 2
+        //   dungeon: (2 * depth - member_class + 30) / 2
+        assert_eq!(JIMMY_CHEST_THRESHOLD_BIAS, 30);
+        assert_eq!(JIMMY_CHEST_THRESHOLD_DIVISOR, 2);
+        assert_eq!(JIMMY_DUNGEON_CHEST_DEPTH_MULTIPLIER, 2);
+        // Dungeon: depth 4, class 20 -> (8 - 20 + 30) / 2 = 9.
+        assert_eq!(dungeon_chest_jimmy_threshold(4, 20), 9);
+        // Object: difficulty 0x91 (high bit set, low 7 = 17),
+        // class 20 -> (17 - 20 + 30) / 2 = 13.
+        assert_eq!(object_chest_jimmy_threshold(0x91, 20), Some(13));
+        // Object with high bit clear returns None (broken-lock state).
+        assert_eq!(object_chest_jimmy_threshold(0x11, 20), None);
+    }
+
+    #[test]
     fn trap_effect_damage_max_routes_through_named_constants() {
         // traps.md §3: Acid effect rolls 1..=30 damage; Bomb effect
         // rolls 1..=8 damage. Both upper bounds must route through

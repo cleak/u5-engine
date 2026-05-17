@@ -97,22 +97,36 @@ pub const fn object_chest_jimmy_threshold(object_stat: u8, member_class: u8) -> 
     if raw < 0 {
         Some(0)
     } else {
-        Some((raw as u16 / 2) as u8)
+        Some((raw as u16 / JIMMY_CHEST_THRESHOLD_DIVISOR) as u8)
     }
 }
 pub const fn object_chest_jimmy_succeeds(threshold: u8, roll_1_to_30: u8) -> bool {
     roll_1_to_30 <= threshold
 }
 
+/// `doors-and-z-transitions.md §3` dungeon-chest pick depth
+/// multiplier. The threshold formula
+/// `(2 * dungeon_depth - member_class + 30) / 2` uses this factor on
+/// the depth term; promoting it lets the helper name the depth
+/// weight rather than encoding `2` as a bare literal.
+pub const JIMMY_DUNGEON_CHEST_DEPTH_MULTIPLIER: i16 = 2;
+/// `doors-and-z-transitions.md §3` divisor applied to both chest-pick
+/// thresholds (object and dungeon) before the `1..=30` roll compare.
+/// The original formulas halve the bias-adjusted difficulty before
+/// comparing against the die.
+pub const JIMMY_CHEST_THRESHOLD_DIVISOR: u16 = 2;
+
 /// `doors-and-z-transitions.md §3`: dungeon chest pick. Threshold is
 /// `(2*depth - member_class + JIMMY_CHEST_THRESHOLD_BIAS) / 2`; roll
 /// is `1..=30` and success occurs when `roll <= threshold`.
 pub const fn dungeon_chest_jimmy_threshold(depth: u8, member_class: u8) -> u8 {
-    let raw = (2 * depth as i16) - member_class as i16 + JIMMY_CHEST_THRESHOLD_BIAS;
+    let raw = JIMMY_DUNGEON_CHEST_DEPTH_MULTIPLIER * (depth as i16)
+        - member_class as i16
+        + JIMMY_CHEST_THRESHOLD_BIAS;
     if raw < 0 {
         0
     } else {
-        (raw as u16 / 2) as u8
+        (raw as u16 / JIMMY_CHEST_THRESHOLD_DIVISOR) as u8
     }
 }
 pub const fn dungeon_chest_jimmy_succeeds(threshold: u8, roll_1_to_30: u8) -> bool {
