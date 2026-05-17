@@ -483,7 +483,11 @@ pub const SCEPTRE_BARRIER_DISSOLVED_TILE: u8 = 0x44;
 /// take the no-noticeable-effect branch instead.
 pub const POTION_WHITE_SWEEP_FRAMES: u8 = 20;
 pub const POTION_WHITE_SWEEP_RADIUS: u8 = 32;
-pub const SHADOWLORD_COUNT: usize = 3;
+/// `endgame.md §2` total Shadow Lord count. The three named
+/// indices span FALSEHOOD (0) through COWARDICE (2); anchor the
+/// count to [`SHADOWLORD_COWARDICE_INDEX`] + 1 so adding or
+/// renaming a Shadow Lord only happens in one place.
+pub const SHADOWLORD_COUNT: usize = SHADOWLORD_COWARDICE_INDEX + 1;
 pub const SHADOWLORD_FALSEHOOD_INDEX: usize = 0;
 pub const SHADOWLORD_HATRED_INDEX: usize = 1;
 pub const SHADOWLORD_COWARDICE_INDEX: usize = 2;

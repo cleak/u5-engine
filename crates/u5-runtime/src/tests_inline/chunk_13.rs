@@ -1,4 +1,18 @@
     #[test]
+    fn shadowlord_count_anchors_to_last_shadowlord_index() {
+        // endgame.md §2: the three Shadow Lords span the indices
+        // FALSEHOOD (0), HATRED (1), COWARDICE (2). Anchor
+        // SHADOWLORD_COUNT to SHADOWLORD_COWARDICE_INDEX + 1 so
+        // adding or renaming a Shadow Lord only happens in one
+        // place.
+        assert_eq!(SHADOWLORD_COUNT, SHADOWLORD_COWARDICE_INDEX + 1);
+        assert_eq!(SHADOWLORD_COUNT, 3);
+        assert_eq!(SHADOWLORD_FALSEHOOD_INDEX, 0);
+        assert_eq!(SHADOWLORD_HATRED_INDEX, 1);
+        assert_eq!(SHADOWLORD_COWARDICE_INDEX, 2);
+    }
+
+    #[test]
     fn special_item_count_anchors_to_last_special_item_index() {
         // item-list.md §6: the special-item catalog spans the
         // sixteen indices MAGIC_CARPET (0x00) through WOODEN_BOX
