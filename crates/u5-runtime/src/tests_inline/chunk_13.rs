@@ -1,4 +1,15 @@
     #[test]
+    fn chest_secondary_pool_row_count_anchors_to_equipment_count() {
+        // containers.md §4: chest secondary-pool indices are the
+        // same 0..=47 equipment ids passed to the inventory-add
+        // path on success. Anchor CHEST_SECONDARY_POOL_ROW_COUNT
+        // to EQUIPMENT_COUNT so the chest pool size and the
+        // equipment catalog stay one value.
+        assert_eq!(CHEST_SECONDARY_POOL_ROW_COUNT, EQUIPMENT_COUNT);
+        assert_eq!(CHEST_SECONDARY_POOL_ROW_COUNT, 48);
+    }
+
+    #[test]
     fn spell_count_anchors_to_circles_times_spells_per_circle() {
         // magic.md §4: there are eight magic circles and six
         // spells per circle, for 48 spell ids 0..=47. Anchor

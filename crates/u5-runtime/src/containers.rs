@@ -53,7 +53,11 @@ pub const CHEST_PRIMARY_POOL_THRESHOLDS: [u8; CHEST_PRIMARY_POOL_ROW_COUNT] = [
 ];
 
 /// `containers.md §4` chest secondary-pool published row count.
-pub const CHEST_SECONDARY_POOL_ROW_COUNT: usize = 48;
+/// The pool indices are the same `0..=47` equipment ids passed
+/// to the inventory-add path on success. Anchored to
+/// [`crate::EQUIPMENT_COUNT`] so the chest pool size and the
+/// equipment catalog stay one value.
+pub const CHEST_SECONDARY_POOL_ROW_COUNT: usize = crate::EQUIPMENT_COUNT;
 
 /// `containers.md §4` chest secondary-pool per-row threshold table.
 /// `None` is the "Disabled" sentinel — those rows never succeed for
