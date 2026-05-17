@@ -1,4 +1,17 @@
     #[test]
+    fn local_view_overlay_dimensions_match_spec() {
+        // view.md §4: the LOOKOBJ local-view overlay is a 32-by-32
+        // square painted at four pixels per cell inside the message
+        // panel.
+        assert_eq!(LOCAL_VIEW_OVERLAY_SIDE, 32);
+        assert_eq!(LOCAL_VIEW_CELL_PIXEL_SCALE, 4);
+        // The overlay side matches the overworld chunk window's side
+        // (the renderer samples the same 32x32 buffer either modally
+        // from the live world or from the local town floor).
+        assert_eq!(LOCAL_VIEW_OVERLAY_SIDE, OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE);
+    }
+
+    #[test]
     fn jimmy_chest_threshold_arithmetic_uses_named_constants() {
         // doors-and-z-transitions.md §3 chest-pick threshold:
         //   object: (difficulty - member_class + 30) / 2

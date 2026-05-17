@@ -75,6 +75,15 @@ impl Command {
     }
 }
 
+/// `view.md §4` LOOKOBJ local-view overlay side length. The
+/// overworld/town V-View paints a temporary square overlay
+/// `LOCAL_VIEW_OVERLAY_SIDE` cells on each side around the party.
+pub const LOCAL_VIEW_OVERLAY_SIDE: usize = 32;
+/// `view.md §4` LOOKOBJ local-view per-cell pixel scale. Each cell
+/// in the overlay renders at a four-pixel square inside the
+/// message-panel region.
+pub const LOCAL_VIEW_CELL_PIXEL_SCALE: usize = 4;
+
 /// `view.md §4` LOOKOBJ local-view 32x32 overlay class. Each
 /// sampled cell is reduced to a view class and drawn by a
 /// per-class renderer. The classes here are the spec's compact
