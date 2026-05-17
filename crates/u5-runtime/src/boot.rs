@@ -102,6 +102,16 @@ impl DisplayDriverFamily {
     }
 }
 
+/// `launcher.md §3` / `boot.md §5` command-line display-driver
+/// selector letters. The resident parser case-folds the first
+/// character of the first argument and matches against these four
+/// values; anything else (including no argument) leaves the
+/// explicit selector clear.
+pub const DRIVER_SELECTOR_CGA: u8 = b'C';
+pub const DRIVER_SELECTOR_EGA: u8 = b'E';
+pub const DRIVER_SELECTOR_TANDY: u8 = b'T';
+pub const DRIVER_SELECTOR_HERCULES: u8 = b'H';
+
 /// `boot.md §5`: parse a command-line driver-selection argument. The
 /// resident parser looks at the first character of the first argument,
 /// case-folds it, and accepts only `C/E/T/H`. Anything else (including
@@ -111,10 +121,10 @@ pub fn parse_explicit_driver_selector(arg: Option<&str>) -> Option<DisplayDriver
     let arg = arg?;
     let first = arg.as_bytes().first().copied()?;
     match input_case_fold(first) {
-        b'C' => Some(DisplayDriverFamily::Cga),
-        b'E' => Some(DisplayDriverFamily::Ega),
-        b'T' => Some(DisplayDriverFamily::Tandy),
-        b'H' => Some(DisplayDriverFamily::Hercules),
+        DRIVER_SELECTOR_CGA => Some(DisplayDriverFamily::Cga),
+        DRIVER_SELECTOR_EGA => Some(DisplayDriverFamily::Ega),
+        DRIVER_SELECTOR_TANDY => Some(DisplayDriverFamily::Tandy),
+        DRIVER_SELECTOR_HERCULES => Some(DisplayDriverFamily::Hercules),
         _ => None,
     }
 }

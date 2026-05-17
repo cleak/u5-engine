@@ -154,7 +154,8 @@ pub use blackthorn::{
     lord_british_camp_verdict_record,
 };
 pub use boot::{
-    DATA_OVL_FILENAME, DisplayDriverFamily, GraphicsCapability, INTRO_OVL_FILENAME,
+    DATA_OVL_FILENAME, DRIVER_SELECTOR_CGA, DRIVER_SELECTOR_EGA, DRIVER_SELECTOR_HERCULES,
+    DRIVER_SELECTOR_TANDY, DisplayDriverFamily, GraphicsCapability, INTRO_OVL_FILENAME,
     MachineClass, TANDY_LOW_MEMORY_THRESHOLD_KB, ULTIMA_EXE_FILENAME,
     parse_explicit_driver_selector, resolve_driver_family, tandy_low_memory_downgrades,
 };

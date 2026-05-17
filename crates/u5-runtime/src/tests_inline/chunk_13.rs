@@ -1,4 +1,27 @@
     #[test]
+    fn driver_selector_letters_match_launcher_spec() {
+        // launcher.md §3 / boot.md §5: command-line selector letters
+        // C/E/T/H choose CGA/EGA/Tandy/Hercules. The parser
+        // case-folds the first character before matching.
+        assert_eq!(DRIVER_SELECTOR_CGA, b'C');
+        assert_eq!(DRIVER_SELECTOR_EGA, b'E');
+        assert_eq!(DRIVER_SELECTOR_TANDY, b'T');
+        assert_eq!(DRIVER_SELECTOR_HERCULES, b'H');
+        // Each letter (uppercase and lowercase) round-trips through
+        // parse_explicit_driver_selector.
+        assert_eq!(
+            parse_explicit_driver_selector(Some("c")),
+            Some(DisplayDriverFamily::Cga),
+        );
+        assert_eq!(
+            parse_explicit_driver_selector(Some("E")),
+            Some(DisplayDriverFamily::Ega),
+        );
+        assert_eq!(parse_explicit_driver_selector(Some("X")), None);
+        assert_eq!(parse_explicit_driver_selector(None), None);
+    }
+
+    #[test]
     fn scene_dungeon_ranges_anchor_to_scene_module() {
         // main-loop.md §3 vs scene.rs: the dungeon-family scene-byte
         // range and the named-dungeon sub-range both start at the
