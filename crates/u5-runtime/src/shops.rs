@@ -904,8 +904,10 @@ pub const fn inn_pickup_status_converts_to_dead(stored_status: CharacterStatus) 
 /// `shops.md §8.4` 28-day month-rollover stay-counter cap. Each
 /// month rollover bumps the inn registry's per-guest stay counter
 /// by one until this cap is reached; the pickup bill multiplies the
-/// adjusted lodging charge by the stored counter.
-pub const INN_STAY_COUNTER_MAX: u8 = 25;
+/// adjusted lodging charge by the stored counter. Anchored to
+/// [`INN_STAY_COUNTER_CAP`] so the persistence cap and the
+/// month-rollover cap stay a single value.
+pub const INN_STAY_COUNTER_MAX: u8 = INN_STAY_COUNTER_CAP;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Inn {

@@ -1,4 +1,16 @@
     #[test]
+    fn inn_stay_counter_month_rollover_cap_anchors_to_persistence_cap() {
+        // shops.md §6 & §8.4: the inn registry's stored stay counter
+        // is bumped each 28-day month rollover and capped at 25; the
+        // persistence path clamps the same counter to the same value
+        // when serializing the inn registry. The two constants must
+        // stay coupled — INN_STAY_COUNTER_MAX is now anchored to
+        // INN_STAY_COUNTER_CAP so the cap moves as a single value.
+        assert_eq!(INN_STAY_COUNTER_MAX, INN_STAY_COUNTER_CAP);
+        assert_eq!(INN_STAY_COUNTER_MAX, 25);
+    }
+
+    #[test]
     fn shop_time_of_day_partitions_route_through_named_hours() {
         // shops.md §4.1: `@` substitution maps hours into morning
         // (0..12), afternoon (12..18), and evening (18..24).
