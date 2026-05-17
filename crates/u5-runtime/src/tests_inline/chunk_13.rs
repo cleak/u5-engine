@@ -1,4 +1,20 @@
     #[test]
+    fn equip_slot_indices_chain_sequentially() {
+        // inventory.md §3: per-character equipment slot indices
+        // occupy 0..=5 in the published order (Helm, Armour,
+        // Weapon, Off-hand, Ring, Amulet). Anchor each successor
+        // to the chain so adding or reordering a slot only
+        // happens in one place.
+        assert_eq!(EQUIP_SLOT_ARMOUR, EQUIP_SLOT_HELM + 1);
+        assert_eq!(EQUIP_SLOT_WEAPON, EQUIP_SLOT_ARMOUR + 1);
+        assert_eq!(EQUIP_SLOT_OFFHAND, EQUIP_SLOT_WEAPON + 1);
+        assert_eq!(EQUIP_SLOT_RING, EQUIP_SLOT_OFFHAND + 1);
+        assert_eq!(EQUIP_SLOT_AMULET, EQUIP_SLOT_RING + 1);
+        assert_eq!(EQUIP_SLOT_HELM, 0);
+        assert_eq!(EQUIP_SLOT_AMULET, 5);
+    }
+
+    #[test]
     fn reagent_indices_chain_sequentially() {
         // catalogs/spell-list.md §3: reagent enumeration order
         // packs the eight reagent indices into 0..=7 in sequence

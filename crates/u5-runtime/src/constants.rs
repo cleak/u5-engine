@@ -760,12 +760,17 @@ pub const EQUIPMENT_STOCK_BAND_LEN: usize = EQUIPMENT_COUNT;
 /// spell id `0..=47`). Anchored to [`SPELL_COUNT`] so the spell
 /// catalog size and the per-spell charge band stay one value.
 pub const SPELL_CHARGE_BAND_LEN: usize = SPELL_COUNT;
+/// `inventory.md §3` per-character equipment slot indices. The
+/// six slot indices occupy 0..=5 in the published order (Helm,
+/// Armour, Weapon, Off-hand, Ring, Amulet). Anchor each
+/// successor to the chain so adding or reordering a slot only
+/// happens in one place.
 pub const EQUIP_SLOT_HELM: usize = 0;
-pub const EQUIP_SLOT_ARMOUR: usize = 1;
-pub const EQUIP_SLOT_WEAPON: usize = 2;
-pub const EQUIP_SLOT_OFFHAND: usize = 3;
-pub const EQUIP_SLOT_RING: usize = 4;
-pub const EQUIP_SLOT_AMULET: usize = 5;
+pub const EQUIP_SLOT_ARMOUR: usize = EQUIP_SLOT_HELM + 1;
+pub const EQUIP_SLOT_WEAPON: usize = EQUIP_SLOT_ARMOUR + 1;
+pub const EQUIP_SLOT_OFFHAND: usize = EQUIP_SLOT_WEAPON + 1;
+pub const EQUIP_SLOT_RING: usize = EQUIP_SLOT_OFFHAND + 1;
+pub const EQUIP_SLOT_AMULET: usize = EQUIP_SLOT_RING + 1;
 pub const EQUIPMENT_TAG_AMMO: u8 = 0x00;
 pub const EQUIPMENT_TAG_RING: u8 = 0x02;
 pub const EQUIPMENT_TAG_AMULET: u8 = 0x04;
