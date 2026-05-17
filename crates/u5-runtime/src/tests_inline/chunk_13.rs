@@ -1,4 +1,22 @@
     #[test]
+    fn level_from_experience_scaler_matches_spec() {
+        // u4-transfer.md §7 / magic.md §8: level starts at 1; the
+        // experience-to-level scaler divides by 100, then halves the
+        // quotient repeatedly to step the level up while the quotient
+        // remains nonzero.
+        assert_eq!(LEVEL_FROM_EXPERIENCE_BASE_DIVISOR, 100);
+        assert_eq!(LEVEL_FROM_EXPERIENCE_HALVING_STEP, 2);
+        // Boundary cases from the spec:
+        assert_eq!(recompute_level_from_experience(0), 1);
+        assert_eq!(recompute_level_from_experience(99), 1);
+        assert_eq!(recompute_level_from_experience(100), 2);
+        assert_eq!(recompute_level_from_experience(199), 2);
+        assert_eq!(recompute_level_from_experience(200), 3);
+        assert_eq!(recompute_level_from_experience(399), 3);
+        assert_eq!(recompute_level_from_experience(400), 4);
+    }
+
+    #[test]
     fn u4_transfer_attribute_translator_bands_match_spec() {
         // u4-transfer.md §7: three-band primary-attribute translator.
         // Band edges: low 0..=9, mid 10..=29, high 30+.

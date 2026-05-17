@@ -181,12 +181,24 @@ pub fn default_party_intelligence(party_len: usize) -> Vec<u8> {
     vec![AVATAR_STAT_MAX; party_len]
 }
 
+/// `u4-transfer.md §7` / `magic.md §8` level-from-experience scaler.
+/// Level starts at 1; experience is divided by this base to get the
+/// first quotient, and the level advances once for each subsequent
+/// halving step while that quotient remains nonzero (so 100..199
+/// XP = level 2, 200..399 = level 3, 400..799 = level 4, ...).
+pub const LEVEL_FROM_EXPERIENCE_BASE_DIVISOR: u16 = 100;
+/// `u4-transfer.md §7` / `magic.md §8` level-from-experience halving
+/// step. After dividing experience by [`LEVEL_FROM_EXPERIENCE_BASE_DIVISOR`],
+/// the quotient is repeatedly divided by this step; each nonzero
+/// quotient raises the resulting level by one.
+pub const LEVEL_FROM_EXPERIENCE_HALVING_STEP: u16 = 2;
+
 pub fn recompute_level_from_experience(experience: u16) -> u8 {
     let mut level = 1;
-    let mut quotient = experience / 100;
+    let mut quotient = experience / LEVEL_FROM_EXPERIENCE_BASE_DIVISOR;
     while quotient != 0 {
         level += 1;
-        quotient /= 2;
+        quotient /= LEVEL_FROM_EXPERIENCE_HALVING_STEP;
     }
     level
 }

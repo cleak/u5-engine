@@ -468,9 +468,10 @@ pub use npc_runtime::{
     npc_type_byte_class, npc_type_byte_occupied, schedule_floor_state,
 };
 pub use party::{
-    Area, AvatarStats, MoonstoneGateSlot, PartyMember, Player, RESURRECTION_MAX_HP_PER_LEVEL,
-    RESURRECTION_REBUILT_CURRENT_HP, class_refreshed_mana, default_party,
-    default_party_experience,
+    Area, AvatarStats, LEVEL_FROM_EXPERIENCE_BASE_DIVISOR,
+    LEVEL_FROM_EXPERIENCE_HALVING_STEP, MoonstoneGateSlot, PartyMember, Player,
+    RESURRECTION_MAX_HP_PER_LEVEL, RESURRECTION_REBUILT_CURRENT_HP,
+    class_refreshed_mana, default_party, default_party_experience,
     default_party_intelligence, default_party_names, default_party_stay_counters,
     heal_spell_amount_from_raw_roll, increase_capped_stat, party_member_unavailable_message,
     POTION_VARIATION_FORCED_ORANGE_ROLL, POTION_VARIATION_RANDOM_INDEX_MASK,
