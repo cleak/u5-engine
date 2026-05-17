@@ -1,4 +1,19 @@
     #[test]
+    fn scene_moonglow_anchors_to_town_family_first() {
+        // catalogs/npc-roster.md §1: Moonglow (scene 1) is the
+        // first town-family scene — the slot immediately after the
+        // overworld (scene 0). Anchor SCENE_MOONGLOW to
+        // SCENE_TOWN_FAMILY_FIRST so the first town and the
+        // town-family band share one source of truth. SCENE_BRITAIN
+        // chains from SCENE_MOONGLOW so adding scenes shifts later
+        // names automatically.
+        assert_eq!(SCENE_MOONGLOW, SCENE_TOWN_FAMILY_FIRST);
+        assert_eq!(SCENE_MOONGLOW, 1);
+        assert_eq!(SCENE_BRITAIN, SCENE_MOONGLOW + 1);
+        assert_eq!(SCENE_BRITAIN, 2);
+    }
+
+    #[test]
     fn tile_npc_last_anchors_to_u8_max() {
         // catalogs/tile-catalog.md §2: the NPC sprite band runs
         // `0xC0..=0xFF` — the upper quarter of the 8-bit tile-id

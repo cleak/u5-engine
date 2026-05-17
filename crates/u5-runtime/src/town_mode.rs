@@ -438,8 +438,13 @@ pub const NPC_WORLD_ROSTER_MAX: usize =
 /// stock locations the engine ships with. These match the scene-byte
 /// to-place-name table; runtime callers that need a specific scene
 /// can refer to these instead of magic numbers.
-pub const SCENE_MOONGLOW: u8 = 1;
-pub const SCENE_BRITAIN: u8 = 2;
+///
+/// Moonglow is the first town-family scene — the slot immediately
+/// after the overworld. Anchored to
+/// [`crate::SCENE_TOWN_FAMILY_FIRST`] so the first town and the
+/// town-family band share one source of truth.
+pub const SCENE_MOONGLOW: u8 = crate::SCENE_TOWN_FAMILY_FIRST;
+pub const SCENE_BRITAIN: u8 = SCENE_MOONGLOW + 1;
 pub const SCENE_JHELOM: u8 = 3;
 pub const SCENE_YEW: u8 = 4;
 pub const SCENE_MINOC: u8 = 5;
