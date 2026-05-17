@@ -1,4 +1,20 @@
     #[test]
+    fn shop_time_of_day_boundaries_anchor_to_clock_day_partitions() {
+        // shops.md §4.1: time-of-day boundaries split the day
+        // into morning (0..=11), afternoon (12..=17), and
+        // evening (18..=23). The morning band ends at noon
+        // (HOURS_PER_DAY / 2); the afternoon band ends at
+        // 3/4 of the day (HOURS_PER_DAY * 3 / 4). Anchor each
+        // boundary to the clock-day-length partition so the
+        // shop time-of-day partition derives from the
+        // time-system constants.
+        assert_eq!(SHOP_TIME_OF_DAY_MORNING_END_HOUR, HOURS_PER_DAY / 2);
+        assert_eq!(SHOP_TIME_OF_DAY_AFTERNOON_END_HOUR, HOURS_PER_DAY * 3 / 4);
+        assert_eq!(SHOP_TIME_OF_DAY_MORNING_END_HOUR, 12);
+        assert_eq!(SHOP_TIME_OF_DAY_AFTERNOON_END_HOUR, 18);
+    }
+
+    #[test]
     fn play_start_hour_anchors_to_hours_per_day_half() {
         // save-load.md: the post-chargen play-mode entry
         // normalises the clock to noon (half-way through the

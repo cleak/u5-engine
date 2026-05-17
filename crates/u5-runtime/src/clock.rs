@@ -316,9 +316,12 @@ pub const SKY_STRIP_RENDER_ORDER: [SkyStripMarker; 3] = [
 /// `shops.md §4.1` time-of-day partition boundaries for the `@`
 /// substitution placeholder. Hours `0..MORNING_END` are morning,
 /// `MORNING_END..AFTERNOON_END` are afternoon, and the remainder
-/// `AFTERNOON_END..HOURS_PER_DAY` are evening.
-pub const SHOP_TIME_OF_DAY_MORNING_END_HOUR: u8 = 12;
-pub const SHOP_TIME_OF_DAY_AFTERNOON_END_HOUR: u8 = 18;
+/// `AFTERNOON_END..HOURS_PER_DAY` are evening. The morning band
+/// ends at noon = HOURS_PER_DAY / 2; the afternoon band ends
+/// three-quarters of the way through the day (18 = HOURS_PER_DAY
+/// * 3 / 4). Anchored to the clock-day-length partitions.
+pub const SHOP_TIME_OF_DAY_MORNING_END_HOUR: u8 = HOURS_PER_DAY / 2;
+pub const SHOP_TIME_OF_DAY_AFTERNOON_END_HOUR: u8 = HOURS_PER_DAY * 3 / 4;
 
 /// `shops.md` §4.1 substitution placeholder `@` (and any caller that wants
 /// the same time-of-day word): returns `"morning"` for hours `0..12`,
