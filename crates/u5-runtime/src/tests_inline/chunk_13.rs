@@ -1,4 +1,18 @@
     #[test]
+    fn inn_stay_counter_cap_anchors_to_character_month_counter_cap() {
+        // shops.md §8.4 + time.md §8: the inn's guest-stay counter
+        // is stored in the character record's month-counter byte
+        // that the 28-day rollover ages each month. INN_STAY_COUNTER_CAP
+        // (the inn's stay-counter ceiling) equals
+        // CHARACTER_MONTH_COUNTER_CAP (the month-counter ceiling).
+        // Anchor INN_STAY_COUNTER_CAP through to
+        // CHARACTER_MONTH_COUNTER_CAP so the two ceilings stay
+        // in lockstep.
+        assert_eq!(INN_STAY_COUNTER_CAP, CHARACTER_MONTH_COUNTER_CAP);
+        assert_eq!(INN_STAY_COUNTER_CAP, 25);
+    }
+
+    #[test]
     fn chargen_reagent_seeds_alias_to_default_reagents_slots() {
         // chargen.md §8: the chargen seeded reagent counters are
         // the same values as the global DEFAULT_REAGENTS storage-

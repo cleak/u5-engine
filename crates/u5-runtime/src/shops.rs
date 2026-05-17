@@ -900,7 +900,14 @@ pub const INN_REGISTRY_CAP: usize = crate::SAVE_ROSTER_SLOT_COUNT;
 /// [`crate::SAVE_PARTY_SIZE_MAX`] so the inn gate and the save
 /// file's roster cap stay a single value.
 pub const INN_PARTY_CAP: usize = crate::SAVE_PARTY_SIZE_MAX as usize;
-pub const INN_STAY_COUNTER_CAP: u8 = 25;
+/// `shops.md §8.4`: maximum value the inn's guest-stay counter
+/// can reach. The same counter is the character record's
+/// month-counter byte that the 28-day rollover ages each month,
+/// so this cap is the same value as
+/// [`crate::CHARACTER_MONTH_COUNTER_CAP`]. Anchored through to
+/// the month-counter cap so the inn's stay-counter ceiling and
+/// the character record's month-counter ceiling stay in lockstep.
+pub const INN_STAY_COUNTER_CAP: u8 = crate::CHARACTER_MONTH_COUNTER_CAP;
 
 /// `shops.md §8.4` Leave-companion deposit unit count. The deposit
 /// debited when the player leaves a companion at an inn is the local
