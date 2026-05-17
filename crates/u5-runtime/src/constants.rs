@@ -420,16 +420,22 @@ pub const SAVE_CHARACTER_CLASS_OFFSET: usize = SAVE_CHARACTER_GENDER_OFFSET + 1;
 /// [`SAVE_CHARACTER_CLASS_OFFSET`] + 1 so the per-record
 /// class→status adjacency has one source of truth.
 pub const SAVE_CHARACTER_STATUS_OFFSET: usize = SAVE_CHARACTER_CLASS_OFFSET + 1;
-pub const SAVE_CHARACTER_STR_OFFSET: usize = 0x0c;
-pub const SAVE_CHARACTER_DEX_OFFSET: usize = 0x0d;
-pub const SAVE_CHARACTER_INT_OFFSET: usize = 0x0e;
-pub const SAVE_CHARACTER_MANA_OFFSET: usize = 0x0f;
-pub const SAVE_CHARACTER_HP_OFFSET: usize = 0x10;
-pub const SAVE_CHARACTER_MAX_HP_OFFSET: usize = 0x12;
-pub const SAVE_CHARACTER_EXPERIENCE_OFFSET: usize = 0x14;
-pub const SAVE_CHARACTER_LEVEL_OFFSET: usize = 0x16;
-pub const SAVE_CHARACTER_STAY_COUNTER_OFFSET: usize = 0x17;
-pub const SAVE_CHARACTER_EQUIPMENT_OFFSET: usize = 0x19;
+/// `formats/saved-gam.md §3` per-record byte fields follow the
+/// status byte: Str/Dex/Int are three contiguous single bytes,
+/// then word-sized Mana, HP, Max HP, Experience, Level (which
+/// shares its word with the stay counter), and the equipment
+/// band. Anchor each offset to the previous-byte chain so adding
+/// or resizing a per-record field only happens in one place.
+pub const SAVE_CHARACTER_STR_OFFSET: usize = SAVE_CHARACTER_STATUS_OFFSET + 1;
+pub const SAVE_CHARACTER_DEX_OFFSET: usize = SAVE_CHARACTER_STR_OFFSET + 1;
+pub const SAVE_CHARACTER_INT_OFFSET: usize = SAVE_CHARACTER_DEX_OFFSET + 1;
+pub const SAVE_CHARACTER_MANA_OFFSET: usize = SAVE_CHARACTER_INT_OFFSET + 1;
+pub const SAVE_CHARACTER_HP_OFFSET: usize = SAVE_CHARACTER_MANA_OFFSET + 1;
+pub const SAVE_CHARACTER_MAX_HP_OFFSET: usize = SAVE_CHARACTER_HP_OFFSET + 2;
+pub const SAVE_CHARACTER_EXPERIENCE_OFFSET: usize = SAVE_CHARACTER_MAX_HP_OFFSET + 2;
+pub const SAVE_CHARACTER_LEVEL_OFFSET: usize = SAVE_CHARACTER_EXPERIENCE_OFFSET + 2;
+pub const SAVE_CHARACTER_STAY_COUNTER_OFFSET: usize = SAVE_CHARACTER_LEVEL_OFFSET + 1;
+pub const SAVE_CHARACTER_EQUIPMENT_OFFSET: usize = SAVE_CHARACTER_STAY_COUNTER_OFFSET + 2;
 /// `formats/tiles.md §1,§5.1`: 16x16 tile pixel side and the flat
 /// atlas's 512-entry capacity.
 pub const TILE_PIXEL_SIDE: usize = 16;

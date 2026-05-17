@@ -1,4 +1,23 @@
     #[test]
+    fn save_character_stat_offsets_chain_to_equipment_band() {
+        // formats/saved-gam.md §3 per-record layout: status, str,
+        // dex, int, mana, hp(2), max_hp(2), experience(2),
+        // level, stay_counter, [defense at 0x18], equipment(6).
+        // Anchor each offset to the chain so adding or resizing
+        // any field automatically shifts the later offsets.
+        assert_eq!(SAVE_CHARACTER_STR_OFFSET, 0x0c);
+        assert_eq!(SAVE_CHARACTER_DEX_OFFSET, 0x0d);
+        assert_eq!(SAVE_CHARACTER_INT_OFFSET, 0x0e);
+        assert_eq!(SAVE_CHARACTER_MANA_OFFSET, 0x0f);
+        assert_eq!(SAVE_CHARACTER_HP_OFFSET, 0x10);
+        assert_eq!(SAVE_CHARACTER_MAX_HP_OFFSET, 0x12);
+        assert_eq!(SAVE_CHARACTER_EXPERIENCE_OFFSET, 0x14);
+        assert_eq!(SAVE_CHARACTER_LEVEL_OFFSET, 0x16);
+        assert_eq!(SAVE_CHARACTER_STAY_COUNTER_OFFSET, 0x17);
+        assert_eq!(SAVE_CHARACTER_EQUIPMENT_OFFSET, 0x19);
+    }
+
+    #[test]
     fn save_character_class_and_status_offsets_chain_from_gender() {
         // formats/saved-gam.md §3: per-record fields are gender at
         // 0x09, class at 0x0a, status at 0x0b — each field is one
