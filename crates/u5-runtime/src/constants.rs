@@ -59,8 +59,10 @@ pub const LOOK2_DAT_FILE: &str = "LOOK2.DAT";
 pub const DOS_EOF_MARKER: u8 = 0x1A;
 /// `formats/look2-dat.md §2`: 1024-byte offset table holds 512
 /// little-endian word offsets — entries 0..=255 for terrain
-/// descriptions and 256..=511 for object descriptions.
-pub const LOOK2_DAT_OFFSET_TABLE_LEN: usize = 1024;
+/// descriptions and 256..=511 for object descriptions. Anchored
+/// to [`LOOK2_TABLE_LEN`] so the LOOK2.DAT offset table size and
+/// the look2-table length share one source of truth.
+pub const LOOK2_DAT_OFFSET_TABLE_LEN: usize = LOOK2_TABLE_LEN;
 pub const LOOK2_DAT_TERRAIN_ENTRIES: usize = 256;
 pub const LOOK2_DAT_OBJECT_ENTRIES: usize = 256;
 pub const LOOK2_DAT_OBJECT_DOMAIN_BASE: usize = 0x200;

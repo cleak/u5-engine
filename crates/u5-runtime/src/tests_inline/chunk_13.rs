@@ -1,4 +1,16 @@
     #[test]
+    fn look2_dat_offset_table_len_anchors_to_look2_table_len() {
+        // formats/look2-dat.md §2: the LOOK2.DAT offset table is
+        // 1024 bytes — 512 little-endian word offsets (terrain
+        // 0..=255 and object 256..=511). Anchor
+        // LOOK2_DAT_OFFSET_TABLE_LEN to LOOK2_TABLE_LEN
+        // (LOOK2_TILE_COUNT × 2) so the file-format offset table
+        // and the table-length constant share one value.
+        assert_eq!(LOOK2_DAT_OFFSET_TABLE_LEN, LOOK2_TABLE_LEN);
+        assert_eq!(LOOK2_DAT_OFFSET_TABLE_LEN, 1024);
+    }
+
+    #[test]
     fn viewport_centre_and_arena_side_anchor_to_viewport_side() {
         // visibility.md §2: player sits at the centre of the 11x11
         // active viewport; combat-mode arenas share the same 11x11
