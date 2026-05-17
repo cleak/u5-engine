@@ -79,6 +79,45 @@ pub const RTV_STRIP_COUNT: usize = 4;
 pub const RTV_STRIP_ROWS: usize = 19;
 pub const RTV_STRIP_COLUMNS: usize = 4;
 pub const RTV_COMMAND_STREAM_BYTES: usize = 655;
+
+/// `formats/location-dat.md §11` MISCMAPS section offsets. The file
+/// concatenates three sections back-to-back: four cutscene maps
+/// (704 bytes), four Return-to-View strips (512 bytes), and the
+/// 655-byte Return-to-View command stream. Promote the offsets and
+/// per-section lengths so loader code does not bake them as bare
+/// literals.
+pub const MISCMAPS_CUTSCENE_SECTION_OFFSET: usize = 0;
+/// `formats/location-dat.md §11` byte length of the cutscene-map
+/// section: four maps of `16 × 11 = 176` bytes each (eleven 16-byte
+/// rows with five trailing pad bytes), totalling 704 bytes.
+pub const MISCMAPS_CUTSCENE_SECTION_BYTES: usize = 704;
+/// `formats/location-dat.md §11` per-cutscene-map row stride. Each
+/// cutscene map is authored as eleven 16-byte rows; the first 11
+/// bytes of each row carry tile data and the trailing five bytes
+/// are zero-padded.
+pub const MISCMAPS_CUTSCENE_ROW_STRIDE: usize = 16;
+pub const MISCMAPS_CUTSCENE_ROWS: usize = 11;
+pub const MISCMAPS_CUTSCENE_VISIBLE_COLUMNS: usize = 11;
+pub const MISCMAPS_CUTSCENE_RECORD_COUNT: usize = 4;
+pub const MISCMAPS_CUTSCENE_RECORD_BYTES: usize =
+    MISCMAPS_CUTSCENE_ROW_STRIDE * MISCMAPS_CUTSCENE_ROWS;
+
+/// `formats/location-dat.md §11` Return-to-View map strip section
+/// offset (immediately after the cutscene section).
+pub const MISCMAPS_RTV_STRIP_SECTION_OFFSET: usize = MISCMAPS_CUTSCENE_SECTION_BYTES;
+/// `formats/location-dat.md §11` Return-to-View map strip section
+/// byte length: four 19x4 strips padded to a 32-byte row stride,
+/// totalling `4 * 32 * 4 = 512` bytes.
+pub const MISCMAPS_RTV_STRIP_SECTION_BYTES: usize = 512;
+/// `formats/location-dat.md §11` per-strip row stride. Each strip
+/// is authored as four 32-byte rows; the first 19 bytes per row
+/// carry tile data and the trailing 13 bytes are zero-padded.
+pub const MISCMAPS_RTV_STRIP_ROW_STRIDE: usize = 32;
+
+/// `formats/location-dat.md §11` Return-to-View command stream
+/// section offset (immediately after the strip section).
+pub const MISCMAPS_RTV_COMMAND_SECTION_OFFSET: usize =
+    MISCMAPS_RTV_STRIP_SECTION_OFFSET + MISCMAPS_RTV_STRIP_SECTION_BYTES;
 /// `intro.md §12`: Return-to-View command stream is interpreted as a
 /// 16-command preview bytecode, not the gameplay TLK runner.
 pub const RTV_COMMAND_COUNT: usize = 16;

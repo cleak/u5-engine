@@ -472,6 +472,36 @@
     }
 
     #[test]
+    fn miscmaps_section_offsets_and_sizes_match_spec() {
+        // formats/location-dat.md §11: MISCMAPS.DAT concatenates
+        // three sections — four 11x11 cutscene maps padded to 16-byte
+        // rows (704 bytes), four 19x4 Return-to-View strips padded
+        // to 32-byte rows (512 bytes), and the 655-byte
+        // Return-to-View command stream. Promote the per-section
+        // offsets, lengths, and row strides so a future loader does
+        // not bake them as bare numbers.
+        assert_eq!(MISCMAPS_CUTSCENE_SECTION_OFFSET, 0);
+        assert_eq!(MISCMAPS_CUTSCENE_SECTION_BYTES, 704);
+        assert_eq!(MISCMAPS_CUTSCENE_RECORD_COUNT, 4);
+        assert_eq!(MISCMAPS_CUTSCENE_ROW_STRIDE, 16);
+        assert_eq!(MISCMAPS_CUTSCENE_ROWS, 11);
+        assert_eq!(MISCMAPS_CUTSCENE_VISIBLE_COLUMNS, 11);
+        assert_eq!(MISCMAPS_CUTSCENE_RECORD_BYTES, 176);
+        assert_eq!(
+            MISCMAPS_CUTSCENE_RECORD_COUNT * MISCMAPS_CUTSCENE_RECORD_BYTES,
+            MISCMAPS_CUTSCENE_SECTION_BYTES
+        );
+        assert_eq!(MISCMAPS_RTV_STRIP_SECTION_OFFSET, 704);
+        assert_eq!(MISCMAPS_RTV_STRIP_SECTION_BYTES, 512);
+        assert_eq!(MISCMAPS_RTV_STRIP_ROW_STRIDE, 32);
+        assert_eq!(MISCMAPS_RTV_COMMAND_SECTION_OFFSET, 1216);
+        assert_eq!(
+            MISCMAPS_RTV_COMMAND_SECTION_OFFSET + RTV_COMMAND_STREAM_BYTES,
+            1216 + 655
+        );
+    }
+
+    #[test]
     fn tlk_introducer_argument_widths_match_spec_table() {
         // formats/tlk.md §9.1 publishes the multi-byte introducer
         // argument widths: GOLD-PAYMENT (0x85) takes three ASCII
