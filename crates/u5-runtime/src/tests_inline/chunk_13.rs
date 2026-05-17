@@ -1,4 +1,17 @@
     #[test]
+    fn endgame_campaign_start_constants_anchor_to_chargen() {
+        // endgame.md §9 / chargen.md §11: the certificate's
+        // "beginning of the quest" date is the same Year/Month/Day
+        // chargen seeds into the first SAVED.GAM. Anchor the
+        // endgame triple to the chargen-side constants so a future
+        // chargen edit can't drift from the certificate's baseline.
+        assert_eq!(ENDGAME_CAMPAIGN_START_YEAR, CHARGEN_STARTING_YEAR);
+        assert_eq!(ENDGAME_CAMPAIGN_START_MONTH, CHARGEN_STARTING_MONTH);
+        assert_eq!(ENDGAME_CAMPAIGN_START_DAY, CHARGEN_STARTING_DAY);
+        assert_eq!(ENDGAME_CAMPAIGN_START_YEAR, 139);
+    }
+
+    #[test]
     fn doom_final_room_constants_anchor_to_shared_dungeon_constants() {
         // endgame.md §2: Doom's final room lives on the deepest
         // dungeon level (= DUNGEON_DEEPEST_LEVEL) with room-trigger

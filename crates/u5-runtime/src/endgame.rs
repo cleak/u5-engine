@@ -192,9 +192,9 @@ pub fn endgame_outcome(final_confirmation: bool, has_sandalwood_box: bool) -> En
 /// calendar model. Year 139, month 4, day 5 corresponds to the
 /// campaign-start date the certificate calls the "beginning of the
 /// quest".
-pub const ENDGAME_CAMPAIGN_START_YEAR: u16 = 139;
-pub const ENDGAME_CAMPAIGN_START_MONTH: u8 = 4;
-pub const ENDGAME_CAMPAIGN_START_DAY: u8 = 5;
+pub const ENDGAME_CAMPAIGN_START_YEAR: u16 = crate::CHARGEN_STARTING_YEAR;
+pub const ENDGAME_CAMPAIGN_START_MONTH: u8 = crate::CHARGEN_STARTING_MONTH;
+pub const ENDGAME_CAMPAIGN_START_DAY: u8 = crate::CHARGEN_STARTING_DAY;
 
 pub fn endgame_elapsed_campaign_time(clock: GameClock) -> (u16, u8, u8) {
     let mut years = clock.year.saturating_sub(ENDGAME_CAMPAIGN_START_YEAR);
