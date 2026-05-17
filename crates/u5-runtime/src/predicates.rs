@@ -728,8 +728,11 @@ pub const RANDOM_ENCOUNTER_DIE: u8 = 30;
 /// `encounters.md §3` last hour of the surface night-boost band.
 /// Hours `0..=RANDOM_ENCOUNTER_NIGHT_HOUR_LAST` add the published
 /// night-time boost to the surface encounter threshold; daytime
-/// hours use the lower base threshold.
-pub const RANDOM_ENCOUNTER_NIGHT_HOUR_LAST: u8 = 4;
+/// hours use the lower base threshold. The same hour boundary
+/// the town dawn/dusk substitution uses (town-mode.md §5,§6).
+/// Anchored to [`crate::TOWN_NIGHT_BAND_DAWN_HOUR`] so the
+/// engine-wide "dawn hour" has one source of truth.
+pub const RANDOM_ENCOUNTER_NIGHT_HOUR_LAST: u8 = crate::TOWN_NIGHT_BAND_DAWN_HOUR;
 
 /// `encounters.md §3` underworld-plane fixed encounter threshold. The
 /// underworld uses this value regardless of hour or tile.

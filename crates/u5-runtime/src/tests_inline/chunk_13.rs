@@ -1,4 +1,20 @@
     #[test]
+    fn random_encounter_night_hour_last_anchors_to_town_dawn_hour() {
+        // encounters.md §3 / town-mode.md §5, §6: both the
+        // surface encounter night-boost band and the town
+        // dawn/dusk substitution use hour 4 as the dawn-side
+        // boundary (last hour of night). Anchor
+        // RANDOM_ENCOUNTER_NIGHT_HOUR_LAST to
+        // TOWN_NIGHT_BAND_DAWN_HOUR so the engine-wide "dawn
+        // hour" has one source of truth.
+        assert_eq!(
+            RANDOM_ENCOUNTER_NIGHT_HOUR_LAST,
+            TOWN_NIGHT_BAND_DAWN_HOUR,
+        );
+        assert_eq!(RANDOM_ENCOUNTER_NIGHT_HOUR_LAST, 4);
+    }
+
+    #[test]
     fn scroll_negate_time_duration_anchors_to_negate_magic_duration() {
         // inventory.md §7.1: the Negate Time scroll (`AT`)
         // installs the same 20-counter-unit duration as the
