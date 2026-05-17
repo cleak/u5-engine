@@ -634,8 +634,10 @@ pub const fn pick_random_spawn_bucket(bucket: &[(u8, u8)], roll: u8) -> Option<u
 /// `encounters.md §3` random-encounter roll bound. The probe rolls
 /// uniformly in `[1, 30]`; spawn fires when `roll < threshold`. The
 /// effective per-eligible-turn chance is `(threshold - 1) / 30`,
-/// with thresholds 0 and 1 both producing no encounter.
-pub const RANDOM_ENCOUNTER_ROLL_BOUND: u8 = 30;
+/// with thresholds 0 and 1 both producing no encounter. Anchored
+/// to [`RANDOM_ENCOUNTER_DIE`] so the spawner-side die and the
+/// helper-side roll bound stay one value.
+pub const RANDOM_ENCOUNTER_ROLL_BOUND: u8 = RANDOM_ENCOUNTER_DIE;
 
 /// `encounters.md §3`: returns `true` when a `random(1, 30)` roll
 /// fires the encounter spawner. Spawn fires when `roll < threshold`.

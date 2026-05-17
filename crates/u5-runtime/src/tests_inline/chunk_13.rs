@@ -1,4 +1,16 @@
     #[test]
+    fn random_encounter_roll_bound_anchors_to_die() {
+        // encounters.md §3: the random-encounter probe rolls a
+        // uniform 1..=30. RANDOM_ENCOUNTER_DIE and
+        // RANDOM_ENCOUNTER_ROLL_BOUND both stored 30 as parallel
+        // bare literals in predicates.rs. Anchor the helper-side
+        // roll bound to the spawner-side die so the probe die has
+        // one source of truth.
+        assert_eq!(RANDOM_ENCOUNTER_ROLL_BOUND, RANDOM_ENCOUNTER_DIE);
+        assert_eq!(RANDOM_ENCOUNTER_ROLL_BOUND, 30);
+    }
+
+    #[test]
     fn combat_damage_roll_caps_anchor_to_spell_raw_damage_caps() {
         // catalogs/spell-list.md §5: Magic Missile raw damage caps
         // at 16; Fireball raw damage caps at 30. The combat-side
