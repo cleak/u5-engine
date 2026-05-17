@@ -1,4 +1,15 @@
     #[test]
+    fn last_in_hour_minute_anchors_to_minutes_per_hour_minus_one() {
+        // lighting.md §3: the last in-hour minute (59) is one
+        // below MINUTES_PER_HOUR (60). Anchor LAST_IN_HOUR_MINUTE
+        // to MINUTES_PER_HOUR - 1 so the last minute of an hour
+        // derives from the published hour length.
+        assert_eq!(LAST_IN_HOUR_MINUTE, MINUTES_PER_HOUR - 1);
+        assert_eq!(LAST_IN_HOUR_MINUTE, 59);
+        assert_eq!(MINUTES_PER_HOUR, 60);
+    }
+
+    #[test]
     fn blackthorn_captive_cell_scene_anchors_to_blackthorns_castle() {
         // blackthorn.md §3: the audience cinematic hands the party
         // off to a captive cell inside Lord Blackthorn's Castle

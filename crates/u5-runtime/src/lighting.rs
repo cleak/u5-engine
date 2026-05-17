@@ -168,8 +168,9 @@ pub const DAWN_DUSK_LAST_INDEX: usize = DAWN_DUSK_LIGHT.len() - 1;
 /// `lighting.md §3`: last in-hour minute. Dusk reverses the gradient
 /// by indexing on `(LAST_IN_HOUR_MINUTE - minute) / DAWN_DUSK_STEP_MINUTES`
 /// so 19:00 starts at the brightest gradient level and 19:59 ends at
-/// the darkest.
-pub const LAST_IN_HOUR_MINUTE: u8 = 59;
+/// the darkest. Anchored to [`crate::MINUTES_PER_HOUR`] - 1 so the
+/// last minute of an hour derives from the published hour length.
+pub const LAST_IN_HOUR_MINUTE: u8 = crate::MINUTES_PER_HOUR - 1;
 
 /// `time.md §6` Stage-1 base daylight value computed from hour/minute and
 /// scene. Returns the cached ambient base before personal-light floors:
