@@ -252,12 +252,13 @@ pub const fn resurrection_max_hp_for_level(level: u8) -> u16 {
 /// selector percentage" phrasing is the narrative summary and
 /// resolves to the same expression.
 pub fn resurrection_adjusted_experience(experience: u16, moral_standing: u8) -> u16 {
-    if moral_standing >= 98 {
+    if moral_standing >= crate::RESURRECTION_PENALTY_SKIP_THRESHOLD {
         return experience;
     }
 
     let divisor = u32::from(moral_standing.max(1));
-    ((u32::from(experience) * 100) / divisor).min(u32::from(u16::MAX)) as u16
+    ((u32::from(experience) * crate::RESURRECTION_PENALTY_PERCENT_DIVISOR) / divisor)
+        .min(u32::from(u16::MAX)) as u16
 }
 
 pub fn party_status_name(status: u8) -> &'static str {

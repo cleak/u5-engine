@@ -124,6 +124,13 @@ pub const fn codex_turnin_stat_reward(virtue: ShrineVirtue) -> (u8, u8, u8) {
 /// below 98 the XP is scaled down by the selector percentage.
 pub const RESURRECTION_PENALTY_SKIP_THRESHOLD: u8 = 98;
 
+/// `karma.md §5` resurrection-penalty percentage divisor. The
+/// revived member's experience is multiplied by `standing` and then
+/// divided by this value to apply the selector percentage; promoting
+/// it lets the helper name the divisor instead of repeating `100`
+/// as a bare literal.
+pub const RESURRECTION_PENALTY_PERCENT_DIVISOR: u32 = 100;
+
 /// `karma.md §5`: returns `true` when the selector is high enough to
 /// skip the resurrection XP penalty.
 pub const fn resurrection_penalty_skipped(standing: u8) -> bool {
@@ -132,14 +139,15 @@ pub const fn resurrection_penalty_skipped(standing: u8) -> bool {
 
 /// `karma.md §5`: revived member's experience after the resurrection
 /// XP scale. With selector >= 98 the XP is unchanged; otherwise the
-/// XP is multiplied by the selector / 100. Computed in u32 to avoid
+/// XP is multiplied by the selector and divided by
+/// [`RESURRECTION_PENALTY_PERCENT_DIVISOR`]. Computed in u32 to avoid
 /// `u16 * u16` overflow before the divide.
 pub const fn resurrection_scaled_xp(standing: u8, current_xp: u16) -> u16 {
     if resurrection_penalty_skipped(standing) {
         return current_xp;
     }
     let product = (current_xp as u32) * (standing as u32);
-    (product / 100) as u16
+    (product / RESURRECTION_PENALTY_PERCENT_DIVISOR) as u16
 }
 
 /// `karma.md §4` clamp policy: shrine and toll-style increments cap at

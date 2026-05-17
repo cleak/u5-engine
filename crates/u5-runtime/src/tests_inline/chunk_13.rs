@@ -1,4 +1,27 @@
     #[test]
+    fn resurrection_penalty_percent_divisor_matches_spec() {
+        // karma.md §5 / magic.md §8: the resurrection XP scaler
+        // multiplies by the moral-standing selector and divides by
+        // 100; promote the divisor so both helpers share one named
+        // source of truth.
+        assert_eq!(RESURRECTION_PENALTY_PERCENT_DIVISOR, 100);
+        assert_eq!(RESURRECTION_PENALTY_SKIP_THRESHOLD, 98);
+        // Skip threshold: a 98+ selector leaves XP unchanged.
+        assert_eq!(
+            resurrection_scaled_xp(RESURRECTION_PENALTY_SKIP_THRESHOLD, 1234),
+            1234,
+        );
+        assert_eq!(resurrection_scaled_xp(99, 1234), 1234);
+        // Below the threshold the scale runs: standing 50 yields half.
+        assert_eq!(resurrection_scaled_xp(50, 200), 100);
+        // resurrection_adjusted_experience uses the same constants.
+        assert_eq!(
+            resurrection_adjusted_experience(1234, RESURRECTION_PENALTY_SKIP_THRESHOLD),
+            1234,
+        );
+    }
+
+    #[test]
     fn karma_action_signed_deltas_route_through_named_constants() {
         // karma.md §4 confirmed scalar mutators. Route each non-shrine
         // delta through its named promoted constant so the table here
