@@ -44,11 +44,18 @@ pub const DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE: u8 = 0x3c;
 /// sixteen placement-slot X/Y coordinates sit on rows 6 and 7 at
 /// columns 11..=26.
 pub const CBT_SETUP_TABLE_ROW: usize = 3;
-pub const CBT_SETUP_TABLE_A_COLUMNS: std::ops::RangeInclusive<usize> = 11..=16;
+/// `formats/cbt.md §5` outdoor metadata band column slices. Table
+/// A starts at the metadata-start column; tables B and the
+/// placement band tile up across the metadata row. Anchor each
+/// range to COMBAT_ARENA_METADATA_START so resizing the visible
+/// terrain band automatically shifts the column ranges.
+pub const CBT_SETUP_TABLE_A_COLUMNS: std::ops::RangeInclusive<usize> =
+    COMBAT_ARENA_METADATA_START..=16;
 pub const CBT_SETUP_TABLE_B_COLUMNS: std::ops::RangeInclusive<usize> = 17..=22;
 pub const CBT_PLACEMENT_X_ROW: usize = 6;
 pub const CBT_PLACEMENT_Y_ROW: usize = 7;
-pub const CBT_PLACEMENT_COLUMNS: std::ops::RangeInclusive<usize> = 11..=26;
+pub const CBT_PLACEMENT_COLUMNS: std::ops::RangeInclusive<usize> =
+    COMBAT_ARENA_METADATA_START..=26;
 pub const CBT_PLACEMENT_SLOT_COUNT: usize = 16;
 /// `formats/cbt.md §2` expected total file lengths.
 pub const BRIT_CBT_FILE_LEN: usize = COMBAT_ARENA_RECORD_LEN * BRIT_CBT_RECORDS;

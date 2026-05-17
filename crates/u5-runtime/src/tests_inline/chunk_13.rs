@@ -1,4 +1,17 @@
     #[test]
+    fn cbt_metadata_column_ranges_anchor_to_arena_metadata_start() {
+        // formats/cbt.md §5: outdoor metadata band columns start
+        // at the metadata-start column. Anchor the setup-table-A
+        // and placement column ranges to COMBAT_ARENA_METADATA_START
+        // so resizing the visible terrain band automatically shifts
+        // the column ranges.
+        assert_eq!(*CBT_SETUP_TABLE_A_COLUMNS.start(), COMBAT_ARENA_METADATA_START);
+        assert_eq!(*CBT_SETUP_TABLE_A_COLUMNS.end(), 16);
+        assert_eq!(*CBT_PLACEMENT_COLUMNS.start(), COMBAT_ARENA_METADATA_START);
+        assert_eq!(*CBT_PLACEMENT_COLUMNS.end(), 26);
+    }
+
+    #[test]
     fn dungeon_room_source_column_anchors_to_arena_metadata_start() {
         // formats/cbt.md §5: the dungeon-room source band starts
         // in the metadata column (one past the visible 11-cell
