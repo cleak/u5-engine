@@ -74,8 +74,11 @@ impl ShrineVirtue {
         }
     }
 
-    /// Iteration order used by `karma.md §8` (the standard virtue order).
-    pub const ALL: [Self; 8] = [
+    /// Iteration order used by `karma.md §8` (the standard virtue
+    /// order). The array length is anchored to
+    /// [`crate::VIRTUE_COUNT`] so the catalog size and the
+    /// iteration array stay one value.
+    pub const ALL: [Self; crate::VIRTUE_COUNT] = [
         Self::Honesty,
         Self::Compassion,
         Self::Valor,

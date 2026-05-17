@@ -1,4 +1,14 @@
     #[test]
+    fn shrine_virtue_all_array_length_anchors_to_virtue_count() {
+        // karma.md §8: the eight-virtue iteration order packs into
+        // ShrineVirtue::ALL. The array length is now anchored to
+        // VIRTUE_COUNT so the catalog size and the iteration array
+        // share one source of truth.
+        assert_eq!(ShrineVirtue::ALL.len(), VIRTUE_COUNT);
+        assert_eq!(VIRTUE_COUNT, 8);
+    }
+
+    #[test]
     fn potion_count_anchors_to_last_potion_index() {
         // inventory.md §7: eight potions at catalog indices BLUE
         // (0) through WHITE (7). Anchor POTION_COUNT to
