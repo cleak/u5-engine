@@ -1,4 +1,20 @@
     #[test]
+    fn viewport_centre_and_arena_side_anchor_to_viewport_side() {
+        // visibility.md §2: player sits at the centre of the 11x11
+        // active viewport; combat-mode arenas share the same 11x11
+        // dimension (formats/cbt.md §3). Anchor
+        // VIEWPORT_PLAYER_ROW/COL to (VIEWPORT_SIDE - 1) / 2 and
+        // COMBAT_ARENA_SIDE to VIEWPORT_SIDE so the active-window
+        // dimensions have one source of truth.
+        assert_eq!(VIEWPORT_PLAYER_ROW, (VIEWPORT_SIDE - 1) / 2);
+        assert_eq!(VIEWPORT_PLAYER_COL, (VIEWPORT_SIDE - 1) / 2);
+        assert_eq!(COMBAT_ARENA_SIDE, VIEWPORT_SIDE);
+        assert_eq!(VIEWPORT_SIDE, 11);
+        assert_eq!(VIEWPORT_PLAYER_ROW, 5);
+        assert_eq!(COMBAT_ARENA_SIDE, 11);
+    }
+
+    #[test]
     fn combat_arena_metadata_start_anchors_to_arena_side() {
         // formats/cbt.md §3: each arena row carries 11 visible
         // terrain bytes followed by 21 metadata bytes (32-byte

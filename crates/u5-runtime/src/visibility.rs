@@ -13,9 +13,12 @@ pub const VIEWPORT_ROW_STRIDE: usize = 32;
 /// `visibility.md §2`: row stride of the terrain band in bytes.
 pub const TERRAIN_BAND_ROW_STRIDE: usize = 16;
 /// `visibility.md §2`: zero-based player position inside the active
-/// window (centre row, centre column).
-pub const VIEWPORT_PLAYER_ROW: usize = 5;
-pub const VIEWPORT_PLAYER_COL: usize = 5;
+/// window (centre row, centre column). Anchored to
+/// `(VIEWPORT_SIDE - 1) / 2` so the centre position derives from
+/// the viewport side dimension; changing the viewport size
+/// automatically re-centres the player.
+pub const VIEWPORT_PLAYER_ROW: usize = (VIEWPORT_SIDE - 1) / 2;
+pub const VIEWPORT_PLAYER_COL: usize = (VIEWPORT_SIDE - 1) / 2;
 
 /// `visibility.md §2`: well-known visibility-grid byte markers.
 pub const VISIBILITY_HIDDEN: u8 = 0xFF;

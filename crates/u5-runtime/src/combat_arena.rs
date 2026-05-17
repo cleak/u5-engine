@@ -6,7 +6,11 @@ use std::path::Path;
 
 use crate::DUNGEON_ROOM_SLOTS_PER_BANK;
 
-pub const COMBAT_ARENA_SIDE: usize = 11;
+/// `formats/cbt.md §3`: each combat arena is an 11x11 visible
+/// grid — the same dimension as the main-mode active viewport.
+/// Anchored to [`crate::VIEWPORT_SIDE`] so the combat-arena side
+/// and the main-mode viewport side share one source of truth.
+pub const COMBAT_ARENA_SIDE: usize = crate::VIEWPORT_SIDE;
 pub const COMBAT_ARENA_ROW_STRIDE: usize = 32;
 /// `formats/cbt.md §3`: each arena row carries `COMBAT_ARENA_SIDE`
 /// visible terrain bytes followed by 21 metadata bytes. The
