@@ -1,4 +1,23 @@
     #[test]
+    fn prng_state_advance_constants_match_spec() {
+        // prng.md §2: the state advance adds 0x9248, rotates right
+        // by three bits, XORs with 0x9248 again, and adds 0x0011.
+        // The non-negative mask is 0x7FFF (low 15 bits) and is
+        // applied before the modulo reduction.
+        assert_eq!(PRNG_STATE_ADD, 0x9248);
+        assert_eq!(PRNG_STATE_ROTATE_BITS, 3);
+        assert_eq!(PRNG_STATE_FINAL_BIAS, 0x0011);
+        assert_eq!(PRNG_NON_NEGATIVE_MASK, 0x7FFF);
+        // u5_prng_advance_state matches the recurrence built from the
+        // named constants.
+        let state: u16 = 0;
+        let expected = (state.wrapping_add(PRNG_STATE_ADD).rotate_right(PRNG_STATE_ROTATE_BITS)
+            ^ PRNG_STATE_ADD)
+            .wrapping_add(PRNG_STATE_FINAL_BIAS);
+        assert_eq!(u5_prng_advance_state(state), expected);
+    }
+
+    #[test]
     fn tlk_dictionary_token_range_matches_spec() {
         // conversation.md §8: dialogue dictionary tokens are nonzero
         // high-bit-clear bytes (0x01..=0x7F); each token is the
