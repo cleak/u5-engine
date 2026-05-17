@@ -61,9 +61,13 @@ pub const CHARGEN_QUESTION_COUNT: usize = CHARGEN_QUESTIONS_PER_ROUND[0]
 /// prompt accepts up to eight characters; shorter names are
 /// null-padded into the eight-byte name slice. The save record's
 /// name field is nine bytes wide; chargen leaves the ninth byte as
-/// the seed padding.
-pub const CHARGEN_NAME_INPUT_MAX_LEN: usize = 8;
-pub const CHARGEN_NAME_FIELD_LEN: usize = 9;
+/// the seed padding. Anchored to [`SAVE_CHARACTER_NAME_LEN`] - 1 so
+/// the input limit derives from the save-record field width.
+pub const CHARGEN_NAME_INPUT_MAX_LEN: usize = SAVE_CHARACTER_NAME_LEN - 1;
+/// `chargen.md §4` Avatar name save-record field width. Anchored
+/// to [`SAVE_CHARACTER_NAME_LEN`] so the chargen-side field width
+/// and the save-record name field share one source of truth.
+pub const CHARGEN_NAME_FIELD_LEN: usize = SAVE_CHARACTER_NAME_LEN;
 
 pub fn chargen_question_record_for_pair(
     first: ShrineVirtue,

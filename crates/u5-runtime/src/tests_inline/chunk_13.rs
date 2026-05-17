@@ -1,4 +1,22 @@
     #[test]
+    fn chargen_name_field_and_input_max_anchor_to_save_name_len() {
+        // chargen.md §4: the save record's name field is nine
+        // bytes wide and chargen accepts up to eight characters of
+        // input (leaving one trailing byte as seed padding).
+        // chargen.rs declared both CHARGEN_NAME_FIELD_LEN = 9 and
+        // CHARGEN_NAME_INPUT_MAX_LEN = 8 as bare literals in
+        // parallel with constants::SAVE_CHARACTER_NAME_LEN = 9.
+        // Anchor CHARGEN_NAME_FIELD_LEN to SAVE_CHARACTER_NAME_LEN
+        // and CHARGEN_NAME_INPUT_MAX_LEN to SAVE_CHARACTER_NAME_LEN
+        // - 1 so the chargen-side field/input widths derive from
+        // the save-record name field.
+        assert_eq!(CHARGEN_NAME_FIELD_LEN, SAVE_CHARACTER_NAME_LEN);
+        assert_eq!(CHARGEN_NAME_FIELD_LEN, 9);
+        assert_eq!(CHARGEN_NAME_INPUT_MAX_LEN, SAVE_CHARACTER_NAME_LEN - 1);
+        assert_eq!(CHARGEN_NAME_INPUT_MAX_LEN, 8);
+    }
+
+    #[test]
     fn ship_broadside_range_anchors_to_town_cannon_range() {
         // vehicles.md §7: the ship broadside projectile and the
         // town cannon projectile both scan 3 cells from the firer
