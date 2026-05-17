@@ -1,4 +1,20 @@
     #[test]
+    fn character_record_defense_byte_offset_anchors_to_month_counter() {
+        // formats/saved-gam.md §3.1: the per-record defense byte
+        // at 0x18 sits immediately after the one-byte month
+        // counter and immediately before the equipment band.
+        // Anchor SAVE_CHARACTER_DEFENSE_BYTE_OFFSET to
+        // SAVE_CHARACTER_MONTH_COUNTER_OFFSET + 1 so the
+        // MonthCounter→Defense→Equipment chain has one source of
+        // truth.
+        assert_eq!(
+            crate::character_record::SAVE_CHARACTER_DEFENSE_BYTE_OFFSET,
+            crate::character_record::SAVE_CHARACTER_MONTH_COUNTER_OFFSET + 1,
+        );
+        assert_eq!(crate::character_record::SAVE_CHARACTER_DEFENSE_BYTE_OFFSET, 0x18);
+    }
+
+    #[test]
     fn character_record_offsets_anchor_to_constants_per_byte_chain() {
         // formats/saved-gam.md §3.1: per-character byte offsets
         // form the chain Status (0x0b), Str/Dex/Int (3 bytes), Mana,

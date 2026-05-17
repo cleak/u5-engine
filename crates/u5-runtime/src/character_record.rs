@@ -119,7 +119,12 @@ pub const SAVE_CHARACTER_EXPERIENCE_OFFSET: usize =
 pub const SAVE_CHARACTER_LEVEL_OFFSET: usize = crate::constants::SAVE_CHARACTER_LEVEL_OFFSET;
 pub const SAVE_CHARACTER_MONTH_COUNTER_OFFSET: usize =
     crate::constants::SAVE_CHARACTER_STAY_COUNTER_OFFSET;
-pub const SAVE_CHARACTER_DEFENSE_BYTE_OFFSET: usize = 0x18;
+/// `formats/saved-gam.md §3.1`: per-record combat defense byte
+/// sits immediately after the one-byte month counter and
+/// immediately before the six-byte equipment band. Anchored to
+/// SAVE_CHARACTER_MONTH_COUNTER_OFFSET + 1 so the
+/// MonthCounter→Defense→Equipment chain has one source of truth.
+pub const SAVE_CHARACTER_DEFENSE_BYTE_OFFSET: usize = SAVE_CHARACTER_MONTH_COUNTER_OFFSET + 1;
 
 /// `formats/saved-gam.md §3.1` per-character record stride.
 pub const SAVE_CHARACTER_RECORD_LEN: usize = 32;
