@@ -254,7 +254,12 @@ pub const COMBAT_CLASS_DAEMON: u8 = 38;
 /// (38) consecutively. Anchor DRAGON to DAEMON + 1.
 pub const COMBAT_CLASS_DRAGON: u8 = COMBAT_CLASS_DAEMON + 1;
 pub const COMBAT_CLASS_SHADOW_LORD: u8 = 47;
-pub const CONJURE_ANIMAL_OUTCOME_COUNT: u8 = 15;
+/// `magic.md §8` Conjure spell outcome bound — fifteen weighted
+/// outcomes. Same fundamental count as
+/// [`crate::CONJURE_OUTCOME_COUNT`] in magic.rs; anchored
+/// through to that constant so the per-conjure handler and the
+/// spec-rooted Conjure-outcome anchor share one source of truth.
+pub const CONJURE_ANIMAL_OUTCOME_COUNT: u8 = crate::CONJURE_OUTCOME_COUNT;
 /// `combat.md §11` field-kind byte enumeration. Poison, Sleep,
 /// Fire, and Energy field kinds occupy four consecutive class
 /// bytes 0x33..=0x36. Anchor each successor to the chain.

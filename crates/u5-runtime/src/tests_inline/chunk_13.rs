@@ -1,4 +1,16 @@
     #[test]
+    fn conjure_animal_outcome_count_aliases_to_conjure_outcome_count() {
+        // magic.md §8: the Conjure spell rolls one of fifteen
+        // weighted outcomes. combat_actor.rs declared
+        // CONJURE_ANIMAL_OUTCOME_COUNT = 15 as a bare literal in
+        // parallel with magic::CONJURE_OUTCOME_COUNT = 15. Anchor
+        // the combat-side count through to the magic-side
+        // anchor so both refer to the same outcome bound.
+        assert_eq!(CONJURE_ANIMAL_OUTCOME_COUNT, CONJURE_OUTCOME_COUNT);
+        assert_eq!(CONJURE_ANIMAL_OUTCOME_COUNT, 15);
+    }
+
+    #[test]
     fn party_food_cap_anchors_to_party_gold_cap() {
         // inventory.md §2: both PARTY_FOOD_CAP and PARTY_GOLD_CAP
         // are word-sized counters that cap at 9999 in ordinary
