@@ -1,4 +1,15 @@
     #[test]
+    fn magic_lock_unlock_pair_chains_sequentially() {
+        // catalogs/spell-list.md §5: Magic Lock (An Por) and
+        // Unlock Magic (Ex Por) form the paired lock-magic spell
+        // at consecutive indices 25..=26. Anchor UNLOCK_MAGIC to
+        // MAGIC_LOCK + 1 so the pair stays consecutive.
+        assert_eq!(UNLOCK_MAGIC_SPELL_INDEX, MAGIC_LOCK_SPELL_INDEX + 1);
+        assert_eq!(MAGIC_LOCK_SPELL_INDEX, 25);
+        assert_eq!(UNLOCK_MAGIC_SPELL_INDEX, 26);
+    }
+
+    #[test]
     fn dungeon_level_spell_pair_chains_sequentially() {
         // catalogs/spell-list.md §5: Uus Por (Up) and Des Por
         // (Down) form the dungeon-level spell pair at indices

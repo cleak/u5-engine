@@ -943,9 +943,13 @@ pub const REVEAL_SPELL_INDEX: usize = 23;
 pub const REVEAL_COST: u8 = (REVEAL_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const ENERGY_FIELD_SPELL_INDEX: usize = 20;
 pub const ENERGY_FIELD_COST: u8 = (ENERGY_FIELD_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
+/// `catalogs/spell-list.md §5`: Magic Lock (An Por) and Unlock
+/// Magic (Ex Por) form the paired lock-magic spells at
+/// consecutive indices 25..=26. Anchor UNLOCK_MAGIC to
+/// MAGIC_LOCK + 1.
 pub const MAGIC_LOCK_SPELL_INDEX: usize = 25;
 pub const MAGIC_LOCK_COST: u8 = (MAGIC_LOCK_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
-pub const UNLOCK_MAGIC_SPELL_INDEX: usize = 26;
+pub const UNLOCK_MAGIC_SPELL_INDEX: usize = MAGIC_LOCK_SPELL_INDEX + 1;
 pub const UNLOCK_MAGIC_COST: u8 = (UNLOCK_MAGIC_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const GREAT_HEAL_SPELL_INDEX: usize = 27;
 pub const GREAT_HEAL_COST: u8 = (GREAT_HEAL_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
