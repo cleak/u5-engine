@@ -711,6 +711,21 @@ pub const fn dungeon_fall_destination_marks_visit(destination_byte: u8) -> bool 
     destination_byte < DUNGEON_WALL_DOOR_BAND_FIRST
 }
 
+/// `dungeon-mode.md §6.1`: renderer-facing cell-read normaliser. For
+/// cell bytes below [`DUNGEON_WALL_DOOR_BAND_FIRST`] (`0x90`), bit
+/// [`DUNGEON_VISIT_MARKER_BIT`] (`0x08`) is ignored by clearing it
+/// before the renderer's class interpretation. For classes `0x9?`
+/// and higher the bit remains meaningful as a render-side
+/// overlay/extra-glyph flag. The static dungeon record is not
+/// modified; this is a read-side transform.
+pub const fn dungeon_render_cell_byte(raw_byte: u8) -> u8 {
+    if raw_byte < DUNGEON_WALL_DOOR_BAND_FIRST {
+        raw_byte & !DUNGEON_VISIT_MARKER_BIT
+    } else {
+        raw_byte
+    }
+}
+
 /// `dungeon-mode.md §8`: search-rewrite targets for the flavour-class
 /// (`0xC?`) and wall-class (`0xD?`) hidden-passage paths. Each rewrite
 /// preserves only the visit-marker bit on the original cell.

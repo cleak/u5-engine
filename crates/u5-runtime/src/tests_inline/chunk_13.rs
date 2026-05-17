@@ -1,4 +1,22 @@
     #[test]
+    fn dungeon_render_cell_byte_strips_visit_bit_below_wall_band() {
+        // dungeon-mode.md §6.1: renderer-facing cell reads strip
+        // bit 0x08 from cell bytes below 0x90 before class
+        // interpretation; classes 0x9? and higher keep the bit.
+        // Below the band: visit marker is cleared.
+        assert_eq!(dungeon_render_cell_byte(0x00), 0x00);
+        assert_eq!(dungeon_render_cell_byte(0x08), 0x00);
+        assert_eq!(dungeon_render_cell_byte(0x68), 0x60);
+        assert_eq!(dungeon_render_cell_byte(0x8B), 0x83);
+        // At and above the wall/door band: bit is preserved.
+        assert_eq!(dungeon_render_cell_byte(0x90), 0x90);
+        assert_eq!(dungeon_render_cell_byte(0x98), 0x98);
+        assert_eq!(dungeon_render_cell_byte(0xFF), 0xFF);
+        assert_eq!(dungeon_render_cell_byte(DUNGEON_WALL_DOOR_BAND_FIRST),
+            DUNGEON_WALL_DOOR_BAND_FIRST);
+    }
+
+    #[test]
     fn dungeon_facing_side_deltas_match_spec_rotations() {
         // dungeon-mode.md §6: side-wall mirroring reads cells to the
         // left and right of the forward path. Left rotates the
