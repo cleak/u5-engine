@@ -1,4 +1,32 @@
     #[test]
+    fn reagent_recipe_masks_match_spec_table() {
+        // catalogs/spell-list.md §3: per-reagent recipe-mask bits.
+        // Bit 0x80 selects Sulfur Ash (index 0); each subsequent
+        // reagent uses the next lower bit.
+        assert_eq!(REAGENT_MASK_SULFUR_ASH, 0x80);
+        assert_eq!(REAGENT_MASK_GINSENG, 0x40);
+        assert_eq!(REAGENT_MASK_GARLIC, 0x20);
+        assert_eq!(REAGENT_MASK_SPIDER_SILK, 0x10);
+        assert_eq!(REAGENT_MASK_BLOOD_MOSS, 0x08);
+        assert_eq!(REAGENT_MASK_BLACK_PEARL, 0x04);
+        assert_eq!(REAGENT_MASK_NIGHTSHADE, 0x02);
+        assert_eq!(REAGENT_MASK_MANDRAKE, 0x01);
+        // The packed table at REAGENT_MASKS lines up with the
+        // index-keyed constants (REAGENT_*).
+        assert_eq!(REAGENT_MASKS[REAGENT_SULFUR_ASH], REAGENT_MASK_SULFUR_ASH);
+        assert_eq!(REAGENT_MASKS[REAGENT_GINSENG], REAGENT_MASK_GINSENG);
+        assert_eq!(REAGENT_MASKS[REAGENT_GARLIC], REAGENT_MASK_GARLIC);
+        assert_eq!(REAGENT_MASKS[REAGENT_SPIDER_SILK], REAGENT_MASK_SPIDER_SILK);
+        assert_eq!(REAGENT_MASKS[REAGENT_BLOOD_MOSS], REAGENT_MASK_BLOOD_MOSS);
+        assert_eq!(REAGENT_MASKS[REAGENT_BLACK_PEARL], REAGENT_MASK_BLACK_PEARL);
+        assert_eq!(REAGENT_MASKS[REAGENT_NIGHTSHADE], REAGENT_MASK_NIGHTSHADE);
+        assert_eq!(REAGENT_MASKS[REAGENT_MANDRAKE], REAGENT_MASK_MANDRAKE);
+        // The eight bits together cover the full byte.
+        let union: u8 = REAGENT_MASKS.iter().fold(0, |acc, b| acc | b);
+        assert_eq!(union, 0xFF);
+    }
+
+    #[test]
     fn spell_scene_bit_and_mp_cost_route_through_named_constants() {
         // catalogs/spell-list.md §4: scene-byte classifier and §10
         // spell-MP-cost formula both rely on already-promoted named

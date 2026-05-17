@@ -542,7 +542,31 @@ pub const FIXED_HIDDEN_TREASURE_FOUND_BYTES: usize = 15;
 pub const FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY: u8 = 0;
 pub const FIXED_HIDDEN_TREASURE_OBJECT_TILE: u8 = 0x1f;
 pub const FIXED_HIDDEN_TREASURE_OBJECT_AUX3: u8 = 0xa5;
-pub const REAGENT_MASKS: [u8; REAGENT_COUNT] = [0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01];
+/// `catalogs/spell-list.md §3` per-reagent recipe-mask bit. The mix
+/// command builds a one-byte recipe mask by OR-ing these bits for the
+/// selected reagents and comparing against the spell's resident
+/// recipe byte. Bit `0x80` selects Sulfur Ash (index 0), and each
+/// subsequent reagent uses the next lower bit (`0x40` Ginseng,
+/// `0x20` Garlic, `0x10` Spider Silk, `0x08` Blood Moss, `0x04`
+/// Black Pearl, `0x02` Nightshade, `0x01` Mandrake).
+pub const REAGENT_MASK_SULFUR_ASH: u8 = 0x80;
+pub const REAGENT_MASK_GINSENG: u8 = 0x40;
+pub const REAGENT_MASK_GARLIC: u8 = 0x20;
+pub const REAGENT_MASK_SPIDER_SILK: u8 = 0x10;
+pub const REAGENT_MASK_BLOOD_MOSS: u8 = 0x08;
+pub const REAGENT_MASK_BLACK_PEARL: u8 = 0x04;
+pub const REAGENT_MASK_NIGHTSHADE: u8 = 0x02;
+pub const REAGENT_MASK_MANDRAKE: u8 = 0x01;
+pub const REAGENT_MASKS: [u8; REAGENT_COUNT] = [
+    REAGENT_MASK_SULFUR_ASH,
+    REAGENT_MASK_GINSENG,
+    REAGENT_MASK_GARLIC,
+    REAGENT_MASK_SPIDER_SILK,
+    REAGENT_MASK_BLOOD_MOSS,
+    REAGENT_MASK_BLACK_PEARL,
+    REAGENT_MASK_NIGHTSHADE,
+    REAGENT_MASK_MANDRAKE,
+];
 pub const REAGENT_SAVE_ORDER: [usize; REAGENT_COUNT] = [
     REAGENT_BLACK_PEARL,
     REAGENT_BLOOD_MOSS,
