@@ -1,4 +1,31 @@
     #[test]
+    fn shop_time_of_day_partitions_route_through_named_hours() {
+        // shops.md §4.1: `@` substitution maps hours into morning
+        // (0..12), afternoon (12..18), and evening (18..24).
+        assert_eq!(SHOP_TIME_OF_DAY_MORNING_END_HOUR, 12);
+        assert_eq!(SHOP_TIME_OF_DAY_AFTERNOON_END_HOUR, 18);
+        // Boundary tests:
+        assert_eq!(shop_time_of_day_word(0), "morning");
+        assert_eq!(
+            shop_time_of_day_word(SHOP_TIME_OF_DAY_MORNING_END_HOUR - 1),
+            "morning",
+        );
+        assert_eq!(
+            shop_time_of_day_word(SHOP_TIME_OF_DAY_MORNING_END_HOUR),
+            "afternoon",
+        );
+        assert_eq!(
+            shop_time_of_day_word(SHOP_TIME_OF_DAY_AFTERNOON_END_HOUR - 1),
+            "afternoon",
+        );
+        assert_eq!(
+            shop_time_of_day_word(SHOP_TIME_OF_DAY_AFTERNOON_END_HOUR),
+            "evening",
+        );
+        assert_eq!(shop_time_of_day_word(HOURS_PER_DAY - 1), "evening");
+    }
+
+    #[test]
     fn dungeon_torch_duration_anchors_to_lighting_increment() {
         // lighting.md §8: dungeon Ignite adds a random 112..127
         // counter units to the current torch counter. The same `112`

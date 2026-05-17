@@ -313,13 +313,20 @@ pub const SKY_STRIP_RENDER_ORDER: [SkyStripMarker; 3] = [
     SkyStripMarker::Felucca,
 ];
 
+/// `shops.md §4.1` time-of-day partition boundaries for the `@`
+/// substitution placeholder. Hours `0..MORNING_END` are morning,
+/// `MORNING_END..AFTERNOON_END` are afternoon, and the remainder
+/// `AFTERNOON_END..HOURS_PER_DAY` are evening.
+pub const SHOP_TIME_OF_DAY_MORNING_END_HOUR: u8 = 12;
+pub const SHOP_TIME_OF_DAY_AFTERNOON_END_HOUR: u8 = 18;
+
 /// `shops.md` §4.1 substitution placeholder `@` (and any caller that wants
 /// the same time-of-day word): returns `"morning"` for hours `0..12`,
 /// `"afternoon"` for hours `12..18`, and `"evening"` for hours `18..24`.
 pub const fn shop_time_of_day_word(hour: u8) -> &'static str {
-    if hour < 12 {
+    if hour < SHOP_TIME_OF_DAY_MORNING_END_HOUR {
         "morning"
-    } else if hour < 18 {
+    } else if hour < SHOP_TIME_OF_DAY_AFTERNOON_END_HOUR {
         "afternoon"
     } else {
         "evening"

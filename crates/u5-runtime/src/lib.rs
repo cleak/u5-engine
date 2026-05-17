@@ -127,6 +127,7 @@ pub use clock::{
     age_character_month_counter, apply_timing_tag_increment,
     all_shadowlords_vanquished, display_hour_12h, is_provision_decrement_hour,
     shadowlord_hideout_is_live, shadowlord_hideout_is_vanquished,
+    SHOP_TIME_OF_DAY_AFTERNOON_END_HOUR, SHOP_TIME_OF_DAY_MORNING_END_HOUR,
     shadowlord_name_for_slot, shadowlord_slot_for_name, shop_time_of_day_word,
     sky_strip_composed_cells, sky_strip_marker_position, sky_strip_renders,
     town_arrest_release_loop_done,
