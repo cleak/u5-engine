@@ -1,4 +1,17 @@
     #[test]
+    fn carrier_band_lengths_anchor_to_catalog_sizes() {
+        // inventory.md §2: the per-equipment stock band carries one
+        // counter per equipment id (`0..=47`) and the per-spell
+        // charge band carries one entry per spell id (`0..=47`). The
+        // band length is the catalog size — anchor to share one
+        // source of truth.
+        assert_eq!(EQUIPMENT_STOCK_BAND_LEN, EQUIPMENT_COUNT);
+        assert_eq!(SPELL_CHARGE_BAND_LEN, SPELL_COUNT);
+        assert_eq!(EQUIPMENT_STOCK_BAND_LEN, 48);
+        assert_eq!(SPELL_CHARGE_BAND_LEN, 48);
+    }
+
+    #[test]
     fn shop_gold_and_food_caps_anchor_to_party_counters() {
         // inventory.md §2: party gold and food counters cap at 9999.
         // shops.md §6 applies the same caps when crediting sale gold

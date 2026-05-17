@@ -503,11 +503,14 @@ pub const PARTY_FOOD_CAP: u16 = 9999;
 /// 99 in ordinary play.
 pub const SPELL_CHARGE_CAP: u8 = 99;
 /// `inventory.md §2`: equipment stock band has 48 entries (item ids
-/// `0..=47`).
-pub const EQUIPMENT_STOCK_BAND_LEN: usize = 48;
+/// `0..=47`) — one counter per equipment id. Anchored to
+/// [`EQUIPMENT_COUNT`] so the catalog size and the carrier band
+/// length stay one value.
+pub const EQUIPMENT_STOCK_BAND_LEN: usize = EQUIPMENT_COUNT;
 /// `inventory.md §2`: spell-charge band has 48 entries (one per
-/// spell id `0..=47`).
-pub const SPELL_CHARGE_BAND_LEN: usize = 48;
+/// spell id `0..=47`). Anchored to [`SPELL_COUNT`] so the spell
+/// catalog size and the per-spell charge band stay one value.
+pub const SPELL_CHARGE_BAND_LEN: usize = SPELL_COUNT;
 pub const EQUIP_SLOT_HELM: usize = 0;
 pub const EQUIP_SLOT_ARMOUR: usize = 1;
 pub const EQUIP_SLOT_WEAPON: usize = 2;
