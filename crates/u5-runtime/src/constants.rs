@@ -887,12 +887,16 @@ pub const CAUSE_FEAR_COST: u8 = 7;
 pub const PEER_SPELL_INDEX: usize = 39;
 pub const PEER_COST: u8 = 7;
 pub const RESURRECT_SPELL_INDEX: usize = 42;
-pub const RESURRECT_COST: u8 = 8;
+/// `combat.md §10` per-spell MP cost = `(spell_index /
+/// SPELLS_PER_CIRCLE) + 1`. Anchor each named spell's cost to
+/// that formula so renumbering a spell automatically updates
+/// its cost.
+pub const RESURRECT_COST: u8 = (RESURRECT_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const SUMMON_DAEMON_SPELL_INDEX: usize = 43;
 pub const GATE_TRAVEL_SPELL_INDEX: usize = 46;
-pub const GATE_TRAVEL_COST: u8 = 8;
+pub const GATE_TRAVEL_COST: u8 = (GATE_TRAVEL_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const TIME_STOP_SPELL_INDEX: usize = 47;
-pub const TIME_STOP_COST: u8 = 8;
+pub const TIME_STOP_COST: u8 = (TIME_STOP_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const TIME_STOP_DURATION: u8 = 10;
 pub const NEGATE_TIME_ACTIVE_EFFECT_TAG: u8 = b'T';
 

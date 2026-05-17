@@ -1,4 +1,18 @@
     #[test]
+    fn high_circle_spell_costs_anchor_to_index_divided_by_circle_size() {
+        // combat.md §10: per-spell MP cost is
+        // `(spell_index / SPELLS_PER_CIRCLE) + 1`. Anchor the
+        // Resurrect/Gate Travel/Time Stop costs to that formula
+        // so renumbering a spell automatically updates its cost.
+        assert_eq!(RESURRECT_COST, (RESURRECT_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1);
+        assert_eq!(GATE_TRAVEL_COST, (GATE_TRAVEL_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1);
+        assert_eq!(TIME_STOP_COST, (TIME_STOP_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1);
+        assert_eq!(RESURRECT_COST, 8);
+        assert_eq!(GATE_TRAVEL_COST, 8);
+        assert_eq!(TIME_STOP_COST, 8);
+    }
+
+    #[test]
     fn scene_town_family_first_anchors_to_overworld_plus_one() {
         // main-loop.md §3: scene byte 0 is the overworld; the
         // town family picks up immediately after at scene byte 1.
