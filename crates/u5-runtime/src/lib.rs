@@ -469,7 +469,8 @@ pub use play_state_struct::{PlayState, WorldOverlayCache, WorldReturn};
 pub use predicates::*;
 pub use prng::*;
 pub use pth::{
-    BRITISH_PTH_LEN, BRITISH_PTH_SEGMENT_COUNT, PenStroke, pth_decode_byte,
+    BRITISH_PTH_LEN, BRITISH_PTH_SEGMENT_COUNT, PTH_BYTE_SIGN_X, PTH_BYTE_SIGN_Y,
+    PTH_NIBBLE_MAGNITUDE_MASK, PTH_PEN_DOWN_MAX_MAGNITUDE, PenStroke, pth_decode_byte,
 };
 pub use report::run_report;
 pub use save_load::*;

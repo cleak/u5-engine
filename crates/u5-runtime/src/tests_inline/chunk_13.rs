@@ -472,6 +472,28 @@
     }
 
     #[test]
+    fn pth_byte_decoder_constants_match_spec() {
+        // formats/pth.md §3,§5: each non-zero PTH byte packs a
+        // signed-magnitude nibble pair (low three bits = magnitude,
+        // bit 3 / 7 = sign per axis). The pen paints only when both
+        // nibble magnitudes are at or below two; either above two
+        // lifts the pen for that byte without sticky state. Promote
+        // the masks, sign bits, and pen-down threshold so
+        // pth_decode_byte does not bake `0x07`, `0x08`, `0x80`, and
+        // `2` as bare literals.
+        assert_eq!(PTH_NIBBLE_MAGNITUDE_MASK, 0x07);
+        assert_eq!(PTH_BYTE_SIGN_X, 0x80);
+        assert_eq!(PTH_BYTE_SIGN_Y, 0x08);
+        assert_eq!(PTH_PEN_DOWN_MAX_MAGNITUDE, 2);
+        // Pen-down boundary: 0x22 (mag 2, 2) paints; 0x23 (mag 2,3)
+        // does not.
+        let down = pth_decode_byte(0x22).unwrap();
+        assert!(down.pen_down);
+        let up = pth_decode_byte(0x23).unwrap();
+        assert!(!up.pen_down);
+    }
+
+    #[test]
     fn chest_content_roll_die_and_secondary_attempt_formula_match_spec() {
         // containers.md §4: chest content gates use a `1..=30` die,
         // and the secondary-pool attempt count is `floor(chest_class
