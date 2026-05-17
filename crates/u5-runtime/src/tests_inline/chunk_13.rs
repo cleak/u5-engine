@@ -1,4 +1,14 @@
     #[test]
+    fn ch_glyph_bytes_anchors_to_cell_side() {
+        // formats/font-ch.md §2: each .CH glyph is an 8x8 cell with
+        // one byte per row, so per-glyph byte count = 8 rows × 1
+        // byte = 8. Anchor CH_GLYPH_BYTES to CH_CELL_SIDE so the
+        // per-glyph byte count and the cell side stay one value.
+        assert_eq!(CH_GLYPH_BYTES, CH_CELL_SIDE);
+        assert_eq!(CH_GLYPH_BYTES, 8);
+    }
+
+    #[test]
     fn hcs_glyph_bytes_anchors_to_cell_height_times_row_bytes() {
         // formats/font-hcs.md §2: each .HCS glyph is a 16x12 cell
         // with two bytes per row, so per-glyph byte count = 12 * 2
