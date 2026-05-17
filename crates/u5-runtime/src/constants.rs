@@ -317,6 +317,17 @@ pub const SAVE_PARTY_Y_OFFSET: usize = 0x02F1;
 pub const SAVE_PARTY_Z_NO_ACTIVE_MAP: u8 = 0xFF;
 pub const SAVE_AVATAR_NAME_LEN: usize = 9;
 pub const SAVE_ACTIVE_OBJECTS_OFFSET: usize = 0x06b4;
+/// `formats/saved-gam.md §12`: 2,220-byte reserved tail at file
+/// offsets `0x07B4..=0x105F` that follows the active-object table.
+/// In memory the region holds the NPC schedule blob, NPC runtime
+/// state, NPC path queues, and the world-tile render buffer — all
+/// repopulated from the location's NPC files and the active-map
+/// loader on map entry. The bytes are transient for gameplay, but
+/// byte-compatible save editors must preserve them so unknown bytes
+/// survive a rewrite of an existing save. Promote the offset and
+/// length so the tail span has one named source of truth.
+pub const SAVE_RESERVED_TAIL_OFFSET: usize = 0x07B4;
+pub const SAVE_RESERVED_TAIL_LEN: usize = 2_220;
 pub const SAVE_PARTY_SIZE_OFFSET: usize = 0x02b5;
 pub const SAVE_ROSTER_OFFSET: usize = 0x0002;
 /// `formats/saved-gam.md §3`: number of character records the roster

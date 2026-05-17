@@ -1,4 +1,23 @@
     #[test]
+    fn save_reserved_tail_span_matches_spec() {
+        // formats/saved-gam.md §12: 2,220-byte reserved tail at
+        // 0x07B4..=0x105F follows the active-object table. The tail
+        // ends at the last byte of the 4,192-byte file image.
+        assert_eq!(SAVE_RESERVED_TAIL_OFFSET, 0x07B4);
+        assert_eq!(SAVE_RESERVED_TAIL_LEN, 2_220);
+        assert_eq!(
+            SAVE_RESERVED_TAIL_OFFSET + SAVE_RESERVED_TAIL_LEN,
+            SAVED_GAM_LEN,
+        );
+        // The tail begins immediately after the 256-byte active-object
+        // table that sits at 0x06B4.
+        assert_eq!(
+            SAVE_ACTIVE_OBJECT_TABLE_OFFSET + 256,
+            SAVE_RESERVED_TAIL_OFFSET,
+        );
+    }
+
+    #[test]
     fn npc_schedule_record_field_offsets_match_spec() {
         // formats/npc.md §5: each 16-byte schedule record packs three
         // waypoints (AI[3], X[3], Y[3], Z[3]) and four hour-of-day
