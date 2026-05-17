@@ -67,8 +67,9 @@ pub const fn visibility_marker(byte: u8) -> VisibilityMarker {
 /// `visibility.md §12` local-light mask side dimension. The mask
 /// covers the full 32x32 active map window (not the 11x11 viewport)
 /// because local lights placed outside the viewport can still reach
-/// in.
-pub const LOCAL_LIGHT_MASK_SIDE: usize = 32;
+/// in. Anchored to [`crate::TOWN_GRID_SIDE`] so the local-light
+/// mask and the active map window share one source of truth.
+pub const LOCAL_LIGHT_MASK_SIDE: usize = crate::TOWN_GRID_SIDE;
 
 /// `visibility.md §12`: returns `true` for tile ids the resident
 /// local-light refresh recognises as local-light source candidates.

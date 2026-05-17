@@ -1,4 +1,17 @@
     #[test]
+    fn active_map_window_aliases_anchor_to_town_grid_side() {
+        // visibility.md §12 and view.md §4 both describe overlays
+        // that span the full 32x32 active map window. Anchor
+        // LOCAL_LIGHT_MASK_SIDE and LOCAL_VIEW_OVERLAY_SIDE to
+        // TOWN_GRID_SIDE so the active-map-window dimensions
+        // share one source of truth.
+        assert_eq!(LOCAL_LIGHT_MASK_SIDE, TOWN_GRID_SIDE);
+        assert_eq!(LOCAL_VIEW_OVERLAY_SIDE, TOWN_GRID_SIDE);
+        assert_eq!(LOCAL_LIGHT_MASK_SIDE, 32);
+        assert_eq!(LOCAL_VIEW_OVERLAY_SIDE, 32);
+    }
+
+    #[test]
     fn npc_pathfind_workspace_side_anchors_to_town_grid_side() {
         // npc-schedules.md §8.1: the NPC pathfinder workspace is
         // a 32x32 byte scratch grid mirroring the town grid.

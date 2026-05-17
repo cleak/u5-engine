@@ -77,8 +77,11 @@ impl Command {
 
 /// `view.md §4` LOOKOBJ local-view overlay side length. The
 /// overworld/town V-View paints a temporary square overlay
-/// `LOCAL_VIEW_OVERLAY_SIDE` cells on each side around the party.
-pub const LOCAL_VIEW_OVERLAY_SIDE: usize = 32;
+/// `LOCAL_VIEW_OVERLAY_SIDE` cells on each side around the party
+/// — the same 32-cell side as the active map window. Anchored to
+/// [`crate::TOWN_GRID_SIDE`] so the overlay and the active map
+/// window share one source of truth.
+pub const LOCAL_VIEW_OVERLAY_SIDE: usize = crate::TOWN_GRID_SIDE;
 /// `view.md §4` LOOKOBJ local-view per-cell pixel scale. Each cell
 /// in the overlay renders at a four-pixel square inside the
 /// message-panel region.
