@@ -472,6 +472,39 @@
     }
 
     #[test]
+    fn weapon_range_arena_wide_cap_covers_full_arena_diagonal() {
+        // catalogs/item-list.md §5.3: Magic Bow and Magic Axe use
+        // non-adjacent range cap 15, which reaches every cell on the
+        // eleven-by-eleven arena. The diagonal cells `(0, 0)` and
+        // `(10, 10)` produce truncated Euclidean distance 14, so a
+        // cap of 15 covers the full arena with one extra-cell
+        // margin. Promote the value so the equipment range table
+        // does not bake `15` as a bare row entry.
+        assert_eq!(WEAPON_RANGE_ARENA_WIDE_CAP, 15);
+        // Both arena-wide weapons publish this cap.
+        assert_eq!(
+            equipment_weapon_range_cap(EQUIPMENT_ID_MAGIC_BOW).unwrap(),
+            WEAPON_RANGE_ARENA_WIDE_CAP
+        );
+        // EQUIPMENT_ID 38 is Magic Axe (catalog §5.3 row).
+        assert_eq!(
+            equipment_weapon_range_cap(38).unwrap(),
+            WEAPON_RANGE_ARENA_WIDE_CAP
+        );
+        // Sanity: the cap is at least the integer-truncated full
+        // arena diagonal so every cell is reachable.
+        // sqrt(10*10 + 10*10) = sqrt(200) ≈ 14.14 → truncates to 14.
+        let max_dx = (COMBAT_ARENA_SIDE - 1) as u32;
+        let sq = max_dx * max_dx + max_dx * max_dx;
+        let mut diagonal = 0u32;
+        while (diagonal + 1) * (diagonal + 1) <= sq {
+            diagonal += 1;
+        }
+        assert_eq!(diagonal, 14);
+        assert!(WEAPON_RANGE_ARENA_WIDE_CAP >= diagonal as u8);
+    }
+
+    #[test]
     fn combat_to_hit_bias_matches_spec_formula() {
         // catalogs/item-list.md §5.3: the shared combat to-hit
         // helper computes `(attacker - defender + 30) / 2` and

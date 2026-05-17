@@ -443,6 +443,13 @@ pub const EQUIPMENT_BASE_PRICES: [u16; EQUIPMENT_COUNT] = [
     900, 240, 0,
 ];
 
+/// `catalogs/item-list.md §5.3` arena-wide weapon range cap. A
+/// non-adjacent range cap of this value reaches every cell on the
+/// eleven-by-eleven combat arena; Magic Bow and Magic Axe use it.
+/// (`sqrt(10*10 + 10*10) ≈ 14.14`, truncated to 14, so 15 covers the
+/// full diagonal with one extra-cell margin.)
+pub const WEAPON_RANGE_ARENA_WIDE_CAP: u8 = 15;
+
 pub const EQUIPMENT_WEAPON_RANGE_CAPS: [u8; EQUIPMENT_COUNT] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 4, 0, 4, 0, 5, 4, 0, 0, 2, 7, 0, 8, 0, 0, 0,
     0, 0, 2, 0, 15, 0, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0,
