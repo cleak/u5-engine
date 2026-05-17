@@ -420,8 +420,13 @@ pub const fn sleep_ambush_rest_interrupted(roll: u8) -> bool {
 /// 16-byte bitmap covers eight dungeons (`0..7`) by sixteen room
 /// ids (`0..15`), giving 128 bits total. Layout is dungeon-major
 /// then room-major: dungeon `D` occupies the bits at byte offsets
-/// `D*2..=D*2+1`, with low bit = room id 0.
-pub const SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON: usize = 2;
+/// `D*2..=D*2+1`, with low bit = room id 0. Per-dungeon byte
+/// count = sixteen room bits packed at eight bits per byte = 2.
+/// Anchored to ceil(SAVE_DUNGEON_ROOM_CLEAR_ROOMS_PER_DUNGEON / 8)
+/// so resizing the per-dungeon room count automatically widens
+/// the per-dungeon byte stride.
+pub const SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON: usize =
+    SAVE_DUNGEON_ROOM_CLEAR_ROOMS_PER_DUNGEON.div_ceil(8);
 /// `formats/saved-gam.md §10` rooms-per-dungeon ("sixteen room
 /// ids `0..15`") matches the dungeon-format room-arena slot
 /// count. Anchored to [`crate::DUNGEON_ROOM_SLOTS_PER_BANK`] so

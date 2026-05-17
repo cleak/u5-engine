@@ -1,4 +1,20 @@
     #[test]
+    fn save_dungeon_room_clear_bytes_per_dungeon_derive_from_room_count() {
+        // formats/saved-gam.md §10: each dungeon's room-clear
+        // bitmap packs sixteen room bits at eight bits per byte,
+        // yielding 2 bytes per dungeon. Anchor
+        // SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON to
+        // ceil(SAVE_DUNGEON_ROOM_CLEAR_ROOMS_PER_DUNGEON / 8) so
+        // resizing the per-dungeon room count automatically
+        // widens the per-dungeon byte stride.
+        assert_eq!(
+            SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON,
+            SAVE_DUNGEON_ROOM_CLEAR_ROOMS_PER_DUNGEON.div_ceil(8),
+        );
+        assert_eq!(SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON, 2);
+    }
+
+    #[test]
     fn save_dungeon_room_clear_bitmap_len_derives_from_dungeon_count() {
         // formats/saved-gam.md §10: the room-clear bitmap is
         // sixteen bytes — two bytes per dungeon × eight dungeons.
