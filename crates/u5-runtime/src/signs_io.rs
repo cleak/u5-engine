@@ -24,10 +24,13 @@ const RECORD_HEADER_LEN: usize = 4;
 /// `formats/signs-dat.md §2` published filename for the sign-record file.
 pub const SIGNS_DAT_FILE: &str = "SIGNS.DAT";
 
-/// `formats/signs-dat.md §2`: scene directory holds 33 little-endian
-/// scene-block offsets in the leading 66 bytes of the file.
+/// `formats/signs-dat.md §2`: scene directory holds 33 little-
+/// endian scene-block offsets in the leading 66 bytes of the
+/// file. Anchor the byte length to SLOTS × 2 (each entry is a
+/// 2-byte word) so resizing the slot count automatically shifts
+/// the leading-block byte length.
 pub const SIGNS_DAT_SCENE_DIRECTORY_SLOTS: usize = 33;
-pub const SIGNS_DAT_SCENE_DIRECTORY_BYTES: usize = 66;
+pub const SIGNS_DAT_SCENE_DIRECTORY_BYTES: usize = SIGNS_DAT_SCENE_DIRECTORY_SLOTS * 2;
 /// `formats/signs-dat.md §3`: each sign record begins with a four-byte
 /// `(scene, z, y, x)` header followed by a NUL-terminated payload.
 pub const SIGNS_DAT_RECORD_HEADER_LEN: usize = 4;

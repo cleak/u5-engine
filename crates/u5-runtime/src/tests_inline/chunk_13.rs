@@ -1,4 +1,21 @@
     #[test]
+    fn signs_dat_scene_directory_bytes_anchors_to_slots() {
+        // formats/signs-dat.md §2: the SIGNS.DAT scene directory
+        // holds 33 little-endian scene-block offsets in the
+        // leading 66 bytes. Each entry is a 2-byte word, so the
+        // byte length = slots × 2. Anchor
+        // SIGNS_DAT_SCENE_DIRECTORY_BYTES to SLOTS × 2 so
+        // resizing the slot count automatically shifts the
+        // leading-block byte length.
+        assert_eq!(
+            SIGNS_DAT_SCENE_DIRECTORY_BYTES,
+            SIGNS_DAT_SCENE_DIRECTORY_SLOTS * 2,
+        );
+        assert_eq!(SIGNS_DAT_SCENE_DIRECTORY_BYTES, 66);
+        assert_eq!(SIGNS_DAT_SCENE_DIRECTORY_SLOTS, 33);
+    }
+
+    #[test]
     fn tlk_label_and_printable_text_bands_chain() {
         // conversation.md §7, §7.7: the label band ends at the
         // last GOTO-label byte (0x9F), and the printable-text
