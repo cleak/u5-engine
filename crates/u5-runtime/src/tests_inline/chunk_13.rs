@@ -1,4 +1,25 @@
     #[test]
+    fn ship_transport_heading_routes_through_named_facing_mask() {
+        // vehicles.md §6: the ship transport marker's low two bits
+        // decode heading as north(0)/east(1)/south(2)/west(3).
+        // ship_transport_heading_index must route through
+        // TRANSPORT_FACING_MASK so the helper agrees with
+        // transport_facing_index on every ship marker.
+        for marker in TRANSPORT_MARKER_SHIP_HOISTED_FIRST
+            ..=TRANSPORT_MARKER_SHIP_FURLED_LAST
+        {
+            let direct = ship_transport_heading_index(marker);
+            let generic = transport_facing_index(marker);
+            assert_eq!(direct, generic, "marker 0x{marker:02X}");
+            assert_eq!(direct, Some(marker & TRANSPORT_FACING_MASK));
+        }
+        // Non-ship transport markers return None from the ship-specific
+        // helper even though the shared facing decoder accepts them.
+        assert_eq!(ship_transport_heading_index(TRANSPORT_MARKER_FOOT_DEFAULT), None);
+        assert_eq!(ship_transport_heading_index(TRANSPORT_MARKER_SKIFF_FIRST), None);
+    }
+
+    #[test]
     fn driver_selector_letters_match_launcher_spec() {
         // launcher.md §3 / boot.md §5: command-line selector letters
         // C/E/T/H choose CGA/EGA/Tandy/Hercules. The parser

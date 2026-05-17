@@ -315,7 +315,7 @@ pub const fn stats_panel_middle_counter(transport_marker: u8) -> StatsPanelMiddl
 /// bytes.
 pub const fn ship_transport_heading_index(byte: u8) -> Option<u8> {
     if is_ship_transport_marker(byte) {
-        Some(byte & 0x03)
+        Some(byte & TRANSPORT_FACING_MASK)
     } else {
         None
     }
