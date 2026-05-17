@@ -422,7 +422,12 @@ pub const fn sleep_ambush_rest_interrupted(roll: u8) -> bool {
 /// then room-major: dungeon `D` occupies the bits at byte offsets
 /// `D*2..=D*2+1`, with low bit = room id 0.
 pub const SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON: usize = 2;
-pub const SAVE_DUNGEON_ROOM_CLEAR_ROOMS_PER_DUNGEON: usize = 16;
+/// `formats/saved-gam.md §10` rooms-per-dungeon ("sixteen room
+/// ids `0..15`") matches the dungeon-format room-arena slot
+/// count. Anchored to [`crate::DUNGEON_ROOM_SLOTS_PER_BANK`] so
+/// the save bitmap layout and the dungeon record layout stay one
+/// value.
+pub const SAVE_DUNGEON_ROOM_CLEAR_ROOMS_PER_DUNGEON: usize = crate::DUNGEON_ROOM_SLOTS_PER_BANK;
 
 /// `formats/saved-gam.md §10`: returns the (byte_offset_within_bitmap,
 /// bit_mask) pair for a (dungeon, room_id) coordinate. Returns

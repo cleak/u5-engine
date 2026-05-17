@@ -1,4 +1,19 @@
     #[test]
+    fn save_dungeon_room_clear_rooms_anchor_to_dungeon_room_slots_per_bank() {
+        // formats/saved-gam.md §10 and formats/dungeon-dat.md §4
+        // both describe the same sixteen room ids 0..15 per
+        // dungeon. The save-side room-count and the dungeon-format-
+        // side per-bank slot count are now anchored so the save
+        // bitmap layout and the dungeon record layout stay one
+        // value.
+        assert_eq!(
+            SAVE_DUNGEON_ROOM_CLEAR_ROOMS_PER_DUNGEON,
+            DUNGEON_ROOM_SLOTS_PER_BANK,
+        );
+        assert_eq!(SAVE_DUNGEON_ROOM_CLEAR_ROOMS_PER_DUNGEON, 16);
+    }
+
+    #[test]
     fn save_inn_registry_count_anchors_to_save_roster_slot_count() {
         // shops.md §8.4: the inn registry is "a 16-slot, save-
         // backed resident view... a shifted legacy view over the
