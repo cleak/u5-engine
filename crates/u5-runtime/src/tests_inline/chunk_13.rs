@@ -1,4 +1,17 @@
     #[test]
+    fn dungeon_room_source_count_aliases_to_slots_per_bank() {
+        // formats/cbt.md §5: each dungeon bank's source records
+        // occupy the same 16 slots as the bank's room table.
+        // combat_arena.rs declared DUNGEON_ROOM_SOURCE_COUNT = 16
+        // as a bare literal in parallel with
+        // tile_helpers::DUNGEON_ROOM_SLOTS_PER_BANK = 16. Anchor
+        // the source count through to the room-slot count so
+        // both refer to the same per-bank slot count.
+        assert_eq!(DUNGEON_ROOM_SOURCE_COUNT, DUNGEON_ROOM_SLOTS_PER_BANK);
+        assert_eq!(DUNGEON_ROOM_SOURCE_COUNT, 16);
+    }
+
+    #[test]
     fn great_light_spell_duration_anchors_to_u8_max() {
         // lighting.md §8: Great Light (Vas Lor) overwrites the
         // light-spell counter with 255 units — the largest byte

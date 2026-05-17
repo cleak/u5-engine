@@ -36,7 +36,11 @@ pub const DUNGEON_ROOM_SOURCE_ROW: usize = 5;
 /// dungeon-room source column derives from the visible/metadata
 /// split.
 pub const DUNGEON_ROOM_SOURCE_COLUMN: usize = COMBAT_ARENA_METADATA_START;
-pub const DUNGEON_ROOM_SOURCE_COUNT: usize = 16;
+/// `formats/cbt.md §5` dungeon-room source slot count per bank.
+/// Equal to [`crate::DUNGEON_ROOM_SLOTS_PER_BANK`] — each bank's
+/// source records occupy the same 16 slots as the bank's room
+/// table. Anchored through to that shared slot count.
+pub const DUNGEON_ROOM_SOURCE_COUNT: usize = crate::DUNGEON_ROOM_SLOTS_PER_BANK;
 pub const DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE: u8 = 0x3c;
 
 /// `formats/cbt.md §5` outdoor metadata band slices. Per-arena setup
