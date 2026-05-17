@@ -1,4 +1,23 @@
     #[test]
+    fn special_item_shard_indices_chain_sequentially() {
+        // catalogs/item-list.md §6: the three Shard special-items
+        // occupy consecutive indices 0x06..=0x08 in the same
+        // order as the Shadow Lord enumeration. Anchor each
+        // shard to the chain so the triplet stays sequential.
+        assert_eq!(
+            SPECIAL_ITEM_SHARD_HATRED_INDEX,
+            SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX + 1,
+        );
+        assert_eq!(
+            SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+            SPECIAL_ITEM_SHARD_HATRED_INDEX + 1,
+        );
+        assert_eq!(SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, 0x06);
+        assert_eq!(SPECIAL_ITEM_SHARD_HATRED_INDEX, 0x07);
+        assert_eq!(SPECIAL_ITEM_SHARD_COWARDICE_INDEX, 0x08);
+    }
+
+    #[test]
     fn save_dungeon_room_clear_bytes_per_dungeon_derive_from_room_count() {
         // formats/saved-gam.md §10: each dungeon's room-clear
         // bitmap packs sixteen room bits at eight bits per byte,

@@ -691,9 +691,14 @@ pub const SPECIAL_ITEM_SKULL_KEY_INDEX: usize = 0x01;
 pub const SPECIAL_ITEM_AMULET_LB_INDEX: usize = 0x03;
 pub const SPECIAL_ITEM_CROWN_LB_INDEX: usize = 0x04;
 pub const SPECIAL_ITEM_SCEPTRE_LB_INDEX: usize = 0x05;
+/// `catalogs/item-list.md §6` the three Shard special-items
+/// occupy consecutive indices 0x06..=0x08 in the same order as
+/// the Shadow Lord enumeration (Falsehood, Hatred, Cowardice).
+/// Anchor each shard to the chain so the triplet stays sequential
+/// and matches the Shadow Lord index order.
 pub const SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX: usize = 0x06;
-pub const SPECIAL_ITEM_SHARD_HATRED_INDEX: usize = 0x07;
-pub const SPECIAL_ITEM_SHARD_COWARDICE_INDEX: usize = 0x08;
+pub const SPECIAL_ITEM_SHARD_HATRED_INDEX: usize = SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX + 1;
+pub const SPECIAL_ITEM_SHARD_COWARDICE_INDEX: usize = SPECIAL_ITEM_SHARD_HATRED_INDEX + 1;
 pub const SPECIAL_ITEM_SPYGLASS_INDEX: usize = 0x0a;
 pub const SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX: usize = 0x0b;
 pub const SPECIAL_ITEM_SEXTANT_INDEX: usize = 0x0c;
