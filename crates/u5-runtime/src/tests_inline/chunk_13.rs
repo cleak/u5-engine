@@ -1,4 +1,17 @@
     #[test]
+    fn rest_mana_cap_aliases_to_spell_charge_cap() {
+        // rest-and-camp.md §3 + inventory.md §2: the per-character
+        // MP cap (99) and the per-spell charge cap (99) are the
+        // same byte-sized magic-counter ceiling. constants.rs
+        // declared REST_MANA_CAP = 99 as a bare literal in
+        // parallel with SPELL_CHARGE_CAP = 99. Anchor
+        // REST_MANA_CAP through to SPELL_CHARGE_CAP so both
+        // magic-counter caps share one source of truth.
+        assert_eq!(REST_MANA_CAP, SPELL_CHARGE_CAP);
+        assert_eq!(REST_MANA_CAP, 99);
+    }
+
+    #[test]
     fn visibility_hidden_anchors_to_u8_max() {
         // visibility.md §2: the fully-obscured marker is the
         // largest representable byte value (0xFF) — the renderer

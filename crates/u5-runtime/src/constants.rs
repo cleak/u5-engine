@@ -1209,7 +1209,13 @@ pub const TOWN_REST_TICK_BUDGET: u16 =
 /// `Space` and `0` cancel; `1..=9` are echoed and used as the target-
 /// hour offset.
 pub const TOWN_REST_DURATION_DIGIT_MAX: u8 = 9;
-pub const REST_MANA_CAP: u8 = 99;
+/// `rest-and-camp.md §3`: party-rest tick raises each character's
+/// MP toward the published byte-stat cap of 99. Same two-digit
+/// display cap as [`SPELL_CHARGE_CAP`] (both byte-sized magic
+/// counters cap at 99 in ordinary play). Anchored through to
+/// SPELL_CHARGE_CAP so the per-character MP cap and the per-spell
+/// charge cap share one source of truth.
+pub const REST_MANA_CAP: u8 = SPELL_CHARGE_CAP;
 pub const DEFAULT_TORCH_STOCK: u8 = 4;
 pub const SURFACE_TORCH_DURATION: u8 = 240;
 /// `lighting.md §8` dungeon Ignite minimum increment. Same value as
