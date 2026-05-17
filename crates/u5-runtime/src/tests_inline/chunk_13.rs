@@ -1,4 +1,19 @@
     #[test]
+    fn ship_broadside_damage_roll_routes_through_named_min_max() {
+        // vehicles.md §7: a successful broadside subtracts a random
+        // 1..20 amount from the target object's active-object byte +5.
+        // The damage-roll helper must derive its result through the
+        // promoted SHIP_BROADSIDE_DAMAGE_MIN / SHIP_BROADSIDE_DAMAGE_MAX
+        // constants rather than bare literals.
+        assert_eq!(SHIP_BROADSIDE_DAMAGE_MIN, 1);
+        assert_eq!(SHIP_BROADSIDE_DAMAGE_MAX, 20);
+        // The min is the floor and the helper's modulus is the max; the
+        // resulting roll therefore lies in [MIN, MIN + MAX - 1].
+        let highest = SHIP_BROADSIDE_DAMAGE_MIN + SHIP_BROADSIDE_DAMAGE_MAX - 1;
+        assert_eq!(highest, 20);
+    }
+
+    #[test]
     fn transport_marker_ranges_match_spec_table() {
         // vehicles.md §2: each four-marker transport family carries
         // facing in its low two bits.

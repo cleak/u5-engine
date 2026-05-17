@@ -1361,7 +1361,9 @@ impl PlayState {
         slot: usize,
         object: ActiveObject,
     ) -> u8 {
-        1 + (self.ship_broadside_damage_seed(direction, slot, object) % 20)
+        SHIP_BROADSIDE_DAMAGE_MIN
+            + (self.ship_broadside_damage_seed(direction, slot, object)
+                % SHIP_BROADSIDE_DAMAGE_MAX)
     }
 
     pub fn ship_broadside_damage_seed(
