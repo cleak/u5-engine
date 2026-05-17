@@ -516,12 +516,18 @@ pub const RARE_REAGENT_HARVEST_QUANTITY_MAX: u8 = 15;
 pub const RARE_REAGENT_HARVEST_HOUR: u8 = 0;
 pub const RARE_REAGENT_HARVEST_MINUTE_BOUND: u8 = 60;
 
+/// `containers.md §5`: width of the rare-reagent harvest band
+/// (`MAX - MIN + 1`). Used as the modulus on the harvest-quantity
+/// seed so every value in `[MIN, MAX]` is reachable.
+pub const RARE_REAGENT_HARVEST_QUANTITY_SPAN: u8 =
+    RARE_REAGENT_HARVEST_QUANTITY_MAX - RARE_REAGENT_HARVEST_QUANTITY_MIN + 1;
+
 /// `containers.md §5`: returns the harvest-quantity amount for one
 /// uniform seed byte. The shipped helper rolls `2 + (seed % 14)`,
 /// which produces every value in `2..=15` either 18 or 19 times
 /// across the 256-value seed domain.
 pub const fn rare_reagent_harvest_quantity(seed: u8) -> u8 {
-    RARE_REAGENT_HARVEST_QUANTITY_MIN + (seed % 14)
+    RARE_REAGENT_HARVEST_QUANTITY_MIN + (seed % RARE_REAGENT_HARVEST_QUANTITY_SPAN)
 }
 
 /// `containers.md §5`: returns `true` when the in-game hour qualifies

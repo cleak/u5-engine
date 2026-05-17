@@ -472,6 +472,28 @@
     }
 
     #[test]
+    fn rare_reagent_harvest_quantity_span_matches_min_max_band() {
+        // containers.md §5: the rare-reagent harvest rolls in the
+        // inclusive `2..=15` range; the modulus on the seed must be
+        // `MAX - MIN + 1` so every value in that band is reachable.
+        // Promote the span so rare_reagent_harvest_quantity does not
+        // bake `14` as a bare modulus literal.
+        assert_eq!(
+            RARE_REAGENT_HARVEST_QUANTITY_SPAN,
+            RARE_REAGENT_HARVEST_QUANTITY_MAX - RARE_REAGENT_HARVEST_QUANTITY_MIN + 1
+        );
+        assert_eq!(RARE_REAGENT_HARVEST_QUANTITY_SPAN, 14);
+        // Every seed value still lands inside the published band.
+        for seed in 0u8..=u8::MAX {
+            let q = rare_reagent_harvest_quantity(seed);
+            assert!(
+                (RARE_REAGENT_HARVEST_QUANTITY_MIN..=RARE_REAGENT_HARVEST_QUANTITY_MAX)
+                    .contains(&q)
+            );
+        }
+    }
+
+    #[test]
     fn potion_variation_threshold_constants_match_spec() {
         // inventory.md §7: the consumed-potion variation roll has
         // fourteen of sixteen outcomes (0..=13) preserve the chosen

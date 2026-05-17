@@ -171,6 +171,7 @@ pub use containers::{
     dungeon_chest_search_outcome,
     RARE_REAGENT_HARVEST_HOUR, RARE_REAGENT_HARVEST_MINUTE_BOUND,
     RARE_REAGENT_HARVEST_QUANTITY_MAX, RARE_REAGENT_HARVEST_QUANTITY_MIN,
+    RARE_REAGENT_HARVEST_QUANTITY_SPAN,
     TOWN_CHEST_OPEN_KARMA_DEBIT, rare_reagent_harvest_hour_accepted,
     rare_reagent_harvest_quantity, town_chest_open_standing,
     InventoryAddClass, SearchLocationPrefix, SearchTrapVisibility, TABLE_FOOD_TILE_A,
