@@ -1,4 +1,18 @@
     #[test]
+    fn save_flow_double_underworld_routes_through_canonical_mode() {
+        // save-load.md §5.2 step 5: the underworld mirror double-flush
+        // runs unless the entry disk-prompt mode is already canonical
+        // (mode 1). Route the predicate's bare literal through the
+        // named DISK_PROMPT_MODE_CANONICAL.
+        assert!(!save_flow_double_writes_underworld(DISK_PROMPT_MODE_CANONICAL));
+        assert!(save_flow_double_writes_underworld(0));
+        // Alias modes still trigger the double-write before
+        // normalisation collapses them.
+        assert!(save_flow_double_writes_underworld(DISK_PROMPT_MODE_ALIAS_A));
+        assert!(save_flow_double_writes_underworld(DISK_PROMPT_MODE_ALIAS_B));
+    }
+
+    #[test]
     fn combat_post_round_terrain_dispatch_bytes_match_spec() {
         // combat.md §7: post-round maintenance sweeps the 11x11
         // combat arena and dispatches based on the terrain/state byte.

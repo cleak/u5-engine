@@ -492,9 +492,10 @@ pub const fn save_load_needs_underworld_disk_swap(scene_byte: u8, party_z: u8) -
 /// `save-load.md §5.2` step 5: the save handler writes the underworld
 /// staging half to `UNDER.OOL` once unconditionally, then a second time
 /// as a defensive re-flush when the entry disk-prompt mode was *not*
-/// already mode 1. Returns `true` when the second write should run.
+/// already [`DISK_PROMPT_MODE_CANONICAL`]. Returns `true` when the
+/// second write should run.
 pub const fn save_flow_double_writes_underworld(entry_disk_prompt_mode: u8) -> bool {
-    entry_disk_prompt_mode != 1
+    entry_disk_prompt_mode != DISK_PROMPT_MODE_CANONICAL
 }
 
 /// `screen-mode-dispatch.md §5`: canonical disk-prompt mode the
