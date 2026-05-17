@@ -1,4 +1,17 @@
     #[test]
+    fn tile_atlas_strides_anchor_to_pixels_per_byte() {
+        // formats/tiles.md §3, §4: EGA and CGA tile pixel data
+        // pack at EGA_PIXELS_PER_BYTE (2) and CGA_PIXELS_PER_BYTE
+        // (4) pixels per byte. Anchor the atlas per-tile strides
+        // to those divisors so the packing densities and the
+        // per-tile byte strides stay one value.
+        assert_eq!(TILE_ATLAS_EGA_TILE_STRIDE, TILE_ATLAS_TILE_PIXELS / EGA_PIXELS_PER_BYTE);
+        assert_eq!(TILE_ATLAS_CGA_TILE_STRIDE, TILE_ATLAS_TILE_PIXELS / CGA_PIXELS_PER_BYTE);
+        assert_eq!(TILE_ATLAS_EGA_TILE_STRIDE, 128);
+        assert_eq!(TILE_ATLAS_CGA_TILE_STRIDE, 64);
+    }
+
+    #[test]
     fn tile_pixel_side_anchors_to_tile_atlas_side() {
         // formats/tiles.md §1, §5.1: each shared world tile is
         // 16 pixels on a side. constants.rs declared TILE_PIXEL_SIDE

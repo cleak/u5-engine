@@ -160,8 +160,16 @@ pub const TILE_ATLAS_TILE_COUNT: usize = 512;
 pub const TILE_ATLAS_SIDE: usize = 16;
 pub const TILE_ATLAS_TILE_PIXELS: usize = TILE_ATLAS_SIDE * TILE_ATLAS_SIDE;
 pub const TILE_ATLAS_PIXEL_LEN: usize = TILE_ATLAS_TILE_COUNT * TILE_ATLAS_TILE_PIXELS;
-pub const TILE_ATLAS_EGA_TILE_STRIDE: usize = TILE_ATLAS_TILE_PIXELS / 2;
-pub const TILE_ATLAS_CGA_TILE_STRIDE: usize = TILE_ATLAS_TILE_PIXELS / 4;
+/// `formats/tiles.md §3`: EGA tile pixel data packs at
+/// `EGA_PIXELS_PER_BYTE` pixels per byte. Anchor the stride to
+/// that divisor so the EGA packing density and the per-tile
+/// byte stride share one source of truth.
+pub const TILE_ATLAS_EGA_TILE_STRIDE: usize = TILE_ATLAS_TILE_PIXELS / EGA_PIXELS_PER_BYTE;
+/// `formats/tiles.md §4`: CGA tile pixel data packs at
+/// `CGA_PIXELS_PER_BYTE` pixels per byte. Anchor the stride to
+/// that divisor so the CGA packing density and the per-tile
+/// byte stride share one source of truth.
+pub const TILE_ATLAS_CGA_TILE_STRIDE: usize = TILE_ATLAS_TILE_PIXELS / CGA_PIXELS_PER_BYTE;
 pub const TILE_ATLAS_EGA_BODY_LEN: usize = TILE_ATLAS_TILE_COUNT * TILE_ATLAS_EGA_TILE_STRIDE;
 pub const TILE_ATLAS_CGA_BODY_LEN: usize = TILE_ATLAS_TILE_COUNT * TILE_ATLAS_CGA_TILE_STRIDE;
 pub const LZW_CLEAR_CODE: u16 = 256;
