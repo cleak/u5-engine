@@ -1,4 +1,24 @@
     #[test]
+    fn npc_block_offsets_chain_through_slots_per_sub_map() {
+        // formats/npc.md §3: each sub-map ships 32 NPC slots; the
+        // schedule array packs 32 × 16 = 512 bytes, then the type
+        // and dialog arrays each carry 32 bytes immediately after.
+        // The block offsets and lengths are now anchored to
+        // NPC_SLOTS_PER_SUB_MAP and the previous-block end so the
+        // per-NPC layout has one source of truth.
+        assert_eq!(NPC_SCHEDULE_ARRAY_LEN, NPC_SLOTS_PER_SUB_MAP * NPC_SCHEDULE_RECORD_LEN);
+        assert_eq!(NPC_TYPE_ARRAY_OFFSET, NPC_SCHEDULE_ARRAY_LEN);
+        assert_eq!(NPC_TYPE_ARRAY_LEN, NPC_SLOTS_PER_SUB_MAP);
+        assert_eq!(NPC_DIALOG_ARRAY_OFFSET, NPC_TYPE_ARRAY_OFFSET + NPC_TYPE_ARRAY_LEN);
+        assert_eq!(NPC_DIALOG_ARRAY_LEN, NPC_SLOTS_PER_SUB_MAP);
+        assert_eq!(NPC_SCHEDULE_ARRAY_LEN, 512);
+        assert_eq!(NPC_TYPE_ARRAY_OFFSET, 512);
+        assert_eq!(NPC_TYPE_ARRAY_LEN, 32);
+        assert_eq!(NPC_DIALOG_ARRAY_OFFSET, 544);
+        assert_eq!(NPC_DIALOG_ARRAY_LEN, 32);
+    }
+
+    #[test]
     fn combat_max_combatants_and_record_len_anchor() {
         // active-objects.md §7: combat caps total combatants at
         // the last monster slot index + 1 (slots 0..=25 = 26

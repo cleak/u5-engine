@@ -334,11 +334,17 @@ pub const NPC_FILE_LEN: usize = 4608;
 pub const NPC_SUB_MAP_LEN: usize = 576;
 pub const NPC_SUB_MAPS_PER_FILE: usize = 8;
 pub const NPC_SCHEDULE_RECORD_LEN: usize = 16;
-pub const NPC_SCHEDULE_ARRAY_LEN: usize = 512;
-pub const NPC_TYPE_ARRAY_OFFSET: usize = 512;
-pub const NPC_TYPE_ARRAY_LEN: usize = 32;
-pub const NPC_DIALOG_ARRAY_OFFSET: usize = 544;
-pub const NPC_DIALOG_ARRAY_LEN: usize = 32;
+/// `formats/npc.md §3` per-NPC-block layout. Each sub-map ships
+/// 32 NPC slots; the schedule array packs 32 records of 16
+/// bytes (= 512 bytes), then the type and dialog arrays each
+/// hold 32 bytes immediately after. Anchor each offset/length to
+/// NPC_SLOTS_PER_SUB_MAP (or the previous-block end) so adding
+/// or resizing any block automatically shifts the later offsets.
+pub const NPC_SCHEDULE_ARRAY_LEN: usize = NPC_SLOTS_PER_SUB_MAP * NPC_SCHEDULE_RECORD_LEN;
+pub const NPC_TYPE_ARRAY_OFFSET: usize = NPC_SCHEDULE_ARRAY_LEN;
+pub const NPC_TYPE_ARRAY_LEN: usize = NPC_SLOTS_PER_SUB_MAP;
+pub const NPC_DIALOG_ARRAY_OFFSET: usize = NPC_TYPE_ARRAY_OFFSET + NPC_TYPE_ARRAY_LEN;
+pub const NPC_DIALOG_ARRAY_LEN: usize = NPC_SLOTS_PER_SUB_MAP;
 pub const NPC_SLOTS_PER_SUB_MAP: usize = 32;
 
 /// `formats/npc.md §5` schedule-record sub-field widths. Each
