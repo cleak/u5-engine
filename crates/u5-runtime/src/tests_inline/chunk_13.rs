@@ -1,4 +1,21 @@
     #[test]
+    fn animation_phase_steady_nibble_anchors_to_low_nibble_mask() {
+        // active-objects.md §8: the "steady, do not animate"
+        // sentinel in byte 6 is the all-ones nibble (0x0F) — the
+        // same all-ones nibble that ACTIVE_OBJECT_PHASE_LOW_NIBBLE_MASK
+        // names. active_object_io.rs declared
+        // ANIMATION_PHASE_STEADY_NIBBLE = 0x0F as a bare literal
+        // in parallel with ACTIVE_OBJECT_PHASE_LOW_NIBBLE_MASK = 0x0F.
+        // Anchor the sentinel through to the low-nibble mask so
+        // both names share one source of truth.
+        assert_eq!(
+            ANIMATION_PHASE_STEADY_NIBBLE,
+            ACTIVE_OBJECT_PHASE_LOW_NIBBLE_MASK,
+        );
+        assert_eq!(ANIMATION_PHASE_STEADY_NIBBLE, 0x0F);
+    }
+
+    #[test]
     fn movement_facing_range_uppers_anchor_to_facing_mask() {
         // movement.md §4: the chair-tile force-reject range
         // (0x90..=0x93) and the on-foot/avatar query family

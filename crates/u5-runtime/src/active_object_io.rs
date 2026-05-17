@@ -318,8 +318,11 @@ pub enum AnimationPhaseStep {
 }
 
 /// All-ones nibble in byte 6 marks "steady, do not animate" per
-/// `active-objects.md §8`.
-pub const ANIMATION_PHASE_STEADY_NIBBLE: u8 = 0x0F;
+/// `active-objects.md §8`. Anchored to
+/// [`ACTIVE_OBJECT_PHASE_LOW_NIBBLE_MASK`] so the "steady"
+/// sentinel and the low-nibble mask share one source of truth —
+/// both name the same all-ones-nibble value.
+pub const ANIMATION_PHASE_STEADY_NIBBLE: u8 = ACTIVE_OBJECT_PHASE_LOW_NIBBLE_MASK;
 
 /// `active-objects.md §3` / `formats/ool.md §4` packed phase-byte
 /// (byte 6) low-nibble mask. The low nibble holds the animation-phase
