@@ -90,7 +90,9 @@ pub const SIGN_BODY_MACRO_LAST: u8 = 0x31;
 /// a decorative divider; both render the same separator glyph.
 pub const SIGN_BODY_SEPARATOR_GLYPH_A: u8 = 0x26;
 /// `formats/signs-dat.md §4` second separator-glyph byte (`0x27`).
-pub const SIGN_BODY_SEPARATOR_GLYPH_B: u8 = 0x27;
+/// Anchored to SIGN_BODY_SEPARATOR_GLYPH_A + 1 so the paired
+/// adjacent bytes have one source of truth.
+pub const SIGN_BODY_SEPARATOR_GLYPH_B: u8 = SIGN_BODY_SEPARATOR_GLYPH_A + 1;
 /// `formats/signs-dat.md §4` low-seven-bit character mask. Ordinary
 /// printable bytes render the low seven bits; the high bit is a
 /// presentation-mode toggle owned by the surrounding Look renderer.

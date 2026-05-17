@@ -1,4 +1,17 @@
     #[test]
+    fn sign_body_separator_glyph_b_anchors_to_separator_glyph_a() {
+        // formats/signs-dat.md §4: shipped records pair separator
+        // glyphs at 0x26 and 0x27 as decorative dividers; both
+        // render the same glyph. signs_io.rs declared both as
+        // parallel bare 0x26/0x27 literals. Anchor
+        // SIGN_BODY_SEPARATOR_GLYPH_B to SEPARATOR_GLYPH_A + 1
+        // so the paired adjacent bytes have one source of truth.
+        assert_eq!(SIGN_BODY_SEPARATOR_GLYPH_B, SIGN_BODY_SEPARATOR_GLYPH_A + 1);
+        assert_eq!(SIGN_BODY_SEPARATOR_GLYPH_A, 0x26);
+        assert_eq!(SIGN_BODY_SEPARATOR_GLYPH_B, 0x27);
+    }
+
+    #[test]
     fn brit_dat_len_anchors_to_stored_chunks_times_chunk_bytes() {
         // formats/brit-dat.md §2: BRIT.DAT total file size = 205
         // stored chunks × 256 bytes per chunk = 52,480 bytes.
