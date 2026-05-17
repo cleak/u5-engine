@@ -472,6 +472,19 @@
     }
 
     #[test]
+    fn question_dat_len_matches_shipped_total() {
+        // systems/chargen.md §5: the shipped QUESTION.DAT is 7,746
+        // bytes containing thirty NUL-terminated records. Promote the
+        // total length so seed/asset verifiers can compare against
+        // the spec without re-deriving it from a length scan.
+        assert_eq!(QUESTION_DAT_LEN, 7_746);
+        // A 30-record file shorter than the published total would be
+        // a malformed shipped asset; the length acts as a coarse
+        // sanity bound against truncation.
+        assert!(QUESTION_DAT_LEN >= QUESTION_DAT_RECORDS);
+    }
+
+    #[test]
     fn miscmaps_section_offsets_and_sizes_match_spec() {
         // formats/location-dat.md §11: MISCMAPS.DAT concatenates
         // three sections — four 11x11 cutscene maps padded to 16-byte

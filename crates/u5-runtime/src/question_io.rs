@@ -53,6 +53,12 @@ pub const QUESTION_DAT_FIRST_DILEMMA_RECORD: usize = 2;
 /// `formats/question-dat.md §4`: number of virtue-dilemma paragraphs
 /// (`C(8,2) = 28`).
 pub const QUESTION_DAT_DILEMMA_COUNT: usize = 28;
+/// `systems/chargen.md §5`: shipped `QUESTION.DAT` size in bytes.
+/// The thirty NUL-terminated text records pack to exactly this
+/// total in the DOS data set. A byte-compatible reader should still
+/// scan to the published record count rather than relying on this
+/// number to delimit records.
+pub const QUESTION_DAT_LEN: usize = 7_746;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuestionRecords {
