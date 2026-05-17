@@ -340,7 +340,14 @@ pub const NPC_FILE_LEN: usize = NPC_SUB_MAPS_PER_FILE * NPC_SUB_MAP_LEN;
 pub const NPC_SUB_MAP_LEN: usize =
     NPC_SCHEDULE_ARRAY_LEN + NPC_TYPE_ARRAY_LEN + NPC_DIALOG_ARRAY_LEN;
 pub const NPC_SUB_MAPS_PER_FILE: usize = 8;
-pub const NPC_SCHEDULE_RECORD_LEN: usize = 16;
+/// `formats/npc.md §5` schedule-record byte length. Each record
+/// packs four 3-byte arrays (AI/X/Y/Z) and one 4-byte time-of-day
+/// boundary array, for 4 × 3 + 4 = 16 bytes total. Anchored to
+/// `4 * NPC_SCHEDULE_WAYPOINT_COUNT + NPC_SCHEDULE_TIME_BOUNDARY_COUNT`
+/// so resizing the waypoint count or time boundary count
+/// automatically shifts the record stride.
+pub const NPC_SCHEDULE_RECORD_LEN: usize =
+    4 * NPC_SCHEDULE_WAYPOINT_COUNT + NPC_SCHEDULE_TIME_BOUNDARY_COUNT;
 /// `formats/npc.md §3` per-NPC-block layout. Each sub-map ships
 /// 32 NPC slots; the schedule array packs 32 records of 16
 /// bytes (= 512 bytes), then the type and dialog arrays each

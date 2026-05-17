@@ -1,4 +1,20 @@
     #[test]
+    fn npc_schedule_record_len_anchors_to_waypoint_and_time_counts() {
+        // formats/npc.md §5: each 16-byte schedule record packs
+        // four 3-byte arrays (AI/X/Y/Z) plus a 4-byte time-of-day
+        // boundary array. Anchor NPC_SCHEDULE_RECORD_LEN to
+        // 4 × NPC_SCHEDULE_WAYPOINT_COUNT +
+        // NPC_SCHEDULE_TIME_BOUNDARY_COUNT so resizing the waypoint
+        // count or time boundary count automatically shifts the
+        // record stride.
+        assert_eq!(
+            NPC_SCHEDULE_RECORD_LEN,
+            4 * NPC_SCHEDULE_WAYPOINT_COUNT + NPC_SCHEDULE_TIME_BOUNDARY_COUNT,
+        );
+        assert_eq!(NPC_SCHEDULE_RECORD_LEN, 16);
+    }
+
+    #[test]
     fn combat_spawn_count_cap_anchors_to_max_combatants() {
         // combat.md §5: the post-roll spawn-count clamp reduces
         // the count to the combat actor table's total combatant
