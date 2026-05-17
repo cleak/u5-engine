@@ -1,4 +1,16 @@
     #[test]
+    fn stat_reward_caps_anchor_to_avatar_stat_max() {
+        // karma.md §7 (Codex turn-in) and rest-and-camp.md §7 (Lord
+        // British camp stat reward) both clamp the reward at the
+        // engine-wide Avatar stat ceiling of 30. The two caps are
+        // now anchored to AVATAR_STAT_MAX so the global ceiling has
+        // one source of truth.
+        assert_eq!(CODEX_TURNIN_STAT_CAP, AVATAR_STAT_MAX);
+        assert_eq!(LORD_BRITISH_CAMP_STAT_REWARD_CAP, AVATAR_STAT_MAX);
+        assert_eq!(AVATAR_STAT_MAX, 30);
+    }
+
+    #[test]
     fn reagent_count_anchors_to_last_reagent_index() {
         // spell-list.md §3 / inventory.md §2 ship eight reagents at
         // catalog indices SULFUR_ASH (0) through MANDRAKE (7). The

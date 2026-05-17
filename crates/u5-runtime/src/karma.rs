@@ -105,7 +105,11 @@ pub const fn shrine_mantra_for(virtue: ShrineVirtue) -> &'static str {
 /// columns chargen scores at `+2` per question are scored at `+1`
 /// here, except Humility which still grants no stat reward.
 pub const CODEX_TURNIN_STAT_INCREMENT: u8 = 1;
-pub const CODEX_TURNIN_STAT_CAP: u8 = 30;
+/// `karma.md §7` Codex turn-in stat-reward cap. The reward clamps
+/// each touched stat at the engine-wide Avatar stat ceiling
+/// (thirty). Anchored to [`crate::AVATAR_STAT_MAX`] so the
+/// turn-in cap and the global stat ceiling stay one value.
+pub const CODEX_TURNIN_STAT_CAP: u8 = crate::AVATAR_STAT_MAX;
 pub const fn codex_turnin_stat_reward(virtue: ShrineVirtue) -> (u8, u8, u8) {
     match virtue {
         ShrineVirtue::Honesty => (0, 0, 1),

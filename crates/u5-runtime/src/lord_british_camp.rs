@@ -48,8 +48,10 @@ pub enum LordBritishCampStatReward {
     Intelligence,
 }
 
-/// `rest-and-camp.md §7`: per-stat increase cap.
-pub const LORD_BRITISH_CAMP_STAT_REWARD_CAP: u8 = 30;
+/// `rest-and-camp.md §7`: per-stat increase cap. Anchored to
+/// [`crate::AVATAR_STAT_MAX`] so the camp stat-reward ceiling and
+/// the engine-wide Avatar stat ceiling stay one value.
+pub const LORD_BRITISH_CAMP_STAT_REWARD_CAP: u8 = crate::AVATAR_STAT_MAX;
 
 /// `rest-and-camp.md §7`: classify a `random(1, 3)` roll into the
 /// stat that is incremented by one. Returns `None` for rolls outside
