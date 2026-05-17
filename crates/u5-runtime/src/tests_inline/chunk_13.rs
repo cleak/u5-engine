@@ -1,4 +1,19 @@
     #[test]
+    fn end_paragraph_markers_anchor_to_question_markers() {
+        // formats/end-dat.md §3 / formats/question-dat.md §3 /
+        // formats/font-pcs.md: the same proportional-font
+        // paragraph renderer handles both END.DAT and QUESTION.DAT
+        // text — both formats use `{` as paragraph-start marker
+        // and `_` as soft-break marker. Anchor the END.DAT
+        // markers to the QUESTION.DAT markers so the two
+        // renderer-targeted formats share one source of truth.
+        assert_eq!(END_PARAGRAPH_START_MARKER, QUESTION_PARAGRAPH_START_MARKER);
+        assert_eq!(END_SOFT_BREAK_MARKER, QUESTION_SOFT_BREAK_MARKER);
+        assert_eq!(END_PARAGRAPH_START_MARKER, b'{');
+        assert_eq!(END_SOFT_BREAK_MARKER, b'_');
+    }
+
+    #[test]
     fn ship_broadside_depletion_byte_anchors_to_active_object_dep1() {
         // vehicles.md §7: the ship-broadside damage path
         // subtracts from active-object field DEP1 (offset 5 in

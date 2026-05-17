@@ -24,13 +24,17 @@ pub const END_DAT_WINDOW_COUNT: usize = 6;
 
 /// `formats/end-dat.md §3` page/paragraph-start marker the
 /// proportional-font renderer walks past without emitting a glyph.
-/// Identical convention to STORY_PARAGRAPH_START_MARKER; promoted
-/// here so the END.DAT decoder names its layout marker locally.
-pub const END_PARAGRAPH_START_MARKER: u8 = b'{';
+/// Identical convention to QUESTION_PARAGRAPH_START_MARKER (the
+/// same renderer handles END.DAT and QUESTION.DAT — see
+/// formats/font-pcs.md). Anchored to
+/// [`crate::QUESTION_PARAGRAPH_START_MARKER`] so the two
+/// renderer-targeted formats share one paragraph-marker byte.
+pub const END_PARAGRAPH_START_MARKER: u8 = crate::QUESTION_PARAGRAPH_START_MARKER;
 /// `formats/end-dat.md §3` soft-hyphen / syllable-break marker the
 /// proportional-font renderer treats as a line-break opportunity
-/// without rendering it as an underscore glyph.
-pub const END_SOFT_BREAK_MARKER: u8 = b'_';
+/// without rendering it as an underscore glyph. Anchored to
+/// [`crate::QUESTION_SOFT_BREAK_MARKER`] for the same reason.
+pub const END_SOFT_BREAK_MARKER: u8 = crate::QUESTION_SOFT_BREAK_MARKER;
 
 /// `formats/end-dat.md §4` semantic role for each fixed window.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
