@@ -563,7 +563,13 @@ pub const EQUIPMENT_ID_AMULET_TURNING: usize = 45;
 /// adding or renaming a reagent only happens in one place.
 pub const REAGENT_COUNT: usize = REAGENT_MANDRAKE + 1;
 pub const VIRTUE_COUNT: usize = 8;
-pub const SHRINE_STANDING_MAX: u8 = 99;
+/// `karma.md §1`: per-virtue shrine standing caps at ninety-nine.
+/// The traced moral-standing selector ([`MORAL_STANDING_MAX`])
+/// and per-virtue shrine standings share the same byte cap;
+/// anchor here so both move as one value.
+pub const SHRINE_STANDING_MAX: u8 = MORAL_STANDING_MAX;
+/// `karma.md §3`: the moral-standing selector caps at ninety-nine
+/// across all add paths (NPC thank-you, toll milestone, etc.).
 pub const MORAL_STANDING_MAX: u8 = 99;
 pub const AVATAR_STAT_MAX: u8 = 30;
 pub const REAGENT_SULFUR_ASH: usize = 0;

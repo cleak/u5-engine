@@ -1,4 +1,15 @@
     #[test]
+    fn shrine_standing_cap_anchors_to_moral_standing_cap() {
+        // karma.md §1: per-virtue shrine standing caps at 99 — the
+        // same byte ceiling karma.md §3 documents for the moral-
+        // standing selector ("capped at ninety-nine"). Anchor
+        // SHRINE_STANDING_MAX to MORAL_STANDING_MAX so both move
+        // as one value.
+        assert_eq!(SHRINE_STANDING_MAX, MORAL_STANDING_MAX);
+        assert_eq!(SHRINE_STANDING_MAX, 99);
+    }
+
+    #[test]
     fn stat_reward_caps_anchor_to_avatar_stat_max() {
         // karma.md §7 (Codex turn-in) and rest-and-camp.md §7 (Lord
         // British camp stat reward) both clamp the reward at the
