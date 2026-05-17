@@ -270,13 +270,19 @@ pub const SAVE_CHARACTER_ROSTER_SLOTS: usize = SAVE_ROSTER_SLOT_COUNT;
 /// `formats/saved-gam.md §4`: party-size byte range (`1..=6`).
 pub const SAVE_PARTY_SIZE_MIN: u8 = 1;
 pub const SAVE_PARTY_SIZE_MAX: u8 = 6;
+/// `formats/saved-gam.md §4` party inventory band starts at
+/// 0x0202 with the word-sized food counter. The subsequent
+/// counters chain by their stored widths: food/gold are words
+/// (2 bytes each); key/gem/torch/climbing gear are single
+/// bytes. Anchor each offset to the chain so resizing any
+/// stock counter automatically shifts the later offsets.
 pub const SAVE_FOOD_STOCK_OFFSET: usize = 0x0202;
-pub const SAVE_GOLD_STOCK_OFFSET: usize = 0x0204;
-pub const SAVE_KEY_STOCK_OFFSET: usize = 0x0206;
-pub const SAVE_GEM_STOCK_OFFSET: usize = 0x0207;
-pub const SAVE_TORCH_STOCK_OFFSET: usize = 0x0208;
-pub const SAVE_CLIMBING_GEAR_OFFSET: usize = 0x0209;
-pub const SAVE_SPECIAL_ITEM_OFFSET: usize = 0x020a;
+pub const SAVE_GOLD_STOCK_OFFSET: usize = SAVE_FOOD_STOCK_OFFSET + 2;
+pub const SAVE_KEY_STOCK_OFFSET: usize = SAVE_GOLD_STOCK_OFFSET + 2;
+pub const SAVE_GEM_STOCK_OFFSET: usize = SAVE_KEY_STOCK_OFFSET + 1;
+pub const SAVE_TORCH_STOCK_OFFSET: usize = SAVE_GEM_STOCK_OFFSET + 1;
+pub const SAVE_CLIMBING_GEAR_OFFSET: usize = SAVE_TORCH_STOCK_OFFSET + 1;
+pub const SAVE_SPECIAL_ITEM_OFFSET: usize = SAVE_CLIMBING_GEAR_OFFSET + 1;
 pub const SAVE_EQUIPMENT_STOCK_OFFSET: usize = 0x021a;
 pub const SAVE_SPELL_CHARGES_OFFSET: usize = 0x024a;
 pub const SAVE_SCROLL_STOCK_OFFSET: usize = 0x027a;

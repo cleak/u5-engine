@@ -1,4 +1,21 @@
     #[test]
+    fn save_party_inventory_offsets_chain_food_to_special_item() {
+        // formats/saved-gam.md §4: party inventory band starts at
+        // 0x0202 with the word-sized food counter, then gold (word),
+        // key/gem/torch/climbing gear (single bytes each), and the
+        // special-item band. Anchor each offset to the per-byte
+        // chain rooted at SAVE_FOOD_STOCK_OFFSET so resizing any
+        // counter automatically shifts the later offsets.
+        assert_eq!(SAVE_FOOD_STOCK_OFFSET, 0x0202);
+        assert_eq!(SAVE_GOLD_STOCK_OFFSET, 0x0204);
+        assert_eq!(SAVE_KEY_STOCK_OFFSET, 0x0206);
+        assert_eq!(SAVE_GEM_STOCK_OFFSET, 0x0207);
+        assert_eq!(SAVE_TORCH_STOCK_OFFSET, 0x0208);
+        assert_eq!(SAVE_CLIMBING_GEAR_OFFSET, 0x0209);
+        assert_eq!(SAVE_SPECIAL_ITEM_OFFSET, 0x020a);
+    }
+
+    #[test]
     fn save_character_stat_offsets_chain_to_equipment_band() {
         // formats/saved-gam.md §3 per-record layout: status, str,
         // dex, int, mana, hp(2), max_hp(2), experience(2),
