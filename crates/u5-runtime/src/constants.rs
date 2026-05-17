@@ -460,7 +460,11 @@ pub const SCROLL_COUNT: usize = SCROLL_NEGATE_TIME_INDEX + 1;
 pub const SCROLL_SPELL_LABELS: [&str; SCROLL_COUNT] = [
     "LV", "HR", "IS", "AI", "IQW", "CKX", "CIM", "AT",
 ];
-pub const POTION_COUNT: usize = 8;
+/// `inventory.md §7` potion catalog size. The eight potion
+/// indices span BLUE (0) through WHITE (7); anchor the count to
+/// [`POTION_WHITE_INDEX`] + 1 so adding or renaming a potion
+/// only happens in one place.
+pub const POTION_COUNT: usize = POTION_WHITE_INDEX + 1;
 pub const POTION_BLUE_INDEX: usize = 0;
 pub const POTION_YELLOW_INDEX: usize = 1;
 pub const POTION_RED_INDEX: usize = 2;

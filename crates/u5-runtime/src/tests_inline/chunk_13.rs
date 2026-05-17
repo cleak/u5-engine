@@ -1,4 +1,16 @@
     #[test]
+    fn potion_count_anchors_to_last_potion_index() {
+        // inventory.md §7: eight potions at catalog indices BLUE
+        // (0) through WHITE (7). Anchor POTION_COUNT to
+        // POTION_WHITE_INDEX + 1 so adding or renaming a potion
+        // only happens in one place.
+        assert_eq!(POTION_COUNT, POTION_WHITE_INDEX + 1);
+        assert_eq!(POTION_COUNT, 8);
+        assert_eq!(POTION_BLUE_INDEX, 0);
+        assert_eq!(POTION_WHITE_INDEX, 7);
+    }
+
+    #[test]
     fn scroll_count_anchors_to_last_scroll_index() {
         // inventory.md §7: eight U-Use scrolls at catalog indices
         // LIGHT (0) through NEGATE_TIME (7). Anchor SCROLL_COUNT
