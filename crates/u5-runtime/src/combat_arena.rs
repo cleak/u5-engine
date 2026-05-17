@@ -24,8 +24,11 @@ pub const BRIT_CBT_RECORDS: usize = 16;
 /// `formats/cbt.md §2`: number of dungeon-room arena banks in
 /// `DUNGEON.CBT`. Seven of the eight stock dungeons have authored
 /// room triggers (Despise carries none); each contributing dungeon
-/// owns one 16-slot bank.
-pub const DUNGEON_CBT_BANK_COUNT: usize = 7;
+/// owns one 16-slot bank. Anchored to
+/// [`crate::DUNGEON_DAT_RECORD_COUNT`] - 1 so the bank count
+/// derives from the dungeon-record count with the published
+/// Despise exception captured as the single subtraction.
+pub const DUNGEON_CBT_BANK_COUNT: usize = crate::DUNGEON_DAT_RECORD_COUNT - 1;
 pub const DUNGEON_CBT_RECORDS: usize = DUNGEON_CBT_BANK_COUNT * DUNGEON_ROOM_SLOTS_PER_BANK;
 pub const BRIT_CBT_FILE: &str = "BRIT.CBT";
 pub const DUNGEON_CBT_FILE: &str = "DUNGEON.CBT";

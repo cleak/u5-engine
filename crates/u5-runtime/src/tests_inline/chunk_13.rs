@@ -1,4 +1,17 @@
     #[test]
+    fn dungeon_cbt_bank_count_anchors_to_dungeon_records_minus_one() {
+        // formats/cbt.md §2: seven of the eight stock dungeons
+        // have authored DUNGEON.CBT room triggers (Despise carries
+        // none). Anchor DUNGEON_CBT_BANK_COUNT to
+        // DUNGEON_DAT_RECORD_COUNT - 1 so the bank count derives
+        // from the dungeon-record count with the Despise exception
+        // captured as the single subtraction.
+        assert_eq!(DUNGEON_CBT_BANK_COUNT, DUNGEON_DAT_RECORD_COUNT - 1);
+        assert_eq!(DUNGEON_CBT_BANK_COUNT, 7);
+        assert_eq!(DUNGEON_DAT_RECORD_COUNT, 8);
+    }
+
+    #[test]
     fn question_dat_dilemma_count_anchors_to_virtue_pair_combinations() {
         // formats/question-dat.md §4: the 28 virtue-dilemma
         // paragraphs cover one per unordered pair of distinct
