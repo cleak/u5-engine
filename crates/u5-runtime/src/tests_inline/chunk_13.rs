@@ -1,4 +1,16 @@
     #[test]
+    fn spell_count_anchors_to_circles_times_spells_per_circle() {
+        // magic.md §4: there are eight magic circles and six
+        // spells per circle, for 48 spell ids 0..=47. Anchor
+        // SPELL_COUNT to SPELL_CIRCLE_COUNT × SPELLS_PER_CIRCLE
+        // so the catalog size derives from the per-circle layout.
+        assert_eq!(SPELL_COUNT, SPELL_CIRCLE_COUNT * SPELLS_PER_CIRCLE);
+        assert_eq!(SPELL_COUNT, 48);
+        assert_eq!(SPELL_CIRCLE_COUNT, 8);
+        assert_eq!(SPELLS_PER_CIRCLE, 6);
+    }
+
+    #[test]
     fn lzw_max_codes_anchors_to_max_code_size() {
         // formats/lzw.md §3: the maximum LZW dictionary size is
         // 2^max_code_size (4096 codes at a 12-bit max code width).

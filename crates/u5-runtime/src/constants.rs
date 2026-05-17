@@ -585,7 +585,12 @@ pub const CGA_TILE_BYTES: usize = TILE_PIXEL_SIDE * TILE_PIXEL_SIDE / CGA_PIXELS
 pub const EGA_FLAT_TILE_ATLAS_BYTES: usize = FLAT_TILE_ATLAS_TILES * EGA_TILE_BYTES;
 pub const CGA_FLAT_TILE_ATLAS_BYTES: usize = FLAT_TILE_ATLAS_TILES * CGA_TILE_BYTES;
 
-pub const SPELL_COUNT: usize = 48;
+/// `magic.md §4` / `catalogs/spell-list.md §1`: total spell
+/// catalog size — eight magic circles × six spells per circle =
+/// 48 spell ids `0..=47`. Anchored to
+/// [`SPELL_CIRCLE_COUNT`] × [`SPELLS_PER_CIRCLE`] so the
+/// catalog size derives from the per-circle layout.
+pub const SPELL_COUNT: usize = SPELL_CIRCLE_COUNT * SPELLS_PER_CIRCLE;
 /// `magic.md §4`: there are eight magic circles.
 pub const SPELL_CIRCLE_COUNT: usize = 8;
 /// `magic.md §4`: each circle holds six spells.
