@@ -557,7 +557,11 @@ pub const EQUIPMENT_ID_MAGIC_BOW: usize = 36;
 pub const EQUIPMENT_ID_RING_INVISIBILITY: usize = 42;
 pub const EQUIPMENT_ID_RING_REGENERATION: usize = 44;
 pub const EQUIPMENT_ID_AMULET_TURNING: usize = 45;
-pub const REAGENT_COUNT: usize = 8;
+/// `catalogs/spell-list.md §3` / `inventory.md §2` total reagent
+/// catalog size. The reagent indices span SULFUR_ASH (0) through
+/// MANDRAKE (7); anchor the count to [`REAGENT_MANDRAKE`] + 1 so
+/// adding or renaming a reagent only happens in one place.
+pub const REAGENT_COUNT: usize = REAGENT_MANDRAKE + 1;
 pub const VIRTUE_COUNT: usize = 8;
 pub const SHRINE_STANDING_MAX: u8 = 99;
 pub const MORAL_STANDING_MAX: u8 = 99;

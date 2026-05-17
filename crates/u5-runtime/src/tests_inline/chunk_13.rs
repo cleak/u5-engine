@@ -1,4 +1,16 @@
     #[test]
+    fn reagent_count_anchors_to_last_reagent_index() {
+        // spell-list.md §3 / inventory.md §2 ship eight reagents at
+        // catalog indices SULFUR_ASH (0) through MANDRAKE (7). The
+        // catalog size is now anchored to REAGENT_MANDRAKE + 1 so
+        // adding a reagent only happens in one place.
+        assert_eq!(REAGENT_COUNT, REAGENT_MANDRAKE + 1);
+        assert_eq!(REAGENT_COUNT, 8);
+        assert_eq!(REAGENT_SULFUR_ASH, 0);
+        assert_eq!(REAGENT_MANDRAKE, 7);
+    }
+
+    #[test]
     fn equipment_slot_count_anchors_to_last_slot_index() {
         // inventory.md §3: the six equipment slots span the indices
         // EQUIP_SLOT_HELM..=EQUIP_SLOT_AMULET (0..=5). The slot
