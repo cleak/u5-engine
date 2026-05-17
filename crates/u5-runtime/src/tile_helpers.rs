@@ -698,8 +698,11 @@ pub const fn dungeon_klimb_apply(tile: u8) -> DungeonKlimbApply {
 /// `dungeon-mode.md §8`: Search rewrites `0x61` (secret-door reveal)
 /// to `0x60` for the current visit and marks the same X/Y cell one
 /// level below with the visit bit `0x08` (when not already on the
-/// deepest level). The deepest dungeon level is `7`.
-pub const DUNGEON_DEEPEST_LEVEL: u8 = 7;
+/// deepest level). The deepest dungeon level index is one less than
+/// the per-record level count. Anchored to
+/// [`crate::DUNGEON_LEVELS_PER_RECORD`] - 1 so the deepest-level
+/// index derives from the dungeon record layout.
+pub const DUNGEON_DEEPEST_LEVEL: u8 = crate::DUNGEON_LEVELS_PER_RECORD as u8 - 1;
 pub const DUNGEON_VISIT_MARKER_BIT: u8 = 0x08;
 
 /// `dungeon-mode.md §8`: stepping into an automatic fall trap

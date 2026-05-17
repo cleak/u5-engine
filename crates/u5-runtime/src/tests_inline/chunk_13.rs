@@ -1,4 +1,16 @@
     #[test]
+    fn dungeon_deepest_level_anchors_to_levels_per_record() {
+        // dungeon-mode.md §8: dungeons have eight levels (0..=7);
+        // the deepest level index is one less than the per-record
+        // level count. Anchor DUNGEON_DEEPEST_LEVEL to
+        // DUNGEON_LEVELS_PER_RECORD - 1 so the deepest-level
+        // index derives from the dungeon record layout.
+        assert_eq!(DUNGEON_DEEPEST_LEVEL, DUNGEON_LEVELS_PER_RECORD as u8 - 1);
+        assert_eq!(DUNGEON_DEEPEST_LEVEL, 7);
+        assert_eq!(DUNGEON_LEVELS_PER_RECORD, 8);
+    }
+
+    #[test]
     fn low_circle_spell_costs_anchor_to_circle_derived_formula() {
         // combat.md §10: per-spell MP cost is
         // `(spell_index / SPELLS_PER_CIRCLE) + 1`. The first four
