@@ -102,14 +102,14 @@ impl WindState {
                 | (Direction::West, Direction::South)
         );
         if perpendicular {
-            return Some(0);
+            return Some(PLAYER_SAIL_WAIT_TICKS_PERPENDICULAR);
         }
         if wind == heading {
             // Sailing into the wind.
-            Some(2)
+            Some(PLAYER_SAIL_WAIT_TICKS_INTO_WIND)
         } else {
             // Sailing with the wind (heading == opposite of wind source).
-            Some(1)
+            Some(PLAYER_SAIL_WAIT_TICKS_WITH_WIND)
         }
     }
 
@@ -120,7 +120,11 @@ impl WindState {
     /// rigging flag active the wait pass uses a one-minute increment
     /// and alternates the active-object epilogue.
     pub const fn sailing_wait_pass_minutes(rigging_active: bool) -> u8 {
-        if rigging_active { 1 } else { 2 }
+        if rigging_active {
+            crate::MINUTES_PER_INDOOR_TURN
+        } else {
+            crate::MINUTES_PER_OUTDOOR_TURN
+        }
     }
 
     /// `weather.md §7`: cadence cap for an autonomous active-ship slot
@@ -202,6 +206,16 @@ impl WindState {
         }
     }
 }
+
+/// `weather.md §5` published hoisted-sail player-ship wait-tick
+/// counts. The release-table cells classify into three cases:
+/// perpendicular wind/heading releases immediately (zero waits);
+/// "with the wind" (heading is the opposite of the wind source)
+/// releases after one wait; "into the wind" (heading matches the
+/// wind source) releases after two waits.
+pub const PLAYER_SAIL_WAIT_TICKS_PERPENDICULAR: u8 = 0;
+pub const PLAYER_SAIL_WAIT_TICKS_WITH_WIND: u8 = 1;
+pub const PLAYER_SAIL_WAIT_TICKS_INTO_WIND: u8 = 2;
 
 /// `weather.md §7` per-frame active-ship cadence caps. Each pair is
 /// `(numerator, denominator)`: the slot moves on `numerator` of every

@@ -1,4 +1,37 @@
     #[test]
+    fn player_sail_wait_ticks_route_through_named_constants() {
+        // weather.md §5: hoisted-sail wait-tick release table.
+        assert_eq!(PLAYER_SAIL_WAIT_TICKS_PERPENDICULAR, 0);
+        assert_eq!(PLAYER_SAIL_WAIT_TICKS_WITH_WIND, 1);
+        assert_eq!(PLAYER_SAIL_WAIT_TICKS_INTO_WIND, 2);
+        // North wind + south-facing sail: "with the wind" (one wait).
+        assert_eq!(
+            WindState::North.player_sail_wait_ticks(Direction::South),
+            Some(PLAYER_SAIL_WAIT_TICKS_WITH_WIND),
+        );
+        // North wind + north-facing sail: "into the wind" (two waits).
+        assert_eq!(
+            WindState::North.player_sail_wait_ticks(Direction::North),
+            Some(PLAYER_SAIL_WAIT_TICKS_INTO_WIND),
+        );
+        // North wind + east-facing sail: perpendicular (immediate).
+        assert_eq!(
+            WindState::North.player_sail_wait_ticks(Direction::East),
+            Some(PLAYER_SAIL_WAIT_TICKS_PERPENDICULAR),
+        );
+        // sailing_wait_pass_minutes routes through the named indoor
+        // and outdoor cadences per §5.
+        assert_eq!(
+            WindState::sailing_wait_pass_minutes(false),
+            MINUTES_PER_OUTDOOR_TURN,
+        );
+        assert_eq!(
+            WindState::sailing_wait_pass_minutes(true),
+            MINUTES_PER_INDOOR_TURN,
+        );
+    }
+
+    #[test]
     fn active_ship_cadence_ratios_match_spec_table() {
         // weather.md §7: per-frame active-ship cadence caps. Each pair
         // is (numerator, denominator).
