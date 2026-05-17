@@ -1,4 +1,18 @@
     #[test]
+    fn font_byte_lengths_anchor_to_catalog_times_glyph_bytes() {
+        // formats/font-ch.md §2 and formats/font-hcs.md §2 fix each
+        // font's total byte length at `glyph_count * glyph_bytes`.
+        // Anchor the file-length constants to that product so the
+        // catalog/cell dimensions and the file length stay one
+        // value: changing either component automatically updates
+        // the total.
+        assert_eq!(CH_FONT_LEN, CH_GLYPH_COUNT * CH_GLYPH_BYTES);
+        assert_eq!(HCS_FONT_LEN, HCS_GLYPH_COUNT * HCS_GLYPH_BYTES);
+        assert_eq!(CH_FONT_LEN, 1024);
+        assert_eq!(HCS_FONT_LEN, 3072);
+    }
+
+    #[test]
     fn hcs_glyph_count_anchors_to_ch_glyph_count() {
         // formats/font-ch.md §2 and formats/font-hcs.md §2 both
         // ship 128 glyphs per font — the same character set, only

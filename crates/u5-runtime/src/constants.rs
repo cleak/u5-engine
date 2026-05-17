@@ -92,16 +92,20 @@ pub const BIT_STRIP_WIDTH_WORD_LEN: usize = 2;
 pub const BIT_STRIP_ROW_COUNT_WORD_LEN: usize = 2;
 pub const BIT_STRIP_HEADER_LEN: usize =
     BIT_STRIP_WIDTH_WORD_LEN + BIT_STRIP_ROW_COUNT_WORD_LEN;
-/// `formats/font-ch.md §2,§3`: a shipped `.CH` font is exactly
-/// 1024 bytes (128 glyphs × 8 bytes each).
-pub const CH_FONT_LEN: usize = 1024;
 pub const CH_GLYPH_COUNT: usize = 128;
 pub const CH_GLYPH_BYTES: usize = 8;
+/// `formats/font-ch.md §2,§3`: a shipped `.CH` font is exactly
+/// 1024 bytes (128 glyphs × 8 bytes each). Anchored to
+/// [`CH_GLYPH_COUNT`] × [`CH_GLYPH_BYTES`] so the file size and
+/// the catalog/glyph dimensions stay one value.
+pub const CH_FONT_LEN: usize = CH_GLYPH_COUNT * CH_GLYPH_BYTES;
 pub const CH_CELL_SIDE: usize = 8;
 /// `formats/font-hcs.md §2,§3`: a shipped `.HCS` font is exactly
 /// 3072 bytes (128 glyphs × 24 bytes each), each glyph a 16x12 cell
-/// with two bytes per row.
-pub const HCS_FONT_LEN: usize = 3072;
+/// with two bytes per row. Anchored to [`HCS_GLYPH_COUNT`] ×
+/// [`HCS_GLYPH_BYTES`] so the file size and the catalog/glyph
+/// dimensions stay one value.
+pub const HCS_FONT_LEN: usize = HCS_GLYPH_COUNT * HCS_GLYPH_BYTES;
 /// `formats/font-hcs.md §2`: 128 glyphs per HCS font — the same
 /// 128-entry character set the .CH catalog ships. Anchored to
 /// [`CH_GLYPH_COUNT`] so the two font catalogs stay one value.
