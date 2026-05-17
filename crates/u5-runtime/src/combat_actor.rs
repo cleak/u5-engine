@@ -197,8 +197,16 @@ pub const COMBAT_ACTOR_FLAG_MARKED_DEAD: u8 = 0x20;
 pub const COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED: u8 = 0x04;
 pub const COMBAT_FIELD_REJECTED_ACTIVE_OBJECT_TILE: u8 = 0xf4;
 pub const COMBAT_INSTANT_KILL_DAMAGE: i16 = 99;
-pub const COMBAT_MAGIC_MISSILE_DAMAGE_ROLL_MAX: u8 = 16;
-pub const COMBAT_FIREBALL_DAMAGE_ROLL_MAX: u8 = 30;
+/// `catalogs/spell-list.md §5` Magic Missile raw damage roll cap.
+/// Anchored to [`crate::MAGIC_MISSILE_RAW_DAMAGE_MAX`] so the
+/// combat-side roll cap and the spell-list-side raw cap stay one
+/// value.
+pub const COMBAT_MAGIC_MISSILE_DAMAGE_ROLL_MAX: u8 = crate::MAGIC_MISSILE_RAW_DAMAGE_MAX;
+/// `catalogs/spell-list.md §5` Fireball raw damage roll cap.
+/// Anchored to [`crate::FIREBALL_RAW_DAMAGE_MAX`] so the
+/// combat-side roll cap and the spell-list-side raw cap stay one
+/// value.
+pub const COMBAT_FIREBALL_DAMAGE_ROLL_MAX: u8 = crate::FIREBALL_RAW_DAMAGE_MAX;
 pub const COMBAT_TREMOR_DAMAGE_ROLL_MAX: u8 = 20;
 pub const COMBAT_FLAME_WIND_DAMAGE_ROLL_MAX: u8 = 30;
 /// `magic.md §8`: Protection's `P` active-effect tag adds this many

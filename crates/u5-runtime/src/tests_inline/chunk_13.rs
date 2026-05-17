@@ -1,4 +1,19 @@
     #[test]
+    fn combat_damage_roll_caps_anchor_to_spell_raw_damage_caps() {
+        // catalogs/spell-list.md §5: Magic Missile raw damage caps
+        // at 16; Fireball raw damage caps at 30. The combat-side
+        // roll caps now anchor to the spell-list-side raw caps so
+        // each spell's damage ceiling has one source of truth.
+        assert_eq!(
+            COMBAT_MAGIC_MISSILE_DAMAGE_ROLL_MAX,
+            MAGIC_MISSILE_RAW_DAMAGE_MAX,
+        );
+        assert_eq!(COMBAT_FIREBALL_DAMAGE_ROLL_MAX, FIREBALL_RAW_DAMAGE_MAX);
+        assert_eq!(COMBAT_MAGIC_MISSILE_DAMAGE_ROLL_MAX, 16);
+        assert_eq!(COMBAT_FIREBALL_DAMAGE_ROLL_MAX, 30);
+    }
+
+    #[test]
     fn shrine_standing_cap_anchors_to_moral_standing_cap() {
         // karma.md §1: per-virtue shrine standing caps at 99 — the
         // same byte ceiling karma.md §3 documents for the moral-
