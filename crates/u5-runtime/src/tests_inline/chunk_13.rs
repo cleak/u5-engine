@@ -1,4 +1,25 @@
     #[test]
+    fn active_object_phase_byte_nibble_layout_matches_spec() {
+        // active-objects.md §3 and formats/ool.md §4: byte 6 packs
+        // the animation phase in its low nibble and the direction-step
+        // counter in its high nibble. Promote both the low-nibble mask
+        // and the high-nibble shift so animator and renderer share
+        // the same source of truth.
+        assert_eq!(ACTIVE_OBJECT_PHASE_LOW_NIBBLE_MASK, 0x0F);
+        assert_eq!(ACTIVE_OBJECT_PHASE_DIRECTION_NIBBLE_SHIFT, 4);
+        // A packed byte with direction-step counter 0x9 in the high
+        // nibble and animation phase 0x3 in the low nibble must
+        // separate cleanly through the published accessors.
+        let packed = 0x93;
+        assert_eq!(packed & ACTIVE_OBJECT_PHASE_LOW_NIBBLE_MASK, 0x03);
+        assert_eq!(active_object_direction_step(packed), 0x09);
+        // Boundary cases: an all-zero byte yields zero in both fields,
+        // and an all-ones byte yields 0xF in both fields.
+        assert_eq!(active_object_direction_step(0x00), 0x00);
+        assert_eq!(active_object_direction_step(0xFF), 0x0F);
+    }
+
+    #[test]
     fn first_dungeon_scene_byte_matches_spec_arithmetic() {
         // formats/cbt.md §7 and formats/dungeon-dat.md §2: the
         // scene-byte range for the eight dungeons is 33..=40, and the

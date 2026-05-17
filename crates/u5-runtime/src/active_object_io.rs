@@ -311,12 +311,32 @@ pub enum AnimationPhaseStep {
 /// `active-objects.md §8`.
 pub const ANIMATION_PHASE_STEADY_NIBBLE: u8 = 0x0F;
 
+/// `active-objects.md §3` / `formats/ool.md §4` packed phase-byte
+/// (byte 6) low-nibble mask. The low nibble holds the animation-phase
+/// countdown; the high nibble holds the direction-step counter used
+/// by AI movement. Promote the mask so both decoders share one
+/// source of truth.
+pub const ACTIVE_OBJECT_PHASE_LOW_NIBBLE_MASK: u8 = 0x0F;
+
+/// `active-objects.md §3` / `formats/ool.md §4` packed phase-byte
+/// high-nibble shift. The direction-step counter sits in bits 4..=7
+/// of byte 6; right-shifting the byte by this amount yields the
+/// counter as a value in `0..=15`.
+pub const ACTIVE_OBJECT_PHASE_DIRECTION_NIBBLE_SHIFT: u32 = 4;
+
+/// `active-objects.md §3`: extract the direction-step counter from
+/// a packed phase byte (byte 6). The high nibble carries the AI
+/// movement direction-step counter in `0..=15`.
+pub const fn active_object_direction_step(phase_byte: u8) -> u8 {
+    phase_byte >> ACTIVE_OBJECT_PHASE_DIRECTION_NIBBLE_SHIFT
+}
+
 /// `active-objects.md §8`: classify the low nibble of an active-object
 /// phase byte (byte 6) into the animator's per-tick outcome. Higher
 /// bits of the input are masked off; callers may pass either the raw
 /// byte or just the nibble.
 pub const fn animation_phase_step(phase_byte: u8) -> AnimationPhaseStep {
-    let nibble = phase_byte & 0x0F;
+    let nibble = phase_byte & ACTIVE_OBJECT_PHASE_LOW_NIBBLE_MASK;
     if nibble == ANIMATION_PHASE_STEADY_NIBBLE {
         AnimationPhaseStep::Steady
     } else if nibble == 0 {
