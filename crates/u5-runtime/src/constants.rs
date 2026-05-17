@@ -796,14 +796,19 @@ pub const SHRINE_STANDING_MAX: u8 = MORAL_STANDING_MAX;
 /// across all add paths (NPC thank-you, toll milestone, etc.).
 pub const MORAL_STANDING_MAX: u8 = 99;
 pub const AVATAR_STAT_MAX: u8 = 30;
+/// `catalogs/spell-list.md §3` reagent enumeration order. The
+/// eight reagent indices occupy 0..=7 in sequence (Sulfur Ash,
+/// Ginseng, Garlic, Spider Silk, Blood Moss, Black Pearl,
+/// Nightshade, Mandrake). Anchor each successor to the chain so
+/// adding or reordering a reagent only happens in one place.
 pub const REAGENT_SULFUR_ASH: usize = 0;
-pub const REAGENT_GINSENG: usize = 1;
-pub const REAGENT_GARLIC: usize = 2;
-pub const REAGENT_SPIDER_SILK: usize = 3;
-pub const REAGENT_BLOOD_MOSS: usize = 4;
-pub const REAGENT_BLACK_PEARL: usize = 5;
-pub const REAGENT_NIGHTSHADE: usize = 6;
-pub const REAGENT_MANDRAKE: usize = 7;
+pub const REAGENT_GINSENG: usize = REAGENT_SULFUR_ASH + 1;
+pub const REAGENT_GARLIC: usize = REAGENT_GINSENG + 1;
+pub const REAGENT_SPIDER_SILK: usize = REAGENT_GARLIC + 1;
+pub const REAGENT_BLOOD_MOSS: usize = REAGENT_SPIDER_SILK + 1;
+pub const REAGENT_BLACK_PEARL: usize = REAGENT_BLOOD_MOSS + 1;
+pub const REAGENT_NIGHTSHADE: usize = REAGENT_BLACK_PEARL + 1;
+pub const REAGENT_MANDRAKE: usize = REAGENT_NIGHTSHADE + 1;
 pub const RARE_REAGENT_HARVEST_POINT_COUNT: usize = 3;
 pub const RARE_REAGENT_HARVEST_UNSEEN_DAY: u8 = 0;
 pub const FIXED_HIDDEN_TREASURE_COUNT: usize = 113;

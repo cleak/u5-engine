@@ -1,4 +1,23 @@
     #[test]
+    fn reagent_indices_chain_sequentially() {
+        // catalogs/spell-list.md §3: reagent enumeration order
+        // packs the eight reagent indices into 0..=7 in sequence
+        // (Sulfur Ash, Ginseng, Garlic, Spider Silk, Blood Moss,
+        // Black Pearl, Nightshade, Mandrake). Anchor each
+        // successor to the chain so adding or reordering a
+        // reagent only happens in one place.
+        assert_eq!(REAGENT_GINSENG, REAGENT_SULFUR_ASH + 1);
+        assert_eq!(REAGENT_GARLIC, REAGENT_GINSENG + 1);
+        assert_eq!(REAGENT_SPIDER_SILK, REAGENT_GARLIC + 1);
+        assert_eq!(REAGENT_BLOOD_MOSS, REAGENT_SPIDER_SILK + 1);
+        assert_eq!(REAGENT_BLACK_PEARL, REAGENT_BLOOD_MOSS + 1);
+        assert_eq!(REAGENT_NIGHTSHADE, REAGENT_BLACK_PEARL + 1);
+        assert_eq!(REAGENT_MANDRAKE, REAGENT_NIGHTSHADE + 1);
+        assert_eq!(REAGENT_SULFUR_ASH, 0);
+        assert_eq!(REAGENT_MANDRAKE, 7);
+    }
+
+    #[test]
     fn potion_indices_chain_sequentially() {
         // inventory.md §7: U-Use potion dispatch order packs the
         // eight potion indices into 0..=7 in sequence (Blue,
