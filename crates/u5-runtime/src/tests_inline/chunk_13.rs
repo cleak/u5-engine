@@ -1,4 +1,20 @@
     #[test]
+    fn tlk_label_byte_count_anchors_to_label_band_width() {
+        // conversation.md §7.7: per-blob label bytes occupy
+        // `0x91..=0x9F`, so the count is TLK_LABEL_LAST -
+        // TLK_LABEL_FIRST + 1 = 15. Anchor TLK_LABEL_BYTE_COUNT
+        // to that band width so the count derives from the
+        // published label-byte band.
+        assert_eq!(
+            TLK_LABEL_BYTE_COUNT,
+            (TLK_LABEL_LAST - TLK_LABEL_FIRST + 1) as usize,
+        );
+        assert_eq!(TLK_LABEL_BYTE_COUNT, 15);
+        assert_eq!(TLK_LABEL_FIRST, 0x91);
+        assert_eq!(TLK_LABEL_LAST, 0x9F);
+    }
+
+    #[test]
     fn in_lor_light_duration_aliases_to_light_spell_duration() {
         // lighting.md §8: In Lor (ordinary Light spell) overwrites
         // the light-spell counter with 100 units. constants.rs

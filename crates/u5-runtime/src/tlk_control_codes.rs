@@ -77,8 +77,11 @@ pub const RESERVED_KEYWORD_REBUKE_COUNT: usize =
 /// supports up to fifteen distinct label bytes per NPC blob,
 /// occupying values `0x91..=0x9F`. Labels are byte-level flow
 /// markers, not globally unique names; shipped blobs commonly reuse
-/// the same label byte multiple times (transfer + record).
-pub const TLK_LABEL_BYTE_COUNT: usize = 15;
+/// the same label byte multiple times (transfer + record). Anchored
+/// to `TLK_LABEL_LAST - TLK_LABEL_FIRST + 1` so the label-count
+/// derives from the published label-byte band.
+pub const TLK_LABEL_BYTE_COUNT: usize =
+    (TLK_LABEL_LAST - TLK_LABEL_FIRST + 1) as usize;
 
 /// `conversation.md §7.7`: returns the zero-based label index
 /// `0..=14` for a label byte in the `0x91..=0x9F` range, or `None`
