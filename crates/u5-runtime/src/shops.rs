@@ -156,31 +156,36 @@ pub const fn shop_placeholder_kind(byte: u8) -> Option<ShopPlaceholderKind> {
     })
 }
 
-pub const SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST: usize = 8;
+/// `formats/shoppe-dat.md §3`: shoppe-record bands. The shared-
+/// barks, arms-descriptions, arms-sell, and tavern bands tile
+/// contiguously from record 0 upward. Anchor each *_FIRST to
+/// the previous band's *_LAST + 1 so resizing any band shifts
+/// the later bands automatically.
+pub const SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST: usize = SHOPPE_RECORDS_SHARED_BARKS_LAST + 1;
 pub const SHOPPE_RECORDS_ARMS_DESCRIPTIONS_LAST: usize = 48;
 
-pub const SHOPPE_RECORDS_ARMS_SELL_FIRST: usize = 49;
+pub const SHOPPE_RECORDS_ARMS_SELL_FIRST: usize = SHOPPE_RECORDS_ARMS_DESCRIPTIONS_LAST + 1;
 pub const SHOPPE_RECORDS_ARMS_SELL_LAST: usize = 56;
 
-pub const SHOPPE_RECORDS_TAVERN_FIRST: usize = 57;
+pub const SHOPPE_RECORDS_TAVERN_FIRST: usize = SHOPPE_RECORDS_ARMS_SELL_LAST + 1;
 pub const SHOPPE_RECORDS_TAVERN_LAST: usize = 88;
 
 pub const SHOPPE_RECORDS_SAGE_FIRST: usize = 84;
 pub const SHOPPE_RECORDS_SAGE_LAST: usize = 91;
 
-pub const SHOPPE_RECORDS_HORSE_TRADER_FIRST: usize = 92;
+pub const SHOPPE_RECORDS_HORSE_TRADER_FIRST: usize = SHOPPE_RECORDS_SAGE_LAST + 1;
 pub const SHOPPE_RECORDS_HORSE_TRADER_LAST: usize = 104;
 
-pub const SHOPPE_RECORDS_SHIP_BROKER_FIRST: usize = 105;
+pub const SHOPPE_RECORDS_SHIP_BROKER_FIRST: usize = SHOPPE_RECORDS_HORSE_TRADER_LAST + 1;
 pub const SHOPPE_RECORDS_SHIP_BROKER_LAST: usize = 126;
 
-pub const SHOPPE_RECORDS_REAGENT_FIRST: usize = 127;
+pub const SHOPPE_RECORDS_REAGENT_FIRST: usize = SHOPPE_RECORDS_SHIP_BROKER_LAST + 1;
 pub const SHOPPE_RECORDS_REAGENT_LAST: usize = 146;
 
 pub const SHOPPE_RECORDS_GUILD_FIRST: usize = 148;
 pub const SHOPPE_RECORDS_GUILD_LAST: usize = 162;
 
-pub const SHOPPE_RECORDS_HEALER_FIRST: usize = 163;
+pub const SHOPPE_RECORDS_HEALER_FIRST: usize = SHOPPE_RECORDS_GUILD_LAST + 1;
 pub const SHOPPE_RECORDS_HEALER_LAST: usize = 173;
 
 pub const SHOPPE_RECORDS_INNKEEPER_FIRST: usize = 174;

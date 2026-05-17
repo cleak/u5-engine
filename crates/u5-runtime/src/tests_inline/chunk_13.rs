@@ -1,4 +1,32 @@
     #[test]
+    fn shoppe_record_bands_chain_to_previous_last() {
+        // formats/shoppe-dat.md §3: shoppe-record bands tile
+        // contiguously across the file (with two known gaps —
+        // tavern/sage overlap at 84..=88 and a one-record gap
+        // 147 before the guild band). Anchor each contiguous-band
+        // *_FIRST to the previous band's *_LAST + 1 so resizing
+        // any band shifts the later bands automatically.
+        assert_eq!(
+            SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST,
+            SHOPPE_RECORDS_SHARED_BARKS_LAST + 1,
+        );
+        assert_eq!(
+            SHOPPE_RECORDS_ARMS_SELL_FIRST,
+            SHOPPE_RECORDS_ARMS_DESCRIPTIONS_LAST + 1,
+        );
+        assert_eq!(SHOPPE_RECORDS_TAVERN_FIRST, SHOPPE_RECORDS_ARMS_SELL_LAST + 1);
+        assert_eq!(SHOPPE_RECORDS_HORSE_TRADER_FIRST, SHOPPE_RECORDS_SAGE_LAST + 1);
+        assert_eq!(
+            SHOPPE_RECORDS_SHIP_BROKER_FIRST,
+            SHOPPE_RECORDS_HORSE_TRADER_LAST + 1,
+        );
+        assert_eq!(SHOPPE_RECORDS_REAGENT_FIRST, SHOPPE_RECORDS_SHIP_BROKER_LAST + 1);
+        assert_eq!(SHOPPE_RECORDS_HEALER_FIRST, SHOPPE_RECORDS_GUILD_LAST + 1);
+        assert_eq!(SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, 8);
+        assert_eq!(SHOPPE_RECORDS_HEALER_FIRST, 163);
+    }
+
+    #[test]
     fn active_object_eviction_band_boundaries_chain() {
         // active-objects.md §4: the eviction phase byte bands
         // tile contiguously — door/fixture pair starts one byte
