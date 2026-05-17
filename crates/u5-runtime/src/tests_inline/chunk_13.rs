@@ -1,4 +1,17 @@
     #[test]
+    fn doom_final_room_constants_anchor_to_shared_dungeon_constants() {
+        // endgame.md §2: Doom's final room lives on the deepest
+        // dungeon level (= DUNGEON_DEEPEST_LEVEL) with room-trigger
+        // slot fifteen (= DUNGEON_ROOM_SLOT_MASK).
+        assert_eq!(DOOM_FINAL_ROOM_LEVEL, DUNGEON_DEEPEST_LEVEL);
+        assert_eq!(DOOM_FINAL_ROOM_LEVEL, 7);
+        assert_eq!(DOOM_FINAL_ROOM_SLOT, DUNGEON_ROOM_SLOT_MASK);
+        assert_eq!(DOOM_FINAL_ROOM_SLOT, 15);
+        // Doom is the eighth dungeon record (index 7).
+        assert_eq!(DOOM_DUNGEON_RECORD, 7);
+    }
+
+    #[test]
     fn local_view_overlay_dimensions_match_spec() {
         // view.md §4: the LOOKOBJ local-view overlay is a 32-by-32
         // square painted at four pixels per cell inside the message

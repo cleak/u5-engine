@@ -478,10 +478,17 @@ pub const SPECIAL_ITEM_WORN_VALUE: u8 = 2;
 pub const LORD_BLACKTHORN_CASTLE_SCENE_BYTE: u8 = 18;
 pub const STONEGATE_SCENE_BYTE: u8 = 29;
 pub const DOOM_DUNGEON_RECORD: usize = 7;
-pub const DOOM_FINAL_ROOM_LEVEL: u8 = 7;
+/// `endgame.md §2` Doom final-room trigger lives on the deepest
+/// dungeon level (`Z == DUNGEON_DEEPEST_LEVEL`). Anchor the level
+/// constant to tile_helpers.rs so the Doom-final and dungeon-floor
+/// edges share one source of truth.
+pub const DOOM_FINAL_ROOM_LEVEL: u8 = crate::DUNGEON_DEEPEST_LEVEL;
 pub const DOOM_FINAL_ROOM_X: usize = 5;
 pub const DOOM_FINAL_ROOM_Y: usize = 7;
-pub const DOOM_FINAL_ROOM_SLOT: u8 = 15;
+/// `endgame.md §2` Doom final-room slot id. The room-trigger low
+/// nibble is fifteen — the high end of the per-bank slot range
+/// promoted as DUNGEON_ROOM_SLOT_MASK.
+pub const DOOM_FINAL_ROOM_SLOT: u8 = crate::DUNGEON_ROOM_SLOT_MASK;
 pub const EQUIPMENT_SLOT_COUNT: usize = 6;
 pub const EQUIPMENT_EMPTY: u8 = 0xff;
 pub const EQUIPMENT_STOCK_CAP: u8 = 99;
