@@ -504,7 +504,11 @@ pub const SCROLL_LIGHT_DURATION: u8 = 240;
 pub const SCROLL_PROTECTION_DURATION: u8 = 100;
 pub const SCROLL_NEGATE_MAGIC_DURATION: u8 = 20;
 pub const SCROLL_NEGATE_TIME_DURATION: u8 = 20;
-pub const SPECIAL_ITEM_COUNT: usize = 16;
+/// `catalogs/item-list.md §6` total special-item catalog size.
+/// The named indices span MAGIC_CARPET (0x00) through WOODEN_BOX
+/// (0x0F); anchor the count to [`SPECIAL_ITEM_WOODEN_BOX_INDEX`]
+/// + 1 so adding a special item only happens in one place.
+pub const SPECIAL_ITEM_COUNT: usize = SPECIAL_ITEM_WOODEN_BOX_INDEX + 1;
 pub const SPECIAL_ITEM_MAGIC_CARPET_INDEX: usize = 0x00;
 pub const SPECIAL_ITEM_SKULL_KEY_INDEX: usize = 0x01;
 pub const SPECIAL_ITEM_AMULET_LB_INDEX: usize = 0x03;

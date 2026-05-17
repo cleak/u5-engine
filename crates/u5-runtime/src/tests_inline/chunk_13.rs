@@ -1,4 +1,17 @@
     #[test]
+    fn special_item_count_anchors_to_last_special_item_index() {
+        // item-list.md §6: the special-item catalog spans the
+        // sixteen indices MAGIC_CARPET (0x00) through WOODEN_BOX
+        // (0x0F). Anchor SPECIAL_ITEM_COUNT to
+        // SPECIAL_ITEM_WOODEN_BOX_INDEX + 1 so adding a special
+        // item only happens in one place.
+        assert_eq!(SPECIAL_ITEM_COUNT, SPECIAL_ITEM_WOODEN_BOX_INDEX + 1);
+        assert_eq!(SPECIAL_ITEM_COUNT, 16);
+        assert_eq!(SPECIAL_ITEM_MAGIC_CARPET_INDEX, 0x00);
+        assert_eq!(SPECIAL_ITEM_WOODEN_BOX_INDEX, 0x0f);
+    }
+
+    #[test]
     fn outdoor_arena_count_anchors_to_brit_cbt_records() {
         // encounters.md §4: sixteen outdoor 11x11 arenas. The same
         // sixteen records ship in BRIT.CBT per formats/cbt.md §2.
