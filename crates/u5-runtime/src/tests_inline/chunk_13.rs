@@ -1,4 +1,24 @@
     #[test]
+    fn text_color_packed_byte_nibbles_match_spec() {
+        // text-output.md §3: the active window's colour attribute
+        // carries the foreground palette index in its low nibble and
+        // the background palette index in its high nibble. Both
+        // nibbles are four bits wide.
+        assert_eq!(TEXT_COLOR_FOREGROUND_MASK, 0x0F);
+        assert_eq!(TEXT_COLOR_BACKGROUND_SHIFT, 4);
+        // Boot defaults: fg 15 (bright white), bg 0 (black) — packed
+        // through the named shift produces the canonical 0x0F byte
+        // and round-trips through the named accessors.
+        let packed = text_window_default_color_byte();
+        assert_eq!(packed, 0x0F);
+        assert_eq!(text_color_foreground(packed), TEXT_WINDOW_DEFAULT_FOREGROUND);
+        assert_eq!(text_color_background(packed), TEXT_WINDOW_DEFAULT_BACKGROUND);
+        // Mixed sample: fg 3 (cyan) on bg 7 (light grey) packs to 0x73.
+        assert_eq!(text_color_foreground(0x73), 3);
+        assert_eq!(text_color_background(0x73), 7);
+    }
+
+    #[test]
     fn mmix_quantity_prompt_width_matches_spec() {
         // magic.md §6: M-Mix step 4 reads a two-digit unsigned
         // quantity. The maximum accepted value is 99 and matches the

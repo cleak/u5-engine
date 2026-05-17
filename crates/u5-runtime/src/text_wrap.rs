@@ -86,10 +86,31 @@ pub const TEXT_WINDOW_DEFAULT_FOREGROUND: u8 = 15;
 pub const TEXT_WINDOW_DEFAULT_BACKGROUND: u8 = 0;
 pub const TEXT_WINDOW_DEFAULT_ACTIVE_INDEX: u8 = 0;
 
+/// `text-output.md §3` text-window packed colour-byte layout. The
+/// active window's colour attribute carries the foreground palette
+/// index in its low nibble and the background palette index in its
+/// high nibble. Both nibbles are four bits wide; specific palette
+/// entries are a driver concern.
+pub const TEXT_COLOR_FOREGROUND_MASK: u8 = 0x0F;
+pub const TEXT_COLOR_BACKGROUND_SHIFT: u32 = 4;
+
+/// `text-output.md §3`: extract the foreground palette index from a
+/// packed text-window colour byte.
+pub const fn text_color_foreground(packed: u8) -> u8 {
+    packed & TEXT_COLOR_FOREGROUND_MASK
+}
+
+/// `text-output.md §3`: extract the background palette index from a
+/// packed text-window colour byte.
+pub const fn text_color_background(packed: u8) -> u8 {
+    packed >> TEXT_COLOR_BACKGROUND_SHIFT
+}
+
 /// `text-output.md §9`: the packed colour byte produced by the
 /// boot defaults (low nibble fg, high nibble bg).
 pub const fn text_window_default_color_byte() -> u8 {
-    (TEXT_WINDOW_DEFAULT_BACKGROUND << 4) | TEXT_WINDOW_DEFAULT_FOREGROUND
+    (TEXT_WINDOW_DEFAULT_BACKGROUND << TEXT_COLOR_BACKGROUND_SHIFT)
+        | TEXT_WINDOW_DEFAULT_FOREGROUND
 }
 
 /// `text-output.md §3` extended text-control byte values. The per-
