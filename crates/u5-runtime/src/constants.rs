@@ -844,7 +844,10 @@ pub const TOWN_REST_DURATION_DIGIT_MAX: u8 = 9;
 pub const REST_MANA_CAP: u8 = 99;
 pub const DEFAULT_TORCH_STOCK: u8 = 4;
 pub const SURFACE_TORCH_DURATION: u8 = 240;
-pub const DUNGEON_TORCH_DURATION_MIN: u8 = 112;
+/// `lighting.md §8` dungeon Ignite minimum increment. Same value as
+/// the `DUNGEON_TORCH_INCREMENT_MIN` anchor in lighting.rs: dungeon
+/// Ignite rolls a uniform `[MIN, MAX]` torch-counter increment.
+pub const DUNGEON_TORCH_DURATION_MIN: u8 = crate::DUNGEON_TORCH_INCREMENT_MIN;
 /// `time.md §6` / `lighting.md §3` published ambient-light scale.
 /// Full daylight is 50 and full darkness is 2; values strictly above
 /// `FULL_DAYLIGHT` (`>= DAYLIGHT_SENTINEL_MIN`) are the "skip

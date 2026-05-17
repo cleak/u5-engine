@@ -1,4 +1,21 @@
     #[test]
+    fn dungeon_torch_duration_anchors_to_lighting_increment() {
+        // lighting.md §8: dungeon Ignite adds a random 112..127
+        // counter units to the current torch counter. The same `112`
+        // value previously lived in two constants; anchor
+        // DUNGEON_TORCH_DURATION_MIN to DUNGEON_TORCH_INCREMENT_MIN
+        // so the dungeon Ignite arithmetic has one source of truth.
+        assert_eq!(DUNGEON_TORCH_DURATION_MIN, DUNGEON_TORCH_INCREMENT_MIN);
+        assert_eq!(DUNGEON_TORCH_DURATION_MIN, 112);
+        assert_eq!(DUNGEON_TORCH_INCREMENT_MAX, 127);
+        // The 0x0f mask in the increment roll produces 16 outcomes.
+        assert_eq!(
+            (DUNGEON_TORCH_INCREMENT_MAX - DUNGEON_TORCH_INCREMENT_MIN + 1) as usize,
+            16,
+        );
+    }
+
+    #[test]
     fn npc_floor_link_tile_aliases_anchor_to_constants() {
         // npc-schedules.md §8.5: floor-link marker tile bytes 0xC8 and
         // 0xC9 are the same paired marker family the town-mode loader
