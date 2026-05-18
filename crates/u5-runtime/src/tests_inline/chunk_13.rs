@@ -16246,6 +16246,25 @@
         assert_eq!(sleep_ambush_monster(7), Some(SleepAmbushMonster::Headless));
         assert_eq!(sleep_ambush_monster(8), None);
         assert_eq!(sleep_ambush_monster(255), None);
+        assert_eq!(
+            sleep_ambush_monster_sprite(SleepAmbushMonster::GiantRat),
+            0x90
+        );
+        assert_eq!(sleep_ambush_monster_sprite(SleepAmbushMonster::Troll), 0xE4);
+        assert_eq!(sleep_ambush_monster_sprite(SleepAmbushMonster::Bat), 0x94);
+        assert_eq!(sleep_ambush_monster_sprite(SleepAmbushMonster::Slime), 0xA0);
+        assert_eq!(
+            sleep_ambush_monster_sprite(SleepAmbushMonster::GiantSpider),
+            0x98
+        );
+        assert_eq!(
+            sleep_ambush_monster_sprite(SleepAmbushMonster::Gremlin),
+            0xA4
+        );
+        assert_eq!(
+            sleep_ambush_monster_sprite(SleepAmbushMonster::Headless),
+            0xD0
+        );
 
         // Effective Giant Rat share = 2/8
         let rat_rows = (0..8u8)

@@ -592,6 +592,38 @@
     fn dangerous_rest_interrupts_on_one_in_sixty_four_predicate() {
         let mut state = britannia_state(open_world_grid(), 0, 15);
         state.clock = GameClock::new(0, 0).unwrap();
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 12,
+                max_hp: 12,
+                level: 8,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'A',
+                status: b'S',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 2,
+                hp: 8,
+                max_hp: 12,
+                level: 8,
+            },
+            PartyMember {
+                slot: 2,
+                class_byte: b'A',
+                status: b'P',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 2,
+                hp: 8,
+                max_hp: 12,
+                level: 8,
+            },
+        ];
 
         assert_eq!(
             state.hole_up_command(Path::new(""), Some(2)).unwrap(),
@@ -602,7 +634,16 @@
         assert_eq!(state.clock, GameClock::new(0, 20).unwrap());
         assert!(state.message.contains("Party rested 0 hours 20 minutes"));
         assert!(state.message.contains("Ambushed!"));
+        assert!(state.message.contains("sleep ambush entered combat"));
         assert!(!state.message.contains("out of scope"));
+        assert!(state.combat_active);
+        assert_eq!(state.party[1].status, b'G');
+        assert_eq!(state.party[2].status, b'P');
+        assert_eq!(
+            state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].z,
+            WorldPlane::Britannia.save_floor()
+        );
+        assert!(!state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty());
     }
 
     #[test]

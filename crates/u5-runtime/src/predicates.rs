@@ -422,6 +422,20 @@ pub const fn sleep_ambush_monster(row: u8) -> Option<SleepAmbushMonster> {
     })
 }
 
+/// `encounters.md §6` / `monster-bestiary.md`: sprite family used for
+/// the selected sleep-ambush monster row.
+pub const fn sleep_ambush_monster_sprite(monster: SleepAmbushMonster) -> u8 {
+    match monster {
+        SleepAmbushMonster::GiantRat => 0x90,
+        SleepAmbushMonster::Troll => 0xE4,
+        SleepAmbushMonster::Bat => 0x94,
+        SleepAmbushMonster::Slime => 0xA0,
+        SleepAmbushMonster::GiantSpider => 0x98,
+        SleepAmbushMonster::Gremlin => 0xA4,
+        SleepAmbushMonster::Headless => 0xD0,
+    }
+}
+
 /// `encounters.md §6`: PRNG outcome that flips the rest loop into the
 /// sleep-ambush branch. The shared integer PRNG produces sixty-four
 /// outcomes per eligible predicate invocation; only the zero outcome

@@ -456,6 +456,62 @@ impl PlayState {
         ))
     }
 
+    pub fn enter_sleep_ambush_combat(
+        &mut self,
+        monster: SleepAmbushMonster,
+        z: i8,
+    ) -> io::Result<String> {
+        let tile = sleep_ambush_monster_sprite(monster);
+        let stats = combat_class_stats_for_sprite_byte(tile).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("sleep-ambush monster sprite 0x{tile:02X} has no combat class"),
+            )
+        })?;
+        let mut active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+        let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+        self.populate_terrain_combat_party(&mut active_objects, &mut actors, z);
+
+        let requested_count = self.resolve_terrain_combat_setup_count(
+            stats.default_spawn_count,
+            self.sleep_ambush_setup_seed(tile, 0x13),
+            self.sleep_ambush_setup_seed(tile, 0x2b),
+            false,
+        );
+        let placement_count = requested_count
+            .min((OOL_SLOTS - COMBAT_PARTY_ACTOR_SLOTS) as u8)
+            .min((COMBAT_ACTOR_SLOTS - COMBAT_PARTY_ACTOR_SLOTS) as u8);
+        for spawn in 0..placement_count {
+            let slot = COMBAT_PARTY_ACTOR_SLOTS + usize::from(spawn);
+            let x = 2 + (spawn % 4) * 2;
+            let y = 2 + (spawn / 4) * 2;
+            active_objects[slot] = ActiveObject {
+                type_byte: tile,
+                tile,
+                x: usize::from(x),
+                y: usize::from(y),
+                z,
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            };
+            actors[slot] = CombatActorDescriptor::for_monster_placement(
+                stats,
+                slot as u8,
+                x,
+                y,
+                COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                0,
+            );
+        }
+
+        self.enter_combat_frame(active_objects, actors)?;
+        Ok(format!(
+            "sleep ambush entered combat against {placement_count} of {requested_count} requested {} combatant(s)",
+            stats.name
+        ))
+    }
+
     pub fn enter_terrain_combat_from_world_object(
         &mut self,
         game_dir: &std::path::Path,
@@ -535,6 +591,16 @@ impl PlayState {
             ^ (object_slot as u8).wrapping_mul(7)
             ^ object.type_byte.wrapping_mul(11)
             ^ object.tile.wrapping_mul(13)
+            ^ salt
+    }
+
+    pub fn sleep_ambush_setup_seed(&self, tile: u8, salt: u8) -> u8 {
+        self.turn as u8
+            ^ self.clock.hour.wrapping_mul(3)
+            ^ self.clock.minute.wrapping_mul(5)
+            ^ (self.player.x as u8).wrapping_mul(7)
+            ^ (self.player.y as u8).wrapping_mul(11)
+            ^ tile.wrapping_mul(13)
             ^ salt
     }
 

@@ -19,6 +19,11 @@ impl PlayState {
             self.message = "Rest hours must be in 1..9.".to_string();
             return Ok(MoveOutcome::Blocked);
         }
+        let rest_entry_statuses = self
+            .party
+            .iter()
+            .map(|member| member.status)
+            .collect::<Vec<_>>();
         let asleep_at_start = self
             .party
             .iter()
@@ -30,6 +35,7 @@ impl PlayState {
         let mut world_damage_ticks = 0;
         let mut last_world_damage = None;
         let mut interrupted = false;
+        let mut ambush_monster = None;
         let mut rest_ticks = 0u64;
         'resting: for _ in 0..hours {
             for _ in 0..REST_WATCH_TICKS_PER_HOUR {
@@ -46,11 +52,16 @@ impl PlayState {
                 }
                 if self.dangerous_rest_interrupted() {
                     interrupted = true;
+                    ambush_monster = sleep_ambush_monster(self.sleep_ambush_monster_row());
                     break 'resting;
                 }
             }
         }
-        let woke = self.wake_initial_rest_sleepers(&asleep_at_start);
+        let woke = if interrupted {
+            self.restore_sleep_ambush_party_statuses(&rest_entry_statuses)
+        } else {
+            self.wake_initial_rest_sleepers(&asleep_at_start)
+        };
         let completed_hours = rest_ticks / u64::from(REST_WATCH_TICKS_PER_HOUR);
         let completed_minutes = (rest_ticks % u64::from(REST_WATCH_TICKS_PER_HOUR))
             * u64::from(REST_WATCH_MINUTES_PER_TICK);
@@ -69,8 +80,14 @@ impl PlayState {
         self.message = format!(
             "Party rested {duration}; recovered {recovered_hp} HP and {recovered_mana} MP; woke {woke} asleep member(s).",
         );
-        if interrupted {
-            self.message.push_str(" Ambushed!");
+        if let Some(monster) = ambush_monster {
+            let z = match self.area {
+                Area::World { plane } => plane.save_floor(),
+                Area::Dungeon { level, .. } => level as i8,
+                Area::Town { floor, .. } => floor,
+            };
+            let note = self.enter_sleep_ambush_combat(monster, z)?;
+            self.message.push_str(&format!(" Ambushed! {note}."));
         }
         if let Some(report) = last_world_damage {
             self.message.push_str(&format!(
@@ -253,6 +270,39 @@ impl PlayState {
             ^ (self.player.x as u8).wrapping_mul(7)
             ^ (self.player.y as u8).wrapping_mul(11)
             ^ area
+    }
+
+    pub fn sleep_ambush_monster_row(&self) -> u8 {
+        let area = match self.area {
+            Area::World { plane } => plane.save_floor() as u8,
+            Area::Dungeon { scene, level } => scene.byte.wrapping_add(level),
+            Area::Town { scene, floor } => scene.byte.wrapping_add(floor as u8),
+        };
+        (self.turn as u8)
+            .wrapping_add(self.clock.hour.wrapping_mul(5))
+            .wrapping_add(self.clock.minute.wrapping_mul(7))
+            .wrapping_add((self.player.x as u8).wrapping_mul(11))
+            .wrapping_add((self.player.y as u8).wrapping_mul(13))
+            .wrapping_add(area)
+            % 8
+    }
+
+    pub fn restore_sleep_ambush_party_statuses(&mut self, entry_statuses: &[u8]) -> usize {
+        let mut restored = 0;
+        for (index, member) in self.party.iter_mut().enumerate() {
+            let Some(entry_status) = entry_statuses
+                .get(index)
+                .and_then(|status| character_status_for_byte(*status))
+            else {
+                continue;
+            };
+            let restored_status = sleep_ambush_restored_status(entry_status).save_byte();
+            if member.status != restored_status {
+                member.status = restored_status;
+                restored += 1;
+            }
+        }
+        restored
     }
 
     pub fn apply_rest_recovery_tick(&mut self) -> (u16, u16) {
