@@ -19,8 +19,8 @@ use u5_runtime::{
     U4TransferOverrides, commit_u4_transfer_save, intro_step_has_story6_secondary_pass,
     intro_step_transition_strips, intro_story_art_file_for_step,
     intro_story_art_placement_for_step, intro_story_step_waits_for_input,
-    intro_story6_secondary_subimage, load_play_options_from_save, load_story_records,
-    read_u4_transfer_source_from_party_sav,
+    intro_story6_secondary_subimage, load_play_options_from_save, load_return_to_view_script,
+    load_story_records, read_u4_transfer_source_from_party_sav, summarize_return_to_view_script,
 };
 
 use crate::cli::run_interactive_create_character;
@@ -234,6 +234,11 @@ fn run_return_to_view_preview(game_dir: &Path) -> io::Result<()> {
                 MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
                 RTV_COMMAND_STREAM_BYTES
             );
+            match load_return_to_view_script(game_dir) {
+                Ok(Some(script)) => println!("{}", summarize_return_to_view_script(&script)),
+                Ok(None) => println!("{MISCMAPS_DAT_FILE} is missing; preview cannot run."),
+                Err(err) => println!("Return-to-View script error: {err}"),
+            }
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
             println!("{MISCMAPS_DAT_FILE} is missing; preview cannot run.");

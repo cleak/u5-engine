@@ -68,6 +68,7 @@ pub mod quest_flags;
 pub mod question_io;
 pub mod report;
 pub mod rest_camp;
+pub mod return_to_view;
 pub mod save_load;
 pub mod scene;
 pub mod ship_broadside;
@@ -397,6 +398,11 @@ pub use question_io::{
     question_dat_dilemma_record_for_pair,
 };
 pub use report::run_report;
+pub use return_to_view::{
+    ReturnToViewCommand, ReturnToViewScript, load_return_to_view_script,
+    parse_return_to_view_commands, parse_return_to_view_script_file,
+    return_to_view_command_histogram, return_to_view_command_name, summarize_return_to_view_script,
+};
 pub use save_load::*;
 pub use scene::{
     DungeonPresentationFlavour, DungeonScene, FIRST_DUNGEON_SCENE_BYTE, Family,
