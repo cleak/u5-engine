@@ -57,8 +57,8 @@ input system maps keyboard events into the same handlers used by the terminal
 harness, so movement, blocking, doors, and supported area transitions work out
 of the box. Dungeon scenes render a light-gated first-person corridor panel;
 combat scenes render the tactical arena through the same atlas-backed viewport,
-while shops, conversations, and character creation remain modal runtime flows
-rather than bespoke Bevy UI. Line-oriented modal prompts such as
+while shops, conversations, and other line-oriented interactions remain modal
+runtime flows rather than bespoke Bevy UI. Modal prompts such as
 conversation keywords, Blackthorn answers, and sage topics collect typed text
 in the status panel, support Backspace, and submit on Enter.
 
@@ -66,8 +66,9 @@ in the status panel, support Backspace, and submit on Enter.
 dispatcher used by terminal intro mode. Journey Onward loads `SAVED.GAM` and
 `SAVED.OOL` then launches the Bevy gameplay loop. The visual shell pages the
 story text, acknowledgement boundary, and a dry-run-rendered Return-to-View
-preview strip in intro-local panels; character creation and transfer remain
-terminal flows.
+preview strip in intro-local panels. Create New Character and Ultima IV Transfer
+also run in visual intro panels, then write `SAVED.GAM` and `SAVED.OOL` through
+the shared runtime save producers.
 
 Input map (visual mode):
 

@@ -491,17 +491,24 @@ fn drive_visual_intro(
     let Some(mut intro) = intro else {
         return;
     };
+    let mut handled = false;
     if keyboard.just_pressed(KeyCode::Escape) {
-        exit.write(AppExit::Success);
-        return;
+        if cancel_visual_intro_panel(&mut intro) {
+            handled = true;
+        } else {
+            exit.write(AppExit::Success);
+            return;
+        }
     }
 
     let shift_pressed =
         keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
     let control_pressed =
         keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
-    let mut handled = false;
     for key in keyboard.get_just_pressed() {
+        if *key == KeyCode::Escape {
+            continue;
+        }
         let Some(ch) = key_code_to_char(*key, shift_pressed, control_pressed) else {
             continue;
         };
@@ -675,6 +682,44 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             }
         }
     }
+    true
+}
+
+fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
+    let Some((subflow, result, message)) = (match intro.panel {
+        VisualIntroPanel::Menu => None,
+        VisualIntroPanel::CharacterCreation { .. } => Some((
+            IntroSubflow::CharacterCreation,
+            IntroSubflowResult::Cancelled,
+            "Character creation cancelled; returning to the intro menu.",
+        )),
+        VisualIntroPanel::U4Transfer { .. } => Some((
+            IntroSubflow::UltimaIvTransfer,
+            IntroSubflowResult::Cancelled,
+            "Transfer cancelled; returning to the intro menu.",
+        )),
+        VisualIntroPanel::Story { .. } => Some((
+            IntroSubflow::StorySlides,
+            IntroSubflowResult::ReturnedToMenu,
+            "Ultima V Introduction cancelled; returning to the intro menu.",
+        )),
+        VisualIntroPanel::Acknowledgements => Some((
+            IntroSubflow::Acknowledgements,
+            IntroSubflowResult::ReturnedToMenu,
+            "Acknowledgements cancelled; returning to the intro menu.",
+        )),
+        VisualIntroPanel::ReturnToView { .. } => Some((
+            IntroSubflow::ReturnToView,
+            IntroSubflowResult::ReturnedToMenu,
+            "Return-to-View preview cancelled; returning to the intro menu.",
+        )),
+    }) else {
+        return false;
+    };
+
+    intro.panel = VisualIntroPanel::Menu;
+    intro.dispatch.complete_subflow(subflow, result);
+    intro.message = message.to_string();
     true
 }
 
@@ -1121,6 +1166,7 @@ fn summarize_visual_chargen(session: &ChargenSession, input_line: &str) -> Strin
             String::new(),
             "By what name shalt thou be known?".to_string(),
             format!("> {input_line}"),
+            "Esc cancels to the intro menu.".to_string(),
         ]
         .join("\n"),
         ChargenSessionStep::PromptGender => [
@@ -1217,6 +1263,8 @@ fn summarize_visual_u4_transfer(
             lines.push("Commit transfer save? Press Y or N.".to_string());
         }
     }
+    lines.push(String::new());
+    lines.push("Esc cancels to the intro menu.".to_string());
     lines.join("\n")
 }
 
@@ -2404,6 +2452,31 @@ mod tests {
     }
 
     #[test]
+    fn visual_intro_character_creation_escape_returns_to_menu_without_save() {
+        let dir = debug_game_dir();
+        let session = ChargenSession::new(chargen_records(), (0u8..=127).collect()).unwrap();
+        let mut intro = visual_intro_state_with_panel(
+            dir.clone(),
+            VisualIntroPanel::CharacterCreation {
+                session,
+                input_line: "Avatar".to_string(),
+            },
+        );
+        intro.dispatch.submit_menu_key(b'C');
+
+        assert!(cancel_visual_intro_panel(&mut intro));
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message.contains("Character creation cancelled"));
+        assert!(!dir.join(SAVED_GAM_FILENAME).exists());
+        assert!(matches!(
+            intro.dispatch.submit_menu_key(b'A'),
+            UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
+        ));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn visual_intro_u4_transfer_accepts_overrides_and_writes_save() {
         let dir = debug_game_dir();
         fs::write(
@@ -2467,6 +2540,53 @@ mod tests {
             fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap(),
             [vec![0u8; OOL_PLANE_LEN], vec![0x55; OOL_PLANE_LEN]].concat()
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_intro_u4_transfer_escape_returns_to_menu_without_save() {
+        let dir = debug_game_dir();
+        let source = U4TransferSource {
+            name: b"OLDNAME\0\0".to_vec(),
+            male: true,
+            class_index: 6,
+            strength: 35,
+            dexterity: 20,
+            intelligence: 22,
+            experience: 1500,
+        };
+        let preview = u4_transfer_preview_from_u4_values(
+            display_name_bytes(&source.name),
+            source.class_index,
+            source.strength,
+            source.dexterity,
+            source.intelligence,
+            0,
+        );
+        let mut intro = visual_intro_state_with_panel(
+            dir.clone(),
+            VisualIntroPanel::U4Transfer {
+                source,
+                preview,
+                overrides: U4TransferOverrides {
+                    name: Some(b"New".to_vec()),
+                    male: None,
+                },
+                stage: VisualU4TransferStage::ConfirmGender,
+                input_line: String::new(),
+            },
+        );
+        intro.dispatch.submit_menu_key(b'T');
+
+        assert!(cancel_visual_intro_panel(&mut intro));
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message.contains("Transfer cancelled"));
+        assert!(!dir.join(SAVED_GAM_FILENAME).exists());
+        assert!(matches!(
+            intro.dispatch.submit_menu_key(b'A'),
+            UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
+        ));
         let _ = fs::remove_dir_all(dir);
     }
 
