@@ -1436,8 +1436,8 @@ impl PlayState {
         if (tile >> 4) == 0x5 {
             self.message = match drink {
                 None => {
-                    "You see: a fountain. Will you drink? (use lY/lN, or l2Y for party member 2)."
-                        .to_string()
+                    let member_index = party_index.unwrap_or(0);
+                    return self.start_dungeon_fountain_drink_prompt(member_index, focus);
                 }
                 Some(false) => "You see: a fountain. Will you drink? No.".to_string(),
                 Some(true) => {

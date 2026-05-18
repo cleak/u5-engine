@@ -942,10 +942,25 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    pub fn start_dungeon_fountain_drink_prompt(
+        &mut self,
+        party_index: usize,
+        focus: DungeonLookFocus,
+    ) -> MoveOutcome {
+        self.active_yes_no_prompt = Some(YesNoPromptSession::new(
+            YesNoPromptKind::DungeonFountainDrink { party_index, focus },
+        ));
+        self.message = self.render_active_yes_no_prompt();
+        MoveOutcome::Observed
+    }
+
     pub fn render_active_yes_no_prompt(&self) -> String {
         self.active_yes_no_prompt
             .as_ref()
             .map(|session| match session.kind {
+                YesNoPromptKind::DungeonFountainDrink { .. } => {
+                    "You see: a fountain. Will you drink?".to_string()
+                }
                 YesNoPromptKind::SaveGame => SAVE_PROMPT_MESSAGE.to_string(),
                 YesNoPromptKind::ExitToDos => "Exit to DOS?".to_string(),
             })
@@ -965,6 +980,10 @@ impl PlayState {
             match ch.to_ascii_uppercase() {
                 'Y' => {
                     return match session.kind {
+                        YesNoPromptKind::DungeonFountainDrink { party_index, focus } => {
+                            self.look_dungeon_with_focus(Some(true), Some(party_index), focus);
+                            Ok(Some(PlayInputDisposition::Continue))
+                        }
                         YesNoPromptKind::SaveGame => {
                             let _ = self.save_game_command(game_dir, Some(true))?;
                             Ok(Some(PlayInputDisposition::Continue))
@@ -976,7 +995,13 @@ impl PlayState {
                     };
                 }
                 'N' | '\u{1b}' => {
-                    self.message = "No.".to_string();
+                    if let YesNoPromptKind::DungeonFountainDrink { party_index, focus } =
+                        session.kind
+                    {
+                        self.look_dungeon_with_focus(Some(false), Some(party_index), focus);
+                    } else {
+                        self.message = "No.".to_string();
+                    }
                     return Ok(Some(PlayInputDisposition::Continue));
                 }
                 _ => {}

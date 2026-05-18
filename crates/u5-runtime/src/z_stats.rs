@@ -217,6 +217,10 @@ pub struct YesNoPromptSession {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum YesNoPromptKind {
+    DungeonFountainDrink {
+        party_index: usize,
+        focus: DungeonLookFocus,
+    },
     SaveGame,
     ExitToDos,
 }

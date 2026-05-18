@@ -18293,6 +18293,7 @@
         state.player.facing = Direction::East;
         state.torch_counter = 5;
         state.party.push(state.party[0]);
+        state.party[1].status = b'P';
 
         assert_eq!(
             handle_play_key_input(&mut state, 'L', "", Path::new("")).unwrap(),
@@ -18323,6 +18324,19 @@
             PlayInputDisposition::Continue
         );
         assert!(state.message.contains("fountain"));
+        assert_eq!(
+            state.active_yes_no_prompt.as_ref().map(|session| session.kind),
+            Some(YesNoPromptKind::DungeonFountainDrink {
+                party_index: 1,
+                focus: DungeonLookFocus::Right,
+            })
+        );
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.party[1].status, b'G');
+        assert!(state.message.contains("Cured!"));
         assert_eq!(state.turn, 0);
     }
 

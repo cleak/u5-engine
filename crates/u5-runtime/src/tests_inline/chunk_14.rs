@@ -292,6 +292,13 @@
         assert_eq!(state.turn, 0);
         assert!(state.message.contains("You see: a fountain"));
         assert!(state.message.contains("Will you drink?"));
+        assert_eq!(
+            state.active_yes_no_prompt.as_ref().map(|session| session.kind),
+            Some(YesNoPromptKind::DungeonFountainDrink {
+                party_index: 0,
+                focus: DungeonLookFocus::Ahead,
+            })
+        );
     }
 
     #[test]
