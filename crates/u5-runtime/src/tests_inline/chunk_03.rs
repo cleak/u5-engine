@@ -63,6 +63,7 @@
         state.shrine_codex_mask = 0b0100_0001;
         state.moral_standing = 42;
         state.fortunes_of_war = 0x7e;
+        state.dungeon_room_clear_bitmap[3] = 0xa5;
         state.active_player = Some(1);
         state.combat_round_counter = 7;
         state.avatar_stats = AvatarStats {
@@ -159,6 +160,11 @@
         assert_eq!(saved[SAVE_SHRINE_CODEX_MASK_OFFSET], 0b0100_0001);
         assert_eq!(saved[SAVE_MORAL_STANDING_OFFSET], 42);
         assert_eq!(saved[SAVE_FORTUNES_OF_WAR_OFFSET], 0x7e);
+        assert_eq!(
+            &saved[SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET
+                ..SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET + SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
+            &state.dungeon_room_clear_bitmap
+        );
         assert_eq!(saved[SAVE_TIMING_STATUS_TAG_OFFSET], b'Q');
         assert_eq!(saved[SAVE_ACTIVE_PLAYER_OFFSET], 1);
         assert_eq!(saved[SAVE_COMBAT_ROUND_COUNTER_OFFSET], 7);
@@ -235,6 +241,22 @@
         assert_eq!(underworld_overlay[0], underworld_object);
         assert!(state.message.contains("Done."));
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn from_save_decodes_dungeon_room_clear_bitmap() {
+        let mut bytes = saved_game_seed_bytes(33, 0, 1, 1);
+        bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        bytes[SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET + 14] = 0x40;
+
+        let options = play_options_from_save_bytes(&bytes).unwrap();
+
+        assert_eq!(options.dungeon_room_clear_bitmap[14], 0x40);
+        assert_eq!(
+            options.dungeon_room_clear_bitmap
+                [SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN - 1],
+            0
+        );
     }
 
     #[test]
@@ -1005,6 +1027,7 @@
                 RARE_REAGENT_HARVEST_POINT_COUNT],
             fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
             fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
+            dungeon_room_clear_bitmap: [0; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
             shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
             shrine_ordained_mask: 0,

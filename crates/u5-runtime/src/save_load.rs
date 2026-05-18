@@ -158,6 +158,11 @@ pub fn play_options_from_save_bytes_named(
         .copy_from_slice(&bytes[SAVE_POTION_STOCK_OFFSET..SAVE_POTION_STOCK_OFFSET + POTION_COUNT]);
     let moonstone_slots = decode_moonstone_gate_slots(bytes);
     let reagents = decode_reagent_stock(bytes);
+    let mut dungeon_room_clear_bitmap = [0; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN];
+    dungeon_room_clear_bitmap.copy_from_slice(
+        &bytes[SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET
+            ..SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET + SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
+    );
     let avatar_stats = decode_avatar_stats(bytes);
     let party = decode_save_party(bytes);
     let party_size = party.len();
@@ -204,6 +209,7 @@ pub fn play_options_from_save_bytes_named(
             RARE_REAGENT_HARVEST_POINT_COUNT],
         fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
         fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
+        dungeon_room_clear_bitmap,
         moonstone_slots,
         shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
         shrine_ordained_mask: bytes[SAVE_SHRINE_ORDAINED_MASK_OFFSET],

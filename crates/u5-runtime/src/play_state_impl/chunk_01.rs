@@ -114,6 +114,9 @@ impl PlayState {
         save[SAVE_MORAL_STANDING_OFFSET] = self.moral_standing;
         save[SAVE_TIMING_STATUS_TAG_OFFSET] = self.timing_status.save_byte();
         save[SAVE_FORTUNES_OF_WAR_OFFSET] = self.fortunes_of_war;
+        save[SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET
+            ..SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET + SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN]
+            .copy_from_slice(&self.dungeon_room_clear_bitmap);
         save[SAVE_ACTIVE_PLAYER_OFFSET] = encode_active_player_slot(self.active_player);
         save[SAVE_COMBAT_ROUND_COUNTER_OFFSET] = self.combat_round_counter;
         save[SAVE_TRANSPORT_MARKER_OFFSET] = self.player.transport.save_marker();
@@ -345,6 +348,7 @@ impl PlayState {
             rare_reagent_harvest_days: options.rare_reagent_harvest_days,
             fixed_hidden_treasure_found: options.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: options.fixed_hidden_treasure_daily_day,
+            dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
             shrine_ordained_mask: options.shrine_ordained_mask,
@@ -432,7 +436,8 @@ impl PlayState {
                 ),
             ));
         }
-        let grid = load_dungeon_record(game_dir, scene)?;
+        let mut grid = load_dungeon_record(game_dir, scene)?;
+        apply_dungeon_room_clear_bitmap(&mut grid, scene, &options.dungeon_room_clear_bitmap);
         let passability = load_tile_passability(game_dir)?;
         let moongates = load_moongate_entries(game_dir)?.unwrap_or_default();
         let level = options.floor as u8;
@@ -509,6 +514,7 @@ impl PlayState {
             rare_reagent_harvest_days: options.rare_reagent_harvest_days,
             fixed_hidden_treasure_found: options.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: options.fixed_hidden_treasure_daily_day,
+            dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
             shrine_ordained_mask: options.shrine_ordained_mask,
@@ -693,6 +699,7 @@ impl PlayState {
             rare_reagent_harvest_days: options.rare_reagent_harvest_days,
             fixed_hidden_treasure_found: options.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: options.fixed_hidden_treasure_daily_day,
+            dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
             shrine_ordained_mask: options.shrine_ordained_mask,

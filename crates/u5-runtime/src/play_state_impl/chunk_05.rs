@@ -489,6 +489,7 @@ impl PlayState {
         let marked_helper = !helper_state && !doom_final_room;
         if marked_helper {
             self.grid[dungeon_cell_index(level, x, y)] = 0xa0 | slot;
+            set_dungeon_room_clear_bit(&mut self.dungeon_room_clear_bitmap, scene, slot);
         }
         self.mark_visibility_dirty();
         self.advance_turn();

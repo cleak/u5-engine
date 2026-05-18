@@ -44,6 +44,7 @@ pub struct PlayState {
     pub rare_reagent_harvest_days: [u8; RARE_REAGENT_HARVEST_POINT_COUNT],
     pub fixed_hidden_treasure_found: [u8; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
     pub fixed_hidden_treasure_daily_day: u8,
+    pub dungeon_room_clear_bitmap: [u8; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
     pub moonstone_slots: [MoonstoneGateSlot; MOONSTONE_SLOT_COUNT],
     pub shadowlord_hideouts: [u8; SHADOWLORD_COUNT],
     pub shrine_ordained_mask: u8,

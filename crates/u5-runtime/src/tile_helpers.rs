@@ -178,6 +178,42 @@ pub fn dungeon_room_arena_index(scene: DungeonScene, tile: u8) -> usize {
     bank * DUNGEON_ROOM_SLOTS_PER_BANK + dungeon_room_slot(tile) as usize
 }
 
+pub fn dungeon_room_clear_bit_is_set(
+    bitmap: &[u8; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
+    scene: DungeonScene,
+    room_id: u8,
+) -> bool {
+    dungeon_room_clear_bit_position(scene.record as u8, room_id)
+        .is_some_and(|(byte, mask)| bitmap[byte] & mask != 0)
+}
+
+pub fn set_dungeon_room_clear_bit(
+    bitmap: &mut [u8; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
+    scene: DungeonScene,
+    room_id: u8,
+) -> bool {
+    let Some((byte, mask)) = dungeon_room_clear_bit_position(scene.record as u8, room_id) else {
+        return false;
+    };
+    let was_clear = bitmap[byte] & mask == 0;
+    bitmap[byte] |= mask;
+    was_clear
+}
+
+pub fn apply_dungeon_room_clear_bitmap(
+    grid: &mut [u8],
+    scene: DungeonScene,
+    bitmap: &[u8; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
+) {
+    for cell in grid.iter_mut().take(DUNGEON_RECORD_LEN) {
+        if is_dungeon_room_trigger(*cell)
+            && dungeon_room_clear_bit_is_set(bitmap, scene, dungeon_room_slot(*cell))
+        {
+            *cell = 0xA0 | dungeon_room_slot(*cell);
+        }
+    }
+}
+
 pub fn stair_delta(tile: u8, intent: ClimbIntent) -> Option<i8> {
     if !(80..=87).contains(&tile) {
         return None;

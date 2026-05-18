@@ -13488,10 +13488,50 @@
 
         assert_eq!((state.player.x, state.player.y), (2, 1));
         assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xa7);
+        assert!(dungeon_room_clear_bit_is_set(
+            &state.dungeon_room_clear_bitmap,
+            scene,
+            7
+        ));
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("slot 7"));
         assert!(state.message.contains("selected DUNGEON.CBT arena 23"));
         assert!(!state.message.contains("out of scope"));
+    }
+
+    #[test]
+    fn dungeon_room_clear_bitmap_demotes_matching_triggers_on_load() {
+        let dir = debug_game_dir();
+        let scene = DungeonScene::new(33).unwrap();
+        let mut dungeon_dat = vec![0; DUNGEON_DAT_LEN];
+        let record_base = scene.record * DUNGEON_RECORD_LEN;
+        let clear_cell = record_base + dungeon_cell_index(0, 2, 1);
+        let uncleared_cell = record_base + dungeon_cell_index(0, 3, 1);
+        dungeon_dat[clear_cell] = 0xf7;
+        dungeon_dat[uncleared_cell] = 0xf6;
+        fs::write(dir.join(DUNGEON_DAT_FILENAME), dungeon_dat).unwrap();
+
+        let mut options = PlayOptions {
+            floor: 0,
+            start: Some((1, 1)),
+            ..PlayOptions::default()
+        };
+        assert!(set_dungeon_room_clear_bit(
+            &mut options.dungeon_room_clear_bitmap,
+            scene,
+            7
+        ));
+
+        let state = PlayState::load_dungeon_scene(&dir, scene, options).unwrap();
+
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xa7);
+        assert_eq!(state.grid[dungeon_cell_index(0, 3, 1)], 0xf6);
+        assert!(dungeon_room_clear_bit_is_set(
+            &state.dungeon_room_clear_bitmap,
+            scene,
+            7
+        ));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -13666,6 +13706,11 @@
         assert!(state.message.contains("entered dungeon combat"));
         assert!(state.message.contains("DUNGEON.CBT arena 111"));
         assert!(state.message.contains("kept final room trigger state"));
+        assert!(!dungeon_room_clear_bit_is_set(
+            &state.dungeon_room_clear_bitmap,
+            scene,
+            DOOM_FINAL_ROOM_SLOT
+        ));
         assert_eq!(state.active_objects[7].tile, 0xc4);
         assert!(!state.combat_actors[7].is_empty());
         let _ = fs::remove_dir_all(dir);

@@ -890,6 +890,7 @@ impl PlayState {
             rare_reagent_harvest_days: self.rare_reagent_harvest_days,
             fixed_hidden_treasure_found: self.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: self.fixed_hidden_treasure_daily_day,
+            dungeon_room_clear_bitmap: self.dungeon_room_clear_bitmap,
             moonstone_slots: self.moonstone_slots,
             shadowlord_hideouts: self.shadowlord_hideouts,
             shrine_ordained_mask: self.shrine_ordained_mask,
