@@ -736,6 +736,102 @@
     }
 
     #[test]
+    fn blackthorn_captive_arrest_enters_audience_and_handoffs_after_answer() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 5, 5);
+        let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE).unwrap();
+        state.area = Area::Town { scene, floor: 0 };
+        state.pending_town_arrest = Some(TownArrestPrompt {
+            scene_byte: BLACKTHORN_CAPTIVE_CELL_SCENE,
+            floor: 0,
+            npc_slot: 1,
+        });
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x70,
+            tile: 0x70,
+            x: 6,
+            y: 5,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.pending_town_arrest.is_none());
+        assert!(state.active_blackthorn.is_some());
+        assert!(state.active_objects[1].is_empty());
+        assert!(state.message.contains("Blackthorn audience"));
+        assert!(state.message.contains("Honesty"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "hm", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_blackthorn.is_none());
+        assert!(state.blackthorn_jailed_party_slots.contains(&0));
+        assert_eq!(
+            state.area,
+            Area::Town {
+                scene,
+                floor: 0
+            }
+        );
+        assert_eq!(
+            (state.player.x, state.player.y),
+            (
+                BLACKTHORN_CAPTIVE_CELL_X as usize,
+                BLACKTHORN_CAPTIVE_CELL_Y as usize
+            )
+        );
+        assert!(state.message.contains("Returned to Blackthorn's captive cell"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn blackthorn_rescue_restores_party_and_clamps_standing() {
+        let dir = debug_game_dir();
+        let mut state = dungeon_state(open_dungeon_record(), 3, 1, 1);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'F',
+            status: b'D',
+            climb_stat: 10,
+            mana: 0,
+            hp: 0,
+            max_hp: 42,
+            level: 3,
+        });
+        state.blackthorn_jailed_party_slots.push(1);
+        state.moral_standing = 12;
+
+        assert!(matches!(
+            state.apply_blackthorn_rescue_refuge(&dir).unwrap(),
+            MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
+                if scene.byte == BLACKTHORN_RESCUE_HANDOFF_SCENE
+        ));
+
+        assert_eq!(state.moral_standing, BLACKTHORN_RESCUE_STANDING_FLOOR);
+        assert!(state.blackthorn_jailed_party_slots.is_empty());
+        assert_eq!(state.party[1].status, b'G');
+        assert_eq!(state.party[1].hp, 42);
+        assert_eq!(
+            (state.player.x, state.player.y),
+            (
+                BLACKTHORN_RESCUE_HANDOFF_X as usize,
+                BLACKTHORN_RESCUE_HANDOFF_Y as usize
+            )
+        );
+        assert!(state.message.contains("verdict record 0"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn scheduled_npc_pathfinds_around_blocked_direct_step() {
         let mut grid = open_grid();
         grid[1 * 32 + 1] = 24;

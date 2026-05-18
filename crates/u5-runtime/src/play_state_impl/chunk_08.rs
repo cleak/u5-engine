@@ -755,6 +755,7 @@ impl PlayState {
         self.return_world = None;
         self.pending_moongate = None;
         self.pending_town_arrest = None;
+        self.active_blackthorn = None;
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         self.message = format!(
@@ -837,6 +838,7 @@ impl PlayState {
     ) -> io::Result<MoveOutcome> {
         self.pending_moongate = None;
         self.pending_town_arrest = None;
+        self.active_blackthorn = None;
         if entry.is_single_ended() {
             self.message = "Entered moongate, but it has no destination.".to_string();
             return Ok(MoveOutcome::Observed);
@@ -858,6 +860,7 @@ impl PlayState {
             self.return_world = None;
             self.pending_moongate = None;
             self.pending_town_arrest = None;
+            self.active_blackthorn = None;
         }
         self.player.x = entry.destination_x;
         self.player.y = entry.destination_y;
@@ -891,6 +894,7 @@ impl PlayState {
             'y' | 'Y' => {
                 let Area::World { plane } = self.area else {
                     self.pending_moongate = None;
+                    self.active_blackthorn = None;
                     self.message = "Moongate prompt cancelled outside the overworld.".to_string();
                     return Ok(Some(MoveOutcome::Blocked));
                 };
@@ -898,6 +902,7 @@ impl PlayState {
             }
             'n' | 'N' => {
                 self.pending_moongate = None;
+                self.active_blackthorn = None;
                 self.message = "Moongate ignored.".to_string();
                 Ok(Some(MoveOutcome::PromptDeclined))
             }
@@ -1166,6 +1171,7 @@ impl PlayState {
         self.clear_open_town_door_state();
         self.pending_moongate = None;
         self.pending_town_arrest = None;
+        self.active_blackthorn = None;
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         true
@@ -1207,6 +1213,7 @@ impl PlayState {
         self.clear_open_town_door_state();
         self.pending_moongate = None;
         self.pending_town_arrest = None;
+        self.active_blackthorn = None;
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         Ok(true)

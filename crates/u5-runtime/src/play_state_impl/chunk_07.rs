@@ -1803,9 +1803,7 @@ impl PlayState {
             'y' => {
                 self.pending_town_arrest = None;
                 if prompt.scene_byte == BLACKTHORN_CAPTIVE_CELL_SCENE {
-                    self.message =
-                        "Blackthorn audience capture would begin from the captive scene.".to_string();
-                    return Ok(Some(MoveOutcome::Used));
+                    return self.begin_blackthorn_audience_capture(game_dir);
                 }
                 self.apply_town_arrest_surrender(game_dir)
             }
@@ -1863,6 +1861,249 @@ impl PlayState {
             self.clock.hour
         );
         Ok(Some(MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))))
+    }
+
+    pub fn begin_blackthorn_audience_capture(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        self.pending_town_arrest = None;
+        self.pending_moongate = None;
+        self.clear_non_player_active_objects();
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+
+        let Some(target_slot) = self.next_blackthorn_challenge_target_slot() else {
+            let outcome = self.apply_blackthorn_captive_cell_handoff(
+                game_dir,
+                "Blackthorn audience found no eligible party member.",
+            )?;
+            return Ok(Some(outcome));
+        };
+
+        let mut challenge = crate::blackthorn_session::BlackthornChallenge::new();
+        let prompt = match challenge.begin() {
+            crate::blackthorn_session::BlackthornChallengeOutcome::PromptPresented {
+                prompt,
+                ..
+            } => prompt,
+            _ => "Virtue",
+        };
+        self.active_blackthorn = Some(challenge);
+        self.message = format!(
+            "Blackthorn audience: the party is overcome and dragged before Lord Blackthorn. Party slot {} is challenged for {prompt}.",
+            target_slot + 1
+        );
+        Ok(Some(MoveOutcome::Used))
+    }
+
+    pub fn submit_blackthorn_audience_answer(
+        &mut self,
+        typed: &str,
+        game_dir: &Path,
+    ) -> io::Result<MoveOutcome> {
+        let answer: String = typed
+            .trim()
+            .chars()
+            .take(BLACKTHORN_CHALLENGE_INPUT_LIMIT)
+            .collect();
+        if answer.is_empty() {
+            self.message = self.blackthorn_current_prompt_message();
+            return Ok(MoveOutcome::PromptDeclined);
+        }
+
+        let Some(mut challenge) = self.active_blackthorn.take() else {
+            self.message = "No Blackthorn audience is active.".to_string();
+            return Ok(MoveOutcome::Blocked);
+        };
+
+        match challenge.submit(&answer) {
+            crate::blackthorn_session::BlackthornChallengeOutcome::Correct { ordinal } => {
+                let handled_slot = self.mark_blackthorn_current_target_handled();
+                if self.next_blackthorn_challenge_target_slot().is_none() {
+                    return self.apply_blackthorn_captive_cell_handoff(
+                        game_dir,
+                        &format!(
+                            "Answered Blackthorn's prompt {} correctly; party slot {} is handled.",
+                            ordinal + 1,
+                            handled_slot.map(|slot| slot + 1).unwrap_or(0)
+                        ),
+                    );
+                }
+                self.active_blackthorn = Some(challenge);
+                self.message = format!(
+                    "Answered Blackthorn's prompt {} correctly; party slot {} is handled. {}",
+                    ordinal + 1,
+                    handled_slot.map(|slot| slot + 1).unwrap_or(0),
+                    self.blackthorn_current_prompt_message()
+                );
+                Ok(MoveOutcome::Used)
+            }
+            crate::blackthorn_session::BlackthornChallengeOutcome::Survived => {
+                let handled_slot = self.mark_blackthorn_current_target_handled();
+                self.apply_blackthorn_captive_cell_handoff(
+                    game_dir,
+                    &format!(
+                        "Survived Blackthorn's challenge; party slot {} is handled.",
+                        handled_slot.map(|slot| slot + 1).unwrap_or(0)
+                    ),
+                )
+            }
+            crate::blackthorn_session::BlackthornChallengeOutcome::Wrong {
+                ordinal,
+                expected,
+            } => {
+                let victim = self.mark_blackthorn_failure_victim_handled();
+                self.apply_blackthorn_captive_cell_handoff(
+                    game_dir,
+                    &format!(
+                        "Failed Blackthorn's prompt {}; expected {expected}; party slot {} is punished.",
+                        ordinal + 1,
+                        victim.map(|slot| slot + 1).unwrap_or(0)
+                    ),
+                )
+            }
+            crate::blackthorn_session::BlackthornChallengeOutcome::PromptPresented {
+                prompt,
+                ..
+            } => {
+                self.active_blackthorn = Some(challenge);
+                self.message = format!("Blackthorn asks for {prompt}.");
+                Ok(MoveOutcome::PromptDeclined)
+            }
+            crate::blackthorn_session::BlackthornChallengeOutcome::AlreadyPunished => {
+                self.apply_blackthorn_captive_cell_handoff(
+                    game_dir,
+                    "Blackthorn's punishment has already resolved.",
+                )
+            }
+            crate::blackthorn_session::BlackthornChallengeOutcome::AlreadySurvived => {
+                self.apply_blackthorn_captive_cell_handoff(
+                    game_dir,
+                    "Blackthorn's challenge has already resolved.",
+                )
+            }
+            crate::blackthorn_session::BlackthornChallengeOutcome::AlreadyAborted => {
+                self.apply_blackthorn_captive_cell_handoff(
+                    game_dir,
+                    "Blackthorn's challenge was aborted.",
+                )
+            }
+        }
+    }
+
+    pub fn blackthorn_current_prompt_message(&self) -> String {
+        let Some(challenge) = self.active_blackthorn.as_ref() else {
+            return "Blackthorn audience is not active.".to_string();
+        };
+        if let Some((_, prompt)) = challenge.current_prompt() {
+            let target = self
+                .next_blackthorn_challenge_target_slot()
+                .map(|slot| slot + 1)
+                .unwrap_or(0);
+            format!("Blackthorn asks party slot {target} for {prompt}.")
+        } else {
+            "Blackthorn waits.".to_string()
+        }
+    }
+
+    pub fn next_blackthorn_challenge_target_slot(&self) -> Option<usize> {
+        self.party.iter().enumerate().find_map(|(index, member)| {
+            let slot = member.slot;
+            (member.living() && !self.blackthorn_jailed_party_slots.contains(&slot))
+                .then_some(index)
+        })
+    }
+
+    pub fn mark_blackthorn_current_target_handled(&mut self) -> Option<usize> {
+        let index = self.next_blackthorn_challenge_target_slot()?;
+        let slot = self.party[index].slot;
+        if !self.blackthorn_jailed_party_slots.contains(&slot) {
+            self.blackthorn_jailed_party_slots.push(slot);
+        }
+        Some(index)
+    }
+
+    pub fn mark_blackthorn_failure_victim_handled(&mut self) -> Option<usize> {
+        let index = if self.party.len() > BLACKTHORN_FAILURE_VICTIM_SLOT {
+            BLACKTHORN_FAILURE_VICTIM_SLOT
+        } else {
+            self.next_blackthorn_challenge_target_slot()?
+        };
+        let slot = self.party[index].slot;
+        if !self.blackthorn_jailed_party_slots.contains(&slot) {
+            self.blackthorn_jailed_party_slots.push(slot);
+        }
+        Some(index)
+    }
+
+    pub fn apply_blackthorn_captive_cell_handoff(
+        &mut self,
+        game_dir: &Path,
+        prefix: &str,
+    ) -> io::Result<MoveOutcome> {
+        let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE)?;
+        let floor = 0i8;
+        self.grid = load_town_runtime_floor(game_dir, scene, floor, self.clock.hour)?;
+        self.area = Area::Town { scene, floor };
+        self.player.x = BLACKTHORN_CAPTIVE_CELL_X as usize;
+        self.player.y = BLACKTHORN_CAPTIVE_CELL_Y as usize;
+        self.player.transport = TransportState::Foot;
+        self.pending_moongate = None;
+        self.pending_town_arrest = None;
+        self.active_blackthorn = None;
+        self.clear_town_floor_reload_door_state();
+        self.town_npc_alarm_states
+            .retain(|marker| marker.scene_byte == scene.byte && marker.floor == floor);
+        let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
+        let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;
+        self.load_scheduled_npcs(&npc_slots);
+        self.attach_player_phantom_npc();
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+        self.message = format!(
+            "{prefix} Returned to Blackthorn's captive cell in {} at ({}, {}).",
+            scene.key(),
+            self.player.x,
+            self.player.y
+        );
+        Ok(MoveOutcome::Transition(AreaTransition::EnteredLocation(scene)))
+    }
+
+    pub fn apply_blackthorn_rescue_refuge(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+        let verdict = blackthorn_rescue_verdict_record(self.moral_standing);
+        let previous_standing = self.moral_standing;
+        self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);
+        for member in &mut self.party {
+            member.status = b'G';
+            member.hp = member.max_hp.max(1);
+        }
+        self.blackthorn_jailed_party_slots.clear();
+        let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
+        let floor = 0i8;
+        self.grid = load_town_runtime_floor(game_dir, scene, floor, self.clock.hour)?;
+        self.area = Area::Town { scene, floor };
+        self.player.x = BLACKTHORN_RESCUE_HANDOFF_X as usize;
+        self.player.y = BLACKTHORN_RESCUE_HANDOFF_Y as usize;
+        self.force_foot_transport();
+        self.pending_moongate = None;
+        self.pending_town_arrest = None;
+        self.active_blackthorn = None;
+        self.clear_town_floor_reload_door_state();
+        let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
+        let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;
+        self.load_scheduled_npcs(&npc_slots);
+        self.attach_player_phantom_npc();
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+        self.message = format!(
+            "Blackthorn rescue/refuge: verdict record {verdict}, standing {previous_standing}->{}, restored party, handed off to {} at ({}, {}).",
+            self.moral_standing,
+            scene.key(),
+            self.player.x,
+            self.player.y
+        );
+        Ok(MoveOutcome::Transition(AreaTransition::EnteredLocation(scene)))
     }
 
     pub fn apply_dungeon_post_turn_effects_after_turn(

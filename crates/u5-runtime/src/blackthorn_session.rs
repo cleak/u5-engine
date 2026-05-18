@@ -93,6 +93,13 @@ impl BlackthornChallenge {
         }
     }
 
+    pub fn current_prompt(&self) -> Option<(u8, &'static str)> {
+        let BlackthornChallengePhase::PresentingPrompt { ordinal } = self.phase else {
+            return None;
+        };
+        blackthorn_challenge_prompt(ordinal).map(|(prompt, _)| (ordinal, prompt))
+    }
+
     pub fn abort(&mut self) {
         self.phase = BlackthornChallengePhase::Aborted;
     }

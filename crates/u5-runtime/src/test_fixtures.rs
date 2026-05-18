@@ -122,6 +122,8 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         pending_moongate: None,
         pending_town_arrest: None,
         endgame: None,
+        active_blackthorn: None,
+        blackthorn_jailed_party_slots: Vec::new(),
         active_shop: None,
         active_conversation: None,
         pickpocketed_npcs: Vec::new(),
@@ -225,6 +227,8 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         pending_moongate: None,
         pending_town_arrest: None,
         endgame: None,
+        active_blackthorn: None,
+        blackthorn_jailed_party_slots: Vec::new(),
         active_shop: None,
         active_conversation: None,
         pickpocketed_npcs: Vec::new(),
@@ -329,6 +333,8 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         pending_moongate: None,
         pending_town_arrest: None,
         endgame: None,
+        active_blackthorn: None,
+        blackthorn_jailed_party_slots: Vec::new(),
         active_shop: None,
         active_conversation: None,
         pickpocketed_npcs: Vec::new(),
@@ -346,8 +352,8 @@ pub fn debug_game_dir() -> PathBuf {
         .as_nanos();
     let dir = std::env::temp_dir().join(format!("u5-engine-test-{}-{unique}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join("CASTLE.DAT"), vec![16; 1024]).unwrap();
-    fs::write(dir.join("CASTLE.NPC"), vec![0; 576]).unwrap();
+    fs::write(dir.join("CASTLE.DAT"), vec![16; 4096]).unwrap();
+    fs::write(dir.join("CASTLE.NPC"), vec![0; 2304]).unwrap();
     fs::write(dir.join("CASTLE.TLK"), [1, 0, 0, 0]).unwrap();
     fs::write(dir.join("DUNGEON.DAT"), vec![0; DUNGEON_DAT_LEN]).unwrap();
     fs::write(dir.join("UNDER.DAT"), vec![5; UNDER_DAT_LEN]).unwrap();

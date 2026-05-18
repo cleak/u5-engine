@@ -22,6 +22,9 @@ pub fn handle_play_key_input(
     if state.endgame.is_some() {
         return Ok(handle_endgame_key_input(state, key, suffix));
     }
+    if state.active_blackthorn.is_some() {
+        return handle_active_blackthorn_key_input(state, key, suffix, game_dir);
+    }
     if state.active_shop.is_some() {
         return Ok(handle_active_shop_key_input(state, key, suffix));
     }
@@ -748,6 +751,21 @@ fn handle_active_conversation_key_input(
     let line = line.trim().to_string();
     let (_text, _ended) = state.submit_active_conversation_keyword(&line);
     PlayInputDisposition::Continue
+}
+
+fn handle_active_blackthorn_key_input(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    let mut line = String::new();
+    if !matches!(key, '\r' | '\n' | ' ') {
+        line.push(key);
+    }
+    line.push_str(suffix);
+    state.submit_blackthorn_audience_answer(&line, game_dir)?;
+    Ok(PlayInputDisposition::Continue)
 }
 
 fn handle_endgame_key_input(

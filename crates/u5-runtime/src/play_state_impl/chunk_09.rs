@@ -344,6 +344,7 @@ impl PlayState {
         self.return_world = None;
         self.pending_moongate = None;
         self.pending_town_arrest = None;
+        self.active_blackthorn = None;
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         self.message = match (entry.from_plane, entry.to_plane) {
