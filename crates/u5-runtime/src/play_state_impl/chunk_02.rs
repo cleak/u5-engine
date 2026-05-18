@@ -89,29 +89,7 @@ impl PlayState {
                 handled!(self.turn_dungeon(true));
             }
             'k' => {
-                let Area::Dungeon { level, .. } = self.area else {
-                    unreachable!("dungeon key handler is gated to dungeon scenes");
-                };
-                let tile = self.dungeon_cell(level, self.player.x, self.player.y);
-                let outcome = if tile == 0x60 {
-                    self.climb(game_dir, ClimbIntent::Up)?
-                } else {
-                    match tile >> 4 {
-                        0x1 => self.climb(game_dir, ClimbIntent::Up)?,
-                        0x2 => self.climb(game_dir, ClimbIntent::Down)?,
-                        0x3 => {
-                            self.message =
-                                "Two-way ladder: use < or > to choose a climb direction."
-                                    .to_string();
-                            MoveOutcome::Blocked
-                        }
-                        _ => {
-                            self.message = "Not climbable!".to_string();
-                            MoveOutcome::Blocked
-                        }
-                    }
-                };
-                handled!(outcome);
+                handled!(self.klimb_command(game_dir)?);
             }
             '<' => {
                 handled!(self.climb(game_dir, ClimbIntent::Up)?);

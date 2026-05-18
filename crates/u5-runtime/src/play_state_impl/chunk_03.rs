@@ -764,11 +764,19 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    pub fn start_klimb_direction_prompt(&mut self) -> MoveOutcome {
+        self.active_direction_prompt =
+            Some(DirectionPromptSession::new(DirectionPromptKind::Klimb));
+        self.message = self.render_active_direction_prompt();
+        MoveOutcome::Observed
+    }
+
     pub fn render_active_direction_prompt(&self) -> String {
         self.active_direction_prompt
             .as_ref()
             .map(|session| match session.kind {
                 DirectionPromptKind::Attack => "Attack where?".to_string(),
+                DirectionPromptKind::Klimb => "Klimb-".to_string(),
                 DirectionPromptKind::CombatKlimb { .. } => "Klimb-".to_string(),
                 DirectionPromptKind::CombatPush { .. } => "Push-".to_string(),
                 DirectionPromptKind::CombatSjog { branch, .. } => {
@@ -800,6 +808,13 @@ impl PlayState {
                 self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
                 return Ok(Some(MoveOutcome::PromptDeclined));
             }
+            if matches!(session.kind, DirectionPromptKind::Klimb) {
+                match ch {
+                    '<' => return self.climb(game_dir, ClimbIntent::Up).map(Some),
+                    '>' => return self.climb(game_dir, ClimbIntent::Down).map(Some),
+                    _ => continue,
+                }
+            }
             if let DirectionPromptKind::CombatKlimb { actor_slot } = session.kind {
                 match ch {
                     '<' => {
@@ -823,6 +838,10 @@ impl PlayState {
             let outcome = match session.kind {
                 DirectionPromptKind::Attack => {
                     self.attack_command_with_game_dir(Some(direction), Some(game_dir))?
+                }
+                DirectionPromptKind::Klimb => {
+                    self.message = "Klimb-".to_string();
+                    MoveOutcome::Blocked
                 }
                 DirectionPromptKind::CombatKlimb { actor_slot } => {
                     self.klimb_combat_actor_direction(actor_slot, direction)

@@ -259,20 +259,36 @@
         assert!(up.handle_dungeon_key('k', Path::new("")).unwrap());
         assert_eq!(up.area, Area::Dungeon { scene, level: 2 });
         assert_eq!(up.turn, 0);
-        assert!(up.message.contains("Two-way ladder"));
+        assert_eq!(up.message, "Klimb-");
+        assert_eq!(
+            up.active_direction_prompt.map(|session| session.kind),
+            Some(DirectionPromptKind::Klimb)
+        );
 
-        assert!(up.handle_dungeon_key('<', Path::new("")).unwrap());
+        assert_eq!(
+            handle_play_key_input(&mut up, '<', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
 
         assert_eq!(up.area, Area::Dungeon { scene, level: 1 });
         assert_eq!(up.active_objects[0].z, 1);
         assert_eq!(up.turn, 1);
+        assert!(up.active_direction_prompt.is_none());
 
         let mut down_grid = open_dungeon_record();
         down_grid[dungeon_cell_index(2, 1, 1)] = 0x30;
         down_grid[dungeon_cell_index(3, 1, 1)] = 0x10;
         let mut down = dungeon_state(down_grid, 2, 1, 1);
 
-        assert!(down.handle_dungeon_key('>', Path::new("")).unwrap());
+        assert!(down.handle_dungeon_key('k', Path::new("")).unwrap());
+        assert_eq!(
+            down.active_direction_prompt.map(|session| session.kind),
+            Some(DirectionPromptKind::Klimb)
+        );
+        assert_eq!(
+            handle_play_key_input(&mut down, '>', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
 
         assert_eq!(down.area, Area::Dungeon { scene, level: 3 });
         assert_eq!(down.active_objects[0].z, 3);

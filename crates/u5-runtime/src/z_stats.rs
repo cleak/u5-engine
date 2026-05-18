@@ -169,6 +169,7 @@ pub struct DirectionPromptSession {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DirectionPromptKind {
     Attack,
+    Klimb,
     CombatKlimb {
         actor_slot: usize,
     },

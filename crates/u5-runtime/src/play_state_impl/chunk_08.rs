@@ -693,11 +693,7 @@ impl PlayState {
                         Ok(MoveOutcome::Blocked)
                     }
                     [intent] => self.climb(game_dir, *intent),
-                    _ => {
-                        self.message =
-                            "Two-way climb: use < or > to choose a climb direction.".to_string();
-                        Ok(MoveOutcome::Blocked)
-                    }
+                    _ => Ok(self.start_klimb_direction_prompt()),
                 }
             }
             Area::Dungeon { level, .. } => {
@@ -708,12 +704,7 @@ impl PlayState {
                     match tile >> 4 {
                         0x1 => self.climb(game_dir, ClimbIntent::Up),
                         0x2 => self.climb(game_dir, ClimbIntent::Down),
-                        0x3 => {
-                            self.message =
-                                "Two-way ladder: use < or > to choose a climb direction."
-                                    .to_string();
-                            Ok(MoveOutcome::Blocked)
-                        }
+                        0x3 => Ok(self.start_klimb_direction_prompt()),
                         _ => {
                             self.message = "Not climbable!".to_string();
                             Ok(MoveOutcome::Blocked)

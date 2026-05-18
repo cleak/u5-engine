@@ -653,9 +653,13 @@
         grid[0] = 80;
         let mut state = test_state(grid, 0, 0);
 
-        assert_eq!(state.klimb_command(&dir).unwrap(), MoveOutcome::Blocked);
+        assert_eq!(state.klimb_command(&dir).unwrap(), MoveOutcome::Observed);
 
-        assert!(state.message.contains("Two-way climb"));
+        assert_eq!(state.message, "Klimb-");
+        assert_eq!(
+            state.active_direction_prompt.map(|session| session.kind),
+            Some(DirectionPromptKind::Klimb)
+        );
         assert_eq!(
             state.area,
             Area::Town {
@@ -664,6 +668,21 @@
             }
         );
         assert_eq!(state.turn, 0);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '>', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(
+            state.area,
+            Area::Town {
+                scene: Scene::new(17).unwrap(),
+                floor: -1
+            }
+        );
+        assert_eq!(state.turn, 1);
+        assert!(state.active_direction_prompt.is_none());
         let _ = fs::remove_dir_all(dir);
     }
 
