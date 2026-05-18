@@ -12910,6 +12910,25 @@
     }
 
     #[test]
+    fn town_npc_attack_resolution_gates_death_mask_by_type() {
+        assert!(town_npc_activation_mask_eligible(0x0E));
+        assert!(!town_npc_activation_mask_eligible(0x50));
+        assert!(!town_npc_activation_mask_eligible(0x70));
+        assert_eq!(
+            town_npc_attack_resolution(0x0E),
+            TownNpcAttackResolution::DeathMask
+        );
+        assert_eq!(
+            town_npc_attack_resolution(0x70),
+            TownNpcAttackResolution::AlarmOnly
+        );
+        assert_eq!(
+            town_npc_attack_resolution(0x50),
+            TownNpcAttackResolution::Refused
+        );
+    }
+
+    #[test]
     fn main_quest_requirements_enumerate_per_spec() {
         // catalogs/quest-graph.md §2
         assert_eq!(MainQuestRequirement::ALL.len(), 4);

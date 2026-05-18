@@ -319,7 +319,7 @@ impl PlayState {
                 'P' => {
                     if let Some(direction) = inline_direction {
                         handled!(self.push_direction_with_game_dir(direction, game_dir)?);
-                    } else if matches!(self.area, Area::Town { .. }) {
+                    } else if matches!(self.area, Area::World { .. } | Area::Town { .. }) {
                         handled!(self.start_push_direction_prompt());
                     } else {
                         handled!(self.push_facing_with_game_dir(game_dir)?);

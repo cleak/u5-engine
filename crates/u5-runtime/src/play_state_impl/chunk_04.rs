@@ -110,8 +110,6 @@ impl PlayState {
         game_dir: Option<&Path>,
     ) -> io::Result<MoveOutcome> {
         Ok(match request {
-            Some(UseItemRequest::Torch) => self.ignite_torch(),
-            Some(UseItemRequest::Gem) => self.view_gem(),
             Some(UseItemRequest::WoodenBox) => self.use_wooden_box(),
             Some(UseItemRequest::HmsCapePlans) => self.use_hms_cape_plans(),
             Some(UseItemRequest::CrownOfLordBritish) => self.use_worn_regalia(

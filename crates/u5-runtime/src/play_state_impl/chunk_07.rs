@@ -1048,20 +1048,47 @@ impl PlayState {
             }
             self.advance_turn();
             if let Area::Town { scene, floor } = self.area {
-                if let Some((npc_index, npc_slot, object_slot)) =
+                if let Some((npc_index, npc_slot, object_slot, type_byte)) =
                     self.town_attack_target_at(floor, x, y)
                 {
-                    self.free_active_object_slot(object_slot);
-                    self.npcs.remove(npc_index);
-                    self.mark_removed_town_npc_once(scene, floor, npc_slot);
-                    let (fortified, fleeing) = self.town_alarm_sweep(scene, floor, Some(npc_slot));
-                    self.mark_visibility_dirty();
-                    self.message = format!(
-                        "Attacked NPC slot {npc_slot} at ({x}, {y}) to the {}; target removed from {} floor {floor}; alarm raised ({fortified} fortified, {fleeing} fleeing).",
-                        direction.name(),
-                        scene.key()
-                    );
-                    return Ok(MoveOutcome::Used);
+                    match town_npc_attack_resolution(type_byte) {
+                        TownNpcAttackResolution::DeathMask => {
+                            self.free_active_object_slot(object_slot);
+                            self.npcs.remove(npc_index);
+                            self.mark_removed_town_npc_once(scene, floor, npc_slot);
+                            let (fortified, fleeing) =
+                                self.town_alarm_sweep(scene, floor, Some(npc_slot));
+                            self.mark_visibility_dirty();
+                            self.message = format!(
+                                "Attacked NPC slot {npc_slot} type 0x{type_byte:02X} at ({x}, {y}) to the {}; target removed from {} floor {floor}; alarm raised ({fortified} fortified, {fleeing} fleeing).",
+                                direction.name(),
+                                scene.key()
+                            );
+                            return Ok(MoveOutcome::Used);
+                        }
+                        TownNpcAttackResolution::AlarmOnly => {
+                            let (fortified, fleeing) =
+                                self.town_alarm_sweep(scene, floor, Some(npc_slot));
+                            self.set_town_npc_alarm_state(
+                                scene,
+                                floor,
+                                npc_slot,
+                                TownNpcAlarmState::Fortified,
+                            );
+                            self.message = format!(
+                                "Attacked NPC slot {npc_slot} type 0x{type_byte:02X} at ({x}, {y}) to the {}; alarm raised ({fortified} fortified, {fleeing} fleeing).",
+                                direction.name()
+                            );
+                            return Ok(MoveOutcome::Used);
+                        }
+                        TownNpcAttackResolution::Refused => {
+                            self.message = format!(
+                                "Attacked NPC slot {npc_slot} type 0x{type_byte:02X} at ({x}, {y}) to the {}; no attackable town NPC.",
+                                direction.name()
+                            );
+                            return Ok(MoveOutcome::Blocked);
+                        }
+                    }
                 }
                 self.message = format!(
                     "Attacked object tile {} at ({x}, {y}) to the {}; no attackable town NPC.",
@@ -1112,7 +1139,7 @@ impl PlayState {
         floor: i8,
         x: usize,
         y: usize,
-    ) -> Option<(usize, usize, usize)> {
+    ) -> Option<(usize, usize, usize, u8)> {
         if floor < 0 {
             return None;
         }
@@ -1131,7 +1158,7 @@ impl PlayState {
                         active_object_matches_runtime_npc(object, npc, floor).then_some(slot)
                     })
             })?;
-            Some((index, npc.slot, object_slot))
+            Some((index, npc.slot, object_slot, npc.type_byte))
         })
     }
 
@@ -2051,7 +2078,7 @@ impl PlayState {
             let wp = waypoint_for_hour(&npc.schedule, self.clock.hour);
             let alarm_state = self.town_npc_alarm_state(scene, floor, npc.slot);
             let behavior = if alarm_state == Some(TownNpcAlarmState::Fortified) {
-                if town_contact_type_guard_like(npc.type_byte) {
+                if town_npc_type_guard_like(npc.type_byte) {
                     NpcAiBehavior::GuardOrBlock
                 } else {
                     NpcAiBehavior::ApproachAndAttack
@@ -2822,8 +2849,4 @@ pub fn potion_label(index: usize) -> &'static str {
 
 pub fn scroll_label(index: usize) -> &'static str {
     SCROLL_SPELL_LABELS.get(index).copied().unwrap_or("unknown")
-}
-
-fn town_contact_type_guard_like(type_byte: u8) -> bool {
-    matches!(type_byte, 0x70..=0x7f)
 }

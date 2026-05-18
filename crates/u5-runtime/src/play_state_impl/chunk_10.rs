@@ -311,7 +311,11 @@ impl PlayState {
         self.npcs = slots
             .iter()
             .skip(1)
-            .filter(|slot| slot.type_byte != 0 && !removed.contains(&slot.slot))
+            .filter(|slot| {
+                slot.type_byte != 0
+                    && !(town_npc_activation_mask_eligible(slot.type_byte)
+                        && removed.contains(&slot.slot))
+            })
             .map(|slot| RuntimeNpc::from_slot(slot, self.clock.hour))
             .collect();
         self.relink_npc_objects();
@@ -322,7 +326,11 @@ impl PlayState {
         self.npcs = slots
             .iter()
             .skip(1)
-            .filter(|slot| slot.type_byte != 0 && !removed.contains(&slot.slot))
+            .filter(|slot| {
+                slot.type_byte != 0
+                    && !(town_npc_activation_mask_eligible(slot.type_byte)
+                        && removed.contains(&slot.slot))
+            })
             .map(|slot| RuntimeNpc::from_slot(slot, self.clock.hour))
             .collect();
         self.link_npcs_to_existing_active_objects();
@@ -878,10 +886,6 @@ fn cardinal_direction_from_sign(dx: isize, dy: isize) -> Option<Direction> {
         (0, 1) => Some(Direction::South),
         _ => None,
     }
-}
-
-fn town_npc_type_guard_like(type_byte: u8) -> bool {
-    matches!(type_byte, 0x70..=0x7f)
 }
 
 fn town_npc_type_fortifies_on_alarm(type_byte: u8) -> bool {

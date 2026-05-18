@@ -953,9 +953,10 @@
     }
 
     #[test]
-    fn inline_use_suffix_still_bypasses_active_picker() {
+    fn inline_use_suffix_rejects_torch_and_gem_aliases() {
         let mut state = test_state(open_grid(), 5, 5);
         state.torches = 1;
+        state.gems = 1;
 
         assert_eq!(
             handle_play_key_input(&mut state, 'U', "T", Path::new("")).unwrap(),
@@ -963,9 +964,20 @@
         );
 
         assert!(state.active_use.is_none());
-        assert_eq!(state.torches, 0);
-        assert_eq!(state.torch_counter, SURFACE_TORCH_DURATION);
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.torches, 1);
+        assert_eq!(state.torch_counter, 0);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, use_prompt_message());
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'U', "G", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_use.is_none());
+        assert_eq!(state.gems, 1);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, use_prompt_message());
     }
 
     #[test]

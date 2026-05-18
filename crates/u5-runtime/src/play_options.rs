@@ -263,8 +263,6 @@ impl MoveOutcome {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UseItemRequest {
-    Torch,
-    Gem,
     WoodenBox,
     HmsCapePlans,
     CrownOfLordBritish,

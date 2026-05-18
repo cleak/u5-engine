@@ -207,8 +207,6 @@ pub fn parse_inline_use_request(value: &str) -> Option<UseItemRequest> {
     }
     let token = trimmed.chars().next()?;
     match token.to_ascii_uppercase() {
-        'T' | 'I' => Some(UseItemRequest::Torch),
-        'G' | 'V' => Some(UseItemRequest::Gem),
         'B' => Some(UseItemRequest::WoodenBox),
         'C' => Some(UseItemRequest::MagicCarpet),
         'P' => Some(UseItemRequest::HmsCapePlans),

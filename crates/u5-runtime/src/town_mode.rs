@@ -239,6 +239,36 @@ pub struct TownNpcAlarmMarker {
     pub state: TownNpcAlarmState,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TownNpcAttackResolution {
+    DeathMask,
+    AlarmOnly,
+    Refused,
+}
+
+/// `town-mode.md §4, §10` and `catalogs/npc-roster.md §4`: only
+/// the rare `0x0E` actor class participates in the town
+/// activation/death mask. Ordinary town actors may still be live
+/// NPCs, but attacking them must not create a persistent removed
+/// marker for scene re-entry.
+pub const fn town_npc_activation_mask_eligible(type_byte: u8) -> bool {
+    type_byte == 0x0E
+}
+
+pub const fn town_npc_type_guard_like(type_byte: u8) -> bool {
+    matches!(type_byte, 0x70..=0x7f)
+}
+
+pub const fn town_npc_attack_resolution(type_byte: u8) -> TownNpcAttackResolution {
+    if town_npc_activation_mask_eligible(type_byte) {
+        TownNpcAttackResolution::DeathMask
+    } else if town_npc_type_guard_like(type_byte) {
+        TownNpcAttackResolution::AlarmOnly
+    } else {
+        TownNpcAttackResolution::Refused
+    }
+}
+
 /// `town-mode.md §5`: returns `true` when town entry hit the
 /// jail-wakeup branch — local floor 0 cell with `Y == TOWN_ARREST_JAIL_Y`
 /// in the Yew scene. The phantom-attach helper skips the queue

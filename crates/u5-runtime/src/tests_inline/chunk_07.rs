@@ -1,5 +1,5 @@
 #[test]
-fn use_command_routes_inline_torch_and_gem_requests() {
+fn use_command_rejects_inline_torch_and_gem_aliases() {
     let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
     dungeon.torches = 1;
 
@@ -8,10 +8,10 @@ fn use_command_routes_inline_torch_and_gem_requests() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(dungeon.torches, 0);
-    assert!((112..=127).contains(&dungeon.torch_counter));
-    assert_eq!(dungeon.turn, 1);
-    assert!(dungeon.message.contains("Ignited a torch"));
+    assert_eq!(dungeon.torches, 1);
+    assert_eq!(dungeon.torch_counter, 0);
+    assert_eq!(dungeon.turn, 0);
+    assert_eq!(dungeon.message, use_prompt_message());
 
     let mut world = britannia_state(open_world_grid(), 1, 1);
     world.gems = 1;
@@ -21,9 +21,9 @@ fn use_command_routes_inline_torch_and_gem_requests() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(world.gems, 0);
+    assert_eq!(world.gems, 1);
     assert_eq!(world.turn, 0);
-    assert!(world.message.contains("Gem view of BRITANNIA"));
+    assert_eq!(world.message, use_prompt_message());
 }
 
 #[test]
@@ -1025,30 +1025,32 @@ fn world_push_consumes_turn_when_pushable_destination_is_blocked() {
 #[test]
 fn world_push_prompt_routes_to_overworld_push() {
     let dir = debug_game_dir();
-    let mut grid = open_world_grid();
-    grid[world_cell_index(2, 1)] = 0x90;
-    grid[world_cell_index(3, 1)] = PUSHABLE_GENERIC_FLOOR_STAMP;
-    let mut state = world_state(grid, 1, 1);
+    for key in ['P', 'p'] {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(2, 1)] = 0x90;
+        grid[world_cell_index(3, 1)] = PUSHABLE_GENERIC_FLOOR_STAMP;
+        let mut state = world_state(grid, 1, 1);
 
-    assert_eq!(
-        handle_play_key_input(&mut state, 'p', "", &dir).unwrap(),
-        PlayInputDisposition::Continue
-    );
-    assert_eq!(state.turn, 0);
-    assert_eq!(state.message, "Push-");
+        assert_eq!(
+            handle_play_key_input(&mut state, key, "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Push-");
 
-    assert_eq!(
-        handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
-        PlayInputDisposition::Continue
-    );
+        assert_eq!(
+            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
 
-    assert_eq!(
-        state.grid[world_cell_index(2, 1)],
-        PUSHABLE_GENERIC_FLOOR_STAMP
-    );
-    assert_eq!(state.grid[world_cell_index(3, 1)], 0x91);
-    assert_eq!((state.player.x, state.player.y), (2, 1));
-    assert_eq!(state.turn, 1);
+        assert_eq!(
+            state.grid[world_cell_index(2, 1)],
+            PUSHABLE_GENERIC_FLOOR_STAMP
+        );
+        assert_eq!(state.grid[world_cell_index(3, 1)], 0x91);
+        assert_eq!((state.player.x, state.player.y), (2, 1));
+        assert_eq!(state.turn, 1);
+    }
     let _ = fs::remove_dir_all(dir);
 }
 

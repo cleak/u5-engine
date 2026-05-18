@@ -808,7 +808,7 @@
     }
 
     #[test]
-    fn a_attack_adjacent_town_npc_removes_linked_runtime_actor() {
+    fn a_attack_adjacent_activation_mask_npc_removes_linked_runtime_actor() {
         let mut state = test_state(open_grid(), 1, 1);
         state.player.facing = Direction::East;
         let slots = [
@@ -821,7 +821,7 @@
             },
             NpcSlot {
                 slot: 1,
-                type_byte: 1,
+                type_byte: 0x0E,
                 dialog_id: 2,
                 schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
                 name: None,
@@ -842,6 +842,7 @@
         assert_eq!(state.removed_town_npcs, vec![(17, 0, 1)]);
         assert!(state.visibility_dirty);
         assert!(state.message.contains("Attacked NPC slot 1"));
+        assert!(state.message.contains("type 0x0E"));
         assert!(state.message.contains("target removed"));
         assert!(!state.message.contains("combat"));
         assert!(!state.message.contains("pending"));
@@ -851,6 +852,85 @@
             state.npcs.is_empty(),
             "removed NPC slot must not relink during the current scene visit"
         );
+    }
+
+    #[test]
+    fn a_attack_ordinary_town_npc_does_not_mark_removed_or_enter_combat() {
+        let mut state = test_state(open_grid(), 1, 1);
+        let slots = [
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x50,
+                dialog_id: 2,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                name: None,
+            },
+        ];
+        state.load_scheduled_npcs(&slots);
+        let object_slot = state.npcs[0].active_object.unwrap();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "6", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.npcs.len(), 1);
+        assert!(!state.active_objects[object_slot].is_empty());
+        assert!(state.removed_town_npcs.is_empty());
+        assert!(!state.combat_active);
+        assert!(state.message.contains("type 0x50"));
+        assert!(state.message.contains("no attackable town NPC"));
+
+        state.load_scheduled_npcs(&slots);
+        assert_eq!(state.npcs.len(), 1);
+    }
+
+    #[test]
+    fn a_attack_guard_like_town_npc_raises_alarm_without_death_mask() {
+        let mut state = test_state(open_grid(), 1, 1);
+        let slots = [
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x70,
+                dialog_id: 2,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+                name: None,
+            },
+        ];
+        state.load_scheduled_npcs(&slots);
+        let object_slot = state.npcs[0].active_object.unwrap();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "6", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.npcs.len(), 1);
+        assert!(!state.active_objects[object_slot].is_empty());
+        assert!(state.removed_town_npcs.is_empty());
+        assert_eq!(
+            state.town_npc_alarm_state(Scene::new(17).unwrap(), 0, 1),
+            Some(TownNpcAlarmState::Fortified)
+        );
+        assert!(!state.combat_active);
+        assert!(state.message.contains("type 0x70"));
+        assert!(state.message.contains("alarm raised"));
     }
 
     #[test]
