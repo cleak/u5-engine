@@ -16,12 +16,16 @@ use bevy::sprite::Anchor;
 use bevy::text::TextBounds;
 
 use u5_runtime::{
-    Area, Direction, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
-    MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, PLAY_MUSIC_TOGGLE_KEY,
-    PlayInputDisposition, PlayOptions, PlayState, RTV_COMMAND_STREAM_BYTES, TILE_ATLAS_SIDE,
-    TileAtlas, TileGraphicsDepth, handle_play_key_input,
+    Area, Direction, INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, IntroStoryArtPlacement,
+    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    MISCMAPS_RTV_STRIP_SECTION_OFFSET, PLAY_MUSIC_TOGGLE_KEY, PlayInputDisposition, PlayOptions,
+    PlayState, RTV_COMMAND_STREAM_BYTES, StoryRecords, TILE_ATLAS_SIDE, TileAtlas,
+    TileGraphicsDepth, handle_play_key_input,
     intro_menu::{IntroSubflow, IntroSubflowResult},
-    load_play_options_from_save, load_tile_atlas,
+    intro_step_has_story6_secondary_pass, intro_step_transition_strips,
+    intro_story_art_file_for_step, intro_story_art_placement_for_step,
+    intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_play_options_from_save,
+    load_story_records, load_tile_atlas,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     render_text_panel_rgba,
     shop_runtime::SageState,
@@ -127,6 +131,10 @@ fn run_visual_intro_menu_app(game_dir: PathBuf, launch_result: Arc<Mutex<Option<
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(60);
+    let preset_keys: Vec<char> = std::env::var("U5_BEVY_PRESS")
+        .ok()
+        .map(|s| s.chars().collect())
+        .unwrap_or_default();
 
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -143,13 +151,14 @@ fn run_visual_intro_menu_app(game_dir: PathBuf, launch_result: Arc<Mutex<Option<
             game_dir,
             dispatch: UnifiedMenuDispatch::new(),
             message: String::new(),
+            panel: VisualIntroPanel::Menu,
             launch_result,
             image_handle: None,
         })
         .insert_resource(ScreenshotConfig {
             path: screenshot_path,
             frame_delay: screenshot_delay,
-            preset_keys: Vec::new(),
+            preset_keys,
         })
         .insert_resource(ScreenshotState::default())
         .add_systems(Startup, setup_intro)
@@ -177,6 +186,7 @@ fn screenshot_system(
     config: Res<ScreenshotConfig>,
     mut state: ResMut<ScreenshotState>,
     visual: Option<ResMut<VisualState>>,
+    intro: Option<ResMut<VisualIntroState>>,
     mut images: ResMut<Assets<Image>>,
     mut text_query: Query<&mut Text2d, With<StatusText>>,
     mut exit: EventWriter<AppExit>,
@@ -202,6 +212,20 @@ fn screenshot_system(
             }
             if let Ok(mut text) = text_query.single_mut() {
                 text.0 = summarize(&mut v.state, "", &v.input_line);
+            }
+            state.preset_keys_applied = true;
+        } else if let Some(mut intro) = intro {
+            let mut handled = false;
+            for ch in &config.preset_keys {
+                handled |= step_visual_intro(&mut intro, *ch, &mut exit);
+            }
+            if handled {
+                let rgba = render_intro_frame(&mut intro);
+                if let Some(handle) = intro.image_handle.as_ref() {
+                    if let Some(image) = images.get_mut(handle) {
+                        image.data = Some(rgba);
+                    }
+                }
             }
             state.preset_keys_applied = true;
         }
@@ -248,8 +272,23 @@ struct VisualIntroState {
     game_dir: PathBuf,
     dispatch: UnifiedMenuDispatch,
     message: String,
+    panel: VisualIntroPanel,
     launch_result: Arc<Mutex<Option<PlayOptions>>>,
     image_handle: Option<Handle<Image>>,
+}
+
+#[derive(Debug, Default)]
+enum VisualIntroPanel {
+    #[default]
+    Menu,
+    Story {
+        records: StoryRecords,
+        step: usize,
+    },
+    Acknowledgements,
+    ReturnToView {
+        summary: String,
+    },
 }
 
 /// Drives the static-tile animator (water cycle) at a fixed wall-clock
@@ -451,6 +490,10 @@ fn step_visual_intro(
     ch: char,
     exit: &mut EventWriter<AppExit>,
 ) -> bool {
+    if !matches!(intro.panel, VisualIntroPanel::Menu) {
+        return step_visual_intro_panel(intro);
+    }
+
     if matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle) {
         intro.dispatch.dismiss_title();
         if ch.eq_ignore_ascii_case(&'J') {
@@ -483,6 +526,43 @@ fn step_visual_intro(
     }
 }
 
+fn step_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
+    match &mut intro.panel {
+        VisualIntroPanel::Menu => false,
+        VisualIntroPanel::Story { step, .. } => {
+            if *step + 1 < INTRO_STORY_STEP_COUNT {
+                *step += 1;
+            } else {
+                intro.panel = VisualIntroPanel::Menu;
+                intro.dispatch.complete_subflow(
+                    IntroSubflow::StorySlides,
+                    IntroSubflowResult::ReturnedToMenu,
+                );
+                intro.message = "Ultima V Introduction complete.".to_string();
+            }
+            true
+        }
+        VisualIntroPanel::Acknowledgements => {
+            intro.panel = VisualIntroPanel::Menu;
+            intro.dispatch.complete_subflow(
+                IntroSubflow::Acknowledgements,
+                IntroSubflowResult::ReturnedToMenu,
+            );
+            intro.message = "Acknowledgements complete.".to_string();
+            true
+        }
+        VisualIntroPanel::ReturnToView { .. } => {
+            intro.panel = VisualIntroPanel::Menu;
+            intro.dispatch.complete_subflow(
+                IntroSubflow::ReturnToView,
+                IntroSubflowResult::ReturnedToMenu,
+            );
+            intro.message = "Return-to-View preview complete.".to_string();
+            true
+        }
+    }
+}
+
 fn resolve_visual_intro_subflow(
     intro: &mut VisualIntroState,
     subflow: IntroSubflow,
@@ -508,6 +588,7 @@ fn resolve_visual_intro_subflow(
             }
         },
         IntroSubflow::CharacterCreation => {
+            intro.panel = VisualIntroPanel::Menu;
             intro
                 .dispatch
                 .complete_subflow(subflow, IntroSubflowResult::Cancelled);
@@ -516,29 +597,42 @@ fn resolve_visual_intro_subflow(
                     .to_string();
         }
         IntroSubflow::UltimaIvTransfer => {
+            intro.panel = VisualIntroPanel::Menu;
             intro
                 .dispatch
                 .complete_subflow(subflow, IntroSubflowResult::Cancelled);
             intro.message =
                 "Ultima IV Transfer is available from the terminal intro flow.".to_string();
         }
-        IntroSubflow::StorySlides => {
-            intro
-                .dispatch
-                .complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
-            intro.message = "Ultima V Introduction story slides return to the menu.".to_string();
-        }
+        IntroSubflow::StorySlides => match load_story_records(&intro.game_dir) {
+            Ok(Some(records)) => {
+                intro.panel = VisualIntroPanel::Story { records, step: 0 };
+                intro.message.clear();
+            }
+            Ok(None) => {
+                intro.panel = VisualIntroPanel::Menu;
+                intro
+                    .dispatch
+                    .complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
+                intro.message = "STORY.DAT is missing; returning to the intro menu.".to_string();
+            }
+            Err(err) => {
+                intro.panel = VisualIntroPanel::Menu;
+                intro
+                    .dispatch
+                    .complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
+                intro.message = format!("STORY.DAT could not be loaded: {err}");
+            }
+        },
         IntroSubflow::Acknowledgements => {
-            intro
-                .dispatch
-                .complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
-            intro.message = "Acknowledgements return to the menu.".to_string();
+            intro.panel = VisualIntroPanel::Acknowledgements;
+            intro.message.clear();
         }
         IntroSubflow::ReturnToView => {
-            intro
-                .dispatch
-                .complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
-            intro.message = visual_return_to_view_summary(&intro.game_dir);
+            intro.panel = VisualIntroPanel::ReturnToView {
+                summary: visual_return_to_view_summary(&intro.game_dir),
+            };
+            intro.message.clear();
         }
     }
     true
@@ -624,6 +718,37 @@ fn drive_visual(
 }
 
 fn summarize_intro(intro: &mut VisualIntroState) -> String {
+    match &intro.panel {
+        VisualIntroPanel::Menu => {}
+        VisualIntroPanel::Story { records, step } => {
+            return summarize_intro_story(records, *step);
+        }
+        VisualIntroPanel::Acknowledgements => {
+            return [
+                "Acknowledgements".to_string(),
+                String::new(),
+                "This intro submenu is self-contained and returns to the main menu.".to_string(),
+                "The clean specification does not transcribe the exact acknowledgement text."
+                    .to_string(),
+                String::new(),
+                "Press any key to return to the intro menu.".to_string(),
+            ]
+            .join("\n");
+        }
+        VisualIntroPanel::ReturnToView { summary } => {
+            return [
+                "Return to View".to_string(),
+                String::new(),
+                summary.clone(),
+                String::new(),
+                "This visual harness reports the clean preview layout and returns to the menu."
+                    .to_string(),
+                "Press any key to return to the intro menu.".to_string(),
+            ]
+            .join("\n");
+        }
+    }
+
     if matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle) {
         return "Ultima V\n\nPress any key for the main menu\nPress J to journey onward"
             .to_string();
@@ -646,6 +771,58 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
         lines.push(intro.message.clone());
     }
     lines.join("\n")
+}
+
+fn summarize_intro_story(records: &StoryRecords, step: usize) -> String {
+    let mut lines = vec![
+        "Ultima V Introduction".to_string(),
+        format!("Story step {} of {}", step + 1, INTRO_STORY_STEP_COUNT),
+    ];
+    if let Some(file) = intro_story_art_file_for_step(step) {
+        if let Some(placement) = intro_story_art_placement_for_step(step) {
+            lines.push(format_story_art_line(file, placement));
+        }
+    }
+    if let Some(strips) = intro_step_transition_strips(step) {
+        lines.push(format!(
+            "Transition strips: #{}, ({}, {}); #{}, ({}, {}).",
+            strips[0].0, strips[0].1, strips[0].2, strips[1].0, strips[1].1, strips[1].2
+        ));
+    }
+    if step == INTRO_INLINE_DOORWAY_STEP {
+        lines.push("Inline doorway transition text.".to_string());
+    } else {
+        let record_index = if step < INTRO_INLINE_DOORWAY_STEP {
+            step
+        } else {
+            step - 1
+        };
+        if let Some(text) = records.record(record_index) {
+            lines.push(String::new());
+            lines.push(text.to_string());
+        } else {
+            lines.push(format!("Missing STORY.DAT record {record_index}."));
+        }
+    }
+    if intro_step_has_story6_secondary_pass(step) {
+        if let Some(subimage) = intro_story6_secondary_subimage(step) {
+            lines.push(format!("Secondary STORY6.16 subimage {subimage}."));
+        }
+    }
+    lines.push(String::new());
+    if intro_story_step_waits_for_input(step) {
+        lines.push("Press any key for the next story step.".to_string());
+    } else {
+        lines.push("Opening transition step; press any key to continue.".to_string());
+    }
+    lines.join("\n")
+}
+
+fn format_story_art_line(file: &str, placement: IntroStoryArtPlacement) -> String {
+    format!(
+        "Art {file} subimage {} at ({}, {}).",
+        placement.subimage, placement.top_left_x, placement.top_left_y
+    )
 }
 
 fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
@@ -1379,6 +1556,7 @@ mod tests {
             game_dir: debug_game_dir(),
             dispatch: UnifiedMenuDispatch::new(),
             message: String::new(),
+            panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
         };
@@ -1407,5 +1585,49 @@ mod tests {
         assert!(summary.contains("128 bytes"));
         assert!(summary.contains("Return-to-View strips"));
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_intro_story_summary_uses_step_art_and_story_record() {
+        let records = StoryRecords {
+            records: (0..20).map(|i| format!("Story record {i}")).collect(),
+        };
+
+        let summary = summarize_intro_story(&records, 7);
+
+        assert!(summary.contains("Story step 8 of 21"));
+        assert!(summary.contains("Art STORY3.16 subimage 0 at (0, 0)."));
+        assert!(summary.contains("Transition strips"));
+        assert!(summary.contains("Story record 6"));
+        assert!(summary.contains("Press any key"));
+    }
+
+    #[test]
+    fn visual_intro_story_panel_pages_back_to_menu_after_final_step() {
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            dispatch: UnifiedMenuDispatch::new(),
+            message: String::new(),
+            panel: VisualIntroPanel::Story {
+                records: StoryRecords {
+                    records: (0..20).map(|i| format!("Story record {i}")).collect(),
+                },
+                step: INTRO_STORY_STEP_COUNT - 1,
+            },
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+        intro.dispatch.dismiss_title();
+        intro.dispatch.submit_menu_key(b'U');
+
+        assert!(step_visual_intro_panel(&mut intro));
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message.contains("Introduction complete"));
+        assert!(matches!(
+            intro.dispatch.submit_menu_key(b'A'),
+            UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
+        ));
+        let _ = fs::remove_dir_all(&intro.game_dir);
     }
 }

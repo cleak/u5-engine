@@ -64,8 +64,9 @@ in the status panel, support Backspace, and submit on Enter.
 
 `--intro --visual` opens a Bevy intro/menu shell backed by the same runtime menu
 dispatcher used by terminal intro mode. Journey Onward loads `SAVED.GAM` and
-`SAVED.OOL` then launches the Bevy gameplay loop; character creation and
-transfer remain terminal flows.
+`SAVED.OOL` then launches the Bevy gameplay loop. The visual shell pages the
+story text, acknowledgement boundary, and Return-to-View preview summary in
+intro-local panels; character creation and transfer remain terminal flows.
 
 Input map (visual mode):
 
