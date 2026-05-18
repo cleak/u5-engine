@@ -962,6 +962,69 @@
     }
 
     #[test]
+    fn hidden_npc_mask_matches_published_scene_slots() {
+        assert!(npc_hidden_sprite_slot(SCENE_MOONGLOW, 1));
+        assert!(npc_hidden_sprite_slot(SCENE_MOONGLOW, 5));
+        assert!(npc_hidden_sprite_slot(SCENE_MOONGLOW, 9));
+        assert!(npc_hidden_sprite_slot(SCENE_MOONGLOW, 11));
+        assert!(!npc_hidden_sprite_slot(SCENE_MOONGLOW, 6));
+
+        assert!(npc_hidden_sprite_slot(SCENE_MINOC, 15));
+        assert!(npc_hidden_sprite_slot(SCENE_MINOC, 17));
+        assert!(!npc_hidden_sprite_slot(SCENE_MINOC, 16));
+
+        assert!(npc_hidden_sprite_slot(SCENE_TRINSIC, 1));
+        assert!(!npc_hidden_sprite_slot(SCENE_TRINSIC, 2));
+
+        assert!(npc_hidden_sprite_slot(SCENE_STONEGATE, 3));
+        assert!(npc_hidden_sprite_slot(SCENE_STONEGATE, 9));
+        assert!(!npc_hidden_sprite_slot(SCENE_STONEGATE, 10));
+
+        assert!(npc_hidden_sprite_slot(SCENE_THE_LYCAEUM, 5));
+        assert!(npc_hidden_sprite_slot(SCENE_THE_LYCAEUM, 8));
+        assert!(!npc_hidden_sprite_slot(SCENE_THE_LYCAEUM, 9));
+    }
+
+    #[test]
+    fn hidden_npc_allocates_logical_object_with_transparent_tile() {
+        let mut state = test_state(open_grid(), 3, 5);
+        state.area = Area::Town {
+            scene: Scene::new(SCENE_MOONGLOW).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::North;
+        let slots = vec![
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 4,
+                type_byte: 0xc4,
+                dialog_id: 2,
+                schedule: [0, 0, 0, 3, 3, 3, 4, 4, 4, 0, 0, 0, 8, 12, 18, 22],
+                name: None,
+            },
+        ];
+
+        state.load_scheduled_npcs(&slots);
+
+        assert_eq!(state.npcs[0].slot, 4);
+        assert_eq!(state.npcs[0].active_object, Some(1));
+        assert_eq!(state.active_objects[1].type_byte, 0xc4);
+        assert_eq!(state.active_objects[1].tile, NPC_HIDDEN_SPRITE_TILE);
+        assert_eq!(
+            state.facing_talk_target(),
+            Some((2, state.player.x, state.player.y - 1))
+        );
+        assert!(state.blocking_object_at(3, 4).is_some());
+        assert!(state.sight_blocking_object_at_current_floor(3, 4).is_none());
+    }
+
+    #[test]
     fn player_phantom_npc_is_stationary_and_idempotent() {
         let mut state = test_state(open_grid(), 3, 4);
 

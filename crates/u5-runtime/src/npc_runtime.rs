@@ -235,6 +235,27 @@ pub const NPC_DIALOG_ID_HIGH_FIRST: u8 = 129;
 pub const NPC_DIALOG_ID_HIGH_LAST: u8 = 136;
 pub const NPC_DIALOG_ID_HIGH_FALLBACK: u8 = 255;
 
+/// `npc-schedules.md Section 11`: active-object visual tile used when
+/// the hidden-NPC bitmask suppresses only presentation. The active
+/// object keeps its nonzero NPC type byte so collision, scheduling,
+/// and Talk linkage remain live while the rendered tile is transparent.
+pub const NPC_HIDDEN_SPRITE_TILE: u8 = 0x00;
+
+/// `npc-schedules.md Section 11`: shipped hidden-sprite mask keyed by
+/// public one-based town-mode scene byte and roster slot. Hidden slots
+/// still participate in scheduling and Talk; only the active-object
+/// tile is replaced by [`NPC_HIDDEN_SPRITE_TILE`].
+pub const fn npc_hidden_sprite_slot(scene_byte: u8, slot: usize) -> bool {
+    match scene_byte {
+        SCENE_MOONGLOW => matches!(slot, 0..=5 | 9 | 11),
+        SCENE_MINOC => matches!(slot, 15 | 17),
+        SCENE_TRINSIC => slot == 1,
+        SCENE_STONEGATE => matches!(slot, 3..=9),
+        SCENE_THE_LYCAEUM => matches!(slot, 5..=8),
+        _ => false,
+    }
+}
+
 /// `catalogs/npc-roster.md §4`: classify a dialog-id byte into the
 /// engine's `.TLK`-resolution category.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

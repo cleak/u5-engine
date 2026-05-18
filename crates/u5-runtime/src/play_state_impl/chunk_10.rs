@@ -442,9 +442,20 @@ impl PlayState {
             }
             return false;
         }
-        let (x, y, z, type_byte, active_object) = {
+        let scene_byte = match self.area {
+            Area::Town { scene, .. } => scene.byte,
+            _ => 0,
+        };
+        let (x, y, z, type_byte, npc_slot, active_object) = {
             let npc = &self.npcs[index];
-            (npc.x, npc.y, npc.z, npc.type_byte, npc.active_object)
+            (
+                npc.x,
+                npc.y,
+                npc.z,
+                npc.type_byte,
+                npc.slot,
+                npc.active_object,
+            )
         };
         let should_render =
             x < 32 && y < 32 && z == floor && (x, y) != (self.player.x, self.player.y);
@@ -454,7 +465,10 @@ impl PlayState {
                 self.npcs[index].active_object = None;
                 return true;
             }
-            let object = npc_active_object(type_byte, x, y, z);
+            let mut object = npc_active_object(type_byte, x, y, z);
+            if npc_hidden_sprite_slot(scene_byte, npc_slot) {
+                object.tile = NPC_HIDDEN_SPRITE_TILE;
+            }
             if let Some(active_object) = self.active_objects.get_mut(slot) {
                 *active_object = object;
             } else if let Some(slot) = self.allocate_active_object_slot(object) {
@@ -465,7 +479,10 @@ impl PlayState {
             return true;
         }
         if should_render {
-            let object = npc_active_object(type_byte, x, y, z);
+            let mut object = npc_active_object(type_byte, x, y, z);
+            if npc_hidden_sprite_slot(scene_byte, npc_slot) {
+                object.tile = NPC_HIDDEN_SPRITE_TILE;
+            }
             self.npcs[index].active_object = self.allocate_active_object_slot(object);
             return self.npcs[index].active_object.is_some();
         }
@@ -473,7 +490,7 @@ impl PlayState {
     }
 
     pub fn relink_npc_objects(&mut self) {
-        let Area::Town { floor, .. } = self.area else {
+        let Area::Town { scene, floor } = self.area else {
             return;
         };
         let floor = floor as u8;
@@ -493,7 +510,10 @@ impl PlayState {
             {
                 continue;
             }
-            let object = npc_active_object(npc.type_byte, npc.x, npc.y, npc.z);
+            let mut object = npc_active_object(npc.type_byte, npc.x, npc.y, npc.z);
+            if npc_hidden_sprite_slot(scene.byte, npc.slot) {
+                object.tile = NPC_HIDDEN_SPRITE_TILE;
+            }
             self.npcs[index].active_object = self.allocate_active_object_slot(object);
         }
     }
