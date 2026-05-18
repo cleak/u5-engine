@@ -573,42 +573,15 @@ fn handle_active_shop_key_input(
         }
         ActiveShopSession::Reagent(s) => {
             let mut stock = state.reagents;
-            let prices = [25u16, 20, 10, 30, 15, 40, 50, 65];
-            let outcome = match (*s, yes, no, inline_digit) {
-                (ReagentShopState::Greeting, _, _, _) => step_reagent_shop(
-                    s,
-                    ReagentShopInput::Key(key_byte),
-                    &mut state.gold,
-                    &mut stock,
-                    &prices,
-                ),
-                (ReagentShopState::PickReagent, _, _, Some(d)) => step_reagent_shop(
-                    s,
-                    ReagentShopInput::Reagent(d),
-                    &mut state.gold,
-                    &mut stock,
-                    &prices,
-                ),
-                (ReagentShopState::PickQuantity { .. }, _, _, Some(q)) => step_reagent_shop(
+            let outcome = match (*s, inline_digit) {
+                (ReagentShopState::Greeting { .. } | ReagentShopState::PickReagent { .. }, _) => {
+                    step_reagent_shop(s, ReagentShopInput::Key(key_byte), &mut state.gold, &mut stock)
+                }
+                (ReagentShopState::PickQuantity { .. }, Some(q)) => step_reagent_shop(
                     s,
                     ReagentShopInput::Quantity(q),
                     &mut state.gold,
                     &mut stock,
-                    &prices,
-                ),
-                (ReagentShopState::Confirm { .. }, true, _, _) => step_reagent_shop(
-                    s,
-                    ReagentShopInput::Confirm(true),
-                    &mut state.gold,
-                    &mut stock,
-                    &prices,
-                ),
-                (ReagentShopState::Confirm { .. }, _, true, _) => step_reagent_shop(
-                    s,
-                    ReagentShopInput::Confirm(false),
-                    &mut state.gold,
-                    &mut stock,
-                    &prices,
                 ),
                 _ => ReagentShopOutcome::InvalidInput,
             };
@@ -680,74 +653,30 @@ fn handle_active_shop_key_input(
             let mut gems = state.gems;
             let mut keys = state.keys;
             let mut torches = state.torches;
-            let mut sextant = state.special_items[crate::SPECIAL_ITEM_SEXTANT_INDEX] != 0;
-            let outcome = match (*s, yes, no, inline_digit) {
-                (GuildShopState::Greeting, _, _, _) => step_guild_shop(
-                    s,
-                    GuildShopInput::Key(key_byte),
-                    &mut state.gold,
-                    &mut gems,
-                    &mut keys,
-                    &mut torches,
-                    &mut sextant,
-                ),
-                (GuildShopState::PickItem, _, _, _) => {
-                    let item = match key_byte {
-                        b'G' | b'g' => Some(GuildItem::Gems),
-                        b'K' | b'k' => Some(GuildItem::Keys),
-                        b'T' | b't' => Some(GuildItem::Torches),
-                        b'X' | b'x' => Some(GuildItem::Sextant),
-                        _ => None,
-                    };
-                    if let Some(item) = item {
-                        step_guild_shop(
-                            s,
-                            GuildShopInput::Item(item),
-                            &mut state.gold,
-                            &mut gems,
-                            &mut keys,
-                            &mut torches,
-                            &mut sextant,
-                        )
-                    } else {
-                        GuildShopOutcome::InvalidInput
-                    }
+            let outcome = match (*s, inline_digit) {
+                (GuildShopState::Greeting { .. } | GuildShopState::PickItem { .. }, _) => {
+                    step_guild_shop(
+                        s,
+                        GuildShopInput::Key(key_byte),
+                        &mut state.gold,
+                        &mut gems,
+                        &mut keys,
+                        &mut torches,
+                    )
                 }
-                (GuildShopState::PickQuantity { .. }, _, _, Some(q)) => step_guild_shop(
+                (GuildShopState::PickQuantity { .. }, Some(q)) => step_guild_shop(
                     s,
                     GuildShopInput::Quantity(q),
                     &mut state.gold,
                     &mut gems,
                     &mut keys,
                     &mut torches,
-                    &mut sextant,
-                ),
-                (GuildShopState::ConfirmSextant { .. }, true, _, _) => step_guild_shop(
-                    s,
-                    GuildShopInput::Confirm(true),
-                    &mut state.gold,
-                    &mut gems,
-                    &mut keys,
-                    &mut torches,
-                    &mut sextant,
-                ),
-                (GuildShopState::ConfirmSextant { .. }, _, true, _) => step_guild_shop(
-                    s,
-                    GuildShopInput::Confirm(false),
-                    &mut state.gold,
-                    &mut gems,
-                    &mut keys,
-                    &mut torches,
-                    &mut sextant,
                 ),
                 _ => GuildShopOutcome::InvalidInput,
             };
             state.gems = gems;
             state.keys = keys;
             state.torches = torches;
-            if sextant {
-                state.special_items[crate::SPECIAL_ITEM_SEXTANT_INDEX] = 1;
-            }
             format_guild_outcome(outcome)
         }
     };
@@ -884,26 +813,30 @@ fn format_tavern_outcome(outcome: crate::shop_runtime::TavernOutcome) -> String 
 fn format_reagent_outcome(outcome: crate::shop_runtime::ReagentShopOutcome) -> String {
     use crate::shop_runtime::ReagentShopOutcome::*;
     match outcome {
-        EnteredMenu => "Pick a reagent (0-7).".to_string(),
+        EnteredMenu { herbalist } => {
+            format!("{} offers reagents A-E, or Space.", herbalist.display_name())
+        }
         QuotedUnit {
+            herbalist,
             reagent,
             unit_price,
-        } => {
-            format!("Reagent {reagent}: {unit_price} gold each. How many?")
-        }
-        QuotedTotal {
-            quantity, total, ..
-        } => {
-            format!("{quantity} units total {total} gold. (Y/N)")
-        }
+        } => format!(
+            "{} sells {} for {unit_price} gold each. Quantity?",
+            herbalist.display_name(),
+            reagent.display_name()
+        ),
         Bought {
+            herbalist,
             reagent,
             quantity,
             paid,
-        } => {
-            format!("Bought {quantity} of reagent {reagent} for {paid} gold.")
-        }
-        RefusedShortFunds { total } => format!("Thou lackest the {total} gold."),
+        } => format!(
+            "{} sold {quantity} {} for {paid} gold.",
+            herbalist.display_name(),
+            reagent.display_name()
+        ),
+        RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
+        RefusedStockCap { cap, .. } => format!("Thou canst carry only {cap}."),
         Declined => "As you wish.".to_string(),
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),
@@ -969,18 +902,31 @@ fn format_ship_broker_outcome(outcome: crate::shop_runtime::ShipBrokerOutcome) -
 fn format_guild_outcome(outcome: crate::shop_runtime::GuildShopOutcome) -> String {
     use crate::shop_runtime::GuildShopOutcome::*;
     match outcome {
-        EnteredMenu => "Gems (G), Keys (K), Torches (T), or Sextant (X)?".to_string(),
-        QuotedUnit { unit_price, .. } => {
-            format!("That costs {unit_price} gold each. How many?")
-        }
-        QuotedTotal {
-            quantity, total, ..
-        } => {
-            format!("{quantity} units total {total} gold.")
-        }
-        Bought { quantity, paid, .. } => format!("Bought {quantity} for {paid} gold."),
-        SextantPurchased { price } => format!("Sextant sold for {price} gold."),
+        EnteredMenu { shop } => format!(
+            "{}: Keys (A), Gems (B), Torches (C), or Space.",
+            shop.display_name()
+        ),
+        QuotedUnit {
+            shop,
+            commodity,
+            unit_price,
+        } => format!(
+            "{} sells {} for {unit_price} gold each. Quantity?",
+            shop.display_name(),
+            commodity.display_name()
+        ),
+        Bought {
+            shop,
+            commodity,
+            quantity,
+            paid,
+        } => format!(
+            "{} sold {quantity} {} for {paid} gold.",
+            shop.display_name(),
+            commodity.display_name()
+        ),
         RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
+        RefusedStockCap { cap, .. } => format!("Thou canst carry only {cap}."),
         Declined => "As you wish.".to_string(),
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),

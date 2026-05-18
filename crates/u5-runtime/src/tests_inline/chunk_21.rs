@@ -1706,6 +1706,50 @@
     }
 
     #[test]
+    fn end_to_end_reagent_vendor_uses_compact_herbalist_letter_menu() {
+        use crate::shop_runtime::ReagentShopState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 100;
+        state.reagents = [0; REAGENT_COUNT];
+        state.active_shop = Some(ActiveShopSession::Reagent(
+            ReagentShopState::for_herbalist(Herbalist::Mysticism),
+        ));
+
+        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
+        assert!(state.message.contains("Spider Silk"));
+        handle_play_key_input(&mut state, '3', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 82);
+        assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 3);
+        assert!(state.message.contains("18 gold"));
+        assert!(state.active_shop.is_some());
+    }
+
+    #[test]
+    fn end_to_end_guildmaster_uses_shop_letter_prices() {
+        use crate::shop_runtime::GuildShopState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 500;
+        state.keys = 0;
+        state.active_shop = Some(ActiveShopSession::Guild(GuildShopState::for_shop(
+            GuildShop::TheDen,
+        )));
+
+        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
+        assert!(state.message.contains("keys"));
+        handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 120);
+        assert_eq!(state.keys, 2);
+        assert!(state.message.contains("380 gold"));
+        assert!(state.active_shop.is_some());
+    }
+
+    #[test]
     fn end_to_end_arms_shop_exit_clears_session() {
         let dialogue = HashMap::new();
         let mut state = test_state(open_grid(), 1, 1);

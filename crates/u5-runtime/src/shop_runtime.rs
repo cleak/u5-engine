@@ -12,14 +12,16 @@
 
 use crate::constants::{EQUIPMENT_COUNT, EQUIPMENT_STOCK_CAP};
 use crate::shops::{
-    ArmsShopAction, BlueBoarDrinkChoice, INN_REGISTRY_CAP, Inn, InnMainAction,
-    ProvisionPurchaseError, Shipwright, ShipwrightMenuAction, ShipwrightPurchaseError,
+    ArmsShopAction, BlueBoarDrinkChoice, GuildCommodity, GuildPurchaseError, GuildShop,
+    GuildShopAction, Herbalist, INN_REGISTRY_CAP, Inn, InnMainAction, ProvisionPurchaseError,
+    Reagent, ReagentPurchaseError, Shipwright, ShipwrightMenuAction, ShipwrightPurchaseError,
     ShipwrightPurchaseOutcome, ShipwrightPurchaseQuote, Tavern, TavernDrinkError,
-    TavernDrinkPrompt, apply_blue_boar_drink, apply_provision_purchase, apply_shipwright_purchase,
-    apply_tavern_round_drink, arms_shop_action, arms_shop_buy_quote, arms_shop_sell_offer,
-    inn_base_room_rate, inn_leave_companion_deposit, inn_main_action, inn_pickup_bill,
-    quote_inn_rest, quote_shipwright_purchase, shipwright_menu_action, tavern_drink_prompt,
-    tavern_provision_unit_price, tavern_round_drink_menu_letter,
+    TavernDrinkPrompt, apply_blue_boar_drink, apply_guild_purchase, apply_provision_purchase,
+    apply_reagent_purchase, apply_shipwright_purchase, apply_tavern_round_drink, arms_shop_action,
+    arms_shop_buy_quote, arms_shop_sell_offer, guild_shop_action, guild_unit_price,
+    herbalist_menu_entries, inn_base_room_rate, inn_leave_companion_deposit, inn_main_action,
+    inn_pickup_bill, quote_inn_rest, quote_shipwright_purchase, shipwright_menu_action,
+    tavern_drink_prompt, tavern_provision_unit_price, tavern_round_drink_menu_letter,
 };
 use crate::transport::PendingVehicleAcquisition;
 
@@ -635,53 +637,63 @@ pub fn step_innkeeper(
 
 // ---------- Reagent shop ----------
 
-/// Reagent shop transaction. The player picks one reagent and a
-/// quantity; shop charges `unit_price * quantity` and adds the stock.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+/// Reagent shop transaction. The player picks a compact letter entry
+/// from the current herbalist's stocked menu and then a quantity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReagentShopState {
-    #[default]
-    Greeting,
-    PickReagent,
+    Greeting { herbalist: Herbalist },
+    PickReagent { herbalist: Herbalist },
     PickQuantity {
-        reagent: u8,
+        herbalist: Herbalist,
+        reagent: Reagent,
         unit_price: u16,
     },
-    Confirm {
-        reagent: u8,
-        quantity: u8,
-        total: u16,
-    },
     Exited,
+}
+
+impl Default for ReagentShopState {
+    fn default() -> Self {
+        Self::Greeting {
+            herbalist: Herbalist::TheHerbalist,
+        }
+    }
+}
+
+impl ReagentShopState {
+    pub const fn for_herbalist(herbalist: Herbalist) -> Self {
+        Self::Greeting { herbalist }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReagentShopInput {
     Key(u8),
-    /// 0-based reagent index (0..REAGENT_COUNT).
-    Reagent(u8),
     Quantity(u8),
-    Confirm(bool),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReagentShopOutcome {
-    EnteredMenu,
+    EnteredMenu {
+        herbalist: Herbalist,
+    },
     QuotedUnit {
-        reagent: u8,
+        herbalist: Herbalist,
+        reagent: Reagent,
         unit_price: u16,
     },
-    QuotedTotal {
-        reagent: u8,
-        quantity: u8,
-        total: u16,
-    },
     Bought {
-        reagent: u8,
+        herbalist: Herbalist,
+        reagent: Reagent,
         quantity: u8,
         paid: u16,
     },
     RefusedShortFunds {
-        total: u16,
+        cost: u16,
+    },
+    RefusedStockCap {
+        current: u8,
+        requested: u8,
+        cap: u8,
     },
     Declined,
     Exited,
@@ -695,91 +707,87 @@ pub fn step_reagent_shop(
     input: ReagentShopInput,
     gold: &mut u16,
     reagent_stock: &mut [u8],
-    unit_price_table: &[u16],
 ) -> ReagentShopOutcome {
     match (*state, input) {
-        (ReagentShopState::Greeting, ReagentShopInput::Key(b)) => match b {
-            b'Y' | b'y' | b'B' | b'b' => {
-                *state = ReagentShopState::PickReagent;
-                ReagentShopOutcome::EnteredMenu
-            }
-            _ => {
-                *state = ReagentShopState::Exited;
-                ReagentShopOutcome::Exited
-            }
-        },
-        (ReagentShopState::PickReagent, ReagentShopInput::Reagent(reagent)) => {
-            let idx = reagent as usize;
-            if idx >= reagent_stock.len() || idx >= unit_price_table.len() {
-                return ReagentShopOutcome::InvalidInput;
-            }
-            let unit_price = unit_price_table[idx];
-            if unit_price == 0 {
-                return ReagentShopOutcome::InvalidInput;
-            }
-            *state = ReagentShopState::PickQuantity {
-                reagent,
-                unit_price,
-            };
-            ReagentShopOutcome::QuotedUnit {
-                reagent,
-                unit_price,
-            }
+        (ReagentShopState::Greeting { herbalist }, ReagentShopInput::Key(b)) => {
+            *state = ReagentShopState::PickReagent { herbalist };
+            select_reagent_menu_entry(state, herbalist, b)
+        }
+        (ReagentShopState::PickReagent { herbalist }, ReagentShopInput::Key(b)) => {
+            select_reagent_menu_entry(state, herbalist, b)
         }
         (
             ReagentShopState::PickQuantity {
-                reagent,
-                unit_price,
+                herbalist, reagent, ..
             },
             ReagentShopInput::Quantity(quantity),
         ) => {
+            *state = ReagentShopState::PickReagent { herbalist };
             if quantity == 0 {
-                *state = ReagentShopState::Greeting;
                 return ReagentShopOutcome::Declined;
             }
-            let total = unit_price.saturating_mul(quantity as u16);
-            *state = ReagentShopState::Confirm {
-                reagent,
-                quantity,
-                total,
+            let idx = reagent.inventory_index();
+            let Some(stock) = reagent_stock.get_mut(idx) else {
+                return ReagentShopOutcome::InvalidInput;
             };
-            ReagentShopOutcome::QuotedTotal {
-                reagent,
-                quantity,
-                total,
+            match apply_reagent_purchase(gold, stock, herbalist, reagent, quantity) {
+                Ok(outcome) => ReagentShopOutcome::Bought {
+                    herbalist,
+                    reagent,
+                    quantity,
+                    paid: outcome.quote.total_price,
+                },
+                Err(ReagentPurchaseError::InsufficientGold { required, .. }) => {
+                    ReagentShopOutcome::RefusedShortFunds { cost: required }
+                }
+                Err(ReagentPurchaseError::StockCap {
+                    current,
+                    requested,
+                    cap,
+                }) => ReagentShopOutcome::RefusedStockCap {
+                    current,
+                    requested,
+                    cap,
+                },
+                Err(ReagentPurchaseError::ZeroQuantity) => ReagentShopOutcome::Declined,
+                Err(ReagentPurchaseError::NotStocked) => ReagentShopOutcome::InvalidInput,
             }
-        }
-        (
-            ReagentShopState::Confirm {
-                reagent,
-                quantity,
-                total,
-            },
-            ReagentShopInput::Confirm(true),
-        ) => {
-            let idx = reagent as usize;
-            if *gold < total {
-                *state = ReagentShopState::Greeting;
-                return ReagentShopOutcome::RefusedShortFunds { total };
-            }
-            *gold -= total;
-            let new_stock = reagent_stock[idx]
-                .saturating_add(quantity)
-                .min(REAGENT_STOCK_CAP_PER_KIND);
-            reagent_stock[idx] = new_stock;
-            *state = ReagentShopState::Greeting;
-            ReagentShopOutcome::Bought {
-                reagent,
-                quantity,
-                paid: total,
-            }
-        }
-        (ReagentShopState::Confirm { .. }, ReagentShopInput::Confirm(false)) => {
-            *state = ReagentShopState::Greeting;
-            ReagentShopOutcome::Declined
         }
         (ReagentShopState::Exited, _) => ReagentShopOutcome::Exited,
         _ => ReagentShopOutcome::InvalidInput,
+    }
+}
+
+fn select_reagent_menu_entry(
+    state: &mut ReagentShopState,
+    herbalist: Herbalist,
+    byte: u8,
+) -> ReagentShopOutcome {
+    match byte {
+        b' ' | 0x1B | b'N' | b'n' => {
+            *state = ReagentShopState::Exited;
+            ReagentShopOutcome::Exited
+        }
+        b'Y' | b'y' => ReagentShopOutcome::EnteredMenu { herbalist },
+        b => {
+            let upper = b.to_ascii_uppercase() as char;
+            let Some(entry) = herbalist_menu_entries(herbalist)
+                .into_iter()
+                .find(|entry| entry.letter == upper)
+            else {
+                return ReagentShopOutcome::InvalidInput;
+            };
+            *state = ReagentShopState::PickQuantity {
+                herbalist,
+                reagent: entry.reagent,
+                unit_price: entry.unit_price,
+            };
+            ReagentShopOutcome::QuotedUnit {
+                herbalist,
+                reagent: entry.reagent,
+                unit_price: entry.unit_price,
+            }
+        }
     }
 }
 
@@ -1141,78 +1149,65 @@ pub fn step_ship_broker(
 
 // ---------- Guild trader ----------
 
-/// Guild items: gems, keys, torches, sextant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum GuildItem {
-    Gems,
-    Keys,
-    Torches,
-    Sextant,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum GuildShopState {
-    #[default]
-    Greeting,
-    PickItem,
+    Greeting { shop: GuildShop },
+    PickItem { shop: GuildShop },
     PickQuantity {
-        item: GuildItem,
+        shop: GuildShop,
+        commodity: GuildCommodity,
         unit_price: u16,
     },
-    ConfirmSextant {
-        price: u16,
-    },
     Exited,
+}
+
+impl Default for GuildShopState {
+    fn default() -> Self {
+        Self::Greeting {
+            shop: GuildShop::TheGuild,
+        }
+    }
+}
+
+impl GuildShopState {
+    pub const fn for_shop(shop: GuildShop) -> Self {
+        Self::Greeting { shop }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GuildShopInput {
     Key(u8),
-    Item(GuildItem),
     Quantity(u8),
-    Confirm(bool),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GuildShopOutcome {
-    EnteredMenu,
+    EnteredMenu {
+        shop: GuildShop,
+    },
     QuotedUnit {
-        item: GuildItem,
+        shop: GuildShop,
+        commodity: GuildCommodity,
         unit_price: u16,
     },
-    QuotedTotal {
-        item: GuildItem,
-        quantity: u8,
-        total: u16,
-    },
     Bought {
-        item: GuildItem,
+        shop: GuildShop,
+        commodity: GuildCommodity,
         quantity: u8,
         paid: u16,
-    },
-    SextantPurchased {
-        price: u16,
     },
     RefusedShortFunds {
         cost: u16,
     },
+    RefusedStockCap {
+        current: u8,
+        requested: u8,
+        cap: u8,
+    },
     Declined,
     Exited,
     InvalidInput,
-}
-
-pub const GUILD_PRICE_GEMS_EACH: u16 = 100;
-pub const GUILD_PRICE_KEYS_EACH: u16 = 30;
-pub const GUILD_PRICE_TORCHES_EACH: u16 = 10;
-pub const GUILD_PRICE_SEXTANT: u16 = 900;
-
-pub const fn guild_item_unit_price(item: GuildItem) -> u16 {
-    match item {
-        GuildItem::Gems => GUILD_PRICE_GEMS_EACH,
-        GuildItem::Keys => GUILD_PRICE_KEYS_EACH,
-        GuildItem::Torches => GUILD_PRICE_TORCHES_EACH,
-        GuildItem::Sextant => GUILD_PRICE_SEXTANT,
-    }
 }
 
 pub fn step_guild_shop(
@@ -1222,76 +1217,83 @@ pub fn step_guild_shop(
     gems: &mut u8,
     keys: &mut u8,
     torches: &mut u8,
-    sextant_owned: &mut bool,
 ) -> GuildShopOutcome {
     match (*state, input) {
-        (GuildShopState::Greeting, GuildShopInput::Key(b)) => match b {
-            b'Y' | b'y' | b'B' | b'b' => {
-                *state = GuildShopState::PickItem;
-                GuildShopOutcome::EnteredMenu
+        (GuildShopState::Greeting { shop }, GuildShopInput::Key(b)) => {
+            *state = GuildShopState::PickItem { shop };
+            select_guild_menu_entry(state, shop, b)
+        }
+        (GuildShopState::PickItem { shop }, GuildShopInput::Key(b)) => {
+            select_guild_menu_entry(state, shop, b)
+        }
+        (
+            GuildShopState::PickQuantity {
+                shop, commodity, ..
+            },
+            GuildShopInput::Quantity(quantity),
+        ) => {
+            *state = GuildShopState::PickItem { shop };
+            if quantity == 0 {
+                return GuildShopOutcome::Declined;
             }
-            _ => {
+            let stock = match commodity {
+                GuildCommodity::Gems => gems,
+                GuildCommodity::Keys => keys,
+                GuildCommodity::Torches => torches,
+            };
+            match apply_guild_purchase(gold, stock, shop, commodity, quantity) {
+                Ok(outcome) => GuildShopOutcome::Bought {
+                    shop,
+                    commodity,
+                    quantity,
+                    paid: outcome.quote.total_price,
+                },
+                Err(GuildPurchaseError::InsufficientGold { required, .. }) => {
+                    GuildShopOutcome::RefusedShortFunds { cost: required }
+                }
+                Err(GuildPurchaseError::StockCap {
+                    current,
+                    requested,
+                    cap,
+                }) => GuildShopOutcome::RefusedStockCap {
+                    current,
+                    requested,
+                    cap,
+                },
+                Err(GuildPurchaseError::ZeroQuantity) => GuildShopOutcome::Declined,
+            }
+        }
+        (GuildShopState::Exited, _) => GuildShopOutcome::Exited,
+        _ => GuildShopOutcome::InvalidInput,
+    }
+}
+
+fn select_guild_menu_entry(
+    state: &mut GuildShopState,
+    shop: GuildShop,
+    byte: u8,
+) -> GuildShopOutcome {
+    match byte {
+        b'Y' | b'y' => GuildShopOutcome::EnteredMenu { shop },
+        b => match guild_shop_action(b) {
+            GuildShopAction::Purchase(commodity) => {
+                let unit_price = guild_unit_price(shop, commodity);
+                *state = GuildShopState::PickQuantity {
+                    shop,
+                    commodity,
+                    unit_price,
+                };
+                GuildShopOutcome::QuotedUnit {
+                    shop,
+                    commodity,
+                    unit_price,
+                }
+            }
+            GuildShopAction::Exit => {
                 *state = GuildShopState::Exited;
                 GuildShopOutcome::Exited
             }
         },
-        (GuildShopState::PickItem, GuildShopInput::Item(GuildItem::Sextant)) => {
-            if *sextant_owned {
-                *state = GuildShopState::Greeting;
-                return GuildShopOutcome::Declined;
-            }
-            let price = GUILD_PRICE_SEXTANT;
-            *state = GuildShopState::ConfirmSextant { price };
-            GuildShopOutcome::QuotedUnit {
-                item: GuildItem::Sextant,
-                unit_price: price,
-            }
-        }
-        (GuildShopState::PickItem, GuildShopInput::Item(item)) => {
-            let unit_price = guild_item_unit_price(item);
-            *state = GuildShopState::PickQuantity { item, unit_price };
-            GuildShopOutcome::QuotedUnit { item, unit_price }
-        }
-        (GuildShopState::PickQuantity { item, unit_price }, GuildShopInput::Quantity(quantity)) => {
-            if quantity == 0 {
-                *state = GuildShopState::Greeting;
-                return GuildShopOutcome::Declined;
-            }
-            let total = unit_price.saturating_mul(quantity as u16);
-            if *gold < total {
-                *state = GuildShopState::Greeting;
-                return GuildShopOutcome::RefusedShortFunds { cost: total };
-            }
-            *gold -= total;
-            match item {
-                GuildItem::Gems => *gems = gems.saturating_add(quantity),
-                GuildItem::Keys => *keys = keys.saturating_add(quantity),
-                GuildItem::Torches => *torches = torches.saturating_add(quantity),
-                GuildItem::Sextant => unreachable!(),
-            }
-            *state = GuildShopState::Greeting;
-            GuildShopOutcome::Bought {
-                item,
-                quantity,
-                paid: total,
-            }
-        }
-        (GuildShopState::ConfirmSextant { price }, GuildShopInput::Confirm(true)) => {
-            if *gold < price {
-                *state = GuildShopState::Greeting;
-                return GuildShopOutcome::RefusedShortFunds { cost: price };
-            }
-            *gold -= price;
-            *sextant_owned = true;
-            *state = GuildShopState::Exited;
-            GuildShopOutcome::SextantPurchased { price }
-        }
-        (GuildShopState::ConfirmSextant { .. }, GuildShopInput::Confirm(false)) => {
-            *state = GuildShopState::Greeting;
-            GuildShopOutcome::Declined
-        }
-        (GuildShopState::Exited, _) => GuildShopOutcome::Exited,
-        _ => GuildShopOutcome::InvalidInput,
     }
 }
 
@@ -1769,117 +1771,92 @@ mod tests {
     }
 
     #[test]
-    fn reagent_shop_buy_full_path() {
-        let mut state = ReagentShopState::Greeting;
+    fn reagent_shop_compact_letter_path_debits_gold_and_increments_stock() {
+        let mut state = ReagentShopState::for_herbalist(Herbalist::Mysticism);
         let mut gold = 1000u16;
         let mut stock = [0u8; 8];
-        let prices = [5u16, 10, 15, 20, 25, 30, 50, 70];
-        step_reagent_shop(
+        let quote = step_reagent_shop(
             &mut state,
-            ReagentShopInput::Key(b'Y'),
+            ReagentShopInput::Key(b'A'),
             &mut gold,
             &mut stock,
-            &prices,
         );
-        step_reagent_shop(
-            &mut state,
-            ReagentShopInput::Reagent(2),
-            &mut gold,
-            &mut stock,
-            &prices,
+        assert_eq!(
+            quote,
+            ReagentShopOutcome::QuotedUnit {
+                herbalist: Herbalist::Mysticism,
+                reagent: Reagent::SpiderSilk,
+                unit_price: 6
+            }
         );
-        step_reagent_shop(
+        let outcome = step_reagent_shop(
             &mut state,
             ReagentShopInput::Quantity(4),
             &mut gold,
             &mut stock,
-            &prices,
-        );
-        let outcome = step_reagent_shop(
-            &mut state,
-            ReagentShopInput::Confirm(true),
-            &mut gold,
-            &mut stock,
-            &prices,
         );
         assert!(matches!(
             outcome,
             ReagentShopOutcome::Bought {
-                reagent: 2,
+                herbalist: Herbalist::Mysticism,
+                reagent: Reagent::SpiderSilk,
                 quantity: 4,
-                paid: 60
+                paid: 24
             }
         ));
-        assert_eq!(stock[2], 4);
-        assert_eq!(gold, 1000 - 60);
+        assert_eq!(stock[Reagent::SpiderSilk.inventory_index()], 4);
+        assert_eq!(gold, 1000 - 24);
     }
 
     #[test]
     fn reagent_shop_zero_quantity_treated_as_decline() {
-        let mut state = ReagentShopState::Greeting;
+        let mut state = ReagentShopState::for_herbalist(Herbalist::TheHerbalist);
         let mut gold = 1000u16;
         let mut stock = [0u8; 8];
-        let prices = [5u16; 8];
         step_reagent_shop(
             &mut state,
-            ReagentShopInput::Key(b'Y'),
+            ReagentShopInput::Key(b'A'),
             &mut gold,
             &mut stock,
-            &prices,
-        );
-        step_reagent_shop(
-            &mut state,
-            ReagentShopInput::Reagent(0),
-            &mut gold,
-            &mut stock,
-            &prices,
         );
         let outcome = step_reagent_shop(
             &mut state,
             ReagentShopInput::Quantity(0),
             &mut gold,
             &mut stock,
-            &prices,
         );
         assert_eq!(outcome, ReagentShopOutcome::Declined);
         assert_eq!(gold, 1000);
     }
 
     #[test]
-    fn reagent_shop_caps_stock_at_per_kind_max() {
-        let mut state = ReagentShopState::Greeting;
+    fn reagent_shop_refuses_stock_cap_overflow_without_partial_mutation() {
+        let mut state = ReagentShopState::for_herbalist(Herbalist::TheSharperMage);
         let mut gold = 60_000u16;
-        let mut stock = [95u8; 8];
-        let prices = [1u16; 8];
+        let mut stock = [0u8; 8];
+        stock[Reagent::BloodMoss.inventory_index()] = 95;
         step_reagent_shop(
             &mut state,
-            ReagentShopInput::Key(b'Y'),
+            ReagentShopInput::Key(b'A'),
             &mut gold,
             &mut stock,
-            &prices,
         );
-        step_reagent_shop(
-            &mut state,
-            ReagentShopInput::Reagent(0),
-            &mut gold,
-            &mut stock,
-            &prices,
-        );
-        step_reagent_shop(
+        let outcome = step_reagent_shop(
             &mut state,
             ReagentShopInput::Quantity(20),
             &mut gold,
             &mut stock,
-            &prices,
         );
-        step_reagent_shop(
-            &mut state,
-            ReagentShopInput::Confirm(true),
-            &mut gold,
-            &mut stock,
-            &prices,
+        assert_eq!(
+            outcome,
+            ReagentShopOutcome::RefusedStockCap {
+                current: 95,
+                requested: 20,
+                cap: REAGENT_STOCK_CAP_PER_KIND
+            }
         );
-        assert_eq!(stock[0], REAGENT_STOCK_CAP_PER_KIND);
+        assert_eq!(stock[Reagent::BloodMoss.inventory_index()], 95);
+        assert_eq!(gold, 60_000);
     }
 
     #[test]
@@ -2207,152 +2184,96 @@ mod tests {
     }
 
     #[test]
-    fn guild_shop_gems_path_debits_gold_and_increments_count() {
-        let mut state = GuildShopState::Greeting;
+    fn guild_shop_letter_path_debits_gold_and_increments_count() {
+        let mut state = GuildShopState::for_shop(GuildShop::TheDen);
         let mut gold = 1000u16;
         let mut gems = 0u8;
         let mut keys = 0u8;
         let mut torches = 0u8;
-        let mut sextant = false;
-        step_guild_shop(
+        let quote = step_guild_shop(
             &mut state,
-            GuildShopInput::Key(b'Y'),
+            GuildShopInput::Key(b'A'),
             &mut gold,
             &mut gems,
             &mut keys,
             &mut torches,
-            &mut sextant,
         );
-        step_guild_shop(
-            &mut state,
-            GuildShopInput::Item(GuildItem::Gems),
-            &mut gold,
-            &mut gems,
-            &mut keys,
-            &mut torches,
-            &mut sextant,
+        assert_eq!(
+            quote,
+            GuildShopOutcome::QuotedUnit {
+                shop: GuildShop::TheDen,
+                commodity: GuildCommodity::Keys,
+                unit_price: 190
+            }
         );
         let outcome = step_guild_shop(
             &mut state,
-            GuildShopInput::Quantity(3),
+            GuildShopInput::Quantity(2),
             &mut gold,
             &mut gems,
             &mut keys,
             &mut torches,
-            &mut sextant,
         );
         assert!(matches!(
             outcome,
             GuildShopOutcome::Bought {
-                item: GuildItem::Gems,
-                quantity: 3,
-                paid: 300
+                shop: GuildShop::TheDen,
+                commodity: GuildCommodity::Keys,
+                quantity: 2,
+                paid: 380
             }
         ));
-        assert_eq!(gems, 3);
-        assert_eq!(gold, 700);
+        assert_eq!(keys, 2);
+        assert_eq!(gems, 0);
+        assert_eq!(gold, 620);
     }
 
     #[test]
-    fn guild_shop_sextant_only_sells_once() {
-        let mut state = GuildShopState::Greeting;
+    fn guild_shop_non_menu_letter_exits_without_selling_sextant_placeholder() {
+        let mut state = GuildShopState::for_shop(GuildShop::TheGuild);
         let mut gold = 5000u16;
         let mut gems = 0u8;
         let mut keys = 0u8;
         let mut torches = 0u8;
-        let mut sextant = false;
-        step_guild_shop(
-            &mut state,
-            GuildShopInput::Key(b'Y'),
-            &mut gold,
-            &mut gems,
-            &mut keys,
-            &mut torches,
-            &mut sextant,
-        );
-        step_guild_shop(
-            &mut state,
-            GuildShopInput::Item(GuildItem::Sextant),
-            &mut gold,
-            &mut gems,
-            &mut keys,
-            &mut torches,
-            &mut sextant,
-        );
         let outcome = step_guild_shop(
             &mut state,
-            GuildShopInput::Confirm(true),
+            GuildShopInput::Key(b'X'),
             &mut gold,
             &mut gems,
             &mut keys,
             &mut torches,
-            &mut sextant,
         );
-        assert!(matches!(outcome, GuildShopOutcome::SextantPurchased { .. }));
-        assert!(sextant);
-        // Second attempt declines without charging — caller starts a
-        // fresh visit since the previous one terminated.
-        state = GuildShopState::Greeting;
-        step_guild_shop(
-            &mut state,
-            GuildShopInput::Key(b'Y'),
-            &mut gold,
-            &mut gems,
-            &mut keys,
-            &mut torches,
-            &mut sextant,
-        );
-        let outcome = step_guild_shop(
-            &mut state,
-            GuildShopInput::Item(GuildItem::Sextant),
-            &mut gold,
-            &mut gems,
-            &mut keys,
-            &mut torches,
-            &mut sextant,
-        );
-        assert_eq!(outcome, GuildShopOutcome::Declined);
+        // Non-menu guild letters exit instead of buying placeholder goods.
+        assert_eq!(outcome, GuildShopOutcome::Exited);
+        assert_eq!(state, GuildShopState::Exited);
+        assert_eq!(gold, 5000);
+        assert_eq!((gems, keys, torches), (0, 0, 0));
     }
 
     #[test]
     fn guild_shop_short_funds_refuses_quantity_purchase() {
-        let mut state = GuildShopState::Greeting;
+        let mut state = GuildShopState::for_shop(GuildShop::TheGuild);
         let mut gold = 100u16;
         let mut gems = 0u8;
         let mut keys = 0u8;
         let mut torches = 0u8;
-        let mut sextant = false;
         step_guild_shop(
             &mut state,
-            GuildShopInput::Key(b'Y'),
+            GuildShopInput::Key(b'B'),
             &mut gold,
             &mut gems,
             &mut keys,
             &mut torches,
-            &mut sextant,
-        );
-        step_guild_shop(
-            &mut state,
-            GuildShopInput::Item(GuildItem::Gems),
-            &mut gold,
-            &mut gems,
-            &mut keys,
-            &mut torches,
-            &mut sextant,
         );
         let outcome = step_guild_shop(
             &mut state,
-            GuildShopInput::Quantity(5),
+            GuildShopInput::Quantity(1),
             &mut gold,
             &mut gems,
             &mut keys,
             &mut torches,
-            &mut sextant,
         );
-        assert!(matches!(
-            outcome,
-            GuildShopOutcome::RefusedShortFunds { .. }
-        ));
+        assert_eq!(outcome, GuildShopOutcome::RefusedShortFunds { cost: 200 });
         assert_eq!(gold, 100);
         assert_eq!(gems, 0);
     }

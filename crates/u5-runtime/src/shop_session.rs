@@ -57,6 +57,8 @@ impl ActiveShopSession {
             Self::Innkeeper(_) => "Rest (R), Leave (L), Pick up (P), or Space.",
             Self::ShipBroker(_) => "Choose Frigate (F), Skiff (S), or Space.",
             Self::Tavern(_) => "Drink? Yes (Y), No (N), or Space.",
+            Self::Reagent(_) => "Choose reagent A-E, or Space.",
+            Self::Guild(_) => "Keys (A), Gems (B), Torches (C), or Space.",
             _ => "Choose Buy / Sell / Yes / No.",
         }
     }
@@ -71,8 +73,8 @@ pub fn shop_session_for_dialog_id(dialog_id: u8) -> Option<ActiveShopSession> {
         0x82 => ActiveShopSession::Tavern(TavernState::default()),
         0x83 => ActiveShopSession::HorseTrader(HorseTraderState::Greeting),
         0x84 => ActiveShopSession::ShipBroker(ShipBrokerState::default()),
-        0x85 => ActiveShopSession::Reagent(ReagentShopState::Greeting),
-        0x86 => ActiveShopSession::Guild(GuildShopState::Greeting),
+        0x85 => ActiveShopSession::Reagent(ReagentShopState::default()),
+        0x86 => ActiveShopSession::Guild(GuildShopState::default()),
         0x87 => ActiveShopSession::Healer(HealerShopState::Greeting),
         0x88 => ActiveShopSession::Innkeeper(InnkeeperState::default()),
         _ => return None,
