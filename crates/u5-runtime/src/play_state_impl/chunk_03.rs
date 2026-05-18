@@ -771,6 +771,11 @@ impl PlayState {
                 DirectionPromptKind::Attack => "Attack where?".to_string(),
                 DirectionPromptKind::CombatKlimb { .. } => "Klimb-".to_string(),
                 DirectionPromptKind::CombatPush { .. } => "Push-".to_string(),
+                DirectionPromptKind::CombatSjog { branch, .. } => {
+                    combat_command_branch_published_label(branch)
+                        .unwrap_or("Direction?")
+                        .to_string()
+                }
                 DirectionPromptKind::Fire => "Fire- which direction?".to_string(),
                 DirectionPromptKind::Get => "Get-".to_string(),
                 DirectionPromptKind::Open => "Open-".to_string(),
@@ -824,6 +829,9 @@ impl PlayState {
                 }
                 DirectionPromptKind::CombatPush { actor_slot } => {
                     self.push_combat_actor_direction(actor_slot, direction)
+                }
+                DirectionPromptKind::CombatSjog { actor_slot, branch } => {
+                    self.combat_sjog_actor_direction(actor_slot, branch, direction)
                 }
                 DirectionPromptKind::Fire => self.fire_command(Some(direction), game_dir)?,
                 DirectionPromptKind::Get => {

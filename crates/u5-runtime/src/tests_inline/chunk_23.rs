@@ -7490,6 +7490,117 @@
     }
 
     #[test]
+    fn combat_sjog_get_removes_loose_combat_object() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(10, 10);
+        state.active_objects[1] = ActiveObject {
+            type_byte: 0x50,
+            tile: 0x50,
+            x: 6,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+        state.visibility_dirty = false;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'G', "6", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_objects[1].is_empty());
+        assert!(state.visibility_dirty);
+        assert!(state.message.starts_with("Got combat object tile 80 at (6, 5)."));
+        assert!(state.message.contains("Giant Rat"));
+    }
+
+    #[test]
+    fn combat_sjog_open_and_jimmy_mutate_combat_terrain() {
+        let game_dir = std::path::Path::new(".");
+        let mut open_state = combat_player_command_state(10, 10);
+        open_state.combat_terrain[5][6] = 97;
+        open_state.visibility_dirty = false;
+
+        assert_eq!(
+            handle_play_key_input(&mut open_state, 'O', "6", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(open_state.combat_terrain[5][6], 16);
+        assert!(open_state.visibility_dirty);
+        assert!(open_state
+            .message
+            .starts_with("Opened combat tile 97 at (6, 5)."));
+
+        let mut jimmy_state = combat_player_command_state(10, 10);
+        jimmy_state.keys = 1;
+        jimmy_state.party[0].class_byte = 255;
+        jimmy_state.combat_terrain[5][6] = 99;
+        jimmy_state.visibility_dirty = false;
+
+        assert_eq!(
+            handle_play_key_input(&mut jimmy_state, 'J', "6", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(jimmy_state.combat_terrain[5][6], 98);
+        assert_eq!(jimmy_state.keys, 1);
+        assert!(jimmy_state.visibility_dirty);
+        assert!(jimmy_state
+            .message
+            .starts_with("Unlocked combat tile 99 at (6, 5)."));
+    }
+
+    #[test]
+    fn combat_sjog_search_observes_without_removing_object() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(10, 10);
+        state.active_objects[1] = ActiveObject {
+            type_byte: 0x51,
+            tile: 0x51,
+            x: 6,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'S', "6", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(!state.active_objects[1].is_empty());
+        assert!(state
+            .message
+            .starts_with("Found combat object tile 81 at (6, 5)."));
+    }
+
+    #[test]
+    fn combat_sjog_prompt_cancel_restores_pending_actor() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(10, 10);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'G', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.message, "Get-");
+        assert!(matches!(
+            state.active_direction_prompt.map(|session| session.kind),
+            Some(DirectionPromptKind::CombatSjog {
+                actor_slot: 0,
+                branch: CombatCommandBranch::Get,
+            })
+        ));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, ' ', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+        assert_eq!(state.message, DIRECTION_PROMPT_LABEL_PASS);
+    }
+
+    #[test]
     fn combat_player_command_quickness_can_consume_dispatch_before_input() {
         let mut state = combat_player_command_state(8, 5);
         state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);

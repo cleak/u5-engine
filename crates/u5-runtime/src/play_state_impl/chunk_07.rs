@@ -4,6 +4,176 @@ use std::path::Path;
 use crate::*;
 
 impl PlayState {
+    pub fn combat_sjog_actor_direction(
+        &mut self,
+        actor_slot: usize,
+        branch: CombatCommandBranch,
+        direction: Direction,
+    ) -> MoveOutcome {
+        match branch {
+            CombatCommandBranch::Get => self.get_combat_actor_direction(actor_slot, direction),
+            CombatCommandBranch::Jimmy => self.jimmy_combat_actor_direction(actor_slot, direction),
+            CombatCommandBranch::Open => self.open_combat_actor_direction(actor_slot, direction),
+            CombatCommandBranch::Search => {
+                self.search_combat_actor_direction(actor_slot, direction)
+            }
+            _ => {
+                self.message = "What?".to_string();
+                MoveOutcome::Blocked
+            }
+        }
+    }
+
+    pub fn get_combat_actor_direction(
+        &mut self,
+        actor_slot: usize,
+        direction: Direction,
+    ) -> MoveOutcome {
+        let Some((actor, x, y)) =
+            self.combat_sjog_target_coordinate(actor_slot, direction, "Nothing to get there.")
+        else {
+            return MoveOutcome::Blocked;
+        };
+
+        if self
+            .combat_actor_slot_at(x as u8, y as u8, actor_slot)
+            .is_some()
+        {
+            self.message = "Nothing to get there.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let Some((object_slot, object)) =
+            self.combat_loose_object_slot_at(x, y, actor.active_object_slot as usize)
+        else {
+            self.message = "Nothing to get here.".to_string();
+            return MoveOutcome::Blocked;
+        };
+
+        self.free_active_object_slot(object_slot);
+        self.mark_visibility_dirty();
+        self.message = format!("Got combat object tile {} at ({x}, {y}).", object.tile);
+        MoveOutcome::Got
+    }
+
+    pub fn search_combat_actor_direction(
+        &mut self,
+        actor_slot: usize,
+        direction: Direction,
+    ) -> MoveOutcome {
+        let Some((actor, x, y)) =
+            self.combat_sjog_target_coordinate(actor_slot, direction, "Nothing to search there.")
+        else {
+            return MoveOutcome::Blocked;
+        };
+
+        if let Some((_, object)) =
+            self.combat_loose_object_slot_at(x, y, actor.active_object_slot as usize)
+        {
+            self.message = format!("Found combat object tile {} at ({x}, {y}).", object.tile);
+            return MoveOutcome::Searched;
+        }
+
+        let tile = self.combat_terrain[y][x];
+        self.message = format!("Searched combat tile {tile} at ({x}, {y}).");
+        MoveOutcome::Searched
+    }
+
+    pub fn open_combat_actor_direction(
+        &mut self,
+        actor_slot: usize,
+        direction: Direction,
+    ) -> MoveOutcome {
+        let Some((_, x, y)) =
+            self.combat_sjog_target_coordinate(actor_slot, direction, "Nothing to open there.")
+        else {
+            return MoveOutcome::Blocked;
+        };
+        if self
+            .combat_actor_slot_at(x as u8, y as u8, actor_slot)
+            .is_some()
+        {
+            self.message = "Nothing to open there.".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        let tile = self.combat_terrain[y][x];
+        if tile == 16 {
+            self.message = "It's open!".to_string();
+            return MoveOutcome::DoorOpened;
+        }
+        if !(96..=103).contains(&tile) {
+            self.message = "Nothing to open here.".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        self.combat_terrain[y][x] = 16;
+        self.mark_visibility_dirty();
+        self.message = format!("Opened combat tile {tile} at ({x}, {y}).");
+        MoveOutcome::DoorOpened
+    }
+
+    pub fn jimmy_combat_actor_direction(
+        &mut self,
+        actor_slot: usize,
+        direction: Direction,
+    ) -> MoveOutcome {
+        let Some((_, x, y)) = self.combat_sjog_target_coordinate(actor_slot, direction, "No lock!")
+        else {
+            return MoveOutcome::Blocked;
+        };
+        if self.keys == 0 {
+            self.message = "No keys!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if self
+            .combat_actor_slot_at(x as u8, y as u8, actor_slot)
+            .is_some()
+        {
+            self.message = "No lock!".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        let tile = self.combat_terrain[y][x];
+        let Some(unlocked_tile) = Self::visible_jimmy_unlock_tile(tile) else {
+            self.message = "No lock!".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !self.jimmy_lock_pick_succeeds(actor_slot) {
+            self.keys = self.keys.saturating_sub(1);
+            self.message = "Key broke!".to_string();
+            return MoveOutcome::LockTried;
+        }
+
+        self.combat_terrain[y][x] = unlocked_tile;
+        self.mark_visibility_dirty();
+        self.message = format!("Unlocked combat tile {tile} at ({x}, {y}).");
+        MoveOutcome::LockTried
+    }
+
+    fn combat_sjog_target_coordinate(
+        &mut self,
+        actor_slot: usize,
+        direction: Direction,
+        out_of_bounds_message: &str,
+    ) -> Option<(CombatActorDescriptor, usize, usize)> {
+        let Some(actor) = self.live_combat_party_actor(actor_slot) else {
+            self.message = "No active combatant.".to_string();
+            return None;
+        };
+        if !direction.is_cardinal() {
+            self.message = "Direction?".to_string();
+            return None;
+        }
+        let (dx, dy) = direction.delta();
+        let x = actor.x as isize + dx;
+        let y = actor.y as isize + dy;
+        if !combat_arena_coordinate_in_bounds(x as i16, y as i16) {
+            self.message = out_of_bounds_message.to_string();
+            return None;
+        }
+        Some((actor, x as usize, y as usize))
+    }
+
     pub fn klimb_combat_actor_vertical(
         &mut self,
         actor_slot: usize,

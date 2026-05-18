@@ -353,6 +353,7 @@ fn handle_active_direction_prompt_key_input(
             .and_then(|session| match session.kind {
                 DirectionPromptKind::CombatKlimb { actor_slot } => Some(actor_slot),
                 DirectionPromptKind::CombatPush { actor_slot } => Some(actor_slot),
+                DirectionPromptKind::CombatSjog { actor_slot, .. } => Some(actor_slot),
                 _ => None,
             });
     if let Some(outcome) = state.step_active_direction_prompt(key, suffix, game_dir)? {
@@ -1711,6 +1712,30 @@ fn handle_combat_multistage_command(
             }
             true
         }
+        CombatCommandBranch::Get
+        | CombatCommandBranch::Jimmy
+        | CombatCommandBranch::Open
+        | CombatCommandBranch::Search => {
+            if let Some(direction) = suffix
+                .chars()
+                .find_map(Direction::from_play_key)
+                .filter(|direction| direction.is_cardinal())
+            {
+                state.combat_sjog_actor_direction(actor_slot, *branch, direction);
+                if state.combat_active {
+                    advance_combat_round_after_actor_and_append_message(state, actor_slot);
+                }
+            } else {
+                state.active_direction_prompt = Some(DirectionPromptSession::new(
+                    DirectionPromptKind::CombatSjog {
+                        actor_slot,
+                        branch: *branch,
+                    },
+                ));
+                state.message = state.render_active_direction_prompt();
+            }
+            true
+        }
         _ => false,
     }
 }
@@ -1782,6 +1807,9 @@ fn combat_player_command_input_from_key_suffix(
             return CombatPlayerCommandInput::AttackDirection(direction_code);
         }
         return CombatPlayerCommandInput::Key('A');
+    }
+    if key.is_ascii_uppercase() {
+        return CombatPlayerCommandInput::Key(key);
     }
     if let Some(direction_code) =
         Direction::from_play_key(key).and_then(combat_direction_code_for_direction)
