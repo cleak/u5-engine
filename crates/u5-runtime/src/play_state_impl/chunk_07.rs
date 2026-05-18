@@ -1476,6 +1476,203 @@ impl PlayState {
         self.push_world_static_family(direction, tx, ty, px, py, family)
     }
 
+    pub fn push_combat_actor_direction(
+        &mut self,
+        actor_slot: usize,
+        direction: Direction,
+    ) -> MoveOutcome {
+        if !self.combat_active || actor_slot >= COMBAT_PARTY_ACTOR_SLOTS {
+            self.message = "No active combatant.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if !direction.is_cardinal() {
+            self.message = "Push requires a cardinal facing direction.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let Some(actor) = self.combat_actors.get(actor_slot).copied() else {
+            self.message = "No active combatant.".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !combat_actor_is_active_not_dead(actor) {
+            self.message = "No active combatant.".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        let (dx, dy) = direction.delta();
+        let sx = actor.x as isize + dx;
+        let sy = actor.y as isize + dy;
+        let dx2 = sx + dx;
+        let dy2 = sy + dy;
+        if !combat_arena_coordinate_in_bounds(sx as i16, sy as i16)
+            || !combat_arena_coordinate_in_bounds(dx2 as i16, dy2 as i16)
+        {
+            self.message = "Nothing to push there.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let sx = sx as usize;
+        let sy = sy as usize;
+        let dx2 = dx2 as usize;
+        let dy2 = dy2 as usize;
+
+        if let Some(blocking_slot) = self.combat_actor_slot_at(sx as u8, sy as u8, actor_slot) {
+            self.message = format!("Push blocked by combatant in slot {blocking_slot}.");
+            return MoveOutcome::Blocked;
+        }
+
+        if let Some((object_slot, object)) =
+            self.combat_loose_object_slot_at(sx, sy, actor.active_object_slot as usize)
+        {
+            return self.push_combat_dynamic_object(
+                actor_slot,
+                direction,
+                sx,
+                sy,
+                dx2,
+                dy2,
+                object_slot,
+                object,
+            );
+        }
+
+        let source_tile = self.combat_terrain[sy][sx];
+        let Some(family) = pushable_tile_family(source_tile) else {
+            self.message = "Nothing to push there.".to_string();
+            return MoveOutcome::Blocked;
+        };
+
+        self.push_combat_static_family(actor_slot, direction, sx, sy, dx2, dy2, family)
+    }
+
+    fn push_combat_static_family(
+        &mut self,
+        actor_slot: usize,
+        direction: Direction,
+        sx: usize,
+        sy: usize,
+        dx2: usize,
+        dy2: usize,
+        family: PushableTileFamily,
+    ) -> MoveOutcome {
+        let actor = self.combat_actors[actor_slot];
+        let source_tile = self.combat_terrain[sy][sx];
+        let stamp = family.floor_stamp();
+        if self.combat_cell_clear_for_push(dx2, dy2) && self.combat_terrain[dy2][dx2] == stamp {
+            self.combat_terrain[sy][sx] = stamp;
+            self.combat_terrain[dy2][dx2] = pushable_oriented_tile(source_tile, direction);
+            self.finish_combat_push(actor_slot, sx, sy);
+            self.message = format!(
+                "Pushed combat tile {source_tile} {} from ({sx}, {sy}) to ({dx2}, {dy2}).",
+                direction.name()
+            );
+            return MoveOutcome::Pushed;
+        }
+
+        if self.combat_terrain[actor.y as usize][actor.x as usize] == stamp {
+            let pull_direction = direction.opposite_cardinal().unwrap_or(direction);
+            self.combat_terrain[actor.y as usize][actor.x as usize] =
+                pushable_oriented_tile(source_tile, pull_direction);
+            self.combat_terrain[sy][sx] = stamp;
+            self.finish_combat_push(actor_slot, sx, sy);
+            self.message = format!(
+                "Pulled combat tile {source_tile} {} from ({sx}, {sy}) to ({}, {}).",
+                direction.name(),
+                actor.x,
+                actor.y
+            );
+            return MoveOutcome::Pushed;
+        }
+
+        self.message = "Push blocked; it won't budge.".to_string();
+        MoveOutcome::Blocked
+    }
+
+    fn push_combat_dynamic_object(
+        &mut self,
+        actor_slot: usize,
+        direction: Direction,
+        sx: usize,
+        sy: usize,
+        dx2: usize,
+        dy2: usize,
+        object_slot: usize,
+        object: ActiveObject,
+    ) -> MoveOutcome {
+        if !self.combat_cell_clear_for_push(dx2, dy2)
+            || !is_probe_walkable(self.combat_terrain[dy2][dx2])
+        {
+            self.message = format!("Push blocked by combat arena cell ({dx2}, {dy2}).");
+            return MoveOutcome::Blocked;
+        }
+
+        if let Some(moved) = self.active_objects.get_mut(object_slot) {
+            moved.x = dx2;
+            moved.y = dy2;
+            moved.tile = pushable_oriented_tile(moved.tile, direction);
+            moved.type_byte = pushable_oriented_tile(moved.type_byte, direction);
+        }
+        self.finish_combat_push(actor_slot, sx, sy);
+        self.message = format!(
+            "Pushed combat object tile {} {} from ({sx}, {sy}) to ({dx2}, {dy2}).",
+            object.tile,
+            direction.name()
+        );
+        MoveOutcome::Pushed
+    }
+
+    fn finish_combat_push(&mut self, actor_slot: usize, x: usize, y: usize) {
+        let _ = commit_combat_actor_linked_position(
+            &mut self.combat_actors[actor_slot],
+            &mut self.active_objects,
+            x as u8,
+            y as u8,
+        );
+        self.mark_visibility_dirty();
+    }
+
+    fn combat_actor_slot_at(&self, x: u8, y: u8, except_slot: usize) -> Option<usize> {
+        self.combat_actors
+            .iter()
+            .copied()
+            .enumerate()
+            .find_map(|(slot, actor)| {
+                (slot != except_slot && combat_actor_occupies_arena_cell(actor, x, y))
+                    .then_some(slot)
+            })
+    }
+
+    fn combat_loose_object_slot_at(
+        &self,
+        x: usize,
+        y: usize,
+        actor_object_slot: usize,
+    ) -> Option<(usize, ActiveObject)> {
+        self.active_objects
+            .iter()
+            .copied()
+            .enumerate()
+            .find_map(|(slot, object)| {
+                if slot == actor_object_slot || object.is_empty() || object.x != x || object.y != y
+                {
+                    return None;
+                }
+                let linked_to_live_actor = self.combat_actors.iter().copied().any(|actor| {
+                    combat_actor_is_active_not_dead(actor)
+                        && actor.active_object_slot as usize == slot
+                });
+                (!linked_to_live_actor).then_some((slot, object))
+            })
+    }
+
+    fn combat_cell_clear_for_push(&self, x: usize, y: usize) -> bool {
+        self.combat_actor_slot_at(x as u8, y as u8, usize::MAX)
+            .is_none()
+            && self
+                .active_objects
+                .iter()
+                .copied()
+                .all(|object| object.is_empty() || object.x != x || object.y != y)
+    }
+
     fn world_push_coordinate(
         &self,
         x: usize,

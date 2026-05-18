@@ -7299,6 +7299,123 @@
     }
 
     #[test]
+    fn combat_push_static_tile_uses_actor_anchor_and_arena_terrain() {
+        let mut state = combat_player_command_state(10, 10);
+        state.visibility_dirty = false;
+        state.combat_terrain[5][6] = 0x90;
+        state.combat_terrain[5][7] = PUSHABLE_GENERIC_FLOOR_STAMP;
+
+        let outcome = state.push_combat_actor_direction(0, Direction::East);
+
+        assert_eq!(outcome, MoveOutcome::Pushed);
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (6, 5));
+        assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (6, 5));
+        assert_eq!(state.combat_terrain[5][6], PUSHABLE_GENERIC_FLOOR_STAMP);
+        assert_eq!(state.combat_terrain[5][7], 0x91);
+        assert!(state.visibility_dirty);
+        assert!(state.message.contains("Pushed combat tile 144 East"));
+    }
+
+    #[test]
+    fn combat_push_dynamic_object_moves_loose_object_only_in_arena() {
+        let mut state = combat_player_command_state(10, 10);
+        state.visibility_dirty = false;
+        state.active_objects[1] = ActiveObject {
+            type_byte: 0x90,
+            tile: 0x90,
+            x: 6,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+
+        let outcome = state.push_combat_actor_direction(0, Direction::East);
+
+        assert_eq!(outcome, MoveOutcome::Pushed);
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (6, 5));
+        assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (6, 5));
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (7, 5));
+        assert_eq!(state.active_objects[1].tile, 0x91);
+        assert_eq!(state.active_objects[1].type_byte, 0x91);
+        assert_eq!(state.combat_terrain[5][6], 0x04);
+        assert_eq!(state.combat_terrain[5][7], 0x04);
+        assert!(state.visibility_dirty);
+        assert!(state.message.contains("Pushed combat object tile 144 East"));
+    }
+
+    #[test]
+    fn combat_input_dispatch_push_prompt_keeps_actor_until_direction() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(10, 10);
+        state.visibility_dirty = false;
+        state.combat_terrain[5][6] = 0x90;
+        state.combat_terrain[5][7] = PUSHABLE_GENERIC_FLOOR_STAMP;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'P', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.message, "Push-");
+        assert!(matches!(
+            state.active_direction_prompt.map(|session| session.kind),
+            Some(DirectionPromptKind::CombatPush { actor_slot: 0 })
+        ));
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 5));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '6', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_direction_prompt.is_none());
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (6, 5));
+        assert_eq!(state.combat_terrain[5][6], PUSHABLE_GENERIC_FLOOR_STAMP);
+        assert_eq!(state.combat_terrain[5][7], 0x91);
+        assert!(state.message.contains("Pushed combat tile 144 East"));
+        assert!(state.visibility_dirty);
+    }
+
+    #[test]
+    fn combat_input_dispatch_push_prompt_cancel_restores_pending_actor() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(10, 10);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'P', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_direction_prompt.is_some());
+        assert_eq!(state.pending_combat_actor_slot, None);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, ' ', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_direction_prompt.is_none());
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+        assert_eq!(state.message, DIRECTION_PROMPT_LABEL_PASS);
+    }
+
+    #[test]
+    fn combat_input_dispatch_inline_push_suffix_pushes_immediately() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(10, 10);
+        state.combat_terrain[5][6] = 0x90;
+        state.combat_terrain[5][7] = PUSHABLE_GENERIC_FLOOR_STAMP;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'P', "6", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_direction_prompt.is_none());
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (6, 5));
+        assert_eq!(state.combat_terrain[5][6], PUSHABLE_GENERIC_FLOOR_STAMP);
+        assert_eq!(state.combat_terrain[5][7], 0x91);
+        assert!(state.message.contains("Pushed combat tile 144 East"));
+    }
+
+    #[test]
     fn combat_player_command_quickness_can_consume_dispatch_before_input() {
         let mut state = combat_player_command_state(8, 5);
         state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);

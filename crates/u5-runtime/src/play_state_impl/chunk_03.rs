@@ -769,6 +769,7 @@ impl PlayState {
             .as_ref()
             .map(|session| match session.kind {
                 DirectionPromptKind::Attack => "Attack where?".to_string(),
+                DirectionPromptKind::CombatPush { .. } => "Push-".to_string(),
                 DirectionPromptKind::Fire => "Fire- which direction?".to_string(),
                 DirectionPromptKind::Get => "Get-".to_string(),
                 DirectionPromptKind::Open => "Open-".to_string(),
@@ -801,6 +802,9 @@ impl PlayState {
             let outcome = match session.kind {
                 DirectionPromptKind::Attack => {
                     self.attack_command_with_game_dir(Some(direction), Some(game_dir))?
+                }
+                DirectionPromptKind::CombatPush { actor_slot } => {
+                    self.push_combat_actor_direction(actor_slot, direction)
                 }
                 DirectionPromptKind::Fire => self.fire_command(Some(direction), game_dir)?,
                 DirectionPromptKind::Get => {

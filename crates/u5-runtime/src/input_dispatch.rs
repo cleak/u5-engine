@@ -346,8 +346,24 @@ fn handle_active_direction_prompt_key_input(
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
     let turn_before = state.turn;
+    let combat_push_actor =
+        state
+            .active_direction_prompt
+            .as_ref()
+            .and_then(|session| match session.kind {
+                DirectionPromptKind::CombatPush { actor_slot } => Some(actor_slot),
+                _ => None,
+            });
     if let Some(outcome) = state.step_active_direction_prompt(key, suffix, game_dir)? {
-        state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+        if let Some(actor_slot) = combat_push_actor {
+            if matches!(outcome, MoveOutcome::PromptDeclined) {
+                state.pending_combat_actor_slot = Some(actor_slot);
+            } else {
+                advance_combat_round_after_actor_and_append_message(state, actor_slot);
+            }
+        } else {
+            state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+        }
     }
     Ok(PlayInputDisposition::Continue)
 }
@@ -1652,6 +1668,22 @@ fn handle_combat_multistage_command(
                     state.message = format!("Yelled {word}. Nothing happens.");
                     advance_combat_round_after_actor_and_append_message(state, actor_slot);
                 }
+            }
+            true
+        }
+        CombatCommandBranch::Push => {
+            if let Some(direction) = suffix
+                .chars()
+                .find_map(Direction::from_play_key)
+                .filter(|direction| direction.is_cardinal())
+            {
+                state.push_combat_actor_direction(actor_slot, direction);
+                advance_combat_round_after_actor_and_append_message(state, actor_slot);
+            } else {
+                state.active_direction_prompt = Some(DirectionPromptSession::new(
+                    DirectionPromptKind::CombatPush { actor_slot },
+                ));
+                state.message = state.render_active_direction_prompt();
             }
             true
         }
