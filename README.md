@@ -261,8 +261,10 @@ saved charge, mana, and level gates succeed. `C1AZ2`, `C1AN2`, `C1M2`,
 Resurrect hooks from party slot 1 targeting party member 2; status clears
 follow the public sleep/poison/death semantics. Heal applies the public
 `magic.md` §8 formula (random 0..60 halved, promoted to one), giving a 1..30
-HP restore capped at the target's max HP. Great Heal and Resurrect restore to
-max HP until exact HP math is public. `C1IS`, `C1RT`, and `C1AI` cast the
+HP restore capped at the target's max HP. Great Heal restores accepted non-Dead
+targets to maximum HP, and Resurrect rebuilds Dead targets at 1 HP with
+public level, max-HP, mana, and moral-standing experience adjustment rules.
+`C1IS`, `C1RT`, and `C1AI` cast the
 shared active-effect wrappers for Protection, Quickness, and Negate Magic,
 recording the public `P`/20, `Q`/30, or `N`/10 runtime tag and aging it on
 consumed turns. Combat consumes those shared tags for Protection's equipped-stat

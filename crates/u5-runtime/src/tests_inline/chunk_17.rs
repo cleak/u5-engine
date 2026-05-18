@@ -2157,6 +2157,72 @@
     }
 
     #[test]
+    fn heal_and_great_heal_skip_only_dead_targets() {
+        // magic.md §8: Heal and Great Heal have a spell-specific
+        // Dead-status gate; Ashes and zero-HP non-Dead records remain
+        // accepted targets, and Heal leaves the status byte unchanged.
+        let mut heal = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        heal.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: HEAL_COST,
+                hp: 10,
+                max_hp: 20,
+                level: HEAL_COST,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'F',
+                status: b'A',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 0,
+                max_hp: 30,
+                level: 1,
+            },
+        ];
+        heal.spell_charges[HEAL_SPELL_INDEX] = 1;
+        let expected_heal = heal.heal_spell_amount(0, 1);
+
+        assert_eq!(
+            handle_play_key_input(&mut heal, 'C', "1M2", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(heal.party[1].status, b'A');
+        assert_eq!(heal.party[1].hp, expected_heal);
+        assert_eq!(heal.spell_charges[HEAL_SPELL_INDEX], 0);
+        assert_eq!(heal.party[0].mana, 0);
+        assert_eq!(heal.turn, 1);
+        assert!(heal.message.starts_with("Healed party member 2"));
+
+        let mut great_heal = heal.clone();
+        great_heal.turn = 0;
+        great_heal.party[0].mana = GREAT_HEAL_COST;
+        great_heal.party[0].level = GREAT_HEAL_COST;
+        great_heal.party[1].hp = 0;
+        great_heal.spell_charges[GREAT_HEAL_SPELL_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut great_heal, 'C', "1MV2", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(great_heal.party[1].status, b'A');
+        assert_eq!(great_heal.party[1].hp, 30);
+        assert_eq!(great_heal.spell_charges[GREAT_HEAL_SPELL_INDEX], 0);
+        assert_eq!(great_heal.party[0].mana, 0);
+        assert_eq!(great_heal.turn, 1);
+        assert_eq!(
+            great_heal.message,
+            "Great healed party member 2 for 30 HP (30/30)."
+        );
+    }
+
+    #[test]
     fn heal_amount_helper_matches_public_roll_range() {
         assert_eq!(heal_spell_amount_from_raw_roll(0), 1);
         assert_eq!(heal_spell_amount_from_raw_roll(1), 1);

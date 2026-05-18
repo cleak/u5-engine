@@ -2081,7 +2081,7 @@ impl PlayState {
             return outcome;
         }
 
-        if !self.party[target_index].living() {
+        if self.party[target_index].status == b'D' {
             self.advance_turn();
             self.message = "Failed!".to_string();
             return MoveOutcome::Blocked;
@@ -2155,7 +2155,7 @@ impl PlayState {
             return outcome;
         }
 
-        if !self.party[target_index].living() {
+        if self.party[target_index].status == b'D' {
             self.advance_turn();
             self.message = "Failed!".to_string();
             return MoveOutcome::Blocked;
