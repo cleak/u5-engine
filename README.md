@@ -391,7 +391,10 @@ Town entry and hour
 boundaries apply the public dawn/dusk gate substitution. Dungeon entry
 uses the public surface/underworld seed positions and facing rules, including
 the Doom underworld-entry exception and trigger-class entry cells while combat
-handoff remains out of scope. It also
+handoff remains out of scope. Combat-frame exits restore the pre-combat
+active-object table and reconcile the caller's original terrain trigger slot,
+including water-creature victory rewrites into persistent body/retrieval
+objects while defeat and live-foe escape clear the trigger. It also
 has Britannia and Underworld overworld
 debug views with wrapping movement, runtime `.OOL` object-overlay rendering,
 active-object phase animation and consumed-turn off-neighborhood pruning, basic semantic

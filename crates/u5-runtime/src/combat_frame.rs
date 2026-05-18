@@ -166,6 +166,14 @@ pub fn reconcile_post_combat_terrain_trigger_slot(
     PostCombatTriggerReconcile::Cleared
 }
 
+pub fn combat_exit_requests_body_retrieval_reconcile(
+    exit: CombatRoundLoopExit,
+    actors: &[CombatActorDescriptor],
+) -> bool {
+    matches!(exit, CombatRoundLoopExit::LeaveCombat)
+        && !combat_has_active_not_dead_non_party_actor(actors)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CombatWeaponDamageApplication {
     Party {
@@ -1582,6 +1590,14 @@ impl PlayState {
     }
 
     pub fn restore_combat_frame(&mut self, snapshot: CombatFrameSnapshot) {
+        self.restore_combat_frame_with_trigger_reconcile(snapshot, false);
+    }
+
+    fn restore_combat_frame_with_trigger_reconcile(
+        &mut self,
+        snapshot: CombatFrameSnapshot,
+        body_retrieval_exit: bool,
+    ) {
         let pending_terrain_trigger = self.pending_combat_terrain_trigger_slot.take();
         self.area = snapshot.area;
         self.player = snapshot.player;
@@ -1595,7 +1611,11 @@ impl PlayState {
         self.pending_combat_actor_slot = None;
         self.next_combat_actor_slot = 0;
         if let Some(slot) = pending_terrain_trigger {
-            reconcile_post_combat_terrain_trigger_slot(&mut self.active_objects, slot, false);
+            reconcile_post_combat_terrain_trigger_slot(
+                &mut self.active_objects,
+                slot,
+                body_retrieval_exit,
+            );
         }
         self.mark_visibility_dirty();
     }
@@ -1605,14 +1625,20 @@ impl PlayState {
         exit: CombatRoundLoopExit,
     ) -> CombatRoundLoopExitApplication {
         let result_code = exit.result_code();
+        let body_retrieval_exit =
+            combat_exit_requests_body_retrieval_reconcile(exit, &self.combat_actors);
         let restored_snapshot = if let Some(snapshot) = self.combat_frame_snapshot.take() {
-            self.restore_combat_frame(snapshot);
+            self.restore_combat_frame_with_trigger_reconcile(snapshot, body_retrieval_exit);
             true
         } else {
             self.combat_active = false;
             self.pending_combat_actor_slot = None;
             if let Some(slot) = self.pending_combat_terrain_trigger_slot.take() {
-                reconcile_post_combat_terrain_trigger_slot(&mut self.active_objects, slot, false);
+                reconcile_post_combat_terrain_trigger_slot(
+                    &mut self.active_objects,
+                    slot,
+                    body_retrieval_exit,
+                );
             }
             self.next_combat_actor_slot = 0;
             self.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];

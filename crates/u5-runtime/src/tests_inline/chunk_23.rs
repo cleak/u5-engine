@@ -4525,6 +4525,94 @@
     }
 
     #[test]
+    fn terrain_combat_victory_rewrites_water_trigger_slot_after_restore() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        state.active_objects[2] = ActiveObject {
+            type_byte: 0x2c,
+            tile: 0x2f,
+            x: 11,
+            y: 20,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0x07,
+            aux1: 0x55,
+            aux3: 0xaa,
+        };
+        state
+            .enter_combat_frame(
+                vec![ActiveObject::empty(); OOL_SLOTS],
+                [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
+            )
+            .unwrap();
+        state.pending_combat_terrain_trigger_slot = Some(2);
+
+        let application = state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+
+        assert_eq!(application.result_code, COMBAT_ROUND_RESULT_SUCCESS);
+        assert_eq!(
+            state.active_objects[2],
+            ActiveObject {
+                type_byte: 0x24,
+                tile: 0x27,
+                x: 11,
+                y: 20,
+                z: WorldPlane::Underworld.save_floor(),
+                phase: 0x07,
+                aux1: WATER_CREATURE_BODY_AUX1,
+                aux3: WATER_CREATURE_BODY_AUX3,
+            }
+        );
+    }
+
+    #[test]
+    fn terrain_combat_escape_with_living_foes_clears_water_trigger_slot() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        state.active_objects[2] = ActiveObject {
+            type_byte: 0x2f,
+            tile: 0x2d,
+            x: 11,
+            y: 20,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0x07,
+            aux1: 0x55,
+            aux3: 0xaa,
+        };
+        let mut combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+        combat_actors[COMBAT_PARTY_ACTOR_SLOTS] = CombatActorDescriptor::from_row([
+            10,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            32,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        state
+            .enter_combat_frame(vec![ActiveObject::empty(); OOL_SLOTS], combat_actors)
+            .unwrap();
+        state.pending_combat_terrain_trigger_slot = Some(2);
+
+        let application = state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+
+        assert_eq!(application.result_code, COMBAT_ROUND_RESULT_SUCCESS);
+        assert_eq!(
+            state.active_objects[2],
+            ActiveObject {
+                type_byte: 0,
+                tile: 0,
+                x: 0,
+                y: 0,
+                z: 0,
+                phase: 0x07,
+                aux1: 0x55,
+                aux3: 0xaa,
+            }
+        );
+    }
+
+    #[test]
     fn combat_round_loop_exit_without_snapshot_clears_combat_state() {
         let mut state = combat_ai_turn_state(8, 5);
         state.pending_combat_actor_slot = Some(0);
@@ -4548,6 +4636,34 @@
             [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS]
         );
         assert!(state.visibility_dirty);
+    }
+
+    #[test]
+    fn combat_exit_body_retrieval_state_requires_success_with_no_living_foes() {
+        let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+        assert!(combat_exit_requests_body_retrieval_reconcile(
+            CombatRoundLoopExit::LeaveCombat,
+            &actors
+        ));
+        assert!(!combat_exit_requests_body_retrieval_reconcile(
+            CombatRoundLoopExit::Defeat,
+            &actors
+        ));
+
+        actors[COMBAT_PARTY_ACTOR_SLOTS] = CombatActorDescriptor::from_row([
+            10,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            32,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        assert!(!combat_exit_requests_body_retrieval_reconcile(
+            CombatRoundLoopExit::LeaveCombat,
+            &actors
+        ));
     }
 
     #[test]
