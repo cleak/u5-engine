@@ -3,9 +3,8 @@
 //! value range and either emits printable output, runs a control action, or
 //! stops the current stream.
 //!
-//! The full byte runner is not yet wired into the engine; these constants
-//! exist so that helpers and tests can refer to spec-named codes without
-//! magic numbers.
+//! These constants give the runner, conversation session, and gameplay
+//! wrappers spec-named control bytes instead of magic numbers.
 
 /// `conversation.md §7.5` print-mask state for the byte runner.
 /// `0x8E` toggles the mask's high bit. While the mask is flipped,

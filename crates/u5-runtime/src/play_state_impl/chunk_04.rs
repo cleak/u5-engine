@@ -1632,6 +1632,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         let raw_fields = raw_blob.get(&(dialog_id as u16));
+        let keyword = keyword.and_then(non_empty_talk_keyword);
 
         let name = fields
             .first()
@@ -1650,6 +1651,23 @@ impl PlayState {
             Area::Town { scene, .. } => Some(scene),
             _ => None,
         };
+
+        if keyword.is_none() {
+            if let Some(raw_fields) = raw_fields {
+                let session = crate::conversation_session::ConversationSession::new(
+                    raw_fields.clone(),
+                    fields.clone(),
+                );
+                self.active_conversation = Some(Box::new(session));
+                let greeting_text = self.advance_active_conversation_greeting();
+                let prompt = TLK_KEYWORD_PROMPT
+                    .lines()
+                    .next()
+                    .unwrap_or("Your interest?");
+                self.message = format!("Talked to {name}: {description}. {greeting_text} {prompt}");
+                return MoveOutcome::Talked;
+            }
+        }
 
         // Compose the inputs for the byte-runner once per call; the
         // avatar name is the first party member's name (or "Avatar"
@@ -1687,7 +1705,7 @@ impl PlayState {
         let mut applied_grants: Vec<crate::tlk_control_codes::TlkActionDispatchVerb> = Vec::new();
         let mut applied_flags: u32 = 0;
 
-        if let Some(keyword) = keyword.and_then(non_empty_talk_keyword) {
+        if let Some(keyword) = keyword {
             if fields.len() < 5 {
                 self.message = format!("Dialogue id {dialog_id} has no complete talk envelope.");
                 return MoveOutcome::Talked;

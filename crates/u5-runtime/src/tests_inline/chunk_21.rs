@@ -838,6 +838,54 @@
     }
 
     #[test]
+    fn play_input_talk_without_suffix_opens_keyword_session() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join("CASTLE.TLK"),
+            tlk_bytes(&[(
+                2,
+                &["Ada", "a test smith", "Greetings", "I mend gear", "Farewell"],
+            )]),
+        )
+        .unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 2,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: Some("Ada".to_string()),
+            },
+        ]);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'T', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.message.contains("Greetings"));
+        assert!(state.active_conversation.is_some());
+        assert_eq!(state.turn, 1);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'J', "OB", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.message, "I mend gear");
+        assert!(state.active_conversation.is_some());
+        assert_eq!(state.turn, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn town_talk_can_reach_npc_behind_counter_tile() {
         let dialogue = parse_tlk_bytes(&tlk_bytes(&[(
             2,
@@ -995,6 +1043,70 @@
         assert!(state.message.contains("horseback"));
         assert!(state.active_shop.is_none());
         assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn town_raw_tlk_no_keyword_opens_runner_backed_conversation_session() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Maris".to_string(),
+                "a quiet sage".to_string(),
+                "Greetings".to_string(),
+                "I read books".to_string(),
+                "Farewell".to_string(),
+                "GIFT".to_string(),
+                "Take this gift".to_string(),
+            ],
+        );
+
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        let mut gift_response = enc("Take this gift");
+        gift_response.push(0x86);
+        gift_response.push(b'H' | 0x80);
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Maris"),
+                enc("a quiet sage"),
+                enc("Greetings"),
+                enc("I read books"),
+                enc("Farewell"),
+                enc("GIFT"),
+                gift_response,
+            ],
+        );
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+            MoveOutcome::Talked
+        );
+
+        assert!(state.message.contains("Talked to Maris"));
+        assert!(state.message.contains("Greetings"));
+        assert!(state.message.contains("Your interest?"));
+        assert!(state.active_conversation.is_some());
+        assert_eq!(state.turn, 1);
+
+        let (text, ended) = state.submit_active_conversation_keyword("gift");
+        assert_eq!(text, "Take this gift");
+        assert!(!ended);
+        assert_eq!(state.special_items[SPECIAL_ITEM_SEXTANT_INDEX], 1);
     }
 
     #[test]
