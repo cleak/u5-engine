@@ -507,8 +507,7 @@ impl PlayState {
                         type_byte: FIRST_PLAYABLE_SKIFF_TILE,
                         tile: FIRST_PLAYABLE_SKIFF_TILE,
                     };
-                    self.timing_status =
-                        TimingStatusTag::for_transport(self.player.transport);
+                    self.timing_status = TimingStatusTag::for_transport(self.player.transport);
                     self.sail_cadence = 0;
                     self.sail_stall_pending = false;
                     self.sync_player_object();
@@ -980,6 +979,18 @@ impl PlayState {
             self.free_active_object_slot(slot);
             self.mark_visibility_dirty();
             self.advance_turn();
+            if combat_class_stats_for_sprite_byte(object.tile)
+                .or_else(|| combat_class_stats_for_sprite_byte(object.type_byte))
+                .is_some()
+            {
+                let note = self.enter_dungeon_active_monster_combat(level, object)?;
+                self.message = format!(
+                    "Attacked dungeon monster tile {} at ({x}, {y}) on {} level {level}; {note}.",
+                    object.tile,
+                    scene.key()
+                );
+                return Ok(MoveOutcome::Used);
+            }
             self.message = format!(
                 "Attacked dungeon monster tile {} at ({x}, {y}) on {} level {level}; dungeon combat resolution is pending.",
                 object.tile,
@@ -1362,8 +1373,7 @@ impl PlayState {
         object: ActiveObject,
     ) -> u8 {
         SHIP_BROADSIDE_DAMAGE_MIN
-            + (self.ship_broadside_damage_seed(direction, slot, object)
-                % SHIP_BROADSIDE_DAMAGE_MAX)
+            + (self.ship_broadside_damage_seed(direction, slot, object) % SHIP_BROADSIDE_DAMAGE_MAX)
     }
 
     pub fn ship_broadside_damage_seed(
@@ -1581,9 +1591,7 @@ impl PlayState {
         }
         // active-objects.md §8: adjacent whirlpool engagement is a
         // plane-transition effect when the party is not on foot.
-        if let Some(transition) =
-            self.apply_world_whirlpool_engagement(game_dir, plane)?
-        {
+        if let Some(transition) = self.apply_world_whirlpool_engagement(game_dir, plane)? {
             let transition_message = self.message.clone();
             self.message = if pre_effect_message.is_empty() {
                 transition_message
@@ -1780,7 +1788,7 @@ impl PlayState {
                 format!("{} {wind_message}", self.message)
             };
         }
-        if let Some(outcome) = self.apply_dungeon_active_monster_step(scene, level) {
+        if let Some(outcome) = self.apply_dungeon_active_monster_step(scene, level)? {
             return Ok(Some(outcome));
         }
         Ok(None)
@@ -1790,9 +1798,13 @@ impl PlayState {
         &mut self,
         scene: DungeonScene,
         level: u8,
-    ) -> Option<MoveOutcome> {
-        let (slot, object) = self.dungeon_active_monster()?;
-        let step = self.dungeon_active_monster_step(slot, object, level)?;
+    ) -> io::Result<Option<MoveOutcome>> {
+        let Some((slot, object)) = self.dungeon_active_monster() else {
+            return Ok(None);
+        };
+        let Some(step) = self.dungeon_active_monster_step(slot, object, level) else {
+            return Ok(None);
+        };
         if step.contact {
             let direction = self
                 .dungeon_direction_from_player_to(object.x, object.y)
@@ -1800,6 +1812,24 @@ impl PlayState {
             self.player.facing = direction;
             self.free_active_object_slot(slot);
             self.mark_visibility_dirty();
+            if combat_class_stats_for_sprite_byte(object.tile)
+                .or_else(|| combat_class_stats_for_sprite_byte(object.type_byte))
+                .is_some()
+            {
+                let note = self.enter_dungeon_active_monster_combat(level, object)?;
+                let contact_message = format!(
+                    "Dungeon monster tile {} approaches from the {} on {} level {level}; {note}.",
+                    object.tile,
+                    direction.name(),
+                    scene.key()
+                );
+                self.message = if self.message.is_empty() {
+                    contact_message
+                } else {
+                    format!("{} {contact_message}", self.message)
+                };
+                return Ok(Some(MoveOutcome::Used));
+            }
             let contact_message = format!(
                 "Dungeon monster tile {} approaches from the {} on {} level {level}; dungeon combat resolution is pending.",
                 object.tile,
@@ -1811,7 +1841,7 @@ impl PlayState {
             } else {
                 format!("{} {contact_message}", self.message)
             };
-            return Some(MoveOutcome::Used);
+            return Ok(Some(MoveOutcome::Used));
         }
 
         self.active_objects[slot].x = step.x;
@@ -1832,7 +1862,7 @@ impl PlayState {
         } else {
             format!("{} {move_message}", self.message)
         };
-        None
+        Ok(None)
     }
 
     pub fn dungeon_active_monster_step(

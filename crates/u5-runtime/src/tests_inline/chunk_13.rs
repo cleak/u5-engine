@@ -13498,7 +13498,10 @@
     fn dungeon_room_trigger_loads_selected_dungeon_cbt_record_when_available() {
         let dir = debug_game_dir();
         let scene = DungeonScene::new(35).unwrap();
-        let record = synthetic_combat_arena_record();
+        let mut record = synthetic_combat_arena_record();
+        let source_base =
+            DUNGEON_ROOM_SOURCE_ROW * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_SOURCE_COLUMN;
+        record[source_base + 2] = 0x44;
         let mut dungeon_cbt = Vec::new();
         for _ in 0..DUNGEON_CBT_RECORDS {
             dungeon_cbt.extend_from_slice(&record);
@@ -13517,11 +13520,15 @@
         );
 
         assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xa7);
-        assert!(state.message.contains("loaded DUNGEON.CBT arena 23"));
-        assert!(state.message.contains("terrain[0,0]=0x00"));
+        assert!(state.combat_active);
+        assert!(state.message.contains("entered dungeon combat"));
+        assert!(state.message.contains("DUNGEON.CBT arena 23"));
         assert!(state.message.contains("16 room source marker(s)"));
-        assert!(state.message.contains("1 absorbable-field marker(s)"));
-        assert!(state.message.contains("first source 0x30"));
+        assert!(state.message.contains("1 ordinary combatant"));
+        assert_eq!(state.combat_terrain[0][0], 0x00);
+        assert_eq!(state.active_objects[8].tile, 0xc4);
+        assert_eq!((state.active_objects[8].x, state.active_objects[8].y), (2, 13));
+        assert!(!state.combat_actors[8].is_empty());
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -17591,9 +17598,13 @@
         assert!(state.handle_dungeon_key('A', Path::new("")).unwrap());
 
         assert_eq!(state.turn, 1);
-        assert!(state.active_objects[1].is_empty());
+        assert!(state.combat_active);
+        assert!(state.combat_frame_snapshot.as_ref().unwrap().active_objects[1].is_empty());
+        assert_eq!(state.active_objects[6].tile, 0xc0);
+        assert!(!state.combat_actors[6].is_empty());
         assert!(state.message.contains("Attacked dungeon monster tile 192"));
-        assert!(state.message.contains("dungeon combat resolution is pending"));
+        assert!(state.message.contains("entered dungeon combat"));
+        assert!(!state.message.contains("pending"));
     }
 
     #[test]
@@ -17798,9 +17809,13 @@
         );
 
         assert_eq!(state.player.facing, Direction::East);
-        assert!(state.active_objects[1].is_empty());
+        assert!(state.combat_active);
+        assert!(state.combat_frame_snapshot.as_ref().unwrap().active_objects[1].is_empty());
+        assert_eq!(state.active_objects[6].tile, 192);
+        assert!(!state.combat_actors[6].is_empty());
         assert!(state.message.contains("approaches from the East"));
-        assert!(state.message.contains("dungeon combat resolution is pending"));
+        assert!(state.message.contains("entered dungeon combat"));
+        assert!(!state.message.contains("pending"));
     }
 
     #[test]

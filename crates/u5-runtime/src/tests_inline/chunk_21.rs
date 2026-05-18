@@ -926,6 +926,78 @@
     }
 
     #[test]
+    fn town_raw_tlk_shop_trigger_opens_active_shop_session() {
+        let dialogue = HashMap::new();
+        let raw = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x84,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+            MoveOutcome::Talked
+        );
+
+        assert!(state.message.contains("Shipwright"));
+        assert!(state.message.contains("now open"));
+        assert!(state.active_shop.is_some());
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn town_raw_tlk_shop_trigger_horseback_refusal_does_not_open_session() {
+        let dialogue = HashMap::new();
+        let raw = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.player.transport = TransportState::Horse {
+            type_byte: FIRST_PLAYABLE_HORSE_TILE,
+            tile: FIRST_PLAYABLE_HORSE_TILE,
+        };
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x85,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+            MoveOutcome::Blocked
+        );
+
+        assert!(state.message.contains("Herbalist"));
+        assert!(state.message.contains("horseback"));
+        assert!(state.active_shop.is_none());
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
     fn town_talk_horse_mounted_refuses_non_horse_trader_shops() {
         // shops.md §2: ordinary shop arms refuse before opening their menu when
         // the party is mounted on a horse; only the 0x83 horse trader remains.

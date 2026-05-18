@@ -1509,27 +1509,22 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let Some((dialog_id, x, y)) = self.facing_talk_target() else {
+        let Some((dialog_id, _, _)) = self.facing_talk_target() else {
             self.message = TALK_NOBODY_HERE_MESSAGE.to_string();
             return MoveOutcome::Blocked;
         };
 
         if let Some((role, _family)) = talk_shop_trigger(dialog_id) {
             if self.player.transport.is_horse() && dialog_id != 0x83 {
-                self.message = format!(
-                    "{role} refuses thee on horseback; dismount before commerce."
-                );
+                self.message =
+                    format!("{role} refuses thee on horseback; dismount before commerce.");
                 return MoveOutcome::Blocked;
             }
-            if let Some(session) =
-                crate::shop_session::shop_session_for_dialog_id(dialog_id)
-            {
+            if let Some(session) = crate::shop_session::shop_session_for_dialog_id(dialog_id) {
                 self.advance_turn();
                 let label = session.shop_label().to_string();
                 self.active_shop = Some(session);
-                self.message = format!(
-                    "{label} is now open. Choose Buy / Sell / Yes / No."
-                );
+                self.message = format!("{label} is now open. Choose Buy / Sell / Yes / No.");
                 return MoveOutcome::Talked;
             }
         }
@@ -1600,23 +1595,26 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let Some((dialog_id, x, y)) = self.facing_talk_target() else {
+        let Some((dialog_id, _, _)) = self.facing_talk_target() else {
             self.message = TALK_NOBODY_HERE_MESSAGE.to_string();
             return MoveOutcome::Blocked;
         };
 
         if let Some((role, family)) = talk_shop_trigger(dialog_id) {
             if self.player.transport.is_horse() && dialog_id != 0x83 {
-                self.message = format!(
-                    "{role} refuses thee on horseback; dismount before commerce."
-                );
+                self.message =
+                    format!("{role} refuses thee on horseback; dismount before commerce.");
                 return MoveOutcome::Blocked;
             }
-            self.advance_turn();
-            self.message = format!(
-                "Talk reached {role} shop trigger 0x{dialog_id:02X} at ({x}, {y}); dispatch family: {family}."
-            );
-            return MoveOutcome::Talked;
+            if let Some(session) = crate::shop_session::shop_session_for_dialog_id(dialog_id) {
+                self.advance_turn();
+                let label = session.shop_label().to_string();
+                self.active_shop = Some(session);
+                self.message = format!(
+                    "{label} is now open. Choose Buy / Sell / Yes / No. Dispatch family: {family}."
+                );
+                return MoveOutcome::Talked;
+            }
         }
         if dialog_id == 0 {
             self.message = "They give thee a funny look.".to_string();
@@ -1711,8 +1709,7 @@ impl PlayState {
             } else {
                 TLK_NO_KEYWORD_MATCH_MESSAGE.to_string()
             };
-            let (legacy_text, legacy_actions) =
-                talk_response_text_and_actions(&response_text);
+            let (legacy_text, legacy_actions) = talk_response_text_and_actions(&response_text);
             self.apply_tlk_action_grants(&applied_grants);
             self.apply_talk_action_grants(&legacy_actions);
             if let Some(scene) = scene_for_flags {
@@ -1735,15 +1732,13 @@ impl PlayState {
                     .map(String::clone)
                     .unwrap_or_else(|| "...".to_string())
             };
-            let (legacy_text, legacy_actions) =
-                talk_response_text_and_actions(&greeting_text);
+            let (legacy_text, legacy_actions) = talk_response_text_and_actions(&greeting_text);
             self.apply_tlk_action_grants(&applied_grants);
             self.apply_talk_action_grants(&legacy_actions);
             if let Some(scene) = scene_for_flags {
                 self.merge_talk_branch_flags(scene, applied_flags);
             }
-            self.message =
-                format!("Talked to {name}: {description}. {legacy_text} Your interest?");
+            self.message = format!("Talked to {name}: {description}. {legacy_text} Your interest?");
         }
         MoveOutcome::Talked
     }
@@ -1828,10 +1823,8 @@ impl PlayState {
         }
         let fields = dialogue.get(&(dialog_id as u16))?;
         let raw = raw_blob.get(&(dialog_id as u16))?;
-        let session = crate::conversation_session::ConversationSession::new(
-            raw.clone(),
-            fields.clone(),
-        );
+        let session =
+            crate::conversation_session::ConversationSession::new(raw.clone(), fields.clone());
         self.active_conversation = Some(Box::new(session));
         // Run the greeting now so the caller sees the opening line.
         Some(self.advance_active_conversation_greeting())

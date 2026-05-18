@@ -496,6 +496,16 @@ impl PlayState {
         self.grid[dungeon_cell_index(level, x, y)] = 0xa0 | slot;
         self.mark_visibility_dirty();
         self.advance_turn();
+        if let Some(game_dir) = game_dir {
+            if game_dir.join(DUNGEON_CBT_FILE).exists() {
+                let combat_note = self.enter_dungeon_room_combat(game_dir, scene, level, arena)?;
+                self.message = format!(
+                    "Entered dungeon room trigger slot {slot} at ({x}, {y}) on {} level {level}; {combat_note}; marked visit-local room-helper state.",
+                    scene.key()
+                );
+                return Ok(MoveOutcome::Moved);
+            }
+        }
         let arena_note = self.dungeon_room_arena_note(game_dir, arena)?;
         self.message = format!(
             "Entered dungeon room trigger slot {slot} at ({x}, {y}) on {} level {level}; {arena_note}; marked visit-local room-helper state.",

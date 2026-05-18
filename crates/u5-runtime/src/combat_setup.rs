@@ -54,6 +54,7 @@ pub struct TerrainCombatSetup {
 pub struct DungeonRoomCombatSetup {
     pub arena_index: usize,
     pub terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    pub placement_slots: Vec<CombatPlacementSlot>,
     pub setup_sources: Vec<DungeonRoomSetupSource>,
 }
 
@@ -115,10 +116,103 @@ pub fn dungeon_room_combat_setup_from_record(
     arena_index: usize,
     record: &CombatArenaRecord,
 ) -> DungeonRoomCombatSetup {
+    let placement_x = record.outdoor_placement_x();
+    let placement_y = record.outdoor_placement_y();
+    let placement_slots = placement_x
+        .into_iter()
+        .zip(placement_y)
+        .enumerate()
+        .map(|(slot, (x, y))| CombatPlacementSlot { slot, x, y })
+        .collect();
+
     DungeonRoomCombatSetup {
         arena_index,
         terrain: record.terrain_grid(),
+        placement_slots,
         setup_sources: record.dungeon_room_setup_sources(),
+    }
+}
+
+pub fn dungeon_room_source_sprite(source: u8) -> Option<u8> {
+    match DungeonRoomSetupSourceKind::from_source(source) {
+        DungeonRoomSetupSourceKind::OrdinaryCombatant => Some(source | 0x80),
+        _ => None,
+    }
+}
+
+pub fn dungeon_room_combat_instance_from_setup(
+    setup: &DungeonRoomCombatSetup,
+    z: i8,
+) -> TerrainCombatInstance {
+    let mut active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    let mut placed_count = 0u8;
+
+    for source in &setup.setup_sources {
+        let active_object_slot = COMBAT_PARTY_ACTOR_SLOTS + source.slot;
+        if active_object_slot >= OOL_SLOTS || active_object_slot >= COMBAT_ACTOR_SLOTS {
+            continue;
+        }
+        let placement =
+            setup
+                .placement_slots
+                .get(source.slot)
+                .copied()
+                .unwrap_or(CombatPlacementSlot {
+                    slot: source.slot,
+                    x: (source.slot % COMBAT_ARENA_SIDE) as u8,
+                    y: (source.slot / COMBAT_ARENA_SIDE) as u8,
+                });
+        match source.kind {
+            DungeonRoomSetupSourceKind::OrdinaryCombatant => {
+                let Some(tile) = dungeon_room_source_sprite(source.source) else {
+                    continue;
+                };
+                let Some(stats) = combat_class_stats_for_sprite_byte(tile) else {
+                    continue;
+                };
+                active_objects[active_object_slot] = ActiveObject {
+                    type_byte: tile,
+                    tile,
+                    x: usize::from(placement.x),
+                    y: usize::from(placement.y),
+                    z,
+                    phase: STEADY_PHASE,
+                    aux1: 0,
+                    aux3: 0,
+                };
+                actors[active_object_slot] = CombatActorDescriptor::for_monster_placement(
+                    stats,
+                    active_object_slot as u8,
+                    placement.x,
+                    placement.y,
+                    COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                    0,
+                );
+                placed_count = placed_count.saturating_add(1);
+            }
+            DungeonRoomSetupSourceKind::AbsorbableField
+            | DungeonRoomSetupSourceKind::SpecialPlacement => {
+                active_objects[active_object_slot] = ActiveObject {
+                    type_byte: source.source,
+                    tile: source.source,
+                    x: usize::from(placement.x),
+                    y: usize::from(placement.y),
+                    z,
+                    phase: STEADY_PHASE,
+                    aux1: 0,
+                    aux3: 0,
+                };
+            }
+        }
+    }
+
+    TerrainCombatInstance {
+        active_objects,
+        actors,
+        requested_count: setup.setup_sources.len() as u8,
+        placed_count,
+        unplaced_count: (setup.setup_sources.len() as u8).saturating_sub(placed_count),
     }
 }
 
@@ -172,9 +266,7 @@ pub const TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR: u8 = 9;
 /// early-spawn replacement roll selects the per-arena replacement
 /// tile. The caller is responsible for the spawn-index threshold
 /// gate; this helper only encodes the one-in-nine die.
-pub const fn terrain_combat_replacement_roll_picks_replacement(
-    replacement_roll_seed: u8,
-) -> bool {
+pub const fn terrain_combat_replacement_roll_picks_replacement(replacement_roll_seed: u8) -> bool {
     replacement_roll_seed % TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR == 0
 }
 
@@ -284,6 +376,86 @@ pub fn terrain_combat_instance_from_setup(
 }
 
 impl PlayState {
+    pub fn enter_dungeon_room_combat(
+        &mut self,
+        game_dir: &std::path::Path,
+        scene: DungeonScene,
+        level: u8,
+        arena_index: usize,
+    ) -> io::Result<String> {
+        let bank = load_dungeon_cbt(game_dir)?;
+        let record = bank.record(arena_index).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("DUNGEON.CBT has no arena record {arena_index}"),
+            )
+        })?;
+        let setup = dungeon_room_combat_setup_from_record(arena_index, record);
+        let mut instance = dungeon_room_combat_instance_from_setup(&setup, level as i8);
+        self.populate_terrain_combat_party(
+            &mut instance.active_objects,
+            &mut instance.actors,
+            level as i8,
+        );
+        let placed_count = instance.placed_count;
+        let requested_count = instance.requested_count;
+        self.enter_combat_frame_with_terrain(
+            instance.active_objects,
+            instance.actors,
+            setup.terrain,
+        )?;
+        Ok(format!(
+            "entered dungeon combat from {} level {level} using DUNGEON.CBT arena {arena_index}; placed {placed_count} ordinary combatant(s) from {requested_count} room source marker(s)",
+            scene.key()
+        ))
+    }
+
+    pub fn enter_dungeon_active_monster_combat(
+        &mut self,
+        level: u8,
+        object: ActiveObject,
+    ) -> io::Result<String> {
+        let mut active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+        let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+        self.populate_terrain_combat_party(&mut active_objects, &mut actors, level as i8);
+
+        let monster_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        let stats = combat_class_stats_for_sprite_byte(object.tile)
+            .or_else(|| combat_class_stats_for_sprite_byte(object.type_byte))
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "dungeon active-object type 0x{:02X} tile 0x{:02X} has no combat class",
+                        object.type_byte, object.tile
+                    ),
+                )
+            })?;
+        active_objects[monster_slot] = ActiveObject {
+            type_byte: object.type_byte,
+            tile: object.tile,
+            x: 6,
+            y: 5,
+            z: level as i8,
+            phase: STEADY_PHASE,
+            aux1: object.aux1,
+            aux3: object.aux3,
+        };
+        actors[monster_slot] = CombatActorDescriptor::for_monster_placement(
+            stats,
+            monster_slot as u8,
+            6,
+            5,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+        );
+        self.enter_combat_frame(active_objects, actors)?;
+        Ok(format!(
+            "entered dungeon combat against {} from active monster tile {}",
+            stats.name, object.tile
+        ))
+    }
+
     pub fn enter_terrain_combat_from_world_object(
         &mut self,
         game_dir: &std::path::Path,
