@@ -7479,6 +7479,75 @@
     }
 
     #[test]
+    fn combat_input_dispatch_z_stats_binds_pending_actor_without_ending_turn() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(8, 5);
+        state.pending_combat_actor_slot = Some(0);
+        state.next_combat_actor_slot = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Z', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+        assert_eq!(state.active_z_stats.as_ref().unwrap().selected_party_index, 0);
+        assert!(state.message.starts_with("Z-stats: Stats page"));
+    }
+
+    #[test]
+    fn combat_input_dispatch_ready_binds_pending_actor_to_picker() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(8, 5);
+        state.pending_combat_actor_slot = Some(0);
+        state.next_combat_actor_slot = 1;
+        state.equipment_stock[16] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'R', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+        assert_eq!(state.active_ready.as_ref().unwrap().selected_party_index, Some(0));
+        assert!(state.message.starts_with("Ready: party member 1."));
+    }
+
+    #[test]
+    fn combat_input_dispatch_yell_word_uses_combat_no_effect_route() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(8, 5);
+        state.pending_combat_actor_slot = Some(0);
+        state.next_combat_actor_slot = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "FALLAX", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.message, "Yelled FALLAX. Nothing happens.");
+        assert!(!state.message.contains("Word of Power"));
+        assert!(state.active_ready.is_none());
+        assert!(state.active_z_stats.is_none());
+    }
+
+    #[test]
+    fn combat_input_dispatch_yell_prompt_keeps_same_actor_pending() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(8, 5);
+        state.pending_combat_actor_slot = Some(0);
+        state.next_combat_actor_slot = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.message, "Yell what? Use Y<word>.");
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+    }
+
+    #[test]
     fn combat_input_dispatch_uses_pending_round_walker_actor_slot() {
         let game_dir = std::path::Path::new(".");
         let mut state = combat_player_command_state(8, 5);

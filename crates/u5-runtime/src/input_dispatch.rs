@@ -61,10 +61,6 @@ pub fn handle_play_key_input(
         state.toggle_typeahead_buffer();
         return Ok(PlayInputDisposition::Continue);
     }
-    if key == 'Z' {
-        state.z_stats();
-        return Ok(PlayInputDisposition::Continue);
-    }
     if state.combat_active
         && combat_has_dispatchable_party_actor(state)
         && (state.pending_combat_actor_slot.is_some() || combat_has_active_non_party_actor(state))
@@ -77,6 +73,13 @@ pub fn handle_play_key_input(
         let turn_before = state.turn;
         let outcome = state.cast_spell_from_suffix(suffix, game_dir)?;
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+        return Ok(PlayInputDisposition::Continue);
+    }
+    if state.combat_active {
+        return Ok(handle_combat_key_input(state, key, suffix));
+    }
+    if key == 'Z' {
+        state.z_stats();
         return Ok(PlayInputDisposition::Continue);
     }
     if key == 'M' && !suffix.is_empty() {
@@ -117,9 +120,6 @@ pub fn handle_play_key_input(
         let outcome = state.yell_command(non_empty_yell_word(suffix));
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
         return Ok(PlayInputDisposition::Continue);
-    }
-    if state.combat_active {
-        return Ok(handle_combat_key_input(state, key, suffix));
     }
     if key == 'q' {
         return Ok(PlayInputDisposition::Quit);
@@ -1257,11 +1257,26 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
     let Some(application) =
         state.apply_combat_player_command_with_inputs(actor_slot, input, quickness_roll)
     else {
+        if key.eq_ignore_ascii_case(&'Z')
+            && actor_slot < COMBAT_PARTY_ACTOR_SLOTS
+            && state
+                .party
+                .get(actor_slot)
+                .copied()
+                .is_some_and(PartyMember::living)
+        {
+            state.z_stats_for_party(actor_slot);
+            state.pending_combat_actor_slot = Some(actor_slot);
+            return PlayInputDisposition::Continue;
+        }
         state.message = "No active combatant.".to_string();
         return PlayInputDisposition::Continue;
     };
     state.message = combat_magic_ring_pass_message(application.ring_pass)
         .unwrap_or_else(|| combat_player_command_message(&application.action));
+    if handle_combat_multistage_command(state, actor_slot, &application.action, suffix) {
+        return PlayInputDisposition::Continue;
+    }
     if let CombatRoundLoopControl::Exit(exit) = application.control_after {
         state.apply_combat_round_loop_exit(exit);
     } else if matches!(
@@ -1273,6 +1288,77 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         state.ensure_pending_combat_player_turn();
     }
     PlayInputDisposition::Continue
+}
+
+fn handle_combat_multistage_command(
+    state: &mut PlayState,
+    actor_slot: usize,
+    action: &CombatPlayerCommandAction,
+    suffix: &str,
+) -> bool {
+    let CombatPlayerCommandAction::Branch {
+        branch,
+        live_actor_gate,
+    } = action
+    else {
+        return false;
+    };
+    if matches!(
+        live_actor_gate,
+        CombatCommandLiveActorGate::RejectedDeadOrMissing
+    ) {
+        state.message = "No active combatant.".to_string();
+        return false;
+    }
+
+    match branch {
+        CombatCommandBranch::Ready => {
+            state.start_combat_ready_equipment(actor_slot);
+            state.pending_combat_actor_slot = Some(actor_slot);
+            true
+        }
+        CombatCommandBranch::ZStats => {
+            state.z_stats_for_party(actor_slot);
+            state.pending_combat_actor_slot = Some(actor_slot);
+            true
+        }
+        CombatCommandBranch::Yell => {
+            match combat_yell_word_from_suffix(suffix) {
+                CombatInlineYell::Prompt => {
+                    state.message = yell_prompt_message();
+                    state.pending_combat_actor_slot = Some(actor_slot);
+                }
+                CombatInlineYell::Empty => {
+                    state.message = YELL_NOTHING_SAID_MESSAGE.to_string();
+                    state.ensure_pending_combat_player_turn();
+                }
+                CombatInlineYell::Word(word) => {
+                    let word = PlayState::normalize_yell_word(word);
+                    state.message = format!("Yelled {word}. Nothing happens.");
+                    state.ensure_pending_combat_player_turn();
+                }
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CombatInlineYell<'a> {
+    Prompt,
+    Empty,
+    Word(&'a str),
+}
+
+fn combat_yell_word_from_suffix(suffix: &str) -> CombatInlineYell<'_> {
+    if suffix.is_empty() {
+        return CombatInlineYell::Prompt;
+    }
+    match non_empty_yell_word(suffix) {
+        Some(word) => CombatInlineYell::Word(word),
+        None => CombatInlineYell::Empty,
+    }
 }
 
 fn combat_magic_ring_pass_message(pass: Option<CombatMagicRingPassOutcome>) -> Option<String> {

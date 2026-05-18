@@ -9,6 +9,15 @@ use crate::*;
 impl PlayState {
     pub fn z_stats(&mut self) -> MoveOutcome {
         let selected = self.z_stats_initial_party_index();
+        self.z_stats_for_party(selected)
+    }
+
+    pub fn z_stats_for_party(&mut self, selected: usize) -> MoveOutcome {
+        if self.party.is_empty() {
+            self.message = "No party members are available.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let selected = selected.min(self.party.len() - 1);
         self.active_z_stats = Some(ZStatsSession::new(selected));
         self.message = self.render_active_z_stats();
         MoveOutcome::Observed
@@ -109,6 +118,39 @@ impl PlayState {
         self.active_ready = Some(ReadySession::new());
         self.message = self.render_active_ready();
         MoveOutcome::Observed
+    }
+
+    pub fn start_ready_equipment_for_party(&mut self, party_index: usize) -> MoveOutcome {
+        if party_index >= self.party.len() {
+            self.message = party_member_unavailable_message(self.party.len());
+            return MoveOutcome::Blocked;
+        }
+        if !self.party[party_index].living() {
+            self.message = format!("Party member {} is unavailable.", party_index + 1);
+            return MoveOutcome::Blocked;
+        }
+
+        let mut session = ReadySession::with_party(party_index);
+        self.normalize_ready_cursor(&mut session);
+        self.active_ready = Some(session);
+        self.message = self.render_active_ready();
+        MoveOutcome::Observed
+    }
+
+    pub fn start_combat_ready_equipment(&mut self, actor_slot: usize) -> MoveOutcome {
+        if !self.combat_active
+            || actor_slot >= COMBAT_PARTY_ACTOR_SLOTS
+            || actor_slot >= self.party.len()
+            || !self
+                .combat_actors
+                .get(actor_slot)
+                .copied()
+                .is_some_and(combat_actor_is_active_not_dead)
+        {
+            self.message = "No active combatant.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        self.start_ready_equipment_for_party(actor_slot)
     }
 
     pub fn render_active_ready(&self) -> String {
