@@ -7624,6 +7624,27 @@
     }
 
     #[test]
+    fn combat_input_dispatch_applies_round_walker_defeat_exit() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(6, 5);
+        state.combat_actors[8].owner_target_class = 33;
+        state.party[0].status = b'G';
+        state.party[0].hp = 1;
+        state.party[0].max_hp = 20;
+        state.turn = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, ' ', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.message.starts_with("Pass.\nSkeleton "));
+        assert!(!state.combat_active);
+        assert_eq!(state.pending_combat_actor_slot, None);
+        assert_eq!(state.combat_actors, [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS]);
+    }
+
+    #[test]
     fn combat_input_dispatch_appends_monster_movement_round_summary() {
         let game_dir = std::path::Path::new(".");
         let mut state = combat_player_command_state(8, 5);

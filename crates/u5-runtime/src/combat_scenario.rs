@@ -7,8 +7,11 @@
 //! player slot, and records the resulting state transitions for
 //! inspection.
 
-use crate::combat_actor::CombatRoundLoopExit;
-use crate::combat_frame::CombatActorSlotDispatchApplication;
+use crate::combat_actor::{CombatRoundLoopControl, CombatRoundLoopExit};
+use crate::combat_frame::{
+    CombatActorSlotDispatchApplication, CombatPlayerCommandAction, CombatPlayerCommandInput,
+    CombatRoundWalkApplication, CombatRoundWalkStopReason,
+};
 use crate::play_state_struct::PlayState;
 
 /// One scripted combat input.
@@ -59,12 +62,18 @@ pub fn run_combat_scenario(
     for input in script {
         // Make sure the round walker has advanced to a player slot or
         // exited combat before we look for an input target.
-        state.ensure_pending_combat_player_turn();
+        let entry_walk = state.ensure_pending_combat_player_turn();
+        if let Some(exit) = entry_walk
+            .as_ref()
+            .and_then(consume_round_walk_application_history)
+        {
+            state.apply_combat_round_loop_exit(exit);
+            result.steps.push(CombatScenarioStep::Exited(exit));
+            result.final_exit = Some(exit);
+            break;
+        }
 
         let Some(actor_slot) = state.pending_combat_actor_slot.take() else {
-            // Combat is over (no player slot ready and walker is idle).
-            // Determine exit reason by inspecting the most recently
-            // applied control state.
             result.steps.push(CombatScenarioStep::NoActiveCombatant);
             break;
         };
@@ -77,71 +86,121 @@ pub fn run_combat_scenario(
             break;
         }
 
-        let pre_combat_active = state.combat_active;
-        let mut should_break = false;
-        match input {
-            CombatScenarioInput::AttackDirection(dir) | CombatScenarioInput::Move(dir) => {
-                let attacker_group =
-                    crate::combat_actor::resolve_combat_target_group(actor_slot, None, false);
-                let _ = state.apply_combat_step_or_attack_primitive(
-                    actor_slot,
-                    attacker_group,
-                    *dir,
-                    true,
-                );
-            }
-            CombatScenarioInput::Pass | CombatScenarioInput::StatsPanel => {
-                // Pass / Z spend the player's turn without other
-                // effects.
-            }
-            CombatScenarioInput::Quit => {
-                state
-                    .apply_combat_round_loop_exit(crate::combat_actor::CombatRoundLoopExit::Defeat);
-                result.steps.push(CombatScenarioStep::Exited(
-                    crate::combat_actor::CombatRoundLoopExit::Defeat,
-                ));
-                result.final_exit = Some(crate::combat_actor::CombatRoundLoopExit::Defeat);
-                should_break = true;
-            }
-            CombatScenarioInput::Xit => {
-                if !crate::combat_actor::combat_has_active_not_dead_non_party_actor(
-                    &state.combat_actors,
-                ) {
-                    state.apply_combat_round_loop_exit(
-                        crate::combat_actor::CombatRoundLoopExit::LeaveCombat,
-                    );
-                    result.steps.push(CombatScenarioStep::Exited(
-                        crate::combat_actor::CombatRoundLoopExit::LeaveCombat,
-                    ));
-                    result.final_exit = Some(crate::combat_actor::CombatRoundLoopExit::LeaveCombat);
-                    should_break = true;
-                }
-            }
-        }
+        let command_input = scenario_command_input(input);
+        let quickness_roll = state.combat_quickness_dispatch_roll(actor_slot);
+        let Some(application) = state.apply_combat_player_command_with_inputs(
+            actor_slot,
+            command_input,
+            quickness_roll,
+        ) else {
+            result.steps.push(CombatScenarioStep::NoActiveCombatant);
+            break;
+        };
 
-        if should_break {
+        if let CombatRoundLoopControl::Exit(exit) = application.control_after {
+            state.apply_combat_round_loop_exit(exit);
+            result.steps.push(CombatScenarioStep::Exited(exit));
+            result.final_exit = Some(exit);
             break;
         }
+
         result
             .steps
             .push(CombatScenarioStep::AppliedToSlot(actor_slot));
-        if !pre_combat_active || !state.combat_active {
+        if matches!(
+            application.action,
+            CombatPlayerCommandAction::PromptForAttackDirection
+        ) {
+            state.pending_combat_actor_slot = Some(actor_slot);
+            continue;
+        }
+        if let Some(exit) = advance_combat_round_after_scenario_actor(state, actor_slot) {
+            result.steps.push(CombatScenarioStep::Exited(exit));
+            result.final_exit = Some(exit);
             break;
         }
     }
 
     result.combat_active_at_end = state.combat_active;
-    let _ = consume_round_walk_application_history;
     result
+}
+
+fn scenario_command_input(input: &CombatScenarioInput) -> CombatPlayerCommandInput {
+    match input {
+        CombatScenarioInput::AttackDirection(direction) => {
+            CombatPlayerCommandInput::AttackDirection(*direction)
+        }
+        CombatScenarioInput::Move(direction) => CombatPlayerCommandInput::Direction(*direction),
+        CombatScenarioInput::Pass | CombatScenarioInput::StatsPanel => {
+            CombatPlayerCommandInput::Key(' ')
+        }
+        CombatScenarioInput::Quit => CombatPlayerCommandInput::Key('Q'),
+        CombatScenarioInput::Xit => CombatPlayerCommandInput::Key('X'),
+    }
+}
+
+fn advance_combat_round_after_scenario_actor(
+    state: &mut PlayState,
+    actor_slot: usize,
+) -> Option<CombatRoundLoopExit> {
+    state.next_combat_actor_slot = actor_slot.saturating_add(1).min(crate::COMBAT_ACTOR_SLOTS);
+    for _ in 0..crate::COMBAT_ACTOR_SLOTS {
+        if !state.combat_active || state.pending_combat_actor_slot.is_some() {
+            return None;
+        }
+        let start_slot = state.next_combat_actor_slot.min(crate::COMBAT_ACTOR_SLOTS);
+        let application = state.apply_combat_round_walk_from_slot(start_slot, 30, false);
+        state.next_combat_actor_slot = match application.stop_reason {
+            CombatRoundWalkStopReason::EndOfRound => 0,
+            CombatRoundWalkStopReason::AwaitingPlayer | CombatRoundWalkStopReason::Exit => {
+                application.next_slot
+            }
+        };
+        if application.stop_reason == CombatRoundWalkStopReason::AwaitingPlayer {
+            state.pending_combat_actor_slot =
+                ready_player_slot_from_scenario_round_walk(&application);
+        }
+        if let Some(exit) = consume_round_walk_application_history(&application) {
+            state.apply_combat_round_loop_exit(exit);
+            return Some(exit);
+        }
+        if !matches!(
+            application.stop_reason,
+            CombatRoundWalkStopReason::EndOfRound
+        ) || state.pending_combat_actor_slot.is_some()
+        {
+            return None;
+        }
+    }
+    None
+}
+
+fn ready_player_slot_from_scenario_round_walk(
+    application: &CombatRoundWalkApplication,
+) -> Option<usize> {
+    application.applications.iter().rev().find_map(|entry| {
+        let CombatActorSlotDispatchApplication::Slot { slot, action, .. } = entry else {
+            return None;
+        };
+        if *slot < crate::COMBAT_PARTY_ACTOR_SLOTS
+            && matches!(
+                action,
+                crate::combat_frame::CombatActorDispatchAction::PlayerReady
+            )
+        {
+            Some(*slot)
+        } else {
+            None
+        }
+    })
 }
 
 /// Test-only helper to peek at the round walker's per-slot dispatch
 /// records and return the most recent exit, if any.
 pub fn consume_round_walk_application_history(
-    applications: &[CombatActorSlotDispatchApplication],
+    application: &CombatRoundWalkApplication,
 ) -> Option<CombatRoundLoopExit> {
-    use crate::combat_actor::CombatRoundLoopControl;
-    for entry in applications.iter().rev() {
+    for entry in application.applications.iter().rev() {
         match entry {
             CombatActorSlotDispatchApplication::EndOfRound { control }
             | CombatActorSlotDispatchApplication::Slot {
@@ -161,6 +220,53 @@ pub fn consume_round_walk_application_history(
 mod tests {
     use super::*;
 
+    fn adjacent_skeleton_combat_state() -> PlayState {
+        let mut state = crate::test_fixtures::test_state(crate::test_fixtures::open_grid(), 5, 5);
+        state.combat_active = true;
+        state.combat_terrain = [[0x04; crate::COMBAT_ARENA_SIDE]; crate::COMBAT_ARENA_SIDE];
+        state.active_objects = vec![crate::ActiveObject::empty(); crate::OOL_SLOTS];
+        state.active_objects[0] = crate::ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 5,
+            y: 5,
+            ..crate::ActiveObject::empty()
+        };
+        state.active_objects[8] = crate::ActiveObject {
+            type_byte: 0x90,
+            tile: 0x90,
+            x: 6,
+            y: 5,
+            ..crate::ActiveObject::empty()
+        };
+        state.combat_actors[0] = crate::CombatActorDescriptor::from_row([
+            20,
+            1,
+            crate::COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        state.combat_actors[8] = crate::CombatActorDescriptor::from_row([
+            20,
+            1,
+            crate::COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            33,
+            8,
+            0,
+            6,
+            5,
+        ]);
+        state.pending_combat_actor_slot = Some(0);
+        state.party[0].status = b'G';
+        state.party[0].hp = 1;
+        state.party[0].max_hp = 20;
+        state.turn = 1;
+        state
+    }
+
     #[test]
     fn quit_input_marks_defeat_exit() {
         let mut state = crate::test_fixtures::test_state(crate::test_fixtures::open_grid(), 5, 5);
@@ -168,9 +274,37 @@ mod tests {
         // slot. We exercise only the Quit branch since it does not
         // need full combat actor setup to verify the exit path.
         state.combat_active = true;
+        state.combat_actors[0] = crate::CombatActorDescriptor::from_row([
+            20,
+            1,
+            crate::COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
         state.pending_combat_actor_slot = Some(0);
         let result = run_combat_scenario(&mut state, &[CombatScenarioInput::Quit]);
         assert_eq!(result.final_exit, Some(CombatRoundLoopExit::Defeat));
+        assert!(!state.combat_active);
+    }
+
+    #[test]
+    fn pass_input_records_round_walker_defeat_exit() {
+        let mut state = adjacent_skeleton_combat_state();
+
+        let result = run_combat_scenario(&mut state, &[CombatScenarioInput::Pass]);
+
+        assert_eq!(
+            result.steps,
+            vec![
+                CombatScenarioStep::AppliedToSlot(0),
+                CombatScenarioStep::Exited(CombatRoundLoopExit::Defeat)
+            ]
+        );
+        assert_eq!(result.final_exit, Some(CombatRoundLoopExit::Defeat));
+        assert!(!result.combat_active_at_end);
         assert!(!state.combat_active);
     }
 

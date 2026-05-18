@@ -1792,7 +1792,12 @@ fn drive_combat_round_walk_and_append_message(state: &mut PlayState) {
             application.stop_reason,
             CombatRoundWalkStopReason::EndOfRound
         ) || state.pending_combat_actor_slot.is_some();
+        let exit = combat_round_walk_exit(&application);
         append_combat_round_walk_summary_after_message(state, Some(application));
+        if let Some(exit) = exit {
+            state.apply_combat_round_loop_exit(exit);
+            break;
+        }
         if should_stop {
             break;
         }
@@ -1819,6 +1824,24 @@ fn ready_player_slot_from_input_round_walk(
             None
         }
     })
+}
+
+fn combat_round_walk_exit(application: &CombatRoundWalkApplication) -> Option<CombatRoundLoopExit> {
+    application
+        .applications
+        .iter()
+        .rev()
+        .find_map(|entry| match entry {
+            CombatActorSlotDispatchApplication::EndOfRound { control }
+            | CombatActorSlotDispatchApplication::Slot {
+                control_after: control,
+                ..
+            } => match control {
+                CombatRoundLoopControl::Exit(exit) => Some(*exit),
+                CombatRoundLoopControl::ContinueActorWalk
+                | CombatRoundLoopControl::StartNextRound => None,
+            },
+        })
 }
 
 fn combat_round_walk_summary(
