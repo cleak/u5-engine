@@ -382,7 +382,10 @@
         assert!(underworld[0].is_empty());
 
         let saved_gam = fs::read(dir.join("SAVED.GAM")).unwrap();
-        assert_eq!(saved_gam[SAVE_TRANSPORT_MARKER_OFFSET], 168);
+        assert_eq!(
+            saved_gam[SAVE_TRANSPORT_MARKER_OFFSET],
+            TRANSPORT_MARKER_SHIP_FURLED_FIRST
+        );
         let saved_active = decode_active_object_table(
             &saved_gam[SAVE_ACTIVE_OBJECTS_OFFSET..SAVE_ACTIVE_OBJECTS_OFFSET + OOL_PLANE_LEN],
             "SAVED.GAM",
@@ -466,6 +469,106 @@
             state.message,
             format!("Boarded ship. {SHIP_BADLY_DAMAGED_WARNING} {SHIP_NO_SKIFFS_WARNING}")
         );
+    }
+
+    #[test]
+    fn board_ship_accepts_public_object_byte_and_preserves_save_marker() {
+        let mut state = world_state(open_world_grid(), 0, 0);
+        state.player.facing = Direction::East;
+        state.active_objects.push(ActiveObject {
+            type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST + 1,
+            tile: 0,
+            x: 1,
+            y: 0,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 88,
+            aux3: 1,
+        });
+
+        assert_eq!(state.board_vehicle(), MoveOutcome::Boarded);
+
+        assert_eq!(
+            state.player.transport,
+            TransportState::Ship {
+                type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST + 1,
+                tile: FIRST_PLAYABLE_FRIGATE_TILE + 1,
+                sails_hoisted: false,
+                hull: 88,
+                skiffs: 1,
+            }
+        );
+        assert_eq!(
+            state.player.transport.save_marker(),
+            TRANSPORT_MARKER_SHIP_FURLED_FIRST + 1
+        );
+        assert_eq!(state.active_objects[0].tile, FIRST_PLAYABLE_FRIGATE_TILE + 1);
+        assert!(state.active_objects[1].is_empty());
+    }
+
+    #[test]
+    fn board_ship_accepts_carpet_north_east_and_stows_carpet() {
+        for marker in [TRANSPORT_MARKER_MAGIC_CARPET_FIRST, TRANSPORT_MARKER_MAGIC_CARPET_FIRST + 1] {
+            let mut state = world_state(open_world_grid(), 0, 0);
+            state.player.transport = TransportState::Carpet {
+                type_byte: marker,
+                tile: transport_visual_tile_for_marker(marker).unwrap(),
+            };
+            state.player.facing = Direction::East;
+            state.sync_player_object();
+            state.active_objects.push(ActiveObject {
+                type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+                tile: 0,
+                x: 1,
+                y: 0,
+                z: WorldPlane::Underworld.save_floor(),
+                phase: STEADY_PHASE,
+                aux1: 77,
+                aux3: 2,
+            });
+
+            assert_eq!(state.board_vehicle(), MoveOutcome::Boarded);
+
+            assert_eq!(state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 1);
+            assert!(matches!(state.player.transport, TransportState::Ship { .. }));
+            assert_eq!(state.message, "Boarded ship.");
+        }
+    }
+
+    #[test]
+    fn board_ship_refuses_carpet_south_west() {
+        for marker in [TRANSPORT_MARKER_MAGIC_CARPET_FIRST + 2, TRANSPORT_MARKER_MAGIC_CARPET_FIRST + 3] {
+            let mut state = world_state(open_world_grid(), 0, 0);
+            state.player.transport = TransportState::Carpet {
+                type_byte: marker,
+                tile: transport_visual_tile_for_marker(marker).unwrap(),
+            };
+            state.player.facing = Direction::East;
+            state.sync_player_object();
+            state.active_objects.push(ActiveObject {
+                type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+                tile: 0,
+                x: 1,
+                y: 0,
+                z: WorldPlane::Underworld.save_floor(),
+                phase: STEADY_PHASE,
+                aux1: 77,
+                aux3: 2,
+            });
+
+            assert_eq!(state.board_vehicle(), MoveOutcome::Blocked);
+
+            assert_eq!(
+                state.player.transport,
+                TransportState::Carpet {
+                    type_byte: marker,
+                    tile: transport_visual_tile_for_marker(marker).unwrap(),
+                }
+            );
+            assert_eq!(state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 0);
+            assert_eq!(state.message, "On foot.");
+            assert!(!state.active_objects[1].is_empty());
+        }
     }
 
     #[test]

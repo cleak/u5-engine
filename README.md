@@ -238,11 +238,13 @@ damaging-terrain sidecar cells that are blocked or hazardous on foot, active
 moongate origins, clean world plane-transition/waterfall cells, and town
 stair/exit/trap-door transition cells when metadata is available, and refusing
 with the stock `Not here!` line when none exists. `Y` toggles ship sails.
-Balloon support is currently a semantic debug transport only: it follows wind
-direction over terrain, overflies clean damaging-terrain/waterfall sidecar
-effects, and can X-it only when the current cell is not mountain or wall-like,
-but B-Board and byte-compatible save/load marker paths remain unpromoted in the
-public spec.
+Horse, ship, skiff, and magic-carpet boarding now accepts the public parked
+object bytes and saves the documented transport marker byte for the active
+state, while still accepting the first-playable visual tile ids used by older
+debug hooks. Balloon support is currently a semantic debug transport only: it
+follows wind direction over terrain, overflies clean damaging-terrain/waterfall
+sidecar effects, and can X-it only when the current cell is not mountain or
+wall-like; B-Board remains intentionally unpromoted for balloons.
 Furled ships use manual water movement; hoisted sails use the harness wind
 state, where calm/perpendicular wind stalls and same-axis wind advances on a
 deterministic first-playable cadence. After a stalled sail attempt, Pass
@@ -636,9 +638,9 @@ cargo run -- --play --scene UNDERWORLD C:\Games\U5-Clean
 ```
 
 `--transport` is a semantic debug startup hook for `foot`, `horse`, `ship`,
-`skiff`, `carpet`, and `balloon`. The balloon option is intentionally not a
-claim about B-Board or byte-compatible save marker mappings; those remain open
-in the public vehicle spec.
+`skiff`, `carpet`, and `balloon`. Horse, ship, skiff, and carpet state now
+round-trip through the public save marker families; the balloon option remains
+debug-only and is intentionally not a claim about B-Board support.
 
 `--pending-vehicle` is a clean debug hook for the public shipwright-delivery
 handshake while the shop UI remains out of scope. Use `frigate:x,y[,skiffs]` to

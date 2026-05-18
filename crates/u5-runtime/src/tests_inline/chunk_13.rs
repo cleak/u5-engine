@@ -12042,6 +12042,24 @@
     }
 
     #[test]
+    fn public_ship_marker_parks_as_furled_object_byte() {
+        let parked = TransportState::Ship {
+            type_byte: TRANSPORT_MARKER_SHIP_HOISTED_FIRST + 1,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE + 1,
+            sails_hoisted: false,
+            hull: 77,
+            skiffs: 2,
+        }
+        .parked_object(3, 4, WorldPlane::Britannia.save_floor())
+        .unwrap();
+
+        assert_eq!(parked.type_byte, TRANSPORT_MARKER_SHIP_FURLED_FIRST + 1);
+        assert_eq!(parked.tile, FIRST_PLAYABLE_FRIGATE_TILE + 1);
+        assert_eq!(parked.aux1, 77);
+        assert_eq!(parked.aux3, 2);
+    }
+
+    #[test]
     fn transport_family_classifier_matches_spec_table() {
         // vehicles.md §2
         for b in 0x12u8..=0x13 {

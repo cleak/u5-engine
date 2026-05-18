@@ -493,6 +493,41 @@ pub fn transport_from_vehicle_object(
     aux1: u8,
     aux3: u8,
 ) -> Option<TransportState> {
+    if let Some(family) = boardable_family(type_byte) {
+        return match family {
+            BoardableFamily::Horse => {
+                let marker = mount_horse_marker(type_byte)?;
+                let tile = transport_visual_tile_for_marker(marker)?;
+                Some(TransportState::Horse {
+                    type_byte: marker,
+                    tile,
+                })
+            }
+            BoardableFamily::MagicCarpet => {
+                let marker = CARPET_MOUNTED;
+                let tile = transport_visual_tile_for_marker(marker)?;
+                Some(TransportState::Carpet {
+                    type_byte: marker,
+                    tile,
+                })
+            }
+            BoardableFamily::Ship => {
+                let tile = transport_visual_tile_for_marker(type_byte)?;
+                Some(TransportState::Ship {
+                    type_byte,
+                    tile,
+                    sails_hoisted: false,
+                    hull: aux1,
+                    skiffs: aux3,
+                })
+            }
+            BoardableFamily::Skiff => {
+                let tile = transport_visual_tile_for_marker(type_byte)?;
+                Some(TransportState::Skiff { type_byte, tile })
+            }
+        };
+    }
+
     match tile {
         160..=167 => Some(TransportState::Horse { type_byte, tile }),
         168..=175 => Some(TransportState::Ship {
@@ -510,7 +545,100 @@ pub fn transport_from_vehicle_object(
 }
 
 pub fn transport_from_save_marker(marker: u8) -> TransportState {
-    transport_from_vehicle_object(marker, marker, 0, 0).unwrap_or_default()
+    let Some(family) = transport_family(marker) else {
+        return transport_from_vehicle_object(marker, marker, 0, 0).unwrap_or_default();
+    };
+    match family {
+        TransportFamily::MountedHorse => TransportState::Horse {
+            type_byte: marker,
+            tile: transport_visual_tile_for_marker(marker).unwrap_or(FIRST_PLAYABLE_HORSE_TILE),
+        },
+        TransportFamily::MagicCarpet => TransportState::Carpet {
+            type_byte: marker,
+            tile: transport_visual_tile_for_marker(marker)
+                .unwrap_or(FIRST_PLAYABLE_MAGIC_CARPET_TILE),
+        },
+        TransportFamily::Foot => TransportState::Foot,
+        TransportFamily::ShipHoisted | TransportFamily::ShipFurled => TransportState::Ship {
+            type_byte: marker,
+            tile: transport_visual_tile_for_marker(marker).unwrap_or(FIRST_PLAYABLE_FRIGATE_TILE),
+            sails_hoisted: matches!(family, TransportFamily::ShipHoisted),
+            hull: 0,
+            skiffs: 0,
+        },
+        TransportFamily::Skiff => TransportState::Skiff {
+            type_byte: marker,
+            tile: transport_visual_tile_for_marker(marker).unwrap_or(FIRST_PLAYABLE_SKIFF_TILE),
+        },
+    }
+}
+
+pub const fn transport_visual_tile_for_marker(marker: u8) -> Option<u8> {
+    Some(match transport_family(marker) {
+        Some(TransportFamily::MountedHorse) => {
+            FIRST_PLAYABLE_HORSE_TILE + (marker - HORSE_TRANSPORT_FIRST)
+        }
+        Some(TransportFamily::MagicCarpet) => {
+            FIRST_PLAYABLE_MAGIC_CARPET_TILE + (marker & TRANSPORT_FACING_MASK)
+        }
+        Some(TransportFamily::ShipHoisted) | Some(TransportFamily::ShipFurled) => {
+            FIRST_PLAYABLE_FRIGATE_TILE + (marker & TRANSPORT_FACING_MASK)
+        }
+        Some(TransportFamily::Skiff) => {
+            FIRST_PLAYABLE_SKIFF_TILE + (marker & TRANSPORT_FACING_MASK)
+        }
+        Some(TransportFamily::Foot) => PLAYER_TILE,
+        None => return None,
+    })
+}
+
+pub const fn transport_marker_for_vehicle_bytes(
+    type_byte: u8,
+    tile: u8,
+    sails_hoisted: bool,
+) -> Option<u8> {
+    if let Some(family) = transport_family(type_byte) {
+        let facing = type_byte & TRANSPORT_FACING_MASK;
+        return Some(match family {
+            TransportFamily::MountedHorse => {
+                HORSE_TRANSPORT_FIRST + ((type_byte - HORSE_TRANSPORT_FIRST) & 0x01)
+            }
+            TransportFamily::MagicCarpet => TRANSPORT_MARKER_MAGIC_CARPET_FIRST + facing,
+            TransportFamily::Foot => TRANSPORT_MARKER_FOOT_FIRST + facing,
+            TransportFamily::ShipHoisted | TransportFamily::ShipFurled => {
+                if sails_hoisted {
+                    TRANSPORT_MARKER_SHIP_HOISTED_FIRST + facing
+                } else {
+                    TRANSPORT_MARKER_SHIP_FURLED_FIRST + facing
+                }
+            }
+            TransportFamily::Skiff => TRANSPORT_MARKER_SKIFF_FIRST + facing,
+        });
+    }
+    transport_marker_for_visual_tile(tile, sails_hoisted)
+}
+
+pub const fn transport_marker_for_visual_tile(tile: u8, sails_hoisted: bool) -> Option<u8> {
+    Some(match tile {
+        160..=167 => HORSE_TRANSPORT_FIRST + ((tile - FIRST_PLAYABLE_HORSE_TILE) & 0x01),
+        168..=175 => {
+            let facing = (tile - FIRST_PLAYABLE_FRIGATE_TILE) & TRANSPORT_FACING_MASK;
+            if sails_hoisted {
+                TRANSPORT_MARKER_SHIP_HOISTED_FIRST + facing
+            } else {
+                TRANSPORT_MARKER_SHIP_FURLED_FIRST + facing
+            }
+        }
+        176..=183 => {
+            TRANSPORT_MARKER_SKIFF_FIRST
+                + ((tile - FIRST_PLAYABLE_SKIFF_TILE) & TRANSPORT_FACING_MASK)
+        }
+        184..=187 => {
+            TRANSPORT_MARKER_MAGIC_CARPET_FIRST
+                + ((tile - FIRST_PLAYABLE_MAGIC_CARPET_TILE) & TRANSPORT_FACING_MASK)
+        }
+        _ => return None,
+    })
 }
 
 pub fn active_object_frame_tile(type_byte: u8, phase: u8) -> Option<u8> {

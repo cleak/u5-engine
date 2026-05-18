@@ -229,9 +229,7 @@ impl TransportState {
 
     pub fn can_board(self, target: Self) -> bool {
         match target {
-            Self::Ship { .. } => {
-                matches!(self, Self::Foot | Self::Ship { .. } | Self::Skiff { .. })
-            }
+            Self::Ship { .. } => ship_boarding_precondition_accepts(self.save_marker()),
             Self::Horse { .. } | Self::Skiff { .. } | Self::Carpet { .. } => self.is_foot(),
             Self::Balloon { .. } => false,
             Self::Foot => false,
@@ -241,10 +239,21 @@ impl TransportState {
     pub fn save_marker(self) -> u8 {
         match self {
             Self::Foot => FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER,
-            Self::Horse { tile, .. }
-            | Self::Ship { tile, .. }
-            | Self::Skiff { tile, .. }
-            | Self::Carpet { tile, .. } => tile,
+            Self::Horse { type_byte, tile } => {
+                transport_marker_for_vehicle_bytes(type_byte, tile, false)
+                    .unwrap_or(FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER)
+            }
+            Self::Ship {
+                type_byte,
+                tile,
+                sails_hoisted,
+                ..
+            } => transport_marker_for_vehicle_bytes(type_byte, tile, sails_hoisted)
+                .unwrap_or(FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER),
+            Self::Skiff { type_byte, tile } | Self::Carpet { type_byte, tile } => {
+                transport_marker_for_vehicle_bytes(type_byte, tile, false)
+                    .unwrap_or(FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER)
+            }
             Self::Balloon { .. } => FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER,
         }
     }
@@ -252,25 +261,46 @@ impl TransportState {
     pub fn parked_object(self, x: usize, y: usize, z: i8) -> Option<ActiveObject> {
         let (type_byte, tile, aux1, aux3) = match self {
             Self::Foot => return None,
-            Self::Horse {
-                type_byte, tile, ..
+            Self::Horse { type_byte, tile } => {
+                let parked_type = if (HORSE_MOUNTED_FIRST..=HORSE_MOUNTED_LAST).contains(&type_byte)
+                {
+                    type_byte - HORSE_BOARDING_BIAS
+                } else {
+                    type_byte
+                };
+                (parked_type, tile, 0, 0)
             }
-            | Self::Skiff {
-                type_byte, tile, ..
+            Self::Skiff { type_byte, tile } | Self::Balloon { type_byte, tile } => {
+                (type_byte, tile, 0, 0)
             }
-            | Self::Carpet {
-                type_byte, tile, ..
+            Self::Carpet { type_byte, tile } => {
+                let parked_type = if matches!(
+                    transport_family(type_byte),
+                    Some(TransportFamily::MagicCarpet)
+                ) {
+                    CARPET_PARKED
+                } else {
+                    type_byte
+                };
+                (parked_type, tile, 0, 0)
             }
-            | Self::Balloon {
-                type_byte, tile, ..
-            } => (type_byte, tile, 0, 0),
             Self::Ship {
                 type_byte,
                 tile,
                 hull,
                 skiffs,
                 ..
-            } => (type_byte, tile, hull, skiffs),
+            } => {
+                let parked_type = if matches!(
+                    transport_family(type_byte),
+                    Some(TransportFamily::ShipHoisted | TransportFamily::ShipFurled)
+                ) {
+                    transport_marker_for_vehicle_bytes(type_byte, tile, false).unwrap_or(type_byte)
+                } else {
+                    type_byte
+                };
+                (parked_type, tile, hull, skiffs)
+            }
         };
         Some(ActiveObject {
             type_byte,

@@ -170,7 +170,7 @@
         assert_eq!(saved[SAVE_COMBAT_ROUND_COUNTER_OFFSET], 7);
         assert_eq!(
             saved[SAVE_TRANSPORT_MARKER_OFFSET],
-            FIRST_PLAYABLE_SKIFF_TILE
+            TRANSPORT_MARKER_SKIFF_FIRST
         );
         assert_eq!(saved[SAVE_WIND_OFFSET], 9);
         assert_eq!(saved[SAVE_PARTY_SIZE_OFFSET], 2);
@@ -732,6 +732,63 @@
         bytes[SAVE_TRANSPORT_MARKER_OFFSET] = 191;
         let unknown = play_options_from_save_bytes(&bytes).unwrap();
         assert_eq!(unknown.transport, TransportState::Foot);
+    }
+
+    #[test]
+    fn save_play_options_reads_public_transport_markers() {
+        let mut bytes = vec![0; SAVED_GAM_LEN];
+        bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        bytes[SAVE_SCENE_OFFSET] = 0;
+        bytes[SAVE_Z_OFFSET] = 0xff;
+        bytes[SAVE_X_OFFSET] = 200;
+        bytes[SAVE_Y_OFFSET] = 201;
+        write_saved_clock(&mut bytes, GameClock::new(8, 35).unwrap());
+
+        bytes[SAVE_TRANSPORT_MARKER_OFFSET] = TRANSPORT_MARKER_SHIP_HOISTED_FIRST + 1;
+        let hoisted = play_options_from_save_bytes(&bytes).unwrap();
+        assert_eq!(
+            hoisted.transport,
+            TransportState::Ship {
+                type_byte: TRANSPORT_MARKER_SHIP_HOISTED_FIRST + 1,
+                tile: FIRST_PLAYABLE_FRIGATE_TILE + 1,
+                sails_hoisted: true,
+                hull: 0,
+                skiffs: 0,
+            }
+        );
+
+        bytes[SAVE_TRANSPORT_MARKER_OFFSET] = TRANSPORT_MARKER_SHIP_FURLED_FIRST + 2;
+        let furled = play_options_from_save_bytes(&bytes).unwrap();
+        assert_eq!(
+            furled.transport,
+            TransportState::Ship {
+                type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST + 2,
+                tile: FIRST_PLAYABLE_FRIGATE_TILE + 2,
+                sails_hoisted: false,
+                hull: 0,
+                skiffs: 0,
+            }
+        );
+
+        bytes[SAVE_TRANSPORT_MARKER_OFFSET] = TRANSPORT_MARKER_MAGIC_CARPET_LAST;
+        let carpet = play_options_from_save_bytes(&bytes).unwrap();
+        assert_eq!(
+            carpet.transport,
+            TransportState::Carpet {
+                type_byte: TRANSPORT_MARKER_MAGIC_CARPET_LAST,
+                tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE + 3,
+            }
+        );
+
+        bytes[SAVE_TRANSPORT_MARKER_OFFSET] = TRANSPORT_MARKER_SKIFF_LAST;
+        let skiff = play_options_from_save_bytes(&bytes).unwrap();
+        assert_eq!(
+            skiff.transport,
+            TransportState::Skiff {
+                type_byte: TRANSPORT_MARKER_SKIFF_LAST,
+                tile: FIRST_PLAYABLE_SKIFF_TILE + 3,
+            }
+        );
     }
 
     #[test]

@@ -315,6 +315,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         let transport = candidate.transport;
+        let starting_transport_marker = self.player.transport.save_marker();
         if !self.player.transport.can_board(transport) {
             self.message = "On foot.".to_string();
             return MoveOutcome::Blocked;
@@ -328,6 +329,12 @@ impl PlayState {
         }
 
         self.free_active_object_slot(candidate.slot);
+        if matches!(transport, TransportState::Ship { .. })
+            && ship_boarding_stows_carpet(starting_transport_marker)
+        {
+            let slot = &mut self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX];
+            *slot = slot.saturating_add(1).min(PARTY_BYTE_STOCK_CAP);
+        }
         self.player.transport = transport;
         self.timing_status = TimingStatusTag::for_transport(transport);
         self.sync_player_object();
