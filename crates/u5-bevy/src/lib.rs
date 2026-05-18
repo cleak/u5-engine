@@ -5,7 +5,7 @@
 //! free.
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use bevy::image::ImageSampler;
 use bevy::prelude::*;
@@ -16,9 +16,16 @@ use bevy::sprite::Anchor;
 use bevy::text::TextBounds;
 
 use u5_runtime::{
-    Area, Direction, PLAY_MUSIC_TOGGLE_KEY, PlayInputDisposition, PlayOptions, PlayState,
-    TILE_ATLAS_SIDE, TileAtlas, TileGraphicsDepth, handle_play_key_input, load_tile_atlas,
-    render_text_panel_rgba, shop_runtime::SageState, shop_session::ActiveShopSession,
+    Area, Direction, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
+    MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, PLAY_MUSIC_TOGGLE_KEY,
+    PlayInputDisposition, PlayOptions, PlayState, RTV_COMMAND_STREAM_BYTES, TILE_ATLAS_SIDE,
+    TileAtlas, TileGraphicsDepth, handle_play_key_input,
+    intro_menu::{IntroSubflow, IntroSubflowResult},
+    load_play_options_from_save, load_tile_atlas,
+    menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
+    render_text_panel_rgba,
+    shop_runtime::SageState,
+    shop_session::ActiveShopSession,
 };
 
 const VIEWPORT_RADIUS: usize = 5;
@@ -31,6 +38,9 @@ const STATUS_FONT_SIZE: f32 = 14.0;
 
 const READY_HINT: &str =
     "WASD/arrows: move. Shift+A attacks, Shift+S searches. Ctrl+S music. Esc quit.";
+const INTRO_FRAMEBUFFER_WIDTH: u32 = 320;
+const INTRO_FRAMEBUFFER_HEIGHT: u32 = 220;
+const INTRO_DISPLAY_SCALE: f32 = 2.5;
 
 pub fn run_visual_loop(
     game_dir: &Path,
@@ -92,6 +102,59 @@ pub fn run_visual_loop(
         .run();
 
     Ok(())
+}
+
+pub fn run_visual_intro_loop(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+) -> std::io::Result<()> {
+    let launch_result = Arc::new(Mutex::new(None));
+    run_visual_intro_menu_app(game_dir.to_path_buf(), launch_result.clone());
+    let options = launch_result
+        .lock()
+        .expect("visual intro launch lock poisoned")
+        .take();
+    if let Some(options) = options {
+        run_visual_loop(game_dir, options, raster_depth)?;
+    }
+    Ok(())
+}
+
+fn run_visual_intro_menu_app(game_dir: PathBuf, launch_result: Arc<Mutex<Option<PlayOptions>>>) {
+    let screenshot_path: Option<PathBuf> =
+        std::env::var("U5_BEVY_SCREENSHOT").ok().map(PathBuf::from);
+    let screenshot_delay: u32 = std::env::var("U5_BEVY_SCREENSHOT_DELAY")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(60);
+
+    App::new()
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Ultima V Intro".into(),
+                resolution: (820.0, 620.0).into(),
+                resizable: true,
+                ..default()
+            }),
+            ..default()
+        }))
+        .insert_resource(ClearColor(Color::BLACK))
+        .insert_resource(VisualIntroState {
+            game_dir,
+            dispatch: UnifiedMenuDispatch::new(),
+            message: String::new(),
+            launch_result,
+            image_handle: None,
+        })
+        .insert_resource(ScreenshotConfig {
+            path: screenshot_path,
+            frame_delay: screenshot_delay,
+            preset_keys: Vec::new(),
+        })
+        .insert_resource(ScreenshotState::default())
+        .add_systems(Startup, setup_intro)
+        .add_systems(Update, (drive_visual_intro, screenshot_system))
+        .run();
 }
 
 #[derive(Resource)]
@@ -179,6 +242,15 @@ struct VisualState {
 
 #[derive(Component)]
 struct StatusText;
+
+#[derive(Resource)]
+struct VisualIntroState {
+    game_dir: PathBuf,
+    dispatch: UnifiedMenuDispatch,
+    message: String,
+    launch_result: Arc<Mutex<Option<PlayOptions>>>,
+    image_handle: Option<Handle<Image>>,
+}
 
 /// Drives the static-tile animator (water cycle) at a fixed wall-clock
 /// cadence so the world looks alive even when the player isn't moving.
@@ -302,6 +374,176 @@ fn setup(
     commands.remove_resource::<PendingBootstrap>();
 }
 
+fn setup_intro(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    mut intro: ResMut<VisualIntroState>,
+) {
+    commands.spawn(Camera2d);
+    let rgba = render_intro_frame(&mut intro);
+    let mut image = Image::new(
+        Extent3d {
+            width: INTRO_FRAMEBUFFER_WIDTH,
+            height: INTRO_FRAMEBUFFER_HEIGHT,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        rgba,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    );
+    image.sampler = ImageSampler::nearest();
+    let image_handle = images.add(image);
+    intro.image_handle = Some(image_handle.clone());
+
+    commands.spawn((
+        Sprite {
+            image: image_handle,
+            custom_size: Some(Vec2::new(
+                INTRO_FRAMEBUFFER_WIDTH as f32 * INTRO_DISPLAY_SCALE,
+                INTRO_FRAMEBUFFER_HEIGHT as f32 * INTRO_DISPLAY_SCALE,
+            )),
+            ..default()
+        },
+        Transform::from_xyz(0.0, 0.0, 0.0),
+    ));
+}
+
+fn drive_visual_intro(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    intro: Option<ResMut<VisualIntroState>>,
+    mut images: ResMut<Assets<Image>>,
+    mut exit: EventWriter<AppExit>,
+) {
+    let Some(mut intro) = intro else {
+        return;
+    };
+    if keyboard.just_pressed(KeyCode::Escape) {
+        exit.write(AppExit::Success);
+        return;
+    }
+
+    let shift_pressed =
+        keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
+    let control_pressed =
+        keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
+    let mut handled = false;
+    for key in keyboard.get_just_pressed() {
+        let Some(ch) = key_code_to_char(*key, shift_pressed, control_pressed) else {
+            continue;
+        };
+        if step_visual_intro(&mut intro, ch, &mut exit) {
+            handled = true;
+        }
+    }
+    if handled {
+        let rgba = render_intro_frame(&mut intro);
+        if let Some(handle) = intro.image_handle.as_ref() {
+            if let Some(image) = images.get_mut(handle) {
+                image.data = Some(rgba);
+            }
+        }
+    }
+}
+
+fn step_visual_intro(
+    intro: &mut VisualIntroState,
+    ch: char,
+    exit: &mut EventWriter<AppExit>,
+) -> bool {
+    if matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle) {
+        intro.dispatch.dismiss_title();
+        if ch.eq_ignore_ascii_case(&'J') {
+            return resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward, exit);
+        }
+        intro.message.clear();
+        return true;
+    }
+
+    let key = if ch == '\r' { b'\r' } else { ch as u8 };
+    match intro.dispatch.submit_menu_key(key) {
+        UnifiedMenuStep::EnteredSubflow(subflow) => {
+            resolve_visual_intro_subflow(intro, subflow, exit)
+        }
+        UnifiedMenuStep::Ignored => {
+            intro.message = "Choose J, C, T, U, A, R, or Enter to repeat.".to_string();
+            true
+        }
+        UnifiedMenuStep::PresentMenu | UnifiedMenuStep::ReturnedToMenu => true,
+        UnifiedMenuStep::LaunchGameplay => {
+            exit.write(AppExit::Success);
+            true
+        }
+        UnifiedMenuStep::PresentTitle
+        | UnifiedMenuStep::CodexAdvanced(_)
+        | UnifiedMenuStep::CodexCompleted
+        | UnifiedMenuStep::BlackthornAdvanced
+        | UnifiedMenuStep::BlackthornEnded { .. }
+        | UnifiedMenuStep::U4Stepped => false,
+    }
+}
+
+fn resolve_visual_intro_subflow(
+    intro: &mut VisualIntroState,
+    subflow: IntroSubflow,
+    exit: &mut EventWriter<AppExit>,
+) -> bool {
+    match subflow {
+        IntroSubflow::JourneyOnward => match load_play_options_from_save(&intro.game_dir) {
+            Ok(options) => {
+                intro
+                    .dispatch
+                    .complete_subflow(subflow, IntroSubflowResult::SaveReady);
+                *intro
+                    .launch_result
+                    .lock()
+                    .expect("visual intro launch lock poisoned") = Some(options);
+                exit.write(AppExit::Success);
+            }
+            Err(err) => {
+                intro
+                    .dispatch
+                    .complete_subflow(subflow, IntroSubflowResult::Cancelled);
+                intro.message = format!("No loadable saved game: {err}");
+            }
+        },
+        IntroSubflow::CharacterCreation => {
+            intro
+                .dispatch
+                .complete_subflow(subflow, IntroSubflowResult::Cancelled);
+            intro.message =
+                "Create New Character is available from terminal intro or --create-character."
+                    .to_string();
+        }
+        IntroSubflow::UltimaIvTransfer => {
+            intro
+                .dispatch
+                .complete_subflow(subflow, IntroSubflowResult::Cancelled);
+            intro.message =
+                "Ultima IV Transfer is available from the terminal intro flow.".to_string();
+        }
+        IntroSubflow::StorySlides => {
+            intro
+                .dispatch
+                .complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
+            intro.message = "Ultima V Introduction story slides return to the menu.".to_string();
+        }
+        IntroSubflow::Acknowledgements => {
+            intro
+                .dispatch
+                .complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
+            intro.message = "Acknowledgements return to the menu.".to_string();
+        }
+        IntroSubflow::ReturnToView => {
+            intro
+                .dispatch
+                .complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
+            intro.message = visual_return_to_view_summary(&intro.game_dir);
+        }
+    }
+    true
+}
+
 fn drive_visual(
     keyboard: Res<ButtonInput<KeyCode>>,
     visual: Option<ResMut<VisualState>>,
@@ -378,6 +620,61 @@ fn drive_visual(
     if let Ok(mut text) = text_query.single_mut() {
         let summary = summarize(&mut v.state, "", &v.input_line);
         text.0 = summary;
+    }
+}
+
+fn summarize_intro(intro: &mut VisualIntroState) -> String {
+    if matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle) {
+        return "Ultima V\n\nPress any key for the main menu\nPress J to journey onward"
+            .to_string();
+    }
+
+    let mut lines = vec![
+        "Ultima V".to_string(),
+        String::new(),
+        "J  Journey Onward".to_string(),
+        "C  Create New Character".to_string(),
+        "T  Transfer from Ultima IV".to_string(),
+        "U  Ultima V Introduction".to_string(),
+        "A  Acknowledgements".to_string(),
+        "R  Return to View".to_string(),
+        String::new(),
+        "Esc quits visual intro".to_string(),
+    ];
+    if !intro.message.is_empty() {
+        lines.push(String::new());
+        lines.push(intro.message.clone());
+    }
+    lines.join("\n")
+}
+
+fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
+    render_text_panel_rgba(
+        &summarize_intro(intro),
+        INTRO_FRAMEBUFFER_WIDTH as usize,
+        INTRO_FRAMEBUFFER_HEIGHT as usize,
+    )
+    .unwrap_or_else(|_| {
+        vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4]
+    })
+}
+
+fn visual_return_to_view_summary(game_dir: &Path) -> String {
+    let path = game_dir.join(MISCMAPS_DAT_FILE);
+    match std::fs::metadata(&path) {
+        Ok(metadata) => format!(
+            "{} found ({} bytes). Return-to-View strips start at byte {}, span {} bytes; command stream starts at byte {} and spans {} bytes.",
+            MISCMAPS_DAT_FILE,
+            metadata.len(),
+            MISCMAPS_RTV_STRIP_SECTION_OFFSET,
+            MISCMAPS_RTV_STRIP_SECTION_BYTES,
+            MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
+            RTV_COMMAND_STREAM_BYTES
+        ),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            format!("{MISCMAPS_DAT_FILE} is missing; preview cannot run.")
+        }
+        Err(err) => format!("Return-to-View preview error: {err}"),
     }
 }
 
@@ -1073,6 +1370,42 @@ mod tests {
         assert!(input_line.is_empty());
         assert!(state.active_shrine.is_none());
         assert!(state.message.contains("None"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_intro_summary_switches_from_title_to_menu() {
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            dispatch: UnifiedMenuDispatch::new(),
+            message: String::new(),
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        let title = summarize_intro(&mut intro);
+        assert!(title.contains("Press any key"));
+        assert!(!title.contains("Create New Character"));
+
+        intro.dispatch.dismiss_title();
+        intro.message = "Choose a path.".to_string();
+        let menu = summarize_intro(&mut intro);
+        assert!(menu.contains("Journey Onward"));
+        assert!(menu.contains("Create New Character"));
+        assert!(menu.contains("Choose a path."));
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn visual_return_to_view_summary_reports_miscmap_shape() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(MISCMAPS_DAT_FILE), vec![0u8; 128]).unwrap();
+
+        let summary = visual_return_to_view_summary(&dir);
+
+        assert!(summary.contains(MISCMAPS_DAT_FILE));
+        assert!(summary.contains("128 bytes"));
+        assert!(summary.contains("Return-to-View strips"));
         let _ = fs::remove_dir_all(dir);
     }
 }

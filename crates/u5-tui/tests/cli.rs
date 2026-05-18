@@ -329,6 +329,16 @@ fn cli_parser_accepts_intro_menu_mode() {
 }
 
 #[test]
+fn cli_parser_accepts_visual_intro_menu_mode() {
+    let args = parse_cli_args(["--intro", "--visual", r"C:\Games\U5-Clean"]).unwrap();
+
+    assert!(args.intro);
+    assert!(args.visual);
+    assert!(!args.play);
+    assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
+}
+
+#[test]
 fn cli_intro_rejects_direct_play_or_save_creation_modes() {
     assert!(parse_cli_args(["--intro", "--play"]).is_err());
     assert!(parse_cli_args(["--intro", "--from-save"]).is_err());

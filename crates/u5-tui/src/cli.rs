@@ -277,10 +277,10 @@ where
             "--from-save and --from-init are mutually exclusive",
         ));
     }
-    if intro && (play || visual || save_frame.is_some() || from_save || from_init) {
+    if intro && (play || save_frame.is_some() || from_save || from_init) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--intro owns the title/menu flow; it cannot be combined with play, visual, save-frame, from-save, or from-init",
+            "--intro owns the title/menu flow; it cannot be combined with play, save-frame, from-save, or from-init",
         ));
     }
     if create_character_interactive
@@ -404,6 +404,7 @@ OPTIONS:
         --raster-depth <D>    ega|cga (default ega).
         --visual              Launch the Bevy visual harness.
                               Requires building with `--features visual`.
+                              Combine with --intro for the Bevy intro/menu shell.
         --save-frame <PATH>   Render the current viewport (after running
                               --play-script if given) to a PNG and exit.
                               Useful for verifying movement without a desktop.
@@ -416,6 +417,7 @@ SMOKE COMMANDS:
     cargo run -- --create-character Avatar --gender male --chargen-winners Honesty,Compassion,Valor,Justice,Sacrifice,Honor,Spirituality C:\\Games\\U5-Clean
     cargo run --features visual -- --visual --scene BRITANNIA C:\\Games\\U5-Clean
     cargo run --features visual -- --visual --scene CASTLE:0 --floor 0 C:\\Games\\U5-Clean
+    cargo run --features visual -- --intro --visual C:\\Games\\U5-Clean
 ";
 
 pub fn parse_chargen_answers_arg(value: &str) -> io::Result<Vec<bool>> {

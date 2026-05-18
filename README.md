@@ -47,6 +47,7 @@ scenes plus the clean first-person dungeon raster:
 ```powershell
 cargo run --features visual -- --visual --scene BRITANNIA C:\Games\U5-Clean
 cargo run --features visual -- --visual --scene CASTLE:0 --floor 0 C:\Games\U5-Clean
+cargo run --features visual -- --intro --visual C:\Games\U5-Clean
 ```
 
 The window draws a single CPU-generated 11x11 tile viewport (an `EGA` or `CGA`
@@ -60,6 +61,11 @@ while shops, conversations, and character creation remain modal runtime flows
 rather than bespoke Bevy UI. Line-oriented modal prompts such as
 conversation keywords, Blackthorn answers, and sage topics collect typed text
 in the status panel, support Backspace, and submit on Enter.
+
+`--intro --visual` opens a Bevy intro/menu shell backed by the same runtime menu
+dispatcher used by terminal intro mode. Journey Onward loads `SAVED.GAM` and
+`SAVED.OOL` then launches the Bevy gameplay loop; character creation and
+transfer remain terminal flows.
 
 Input map (visual mode):
 

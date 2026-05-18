@@ -13,6 +13,9 @@ fn main() -> io::Result<()> {
         print!("{CLI_USAGE}");
         return Ok(());
     }
+    if args.intro && args.visual {
+        return run_visual_intro(args);
+    }
     if args.intro {
         return run_intro_menu_loop(&args.game_dir, args.raster_diagnostics, args.raster_depth);
     }
@@ -61,11 +64,25 @@ fn run_visual(args: CliArgs) -> io::Result<()> {
     u5_bevy::run_visual_loop(&args.game_dir, args.play_options, args.raster_depth)
 }
 
+#[cfg(feature = "visual")]
+fn run_visual_intro(args: CliArgs) -> io::Result<()> {
+    u5_bevy::run_visual_intro_loop(&args.game_dir, args.raster_depth)
+}
+
 #[cfg(not(feature = "visual"))]
 fn run_visual(_args: CliArgs) -> io::Result<()> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
         "--visual requires building with --features visual (e.g. \
          `cargo run --features visual -- --visual <GAME_DIR>`).",
+    ))
+}
+
+#[cfg(not(feature = "visual"))]
+fn run_visual_intro(_args: CliArgs) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "--intro --visual requires building with --features visual (e.g. \
+         `cargo run --features visual -- --intro --visual <GAME_DIR>`).",
     ))
 }
