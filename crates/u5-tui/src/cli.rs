@@ -4,16 +4,16 @@
 //! command suffixes typed at the play prompt; this module owns the
 //! command-line surface.
 
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use u5_runtime::{
-    ChargenAvatar, ChargenStats, DEFAULT_GAME_DIR, FIRST_PLAYABLE_BALLOON_TILE,
-    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_SKIFF_TILE,
-    GameClock, PendingVehicleAcquisition, PlayOptions, PlayTarget, ShrineVirtue, TileGraphicsDepth,
-    TimingStatusTag, TransportState, WindState, chargen_stats_from_winners, commit_chargen_save,
-    load_play_options_from_init, load_play_options_from_save, parse_u8_literal,
-    run_chargen_tournament,
+    CHARGEN_QUESTION_COUNT, ChargenAvatar, ChargenSession, ChargenSessionStep, ChargenStats,
+    DEFAULT_GAME_DIR, FIRST_PLAYABLE_BALLOON_TILE, FIRST_PLAYABLE_FRIGATE_TILE,
+    FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_SKIFF_TILE, GameClock, PendingVehicleAcquisition,
+    PlayOptions, PlayTarget, ShrineVirtue, TileGraphicsDepth, TimingStatusTag, TransportState,
+    WindState, chargen_stats_from_winners, commit_chargen_save, load_play_options_from_init,
+    load_play_options_from_save, load_question_records, parse_u8_literal, run_chargen_tournament,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -39,6 +39,7 @@ pub struct CliArgs {
     /// and the Bevy harness; useful for verifying movement without a desktop.
     pub save_frame: Option<PathBuf>,
     pub create_character: Option<CreateCharacterCommand>,
+    pub create_character_interactive: bool,
 }
 
 pub fn split_play_script(script: &str) -> Vec<String> {
@@ -73,6 +74,7 @@ where
     let mut create_character_name: Option<Vec<u8>> = None;
     let mut create_character_male: Option<bool> = None;
     let mut create_character_winners: Option<Vec<ShrineVirtue>> = None;
+    let mut create_character_interactive = false;
     let mut args = args.into_iter().map(Into::into);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -130,6 +132,7 @@ where
                     ));
                 }
             }
+            "--create-character-interactive" => create_character_interactive = true,
             "--gender" => {
                 let value = args.next().ok_or_else(|| {
                     io::Error::new(io::ErrorKind::InvalidInput, "--gender requires male|female")
@@ -260,6 +263,7 @@ where
             help: true,
             save_frame: None,
             create_character: None,
+            create_character_interactive: false,
         });
     }
     if from_save && from_init {
@@ -268,6 +272,21 @@ where
             "--from-save and --from-init are mutually exclusive",
         ));
     }
+    if create_character_interactive
+        && (play || visual || save_frame.is_some() || from_save || from_init)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--create-character-interactive writes a save and returns to the intro/menu state; it cannot be combined with play, visual, save-frame, from-save, or from-init",
+        ));
+    }
+    if create_character_interactive && create_character_name.is_some() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--create-character and --create-character-interactive are mutually exclusive",
+        ));
+    }
+
     let create_character = if let Some(name) = create_character_name {
         if play || visual || save_frame.is_some() || from_save || from_init {
             return Err(io::Error::new(
@@ -336,6 +355,7 @@ where
         help: false,
         save_frame,
         create_character,
+        create_character_interactive,
     })
 }
 
@@ -363,6 +383,8 @@ OPTIONS:
         --from-init           Seed play options from INIT.GAM (debug).
         --create-character <N>
                               Create SAVED.GAM/SAVED.OOL from INIT seeds and return.
+        --create-character-interactive
+                              Run the interactive name/gender/questionnaire flow.
         --gender <G>          male|female for --create-character.
         --chargen-winners <V> Seven comma-separated winning virtues for chargen.
         --raster-diagnostics  Emit per-frame raster diagnostics.
@@ -426,6 +448,123 @@ pub fn run_create_character_command(
     command: &CreateCharacterCommand,
 ) -> io::Result<ChargenAvatar> {
     commit_chargen_save(game_dir, &command.name, command.male, command.stats)
+}
+
+pub fn run_interactive_create_character(game_dir: &Path) -> io::Result<Option<ChargenAvatar>> {
+    let records = load_question_records(game_dir)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "QUESTION.DAT is required for interactive character creation",
+        )
+    })?;
+    let mut session = ChargenSession::new(records.records, chargen_interactive_rng_pool())?;
+    let mut input = String::new();
+
+    println!("Create New Character");
+    loop {
+        match session.current_step() {
+            ChargenSessionStep::PromptName => {
+                print!("By what name shalt thou be known? ");
+                io::stdout().flush()?;
+                input.clear();
+                io::stdin().read_line(&mut input)?;
+                match session.submit_name(&input) {
+                    ChargenSessionStep::Aborted => {
+                        println!("Character creation aborted; returning to the intro menu.");
+                        return Ok(None);
+                    }
+                    ChargenSessionStep::PromptGender => {}
+                    _ => println!("Use a nonblank printable ASCII name up to eight characters."),
+                }
+            }
+            ChargenSessionStep::PromptGender => {
+                print!("Art thou Male or Female? ");
+                io::stdout().flush()?;
+                input.clear();
+                io::stdin().read_line(&mut input)?;
+                if let Some(byte) = input.bytes().next() {
+                    if !matches!(
+                        session.submit_gender_key(byte),
+                        ChargenSessionStep::PresentIntro { .. }
+                    ) {
+                        println!("Press M or F.");
+                    }
+                }
+            }
+            ChargenSessionStep::PresentIntro { text, .. } => {
+                println!();
+                println!("{text}");
+                prompt_continue()?;
+                session.advance_intro();
+            }
+            ChargenSessionStep::PresentQuestion(question) => {
+                println!();
+                println!(
+                    "Question {} of {} (round {})",
+                    question.question_index + 1,
+                    CHARGEN_QUESTION_COUNT,
+                    question.round
+                );
+                println!("{}", question.text);
+                println!(
+                    "A: {}    B: {}",
+                    question.option_a.name(),
+                    question.option_b.name()
+                );
+                loop {
+                    print!("Choose A or B: ");
+                    io::stdout().flush()?;
+                    input.clear();
+                    io::stdin().read_line(&mut input)?;
+                    let Some(byte) = input.bytes().next() else {
+                        continue;
+                    };
+                    if !matches!(session.submit_answer_key(byte), ChargenSessionStep::Ignored) {
+                        break;
+                    }
+                }
+            }
+            ChargenSessionStep::Completed(result) => {
+                let avatar = commit_chargen_save(
+                    game_dir,
+                    &result.entered_name,
+                    result.male,
+                    result.tournament.stats,
+                )?;
+                println!("Created character. Choose Journey Onward to load the new save.");
+                return Ok(Some(avatar));
+            }
+            ChargenSessionStep::Aborted => return Ok(None),
+            ChargenSessionStep::Ignored => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "character creation reached an invalid state",
+                ));
+            }
+        }
+    }
+}
+
+fn prompt_continue() -> io::Result<()> {
+    print!("Press Enter to continue.");
+    io::stdout().flush()?;
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    Ok(())
+}
+
+pub fn chargen_interactive_rng_pool() -> Vec<u8> {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos() as u64)
+        .unwrap_or(0x5eed_1234);
+    let mut state = nanos ^ 0xa5a5_1f2e_3d4c_5b6a;
+    let mut bytes = Vec::with_capacity(128);
+    for _ in 0..128 {
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        bytes.push((state >> 32) as u8);
+    }
+    bytes
 }
 
 pub fn parse_start_arg(value: &str) -> io::Result<(usize, usize)> {

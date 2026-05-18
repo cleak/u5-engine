@@ -20,6 +20,66 @@ pub struct ChargenAvatar {
     pub stats: ChargenStats,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PendingChargenQuestion {
+    pub round: u8,
+    pub question_index: usize,
+    pub option_a: ShrineVirtue,
+    pub option_b: ShrineVirtue,
+    pub question_record: usize,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChargenSessionResult {
+    pub name: [u8; SAVE_CHARACTER_NAME_LEN],
+    pub entered_name: Vec<u8>,
+    pub male: bool,
+    pub tournament: ChargenTournamentOutcome,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ChargenSessionPhase {
+    #[default]
+    AwaitingName,
+    AwaitingGender,
+    GypsyArrival,
+    GypsyInvitation,
+    AwaitingAnswer,
+    Completed,
+    Aborted,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ChargenSessionStep {
+    PromptName,
+    PromptGender,
+    PresentIntro { record: usize, text: String },
+    PresentQuestion(PendingChargenQuestion),
+    Completed(ChargenSessionResult),
+    Aborted,
+    Ignored,
+}
+
+#[derive(Clone, Debug)]
+pub struct ChargenSession {
+    pub phase: ChargenSessionPhase,
+    records: Vec<String>,
+    rng_bytes: Vec<u8>,
+    rng_cursor: usize,
+    question_index: usize,
+    round_index: usize,
+    question_in_round: usize,
+    selected_this_round: [bool; VIRTUE_COUNT],
+    lost_forever: [bool; VIRTUE_COUNT],
+    entered_name: Vec<u8>,
+    normalized_name: [u8; SAVE_CHARACTER_NAME_LEN],
+    male: Option<bool>,
+    current_question: Option<PendingChargenQuestion>,
+    questions: Vec<ChargenTournamentQuestion>,
+    winners: Vec<ShrineVirtue>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChargenError {
     BlankName,
@@ -56,6 +116,244 @@ pub const CHARGEN_QUESTIONS_PER_ROUND: [usize; CHARGEN_ROUND_COUNT] = [4, 2, 1];
 pub const CHARGEN_QUESTION_COUNT: usize = CHARGEN_QUESTIONS_PER_ROUND[0]
     + CHARGEN_QUESTIONS_PER_ROUND[1]
     + CHARGEN_QUESTIONS_PER_ROUND[2];
+
+impl ChargenSession {
+    pub fn new(records: Vec<String>, rng_bytes: Vec<u8>) -> io::Result<Self> {
+        if records.len() < crate::QUESTION_DAT_RECORDS {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{} requires at least {} records, got {}",
+                    crate::QUESTION_DAT_FILE,
+                    crate::QUESTION_DAT_RECORDS,
+                    records.len()
+                ),
+            ));
+        }
+        Ok(Self {
+            phase: ChargenSessionPhase::AwaitingName,
+            records,
+            rng_bytes,
+            rng_cursor: 0,
+            question_index: 0,
+            round_index: 0,
+            question_in_round: 0,
+            selected_this_round: [false; VIRTUE_COUNT],
+            lost_forever: [false; VIRTUE_COUNT],
+            entered_name: Vec::new(),
+            normalized_name: [0; SAVE_CHARACTER_NAME_LEN],
+            male: None,
+            current_question: None,
+            questions: Vec::with_capacity(CHARGEN_QUESTION_COUNT),
+            winners: Vec::with_capacity(CHARGEN_QUESTION_COUNT),
+        })
+    }
+}
+
+impl ChargenSession {
+    pub fn current_step(&self) -> ChargenSessionStep {
+        match self.phase {
+            ChargenSessionPhase::AwaitingName => ChargenSessionStep::PromptName,
+            ChargenSessionPhase::AwaitingGender => ChargenSessionStep::PromptGender,
+            ChargenSessionPhase::GypsyArrival => ChargenSessionStep::PresentIntro {
+                record: 0,
+                text: self.records[0].clone(),
+            },
+            ChargenSessionPhase::GypsyInvitation => ChargenSessionStep::PresentIntro {
+                record: 1,
+                text: self.records[1].clone(),
+            },
+            ChargenSessionPhase::AwaitingAnswer => self
+                .current_question
+                .clone()
+                .map(ChargenSessionStep::PresentQuestion)
+                .unwrap_or(ChargenSessionStep::Ignored),
+            ChargenSessionPhase::Completed => self
+                .result()
+                .map(ChargenSessionStep::Completed)
+                .unwrap_or(ChargenSessionStep::Ignored),
+            ChargenSessionPhase::Aborted => ChargenSessionStep::Aborted,
+        }
+    }
+
+    pub fn submit_name(&mut self, name: &str) -> ChargenSessionStep {
+        if !matches!(self.phase, ChargenSessionPhase::AwaitingName) {
+            return ChargenSessionStep::Ignored;
+        }
+        let bytes = name.trim_end_matches(['\r', '\n']).as_bytes();
+        if bytes.is_empty() {
+            self.phase = ChargenSessionPhase::Aborted;
+            return ChargenSessionStep::Aborted;
+        }
+        match normalize_chargen_name(bytes) {
+            Ok(normalized) => {
+                self.entered_name = bytes
+                    .iter()
+                    .take(CHARGEN_NAME_INPUT_LIMIT)
+                    .copied()
+                    .collect();
+                self.normalized_name = normalized;
+                self.phase = ChargenSessionPhase::AwaitingGender;
+                ChargenSessionStep::PromptGender
+            }
+            Err(_) => ChargenSessionStep::Ignored,
+        }
+    }
+
+    pub fn submit_gender_key(&mut self, key: u8) -> ChargenSessionStep {
+        if !matches!(self.phase, ChargenSessionPhase::AwaitingGender) {
+            return ChargenSessionStep::Ignored;
+        }
+        let Some(male) = chargen_gender_key(key) else {
+            return ChargenSessionStep::Ignored;
+        };
+        self.male = Some(male);
+        self.phase = ChargenSessionPhase::GypsyArrival;
+        self.current_step()
+    }
+
+    pub fn advance_intro(&mut self) -> ChargenSessionStep {
+        match self.phase {
+            ChargenSessionPhase::GypsyArrival => {
+                self.phase = ChargenSessionPhase::GypsyInvitation;
+                self.current_step()
+            }
+            ChargenSessionPhase::GypsyInvitation => self.prepare_next_question(),
+            _ => ChargenSessionStep::Ignored,
+        }
+    }
+
+    pub fn submit_answer_key(&mut self, key: u8) -> ChargenSessionStep {
+        if !matches!(self.phase, ChargenSessionPhase::AwaitingAnswer) {
+            return ChargenSessionStep::Ignored;
+        }
+        let Some(chose_a) = chargen_answer_key(key) else {
+            return ChargenSessionStep::Ignored;
+        };
+        let Some(current) = self.current_question.take() else {
+            return ChargenSessionStep::Ignored;
+        };
+        let winner = if chose_a {
+            current.option_a
+        } else {
+            current.option_b
+        };
+        let loser = if chose_a {
+            current.option_b
+        } else {
+            current.option_a
+        };
+        self.lost_forever[loser.index()] = true;
+        self.winners.push(winner);
+        self.questions.push(ChargenTournamentQuestion {
+            round: current.round,
+            option_a: current.option_a,
+            option_b: current.option_b,
+            question_record: current.question_record,
+            chose_a,
+            winner,
+            loser,
+        });
+        self.question_index += 1;
+        self.question_in_round += 1;
+
+        if self.question_index == CHARGEN_QUESTION_COUNT {
+            self.phase = ChargenSessionPhase::Completed;
+            return self.current_step();
+        }
+        if self.question_in_round >= CHARGEN_QUESTIONS_PER_ROUND[self.round_index] {
+            self.round_index += 1;
+            self.question_in_round = 0;
+            self.selected_this_round = [false; VIRTUE_COUNT];
+        }
+        self.prepare_next_question()
+    }
+
+    pub fn result(&self) -> Option<ChargenSessionResult> {
+        if !matches!(self.phase, ChargenSessionPhase::Completed) {
+            return None;
+        }
+        let male = self.male?;
+        let final_winner = self.winners.last().copied()?;
+        Some(ChargenSessionResult {
+            name: self.normalized_name,
+            entered_name: self.entered_name.clone(),
+            male,
+            tournament: ChargenTournamentOutcome {
+                questions: self.questions.clone(),
+                stats: chargen_stats_from_winners(&self.winners),
+                final_winner,
+            },
+        })
+    }
+
+    fn prepare_next_question(&mut self) -> ChargenSessionStep {
+        let first_idx = match draw_virtue(
+            &self.rng_bytes,
+            &mut self.rng_cursor,
+            &self.selected_this_round,
+            &self.lost_forever,
+        ) {
+            Some(idx) => idx,
+            None => {
+                self.phase = ChargenSessionPhase::Aborted;
+                return ChargenSessionStep::Aborted;
+            }
+        };
+        self.selected_this_round[first_idx] = true;
+        let second_idx = match draw_virtue(
+            &self.rng_bytes,
+            &mut self.rng_cursor,
+            &self.selected_this_round,
+            &self.lost_forever,
+        ) {
+            Some(idx) => idx,
+            None => {
+                self.phase = ChargenSessionPhase::Aborted;
+                return ChargenSessionStep::Aborted;
+            }
+        };
+        self.selected_this_round[second_idx] = true;
+
+        let (a_idx, b_idx) = if first_idx < second_idx {
+            (first_idx, second_idx)
+        } else {
+            (second_idx, first_idx)
+        };
+        let option_a = ShrineVirtue::from_index(a_idx).expect("virtue index in range");
+        let option_b = ShrineVirtue::from_index(b_idx).expect("virtue index in range");
+        let question_record =
+            chargen_question_record_for_pair(option_a, option_b).expect("distinct virtues");
+        let text = self.records[question_record].clone();
+        let question = PendingChargenQuestion {
+            round: (self.round_index + 1) as u8,
+            question_index: self.question_index,
+            option_a,
+            option_b,
+            question_record,
+            text,
+        };
+        self.current_question = Some(question.clone());
+        self.phase = ChargenSessionPhase::AwaitingAnswer;
+        ChargenSessionStep::PresentQuestion(question)
+    }
+}
+
+pub const fn chargen_gender_key(key: u8) -> Option<bool> {
+    match key {
+        b'M' | b'm' => Some(true),
+        b'F' | b'f' => Some(false),
+        _ => None,
+    }
+}
+
+pub const fn chargen_answer_key(key: u8) -> Option<bool> {
+    match key {
+        b'A' | b'a' => Some(true),
+        b'B' | b'b' => Some(false),
+        _ => None,
+    }
+}
 
 /// `chargen.md §4` Avatar name-prompt input limit. The free-text
 /// prompt accepts up to eight characters; shorter names are
@@ -480,6 +778,73 @@ mod tests {
             *b = i as u8;
         }
         bytes
+    }
+
+    fn question_records() -> Vec<String> {
+        let mut records = vec![
+            "Arrival narrative.".to_string(),
+            "Invitation narrative.".to_string(),
+        ];
+        for index in 2..30 {
+            records.push(format!("Question record {index}."));
+        }
+        records
+    }
+
+    #[test]
+    fn chargen_session_empty_name_aborts_before_gender_or_questions() {
+        let mut session = ChargenSession::new(question_records(), rng_pool().to_vec()).unwrap();
+        assert_eq!(session.current_step(), ChargenSessionStep::PromptName);
+        assert_eq!(session.submit_name("\n"), ChargenSessionStep::Aborted);
+        assert_eq!(session.phase, ChargenSessionPhase::Aborted);
+        assert!(session.result().is_none());
+    }
+
+    #[test]
+    fn chargen_session_ignores_invalid_gender_until_m_or_f() {
+        let mut session = ChargenSession::new(question_records(), rng_pool().to_vec()).unwrap();
+        assert_eq!(
+            session.submit_name("Avatar"),
+            ChargenSessionStep::PromptGender
+        );
+        assert_eq!(session.submit_gender_key(b'X'), ChargenSessionStep::Ignored);
+        assert!(matches!(
+            session.submit_gender_key(b'f'),
+            ChargenSessionStep::PresentIntro { record: 0, .. }
+        ));
+    }
+
+    #[test]
+    fn chargen_session_walks_intro_questions_and_completed_result() {
+        let mut session = ChargenSession::new(question_records(), rng_pool().to_vec()).unwrap();
+        session.submit_name("Avatar");
+        assert!(matches!(
+            session.submit_gender_key(b'M'),
+            ChargenSessionStep::PresentIntro { record: 0, .. }
+        ));
+        assert!(matches!(
+            session.advance_intro(),
+            ChargenSessionStep::PresentIntro { record: 1, .. }
+        ));
+        let mut step = session.advance_intro();
+        let mut answered = 0usize;
+        while let ChargenSessionStep::PresentQuestion(question) = step {
+            assert_eq!(
+                question.text,
+                format!("Question record {}.", question.question_record)
+            );
+            step = session.submit_answer_key(b'A');
+            answered += 1;
+        }
+        assert_eq!(answered, CHARGEN_QUESTION_COUNT);
+        let ChargenSessionStep::Completed(result) = step else {
+            panic!("expected completed result");
+        };
+        assert_eq!(result.entered_name, b"Avatar");
+        assert!(result.male);
+        assert_eq!(result.tournament.questions.len(), CHARGEN_QUESTION_COUNT);
+        assert_eq!(result.tournament.stats.strength, CHARGEN_STR_FLOOR);
+        assert_eq!(session.phase, ChargenSessionPhase::Completed);
     }
 
     #[test]

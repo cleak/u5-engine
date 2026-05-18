@@ -10,7 +10,8 @@ pub mod save_frame;
 pub use cli::{
     CLI_USAGE, CliArgs, CreateCharacterCommand, parse_chargen_gender_arg,
     parse_chargen_winners_arg, parse_cli_args, parse_pending_vehicle_arg, parse_start_arg,
-    parse_time_arg, parse_transport_arg, run_create_character_command, split_play_script,
+    parse_time_arg, parse_transport_arg, run_create_character_command,
+    run_interactive_create_character, split_play_script,
 };
 pub use play_loop::{
     ansi_function_key, ansi_navigation_key, handle_empty_play_input, handle_play_script_command,

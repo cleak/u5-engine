@@ -28,9 +28,8 @@ pub enum IntroMenuPhase {
     /// on success.
     JourneyOnwardLoading,
     /// `C` flow: caller is running the chargen tournament + name +
-    /// gender prompts. Returns to `AwaitingSelection` on cancel,
-    /// `JourneyOnwardLoading` on commit (the caller is expected to
-    /// load the freshly-written save next).
+    /// gender prompts. Returns to `AwaitingSelection` on cancel or
+    /// commit; the player must choose Journey Onward explicitly.
     CharacterCreation,
     /// `T` flow: caller is running the Ultima IV transfer path.
     UltimaIvTransfer,
@@ -160,9 +159,17 @@ impl IntroMenu {
         result: IntroSubflowResult,
     ) -> IntroMenuOutput {
         match (sub, result) {
-            (_, IntroSubflowResult::SaveReady) => {
+            (IntroSubflow::JourneyOnward, IntroSubflowResult::SaveReady) => {
                 self.phase = IntroMenuPhase::LaunchedGameplay;
                 IntroMenuOutput::LaunchGameplay
+            }
+            (IntroSubflow::CharacterCreation, IntroSubflowResult::SaveReady) => {
+                self.phase = IntroMenuPhase::AwaitingSelection;
+                IntroMenuOutput::PresentMenu
+            }
+            (_, IntroSubflowResult::SaveReady) => {
+                self.phase = IntroMenuPhase::AwaitingSelection;
+                IntroMenuOutput::PresentMenu
             }
             (_, IntroSubflowResult::ReturnedToMenu) | (_, IntroSubflowResult::Cancelled) => {
                 self.phase = IntroMenuPhase::AwaitingSelection;
@@ -257,6 +264,22 @@ mod tests {
             IntroMenuOutput::LaunchGameplay
         );
         assert!(menu.is_launched());
+    }
+
+    #[test]
+    fn character_creation_save_ready_returns_to_menu() {
+        let mut menu = IntroMenu::new();
+        menu.dismiss_title();
+        menu.step(b'C');
+        assert_eq!(
+            menu.complete_subflow(
+                IntroSubflow::CharacterCreation,
+                IntroSubflowResult::SaveReady
+            ),
+            IntroMenuOutput::PresentMenu
+        );
+        assert_eq!(menu.phase, IntroMenuPhase::AwaitingSelection);
+        assert!(!menu.is_launched());
     }
 
     #[test]

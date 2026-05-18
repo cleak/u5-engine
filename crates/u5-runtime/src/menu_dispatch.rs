@@ -197,6 +197,18 @@ mod tests {
     }
 
     #[test]
+    fn character_creation_save_ready_returns_to_menu_step() {
+        let mut d = UnifiedMenuDispatch::new();
+        d.dismiss_title();
+        d.submit_menu_key(b'C');
+        let step = d.complete_subflow(
+            IntroSubflow::CharacterCreation,
+            IntroSubflowResult::SaveReady,
+        );
+        assert_eq!(step, UnifiedMenuStep::ReturnedToMenu);
+    }
+
+    #[test]
     fn codex_flow_walks_three_words_to_completion() {
         let mut d = UnifiedMenuDispatch::new();
         d.open_codex();
