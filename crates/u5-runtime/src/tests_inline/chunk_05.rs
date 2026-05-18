@@ -594,6 +594,8 @@
         assert_eq!(dungeon.turn, 1);
         assert!(dungeon.message.contains("Yelled FALLAX"));
         assert!(dungeon.message.contains("Word of Power for Deceit"));
+        assert!(dungeon.message.contains("low rumble"));
+        assert!(dungeon.message.contains("full-viewport flash"));
         assert!(!dungeon.message.contains("out of scope"));
 
         let mut world = world_state(open_world_grid(), 5, 5);

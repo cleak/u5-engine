@@ -867,7 +867,10 @@ impl PlayState {
                 Area::Dungeon { .. } => "No matching Word-of-Power seal is present.",
                 _ => "This is not a dungeon Word-of-Power seal.",
             };
-            self.message = format!("Yelled {word}, the Word of Power for {dungeon}. {context}");
+            self.message = format!(
+                "Yelled {word}, the Word of Power for {dungeon}. {} {context}",
+                Self::word_of_power_presentation_message()
+            );
             return MoveOutcome::Used;
         }
         if let Some(index) = Self::shadowlord_name_index(&word) {
@@ -909,6 +912,10 @@ impl PlayState {
             "VERAMOCOR" => Some("Doom"),
             _ => None,
         }
+    }
+
+    pub const fn word_of_power_presentation_message() -> &'static str {
+        "A low rumble and full-viewport flash answer the word."
     }
 
     pub fn shadowlord_name(word: &str) -> Option<&'static str> {
