@@ -1315,6 +1315,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::path::Path;
+    use u5_runtime::blackthorn_session::BlackthornChallenge;
     use u5_runtime::conversation_session::ConversationSession;
     use u5_runtime::shop_runtime::{GuildShopState, ReagentShopState, TavernState};
     use u5_runtime::shop_session::ActiveShopSession;
@@ -1672,6 +1673,44 @@ mod tests {
         assert_eq!(state.gold, 28);
         assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 12);
         assert!(state.message.contains("72 gold"));
+    }
+
+    #[test]
+    fn visual_line_input_buffers_blackthorn_answer_until_enter() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 1, 1);
+        let mut challenge = BlackthornChallenge::new();
+        challenge.begin();
+        state.active_blackthorn = Some(challenge);
+
+        let mut input_line = String::new();
+        for key in [KeyCode::KeyA, KeyCode::KeyH, KeyCode::KeyM] {
+            handle_visual_line_key(&mut state, &mut input_line, key, false, false, &dir).unwrap();
+        }
+
+        assert_eq!(input_line, "ahm");
+        assert!(state.active_blackthorn.is_some());
+        assert!(!state.blackthorn_jailed_party_slots.contains(&0));
+
+        handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::Enter,
+            false,
+            false,
+            &dir,
+        )
+        .unwrap();
+
+        assert!(input_line.is_empty());
+        assert!(state.active_blackthorn.is_none());
+        assert!(state.blackthorn_jailed_party_slots.contains(&0));
+        assert!(
+            state
+                .message
+                .contains("Returned to Blackthorn's captive cell")
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

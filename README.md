@@ -408,11 +408,14 @@ pathfinding.
 Town entry and hour
 boundaries apply the public dawn/dusk gate substitution. Dungeon entry
 uses the public surface/underworld seed positions and facing rules, including
-the Doom underworld-entry exception and trigger-class entry cells while combat
-handoff remains out of scope. Combat-frame exits restore the pre-combat
-active-object table and reconcile the caller's original terrain trigger slot,
-including water-creature victory rewrites into persistent body/retrieval
-objects while defeat and live-foe escape clear the trigger. It also
+the Doom underworld-entry exception and trigger-class entry cells. Dungeon
+room, rest-ambush, and outdoor encounter routes can enter the combat frame,
+which loads arena terrain, snapshots caller state, places actors, and routes
+player commands, monster AI, spells, fields, rewards, escape, and victory
+cleanup. Combat-frame exits restore the pre-combat active-object table and
+reconcile the caller's original terrain trigger slot, including water-creature
+victory rewrites into persistent body/retrieval objects while defeat and
+live-foe escape clear the trigger. It also
 has Britannia and Underworld overworld
 debug views with wrapping movement, runtime `.OOL` object-overlay rendering,
 active-object phase animation and consumed-turn off-neighborhood pruning, basic semantic
@@ -669,9 +672,12 @@ round-trip through the public save marker families; the balloon option remains
 debug-only and is intentionally not a claim about B-Board support.
 
 `--pending-vehicle` is a clean debug hook for the public shipwright-delivery
-handshake while the shop UI remains out of scope. Use `frigate:x,y[,skiffs]` to
-place a ship-family active object with the first-playable full-hull auxiliary
-value and the supplied skiff count, or `skiff:x,y` to place a standalone skiff.
+handshake. Talk-entered shop sessions cover arms, healers, inns, taverns,
+sages, reagent sellers, guilds, shipwrights, horse traders, and companion
+pickup/dropoff flows through the shared prompt dispatcher. Use
+`frigate:x,y[,skiffs]` to place a ship-family active object with the
+first-playable full-hull auxiliary value and the supplied skiff count, or
+`skiff:x,y` to place a standalone skiff.
 
 Overworld fixed-location entry reports a diagnostic until clean entrance
 coordinates are published. If you have a clean-room coordinate table, place it
@@ -964,7 +970,8 @@ member can participate, and inline input also accepts a watcher slot such as
 counters, applies the existing dawn/dusk cleanup, and runs one NPC schedule tick
 per hour. Town bed rest also applies deterministic first-playable HP recovery to
 living party members plus byte-capped first-playable MP recovery. Encounter
-interruption is out of scope for this slice.
+interruption is owned by the overworld/dungeon rest-with-watch path rather than
+town beds.
 In overworld and dungeon modes the same `h8` input runs the first-playable
 rest-with-watch path: each rested hour performs three 20-minute cleanup ticks,
 including time, light counters, animation, and existing area-specific per-turn
