@@ -91,6 +91,7 @@ pub struct PlayState {
     pub active_use: Option<crate::z_stats::UseSession>,
     pub active_cast: Option<crate::z_stats::CastSession>,
     pub active_cast_followup: Option<crate::z_stats::CastFollowupSession>,
+    pub active_rest: Option<crate::z_stats::RestSession>,
     pub active_mix: Option<crate::z_stats::MixSession>,
     pub active_new_order: Option<crate::z_stats::NewOrderSession>,
     pub active_yell: Option<crate::z_stats::YellSession>,

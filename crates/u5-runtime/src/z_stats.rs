@@ -104,6 +104,19 @@ pub enum CastFollowupKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RestSession {
+    pub phase: RestPhase,
+    pub hours: Option<u8>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RestPhase {
+    Hours,
+    WatchYesNo,
+    WatchSlot,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MixSession {
     pub phase: MixPhase,
     pub spell_buffer: String,
@@ -297,6 +310,15 @@ impl CastFollowupSession {
             buffer: String::new(),
             combat_actor_slot,
             combat_had_foe,
+        }
+    }
+}
+
+impl RestSession {
+    pub const fn new() -> Self {
+        Self {
+            phase: RestPhase::Hours,
+            hours: None,
         }
     }
 }

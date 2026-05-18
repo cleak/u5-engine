@@ -306,10 +306,12 @@
 
         assert_eq!(
             state.hole_up_command(&dir, None).unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Observed
         );
         assert!(state.message.contains("how many hours"));
+        assert!(state.active_rest.is_some());
         assert_eq!(state.turn, 0);
+        state.active_rest = None;
 
         fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 56\n").unwrap();
         assert_eq!(
@@ -540,10 +542,12 @@
 
         assert_eq!(
             state.hole_up_command(Path::new(""), None).unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Observed
         );
         assert!(state.message.contains("how many hours"));
+        assert!(state.active_rest.is_some());
         assert_eq!(state.turn, 0);
+        state.active_rest = None;
 
         assert_eq!(
             state.hole_up_command(Path::new(""), Some(0)).unwrap(),
@@ -558,6 +562,132 @@
         );
         assert_eq!(state.message, "Rest hours must be in 1..9.");
         assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn active_rest_prompt_accepts_duration_without_watch_for_single_member() {
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'H', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_rest.is_some());
+        assert!(state.message.contains("Rest- how many hours"));
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_rest.is_none());
+        assert_eq!(state.turn, 3);
+        assert!(state.message.contains("Party rested 1 hour"));
+        assert!(state.message.contains("no watch needed"));
+    }
+
+    #[test]
+    fn active_rest_prompt_collects_watch_member() {
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 0,
+            hp: 8,
+            max_hp: 12,
+            level: 8,
+        });
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'H', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(
+            handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_rest.is_some());
+        assert!(state.message.contains("Set watch"));
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.message.contains("Who keeps watch"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_rest.is_none());
+        assert_eq!(state.turn, 3);
+        assert!(state.message.contains("party slot 2 keeps watch"));
+    }
+
+    #[test]
+    fn active_rest_prompt_invalid_watcher_rests_without_watch() {
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'P',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 0,
+            hp: 8,
+            max_hp: 12,
+            level: 8,
+        });
+
+        handle_play_key_input(&mut state, 'H', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+
+        assert!(state.active_rest.is_none());
+        assert_eq!(state.party[1].status, b'P');
+        assert_eq!(state.turn, 3);
+        assert!(state.message.contains("no watch set"));
+    }
+
+    #[test]
+    fn active_town_hole_up_prompt_accepts_duration_digit() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
+        let mut grid = open_grid();
+        grid[32 + 1] = 55;
+        let mut state = test_state(grid, 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'H', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_rest.is_some());
+        assert!(state.message.contains("Hole up- how many hours"));
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '1', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_rest.is_none());
+        assert_eq!(state.clock, GameClock::new(9, 0).unwrap());
+        assert_eq!(
+            state.turn,
+            u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS)
+                + u64::from(TOWN_REST_TICKS_PER_HOUR)
+        );
+        assert!(state.message.contains("Rested 1 hour"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

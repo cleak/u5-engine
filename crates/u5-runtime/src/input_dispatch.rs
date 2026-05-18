@@ -35,6 +35,9 @@ pub fn handle_play_key_input(
     if state.active_cast.is_some() {
         return handle_active_cast_key_input(state, key, suffix, game_dir);
     }
+    if state.active_rest.is_some() {
+        return handle_active_rest_key_input(state, key, suffix, game_dir);
+    }
     if state.active_mix.is_some() {
         return Ok(handle_active_mix_key_input(state, key, suffix));
     }
@@ -266,6 +269,19 @@ fn handle_active_mix_key_input(
 ) -> PlayInputDisposition {
     let _ = state.step_active_mix(key, suffix);
     PlayInputDisposition::Continue
+}
+
+fn handle_active_rest_key_input(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    let turn_before = state.turn;
+    if let Some(outcome) = state.step_active_rest(key, suffix, game_dir)? {
+        state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+    }
+    Ok(PlayInputDisposition::Continue)
 }
 
 fn handle_active_new_order_key_input(

@@ -4,15 +4,160 @@ use std::path::Path;
 use crate::*;
 
 impl PlayState {
+    pub fn start_rest_prompt(&mut self) -> MoveOutcome {
+        self.active_rest = Some(RestSession::new());
+        self.message = self.render_active_rest();
+        MoveOutcome::Observed
+    }
+
+    pub fn render_active_rest(&self) -> String {
+        self.active_rest
+            .as_ref()
+            .map(|session| self.render_rest_session(session))
+            .unwrap_or_else(|| "Rest?".to_string())
+    }
+
+    fn render_rest_session(&self, session: &RestSession) -> String {
+        match session.phase {
+            RestPhase::Hours => {
+                let label = if matches!(self.area, Area::Town { .. }) {
+                    "Hole up"
+                } else {
+                    "Rest"
+                };
+                format!("{label}- how many hours? _\nChoose 1-9; Space/0 cancels.")
+            }
+            RestPhase::WatchYesNo => "Set watch? (Y/N)".to_string(),
+            RestPhase::WatchSlot => {
+                let last = self.party.len().min(6);
+                format!(
+                    "Who keeps watch? _\nChoose party member 1-{last}; Space/0 leaves no watch."
+                )
+            }
+        }
+    }
+
+    pub fn step_active_rest(
+        &mut self,
+        key: char,
+        suffix: &str,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let Some(mut session) = self.active_rest.take() else {
+            return Ok(None);
+        };
+        for ch in std::iter::once(key).chain(suffix.chars()) {
+            match session.phase {
+                RestPhase::Hours => {
+                    if ch == '\u{1b}' {
+                        self.message = "None!".to_string();
+                        return Ok(None);
+                    }
+                    let duration_input = if ch.is_ascii() {
+                        rest_duration_input(ch as u8)
+                    } else {
+                        RestDurationInput::Discard
+                    };
+                    match duration_input {
+                        RestDurationInput::Hours(hours) => {
+                            if !matches!(self.area, Area::Town { .. })
+                                && self.rest_watch_prompt_needed()
+                            {
+                                session.hours = Some(hours);
+                                session.phase = RestPhase::WatchYesNo;
+                                self.active_rest = Some(session);
+                                self.message = self.render_active_rest();
+                                return Ok(None);
+                            }
+                            return self.finish_active_rest(hours, None, game_dir);
+                        }
+                        RestDurationInput::Cancel => {
+                            self.message = "None!".to_string();
+                            return Ok(None);
+                        }
+                        RestDurationInput::Discard => {}
+                    }
+                }
+                RestPhase::WatchYesNo => match ch.to_ascii_uppercase() {
+                    'Y' => {
+                        session.phase = RestPhase::WatchSlot;
+                        self.active_rest = Some(session);
+                        self.message = self.render_active_rest();
+                        return Ok(None);
+                    }
+                    'N' | '\u{1b}' | ' ' | '0' | '\r' | '\n' => {
+                        let hours = session.hours.unwrap_or(1);
+                        return self.finish_active_rest(hours, None, game_dir);
+                    }
+                    _ => {}
+                },
+                RestPhase::WatchSlot => {
+                    if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
+                        let hours = session.hours.unwrap_or(1);
+                        return self.finish_active_rest(hours, None, game_dir);
+                    }
+                    let Some(digit) = ch
+                        .to_digit(10)
+                        .and_then(|digit| usize::try_from(digit).ok())
+                    else {
+                        continue;
+                    };
+                    if !(1..=self.party.len().min(6)).contains(&digit) {
+                        continue;
+                    }
+                    let hours = session.hours.unwrap_or(1);
+                    let watcher = self.rest_prompt_watcher(digit - 1);
+                    return self.finish_active_rest(hours, watcher, game_dir);
+                }
+            }
+        }
+        self.active_rest = Some(session);
+        self.message = self.render_active_rest();
+        Ok(None)
+    }
+
+    fn finish_active_rest(
+        &mut self,
+        hours: u8,
+        watcher: Option<usize>,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let request = InlineRestRequest {
+            hours: Some(hours),
+            watcher,
+        };
+        self.hole_up_command(game_dir, request).map(Some)
+    }
+
+    fn rest_watch_prompt_needed(&self) -> bool {
+        self.rest_watch_eligible_count() > 1
+    }
+
+    fn rest_watch_eligible_count(&self) -> usize {
+        self.party
+            .iter()
+            .filter(|member| {
+                character_status_for_byte(member.status).is_some_and(rest_with_watch_participates)
+                    && member.living()
+            })
+            .count()
+    }
+
+    fn rest_prompt_watcher(&self, watcher: usize) -> Option<usize> {
+        if !self.rest_watch_prompt_needed() {
+            return None;
+        }
+        let member = self.party.get(watcher)?;
+        (member.status == b'G' && member.living()).then_some(watcher)
+    }
+
     pub fn rest_with_watch(
         &mut self,
         request: InlineRestRequest,
         game_dir: Option<&Path>,
     ) -> io::Result<MoveOutcome> {
         let Some(hours) = request.hours else {
-            self.message =
-                "Rest- how many hours? Use H<hours> or H<hours>/<watcher-slot>.".to_string();
-            return Ok(MoveOutcome::Blocked);
+            return Ok(self.start_rest_prompt());
         };
         if !(1..=9).contains(&hours) {
             self.message = "Rest hours must be in 1..9.".to_string();

@@ -2524,9 +2524,7 @@ impl PlayState {
         floor: i8,
     ) -> io::Result<MoveOutcome> {
         let Some(hours) = hours else {
-            self.message =
-                "Hole up- how many hours? Use H plus a number in this harness.".to_string();
-            return Ok(MoveOutcome::Blocked);
+            return Ok(self.start_rest_prompt());
         };
         if !(1..=9).contains(&hours) {
             self.message = "Rest hours must be in 1..9.".to_string();

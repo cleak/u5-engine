@@ -909,8 +909,10 @@ data as `town_rest_beds.tsv`:
 CASTLE:0 0 14 10 55
 ```
 
-In the terminal harness, use `h` plus inline hours, for example `h8`; the
-outdoor/dungeon rest-with-watch shortcut also accepts a watcher slot such as
+In the terminal harness, bare `h` opens the duration prompt; inline shortcuts
+such as `h8` still work. The outdoor/dungeon rest-with-watch prompt asks
+whether to set watch when more than one living Good/Poisoned/Sleeping party
+member can participate, and inline input also accepts a watcher slot such as
 `h8/2`. A matching bed row advances one in-world hour per iteration, decays personal light
 counters, applies the existing dawn/dusk cleanup, and runs one NPC schedule tick
 per hour. Town bed rest also applies deterministic first-playable HP recovery to
