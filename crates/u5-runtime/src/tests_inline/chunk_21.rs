@@ -1549,6 +1549,64 @@
     }
 
     #[test]
+    fn town_raw_tlk_one_shot_keyword_records_numeric_signal_flag() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Maris".to_string(),
+                "a quiet sage".to_string(),
+                "Greetings".to_string(),
+                "I read books".to_string(),
+                "Farewell".to_string(),
+                "MARK".to_string(),
+                "Marked".to_string(),
+            ],
+        );
+
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        let mut mark_response = enc("Marked");
+        mark_response.push(TLK_CODE_ACTION_DISPATCH);
+        mark_response.push(5);
+        mark_response.push(TLK_CODE_END_OF_RESPONSE);
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Maris"),
+                enc("a quiet sage"),
+                enc("Greetings"),
+                enc("I read books"),
+                enc("Farewell"),
+                enc("MARK"),
+                mark_response,
+            ],
+        );
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, Some("mark")),
+            MoveOutcome::Talked
+        );
+
+        assert_eq!(state.message, "Talked to Maris: Marked");
+        assert_eq!(state.conversation_signal_flags[5], 1);
+        assert!(state.active_conversation.is_none());
+    }
+
+    #[test]
     fn active_conversation_records_numeric_signal_and_cleanup_reconciles_on_bye() {
         let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
         dialogue.insert(

@@ -2271,6 +2271,7 @@ impl PlayState {
         let mut applied_grants: Vec<crate::tlk_control_codes::TlkActionDispatchVerb> = Vec::new();
         let mut applied_payments: Vec<crate::conversation_session::ConversationGoldPayment> =
             Vec::new();
+        let mut applied_signal_flags: Vec<u8> = Vec::new();
         let mut applied_flags: u32 = 0;
 
         if let Some(keyword) = keyword {
@@ -2282,6 +2283,7 @@ impl PlayState {
             let response_text = if let Some(idx) = response_field_index {
                 if let Some(output) = run_field(idx) {
                     applied_grants.extend(output.action_grants.iter().copied());
+                    applied_signal_flags.extend(output.signal_flags.iter().copied());
                     applied_payments.extend(output.events.iter().filter_map(|event| match event {
                         crate::tlk_runner::TlkRunEvent::GoldPayment { amount, accepted } => {
                             Some(crate::conversation_session::ConversationGoldPayment {
@@ -2309,6 +2311,7 @@ impl PlayState {
             let (legacy_text, legacy_actions) = talk_response_text_and_actions(&response_text);
             self.apply_tlk_action_grants(&applied_grants);
             self.apply_tlk_gold_payments(&applied_payments);
+            self.record_tlk_signal_flags(&applied_signal_flags);
             self.apply_talk_action_grants(&legacy_actions);
             if let Some(scene) = scene_for_flags {
                 self.merge_talk_branch_flags(scene, applied_flags);
@@ -2317,6 +2320,7 @@ impl PlayState {
         } else {
             let greeting_text = if let Some(output) = run_field(2) {
                 applied_grants.extend(output.action_grants.iter().copied());
+                applied_signal_flags.extend(output.signal_flags.iter().copied());
                 applied_payments.extend(output.events.iter().filter_map(|event| match event {
                     crate::tlk_runner::TlkRunEvent::GoldPayment { amount, accepted } => {
                         Some(crate::conversation_session::ConversationGoldPayment {
@@ -2342,6 +2346,7 @@ impl PlayState {
             let (legacy_text, legacy_actions) = talk_response_text_and_actions(&greeting_text);
             self.apply_tlk_action_grants(&applied_grants);
             self.apply_tlk_gold_payments(&applied_payments);
+            self.record_tlk_signal_flags(&applied_signal_flags);
             self.apply_talk_action_grants(&legacy_actions);
             if let Some(scene) = scene_for_flags {
                 self.merge_talk_branch_flags(scene, applied_flags);
