@@ -9565,6 +9565,108 @@
     }
 
     #[test]
+    fn active_combat_cast_target_followup_collects_one_and_two_digit_slots() {
+        let spell_index = spell_index_from_code("GP").unwrap();
+        let stats = combat_class_stats(32).unwrap();
+
+        let mut single = world_state(open_world_grid(), 10, 20);
+        single.combat_active = true;
+        single.party[0].mana = 1;
+        single.party[0].level = 1;
+        single.spell_charges[spell_index] = 1;
+        single.combat_actors[0] =
+            CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 4, 5]);
+        let single_target = COMBAT_PARTY_ACTOR_SLOTS;
+        single.combat_actors[single_target] = CombatActorDescriptor::for_monster_placement(
+            stats,
+            7,
+            4,
+            5,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+        );
+
+        assert_eq!(
+            single.start_combat_cast_spell_prompt(0, false),
+            MoveOutcome::Observed
+        );
+        assert!(single
+            .step_active_cast('G', "P", std::path::Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(single
+            .step_active_cast(' ', "", std::path::Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(single.active_cast_followup.is_some());
+        assert!(single.message.contains("Target?"));
+        assert_eq!(single.spell_charges[spell_index], 1);
+        assert_eq!(single.party[0].mana, 1);
+        assert_eq!(single.turn, 0);
+
+        let single_result = single
+            .step_active_cast_followup('7', "", std::path::Path::new(""))
+            .unwrap()
+            .expect("slot 7 should finish the combat spell");
+        assert_eq!(single_result.0, MoveOutcome::Cast);
+        assert_eq!(single.spell_charges[spell_index], 0);
+        assert_eq!(single.party[0].mana, 0);
+        assert_eq!(single.turn, 1);
+        assert_eq!(single.message, "Magic Missile!");
+
+        let mut double = world_state(open_world_grid(), 10, 20);
+        double.combat_active = true;
+        double.party[0].mana = 1;
+        double.party[0].level = 1;
+        double.spell_charges[spell_index] = 1;
+        double.combat_actors[0] =
+            CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 4, 5]);
+        let double_target = 9;
+        double.combat_actors[double_target] = CombatActorDescriptor::for_monster_placement(
+            stats,
+            7,
+            4,
+            5,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+        );
+
+        assert_eq!(
+            double.start_combat_cast_spell_prompt(0, false),
+            MoveOutcome::Observed
+        );
+        assert!(double
+            .step_active_cast('G', "P", std::path::Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(double
+            .step_active_cast(' ', "", std::path::Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(
+            double
+                .step_active_cast_followup('1', "", std::path::Path::new(""))
+                .unwrap()
+                .is_none()
+        );
+        assert!(double.active_cast_followup.is_some());
+        assert!(double.message.contains("1_"));
+        assert_eq!(double.spell_charges[spell_index], 1);
+        assert_eq!(double.party[0].mana, 1);
+        assert_eq!(double.turn, 0);
+
+        let double_result = double
+            .step_active_cast_followup('0', "", std::path::Path::new(""))
+            .unwrap()
+            .expect("slot 10 should finish the combat spell");
+        assert_eq!(double_result.0, MoveOutcome::Cast);
+        assert_eq!(double.spell_charges[spell_index], 0);
+        assert_eq!(double.party[0].mana, 0);
+        assert_eq!(double.turn, 1);
+        assert_eq!(double.message, "Magic Missile!");
+    }
+
+    #[test]
     fn combat_cast_repel_undead_routes_resources_and_dispels_undead_classes() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;

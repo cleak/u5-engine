@@ -90,6 +90,7 @@ pub struct CastFollowupSession {
     pub caster_index: usize,
     pub spell_code: String,
     pub kind: CastFollowupKind,
+    pub buffer: String,
     pub combat_actor_slot: Option<usize>,
     pub combat_had_foe: bool,
 }
@@ -99,6 +100,7 @@ pub enum CastFollowupKind {
     Direction { pass_allowed: bool },
     PartyTarget,
     GatePhase,
+    CombatTarget { creature: bool },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -292,6 +294,7 @@ impl CastFollowupSession {
             caster_index,
             spell_code,
             kind,
+            buffer: String::new(),
             combat_actor_slot,
             combat_had_foe,
         }

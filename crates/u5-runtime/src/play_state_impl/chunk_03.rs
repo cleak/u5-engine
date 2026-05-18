@@ -200,6 +200,15 @@ impl PlayState {
                 CastFollowupKind::GatePhase => {
                     "To phase? _\nChoose moon phase 1-8; Esc cancels.".to_string()
                 }
+                CastFollowupKind::CombatTarget { creature } => {
+                    let label = if creature { "Creature" } else { "Target" };
+                    let value = if session.buffer.is_empty() {
+                        "_".to_string()
+                    } else {
+                        format!("{}_", session.buffer)
+                    };
+                    format!("{label}? {value}\nChoose combat slot 1-{COMBAT_ACTOR_SLOTS}; Esc cancels.")
+                }
             })
             .unwrap_or_else(|| "Cast target?".to_string())
     }
@@ -210,7 +219,7 @@ impl PlayState {
         suffix: &str,
         game_dir: &Path,
     ) -> io::Result<Option<(MoveOutcome, Option<(usize, bool)>)>> {
-        let Some(session) = self.active_cast_followup.take() else {
+        let Some(mut session) = self.active_cast_followup.take() else {
             return Ok(None);
         };
         for ch in std::iter::once(key).chain(suffix.chars()) {
@@ -272,6 +281,44 @@ impl PlayState {
                     }
                     return self.finish_active_cast_followup(session, &digit.to_string(), game_dir);
                 }
+                CastFollowupKind::CombatTarget { .. } => {
+                    if ch == '\u{1b}'
+                        || (session.buffer.is_empty() && matches!(ch, ' ' | '\r' | '\n' | '0'))
+                    {
+                        self.message = "None!".to_string();
+                        return Ok(None);
+                    }
+                    if matches!(ch, '\r' | '\n') && !session.buffer.is_empty() {
+                        let tail = session.buffer.clone();
+                        return self.finish_active_cast_followup(session, &tail, game_dir);
+                    }
+                    let Some(digit) = ch.to_digit(10) else {
+                        continue;
+                    };
+                    if session.buffer == "1" {
+                        let candidate = 10 + digit as usize;
+                        if (10..=COMBAT_ACTOR_SLOTS).contains(&candidate) {
+                            return self.finish_active_cast_followup(
+                                session,
+                                &candidate.to_string(),
+                                game_dir,
+                            );
+                        }
+                        continue;
+                    }
+                    if digit == 1 {
+                        session.buffer.push('1');
+                        continue;
+                    }
+                    let candidate = digit as usize;
+                    if (2..=9).contains(&candidate) && candidate <= COMBAT_ACTOR_SLOTS {
+                        return self.finish_active_cast_followup(
+                            session,
+                            &candidate.to_string(),
+                            game_dir,
+                        );
+                    }
+                }
             }
         }
         self.active_cast_followup = Some(session);
@@ -308,6 +355,10 @@ impl PlayState {
             Some(CastFollowupKind::PartyTarget)
         } else if self.message.starts_with("To phase? Use C") {
             Some(CastFollowupKind::GatePhase)
+        } else if self.message.starts_with("Creature? Use C") {
+            Some(CastFollowupKind::CombatTarget { creature: true })
+        } else if self.message.starts_with("Target? Use C") {
+            Some(CastFollowupKind::CombatTarget { creature: false })
         } else {
             None
         };
