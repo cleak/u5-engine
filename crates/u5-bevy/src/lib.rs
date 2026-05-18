@@ -301,7 +301,7 @@ fn drive_visual(
     let Some(mut visual) = visual else {
         return;
     };
-    if keyboard.just_pressed(KeyCode::Escape) {
+    if keyboard.just_pressed(KeyCode::Escape) && should_escape_quit_visual(&visual.state) {
         exit.write(AppExit::Success);
         return;
     }
@@ -424,6 +424,29 @@ fn visual_line_prompt_active(state: &PlayState) -> bool {
         )
 }
 
+fn visual_modal_prompt_active(state: &PlayState) -> bool {
+    visual_line_prompt_active(state)
+        || state.active_z_stats.is_some()
+        || state.active_ready.is_some()
+        || state.active_use.is_some()
+        || state.active_cast.is_some()
+        || state.active_cast_followup.is_some()
+        || state.active_rest.is_some()
+        || state.active_jimmy.is_some()
+        || state.active_mix.is_some()
+        || state.active_new_order.is_some()
+        || state.active_direction_prompt.is_some()
+        || state.active_yes_no_prompt.is_some()
+        || state.active_shop.is_some()
+        || state.pending_moongate.is_some()
+        || state.pending_town_arrest.is_some()
+        || state.endgame.is_some()
+}
+
+fn should_escape_quit_visual(state: &PlayState) -> bool {
+    !visual_modal_prompt_active(state)
+}
+
 fn handle_visual_line_key(
     state: &mut PlayState,
     input_line: &mut String,
@@ -437,6 +460,10 @@ fn handle_visual_line_key(
         return Ok(None);
     }
     match key {
+        Escape => {
+            input_line.clear();
+            handle_play_key_input(state, '\u{1b}', "", game_dir).map(Some)
+        }
         Enter | NumpadEnter => {
             let submitted = std::mem::take(input_line);
             let mut chars = submitted.chars();
@@ -507,6 +534,34 @@ fn key_code_to_line_char(key: KeyCode, shift_pressed: bool) -> Option<char> {
         Digit8 | Numpad8 => '8',
         Digit9 | Numpad9 => '9',
         Space => ' ',
+        Minus => {
+            if shift_pressed {
+                '_'
+            } else {
+                '-'
+            }
+        }
+        Equal => {
+            if shift_pressed {
+                '+'
+            } else {
+                '='
+            }
+        }
+        BracketLeft => {
+            if shift_pressed {
+                '{'
+            } else {
+                '['
+            }
+        }
+        BracketRight => {
+            if shift_pressed {
+                '}'
+            } else {
+                ']'
+            }
+        }
         Comma => {
             if shift_pressed {
                 '<'
@@ -571,6 +626,11 @@ fn key_code_to_char(key: KeyCode, shift_pressed: bool, control_pressed: bool) ->
             KeyX => 'X',
             KeyY => 'Y',
             KeyZ => 'Z',
+            BracketLeft => '{',
+            BracketRight => '}',
+            Equal | NumpadAdd => '+',
+            Minus => '_',
+            NumpadSubtract => '-',
             Comma => '<',
             Period => '>',
             _ => return None,
@@ -579,6 +639,9 @@ fn key_code_to_char(key: KeyCode, shift_pressed: bool, control_pressed: bool) ->
     }
 
     let ch = match key {
+        Escape => '\u{1b}',
+        Enter | NumpadEnter => '\r',
+        Backspace | NumpadBackspace => '\u{8}',
         KeyW | ArrowUp | Numpad8 => 'w',
         KeyA | ArrowLeft | Numpad4 => 'a',
         KeyS | ArrowDown | Numpad2 => 's',
@@ -597,6 +660,11 @@ fn key_code_to_char(key: KeyCode, shift_pressed: bool, control_pressed: bool) ->
         Digit7 => '7',
         Digit8 => '8',
         Digit9 => '9',
+        BracketLeft => '[',
+        BracketRight => ']',
+        Equal => '=',
+        Minus | NumpadSubtract => '-',
+        NumpadAdd => '+',
         KeyB => 'B',
         KeyC => 'C',
         KeyE => 'E',
@@ -743,6 +811,69 @@ mod tests {
         assert_eq!(key_code_to_char(KeyCode::KeyQ, false, false), Some('Q'));
         assert_eq!(key_code_to_char(KeyCode::KeyU, false, false), Some('U'));
         assert_eq!(key_code_to_char(KeyCode::Digit2, false, false), Some('2'));
+    }
+
+    #[test]
+    fn visual_key_map_emits_modal_prompt_controls() {
+        assert_eq!(key_code_to_char(KeyCode::Enter, false, false), Some('\r'));
+        assert_eq!(
+            key_code_to_char(KeyCode::NumpadEnter, false, false),
+            Some('\r')
+        );
+        assert_eq!(
+            key_code_to_char(KeyCode::Backspace, false, false),
+            Some('\u{8}')
+        );
+        assert_eq!(
+            key_code_to_char(KeyCode::NumpadBackspace, false, false),
+            Some('\u{8}')
+        );
+        assert_eq!(
+            key_code_to_char(KeyCode::Escape, false, false),
+            Some('\u{1b}')
+        );
+        assert_eq!(
+            key_code_to_char(KeyCode::BracketLeft, false, false),
+            Some('[')
+        );
+        assert_eq!(
+            key_code_to_char(KeyCode::BracketRight, true, false),
+            Some('}')
+        );
+        assert_eq!(key_code_to_char(KeyCode::Equal, true, false), Some('+'));
+        assert_eq!(key_code_to_char(KeyCode::Minus, false, false), Some('-'));
+        assert_eq!(
+            key_code_to_char(KeyCode::NumpadAdd, false, false),
+            Some('+')
+        );
+        assert_eq!(
+            key_code_to_char(KeyCode::NumpadSubtract, true, false),
+            Some('-')
+        );
+    }
+
+    #[test]
+    fn visual_escape_quits_only_when_no_gameplay_prompt_is_active() {
+        let mut state = test_state(open_grid(), 1, 1);
+        assert!(should_escape_quit_visual(&state));
+
+        state.start_cast_spell_prompt();
+        assert!(state.active_cast.is_some());
+        assert!(!should_escape_quit_visual(&state));
+    }
+
+    #[test]
+    fn visual_cast_prompt_receives_backspace_from_key_map() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.start_cast_spell_prompt();
+
+        for key in [KeyCode::KeyI, KeyCode::KeyN, KeyCode::Backspace] {
+            let ch = key_code_to_char(key, false, false).unwrap();
+            handle_play_key_input(&mut state, ch, "", Path::new("")).unwrap();
+        }
+
+        assert_eq!(state.active_cast.as_ref().unwrap().buffer, "I");
+        assert!(state.message.contains("Spell name: I"));
     }
 
     #[test]
@@ -902,6 +1033,35 @@ mod tests {
         assert!(input_line.is_empty());
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
         assert!(state.message.contains("ordained"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_line_input_escape_cancels_shrine_prompt() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 136\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 136;
+        let mut state = world_state(grid, 10, 20);
+        state.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        handle_play_key_input(&mut state, 'M', "", &dir).unwrap();
+        let mut input_line = "ahm".to_string();
+
+        handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::Escape,
+            false,
+            false,
+            &dir,
+        )
+        .unwrap();
+
+        assert!(input_line.is_empty());
+        assert!(state.active_shrine.is_none());
+        assert!(state.message.contains("None"));
         let _ = fs::remove_dir_all(dir);
     }
 }
