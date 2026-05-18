@@ -1231,7 +1231,7 @@ fn handle_combat_cast_key_input(
         let ring_pass = state.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
         state.message =
             combat_magic_ring_pass_message(ring_pass).unwrap_or_else(|| "Quickness!".to_string());
-        state.ensure_pending_combat_player_turn();
+        advance_combat_round_after_actor_and_append_message(state, actor_slot);
         return Ok(PlayInputDisposition::Continue);
     }
 
@@ -1247,7 +1247,7 @@ fn handle_combat_cast_key_input(
     if state.combat_active && had_foe && !combat_has_active_non_party_actor(state) {
         state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
     } else if state.combat_active {
-        state.ensure_pending_combat_player_turn();
+        advance_combat_round_after_actor_and_append_message(state, actor_slot);
     }
 
     Ok(PlayInputDisposition::Continue)
@@ -1291,7 +1291,7 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
     ) {
         state.pending_combat_actor_slot = Some(actor_slot);
     } else if application.control_after.result_code().is_none() {
-        state.ensure_pending_combat_player_turn();
+        advance_combat_round_after_actor_and_append_message(state, actor_slot);
     }
     PlayInputDisposition::Continue
 }
@@ -1336,12 +1336,12 @@ fn handle_combat_multistage_command(
                 }
                 CombatInlineYell::Empty => {
                     state.message = YELL_NOTHING_SAID_MESSAGE.to_string();
-                    state.ensure_pending_combat_player_turn();
+                    advance_combat_round_after_actor_and_append_message(state, actor_slot);
                 }
                 CombatInlineYell::Word(word) => {
                     let word = PlayState::normalize_yell_word(word);
                     state.message = format!("Yelled {word}. Nothing happens.");
-                    state.ensure_pending_combat_player_turn();
+                    advance_combat_round_after_actor_and_append_message(state, actor_slot);
                 }
             }
             true
@@ -1568,4 +1568,271 @@ fn combat_monster_target_label(target_slot: usize, class: u8) -> String {
     combat_class_stats(class)
         .map(|stats| stats.name.to_string())
         .unwrap_or_else(|| format!("combatant in slot {target_slot}"))
+}
+
+fn append_combat_round_walk_summary_after_message(
+    state: &mut PlayState,
+    application: Option<CombatRoundWalkApplication>,
+) {
+    let Some(application) = application else {
+        return;
+    };
+    let Some(summary) = combat_round_walk_summary(state, &application) else {
+        return;
+    };
+    if !state.message.is_empty() {
+        state.message.push('\n');
+    }
+    state.message.push_str(&summary);
+}
+
+fn drive_combat_round_walk_and_append_message(state: &mut PlayState) {
+    if !state.combat_active || state.pending_combat_actor_slot.is_some() {
+        return;
+    }
+
+    for _ in 0..COMBAT_ACTOR_SLOTS {
+        let start_slot = state.next_combat_actor_slot.min(COMBAT_ACTOR_SLOTS);
+        let application = state.apply_combat_round_walk_from_slot(start_slot, 30, false);
+        state.next_combat_actor_slot = match application.stop_reason {
+            CombatRoundWalkStopReason::EndOfRound => 0,
+            CombatRoundWalkStopReason::AwaitingPlayer | CombatRoundWalkStopReason::Exit => {
+                application.next_slot
+            }
+        };
+        if application.stop_reason == CombatRoundWalkStopReason::AwaitingPlayer {
+            state.pending_combat_actor_slot = ready_player_slot_from_input_round_walk(&application);
+        }
+
+        let should_stop = !matches!(
+            application.stop_reason,
+            CombatRoundWalkStopReason::EndOfRound
+        ) || state.pending_combat_actor_slot.is_some();
+        append_combat_round_walk_summary_after_message(state, Some(application));
+        if should_stop {
+            break;
+        }
+    }
+}
+
+fn advance_combat_round_after_actor_and_append_message(state: &mut PlayState, actor_slot: usize) {
+    state.next_combat_actor_slot = actor_slot.saturating_add(1).min(COMBAT_ACTOR_SLOTS);
+    drive_combat_round_walk_and_append_message(state);
+}
+
+fn ready_player_slot_from_input_round_walk(
+    application: &CombatRoundWalkApplication,
+) -> Option<usize> {
+    application.applications.iter().rev().find_map(|entry| {
+        let CombatActorSlotDispatchApplication::Slot { slot, action, .. } = entry else {
+            return None;
+        };
+        if *slot < COMBAT_PARTY_ACTOR_SLOTS
+            && matches!(action, CombatActorDispatchAction::PlayerReady)
+        {
+            Some(*slot)
+        } else {
+            None
+        }
+    })
+}
+
+fn combat_round_walk_summary(
+    state: &PlayState,
+    application: &CombatRoundWalkApplication,
+) -> Option<String> {
+    let mut lines = Vec::new();
+    for entry in application.applications.iter() {
+        let CombatActorSlotDispatchApplication::Slot { slot, action, .. } = entry else {
+            continue;
+        };
+        if let CombatActorDispatchAction::MonsterAi {
+            ai_turn: Some(ai_turn),
+        } = action
+        {
+            lines.extend(combat_ai_turn_summary_lines(state, *slot, ai_turn));
+        }
+        if lines.len() >= 3 {
+            break;
+        }
+    }
+    (!lines.is_empty()).then(|| lines.join("\n"))
+}
+
+fn combat_ai_turn_summary_lines(
+    state: &PlayState,
+    slot: usize,
+    ai_turn: &CombatAiTurnApplication,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    if let Some(special) = &ai_turn.special {
+        lines.push(combat_ai_special_message(state, special));
+    }
+    if let Some(monster_attack) = ai_turn.monster_attack {
+        lines.push(combat_monster_attack_message(state, monster_attack));
+    } else if let Some(movement) = ai_turn.movement {
+        lines.push(combat_ai_movement_message(
+            &combat_actor_slot_label(state, slot),
+            movement,
+        ));
+    }
+    lines
+}
+
+fn combat_ai_special_message(state: &PlayState, special: &CombatAiSpecialApplication) -> String {
+    match special {
+        CombatAiSpecialApplication::Possess {
+            actor_slot,
+            target_slot,
+            outcome,
+            ..
+        } => match outcome {
+            CombatPossessResistanceOutcome::Blocked => format!(
+                "{} tried to possess party member {}, but resistance held.",
+                combat_actor_slot_label(state, *actor_slot),
+                target_slot + 1
+            ),
+            CombatPossessResistanceOutcome::Landed { .. } => format!(
+                "{} possessed party member {}.",
+                combat_actor_slot_label(state, *actor_slot),
+                target_slot + 1
+            ),
+        },
+        CombatAiSpecialApplication::Blink {
+            actor_slot,
+            visibility,
+        } => {
+            let state_word = match visibility.visibility {
+                CombatLinkedVisibility::Hidden => "vanished",
+                CombatLinkedVisibility::Visible => "reappeared",
+            };
+            format!(
+                "{} {state_word}.",
+                combat_actor_slot_label(state, *actor_slot)
+            )
+        }
+        CombatAiSpecialApplication::SummonDaemon { actor_slot, summon } => format!(
+            "{} summoned daemon at ({}, {}).",
+            combat_actor_slot_label(state, *actor_slot),
+            summon.x,
+            summon.y
+        ),
+    }
+}
+
+fn combat_monster_attack_message(
+    state: &PlayState,
+    attack: CombatMonsterAttackApplication,
+) -> String {
+    let attacker = combat_actor_slot_label(state, attack.attacker_slot);
+    if let Some(poison) = attack.poison_status_outcome {
+        match poison {
+            CombatPoisonStatusAttackOutcome::PoisonedPartyMember { .. } => {
+                return format!(
+                    "{attacker} poisoned party member {}.",
+                    attack.target_slot + 1
+                );
+            }
+            CombatPoisonStatusAttackOutcome::FallbackDamage { raw_damage } => {
+                return format!(
+                    "{attacker} poison attack hit party member {} for {raw_damage} raw damage.",
+                    attack.target_slot + 1
+                );
+            }
+            CombatPoisonStatusAttackOutcome::NotPoisonStatusClass
+            | CombatPoisonStatusAttackOutcome::GateRejected => {}
+        }
+    }
+    match attack.resolution {
+        Some(CombatWeaponAttackResolution::OutOfRange {
+            target_range,
+            range_cap,
+        }) => format!(
+            "{attacker} attack missed: target range {target_range} exceeds range {range_cap}."
+        ),
+        Some(CombatWeaponAttackResolution::NoOrdinaryDamage { route }) => format!(
+            "{attacker} used {} with no ordinary damage.",
+            combat_attack_route_label(route)
+        ),
+        Some(CombatWeaponAttackResolution::Miss { route, .. }) => format!(
+            "{attacker} missed party member {} with {}.",
+            attack.target_slot + 1,
+            combat_attack_route_label(route)
+        ),
+        Some(CombatWeaponAttackResolution::Special { route }) => format!(
+            "{attacker} used {} with a special effect.",
+            combat_attack_route_label(route)
+        ),
+        Some(CombatWeaponAttackResolution::Hit { route, .. }) => match attack.damage_application {
+            Some(CombatWeaponDamageApplication::Party {
+                target_slot,
+                damage,
+            }) => {
+                if damage.missed {
+                    format!(
+                        "{attacker} hit party member {}, but did no damage.",
+                        target_slot + 1
+                    )
+                } else {
+                    let mut message = format!(
+                        "{attacker} hit party member {} for {} damage with {}.",
+                        target_slot + 1,
+                        damage.applied_damage,
+                        combat_attack_route_label(route)
+                    );
+                    if damage.killed {
+                        message.push_str(" Party member fell.");
+                    }
+                    message
+                }
+            }
+            Some(CombatWeaponDamageApplication::Monster {
+                target_slot,
+                damage,
+                ..
+            }) => {
+                let target = combat_monster_target_label(target_slot, damage.class);
+                format!(
+                    "{attacker} hit {target} for {} damage with {}.",
+                    damage.applied_damage,
+                    combat_attack_route_label(route)
+                )
+            }
+            None => format!(
+                "{attacker} hit with {}, but no damage was applied.",
+                combat_attack_route_label(route)
+            ),
+        },
+        None => format!("{attacker} found no attack route."),
+    }
+}
+
+fn combat_ai_movement_message(actor: &str, movement: CombatAiMovementOutcome) -> String {
+    match movement {
+        CombatAiMovementOutcome::Teleport { x, y } => {
+            format!("{actor} teleported to ({x}, {y}).")
+        }
+        CombatAiMovementOutcome::Step { x, y, .. } => format!("{actor} moved to ({x}, {y})."),
+        CombatAiMovementOutcome::Blocked { surrounded } => {
+            if surrounded {
+                format!("{actor} is surrounded.")
+            } else {
+                format!("{actor} is blocked.")
+            }
+        }
+    }
+}
+
+fn combat_actor_slot_label(state: &PlayState, slot: usize) -> String {
+    if slot < COMBAT_PARTY_ACTOR_SLOTS {
+        return format!("Party member {}", slot + 1);
+    }
+    let class = state
+        .combat_actors
+        .get(slot)
+        .map(|actor| actor.owner_target_class)
+        .unwrap_or_default();
+    combat_class_stats(class)
+        .map(|stats| stats.name.to_string())
+        .unwrap_or_else(|| format!("Combatant {slot}"))
 }

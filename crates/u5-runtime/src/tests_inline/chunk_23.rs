@@ -7346,7 +7346,10 @@
             PlayInputDisposition::Continue
         );
         assert_eq!((move_state.combat_actors[0].x, move_state.combat_actors[0].y), (6, 5));
-        assert_eq!(move_state.message, "Moved to (6, 5).");
+        assert_eq!(
+            move_state.message,
+            "Moved to (6, 5).\nGiant Rat moved to (7, 5)."
+        );
         assert_eq!(move_state.pending_combat_actor_slot, Some(0));
 
         let mut attack_state = combat_player_command_state(6, 5);
@@ -7359,7 +7362,10 @@
             (attack_state.combat_actors[0].x, attack_state.combat_actors[0].y),
             (5, 5)
         );
-        assert_eq!(attack_state.message, "Attack: no readied weapon.");
+        assert_eq!(
+            attack_state.message,
+            "Attack: no readied weapon.\nGiant Rat poisoned party member 1."
+        );
         assert_eq!(attack_state.pending_combat_actor_slot, Some(0));
 
         let mut quit_state = combat_player_command_state(8, 5);
@@ -7388,7 +7394,7 @@
 
         assert_eq!(
             state.message,
-            "Hit Giant Rat for 1 damage with melee. Gained 1 XP."
+            "Hit Giant Rat for 1 damage with melee. Gained 1 XP.\nGiant Rat poisoned party member 1."
         );
         assert_eq!(state.combat_actors[8].hp_or_wound, 9);
         assert_eq!(state.party_experience[0], 1);
@@ -7417,6 +7423,39 @@
         assert_eq!(state.party_experience[0], 3);
         assert!(!state.combat_active);
         assert_eq!(state.pending_combat_actor_slot, None);
+    }
+
+    #[test]
+    fn combat_input_dispatch_appends_monster_attack_round_summary() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(6, 5);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, ' ', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(
+            state.message,
+            "Pass.\nGiant Rat poisoned party member 1."
+        );
+        assert_eq!(state.party[0].status, b'P');
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+    }
+
+    #[test]
+    fn combat_input_dispatch_appends_monster_movement_round_summary() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(8, 5);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, ' ', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.message, "Pass.\nGiant Rat moved to (7, 5).");
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
     }
 
     #[test]
@@ -7572,7 +7611,10 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.message, "Yelled FALLAX. Nothing happens.");
+        assert_eq!(
+            state.message,
+            "Yelled FALLAX. Nothing happens.\nGiant Rat moved to (7, 5)."
+        );
         assert!(!state.message.contains("Word of Power"));
         assert!(state.active_ready.is_none());
         assert!(state.active_z_stats.is_none());
@@ -7630,7 +7672,10 @@
         assert_eq!((state.combat_actors[1].x, state.combat_actors[1].y), (4, 6));
         assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (4, 6));
         assert_ne!((state.combat_actors[0].x, state.combat_actors[0].y), (4, 6));
-        assert_eq!(state.message, "Moved to (4, 6).");
+        assert_eq!(
+            state.message,
+            "Moved to (4, 6).\nGiant Rat moved to (7, 5)."
+        );
     }
 
     #[test]
@@ -7650,7 +7695,10 @@
             PlayInputDisposition::Continue
         );
         assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (6, 5));
-        assert_eq!(state.message, "Moved to (6, 5).");
+        assert_eq!(
+            state.message,
+            "Moved to (6, 5).\nGiant Rat moved to (7, 5)."
+        );
     }
 
     #[test]
@@ -7666,7 +7714,7 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.message, "Quickness!");
+        assert_eq!(state.message, "Quickness!\nGiant Rat moved to (7, 5).");
         assert!(state.combat_active);
     }
 
@@ -7683,7 +7731,10 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.message, "Ring of Invisibility vanished.");
+        assert_eq!(
+            state.message,
+            "Ring of Invisibility vanished.\nGiant Rat moved to (7, 5)."
+        );
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
         assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
     }
@@ -7739,7 +7790,7 @@
         assert_eq!(state.party[1].mana, 0);
         assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
         assert!(state.combat_actors[1].is_hidden_or_unrevealed());
-        assert_eq!(state.message, "Invisibility!");
+        assert_eq!(state.message, "Invisibility!\nGiant Rat moved to (7, 5).");
     }
 
     #[test]
@@ -7758,7 +7809,7 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.message, "Quickness!");
+        assert_eq!(state.message, "Quickness!\nGiant Rat moved to (7, 5).");
         assert_eq!(state.spell_charges[INVISIBILITY_SPELL_INDEX], 1);
         assert_eq!(state.party[0].mana, INVISIBILITY_COST);
         assert!(!state.combat_actors[0].is_hidden_or_unrevealed());

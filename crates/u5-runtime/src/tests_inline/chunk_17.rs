@@ -1179,7 +1179,10 @@
             state.combat_actors[8].hp_or_wound,
             cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_PYTHON).unwrap().max_hp)
         );
-        assert_eq!(state.message, "Cause Fear affected 2 combat actor(s).");
+        assert_eq!(
+            state.message,
+            "Cause Fear affected 2 combat actor(s).\nDaemon hit party member 1 for 20 damage with ranged attack."
+        );
     }
 
     #[test]
