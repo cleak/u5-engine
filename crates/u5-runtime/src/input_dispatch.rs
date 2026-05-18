@@ -28,6 +28,9 @@ pub fn handle_play_key_input(
     if state.active_ready.is_some() {
         return Ok(handle_active_ready_key_input(state, key, suffix));
     }
+    if state.active_use.is_some() {
+        return handle_active_use_key_input(state, key, suffix, game_dir);
+    }
     if state.active_z_stats.is_some() {
         return Ok(handle_active_z_stats_key_input(state, key, suffix));
     }
@@ -181,6 +184,16 @@ fn handle_active_ready_key_input(
 ) -> PlayInputDisposition {
     state.step_active_ready(key, suffix);
     PlayInputDisposition::Continue
+}
+
+fn handle_active_use_key_input(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    state.step_active_use(key, suffix, game_dir)?;
+    Ok(PlayInputDisposition::Continue)
 }
 
 fn handle_active_shop_key_input(

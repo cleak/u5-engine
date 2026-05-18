@@ -191,6 +191,81 @@
     }
 
     #[test]
+    fn active_use_picker_refuses_when_no_usable_items_are_available() {
+        let mut state = dungeon_state(vec![0; DUNGEON_SIDE * DUNGEON_SIDE], 0, 1, 1);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_use.is_none());
+        assert_eq!(state.message, "No usable items.");
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn active_use_picker_uses_pocket_watch_and_closes() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.clock = GameClock::with_date(139, 1, 1, 13, 0).unwrap();
+        state.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_use.is_some());
+        assert!(state.message.contains("Pocket Watch"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_use.is_none());
+        assert_eq!(state.message, "Pocket Watch: 1 P.M.");
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn active_use_picker_uses_scroll_stock_row() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.scroll_stock[SCROLL_LIGHT_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.message.contains("Scroll LV"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_use.is_none());
+        assert_eq!(state.scroll_stock[SCROLL_LIGHT_INDEX], 0);
+        assert_eq!(state.light_spell_counter, SCROLL_LIGHT_DURATION - 1);
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn inline_use_suffix_still_bypasses_active_picker() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.torches = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'U', "T", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_use.is_none());
+        assert_eq!(state.torches, 0);
+        assert_eq!(state.torch_counter, SURFACE_TORCH_DURATION);
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
     fn combat_z_stats_binds_pending_party_actor() {
         let mut state = test_state(open_grid(), 1, 1);
         state.party = vec![

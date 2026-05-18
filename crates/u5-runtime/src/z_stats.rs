@@ -4,6 +4,7 @@ use crate::*;
 
 pub const Z_STATS_INVENTORY_PANEL_ROWS: usize = 8;
 pub const READY_PICKER_PANEL_ROWS: usize = 8;
+pub const USE_PICKER_PANEL_ROWS: usize = 8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ZStatsPage {
@@ -67,6 +68,11 @@ pub struct ReadySession {
     pub cursor: usize,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UseSession {
+    pub cursor: usize,
+}
+
 impl ReadySession {
     pub const fn new() -> Self {
         Self {
@@ -85,6 +91,12 @@ impl ReadySession {
     pub fn select_party_index(&mut self, party_index: usize) {
         self.selected_party_index = Some(party_index);
         self.cursor = 0;
+    }
+}
+
+impl UseSession {
+    pub const fn new() -> Self {
+        Self { cursor: 0 }
     }
 }
 
@@ -135,6 +147,18 @@ pub enum ReadyInputAction {
     Discard,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UseInputAction {
+    Exit,
+    Confirm,
+    NextItem,
+    PreviousItem,
+    PageNext,
+    PagePrevious,
+    Redraw,
+    Discard,
+}
+
 pub fn ready_input_action(key: char) -> ReadyInputAction {
     match key {
         ' ' | '\u{1b}' => ReadyInputAction::Exit,
@@ -146,6 +170,19 @@ pub fn ready_input_action(key: char) -> ReadyInputAction {
         '1'..='6' => ReadyInputAction::SelectParty((key as u8 - b'1') as usize),
         'R' | 'r' => ReadyInputAction::Redraw,
         _ => ReadyInputAction::Discard,
+    }
+}
+
+pub fn use_input_action(key: char) -> UseInputAction {
+    match key {
+        ' ' | '\u{1b}' => UseInputAction::Exit,
+        '\r' | '\n' => UseInputAction::Confirm,
+        '>' | '+' => UseInputAction::NextItem,
+        '<' | '-' => UseInputAction::PreviousItem,
+        ']' | '}' => UseInputAction::PageNext,
+        '[' | '{' => UseInputAction::PagePrevious,
+        'U' | 'u' => UseInputAction::Redraw,
+        _ => UseInputAction::Discard,
     }
 }
 

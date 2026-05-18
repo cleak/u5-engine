@@ -17794,7 +17794,7 @@
             ('M', "Mix what?"),
             ('N', "New order?"),
             ('Q', "Save game?"),
-            ('U', "Use what?"),
+            ('U', "Use:"),
             ('W', "What?"),
             ('Z', "Z-stats:"),
         ] {
@@ -18110,7 +18110,7 @@
             ('M', "Mix what?"),
             ('N', "New order?"),
             ('R', "Ready:"),
-            ('U', "Use what?"),
+            ('U', "No usable items."),
             ('Y', "Yell what?"),
             ('Z', "Z-stats:"),
         ] {

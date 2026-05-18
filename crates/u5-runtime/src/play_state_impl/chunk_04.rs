@@ -5,6 +5,13 @@ use std::path::{Path, PathBuf};
 
 use crate::*;
 
+#[derive(Clone, Debug)]
+struct UseItemPickerRow {
+    label: String,
+    detail: String,
+    request: UseItemRequest,
+}
+
 impl PlayState {
     pub fn cast_rel_hur(
         &mut self,
@@ -146,6 +153,285 @@ impl PlayState {
                 MoveOutcome::Blocked
             }
         })
+    }
+
+    pub fn start_use_item(&mut self) -> MoveOutcome {
+        let rows = self.use_item_picker_rows();
+        if rows.is_empty() {
+            self.message = "No usable items.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        self.active_use = Some(UseSession::new());
+        self.message = self.render_active_use();
+        MoveOutcome::Observed
+    }
+
+    pub fn render_active_use(&self) -> String {
+        self.active_use
+            .as_ref()
+            .map(|session| self.render_use_session(session))
+            .unwrap_or_else(use_prompt_message)
+    }
+
+    pub fn render_use_session(&self, session: &UseSession) -> String {
+        let rows = self.use_item_picker_rows();
+        if rows.is_empty() {
+            return "No usable items.".to_string();
+        }
+
+        let cursor = session.cursor.min(rows.len() - 1);
+        let panel_start = (cursor / USE_PICKER_PANEL_ROWS) * USE_PICKER_PANEL_ROWS;
+        let mut lines = vec![
+            "Use: Enter activates; </> move; [] page; Space/Esc exits.".to_string(),
+        ];
+        for (index, row) in rows
+            .iter()
+            .enumerate()
+            .skip(panel_start)
+            .take(USE_PICKER_PANEL_ROWS)
+        {
+            let marker = if index == cursor { ">" } else { " " };
+            lines.push(format!(
+                "{marker} {:02}: {} ({})",
+                index + 1,
+                row.label,
+                row.detail
+            ));
+        }
+        if rows.len() > panel_start + USE_PICKER_PANEL_ROWS {
+            lines.push(format!(
+                "... {} more",
+                rows.len() - panel_start - USE_PICKER_PANEL_ROWS
+            ));
+        }
+        lines.join("\n")
+    }
+
+    pub fn step_active_use(
+        &mut self,
+        key: char,
+        suffix: &str,
+        game_dir: &Path,
+    ) -> io::Result<bool> {
+        let Some(mut session) = self.active_use.take() else {
+            return Ok(false);
+        };
+        let key = ready_first_input_key(key, suffix);
+        match use_input_action(key) {
+            UseInputAction::Exit => {
+                self.message = "Use closed.".to_string();
+            }
+            UseInputAction::NextItem => {
+                self.move_use_cursor(&mut session, 1);
+                self.message = self.render_use_session(&session);
+                self.active_use = Some(session);
+            }
+            UseInputAction::PreviousItem => {
+                self.move_use_cursor(&mut session, -1);
+                self.message = self.render_use_session(&session);
+                self.active_use = Some(session);
+            }
+            UseInputAction::PageNext => {
+                self.move_use_cursor(&mut session, USE_PICKER_PANEL_ROWS as isize);
+                self.message = self.render_use_session(&session);
+                self.active_use = Some(session);
+            }
+            UseInputAction::PagePrevious => {
+                self.move_use_cursor(&mut session, -(USE_PICKER_PANEL_ROWS as isize));
+                self.message = self.render_use_session(&session);
+                self.active_use = Some(session);
+            }
+            UseInputAction::Confirm => {
+                let Some(row) = self.use_selected_item(&session) else {
+                    self.message = "No usable items.".to_string();
+                    return Ok(true);
+                };
+                let turn_before = self.turn;
+                let outcome = self.use_item_command(Some(row.request), Some(game_dir))?;
+                self.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+            }
+            UseInputAction::Redraw | UseInputAction::Discard => {
+                self.normalize_use_cursor(&mut session);
+                self.message = self.render_use_session(&session);
+                self.active_use = Some(session);
+            }
+        }
+        Ok(true)
+    }
+
+    fn use_selected_item(&self, session: &UseSession) -> Option<UseItemPickerRow> {
+        let rows = self.use_item_picker_rows();
+        rows.get(session.cursor.min(rows.len().saturating_sub(1)))
+            .cloned()
+    }
+
+    fn normalize_use_cursor(&self, session: &mut UseSession) {
+        let row_count = self.use_item_picker_rows().len();
+        if row_count == 0 {
+            session.cursor = 0;
+        } else if session.cursor >= row_count {
+            session.cursor = row_count - 1;
+        }
+    }
+
+    fn move_use_cursor(&self, session: &mut UseSession, delta: isize) {
+        let row_count = self.use_item_picker_rows().len();
+        if row_count == 0 {
+            session.cursor = 0;
+            return;
+        }
+        let next = session.cursor as isize + delta;
+        session.cursor = next.clamp(0, row_count as isize - 1) as usize;
+    }
+
+    fn use_item_picker_rows(&self) -> Vec<UseItemPickerRow> {
+        let mut rows = Vec::new();
+
+        self.push_counted_use_row(
+            &mut rows,
+            SPECIAL_ITEM_MAGIC_CARPET_INDEX,
+            "Magic Carpet",
+            UseItemRequest::MagicCarpet,
+        );
+        self.push_counted_use_row(
+            &mut rows,
+            SPECIAL_ITEM_SKULL_KEY_INDEX,
+            "Skull Keys",
+            UseItemRequest::SkullKey,
+        );
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_AMULET_LB_INDEX,
+            "Amulet of Lord British",
+            UseItemRequest::AmuletOfLordBritish,
+        );
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_CROWN_LB_INDEX,
+            "Crown of Lord British",
+            UseItemRequest::CrownOfLordBritish,
+        );
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_SCEPTRE_LB_INDEX,
+            "Sceptre of Lord British",
+            UseItemRequest::Sceptre,
+        );
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_SPYGLASS_INDEX,
+            "Spyglass",
+            UseItemRequest::Spyglass,
+        );
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
+            "HMS Cape Plans",
+            UseItemRequest::HmsCapePlans,
+        );
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_SEXTANT_INDEX,
+            "Sextant",
+            UseItemRequest::Sextant,
+        );
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_POCKET_WATCH_INDEX,
+            "Pocket Watch",
+            UseItemRequest::PocketWatch,
+        );
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_BLACK_BADGE_INDEX,
+            "Black Badge",
+            UseItemRequest::BlackBadge,
+        );
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_WOODEN_BOX_INDEX,
+            "Wooden Box",
+            UseItemRequest::WoodenBox,
+        );
+
+        for (index, count) in self.scroll_stock.iter().copied().enumerate() {
+            if count > 0 {
+                rows.push(UseItemPickerRow {
+                    label: format!("Scroll {}", scroll_label(index)),
+                    detail: format!("stock {count}"),
+                    request: UseItemRequest::Scroll {
+                        index,
+                        direction: None,
+                        target: None,
+                    },
+                });
+            }
+        }
+        for (index, count) in self.potion_stock.iter().copied().enumerate() {
+            if count > 0 {
+                rows.push(UseItemPickerRow {
+                    label: potion_inventory_name(index).to_string(),
+                    detail: format!("stock {count}"),
+                    request: UseItemRequest::Potion {
+                        index,
+                        target: None,
+                    },
+                });
+            }
+        }
+        if self.current_moonstone_bury_context().is_some() {
+            for index in 0..MOONSTONE_SLOT_COUNT {
+                rows.push(UseItemPickerRow {
+                    label: format!("Moonstone phase {}", index + 1),
+                    detail: if self.moonstone_slots[index].is_valid() {
+                        "buried slot".to_string()
+                    } else {
+                        "carried".to_string()
+                    },
+                    request: UseItemRequest::Moonstone(index),
+                });
+            }
+        }
+
+        rows
+    }
+
+    fn push_counted_use_row(
+        &self,
+        rows: &mut Vec<UseItemPickerRow>,
+        special_item_index: usize,
+        label: &str,
+        request: UseItemRequest,
+    ) {
+        let count = self.special_items[special_item_index];
+        if count > 0 {
+            rows.push(UseItemPickerRow {
+                label: label.to_string(),
+                detail: format!("stock {count}"),
+                request,
+            });
+        }
+    }
+
+    fn push_owned_use_row(
+        &self,
+        rows: &mut Vec<UseItemPickerRow>,
+        special_item_index: usize,
+        label: &str,
+        request: UseItemRequest,
+    ) {
+        let value = self.special_items[special_item_index];
+        if value > 0 {
+            rows.push(UseItemPickerRow {
+                label: label.to_string(),
+                detail: if value == SPECIAL_ITEM_WORN_VALUE {
+                    "worn".to_string()
+                } else {
+                    "carried".to_string()
+                },
+                request,
+            });
+        }
     }
 
     pub fn use_wooden_box(&mut self) -> MoveOutcome {

@@ -1510,10 +1510,7 @@
         grid[world_cell_index(4, 5)] = 16;
         let mut state = britannia_state(grid, 4, 5);
 
-        assert_eq!(
-            handle_play_key_input(&mut state, 'U', "", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
+        assert_eq!(state.use_item_command(None, Some(&dir)).unwrap(), MoveOutcome::Blocked);
         assert_eq!(state.turn, 0);
         assert_eq!(state.message, use_prompt_message());
 
@@ -1528,7 +1525,7 @@
         let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
         assert!(dungeon.handle_dungeon_key('U', &dir).unwrap());
         assert_eq!(dungeon.turn, 0);
-        assert_eq!(dungeon.message, use_prompt_message());
+        assert_eq!(dungeon.message, "No usable items.");
         assert_eq!(
             handle_play_key_input(&mut dungeon, 'U', "1", &dir).unwrap(),
             PlayInputDisposition::Continue

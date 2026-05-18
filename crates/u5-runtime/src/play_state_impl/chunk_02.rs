@@ -182,7 +182,12 @@ impl PlayState {
                 handled!(self.start_ready_equipment());
             }
             'u' => {
-                handled!(self.use_item_command(inline_use_request, Some(game_dir))?);
+                let outcome = if inline_use_request.is_some() {
+                    self.use_item_command(inline_use_request, Some(game_dir))?
+                } else {
+                    self.start_use_item()
+                };
+                handled!(outcome);
             }
             'y' => {
                 handled!(self.yell_command(None));
@@ -300,7 +305,12 @@ impl PlayState {
                     handled!(self.talk_facing_with_game_dir(game_dir)?);
                 }
                 'U' => {
-                    handled!(self.use_item_command(inline_use_request, Some(game_dir))?);
+                    let outcome = if inline_use_request.is_some() {
+                        self.use_item_command(inline_use_request, Some(game_dir))?
+                    } else {
+                        self.start_use_item()
+                    };
+                    handled!(outcome);
                 }
                 'V' => {
                     handled!(self.view_gem());
@@ -349,6 +359,13 @@ impl PlayState {
             }
             'z' => self.z_stats(),
             'r' => self.start_ready_equipment(),
+            'u' => {
+                if inline_use_request.is_some() {
+                    self.use_item_command(inline_use_request, Some(game_dir))?
+                } else {
+                    self.start_use_item()
+                }
+            }
             'y' => self.yell_command(None),
             '<' => self.climb(game_dir, ClimbIntent::Up)?,
             '>' => self.climb(game_dir, ClimbIntent::Down)?,

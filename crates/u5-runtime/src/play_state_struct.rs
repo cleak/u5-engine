@@ -91,6 +91,7 @@ pub struct PlayState {
     pub active_conversation: Option<Box<crate::conversation_session::ConversationSession>>,
     pub active_z_stats: Option<crate::z_stats::ZStatsSession>,
     pub active_ready: Option<crate::z_stats::ReadySession>,
+    pub active_use: Option<crate::z_stats::UseSession>,
     pub pickpocketed_npcs: Vec<(u8, i8, usize)>,
     pub removed_town_npcs: Vec<(u8, i8, usize)>,
     pub town_npc_alarm_states: Vec<TownNpcAlarmMarker>,
