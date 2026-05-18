@@ -50,6 +50,14 @@ impl ActiveShopSession {
             Self::Guild(_) => "Guildmaster",
         }
     }
+
+    /// Short first prompt shown when Talk opens the overlay.
+    pub fn opening_prompt(&self) -> &'static str {
+        match self {
+            Self::ShipBroker(_) => "Choose Frigate (F), Skiff (S), or Space.",
+            _ => "Choose Buy / Sell / Yes / No.",
+        }
+    }
 }
 
 /// Build a fresh session for the supplied Talk-resolved shop trigger
@@ -60,7 +68,7 @@ pub fn shop_session_for_dialog_id(dialog_id: u8) -> Option<ActiveShopSession> {
         0x81 => ActiveShopSession::Arms(ArmsShopState::Greeting),
         0x82 => ActiveShopSession::Tavern(TavernState::Greeting),
         0x83 => ActiveShopSession::HorseTrader(HorseTraderState::Greeting),
-        0x84 => ActiveShopSession::ShipBroker(ShipBrokerState::Greeting),
+        0x84 => ActiveShopSession::ShipBroker(ShipBrokerState::default()),
         0x85 => ActiveShopSession::Reagent(ReagentShopState::Greeting),
         0x86 => ActiveShopSession::Guild(GuildShopState::Greeting),
         0x87 => ActiveShopSession::Healer(HealerShopState::Greeting),

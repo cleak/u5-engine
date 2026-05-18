@@ -1586,8 +1586,9 @@ impl PlayState {
             if let Some(session) = crate::shop_session::shop_session_for_dialog_id(dialog_id) {
                 self.advance_turn();
                 let label = session.shop_label().to_string();
+                let prompt = session.opening_prompt().to_string();
                 self.active_shop = Some(session);
-                self.message = format!("{label} is now open. Choose Buy / Sell / Yes / No.");
+                self.message = format!("{label} is now open. {prompt}");
                 return MoveOutcome::Talked;
             }
         }
@@ -1672,9 +1673,10 @@ impl PlayState {
             if let Some(session) = crate::shop_session::shop_session_for_dialog_id(dialog_id) {
                 self.advance_turn();
                 let label = session.shop_label().to_string();
+                let prompt = session.opening_prompt().to_string();
                 self.active_shop = Some(session);
                 self.message = format!(
-                    "{label} is now open. Choose Buy / Sell / Yes / No. Dispatch family: {family}."
+                    "{label} is now open. {prompt} Dispatch family: {family}."
                 );
                 return MoveOutcome::Talked;
             }

@@ -433,59 +433,40 @@ fn handle_active_shop_key_input(
             format_horse_trader_outcome(outcome, pending)
         }
         ActiveShopSession::ShipBroker(s) => {
-            let mut frigate = false;
-            let mut repair = false;
-            let outcome = match (*s, yes, no) {
-                (ShipBrokerState::Greeting, _, _) => step_ship_broker(
-                    s,
-                    ShipBrokerInput::Key(key_byte),
-                    &mut state.gold,
-                    &mut frigate,
-                    &mut repair,
-                ),
-                (ShipBrokerState::PickService, _, _) => {
-                    let svc = match key_byte {
-                        b'R' | b'r' => Some(ShipBrokerService::Repair),
-                        b'F' | b'f' | b'B' | b'b' => Some(ShipBrokerService::BuyFrigate),
-                        _ => None,
-                    };
-                    if let Some(svc) = svc {
-                        step_ship_broker(
-                            s,
-                            ShipBrokerInput::Service(svc),
-                            &mut state.gold,
-                            &mut frigate,
-                            &mut repair,
-                        )
-                    } else {
-                        ShipBrokerOutcome::InvalidInput
-                    }
+            let outcome = if let Some(return_world) = state.return_world.as_mut() {
+                let delivery_x = return_world.x;
+                let delivery_y = return_world.y;
+                match (*s, yes, no) {
+                    (ShipBrokerState::Greeting { .. }, _, _) => step_ship_broker(
+                        s,
+                        ShipBrokerInput::Key(key_byte),
+                        &mut state.gold,
+                        &mut return_world.pending_vehicle,
+                        delivery_x,
+                        delivery_y,
+                    ),
+                    (ShipBrokerState::ConfirmPurchase { .. }, true, _) => step_ship_broker(
+                        s,
+                        ShipBrokerInput::Confirm(true),
+                        &mut state.gold,
+                        &mut return_world.pending_vehicle,
+                        delivery_x,
+                        delivery_y,
+                    ),
+                    (ShipBrokerState::ConfirmPurchase { .. }, _, true) => step_ship_broker(
+                        s,
+                        ShipBrokerInput::Confirm(false),
+                        &mut state.gold,
+                        &mut return_world.pending_vehicle,
+                        delivery_x,
+                        delivery_y,
+                    ),
+                    _ => ShipBrokerOutcome::InvalidInput,
                 }
-                (
-                    ShipBrokerState::ConfirmRepair { .. } | ShipBrokerState::ConfirmFrigate { .. },
-                    true,
-                    _,
-                ) => step_ship_broker(
-                    s,
-                    ShipBrokerInput::Confirm(true),
-                    &mut state.gold,
-                    &mut frigate,
-                    &mut repair,
-                ),
-                (
-                    ShipBrokerState::ConfirmRepair { .. } | ShipBrokerState::ConfirmFrigate { .. },
-                    _,
-                    true,
-                ) => step_ship_broker(
-                    s,
-                    ShipBrokerInput::Confirm(false),
-                    &mut state.gold,
-                    &mut frigate,
-                    &mut repair,
-                ),
-                _ => ShipBrokerOutcome::InvalidInput,
+            } else {
+                ShipBrokerOutcome::InvalidInput
             };
-            format_ship_broker_outcome(outcome, frigate, repair)
+            format_ship_broker_outcome(outcome)
         }
         ActiveShopSession::Guild(s) => {
             let mut gems = state.gems;
@@ -684,20 +665,32 @@ fn format_horse_trader_outcome(
     }
 }
 
-fn format_ship_broker_outcome(
-    outcome: crate::shop_runtime::ShipBrokerOutcome,
-    frigate: bool,
-    repair: bool,
-) -> String {
+fn format_ship_broker_outcome(outcome: crate::shop_runtime::ShipBrokerOutcome) -> String {
     use crate::shop_runtime::ShipBrokerOutcome::*;
-    let _ = (frigate, repair);
     match outcome {
-        EnteredMenu => "Repair (R) or Buy frigate (B)?".to_string(),
-        QuotedRepairCost { cost } => format!("Repair costs {cost} gold. (Y/N)"),
-        QuotedFrigateCost { cost } => format!("A frigate costs {cost} gold. (Y/N)"),
-        Repaired { cost } => format!("Ship repaired for {cost} gold."),
-        PurchasedFrigate { cost } => format!("Frigate purchased for {cost} gold."),
-        RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
+        QuotedPurchase { quote } => {
+            let item = match quote.kind {
+                crate::shops::ShipwrightPurchaseKind::Frigate => "frigate",
+                crate::shops::ShipwrightPurchaseKind::Skiff => "skiff",
+            };
+            format!("A {item} costs {} gold. (Y/N)", quote.price)
+        }
+        PurchaseApplied { outcome } => match outcome.status {
+            crate::shops::ShipwrightPurchaseStatus::QueuedFrigate => {
+                format!("Frigate purchased for {} gold. Delivery is queued.", outcome.quote.price)
+            }
+            crate::shops::ShipwrightPurchaseStatus::QueuedSkiff => {
+                format!("Skiff purchased for {} gold. Delivery is queued.", outcome.quote.price)
+            }
+            crate::shops::ShipwrightPurchaseStatus::AddedSkiffToPendingFrigate => format!(
+                "Skiff purchased for {} gold and added to the pending frigate.",
+                outcome.quote.price
+            ),
+            crate::shops::ShipwrightPurchaseStatus::ExistingDeliveryRefusal => {
+                "No dock space is available for another delivery.".to_string()
+            }
+        },
+        RefusedShortFunds { required, .. } => format!("Thou lackest the {required} gold."),
         Declined => "As you wish.".to_string(),
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),

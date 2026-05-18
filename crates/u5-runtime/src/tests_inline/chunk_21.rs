@@ -1580,6 +1580,54 @@
     }
 
     #[test]
+    fn end_to_end_shipwright_frigate_queues_return_world_delivery() {
+        use crate::shop_runtime::ShipBrokerState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 3, 4);
+        state.gold = 700;
+        state.active_shop = Some(ActiveShopSession::ShipBroker(
+            ShipBrokerState::for_shipwright(Shipwright::TheRustyBucket),
+        ));
+        state.return_world = Some(WorldReturn {
+            plane: WorldPlane::Britannia,
+            x: 12,
+            y: 21,
+            transport: TransportState::Foot,
+            timing_status: TimingStatusTag::Normal,
+            sail_cadence: 0,
+            sail_stall_pending: false,
+            grid: open_world_grid(),
+            active_objects: vec![ActiveObject {
+                type_byte: PLAYER_TILE,
+                tile: PLAYER_TILE,
+                x: 12,
+                y: 21,
+                z: WorldPlane::Britannia.save_floor(),
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            }],
+            pending_vehicle: None,
+        });
+
+        handle_play_key_input(&mut state, 'F', "", Path::new("")).unwrap();
+        assert!(state.message.contains("700 gold"));
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 0);
+        assert!(state.message.contains("Delivery is queued"));
+        assert_eq!(
+            state.return_world.as_ref().and_then(|world| world.pending_vehicle),
+            Some(PendingVehicleAcquisition::Frigate {
+                x: 12,
+                y: 21,
+                skiffs: 2,
+            })
+        );
+    }
+
+    #[test]
     fn animation_clock_cycles_public_static_four_frame_families() {
         // Only water actually animates (3 frames). Mountains, bookshelves,
         // doors, tables in the 0x0a, 0x5c, 0x98, 0x9c bands are static

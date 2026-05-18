@@ -11,7 +11,13 @@
 //! defined here.
 
 use crate::constants::{EQUIPMENT_COUNT, EQUIPMENT_STOCK_CAP};
-use crate::shops::{arms_shop_action, arms_shop_buy_quote, arms_shop_sell_offer, ArmsShopAction};
+use crate::shops::{
+    apply_shipwright_purchase, arms_shop_action, arms_shop_buy_quote, arms_shop_sell_offer,
+    quote_shipwright_purchase, shipwright_menu_action, ArmsShopAction, Shipwright,
+    ShipwrightMenuAction, ShipwrightPurchaseError, ShipwrightPurchaseOutcome,
+    ShipwrightPurchaseQuote,
+};
+use crate::transport::PendingVehicleAcquisition;
 
 /// Inputs available to every shop machine. Shop-specific machines
 /// extract the fields they need.
@@ -799,108 +805,113 @@ pub fn step_horse_trader(
 
 // ---------- Ship broker / shipwright ----------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShipBrokerState {
-    #[default]
-    Greeting,
-    PickService,
-    ConfirmRepair {
-        cost: u16,
+    Greeting {
+        shipwright: Shipwright,
     },
-    ConfirmFrigate {
-        cost: u16,
+    ConfirmPurchase {
+        quote: ShipwrightPurchaseQuote,
+        delivery_x: usize,
+        delivery_y: usize,
     },
     Exited,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ShipBrokerService {
-    Repair,
-    BuyFrigate,
+impl Default for ShipBrokerState {
+    fn default() -> Self {
+        Self::Greeting {
+            shipwright: Shipwright::IslandShipwrights,
+        }
+    }
+}
+
+impl ShipBrokerState {
+    pub const fn for_shipwright(shipwright: Shipwright) -> Self {
+        Self::Greeting { shipwright }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShipBrokerInput {
     Key(u8),
-    Service(ShipBrokerService),
     Confirm(bool),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShipBrokerOutcome {
-    EnteredMenu,
-    QuotedRepairCost { cost: u16 },
-    QuotedFrigateCost { cost: u16 },
-    Repaired { cost: u16 },
-    PurchasedFrigate { cost: u16 },
-    RefusedShortFunds { cost: u16 },
+    QuotedPurchase { quote: ShipwrightPurchaseQuote },
+    PurchaseApplied { outcome: ShipwrightPurchaseOutcome },
+    RefusedShortFunds { available: u16, required: u16 },
     Declined,
     Exited,
     InvalidInput,
 }
 
-pub const SHIP_BROKER_REPAIR_COST: u16 = 50;
-pub const SHIP_BROKER_FRIGATE_COST: u16 = 3000;
-
 pub fn step_ship_broker(
     state: &mut ShipBrokerState,
     input: ShipBrokerInput,
     gold: &mut u16,
-    frigate_delivery_pending: &mut bool,
-    repair_pending: &mut bool,
+    pending_vehicle: &mut Option<PendingVehicleAcquisition>,
+    delivery_x: usize,
+    delivery_y: usize,
 ) -> ShipBrokerOutcome {
     match (*state, input) {
-        (ShipBrokerState::Greeting, ShipBrokerInput::Key(b)) => match b {
-            b'Y' | b'y' | b'B' | b'b' | b'R' | b'r' => {
-                *state = ShipBrokerState::PickService;
-                ShipBrokerOutcome::EnteredMenu
+        (ShipBrokerState::Greeting { shipwright }, ShipBrokerInput::Key(b)) => {
+            match shipwright_menu_action(b) {
+                ShipwrightMenuAction::Purchase(kind) => {
+                    let quote = quote_shipwright_purchase(shipwright, kind);
+                    *state = ShipBrokerState::ConfirmPurchase {
+                        quote,
+                        delivery_x,
+                        delivery_y,
+                    };
+                    ShipBrokerOutcome::QuotedPurchase { quote }
+                }
+                ShipwrightMenuAction::Exit => {
+                    *state = ShipBrokerState::Exited;
+                    ShipBrokerOutcome::Exited
+                }
+                ShipwrightMenuAction::Discard => ShipBrokerOutcome::InvalidInput,
             }
-            _ => {
-                *state = ShipBrokerState::Exited;
-                ShipBrokerOutcome::Exited
-            }
-        },
-        (ShipBrokerState::PickService, ShipBrokerInput::Service(ShipBrokerService::Repair)) => {
-            *state = ShipBrokerState::ConfirmRepair {
-                cost: SHIP_BROKER_REPAIR_COST,
-            };
-            ShipBrokerOutcome::QuotedRepairCost {
-                cost: SHIP_BROKER_REPAIR_COST,
-            }
-        }
-        (ShipBrokerState::PickService, ShipBrokerInput::Service(ShipBrokerService::BuyFrigate)) => {
-            *state = ShipBrokerState::ConfirmFrigate {
-                cost: SHIP_BROKER_FRIGATE_COST,
-            };
-            ShipBrokerOutcome::QuotedFrigateCost {
-                cost: SHIP_BROKER_FRIGATE_COST,
-            }
-        }
-        (ShipBrokerState::ConfirmRepair { cost }, ShipBrokerInput::Confirm(true)) => {
-            if *gold < cost {
-                *state = ShipBrokerState::Greeting;
-                return ShipBrokerOutcome::RefusedShortFunds { cost };
-            }
-            *gold -= cost;
-            *repair_pending = true;
-            *state = ShipBrokerState::Greeting;
-            ShipBrokerOutcome::Repaired { cost }
-        }
-        (ShipBrokerState::ConfirmFrigate { cost }, ShipBrokerInput::Confirm(true)) => {
-            if *gold < cost {
-                *state = ShipBrokerState::Greeting;
-                return ShipBrokerOutcome::RefusedShortFunds { cost };
-            }
-            *gold -= cost;
-            *frigate_delivery_pending = true;
-            *state = ShipBrokerState::Exited;
-            ShipBrokerOutcome::PurchasedFrigate { cost }
         }
         (
-            ShipBrokerState::ConfirmRepair { .. } | ShipBrokerState::ConfirmFrigate { .. },
+            ShipBrokerState::ConfirmPurchase {
+                quote,
+                delivery_x,
+                delivery_y,
+            },
+            ShipBrokerInput::Confirm(true),
+        ) => {
+            let shipwright = quote.shipwright;
+            let outcome = apply_shipwright_purchase(
+                gold,
+                pending_vehicle,
+                quote.shipwright,
+                quote.kind,
+                delivery_x,
+                delivery_y,
+            );
+            *state = ShipBrokerState::Greeting { shipwright };
+            match outcome {
+                Ok(outcome) => ShipBrokerOutcome::PurchaseApplied { outcome },
+                Err(ShipwrightPurchaseError::InsufficientGold {
+                    available,
+                    required,
+                }) => ShipBrokerOutcome::RefusedShortFunds {
+                    available,
+                    required,
+                },
+                Err(ShipwrightPurchaseError::NoReturnWorld) => ShipBrokerOutcome::InvalidInput,
+            }
+        }
+        (
+            ShipBrokerState::ConfirmPurchase { quote, .. },
             ShipBrokerInput::Confirm(false),
         ) => {
-            *state = ShipBrokerState::Greeting;
+            *state = ShipBrokerState::Greeting {
+                shipwright: quote.shipwright,
+            };
             ShipBrokerOutcome::Declined
         }
         (ShipBrokerState::Exited, _) => ShipBrokerOutcome::Exited,
@@ -1725,70 +1736,100 @@ mod tests {
     }
 
     #[test]
-    fn ship_broker_repair_charges_and_marks_repair_pending() {
-        let mut state = ShipBrokerState::Greeting;
-        let mut gold = 500u16;
-        let mut frigate = false;
-        let mut repair = false;
-        step_ship_broker(
+    fn ship_broker_f_key_quotes_then_queues_frigate_delivery() {
+        let mut state = ShipBrokerState::for_shipwright(Shipwright::TheRustyBucket);
+        let mut gold = 700u16;
+        let mut pending = None;
+        let quote = step_ship_broker(
             &mut state,
-            ShipBrokerInput::Key(b'Y'),
+            ShipBrokerInput::Key(b'F'),
             &mut gold,
-            &mut frigate,
-            &mut repair,
+            &mut pending,
+            12,
+            21,
         );
-        step_ship_broker(
-            &mut state,
-            ShipBrokerInput::Service(ShipBrokerService::Repair),
-            &mut gold,
-            &mut frigate,
-            &mut repair,
-        );
-        let outcome = step_ship_broker(
-            &mut state,
-            ShipBrokerInput::Confirm(true),
-            &mut gold,
-            &mut frigate,
-            &mut repair,
-        );
-        assert!(matches!(outcome, ShipBrokerOutcome::Repaired { .. }));
-        assert!(repair);
-        assert!(!frigate);
-    }
+        assert!(matches!(
+            quote,
+            ShipBrokerOutcome::QuotedPurchase {
+                quote: ShipwrightPurchaseQuote {
+                    shipwright: Shipwright::TheRustyBucket,
+                    kind: crate::shops::ShipwrightPurchaseKind::Frigate,
+                    price: 700,
+                }
+            }
+        ));
 
-    #[test]
-    fn ship_broker_buy_frigate_charges_and_pends_delivery() {
-        let mut state = ShipBrokerState::Greeting;
-        let mut gold = 5000u16;
-        let mut frigate = false;
-        let mut repair = false;
-        step_ship_broker(
-            &mut state,
-            ShipBrokerInput::Key(b'Y'),
-            &mut gold,
-            &mut frigate,
-            &mut repair,
-        );
-        step_ship_broker(
-            &mut state,
-            ShipBrokerInput::Service(ShipBrokerService::BuyFrigate),
-            &mut gold,
-            &mut frigate,
-            &mut repair,
-        );
         let outcome = step_ship_broker(
             &mut state,
             ShipBrokerInput::Confirm(true),
             &mut gold,
-            &mut frigate,
-            &mut repair,
+            &mut pending,
+            12,
+            21,
         );
         assert!(matches!(
             outcome,
-            ShipBrokerOutcome::PurchasedFrigate { .. }
+            ShipBrokerOutcome::PurchaseApplied {
+                outcome: ShipwrightPurchaseOutcome {
+                    status: crate::shops::ShipwrightPurchaseStatus::QueuedFrigate,
+                    ..
+                }
+            }
         ));
-        assert!(frigate);
-        assert_eq!(gold, 5000 - SHIP_BROKER_FRIGATE_COST);
+        assert_eq!(gold, 0);
+        assert_eq!(
+            pending,
+            Some(PendingVehicleAcquisition::Frigate {
+                x: 12,
+                y: 21,
+                skiffs: 2,
+            })
+        );
+    }
+
+    #[test]
+    fn ship_broker_s_key_adds_skiff_to_pending_frigate() {
+        let mut state = ShipBrokerState::for_shipwright(Shipwright::TheOakenOar);
+        let mut gold = 200u16;
+        let mut pending = Some(PendingVehicleAcquisition::Frigate {
+            x: 12,
+            y: 21,
+            skiffs: 2,
+        });
+        step_ship_broker(
+            &mut state,
+            ShipBrokerInput::Key(b'S'),
+            &mut gold,
+            &mut pending,
+            99,
+            99,
+        );
+        let outcome = step_ship_broker(
+            &mut state,
+            ShipBrokerInput::Confirm(true),
+            &mut gold,
+            &mut pending,
+            99,
+            99,
+        );
+        assert!(matches!(
+            outcome,
+            ShipBrokerOutcome::PurchaseApplied {
+                outcome: ShipwrightPurchaseOutcome {
+                    status: crate::shops::ShipwrightPurchaseStatus::AddedSkiffToPendingFrigate,
+                    ..
+                }
+            }
+        ));
+        assert_eq!(gold, 75);
+        assert_eq!(
+            pending,
+            Some(PendingVehicleAcquisition::Frigate {
+                x: 12,
+                y: 21,
+                skiffs: 3,
+            })
+        );
     }
 
     #[test]
