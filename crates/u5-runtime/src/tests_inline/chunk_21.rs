@@ -1706,6 +1706,35 @@
     }
 
     #[test]
+    fn end_to_end_sage_rumour_quotes_confirms_and_debits_gold() {
+        use crate::shop_runtime::SageState;
+        use crate::shop_session::ActiveShopSession;
+
+        static TOPICS: [SageTopic; 1] = [SageTopic {
+            topic: "codex",
+            subject: "the Codex",
+            destination: "the Underworld",
+            fee: 17,
+            template: SageRumourTemplate::SeekSubjectInDestination,
+        }];
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 20;
+        state.active_shop = Some(ActiveShopSession::Sage(SageState::for_topics(&TOPICS)));
+
+        handle_play_key_input(&mut state, 'C', "ODEX", Path::new("")).unwrap();
+        assert_eq!(state.gold, 20);
+        assert!(state.message.contains("17 gold"));
+        assert!(state.active_shop.is_some());
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 3);
+        assert_eq!(state.message, "Seek ye the Codex in the Underworld!");
+        assert!(state.active_shop.is_some());
+    }
+
+    #[test]
     fn end_to_end_reagent_vendor_uses_compact_herbalist_letter_menu() {
         use crate::shop_runtime::ReagentShopState;
         use crate::shop_session::ActiveShopSession;

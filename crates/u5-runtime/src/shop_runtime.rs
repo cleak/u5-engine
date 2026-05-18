@@ -14,14 +14,16 @@ use crate::constants::{EQUIPMENT_COUNT, EQUIPMENT_STOCK_CAP};
 use crate::shops::{
     ArmsShopAction, BlueBoarDrinkChoice, GuildCommodity, GuildPurchaseError, GuildShop,
     GuildShopAction, Herbalist, INN_REGISTRY_CAP, Inn, InnMainAction, ProvisionPurchaseError,
-    Reagent, ReagentPurchaseError, Shipwright, ShipwrightMenuAction, ShipwrightPurchaseError,
-    ShipwrightPurchaseOutcome, ShipwrightPurchaseQuote, Tavern, TavernDrinkError,
-    TavernDrinkPrompt, apply_blue_boar_drink, apply_guild_purchase, apply_provision_purchase,
-    apply_reagent_purchase, apply_shipwright_purchase, apply_tavern_round_drink, arms_shop_action,
-    arms_shop_buy_quote, arms_shop_sell_offer, guild_shop_action, guild_unit_price,
+    Reagent, ReagentPurchaseError, SageRumourError, SageRumourQuote, SageTopic, Shipwright,
+    ShipwrightMenuAction, ShipwrightPurchaseError, ShipwrightPurchaseOutcome,
+    ShipwrightPurchaseQuote, Tavern, TavernDrinkError, TavernDrinkPrompt, apply_blue_boar_drink,
+    apply_guild_purchase, apply_provision_purchase, apply_reagent_purchase,
+    apply_shipwright_purchase, apply_tavern_round_drink, arms_shop_action, arms_shop_buy_quote,
+    arms_shop_sell_offer, find_sage_topic, guild_shop_action, guild_unit_price,
     herbalist_menu_entries, inn_base_room_rate, inn_leave_companion_deposit, inn_main_action,
-    inn_pickup_bill, quote_inn_rest, quote_shipwright_purchase, shipwright_menu_action,
-    tavern_drink_prompt, tavern_provision_unit_price, tavern_round_drink_menu_letter,
+    inn_pickup_bill, quote_inn_rest, quote_shipwright_purchase, render_sage_rumour,
+    shipwright_menu_action, tavern_drink_prompt, tavern_provision_unit_price,
+    tavern_round_drink_menu_letter,
 };
 use crate::transport::PendingVehicleAcquisition;
 
@@ -964,6 +966,102 @@ pub const fn blue_boar_choice_for_key(byte: u8) -> Option<BlueBoarDrinkChoice> {
     }
 }
 
+// ---------- Sage / rumour vendor ----------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SageState {
+    Prompt { topics: &'static [SageTopic] },
+    Confirm {
+        topics: &'static [SageTopic],
+        quote: SageRumourQuote,
+    },
+    Exited,
+}
+
+impl Default for SageState {
+    fn default() -> Self {
+        Self::Prompt { topics: &[] }
+    }
+}
+
+impl SageState {
+    pub const fn for_topics(topics: &'static [SageTopic]) -> Self {
+        Self::Prompt { topics }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SageInput<'a> {
+    Topic(&'a str),
+    Confirm(bool),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SageOutcome {
+    QuotedRumour {
+        quote: SageRumourQuote,
+    },
+    RumourPurchased {
+        quote: SageRumourQuote,
+        paid: u16,
+        rendered: String,
+    },
+    RefusedShortFunds {
+        available: u16,
+        required: u16,
+    },
+    InputTooLong {
+        limit: usize,
+        actual: usize,
+    },
+    NoTopicMatch,
+    Declined,
+    Exited,
+    InvalidInput,
+}
+
+pub fn step_sage(state: &mut SageState, input: SageInput<'_>, gold: &mut u16) -> SageOutcome {
+    match (*state, input) {
+        (SageState::Prompt { topics }, SageInput::Topic(text)) => match find_sage_topic(topics, text)
+        {
+            Ok(quote) => {
+                *state = SageState::Confirm { topics, quote };
+                SageOutcome::QuotedRumour { quote }
+            }
+            Err(SageRumourError::EmptyInput) => {
+                *state = SageState::Exited;
+                SageOutcome::Exited
+            }
+            Err(SageRumourError::InputTooLong { limit, actual }) => {
+                SageOutcome::InputTooLong { limit, actual }
+            }
+            Err(SageRumourError::NoTopicMatch) => SageOutcome::NoTopicMatch,
+            Err(SageRumourError::InsufficientGold { .. }) => SageOutcome::InvalidInput,
+        },
+        (SageState::Confirm { topics, quote }, SageInput::Confirm(true)) => {
+            *state = SageState::Prompt { topics };
+            if *gold < quote.topic.fee {
+                return SageOutcome::RefusedShortFunds {
+                    available: *gold,
+                    required: quote.topic.fee,
+                };
+            }
+            *gold -= quote.topic.fee;
+            SageOutcome::RumourPurchased {
+                quote,
+                paid: quote.topic.fee,
+                rendered: render_sage_rumour(quote.topic),
+            }
+        }
+        (SageState::Confirm { topics, .. }, SageInput::Confirm(false)) => {
+            *state = SageState::Prompt { topics };
+            SageOutcome::Declined
+        }
+        (SageState::Exited, _) => SageOutcome::Exited,
+        _ => SageOutcome::InvalidInput,
+    }
+}
+
 // ---------- Horse trader ----------
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -1300,6 +1398,23 @@ fn select_guild_menu_entry(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    static TEST_SAGE_TOPICS: [SageTopic; 2] = [
+        SageTopic {
+            topic: "codex",
+            subject: "the Codex",
+            destination: "the Underworld",
+            fee: 17,
+            template: crate::shops::SageRumourTemplate::SeekSubjectInDestination,
+        },
+        SageTopic {
+            topic: "shard",
+            subject: "the shard",
+            destination: "Deceit",
+            fee: 25,
+            template: crate::shops::SageRumourTemplate::SeekSubjectInDestination,
+        },
+    ];
 
     fn make_price_table() -> [u16; EQUIPMENT_COUNT] {
         let mut table = [0u16; EQUIPMENT_COUNT];
@@ -2037,6 +2152,71 @@ mod tests {
                 tavern: Tavern::TheWayfarerTavern,
             }
         );
+    }
+
+    #[test]
+    fn sage_rumour_quotes_then_debits_gold_and_renders_rumour() {
+        let mut state = SageState::for_topics(&TEST_SAGE_TOPICS);
+        let mut gold = 20u16;
+
+        let quote = step_sage(&mut state, SageInput::Topic("CODEX"), &mut gold);
+        assert_eq!(
+            quote,
+            SageOutcome::QuotedRumour {
+                quote: SageRumourQuote {
+                    topic: TEST_SAGE_TOPICS[0],
+                    input_len: 5,
+                }
+            }
+        );
+        let outcome = step_sage(&mut state, SageInput::Confirm(true), &mut gold);
+
+        assert_eq!(gold, 3);
+        assert_eq!(
+            outcome,
+            SageOutcome::RumourPurchased {
+                quote: SageRumourQuote {
+                    topic: TEST_SAGE_TOPICS[0],
+                    input_len: 5,
+                },
+                paid: 17,
+                rendered: "Seek ye the Codex in the Underworld!".to_string(),
+            }
+        );
+        assert_eq!(state, SageState::Prompt { topics: &TEST_SAGE_TOPICS });
+    }
+
+    #[test]
+    fn sage_rumour_refusals_and_empty_exit_preserve_gold() {
+        let mut state = SageState::for_topics(&TEST_SAGE_TOPICS);
+        let mut gold = 10u16;
+
+        assert_eq!(
+            step_sage(&mut state, SageInput::Topic("shards"), &mut gold),
+            SageOutcome::NoTopicMatch
+        );
+        assert_eq!(gold, 10);
+        assert_eq!(state, SageState::Prompt { topics: &TEST_SAGE_TOPICS });
+
+        assert!(matches!(
+            step_sage(&mut state, SageInput::Topic("shard"), &mut gold),
+            SageOutcome::QuotedRumour { .. }
+        ));
+        assert_eq!(
+            step_sage(&mut state, SageInput::Confirm(true), &mut gold),
+            SageOutcome::RefusedShortFunds {
+                available: 10,
+                required: 25,
+            }
+        );
+        assert_eq!(gold, 10);
+        assert_eq!(state, SageState::Prompt { topics: &TEST_SAGE_TOPICS });
+
+        assert_eq!(
+            step_sage(&mut state, SageInput::Topic(" "), &mut gold),
+            SageOutcome::Exited
+        );
+        assert_eq!(state, SageState::Exited);
     }
 
     #[test]

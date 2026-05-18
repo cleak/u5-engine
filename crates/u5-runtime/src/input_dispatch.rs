@@ -571,6 +571,22 @@ fn handle_active_shop_key_input(
             state.food = food;
             format_tavern_outcome(outcome)
         }
+        ActiveShopSession::Sage(s) => {
+            let line = active_shop_text_line(key, suffix);
+            let outcome = match (*s, yes, no) {
+                (SageState::Prompt { .. }, _, _) => {
+                    step_sage(s, SageInput::Topic(&line), &mut state.gold)
+                }
+                (SageState::Confirm { .. }, true, _) => {
+                    step_sage(s, SageInput::Confirm(true), &mut state.gold)
+                }
+                (SageState::Confirm { .. }, _, true) => {
+                    step_sage(s, SageInput::Confirm(false), &mut state.gold)
+                }
+                _ => SageOutcome::InvalidInput,
+            };
+            format_sage_outcome(outcome)
+        }
         ActiveShopSession::Reagent(s) => {
             let mut stock = state.reagents;
             let outcome = match (*s, inline_digit) {
@@ -686,6 +702,15 @@ fn handle_active_shop_key_input(
         state.active_shop = Some(session);
     }
     PlayInputDisposition::Continue
+}
+
+fn active_shop_text_line(key: char, suffix: &str) -> String {
+    let mut line = String::new();
+    if !matches!(key, '\r' | '\n' | ' ') {
+        line.push(key);
+    }
+    line.push_str(suffix);
+    line
 }
 
 fn active_inn_scene_marker(state: &PlayState) -> u8 {
@@ -805,6 +830,23 @@ fn format_tavern_outcome(outcome: crate::shop_runtime::TavernOutcome) -> String 
         RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
         RefusedNoLivingParty => "No one can drink right now.".to_string(),
         RefusedNoNeed => "Thou needest no provisions.".to_string(),
+        Exited => "Farewell.".to_string(),
+        InvalidInput => "I do not understand.".to_string(),
+    }
+}
+
+fn format_sage_outcome(outcome: crate::shop_runtime::SageOutcome) -> String {
+    use crate::shop_runtime::SageOutcome::*;
+    match outcome {
+        QuotedRumour { quote } => format!(
+            "{} costs {} gold. (Y/N)",
+            quote.topic.subject, quote.topic.fee
+        ),
+        RumourPurchased { rendered, .. } => rendered,
+        RefusedShortFunds { required, .. } => format!("Thou lackest the {required} gold."),
+        InputTooLong { limit, .. } => format!("Ask in {limit} characters or fewer."),
+        NoTopicMatch => "That, I cannot help thee with.".to_string(),
+        Declined => "As you wish.".to_string(),
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),
     }
