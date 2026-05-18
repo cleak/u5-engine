@@ -97,16 +97,7 @@ impl PlayState {
             return Ok(MoveOutcome::Moved);
         }
         if is_dungeon_room_helper_state(tile) {
-            let slot = dungeon_room_slot(tile);
-            let arena = dungeon_room_arena_index(scene, tile);
-            self.advance_turn();
-            let arena_note = self.dungeon_room_arena_note(game_dir, arena)?;
-            self.message = format!(
-                "Moved {} to ({nx}, {ny}) on {} level {level}; room-helper state slot {slot}; {arena_note}.",
-                direction.name(),
-                scene.key()
-            );
-            return Ok(MoveOutcome::Moved);
+            return self.resolve_dungeon_room_trigger(game_dir, scene, level, nx, ny, tile);
         }
         if self.dungeon_wind_tile_extinguishes_torch(game_dir, scene, level, nx, ny, tile)? {
             self.torch_counter = 0;
@@ -484,31 +475,47 @@ impl PlayState {
         tile: u8,
     ) -> io::Result<MoveOutcome> {
         let slot = dungeon_room_slot(tile);
-        if scene.record == DOOM_DUNGEON_RECORD
+        let helper_state = is_dungeon_room_helper_state(tile);
+        let doom_final_room = scene.record == DOOM_DUNGEON_RECORD
             && level == DOOM_FINAL_ROOM_LEVEL
             && x == DOOM_FINAL_ROOM_X
             && y == DOOM_FINAL_ROOM_Y
-            && slot == DOOM_FINAL_ROOM_SLOT
-        {
+            && slot == DOOM_FINAL_ROOM_SLOT;
+        let arena = dungeon_room_arena_index(scene, tile);
+        let dungeon_cbt_available = game_dir.is_some_and(|dir| dir.join(DUNGEON_CBT_FILE).exists());
+        if doom_final_room && !dungeon_cbt_available {
             return Ok(self.enter_endgame());
         }
-        let arena = dungeon_room_arena_index(scene, tile);
-        self.grid[dungeon_cell_index(level, x, y)] = 0xa0 | slot;
+        let marked_helper = !helper_state && !doom_final_room;
+        if marked_helper {
+            self.grid[dungeon_cell_index(level, x, y)] = 0xa0 | slot;
+        }
         self.mark_visibility_dirty();
         self.advance_turn();
-        if let Some(game_dir) = game_dir {
-            if game_dir.join(DUNGEON_CBT_FILE).exists() {
-                let combat_note = self.enter_dungeon_room_combat(game_dir, scene, level, arena)?;
-                self.message = format!(
-                    "Entered dungeon room trigger slot {slot} at ({x}, {y}) on {} level {level}; {combat_note}; marked visit-local room-helper state.",
-                    scene.key()
-                );
-                return Ok(MoveOutcome::Moved);
-            }
+        let state_note = if doom_final_room {
+            "kept final room trigger state"
+        } else if marked_helper {
+            "marked visit-local room-helper state"
+        } else {
+            "kept visit-local room-helper state"
+        };
+        let trigger_kind = if helper_state {
+            "room-helper state"
+        } else {
+            "room trigger"
+        };
+        if dungeon_cbt_available {
+            let game_dir = game_dir.expect("availability checked from game_dir");
+            let combat_note = self.enter_dungeon_room_combat(game_dir, scene, level, arena)?;
+            self.message = format!(
+                "Entered dungeon {trigger_kind} slot {slot} at ({x}, {y}) on {} level {level}; {combat_note}; {state_note}.",
+                scene.key()
+            );
+            return Ok(MoveOutcome::Moved);
         }
         let arena_note = self.dungeon_room_arena_note(game_dir, arena)?;
         self.message = format!(
-            "Entered dungeon room trigger slot {slot} at ({x}, {y}) on {} level {level}; {arena_note}; marked visit-local room-helper state.",
+            "Entered dungeon {trigger_kind} slot {slot} at ({x}, {y}) on {} level {level}; {arena_note}; {state_note}.",
             scene.key()
         );
         Ok(MoveOutcome::Moved)

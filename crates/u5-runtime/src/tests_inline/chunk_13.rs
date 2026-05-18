@@ -13533,6 +13533,42 @@
     }
 
     #[test]
+    fn dungeon_room_helper_state_loads_dungeon_cbt_record_when_available() {
+        let dir = debug_game_dir();
+        let scene = DungeonScene::new(35).unwrap();
+        let mut record = synthetic_combat_arena_record();
+        let source_base =
+            DUNGEON_ROOM_SOURCE_ROW * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_SOURCE_COLUMN;
+        record[source_base + 1] = 0x44;
+        let mut dungeon_cbt = Vec::new();
+        for _ in 0..DUNGEON_CBT_RECORDS {
+            dungeon_cbt.extend_from_slice(&record);
+        }
+        fs::write(dir.join(DUNGEON_CBT_FILE), dungeon_cbt).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0xa4;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.area = Area::Dungeon { scene, level: 0 };
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Moved
+        );
+
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xa4);
+        assert!(state.combat_active);
+        assert!(state.message.contains("room-helper state slot 4"));
+        assert!(state.message.contains("entered dungeon combat"));
+        assert!(state.message.contains("DUNGEON.CBT arena 20"));
+        assert_eq!(state.combat_terrain[0][0], 0x00);
+        assert_eq!(state.active_objects[7].tile, 0xc4);
+        assert!(!state.combat_actors[7].is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn dungeon_current_room_trigger_fires_before_next_key() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 1, 1)] = 0xf3;
@@ -13578,6 +13614,61 @@
             Some(EndgameState::awaiting_first_confirmation())
         );
         assert!(state.message.contains("Lord British asks"));
+    }
+
+    #[test]
+    fn doom_final_room_trigger_loads_dungeon_cbt_before_endgame_when_available() {
+        let dir = debug_game_dir();
+        let scene = DungeonScene::new(40).unwrap();
+        let mut record = synthetic_combat_arena_record();
+        let source_base =
+            DUNGEON_ROOM_SOURCE_ROW * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_SOURCE_COLUMN;
+        record[source_base] = 0x3c;
+        record[source_base + 1] = 0x44;
+        let mut dungeon_cbt = Vec::new();
+        for index in 0..DUNGEON_CBT_RECORDS {
+            if index == DUNGEON_CBT_RECORDS - 1 {
+                dungeon_cbt.extend_from_slice(&record);
+            } else {
+                dungeon_cbt.extend_from_slice(&synthetic_combat_arena_record());
+            }
+        }
+        fs::write(dir.join(DUNGEON_CBT_FILE), dungeon_cbt).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(
+            DOOM_FINAL_ROOM_LEVEL,
+            DOOM_FINAL_ROOM_X,
+            DOOM_FINAL_ROOM_Y,
+        )] = 0xf0 | DOOM_FINAL_ROOM_SLOT;
+        let mut state = dungeon_state(grid, DOOM_FINAL_ROOM_LEVEL, 4, DOOM_FINAL_ROOM_Y);
+        state.area = Area::Dungeon {
+            scene,
+            level: DOOM_FINAL_ROOM_LEVEL,
+        };
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Moved
+        );
+
+        assert!(state.combat_active);
+        assert_eq!(state.endgame, None);
+        assert_eq!(
+            state.grid[dungeon_cell_index(
+                DOOM_FINAL_ROOM_LEVEL,
+                DOOM_FINAL_ROOM_X,
+                DOOM_FINAL_ROOM_Y,
+            )],
+            0xf0 | DOOM_FINAL_ROOM_SLOT
+        );
+        assert!(state.message.contains("entered dungeon combat"));
+        assert!(state.message.contains("DUNGEON.CBT arena 111"));
+        assert!(state.message.contains("kept final room trigger state"));
+        assert_eq!(state.active_objects[7].tile, 0xc4);
+        assert!(!state.combat_actors[7].is_empty());
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
