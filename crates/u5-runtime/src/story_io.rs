@@ -333,6 +333,41 @@ pub fn load_story_records(game_dir: &Path) -> io::Result<Option<StoryRecords>> {
 pub fn parse_story_records(bytes: &[u8]) -> io::Result<StoryRecords> {
     let mut records = Vec::with_capacity(EXPECTED_RECORD_COUNT);
     let mut start = 0;
+    for record_index in 0..EXPECTED_RECORD_COUNT {
+        let (record, next_start) = read_story_record(bytes, start, record_index)?;
+        records.push(record);
+        start = next_start;
+    }
+    validate_story_tail(bytes, start)?;
+    Ok(StoryRecords { records })
+}
+
+fn read_story_record(
+    bytes: &[u8],
+    start: usize,
+    record_index: usize,
+) -> io::Result<(String, usize)> {
+    let end = bytes[start..]
+        .iter()
+        .position(|&b| b == 0x00)
+        .map(|offset| start + offset);
+    let Some(end) = end else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{STORY_DAT_FILE}: record {record_index} is not NUL-terminated"),
+        ));
+    };
+    if end == start {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{STORY_DAT_FILE}: required record {record_index} is empty"),
+        ));
+    }
+    let record = decode_story_record(record_index, &bytes[start..end])?;
+    Ok((record, end + 1))
+}
+
+fn validate_story_tail(bytes: &[u8], mut start: usize) -> io::Result<()> {
     while start < bytes.len() {
         let end = bytes[start..]
             .iter()
@@ -341,28 +376,20 @@ pub fn parse_story_records(bytes: &[u8]) -> io::Result<StoryRecords> {
         let Some(end) = end else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("{STORY_DAT_FILE}: unterminated record starting at byte {start}"),
+                format!(
+                    "{STORY_DAT_FILE}: extra record starting at byte {start} is not NUL-terminated"
+                ),
             ));
         };
-        records.push(decode_story_record(&bytes[start..end]));
+        if end > start {
+            decode_story_record(EXPECTED_RECORD_COUNT, &bytes[start..end])?;
+        }
         start = end + 1;
     }
-    while records.last().is_some_and(|record| record.is_empty()) {
-        records.pop();
-    }
-    if records.len() < EXPECTED_RECORD_COUNT {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "{STORY_DAT_FILE}: expected {EXPECTED_RECORD_COUNT} records, found {}",
-                records.len()
-            ),
-        ));
-    }
-    Ok(StoryRecords { records })
+    Ok(())
 }
 
-fn decode_story_record(bytes: &[u8]) -> String {
+fn decode_story_record(record_index: usize, bytes: &[u8]) -> io::Result<String> {
     let mut out = String::with_capacity(bytes.len());
     for &byte in bytes {
         match byte {
@@ -371,8 +398,21 @@ fn decode_story_record(bytes: &[u8]) -> String {
             // hyphen are layout markup, not visible glyphs.
             b'{' | b'_' => {}
             ch if (0x20..=0x7e).contains(&ch) => out.push(ch as char),
-            _ => {}
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "{STORY_DAT_FILE}: record {record_index} has unsupported byte 0x{byte:02x}"
+                    ),
+                ));
+            }
         }
     }
-    out
+    if out.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{STORY_DAT_FILE}: record {record_index} decodes to empty text"),
+        ));
+    }
+    Ok(out)
 }

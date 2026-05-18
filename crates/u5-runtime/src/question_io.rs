@@ -119,6 +119,41 @@ pub fn load_question_records(game_dir: &Path) -> io::Result<Option<QuestionRecor
 pub fn parse_question_records(bytes: &[u8]) -> io::Result<QuestionRecords> {
     let mut records = Vec::with_capacity(EXPECTED_RECORD_COUNT);
     let mut start = 0;
+    for record_index in 0..EXPECTED_RECORD_COUNT {
+        let (record, next_start) = read_question_record(bytes, start, record_index)?;
+        records.push(record);
+        start = next_start;
+    }
+    validate_question_tail(bytes, start)?;
+    Ok(QuestionRecords { records })
+}
+
+fn read_question_record(
+    bytes: &[u8],
+    start: usize,
+    record_index: usize,
+) -> io::Result<(String, usize)> {
+    let end = bytes[start..]
+        .iter()
+        .position(|&b| b == 0x00)
+        .map(|offset| start + offset);
+    let Some(end) = end else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{QUESTION_DAT_FILE}: record {record_index} is not NUL-terminated"),
+        ));
+    };
+    if end == start {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{QUESTION_DAT_FILE}: required record {record_index} is empty"),
+        ));
+    }
+    let record = decode_question_record(record_index, &bytes[start..end])?;
+    Ok((record, end + 1))
+}
+
+fn validate_question_tail(bytes: &[u8], mut start: usize) -> io::Result<()> {
     while start < bytes.len() {
         let end = bytes[start..]
             .iter()
@@ -127,28 +162,20 @@ pub fn parse_question_records(bytes: &[u8]) -> io::Result<QuestionRecords> {
         let Some(end) = end else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("{QUESTION_DAT_FILE}: unterminated record starting at byte {start}"),
+                format!(
+                    "{QUESTION_DAT_FILE}: extra record starting at byte {start} is not NUL-terminated"
+                ),
             ));
         };
-        records.push(decode_question_record(&bytes[start..end]));
+        if end > start {
+            decode_question_record(EXPECTED_RECORD_COUNT, &bytes[start..end])?;
+        }
         start = end + 1;
     }
-    while records.last().is_some_and(|record| record.is_empty()) {
-        records.pop();
-    }
-    if records.len() < EXPECTED_RECORD_COUNT {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "{QUESTION_DAT_FILE}: expected {EXPECTED_RECORD_COUNT} records, found {}",
-                records.len()
-            ),
-        ));
-    }
-    Ok(QuestionRecords { records })
+    Ok(())
 }
 
-fn decode_question_record(bytes: &[u8]) -> String {
+fn decode_question_record(record_index: usize, bytes: &[u8]) -> io::Result<String> {
     let mut out = String::with_capacity(bytes.len());
     for &byte in bytes {
         match byte {
@@ -157,8 +184,21 @@ fn decode_question_record(bytes: &[u8]) -> String {
             // markers are layout markup, not visible glyphs.
             QUESTION_PARAGRAPH_START_MARKER | QUESTION_SOFT_BREAK_MARKER => {}
             ch if (0x20..=0x7e).contains(&ch) => out.push(ch as char),
-            _ => {}
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "{QUESTION_DAT_FILE}: record {record_index} has unsupported byte 0x{byte:02x}"
+                    ),
+                ));
+            }
         }
     }
-    out
+    if out.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{QUESTION_DAT_FILE}: record {record_index} decodes to empty text"),
+        ));
+    }
+    Ok(out)
 }

@@ -17453,6 +17453,29 @@
     }
 
     #[test]
+    fn parse_story_records_rejects_empty_or_bad_required_record() {
+        let mut bytes = Vec::new();
+        for index in 0..20usize {
+            if index == 7 {
+                bytes.push(0x00);
+            } else {
+                bytes.extend_from_slice(b"page\0");
+            }
+        }
+        assert!(parse_story_records(&bytes).is_err());
+
+        let mut bytes = Vec::new();
+        for index in 0..20usize {
+            if index == 3 {
+                bytes.extend_from_slice(&[b'p', 0x80, 0x00]);
+            } else {
+                bytes.extend_from_slice(b"page\0");
+            }
+        }
+        assert!(parse_story_records(&bytes).is_err());
+    }
+
+    #[test]
     fn parse_question_records_walks_thirty_records_and_strips_markup() {
         // formats/question-dat.md §2-§3: 30 NUL-terminated records;
         // record 0 = gypsy arrival, 1 = gypsy invitation, 2..=29 = dilemmas.
@@ -17486,6 +17509,29 @@
             bytes.extend_from_slice(b"x\0");
         }
         assert!(parse_question_records(&bytes).is_err());
+    }
+
+    #[test]
+    fn parse_question_records_exposes_only_required_records_and_rejects_bad_bytes() {
+        let mut bytes = Vec::new();
+        for _ in 0..30usize {
+            bytes.extend_from_slice(b"record\0");
+        }
+        bytes.extend_from_slice(b"ignored extra\0");
+
+        let records = parse_question_records(&bytes).expect("extra records are ignored");
+        assert_eq!(records.records.len(), 30);
+        assert_eq!(records.dilemma(30), None);
+
+        let mut bad = Vec::new();
+        for index in 0..30usize {
+            if index == 12 {
+                bad.extend_from_slice(&[b'r', 0x01, 0x00]);
+            } else {
+                bad.extend_from_slice(b"record\0");
+            }
+        }
+        assert!(parse_question_records(&bad).is_err());
     }
 
     #[test]
@@ -17581,6 +17627,31 @@
     }
 
     #[test]
+    fn parse_misc_messages_exposes_only_format_records_and_rejects_bad_bytes() {
+        let mut bytes = Vec::new();
+        for index in 0..47usize {
+            bytes.extend_from_slice(format!("rec{index}").as_bytes());
+            bytes.push(0x00);
+        }
+        bytes.extend_from_slice(b"ignored extra\0");
+
+        let messages = parse_misc_messages(&bytes).expect("extra records are ignored");
+        assert_eq!(messages.records.len(), 47);
+        assert_eq!(messages.record(46), Some("rec46"));
+        assert_eq!(messages.record(47), None);
+
+        let mut bad = Vec::new();
+        for index in 0..47usize {
+            if index == 36 {
+                bad.extend_from_slice(&[b'C', 0x80, 0x00]);
+            } else {
+                bad.extend_from_slice(b"rec\0");
+            }
+        }
+        assert!(parse_misc_messages(&bad).is_err());
+    }
+
+    #[test]
     fn parse_endgame_messages_walks_eleven_nul_terminated_records() {
         // formats/endmsg-dat.md §2-§4: eleven NUL-terminated plain-ASCII
         // records consumed by the endgame Lord British dialogue.
@@ -17623,6 +17694,40 @@
         // Also reject when fewer than 11 records.
         bytes = b"only one record\0".to_vec();
         assert!(parse_endgame_messages(&bytes).is_err());
+    }
+
+    #[test]
+    fn parse_endgame_messages_ignores_extra_records_without_moving_refusal_branch() {
+        let mut bytes = Vec::new();
+        for index in 0..10usize {
+            bytes.extend_from_slice(format!("record {index}").as_bytes());
+            bytes.push(0x00);
+        }
+        bytes.extend_from_slice(b"Refusal branch\0Ignored extra\0");
+
+        let messages = parse_endgame_messages(&bytes).expect("extra records are ignored");
+        assert_eq!(messages.records.len(), 11);
+        assert_eq!(messages.refusal_branch(), Some("Refusal branch"));
+
+        let mut empty = Vec::new();
+        for index in 0..11usize {
+            if index == 5 {
+                empty.push(0x00);
+            } else {
+                empty.extend_from_slice(b"record\0");
+            }
+        }
+        assert!(parse_endgame_messages(&empty).is_err());
+
+        let mut bad = Vec::new();
+        for index in 0..11usize {
+            if index == 2 {
+                bad.extend_from_slice(&[b'r', 0x7f, 0x00]);
+            } else {
+                bad.extend_from_slice(b"record\0");
+            }
+        }
+        assert!(parse_endgame_messages(&bad).is_err());
     }
 
     #[test]

@@ -179,6 +179,35 @@ pub fn load_misc_messages(game_dir: &Path) -> io::Result<Option<MiscMessages>> {
 pub fn parse_misc_messages(bytes: &[u8]) -> io::Result<MiscMessages> {
     let mut records = Vec::with_capacity(EXPECTED_RECORD_COUNT);
     let mut start = 0;
+    for record_index in 0..EXPECTED_RECORD_COUNT {
+        let (record, next_start) = read_misc_record(bytes, start, record_index)?;
+        records.push(record);
+        start = next_start;
+    }
+    validate_misc_tail(bytes, start)?;
+    Ok(MiscMessages { records })
+}
+
+fn read_misc_record(
+    bytes: &[u8],
+    start: usize,
+    record_index: usize,
+) -> io::Result<(String, usize)> {
+    let end = bytes[start..]
+        .iter()
+        .position(|&b| b == 0x00)
+        .map(|offset| start + offset);
+    let Some(end) = end else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{MISCMSG_DAT_FILE}: record {record_index} is not NUL-terminated"),
+        ));
+    };
+    let record = decode_misc_record(record_index, &bytes[start..end])?;
+    Ok((record, end + 1))
+}
+
+fn validate_misc_tail(bytes: &[u8], mut start: usize) -> io::Result<()> {
     while start < bytes.len() {
         let end = bytes[start..]
             .iter()
@@ -187,25 +216,20 @@ pub fn parse_misc_messages(bytes: &[u8]) -> io::Result<MiscMessages> {
         let Some(end) = end else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("{MISCMSG_DAT_FILE}: unterminated record starting at byte {start}"),
+                format!(
+                    "{MISCMSG_DAT_FILE}: extra record starting at byte {start} is not NUL-terminated"
+                ),
             ));
         };
-        records.push(decode_misc_record(&bytes[start..end]));
+        if end > start {
+            decode_misc_record(EXPECTED_RECORD_COUNT, &bytes[start..end])?;
+        }
         start = end + 1;
     }
-    if records.len() < EXPECTED_RECORD_COUNT {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "{MISCMSG_DAT_FILE}: expected at least {EXPECTED_RECORD_COUNT} records, found {}",
-                records.len()
-            ),
-        ));
-    }
-    Ok(MiscMessages { records })
+    Ok(())
 }
 
-fn decode_misc_record(bytes: &[u8]) -> String {
+fn decode_misc_record(record_index: usize, bytes: &[u8]) -> io::Result<String> {
     let mut out = String::with_capacity(bytes.len());
     for &byte in bytes {
         match byte {
@@ -214,10 +238,17 @@ fn decode_misc_record(bytes: &[u8]) -> String {
             // decides whether to render them through the prose printer or the
             // sign-style tile-glyph renderer per the spec.
             ch if (0x20..=0x7e).contains(&ch) => out.push(ch as char),
-            _ => {}
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "{MISCMSG_DAT_FILE}: record {record_index} has unsupported byte 0x{byte:02x}"
+                    ),
+                ));
+            }
         }
     }
-    out
+    Ok(out)
 }
 
 pub fn render_miscmsg_tile_glyph_text(text: &str) -> String {
