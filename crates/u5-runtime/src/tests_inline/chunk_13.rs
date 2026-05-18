@@ -17421,6 +17421,16 @@
         assert_eq!(narrative.window(1, 6).as_deref(), Some("Hello"));
         // Out-of-range window returns None per spec §5.
         assert!(narrative.window(0, 999).is_none());
+        assert!(narrative.window(12, 13).is_none());
+    }
+
+    #[test]
+    fn parse_end_narrative_rejects_bad_or_blank_text() {
+        let narrative = parse_end_narrative(b"{Return_home\0").expect("plain text should parse");
+        assert_eq!(narrative.full_text(), "Returnhome");
+
+        assert!(parse_end_narrative(b"{_\0").is_err());
+        assert!(parse_end_narrative(&[b'{', b'A', 0x80, 0x00]).is_err());
     }
 
     #[test]
@@ -17770,6 +17780,25 @@
     fn parse_sign_records_rejects_short_directory() {
         // Less than the 66-byte scene directory must error per §2 of the format spec.
         assert!(parse_sign_records(&[0u8; 10]).is_err());
+    }
+
+    #[test]
+    fn parse_sign_records_rejects_bad_offsets_and_malformed_blocks() {
+        let mut bad_offset = vec![0u8; SIGNS_DAT_SCENE_DIRECTORY_BYTES];
+        bad_offset[1 * 2..1 * 2 + 2].copy_from_slice(&(12u16).to_le_bytes());
+        assert!(parse_sign_records(&bad_offset).is_err());
+
+        let mut truncated_header = vec![0u8; SIGNS_DAT_SCENE_DIRECTORY_BYTES];
+        let offset = SIGNS_DAT_SCENE_DIRECTORY_BYTES as u16;
+        truncated_header[1 * 2..1 * 2 + 2].copy_from_slice(&offset.to_le_bytes());
+        truncated_header.extend_from_slice(&[1, 0]);
+        assert!(parse_sign_records(&truncated_header).is_err());
+
+        let mut unterminated_payload = vec![0u8; SIGNS_DAT_SCENE_DIRECTORY_BYTES];
+        unterminated_payload[1 * 2..1 * 2 + 2].copy_from_slice(&offset.to_le_bytes());
+        unterminated_payload.extend_from_slice(&[1, 0, 2, 3]);
+        unterminated_payload.extend_from_slice(b"Open ended");
+        assert!(parse_sign_records(&unterminated_payload).is_err());
     }
 
     #[test]

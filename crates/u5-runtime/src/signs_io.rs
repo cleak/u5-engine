@@ -149,25 +149,45 @@ pub fn parse_sign_records(bytes: &[u8]) -> io::Result<Vec<SignRecord>> {
     let mut visited = Vec::new();
     for slot in 0..SCENE_DIRECTORY_SLOTS {
         let offset = u16::from_le_bytes([bytes[slot * 2], bytes[slot * 2 + 1]]) as usize;
-        if offset == 0 || offset >= bytes.len() || visited.contains(&offset) {
+        if offset == 0 {
+            continue;
+        }
+        if offset < SCENE_DIRECTORY_BYTES || offset >= bytes.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{SIGNS_DAT_FILE} directory slot {slot} has invalid offset {offset}"),
+            ));
+        }
+        if visited.contains(&offset) {
             continue;
         }
         visited.push(offset);
-        parse_scene_block(bytes, offset, &mut records);
+        parse_scene_block(bytes, slot as u8, offset, &mut records)?;
     }
     Ok(records)
 }
 
-fn parse_scene_block(bytes: &[u8], start: usize, out: &mut Vec<SignRecord>) {
+fn parse_scene_block(
+    bytes: &[u8],
+    directory_scene: u8,
+    start: usize,
+    out: &mut Vec<SignRecord>,
+) -> io::Result<()> {
     let mut cursor = start;
-    while cursor + RECORD_HEADER_LEN <= bytes.len() {
+    while cursor < bytes.len() {
+        if bytes[cursor] == 0 {
+            return Ok(());
+        }
+        if cursor + RECORD_HEADER_LEN > bytes.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{SIGNS_DAT_FILE} scene {directory_scene} block has truncated record header at byte {cursor}"
+                ),
+            ));
+        }
         let header = &bytes[cursor..cursor + RECORD_HEADER_LEN];
         let scene = header[0];
-        // The end-of-block sentinel is conventionally a zero scene byte after
-        // the last real record; bail when the header looks invalid.
-        if scene == 0 {
-            return;
-        }
         let z = header[1];
         let y = header[2];
         let x = header[3];
@@ -177,9 +197,16 @@ fn parse_scene_block(bytes: &[u8], start: usize, out: &mut Vec<SignRecord>) {
             cursor += 1;
         }
         let payload_end = cursor;
-        if cursor < bytes.len() {
-            cursor += 1; // skip the NUL terminator
+        if cursor >= bytes.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{SIGNS_DAT_FILE} scene {directory_scene} record at byte {} is not NUL-terminated",
+                    payload_start - RECORD_HEADER_LEN
+                ),
+            ));
         }
+        cursor += 1; // skip the NUL terminator
         let body = decode_sign_payload(&bytes[payload_start..payload_end]);
         out.push(SignRecord {
             scene,
@@ -189,6 +216,10 @@ fn parse_scene_block(bytes: &[u8], start: usize, out: &mut Vec<SignRecord>) {
             body,
         });
     }
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!("{SIGNS_DAT_FILE} scene {directory_scene} block has no end sentinel"),
+    ))
 }
 
 pub fn decode_sign_payload(bytes: &[u8]) -> String {

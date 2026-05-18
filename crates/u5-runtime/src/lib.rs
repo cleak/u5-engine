@@ -206,7 +206,7 @@ pub use dungeon_tables_io_movement::*;
 pub use end_io::{
     END_DAT_FILE, END_DAT_LEN, END_DAT_WINDOW_COUNT, END_PARAGRAPH_START_MARKER,
     END_SOFT_BREAK_MARKER, EndNarrative, EndNarrativeGroup, EndNarrativeWindow, decode_end_window,
-    end_narrative_window, load_end_narrative,
+    end_narrative_window, load_end_narrative, parse_end_narrative,
 };
 pub use endgame::*;
 pub use endmsg_io::{

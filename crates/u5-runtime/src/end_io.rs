@@ -126,7 +126,8 @@ impl EndNarrative {
         if end > self.raw.len() || start > end {
             return None;
         }
-        Some(decode_end_window(&self.raw[start..end]))
+        let text = decode_end_window(&self.raw[start..end]);
+        if text.is_empty() { None } else { Some(text) }
     }
 }
 
@@ -142,7 +143,38 @@ pub fn load_end_narrative(game_dir: &Path) -> io::Result<Option<EndNarrative>> {
             ));
         }
     };
-    Ok(Some(EndNarrative { raw: bytes }))
+    parse_end_narrative(&bytes).map(Some)
+}
+
+pub fn parse_end_narrative(bytes: &[u8]) -> io::Result<EndNarrative> {
+    if bytes.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{END_DAT_FILE}: empty narrative file"),
+        ));
+    }
+    let mut has_renderable_text = false;
+    for (offset, &byte) in bytes.iter().enumerate() {
+        match byte {
+            0x00 | 0x0a | 0x0d | END_PARAGRAPH_START_MARKER | END_SOFT_BREAK_MARKER => {}
+            ch if (0x20..=0x7e).contains(&ch) => has_renderable_text = true,
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("{END_DAT_FILE}: unsupported byte 0x{byte:02x} at offset {offset}"),
+                ));
+            }
+        }
+    }
+    if !has_renderable_text {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{END_DAT_FILE}: no renderable narrative text"),
+        ));
+    }
+    Ok(EndNarrative {
+        raw: bytes.to_vec(),
+    })
 }
 
 pub fn decode_end_window(bytes: &[u8]) -> String {
