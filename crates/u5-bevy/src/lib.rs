@@ -25,7 +25,8 @@ const VIEWPORT_SIZE_PX: u32 = (VIEWPORT_CELLS * TILE_ATLAS_SIDE) as u32;
 const DISPLAY_SCALE: f32 = 3.0;
 const STATUS_PANEL_HEIGHT: f32 = 96.0;
 
-const READY_HINT: &str = "WASD/arrows: move. E enter, O open, K klimb, Space pass, Z stats, Esc quit. < / > climb floors.";
+const READY_HINT: &str =
+    "WASD/arrows: move. Command letters work; Shift+A attacks, Shift+S searches. Esc quit.";
 
 pub fn run_visual_loop(
     game_dir: &Path,
@@ -302,8 +303,10 @@ fn drive_visual(
         return;
     }
     let mut handled = false;
+    let shift_pressed =
+        keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
     for key in keyboard.get_just_pressed() {
-        let Some(ch) = key_code_to_char(*key) else {
+        let Some(ch) = key_code_to_char(*key, shift_pressed) else {
             continue;
         };
         let game_dir = visual.game_dir.clone();
@@ -369,8 +372,43 @@ fn summarize(state: &PlayState, fallback: &str) -> String {
     )
 }
 
-fn key_code_to_char(key: KeyCode) -> Option<char> {
+fn key_code_to_char(key: KeyCode, shift_pressed: bool) -> Option<char> {
     use KeyCode::*;
+    if shift_pressed {
+        let ch = match key {
+            KeyA => 'A',
+            KeyB => 'B',
+            KeyC => 'C',
+            KeyD => 'D',
+            KeyE => 'E',
+            KeyF => 'F',
+            KeyG => 'G',
+            KeyH => 'H',
+            KeyI => 'I',
+            KeyJ => 'J',
+            KeyK => 'K',
+            KeyL => 'L',
+            KeyM => 'M',
+            KeyN => 'N',
+            KeyO => 'O',
+            KeyP => 'P',
+            KeyQ => 'Q',
+            KeyR => 'R',
+            KeyS => 'S',
+            KeyT => 'T',
+            KeyU => 'U',
+            KeyV => 'V',
+            KeyW => 'W',
+            KeyX => 'X',
+            KeyY => 'Y',
+            KeyZ => 'Z',
+            Comma => '<',
+            Period => '>',
+            _ => return None,
+        };
+        return Some(ch);
+    }
+
     let ch = match key {
         KeyW | ArrowUp | Numpad8 => 'w',
         KeyA | ArrowLeft | Numpad4 => 'a',
@@ -380,9 +418,37 @@ fn key_code_to_char(key: KeyCode) -> Option<char> {
         Numpad9 => 'u',
         Numpad1 => 'b',
         Numpad3 => 'n',
-        KeyE => 'e',
-        KeyO => 'o',
-        KeyK => 'k',
+        Digit0 | Numpad0 => '0',
+        Digit1 => '1',
+        Digit2 => '2',
+        Digit3 => '3',
+        Digit4 => '4',
+        Digit5 => '5',
+        Digit6 => '6',
+        Digit7 => '7',
+        Digit8 => '8',
+        Digit9 => '9',
+        KeyB => 'B',
+        KeyC => 'C',
+        KeyE => 'E',
+        KeyF => 'F',
+        KeyG => 'G',
+        KeyH => 'H',
+        KeyI => 'I',
+        KeyJ => 'J',
+        KeyK => 'K',
+        KeyL => 'L',
+        KeyM => 'M',
+        KeyN => 'N',
+        KeyO => 'O',
+        KeyP => 'P',
+        KeyQ => 'Q',
+        KeyR => 'R',
+        KeyT => 'T',
+        KeyU => 'U',
+        KeyV => 'V',
+        KeyX => 'X',
+        KeyY => 'Y',
         KeyZ => 'Z',
         Space => ' ',
         Comma => '<',
@@ -459,5 +525,18 @@ mod tests {
         assert_eq!(lines[1], "LEVEL 0");
         assert!(lines.iter().any(|line| line == "A VERY LONG"));
         assert!(lines.iter().any(|line| line == "DUNGEON"));
+    }
+
+    #[test]
+    fn visual_key_map_keeps_wasd_movement_and_shift_command_conflicts() {
+        assert_eq!(key_code_to_char(KeyCode::KeyW, false), Some('w'));
+        assert_eq!(key_code_to_char(KeyCode::KeyA, false), Some('a'));
+        assert_eq!(key_code_to_char(KeyCode::KeyS, false), Some('s'));
+        assert_eq!(key_code_to_char(KeyCode::KeyD, false), Some('d'));
+        assert_eq!(key_code_to_char(KeyCode::KeyA, true), Some('A'));
+        assert_eq!(key_code_to_char(KeyCode::KeyS, true), Some('S'));
+        assert_eq!(key_code_to_char(KeyCode::KeyQ, false), Some('Q'));
+        assert_eq!(key_code_to_char(KeyCode::KeyU, false), Some('U'));
+        assert_eq!(key_code_to_char(KeyCode::Digit2, false), Some('2'));
     }
 }

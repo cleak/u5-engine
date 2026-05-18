@@ -69,7 +69,10 @@ Input map (visual mode):
 | `K`                                                 | Klimb             |
 | `,` / `.`                                           | `<` / `>` floor   |
 | `Space`                                             | Pass              |
-| `Z`                                                 | Stats             |
+| `B`, `C`, `F`-`J`, `L`-`R`, `T`-`V`, `X`-`Z`        | Command letters   |
+| `Shift+A` / `Shift+S`                               | Attack / Search   |
+| number row `0`-`9`                                  | Modal selections  |
+| `Q`                                                 | Save/exit prompt  |
 | `Esc`                                               | Quit              |
 
 `--scene`, `--floor`, `--debug-enter`, `--time`, `--wind`, `--transport`,
