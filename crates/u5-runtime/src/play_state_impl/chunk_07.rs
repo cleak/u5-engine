@@ -1252,7 +1252,7 @@ impl PlayState {
                 return Ok(MoveOutcome::Used);
             }
             self.message = format!(
-                "Attacked dungeon monster tile {} at ({x}, {y}) on {} level {level}; dungeon combat resolution is pending.",
+                "Attacked dungeon object tile {} at ({x}, {y}) on {} level {level}; no published combat class.",
                 object.tile,
                 scene.key()
             );
@@ -1353,7 +1353,7 @@ impl PlayState {
                 return Ok(MoveOutcome::Blocked);
             }
             self.message = format!(
-                "Attacked object tile {} at ({x}, {y}) to the {} in slot {object_slot}; combat resolution is pending.",
+                "Attacked object tile {} at ({x}, {y}) to the {} in slot {object_slot}; no published combat class.",
                 object.tile,
                 direction.name()
             );
@@ -3006,7 +3006,7 @@ impl PlayState {
                 return Ok(Some(MoveOutcome::Used));
             }
             let contact_message = format!(
-                "Dungeon monster tile {} approaches from the {} on {} level {level}; dungeon combat resolution is pending.",
+                "Dungeon object tile {} approaches from the {} on {} level {level}; no published combat class.",
                 object.tile,
                 direction.name(),
                 scene.key()

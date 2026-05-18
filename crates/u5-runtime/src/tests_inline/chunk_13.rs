@@ -17865,6 +17865,33 @@
     }
 
     #[test]
+    fn dungeon_attack_forward_non_class_object_reports_no_combat_class() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.player.facing = Direction::East;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x42,
+            tile: 0x42,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert!(state.handle_dungeon_key('A', Path::new("")).unwrap());
+
+        assert_eq!(state.turn, 1);
+        assert!(!state.combat_active);
+        assert!(state.active_objects[1].is_empty());
+        assert!(state
+            .message
+            .contains("Attacked dungeon object tile 66"));
+        assert!(state.message.contains("no published combat class"));
+        assert!(!state.message.contains("pending"));
+    }
+
+    #[test]
     fn top_down_uppercase_command_letters_preempt_vi_movement() {
         for (key, expected) in [
             ('A', "Attack where?"),
@@ -18072,6 +18099,36 @@
         assert!(!state.combat_actors[6].is_empty());
         assert!(state.message.contains("approaches from the East"));
         assert!(state.message.contains("entered dungeon combat"));
+        assert!(!state.message.contains("pending"));
+    }
+
+    #[test]
+    fn dungeon_post_turn_non_class_contact_reports_no_combat_class() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.player.facing = Direction::North;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x42,
+            tile: 0x42,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: 0x20,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(Path::new(""))).unwrap(),
+            MoveOutcome::Used
+        );
+
+        assert_eq!(state.player.facing, Direction::East);
+        assert!(!state.combat_active);
+        assert!(state.active_objects[1].is_empty());
+        assert!(state
+            .message
+            .contains("Dungeon object tile 66 approaches from the East"));
+        assert!(state.message.contains("no published combat class"));
         assert!(!state.message.contains("pending"));
     }
 
