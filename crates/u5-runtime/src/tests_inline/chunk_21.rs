@@ -1541,6 +1541,60 @@
     }
 
     #[test]
+    fn end_to_end_horse_trader_purchase_places_boardable_horse() {
+        let dialogue = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(20).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.gold = 130;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x83,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue(&dialogue),
+            MoveOutcome::Talked
+        );
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        assert!(state.message.contains("130 gold"));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 0);
+        assert!(state.active_shop.is_none());
+        assert!(state.message.contains("Thy horse awaits outside"));
+        let horse = state
+            .active_objects
+            .iter()
+            .find(|object| object.type_byte == HORSE_PARKED_FIRST)
+            .copied()
+            .expect("horse object was not placed");
+        assert_eq!((horse.x, horse.y, horse.z), (1, 2, 0));
+        assert!(matches!(
+            state
+                .boardable_vehicle_slot_at(1, 2)
+                .map(|candidate| candidate.transport),
+            Some(TransportState::Horse { .. })
+        ));
+    }
+
+    #[test]
     fn town_talk_guild_shop_uses_scene_local_prices() {
         let dialogue = HashMap::new();
         let mut state = test_state(open_grid(), 1, 1);
