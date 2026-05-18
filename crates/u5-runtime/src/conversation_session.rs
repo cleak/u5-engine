@@ -20,7 +20,7 @@
 use std::collections::HashMap;
 
 use crate::tlk_control_codes::*;
-use crate::tlk_runner::{TlkRunEvent, TlkRunInputs, TlkRunOutput, TlkRunStop, run_tlk_stream};
+use crate::tlk_runner::{TlkRunEvent, TlkRunInputs, TlkRunOutput, TlkRunStop, run_tlk_stream_from};
 
 /// Phase the conversation is currently in.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -31,6 +31,12 @@ pub enum ConversationSessionPhase {
     Opened,
     /// Greeting was presented; keyword input loop is active.
     AwaitingKeyword,
+    /// A TLK `0x84` ASK-PARTY-NAME prompt is waiting for a free-text
+    /// party-member name, then resumes the response at `cursor`.
+    AwaitingAskPartyName { field_idx: usize, cursor: usize },
+    /// A TLK `0x88` ASK-WHO prompt is waiting for a free-text party-member
+    /// name, then resumes the response at `cursor`.
+    AwaitingAskWho { field_idx: usize, cursor: usize },
     /// NPC's Bye response is being presented; the session is about
     /// to close. The harness flushes the response and then calls
     /// `acknowledge_close`.
@@ -54,6 +60,10 @@ pub struct ConversationContext<'a> {
     /// Party gold available for the current prompt, used to refuse
     /// unaffordable payments.
     pub gold_available: Option<u16>,
+    /// Live party-member names, already trimmed of trailing NUL padding.
+    /// ASK-PARTY-NAME and ASK-WHO compare the next typed line against
+    /// this list and pass the matched 1-based slot to the TLK runner.
+    pub party_member_names: &'a [&'a [u8]],
 }
 
 /// Accepted or refused gold payment emitted by a TLK response stream.
@@ -76,6 +86,10 @@ pub struct ConversationSessionOutput {
     pub gold_payments: Vec<ConversationGoldPayment>,
     /// Signal-flag bits encountered in the response (`0x86` arg <`A`).
     pub signal_flags: Vec<u8>,
+    /// Matched 1-based slot from an answered ASK-PARTY-NAME prompt.
+    pub asked_party_name: Option<u8>,
+    /// Matched 1-based slot from an answered ASK-WHO prompt.
+    pub asked_who: Option<u8>,
     /// `true` when this step ended the conversation (Bye fired or the
     /// stream ended unrecoverably).
     pub ended: bool,
@@ -110,14 +124,8 @@ impl ConversationSession {
     /// Run the greeting through the byte runner. Caller should display
     /// the rendered text and then transition to keyword input.
     pub fn present_greeting(&mut self, ctx: &ConversationContext<'_>) -> ConversationSessionOutput {
-        let mut out = ConversationSessionOutput::default();
-        if let Some(bytes) = self.fields.get(2) {
-            let inputs = make_inputs(ctx, 0, 0);
-            let run = run_tlk_stream(bytes, &inputs);
-            self.absorb_run(&run, &mut out);
-        }
         self.phase = ConversationSessionPhase::AwaitingKeyword;
-        out
+        self.run_field_from(2, 0, ctx, 0, 0)
     }
 
     /// Feed one typed keyword line. Returns the rendered response.
@@ -126,8 +134,23 @@ impl ConversationSession {
         line: &str,
         ctx: &ConversationContext<'_>,
     ) -> ConversationSessionOutput {
-        if !matches!(self.phase, ConversationSessionPhase::AwaitingKeyword) {
-            return ConversationSessionOutput::default();
+        match self.phase {
+            ConversationSessionPhase::AwaitingKeyword => {}
+            ConversationSessionPhase::AwaitingAskPartyName { field_idx, cursor } => {
+                let slot = tlk_ask_party_name_match(line.trim().as_bytes(), ctx.party_member_names);
+                self.phase = ConversationSessionPhase::AwaitingKeyword;
+                let mut out = self.run_field_from(field_idx, cursor, ctx, slot, 0);
+                out.asked_party_name = Some(slot);
+                return out;
+            }
+            ConversationSessionPhase::AwaitingAskWho { field_idx, cursor } => {
+                let slot = tlk_ask_party_name_match(line.trim().as_bytes(), ctx.party_member_names);
+                self.phase = ConversationSessionPhase::AwaitingKeyword;
+                let mut out = self.run_field_from(field_idx, cursor, ctx, 0, slot);
+                out.asked_who = Some(slot);
+                return out;
+            }
+            _ => return ConversationSessionOutput::default(),
         }
         self.keyword_turns = self.keyword_turns.saturating_add(1);
         let input = line.trim().as_bytes();
@@ -153,11 +176,15 @@ impl ConversationSession {
         if matches!(kind, TlkPlayerInputKind::EmptyByeShortcut) {
             out.text.push_str(TLK_EMPTY_INPUT_BYE_MESSAGE);
         }
-        if let Some(bytes) = self.fields.get(field_idx) {
-            let inputs = make_inputs(ctx, 0, 0);
-            let run = run_tlk_stream(bytes, &inputs);
-            self.absorb_run(&run, &mut out);
-        }
+        let response = self.run_field_from(field_idx, 0, ctx, 0, 0);
+        out.text.push_str(&response.text);
+        out.branch_flags_set |= response.branch_flags_set;
+        out.action_grants.extend(response.action_grants);
+        out.gold_payments.extend(response.gold_payments);
+        out.signal_flags.extend(response.signal_flags);
+        out.asked_party_name = response.asked_party_name;
+        out.asked_who = response.asked_who;
+        out.ended |= response.ended;
         // Empty input or BYE/THANK closes the conversation.
         if matches!(
             kind,
@@ -168,6 +195,17 @@ impl ConversationSession {
             out.ended = true;
         }
         out
+    }
+
+    /// Current prompt text for the active outer input loop.
+    pub fn prompt_message(&self) -> &'static str {
+        match self.phase {
+            ConversationSessionPhase::AwaitingKeyword => "Your interest?",
+            ConversationSessionPhase::AwaitingAskPartyName { .. } => "Name?",
+            ConversationSessionPhase::AwaitingAskWho { .. } => "Who?",
+            ConversationSessionPhase::Opened => "Your interest?",
+            ConversationSessionPhase::PresentingBye | ConversationSessionPhase::Closed => "",
+        }
     }
 
     /// Caller has finished presenting the Bye response; close the
@@ -197,7 +235,31 @@ impl ConversationSession {
         None
     }
 
-    fn absorb_run(&mut self, run: &TlkRunOutput, out: &mut ConversationSessionOutput) {
+    fn run_field_from(
+        &mut self,
+        field_idx: usize,
+        start: usize,
+        ctx: &ConversationContext<'_>,
+        ask_party_name_response: u8,
+        ask_who_response: u8,
+    ) -> ConversationSessionOutput {
+        let mut out = ConversationSessionOutput::default();
+        let Some(run) = self.fields.get(field_idx).map(|bytes| {
+            let inputs = make_inputs(ctx, ask_party_name_response, ask_who_response);
+            run_tlk_stream_from(bytes, start, &inputs)
+        }) else {
+            return out;
+        };
+        self.absorb_run(field_idx, &run, &mut out);
+        out
+    }
+
+    fn absorb_run(
+        &mut self,
+        field_idx: usize,
+        run: &TlkRunOutput,
+        out: &mut ConversationSessionOutput,
+    ) {
         out.text.push_str(&run.text);
         out.branch_flags_set |= run.branch_flags_set;
         out.action_grants.extend(run.action_grants.iter().copied());
@@ -210,14 +272,20 @@ impl ConversationSession {
                 _ => None,
             }));
         out.signal_flags.extend(run.signal_flags.iter().copied());
-        if matches!(
-            run.stop,
-            TlkRunStop::EndOfStream | TlkRunStop::NulTerminator
-        ) {
-            // End-of-stream forces a hard close; the keyword loop must
-            // not continue prompting after that.
-            self.phase = ConversationSessionPhase::PresentingBye;
-            out.ended = true;
+        match run.stop {
+            TlkRunStop::AskingPartyName(cursor) => {
+                self.phase = ConversationSessionPhase::AwaitingAskPartyName { field_idx, cursor };
+            }
+            TlkRunStop::AskingWho(cursor) => {
+                self.phase = ConversationSessionPhase::AwaitingAskWho { field_idx, cursor };
+            }
+            TlkRunStop::EndOfStream | TlkRunStop::NulTerminator => {
+                // End-of-stream forces a hard close; the keyword loop must
+                // not continue prompting after that.
+                self.phase = ConversationSessionPhase::PresentingBye;
+                out.ended = true;
+            }
+            _ => {}
         }
     }
 }
@@ -238,6 +306,7 @@ fn make_inputs<'a>(
         ask_party_name_response,
         ask_who_response,
         yield_on_pause: false,
+        yield_on_ask: true,
     }
 }
 
@@ -270,6 +339,7 @@ mod tests {
             dictionary: None,
             gold_payment_accepted: false,
             gold_available: None,
+            party_member_names: &[],
         }
     }
 
@@ -322,6 +392,54 @@ mod tests {
         s.present_greeting(&ctx());
         let out = s.submit_keyword("job", &ctx());
         assert!(out.text.contains("mend"));
+    }
+
+    #[test]
+    fn ask_party_name_prompt_matches_next_line_then_resumes_response() {
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("JOIN"),
+            {
+                let mut bytes = enc("Name thy companion.");
+                bytes.push(TLK_CODE_ASK_PARTY_NAME);
+                bytes.extend_from_slice(&enc(" Done."));
+                bytes.push(TLK_CODE_END_OF_RESPONSE);
+                bytes
+            },
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Greetings.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "JOIN".to_string(),
+            "Name thy companion.".to_string(),
+        ];
+        let party_names: [&[u8]; 2] = [b"AVATAR", b"IOLO"];
+        let context = ConversationContext {
+            party_member_names: &party_names,
+            ..ctx()
+        };
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&context);
+
+        let first = s.submit_keyword("join", &context);
+        assert_eq!(first.text, "Name thy companion.");
+        assert!(matches!(
+            s.phase,
+            ConversationSessionPhase::AwaitingAskPartyName { .. }
+        ));
+        assert_eq!(s.prompt_message(), "Name?");
+
+        let second = s.submit_keyword("iolo", &context);
+        assert_eq!(second.asked_party_name, Some(2));
+        assert_eq!(second.text, " Done.");
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
 
     #[test]

@@ -1450,12 +1450,17 @@ fn handle_active_conversation_key_input(
     line.push_str(suffix);
     let line = line.trim().to_string();
     let (text, ended) = state.submit_active_conversation_keyword(&line);
-    if !ended && state.active_conversation.is_some() {
-        let prompt = TLK_KEYWORD_PROMPT
-            .lines()
-            .next()
-            .unwrap_or("Your interest?");
-        state.message = format!("{text} {prompt}");
+    if !ended {
+        if let Some(session) = state.active_conversation.as_ref() {
+            let prompt = session.prompt_message();
+            state.message = if prompt.is_empty() {
+                text
+            } else if text.is_empty() {
+                prompt.to_string()
+            } else {
+                format!("{text} {prompt}")
+            };
+        }
     }
     PlayInputDisposition::Continue
 }

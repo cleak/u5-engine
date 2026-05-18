@@ -2217,6 +2217,7 @@ impl PlayState {
             ask_party_name_response: 0,
             ask_who_response: 0,
             yield_on_pause: false,
+            yield_on_ask: false,
         };
 
         // Resolve which field(s) to run through the byte runner.
@@ -2422,6 +2423,13 @@ impl PlayState {
             Area::Town { scene, .. } => self.talk_branch_slot_for_scene(scene),
             _ => 0,
         };
+        let party_name_bytes: Vec<Vec<u8>> = self
+            .party_names
+            .iter()
+            .take(self.party.len())
+            .map(|name| name.iter().take_while(|b| **b != 0).copied().collect())
+            .collect();
+        let party_member_names: Vec<&[u8]> = party_name_bytes.iter().map(Vec::as_slice).collect();
         let ctx = crate::conversation_session::ConversationContext {
             avatar_name: &avatar_name,
             branch_flags,
@@ -2429,6 +2437,7 @@ impl PlayState {
             dictionary: None,
             gold_payment_accepted: true,
             gold_available: Some(self.gold),
+            party_member_names: &party_member_names,
         };
         let mut text = String::new();
         if let Some(session) = self.active_conversation.as_mut() {
@@ -2460,6 +2469,13 @@ impl PlayState {
             Area::Town { scene, .. } => self.talk_branch_slot_for_scene(scene),
             _ => 0,
         };
+        let party_name_bytes: Vec<Vec<u8>> = self
+            .party_names
+            .iter()
+            .take(self.party.len())
+            .map(|name| name.iter().take_while(|b| **b != 0).copied().collect())
+            .collect();
+        let party_member_names: Vec<&[u8]> = party_name_bytes.iter().map(Vec::as_slice).collect();
         let ctx = crate::conversation_session::ConversationContext {
             avatar_name: &avatar_name,
             branch_flags,
@@ -2467,6 +2483,7 @@ impl PlayState {
             dictionary: None,
             gold_payment_accepted: true,
             gold_available: Some(self.gold),
+            party_member_names: &party_member_names,
         };
         let mut text = String::new();
         let mut ended = false;

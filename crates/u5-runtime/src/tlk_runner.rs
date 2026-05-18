@@ -57,6 +57,11 @@ pub struct TlkRunInputs<'a> {
     /// resume. When `false`, the runner treats pauses as no-ops and
     /// wait-key as a single newline and keeps going.
     pub yield_on_pause: bool,
+    /// `0x84` ASK-PARTY-NAME / `0x88` ASK-WHO behaviour. When `true`,
+    /// the runner stops immediately after the ask code so the
+    /// interactive conversation wrapper can collect a free-text answer
+    /// and resume the same stream with the matched party slot.
+    pub yield_on_ask: bool,
 }
 
 /// Reason the runner stopped processing the current stream.
@@ -75,6 +80,10 @@ pub enum TlkRunStop {
     PausedAt(usize),
     /// Stopped at `0x8F` WAIT-KEY (only when `yield_on_pause` is set).
     WaitingKey(usize),
+    /// Stopped at `0x84` ASK-PARTY-NAME (only when `yield_on_ask` is set).
+    AskingPartyName(usize),
+    /// Stopped at `0x88` ASK-WHO (only when `yield_on_ask` is set).
+    AskingWho(usize),
     /// Encountered a malformed multi-byte introducer (short arg span).
     MalformedIntroducer(usize),
     /// Encountered an unresolved GOTO-LABEL target (label byte not found
@@ -149,11 +158,17 @@ pub struct TlkRunOutput {
 /// Execute the byte runner over `bytes` until an explicit terminator,
 /// yield point, or malformed control sequence.
 pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
+    run_tlk_stream_from(bytes, 0, inputs)
+}
+
+/// Execute the byte runner starting at an already-consumed cursor. Label
+/// transfers still scan the whole stream, matching the normal runner.
+pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) -> TlkRunOutput {
     let mut out = TlkRunOutput {
         stop: TlkRunStop::Exhausted,
         ..Default::default()
     };
-    let mut pos = 0usize;
+    let mut pos = start.min(bytes.len());
     let mut print_mask = TlkPrintMaskState::NormalBreaks;
     // Track the last *emitted* printable byte (pre-mask, post-XOR) so we
     // can collapse the on-disk `""` double-quote artefact per §7.5.
@@ -237,10 +252,20 @@ pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
                 out.events.push(TlkRunEvent::SetFlag(bit));
             }
             TLK_CODE_ASK_PARTY_NAME => {
+                if inputs.yield_on_ask {
+                    out.stop = TlkRunStop::AskingPartyName(pos);
+                    out.consumed = pos;
+                    return out;
+                }
                 let slot = inputs.ask_party_name_response;
                 out.events.push(TlkRunEvent::AskedPartyName(slot));
             }
             TLK_CODE_ASK_WHO => {
+                if inputs.yield_on_ask {
+                    out.stop = TlkRunStop::AskingWho(pos);
+                    out.consumed = pos;
+                    return out;
+                }
                 let slot = inputs.ask_who_response;
                 out.events.push(TlkRunEvent::AskedWho(slot));
             }
@@ -797,6 +822,31 @@ mod tests {
         );
         assert_eq!(out.text, "a");
         assert!(matches!(out.stop, TlkRunStop::PausedAt(_)));
+    }
+
+    #[test]
+    fn ask_codes_can_yield_and_resume_same_stream() {
+        let mut inputs = TlkRunInputs {
+            yield_on_ask: true,
+            ..Default::default()
+        };
+        let mut bytes = enc("Name:");
+        bytes.push(TLK_CODE_ASK_PARTY_NAME);
+        bytes.extend_from_slice(&enc("Done"));
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
+
+        let first = run_tlk_stream(&bytes, &inputs);
+        assert_eq!(first.text, "Name:");
+        assert!(matches!(
+            first.stop,
+            TlkRunStop::AskingPartyName(cursor) if cursor == enc("Name:").len() + 1
+        ));
+
+        inputs.yield_on_ask = false;
+        inputs.ask_party_name_response = 2;
+        let resumed = run_tlk_stream_from(&bytes, first.consumed, &inputs);
+        assert_eq!(resumed.text, "Done");
+        assert_eq!(resumed.stop, TlkRunStop::EndOfResponse);
     }
 
     #[test]
