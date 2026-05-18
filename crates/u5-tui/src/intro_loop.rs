@@ -16,11 +16,11 @@ use u5_runtime::{
     INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, MISCMAPS_DAT_FILE,
     MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES, TileGraphicsDepth,
-    U4_TRANSFER_CLASS_INDEX_MAX, U4TransferSource, commit_u4_transfer_save,
-    intro_step_has_story6_secondary_pass, intro_step_transition_strips,
-    intro_story_art_file_for_step, intro_story_art_placement_for_step,
-    intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_play_options_from_save,
-    load_story_records,
+    U4TransferOverrides, commit_u4_transfer_save, intro_step_has_story6_secondary_pass,
+    intro_step_transition_strips, intro_story_art_file_for_step,
+    intro_story_art_placement_for_step, intro_story_step_waits_for_input,
+    intro_story6_secondary_subimage, load_play_options_from_save, load_story_records,
+    read_u4_transfer_source_from_party_sav,
 };
 
 use crate::cli::run_interactive_create_character;
@@ -247,60 +247,58 @@ fn run_return_to_view_preview(game_dir: &Path) -> io::Result<()> {
 fn run_manual_u4_transfer(game_dir: &Path) -> io::Result<bool> {
     println!("Transfer from Ultima IV");
     println!(
-        "Enter clean U4 source fields. This writes a U5 save from BRIT.GAM/BRIT.OOL and returns to the intro menu."
+        "Reading PARTY.SAV. This writes a U5 save from BRIT.GAM/BRIT.OOL and returns to the intro menu."
     );
 
-    let Some(name) = prompt_line("Name (blank abort): ")? else {
-        return Ok(false);
-    };
-    if name.trim().is_empty() {
-        return Ok(false);
-    }
-    let male = loop {
-        let Some(value) = prompt_line("Gender M/F: ")? else {
+    let source = match read_u4_transfer_source_from_party_sav(game_dir) {
+        Ok(source) => source,
+        Err(err) => {
+            println!("Transfer source rejected: {err}");
             return Ok(false);
-        };
-        match value.bytes().next().map(|byte| byte.to_ascii_uppercase()) {
-            Some(b'M') => break true,
-            Some(b'F') => break false,
-            _ => println!("Press M or F."),
         }
     };
-    let class_index = prompt_u8_range("Class index 0-7: ", 0, U4_TRANSFER_CLASS_INDEX_MAX)?;
-    let strength = prompt_u16("U4 Strength: ")?;
-    let dexterity = prompt_u16("U4 Dexterity: ")?;
-    let intelligence = prompt_u16("U4 Intelligence: ")?;
-    let experience = prompt_u32("U4 Experience: ")?;
     let preview = u4_transfer_preview_from_u4_values(
-        name.trim().to_string(),
-        class_index,
-        strength,
-        dexterity,
-        intelligence,
+        u4_transfer_display_name(&source.name),
+        source.class_index,
+        source.strength,
+        source.dexterity,
+        source.intelligence,
         0,
     );
+    let mut overrides = U4TransferOverrides {
+        name: None,
+        male: None,
+    };
     println!(
-        "Preview: {} class {}, STR {}, DEX {}, INT {}.",
+        "Preview: {} class {}, {}, STR {}, DEX {}, INT {}, XP {}.",
         preview.name,
         preview.class_index,
+        if source.male { "male" } else { "female" },
         preview.strength,
         preview.dexterity,
-        preview.intelligence
+        preview.intelligence,
+        source.experience / 10
     );
+    if !prompt_yes_no(&format!("Use imported name {}? (Y/N): ", preview.name))? {
+        let Some(name) = prompt_nonblank_name("Replacement name: ")? else {
+            return Ok(false);
+        };
+        overrides.name = Some(name);
+    }
+    if !prompt_yes_no(&format!(
+        "Use imported gender {}? (Y/N): ",
+        if source.male { "M" } else { "F" }
+    ))? {
+        let Some(male) = prompt_gender("Replacement gender M/F: ")? else {
+            return Ok(false);
+        };
+        overrides.male = Some(male);
+    }
     if !prompt_yes_no("Commit transfer save? (Y/N): ")? {
         return Ok(false);
     }
 
-    let source = U4TransferSource {
-        name: name.trim().as_bytes().to_vec(),
-        male,
-        class_index,
-        strength,
-        dexterity,
-        intelligence,
-        experience,
-    };
-    let avatar = commit_u4_transfer_save(game_dir, &source, None)?;
+    let avatar = commit_u4_transfer_save(game_dir, &source, Some(&overrides))?;
     let end = avatar
         .name
         .iter()
@@ -311,6 +309,40 @@ fn run_manual_u4_transfer(game_dir: &Path) -> io::Result<bool> {
         String::from_utf8_lossy(&avatar.name[..end])
     );
     Ok(true)
+}
+
+fn u4_transfer_display_name(name: &[u8]) -> String {
+    let end = name
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(name.len());
+    String::from_utf8_lossy(&name[..end]).trim_end().to_string()
+}
+
+fn prompt_nonblank_name(prompt: &str) -> io::Result<Option<Vec<u8>>> {
+    loop {
+        let Some(value) = prompt_line(prompt)? else {
+            return Ok(None);
+        };
+        if value.trim().is_empty() {
+            println!("Name may not be blank.");
+        } else {
+            return Ok(Some(value.trim().as_bytes().to_vec()));
+        }
+    }
+}
+
+fn prompt_gender(prompt: &str) -> io::Result<Option<bool>> {
+    loop {
+        let Some(value) = prompt_line(prompt)? else {
+            return Ok(None);
+        };
+        match value.bytes().next().map(|byte| byte.to_ascii_uppercase()) {
+            Some(b'M') => return Ok(Some(true)),
+            Some(b'F') => return Ok(Some(false)),
+            _ => println!("Press M or F."),
+        }
+    }
 }
 
 fn prompt_line(prompt: &str) -> io::Result<Option<String>> {
@@ -348,42 +380,6 @@ fn prompt_yes_no(prompt: &str) -> io::Result<bool> {
             Some(b'Y') => return Ok(true),
             Some(b'N') | None => return Ok(false),
             _ => println!("Press Y or N."),
-        }
-    }
-}
-
-fn prompt_u8_range(prompt: &str, min: u8, max: u8) -> io::Result<u8> {
-    loop {
-        let Some(value) = prompt_line(prompt)? else {
-            return Ok(min);
-        };
-        match value.trim().parse::<u8>() {
-            Ok(parsed) if (min..=max).contains(&parsed) => return Ok(parsed),
-            _ => println!("Enter a value from {min} to {max}."),
-        }
-    }
-}
-
-fn prompt_u16(prompt: &str) -> io::Result<u16> {
-    loop {
-        let Some(value) = prompt_line(prompt)? else {
-            return Ok(0);
-        };
-        match value.trim().parse::<u16>() {
-            Ok(parsed) => return Ok(parsed),
-            _ => println!("Enter a number from 0 to 65535."),
-        }
-    }
-}
-
-fn prompt_u32(prompt: &str) -> io::Result<u32> {
-    loop {
-        let Some(value) = prompt_line(prompt)? else {
-            return Ok(0);
-        };
-        match value.trim().parse::<u32>() {
-            Ok(parsed) => return Ok(parsed),
-            _ => println!("Enter a nonnegative whole number."),
         }
     }
 }

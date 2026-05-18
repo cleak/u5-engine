@@ -440,6 +440,84 @@
     }
 
     #[test]
+    fn u4_transfer_parses_party_sav_player_zero_and_virtue_gate() {
+        let mut bytes = vec![0; U4_PARTY_SAV_REQUIRED_LEN];
+        let record = U4_PARTY_SAV_PLAYER0_OFFSET;
+        bytes[record + U4_PARTY_SAV_CHARACTER_NAME_OFFSET..record + U4_PARTY_SAV_CHARACTER_NAME_OFFSET + 16]
+            .copy_from_slice(b"AVATAR\0\0\0\0\0\0\0\0\0\0");
+        bytes[record + U4_PARTY_SAV_CHARACTER_SEX_OFFSET] = U4_PARTY_SAV_MALE_BYTE;
+        bytes[record + U4_PARTY_SAV_CHARACTER_CLASS_OFFSET] = 6;
+        bytes[record + U4_PARTY_SAV_CHARACTER_XP_OFFSET..record + U4_PARTY_SAV_CHARACTER_XP_OFFSET + 2]
+            .copy_from_slice(&4321u16.to_le_bytes());
+        bytes[record + U4_PARTY_SAV_CHARACTER_STR_OFFSET..record + U4_PARTY_SAV_CHARACTER_STR_OFFSET + 2]
+            .copy_from_slice(&29u16.to_le_bytes());
+        bytes[record + U4_PARTY_SAV_CHARACTER_DEX_OFFSET..record + U4_PARTY_SAV_CHARACTER_DEX_OFFSET + 2]
+            .copy_from_slice(&30u16.to_le_bytes());
+        bytes[record + U4_PARTY_SAV_CHARACTER_INT_OFFSET..record + U4_PARTY_SAV_CHARACTER_INT_OFFSET + 2]
+            .copy_from_slice(&9u16.to_le_bytes());
+        bytes[U4_PARTY_SAV_FOOD_OFFSET..U4_PARTY_SAV_FOOD_OFFSET + 4]
+            .copy_from_slice(&9999u32.to_le_bytes());
+        bytes[U4_PARTY_SAV_GOLD_OFFSET..U4_PARTY_SAV_GOLD_OFFSET + 2]
+            .copy_from_slice(&9999u16.to_le_bytes());
+        bytes[U4_PARTY_SAV_GEMS_OFFSET..U4_PARTY_SAV_GEMS_OFFSET + 2]
+            .copy_from_slice(&12u16.to_le_bytes());
+        bytes[U4_PARTY_SAV_KARMA_OFFSET + 4..U4_PARTY_SAV_KARMA_OFFSET + 6]
+            .copy_from_slice(&1u16.to_le_bytes());
+
+        let source = parse_u4_transfer_source_from_party_sav(&bytes).unwrap();
+
+        assert_eq!(source.name, b"AVATAR\0\0\0\0\0\0\0\0\0\0");
+        assert!(source.male);
+        assert_eq!(source.class_index, 6);
+        assert_eq!(source.strength, 29);
+        assert_eq!(source.dexterity, 30);
+        assert_eq!(source.intelligence, 9);
+        assert_eq!(source.experience, 4321);
+    }
+
+    #[test]
+    fn u4_transfer_party_sav_parser_rejects_empty_virtues_and_bad_fields() {
+        let mut bytes = vec![0; U4_PARTY_SAV_REQUIRED_LEN];
+        let record = U4_PARTY_SAV_PLAYER0_OFFSET;
+        bytes[record + U4_PARTY_SAV_CHARACTER_NAME_OFFSET..record + U4_PARTY_SAV_CHARACTER_NAME_OFFSET + 16]
+            .copy_from_slice(b"AVATAR\0\0\0\0\0\0\0\0\0\0");
+        bytes[record + U4_PARTY_SAV_CHARACTER_CLASS_OFFSET] = 0;
+
+        bytes[U4_PARTY_SAV_GOLD_OFFSET..U4_PARTY_SAV_GOLD_OFFSET + 2]
+            .copy_from_slice(&10000u16.to_le_bytes());
+        assert_eq!(
+            parse_u4_transfer_source_from_party_sav(&bytes).err(),
+            Some(U4TransferError::SourceCounterOutOfRange {
+                field: "gold",
+                value: 10000,
+                max: 9999,
+            })
+        );
+        bytes[U4_PARTY_SAV_GOLD_OFFSET..U4_PARTY_SAV_GOLD_OFFSET + 2]
+            .copy_from_slice(&0u16.to_le_bytes());
+
+        assert_eq!(
+            parse_u4_transfer_source_from_party_sav(&bytes).err(),
+            Some(U4TransferError::NoTransferableData)
+        );
+
+        bytes[U4_PARTY_SAV_KARMA_OFFSET..U4_PARTY_SAV_KARMA_OFFSET + 2]
+            .copy_from_slice(&1u16.to_le_bytes());
+        bytes[record + U4_PARTY_SAV_CHARACTER_CLASS_OFFSET] = 8;
+        assert_eq!(
+            parse_u4_transfer_source_from_party_sav(&bytes).err(),
+            Some(U4TransferError::InvalidClassIndex(8))
+        );
+
+        bytes[record + U4_PARTY_SAV_CHARACTER_CLASS_OFFSET] = 0;
+        bytes[record + U4_PARTY_SAV_CHARACTER_NAME_OFFSET] = 0x1f;
+        assert_eq!(
+            parse_u4_transfer_source_from_party_sav(&bytes).err(),
+            Some(U4TransferError::InvalidNameByte(0x1f))
+        );
+    }
+
+    #[test]
     fn u4_transfer_application_maps_avatar_fields_and_preserves_seed_bytes() {
         let mut save = saved_game_seed_bytes(0, 0, 10, 20);
         let equipment_offset = SAVE_ROSTER_OFFSET + SAVE_CHARACTER_EQUIPMENT_OFFSET;

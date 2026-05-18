@@ -21,6 +21,23 @@ pub const U4_TRANSFER_U5_SEED_GAM_FILENAME: &str = "BRIT.GAM";
 /// alias and the canonical filename stay one value.
 pub const U4_TRANSFER_U5_SEED_OOL_FILENAME: &str = crate::BRIT_OOL_FILENAME;
 pub const U4_TRANSFER_U4_SOURCE_FILENAME: &str = "PARTY.SAV";
+pub const U4_PARTY_SAV_PLAYER0_OFFSET: usize = 0x08;
+pub const U4_PARTY_SAV_CHARACTER_RECORD_LEN: usize = 39;
+pub const U4_PARTY_SAV_CHARACTER_XP_OFFSET: usize = 0x04;
+pub const U4_PARTY_SAV_CHARACTER_STR_OFFSET: usize = 0x06;
+pub const U4_PARTY_SAV_CHARACTER_DEX_OFFSET: usize = 0x08;
+pub const U4_PARTY_SAV_CHARACTER_INT_OFFSET: usize = 0x0A;
+pub const U4_PARTY_SAV_CHARACTER_NAME_OFFSET: usize = 0x14;
+pub const U4_PARTY_SAV_CHARACTER_NAME_LEN: usize = 16;
+pub const U4_PARTY_SAV_CHARACTER_SEX_OFFSET: usize = 0x24;
+pub const U4_PARTY_SAV_CHARACTER_CLASS_OFFSET: usize = 0x25;
+pub const U4_PARTY_SAV_MALE_BYTE: u8 = 0x0B;
+pub const U4_PARTY_SAV_FOOD_OFFSET: usize = 0x140;
+pub const U4_PARTY_SAV_GOLD_OFFSET: usize = 0x144;
+pub const U4_PARTY_SAV_KARMA_OFFSET: usize = 0x146;
+pub const U4_PARTY_SAV_KARMA_LEN: usize = U4_TRANSFER_VIRTUE_STANDING_COUNT * 2;
+pub const U4_PARTY_SAV_GEMS_OFFSET: usize = 0x158;
+pub const U4_PARTY_SAV_REQUIRED_LEN: usize = U4_PARTY_SAV_GEMS_OFFSET + 2;
 
 /// `u4-transfer.md §5` accepted source-side counter ranges. The
 /// transfer rejects the entire attempt before writing the
@@ -100,6 +117,13 @@ pub enum U4TransferError {
     InvalidNameByte(u8),
     BlankName,
     SaveTooShort(usize),
+    PartySaveTooShort(usize),
+    SourceCounterOutOfRange {
+        field: &'static str,
+        value: u32,
+        max: u32,
+    },
+    NoTransferableData,
 }
 
 impl std::fmt::Display for U4TransferError {
@@ -116,6 +140,16 @@ impl std::fmt::Display for U4TransferError {
                 f,
                 "U5 transfer seed must contain slot 0 record, got {len} bytes"
             ),
+            Self::PartySaveTooShort(len) => {
+                write!(f, "U4 PARTY.SAV is too short, got {len} bytes")
+            }
+            Self::SourceCounterOutOfRange { field, value, max } => {
+                write!(
+                    f,
+                    "U4 transfer {field} counter must be 0..{max}, got {value}"
+                )
+            }
+            Self::NoTransferableData => write!(f, "U4 PARTY.SAV has no transferable virtue data"),
         }
     }
 }
@@ -201,6 +235,61 @@ pub fn u4_transfer_strength_to_u5(value: u16) -> u8 {
 
 pub fn u4_transfer_experience_to_u5(value: u32) -> u16 {
     (value / U4_TRANSFER_EXPERIENCE_DIVISOR).min(u16::MAX as u32) as u16
+}
+
+pub fn read_u4_transfer_source_from_party_sav(game_dir: &Path) -> io::Result<U4TransferSource> {
+    let bytes = fs::read(game_dir.join(U4_TRANSFER_U4_SOURCE_FILENAME))?;
+    parse_u4_transfer_source_from_party_sav(&bytes)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
+}
+
+/// `u4-transfer.md §5,§7` source reader for the public DOS
+/// `PARTY.SAV` layout. It imports only the first U4 character record
+/// and validates the party-wide counters/virtue words that gate the
+/// transfer preview; campaign state remains owned by the U5 seed.
+pub fn parse_u4_transfer_source_from_party_sav(
+    bytes: &[u8],
+) -> Result<U4TransferSource, U4TransferError> {
+    if bytes.len() < U4_PARTY_SAV_REQUIRED_LEN {
+        return Err(U4TransferError::PartySaveTooShort(bytes.len()));
+    }
+
+    validate_u4_source_counter("food", u32_at(bytes, U4_PARTY_SAV_FOOD_OFFSET))?;
+    validate_u4_source_counter("gold", u32::from(u16_at(bytes, U4_PARTY_SAV_GOLD_OFFSET)))?;
+    validate_u4_source_counter("gems", u32::from(u16_at(bytes, U4_PARTY_SAV_GEMS_OFFSET)))?;
+
+    let karma_words = (0..U4_TRANSFER_VIRTUE_STANDING_COUNT)
+        .map(|index| u16_at(bytes, U4_PARTY_SAV_KARMA_OFFSET + index * 2))
+        .collect::<Vec<_>>();
+    if u4_transfer_no_transferable_data(&karma_words) {
+        return Err(U4TransferError::NoTransferableData);
+    }
+
+    let record = U4_PARTY_SAV_PLAYER0_OFFSET;
+    let class_index = bytes[record + U4_PARTY_SAV_CHARACTER_CLASS_OFFSET];
+    if !u4_transfer_class_index_in_range(class_index) {
+        return Err(U4TransferError::InvalidClassIndex(class_index));
+    }
+
+    let name = bytes[record + U4_PARTY_SAV_CHARACTER_NAME_OFFSET
+        ..record + U4_PARTY_SAV_CHARACTER_NAME_OFFSET + U4_PARTY_SAV_CHARACTER_NAME_LEN]
+        .to_vec();
+    for &byte in &name {
+        if !u4_transfer_name_byte_accepted(byte) {
+            return Err(U4TransferError::InvalidNameByte(byte));
+        }
+    }
+    normalize_u4_transfer_name(&name)?;
+
+    Ok(U4TransferSource {
+        name,
+        male: bytes[record + U4_PARTY_SAV_CHARACTER_SEX_OFFSET] == U4_PARTY_SAV_MALE_BYTE,
+        class_index,
+        strength: u16_at(bytes, record + U4_PARTY_SAV_CHARACTER_STR_OFFSET),
+        dexterity: u16_at(bytes, record + U4_PARTY_SAV_CHARACTER_DEX_OFFSET),
+        intelligence: u16_at(bytes, record + U4_PARTY_SAV_CHARACTER_INT_OFFSET),
+        experience: u32::from(u16_at(bytes, record + U4_PARTY_SAV_CHARACTER_XP_OFFSET)),
+    })
 }
 
 pub fn apply_u4_transfer_to_save(
@@ -311,6 +400,31 @@ fn normalize_u4_transfer_name(
         return Err(U4TransferError::BlankName);
     }
     Ok(name)
+}
+
+fn validate_u4_source_counter(field: &'static str, value: u32) -> Result<(), U4TransferError> {
+    if value <= u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX) {
+        Ok(())
+    } else {
+        Err(U4TransferError::SourceCounterOutOfRange {
+            field,
+            value,
+            max: u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
+        })
+    }
+}
+
+fn u16_at(bytes: &[u8], offset: usize) -> u16 {
+    u16::from_le_bytes([bytes[offset], bytes[offset + 1]])
+}
+
+fn u32_at(bytes: &[u8], offset: usize) -> u32 {
+    u32::from_le_bytes([
+        bytes[offset],
+        bytes[offset + 1],
+        bytes[offset + 2],
+        bytes[offset + 3],
+    ])
 }
 
 fn read_brit_ool_plane(game_dir: &Path) -> io::Result<Vec<u8>> {
