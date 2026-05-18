@@ -143,9 +143,7 @@ pub const fn save_character_field_offset(slot: usize, field_offset: usize) -> us
 pub const fn rest_with_watch_participates(status: CharacterStatus) -> bool {
     matches!(
         status,
-        CharacterStatus::Good
-            | CharacterStatus::PoisonedOrRevived
-            | CharacterStatus::Sleeping,
+        CharacterStatus::Good | CharacterStatus::PoisonedOrRevived | CharacterStatus::Sleeping,
     )
 }
 

@@ -110,9 +110,7 @@ pub const fn hidden_treasure_rule(record_index: usize) -> HiddenTreasureRule {
     match record_index {
         HIDDEN_TREASURE_RECORD_KEY_NPC_GATED => HiddenTreasureRule::KeyAndNpcAbsence,
         HIDDEN_TREASURE_RECORD_DAILY_CACHE => HiddenTreasureRule::DailyCache,
-        HIDDEN_TREASURE_RECORD_SINGLE_USE_NPC_GATED => {
-            HiddenTreasureRule::SingleUseAndNpcAbsence
-        }
+        HIDDEN_TREASURE_RECORD_SINGLE_USE_NPC_GATED => HiddenTreasureRule::SingleUseAndNpcAbsence,
         _ => HiddenTreasureRule::OneShot,
     }
 }

@@ -61,8 +61,7 @@ pub const CBT_SETUP_TABLE_A_COLUMNS: std::ops::RangeInclusive<usize> =
 pub const CBT_SETUP_TABLE_B_COLUMNS: std::ops::RangeInclusive<usize> = 17..=22;
 pub const CBT_PLACEMENT_X_ROW: usize = 6;
 pub const CBT_PLACEMENT_Y_ROW: usize = 7;
-pub const CBT_PLACEMENT_COLUMNS: std::ops::RangeInclusive<usize> =
-    COMBAT_ARENA_METADATA_START..=26;
+pub const CBT_PLACEMENT_COLUMNS: std::ops::RangeInclusive<usize> = COMBAT_ARENA_METADATA_START..=26;
 pub const CBT_PLACEMENT_SLOT_COUNT: usize = 16;
 /// `formats/cbt.md §2` expected total file lengths.
 pub const BRIT_CBT_FILE_LEN: usize = COMBAT_ARENA_RECORD_LEN * BRIT_CBT_RECORDS;

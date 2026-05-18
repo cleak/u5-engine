@@ -120,8 +120,7 @@ pub const JIMMY_CHEST_THRESHOLD_DIVISOR: u16 = 2;
 /// `(2*depth - member_class + JIMMY_CHEST_THRESHOLD_BIAS) / 2`; roll
 /// is `1..=30` and success occurs when `roll <= threshold`.
 pub const fn dungeon_chest_jimmy_threshold(depth: u8, member_class: u8) -> u8 {
-    let raw = JIMMY_DUNGEON_CHEST_DEPTH_MULTIPLIER * (depth as i16)
-        - member_class as i16
+    let raw = JIMMY_DUNGEON_CHEST_DEPTH_MULTIPLIER * (depth as i16) - member_class as i16
         + JIMMY_CHEST_THRESHOLD_BIAS;
     if raw < 0 {
         0

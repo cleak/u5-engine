@@ -100,19 +100,21 @@ pub const MISCMSG_URN_CODEX_RANGE: std::ops::RangeInclusive<usize> = 36..=46;
 
 /// its consumer cluster. Returns `None` for indices outside the file.
 pub const fn miscmsg_family(record_index: usize) -> Option<MiscMsgFamily> {
-    Some(if record_index <= *MISCMSG_BLACKTHORN_AUDIENCE_RANGE.end() {
-        MiscMsgFamily::BlackthornAudience
-    } else if record_index <= *MISCMSG_VIRTUE_FAILING_RANGE.end() {
-        MiscMsgFamily::VirtueWeaknessPhrases
-    } else if record_index <= *MISCMSG_VIRTUE_APHORISM_RANGE.end() {
-        MiscMsgFamily::VirtueAphorisms
-    } else if record_index <= *MISCMSG_SHRINE_MEDITATION_RANGE.end() {
-        MiscMsgFamily::ShrineMeditation
-    } else if record_index <= *MISCMSG_URN_CODEX_RANGE.end() {
-        MiscMsgFamily::UrnCodexProphecy
-    } else {
-        return None;
-    })
+    Some(
+        if record_index <= *MISCMSG_BLACKTHORN_AUDIENCE_RANGE.end() {
+            MiscMsgFamily::BlackthornAudience
+        } else if record_index <= *MISCMSG_VIRTUE_FAILING_RANGE.end() {
+            MiscMsgFamily::VirtueWeaknessPhrases
+        } else if record_index <= *MISCMSG_VIRTUE_APHORISM_RANGE.end() {
+            MiscMsgFamily::VirtueAphorisms
+        } else if record_index <= *MISCMSG_SHRINE_MEDITATION_RANGE.end() {
+            MiscMsgFamily::ShrineMeditation
+        } else if record_index <= *MISCMSG_URN_CODEX_RANGE.end() {
+            MiscMsgFamily::UrnCodexProphecy
+        } else {
+            return None;
+        },
+    )
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -146,10 +148,7 @@ impl MiscMessages {
     }
 }
 
-fn slice_range<'a>(
-    records: &'a [String],
-    range: &std::ops::RangeInclusive<usize>,
-) -> &'a [String] {
+fn slice_range<'a>(records: &'a [String], range: &std::ops::RangeInclusive<usize>) -> &'a [String] {
     let start = (*range.start()).min(records.len());
     let end = (*range.end() + 1).min(records.len());
     if start >= end {
@@ -184,9 +183,7 @@ pub fn parse_misc_messages(bytes: &[u8]) -> io::Result<MiscMessages> {
         let Some(end) = end else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!(
-                    "{MISCMSG_DAT_FILE}: unterminated record starting at byte {start}"
-                ),
+                format!("{MISCMSG_DAT_FILE}: unterminated record starting at byte {start}"),
             ));
         };
         records.push(decode_misc_record(&bytes[start..end]));

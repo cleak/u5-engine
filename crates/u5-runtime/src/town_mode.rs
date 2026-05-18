@@ -398,14 +398,10 @@ pub const NPC_SCHEDULE_TIME_BOUNDARY_COUNT: usize = 4;
 /// the start of the 16-byte record). The four arrays are packed
 /// back-to-back in the order AI, X, Y, Z, time.
 pub const NPC_SCHEDULE_AI_OFFSET: usize = 0;
-pub const NPC_SCHEDULE_X_OFFSET: usize =
-    NPC_SCHEDULE_AI_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
-pub const NPC_SCHEDULE_Y_OFFSET: usize =
-    NPC_SCHEDULE_X_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
-pub const NPC_SCHEDULE_Z_OFFSET: usize =
-    NPC_SCHEDULE_Y_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
-pub const NPC_SCHEDULE_TIME_OFFSET: usize =
-    NPC_SCHEDULE_Z_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
+pub const NPC_SCHEDULE_X_OFFSET: usize = NPC_SCHEDULE_AI_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
+pub const NPC_SCHEDULE_Y_OFFSET: usize = NPC_SCHEDULE_X_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
+pub const NPC_SCHEDULE_Z_OFFSET: usize = NPC_SCHEDULE_Y_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
+pub const NPC_SCHEDULE_TIME_OFFSET: usize = NPC_SCHEDULE_Z_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT;
 /// Slot zero of every sub-map is the unused-sentinel slot the schedule
 /// processor skips; effective capacity per sub-map is therefore 31.
 pub const NPC_SENTINEL_SLOT: usize = 0;
@@ -567,10 +563,7 @@ pub const fn town_tile_marker(byte: u8) -> Option<TownTileMarker> {
 /// hours strictly between boundaries leave the NPC idle.
 pub const fn npc_schedule_hour_at_boundary(time: [u8; 4], hour: u8) -> bool {
     let h = hour % 24;
-    time[0] % 24 == h
-        || time[1] % 24 == h
-        || time[2] % 24 == h
-        || time[3] % 24 == h
+    time[0] % 24 == h || time[1] % 24 == h || time[2] % 24 == h || time[3] % 24 == h
 }
 
 pub const fn npc_schedule_waypoint_for_hour(time: [u8; 4], hour: u8) -> u8 {

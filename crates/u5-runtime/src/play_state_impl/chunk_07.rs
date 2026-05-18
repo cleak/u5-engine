@@ -1049,8 +1049,7 @@ impl PlayState {
                     self.free_active_object_slot(object_slot);
                     self.npcs.remove(npc_index);
                     self.mark_removed_town_npc_once(scene, floor, npc_slot);
-                    let (fortified, fleeing) =
-                        self.town_alarm_sweep(scene, floor, Some(npc_slot));
+                    let (fortified, fleeing) = self.town_alarm_sweep(scene, floor, Some(npc_slot));
                     self.mark_visibility_dirty();
                     self.message = format!(
                         "Attacked NPC slot {npc_slot} at ({x}, {y}) to the {}; target removed from {} floor {floor}; alarm raised ({fortified} fortified, {fleeing} fleeing).",
@@ -1444,40 +1443,166 @@ impl PlayState {
         let ty = ty as usize;
         let px = px as usize;
         let py = py as usize;
-        if self.blocking_object_at(tx, ty).is_some() {
-            self.message = format!("Cannot push occupied tile at ({tx}, {ty}).");
-            return Ok(MoveOutcome::Blocked);
-        }
-
         let target_idx = ty * 32 + tx;
         let target_tile = self.grid[target_idx];
-        let Some(entries) = load_town_pushable_entries(game_dir)? else {
+        let entries = load_town_pushable_entries(game_dir)?;
+        let sidecar_pushable = entries.as_ref().is_some_and(|entries| {
+            entries
+                .iter()
+                .any(|entry| town_pushable_matches(*entry, scene, floor, tx, ty, target_tile))
+        });
+
+        if let Some((slot, object)) = self.object_slot_at_current_floor(tx, ty) {
+            return Ok(self.push_town_dynamic_object(direction, tx, ty, px, py, slot, *object));
+        }
+
+        let Some(family) = pushable_tile_family(target_tile) else {
+            if sidecar_pushable {
+                return Ok(self.push_town_sidecar_tile(scene, floor, direction, tx, ty, px, py));
+            }
             self.message = "Nothing to push there.".to_string();
             return Ok(MoveOutcome::Blocked);
         };
-        let pushable = entries
-            .iter()
-            .any(|entry| town_pushable_matches(*entry, scene, floor, tx, ty, target_tile));
-        if !pushable {
-            self.message = "Nothing to push there.".to_string();
-            return Ok(MoveOutcome::Blocked);
-        }
 
+        Ok(self.push_town_static_family(scene, floor, direction, tx, ty, px, py, family))
+    }
+
+    fn push_town_sidecar_tile(
+        &mut self,
+        scene: Scene,
+        floor: i8,
+        direction: Direction,
+        tx: usize,
+        ty: usize,
+        px: usize,
+        py: usize,
+    ) -> MoveOutcome {
         if self.blocking_object_at(px, py).is_some() {
             self.advance_turn();
             self.message = format!("Push blocked by actor at ({px}, {py}).");
-            return Ok(MoveOutcome::Blocked);
+            return MoveOutcome::Blocked;
         }
+        let target_idx = ty * 32 + tx;
         let dest_idx = py * 32 + px;
+        let target_tile = self.grid[target_idx];
         let dest_tile = self.grid[dest_idx];
         if !self.tile_walkable(dest_tile) {
             self.advance_turn();
             self.message = format!("Push blocked by {} at ({px}, {py}).", tile_class(dest_tile));
-            return Ok(MoveOutcome::Blocked);
+            return MoveOutcome::Blocked;
         }
 
         self.grid[target_idx] = dest_tile;
         self.grid[dest_idx] = target_tile;
+        self.finish_town_push(scene, floor, tx, ty, px, py);
+        self.message = format!(
+            "Pushed tile {target_tile} {} from ({tx}, {ty}) to ({px}, {py}).",
+            direction.name()
+        );
+        MoveOutcome::Pushed
+    }
+
+    fn push_town_static_family(
+        &mut self,
+        scene: Scene,
+        floor: i8,
+        direction: Direction,
+        tx: usize,
+        ty: usize,
+        px: usize,
+        py: usize,
+        family: PushableTileFamily,
+    ) -> MoveOutcome {
+        let target_idx = ty * 32 + tx;
+        let dest_idx = py * 32 + px;
+        let player_idx = self.player.y * 32 + self.player.x;
+        let target_tile = self.grid[target_idx];
+        let stamp = family.floor_stamp();
+        if self.blocking_object_at(px, py).is_none() && self.grid[dest_idx] == stamp {
+            self.grid[target_idx] = stamp;
+            self.grid[dest_idx] = pushable_oriented_tile(target_tile, direction);
+            self.finish_town_push(scene, floor, tx, ty, px, py);
+            self.message = format!(
+                "Pushed tile {target_tile} {} from ({tx}, {ty}) to ({px}, {py}).",
+                direction.name()
+            );
+            return MoveOutcome::Pushed;
+        }
+
+        if self.grid[player_idx] == stamp {
+            let pull_direction = direction.opposite_cardinal().unwrap_or(direction);
+            let old_player_x = self.player.x;
+            let old_player_y = self.player.y;
+            self.grid[player_idx] = pushable_oriented_tile(target_tile, pull_direction);
+            self.grid[target_idx] = stamp;
+            self.finish_town_push(scene, floor, tx, ty, old_player_x, old_player_y);
+            self.message = format!(
+                "Pulled tile {target_tile} {} from ({tx}, {ty}) to ({}, {}).",
+                direction.name(),
+                player_idx % 32,
+                player_idx / 32
+            );
+            return MoveOutcome::Pushed;
+        }
+
+        self.advance_turn();
+        self.message = "Push blocked; it won't budge.".to_string();
+        MoveOutcome::Blocked
+    }
+
+    fn push_town_dynamic_object(
+        &mut self,
+        direction: Direction,
+        tx: usize,
+        ty: usize,
+        px: usize,
+        py: usize,
+        slot: usize,
+        object: ActiveObject,
+    ) -> MoveOutcome {
+        if self.blocking_object_at(px, py).is_some() {
+            self.advance_turn();
+            self.message = format!("Push blocked by actor at ({px}, {py}).");
+            return MoveOutcome::Blocked;
+        }
+        let dest_idx = py * 32 + px;
+        if !self.tile_walkable(self.grid[dest_idx]) {
+            self.advance_turn();
+            self.message = format!(
+                "Push blocked by {} at ({px}, {py}).",
+                tile_class(self.grid[dest_idx])
+            );
+            return MoveOutcome::Blocked;
+        }
+
+        if let Some(moved) = self.active_objects.get_mut(slot) {
+            moved.x = px;
+            moved.y = py;
+            moved.tile = pushable_oriented_tile(moved.tile, direction);
+            moved.type_byte = pushable_oriented_tile(moved.type_byte, direction);
+        }
+        self.player.x = tx;
+        self.player.y = ty;
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = format!(
+            "Pushed object tile {} {} from ({tx}, {ty}) to ({px}, {py}).",
+            object.tile,
+            direction.name()
+        );
+        MoveOutcome::Pushed
+    }
+
+    fn finish_town_push(
+        &mut self,
+        scene: Scene,
+        floor: i8,
+        tx: usize,
+        ty: usize,
+        px: usize,
+        py: usize,
+    ) {
         self.forget_open_town_door(scene, floor, tx, ty);
         self.forget_open_town_door(scene, floor, px, py);
         self.forget_revealed_town_secret_door(scene, floor, tx, ty);
@@ -1487,13 +1612,11 @@ impl PlayState {
         }) {
             self.door_tracker = None;
         }
+        self.player.x = tx;
+        self.player.y = ty;
+        self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!(
-            "Pushed tile {target_tile} {} from ({tx}, {ty}) to ({px}, {py}).",
-            direction.name()
-        );
-        Ok(MoveOutcome::Pushed)
     }
 
     #[cfg(test)]
@@ -1786,8 +1909,11 @@ impl PlayState {
             } else {
                 npc_ai_behavior(npc.schedule[NPC_SCHEDULE_AI_OFFSET + wp])?
             };
-            (behavior.raises_attack_event() || behavior.raises_guard_event())
-                .then_some((npc.slot, npc.type_byte, behavior))
+            (behavior.raises_attack_event() || behavior.raises_guard_event()).then_some((
+                npc.slot,
+                npc.type_byte,
+                behavior,
+            ))
         })
     }
 
@@ -1860,7 +1986,9 @@ impl PlayState {
             self.player.y,
             self.clock.hour
         );
-        Ok(Some(MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))))
+        Ok(Some(MoveOutcome::Transition(
+            AreaTransition::EnteredLocation(scene),
+        )))
     }
 
     pub fn begin_blackthorn_audience_capture(
@@ -1949,10 +2077,7 @@ impl PlayState {
                     ),
                 )
             }
-            crate::blackthorn_session::BlackthornChallengeOutcome::Wrong {
-                ordinal,
-                expected,
-            } => {
+            crate::blackthorn_session::BlackthornChallengeOutcome::Wrong { ordinal, expected } => {
                 let victim = self.mark_blackthorn_failure_victim_handled();
                 self.apply_blackthorn_captive_cell_handoff(
                     game_dir,
@@ -1971,24 +2096,21 @@ impl PlayState {
                 self.message = format!("Blackthorn asks for {prompt}.");
                 Ok(MoveOutcome::PromptDeclined)
             }
-            crate::blackthorn_session::BlackthornChallengeOutcome::AlreadyPunished => {
-                self.apply_blackthorn_captive_cell_handoff(
+            crate::blackthorn_session::BlackthornChallengeOutcome::AlreadyPunished => self
+                .apply_blackthorn_captive_cell_handoff(
                     game_dir,
                     "Blackthorn's punishment has already resolved.",
-                )
-            }
-            crate::blackthorn_session::BlackthornChallengeOutcome::AlreadySurvived => {
-                self.apply_blackthorn_captive_cell_handoff(
+                ),
+            crate::blackthorn_session::BlackthornChallengeOutcome::AlreadySurvived => self
+                .apply_blackthorn_captive_cell_handoff(
                     game_dir,
                     "Blackthorn's challenge has already resolved.",
-                )
-            }
-            crate::blackthorn_session::BlackthornChallengeOutcome::AlreadyAborted => {
-                self.apply_blackthorn_captive_cell_handoff(
+                ),
+            crate::blackthorn_session::BlackthornChallengeOutcome::AlreadyAborted => self
+                .apply_blackthorn_captive_cell_handoff(
                     game_dir,
                     "Blackthorn's challenge was aborted.",
-                )
-            }
+                ),
         }
     }
 
@@ -2067,7 +2189,9 @@ impl PlayState {
             self.player.x,
             self.player.y
         );
-        Ok(MoveOutcome::Transition(AreaTransition::EnteredLocation(scene)))
+        Ok(MoveOutcome::Transition(AreaTransition::EnteredLocation(
+            scene,
+        )))
     }
 
     pub fn apply_blackthorn_rescue_refuge(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
@@ -2103,7 +2227,9 @@ impl PlayState {
             self.player.x,
             self.player.y
         );
-        Ok(MoveOutcome::Transition(AreaTransition::EnteredLocation(scene)))
+        Ok(MoveOutcome::Transition(AreaTransition::EnteredLocation(
+            scene,
+        )))
     }
 
     pub fn apply_dungeon_post_turn_effects_after_turn(

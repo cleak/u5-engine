@@ -375,7 +375,9 @@ pub const fn numeric_prompt_action(byte: u8) -> NumericPromptAction {
 /// Submit/Discard leave the accumulator unchanged; Pop divides by ten.
 pub const fn numeric_prompt_apply(value: u16, action: NumericPromptAction) -> u16 {
     match action {
-        NumericPromptAction::AppendDigit(digit) => value.saturating_mul(10).saturating_add(digit as u16),
+        NumericPromptAction::AppendDigit(digit) => {
+            value.saturating_mul(10).saturating_add(digit as u16)
+        }
         NumericPromptAction::Pop => value / 10,
         NumericPromptAction::Submit | NumericPromptAction::Discard => value,
     }

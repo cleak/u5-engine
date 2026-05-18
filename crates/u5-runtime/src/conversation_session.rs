@@ -207,7 +207,10 @@ impl ConversationSession {
                 _ => None,
             }));
         out.signal_flags.extend(run.signal_flags.iter().copied());
-        if matches!(run.stop, TlkRunStop::EndOfStream | TlkRunStop::NulTerminator) {
+        if matches!(
+            run.stop,
+            TlkRunStop::EndOfStream | TlkRunStop::NulTerminator
+        ) {
             // End-of-stream forces a hard close; the keyword loop must
             // not continue prompting after that.
             self.phase = ConversationSessionPhase::PresentingBye;

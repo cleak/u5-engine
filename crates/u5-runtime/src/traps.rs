@@ -13,10 +13,7 @@ pub fn shared_trap_effect_id_from_index(index: u8, combat_active: bool) -> u8 {
 /// [`shared_trap_effect_id_from_index`]. Combat scenes always land on
 /// Acid or Poison; non-combat scenes consult the published 8-slot
 /// outcome table, so every byte resolves to one of the four families.
-pub fn shared_trap_effect_family_from_index(
-    index: u8,
-    combat_active: bool,
-) -> TrapEffect {
+pub fn shared_trap_effect_family_from_index(index: u8, combat_active: bool) -> TrapEffect {
     let id = shared_trap_effect_id_from_index(index, combat_active);
     match id {
         0 => TrapEffect::Acid,

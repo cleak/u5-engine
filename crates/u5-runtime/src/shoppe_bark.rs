@@ -13,8 +13,7 @@ use std::io;
 use std::path::Path;
 
 use crate::shops::{
-    shop_placeholder_kind, shoppe_time_of_day_word, ShopPlaceholderKind,
-    SHOPPE_DAT_RECORD_SLOTS,
+    shop_placeholder_kind, shoppe_time_of_day_word, ShopPlaceholderKind, SHOPPE_DAT_RECORD_SLOTS,
 };
 use crate::tlk_control_codes::{shoppe_dictionary_index, COMMON_WORD_DICTIONARY_ENTRIES};
 
@@ -100,9 +99,7 @@ pub fn render_shoppe_bark(bytes: &[u8], ctx: &ShoppeBarkContext) -> String {
                 ShopPlaceholderKind::ItemName => out.push_str(ctx.item_name),
                 ShopPlaceholderKind::PlaceName => out.push_str(ctx.place_name),
                 ShopPlaceholderKind::ShopName => out.push_str(ctx.shop_name),
-                ShopPlaceholderKind::TimeOfDay => {
-                    out.push_str(shoppe_time_of_day_word(ctx.hour))
-                }
+                ShopPlaceholderKind::TimeOfDay => out.push_str(shoppe_time_of_day_word(ctx.hour)),
             }
             continue;
         }
@@ -210,15 +207,24 @@ mod tests {
         let bytes = b"@";
         let morning = render_shoppe_bark(
             bytes,
-            &ShoppeBarkContext { hour: 8, ..Default::default() },
+            &ShoppeBarkContext {
+                hour: 8,
+                ..Default::default()
+            },
         );
         let afternoon = render_shoppe_bark(
             bytes,
-            &ShoppeBarkContext { hour: 14, ..Default::default() },
+            &ShoppeBarkContext {
+                hour: 14,
+                ..Default::default()
+            },
         );
         let evening = render_shoppe_bark(
             bytes,
-            &ShoppeBarkContext { hour: 22, ..Default::default() },
+            &ShoppeBarkContext {
+                hour: 22,
+                ..Default::default()
+            },
         );
         assert_eq!(morning, "morning");
         assert_eq!(afternoon, "afternoon");

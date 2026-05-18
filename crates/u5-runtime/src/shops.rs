@@ -25,8 +25,8 @@ pub const ARMS_SHOP_SELL_MIN_OFFER_BIAS: u32 = 1;
 /// item therefore quotes differently when a different party member
 /// is speaking. Saturating math guards against absurd inputs.
 pub const fn arms_shop_buy_quote(base_price: u16, speaker_intelligence: u8) -> u16 {
-    let factor: i32 = ARMS_SHOP_PERCENT_DENOMINATOR
-        - ARMS_SHOP_INTELLIGENCE_WEIGHT * speaker_intelligence as i32;
+    let factor: i32 =
+        ARMS_SHOP_PERCENT_DENOMINATOR - ARMS_SHOP_INTELLIGENCE_WEIGHT * speaker_intelligence as i32;
     let adjustment = (base_price as i32 * factor) / ARMS_SHOP_PERCENT_DENOMINATOR;
     let quoted = base_price as i32 + adjustment;
     if quoted < 0 {
@@ -43,11 +43,14 @@ pub const fn arms_shop_buy_quote(base_price: u16, speaker_intelligence: u8) -> u
 /// raised by the offer and the shared equipment counter is
 /// decremented; this helper returns only the gold offer value.
 pub const fn arms_shop_sell_offer(base_price: u16, speaker_intelligence: u8) -> u16 {
-    let prod = base_price as u32
-        * ARMS_SHOP_INTELLIGENCE_WEIGHT as u32
-        * speaker_intelligence as u32;
+    let prod =
+        base_price as u32 * ARMS_SHOP_INTELLIGENCE_WEIGHT as u32 * speaker_intelligence as u32;
     let offer = prod / ARMS_SHOP_PERCENT_DENOMINATOR as u32 + ARMS_SHOP_SELL_MIN_OFFER_BIAS;
-    if offer > u16::MAX as u32 { u16::MAX } else { offer as u16 }
+    if offer > u16::MAX as u32 {
+        u16::MAX
+    } else {
+        offer as u16
+    }
 }
 
 /// `shops.md §8.1` arms-shop entry-menu outcome. After the
@@ -627,9 +630,7 @@ pub const fn healer_treatment_accepts(
 ) -> bool {
     match treatment {
         HealerTreatment::Cure => matches!(status, CharacterStatus::PoisonedOrRevived),
-        HealerTreatment::Heal => {
-            !matches!(status, CharacterStatus::Dead) && hp < max_hp
-        }
+        HealerTreatment::Heal => !matches!(status, CharacterStatus::Dead) && hp < max_hp,
         HealerTreatment::Resurrect => matches!(status, CharacterStatus::Dead),
     }
 }
@@ -1359,8 +1360,7 @@ pub const SHOP_SURCHARGE_GOLD_MIN: u16 = 1;
 /// value equals `MASK + MIN` by construction. Anchored to
 /// `SHOP_SURCHARGE_ROLL_MASK + SHOP_SURCHARGE_GOLD_MIN` so the
 /// surcharge band's upper bound derives from the mask and bias.
-pub const SHOP_SURCHARGE_GOLD_MAX: u16 =
-    SHOP_SURCHARGE_ROLL_MASK as u16 + SHOP_SURCHARGE_GOLD_MIN;
+pub const SHOP_SURCHARGE_GOLD_MAX: u16 = SHOP_SURCHARGE_ROLL_MASK as u16 + SHOP_SURCHARGE_GOLD_MIN;
 /// `shops.md §6.2` mask applied to the surcharge roll seed before
 /// adding [`SHOP_SURCHARGE_GOLD_MIN`]. The low six bits give
 /// `0..=63`, which biases to a uniform `1..=64`-gold band.

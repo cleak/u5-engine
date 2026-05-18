@@ -11,9 +11,7 @@
 //! defined here.
 
 use crate::constants::{EQUIPMENT_COUNT, EQUIPMENT_STOCK_CAP};
-use crate::shops::{
-    arms_shop_action, arms_shop_buy_quote, arms_shop_sell_offer, ArmsShopAction,
-};
+use crate::shops::{arms_shop_action, arms_shop_buy_quote, arms_shop_sell_offer, ArmsShopAction};
 
 /// Inputs available to every shop machine. Shop-specific machines
 /// extract the fields they need.
@@ -137,16 +135,10 @@ pub fn step_arms_shop(
             };
             ArmsShopOutcome::QuotedBuyPrice { item, price }
         }
-        (
-            ArmsShopState::BuyConfirm { item, quoted_price },
-            ArmsShopInput::Confirm(true),
-        ) => {
+        (ArmsShopState::BuyConfirm { item, quoted_price }, ArmsShopInput::Confirm(true)) => {
             if *gold < quoted_price {
                 *state = ArmsShopState::Greeting;
-                return ArmsShopOutcome::BuyRefusedShortFunds {
-                    item,
-                    quoted_price,
-                };
+                return ArmsShopOutcome::BuyRefusedShortFunds { item, quoted_price };
             }
             let item_idx = item as usize;
             if stock[item_idx] >= EQUIPMENT_STOCK_CAP {
@@ -179,10 +171,7 @@ pub fn step_arms_shop(
             *state = ArmsShopState::SellConfirm { item, offer };
             ArmsShopOutcome::OfferedSellPrice { item, offer }
         }
-        (
-            ArmsShopState::SellConfirm { item, offer },
-            ArmsShopInput::Confirm(true),
-        ) => {
+        (ArmsShopState::SellConfirm { item, offer }, ArmsShopInput::Confirm(true)) => {
             let item_idx = item as usize;
             if stock[item_idx] == 0 {
                 *state = ArmsShopState::Greeting;
@@ -230,7 +219,10 @@ pub enum HealerShopState {
     #[default]
     Greeting,
     PickService,
-    PickPartyMember { service: HealerService, cost: u16 },
+    PickPartyMember {
+        service: HealerService,
+        cost: u16,
+    },
     Confirm {
         service: HealerService,
         slot: u8,
@@ -269,9 +261,14 @@ pub enum HealerOutcome {
         cost: u16,
     },
     /// Service refused — short on gold.
-    RefusedShortFunds { cost: u16 },
+    RefusedShortFunds {
+        cost: u16,
+    },
     /// Service refused — invalid target (e.g. cure on Good status).
-    RefusedNotEligible { service: HealerService, slot: u8 },
+    RefusedNotEligible {
+        service: HealerService,
+        slot: u8,
+    },
     Declined,
     Exited,
     InvalidInput,
@@ -299,10 +296,7 @@ pub fn step_healer_shop(
             *state = HealerShopState::PickPartyMember { service, cost };
             HealerOutcome::QuotedCost { service, cost }
         }
-        (
-            HealerShopState::PickPartyMember { service, cost },
-            HealerShopInput::Slot(slot),
-        ) => {
+        (HealerShopState::PickPartyMember { service, cost }, HealerShopInput::Slot(slot)) => {
             let slot_idx = slot as usize;
             if slot_idx >= members.len() {
                 return HealerOutcome::InvalidInput;
@@ -361,15 +355,10 @@ pub const fn healer_service_cost(service: HealerService) -> u16 {
     }
 }
 
-pub fn healer_service_eligible(
-    service: HealerService,
-    member: HealerPartyMemberView,
-) -> bool {
+pub fn healer_service_eligible(service: HealerService, member: HealerPartyMemberView) -> bool {
     match service {
         HealerService::Cure => member.status == b'P',
-        HealerService::Heal => {
-            member.status == b'G' && member.hp < member.max_hp
-        }
+        HealerService::Heal => member.status == b'G' && member.hp < member.max_hp,
         HealerService::Resurrect => member.status == b'D',
     }
 }
@@ -401,8 +390,12 @@ pub fn apply_healer_service(service: HealerService, member: &mut HealerPartyMemb
 pub enum InnkeeperState {
     #[default]
     Greeting,
-    ConfirmRoom { cost: u16 },
-    Resting { hours_remaining: u8 },
+    ConfirmRoom {
+        cost: u16,
+    },
+    Resting {
+        hours_remaining: u8,
+    },
     Exited,
 }
 
@@ -491,7 +484,10 @@ pub enum ReagentShopState {
     #[default]
     Greeting,
     PickReagent,
-    PickQuantity { reagent: u8, unit_price: u16 },
+    PickQuantity {
+        reagent: u8,
+        unit_price: u16,
+    },
     Confirm {
         reagent: u8,
         quantity: u8,
@@ -512,7 +508,10 @@ pub enum ReagentShopInput {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReagentShopOutcome {
     EnteredMenu,
-    QuotedUnit { reagent: u8, unit_price: u16 },
+    QuotedUnit {
+        reagent: u8,
+        unit_price: u16,
+    },
     QuotedTotal {
         reagent: u8,
         quantity: u8,
@@ -523,7 +522,9 @@ pub enum ReagentShopOutcome {
         quantity: u8,
         paid: u16,
     },
-    RefusedShortFunds { total: u16 },
+    RefusedShortFunds {
+        total: u16,
+    },
     Declined,
     Exited,
     InvalidInput,
@@ -631,7 +632,9 @@ pub enum TavernState {
     #[default]
     Greeting,
     PickService,
-    ConfirmMeal { cost: u16 },
+    ConfirmMeal {
+        cost: u16,
+    },
     Exited,
 }
 
@@ -730,7 +733,9 @@ pub fn step_tavern(
 pub enum HorseTraderState {
     #[default]
     Greeting,
-    ConfirmPurchase { price: u16 },
+    ConfirmPurchase {
+        price: u16,
+    },
     Exited,
 }
 
@@ -799,8 +804,12 @@ pub enum ShipBrokerState {
     #[default]
     Greeting,
     PickService,
-    ConfirmRepair { cost: u16 },
-    ConfirmFrigate { cost: u16 },
+    ConfirmRepair {
+        cost: u16,
+    },
+    ConfirmFrigate {
+        cost: u16,
+    },
     Exited,
 }
 
@@ -915,8 +924,13 @@ pub enum GuildShopState {
     #[default]
     Greeting,
     PickItem,
-    PickQuantity { item: GuildItem, unit_price: u16 },
-    ConfirmSextant { price: u16 },
+    PickQuantity {
+        item: GuildItem,
+        unit_price: u16,
+    },
+    ConfirmSextant {
+        price: u16,
+    },
     Exited,
 }
 
@@ -931,7 +945,10 @@ pub enum GuildShopInput {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GuildShopOutcome {
     EnteredMenu,
-    QuotedUnit { item: GuildItem, unit_price: u16 },
+    QuotedUnit {
+        item: GuildItem,
+        unit_price: u16,
+    },
     QuotedTotal {
         item: GuildItem,
         quantity: u8,
@@ -942,8 +959,12 @@ pub enum GuildShopOutcome {
         quantity: u8,
         paid: u16,
     },
-    SextantPurchased { price: u16 },
-    RefusedShortFunds { cost: u16 },
+    SextantPurchased {
+        price: u16,
+    },
+    RefusedShortFunds {
+        cost: u16,
+    },
     Declined,
     Exited,
     InvalidInput,
@@ -1000,10 +1021,7 @@ pub fn step_guild_shop(
             *state = GuildShopState::PickQuantity { item, unit_price };
             GuildShopOutcome::QuotedUnit { item, unit_price }
         }
-        (
-            GuildShopState::PickQuantity { item, unit_price },
-            GuildShopInput::Quantity(quantity),
-        ) => {
+        (GuildShopState::PickQuantity { item, unit_price }, GuildShopInput::Quantity(quantity)) => {
             if quantity == 0 {
                 *state = GuildShopState::Greeting;
                 return GuildShopOutcome::Declined;
@@ -1166,8 +1184,22 @@ mod tests {
             speaker_intelligence: 0,
             world_hour: 12,
         };
-        step_arms_shop(&mut state, ArmsShopInput::Key(b'B'), ctx, &mut gold, &mut stock, &prices);
-        step_arms_shop(&mut state, ArmsShopInput::Item(5), ctx, &mut gold, &mut stock, &prices);
+        step_arms_shop(
+            &mut state,
+            ArmsShopInput::Key(b'B'),
+            ctx,
+            &mut gold,
+            &mut stock,
+            &prices,
+        );
+        step_arms_shop(
+            &mut state,
+            ArmsShopInput::Item(5),
+            ctx,
+            &mut gold,
+            &mut stock,
+            &prices,
+        );
         let outcome = step_arms_shop(
             &mut state,
             ArmsShopInput::Confirm(true),
@@ -1191,7 +1223,14 @@ mod tests {
         let mut stock = make_stock();
         let mut gold = 0u16;
         let ctx = ShopTransactionContext::default();
-        step_arms_shop(&mut state, ArmsShopInput::Key(b'S'), ctx, &mut gold, &mut stock, &prices);
+        step_arms_shop(
+            &mut state,
+            ArmsShopInput::Key(b'S'),
+            ctx,
+            &mut gold,
+            &mut stock,
+            &prices,
+        );
         let outcome = step_arms_shop(
             &mut state,
             ArmsShopInput::Item(5),
@@ -1213,8 +1252,22 @@ mod tests {
         let mut stock = make_stock();
         let mut gold = 1000u16;
         let ctx = ShopTransactionContext::default();
-        step_arms_shop(&mut state, ArmsShopInput::Key(b'B'), ctx, &mut gold, &mut stock, &prices);
-        step_arms_shop(&mut state, ArmsShopInput::Item(5), ctx, &mut gold, &mut stock, &prices);
+        step_arms_shop(
+            &mut state,
+            ArmsShopInput::Key(b'B'),
+            ctx,
+            &mut gold,
+            &mut stock,
+            &prices,
+        );
+        step_arms_shop(
+            &mut state,
+            ArmsShopInput::Item(5),
+            ctx,
+            &mut gold,
+            &mut stock,
+            &prices,
+        );
         let outcome = step_arms_shop(
             &mut state,
             ArmsShopInput::Confirm(false),
@@ -1255,7 +1308,12 @@ mod tests {
             hp: 50,
             max_hp: 50,
         }];
-        step_healer_shop(&mut state, HealerShopInput::Key(b'Y'), &mut gold, &mut members);
+        step_healer_shop(
+            &mut state,
+            HealerShopInput::Key(b'Y'),
+            &mut gold,
+            &mut members,
+        );
         step_healer_shop(
             &mut state,
             HealerShopInput::Service(HealerService::Cure),
@@ -1286,14 +1344,24 @@ mod tests {
             hp: 20,
             max_hp: 50,
         }];
-        step_healer_shop(&mut state, HealerShopInput::Key(b'Y'), &mut gold, &mut members);
+        step_healer_shop(
+            &mut state,
+            HealerShopInput::Key(b'Y'),
+            &mut gold,
+            &mut members,
+        );
         step_healer_shop(
             &mut state,
             HealerShopInput::Service(HealerService::Heal),
             &mut gold,
             &mut members,
         );
-        step_healer_shop(&mut state, HealerShopInput::Slot(0), &mut gold, &mut members);
+        step_healer_shop(
+            &mut state,
+            HealerShopInput::Slot(0),
+            &mut gold,
+            &mut members,
+        );
         let outcome = step_healer_shop(
             &mut state,
             HealerShopInput::Confirm(true),
@@ -1321,14 +1389,24 @@ mod tests {
             hp: 0,
             max_hp: 50,
         }];
-        step_healer_shop(&mut state, HealerShopInput::Key(b'Y'), &mut gold, &mut members);
+        step_healer_shop(
+            &mut state,
+            HealerShopInput::Key(b'Y'),
+            &mut gold,
+            &mut members,
+        );
         step_healer_shop(
             &mut state,
             HealerShopInput::Service(HealerService::Resurrect),
             &mut gold,
             &mut members,
         );
-        step_healer_shop(&mut state, HealerShopInput::Slot(0), &mut gold, &mut members);
+        step_healer_shop(
+            &mut state,
+            HealerShopInput::Slot(0),
+            &mut gold,
+            &mut members,
+        );
         let outcome = step_healer_shop(
             &mut state,
             HealerShopInput::Confirm(true),
@@ -1349,24 +1427,31 @@ mod tests {
             hp: 0,
             max_hp: 50,
         }];
-        step_healer_shop(&mut state, HealerShopInput::Key(b'Y'), &mut gold, &mut members);
+        step_healer_shop(
+            &mut state,
+            HealerShopInput::Key(b'Y'),
+            &mut gold,
+            &mut members,
+        );
         step_healer_shop(
             &mut state,
             HealerShopInput::Service(HealerService::Resurrect),
             &mut gold,
             &mut members,
         );
-        step_healer_shop(&mut state, HealerShopInput::Slot(0), &mut gold, &mut members);
+        step_healer_shop(
+            &mut state,
+            HealerShopInput::Slot(0),
+            &mut gold,
+            &mut members,
+        );
         let outcome = step_healer_shop(
             &mut state,
             HealerShopInput::Confirm(true),
             &mut gold,
             &mut members,
         );
-        assert!(matches!(
-            outcome,
-            HealerOutcome::RefusedShortFunds { .. }
-        ));
+        assert!(matches!(outcome, HealerOutcome::RefusedShortFunds { .. }));
         assert_eq!(gold, 10);
         assert_eq!(members[0].status, b'D');
     }
@@ -1493,10 +1578,34 @@ mod tests {
         let mut gold = 60_000u16;
         let mut stock = [95u8; 8];
         let prices = [1u16; 8];
-        step_reagent_shop(&mut state, ReagentShopInput::Key(b'Y'), &mut gold, &mut stock, &prices);
-        step_reagent_shop(&mut state, ReagentShopInput::Reagent(0), &mut gold, &mut stock, &prices);
-        step_reagent_shop(&mut state, ReagentShopInput::Quantity(20), &mut gold, &mut stock, &prices);
-        step_reagent_shop(&mut state, ReagentShopInput::Confirm(true), &mut gold, &mut stock, &prices);
+        step_reagent_shop(
+            &mut state,
+            ReagentShopInput::Key(b'Y'),
+            &mut gold,
+            &mut stock,
+            &prices,
+        );
+        step_reagent_shop(
+            &mut state,
+            ReagentShopInput::Reagent(0),
+            &mut gold,
+            &mut stock,
+            &prices,
+        );
+        step_reagent_shop(
+            &mut state,
+            ReagentShopInput::Quantity(20),
+            &mut gold,
+            &mut stock,
+            &prices,
+        );
+        step_reagent_shop(
+            &mut state,
+            ReagentShopInput::Confirm(true),
+            &mut gold,
+            &mut stock,
+            &prices,
+        );
         assert_eq!(stock[0], REAGENT_STOCK_CAP_PER_KIND);
     }
 
@@ -1512,12 +1621,7 @@ mod tests {
             &mut gold,
             &mut food,
         );
-        let outcome = step_tavern(
-            &mut state,
-            TavernInput::Confirm(true),
-            &mut gold,
-            &mut food,
-        );
+        let outcome = step_tavern(&mut state, TavernInput::Confirm(true), &mut gold, &mut food);
         assert!(matches!(outcome, TavernOutcome::MealServed { .. }));
         assert_eq!(food, 30 + TAVERN_MEAL_FOOD_ADD);
         assert_eq!(gold, 100 - TAVERN_MEAL_COST);
@@ -1552,10 +1656,7 @@ mod tests {
             &mut gold,
             &mut food,
         );
-        assert!(matches!(
-            outcome,
-            TavernOutcome::RefusedShortFunds { .. }
-        ));
+        assert!(matches!(outcome, TavernOutcome::RefusedShortFunds { .. }));
         assert_eq!(gold, 1);
     }
 
@@ -1581,7 +1682,12 @@ mod tests {
         let mut state = HorseTraderState::Greeting;
         let mut gold = 500u16;
         let mut pending = false;
-        step_horse_trader(&mut state, HorseTraderInput::Key(b'Y'), &mut gold, &mut pending);
+        step_horse_trader(
+            &mut state,
+            HorseTraderInput::Key(b'Y'),
+            &mut gold,
+            &mut pending,
+        );
         let outcome = step_horse_trader(
             &mut state,
             HorseTraderInput::Confirm(true),
@@ -1598,7 +1704,12 @@ mod tests {
         let mut state = HorseTraderState::Greeting;
         let mut gold = 10u16;
         let mut pending = false;
-        step_horse_trader(&mut state, HorseTraderInput::Key(b'Y'), &mut gold, &mut pending);
+        step_horse_trader(
+            &mut state,
+            HorseTraderInput::Key(b'Y'),
+            &mut gold,
+            &mut pending,
+        );
         let outcome = step_horse_trader(
             &mut state,
             HorseTraderInput::Confirm(true),
@@ -1762,10 +1873,7 @@ mod tests {
             &mut torches,
             &mut sextant,
         );
-        assert!(matches!(
-            outcome,
-            GuildShopOutcome::SextantPurchased { .. }
-        ));
+        assert!(matches!(outcome, GuildShopOutcome::SextantPurchased { .. }));
         assert!(sextant);
         // Second attempt declines without charging — caller starts a
         // fresh visit since the previous one terminated.
@@ -1862,6 +1970,9 @@ mod tests {
         assert!(healer_service_eligible(HealerService::Heal, good_low));
         assert!(!healer_service_eligible(HealerService::Heal, dead));
         assert!(healer_service_eligible(HealerService::Resurrect, dead));
-        assert!(!healer_service_eligible(HealerService::Resurrect, good_full));
+        assert!(!healer_service_eligible(
+            HealerService::Resurrect,
+            good_full
+        ));
     }
 }

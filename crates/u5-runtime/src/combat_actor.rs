@@ -52,7 +52,8 @@ pub const DIRECTED_TARGET_WALK_MAX_CELLS: usize = 21;
 pub const FIRE_FIELD_DAMAGE_MIN: u8 = 1;
 pub const FIRE_FIELD_DAMAGE_MAX: u8 = 21;
 pub const fn fire_field_raw_damage(roll_seed_0_to_20: u8) -> u8 {
-    FIRE_FIELD_DAMAGE_MIN + (roll_seed_0_to_20 % (FIRE_FIELD_DAMAGE_MAX - FIRE_FIELD_DAMAGE_MIN + 1))
+    FIRE_FIELD_DAMAGE_MIN
+        + (roll_seed_0_to_20 % (FIRE_FIELD_DAMAGE_MAX - FIRE_FIELD_DAMAGE_MIN + 1))
 }
 
 /// `combat.md §11` Energy Field raw damage. Energy contact supplies
@@ -112,9 +113,7 @@ pub const fn monster_wound_sets_fleeing(
 ) -> bool {
     match monster_wound_bucket(current_hp, class_max_hp) {
         MonsterWoundBucket::Critical => true,
-        MonsterWoundBucket::Wounded => {
-            (morale_roll_0_to_255 as u16) < WOUND_MORALE_FLEE_THRESHOLD
-        }
+        MonsterWoundBucket::Wounded => (morale_roll_0_to_255 as u16) < WOUND_MORALE_FLEE_THRESHOLD,
         MonsterWoundBucket::LightlyWounded | MonsterWoundBucket::Healthy => false,
     }
 }
@@ -1756,7 +1755,6 @@ pub fn resolve_combat_defeat(party: &[PartyMember], actors: &[CombatActorDescrip
     !(0..COMBAT_PARTY_ACTOR_SLOTS).any(|slot| combat_party_slot_can_continue(slot, actors, party))
 }
 
-
 pub const fn resolve_combat_round_loop_control(
     defeat_flag: bool,
     leave_combat_flag: bool,
@@ -2106,7 +2104,11 @@ pub const fn apply_combat_spell_experience_reward(current_experience: u16, rewar
 }
 
 pub const fn cause_fear_forced_current_hp(max_hp: u8) -> u8 {
-    if max_hp == 0 { 0 } else { (max_hp - 1) / 4 }
+    if max_hp == 0 {
+        0
+    } else {
+        (max_hp - 1) / 4
+    }
 }
 
 pub const fn resolve_conjure_spell_class(selector: u8) -> u8 {
@@ -2747,7 +2749,11 @@ pub const fn resolve_combat_hit(attacker_rating: u8, defender_rating: u8, roll: 
 }
 
 pub const fn resolve_mass_charm_target_group(normal_group: u8, threshold: u8, roll: u8) -> u8 {
-    if roll > threshold { 0 } else { normal_group }
+    if roll > threshold {
+        0
+    } else {
+        normal_group
+    }
 }
 
 pub fn party_name_forces_monster_combat_group(name: &[u8]) -> bool {

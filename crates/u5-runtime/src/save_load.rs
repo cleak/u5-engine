@@ -519,9 +519,7 @@ pub const DISK_PROMPT_MODE_ALIAS_B: u8 = 5;
 /// historical mode values `2` and `5` to mode `1`; other values pass
 /// through unchanged.
 pub const fn normalize_disk_prompt_mode(requested_mode: u8) -> u8 {
-    if requested_mode == DISK_PROMPT_MODE_ALIAS_A
-        || requested_mode == DISK_PROMPT_MODE_ALIAS_B
-    {
+    if requested_mode == DISK_PROMPT_MODE_ALIAS_A || requested_mode == DISK_PROMPT_MODE_ALIAS_B {
         DISK_PROMPT_MODE_CANONICAL
     } else {
         requested_mode

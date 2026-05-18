@@ -59,10 +59,7 @@ pub const fn light_counter_increment(cadence: LightDecayCadence) -> u8 {
 /// light-counter write entirely (returns `None`); `Q` halves the
 /// spend with the same one-unit floor the minute increment uses;
 /// other tag bytes pass the cadence spend through unchanged.
-pub const fn light_counter_spend_with_tag(
-    cadence: LightDecayCadence,
-    tag_byte: u8,
-) -> Option<u8> {
+pub const fn light_counter_spend_with_tag(cadence: LightDecayCadence, tag_byte: u8) -> Option<u8> {
     apply_timing_tag_increment(light_counter_increment(cadence), tag_byte)
 }
 

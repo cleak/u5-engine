@@ -523,9 +523,7 @@ impl PlayState {
         state: TownNpcAlarmState,
     ) {
         if let Some(marker) = self.town_npc_alarm_states.iter_mut().find(|marker| {
-            marker.scene_byte == scene.byte
-                && marker.floor == floor
-                && marker.npc_slot == npc_slot
+            marker.scene_byte == scene.byte && marker.floor == floor && marker.npc_slot == npc_slot
         }) {
             marker.state = state;
             return;
@@ -583,8 +581,7 @@ impl PlayState {
             }
             let wp = waypoint_for_hour(&self.npcs[index].schedule, self.clock.hour);
             let (tx, ty, tz) = self.npcs[index].waypoint_position(wp);
-            let alarm_state =
-                self.town_npc_alarm_state(scene, floor as i8, self.npcs[index].slot);
+            let alarm_state = self.town_npc_alarm_state(scene, floor as i8, self.npcs[index].slot);
             if alarm_state == Some(TownNpcAlarmState::Pacified) {
                 continue;
             }
@@ -731,7 +728,8 @@ impl PlayState {
         for offset in 0..TOWN_NPC_CARDINAL_DIRECTIONS.len() {
             let direction =
                 TOWN_NPC_CARDINAL_DIRECTIONS[(start + offset) % TOWN_NPC_CARDINAL_DIRECTIONS.len()];
-            let Some((nx, ny)) = self.town_npc_step_in_direction(npc_index, floor, direction) else {
+            let Some((nx, ny)) = self.town_npc_step_in_direction(npc_index, floor, direction)
+            else {
                 continue;
             };
             if bounded

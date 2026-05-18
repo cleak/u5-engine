@@ -86,7 +86,11 @@ pub const fn natural_moongate_dispatches_meditate(hour: u8, minute: u8) -> bool 
 /// from noon onward it reads the second. Returns `0` for first glyph,
 /// `1` for second.
 pub const fn natural_moongate_cached_glyph_slot(hour: u8) -> u8 {
-    if hour < 12 { 0 } else { 1 }
+    if hour < 12 {
+        0
+    } else {
+        1
+    }
 }
 
 /// `overworld.md §9` live moon-gate terrain byte. Eligible saved
@@ -129,9 +133,10 @@ pub const MOONSTONE_BURIAL_TILE_EXTRA_B: u8 = 45;
 pub const fn moonstone_burial_tile_accepted(tile_id: u8) -> bool {
     matches!(
         tile_id,
-        MOONSTONE_BURIAL_BAND_FIRST..=MOONSTONE_BURIAL_BAND_LAST
-            | MOONSTONE_BURIAL_TILE_EXTRA_A
-            | MOONSTONE_BURIAL_TILE_EXTRA_B
+        MOONSTONE_BURIAL_BAND_FIRST
+            ..=MOONSTONE_BURIAL_BAND_LAST
+                | MOONSTONE_BURIAL_TILE_EXTRA_A
+                | MOONSTONE_BURIAL_TILE_EXTRA_B
     )
 }
 

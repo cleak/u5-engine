@@ -124,7 +124,11 @@ pub fn validate_world_start_for_transport(
 }
 
 pub fn pass_fail(value: bool) -> &'static str {
-    if value { "PASS" } else { "FAIL" }
+    if value {
+        "PASS"
+    } else {
+        "FAIL"
+    }
 }
 
 pub fn read(path: &Path) -> io::Result<Vec<u8>> {

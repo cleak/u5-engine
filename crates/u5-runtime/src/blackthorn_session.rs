@@ -11,8 +11,12 @@ use crate::blackthorn::{
 pub enum BlackthornChallengePhase {
     #[default]
     AwaitingAudience,
-    PresentingPrompt { ordinal: u8 },
-    Punished { failed_ordinal: u8 },
+    PresentingPrompt {
+        ordinal: u8,
+    },
+    Punished {
+        failed_ordinal: u8,
+    },
     Survived,
     Aborted,
 }
@@ -45,10 +49,7 @@ impl BlackthornChallenge {
             .expect("blackthorn challenge has at least one prompt")
             .0;
         self.phase = BlackthornChallengePhase::PresentingPrompt { ordinal: 0 };
-        BlackthornChallengeOutcome::PromptPresented {
-            ordinal: 0,
-            prompt,
-        }
+        BlackthornChallengeOutcome::PromptPresented { ordinal: 0, prompt }
     }
 
     pub fn submit(&mut self, typed: &str) -> BlackthornChallengeOutcome {
@@ -75,8 +76,9 @@ impl BlackthornChallenge {
                         let next_prompt = blackthorn_challenge_prompt(next_ordinal)
                             .expect("ordinal already bounds-checked")
                             .0;
-                        self.phase =
-                            BlackthornChallengePhase::PresentingPrompt { ordinal: next_ordinal };
+                        self.phase = BlackthornChallengePhase::PresentingPrompt {
+                            ordinal: next_ordinal,
+                        };
                         let _ = next_prompt;
                         BlackthornChallengeOutcome::Correct { ordinal }
                     }
@@ -84,10 +86,7 @@ impl BlackthornChallenge {
                     self.phase = BlackthornChallengePhase::Punished {
                         failed_ordinal: ordinal,
                     };
-                    BlackthornChallengeOutcome::Wrong {
-                        ordinal,
-                        expected,
-                    }
+                    BlackthornChallengeOutcome::Wrong { ordinal, expected }
                 }
             }
         }
@@ -156,10 +155,7 @@ mod tests {
         let mut c = BlackthornChallenge::new();
         c.begin();
         c.submit("wrong");
-        assert_eq!(
-            c.submit("Ahm"),
-            BlackthornChallengeOutcome::AlreadyPunished
-        );
+        assert_eq!(c.submit("Ahm"), BlackthornChallengeOutcome::AlreadyPunished);
     }
 
     #[test]
@@ -170,10 +166,7 @@ mod tests {
         c.submit("Mu");
         c.submit("Ra");
         c.submit("Beh");
-        assert_eq!(
-            c.submit("Beh"),
-            BlackthornChallengeOutcome::AlreadySurvived
-        );
+        assert_eq!(c.submit("Beh"), BlackthornChallengeOutcome::AlreadySurvived);
     }
 
     #[test]

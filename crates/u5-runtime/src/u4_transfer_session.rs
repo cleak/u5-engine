@@ -199,7 +199,10 @@ mod tests {
         s.step(U4TransferInput::SourceFileLoaded);
         s.step(U4TransferInput::ValidationOk);
         let preview_event = s.step(U4TransferInput::Confirm(true));
-        assert!(matches!(preview_event, U4TransferEvent::PreviewReady { .. }));
+        assert!(matches!(
+            preview_event,
+            U4TransferEvent::PreviewReady { .. }
+        ));
         let event = s.step(U4TransferInput::Confirm(true));
         assert!(matches!(event, U4TransferEvent::Committed { gold: 200 }));
     }
@@ -224,8 +227,7 @@ mod tests {
 
     #[test]
     fn u4_to_u5_stat_translation_applies_strength_floor() {
-        let preview =
-            u4_transfer_preview_from_u4_values("X".to_string(), 0, 5, 5, 5, 0);
+        let preview = u4_transfer_preview_from_u4_values("X".to_string(), 0, 5, 5, 5, 0);
         assert_eq!(preview.strength, U4_TRANSFER_STRENGTH_FLOOR);
     }
 }

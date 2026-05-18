@@ -457,7 +457,11 @@ pub const fn cast_dispatcher_gate(
 /// absorbs casts unconditionally. Returns `true` when the dispatcher
 /// should print "Absorbed!" and abort before consuming a charge or
 /// mana.
-pub const fn spell_indoor_absorbs(scene_blackthorn_castle: bool, has_crown: bool, scene_stonegate: bool) -> bool {
+pub const fn spell_indoor_absorbs(
+    scene_blackthorn_castle: bool,
+    has_crown: bool,
+    scene_stonegate: bool,
+) -> bool {
     if scene_stonegate {
         return true;
     }
@@ -525,14 +529,18 @@ pub const MMIX_QUANTITY_PROMPT_MAX: u8 = crate::SPELL_CHARGE_CAP;
 /// already validated the recipe match and debited reagents.
 pub const fn spell_charge_add_capped(current: u8, qty: u8) -> u8 {
     let sum = current.saturating_add(qty);
-    if sum > SPELL_CHARGE_CAP { SPELL_CHARGE_CAP } else { sum }
+    if sum > SPELL_CHARGE_CAP {
+        SPELL_CHARGE_CAP
+    } else {
+        sum
+    }
 }
 
 /// `magic.md §3` canonical Britannian magic-rune syllable vocabulary.
 /// The twenty-four entries are returned in the spec's table order.
 pub const RUNE_SYLLABLE_VOCABULARY: [&str; 24] = [
-    "An", "Bet", "Corp", "Des", "Ex", "Flam", "Grav", "Hur", "In", "Kal", "Lor", "Mani",
-    "Nox", "Por", "Quas", "Rel", "Sanct", "Tym", "Uus", "Vas", "Wis", "Xen", "Ylem", "Zu",
+    "An", "Bet", "Corp", "Des", "Ex", "Flam", "Grav", "Hur", "In", "Kal", "Lor", "Mani", "Nox",
+    "Por", "Quas", "Rel", "Sanct", "Tym", "Uus", "Vas", "Wis", "Xen", "Ylem", "Zu",
 ];
 
 /// `magic.md §3`: predicate accepting one of the twenty-four resident

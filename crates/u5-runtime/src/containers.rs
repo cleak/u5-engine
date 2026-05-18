@@ -66,18 +66,57 @@ pub const CHEST_SECONDARY_POOL_ROW_COUNT: usize = crate::EQUIPMENT_COUNT;
 /// inventory-add path on success.
 pub const CHEST_SECONDARY_POOL_THRESHOLDS: [Option<u8>; CHEST_SECONDARY_POOL_ROW_COUNT] = [
     // 0..=8 Helm / Shield band
-    Some(10), Some(10), Some(15), Some(20),
-    Some(10), Some(15), Some(20), Some(28), None,
+    Some(10),
+    Some(10),
+    Some(15),
+    Some(20),
+    Some(10),
+    Some(15),
+    Some(20),
+    Some(28),
+    None,
     // 9..=15 Armour band
-    Some(15), Some(15), Some(20), Some(20), Some(20), Some(24), None,
+    Some(15),
+    Some(15),
+    Some(20),
+    Some(20),
+    Some(20),
+    Some(24),
+    None,
     // 16..=41 Weapon band
-    Some(5),  Some(10), Some(10), Some(10), Some(10), Some(10),
-    Some(10), Some(10), Some(15), Some(15), Some(15), Some(10),
-    Some(15), Some(10), Some(20), Some(20), Some(20), Some(20),
-    Some(20), None,     Some(23), Some(23), Some(23), None,
-    None,     None,
+    Some(5),
+    Some(10),
+    Some(10),
+    Some(10),
+    Some(10),
+    Some(10),
+    Some(10),
+    Some(10),
+    Some(15),
+    Some(15),
+    Some(15),
+    Some(10),
+    Some(15),
+    Some(10),
+    Some(20),
+    Some(20),
+    Some(20),
+    Some(20),
+    Some(20),
+    None,
+    Some(23),
+    Some(23),
+    Some(23),
+    None,
+    None,
+    None,
     // 42..=47 Ring / Amulet band
-    Some(23), Some(23), Some(23), Some(23), Some(15), None,
+    Some(23),
+    Some(23),
+    Some(23),
+    Some(23),
+    Some(15),
+    None,
 ];
 
 /// `containers.md §4`: returns the secondary-pool row's threshold,
@@ -148,9 +187,7 @@ pub const INVENTORY_ADD_EQUIPMENT_UNITS: u8 = 1;
 /// helper returns five for Arrows or Quarrels and one for every
 /// other row.
 pub const fn inventory_add_equipment_units(equipment_id: usize) -> u8 {
-    if equipment_id == crate::EQUIPMENT_ID_ARROWS
-        || equipment_id == crate::EQUIPMENT_ID_QUARRELS
-    {
+    if equipment_id == crate::EQUIPMENT_ID_ARROWS || equipment_id == crate::EQUIPMENT_ID_QUARRELS {
         INVENTORY_ADD_AMMO_UNITS
     } else {
         INVENTORY_ADD_EQUIPMENT_UNITS

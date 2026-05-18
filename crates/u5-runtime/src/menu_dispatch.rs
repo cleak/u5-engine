@@ -113,8 +113,9 @@ impl UnifiedMenuDispatch {
             CodexChallengeOutcome::Advanced(phase) => UnifiedMenuStep::CodexAdvanced(phase),
             CodexChallengeOutcome::Completed => UnifiedMenuStep::CodexCompleted,
             CodexChallengeOutcome::WrongAnswer => UnifiedMenuStep::Ignored,
-            CodexChallengeOutcome::AlreadyCompleted
-            | CodexChallengeOutcome::AlreadyFailed => UnifiedMenuStep::Ignored,
+            CodexChallengeOutcome::AlreadyCompleted | CodexChallengeOutcome::AlreadyFailed => {
+                UnifiedMenuStep::Ignored
+            }
         }
     }
 
@@ -191,8 +192,7 @@ mod tests {
         let mut d = UnifiedMenuDispatch::new();
         d.dismiss_title();
         d.submit_menu_key(b'J');
-        let step =
-            d.complete_subflow(IntroSubflow::JourneyOnward, IntroSubflowResult::SaveReady);
+        let step = d.complete_subflow(IntroSubflow::JourneyOnward, IntroSubflowResult::SaveReady);
         assert_eq!(step, UnifiedMenuStep::LaunchGameplay);
     }
 
@@ -225,9 +225,18 @@ mod tests {
     fn blackthorn_four_correct_answers_marks_survived() {
         let mut d = UnifiedMenuDispatch::new();
         d.open_blackthorn();
-        assert_eq!(d.submit_blackthorn_answer("Ahm"), UnifiedMenuStep::BlackthornAdvanced);
-        assert_eq!(d.submit_blackthorn_answer("Mu"), UnifiedMenuStep::BlackthornAdvanced);
-        assert_eq!(d.submit_blackthorn_answer("Ra"), UnifiedMenuStep::BlackthornAdvanced);
+        assert_eq!(
+            d.submit_blackthorn_answer("Ahm"),
+            UnifiedMenuStep::BlackthornAdvanced
+        );
+        assert_eq!(
+            d.submit_blackthorn_answer("Mu"),
+            UnifiedMenuStep::BlackthornAdvanced
+        );
+        assert_eq!(
+            d.submit_blackthorn_answer("Ra"),
+            UnifiedMenuStep::BlackthornAdvanced
+        );
         assert_eq!(
             d.submit_blackthorn_answer("Beh"),
             UnifiedMenuStep::BlackthornEnded { survived: true }

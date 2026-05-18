@@ -60,10 +60,7 @@ pub const fn is_ship_transport_furled(byte: u8) -> bool {
 pub const LIVE_CHUNK_SUBSTITUTION_TARGET_DF: u8 = 0xDF;
 pub const LIVE_CHUNK_SUBSTITUTION_TARGET_1A: u8 = 0x1A;
 
-pub const fn live_chunk_substituted_tile(
-    tile: u8,
-    chunk_classifier_accepts: bool,
-) -> u8 {
+pub const fn live_chunk_substituted_tile(tile: u8, chunk_classifier_accepts: bool) -> u8 {
     match tile {
         0x16..=0x18 => LIVE_CHUNK_SUBSTITUTION_TARGET_DF,
         0x19 if chunk_classifier_accepts => LIVE_CHUNK_SUBSTITUTION_TARGET_1A,
@@ -130,9 +127,7 @@ pub const MOVEMENT_QUERY_SINGLE_TILE_0X40: u8 = 0x40;
 /// this query class. The on-foot family and the `0x40` query are
 /// exempt; everything else respects the reject.
 pub const fn movement_chair_force_reject_applies(query_class: u8, tile: u8) -> bool {
-    if tile < MOVEMENT_CHAIR_FORCE_REJECT_FIRST
-        || tile > MOVEMENT_CHAIR_FORCE_REJECT_LAST
-    {
+    if tile < MOVEMENT_CHAIR_FORCE_REJECT_FIRST || tile > MOVEMENT_CHAIR_FORCE_REJECT_LAST {
         return false;
     }
     if (query_class >= MOVEMENT_QUERY_FOOT_AVATAR_FIRST
@@ -205,8 +200,7 @@ pub const TRANSPORT_MARKER_SHIP_FURLED_FIRST: u8 = TRANSPORT_MARKER_SHIP_HOISTED
 pub const TRANSPORT_MARKER_SHIP_FURLED_LAST: u8 =
     TRANSPORT_MARKER_SHIP_FURLED_FIRST + TRANSPORT_FACING_MASK;
 pub const TRANSPORT_MARKER_SKIFF_FIRST: u8 = TRANSPORT_MARKER_SHIP_FURLED_LAST + 1;
-pub const TRANSPORT_MARKER_SKIFF_LAST: u8 =
-    TRANSPORT_MARKER_SKIFF_FIRST + TRANSPORT_FACING_MASK;
+pub const TRANSPORT_MARKER_SKIFF_LAST: u8 = TRANSPORT_MARKER_SKIFF_FIRST + TRANSPORT_FACING_MASK;
 
 /// `vehicles.md §2` low-bit mask the transport-marker facing decoder
 /// applies. Bit 0 selects east/west; bit 1 selects south/north; the
@@ -475,15 +469,12 @@ pub const SAVE_DUNGEON_ROOM_CLEAR_ROOMS_PER_DUNGEON: usize = crate::DUNGEON_ROOM
 /// bit_mask) pair for a (dungeon, room_id) coordinate. Returns
 /// `None` for out-of-range coordinates (dungeon `>= 8` or room id
 /// `>= 16`).
-pub const fn dungeon_room_clear_bit_position(
-    dungeon: u8,
-    room_id: u8,
-) -> Option<(usize, u8)> {
+pub const fn dungeon_room_clear_bit_position(dungeon: u8, room_id: u8) -> Option<(usize, u8)> {
     if dungeon >= 8 || room_id >= 16 {
         return None;
     }
-    let byte = dungeon as usize * SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON
-        + (room_id as usize) / 8;
+    let byte =
+        dungeon as usize * SAVE_DUNGEON_ROOM_CLEAR_BYTES_PER_DUNGEON + (room_id as usize) / 8;
     let mask = 1u8 << (room_id % 8);
     Some((byte, mask))
 }

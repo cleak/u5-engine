@@ -70,9 +70,9 @@ pub fn run_combat_scenario(
         };
 
         if !state.combat_active {
-            result.steps.push(CombatScenarioStep::Exited(
-                CombatRoundLoopExit::LeaveCombat,
-            ));
+            result
+                .steps
+                .push(CombatScenarioStep::Exited(CombatRoundLoopExit::LeaveCombat));
             result.final_exit = Some(CombatRoundLoopExit::LeaveCombat);
             break;
         }
@@ -81,11 +81,8 @@ pub fn run_combat_scenario(
         let mut should_break = false;
         match input {
             CombatScenarioInput::AttackDirection(dir) | CombatScenarioInput::Move(dir) => {
-                let attacker_group = crate::combat_actor::resolve_combat_target_group(
-                    actor_slot,
-                    None,
-                    false,
-                );
+                let attacker_group =
+                    crate::combat_actor::resolve_combat_target_group(actor_slot, None, false);
                 let _ = state.apply_combat_step_or_attack_primitive(
                     actor_slot,
                     attacker_group,
@@ -98,14 +95,12 @@ pub fn run_combat_scenario(
                 // effects.
             }
             CombatScenarioInput::Quit => {
-                state.apply_combat_round_loop_exit(
-                    crate::combat_actor::CombatRoundLoopExit::Defeat,
-                );
+                state
+                    .apply_combat_round_loop_exit(crate::combat_actor::CombatRoundLoopExit::Defeat);
                 result.steps.push(CombatScenarioStep::Exited(
                     crate::combat_actor::CombatRoundLoopExit::Defeat,
                 ));
-                result.final_exit =
-                    Some(crate::combat_actor::CombatRoundLoopExit::Defeat);
+                result.final_exit = Some(crate::combat_actor::CombatRoundLoopExit::Defeat);
                 should_break = true;
             }
             CombatScenarioInput::Xit => {
@@ -118,8 +113,7 @@ pub fn run_combat_scenario(
                     result.steps.push(CombatScenarioStep::Exited(
                         crate::combat_actor::CombatRoundLoopExit::LeaveCombat,
                     ));
-                    result.final_exit =
-                        Some(crate::combat_actor::CombatRoundLoopExit::LeaveCombat);
+                    result.final_exit = Some(crate::combat_actor::CombatRoundLoopExit::LeaveCombat);
                     should_break = true;
                 }
             }
@@ -128,7 +122,9 @@ pub fn run_combat_scenario(
         if should_break {
             break;
         }
-        result.steps.push(CombatScenarioStep::AppliedToSlot(actor_slot));
+        result
+            .steps
+            .push(CombatScenarioStep::AppliedToSlot(actor_slot));
         if !pre_combat_active || !state.combat_active {
             break;
         }
@@ -148,7 +144,10 @@ pub fn consume_round_walk_application_history(
     for entry in applications.iter().rev() {
         match entry {
             CombatActorSlotDispatchApplication::EndOfRound { control }
-            | CombatActorSlotDispatchApplication::Slot { control_after: control, .. } => {
+            | CombatActorSlotDispatchApplication::Slot {
+                control_after: control,
+                ..
+            } => {
                 if let CombatRoundLoopControl::Exit(exit) = control {
                     return Some(*exit);
                 }
@@ -164,11 +163,7 @@ mod tests {
 
     #[test]
     fn quit_input_marks_defeat_exit() {
-        let mut state = crate::test_fixtures::test_state(
-            crate::test_fixtures::open_grid(),
-            5,
-            5,
-        );
+        let mut state = crate::test_fixtures::test_state(crate::test_fixtures::open_grid(), 5, 5);
         // Pretend combat is active with one fake actor in the player
         // slot. We exercise only the Quit branch since it does not
         // need full combat actor setup to verify the exit path.
@@ -181,11 +176,7 @@ mod tests {
 
     #[test]
     fn empty_script_returns_no_steps() {
-        let mut state = crate::test_fixtures::test_state(
-            crate::test_fixtures::open_grid(),
-            5,
-            5,
-        );
+        let mut state = crate::test_fixtures::test_state(crate::test_fixtures::open_grid(), 5, 5);
         let result = run_combat_scenario(&mut state, &[]);
         assert!(result.steps.is_empty());
         assert_eq!(result.final_exit, None);
@@ -193,11 +184,7 @@ mod tests {
 
     #[test]
     fn script_with_no_active_combatant_reports_no_active_combatant_step() {
-        let mut state = crate::test_fixtures::test_state(
-            crate::test_fixtures::open_grid(),
-            5,
-            5,
-        );
+        let mut state = crate::test_fixtures::test_state(crate::test_fixtures::open_grid(), 5, 5);
         // combat_active is false → ensure_pending_combat_player_turn
         // does not allocate a slot.
         let result = run_combat_scenario(

@@ -103,8 +103,7 @@ pub const WD_BIT_LETTERING_ROWS: u16 = 49;
 /// header instead of repeating `2` as a bare literal.
 pub const BIT_STRIP_WIDTH_WORD_LEN: usize = 2;
 pub const BIT_STRIP_ROW_COUNT_WORD_LEN: usize = 2;
-pub const BIT_STRIP_HEADER_LEN: usize =
-    BIT_STRIP_WIDTH_WORD_LEN + BIT_STRIP_ROW_COUNT_WORD_LEN;
+pub const BIT_STRIP_HEADER_LEN: usize = BIT_STRIP_WIDTH_WORD_LEN + BIT_STRIP_ROW_COUNT_WORD_LEN;
 pub const CH_GLYPH_COUNT: usize = 128;
 pub const CH_CELL_SIDE: usize = 8;
 /// `formats/font-ch.md §2`: each .CH glyph is an 8x8 cell with
@@ -348,8 +347,7 @@ pub const SAVE_SPECIAL_ITEM_OFFSET: usize = SAVE_CLIMBING_GEAR_OFFSET + 1;
 /// a special item, equipment id, or spell id automatically
 /// shifts the later band offsets.
 pub const SAVE_EQUIPMENT_STOCK_OFFSET: usize = SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_COUNT;
-pub const SAVE_SPELL_CHARGES_OFFSET: usize =
-    SAVE_EQUIPMENT_STOCK_OFFSET + EQUIPMENT_STOCK_BAND_LEN;
+pub const SAVE_SPELL_CHARGES_OFFSET: usize = SAVE_EQUIPMENT_STOCK_OFFSET + EQUIPMENT_STOCK_BAND_LEN;
 pub const SAVE_SCROLL_STOCK_OFFSET: usize = SAVE_SPELL_CHARGES_OFFSET + SPELL_CHARGE_BAND_LEN;
 pub const SAVE_POTION_STOCK_OFFSET: usize = SAVE_SCROLL_STOCK_OFFSET + SCROLL_COUNT;
 pub const SAVE_MOONSTONE_X_OFFSET: usize = SAVE_POTION_STOCK_OFFSET + POTION_COUNT;
@@ -641,9 +639,8 @@ pub const SCROLL_COUNT: usize = SCROLL_NEGATE_TIME_INDEX + 1;
 /// would type for the matching C-Cast spell (Vas Lor, Rel Hur,
 /// In Sanct, An In, In Quas Wis, Kal Xen Corp, In Mani Corp, An
 /// Tym), in the U-Use scroll-dispatch order.
-pub const SCROLL_SPELL_LABELS: [&str; SCROLL_COUNT] = [
-    "LV", "HR", "IS", "AI", "IQW", "CKX", "CIM", "AT",
-];
+pub const SCROLL_SPELL_LABELS: [&str; SCROLL_COUNT] =
+    ["LV", "HR", "IS", "AI", "IQW", "CKX", "CIM", "AT"];
 /// `inventory.md §7` potion catalog size. The eight potion
 /// indices span BLUE (0) through WHITE (7); anchor the count to
 /// [`POTION_WHITE_INDEX`] + 1 so adding or renaming a potion
@@ -1329,10 +1326,8 @@ pub const BRIT_STORED_CHUNKS: usize = 205;
 pub const OVERWORLD_CHUNK_BUFFER_GRID_SIDE: usize = 2;
 pub const OVERWORLD_CHUNK_BUFFER_CHUNKS: usize =
     OVERWORLD_CHUNK_BUFFER_GRID_SIDE * OVERWORLD_CHUNK_BUFFER_GRID_SIDE;
-pub const OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE: usize =
-    OVERWORLD_CHUNK_BUFFER_GRID_SIDE * CHUNK_SIDE;
-pub const OVERWORLD_CHUNK_BUFFER_BYTES: usize =
-    OVERWORLD_CHUNK_BUFFER_CHUNKS * CHUNK_BYTES;
+pub const OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE: usize = OVERWORLD_CHUNK_BUFFER_GRID_SIDE * CHUNK_SIDE;
+pub const OVERWORLD_CHUNK_BUFFER_BYTES: usize = OVERWORLD_CHUNK_BUFFER_CHUNKS * CHUNK_BYTES;
 pub const BRIT_WATER_SENTINEL: u8 = 0xff;
 pub const BRIT_DEEP_WATER_TILE: u8 = 1;
 /// `npc-schedules.md §8.4` BFS queue capacity used by the NPC

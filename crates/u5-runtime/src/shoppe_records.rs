@@ -143,9 +143,7 @@ mod tests {
         assert_eq!(ShoppeBand::SharedBark.len(), 8);
         assert_eq!(
             ShoppeBand::ArmsDescription.len(),
-            SHOPPE_RECORDS_ARMS_DESCRIPTIONS_LAST
-                - SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST
-                + 1
+            SHOPPE_RECORDS_ARMS_DESCRIPTIONS_LAST - SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST + 1
         );
     }
 

@@ -60,8 +60,7 @@ pub const QUESTION_DAT_FIRST_DILEMMA_RECORD: usize = 2;
 /// virtues, so the count is `VIRTUE_COUNT * (VIRTUE_COUNT - 1) / 2`
 /// = `8 * 7 / 2` = 28. Anchored to [`crate::VIRTUE_COUNT`] so the
 /// dilemma count derives from the published virtue count.
-pub const QUESTION_DAT_DILEMMA_COUNT: usize =
-    crate::VIRTUE_COUNT * (crate::VIRTUE_COUNT - 1) / 2;
+pub const QUESTION_DAT_DILEMMA_COUNT: usize = crate::VIRTUE_COUNT * (crate::VIRTUE_COUNT - 1) / 2;
 /// `systems/chargen.md §5`: shipped `QUESTION.DAT` size in bytes.
 /// The thirty NUL-terminated text records pack to exactly this
 /// total in the DOS data set. A byte-compatible reader should still
@@ -128,9 +127,7 @@ pub fn parse_question_records(bytes: &[u8]) -> io::Result<QuestionRecords> {
         let Some(end) = end else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!(
-                    "{QUESTION_DAT_FILE}: unterminated record starting at byte {start}"
-                ),
+                format!("{QUESTION_DAT_FILE}: unterminated record starting at byte {start}"),
             ));
         };
         records.push(decode_question_record(&bytes[start..end]));

@@ -200,8 +200,7 @@ pub fn u4_transfer_strength_to_u5(value: u16) -> u8 {
 }
 
 pub fn u4_transfer_experience_to_u5(value: u32) -> u16 {
-    (value / U4_TRANSFER_EXPERIENCE_DIVISOR)
-        .min(u16::MAX as u32) as u16
+    (value / U4_TRANSFER_EXPERIENCE_DIVISOR).min(u16::MAX as u32) as u16
 }
 
 pub fn apply_u4_transfer_to_save(

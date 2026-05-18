@@ -8,7 +8,10 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RestTickOutcome {
     /// Hour passed without an encounter; HP / MP recovered.
-    Slept { hp_per_member: u16, mp_per_member: u8 },
+    Slept {
+        hp_per_member: u16,
+        mp_per_member: u8,
+    },
     /// Encounter check fired; rest is interrupted and combat should
     /// be entered.
     InterruptedByEncounter,
@@ -67,11 +70,7 @@ pub struct RestSessionResult {
     pub interrupted: bool,
 }
 
-pub fn run_rest_session(
-    hours: u8,
-    rolls: &[u8],
-    keeping_watch: bool,
-) -> RestSessionResult {
+pub fn run_rest_session(hours: u8, rolls: &[u8], keeping_watch: bool) -> RestSessionResult {
     let mut completed = 0u8;
     let mut total_hp = 0u16;
     let mut total_mp = 0u8;

@@ -184,8 +184,7 @@ impl PlayState {
                 }
             }
             SpawnTerrainBranch::SeaSerpentAdjacency => {
-                (self.native_world_encounter_mod(attempt, 0x63, SPAWN_SEA_SERPENT_DENOMINATOR)
-                    == 0)
+                (self.native_world_encounter_mod(attempt, 0x63, SPAWN_SEA_SERPENT_DENOMINATOR) == 0)
                     .then_some(0xE0)
             }
             SpawnTerrainBranch::UnderworldTile4RotWorm => Some(0xF8),
@@ -1359,8 +1358,12 @@ impl PlayState {
                 && outdoor_combat_arena_index_for_object(object).is_some()
                 && terrain_combat_base_class(object).is_some()
             {
-                let note =
-                    self.enter_terrain_combat_from_world_object(game_dir, plane, object_slot, object)?;
+                let note = self.enter_terrain_combat_from_world_object(
+                    game_dir,
+                    plane,
+                    object_slot,
+                    object,
+                )?;
                 self.message = format!(
                     "World object tile {} engaged from the {}; {note}.",
                     object.tile,
@@ -1437,9 +1440,7 @@ pub fn outdoor_active_object_step_accepts_tile(
     }
     match class_byte {
         0x2c..=0x2f => water_creature_terrain_accepts(tile),
-        0x80..=0x8f | 0x9c..=0x9f | 0xfc..=0xff => {
-            tile <= 0x03 || (0x60..=0x6f).contains(&tile)
-        }
+        0x80..=0x8f | 0x9c..=0x9f | 0xfc..=0xff => tile <= 0x03 || (0x60..=0x6f).contains(&tile),
         0x94..=0x97 | 0xb0..=0xb3 | 0xd8..=0xdf | 0xf0..=0xf3 => {
             (is_base_tile_passable(tile, passability) || is_water_tile(tile) || is_lava_tile(tile))
                 && !is_mountain_tile(tile)

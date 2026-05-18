@@ -151,7 +151,6 @@ pub const fn dungeon_room_trigger_promoted_visit_byte(tile: u8) -> Option<u8> {
     }
 }
 
-
 /// `formats/dungeon-dat.md §4`: mask isolating the room-trigger
 /// low-nibble slot index (`0..=15`) inside an `0xF?` cell byte.
 pub const DUNGEON_ROOM_SLOT_MASK: u8 = 0x0F;
@@ -1112,8 +1111,7 @@ pub const DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_LAST: u8 = 0x7F;
 /// for dungeon active-object placement (pit/corridor classes only).
 /// The party's current cell must still be rejected by the caller.
 pub const fn dungeon_active_object_spawn_accepts(tile: u8) -> bool {
-    tile >= DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_FIRST
-        && tile <= DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_LAST
+    tile >= DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_FIRST && tile <= DUNGEON_ACTIVE_OBJECT_SPAWN_TILE_LAST
 }
 
 /// `dungeon-mode.md §3`: L-Look description-byte normalisation. The

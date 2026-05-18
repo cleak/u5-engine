@@ -79,8 +79,7 @@ pub const RESERVED_KEYWORD_REBUKE_COUNT: usize =
 /// the same label byte multiple times (transfer + record). Anchored
 /// to `TLK_LABEL_LAST - TLK_LABEL_FIRST + 1` so the label-count
 /// derives from the published label-byte band.
-pub const TLK_LABEL_BYTE_COUNT: usize =
-    (TLK_LABEL_LAST - TLK_LABEL_FIRST + 1) as usize;
+pub const TLK_LABEL_BYTE_COUNT: usize = (TLK_LABEL_LAST - TLK_LABEL_FIRST + 1) as usize;
 
 /// `conversation.md §7.7`: returns the zero-based label index
 /// `0..=14` for a label byte in the `0x91..=0x9F` range, or `None`
@@ -242,10 +241,7 @@ pub const QUEST_PASSWORD_OPPRESSION: &str = "IMPERA";
 /// folding case; the function does not look for substrings or word
 /// boundaries. Empty names never match (callers should skip empty
 /// roster slots before passing them in).
-pub fn tlk_ask_party_name_match(
-    typed: &[u8],
-    party_member_names: &[&[u8]],
-) -> u8 {
+pub fn tlk_ask_party_name_match(typed: &[u8], party_member_names: &[&[u8]]) -> u8 {
     for (zero_index, name) in party_member_names.iter().enumerate() {
         if name.is_empty() || name.len() != typed.len() {
             continue;
@@ -468,12 +464,8 @@ pub const fn tlk_byte_runner_class(byte: u8) -> TlkByteRunnerClass {
     match byte {
         0x00 => TlkByteRunnerClass::NullByte,
         0x01..=0x7F => TlkByteRunnerClass::DictionaryToken,
-        TLK_CODE_GOTO_LABEL_FIRST..=TLK_CODE_GOTO_LABEL_LAST => {
-            TlkByteRunnerClass::GotoLabel
-        }
-        TLK_PRINTABLE_TEXT_FIRST..=TLK_PRINTABLE_TEXT_LAST => {
-            TlkByteRunnerClass::PrintableText
-        }
+        TLK_CODE_GOTO_LABEL_FIRST..=TLK_CODE_GOTO_LABEL_LAST => TlkByteRunnerClass::GotoLabel,
+        TLK_PRINTABLE_TEXT_FIRST..=TLK_PRINTABLE_TEXT_LAST => TlkByteRunnerClass::PrintableText,
         TLK_CONTROL_CODE_FIRST..=TLK_CONTROL_CODE_LAST => TlkByteRunnerClass::ControlCode,
         TLK_CODE_IF_ELSE_ALT => TlkByteRunnerClass::IfElseAlias,
         TLK_CODE_END_OF_RESPONSE => TlkByteRunnerClass::EndOfResponse,
@@ -561,11 +553,7 @@ pub const fn tlk_gold_payment_amount(arg0: u8, arg1: u8, arg2: u8) -> Option<u16
     if h < b'0' || h > b'9' || t < b'0' || t > b'9' || u < b'0' || u > b'9' {
         return None;
     }
-    Some(
-        (h - b'0') as u16 * 100
-            + (t - b'0') as u16 * 10
-            + (u - b'0') as u16,
-    )
+    Some((h - b'0') as u16 * 100 + (t - b'0') as u16 * 10 + (u - b'0') as u16)
 }
 
 /// `formats/tlk.md §9.1` argument-byte width for the GOLD-PAYMENT
@@ -586,9 +574,7 @@ pub const TLK_IF_ELSE_ALT_ARGUMENT_BYTES: u8 = 2;
 pub const fn tlk_introducer_argument_count(code: u8) -> Option<u8> {
     match code {
         TLK_CODE_GOLD_PAYMENT => Some(TLK_GOLD_PAYMENT_ARGUMENT_BYTES),
-        TLK_CODE_ACTION_DISPATCH | TLK_CODE_IF_ELSE => {
-            Some(TLK_ONE_BYTE_INTRODUCER_ARGUMENT_BYTES)
-        }
+        TLK_CODE_ACTION_DISPATCH | TLK_CODE_IF_ELSE => Some(TLK_ONE_BYTE_INTRODUCER_ARGUMENT_BYTES),
         TLK_CODE_IF_ELSE_ALT => Some(TLK_IF_ELSE_ALT_ARGUMENT_BYTES),
         _ => None,
     }

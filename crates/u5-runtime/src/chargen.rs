@@ -186,16 +186,11 @@ pub const CHARGEN_SEED_MAGIC_POWDER: u8 = 0;
 /// through one source of truth.
 pub const CHARGEN_SEED_REAGENT_BLACK_PEARL: u8 =
     crate::DEFAULT_REAGENTS[crate::REAGENT_BLACK_PEARL];
-pub const CHARGEN_SEED_REAGENT_BLOOD_MOSS: u8 =
-    crate::DEFAULT_REAGENTS[crate::REAGENT_BLOOD_MOSS];
-pub const CHARGEN_SEED_REAGENT_GARLIC: u8 =
-    crate::DEFAULT_REAGENTS[crate::REAGENT_GARLIC];
-pub const CHARGEN_SEED_REAGENT_GINSENG: u8 =
-    crate::DEFAULT_REAGENTS[crate::REAGENT_GINSENG];
-pub const CHARGEN_SEED_REAGENT_MANDRAKE: u8 =
-    crate::DEFAULT_REAGENTS[crate::REAGENT_MANDRAKE];
-pub const CHARGEN_SEED_REAGENT_NIGHTSHADE: u8 =
-    crate::DEFAULT_REAGENTS[crate::REAGENT_NIGHTSHADE];
+pub const CHARGEN_SEED_REAGENT_BLOOD_MOSS: u8 = crate::DEFAULT_REAGENTS[crate::REAGENT_BLOOD_MOSS];
+pub const CHARGEN_SEED_REAGENT_GARLIC: u8 = crate::DEFAULT_REAGENTS[crate::REAGENT_GARLIC];
+pub const CHARGEN_SEED_REAGENT_GINSENG: u8 = crate::DEFAULT_REAGENTS[crate::REAGENT_GINSENG];
+pub const CHARGEN_SEED_REAGENT_MANDRAKE: u8 = crate::DEFAULT_REAGENTS[crate::REAGENT_MANDRAKE];
+pub const CHARGEN_SEED_REAGENT_NIGHTSHADE: u8 = crate::DEFAULT_REAGENTS[crate::REAGENT_NIGHTSHADE];
 pub const CHARGEN_SEED_REAGENT_SPIDER_SILK: u8 =
     crate::DEFAULT_REAGENTS[crate::REAGENT_SPIDER_SILK];
 pub const CHARGEN_SEED_REAGENT_SULFUROUS_ASH: u8 =
@@ -306,13 +301,21 @@ pub fn run_chargen_tournament(
             let answer = *answers
                 .get(question_index)
                 .ok_or(ChargenTournamentError::AnswersExhausted { question_index })?;
-            let first_idx =
-                draw_virtue(rng_bytes, &mut rng_cursor, &selected_this_round, &lost_forever)
-                    .ok_or(ChargenTournamentError::RngExhausted { question_index })?;
+            let first_idx = draw_virtue(
+                rng_bytes,
+                &mut rng_cursor,
+                &selected_this_round,
+                &lost_forever,
+            )
+            .ok_or(ChargenTournamentError::RngExhausted { question_index })?;
             selected_this_round[first_idx] = true;
-            let second_idx =
-                draw_virtue(rng_bytes, &mut rng_cursor, &selected_this_round, &lost_forever)
-                    .ok_or(ChargenTournamentError::RngExhausted { question_index })?;
+            let second_idx = draw_virtue(
+                rng_bytes,
+                &mut rng_cursor,
+                &selected_this_round,
+                &lost_forever,
+            )
+            .ok_or(ChargenTournamentError::RngExhausted { question_index })?;
             selected_this_round[second_idx] = true;
 
             if first_idx == second_idx {
@@ -427,10 +430,7 @@ pub fn commit_chargen_save(
     male: bool,
     stats: ChargenStats,
 ) -> io::Result<ChargenAvatar> {
-    let mut save = read_save_image_file(
-        &game_dir.join(INIT_GAM_FILENAME),
-        INIT_GAM_FILENAME,
-    )?;
+    let mut save = read_save_image_file(&game_dir.join(INIT_GAM_FILENAME), INIT_GAM_FILENAME)?;
     let init_ool = read_init_ool_plane(game_dir)?;
     let avatar = apply_chargen_to_save(&mut save, name_bytes, male, stats)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
@@ -448,11 +448,7 @@ fn normalize_chargen_name(
 ) -> Result<[u8; SAVE_CHARACTER_NAME_LEN], ChargenError> {
     let mut name = [0; SAVE_CHARACTER_NAME_LEN];
     let mut has_non_space = false;
-    for (index, &byte) in name_bytes
-        .iter()
-        .take(CHARGEN_NAME_INPUT_LIMIT)
-        .enumerate()
-    {
+    for (index, &byte) in name_bytes.iter().take(CHARGEN_NAME_INPUT_LIMIT).enumerate() {
         if !(0x20..=0x7e).contains(&byte) {
             return Err(ChargenError::InvalidNameByte(byte));
         }
@@ -572,7 +568,10 @@ mod tests {
     fn tournament_returns_answers_exhausted_when_fewer_than_seven_supplied() {
         let rng = rng_pool();
         let err = run_chargen_tournament(&rng, &[true; 3]).unwrap_err();
-        assert!(matches!(err, ChargenTournamentError::AnswersExhausted { .. }));
+        assert!(matches!(
+            err,
+            ChargenTournamentError::AnswersExhausted { .. }
+        ));
     }
 
     #[test]
@@ -590,7 +589,10 @@ mod tests {
     fn final_winner_is_last_questions_winner() {
         let rng = rng_pool();
         let outcome = run_chargen_tournament(&rng, &always_a()).unwrap();
-        assert_eq!(outcome.final_winner, outcome.questions.last().unwrap().winner);
+        assert_eq!(
+            outcome.final_winner,
+            outcome.questions.last().unwrap().winner
+        );
     }
 
     #[test]

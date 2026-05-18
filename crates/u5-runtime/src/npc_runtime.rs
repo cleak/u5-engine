@@ -510,11 +510,7 @@ pub const NPC_FLOOR_LINK_TILE_C9: u8 = crate::NPC_FLOOR_LINK_TILE_B;
 /// current floor; "above" means numerically smaller. Caller still
 /// applies the already-on-waypoint short-circuit and only invokes the
 /// classifier when a real transition has been detected.
-pub const fn schedule_floor_state(
-    npc_floor: u8,
-    target_floor: u8,
-    map_floor: u8,
-) -> u8 {
+pub const fn schedule_floor_state(npc_floor: u8, target_floor: u8, map_floor: u8) -> u8 {
     let npc_eq = npc_floor == map_floor;
     let target_eq = target_floor == map_floor;
     if npc_eq && target_eq {

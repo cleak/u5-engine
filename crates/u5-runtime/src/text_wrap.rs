@@ -66,10 +66,26 @@ pub const fn text_window_clamp_rectangle(
 ) -> (u8, u8, u8, u8) {
     let max_x = TEXT_SCREEN_COLUMNS - 1;
     let max_y = TEXT_SCREEN_ROWS - 1;
-    let x1 = if supplied_x1 > max_x { max_x } else { supplied_x1 };
-    let x2 = if supplied_x2 > max_x { max_x } else { supplied_x2 };
-    let y1 = if supplied_y1 > max_y { max_y } else { supplied_y1 };
-    let y2 = if supplied_y2 > max_y { max_y } else { supplied_y2 };
+    let x1 = if supplied_x1 > max_x {
+        max_x
+    } else {
+        supplied_x1
+    };
+    let x2 = if supplied_x2 > max_x {
+        max_x
+    } else {
+        supplied_x2
+    };
+    let y1 = if supplied_y1 > max_y {
+        max_y
+    } else {
+        supplied_y1
+    };
+    let y2 = if supplied_y2 > max_y {
+        max_y
+    } else {
+        supplied_y2
+    };
     let (left, right) = if x1 > x2 { (x2, x1) } else { (x1, x2) };
     let (top, bottom) = if y1 > y2 { (y2, y1) } else { (y1, y2) };
     (left, top, right, bottom)
@@ -109,8 +125,7 @@ pub const fn text_color_background(packed: u8) -> u8 {
 /// `text-output.md §9`: the packed colour byte produced by the
 /// boot defaults (low nibble fg, high nibble bg).
 pub const fn text_window_default_color_byte() -> u8 {
-    (TEXT_WINDOW_DEFAULT_BACKGROUND << TEXT_COLOR_BACKGROUND_SHIFT)
-        | TEXT_WINDOW_DEFAULT_FOREGROUND
+    (TEXT_WINDOW_DEFAULT_BACKGROUND << TEXT_COLOR_BACKGROUND_SHIFT) | TEXT_WINDOW_DEFAULT_FOREGROUND
 }
 
 /// `text-output.md §3` extended text-control byte values. The per-
@@ -231,9 +246,7 @@ pub enum ProportionalRendererByteKind {
 /// `text-output.md §8`: classify one byte for the proportional
 /// renderer. Caller has already loaded the NUL-terminated text
 /// record into the working buffer.
-pub const fn proportional_renderer_byte_kind(
-    byte: u8,
-) -> ProportionalRendererByteKind {
+pub const fn proportional_renderer_byte_kind(byte: u8) -> ProportionalRendererByteKind {
     match byte {
         0 => ProportionalRendererByteKind::EndOfRecord,
         b' ' => ProportionalRendererByteKind::WordBreakSpace,
@@ -330,8 +343,13 @@ pub fn wrap_text(source: &str, window_width: usize, cursor_x_at_entry: usize) ->
     let first_line_width = window_width.saturating_sub(cursor_x_at_entry);
     let mut emitted_any = false;
 
-    let line_width =
-        |emitted_any: bool| if emitted_any { window_width } else { first_line_width };
+    let line_width = |emitted_any: bool| {
+        if emitted_any {
+            window_width
+        } else {
+            first_line_width
+        }
+    };
 
     for &byte in bytes {
         match byte {

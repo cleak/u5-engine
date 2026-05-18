@@ -126,7 +126,12 @@ impl PlayState {
         save[avatar_record + SAVE_CHARACTER_STR_OFFSET] = self.avatar_stats.strength;
         save[avatar_record + SAVE_CHARACTER_DEX_OFFSET] = self.avatar_stats.dexterity;
         save[avatar_record + SAVE_CHARACTER_INT_OFFSET] = self.avatar_stats.intelligence;
-        for (party_index, member) in self.party.iter().take(SAVE_PARTY_SIZE_MAX as usize).enumerate() {
+        for (party_index, member) in self
+            .party
+            .iter()
+            .take(SAVE_PARTY_SIZE_MAX as usize)
+            .enumerate()
+        {
             let record = SAVE_ROSTER_OFFSET + member.slot as usize * SAVE_CHARACTER_RECORD_LEN;
             if record + SAVE_CHARACTER_MAX_HP_OFFSET + 1 >= save.len() {
                 continue;
@@ -269,7 +274,8 @@ impl PlayState {
         let markers = harvest_location_markers(&grid);
         normalize_town_runtime_floor(&mut grid, options.clock.hour);
         let table_start = if options.floor == 0 {
-            load_location_entry_y(game_dir, scene)?.map(|entry_y| (LOCATION_DEFAULT_ENTRY_X, entry_y))
+            load_location_entry_y(game_dir, scene)?
+                .map(|entry_y| (LOCATION_DEFAULT_ENTRY_X, entry_y))
         } else {
             None
         };

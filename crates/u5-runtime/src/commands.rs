@@ -7,6 +7,7 @@
 //! letter-to-name table.
 
 use crate::input_case_fold;
+use crate::Direction;
 
 /// `commands.md §4` resident A-Z command identities.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -192,13 +193,9 @@ pub const fn local_view_class_for_tile(tile: u8) -> LocalViewClass {
         | 0xB8..=0xBB
         | 0xC4..=0xC7
         | 0xEC..=0xF9 => LocalViewClass::HollowRectangle,
-        0x0C
-        | 0x27..=0x28
-        | 0x39..=0x3F
-        | 0x46
-        | 0x4D..=0x57
-        | 0xD0..=0xD3
-        | 0xFE => LocalViewClass::DiagonalStyle,
+        0x0C | 0x27..=0x28 | 0x39..=0x3F | 0x46 | 0x4D..=0x57 | 0xD0..=0xD3 | 0xFE => {
+            LocalViewClass::DiagonalStyle
+        }
         0x0B | 0x0E..=0x0F => LocalViewClass::DiagonalStep,
         0x06 | 0x08 | 0x2C => LocalViewClass::VegetationHybrid,
         0x03 | 0x60..=0x69 | 0x6C..=0x6F | 0xE4..=0xE7 => LocalViewClass::FourCornerRing,
@@ -215,8 +212,14 @@ pub const fn local_view_class_for_tile(tile: u8) -> LocalViewClass {
 /// object-spawn branch accepts only the six vehicle/joke names
 /// recognized by the original handler. Match is case-insensitive
 /// at the caller; this catalog stores the canonical capitalisation.
-pub const WISHING_WELL_WISH_KEYWORDS: [&str; 6] =
-    ["Corvette", "Ferrari", "Lamborghini", "Lotus", "Porsche", "Horse"];
+pub const WISHING_WELL_WISH_KEYWORDS: [&str; 6] = [
+    "Corvette",
+    "Ferrari",
+    "Lamborghini",
+    "Lotus",
+    "Porsche",
+    "Horse",
+];
 
 /// `view.md §3`: returns `true` when the typed wish matches one of
 /// the six accepted wishing-well keywords (case-insensitive).
@@ -376,6 +379,35 @@ pub const fn pushable_tile_family(tile: u8) -> Option<PushableTileFamily> {
     })
 }
 
+/// `commands.md §8`: four-facing pushable families use the same
+/// low-two-bit cardinal facing convention as stairs and transport markers:
+/// north `0`, east `1`, south `2`, west `3`.
+pub const fn pushable_facing_index(direction: Direction) -> Option<u8> {
+    Some(match direction {
+        Direction::North => 0,
+        Direction::East => 1,
+        Direction::South => 2,
+        Direction::West => 3,
+        _ => return None,
+    })
+}
+
+/// `commands.md §8`: successful pushes and pulls rotate chair/cannon
+/// families to the movement-facing low bits. Non-rotating families keep
+/// their original tile byte.
+pub const fn pushable_oriented_tile(tile: u8, direction: Direction) -> u8 {
+    let Some(family) = pushable_tile_family(tile) else {
+        return tile;
+    };
+    if !family.rewrites_facing() {
+        return tile;
+    }
+    let Some(facing) = pushable_facing_index(direction) else {
+        return tile;
+    };
+    (tile & !0x03) | facing
+}
+
 /// `commands.md §6` New-Order swap-accept predicate. The handler
 /// refuses the swap if either selected slot is slot zero (the
 /// leader must remain first). Same-slot swaps are accepted; the
@@ -409,10 +441,7 @@ pub enum NewOrderOutcome {
 /// shared party-member selector results. Either selection being
 /// `None` means the prompt was cancelled; otherwise the helper
 /// applies the leader-slot refusal before returning a swap.
-pub const fn new_order_outcome(
-    slot_a: Option<usize>,
-    slot_b: Option<usize>,
-) -> NewOrderOutcome {
+pub const fn new_order_outcome(slot_a: Option<usize>, slot_b: Option<usize>) -> NewOrderOutcome {
     let (a, b) = match (slot_a, slot_b) {
         (Some(a), Some(b)) => (a, b),
         _ => return NewOrderOutcome::Cancelled,
@@ -420,7 +449,10 @@ pub const fn new_order_outcome(
     if a == 0 || b == 0 {
         return NewOrderOutcome::LeaderRefusal;
     }
-    NewOrderOutcome::Swap { slot_a: a, slot_b: b }
+    NewOrderOutcome::Swap {
+        slot_a: a,
+        slot_b: b,
+    }
 }
 
 /// `commands.md §4`: classify a raw key byte into a [`Command`]. Keys

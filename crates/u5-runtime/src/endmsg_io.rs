@@ -70,9 +70,7 @@ pub fn parse_endgame_messages(bytes: &[u8]) -> io::Result<EndgameMessages> {
         let Some(end) = end else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!(
-                    "{ENDMSG_DAT_FILE}: unterminated record starting at byte {start}"
-                ),
+                format!("{ENDMSG_DAT_FILE}: unterminated record starting at byte {start}"),
             ));
         };
         records.push(decode_endgame_record(&bytes[start..end]));

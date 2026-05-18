@@ -157,19 +157,14 @@ pub const INTRO_STEP_6_EXTRA_SUBIMAGE: u8 = 3;
 /// steps that draw two `TEXT.16` transition subimages before the
 /// primary story-art draw. Each entry is `(subimage_a, x_a, y_a,
 /// subimage_b, x_b, y_b)`.
-pub const INTRO_STEP_0_TRANSITION_STRIPS: [(u8, u16, u16); 2] =
-    [(0, 224, 30), (1, 168, 58)];
-pub const INTRO_STEP_7_TRANSITION_STRIPS: [(u8, u16, u16); 2] =
-    [(0, 232, 26), (2, 200, 54)];
-pub const INTRO_STEP_14_TRANSITION_STRIPS: [(u8, u16, u16); 2] =
-    [(0, 184, 0), (3, 248, 0)];
+pub const INTRO_STEP_0_TRANSITION_STRIPS: [(u8, u16, u16); 2] = [(0, 224, 30), (1, 168, 58)];
+pub const INTRO_STEP_7_TRANSITION_STRIPS: [(u8, u16, u16); 2] = [(0, 232, 26), (2, 200, 54)];
+pub const INTRO_STEP_14_TRANSITION_STRIPS: [(u8, u16, u16); 2] = [(0, 184, 0), (3, 248, 0)];
 
 /// `intro.md §10`: returns the two `TEXT.16` transition-strip
 /// placements for steps 0, 7, and 14; returns `None` for any other
 /// step (which has no transition-strip pre-draw).
-pub const fn intro_step_transition_strips(
-    step: usize,
-) -> Option<[(u8, u16, u16); 2]> {
+pub const fn intro_step_transition_strips(step: usize) -> Option<[(u8, u16, u16); 2]> {
     Some(match step {
         0 => INTRO_STEP_0_TRANSITION_STRIPS,
         7 => INTRO_STEP_7_TRANSITION_STRIPS,
@@ -188,27 +183,111 @@ pub struct IntroStoryArtPlacement {
 }
 
 const INTRO_STORY_ART_PLACEMENTS: [IntroStoryArtPlacement; INTRO_STORY_STEP_COUNT] = [
-    IntroStoryArtPlacement { subimage: 0, top_left_x: 0, top_left_y: 0 },
-    IntroStoryArtPlacement { subimage: 1, top_left_x: 0, top_left_y: 74 },
-    IntroStoryArtPlacement { subimage: 0, top_left_x: 136, top_left_y: 0 },
-    IntroStoryArtPlacement { subimage: 1, top_left_x: 0, top_left_y: 38 },
-    IntroStoryArtPlacement { subimage: 2, top_left_x: 152, top_left_y: 76 },
-    IntroStoryArtPlacement { subimage: 2, top_left_x: 0, top_left_y: 0 },
-    IntroStoryArtPlacement { subimage: 2, top_left_x: 72, top_left_y: 38 },
-    IntroStoryArtPlacement { subimage: 0, top_left_x: 0, top_left_y: 0 },
-    IntroStoryArtPlacement { subimage: 1, top_left_x: 0, top_left_y: 82 },
-    IntroStoryArtPlacement { subimage: 0, top_left_x: 0, top_left_y: 82 },
-    IntroStoryArtPlacement { subimage: 1, top_left_x: 0, top_left_y: 82 },
-    IntroStoryArtPlacement { subimage: 0, top_left_x: 0, top_left_y: 82 },
-    IntroStoryArtPlacement { subimage: 1, top_left_x: 0, top_left_y: 82 },
-    IntroStoryArtPlacement { subimage: 0, top_left_x: 176, top_left_y: 0 },
-    IntroStoryArtPlacement { subimage: 1, top_left_x: 0, top_left_y: 0 },
-    IntroStoryArtPlacement { subimage: 2, top_left_x: 176, top_left_y: 0 },
-    IntroStoryArtPlacement { subimage: 6, top_left_x: 0, top_left_y: 46 },
-    IntroStoryArtPlacement { subimage: 4, top_left_x: 176, top_left_y: 78 },
-    IntroStoryArtPlacement { subimage: 2, top_left_x: 0, top_left_y: 0 },
-    IntroStoryArtPlacement { subimage: 6, top_left_x: 176, top_left_y: 55 },
-    IntroStoryArtPlacement { subimage: 4, top_left_x: 0, top_left_y: 87 },
+    IntroStoryArtPlacement {
+        subimage: 0,
+        top_left_x: 0,
+        top_left_y: 0,
+    },
+    IntroStoryArtPlacement {
+        subimage: 1,
+        top_left_x: 0,
+        top_left_y: 74,
+    },
+    IntroStoryArtPlacement {
+        subimage: 0,
+        top_left_x: 136,
+        top_left_y: 0,
+    },
+    IntroStoryArtPlacement {
+        subimage: 1,
+        top_left_x: 0,
+        top_left_y: 38,
+    },
+    IntroStoryArtPlacement {
+        subimage: 2,
+        top_left_x: 152,
+        top_left_y: 76,
+    },
+    IntroStoryArtPlacement {
+        subimage: 2,
+        top_left_x: 0,
+        top_left_y: 0,
+    },
+    IntroStoryArtPlacement {
+        subimage: 2,
+        top_left_x: 72,
+        top_left_y: 38,
+    },
+    IntroStoryArtPlacement {
+        subimage: 0,
+        top_left_x: 0,
+        top_left_y: 0,
+    },
+    IntroStoryArtPlacement {
+        subimage: 1,
+        top_left_x: 0,
+        top_left_y: 82,
+    },
+    IntroStoryArtPlacement {
+        subimage: 0,
+        top_left_x: 0,
+        top_left_y: 82,
+    },
+    IntroStoryArtPlacement {
+        subimage: 1,
+        top_left_x: 0,
+        top_left_y: 82,
+    },
+    IntroStoryArtPlacement {
+        subimage: 0,
+        top_left_x: 0,
+        top_left_y: 82,
+    },
+    IntroStoryArtPlacement {
+        subimage: 1,
+        top_left_x: 0,
+        top_left_y: 82,
+    },
+    IntroStoryArtPlacement {
+        subimage: 0,
+        top_left_x: 176,
+        top_left_y: 0,
+    },
+    IntroStoryArtPlacement {
+        subimage: 1,
+        top_left_x: 0,
+        top_left_y: 0,
+    },
+    IntroStoryArtPlacement {
+        subimage: 2,
+        top_left_x: 176,
+        top_left_y: 0,
+    },
+    IntroStoryArtPlacement {
+        subimage: 6,
+        top_left_x: 0,
+        top_left_y: 46,
+    },
+    IntroStoryArtPlacement {
+        subimage: 4,
+        top_left_x: 176,
+        top_left_y: 78,
+    },
+    IntroStoryArtPlacement {
+        subimage: 2,
+        top_left_x: 0,
+        top_left_y: 0,
+    },
+    IntroStoryArtPlacement {
+        subimage: 6,
+        top_left_x: 176,
+        top_left_y: 55,
+    },
+    IntroStoryArtPlacement {
+        subimage: 4,
+        top_left_x: 0,
+        top_left_y: 87,
+    },
 ];
 
 /// `intro.md §10` — return the primary story-art placement for the given
@@ -262,9 +341,7 @@ pub fn parse_story_records(bytes: &[u8]) -> io::Result<StoryRecords> {
         let Some(end) = end else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!(
-                    "{STORY_DAT_FILE}: unterminated record starting at byte {start}"
-                ),
+                format!("{STORY_DAT_FILE}: unterminated record starting at byte {start}"),
             ));
         };
         records.push(decode_story_record(&bytes[start..end]));

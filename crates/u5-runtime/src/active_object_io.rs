@@ -133,8 +133,16 @@ pub const OUTDOOR_WATER_CREATURE_ADJACENCY_RADIUS: i32 = 3;
 /// never trigger the attack-message / water-creature step path,
 /// regardless of distance.
 pub const fn outdoor_water_creature_attack_aligned(wrapped_dx: i32, wrapped_dy: i32) -> bool {
-    let abs_dx = if wrapped_dx < 0 { -wrapped_dx } else { wrapped_dx };
-    let abs_dy = if wrapped_dy < 0 { -wrapped_dy } else { wrapped_dy };
+    let abs_dx = if wrapped_dx < 0 {
+        -wrapped_dx
+    } else {
+        wrapped_dx
+    };
+    let abs_dy = if wrapped_dy < 0 {
+        -wrapped_dy
+    } else {
+        wrapped_dy
+    };
     if abs_dx != 0 && abs_dy != 0 {
         return false;
     }
@@ -169,8 +177,7 @@ pub const ACTIVE_OBJECT_EVICTION_DYNAMIC_FIRST: u8 = 0x80;
 /// (`0x10` and `0x11`). The pair begins immediately after the
 /// scenery band; anchor to [`ACTIVE_OBJECT_EVICTION_SCENERY_LAST`]
 /// + 1 so the band adjacency has one source of truth.
-pub const ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_FIRST: u8 =
-    ACTIVE_OBJECT_EVICTION_SCENERY_LAST + 1;
+pub const ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_FIRST: u8 = ACTIVE_OBJECT_EVICTION_SCENERY_LAST + 1;
 pub const ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_LAST: u8 =
     ACTIVE_OBJECT_EVICTION_DOOR_FIXTURE_FIRST + 1;
 
@@ -247,8 +254,7 @@ pub const fn active_object_eviction_off_screen(
     } else {
         player_y - slot_y
     };
-    dx > ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS
-        || dy > ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS
+    dx > ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS || dy > ACTIVE_OBJECT_EVICTION_OFFSCREEN_RADIUS
 }
 
 /// `active-objects.md §2` per-pass iteration order. The renderer

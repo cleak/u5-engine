@@ -211,8 +211,9 @@ pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
                 print_mask = print_mask.toggle();
             }
             TLK_CODE_CURSE_CHECK => {
-                out.events
-                    .push(TlkRunEvent::CurseChecked { curse_seen: curse_pending });
+                out.events.push(TlkRunEvent::CurseChecked {
+                    curse_seen: curse_pending,
+                });
                 // The original engine resets the curse flag after the check
                 // so a subsequent CURSE-CHECK only fires if a new curse word
                 // was typed in the meantime.
@@ -253,10 +254,8 @@ pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
                         && inputs
                             .gold_available
                             .map_or(true, |available| available >= amount);
-                    out.events.push(TlkRunEvent::GoldPayment {
-                        amount,
-                        accepted,
-                    });
+                    out.events
+                        .push(TlkRunEvent::GoldPayment { amount, accepted });
                     let target_label = if accepted {
                         TLK_CODE_GOTO_LABEL_FIRST
                     } else {
@@ -797,8 +796,7 @@ mod tests {
 
     #[test]
     fn dictionary_token_uses_expansion_when_provided() {
-        let mut dict: [&str; COMMON_WORD_DICTIONARY_ENTRIES] =
-            ["" ; COMMON_WORD_DICTIONARY_ENTRIES];
+        let mut dict: [&str; COMMON_WORD_DICTIONARY_ENTRIES] = [""; COMMON_WORD_DICTIONARY_ENTRIES];
         dict[0x10] = "Britannia";
         let mut bytes = vec![0x10u8];
         bytes.push(TLK_CODE_END_OF_RESPONSE);

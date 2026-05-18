@@ -97,9 +97,6 @@ mod tests {
                 control_after: CombatRoundLoopControl::Exit(CombatRoundLoopExit::Defeat),
             });
         let step = classify_round_walk_application(&app, None);
-        assert_eq!(
-            step,
-            CombatDriverStep::Exited(CombatRoundLoopExit::Defeat)
-        );
+        assert_eq!(step, CombatDriverStep::Exited(CombatRoundLoopExit::Defeat));
     }
 }

@@ -111,10 +111,7 @@ mod tests {
     #[test]
     fn advance_walks_all_six_narrative_windows_in_order() {
         let mut cin = EndgameCinematic::start();
-        assert_eq!(
-            cin.advance(),
-            EndgameCinematicStep::NarrativeWindow(0)
-        );
+        assert_eq!(cin.advance(), EndgameCinematicStep::NarrativeWindow(0));
         for expected in 1..ENDGAME_NARRATIVE_WINDOW_COUNT {
             assert_eq!(
                 cin.advance(),

@@ -19,12 +19,7 @@ pub enum Axis {
 /// One-cell step offsets toward the player along each axis on the 256-cell
 /// torus. Each component is `-1`, `0`, or `+1`. A zero component means the
 /// actor is already aligned with the player on that axis.
-pub fn directed_step_offsets(
-    actor_x: u8,
-    actor_y: u8,
-    player_x: u8,
-    player_y: u8,
-) -> (i8, i8) {
+pub fn directed_step_offsets(actor_x: u8, actor_y: u8, player_x: u8, player_y: u8) -> (i8, i8) {
     let dx = wrapped_step_axis(actor_x, player_x);
     let dy = wrapped_step_axis(actor_y, player_y);
     (dx, dy)
@@ -41,14 +36,22 @@ fn wrapped_step_axis(actor: u8, player: u8) -> i8 {
     }
     let forward = (player as i32 - actor as i32).rem_euclid(WORLD_SIDE);
     let backward = (actor as i32 - player as i32).rem_euclid(WORLD_SIDE);
-    if forward <= backward { 1 } else { -1 }
+    if forward <= backward {
+        1
+    } else {
+        -1
+    }
 }
 
 /// Axis-first selector for the one-bit random roll documented in §8: bit 0
 /// of the roll picks X first, bit 1 picks Y first. The caller falls back to
 /// the other axis if the chosen direction is blocked.
 pub const fn axis_first_choice(rng_bit: u8) -> Axis {
-    if rng_bit & 1 == 0 { Axis::X } else { Axis::Y }
+    if rng_bit & 1 == 0 {
+        Axis::X
+    } else {
+        Axis::Y
+    }
 }
 
 /// Per-destination-tile chance gate for ordinary outdoor movers per
@@ -68,8 +71,5 @@ pub const fn terrain_chance_gate_denominator(tile: u8) -> Option<u8> {
 /// and the Bat/Daemon/Dragon/Mongbat first-frame type bytes bypass the
 /// post-validation terrain chance gate.
 pub const fn type_bypasses_terrain_chance_gate(type_byte: u8) -> bool {
-    matches!(
-        type_byte,
-        0x2C..=0x2F | 0x94 | 0xD8 | 0xDC | 0xF0,
-    )
+    matches!(type_byte, 0x2C..=0x2F | 0x94 | 0xD8 | 0xDC | 0xF0,)
 }

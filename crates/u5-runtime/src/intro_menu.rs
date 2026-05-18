@@ -164,8 +164,7 @@ impl IntroMenu {
                 self.phase = IntroMenuPhase::LaunchedGameplay;
                 IntroMenuOutput::LaunchGameplay
             }
-            (_, IntroSubflowResult::ReturnedToMenu)
-            | (_, IntroSubflowResult::Cancelled) => {
+            (_, IntroSubflowResult::ReturnedToMenu) | (_, IntroSubflowResult::Cancelled) => {
                 self.phase = IntroMenuPhase::AwaitingSelection;
                 IntroMenuOutput::PresentMenu
             }
@@ -231,7 +230,10 @@ mod tests {
         let mut menu = IntroMenu::new();
         menu.dismiss_title();
         menu.step(b'A');
-        menu.complete_subflow(IntroSubflow::Acknowledgements, IntroSubflowResult::ReturnedToMenu);
+        menu.complete_subflow(
+            IntroSubflow::Acknowledgements,
+            IntroSubflowResult::ReturnedToMenu,
+        );
         assert_eq!(
             menu.step(b'\r'),
             IntroMenuOutput::EnterSubflow(IntroSubflow::Acknowledgements)
@@ -263,7 +265,10 @@ mod tests {
         menu.dismiss_title();
         menu.step(b'C');
         assert_eq!(
-            menu.complete_subflow(IntroSubflow::CharacterCreation, IntroSubflowResult::Cancelled),
+            menu.complete_subflow(
+                IntroSubflow::CharacterCreation,
+                IntroSubflowResult::Cancelled
+            ),
             IntroMenuOutput::PresentMenu
         );
         assert_eq!(menu.phase, IntroMenuPhase::AwaitingSelection);
@@ -275,7 +280,10 @@ mod tests {
         menu.dismiss_title();
         menu.step(b'U');
         assert_eq!(
-            menu.complete_subflow(IntroSubflow::StorySlides, IntroSubflowResult::ReturnedToMenu),
+            menu.complete_subflow(
+                IntroSubflow::StorySlides,
+                IntroSubflowResult::ReturnedToMenu
+            ),
             IntroMenuOutput::PresentMenu
         );
         // Another key should now produce a fresh sub-flow.

@@ -167,11 +167,7 @@ fn handle_active_shop_key_input(
     };
     let ctx = ShopTransactionContext {
         party_gold: state.gold,
-        speaker_intelligence: state
-            .party_intelligence
-            .first()
-            .copied()
-            .unwrap_or(0),
+        speaker_intelligence: state.party_intelligence.first().copied().unwrap_or(0),
         world_hour: state.clock.hour,
     };
     let key_byte = key as u8;
@@ -179,14 +175,8 @@ fn handle_active_shop_key_input(
         .chars()
         .find(|c| c.is_ascii_digit())
         .and_then(|c| c.to_digit(10).map(|d| d as u8));
-    let yes = matches!(key_byte, b'Y' | b'y')
-        || suffix
-            .chars()
-            .any(|c| matches!(c, 'Y' | 'y'));
-    let no = matches!(key_byte, b'N' | b'n')
-        || suffix
-            .chars()
-            .any(|c| matches!(c, 'N' | 'n'));
+    let yes = matches!(key_byte, b'Y' | b'y') || suffix.chars().any(|c| matches!(c, 'Y' | 'y'));
+    let no = matches!(key_byte, b'N' | b'n') || suffix.chars().any(|c| matches!(c, 'N' | 'n'));
 
     let message = match &mut session {
         ActiveShopSession::Arms(s) => {
@@ -202,19 +192,16 @@ fn handle_active_shop_key_input(
                     &mut stock,
                     &prices,
                 ),
-                (
-                    ArmsShopState::BuyPickItem | ArmsShopState::SellPickItem,
-                    _,
-                    _,
-                    Some(d),
-                ) => step_arms_shop(
-                    s,
-                    ArmsShopInput::Item(d),
-                    ctx,
-                    &mut state.gold,
-                    &mut stock,
-                    &prices,
-                ),
+                (ArmsShopState::BuyPickItem | ArmsShopState::SellPickItem, _, _, Some(d)) => {
+                    step_arms_shop(
+                        s,
+                        ArmsShopInput::Item(d),
+                        ctx,
+                        &mut state.gold,
+                        &mut stock,
+                        &prices,
+                    )
+                }
                 (
                     ArmsShopState::BuyConfirm { .. } | ArmsShopState::SellConfirm { .. },
                     true,
@@ -313,28 +300,18 @@ fn handle_active_shop_key_input(
         }
         ActiveShopSession::Innkeeper(s) => {
             let outcome = match (*s, yes, no, inline_digit) {
-                (InnkeeperState::Greeting, _, _, _) => step_innkeeper(
-                    s,
-                    InnkeeperInput::Key(key_byte),
-                    &mut state.gold,
-                ),
-                (InnkeeperState::ConfirmRoom { .. }, _, _, Some(h)) if h > 0 => {
-                    step_innkeeper(
-                        s,
-                        InnkeeperInput::Hours(h),
-                        &mut state.gold,
-                    )
+                (InnkeeperState::Greeting, _, _, _) => {
+                    step_innkeeper(s, InnkeeperInput::Key(key_byte), &mut state.gold)
                 }
-                (InnkeeperState::ConfirmRoom { .. }, true, _, _) => step_innkeeper(
-                    s,
-                    InnkeeperInput::Confirm(true),
-                    &mut state.gold,
-                ),
-                (InnkeeperState::ConfirmRoom { .. }, _, true, _) => step_innkeeper(
-                    s,
-                    InnkeeperInput::Confirm(false),
-                    &mut state.gold,
-                ),
+                (InnkeeperState::ConfirmRoom { .. }, _, _, Some(h)) if h > 0 => {
+                    step_innkeeper(s, InnkeeperInput::Hours(h), &mut state.gold)
+                }
+                (InnkeeperState::ConfirmRoom { .. }, true, _, _) => {
+                    step_innkeeper(s, InnkeeperInput::Confirm(true), &mut state.gold)
+                }
+                (InnkeeperState::ConfirmRoom { .. }, _, true, _) => {
+                    step_innkeeper(s, InnkeeperInput::Confirm(false), &mut state.gold)
+                }
                 _ => InnkeeperOutcome::InvalidInput,
             };
             format_innkeeper_outcome(outcome)
@@ -342,12 +319,9 @@ fn handle_active_shop_key_input(
         ActiveShopSession::Tavern(s) => {
             let mut food = state.food;
             let outcome = match (*s, yes, no) {
-                (TavernState::Greeting, _, _) => step_tavern(
-                    s,
-                    TavernInput::Key(key_byte),
-                    &mut state.gold,
-                    &mut food,
-                ),
+                (TavernState::Greeting, _, _) => {
+                    step_tavern(s, TavernInput::Key(key_byte), &mut state.gold, &mut food)
+                }
                 (TavernState::PickService, _, _) => {
                     let svc = match key_byte {
                         b'M' | b'm' => Some(TavernService::Meal),
@@ -356,28 +330,17 @@ fn handle_active_shop_key_input(
                         _ => None,
                     };
                     if let Some(svc) = svc {
-                        step_tavern(
-                            s,
-                            TavernInput::Service(svc),
-                            &mut state.gold,
-                            &mut food,
-                        )
+                        step_tavern(s, TavernInput::Service(svc), &mut state.gold, &mut food)
                     } else {
                         TavernOutcome::InvalidInput
                     }
                 }
-                (TavernState::ConfirmMeal { .. }, true, _) => step_tavern(
-                    s,
-                    TavernInput::Confirm(true),
-                    &mut state.gold,
-                    &mut food,
-                ),
-                (TavernState::ConfirmMeal { .. }, _, true) => step_tavern(
-                    s,
-                    TavernInput::Confirm(false),
-                    &mut state.gold,
-                    &mut food,
-                ),
+                (TavernState::ConfirmMeal { .. }, true, _) => {
+                    step_tavern(s, TavernInput::Confirm(true), &mut state.gold, &mut food)
+                }
+                (TavernState::ConfirmMeal { .. }, _, true) => {
+                    step_tavern(s, TavernInput::Confirm(false), &mut state.gold, &mut food)
+                }
                 _ => TavernOutcome::InvalidInput,
             };
             state.food = food;
@@ -401,15 +364,13 @@ fn handle_active_shop_key_input(
                     &mut stock,
                     &prices,
                 ),
-                (ReagentShopState::PickQuantity { .. }, _, _, Some(q)) => {
-                    step_reagent_shop(
-                        s,
-                        ReagentShopInput::Quantity(q),
-                        &mut state.gold,
-                        &mut stock,
-                        &prices,
-                    )
-                }
+                (ReagentShopState::PickQuantity { .. }, _, _, Some(q)) => step_reagent_shop(
+                    s,
+                    ReagentShopInput::Quantity(q),
+                    &mut state.gold,
+                    &mut stock,
+                    &prices,
+                ),
                 (ReagentShopState::Confirm { .. }, true, _, _) => step_reagent_shop(
                     s,
                     ReagentShopInput::Confirm(true),
@@ -483,24 +444,28 @@ fn handle_active_shop_key_input(
                         ShipBrokerOutcome::InvalidInput
                     }
                 }
-                (ShipBrokerState::ConfirmRepair { .. } | ShipBrokerState::ConfirmFrigate { .. }, true, _) => {
-                    step_ship_broker(
-                        s,
-                        ShipBrokerInput::Confirm(true),
-                        &mut state.gold,
-                        &mut frigate,
-                        &mut repair,
-                    )
-                }
-                (ShipBrokerState::ConfirmRepair { .. } | ShipBrokerState::ConfirmFrigate { .. }, _, true) => {
-                    step_ship_broker(
-                        s,
-                        ShipBrokerInput::Confirm(false),
-                        &mut state.gold,
-                        &mut frigate,
-                        &mut repair,
-                    )
-                }
+                (
+                    ShipBrokerState::ConfirmRepair { .. } | ShipBrokerState::ConfirmFrigate { .. },
+                    true,
+                    _,
+                ) => step_ship_broker(
+                    s,
+                    ShipBrokerInput::Confirm(true),
+                    &mut state.gold,
+                    &mut frigate,
+                    &mut repair,
+                ),
+                (
+                    ShipBrokerState::ConfirmRepair { .. } | ShipBrokerState::ConfirmFrigate { .. },
+                    _,
+                    true,
+                ) => step_ship_broker(
+                    s,
+                    ShipBrokerInput::Confirm(false),
+                    &mut state.gold,
+                    &mut frigate,
+                    &mut repair,
+                ),
                 _ => ShipBrokerOutcome::InvalidInput,
             };
             format_ship_broker_outcome(outcome, frigate, repair)
@@ -509,8 +474,7 @@ fn handle_active_shop_key_input(
             let mut gems = state.gems;
             let mut keys = state.keys;
             let mut torches = state.torches;
-            let mut sextant =
-                state.special_items[crate::SPECIAL_ITEM_SEXTANT_INDEX] != 0;
+            let mut sextant = state.special_items[crate::SPECIAL_ITEM_SEXTANT_INDEX] != 0;
             let outcome = match (*s, yes, no, inline_digit) {
                 (GuildShopState::Greeting, _, _, _) => step_guild_shop(
                     s,
@@ -660,13 +624,22 @@ fn format_reagent_outcome(outcome: crate::shop_runtime::ReagentShopOutcome) -> S
     use crate::shop_runtime::ReagentShopOutcome::*;
     match outcome {
         EnteredMenu => "Pick a reagent (0-7).".to_string(),
-        QuotedUnit { reagent, unit_price } => {
+        QuotedUnit {
+            reagent,
+            unit_price,
+        } => {
             format!("Reagent {reagent}: {unit_price} gold each. How many?")
         }
-        QuotedTotal { quantity, total, .. } => {
+        QuotedTotal {
+            quantity, total, ..
+        } => {
             format!("{quantity} units total {total} gold. (Y/N)")
         }
-        Bought { reagent, quantity, paid } => {
+        Bought {
+            reagent,
+            quantity,
+            paid,
+        } => {
             format!("Bought {quantity} of reagent {reagent} for {paid} gold.")
         }
         RefusedShortFunds { total } => format!("Thou lackest the {total} gold."),
@@ -721,7 +694,9 @@ fn format_guild_outcome(outcome: crate::shop_runtime::GuildShopOutcome) -> Strin
         QuotedUnit { unit_price, .. } => {
             format!("That costs {unit_price} gold each. How many?")
         }
-        QuotedTotal { quantity, total, .. } => {
+        QuotedTotal {
+            quantity, total, ..
+        } => {
             format!("{quantity} units total {total} gold.")
         }
         Bought { quantity, paid, .. } => format!("Bought {quantity} for {paid} gold."),
