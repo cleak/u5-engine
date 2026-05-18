@@ -9080,6 +9080,15 @@
     }
 
     #[test]
+    fn direction_cardinal_facing_index_matches_public_convention() {
+        assert_eq!(Direction::North.cardinal_facing_index(), Some(0));
+        assert_eq!(Direction::East.cardinal_facing_index(), Some(1));
+        assert_eq!(Direction::South.cardinal_facing_index(), Some(2));
+        assert_eq!(Direction::West.cardinal_facing_index(), Some(3));
+        assert_eq!(Direction::NorthEast.cardinal_facing_index(), None);
+    }
+
+    #[test]
     fn ship_broadside_direction_accepted_only_perpendicular_to_facing() {
         // vehicles.md §7
         // Ship facing N (0): broadsides E (1) and W (3); bow N (0) and stern S (2) refuse.

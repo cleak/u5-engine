@@ -346,12 +346,15 @@ save export writes the reordered active records back to the front roster slots.
 In overworld ship mode, bare `F`/`f` opens the fire direction prompt and an
 inline direction (for example `f4`) fires a first-playable broadside:
 bow/stern shots refuse, legal broadsides trace up to three cells, and the first
-target object's active-object slot is zeroed while exact durability tables
-remain out of scope. In town mode, `F`/`f` can fire an
-adjacent clean-room authored fire-source row from `town_fire_sources.tsv`,
-running the public door auto-close pass before tracing up to three cells from
-the source direction and destroying the first door or zeroing the first object
-target slot. Destroying a door also clears the active door auto-close tracker.
+target object hit has its active-object `+5` depletion byte reduced by a
+`1..=20` roll. Targets remain active on low results and clear their active
+object slot when the subtraction enters the high-bit range. In town mode,
+`F`/`f` can fire an adjacent clean-room authored fire-source row from
+`town_fire_sources.tsv`, running the public door auto-close pass before tracing
+up to three cells from the source direction and destroying the first door or
+zeroing the first object target slot. Town object hits also reduce moral
+standing by 5 and do not use ship-broadside depletion. Destroying a door also
+clears the active door auto-close tracker.
 
 In top-down scenes, bare `Q` opens the save prompt, `QY` writes a
 first-playable save-and-continue snapshot to `SAVED.GAM` and `SAVED.OOL`, and

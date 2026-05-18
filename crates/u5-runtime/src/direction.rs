@@ -44,6 +44,16 @@ impl Direction {
         matches!(self, Self::North | Self::East | Self::South | Self::West)
     }
 
+    pub const fn cardinal_facing_index(self) -> Option<u8> {
+        Some(match self {
+            Self::North => 0,
+            Self::East => 1,
+            Self::South => 2,
+            Self::West => 3,
+            _ => return None,
+        })
+    }
+
     pub fn opposite_cardinal(self) -> Option<Self> {
         match self {
             Self::North => Some(Self::South),

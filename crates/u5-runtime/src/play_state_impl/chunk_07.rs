@@ -1590,10 +1590,15 @@ impl PlayState {
                 "Fire- which direction? Use F plus a direction in this harness.".to_string();
             return MoveOutcome::Blocked;
         };
-        if !direction.is_cardinal()
-            || direction == self.player.facing
-            || direction.opposite_cardinal() == Some(self.player.facing)
-        {
+        let Some(ship_facing) = self.player.facing.cardinal_facing_index() else {
+            self.message = "Fire broadsides only!".to_string();
+            return MoveOutcome::Blocked;
+        };
+        let Some(fire_direction) = direction.cardinal_facing_index() else {
+            self.message = "Fire broadsides only!".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !ship_broadside_direction_accepted(ship_facing, fire_direction) {
             self.message = "Fire broadsides only!".to_string();
             return MoveOutcome::Blocked;
         }
@@ -1604,17 +1609,18 @@ impl PlayState {
         let mut hit_report = None;
         if let Some((slot, object)) = hit {
             let damage = self.ship_broadside_damage_roll(direction, slot, object);
-            let remaining = object.aux1.wrapping_sub(damage);
-            if remaining & 0x80 != 0 {
+            if let Some(remaining) = ship_broadside_apply_damage(object.aux1, damage) {
+                if let Some(target) = self.active_objects.get_mut(slot) {
+                    target.aux1 = remaining;
+                    hit_report = Some(format!(
+                        "BOOOM! Ship broadside hit object tile {} at ({}, {}) for {damage} durability damage; durability now {remaining}.",
+                        object.tile, object.x, object.y
+                    ));
+                }
+            } else {
                 self.free_active_object_slot(slot);
                 hit_report = Some(format!(
                     "BOOOM! Ship broadside hit object tile {} at ({}, {}) for {damage} durability damage; target destroyed.",
-                    object.tile, object.x, object.y
-                ));
-            } else if let Some(target) = self.active_objects.get_mut(slot) {
-                target.aux1 = remaining;
-                hit_report = Some(format!(
-                    "BOOOM! Ship broadside hit object tile {} at ({}, {}) for {damage} durability damage; durability now {remaining}.",
                     object.tile, object.x, object.y
                 ));
             }
@@ -1634,7 +1640,7 @@ impl PlayState {
 
     pub fn ship_broadside_target_slot(&self, direction: Direction) -> Option<usize> {
         let (dx, dy) = direction.delta();
-        for distance in 1..=3 {
+        for distance in 1..=SHIP_BROADSIDE_RANGE_CELLS as isize {
             let x = (self.player.x as isize + dx * distance).rem_euclid(WORLD_SIDE as isize);
             let y = (self.player.y as isize + dy * distance).rem_euclid(WORLD_SIDE as isize);
             let x = x as usize;
