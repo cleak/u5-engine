@@ -17777,6 +17777,48 @@
     }
 
     #[test]
+    fn parse_sign_records_resolves_alias_bridges_to_shared_body() {
+        // formats/signs-dat.md section 3: a separator byte followed by NUL
+        // and another four-byte header is an alias bridge. The scanner still
+        // sees the alternate coordinate as the next record, while the
+        // formatter skips through to the shared printed body.
+        let mut bytes = vec![0u8; SIGNS_DAT_SCENE_DIRECTORY_BYTES];
+        let offset = SIGNS_DAT_SCENE_DIRECTORY_BYTES as u16;
+        bytes[17 * 2..17 * 2 + 2].copy_from_slice(&offset.to_le_bytes());
+
+        bytes.extend_from_slice(&[17, 0, 5, 6]);
+        bytes.extend_from_slice(&[SIGN_BODY_SEPARATOR_GLYPH_A, SIGN_BODY_END_OF_RECORD]);
+        bytes.extend_from_slice(&[17, 0, 7, 8]);
+        bytes.extend_from_slice(&[SIGN_BODY_SEPARATOR_GLYPH_B, SIGN_BODY_END_OF_RECORD]);
+        bytes.extend_from_slice(&[17, 0, 9, 10]);
+        bytes.extend_from_slice(b"Shared");
+        bytes.push(SIGN_BODY_END_OF_RECORD);
+        bytes.push(SIGN_BODY_END_OF_RECORD);
+
+        let records = parse_sign_records(&bytes).expect("alias bridges should parse");
+        assert_eq!(records.len(), 3);
+
+        assert_eq!(
+            find_sign(&records, 17, 0, 5, 6)
+                .expect("first bridged coordinate")
+                .body,
+            "Shared"
+        );
+        assert_eq!(
+            find_sign(&records, 17, 0, 7, 8)
+                .expect("second bridged coordinate")
+                .body,
+            "Shared"
+        );
+        assert_eq!(
+            find_sign(&records, 17, 0, 9, 10)
+                .expect("shared body coordinate")
+                .body,
+            "Shared"
+        );
+    }
+
+    #[test]
     fn parse_sign_records_rejects_short_directory() {
         // Less than the 66-byte scene directory must error per §2 of the format spec.
         assert!(parse_sign_records(&[0u8; 10]).is_err());
@@ -17799,6 +17841,13 @@
         unterminated_payload.extend_from_slice(&[1, 0, 2, 3]);
         unterminated_payload.extend_from_slice(b"Open ended");
         assert!(parse_sign_records(&unterminated_payload).is_err());
+
+        let mut dangling_bridge = vec![0u8; SIGNS_DAT_SCENE_DIRECTORY_BYTES];
+        dangling_bridge[1 * 2..1 * 2 + 2].copy_from_slice(&offset.to_le_bytes());
+        dangling_bridge.extend_from_slice(&[1, 0, 2, 3]);
+        dangling_bridge.extend_from_slice(&[SIGN_BODY_SEPARATOR_GLYPH_A, SIGN_BODY_END_OF_RECORD]);
+        dangling_bridge.push(SIGN_BODY_END_OF_RECORD);
+        assert!(parse_sign_records(&dangling_bridge).is_err());
     }
 
     #[test]

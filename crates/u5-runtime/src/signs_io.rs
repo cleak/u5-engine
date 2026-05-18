@@ -120,6 +120,16 @@ pub struct SignRecord {
     pub body: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RawSignRecord {
+    scene: u8,
+    z: u8,
+    y: u8,
+    x: u8,
+    payload_start: usize,
+    payload_end: usize,
+}
+
 pub fn load_sign_records(game_dir: &Path) -> io::Result<Option<Vec<SignRecord>>> {
     let path = game_dir.join(SIGNS_DAT_FILE);
     let bytes = match fs::read(&path) {
@@ -174,8 +184,20 @@ fn parse_scene_block(
     out: &mut Vec<SignRecord>,
 ) -> io::Result<()> {
     let mut cursor = start;
+    let mut raw_records = Vec::new();
     while cursor < bytes.len() {
         if bytes[cursor] == 0 {
+            for index in 0..raw_records.len() {
+                let raw = &raw_records[index];
+                let body = resolve_sign_body(bytes, &raw_records, index, directory_scene)?;
+                out.push(SignRecord {
+                    scene: raw.scene,
+                    z: raw.z,
+                    y: raw.y,
+                    x: raw.x,
+                    body,
+                });
+            }
             return Ok(());
         }
         if cursor + RECORD_HEADER_LEN > bytes.len() {
@@ -207,19 +229,58 @@ fn parse_scene_block(
             ));
         }
         cursor += 1; // skip the NUL terminator
-        let body = decode_sign_payload(&bytes[payload_start..payload_end]);
-        out.push(SignRecord {
+        raw_records.push(RawSignRecord {
             scene,
             z,
             y,
             x,
-            body,
+            payload_start,
+            payload_end,
         });
     }
     Err(io::Error::new(
         io::ErrorKind::InvalidData,
         format!("{SIGNS_DAT_FILE} scene {directory_scene} block has no end sentinel"),
     ))
+}
+
+fn resolve_sign_body(
+    bytes: &[u8],
+    raw_records: &[RawSignRecord],
+    index: usize,
+    directory_scene: u8,
+) -> io::Result<String> {
+    let mut resolved_index = index;
+    while is_alias_bridge_payload(record_payload(bytes, &raw_records[resolved_index])) {
+        let next_index = resolved_index + 1;
+        if next_index >= raw_records.len() {
+            let raw = &raw_records[index];
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{SIGNS_DAT_FILE} scene {directory_scene} alias bridge at ({}, {}, {}) has no following shared-body record",
+                    raw.z, raw.y, raw.x
+                ),
+            ));
+        }
+        resolved_index = next_index;
+    }
+    Ok(decode_sign_payload(record_payload(
+        bytes,
+        &raw_records[resolved_index],
+    )))
+}
+
+fn record_payload<'a>(bytes: &'a [u8], record: &RawSignRecord) -> &'a [u8] {
+    &bytes[record.payload_start..record.payload_end]
+}
+
+fn is_alias_bridge_payload(payload: &[u8]) -> bool {
+    payload.len() == 1
+        && matches!(
+            payload[0],
+            SIGN_BODY_SEPARATOR_GLYPH_A | SIGN_BODY_SEPARATOR_GLYPH_B
+        )
 }
 
 pub fn decode_sign_payload(bytes: &[u8]) -> String {
