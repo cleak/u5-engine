@@ -1796,28 +1796,26 @@ impl PlayState {
         for grant in grants {
             match grant {
                 TlkActionDispatchVerb::RaiseFood => {
-                    self.food = self.food.saturating_add(1);
+                    self.food = self.food.saturating_add(1).min(PARTY_FOOD_CAP);
                 }
                 TlkActionDispatchVerb::RaiseGold => {
-                    self.gold = self.gold.saturating_add(1);
+                    self.gold = self.gold.saturating_add(1).min(PARTY_GOLD_CAP);
                 }
                 TlkActionDispatchVerb::RaiseKeys => {
-                    self.keys = self.keys.saturating_add(1);
+                    self.keys = self.keys.saturating_add(1).min(PARTY_BYTE_STOCK_CAP);
                 }
                 TlkActionDispatchVerb::RaiseGems => {
-                    self.gems = self.gems.saturating_add(1);
+                    self.gems = self.gems.saturating_add(1).min(PARTY_BYTE_STOCK_CAP);
                 }
                 TlkActionDispatchVerb::RaiseTorches => {
-                    self.torches = self.torches.saturating_add(1);
+                    self.torches = self.torches.saturating_add(1).min(PARTY_BYTE_STOCK_CAP);
                 }
                 TlkActionDispatchVerb::SetGrappleGate => {
                     self.climbing_gear = 1;
                 }
                 TlkActionDispatchVerb::RaiseCarpets => {
-                    if SPECIAL_ITEM_COUNT > 0 {
-                        let slot = self.special_items[0].saturating_add(1);
-                        self.special_items[0] = slot;
-                    }
+                    let slot = &mut self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX];
+                    *slot = (*slot).saturating_add(1).min(PARTY_BYTE_STOCK_CAP);
                 }
                 TlkActionDispatchVerb::SetSextantCarried => {
                     self.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
@@ -1829,10 +1827,8 @@ impl PlayState {
                     self.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX] = 1;
                 }
                 TlkActionDispatchVerb::RaiseSkullKeys => {
-                    if SPECIAL_ITEM_COUNT > 1 {
-                        let slot = self.special_items[1].saturating_add(1);
-                        self.special_items[1] = slot;
-                    }
+                    let slot = &mut self.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX];
+                    *slot = (*slot).saturating_add(1).min(PARTY_BYTE_STOCK_CAP);
                 }
             }
         }

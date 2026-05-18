@@ -753,6 +753,54 @@
     }
 
     #[test]
+    fn tlk_action_dispatch_grants_use_published_caps_and_slots() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.food = PARTY_FOOD_CAP;
+        state.gold = PARTY_GOLD_CAP;
+        state.keys = PARTY_BYTE_STOCK_CAP;
+        state.gems = PARTY_BYTE_STOCK_CAP;
+        state.torches = PARTY_BYTE_STOCK_CAP;
+        state.climbing_gear = 0;
+        state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = PARTY_BYTE_STOCK_CAP;
+        state.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX] = PARTY_BYTE_STOCK_CAP;
+        state.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 0;
+        state.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = 0;
+        state.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX] = 0;
+
+        state.apply_tlk_action_grants(&[
+            TlkActionDispatchVerb::RaiseFood,
+            TlkActionDispatchVerb::RaiseGold,
+            TlkActionDispatchVerb::RaiseKeys,
+            TlkActionDispatchVerb::RaiseGems,
+            TlkActionDispatchVerb::RaiseTorches,
+            TlkActionDispatchVerb::SetGrappleGate,
+            TlkActionDispatchVerb::RaiseCarpets,
+            TlkActionDispatchVerb::SetSextantCarried,
+            TlkActionDispatchVerb::SetSpyglassCarried,
+            TlkActionDispatchVerb::SetBlackBadgeCarried,
+            TlkActionDispatchVerb::RaiseSkullKeys,
+        ]);
+
+        assert_eq!(state.food, PARTY_FOOD_CAP);
+        assert_eq!(state.gold, PARTY_GOLD_CAP);
+        assert_eq!(state.keys, PARTY_BYTE_STOCK_CAP);
+        assert_eq!(state.gems, PARTY_BYTE_STOCK_CAP);
+        assert_eq!(state.torches, PARTY_BYTE_STOCK_CAP);
+        assert_eq!(state.climbing_gear, 1);
+        assert_eq!(
+            state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX],
+            PARTY_BYTE_STOCK_CAP
+        );
+        assert_eq!(
+            state.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX],
+            PARTY_BYTE_STOCK_CAP
+        );
+        assert_eq!(state.special_items[SPECIAL_ITEM_SEXTANT_INDEX], 1);
+        assert_eq!(state.special_items[SPECIAL_ITEM_SPYGLASS_INDEX], 1);
+        assert_eq!(state.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX], 1);
+    }
+
+    #[test]
     fn play_input_talk_suffix_routes_to_one_shot_keyword_lookup() {
         let dir = debug_game_dir();
         fs::write(

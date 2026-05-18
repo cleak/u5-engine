@@ -782,9 +782,13 @@ pub const PARTY_GOLD_CAP: u16 = 9999;
 /// word-sized counters' display ceiling derives from one source
 /// of truth.
 pub const PARTY_FOOD_CAP: u16 = PARTY_GOLD_CAP;
+/// `inventory.md §2` / `catalogs/item-list.md §4`: byte-sized carried
+/// commodity and special-item stocks commonly cap at 99 through traced
+/// grant paths.
+pub const PARTY_BYTE_STOCK_CAP: u8 = 99;
 /// `inventory.md §2`: byte-sized party spell-charge counter caps at
 /// 99 in ordinary play.
-pub const SPELL_CHARGE_CAP: u8 = 99;
+pub const SPELL_CHARGE_CAP: u8 = PARTY_BYTE_STOCK_CAP;
 /// `inventory.md §2`: equipment stock band has 48 entries (item ids
 /// `0..=47`) — one counter per equipment id. Anchored to
 /// [`EQUIPMENT_COUNT`] so the catalog size and the carrier band
