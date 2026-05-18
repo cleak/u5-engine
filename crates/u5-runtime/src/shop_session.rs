@@ -5,14 +5,14 @@
 //! gold/equipment/party counters.
 
 use crate::shop_runtime::*;
-use crate::shops::{GuildShop, Herbalist, Inn, Shipwright, Stable, Tavern};
+use crate::shops::{GuildShop, Healer, Herbalist, Inn, Shipwright, Stable, Tavern};
 
 /// Identifies which of the eight shop kinds is open and owns its
 /// per-shop state machine.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ActiveShopSession {
     Arms(ArmsShopState),
-    Healer(HealerShopState),
+    Healer(HealerShopState, Healer),
     Innkeeper(InnkeeperState),
     Reagent(ReagentShopState),
     Sage(SageState),
@@ -29,7 +29,7 @@ impl ActiveShopSession {
     pub fn is_exited(&self) -> bool {
         match self {
             Self::Arms(s) => matches!(s, ArmsShopState::Exited),
-            Self::Healer(s) => matches!(s, HealerShopState::Exited),
+            Self::Healer(s, _) => matches!(s, HealerShopState::Exited),
             Self::Innkeeper(s) => matches!(s, InnkeeperState::Exited),
             Self::Reagent(s) => matches!(s, ReagentShopState::Exited),
             Self::Sage(s) => matches!(s, SageState::Exited),
@@ -44,7 +44,7 @@ impl ActiveShopSession {
     pub fn shop_label(&self) -> &'static str {
         match self {
             Self::Arms(_) => "Weaponsmith / Armourer",
-            Self::Healer(_) => "Healer / Sanctum",
+            Self::Healer(_, healer) => healer.display_name(),
             Self::Innkeeper(InnkeeperState::Greeting { inn })
             | Self::Innkeeper(InnkeeperState::ConfirmRest { inn, .. })
             | Self::Innkeeper(InnkeeperState::PickLeaveCompanion { inn, .. })
@@ -145,7 +145,12 @@ pub fn shop_session_for_talk_context(
                 .map(GuildShopState::for_shop)
                 .unwrap_or_default(),
         ),
-        0x87 => ActiveShopSession::Healer(HealerShopState::Greeting),
+        0x87 => ActiveShopSession::Healer(
+            HealerShopState::Greeting,
+            scene_byte
+                .and_then(healer_for_scene)
+                .unwrap_or(Healer::WoundsOfHonour),
+        ),
         0x88 => ActiveShopSession::Innkeeper(
             scene_byte
                 .and_then(inn_for_scene)
@@ -210,6 +215,13 @@ pub const fn guild_shop_for_scene(scene_byte: u8) -> Option<GuildShop> {
     })
 }
 
+pub const fn healer_for_scene(scene_byte: u8) -> Option<Healer> {
+    Some(match scene_byte {
+        5 => Healer::TheHealersMission,
+        _ => return None,
+    })
+}
+
 pub const fn inn_for_scene(scene_byte: u8) -> Option<Inn> {
     Some(match scene_byte {
         2 => Inn::TheWayfarerInn,
@@ -254,7 +266,7 @@ mod tests {
         ));
         assert!(matches!(
             shop_session_for_dialog_id(0x87),
-            Some(ActiveShopSession::Healer(_))
+            Some(ActiveShopSession::Healer(_, _))
         ));
         assert!(matches!(
             shop_session_for_dialog_id(0x88),
@@ -323,6 +335,13 @@ mod tests {
             Some(ActiveShopSession::HorseTrader(HorseTraderState::Greeting {
                 stable: Stable::WishingWellHorses
             }))
+        ));
+        assert!(matches!(
+            shop_session_for_talk_context(0x87, Some(5)),
+            Some(ActiveShopSession::Healer(
+                HealerShopState::Greeting,
+                Healer::TheHealersMission
+            ))
         ));
         assert!(matches!(
             shop_session_for_talk_context(0x82, Some(19)),

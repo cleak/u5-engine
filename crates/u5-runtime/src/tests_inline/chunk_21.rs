@@ -2029,6 +2029,60 @@
     }
 
     #[test]
+    fn end_to_end_healer_mission_cure_bypasses_gold_path() {
+        use crate::shop_runtime::HealerShopState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 0;
+        state.party[0].status = b'P';
+        state.party[0].hp = 7;
+        state.party[0].max_hp = 20;
+        state.active_shop = Some(ActiveShopSession::Healer(
+            HealerShopState::Greeting,
+            Healer::TheHealersMission,
+        ));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'C', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 0);
+        assert_eq!(state.party[0].status, b'G');
+        assert_eq!(state.party[0].hp, 7);
+        assert_eq!(state.message, "Cured party member 1.");
+        assert!(state.active_shop.is_some());
+    }
+
+    #[test]
+    fn end_to_end_paid_healer_uses_local_fee_and_play_state_treatment() {
+        use crate::shop_runtime::HealerShopState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 60;
+        state.party[0].status = b'P';
+        state.party[0].hp = 5;
+        state.party[0].max_hp = 22;
+        state.active_shop = Some(ActiveShopSession::Healer(
+            HealerShopState::Greeting,
+            Healer::TheShieldOfTruth,
+        ));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'H', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
+        assert!(state.message.contains("60 gold"));
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 0);
+        assert_eq!(state.party[0].status, b'P');
+        assert_eq!(state.party[0].hp, 22);
+        assert_eq!(state.message, "Healed party member 1 to 22/22.");
+        assert!(state.active_shop.is_some());
+    }
+
+    #[test]
     fn active_shop_surcharge_applies_only_for_zero_shadowlord_sentinel() {
         use crate::shop_runtime::TavernState;
         use crate::shop_session::ActiveShopSession;
