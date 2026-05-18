@@ -2002,13 +2002,13 @@ pub const fn combat_command_branch_is_named_multistage(branch: CombatCommandBran
         | CombatCommandBranch::CastSpell
         | CombatCommandBranch::Get
         | CombatCommandBranch::Jimmy
+        | CombatCommandBranch::Klimb
         | CombatCommandBranch::Open
         | CombatCommandBranch::Ready
         | CombatCommandBranch::Search
         | CombatCommandBranch::Yell => true,
         CombatCommandBranch::SceneMessageAbort(_)
         | CombatCommandBranch::DWhatRefusal
-        | CombatCommandBranch::Klimb
         | CombatCommandBranch::Push
         | CombatCommandBranch::QuitDefeat
         | CombatCommandBranch::WWhatRefusal

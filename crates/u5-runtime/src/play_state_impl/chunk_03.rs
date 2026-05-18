@@ -769,6 +769,7 @@ impl PlayState {
             .as_ref()
             .map(|session| match session.kind {
                 DirectionPromptKind::Attack => "Attack where?".to_string(),
+                DirectionPromptKind::CombatKlimb { .. } => "Klimb-".to_string(),
                 DirectionPromptKind::CombatPush { .. } => "Push-".to_string(),
                 DirectionPromptKind::Fire => "Fire- which direction?".to_string(),
                 DirectionPromptKind::Get => "Get-".to_string(),
@@ -794,6 +795,21 @@ impl PlayState {
                 self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
                 return Ok(Some(MoveOutcome::PromptDeclined));
             }
+            if let DirectionPromptKind::CombatKlimb { actor_slot } = session.kind {
+                match ch {
+                    '<' => {
+                        return Ok(Some(
+                            self.klimb_combat_actor_vertical(actor_slot, ClimbIntent::Up),
+                        ));
+                    }
+                    '>' => {
+                        return Ok(Some(
+                            self.klimb_combat_actor_vertical(actor_slot, ClimbIntent::Down),
+                        ));
+                    }
+                    _ => {}
+                }
+            }
             let Some(direction) =
                 Direction::from_play_key(ch).filter(|direction| direction.is_cardinal())
             else {
@@ -802,6 +818,9 @@ impl PlayState {
             let outcome = match session.kind {
                 DirectionPromptKind::Attack => {
                     self.attack_command_with_game_dir(Some(direction), Some(game_dir))?
+                }
+                DirectionPromptKind::CombatKlimb { actor_slot } => {
+                    self.klimb_combat_actor_direction(actor_slot, direction)
                 }
                 DirectionPromptKind::CombatPush { actor_slot } => {
                     self.push_combat_actor_direction(actor_slot, direction)

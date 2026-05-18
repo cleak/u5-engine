@@ -5025,6 +5025,7 @@
             CombatCommandBranch::CastSpell,
             CombatCommandBranch::Get,
             CombatCommandBranch::Jimmy,
+            CombatCommandBranch::Klimb,
             CombatCommandBranch::Open,
             CombatCommandBranch::Ready,
             CombatCommandBranch::Search,
@@ -5036,7 +5037,6 @@
         for branch in [
             CombatCommandBranch::SceneMessageAbort(CombatSceneAbortVerb::UseItem),
             CombatCommandBranch::DWhatRefusal,
-            CombatCommandBranch::Klimb,
             CombatCommandBranch::Push,
             CombatCommandBranch::QuitDefeat,
             CombatCommandBranch::WWhatRefusal,
@@ -7413,6 +7413,80 @@
         assert_eq!(state.combat_terrain[5][6], PUSHABLE_GENERIC_FLOOR_STAMP);
         assert_eq!(state.combat_terrain[5][7], 0x91);
         assert!(state.message.contains("Pushed combat tile 144 East"));
+    }
+
+    #[test]
+    fn combat_klimb_cardinal_suffix_moves_actor_inside_arena() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(10, 10);
+        state.visibility_dirty = false;
+        state.combat_terrain[4][5] = 0x04;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'K', "8", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (5, 4));
+        assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 4));
+        assert_eq!(
+            state.message,
+            "Klimbed North to (5, 4).\nGiant Rat moved to (10, 9)."
+        );
+        assert!(state.visibility_dirty);
+        assert!(state.combat_active);
+    }
+
+    #[test]
+    fn combat_klimb_vertical_suffix_exits_from_ladder_tile() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(10, 10);
+        state.combat_terrain[5][5] = 0x50;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'K', "<", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.message, "Klimbed up from combat.");
+        assert!(!state.combat_active);
+        assert_eq!(state.pending_combat_actor_slot, None);
+    }
+
+    #[test]
+    fn combat_klimb_prompt_accepts_vertical_and_refusal_keeps_actor_pending() {
+        let game_dir = std::path::Path::new(".");
+        let mut prompted = combat_player_command_state(10, 10);
+        prompted.combat_terrain[5][5] = 0x50;
+
+        assert_eq!(
+            handle_play_key_input(&mut prompted, 'K', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(prompted.message, "Klimb-");
+        assert!(matches!(
+            prompted.active_direction_prompt.map(|session| session.kind),
+            Some(DirectionPromptKind::CombatKlimb { actor_slot: 0 })
+        ));
+
+        assert_eq!(
+            handle_play_key_input(&mut prompted, '>', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(prompted.message, "Klimbed down from combat.");
+        assert!(!prompted.combat_active);
+
+        let mut refused = combat_player_command_state(10, 10);
+        assert_eq!(
+            handle_play_key_input(&mut refused, 'K', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(
+            handle_play_key_input(&mut refused, ' ', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(refused.pending_combat_actor_slot, Some(0));
+        assert_eq!(refused.message, DIRECTION_PROMPT_LABEL_PASS);
     }
 
     #[test]

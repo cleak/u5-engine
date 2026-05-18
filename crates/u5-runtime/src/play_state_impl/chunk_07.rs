@@ -4,6 +4,91 @@ use std::path::Path;
 use crate::*;
 
 impl PlayState {
+    pub fn klimb_combat_actor_vertical(
+        &mut self,
+        actor_slot: usize,
+        intent: ClimbIntent,
+    ) -> MoveOutcome {
+        let Some(actor) = self.live_combat_party_actor(actor_slot) else {
+            self.message = "No active combatant.".to_string();
+            return MoveOutcome::Blocked;
+        };
+        let tile = self.combat_terrain[actor.y as usize][actor.x as usize];
+        if !combat_klimb_tile_accepts_vertical(tile, intent) {
+            self.message = "Klimb-What?".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        let label = match intent {
+            ClimbIntent::Up => "up",
+            ClimbIntent::Down => "down",
+        };
+        self.message = format!("Klimbed {label} from combat.");
+        self.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+        MoveOutcome::Moved
+    }
+
+    pub fn klimb_combat_actor_direction(
+        &mut self,
+        actor_slot: usize,
+        direction: Direction,
+    ) -> MoveOutcome {
+        let Some(actor) = self.live_combat_party_actor(actor_slot) else {
+            self.message = "No active combatant.".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !direction.is_cardinal() {
+            self.message = "Klimb-What?".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        let (dx, dy) = direction.delta();
+        let x = actor.x as isize + dx;
+        let y = actor.y as isize + dy;
+        if !combat_arena_coordinate_in_bounds(x as i16, y as i16) {
+            self.message = "Klimb-What?".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let x = x as usize;
+        let y = y as usize;
+        if self
+            .combat_actor_slot_at(x as u8, y as u8, actor_slot)
+            .is_some()
+            || !is_probe_walkable(self.combat_terrain[y][x])
+        {
+            self.message = "Klimb-What?".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        let Some(commit) = commit_combat_actor_linked_position(
+            &mut self.combat_actors[actor_slot],
+            &mut self.active_objects,
+            x as u8,
+            y as u8,
+        ) else {
+            self.message = "No active combatant.".to_string();
+            return MoveOutcome::Blocked;
+        };
+        self.mark_visibility_dirty();
+        self.message = format!(
+            "Klimbed {} to ({}, {}).",
+            direction.name(),
+            commit.actor_position_after.0,
+            commit.actor_position_after.1
+        );
+        MoveOutcome::Moved
+    }
+
+    fn live_combat_party_actor(&self, actor_slot: usize) -> Option<CombatActorDescriptor> {
+        if !self.combat_active || actor_slot >= COMBAT_PARTY_ACTOR_SLOTS {
+            return None;
+        }
+        self.combat_actors
+            .get(actor_slot)
+            .copied()
+            .filter(|actor| combat_actor_is_active_not_dead(*actor))
+    }
+
     pub fn open_dungeon_chest(
         &mut self,
         scene: DungeonScene,
@@ -2981,6 +3066,12 @@ impl PlayState {
         entries.iter().any(|entry| {
             town_rest_bed_matches(*entry, scene, floor, self.player.x, self.player.y, tile)
         })
+    }
+}
+
+fn combat_klimb_tile_accepts_vertical(tile: u8, intent: ClimbIntent) -> bool {
+    match intent {
+        ClimbIntent::Up | ClimbIntent::Down => matches!(tile, 0x50..=0x57),
     }
 }
 

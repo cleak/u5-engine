@@ -351,6 +351,7 @@ fn handle_active_direction_prompt_key_input(
             .active_direction_prompt
             .as_ref()
             .and_then(|session| match session.kind {
+                DirectionPromptKind::CombatKlimb { actor_slot } => Some(actor_slot),
                 DirectionPromptKind::CombatPush { actor_slot } => Some(actor_slot),
                 _ => None,
             });
@@ -358,7 +359,7 @@ fn handle_active_direction_prompt_key_input(
         if let Some(actor_slot) = combat_push_actor {
             if matches!(outcome, MoveOutcome::PromptDeclined) {
                 state.pending_combat_actor_slot = Some(actor_slot);
-            } else {
+            } else if state.combat_active {
                 advance_combat_round_after_actor_and_append_message(state, actor_slot);
             }
         } else {
@@ -1687,7 +1688,38 @@ fn handle_combat_multistage_command(
             }
             true
         }
+        CombatCommandBranch::Klimb => {
+            if let Some(intent) = suffix.chars().find_map(combat_klimb_vertical_intent) {
+                state.klimb_combat_actor_vertical(actor_slot, intent);
+                if state.combat_active {
+                    advance_combat_round_after_actor_and_append_message(state, actor_slot);
+                }
+            } else if let Some(direction) = suffix
+                .chars()
+                .find_map(Direction::from_play_key)
+                .filter(|direction| direction.is_cardinal())
+            {
+                state.klimb_combat_actor_direction(actor_slot, direction);
+                if state.combat_active {
+                    advance_combat_round_after_actor_and_append_message(state, actor_slot);
+                }
+            } else {
+                state.active_direction_prompt = Some(DirectionPromptSession::new(
+                    DirectionPromptKind::CombatKlimb { actor_slot },
+                ));
+                state.message = state.render_active_direction_prompt();
+            }
+            true
+        }
         _ => false,
+    }
+}
+
+fn combat_klimb_vertical_intent(ch: char) -> Option<ClimbIntent> {
+    match ch {
+        '<' => Some(ClimbIntent::Up),
+        '>' => Some(ClimbIntent::Down),
+        _ => None,
     }
 }
 
