@@ -995,6 +995,7 @@ impl PlayState {
                 plane.key(),
                 tile_class(final_tile)
             );
+            self.apply_fixed_narrative_gate_branch(plane);
             self.append_world_damage_tile_message(game_dir, plane)?;
         }
         Ok(MoveOutcome::Moved)

@@ -1734,6 +1734,7 @@ impl PlayState {
             };
             return Ok(Some(outcome));
         }
+        self.apply_fixed_narrative_gate_branch(plane);
         self.append_world_damage_tile_message(Some(game_dir), plane)?;
         if let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)? {
             self.message

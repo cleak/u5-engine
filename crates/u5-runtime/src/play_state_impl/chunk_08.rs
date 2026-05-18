@@ -1420,6 +1420,31 @@ impl PlayState {
             Ok(None)
         }
     }
+
+    pub fn apply_fixed_narrative_gate_branch(&mut self, plane: WorldPlane) -> bool {
+        if plane != WorldPlane::Britannia
+            || self.player.x != NARRATIVE_GATE_X as usize
+            || self.player.y != NARRATIVE_GATE_Y as usize
+        {
+            return false;
+        }
+
+        let narrative = if self.shrine_ordained_mask != 0 {
+            "A fixed narrative gate opens. Ordained shrine progress blocks entry."
+        } else {
+            self.player.y = (self.player.y + 1) % WORLD_SIDE;
+            self.sync_player_object();
+            self.mark_visibility_dirty();
+            "A fixed narrative gate opens. The party enters and steps south."
+        };
+        if self.message.is_empty() {
+            self.message = narrative.to_string();
+        } else {
+            self.message.push(' ');
+            self.message.push_str(narrative);
+        }
+        true
+    }
 }
 
 fn dungeon_climb_landing_allowed(tile: u8) -> bool {

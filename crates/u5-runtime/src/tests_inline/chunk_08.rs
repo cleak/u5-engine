@@ -176,6 +176,85 @@
     }
 
     #[test]
+    fn fixed_narrative_gate_without_ordained_mask_moves_party_south_after_world_step() {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(
+            open_world_grid(),
+            NARRATIVE_GATE_X as usize - 1,
+            NARRATIVE_GATE_Y as usize,
+        );
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Moved
+        );
+
+        assert_eq!(
+            (state.player.x, state.player.y),
+            (NARRATIVE_GATE_X as usize, NARRATIVE_GATE_Y as usize + 1)
+        );
+        assert_eq!(
+            (state.active_objects[0].x, state.active_objects[0].y),
+            (state.player.x, state.player.y)
+        );
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("fixed narrative gate opens"));
+        assert!(state.message.contains("steps south"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn fixed_narrative_gate_with_ordained_mask_blocks_after_world_turn() {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(
+            open_world_grid(),
+            NARRATIVE_GATE_X as usize,
+            NARRATIVE_GATE_Y as usize,
+        );
+        state.shrine_ordained_mask = 0b0000_0001;
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+            MoveOutcome::Passed
+        );
+
+        assert_eq!(
+            (state.player.x, state.player.y),
+            (NARRATIVE_GATE_X as usize, NARRATIVE_GATE_Y as usize)
+        );
+        assert_eq!(state.turn, 1);
+        assert!(state.message.starts_with("Passed."));
+        assert!(state.message.contains("fixed narrative gate opens"));
+        assert!(state.message.contains("blocks entry"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn fixed_narrative_gate_coordinate_does_not_fire_in_underworld() {
+        let dir = debug_game_dir();
+        let mut state = world_state(
+            open_world_grid(),
+            NARRATIVE_GATE_X as usize,
+            NARRATIVE_GATE_Y as usize,
+        );
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+            MoveOutcome::Passed
+        );
+
+        assert_eq!(
+            (state.player.x, state.player.y),
+            (NARRATIVE_GATE_X as usize, NARRATIVE_GATE_Y as usize)
+        );
+        assert_eq!(state.turn, 1);
+        assert!(!state.message.contains("fixed narrative gate"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn ship_enters_clean_drowning_water_sidecar_without_damage() {
         let dir = debug_game_dir();
         fs::write(
