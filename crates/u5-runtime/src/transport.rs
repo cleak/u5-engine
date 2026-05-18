@@ -128,6 +128,33 @@ pub const fn ship_boarding_stows_carpet(marker: u8) -> bool {
     )
 }
 
+/// `vehicles.md` section 5 / `doors-and-z-transitions.md` section 11:
+/// selected nearby
+/// active-object cells can support X-Xit without becoming the destination.
+/// The support set is vehicle/party-like: carpets, riderless horses,
+/// manually handled ships, skiffs, and party/avatar sentinels.
+pub fn vehicle_exit_object_support(object: ActiveObject) -> bool {
+    if object.is_player() {
+        return true;
+    }
+    match transport_from_vehicle_object(object.type_byte, object.tile, object.aux1, object.aux3) {
+        Some(TransportState::Horse { .. })
+        | Some(TransportState::Skiff { .. })
+        | Some(TransportState::Carpet { .. }) => true,
+        Some(TransportState::Ship {
+            sails_hoisted: false,
+            ..
+        }) => true,
+        Some(TransportState::Ship {
+            sails_hoisted: true,
+            ..
+        })
+        | Some(TransportState::Balloon { .. })
+        | Some(TransportState::Foot)
+        | None => false,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BoardVehicleCandidate {
     pub slot: usize,

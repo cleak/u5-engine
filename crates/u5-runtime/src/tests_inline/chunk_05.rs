@@ -28,7 +28,7 @@
             }
         );
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!((state.player.x, state.player.y), (5, 6));
+        assert_eq!((state.player.x, state.player.y), (5, 5));
         assert!(state.active_objects.iter().skip(1).any(|object| {
             object.type_byte == 168
                 && object.x == 5
@@ -70,7 +70,7 @@
             }
         );
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!((state.player.x, state.player.y), (5, 6));
+        assert_eq!((state.player.x, state.player.y), (5, 5));
         assert!(state.active_objects.iter().skip(1).any(|object| {
             object.type_byte == 168
                 && object.x == 5
@@ -110,7 +110,7 @@
             }
         );
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!((state.player.x, state.player.y), (5, 6));
+        assert_eq!((state.player.x, state.player.y), (5, 5));
         assert!(state.pending_moongate.is_none());
         assert!(state.active_objects.iter().skip(1).any(|object| {
             object.type_byte == 184
@@ -146,7 +146,7 @@
             }
         );
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!((state.player.x, state.player.y), (1, 2));
+        assert_eq!((state.player.x, state.player.y), (1, 1));
         assert!(state.active_objects.iter().skip(1).any(|object| {
             object.type_byte == 184 && object.x == 1 && object.y == 1 && object.z == 0
         }));
@@ -183,7 +183,7 @@
             }
         );
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!((state.player.x, state.player.y), (1, 2));
+        assert_eq!((state.player.x, state.player.y), (1, 1));
         assert!(state.active_objects.iter().skip(1).any(|object| {
             object.type_byte == 184 && object.x == 1 && object.y == 1 && object.z == 0
         }));
@@ -213,7 +213,7 @@
             }
         );
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!((state.player.x, state.player.y), (1, 2));
+        assert_eq!((state.player.x, state.player.y), (1, 1));
         assert!(state.active_objects.iter().skip(1).any(|object| {
             object.type_byte == 184 && object.x == 1 && object.y == 1 && object.z == 0
         }));
@@ -245,7 +245,7 @@
             }
         );
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!((state.player.x, state.player.y), (1, 2));
+        assert_eq!((state.player.x, state.player.y), (1, 1));
         assert!(state.active_objects.iter().skip(1).any(|object| {
             object.type_byte == 184 && object.x == 1 && object.y == 1 && object.z == 0
         }));
@@ -325,6 +325,154 @@
     }
 
     #[test]
+    fn exit_vehicle_horse_dismounts_without_nearby_support() {
+        let mut state = world_state(vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS], 5, 5);
+        state.player.transport = TransportState::Horse {
+            type_byte: FIRST_PLAYABLE_HORSE_TILE,
+            tile: FIRST_PLAYABLE_HORSE_TILE,
+        };
+        state.sync_player_object();
+
+        assert_eq!(state.exit_vehicle(), MoveOutcome::ExitedVehicle);
+
+        assert_eq!(state.player.transport, TransportState::Foot);
+        assert_eq!((state.player.x, state.player.y), (5, 5));
+        assert!(state.active_objects.iter().skip(1).any(|object| {
+            object.type_byte == FIRST_PLAYABLE_HORSE_TILE
+                && object.x == 5
+                && object.y == 5
+        }));
+        assert_eq!(state.message, "horse!");
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn exit_vehicle_carpet_accepts_passable_underfoot_without_nearby_support() {
+        let mut grid = vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS];
+        grid[world_cell_index(5, 5)] = 5;
+        let mut state = world_state(grid, 5, 5);
+        state.player.transport = TransportState::Carpet {
+            type_byte: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+            tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+        };
+        state.sync_player_object();
+
+        assert_eq!(state.exit_vehicle(), MoveOutcome::ExitedVehicle);
+
+        assert_eq!(state.player.transport, TransportState::Foot);
+        assert_eq!((state.player.x, state.player.y), (5, 5));
+        assert!(state.active_objects.iter().skip(1).any(|object| {
+            object.type_byte == FIRST_PLAYABLE_MAGIC_CARPET_TILE
+                && object.x == 5
+                && object.y == 5
+        }));
+        assert_eq!(state.message, "carpet!");
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn exit_vehicle_skiff_rejects_deep_water_underfoot_even_with_support() {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(5, 5)] = BRIT_DEEP_WATER_TILE;
+        let mut state = world_state(grid, 5, 5);
+        state.player.transport = TransportState::Skiff {
+            type_byte: FIRST_PLAYABLE_SKIFF_TILE,
+            tile: FIRST_PLAYABLE_SKIFF_TILE,
+        };
+        state.sync_player_object();
+
+        assert_eq!(state.exit_vehicle(), MoveOutcome::Blocked);
+
+        assert_eq!(
+            state.player.transport,
+            TransportState::Skiff {
+                type_byte: FIRST_PLAYABLE_SKIFF_TILE,
+                tile: FIRST_PLAYABLE_SKIFF_TILE,
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (5, 5));
+        assert_eq!(state.active_objects.len(), 1);
+        assert_eq!(state.message, "Not here!");
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn exit_vehicle_ship_can_use_nearby_vehicle_object_as_support_without_relocation() {
+        let mut state = world_state(vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS], 5, 5);
+        state.player.transport = TransportState::Ship {
+            type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: false,
+            hull: 77,
+            skiffs: 0,
+        };
+        state.sync_player_object();
+        state.active_objects.push(ActiveObject {
+            type_byte: FIRST_PLAYABLE_SKIFF_TILE,
+            tile: FIRST_PLAYABLE_SKIFF_TILE,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(state.exit_vehicle(), MoveOutcome::ExitedVehicle);
+
+        assert_eq!(state.player.transport, TransportState::Foot);
+        assert_eq!((state.player.x, state.player.y), (5, 5));
+        assert!(state.active_objects.iter().skip(1).any(|object| {
+            object.type_byte == FIRST_PLAYABLE_FRIGATE_TILE
+                && object.x == 5
+                && object.y == 5
+        }));
+        assert_eq!(state.message, format!("ship! {SHIP_NO_SKIFFS_WARNING}"));
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn exit_vehicle_furled_ship_without_support_redeploys_stowed_carpet() {
+        let mut state = world_state(vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS], 5, 5);
+        state.player.transport = TransportState::Ship {
+            type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: false,
+            hull: 77,
+            skiffs: 0,
+        };
+        state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 1;
+        state.sync_player_object();
+
+        assert_eq!(state.exit_vehicle(), MoveOutcome::ExitedVehicle);
+
+        assert_eq!(
+            state.player.transport,
+            TransportState::Carpet {
+                type_byte: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+                tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+            }
+        );
+        assert_eq!(state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 0);
+        assert_eq!((state.player.x, state.player.y), (5, 5));
+        let parked = state
+            .active_objects
+            .iter()
+            .skip(1)
+            .find(|object| object.type_byte == FIRST_PLAYABLE_FRIGATE_TILE)
+            .copied()
+            .expect("ship should park before carpet redeploy");
+        assert_eq!((parked.x, parked.y), (5, 5));
+        assert_eq!(parked.aux1, 77);
+        assert_eq!(parked.aux3, 0);
+        assert_eq!(
+            state.message,
+            "Redeployed stowed magic carpet from the ship."
+        );
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
     fn exit_vehicle_parks_boardable_object_and_returns_to_foot() {
         let mut state = world_state(open_world_grid(), 5, 5);
         state.player.transport = TransportState::Ship {
@@ -355,7 +503,7 @@
         assert_eq!(state.timing_status, TimingStatusTag::Normal);
         assert_eq!(state.sail_cadence, 0);
         assert!(!state.sail_stall_pending);
-        assert_eq!((state.player.x, state.player.y), (6, 5));
+        assert_eq!((state.player.x, state.player.y), (5, 5));
         assert_eq!(state.active_objects[0].tile, PLAYER_TILE);
         assert_eq!(state.active_objects.len(), 3);
         assert_eq!(

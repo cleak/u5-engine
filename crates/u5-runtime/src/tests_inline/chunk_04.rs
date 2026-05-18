@@ -878,7 +878,7 @@
         assert_eq!(state.exit_vehicle(), MoveOutcome::ExitedVehicle);
 
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!((state.player.x, state.player.y), (6, 5));
+        assert_eq!((state.player.x, state.player.y), (5, 5));
         assert!(state.active_objects.iter().skip(1).any(|object| {
             object.type_byte == 184
                 && object.tile == 184
@@ -898,7 +898,7 @@
         assert_eq!(state.exit_vehicle(), MoveOutcome::ExitedVehicle);
 
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!((state.player.x, state.player.y), (6, 5));
+        assert_eq!((state.player.x, state.player.y), (5, 5));
         assert!(state.active_objects.iter().skip(1).any(|object| {
             object.type_byte == FIRST_PLAYABLE_BALLOON_TILE
                 && object.tile == FIRST_PLAYABLE_BALLOON_TILE
@@ -1004,7 +1004,7 @@
         assert_eq!(state.exit_vehicle(), MoveOutcome::ExitedVehicle);
 
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!((state.player.x, state.player.y), (5, 6));
+        assert_eq!((state.player.x, state.player.y), (5, 5));
         assert!(state.active_objects.iter().skip(1).any(|object| {
             object.type_byte == 168
                 && object.x == 5
@@ -1038,7 +1038,7 @@
         );
 
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!((state.player.x, state.player.y), (5, 6));
+        assert_eq!((state.player.x, state.player.y), (5, 5));
         assert!(state.active_objects.iter().skip(1).any(|object| {
             object.type_byte == 168
                 && object.x == 5
@@ -1074,7 +1074,7 @@
         );
 
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!((state.player.x, state.player.y), (5, 6));
+        assert_eq!((state.player.x, state.player.y), (5, 5));
         assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP);
         assert_eq!(state.turn, 1);
         assert_eq!(state.message, "ship!");

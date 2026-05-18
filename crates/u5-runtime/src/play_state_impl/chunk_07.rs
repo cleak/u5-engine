@@ -730,13 +730,13 @@ impl PlayState {
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
-        let landing = self.vehicle_exit_landing(game_dir)?;
+        let exit_position = self.vehicle_exit_current_position_if_accepted(game_dir)?;
 
         // doors-and-z-transitions.md §11 / vehicles.md §5: a furled-ship exit
         // without nearby foot landing falls back to launching a carried skiff.
         // The ship hull stays parked at the original cell with one fewer
         // skiff aboard, and the party becomes the launched skiff in place.
-        if landing.is_none() {
+        if exit_position.is_none() {
             if let TransportState::Ship {
                 type_byte,
                 tile,
@@ -776,12 +776,42 @@ impl PlayState {
                     self.message = "Launched a skiff from the ship.".to_string();
                     return Ok(MoveOutcome::ExitedVehicle);
                 }
+                if self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] > 0 {
+                    let parked_ship = ActiveObject {
+                        type_byte,
+                        tile,
+                        x: old_x,
+                        y: old_y,
+                        z,
+                        phase: STEADY_PHASE,
+                        aux1: hull,
+                        aux3: skiffs,
+                    };
+                    if self.allocate_active_object_slot(parked_ship).is_none() {
+                        self.message = "No active-object slot for vehicle.".to_string();
+                        return Ok(MoveOutcome::Blocked);
+                    }
+                    self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] =
+                        self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX].saturating_sub(1);
+                    self.player.transport = TransportState::Carpet {
+                        type_byte: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+                        tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+                    };
+                    self.timing_status = TimingStatusTag::for_transport(self.player.transport);
+                    self.sail_cadence = 0;
+                    self.sail_stall_pending = false;
+                    self.sync_player_object();
+                    self.mark_visibility_dirty();
+                    self.advance_turn();
+                    self.message = "Redeployed stowed magic carpet from the ship.".to_string();
+                    return Ok(MoveOutcome::ExitedVehicle);
+                }
             }
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
 
-        let (x, y) = landing.expect("landing checked above");
+        let (x, y) = exit_position.expect("vehicle exit acceptance checked above");
         let Some(parked) = transport.parked_object(old_x, old_y, z) else {
             self.message = "Nothing to exit.".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -807,10 +837,8 @@ impl PlayState {
         if !self.player.transport.is_balloon() {
             return true;
         }
-        let tile = match self.area {
-            Area::Town { .. } => self.grid[self.player.y * 32 + self.player.x],
-            Area::World { .. } => self.grid[world_cell_index(self.player.x, self.player.y)],
-            Area::Dungeon { .. } => return false,
+        let Some(tile) = self.current_surface_tile() else {
+            return false;
         };
         !is_mountain_tile(tile) && !is_wall_or_closed_door_tile(tile)
     }

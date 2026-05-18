@@ -18554,7 +18554,7 @@
         );
 
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!((state.player.x, state.player.y), (6, 5));
+        assert_eq!((state.player.x, state.player.y), (5, 5));
         assert!(state.active_objects.iter().skip(1).any(|object| {
             object.type_byte == 184
                 && object.tile == 184

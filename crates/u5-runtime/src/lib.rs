@@ -552,7 +552,7 @@ pub use transport::{
     HORSE_PARKED_LAST, PendingVehicleAcquisition, SHIP_BOARDING_HULL_WARNING_THRESHOLD,
     SHIP_PARKED_FIRST, SHIP_PARKED_LAST, SKIFF_PARKED_FIRST, SKIFF_PARKED_LAST, TransportState,
     boardable_family, mount_horse_marker, ship_boarding_precondition_accepts,
-    ship_boarding_stows_carpet, ship_boarding_warns,
+    ship_boarding_stows_carpet, ship_boarding_warns, vehicle_exit_object_support,
 };
 pub use traps::*;
 pub use u4_transfer::*;

@@ -123,28 +123,79 @@ impl PlayState {
         out
     }
 
-    pub fn vehicle_exit_landing(
-        &self,
-        game_dir: Option<&Path>,
-    ) -> io::Result<Option<(usize, usize)>> {
+    pub fn vehicle_exit_has_nearby_support(&self, game_dir: Option<&Path>) -> io::Result<bool> {
         for direction in [
             Direction::East,
             Direction::South,
             Direction::West,
             Direction::North,
-            Direction::SouthEast,
-            Direction::SouthWest,
-            Direction::NorthEast,
-            Direction::NorthWest,
         ] {
             let Some((x, y)) = self.adjacent_position(direction) else {
                 continue;
             };
-            if self.player_can_land_on_foot(game_dir, x, y)? {
-                return Ok(Some((x, y)));
+            if self.vehicle_exit_support_at(game_dir, x, y)? {
+                return Ok(true);
             }
         }
-        Ok(None)
+        Ok(false)
+    }
+
+    pub fn vehicle_exit_current_position_if_accepted(
+        &self,
+        game_dir: Option<&Path>,
+    ) -> io::Result<Option<(usize, usize)>> {
+        let nearby_support = self.vehicle_exit_has_nearby_support(game_dir)?;
+        let current = (self.player.x, self.player.y);
+        let accepted = match self.player.transport {
+            TransportState::Horse { .. } => true,
+            TransportState::Carpet { .. } => {
+                nearby_support || self.player_can_land_on_foot(game_dir, current.0, current.1)?
+            }
+            TransportState::Skiff { .. } => {
+                nearby_support && self.current_surface_tile() != Some(BRIT_DEEP_WATER_TILE)
+            }
+            TransportState::Ship {
+                sails_hoisted: false,
+                ..
+            } => nearby_support,
+            TransportState::Balloon { .. } => {
+                nearby_support || self.player_can_land_on_foot(game_dir, current.0, current.1)?
+            }
+            TransportState::Foot
+            | TransportState::Ship {
+                sails_hoisted: true,
+                ..
+            } => false,
+        };
+        Ok(accepted.then_some(current))
+    }
+
+    pub fn vehicle_exit_support_at(
+        &self,
+        game_dir: Option<&Path>,
+        x: usize,
+        y: usize,
+    ) -> io::Result<bool> {
+        if self.vehicle_exit_object_support_at(x, y) {
+            return Ok(true);
+        }
+        self.player_can_land_on_foot(game_dir, x, y)
+    }
+
+    pub fn vehicle_exit_object_support_at(&self, x: usize, y: usize) -> bool {
+        self.active_objects
+            .iter()
+            .copied()
+            .skip(1)
+            .any(|object| self.object_occupies(object, x, y) && vehicle_exit_object_support(object))
+    }
+
+    pub fn current_surface_tile(&self) -> Option<u8> {
+        match self.area {
+            Area::Town { .. } => Some(self.grid[self.player.y * 32 + self.player.x]),
+            Area::World { .. } => Some(self.grid[world_cell_index(self.player.x, self.player.y)]),
+            Area::Dungeon { .. } => None,
+        }
     }
 
     pub fn adjacent_position(&self, direction: Direction) -> Option<(usize, usize)> {
