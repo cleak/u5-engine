@@ -1706,6 +1706,48 @@
     }
 
     #[test]
+    fn active_shop_surcharge_applies_only_for_zero_shadowlord_sentinel() {
+        use crate::shop_runtime::TavernState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[0]).unwrap(),
+            floor: 0,
+        };
+        state.gold = 100;
+        state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(
+            Tavern::TheHonestMeal,
+        )));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap();
+
+        assert!(state.gold < 97);
+        assert!(state.message.contains("served a round for 3 gold"));
+        assert!(state.message.contains("Surcharge"));
+    }
+
+    #[test]
+    fn active_shop_surcharge_suppresses_without_zero_shadowlord_sentinel() {
+        use crate::shop_runtime::TavernState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 100;
+        state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(
+            Tavern::TheHonestMeal,
+        )));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 97);
+        assert!(state.message.contains("served a round for 3 gold"));
+        assert!(!state.message.contains("Surcharge"));
+    }
+
+    #[test]
     fn end_to_end_sage_rumour_quotes_confirms_and_debits_gold() {
         use crate::shop_runtime::SageState;
         use crate::shop_session::ActiveShopSession;
