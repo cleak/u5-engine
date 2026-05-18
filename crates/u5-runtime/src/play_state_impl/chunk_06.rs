@@ -195,6 +195,14 @@ impl PlayState {
         &mut self,
         game_dir: Option<&Path>,
     ) -> io::Result<MoveOutcome> {
+        self.open_direction_with_game_dir(self.player.facing, game_dir)
+    }
+
+    pub fn open_direction_with_game_dir(
+        &mut self,
+        direction: Direction,
+        game_dir: Option<&Path>,
+    ) -> io::Result<MoveOutcome> {
         let (scene, floor) = match self.area {
             Area::Town { scene, floor } => (scene, floor),
             Area::Dungeon { scene, level } => {
@@ -206,7 +214,7 @@ impl PlayState {
             }
         };
         self.tick_door_tracker();
-        let (dx, dy) = self.player.facing.delta();
+        let (dx, dy) = direction.delta();
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
         if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
@@ -403,6 +411,23 @@ impl PlayState {
         game_dir: Option<&Path>,
         member_index: Option<usize>,
     ) -> io::Result<MoveOutcome> {
+        self.jimmy_direction_with_game_dir_and_member(self.player.facing, game_dir, member_index)
+    }
+
+    pub fn jimmy_direction_with_game_dir(
+        &mut self,
+        direction: Direction,
+        game_dir: Option<&Path>,
+    ) -> io::Result<MoveOutcome> {
+        self.jimmy_direction_with_game_dir_and_member(direction, game_dir, Some(0))
+    }
+
+    pub fn jimmy_direction_with_game_dir_and_member(
+        &mut self,
+        direction: Direction,
+        game_dir: Option<&Path>,
+        member_index: Option<usize>,
+    ) -> io::Result<MoveOutcome> {
         if let Area::Dungeon { scene, level } = self.area {
             let Some(member_index) = self.resolve_jimmy_member_index(member_index) else {
                 return Ok(MoveOutcome::PromptDeclined);
@@ -418,7 +443,7 @@ impl PlayState {
         };
         match self.area {
             Area::Town { scene, floor } => {
-                self.jimmy_town_facing(game_dir, scene, floor, member_index)
+                self.jimmy_town_direction(game_dir, scene, floor, member_index, direction)
             }
             Area::World { .. } => {
                 self.message = "No lock!".to_string();
@@ -451,7 +476,18 @@ impl PlayState {
         floor: i8,
         member_index: usize,
     ) -> io::Result<MoveOutcome> {
-        let (dx, dy) = self.player.facing.delta();
+        self.jimmy_town_direction(game_dir, scene, floor, member_index, self.player.facing)
+    }
+
+    pub fn jimmy_town_direction(
+        &mut self,
+        game_dir: Option<&Path>,
+        scene: Scene,
+        floor: i8,
+        member_index: usize,
+        direction: Direction,
+    ) -> io::Result<MoveOutcome> {
+        let (dx, dy) = direction.delta();
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
         if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
@@ -886,9 +922,19 @@ impl PlayState {
     }
 
     pub fn get_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+        self.get_direction_with_game_dir(self.player.facing, game_dir)
+    }
+
+    pub fn get_direction_with_game_dir(
+        &mut self,
+        direction: Direction,
+        game_dir: &Path,
+    ) -> io::Result<MoveOutcome> {
         match self.area {
-            Area::World { plane } => self.get_world_facing(game_dir, plane),
-            Area::Town { scene, floor } => self.get_town_facing(game_dir, scene, floor),
+            Area::World { plane } => self.get_world_direction(game_dir, plane, direction),
+            Area::Town { scene, floor } => {
+                self.get_town_direction(game_dir, scene, floor, direction)
+            }
             Area::Dungeon { scene, level } => {
                 self.get_dungeon_underfoot_with_game_dir(Some(game_dir), scene, level)
             }
@@ -900,7 +946,16 @@ impl PlayState {
         game_dir: &Path,
         plane: WorldPlane,
     ) -> io::Result<MoveOutcome> {
-        let (dx, dy) = self.player.facing.delta();
+        self.get_world_direction(game_dir, plane, self.player.facing)
+    }
+
+    pub fn get_world_direction(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+        direction: Direction,
+    ) -> io::Result<MoveOutcome> {
+        let (dx, dy) = direction.delta();
         let tx = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
         let ty = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
         if let Some(outcome) = self.get_moonstone_pickup_at(tx, ty) {
@@ -958,7 +1013,17 @@ impl PlayState {
         scene: Scene,
         floor: i8,
     ) -> io::Result<MoveOutcome> {
-        let (dx, dy) = self.player.facing.delta();
+        self.get_town_direction(game_dir, scene, floor, self.player.facing)
+    }
+
+    pub fn get_town_direction(
+        &mut self,
+        game_dir: &Path,
+        scene: Scene,
+        floor: i8,
+        direction: Direction,
+    ) -> io::Result<MoveOutcome> {
+        let (dx, dy) = direction.delta();
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
         if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
@@ -1057,9 +1122,17 @@ impl PlayState {
     }
 
     pub fn search_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+        self.search_direction_with_game_dir(self.player.facing, game_dir)
+    }
+
+    pub fn search_direction_with_game_dir(
+        &mut self,
+        direction: Direction,
+        game_dir: &Path,
+    ) -> io::Result<MoveOutcome> {
         let entries = load_secret_door_entries(game_dir)?.unwrap_or_default();
         let chest_entries = load_dungeon_chest_content_entries(game_dir)?;
-        Ok(self.search_facing_secret(&entries, chest_entries.as_deref()))
+        Ok(self.search_direction_secret(direction, &entries, chest_entries.as_deref()))
     }
 
     pub fn search_facing_secret(
@@ -1067,17 +1140,36 @@ impl PlayState {
         entries: &[SecretDoorEntry],
         chest_entries: Option<&[DungeonChestContentEntry]>,
     ) -> MoveOutcome {
+        self.search_direction_secret(self.player.facing, entries, chest_entries)
+    }
+
+    pub fn search_direction_secret(
+        &mut self,
+        direction: Direction,
+        entries: &[SecretDoorEntry],
+        chest_entries: Option<&[DungeonChestContentEntry]>,
+    ) -> MoveOutcome {
         match self.area {
-            Area::Town { scene, floor } => self.search_town_secret(entries, scene, floor),
+            Area::Town { scene, floor } => {
+                self.search_town_secret_direction(entries, scene, floor, direction)
+            }
             Area::Dungeon { scene, level } => {
                 self.search_dungeon_secret(entries, chest_entries, scene, level)
             }
-            Area::World { plane } => self.search_world_moonstone(plane),
+            Area::World { plane } => self.search_world_moonstone_direction(plane, direction),
         }
     }
 
     pub fn search_world_moonstone(&mut self, plane: WorldPlane) -> MoveOutcome {
-        let (dx, dy) = self.player.facing.delta();
+        self.search_world_moonstone_direction(plane, self.player.facing)
+    }
+
+    pub fn search_world_moonstone_direction(
+        &mut self,
+        plane: WorldPlane,
+        direction: Direction,
+    ) -> MoveOutcome {
+        let (dx, dy) = direction.delta();
         let tx = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
         let ty = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
         if let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
@@ -1106,7 +1198,17 @@ impl PlayState {
         scene: Scene,
         floor: i8,
     ) -> MoveOutcome {
-        let (dx, dy) = self.player.facing.delta();
+        self.search_town_secret_direction(entries, scene, floor, self.player.facing)
+    }
+
+    pub fn search_town_secret_direction(
+        &mut self,
+        entries: &[SecretDoorEntry],
+        scene: Scene,
+        floor: i8,
+        direction: Direction,
+    ) -> MoveOutcome {
+        let (dx, dy) = direction.delta();
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
         if !(0..32).contains(&tx) || !(0..32).contains(&ty) {

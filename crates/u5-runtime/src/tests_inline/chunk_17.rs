@@ -494,6 +494,83 @@
     }
 
     #[test]
+    fn active_direction_prompt_routes_get_open_and_search() {
+        let dir = debug_game_dir();
+
+        fs::write(
+            dir.join(WORLD_GET_TILE_TABLE_FILE),
+            "UNDERWORLD 0 0 5 55 GOLD 7\n",
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(0, 0)] = 55;
+        let mut get = world_state(grid, 255, 0);
+        get.player.facing = Direction::South;
+        assert_eq!(
+            handle_play_key_input(&mut get, 'G', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(get.active_direction_prompt.is_some());
+        assert_eq!(get.message, "Get-");
+        assert_eq!(
+            handle_play_key_input(&mut get, '6', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(get.active_direction_prompt.is_none());
+        assert_eq!(get.grid[world_cell_index(0, 0)], 5);
+        assert_eq!(get.gold, DEFAULT_GOLD_STOCK + 7);
+        assert_eq!(get.turn, 1);
+        assert_eq!(get.player.facing, Direction::South);
+
+        let mut grid = open_grid();
+        grid[32 + 2] = 96;
+        let mut open = test_state(grid, 1, 1);
+        open.player.facing = Direction::South;
+        assert_eq!(
+            handle_play_key_input(&mut open, 'O', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(open.active_direction_prompt.is_some());
+        assert_eq!(open.message, "Open-");
+        assert_eq!(
+            handle_play_key_input(&mut open, '6', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(open.active_direction_prompt.is_none());
+        assert_eq!(open.grid[32 + 2], 16);
+        assert_eq!(open.turn, 1);
+        assert_eq!(open.player.facing, Direction::South);
+        assert_eq!(open.message, "Opened!");
+
+        fs::write(
+            dir.join(SECRET_DOOR_TABLE_FILE),
+            "TOWN CASTLE:0 0 2 1 96\n",
+        )
+        .unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = 24;
+        let mut search = test_state(grid, 1, 1);
+        search.player.facing = Direction::South;
+        assert_eq!(
+            handle_play_key_input(&mut search, 'S', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(search.active_direction_prompt.is_some());
+        assert_eq!(search.message, "Search-");
+        assert_eq!(
+            handle_play_key_input(&mut search, '6', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(search.active_direction_prompt.is_none());
+        assert_eq!(search.grid[32 + 2], 96);
+        assert_eq!(search.turn, 1);
+        assert_eq!(search.player.facing, Direction::South);
+        assert_eq!(search.message, "Revealed secret door at (2, 1).");
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn active_yes_no_prompt_routes_save_cancel_and_dungeon_exit() {
         let dir = debug_game_dir();
         fs::write(dir.join("SAVED.GAM"), saved_game_seed_bytes(0, 0xff, 10, 20)).unwrap();

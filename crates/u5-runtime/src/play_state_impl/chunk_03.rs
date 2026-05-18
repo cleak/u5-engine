@@ -511,8 +511,33 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    pub fn start_get_direction_prompt(&mut self) -> MoveOutcome {
+        self.active_direction_prompt = Some(DirectionPromptSession::new(DirectionPromptKind::Get));
+        self.message = self.render_active_direction_prompt();
+        MoveOutcome::Observed
+    }
+
+    pub fn start_open_direction_prompt(&mut self) -> MoveOutcome {
+        self.active_direction_prompt = Some(DirectionPromptSession::new(DirectionPromptKind::Open));
+        self.message = self.render_active_direction_prompt();
+        MoveOutcome::Observed
+    }
+
     pub fn start_push_direction_prompt(&mut self) -> MoveOutcome {
         self.active_direction_prompt = Some(DirectionPromptSession::new(DirectionPromptKind::Push));
+        self.message = self.render_active_direction_prompt();
+        MoveOutcome::Observed
+    }
+
+    pub fn start_search_direction_prompt(&mut self) -> MoveOutcome {
+        self.active_direction_prompt =
+            Some(DirectionPromptSession::new(DirectionPromptKind::Search));
+        self.message = self.render_active_direction_prompt();
+        MoveOutcome::Observed
+    }
+
+    pub fn start_talk_direction_prompt(&mut self) -> MoveOutcome {
+        self.active_direction_prompt = Some(DirectionPromptSession::new(DirectionPromptKind::Talk));
         self.message = self.render_active_direction_prompt();
         MoveOutcome::Observed
     }
@@ -523,7 +548,11 @@ impl PlayState {
             .map(|session| match session.kind {
                 DirectionPromptKind::Attack => "Attack where?".to_string(),
                 DirectionPromptKind::Fire => "Fire- which direction?".to_string(),
+                DirectionPromptKind::Get => "Get-".to_string(),
+                DirectionPromptKind::Open => "Open-".to_string(),
                 DirectionPromptKind::Push => "Push-".to_string(),
+                DirectionPromptKind::Search => "Search-".to_string(),
+                DirectionPromptKind::Talk => "Talk-".to_string(),
             })
             .unwrap_or_else(|| "Direction?".to_string())
     }
@@ -552,8 +581,20 @@ impl PlayState {
                     self.attack_command_with_game_dir(Some(direction), Some(game_dir))?
                 }
                 DirectionPromptKind::Fire => self.fire_command(Some(direction), game_dir)?,
+                DirectionPromptKind::Get => {
+                    self.get_direction_with_game_dir(direction, game_dir)?
+                }
+                DirectionPromptKind::Open => {
+                    self.open_direction_with_game_dir(direction, Some(game_dir))?
+                }
                 DirectionPromptKind::Push => {
                     self.push_direction_with_game_dir(direction, game_dir)?
+                }
+                DirectionPromptKind::Search => {
+                    self.search_direction_with_game_dir(direction, game_dir)?
+                }
+                DirectionPromptKind::Talk => {
+                    self.talk_direction_with_game_dir(direction, game_dir)?
                 }
             };
             return Ok(Some(outcome));

@@ -151,20 +151,22 @@ available, falling back to harness tile classes in parser-only tests. Public
 special-look context is applied for clock tiles using the 12-hour A.M./P.M.
 time, and world dungeon-mouth tiles append the clean `world_locations.tsv`
 dungeon name when that metadata is available.
-Town and overworld `G`et can consume clean-room authored tile-consumable rows
-from `town_get_tiles.tsv` and `world_get_tiles.tsv`, rewriting the visit-local
-map and applying optional authored counter grants while the original
-tile-to-item mapping remains out of scope. Explicit `object_pickups.tsv` rows
-can also consume visible active objects and update the current food, gold, key,
-gem, or torch counter before generic active-object blocking.
-`T`alk resolves the facing scheduled NPC's dialogue id, including one-cell
-talk-through over table/counter furniture, through the matching runtime `.TLK`
-envelope and reports the clean first-playable conversation header in
-town-family scenes. Inline `T<keyword>` input, such as `TJOB`, runs a
-one-shot static keyword lookup against the decoded `.TLK` fields using the
-public space-boundary match rule, while byte-runner side effects and shop UIs
-remain out of scope; overworld and dungeon Talk return the stock no-response
-path without spending a turn.
+Town and overworld `G`et now prompts for a cardinal direction, while inline
+forms such as `G6` still route in one command. It can consume clean-room
+authored tile-consumable rows from `town_get_tiles.tsv` and
+`world_get_tiles.tsv`, rewriting the visit-local map and applying optional
+authored counter grants while the original tile-to-item mapping remains out of
+scope. Explicit `object_pickups.tsv` rows can also consume visible active
+objects and update the current food, gold, key, gem, or torch counter before
+generic active-object blocking.
+Town-family `T`alk now prompts for a cardinal direction before resolving the
+scheduled NPC's dialogue id, including one-cell talk-through over table/counter
+furniture, through the matching runtime `.TLK` envelope and reports the clean
+first-playable conversation header. Inline `T<keyword>` input, such as `TJOB`,
+runs a one-shot static keyword lookup against the decoded `.TLK` fields using
+the public space-boundary match rule, while byte-runner side effects and shop
+UIs remain out of scope; overworld and dungeon Talk return the stock
+no-response path without spending a turn.
 Dungeon movement and the normal lit render are facing-relative: `W`/`S` step
 forward/back, `A`/`D` turn left/right, blocked cardinal movement reports the
 public `Blocked!` refusal, `K` climbs one-way ladders or prompts on two-way
@@ -810,16 +812,17 @@ TOWN CASTLE:0 0 12 4 96 24
 DUNGEON DUNGEON:0 0 2 1 0xF0 0x30
 ```
 
-In the terminal harness, uppercase `S` runs Search so lowercase `s` can remain
-south/back movement. Matching town rows reveal a wall cell as the supplied door
-tile; the revealed town secret door responds to Jimmy with `No lock!` and Open
-rewrites it to the open-door placeholder without arming the normal auto-close
-tracker, so it stays open for the visit. Matching dungeon rows rewrite the
-facing dungeon cell to the supplied packed cell byte. Optional guards check the
-current town tile or dungeon packed cell before revealing, keeping stale
-coordinates from rewriting unrelated cells. Town misses do not spend a turn;
-dungeon misses continue through the ordinary dungeon Search feature/chest/trap
-path.
+In the terminal harness, uppercase `S` prompts for a Search direction so
+lowercase `s` can remain south/back movement; inline forms such as `S6` still
+route in one command. Matching town rows reveal a wall cell as the supplied
+door tile; the revealed town secret door responds to Jimmy with `No lock!` and
+bare `O` prompts before rewriting it to the open-door placeholder without
+arming the normal auto-close tracker, so it stays open for the visit. Matching
+dungeon rows rewrite the facing dungeon cell to the supplied packed cell byte.
+Optional guards check the current town tile or dungeon packed cell before
+revealing, keeping stale coordinates from rewriting unrelated cells. Town
+misses do not spend a turn; dungeon misses continue through the ordinary
+dungeon Search feature/chest/trap path.
 
 Town-family fire sources are also externalized while the original cannon/source
 tile table and orientation encodings remain open. Place rows next to the game

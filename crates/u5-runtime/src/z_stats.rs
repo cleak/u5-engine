@@ -121,7 +121,11 @@ pub struct DirectionPromptSession {
 pub enum DirectionPromptKind {
     Attack,
     Fire,
+    Get,
+    Open,
     Push,
+    Search,
+    Talk,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

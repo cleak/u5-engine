@@ -623,7 +623,14 @@
 
         assert!(
             state
-                .handle_top_down_key_with_inline('G', &dir, None, None, None, None)
+                .handle_top_down_key_with_inline(
+                    'G',
+                    &dir,
+                    Some(Direction::East),
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap()
         );
 
@@ -756,7 +763,14 @@
 
         assert!(
             state
-                .handle_top_down_key_with_inline('G', &dir, None, None, None, None)
+                .handle_top_down_key_with_inline(
+                    'G',
+                    &dir,
+                    Some(Direction::East),
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap()
         );
 
@@ -891,7 +905,14 @@
 
         assert!(
             state
-                .handle_top_down_key_with_inline('G', &dir, None, None, None, None)
+                .handle_top_down_key_with_inline(
+                    'G',
+                    &dir,
+                    Some(Direction::East),
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap()
         );
 

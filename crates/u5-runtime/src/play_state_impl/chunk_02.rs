@@ -270,7 +270,13 @@ impl PlayState {
                     }
                 }
                 'G' => {
-                    handled!(self.get_facing_with_game_dir(game_dir)?);
+                    if let Some(direction) = inline_direction {
+                        handled!(self.get_direction_with_game_dir(direction, game_dir)?);
+                    } else if matches!(self.area, Area::Dungeon { .. }) {
+                        handled!(self.get_facing_with_game_dir(game_dir)?);
+                    } else {
+                        handled!(self.start_get_direction_prompt());
+                    }
                 }
                 'H' => {
                     handled!(self.hole_up_command(game_dir, inline_rest)?);
@@ -303,7 +309,13 @@ impl PlayState {
                     handled!(self.start_new_order_prompt());
                 }
                 'O' => {
-                    handled!(self.open_facing_with_game_dir(Some(game_dir))?);
+                    if let Some(direction) = inline_direction {
+                        handled!(self.open_direction_with_game_dir(direction, Some(game_dir))?);
+                    } else if matches!(self.area, Area::Town { .. }) {
+                        handled!(self.start_open_direction_prompt());
+                    } else {
+                        handled!(self.open_facing_with_game_dir(Some(game_dir))?);
+                    }
                 }
                 'P' => {
                     if let Some(direction) = inline_direction {
@@ -325,10 +337,20 @@ impl PlayState {
                     handled!(self.start_ready_equipment());
                 }
                 'S' => {
-                    handled!(self.search_facing_with_game_dir(game_dir)?);
+                    if let Some(direction) = inline_direction {
+                        handled!(self.search_direction_with_game_dir(direction, game_dir)?);
+                    } else if matches!(self.area, Area::Dungeon { .. }) {
+                        handled!(self.search_facing_with_game_dir(game_dir)?);
+                    } else {
+                        handled!(self.start_search_direction_prompt());
+                    }
                 }
                 'T' => {
-                    handled!(self.talk_facing_with_game_dir(game_dir)?);
+                    if matches!(self.area, Area::Town { .. }) {
+                        handled!(self.start_talk_direction_prompt());
+                    } else {
+                        handled!(self.talk_facing_with_game_dir(game_dir)?);
+                    }
                 }
                 'U' => {
                     let outcome = if inline_use_request.is_some() {
@@ -361,7 +383,15 @@ impl PlayState {
 
         let outcome = match key.to_ascii_lowercase() {
             'e' => self.enter_current_location(game_dir)?,
-            'o' => self.open_facing_with_game_dir(Some(game_dir))?,
+            'o' => {
+                if let Some(direction) = inline_direction {
+                    self.open_direction_with_game_dir(direction, Some(game_dir))?
+                } else if matches!(self.area, Area::Town { .. }) {
+                    self.start_open_direction_prompt()
+                } else {
+                    self.open_facing_with_game_dir(Some(game_dir))?
+                }
+            }
             'l' => self.look_facing_with_game_dir(game_dir)?,
             'v' => self.view_gem(),
             'i' => self.ignite_torch(),
@@ -387,8 +417,22 @@ impl PlayState {
                     self.push_facing_with_game_dir(game_dir)?
                 }
             }
-            'g' => self.get_facing_with_game_dir(game_dir)?,
-            't' => self.talk_facing_with_game_dir(game_dir)?,
+            'g' => {
+                if let Some(direction) = inline_direction {
+                    self.get_direction_with_game_dir(direction, game_dir)?
+                } else if matches!(self.area, Area::Dungeon { .. }) {
+                    self.get_facing_with_game_dir(game_dir)?
+                } else {
+                    self.start_get_direction_prompt()
+                }
+            }
+            't' => {
+                if matches!(self.area, Area::Town { .. }) {
+                    self.start_talk_direction_prompt()
+                } else {
+                    self.talk_facing_with_game_dir(game_dir)?
+                }
+            }
             'j' => self.jimmy_facing_with_game_dir(Some(game_dir))?,
             'k' => self.klimb_command(game_dir)?,
             'x' => self.exit_vehicle_with_game_dir(Some(game_dir))?,

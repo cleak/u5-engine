@@ -1064,7 +1064,17 @@
             handle_play_key_input(&mut state, 'T', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
+        assert_eq!(state.message, "Talk-");
+        assert!(state.active_direction_prompt.is_some());
+        assert!(state.active_conversation.is_none());
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
         assert!(state.message.contains("Greetings"));
+        assert!(state.active_direction_prompt.is_none());
         assert!(state.active_conversation.is_some());
         assert_eq!(state.turn, 1);
 
@@ -1109,6 +1119,7 @@
         ]);
 
         handle_play_key_input(&mut state, 'T', "", &dir).unwrap();
+        handle_play_key_input(&mut state, '6', "", &dir).unwrap();
         assert!(state.active_conversation.is_some());
 
         assert_eq!(

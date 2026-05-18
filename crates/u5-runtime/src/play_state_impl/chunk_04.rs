@@ -1911,6 +1911,23 @@ impl PlayState {
         game_dir: &Path,
         keyword: Option<&str>,
     ) -> io::Result<MoveOutcome> {
+        self.talk_direction_with_game_dir_and_keyword(self.player.facing, game_dir, keyword)
+    }
+
+    pub fn talk_direction_with_game_dir(
+        &mut self,
+        direction: Direction,
+        game_dir: &Path,
+    ) -> io::Result<MoveOutcome> {
+        self.talk_direction_with_game_dir_and_keyword(direction, game_dir, None)
+    }
+
+    pub fn talk_direction_with_game_dir_and_keyword(
+        &mut self,
+        direction: Direction,
+        game_dir: &Path,
+        keyword: Option<&str>,
+    ) -> io::Result<MoveOutcome> {
         let Area::Town { scene, .. } = self.area else {
             self.message = "Funny, no response!".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -1921,11 +1938,16 @@ impl PlayState {
         let dialogue = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let raw_blob = parse_tlk_raw(&game_dir.join(format!("{}.TLK", scene.family.stem())))
             .unwrap_or_default();
-        Ok(self.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw_blob, keyword))
+        Ok(self
+            .talk_direction_with_dialogue_and_keyword_raw(direction, &dialogue, &raw_blob, keyword))
     }
 
     pub fn facing_talk_target(&self) -> Option<(u8, usize, usize)> {
-        let (dx, dy) = self.player.facing.delta();
+        self.talk_target_in_direction(self.player.facing)
+    }
+
+    pub fn talk_target_in_direction(&self, direction: Direction) -> Option<(u8, usize, usize)> {
+        let (dx, dy) = direction.delta();
         let x = self.player.x as isize + dx;
         let y = self.player.y as isize + dy;
         if !(0..32).contains(&x) || !(0..32).contains(&y) {
@@ -1965,6 +1987,15 @@ impl PlayState {
         dialogue: &HashMap<u16, Vec<String>>,
         keyword: Option<&str>,
     ) -> MoveOutcome {
+        self.talk_direction_with_dialogue_and_keyword(self.player.facing, dialogue, keyword)
+    }
+
+    pub fn talk_direction_with_dialogue_and_keyword(
+        &mut self,
+        direction: Direction,
+        dialogue: &HashMap<u16, Vec<String>>,
+        keyword: Option<&str>,
+    ) -> MoveOutcome {
         if !matches!(self.area, Area::Town { .. }) {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;
@@ -1973,7 +2004,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let Some((dialog_id, _, _)) = self.facing_talk_target() else {
+        let Some((dialog_id, _, _)) = self.talk_target_in_direction(direction) else {
             self.message = TALK_NOBODY_HERE_MESSAGE.to_string();
             return MoveOutcome::Blocked;
         };
@@ -2061,6 +2092,21 @@ impl PlayState {
         raw_blob: &HashMap<u16, Vec<Vec<u8>>>,
         keyword: Option<&str>,
     ) -> MoveOutcome {
+        self.talk_direction_with_dialogue_and_keyword_raw(
+            self.player.facing,
+            dialogue,
+            raw_blob,
+            keyword,
+        )
+    }
+
+    pub fn talk_direction_with_dialogue_and_keyword_raw(
+        &mut self,
+        direction: Direction,
+        dialogue: &HashMap<u16, Vec<String>>,
+        raw_blob: &HashMap<u16, Vec<Vec<u8>>>,
+        keyword: Option<&str>,
+    ) -> MoveOutcome {
         if !matches!(self.area, Area::Town { .. }) {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;
@@ -2069,7 +2115,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let Some((dialog_id, _, _)) = self.facing_talk_target() else {
+        let Some((dialog_id, _, _)) = self.talk_target_in_direction(direction) else {
             self.message = TALK_NOBODY_HERE_MESSAGE.to_string();
             return MoveOutcome::Blocked;
         };
