@@ -2838,6 +2838,7 @@ impl PlayState {
 
     pub fn apply_blackthorn_rescue_refuge(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         let verdict = blackthorn_rescue_verdict_record(self.moral_standing);
+        let verdict_message = self.blackthorn_rescue_verdict_message(game_dir, verdict as usize)?;
         let previous_standing = self.moral_standing;
         self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);
         for member in &mut self.party {
@@ -2864,7 +2865,7 @@ impl PlayState {
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.message = format!(
-            "Blackthorn rescue/refuge: verdict record {verdict}, standing {previous_standing}->{}, restored party, handed off to {} at ({}, {}).",
+            "Blackthorn rescue/refuge: {verdict_message}; standing {previous_standing}->{}, restored party, handed off to {} at ({}, {}).",
             self.moral_standing,
             scene.key(),
             self.player.x,
@@ -2873,6 +2874,20 @@ impl PlayState {
         Ok(MoveOutcome::Transition(AreaTransition::EnteredLocation(
             scene,
         )))
+    }
+
+    pub fn blackthorn_rescue_verdict_message(
+        &self,
+        game_dir: &Path,
+        record_index: usize,
+    ) -> io::Result<String> {
+        let Some(records) = load_karma_records(game_dir)? else {
+            return Ok(format!("verdict record {record_index} unavailable"));
+        };
+        Ok(records
+            .get(record_index)
+            .map(|record| format!("verdict record {record_index}: {record}"))
+            .unwrap_or_else(|| format!("verdict record {record_index} unavailable")))
     }
 
     pub fn apply_dungeon_post_turn_effects_after_turn(

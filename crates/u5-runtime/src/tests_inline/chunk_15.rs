@@ -862,6 +862,18 @@
     #[test]
     fn blackthorn_rescue_restores_party_and_clamps_standing() {
         let dir = debug_game_dir();
+        fs::write(
+            dir.join(KARMA_DAT_FILE),
+            karma_bytes(&[
+                "strayed",
+                "corrective",
+                "potential",
+                "praise",
+                "destiny",
+                "camp-only",
+            ]),
+        )
+        .unwrap();
         let mut state = dungeon_state(open_dungeon_record(), 3, 1, 1);
         state.party.push(PartyMember {
             slot: 1,
@@ -893,7 +905,37 @@
                 BLACKTHORN_RESCUE_HANDOFF_Y as usize
             )
         );
-        assert!(state.message.contains("verdict record 0"));
+        assert!(state.message.contains("verdict record 0: strayed"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn blackthorn_rescue_uses_top_band_record_four_not_camp_variant() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(KARMA_DAT_FILE),
+            karma_bytes(&[
+                "strayed",
+                "corrective",
+                "potential",
+                "praise",
+                "destiny",
+                "camp-only",
+            ]),
+        )
+        .unwrap();
+        let mut state = dungeon_state(open_dungeon_record(), 3, 1, 1);
+        state.moral_standing = 99;
+
+        assert!(matches!(
+            state.apply_blackthorn_rescue_refuge(&dir).unwrap(),
+            MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
+                if scene.byte == BLACKTHORN_RESCUE_HANDOFF_SCENE
+        ));
+
+        assert_eq!(state.moral_standing, 99);
+        assert!(state.message.contains("verdict record 4: destiny"));
+        assert!(!state.message.contains("camp-only"));
         let _ = fs::remove_dir_all(dir);
     }
 
