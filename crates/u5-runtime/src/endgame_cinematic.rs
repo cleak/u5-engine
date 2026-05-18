@@ -23,7 +23,7 @@ pub enum EndgameCinematicStep {
     Certificate,
     /// Origin attribution closer is on screen.
     OriginCloser,
-    /// Cinematic complete; the engine should return to the title menu.
+    /// Cinematic complete; the engine remains on the terminal final panel.
     Finished,
 }
 
@@ -70,7 +70,7 @@ impl EndgameCinematic {
     }
 
     /// Returns `true` when the cinematic has presented every screen
-    /// and the caller should return to the title menu.
+    /// and the caller should hold the terminal final panel.
     pub fn is_finished(&self) -> bool {
         matches!(self.step, EndgameCinematicStep::Finished)
     }

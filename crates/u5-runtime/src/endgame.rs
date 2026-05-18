@@ -188,7 +188,7 @@ impl EndgameState {
     }
 
     /// `true` when the post-victory cinematic has presented every
-    /// screen and the engine should return to the title menu.
+    /// screen and the engine should remain on the terminal final panel.
     pub fn cinematic_is_finished(&self) -> bool {
         self.cinematic.is_finished()
     }
@@ -442,14 +442,17 @@ impl PlayState {
         MoveOutcome::EndgameEntered
     }
 
-    /// endgame.md §10: restore the entire travelling party to Good status with
-    /// HP equal to their stored maximum. Used by the endgame entry to set up
-    /// the throne-room tableau. This mutation is cinematic only and is not
-    /// committed to disk.
+    /// endgame.md section 10: restore Dead travelling-party members to Good status with
+    /// HP equal to their stored maximum. Non-Dead statuses keep their entry
+    /// state. This mutation is cinematic only and is not committed to disk.
     pub fn restore_party_for_endgame_tableau(&mut self) {
         for member in &mut self.party {
-            member.status = b'G';
-            member.hp = member.max_hp;
+            if character_status_for_byte(member.status)
+                .is_some_and(endgame_needs_tableau_restoration)
+            {
+                member.status = CharacterStatus::Good.save_byte();
+                member.hp = member.max_hp;
+            }
         }
     }
 
@@ -460,22 +463,25 @@ impl PlayState {
         };
         if current.is_terminal() {
             // Victory branch advances the cinematic page-flip on every
-            // keystroke until the closer is finished, at which point
-            // control returns to the title menu (the engine clears
-            // `endgame` so the caller can route there).
+            // keystroke until the closer is finished, then keeps the terminal
+            // final panel active.
             if matches!(current.outcome, Some(EndgameOutcome::Victory)) {
                 if let Some(state) = self.endgame.as_mut() {
-                    let banner = state.advance_cinematic();
-                    self.message = banner.to_string();
                     if state.cinematic_is_finished() {
-                        // Cinematic is done; clear endgame so the caller
-                        // returns to the title menu.
-                        let certificate = state
+                        self.message = state
                             .certificate
                             .clone()
-                            .unwrap_or_else(|| "Quest complete.".to_string());
-                        self.message = certificate;
-                        self.endgame = None;
+                            .unwrap_or_else(|| "The victory ending is complete.".to_string());
+                    } else {
+                        let banner = state.advance_cinematic();
+                        self.message = if state.cinematic_is_finished() {
+                            state
+                                .certificate
+                                .clone()
+                                .unwrap_or_else(|| "The victory ending is complete.".to_string())
+                        } else {
+                            banner.to_string()
+                        };
                     }
                     return MoveOutcome::Observed;
                 }

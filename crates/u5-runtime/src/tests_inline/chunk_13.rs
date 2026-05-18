@@ -13959,7 +13959,7 @@
     }
 
     #[test]
-    fn victory_endgame_cinematic_advances_through_all_panels_then_clears() {
+    fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_state() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 1;
         state.party_names = vec![*b"AVATAR\0\0\0"];
@@ -13969,7 +13969,8 @@
         state.resolve_endgame_confirmation(true);
 
         // Victory now active. Each additional confirmation advances
-        // the cinematic by one panel until it finishes and clears.
+        // the cinematic by one panel until it reaches the terminal final
+        // screen.
         let endgame = state.endgame.as_ref().unwrap();
         assert!(matches!(
             endgame.cinematic.step,
@@ -13978,11 +13979,19 @@
 
         // Walk all panels: throne → 6 narrative windows → certificate
         // → origin closer → finished. That's 1 + 6 + 1 + 1 = 9 steps;
-        // the 9th call clears `endgame` to None.
+        // after which endgame remains active.
         for _ in 0..9 {
             state.resolve_endgame_confirmation(true);
         }
-        assert!(state.endgame.is_none());
+        let endgame = state.endgame.as_ref().unwrap();
+        assert!(endgame.cinematic_is_finished());
+        assert_eq!(endgame.outcome, Some(EndgameOutcome::Victory));
+        assert!(state.message.contains("Report this completed quest to Origin"));
+
+        let message = state.message.clone();
+        state.resolve_endgame_confirmation(true);
+        assert!(state.endgame.as_ref().unwrap().cinematic_is_finished());
+        assert_eq!(state.message, message);
     }
 
     #[test]
@@ -14022,14 +14031,28 @@
                 max_hp: 25,
                 level: 3,
             },
+            PartyMember {
+                slot: 3,
+                class_byte: b'F',
+                status: b'A',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 0,
+                max_hp: 40,
+                level: 5,
+            },
         ];
 
         state.enter_endgame();
 
-        for member in &state.party {
-            assert_eq!(member.status, b'G');
-            assert_eq!(member.hp, member.max_hp);
-        }
+        assert_eq!(state.party[0].status, b'G');
+        assert_eq!(state.party[0].hp, 60);
+        assert_eq!(state.party[1].status, b'P');
+        assert_eq!(state.party[1].hp, 12);
+        assert_eq!(state.party[2].status, b'S');
+        assert_eq!(state.party[2].hp, 5);
+        assert_eq!(state.party[3].status, b'A');
+        assert_eq!(state.party[3].hp, 0);
         assert!(state.endgame.is_some());
     }
 
