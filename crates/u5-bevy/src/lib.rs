@@ -12,6 +12,7 @@ use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
+use bevy::sprite::Anchor;
 use bevy::text::TextBounds;
 
 use u5_runtime::{
@@ -24,7 +25,9 @@ const VIEWPORT_RADIUS: usize = 5;
 const VIEWPORT_CELLS: usize = VIEWPORT_RADIUS * 2 + 1;
 const VIEWPORT_SIZE_PX: u32 = (VIEWPORT_CELLS * TILE_ATLAS_SIDE) as u32;
 const DISPLAY_SCALE: f32 = 3.0;
-const STATUS_PANEL_HEIGHT: f32 = 96.0;
+const STATUS_PANEL_HEIGHT: f32 = 260.0;
+const STATUS_PANEL_PADDING: f32 = 8.0;
+const STATUS_FONT_SIZE: f32 = 14.0;
 
 const READY_HINT: &str =
     "WASD/arrows: move. Shift+A attacks, Shift+S searches. Ctrl+S music. Esc quit.";
@@ -271,13 +274,21 @@ fn setup(
     commands.spawn((
         Text2d::new(summarize(&mut state, READY_HINT, "")),
         TextFont {
-            font_size: 16.0,
+            font_size: STATUS_FONT_SIZE,
             ..default()
         },
         TextColor(Color::WHITE),
         TextLayout::new_with_justify(JustifyText::Center),
-        TextBounds::new_horizontal(display_size - 16.0),
-        Transform::from_xyz(0.0, -display_size * 0.5, 0.0),
+        TextBounds::new(
+            display_size - STATUS_PANEL_PADDING * 2.0,
+            STATUS_PANEL_HEIGHT - STATUS_PANEL_PADDING * 2.0,
+        ),
+        Anchor::TopCenter,
+        Transform::from_xyz(
+            0.0,
+            -display_size * 0.5 + STATUS_PANEL_HEIGHT * 0.5 - STATUS_PANEL_PADDING,
+            0.0,
+        ),
         StatusText,
     ));
 
@@ -394,7 +405,7 @@ fn summarize(state: &mut PlayState, fallback: &str, input_line: &str) -> String 
         state.message.clone()
     };
     let mut summary = format!(
-        "{} ({}, {}) facing {} — turn {} — music {}{}\n{}",
+        "{} ({}, {}) facing {} - turn {} - music {}{}\n{}",
         state.current_area_label(),
         state.player.x,
         state.player.y,
