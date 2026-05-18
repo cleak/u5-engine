@@ -561,6 +561,72 @@
     }
 
     #[test]
+    fn rest_with_watch_accepts_valid_inline_watcher_without_changing_ambush_odds() {
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 0,
+            hp: 8,
+            max_hp: 12,
+            level: 8,
+        });
+
+        assert_eq!(
+            state
+                .hole_up_command(
+                    Path::new(""),
+                    InlineRestRequest {
+                        hours: Some(1),
+                        watcher: Some(1),
+                    },
+                )
+                .unwrap(),
+            MoveOutcome::Rested
+        );
+
+        assert!(state.message.contains("party slot 2 keeps watch"));
+        assert_eq!(state.turn, 3);
+        assert!(!state.combat_active);
+    }
+
+    #[test]
+    fn rest_with_watch_rejects_non_good_watcher_but_still_rests() {
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'P',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 0,
+            hp: 8,
+            max_hp: 12,
+            level: 8,
+        });
+
+        assert_eq!(
+            state
+                .hole_up_command(
+                    Path::new(""),
+                    InlineRestRequest {
+                        hours: Some(1),
+                        watcher: Some(1),
+                    },
+                )
+                .unwrap(),
+            MoveOutcome::Rested
+        );
+
+        assert!(state.message.contains("no valid watch set"));
+        assert_eq!(state.party[1].status, b'P');
+        assert_eq!(state.turn, 3);
+    }
+
+    #[test]
     fn world_rest_with_watch_advances_three_twenty_minute_ticks_per_hour() {
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.clock = GameClock::new(5, 30).unwrap();

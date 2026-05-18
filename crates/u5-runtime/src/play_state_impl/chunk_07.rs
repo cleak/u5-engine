@@ -2485,12 +2485,15 @@ impl PlayState {
     pub fn hole_up_command(
         &mut self,
         game_dir: &Path,
-        hours: Option<u8>,
+        request: impl Into<InlineRestRequest>,
     ) -> io::Result<MoveOutcome> {
+        let request = request.into();
         match self.area {
-            Area::Town { scene, floor } => self.hole_up_town_command(game_dir, hours, scene, floor),
+            Area::Town { scene, floor } => {
+                self.hole_up_town_command(game_dir, request.hours, scene, floor)
+            }
             Area::World { .. } | Area::Dungeon { .. } => {
-                self.rest_with_watch(hours, Some(game_dir))
+                self.rest_with_watch(request, Some(game_dir))
             }
         }
     }

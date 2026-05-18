@@ -1,8 +1,10 @@
 //! Rest / camp helper per `systems/rest-and-camp.md`.
 //!
 //! The party's H-Hole-up + rest path lets a sleeping party recover HP
-//! and MP across multiple in-world hours, with an encounter check
-//! at each one-hour tick that may interrupt the rest.
+//! and MP across multiple in-world hours, with the public sleep-ambush
+//! interruption predicate able to stop the rest.
+
+use crate::{SLEEP_AMBUSH_INTERRUPT_DENOMINATOR, sleep_ambush_rest_interrupted};
 
 /// Outcome of one rest tick.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -12,50 +14,45 @@ pub enum RestTickOutcome {
         hp_per_member: u16,
         mp_per_member: u8,
     },
-    /// Encounter check fired; rest is interrupted and combat should
+    /// Sleep-ambush check fired; rest is interrupted and combat should
     /// be entered.
-    InterruptedByEncounter,
-    /// Watch-keeper noticed nothing this hour; the party rests.
-    UneventfulWatch,
+    InterruptedByAmbush,
 }
 
-/// Per-tick rest contribution constants. The exact original numbers
-/// are not part of the public spec; these are first-playable
-/// approximations that keep rest meaningful without making it trivial.
+/// Per-tick rest contribution constants. The exact original recovery
+/// amounts are local first-playable policy; the interruption predicate
+/// below follows the public rest/camp contract.
 pub const REST_HP_PER_HOUR: u16 = 4;
 pub const REST_MP_PER_HOUR: u8 = 1;
-/// Probability denominator for the encounter check. The roll uses a
-/// `u8` in `[0, 255]`; if it lies below the threshold the rest is
-/// interrupted.
-pub const REST_ENCOUNTER_THRESHOLD: u8 = 20;
+pub const REST_INTERRUPT_DENOMINATOR: u8 = SLEEP_AMBUSH_INTERRUPT_DENOMINATOR;
 
 /// Inputs the rest tick needs.
 #[derive(Clone, Copy, Debug)]
 pub struct RestTickInputs {
-    /// Pre-rolled `u8` in `[0, 255]` for the encounter check.
-    pub encounter_roll: u8,
-    /// `true` when a watch is being kept. Watch lowers the encounter
-    /// threshold by halving it; without a watch the full threshold
-    /// applies.
+    /// Pre-rolled `u8`; the public rest path treats `roll % 64 == 0`
+    /// as the sleep-ambush interruption.
+    pub interrupt_roll: u8,
+    /// `true` when a watch is being kept. The public interruption
+    /// predicate remains one-in-sixty-four either way; the watcher
+    /// selection belongs to prompt/status handling.
     pub keeping_watch: bool,
 }
 
 /// Resolve one rest tick.
 pub fn resolve_rest_tick(inputs: RestTickInputs) -> RestTickOutcome {
-    let threshold = if inputs.keeping_watch {
-        REST_ENCOUNTER_THRESHOLD / 2
-    } else {
-        REST_ENCOUNTER_THRESHOLD
-    };
-    if inputs.encounter_roll < threshold {
-        RestTickOutcome::InterruptedByEncounter
+    let _ = inputs.keeping_watch;
+    if sleep_ambush_rest_interrupted(inputs.interrupt_roll % REST_INTERRUPT_DENOMINATOR) {
+        RestTickOutcome::InterruptedByAmbush
     } else if inputs.keeping_watch {
         RestTickOutcome::Slept {
             hp_per_member: REST_HP_PER_HOUR,
             mp_per_member: REST_MP_PER_HOUR,
         }
     } else {
-        RestTickOutcome::UneventfulWatch
+        RestTickOutcome::Slept {
+            hp_per_member: REST_HP_PER_HOUR,
+            mp_per_member: REST_MP_PER_HOUR,
+        }
     }
 }
 
@@ -78,7 +75,7 @@ pub fn run_rest_session(hours: u8, rolls: &[u8], keeping_watch: bool) -> RestSes
     for i in 0..hours {
         let roll = *rolls.get(i as usize).unwrap_or(&255);
         let outcome = resolve_rest_tick(RestTickInputs {
-            encounter_roll: roll,
+            interrupt_roll: roll,
             keeping_watch,
         });
         match outcome {
@@ -90,12 +87,7 @@ pub fn run_rest_session(hours: u8, rolls: &[u8], keeping_watch: bool) -> RestSes
                 total_hp = total_hp.saturating_add(hp_per_member);
                 total_mp = total_mp.saturating_add(mp_per_member);
             }
-            RestTickOutcome::UneventfulWatch => {
-                completed += 1;
-                total_hp = total_hp.saturating_add(REST_HP_PER_HOUR);
-                total_mp = total_mp.saturating_add(REST_MP_PER_HOUR);
-            }
-            RestTickOutcome::InterruptedByEncounter => {
+            RestTickOutcome::InterruptedByAmbush => {
                 interrupted = true;
                 break;
             }
@@ -116,7 +108,7 @@ mod tests {
     #[test]
     fn high_roll_uneventful_watch_recovers_hp_and_mp() {
         let outcome = resolve_rest_tick(RestTickInputs {
-            encounter_roll: 200,
+            interrupt_roll: 200,
             keeping_watch: true,
         });
         assert_eq!(
@@ -129,27 +121,25 @@ mod tests {
     }
 
     #[test]
-    fn low_roll_interrupts_rest_with_encounter() {
+    fn zero_mod_sixty_four_interrupts_rest_with_ambush() {
         let outcome = resolve_rest_tick(RestTickInputs {
-            encounter_roll: 5,
+            interrupt_roll: 64,
             keeping_watch: false,
         });
-        assert_eq!(outcome, RestTickOutcome::InterruptedByEncounter);
+        assert_eq!(outcome, RestTickOutcome::InterruptedByAmbush);
     }
 
     #[test]
-    fn keeping_watch_halves_encounter_chance() {
-        // Roll of 15 interrupts without watch (15 < 20) but not with
-        // watch (15 >= 10).
+    fn keeping_watch_does_not_modulate_ambush_predicate() {
         let no_watch = resolve_rest_tick(RestTickInputs {
-            encounter_roll: 15,
+            interrupt_roll: 1,
             keeping_watch: false,
         });
         let with_watch = resolve_rest_tick(RestTickInputs {
-            encounter_roll: 15,
+            interrupt_roll: 1,
             keeping_watch: true,
         });
-        assert_eq!(no_watch, RestTickOutcome::InterruptedByEncounter);
+        assert!(matches!(no_watch, RestTickOutcome::Slept { .. }));
         assert!(matches!(with_watch, RestTickOutcome::Slept { .. }));
     }
 
@@ -164,7 +154,7 @@ mod tests {
 
     #[test]
     fn rest_session_stops_at_first_low_roll() {
-        let rolls = [200u8, 200, 5, 200, 200];
+        let rolls = [200u8, 200, 0, 200, 200];
         let result = run_rest_session(5, &rolls, false);
         assert_eq!(result.completed_hours, 2);
         assert!(result.interrupted);
@@ -178,11 +168,17 @@ mod tests {
     }
 
     #[test]
-    fn unwatched_uneventful_outcome_still_recovers_hp() {
+    fn unwatched_safe_outcome_still_recovers_hp() {
         let outcome = resolve_rest_tick(RestTickInputs {
-            encounter_roll: 200,
+            interrupt_roll: 200,
             keeping_watch: false,
         });
-        assert_eq!(outcome, RestTickOutcome::UneventfulWatch);
+        assert_eq!(
+            outcome,
+            RestTickOutcome::Slept {
+                hp_per_member: REST_HP_PER_HOUR,
+                mp_per_member: REST_MP_PER_HOUR,
+            }
+        );
     }
 }

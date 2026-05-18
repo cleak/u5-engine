@@ -894,8 +894,9 @@ data as `town_rest_beds.tsv`:
 CASTLE:0 0 14 10 55
 ```
 
-In the terminal harness, use `h` plus inline hours, for example `h8`. A matching
-bed row advances one in-world hour per iteration, decays personal light
+In the terminal harness, use `h` plus inline hours, for example `h8`; the
+outdoor/dungeon rest-with-watch shortcut also accepts a watcher slot such as
+`h8/2`. A matching bed row advances one in-world hour per iteration, decays personal light
 counters, applies the existing dawn/dusk cleanup, and runs one NPC schedule tick
 per hour. Town bed rest also applies deterministic first-playable HP recovery to
 living party members plus byte-capped first-playable MP recovery. Encounter
@@ -903,10 +904,14 @@ interruption is out of scope for this slice.
 In overworld and dungeon modes the same `h8` input runs the first-playable
 rest-with-watch path: each rested hour performs three 20-minute cleanup ticks,
 including time, light counters, animation, and existing area-specific per-turn
-hooks such as authored overworld damage tiles. The watch path also applies
+hooks such as authored overworld damage tiles. A supplied watcher must be a
+living Good-status party member; invalid watcher choices leave no watch set.
+The sleep-ambush predicate follows the public one-in-sixty-four rest/camp rule
+and hands the selected ambush monster to the combat frame when it fires. The
+watch path also applies
 deterministic first-playable HP recovery to
 living party members, byte-capped first-playable MP recovery, and wakes members
-who were asleep when rest began. Ambush checks remain out of scope.
+who were asleep when rest began.
 
 Town trap-door cells are also clean-room sidecar metadata while the exact
 interior tile encoding remains open:

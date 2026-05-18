@@ -128,7 +128,7 @@ pub fn handle_play_key_input(
         return Ok(state.exit_to_dos_prompt(parse_inline_yes_no(suffix)));
     }
     let inline_direction = suffix.chars().find_map(Direction::from_play_key);
-    let inline_hours = parse_inline_hours(suffix);
+    let inline_rest = parse_inline_rest_request(suffix);
     let inline_drink = parse_inline_yes_no(suffix);
     let inline_party_index = parse_inline_party_index(suffix);
     let inline_use_request = parse_inline_use_request(suffix);
@@ -136,7 +136,7 @@ pub fn handle_play_key_input(
     if state.handle_dungeon_key_with_inline(
         key,
         game_dir,
-        inline_hours,
+        inline_rest,
         inline_drink,
         inline_party_index,
         inline_use_request,
@@ -153,7 +153,7 @@ pub fn handle_play_key_input(
         key,
         game_dir,
         inline_direction,
-        inline_hours,
+        inline_rest,
         inline_drink,
         inline_use_request,
     )? {

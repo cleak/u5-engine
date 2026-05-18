@@ -8,17 +8,19 @@ use crate::*;
 impl PlayState {
     pub fn rest_with_watch(
         &mut self,
-        hours: Option<u8>,
+        request: InlineRestRequest,
         game_dir: Option<&Path>,
     ) -> io::Result<MoveOutcome> {
-        let Some(hours) = hours else {
-            self.message = "Rest- how many hours? Use H plus a number in this harness.".to_string();
+        let Some(hours) = request.hours else {
+            self.message =
+                "Rest- how many hours? Use H<hours> or H<hours>/<watcher-slot>.".to_string();
             return Ok(MoveOutcome::Blocked);
         };
         if !(1..=9).contains(&hours) {
             self.message = "Rest hours must be in 1..9.".to_string();
             return Ok(MoveOutcome::Blocked);
         }
+        let watch_note = self.rest_watch_note(request.watcher);
         let rest_entry_statuses = self
             .party
             .iter()
@@ -78,7 +80,7 @@ impl PlayState {
             )
         };
         self.message = format!(
-            "Party rested {duration}; recovered {recovered_hp} HP and {recovered_mana} MP; woke {woke} asleep member(s).",
+            "Party rested {duration}; {watch_note}; recovered {recovered_hp} HP and {recovered_mana} MP; woke {woke} asleep member(s).",
         );
         if let Some(monster) = ambush_monster {
             let z = match self.area {
@@ -103,6 +105,31 @@ impl PlayState {
             self.message.push_str(&event_message);
         }
         Ok(MoveOutcome::Rested)
+    }
+
+    pub fn rest_watch_note(&self, watcher: Option<usize>) -> String {
+        let eligible_count = self
+            .party
+            .iter()
+            .filter(|member| {
+                character_status_for_byte(member.status).is_some_and(rest_with_watch_participates)
+                    && member.living()
+            })
+            .count();
+        let Some(watcher) = watcher else {
+            return if eligible_count > 1 {
+                "no watch set".to_string()
+            } else {
+                "no watch needed".to_string()
+            };
+        };
+        let Some(member) = self.party.get(watcher) else {
+            return "no valid watch set".to_string();
+        };
+        if eligible_count <= 1 || member.status != b'G' || !member.living() {
+            return "no valid watch set".to_string();
+        }
+        format!("party slot {} keeps watch", watcher + 1)
     }
 
     pub fn lord_british_camp_event_roll(&self) -> u8 {
@@ -251,7 +278,7 @@ impl PlayState {
 
     pub fn dangerous_rest_interrupted(&self) -> bool {
         matches!(self.area, Area::World { .. } | Area::Dungeon { .. })
-            && self.dangerous_rest_interrupt_roll() == 0
+            && sleep_ambush_rest_interrupted(self.dangerous_rest_interrupt_roll())
     }
 
     pub fn dangerous_rest_interrupt_roll(&self) -> u8 {

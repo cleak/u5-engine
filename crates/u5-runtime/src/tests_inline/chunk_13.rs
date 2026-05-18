@@ -7790,6 +7790,32 @@
     }
 
     #[test]
+    fn inline_rest_request_parses_hours_and_optional_watcher() {
+        assert_eq!(
+            parse_inline_rest_request("2/3"),
+            InlineRestRequest {
+                hours: Some(2),
+                watcher: Some(2),
+            }
+        );
+        assert_eq!(
+            parse_inline_rest_request("10"),
+            InlineRestRequest {
+                hours: Some(10),
+                watcher: None,
+            }
+        );
+        assert_eq!(
+            parse_inline_rest_request("4/N"),
+            InlineRestRequest {
+                hours: Some(4),
+                watcher: None,
+            }
+        );
+        assert_eq!(parse_inline_rest_request(""), InlineRestRequest::default());
+    }
+
+    #[test]
     fn chargen_name_input_limit_is_one_below_record_name_field() {
         // chargen.md §4: the prompt accepts up to 8 visible characters;
         // the save record's name field is 9 bytes so the trailing byte

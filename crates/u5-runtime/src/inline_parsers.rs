@@ -56,6 +56,34 @@ pub fn parse_inline_hours(value: &str) -> Option<u8> {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InlineRestRequest {
+    pub hours: Option<u8>,
+    pub watcher: Option<usize>,
+}
+
+impl From<Option<u8>> for InlineRestRequest {
+    fn from(hours: Option<u8>) -> Self {
+        Self {
+            hours,
+            watcher: None,
+        }
+    }
+}
+
+pub fn parse_inline_rest_request(value: &str) -> InlineRestRequest {
+    let mut parts = value
+        .trim()
+        .split(|ch| matches!(ch, '/' | ':' | ','))
+        .map(str::trim);
+    let hours = parts.next().and_then(parse_inline_hours);
+    let watcher = parts
+        .next()
+        .and_then(parse_inline_party_index)
+        .filter(|watcher| *watcher < SAVE_PARTY_SIZE_MAX as usize);
+    InlineRestRequest { hours, watcher }
+}
+
 pub fn moonstone_phase_from_inline_number(value: u8) -> Option<usize> {
     (1..=MOONSTONE_SLOT_COUNT as u8)
         .contains(&value)

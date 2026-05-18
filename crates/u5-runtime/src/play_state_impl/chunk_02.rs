@@ -31,11 +31,12 @@ impl PlayState {
         &mut self,
         key: char,
         game_dir: &Path,
-        inline_hours: Option<u8>,
+        inline_rest: impl Into<InlineRestRequest>,
         inline_drink: Option<bool>,
         inline_party_index: Option<usize>,
         inline_use_request: Option<UseItemRequest>,
     ) -> io::Result<bool> {
+        let inline_rest = inline_rest.into();
         if !matches!(self.area, Area::Dungeon { .. }) {
             return Ok(false);
         }
@@ -155,7 +156,7 @@ impl PlayState {
                 Ok(true)
             }
             'h' => {
-                handled!(self.hole_up_command(game_dir, inline_hours)?);
+                handled!(self.hole_up_command(game_dir, inline_rest)?);
             }
             ' ' => {
                 self.pass_turn_with_game_dir(Some(game_dir))?;
@@ -207,10 +208,11 @@ impl PlayState {
         key: char,
         game_dir: &Path,
         inline_direction: Option<Direction>,
-        inline_hours: Option<u8>,
+        inline_rest: impl Into<InlineRestRequest>,
         inline_yes_no: Option<bool>,
         inline_use_request: Option<UseItemRequest>,
     ) -> io::Result<bool> {
+        let inline_rest = inline_rest.into();
         if matches!(self.area, Area::Dungeon { .. }) {
             return Ok(false);
         }
@@ -258,7 +260,7 @@ impl PlayState {
                     handled!(self.get_facing_with_game_dir(game_dir)?);
                 }
                 'H' => {
-                    handled!(self.hole_up_command(game_dir, inline_hours)?);
+                    handled!(self.hole_up_command(game_dir, inline_rest)?);
                 }
                 'I' => {
                     handled!(self.ignite_torch());
@@ -339,7 +341,7 @@ impl PlayState {
             'l' => self.look_facing_with_game_dir(game_dir)?,
             'v' => self.view_gem(),
             'i' => self.ignite_torch(),
-            'h' => self.hole_up_command(game_dir, inline_hours)?,
+            'h' => self.hole_up_command(game_dir, inline_rest)?,
             'f' => self.fire_command(inline_direction, game_dir)?,
             'p' => self.push_facing_with_game_dir(game_dir)?,
             'g' => self.get_facing_with_game_dir(game_dir)?,
