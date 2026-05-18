@@ -868,7 +868,7 @@ impl PlayState {
         let ny = ny.rem_euclid(WORLD_SIDE as isize) as usize;
         let tile = self.grid[world_cell_index(nx, ny)];
         let moongate = self.moongate_at(plane, nx, ny);
-        let mut transition = if let Some(game_dir) = game_dir {
+        let transition = if let Some(game_dir) = game_dir {
             self.world_plane_transition_at(game_dir, plane, nx, ny)?
         } else {
             None
@@ -934,64 +934,10 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         }
 
-        let mut final_x = nx;
-        let mut final_y = ny;
-        let mut final_tile = tile;
-        let mut final_moongate = moongate;
-        let mut stride_cells = 1;
-        if transition.is_none()
-            && moongate.is_none()
-            && first_waterfall.is_none()
-            && self.player.transport.is_horse()
-            && is_horse_fast_stride_tile(tile)
-        {
-            let (dx, dy) = direction.delta();
-            let sx = (nx as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
-            let sy = (ny as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
-            let second_tile = self.grid[world_cell_index(sx, sy)];
-            let second_moongate = self.moongate_at(plane, sx, sy);
-            let second_transition = if let Some(game_dir) = game_dir {
-                self.world_plane_transition_at(game_dir, plane, sx, sy)?
-            } else {
-                None
-            };
-            let second_damage_tile = if second_transition.is_none() && second_moongate.is_none() {
-                if let Some(game_dir) = game_dir {
-                    self.world_damage_tile_at(game_dir, plane, sx, sy, second_tile)?
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-            let second_waterfall = if second_transition.is_none()
-                && second_moongate.is_none()
-                && second_damage_tile.is_none()
-            {
-                if let Some(game_dir) = game_dir {
-                    self.world_waterfall_at(game_dir, plane, sx, sy, second_tile)?
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-            if self.world_object_at(sx, sy).is_none()
-                && (second_transition.is_some()
-                    || second_moongate.is_some()
-                    || second_waterfall.is_some()
-                    || (second_damage_tile.is_none()
-                        && is_horse_fast_stride_tile(second_tile)
-                        && self.tile_walkable(second_tile)))
-            {
-                final_x = sx;
-                final_y = sy;
-                final_tile = second_tile;
-                final_moongate = second_moongate;
-                stride_cells = 2;
-                transition = second_transition;
-            }
-        }
+        let final_x = nx;
+        let final_y = ny;
+        let final_tile = tile;
+        let final_moongate = moongate;
 
         self.player.x = final_x;
         self.player.y = final_y;
@@ -1007,7 +953,7 @@ impl PlayState {
                 }));
             }
         }
-        let verb = if stride_cells == 2 { "Rode" } else { "Moved" };
+        let verb = "Moved";
         let waterfall = if final_moongate.is_none() && !self.player.transport.is_balloon() {
             if let Some(game_dir) = game_dir {
                 self.world_waterfall_at(game_dir, plane, final_x, final_y, final_tile)?

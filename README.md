@@ -409,8 +409,8 @@ active-object phase animation and consumed-turn off-neighborhood pruning, basic 
 vehicle boarding/exiting/sail state including waterborne ship boarding, magic
 carpet board/exit with normal outdoor timing plus sidecar-backed lava and
 authored drowning-water damage, semantic debug balloon wind drift and landing
-refusal, horse two-cell
-grass/path stride, outdoor climb gates, and the public
+refusal, one-cell mounted-horse movement with the public horse terrain
+predicate, outdoor climb gates, and the public
 two-minute
 outdoor turn cadence with the saved `Q` timing tag providing skiff/raft
 half-time plus alternate-turn active-object/encounter epilogue cadence, and
@@ -722,9 +722,9 @@ standing on a matching row apply the same underfoot plane transition after turn
 cleanup.
 The optional source-tile guard keeps stale coordinates from firing after local
 map edits.
-Horse two-cell strides do not skip first-cell transition or current-sweep rows,
-and they can still stop on a matching second-cell transition or current row
-after the first stride cell is clear.
+Mounted-horse movement follows the public one-cell overland step contract, so
+transition and current-sweep rows only fire when the accepted destination cell
+itself matches the sidecar row.
 Britannia-to-Underworld falls also apply deterministic first-playable fall
 damage to living saved-party members; ascent rows only move the party between
 planes.

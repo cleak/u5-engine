@@ -982,10 +982,6 @@ pub fn is_talk_through_tile(tile: u8) -> bool {
     (TALK_THROUGH_TILE_FIRST..=TALK_THROUGH_TILE_LAST).contains(&tile)
 }
 
-pub fn is_horse_fast_stride_tile(tile: u8) -> bool {
-    tile == 5 || (16..=23).contains(&tile)
-}
-
 pub fn is_town_night_hour(hour: u8) -> bool {
     hour <= 4 || hour >= 20
 }

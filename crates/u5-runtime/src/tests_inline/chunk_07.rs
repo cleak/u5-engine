@@ -1208,15 +1208,15 @@ fn hoisted_ship_against_wind_uses_slow_cadence() {
 }
 
 #[test]
-fn horse_world_movement_strides_two_cells_on_grass_and_path() {
+fn horse_world_movement_uses_one_cell_on_grass_and_path() {
     let mut grass = world_state(open_world_grid(), 0, 0);
     mount_horse(&mut grass);
 
     assert_eq!(grass.step(Direction::East), MoveOutcome::Moved);
 
-    assert_eq!((grass.player.x, grass.player.y), (2, 0));
+    assert_eq!((grass.player.x, grass.player.y), (1, 0));
     assert_eq!(grass.turn, 1);
-    assert!(grass.message.contains("Rode East"));
+    assert!(grass.message.contains("Moved East"));
 
     let mut path_grid = open_world_grid();
     path_grid[world_cell_index(1, 0)] = 16;
@@ -1225,7 +1225,7 @@ fn horse_world_movement_strides_two_cells_on_grass_and_path() {
     mount_horse(&mut path);
 
     assert_eq!(path.step(Direction::East), MoveOutcome::Moved);
-    assert_eq!((path.player.x, path.player.y), (2, 0));
+    assert_eq!((path.player.x, path.player.y), (1, 0));
 }
 
 #[test]
@@ -1243,20 +1243,7 @@ fn horse_world_movement_uses_one_cell_on_rough_terrain() {
 }
 
 #[test]
-fn horse_world_stride_stops_before_blocked_second_cell() {
-    let mut grid = open_world_grid();
-    grid[world_cell_index(2, 0)] = 24;
-    let mut state = world_state(grid, 0, 0);
-    mount_horse(&mut state);
-
-    assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
-
-    assert_eq!((state.player.x, state.player.y), (1, 0));
-    assert_eq!(state.turn, 1);
-}
-
-#[test]
-fn horse_world_stride_does_not_skip_first_cell_plane_transition() {
+fn horse_world_movement_does_not_skip_first_cell_plane_transition() {
     let dir = debug_game_dir();
     fs::write(
         dir.join(WORLD_PLANE_TRANSITION_TABLE_FILE),
@@ -1283,7 +1270,7 @@ fn horse_world_stride_does_not_skip_first_cell_plane_transition() {
 }
 
 #[test]
-fn horse_world_stride_accepts_second_cell_plane_transition() {
+fn horse_world_movement_does_not_accept_second_cell_plane_transition() {
     let dir = debug_game_dir();
     fs::write(
         dir.join(WORLD_PLANE_TRANSITION_TABLE_FILE),
@@ -1299,21 +1286,19 @@ fn horse_world_stride_accepts_second_cell_plane_transition() {
         state
             .step_with_game_dir(Direction::East, Some(&dir))
             .unwrap(),
-        MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
-            from: WorldPlane::Britannia,
-            to: WorldPlane::Underworld,
-        })
+        MoveOutcome::Moved
     );
 
-    assert_eq!((state.player.x, state.player.y), (30, 40));
-    assert_eq!(state.player.transport, TransportState::Foot);
+    assert_eq!((state.player.x, state.player.y), (1, 0));
+    assert!(matches!(state.area, Area::World { plane: WorldPlane::Britannia }));
+    assert!(matches!(state.player.transport, TransportState::Horse { .. }));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("F-A-L-L-S"));
+    assert!(state.message.contains("Moved East"));
     let _ = fs::remove_dir_all(dir);
 }
 
 #[test]
-fn horse_world_stride_accepts_second_cell_waterfall_sidecar() {
+fn horse_world_movement_does_not_accept_second_cell_waterfall_sidecar() {
     let dir = debug_game_dir();
     fs::write(
         dir.join(WORLD_WATERFALL_TABLE_FILE),
@@ -1332,12 +1317,10 @@ fn horse_world_stride_accepts_second_cell_waterfall_sidecar() {
         MoveOutcome::Moved
     );
 
-    assert_eq!((state.player.x, state.player.y), (3, 0));
+    assert_eq!((state.player.x, state.player.y), (1, 0));
     assert_eq!(state.turn, 1);
-    assert!(state.message.contains("Rode East to (2, 0)"));
-    assert!(state
-        .message
-        .contains("waterfall swept party 1 step(s) East"));
+    assert!(state.message.contains("Moved East to (1, 0)"));
+    assert!(!state.message.contains("waterfall swept"));
     let _ = fs::remove_dir_all(dir);
 }
 

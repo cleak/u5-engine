@@ -340,7 +340,7 @@
     }
 
     #[test]
-    fn horse_world_stride_does_not_skip_first_cell_waterfall() {
+    fn horse_world_movement_applies_first_cell_waterfall() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(WORLD_WATERFALL_TABLE_FILE),
