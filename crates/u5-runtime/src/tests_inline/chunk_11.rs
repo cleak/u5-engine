@@ -807,10 +807,14 @@
             state
                 .step_with_game_dir(Direction::East, Some(&dir))
                 .unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Observed
         );
 
-        assert!(state.message.contains("Two-way climb"));
+        assert_eq!(state.message, "Klimb-");
+        assert_eq!(
+            state.active_direction_prompt.map(|session| session.kind),
+            Some(DirectionPromptKind::Klimb)
+        );
         assert_eq!(
             state.area,
             Area::Town {
@@ -822,10 +826,9 @@
         assert_eq!(state.active_objects[0].x, 1);
         assert_eq!(state.turn, 0);
 
-        assert!(
-            state
-                .handle_top_down_key_with_inline('<', &dir, None, None, None, None)
-                .unwrap()
+        assert_eq!(
+            handle_play_key_input(&mut state, '<', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
         );
 
         assert_eq!(

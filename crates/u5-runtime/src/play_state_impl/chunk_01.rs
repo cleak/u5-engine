@@ -1164,8 +1164,7 @@ impl PlayState {
                 self.player.y = ny;
                 self.sync_player_object();
                 self.mark_visibility_dirty();
-                self.message = "Two-way climb: use < or > to choose a climb direction.".to_string();
-                Ok(MoveOutcome::Blocked)
+                Ok(self.start_klimb_direction_prompt())
             }
         }
     }
