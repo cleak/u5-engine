@@ -620,7 +620,7 @@
         let blob_offset: u16 = 8;
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&2u16.to_le_bytes()); // count
-        bytes.extend_from_slice(&[0u8; 2]); // slot-0 sentinel padding
+        bytes.extend_from_slice(&1u16.to_le_bytes()); // leading sentinel npc id
         bytes.extend_from_slice(&blob_offset.to_le_bytes()); // blob offset for npc 1
         bytes.extend_from_slice(&0x0042u16.to_le_bytes()); // npc id 0x42
         // Two fields: "Ada\0" then "smith\0" (XOR-encoded).
@@ -649,6 +649,48 @@
         let out1 = crate::tlk_runner::run_tlk_stream(&fields[1], &inputs);
         assert_eq!(out0.text, "Ada");
         assert_eq!(out1.text, "smith");
+    }
+
+    #[test]
+    fn parse_tlk_rejects_malformed_headers() {
+        assert!(parse_tlk_bytes(&[0, 0, 0]).is_err());
+
+        let mut empty_sentinel_only = Vec::new();
+        empty_sentinel_only.extend_from_slice(&1u16.to_le_bytes());
+        empty_sentinel_only.extend_from_slice(&1u16.to_le_bytes());
+        assert!(parse_tlk_bytes(&empty_sentinel_only).unwrap().is_empty());
+        assert!(parse_tlk_bytes(&[1, 0, 0, 0]).unwrap().is_empty());
+
+        let mut zero_count = Vec::new();
+        zero_count.extend_from_slice(&0u16.to_le_bytes());
+        zero_count.extend_from_slice(&1u16.to_le_bytes());
+        assert!(parse_tlk_bytes(&zero_count).is_err());
+
+        let mut bad_sentinel = Vec::new();
+        bad_sentinel.extend_from_slice(&2u16.to_le_bytes());
+        bad_sentinel.extend_from_slice(&0u16.to_le_bytes());
+        bad_sentinel.extend_from_slice(&8u16.to_le_bytes());
+        bad_sentinel.extend_from_slice(&2u16.to_le_bytes());
+        bad_sentinel.push(0);
+        assert!(parse_tlk_bytes(&bad_sentinel).is_err());
+
+        let mut bad_offset = Vec::new();
+        bad_offset.extend_from_slice(&2u16.to_le_bytes());
+        bad_offset.extend_from_slice(&1u16.to_le_bytes());
+        bad_offset.extend_from_slice(&4u16.to_le_bytes());
+        bad_offset.extend_from_slice(&2u16.to_le_bytes());
+        bad_offset.push(0);
+        assert!(parse_tlk_bytes(&bad_offset).is_err());
+
+        let mut unsorted_ids = Vec::new();
+        unsorted_ids.extend_from_slice(&3u16.to_le_bytes());
+        unsorted_ids.extend_from_slice(&1u16.to_le_bytes());
+        unsorted_ids.extend_from_slice(&12u16.to_le_bytes());
+        unsorted_ids.extend_from_slice(&3u16.to_le_bytes());
+        unsorted_ids.extend_from_slice(&13u16.to_le_bytes());
+        unsorted_ids.extend_from_slice(&2u16.to_le_bytes());
+        unsorted_ids.extend_from_slice(&[0, 0]);
+        assert!(parse_tlk_blob_fields_raw(&unsorted_ids).is_err());
     }
 
     #[test]

@@ -6,6 +6,12 @@ use std::path::Path;
 
 use crate::*;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TlkHeaderEntry {
+    npc_id: u16,
+    blob_offset: usize,
+}
+
 pub fn parse_tlk(path: &Path) -> io::Result<HashMap<u16, Vec<String>>> {
     let bytes = read(path)?;
     parse_tlk_bytes(&bytes)
@@ -18,29 +24,18 @@ pub fn parse_tlk(path: &Path) -> io::Result<HashMap<u16, Vec<String>>> {
 /// string decoder. Each inner `Vec<u8>` does **not** include the NUL
 /// separator itself; that boundary is preserved by the outer split.
 pub fn parse_tlk_blob_fields_raw(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<Vec<u8>>>> {
-    if bytes.len() < 4 {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "short TLK"));
-    }
-    let count = u16_at(&bytes, 0) as usize;
-    let mut entries = Vec::new();
-    for k in 1..count {
-        let off = u16_at(&bytes, 4 * k) as usize;
-        let id = u16_at(&bytes, 4 * k + 2);
-        entries.push((id, off));
-    }
-    entries.sort_by_key(|(_, off)| *off);
+    let entries = parse_tlk_header_entries(bytes)?;
+    let mut span_entries = entries.clone();
+    span_entries.sort_by_key(|entry| entry.blob_offset);
     let mut out: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
-    for (idx, (id, off)) in entries.iter().enumerate() {
-        let nominal_end = entries
+    for (idx, entry) in span_entries.iter().enumerate() {
+        let nominal_end = span_entries
             .get(idx + 1)
-            .map(|(_, next)| *next)
+            .map(|next| next.blob_offset)
             .unwrap_or(bytes.len());
-        let end = nominal_end.min(off.saturating_add(1024));
-        if *off >= bytes.len() || *off >= end {
-            continue;
-        }
+        let end = nominal_end.min(entry.blob_offset.saturating_add(1024));
         let mut fields: Vec<Vec<u8>> = Vec::new();
-        let mut pos = *off;
+        let mut pos = entry.blob_offset;
         let mut current: Vec<u8> = Vec::new();
         while pos < end && fields.len() < 40 {
             let byte = bytes[pos];
@@ -57,11 +52,11 @@ pub fn parse_tlk_blob_fields_raw(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<Ve
         if !current.is_empty() {
             fields.push(current);
         }
-        out.insert(*id, fields);
+        out.insert(entry.npc_id, fields);
     }
     if !out.contains_key(&1) {
-        if let Some((first_id, _)) = entries.first() {
-            if let Some(fields) = out.get(first_id).cloned() {
+        if let Some(first) = entries.first() {
+            if let Some(fields) = out.get(&first.npc_id).cloned() {
                 out.insert(1, fields);
             }
         }
@@ -77,29 +72,18 @@ pub fn parse_tlk_raw(path: &Path) -> io::Result<HashMap<u16, Vec<Vec<u8>>>> {
 }
 
 pub fn parse_tlk_bytes(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<String>>> {
-    if bytes.len() < 4 {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "short TLK"));
-    }
-    let count = u16_at(&bytes, 0) as usize;
-    let mut entries = Vec::new();
-    for k in 1..count {
-        let off = u16_at(&bytes, 4 * k) as usize;
-        let id = u16_at(&bytes, 4 * k + 2);
-        entries.push((id, off));
-    }
-    entries.sort_by_key(|(_, off)| *off);
+    let entries = parse_tlk_header_entries(bytes)?;
+    let mut span_entries = entries.clone();
+    span_entries.sort_by_key(|entry| entry.blob_offset);
     let mut out = HashMap::new();
-    for (idx, (id, off)) in entries.iter().enumerate() {
-        let nominal_end = entries
+    for (idx, entry) in span_entries.iter().enumerate() {
+        let nominal_end = span_entries
             .get(idx + 1)
-            .map(|(_, next)| *next)
+            .map(|next| next.blob_offset)
             .unwrap_or(bytes.len());
-        let end = nominal_end.min(off.saturating_add(1024));
-        if *off >= bytes.len() || *off >= end {
-            continue;
-        }
+        let end = nominal_end.min(entry.blob_offset.saturating_add(1024));
         let mut fields = Vec::new();
-        let mut pos = *off;
+        let mut pos = entry.blob_offset;
         while pos < end && fields.len() < 40 {
             let (field, next) = decode_tlk_field(&bytes, pos, end);
             fields.push(field);
@@ -108,16 +92,72 @@ pub fn parse_tlk_bytes(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<String>>> {
                 break;
             }
         }
-        out.insert(*id, fields);
+        out.insert(entry.npc_id, fields);
     }
     if !out.contains_key(&1) {
-        if let Some((first_id, _)) = entries.first() {
-            if let Some(fields) = out.get(first_id).cloned() {
+        if let Some(first) = entries.first() {
+            if let Some(fields) = out.get(&first.npc_id).cloned() {
                 out.insert(1, fields);
             }
         }
     }
     Ok(out)
+}
+
+fn parse_tlk_header_entries(bytes: &[u8]) -> io::Result<Vec<TlkHeaderEntry>> {
+    if bytes.len() < 4 {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "short TLK"));
+    }
+    let count = u16_at(&bytes, 0) as usize;
+    if count < 1 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("TLK header count must include at least the sentinel, got {count}"),
+        ));
+    }
+    let header_len = count
+        .checked_mul(4)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "TLK header length overflows"))?;
+    if header_len > bytes.len() || header_len > 512 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("TLK header length {header_len} is outside the available fixed header window"),
+        ));
+    }
+    if count == 1 {
+        return Ok(Vec::new());
+    }
+    let sentinel_id = u16_at(bytes, 2);
+    if sentinel_id != 1 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("TLK leading sentinel id must be 1, got {sentinel_id}"),
+        ));
+    }
+    let mut entries = Vec::new();
+    let mut last_id = 1u16;
+    for k in 1..count {
+        let off = u16_at(bytes, 4 * k) as usize;
+        let id = u16_at(bytes, 4 * k + 2);
+        if id <= last_id {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("TLK header npc id {id} is not strictly after {last_id}"),
+            ));
+        }
+        if off < header_len || off >= bytes.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("TLK header npc id {id} has invalid blob offset {off}"),
+            ));
+        }
+        entries.push(TlkHeaderEntry {
+            npc_id: id,
+            blob_offset: off,
+        });
+        last_id = id;
+    }
+    Ok(entries)
 }
 
 pub fn decode_tlk_field(bytes: &[u8], mut pos: usize, end: usize) -> (String, usize) {
