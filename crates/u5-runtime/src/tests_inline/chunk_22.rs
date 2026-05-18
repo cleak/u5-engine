@@ -89,6 +89,50 @@
     }
 
     #[test]
+    fn half_time_world_epilogue_alternates_active_object_animation() {
+        let mut state = world_state(open_world_grid(), 0, 0);
+        state.timing_status = TimingStatusTag::HalfTime;
+        state.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 5,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0x22,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        state.advance_turn();
+        assert_eq!(state.active_objects[1].phase, 0x22);
+        assert_eq!(state.active_objects[1].tile, 192);
+
+        state.advance_turn();
+        assert_eq!(state.active_objects[1].phase, 0x21);
+        assert_eq!(state.active_objects[1].tile, 193);
+    }
+
+    #[test]
+    fn no_minute_light_world_epilogue_skips_active_object_animation() {
+        let mut state = world_state(open_world_grid(), 0, 0);
+        state.timing_status = TimingStatusTag::NoMinuteLight;
+        state.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 5,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0x22,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        state.advance_turn();
+        assert_eq!(state.active_objects[1].phase, 0x22);
+        assert_eq!(state.active_objects[1].tile, 192);
+    }
+
+    #[test]
     fn ambient_world_actor_wander_respects_terrain_and_player_collision() {
         let mut blocked_grid = open_world_grid();
         blocked_grid[world_cell_index(4, 5)] = 1;

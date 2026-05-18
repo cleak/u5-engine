@@ -2344,29 +2344,34 @@ impl PlayState {
         }
         // active-objects.md §8: adjacent whirlpool engagement is a
         // plane-transition effect when the party is not on foot.
-        if let Some(transition) = self.apply_world_whirlpool_engagement(game_dir, plane)? {
-            let transition_message = self.message.clone();
-            self.message = if pre_effect_message.is_empty() {
-                transition_message
-            } else {
-                format!("{pre_effect_message} {transition_message}")
-            };
-            return Ok(Some(MoveOutcome::Transition(transition)));
-        }
-        if let Some(outcome) = self.apply_world_active_object_engagement(game_dir, plane)? {
-            let engagement_message = self.message.clone();
-            self.message = if pre_effect_message.is_empty() {
-                engagement_message
-            } else {
-                format!("{pre_effect_message} {engagement_message}")
-            };
-            return Ok(Some(outcome));
+        let object_epilogue_runs = self.world_object_epilogue_runs_for_turn(turn_before);
+        if object_epilogue_runs {
+            if let Some(transition) = self.apply_world_whirlpool_engagement(game_dir, plane)? {
+                let transition_message = self.message.clone();
+                self.message = if pre_effect_message.is_empty() {
+                    transition_message
+                } else {
+                    format!("{pre_effect_message} {transition_message}")
+                };
+                return Ok(Some(MoveOutcome::Transition(transition)));
+            }
+            if let Some(outcome) = self.apply_world_active_object_engagement(game_dir, plane)? {
+                let engagement_message = self.message.clone();
+                self.message = if pre_effect_message.is_empty() {
+                    engagement_message
+                } else {
+                    format!("{pre_effect_message} {engagement_message}")
+                };
+                return Ok(Some(outcome));
+            }
         }
         self.apply_fixed_narrative_gate_branch(plane);
         self.append_world_damage_tile_message(Some(game_dir), plane)?;
-        if let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)? {
-            self.message
-                .push_str(&format!(" Wandering encounter spawned in slot {slot}."));
+        if object_epilogue_runs {
+            if let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)? {
+                self.message
+                    .push_str(&format!(" Wandering encounter spawned in slot {slot}."));
+            }
         }
         self.queue_current_moongate_prompt();
         Ok(None)

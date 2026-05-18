@@ -1543,6 +1543,55 @@ fn world_encounter_sidecar_spawns_one_actor_after_consumed_overworld_turn() {
 }
 
 #[test]
+fn half_time_world_epilogue_alternates_encounter_probe() {
+    let dir = debug_game_dir();
+    fs::write(
+        dir.join(WORLD_ENCOUNTER_TABLE_FILE),
+        "BRITANNIA 5 30 192 2 0\n",
+    )
+    .unwrap();
+    let mut state = britannia_state(vec![5; WORLD_CELLS], 10, 10);
+    state.timing_status = TimingStatusTag::HalfTime;
+
+    assert_eq!(
+        state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+        MoveOutcome::Passed
+    );
+    assert_eq!(state.turn, 1);
+    assert_eq!(state.active_objects.len(), 1);
+    assert!(!state.message.contains("Wandering encounter spawned"));
+
+    assert_eq!(
+        state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+        MoveOutcome::Passed
+    );
+    assert_eq!(state.turn, 2);
+    assert_eq!(state.active_objects.len(), 2);
+    assert!(state.message.contains("Wandering encounter spawned"));
+}
+
+#[test]
+fn no_minute_light_world_epilogue_suppresses_encounter_probe() {
+    let dir = debug_game_dir();
+    fs::write(
+        dir.join(WORLD_ENCOUNTER_TABLE_FILE),
+        "BRITANNIA 5 30 192 2 0\n",
+    )
+    .unwrap();
+    let mut state = britannia_state(vec![5; WORLD_CELLS], 10, 10);
+    state.timing_status = TimingStatusTag::NoMinuteLight;
+
+    assert_eq!(
+        state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+        MoveOutcome::Passed
+    );
+
+    assert_eq!(state.turn, 1);
+    assert_eq!(state.active_objects.len(), 1);
+    assert!(!state.message.contains("Wandering encounter spawned"));
+}
+
+#[test]
 fn world_encounter_sidecar_respects_zero_threshold_and_blocked_spawn() {
     let dir = debug_game_dir();
     fs::write(

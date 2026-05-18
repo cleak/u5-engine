@@ -51,6 +51,17 @@ impl TimingStatusTag {
             Self::NoMinuteLight => "no-minute-light",
         }
     }
+
+    /// `time.md §4` / `overworld.md §6`: the saved `Q` tag lets the
+    /// overworld active-object and encounter epilogue run on alternate
+    /// turns, while `T` returns before that epilogue.
+    pub const fn world_object_epilogue_runs(self, turn_before: u64) -> bool {
+        match self {
+            Self::Normal => true,
+            Self::HalfTime => turn_before % 2 == 1,
+            Self::NoMinuteLight => false,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

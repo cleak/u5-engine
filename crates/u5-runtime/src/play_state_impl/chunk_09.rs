@@ -1074,6 +1074,7 @@ impl PlayState {
         advance_active_objects: bool,
     ) {
         let negate_time_active = self.negate_time_active();
+        let turn_before = self.turn;
         let effective_minutes = if negate_time_active {
             0
         } else {
@@ -1110,7 +1111,9 @@ impl PlayState {
             self.time_stop_counter = self.time_stop_counter.saturating_sub(1);
         } else if !negate_time_active {
             self.advance_npc_schedules();
-            if advance_active_objects {
+            let world_object_epilogue_runs = !matches!(self.area, Area::World { .. })
+                || self.timing_status.world_object_epilogue_runs(turn_before);
+            if advance_active_objects && world_object_epilogue_runs {
                 self.advance_active_objects();
             }
         }
@@ -1692,6 +1695,10 @@ impl PlayState {
             }
         }
         Ok(None)
+    }
+
+    pub fn world_object_epilogue_runs_for_turn(&self, turn_before: u64) -> bool {
+        self.timing_status.world_object_epilogue_runs(turn_before)
     }
 
     pub fn prune_far_overworld_objects(&mut self) {

@@ -412,8 +412,9 @@ refusal, horse two-cell
 grass/path stride, outdoor climb gates, and the public
 two-minute
 outdoor turn cadence with the saved `Q` timing tag providing skiff/raft
-half-time and the saved `T` tag skipping minute/light-counter writes while
-turn cleanup still runs. The play harness exposes semantic `--wind`,
+half-time plus alternate-turn active-object/encounter epilogue cadence, and
+the saved `T` tag skipping minute/light-counter writes while suppressing that
+world object epilogue. The play harness exposes semantic `--wind`,
 `--climbing-gear`, `--transport`, and `--pending-vehicle` startup hooks for focused testing;
 world load and overworld entry messages report `Calm/North/South/East/West
 Winds` without claiming byte-perfect save mappings. Mode entry and cross-area
@@ -766,9 +767,10 @@ movement.
 The optional tile guard keeps stale coordinates from firing after local map
 edits.
 
-Random overworld encounter spawning is sidecar-authored while the original
-terrain threshold and monster tables remain open. Place rows next to the game
-data as `world_encounters.tsv`:
+Random overworld encounter spawning now uses the public terrain threshold,
+retry, branch, and weighted bucket tables when no clean sidecar is present.
+For deterministic focused tests or clean-room scenario authoring, place rows
+next to the game data as `world_encounters.tsv`:
 
 ```text
 # PLANE TILE THRESHOLD TYPE DX DY [PHASE]
@@ -776,19 +778,20 @@ BRITANNIA 5 30 192 8 0
 UNDERWORLD 14 12 255 -8 4 0x12
 ```
 
-After a consumed overworld turn, the harness checks the tile under the party
-against matching rows for the current plane. It rolls a deterministic
-first-playable value in `1..30`; `THRESHOLD` is inclusive, so `0` never spawns
-and `30` always spawns. `TYPE` must be a monster/NPC active-object byte in
-`192..255`. `DX`/`DY` place the new object relative to the party with wrapping
-world coordinates and must stay within the active-object neighborhood radius.
+Native encounters roll a deterministic clean-room value in `1..30` and spawn
+when the public threshold strictly exceeds that roll. The saved `Q` timing tag
+checks the encounter probe only on alternate turns, while `T` suppresses it.
+If `world_encounters.tsv` is present, sidecar mode is used: matching rows spawn
+through the authored sidecar path, and unmatched tiles do not fall back to the
+native selector. `TYPE` must be a monster/NPC active-object byte in
+`192..255`. `DX`/`DY` place the new object relative to the party with
+wrapping world coordinates and must stay within the active-object neighborhood radius.
 If `PHASE` is omitted, the spawned actor starts facing back toward the party;
 an explicit phase may supply a direction nibble with a non-steady animation
 nibble. Spawning uses the normal first-empty active-object slot and is skipped
 when the target cell is occupied, is the party cell, is not foot-landable, is an
 active moongate origin, or is a clean sidecar-authored transition/hazard that a
-foot actor should not occupy. No built-in encounter rows are shipped by the
-repository.
+foot actor should not occupy.
 
 Moongate placement is also externalized because the full natural schedule is
 still an open public-spec table. To test gate rendering and teleport plumbing,
