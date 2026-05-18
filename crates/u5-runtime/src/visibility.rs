@@ -140,6 +140,153 @@ pub const fn active_object_compositor_branch(
 /// marker; otherwise it falls through to the default helper.
 pub const VEHICLE_AVATAR_UNDERLAY_MARKER: u8 = 0x92;
 
+/// `visibility.md §8` result of stamping one active-object slot into the
+/// visibility/terrain-band pair.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ActiveObjectCompositeResult {
+    /// Leave the existing grid and terrain-band cells unchanged.
+    Suppress,
+    /// Write the tile to the terrain band and set the visibility grid to
+    /// `VISIBILITY_USE_COMPANION`.
+    Companion(u8),
+    /// Write a direct visibility-grid marker/tile and leave the terrain band
+    /// untouched.
+    Direct(u8),
+    /// Write a direct marker into the previous viewport row, then companion-
+    /// stamp this cell.
+    PreviousRowDirectAndCompanion { previous_marker: u8, tile: u8 },
+}
+
+/// `visibility.md §8`: the small set of effective tile bytes that the default
+/// compositor compares against the current terrain before stamping.
+pub const fn active_object_default_tile_is_terrain_aware(tile: u8) -> bool {
+    tile == 0x1C || (tile >= 0x12 && tile <= 0x15) || (tile >= 0x28 && tile <= 0x2B) || tile >= 0x40
+}
+
+/// `visibility.md §8`: four-entry selector for terrain edge variants. Tinkers
+/// force the first entry; other active characters use the caller-supplied
+/// low-two-bit selector.
+pub const fn active_object_compositor_variant(
+    active_character_is_tinker: bool,
+    selector: u8,
+) -> u8 {
+    if active_character_is_tinker {
+        0
+    } else {
+        selector & 0x03
+    }
+}
+
+/// `visibility.md §8`: default terrain-aware compositor helper.
+pub const fn active_object_default_composite(
+    effective_tile: u8,
+    current_terrain: u8,
+    previous_row_terrain: Option<u8>,
+    next_row_terrain: Option<u8>,
+    viewport_row: usize,
+    variant: u8,
+) -> ActiveObjectCompositeResult {
+    if !active_object_default_tile_is_terrain_aware(effective_tile) {
+        return ActiveObjectCompositeResult::Companion(effective_tile);
+    }
+
+    match current_terrain {
+        0xEC | 0x0A => ActiveObjectCompositeResult::Suppress,
+        0x57 => ActiveObjectCompositeResult::Direct(0x38),
+        0x6A | 0x6B => {
+            if (effective_tile >= 0x80 && effective_tile <= 0x8F)
+                || (effective_tile >= 0x28 && effective_tile <= 0x2B)
+            {
+                ActiveObjectCompositeResult::Suppress
+            } else {
+                ActiveObjectCompositeResult::Companion(effective_tile)
+            }
+        }
+        _ if effective_tile >= 0x80 => ActiveObjectCompositeResult::Companion(effective_tile),
+        0x84 => ActiveObjectCompositeResult::Companion(0x60 + (variant & 0x03)),
+        0x85 => ActiveObjectCompositeResult::Companion(0x64 + (variant & 0x03)),
+        0x90 => {
+            if matches!(previous_row_terrain, Some(0x9B | 0x9C)) {
+                ActiveObjectCompositeResult::Companion(0x38 + (variant & 0x03))
+            } else {
+                ActiveObjectCompositeResult::Companion(0x30)
+            }
+        }
+        0x91 => ActiveObjectCompositeResult::Companion(0x31),
+        0x92 => {
+            if matches!(next_row_terrain, Some(0x9A | 0x9C)) {
+                ActiveObjectCompositeResult::Companion(0x34 + (variant & 0x03))
+            } else {
+                ActiveObjectCompositeResult::Companion(0x32)
+            }
+        }
+        0x93 => ActiveObjectCompositeResult::Companion(0x33),
+        0x9D | 0x9E => ActiveObjectCompositeResult::Companion(0x3C + (variant & 0x03)),
+        0xAB => ActiveObjectCompositeResult::Companion(0x1A),
+        0xC8 => ActiveObjectCompositeResult::Companion(0x17),
+        0xC9 => ActiveObjectCompositeResult::Companion(0x18),
+        _ if viewport_row > 0 && matches!(previous_row_terrain, Some(0x9D)) => {
+            ActiveObjectCompositeResult::PreviousRowDirectAndCompanion {
+                previous_marker: 0x9E,
+                tile: effective_tile,
+            }
+        }
+        _ => ActiveObjectCompositeResult::Companion(effective_tile),
+    }
+}
+
+/// `visibility.md §8`: dispatch one active-object slot through the branch
+/// classifier and, when needed, the default terrain-aware helper.
+pub const fn active_object_composite(
+    type_byte: u8,
+    frame_byte: u8,
+    current_grid_byte: u8,
+    current_terrain: u8,
+    previous_row_terrain: Option<u8>,
+    next_row_terrain: Option<u8>,
+    viewport_row: usize,
+    variant: u8,
+) -> ActiveObjectCompositeResult {
+    if current_grid_byte == VISIBILITY_HIDDEN || current_grid_byte == VISIBILITY_ALREADY_RENDERED {
+        return ActiveObjectCompositeResult::Suppress;
+    }
+
+    match active_object_compositor_branch(type_byte, frame_byte) {
+        ActiveObjectCompositorBranch::WaterBoundCompanion => {
+            if current_grid_byte == VISIBILITY_USE_COMPANION {
+                ActiveObjectCompositeResult::Suppress
+            } else {
+                ActiveObjectCompositeResult::Companion(frame_byte)
+            }
+        }
+        ActiveObjectCompositorBranch::WaterCreatureCompanion => {
+            ActiveObjectCompositeResult::Companion(frame_byte)
+        }
+        ActiveObjectCompositorBranch::VehicleAvatarCompanion => {
+            if current_grid_byte == VEHICLE_AVATAR_UNDERLAY_MARKER {
+                ActiveObjectCompositeResult::Companion(frame_byte)
+            } else {
+                active_object_default_composite(
+                    frame_byte,
+                    current_terrain,
+                    previous_row_terrain,
+                    next_row_terrain,
+                    viewport_row,
+                    variant,
+                )
+            }
+        }
+        ActiveObjectCompositorBranch::DefaultHelper => active_object_default_composite(
+            frame_byte,
+            current_terrain,
+            previous_row_terrain,
+            next_row_terrain,
+            viewport_row,
+            variant,
+        ),
+    }
+}
+
 /// `visibility.md §7` fog-edge refinement squared-distance threshold.
 /// The post-pass folds each viewport coordinate around the centre
 /// `(5, 5)`, computes `(5 - folded_x)^2 + (5 - folded_y)^2`, and

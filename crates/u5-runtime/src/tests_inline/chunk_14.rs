@@ -991,6 +991,74 @@
     }
 
     #[test]
+    fn top_down_viewport_suppresses_active_object_on_blocking_compositor_terrain() {
+        let mut grid = open_grid();
+        grid[32] = 0xEC;
+        let mut state = test_state(grid, 1, 1);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x40,
+            tile: 0x40,
+            x: 0,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let viewport = state.render_top_down_viewport(1, &atlas).unwrap().unwrap();
+
+        assert_eq!(viewport.pixel(0, 16), Some(0xEC % atlas.depth.pixel_limit()));
+    }
+
+    #[test]
+    fn top_down_viewport_applies_active_object_direct_marker_remap() {
+        let mut grid = open_grid();
+        grid[32] = 0x57;
+        let mut state = test_state(grid, 1, 1);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x40,
+            tile: 0x40,
+            x: 0,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let viewport = state.render_top_down_viewport(1, &atlas).unwrap().unwrap();
+
+        assert_eq!(viewport.pixel(0, 16), Some(0x38 % atlas.depth.pixel_limit()));
+    }
+
+    #[test]
+    fn top_down_viewport_applies_previous_row_compositor_marker() {
+        let mut grid = open_grid();
+        grid[2 * 32 + 3] = 0x9D;
+        grid[3 * 32 + 3] = 0x10;
+        let mut state = test_state(grid, 2, 2);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x40,
+            tile: 0x40,
+            x: 3,
+            y: 3,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let viewport = state.render_top_down_viewport(2, &atlas).unwrap().unwrap();
+
+        assert_eq!(viewport.pixel(3 * 16, 2 * 16), Some(0x9E % atlas.depth.pixel_limit()));
+        assert_eq!(viewport.pixel(3 * 16, 3 * 16), Some(0x40 % atlas.depth.pixel_limit()));
+    }
+
+    #[test]
     fn top_down_viewport_rasterizes_world_wrapping_moongates_and_visibility() {
         let mut grid = open_world_grid();
         grid[world_cell_index(0, 0)] = 17;

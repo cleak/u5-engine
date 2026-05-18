@@ -10907,6 +10907,180 @@
     }
 
     #[test]
+    fn active_object_default_compositor_matches_terrain_aware_spec_cases() {
+        // visibility.md §8
+        assert!(!active_object_default_tile_is_terrain_aware(0x11));
+        assert!(active_object_default_tile_is_terrain_aware(0x12));
+        assert!(active_object_default_tile_is_terrain_aware(0x1C));
+        assert!(active_object_default_tile_is_terrain_aware(0x28));
+        assert!(active_object_default_tile_is_terrain_aware(0x40));
+
+        assert_eq!(
+            active_object_default_composite(0x11, 0x84, None, None, 5, 2),
+            ActiveObjectCompositeResult::Companion(0x11)
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0xEC, None, None, 5, 2),
+            ActiveObjectCompositeResult::Suppress
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0x0A, None, None, 5, 2),
+            ActiveObjectCompositeResult::Suppress
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0x57, None, None, 5, 2),
+            ActiveObjectCompositeResult::Direct(0x38)
+        );
+        assert_eq!(
+            active_object_default_composite(0x28, 0x6A, None, None, 5, 2),
+            ActiveObjectCompositeResult::Suppress
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0x6B, None, None, 5, 2),
+            ActiveObjectCompositeResult::Companion(0x40)
+        );
+        assert_eq!(
+            active_object_default_composite(0x80, 0x84, None, None, 5, 2),
+            ActiveObjectCompositeResult::Companion(0x80)
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0x84, None, None, 5, 2),
+            ActiveObjectCompositeResult::Companion(0x62)
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0x85, None, None, 5, 3),
+            ActiveObjectCompositeResult::Companion(0x67)
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0x90, Some(0x9B), None, 5, 1),
+            ActiveObjectCompositeResult::Companion(0x39)
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0x90, Some(0x10), None, 5, 1),
+            ActiveObjectCompositeResult::Companion(0x30)
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0x91, None, None, 5, 1),
+            ActiveObjectCompositeResult::Companion(0x31)
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0x92, None, Some(0x9C), 5, 3),
+            ActiveObjectCompositeResult::Companion(0x37)
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0x92, None, Some(0x10), 5, 3),
+            ActiveObjectCompositeResult::Companion(0x32)
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0x93, None, None, 5, 1),
+            ActiveObjectCompositeResult::Companion(0x33)
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0x9D, None, None, 5, 2),
+            ActiveObjectCompositeResult::Companion(0x3E)
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0xAB, None, None, 5, 2),
+            ActiveObjectCompositeResult::Companion(0x1A)
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0xC8, None, None, 5, 2),
+            ActiveObjectCompositeResult::Companion(0x17)
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0xC9, None, None, 5, 2),
+            ActiveObjectCompositeResult::Companion(0x18)
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0x10, Some(0x9D), None, 3, 2),
+            ActiveObjectCompositeResult::PreviousRowDirectAndCompanion {
+                previous_marker: 0x9E,
+                tile: 0x40,
+            }
+        );
+        assert_eq!(
+            active_object_default_composite(0x40, 0x10, Some(0x9D), None, 0, 2),
+            ActiveObjectCompositeResult::Companion(0x40)
+        );
+    }
+
+    #[test]
+    fn active_object_composite_dispatches_companion_and_guard_branches() {
+        // visibility.md §8
+        assert_eq!(
+            active_object_compositor_variant(true, 3),
+            0,
+            "Tinker active character forces the first variant"
+        );
+        assert_eq!(active_object_compositor_variant(false, 7), 3);
+
+        assert_eq!(
+            active_object_composite(0xE8, 0x44, 0x10, 0x10, None, None, 5, 0),
+            ActiveObjectCompositeResult::Companion(0x44)
+        );
+        assert_eq!(
+            active_object_composite(
+                0xE8,
+                0x44,
+                VISIBILITY_USE_COMPANION,
+                0x10,
+                None,
+                None,
+                5,
+                0
+            ),
+            ActiveObjectCompositeResult::Suppress
+        );
+        assert_eq!(
+            active_object_composite(0x80, 0x1D, 0x10, 0x10, None, None, 5, 0),
+            ActiveObjectCompositeResult::Companion(0x1D)
+        );
+        assert_eq!(
+            active_object_composite(
+                0x5C,
+                0x44,
+                VEHICLE_AVATAR_UNDERLAY_MARKER,
+                0x10,
+                None,
+                None,
+                5,
+                0
+            ),
+            ActiveObjectCompositeResult::Companion(0x44)
+        );
+        assert_eq!(
+            active_object_composite(0x5C, 0x44, 0x10, 0x57, None, None, 5, 0),
+            ActiveObjectCompositeResult::Direct(0x38)
+        );
+        assert_eq!(
+            active_object_composite(
+                0x80,
+                0x44,
+                VISIBILITY_ALREADY_RENDERED,
+                0x10,
+                None,
+                None,
+                5,
+                0
+            ),
+            ActiveObjectCompositeResult::Suppress
+        );
+        assert_eq!(
+            active_object_composite(
+                0x80,
+                0x44,
+                VISIBILITY_HIDDEN,
+                0x10,
+                None,
+                None,
+                5,
+                0
+            ),
+            ActiveObjectCompositeResult::Suppress
+        );
+    }
+
+    #[test]
     fn fog_refinement_squared_distance_matches_spec_threshold() {
         // visibility.md §7
         assert_eq!(FOG_REFINE_SQUARED_THRESHOLD, 5);

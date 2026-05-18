@@ -558,14 +558,17 @@ pub use traps::*;
 pub use u4_transfer::*;
 pub use view_classes::{fc_sprite_proximity_mask_hits, tile_view_class};
 pub use visibility::{
-    ActiveObjectCompositorBranch, FOG_REFINE_SQUARED_THRESHOLD, LOCAL_LIGHT_MASK_SIDE,
-    LightRadiusBranch, TERRAIN_BAND_ROW_STRIDE, VEHICLE_AVATAR_UNDERLAY_MARKER, VIEWPORT_CENTER,
-    VIEWPORT_MAX_INDEX, VIEWPORT_PLAYER_COL, VIEWPORT_PLAYER_ROW, VIEWPORT_ROW_STRIDE,
-    VIEWPORT_SIDE, VISIBILITY_ALREADY_RENDERED, VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR,
-    VISIBILITY_DIM_PERIPHERY, VISIBILITY_HIDDEN, VISIBILITY_USE_COMPANION, VisibilityMarker,
-    active_object_compositor_branch, fog_refine_folded_coord, fog_refine_inside_clear_core,
-    fog_refine_squared_distance, is_local_light_source_tile, light_radius_branch,
-    visibility_cheap_path_needs_refill, visibility_in_radius, visibility_marker,
+    ActiveObjectCompositeResult, ActiveObjectCompositorBranch, FOG_REFINE_SQUARED_THRESHOLD,
+    LOCAL_LIGHT_MASK_SIDE, LightRadiusBranch, TERRAIN_BAND_ROW_STRIDE,
+    VEHICLE_AVATAR_UNDERLAY_MARKER, VIEWPORT_CENTER, VIEWPORT_MAX_INDEX, VIEWPORT_PLAYER_COL,
+    VIEWPORT_PLAYER_ROW, VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE, VISIBILITY_ALREADY_RENDERED,
+    VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR, VISIBILITY_DIM_PERIPHERY, VISIBILITY_HIDDEN,
+    VISIBILITY_USE_COMPANION, VisibilityMarker, active_object_composite,
+    active_object_compositor_branch, active_object_compositor_variant,
+    active_object_default_composite, active_object_default_tile_is_terrain_aware,
+    fog_refine_folded_coord, fog_refine_inside_clear_core, fog_refine_squared_distance,
+    is_local_light_source_tile, light_radius_branch, visibility_cheap_path_needs_refill,
+    visibility_in_radius, visibility_marker,
 };
 pub use wind::{
     ACTIVE_SHIP_CADENCE_EVERY_TURN, ACTIVE_SHIP_CADENCE_INTO_WIND, ACTIVE_SHIP_CADENCE_WITH_WIND,

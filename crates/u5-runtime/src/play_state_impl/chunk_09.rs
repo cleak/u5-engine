@@ -3,6 +3,22 @@ use std::path::Path;
 
 use crate::*;
 
+#[derive(Clone, Copy, Debug)]
+struct PreparedTopDownCell {
+    terrain: u8,
+    grid: u8,
+}
+
+impl PreparedTopDownCell {
+    fn tile(self) -> u8 {
+        if self.grid == VISIBILITY_USE_COMPANION {
+            self.terrain
+        } else {
+            self.grid
+        }
+    }
+}
+
 impl PlayState {
     pub fn apply_world_damage_tile(&mut self, entry: WorldDamageTileEntry) -> String {
         let mut checked = 0;
@@ -495,36 +511,25 @@ impl PlayState {
         let Some(area) = self.top_down_render_area() else {
             return self.render_dungeon_viewport(radius, atlas.depth).map(Some);
         };
-        let px = self.player.x as isize;
-        let py = self.player.y as isize;
-        let r = isize::try_from(radius).map_err(|_| {
+        let _ = isize::try_from(radius).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidInput, "viewport radius is too large")
         })?;
-        // One visibility check per cell, not two. The terrain tile is
-        // painted first; the sprite (avatar / NPC / monster / moongate)
-        // blits opaquely over it per the visibility-spec active-object
-        // compositor.
+        let prepared = self.prepare_top_down_render_grid(area, radius);
         for cell_y in 0..cells {
             for cell_x in 0..cells {
-                let world_x = px + cell_x as isize - r;
-                let world_y = py + cell_y as isize - r;
-                let Some((terrain, sprite)) =
-                    self.top_down_render_cell(area, px, py, world_x, world_y, radius)
-                else {
+                let Some(cell) = prepared[cell_y * cells + cell_x] else {
                     continue;
                 };
-                blit_tile_to_viewport(&mut viewport, atlas, terrain, cell_x, cell_y)?;
-                if let Some(sprite) = sprite {
-                    let sprite_id: usize = if sprite == PLAYER_TILE {
-                        // PLAYER_TILE is a sentinel; 0xFC is "a bellows"
-                        // in the lower-half tile space. Resolve to the
-                        // real upper-half avatar sprite before blitting.
-                        PLAYER_SPRITE_TILE
-                    } else {
-                        sprite as usize
-                    };
-                    blit_tile_id_to_viewport(&mut viewport, atlas, sprite_id, cell_x, cell_y)?;
-                }
+                let tile = cell.tile();
+                let tile_id = if tile == PLAYER_TILE {
+                    // PLAYER_TILE is a sentinel; 0xFC is "a bellows" in the
+                    // lower-half tile space. Resolve to the real upper-half
+                    // avatar sprite before blitting.
+                    PLAYER_SPRITE_TILE
+                } else {
+                    tile as usize
+                };
+                blit_tile_id_to_viewport(&mut viewport, atlas, tile_id, cell_x, cell_y)?;
             }
         }
         Ok(Some(viewport))
@@ -758,11 +763,71 @@ impl PlayState {
         dungeon_renderer_cell_byte(self.dungeon_cell(level, x, y))
     }
 
-    /// Single-pass visibility + terrain + sprite lookup for one cell.
-    /// Returns `None` if the cell is occluded or off-map. The Option in
-    /// the second tuple slot is the sprite to composite on top of the
-    /// terrain (player avatar, active object, or moongate frame).
-    pub fn top_down_render_cell(
+    fn prepare_top_down_render_grid(
+        &self,
+        area: TopDownRenderArea,
+        radius: usize,
+    ) -> Vec<Option<PreparedTopDownCell>> {
+        let cells = radius.saturating_mul(2).saturating_add(1);
+        let px = self.player.x as isize;
+        let py = self.player.y as isize;
+        let r = radius as isize;
+        let mut prepared = vec![None; cells.saturating_mul(cells)];
+
+        for cell_y in 0..cells {
+            for cell_x in 0..cells {
+                let world_x = px + cell_x as isize - r;
+                let world_y = py + cell_y as isize - r;
+                let Some((terrain, _)) =
+                    self.top_down_render_cell_base(area, px, py, world_x, world_y, radius)
+                else {
+                    continue;
+                };
+                prepared[cell_y * cells + cell_x] = Some(PreparedTopDownCell {
+                    terrain,
+                    grid: terrain,
+                });
+            }
+        }
+
+        if let TopDownRenderArea::World(plane) = area {
+            for cell_y in 0..cells {
+                for cell_x in 0..cells {
+                    let world_x = px + cell_x as isize - r;
+                    let world_y = py + cell_y as isize - r;
+                    let wx = world_x.rem_euclid(WORLD_SIDE as isize) as usize;
+                    let wy = world_y.rem_euclid(WORLD_SIDE as isize) as usize;
+                    if let Some(cell) = prepared[cell_y * cells + cell_x].as_mut() {
+                        if self.visible_moongate_at(plane, wx, wy) {
+                            cell.grid = self.animation.resolve_moongate_tile();
+                        }
+                    }
+                }
+            }
+        }
+
+        for slot in (1..self.active_objects.len()).rev() {
+            let object = self.active_objects[slot];
+            self.composite_top_down_object(area, radius, object, &mut prepared);
+        }
+        if let Some(z) = self.current_floor() {
+            let player = ActiveObject {
+                type_byte: PLAYER_TILE,
+                tile: PLAYER_TILE,
+                x: self.player.x,
+                y: self.player.y,
+                z,
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            };
+            self.composite_top_down_object(area, radius, player, &mut prepared);
+        }
+
+        prepared
+    }
+
+    fn top_down_render_cell_base(
         &self,
         area: TopDownRenderArea,
         px: isize,
@@ -783,15 +848,9 @@ impl PlayState {
                 let xu = x as usize;
                 let yu = y as usize;
                 let terrain = self.animation.resolve_static_tile(self.grid[yu * 32 + xu]);
-                let sprite = if x == px && y == py {
-                    Some(PLAYER_TILE)
-                } else {
-                    self.object_at_current_floor(xu, yu)
-                        .map(|object| object.tile)
-                };
-                Some((terrain, sprite))
+                Some((terrain, None))
             }
-            TopDownRenderArea::World(plane) => {
+            TopDownRenderArea::World(_) => {
                 let visible_radius = self.world_visibility_radius(radius);
                 if !self.world_cell_visible(px, py, x, y, visible_radius) {
                     return None;
@@ -801,18 +860,150 @@ impl PlayState {
                 let terrain = self
                     .animation
                     .resolve_static_tile(self.grid[world_cell_index(wx, wy)]);
-                let sprite = if x == px && y == py {
-                    Some(PLAYER_TILE)
-                } else if let Some(object) = self.world_object_at(wx, wy) {
-                    Some(object.tile)
-                } else if self.visible_moongate_at(plane, wx, wy) {
-                    Some(self.animation.resolve_moongate_tile())
-                } else {
-                    None
-                };
-                Some((terrain, sprite))
+                Some((terrain, None))
             }
         }
+    }
+
+    fn composite_top_down_object(
+        &self,
+        area: TopDownRenderArea,
+        radius: usize,
+        object: ActiveObject,
+        prepared: &mut [Option<PreparedTopDownCell>],
+    ) {
+        if object.is_empty() || object.is_player_phantom() {
+            return;
+        }
+        let Some((cell_x, cell_y)) = self.top_down_object_viewport_cell(area, radius, object)
+        else {
+            return;
+        };
+        let cells = radius.saturating_mul(2).saturating_add(1);
+        let index = cell_y * cells + cell_x;
+        let Some(cell) = prepared.get(index).and_then(|cell| *cell) else {
+            return;
+        };
+        let previous_row_terrain = (cell_y > 0)
+            .then(|| prepared[index - cells])
+            .flatten()
+            .map(|cell| cell.terrain);
+        let next_row_terrain = (cell_y + 1 < cells)
+            .then(|| prepared[index + cells])
+            .flatten()
+            .map(|cell| cell.terrain);
+        let variant = self.active_object_render_variant(cell_x, cell_y, object);
+        match active_object_composite(
+            object.type_byte,
+            object.tile,
+            cell.grid,
+            cell.terrain,
+            previous_row_terrain,
+            next_row_terrain,
+            cell_y,
+            variant,
+        ) {
+            ActiveObjectCompositeResult::Suppress => {}
+            ActiveObjectCompositeResult::Companion(tile) => {
+                prepared[index] = Some(PreparedTopDownCell {
+                    terrain: tile,
+                    grid: VISIBILITY_USE_COMPANION,
+                });
+            }
+            ActiveObjectCompositeResult::Direct(tile) => {
+                prepared[index] = Some(PreparedTopDownCell {
+                    terrain: cell.terrain,
+                    grid: tile,
+                });
+            }
+            ActiveObjectCompositeResult::PreviousRowDirectAndCompanion {
+                previous_marker,
+                tile,
+            } => {
+                if cell_y > 0 {
+                    if let Some(previous) = prepared[index - cells].as_mut() {
+                        previous.grid = previous_marker;
+                    }
+                }
+                prepared[index] = Some(PreparedTopDownCell {
+                    terrain: tile,
+                    grid: VISIBILITY_USE_COMPANION,
+                });
+            }
+        }
+    }
+
+    fn top_down_object_viewport_cell(
+        &self,
+        area: TopDownRenderArea,
+        radius: usize,
+        object: ActiveObject,
+    ) -> Option<(usize, usize)> {
+        if object.z != self.current_floor()? {
+            return None;
+        }
+        let r = radius as isize;
+        let (dx, dy) = match area {
+            TopDownRenderArea::Town => (
+                object.x as isize - self.player.x as isize,
+                object.y as isize - self.player.y as isize,
+            ),
+            TopDownRenderArea::World(_) => (
+                wrapped_world_axis_delta(self.player.x, object.x) as isize,
+                wrapped_world_axis_delta(self.player.y, object.y) as isize,
+            ),
+        };
+        if !(-r..=r).contains(&dx) || !(-r..=r).contains(&dy) {
+            return None;
+        }
+        Some(((dx + r) as usize, (dy + r) as usize))
+    }
+
+    fn active_object_render_variant(
+        &self,
+        cell_x: usize,
+        cell_y: usize,
+        object: ActiveObject,
+    ) -> u8 {
+        let active_character_is_tinker = self
+            .active_player
+            .and_then(|index| self.party.get(index))
+            .is_some_and(|member| member.class_byte == b'T');
+        let selector = (self.turn as u8)
+            ^ self.animation.frame
+            ^ (cell_x as u8).wrapping_mul(3)
+            ^ (cell_y as u8).wrapping_mul(5)
+            ^ object.type_byte
+            ^ object.tile;
+        active_object_compositor_variant(active_character_is_tinker, selector)
+    }
+
+    /// Visibility + composited terrain/sprite lookup for one cell.
+    /// Returns `None` if the cell is occluded or off-map. The Option in
+    /// the second tuple slot is the sprite to composite on top of the
+    /// terrain (player avatar, active object, or moongate frame).
+    pub fn top_down_render_cell(
+        &self,
+        area: TopDownRenderArea,
+        px: isize,
+        py: isize,
+        x: isize,
+        y: isize,
+        radius: usize,
+    ) -> Option<(u8, Option<u8>)> {
+        let (terrain, _) = self.top_down_render_cell_base(area, px, py, x, y, radius)?;
+        let r = radius as isize;
+        let cell_x = usize::try_from(x - px + r).ok()?;
+        let cell_y = usize::try_from(y - py + r).ok()?;
+        let cells = radius.saturating_mul(2).saturating_add(1);
+        if cell_x >= cells || cell_y >= cells {
+            return Some((terrain, None));
+        }
+        let prepared = self.prepare_top_down_render_grid(area, radius);
+        let cell = prepared[cell_y * cells + cell_x]?;
+        let tile = cell.tile();
+        let sprite = (tile != terrain).then_some(tile);
+        Some((terrain, sprite))
     }
 
     pub fn top_down_render_area(&self) -> Option<TopDownRenderArea> {
@@ -875,28 +1066,19 @@ impl PlayState {
                     self.turn,
                     self.animation.frame
                 ));
-                let px = self.player.x as isize;
-                let py = self.player.y as isize;
-                let r = radius as isize;
-                let visible_radius = self.surface_visibility_radius(radius);
-                for y in py - r..=py + r {
-                    for x in px - r..=px + r {
-                        if x == px && y == py {
+                let cells = radius.saturating_mul(2).saturating_add(1);
+                let prepared = self.prepare_top_down_render_grid(TopDownRenderArea::Town, radius);
+                for y in 0..cells {
+                    for x in 0..cells {
+                        let Some(cell) = prepared[y * cells + x] else {
+                            out.push(' ');
+                            continue;
+                        };
+                        let tile = cell.tile();
+                        if tile == PLAYER_TILE {
                             out.push('@');
-                        } else if !self.town_cell_visible(px, py, x, y, visible_radius) {
-                            out.push(' ');
-                        } else if (0..32).contains(&x) && (0..32).contains(&y) {
-                            if let Some(object) =
-                                self.object_at_current_floor(x as usize, y as usize)
-                            {
-                                out.push(render_glyph(object.tile));
-                            } else {
-                                let tile = self.grid[y as usize * 32 + x as usize];
-                                let tile = self.animation.resolve_static_tile(tile);
-                                out.push(render_glyph(tile));
-                            }
                         } else {
-                            out.push(' ');
+                            out.push(render_glyph(tile));
                         }
                     }
                     out.push('\n');
@@ -932,25 +1114,19 @@ impl PlayState {
                     self.animation.frame,
                     self.wind.name()
                 ));
-                let px = self.player.x as isize;
-                let py = self.player.y as isize;
-                let r = radius as isize;
-                let visible_radius = self.world_visibility_radius(radius);
-                for y in py - r..=py + r {
-                    for x in px - r..=px + r {
-                        let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
-                        let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
-                        if wx == self.player.x && wy == self.player.y {
-                            out.push('@');
-                        } else if !self.world_cell_visible(px, py, x, y, visible_radius) {
+                let cells = radius.saturating_mul(2).saturating_add(1);
+                let prepared =
+                    self.prepare_top_down_render_grid(TopDownRenderArea::World(plane), radius);
+                for y in 0..cells {
+                    for x in 0..cells {
+                        let Some(cell) = prepared[y * cells + x] else {
                             out.push(' ');
-                        } else if let Some(object) = self.world_object_at(wx, wy) {
-                            out.push(render_glyph(object.tile));
-                        } else if self.visible_moongate_at(plane, wx, wy) {
-                            out.push(render_glyph(self.animation.resolve_moongate_tile()));
+                            continue;
+                        };
+                        let tile = cell.tile();
+                        if tile == PLAYER_TILE {
+                            out.push('@');
                         } else {
-                            let tile = self.grid[world_cell_index(wx, wy)];
-                            let tile = self.animation.resolve_static_tile(tile);
                             out.push(render_glyph(tile));
                         }
                     }
