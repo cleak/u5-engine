@@ -18109,7 +18109,7 @@
             ('C', "Cast what?"),
             ('M', "Mix what?"),
             ('N', "New order?"),
-            ('R', "Ready what?"),
+            ('R', "Ready:"),
             ('U', "Use what?"),
             ('Y', "Yell what?"),
             ('Z', "Z-stats:"),

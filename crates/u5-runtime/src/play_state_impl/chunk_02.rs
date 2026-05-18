@@ -179,7 +179,7 @@ impl PlayState {
                 handled!();
             }
             'r' => {
-                handled!(self.ready_equipment_from_suffix(""));
+                handled!(self.start_ready_equipment());
             }
             'u' => {
                 handled!(self.use_item_command(inline_use_request, Some(game_dir))?);
@@ -291,7 +291,7 @@ impl PlayState {
                     handled!(self.save_game_command(game_dir, inline_yes_no)?);
                 }
                 'R' => {
-                    handled!(self.ready_equipment_from_suffix(""));
+                    handled!(self.start_ready_equipment());
                 }
                 'S' => {
                     handled!(self.search_facing_with_game_dir(game_dir)?);
@@ -348,7 +348,7 @@ impl PlayState {
                 }
             }
             'z' => self.z_stats(),
-            'r' => self.ready_equipment_from_suffix(""),
+            'r' => self.start_ready_equipment(),
             'y' => self.yell_command(None),
             '<' => self.climb(game_dir, ClimbIntent::Up)?,
             '>' => self.climb(game_dir, ClimbIntent::Down)?,

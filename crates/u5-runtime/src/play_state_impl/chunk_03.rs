@@ -101,6 +101,243 @@ impl PlayState {
         true
     }
 
+    pub fn start_ready_equipment(&mut self) -> MoveOutcome {
+        if self.party.is_empty() {
+            self.message = "No party members are available.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        self.active_ready = Some(ReadySession::new());
+        self.message = self.render_active_ready();
+        MoveOutcome::Observed
+    }
+
+    pub fn render_active_ready(&self) -> String {
+        self.active_ready
+            .as_ref()
+            .map(|session| self.render_ready_session(session))
+            .unwrap_or_else(ready_prompt_message)
+    }
+
+    pub fn render_ready_session(&self, session: &ReadySession) -> String {
+        let Some(party_index) = session.selected_party_index else {
+            return format!(
+                "Ready: choose party member (1-{}) or Space/Esc to exit.",
+                self.party.len().min(6)
+            );
+        };
+        if party_index >= self.party.len() {
+            return format!(
+                "Ready: party has {} member{}. Choose 1-{} or Space/Esc to exit.",
+                self.party.len(),
+                if self.party.len() == 1 { "" } else { "s" },
+                self.party.len().min(6)
+            );
+        }
+
+        let mut lines = vec![format!(
+            "Ready: party member {}. Enter equips/unequips; </> move; [] page; 1-6 party; Space/Esc exits.",
+            party_index + 1
+        )];
+        let visible = self.ready_visible_items_for_party(party_index);
+        if visible.is_empty() {
+            lines.push("Nothing to ready.".to_string());
+            return lines.join("\n");
+        }
+
+        let cursor = visible
+            .iter()
+            .copied()
+            .find(|item| *item >= session.cursor)
+            .or_else(|| visible.first().copied())
+            .unwrap_or(0);
+        let cursor_pos = visible.iter().position(|item| *item == cursor).unwrap_or(0);
+        let panel_start = (cursor_pos / READY_PICKER_PANEL_ROWS) * READY_PICKER_PANEL_ROWS;
+        for item_id in visible
+            .iter()
+            .copied()
+            .skip(panel_start)
+            .take(READY_PICKER_PANEL_ROWS)
+        {
+            let marker = if item_id == cursor { ">" } else { " " };
+            let stock = self.equipment_stock[item_id];
+            let readied = self
+                .party_equipment
+                .get(party_index)
+                .is_some_and(|equipment| character_has_readied(equipment, item_id as u8));
+            let state = match (stock, readied) {
+                (0, true) => "readied".to_string(),
+                (count, true) => format!("stock {count}, readied"),
+                (count, false) => format!("stock {count}"),
+            };
+            lines.push(format!(
+                "{marker} {item_id:02}: {} ({state})",
+                equipment_name(item_id)
+            ));
+        }
+        if visible.len() > panel_start + READY_PICKER_PANEL_ROWS {
+            lines.push(format!(
+                "... {} more",
+                visible.len() - panel_start - READY_PICKER_PANEL_ROWS
+            ));
+        }
+        lines.join("\n")
+    }
+
+    pub fn step_active_ready(&mut self, key: char, suffix: &str) -> bool {
+        let Some(mut session) = self.active_ready.take() else {
+            return false;
+        };
+        let key = ready_first_input_key(key, suffix);
+        let action = ready_input_action(key);
+        if matches!(action, ReadyInputAction::Exit) {
+            self.message = "Ready closed.".to_string();
+            return true;
+        }
+
+        if session.selected_party_index.is_none() {
+            match action {
+                ReadyInputAction::SelectParty(index) => {
+                    if self.ready_select_party_for_session(&mut session, index) {
+                        self.message = self.render_ready_session(&session);
+                    }
+                    self.active_ready = Some(session);
+                }
+                ReadyInputAction::Redraw | ReadyInputAction::Discard => {
+                    self.message = self.render_ready_session(&session);
+                    self.active_ready = Some(session);
+                }
+                ReadyInputAction::Confirm
+                | ReadyInputAction::NextItem
+                | ReadyInputAction::PreviousItem
+                | ReadyInputAction::PageNext
+                | ReadyInputAction::PagePrevious
+                | ReadyInputAction::Exit => {
+                    self.message = self.render_ready_session(&session);
+                    self.active_ready = Some(session);
+                }
+            }
+            return true;
+        }
+
+        match action {
+            ReadyInputAction::SelectParty(index) => {
+                if self.ready_select_party_for_session(&mut session, index) {
+                    self.message = self.render_ready_session(&session);
+                }
+                self.active_ready = Some(session);
+            }
+            ReadyInputAction::NextItem => {
+                self.move_ready_cursor(&mut session, 1);
+                self.message = self.render_ready_session(&session);
+                self.active_ready = Some(session);
+            }
+            ReadyInputAction::PreviousItem => {
+                self.move_ready_cursor(&mut session, -1);
+                self.message = self.render_ready_session(&session);
+                self.active_ready = Some(session);
+            }
+            ReadyInputAction::PageNext => {
+                self.move_ready_cursor(&mut session, READY_PICKER_PANEL_ROWS as isize);
+                self.message = self.render_ready_session(&session);
+                self.active_ready = Some(session);
+            }
+            ReadyInputAction::PagePrevious => {
+                self.move_ready_cursor(&mut session, -(READY_PICKER_PANEL_ROWS as isize));
+                self.message = self.render_ready_session(&session);
+                self.active_ready = Some(session);
+            }
+            ReadyInputAction::Confirm => {
+                let Some(party_index) = session.selected_party_index else {
+                    self.message = self.render_ready_session(&session);
+                    self.active_ready = Some(session);
+                    return true;
+                };
+                let Some(item_id) = self.ready_selected_item(&session) else {
+                    self.message = "Nothing to ready.".to_string();
+                    self.active_ready = Some(session);
+                    return true;
+                };
+                let _ = self.ready_equipment(InlineReadyRequest {
+                    party_index,
+                    item_id,
+                });
+                let outcome_message = self.message.clone();
+                self.normalize_ready_cursor(&mut session);
+                self.message =
+                    format!("{outcome_message}\n{}", self.render_ready_session(&session));
+                self.active_ready = Some(session);
+            }
+            ReadyInputAction::Redraw | ReadyInputAction::Discard => {
+                self.message = self.render_ready_session(&session);
+                self.active_ready = Some(session);
+            }
+            ReadyInputAction::Exit => unreachable!(),
+        }
+        true
+    }
+
+    fn ready_select_party_for_session(&mut self, session: &mut ReadySession, index: usize) -> bool {
+        if index >= self.party.len() {
+            self.message = party_member_unavailable_message(self.party.len());
+            return false;
+        }
+        if !self.party[index].living() {
+            self.message = format!("Party member {} is unavailable.", index + 1);
+            return false;
+        }
+        session.select_party_index(index);
+        self.normalize_ready_cursor(session);
+        true
+    }
+
+    fn ready_visible_items_for_party(&self, party_index: usize) -> Vec<usize> {
+        let equipment = self.party_equipment.get(party_index);
+        (0..EQUIPMENT_COUNT)
+            .filter(|item_id| {
+                self.equipment_stock[*item_id] > 0
+                    || equipment.is_some_and(|block| character_has_readied(block, *item_id as u8))
+            })
+            .collect()
+    }
+
+    fn ready_selected_item(&self, session: &ReadySession) -> Option<usize> {
+        let party_index = session.selected_party_index?;
+        self.ready_visible_items_for_party(party_index)
+            .into_iter()
+            .find(|item| *item >= session.cursor)
+            .or_else(|| {
+                self.ready_visible_items_for_party(party_index)
+                    .into_iter()
+                    .next()
+            })
+    }
+
+    fn normalize_ready_cursor(&self, session: &mut ReadySession) {
+        let Some(item_id) = self.ready_selected_item(session) else {
+            session.cursor = 0;
+            return;
+        };
+        session.cursor = item_id;
+    }
+
+    fn move_ready_cursor(&self, session: &mut ReadySession, delta: isize) {
+        let Some(party_index) = session.selected_party_index else {
+            return;
+        };
+        let visible = self.ready_visible_items_for_party(party_index);
+        if visible.is_empty() {
+            session.cursor = 0;
+            return;
+        }
+        let current = visible
+            .iter()
+            .position(|item| *item == session.cursor)
+            .unwrap_or(0);
+        let len = visible.len() as isize;
+        let next = (current as isize + delta).rem_euclid(len) as usize;
+        session.cursor = visible[next];
+    }
+
     fn z_stats_navigation_hint(&self) -> String {
         "Use </> for pages, 1-6 for party, Space/Esc to exit.".to_string()
     }

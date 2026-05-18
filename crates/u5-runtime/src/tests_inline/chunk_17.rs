@@ -687,6 +687,63 @@
     }
 
     #[test]
+    fn active_ready_picker_equips_and_unequips_without_turn() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_strengths = vec![50];
+        state.party_equipment = default_party_equipment(1);
+        state.equipment_stock[EQUIPMENT_ID_BOW] = 1;
+        state.equipment_stock[EQUIPMENT_ID_ARROWS] = 5;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_ready.is_some());
+        assert!(state.message.contains("choose party member"));
+
+        handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
+        assert!(state.message.contains("26: Bow"));
+
+        handle_play_key_input(&mut state, '\n', "", Path::new("")).unwrap();
+        assert_eq!(
+            state.party_equipment[0][EQUIP_SLOT_WEAPON],
+            EQUIPMENT_ID_BOW as u8
+        );
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 0);
+        assert_eq!(state.turn, 0);
+        assert!(state.active_ready.is_some());
+        assert!(state.message.contains("Readied Bow"));
+        assert!(state.message.contains("Bow (readied)"));
+
+        handle_play_key_input(&mut state, '\n', "", Path::new("")).unwrap();
+        assert_eq!(state.party_equipment[0][EQUIP_SLOT_WEAPON], EQUIPMENT_EMPTY);
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
+        assert_eq!(state.turn, 0);
+        assert!(state.message.contains("Unequipped Bow"));
+
+        handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+        assert!(state.active_ready.is_none());
+        assert_eq!(state.message, "Ready closed.");
+    }
+
+    #[test]
+    fn active_ready_picker_rejects_invalid_party_without_closing() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_strengths = vec![50];
+        state.party_equipment = default_party_equipment(1);
+        state.equipment_stock[16] = 1;
+
+        handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+
+        assert!(state.active_ready.is_some());
+        assert!(state.message.contains("Party has 1 member"));
+
+        handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
+        assert!(state.message.contains("16: Dagger"));
+    }
+
+    #[test]
     fn ready_equipment_unequipping_invisibility_ring_clears_combat_hidden_flag() {
         let mut state = test_state(open_grid(), 1, 1);
         state.combat_active = true;

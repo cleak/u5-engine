@@ -3,6 +3,7 @@
 use crate::*;
 
 pub const Z_STATS_INVENTORY_PANEL_ROWS: usize = 8;
+pub const READY_PICKER_PANEL_ROWS: usize = 8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ZStatsPage {
@@ -60,6 +61,33 @@ pub struct ZStatsSession {
     pub inventory_cursor: usize,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReadySession {
+    pub selected_party_index: Option<usize>,
+    pub cursor: usize,
+}
+
+impl ReadySession {
+    pub const fn new() -> Self {
+        Self {
+            selected_party_index: None,
+            cursor: 0,
+        }
+    }
+
+    pub const fn with_party(selected_party_index: usize) -> Self {
+        Self {
+            selected_party_index: Some(selected_party_index),
+            cursor: 0,
+        }
+    }
+
+    pub fn select_party_index(&mut self, party_index: usize) {
+        self.selected_party_index = Some(party_index);
+        self.cursor = 0;
+    }
+}
+
 impl ZStatsSession {
     pub const fn new(selected_party_index: usize) -> Self {
         Self {
@@ -92,6 +120,40 @@ pub enum ZStatsInputAction {
     SelectParty(usize),
     Redraw,
     Discard,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReadyInputAction {
+    Exit,
+    Confirm,
+    NextItem,
+    PreviousItem,
+    PageNext,
+    PagePrevious,
+    SelectParty(usize),
+    Redraw,
+    Discard,
+}
+
+pub fn ready_input_action(key: char) -> ReadyInputAction {
+    match key {
+        ' ' | '\u{1b}' => ReadyInputAction::Exit,
+        '\r' | '\n' => ReadyInputAction::Confirm,
+        '>' | '+' => ReadyInputAction::NextItem,
+        '<' | '-' => ReadyInputAction::PreviousItem,
+        ']' | '}' => ReadyInputAction::PageNext,
+        '[' | '{' => ReadyInputAction::PagePrevious,
+        '1'..='6' => ReadyInputAction::SelectParty((key as u8 - b'1') as usize),
+        'R' | 'r' => ReadyInputAction::Redraw,
+        _ => ReadyInputAction::Discard,
+    }
+}
+
+pub fn ready_first_input_key(key: char, suffix: &str) -> char {
+    suffix
+        .chars()
+        .find(|ch| !ch.is_ascii_whitespace())
+        .unwrap_or(key)
 }
 
 pub fn z_stats_input_action(key: char) -> ZStatsInputAction {

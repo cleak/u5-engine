@@ -25,6 +25,9 @@ pub fn handle_play_key_input(
     if state.active_blackthorn.is_some() {
         return handle_active_blackthorn_key_input(state, key, suffix, game_dir);
     }
+    if state.active_ready.is_some() {
+        return Ok(handle_active_ready_key_input(state, key, suffix));
+    }
     if state.active_z_stats.is_some() {
         return Ok(handle_active_z_stats_key_input(state, key, suffix));
     }
@@ -168,6 +171,15 @@ fn handle_active_z_stats_key_input(
     suffix: &str,
 ) -> PlayInputDisposition {
     state.step_active_z_stats(key, suffix);
+    PlayInputDisposition::Continue
+}
+
+fn handle_active_ready_key_input(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+) -> PlayInputDisposition {
+    state.step_active_ready(key, suffix);
     PlayInputDisposition::Continue
 }
 
