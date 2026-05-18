@@ -28,6 +28,9 @@ pub fn handle_play_key_input(
     if state.active_conversation.is_some() {
         return Ok(handle_active_conversation_key_input(state, key, suffix));
     }
+    if state.resolve_town_arrest_prompt(key, game_dir)?.is_some() {
+        return Ok(PlayInputDisposition::Continue);
+    }
     if state.resolve_moongate_prompt(key, game_dir)?.is_some() {
         return Ok(PlayInputDisposition::Continue);
     }

@@ -217,6 +217,28 @@ pub const TOWN_ARREST_JAIL_FLOOR: u8 = 0;
 pub const TOWN_ARREST_JAIL_X: u8 = 25;
 pub const TOWN_ARREST_JAIL_Y: u8 = 4;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TownArrestPrompt {
+    pub scene_byte: u8,
+    pub floor: i8,
+    pub npc_slot: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TownNpcAlarmState {
+    Fortified,
+    Fleeing,
+    Pacified,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TownNpcAlarmMarker {
+    pub scene_byte: u8,
+    pub floor: i8,
+    pub npc_slot: usize,
+    pub state: TownNpcAlarmState,
+}
+
 /// `town-mode.md §5`: returns `true` when town entry hit the
 /// jail-wakeup branch — local floor 0 cell with `Y == TOWN_ARREST_JAIL_Y`
 /// in the Yew scene. The phantom-attach helper skips the queue

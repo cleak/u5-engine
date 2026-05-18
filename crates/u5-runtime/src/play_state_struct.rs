@@ -82,11 +82,13 @@ pub struct PlayState {
     pub save_template_source: SaveTemplateSource,
     pub typeahead_buffer_enabled: bool,
     pub pending_moongate: Option<MoongateEntry>,
+    pub pending_town_arrest: Option<TownArrestPrompt>,
     pub endgame: Option<EndgameState>,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,
     pub active_conversation: Option<Box<crate::conversation_session::ConversationSession>>,
     pub pickpocketed_npcs: Vec<(u8, i8, usize)>,
     pub removed_town_npcs: Vec<(u8, i8, usize)>,
+    pub town_npc_alarm_states: Vec<TownNpcAlarmMarker>,
     pub talk_branch_flags: HashMap<u8, u32>,
     pub inn_registry: Vec<InnGuestRecord>,
 }

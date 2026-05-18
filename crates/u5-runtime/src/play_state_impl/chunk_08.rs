@@ -754,6 +754,7 @@ impl PlayState {
         self.clear_open_town_door_state();
         self.return_world = None;
         self.pending_moongate = None;
+        self.pending_town_arrest = None;
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         self.message = format!(
@@ -835,6 +836,7 @@ impl PlayState {
         entry: MoongateEntry,
     ) -> io::Result<MoveOutcome> {
         self.pending_moongate = None;
+        self.pending_town_arrest = None;
         if entry.is_single_ended() {
             self.message = "Entered moongate, but it has no destination.".to_string();
             return Ok(MoveOutcome::Observed);
@@ -855,6 +857,7 @@ impl PlayState {
             self.clear_open_town_door_state();
             self.return_world = None;
             self.pending_moongate = None;
+            self.pending_town_arrest = None;
         }
         self.player.x = entry.destination_x;
         self.player.y = entry.destination_y;
@@ -1162,6 +1165,7 @@ impl PlayState {
         self.cache_current_world_overlay();
         self.clear_open_town_door_state();
         self.pending_moongate = None;
+        self.pending_town_arrest = None;
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         true
@@ -1202,6 +1206,7 @@ impl PlayState {
         self.replace_world_active_objects(game_dir, entry.plane, entry.x, entry.y)?;
         self.clear_open_town_door_state();
         self.pending_moongate = None;
+        self.pending_town_arrest = None;
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         Ok(true)

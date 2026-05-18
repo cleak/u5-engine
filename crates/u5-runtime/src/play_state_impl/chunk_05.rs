@@ -767,6 +767,7 @@ impl PlayState {
         game_dir: Option<&Path>,
     ) -> io::Result<MoveOutcome> {
         self.pending_moongate = None;
+        self.pending_town_arrest = None;
         if let Some(outcome) = self.resolve_balloon_wind_step(&mut direction, &mut nx, &mut ny) {
             return Ok(outcome);
         }

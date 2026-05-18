@@ -930,6 +930,7 @@ impl PlayState {
         next.force_foot_transport();
         next.sync_player_object();
         next.pending_moongate = None;
+        next.pending_town_arrest = None;
         next.message = format!(
             "Gate Travel phase {phase} -> {} at ({}, {}).",
             target.key(),

@@ -619,6 +619,123 @@
     }
 
     #[test]
+    fn hostile_town_npc_chases_player_from_active_waypoint() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x50,
+                dialog_id: 0,
+                schedule: [4, 4, 4, 9, 9, 9, 5, 5, 5, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        state.advance_turn();
+
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (8, 5));
+        assert!(state.visibility_dirty);
+    }
+
+    #[test]
+    fn adjacent_hostile_town_npc_raises_alarm_without_combat() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 5, 5);
+        let scene = match state.area {
+            Area::Town { scene, .. } => scene,
+            _ => unreachable!(),
+        };
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 0x50,
+                dialog_id: 0,
+                schedule: [4, 4, 4, 6, 6, 6, 5, 5, 5, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+            MoveOutcome::Used
+        );
+
+        assert!(!state.combat_active);
+        assert!(state.message.contains("Hostile NPC slot 1"));
+        assert_eq!(
+            state.town_npc_alarm_state(scene, 0, 1),
+            Some(TownNpcAlarmState::Fortified)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn adjacent_guard_town_npc_prompts_and_refusal_raises_alarm() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 5, 5);
+        let scene = match state.area {
+            Area::Town { scene, .. } => scene,
+            _ => unreachable!(),
+        };
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 2,
+                type_byte: 0x70,
+                dialog_id: 0,
+                schedule: [6, 6, 6, 6, 6, 6, 5, 5, 5, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+            MoveOutcome::Used
+        );
+        assert_eq!(
+            state.pending_town_arrest,
+            Some(TownArrestPrompt {
+                scene_byte: scene.byte,
+                floor: 0,
+                npc_slot: 2
+            })
+        );
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'n', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.pending_town_arrest.is_none());
+        assert!(state.message.contains("Refused surrender"));
+        assert_eq!(
+            state.town_npc_alarm_state(scene, 0, 2),
+            Some(TownNpcAlarmState::Fortified)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn scheduled_npc_pathfinds_around_blocked_direct_step() {
         let mut grid = open_grid();
         grid[1 * 32 + 1] = 24;

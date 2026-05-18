@@ -343,6 +343,7 @@ impl PlayState {
         self.clear_open_town_door_state();
         self.return_world = None;
         self.pending_moongate = None;
+        self.pending_town_arrest = None;
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
         self.message = match (entry.from_plane, entry.to_plane) {

@@ -499,8 +499,78 @@ impl PlayState {
         }
     }
 
+    pub fn town_npc_alarm_state(
+        &self,
+        scene: Scene,
+        floor: i8,
+        npc_slot: usize,
+    ) -> Option<TownNpcAlarmState> {
+        self.town_npc_alarm_states
+            .iter()
+            .find(|marker| {
+                marker.scene_byte == scene.byte
+                    && marker.floor == floor
+                    && marker.npc_slot == npc_slot
+            })
+            .map(|marker| marker.state)
+    }
+
+    pub fn set_town_npc_alarm_state(
+        &mut self,
+        scene: Scene,
+        floor: i8,
+        npc_slot: usize,
+        state: TownNpcAlarmState,
+    ) {
+        if let Some(marker) = self.town_npc_alarm_states.iter_mut().find(|marker| {
+            marker.scene_byte == scene.byte
+                && marker.floor == floor
+                && marker.npc_slot == npc_slot
+        }) {
+            marker.state = state;
+            return;
+        }
+        self.town_npc_alarm_states.push(TownNpcAlarmMarker {
+            scene_byte: scene.byte,
+            floor,
+            npc_slot,
+            state,
+        });
+    }
+
+    pub fn town_alarm_sweep(
+        &mut self,
+        scene: Scene,
+        floor: i8,
+        trigger_slot: Option<usize>,
+    ) -> (usize, usize) {
+        let mut fortified = 0;
+        let mut fleeing = 0;
+        let npc_slots: Vec<(usize, u8, bool)> = self
+            .npcs
+            .iter()
+            .filter(|npc| npc.z as i8 == floor)
+            .map(|npc| (npc.slot, npc.type_byte, npc.is_player_phantom()))
+            .collect();
+        for (slot, type_byte, player_phantom) in npc_slots {
+            let state = if player_phantom
+                || trigger_slot == Some(slot)
+                || town_npc_type_fortifies_on_alarm(type_byte)
+                || !town_alarm_rolls_flee(scene.byte, floor, slot, type_byte, self.turn)
+            {
+                fortified += 1;
+                TownNpcAlarmState::Fortified
+            } else {
+                fleeing += 1;
+                TownNpcAlarmState::Fleeing
+            };
+            self.set_town_npc_alarm_state(scene, floor, slot, state);
+        }
+        (fortified, fleeing)
+    }
+
     pub fn advance_npc_schedules(&mut self) {
-        let Area::Town { floor, .. } = self.area else {
+        let Area::Town { scene, floor } = self.area else {
             return;
         };
         let floor = floor as u8;
@@ -513,6 +583,61 @@ impl PlayState {
             }
             let wp = waypoint_for_hour(&self.npcs[index].schedule, self.clock.hour);
             let (tx, ty, tz) = self.npcs[index].waypoint_position(wp);
+            let alarm_state =
+                self.town_npc_alarm_state(scene, floor as i8, self.npcs[index].slot);
+            if alarm_state == Some(TownNpcAlarmState::Pacified) {
+                continue;
+            }
+            if alarm_state == Some(TownNpcAlarmState::Fleeing) && self.npcs[index].z == floor {
+                if let Some((nx, ny)) = self.town_npc_flee_step(index, floor) {
+                    self.npcs[index].x = nx;
+                    self.npcs[index].y = ny;
+                    moved = true;
+                    self.sync_npc_active_object(index, floor);
+                }
+                continue;
+            }
+            let raw_ai = self.npcs[index].schedule[NPC_SCHEDULE_AI_OFFSET + wp];
+            let behavior = if alarm_state == Some(TownNpcAlarmState::Fortified) {
+                if town_npc_type_guard_like(self.npcs[index].type_byte) {
+                    Some(NpcAiBehavior::GuardOrBlock)
+                } else {
+                    Some(NpcAiBehavior::ApproachAndAttack)
+                }
+            } else {
+                npc_ai_behavior(raw_ai)
+            };
+            if self.npcs[index].z == floor {
+                if let Some(behavior) = behavior {
+                    if behavior.raises_attack_event()
+                        || behavior.raises_guard_event()
+                        || matches!(behavior, NpcAiBehavior::FollowAtDistance)
+                    {
+                        if !self.town_npc_adjacent_to_player(index)
+                            && self.town_npc_player_distance(index) <= TOWN_NPC_CHASE_RADIUS
+                        {
+                            if let Some((nx, ny)) = self.town_npc_chase_step(index, floor) {
+                                self.npcs[index].x = nx;
+                                self.npcs[index].y = ny;
+                                moved = true;
+                                self.sync_npc_active_object(index, floor);
+                                continue;
+                            }
+                        }
+                    } else if behavior.is_wander() {
+                        let bounded = matches!(behavior, NpcAiBehavior::BoundedWander);
+                        if let Some((nx, ny)) =
+                            self.town_npc_wander_step(index, floor, tx, ty, bounded)
+                        {
+                            self.npcs[index].x = nx;
+                            self.npcs[index].y = ny;
+                            moved = true;
+                            self.sync_npc_active_object(index, floor);
+                            continue;
+                        }
+                    }
+                }
+            }
             if (self.npcs[index].x, self.npcs[index].y, self.npcs[index].z) == (tx, ty, tz) {
                 self.npcs[index].cached_wp = wp;
                 continue;
@@ -547,6 +672,96 @@ impl PlayState {
         if moved {
             self.mark_visibility_dirty();
         }
+    }
+
+    pub fn town_npc_adjacent_to_player(&self, npc_index: usize) -> bool {
+        self.town_npc_player_distance(npc_index) == 1
+    }
+
+    pub fn town_npc_player_distance(&self, npc_index: usize) -> usize {
+        let npc = &self.npcs[npc_index];
+        npc.x.abs_diff(self.player.x) + npc.y.abs_diff(self.player.y)
+    }
+
+    pub fn town_npc_chase_step(&self, npc_index: usize, floor: u8) -> Option<(usize, usize)> {
+        let npc = &self.npcs[npc_index];
+        let dx = self.player.x as isize - npc.x as isize;
+        let dy = self.player.y as isize - npc.y as isize;
+        let primary = if dx.abs() >= dy.abs() {
+            cardinal_direction_from_sign(dx.signum(), 0)
+        } else {
+            cardinal_direction_from_sign(0, dy.signum())
+        };
+        let secondary = if dx.abs() >= dy.abs() {
+            cardinal_direction_from_sign(0, dy.signum())
+        } else {
+            cardinal_direction_from_sign(dx.signum(), 0)
+        };
+        [primary, secondary]
+            .into_iter()
+            .flatten()
+            .find_map(|direction| self.town_npc_step_in_direction(npc_index, floor, direction))
+    }
+
+    pub fn town_npc_flee_step(&self, npc_index: usize, floor: u8) -> Option<(usize, usize)> {
+        let mut best = None;
+        let mut best_distance = self.town_npc_player_distance(npc_index);
+        for direction in TOWN_NPC_CARDINAL_DIRECTIONS {
+            if let Some((nx, ny)) = self.town_npc_step_in_direction(npc_index, floor, direction) {
+                let distance = nx.abs_diff(self.player.x) + ny.abs_diff(self.player.y);
+                if distance > best_distance {
+                    best_distance = distance;
+                    best = Some((nx, ny));
+                }
+            }
+        }
+        best
+    }
+
+    pub fn town_npc_wander_step(
+        &self,
+        npc_index: usize,
+        floor: u8,
+        waypoint_x: usize,
+        waypoint_y: usize,
+        bounded: bool,
+    ) -> Option<(usize, usize)> {
+        let start =
+            ((self.turn as usize) + self.npcs[npc_index].slot) % TOWN_NPC_CARDINAL_DIRECTIONS.len();
+        for offset in 0..TOWN_NPC_CARDINAL_DIRECTIONS.len() {
+            let direction =
+                TOWN_NPC_CARDINAL_DIRECTIONS[(start + offset) % TOWN_NPC_CARDINAL_DIRECTIONS.len()];
+            let Some((nx, ny)) = self.town_npc_step_in_direction(npc_index, floor, direction) else {
+                continue;
+            };
+            if bounded
+                && (nx.abs_diff(waypoint_x) > TOWN_NPC_BOUNDED_WANDER_RADIUS
+                    || ny.abs_diff(waypoint_y) > TOWN_NPC_BOUNDED_WANDER_RADIUS)
+            {
+                continue;
+            }
+            return Some((nx, ny));
+        }
+        None
+    }
+
+    pub fn town_npc_step_in_direction(
+        &self,
+        npc_index: usize,
+        floor: u8,
+        direction: Direction,
+    ) -> Option<(usize, usize)> {
+        let (dx, dy) = direction.delta();
+        let npc = &self.npcs[npc_index];
+        let nx = npc.x as isize + dx;
+        let ny = npc.y as isize + dy;
+        if !(0..32).contains(&nx) || !(0..32).contains(&ny) {
+            return None;
+        }
+        let nx = nx as usize;
+        let ny = ny as usize;
+        self.npc_can_step(npc_index, nx, ny, floor)
+            .then_some((nx, ny))
     }
 
     pub fn npc_path_step(
@@ -589,4 +804,40 @@ impl PlayState {
         }
         None
     }
+}
+
+const TOWN_NPC_CHASE_RADIUS: usize = 8;
+const TOWN_NPC_BOUNDED_WANDER_RADIUS: usize = 2;
+const TOWN_NPC_CARDINAL_DIRECTIONS: [Direction; 4] = [
+    Direction::West,
+    Direction::South,
+    Direction::East,
+    Direction::North,
+];
+
+fn cardinal_direction_from_sign(dx: isize, dy: isize) -> Option<Direction> {
+    match (dx, dy) {
+        (-1, 0) => Some(Direction::West),
+        (1, 0) => Some(Direction::East),
+        (0, -1) => Some(Direction::North),
+        (0, 1) => Some(Direction::South),
+        _ => None,
+    }
+}
+
+fn town_npc_type_guard_like(type_byte: u8) -> bool {
+    matches!(type_byte, 0x70..=0x7f)
+}
+
+fn town_npc_type_fortifies_on_alarm(type_byte: u8) -> bool {
+    town_npc_type_guard_like(type_byte) || matches!(type_byte, PLAYER_NPC_SENTINEL_TYPE | 0x00)
+}
+
+fn town_alarm_rolls_flee(scene_byte: u8, floor: i8, slot: usize, type_byte: u8, turn: u64) -> bool {
+    let seed = u64::from(scene_byte)
+        ^ ((floor as i64 as u64) << 8)
+        ^ ((slot as u64) << 16)
+        ^ ((type_byte as u64) << 24)
+        ^ turn.rotate_left(7);
+    seed.count_ones() % 2 == 0
 }

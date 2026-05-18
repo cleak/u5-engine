@@ -1049,9 +1049,11 @@ impl PlayState {
                     self.free_active_object_slot(object_slot);
                     self.npcs.remove(npc_index);
                     self.mark_removed_town_npc_once(scene, floor, npc_slot);
+                    let (fortified, fleeing) =
+                        self.town_alarm_sweep(scene, floor, Some(npc_slot));
                     self.mark_visibility_dirty();
                     self.message = format!(
-                        "Attacked NPC slot {npc_slot} at ({x}, {y}) to the {}; target removed from {} floor {floor}.",
+                        "Attacked NPC slot {npc_slot} at ({x}, {y}) to the {}; target removed from {} floor {floor}; alarm raised ({fortified} fortified, {fleeing} fleeing).",
                         direction.name(),
                         scene.key()
                     );
@@ -1677,6 +1679,9 @@ impl PlayState {
         let Area::Town { scene, floor } = self.area else {
             return Ok(None);
         };
+        if let Some(outcome) = self.apply_town_npc_contact_event(scene, floor)? {
+            return Ok(Some(outcome));
+        }
         let tile = self.grid[self.player.y * 32 + self.player.x];
         if let Some(entry) =
             self.town_exit_tile_at(game_dir, scene, floor, self.player.x, self.player.y, tile)?
@@ -1707,6 +1712,157 @@ impl PlayState {
             format!("{pre_effect_message} {transition_message}")
         };
         Ok(Some(outcome))
+    }
+
+    pub fn apply_town_npc_contact_event(
+        &mut self,
+        scene: Scene,
+        floor: i8,
+    ) -> io::Result<Option<MoveOutcome>> {
+        if floor < 0 {
+            return Ok(None);
+        }
+        let Some((npc_slot, type_byte, behavior)) = self.town_adjacent_event_npc(scene, floor)
+        else {
+            return Ok(None);
+        };
+        if behavior.raises_guard_event() {
+            self.pending_town_arrest = Some(TownArrestPrompt {
+                scene_byte: scene.byte,
+                floor,
+                npc_slot,
+            });
+            self.message = if self.message.is_empty() {
+                format!("Guard NPC slot {npc_slot} catches the party. Surrender? (Y/N).")
+            } else {
+                format!(
+                    "{} Guard NPC slot {npc_slot} catches the party. Surrender? (Y/N).",
+                    self.message
+                )
+            };
+            return Ok(Some(MoveOutcome::Used));
+        }
+        if behavior.raises_attack_event() {
+            let (fortified, fleeing) = self.town_alarm_sweep(scene, floor, Some(npc_slot));
+            self.set_town_npc_alarm_state(scene, floor, npc_slot, TownNpcAlarmState::Fortified);
+            self.message = if self.message.is_empty() {
+                format!(
+                    "Hostile NPC slot {npc_slot} (type {type_byte}) attacks; alarm raised ({fortified} fortified, {fleeing} fleeing)."
+                )
+            } else {
+                format!(
+                    "{} Hostile NPC slot {npc_slot} (type {type_byte}) attacks; alarm raised ({fortified} fortified, {fleeing} fleeing).",
+                    self.message
+                )
+            };
+            return Ok(Some(MoveOutcome::Used));
+        }
+        Ok(None)
+    }
+
+    pub fn town_adjacent_event_npc(
+        &self,
+        scene: Scene,
+        floor: i8,
+    ) -> Option<(usize, u8, NpcAiBehavior)> {
+        let floor_u8 = floor as u8;
+        self.npcs.iter().find_map(|npc| {
+            if npc.is_player_phantom()
+                || npc.z != floor_u8
+                || npc.x.abs_diff(self.player.x) + npc.y.abs_diff(self.player.y) != 1
+                || self.town_npc_alarm_state(scene, floor, npc.slot)
+                    == Some(TownNpcAlarmState::Pacified)
+            {
+                return None;
+            }
+            let wp = waypoint_for_hour(&npc.schedule, self.clock.hour);
+            let alarm_state = self.town_npc_alarm_state(scene, floor, npc.slot);
+            let behavior = if alarm_state == Some(TownNpcAlarmState::Fortified) {
+                if town_contact_type_guard_like(npc.type_byte) {
+                    NpcAiBehavior::GuardOrBlock
+                } else {
+                    NpcAiBehavior::ApproachAndAttack
+                }
+            } else {
+                npc_ai_behavior(npc.schedule[NPC_SCHEDULE_AI_OFFSET + wp])?
+            };
+            (behavior.raises_attack_event() || behavior.raises_guard_event())
+                .then_some((npc.slot, npc.type_byte, behavior))
+        })
+    }
+
+    pub fn resolve_town_arrest_prompt(
+        &mut self,
+        key: char,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let Some(prompt) = self.pending_town_arrest else {
+            return Ok(None);
+        };
+        match key.to_ascii_lowercase() {
+            'y' => {
+                self.pending_town_arrest = None;
+                if prompt.scene_byte == BLACKTHORN_CAPTIVE_CELL_SCENE {
+                    self.message =
+                        "Blackthorn audience capture would begin from the captive scene.".to_string();
+                    return Ok(Some(MoveOutcome::Used));
+                }
+                self.apply_town_arrest_surrender(game_dir)
+            }
+            'n' => {
+                self.pending_town_arrest = None;
+                let scene = Scene::new(prompt.scene_byte)?;
+                let (fortified, fleeing) =
+                    self.town_alarm_sweep(scene, prompt.floor, Some(prompt.npc_slot));
+                self.message = format!(
+                    "Refused surrender; alarm raised ({fortified} fortified, {fleeing} fleeing)."
+                );
+                Ok(Some(MoveOutcome::Used))
+            }
+            _ => {
+                self.message = "Surrender? (Y/N).".to_string();
+                Ok(Some(MoveOutcome::PromptDeclined))
+            }
+        }
+    }
+
+    pub fn apply_town_arrest_surrender(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let scene = Scene::new(TOWN_ARREST_JAIL_SCENE)?;
+        let floor = TOWN_ARREST_JAIL_FLOOR as i8;
+        self.grid = load_town_runtime_floor(game_dir, scene, floor, self.clock.hour)?;
+        self.area = Area::Town { scene, floor };
+        self.player.x = TOWN_ARREST_JAIL_X as usize;
+        self.player.y = TOWN_ARREST_JAIL_Y as usize;
+        self.player.transport = TransportState::Foot;
+        self.pending_moongate = None;
+        self.clear_town_floor_reload_door_state();
+        self.town_npc_alarm_states
+            .retain(|marker| marker.scene_byte == scene.byte && marker.floor == floor);
+        let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
+        let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;
+        self.load_scheduled_npcs(&npc_slots);
+        self.attach_player_phantom_npc();
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+        let mut cleanup_ticks = 0;
+        while !town_arrest_release_loop_done(self.clock.hour) && cleanup_ticks < 96 {
+            self.advance_turn_with_minutes_and_door_tick(
+                TOWN_ARREST_CLEANUP_INCREMENT_MINUTES,
+                false,
+            );
+            cleanup_ticks += 1;
+        }
+        self.message = format!(
+            "Surrendered to the guards; jailed in {} at ({}, {}) until {:02}:00.",
+            scene.key(),
+            self.player.x,
+            self.player.y,
+            self.clock.hour
+        );
+        Ok(Some(MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))))
     }
 
     pub fn apply_dungeon_post_turn_effects_after_turn(
@@ -2145,4 +2301,8 @@ pub fn potion_label(index: usize) -> &'static str {
 
 pub fn scroll_label(index: usize) -> &'static str {
     SCROLL_SPELL_LABELS.get(index).copied().unwrap_or("unknown")
+}
+
+fn town_contact_type_guard_like(type_byte: u8) -> bool {
+    matches!(type_byte, 0x70..=0x7f)
 }
