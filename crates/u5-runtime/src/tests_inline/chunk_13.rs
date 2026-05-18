@@ -12408,6 +12408,12 @@
         assert_eq!(lord_british_camp_stat_reward(0), None);
         assert_eq!(lord_british_camp_stat_reward(4), None);
         assert_eq!(LORD_BRITISH_CAMP_STAT_REWARD_CAP, 30);
+
+        // Class-specific MP refresh.
+        assert_eq!(lord_british_camp_refreshed_mana(b'A', 24), Some(24));
+        assert_eq!(lord_british_camp_refreshed_mana(b'M', 24), Some(24));
+        assert_eq!(lord_british_camp_refreshed_mana(b'B', 24), Some(12));
+        assert_eq!(lord_british_camp_refreshed_mana(b'F', 24), None);
     }
 
     #[test]

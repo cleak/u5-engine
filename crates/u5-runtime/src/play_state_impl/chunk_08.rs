@@ -243,7 +243,7 @@ impl PlayState {
         }
         if !interrupted
             && matches!(self.area, Area::World { .. })
-            && self.lord_british_camp_event_roll() < 25
+            && lord_british_camp_event_triggered(self.lord_british_camp_event_roll())
         {
             let event_message = self.resolve_lord_british_camp_event(game_dir)?;
             self.message.push(' ');
@@ -305,12 +305,12 @@ impl PlayState {
                 continue;
             }
             let experience = self.party_experience[index];
-            let level = recompute_level_from_experience(experience);
+            let level = level_for_experience(u32::from(experience));
             if self.party[index].level == level {
                 continue;
             }
             self.party[index].level = level;
-            let hp = u16::from(level) * 30;
+            let hp = lord_british_camp_event_hp_for_level(level);
             self.party[index].hp = hp;
             self.party[index].max_hp = hp;
             let reward = self.apply_lord_british_camp_stat_reward(index);
@@ -344,8 +344,8 @@ impl PlayState {
     }
 
     pub fn apply_lord_british_camp_stat_reward(&mut self, member_index: usize) -> &'static str {
-        match self.lord_british_camp_stat_roll(member_index) {
-            1 => {
+        match lord_british_camp_stat_reward(self.lord_british_camp_stat_roll(member_index)) {
+            Some(LordBritishCampStatReward::Strength) => {
                 if member_index == 0 {
                     self.avatar_stats.increase_strength();
                     self.party_strengths[0] = self.avatar_stats.strength;
@@ -354,7 +354,7 @@ impl PlayState {
                 }
                 "Strength reward"
             }
-            2 => {
+            Some(LordBritishCampStatReward::Dexterity) => {
                 if member_index == 0 {
                     self.avatar_stats.increase_dexterity();
                     if let Some(member) = self.party.get_mut(0) {
@@ -365,7 +365,7 @@ impl PlayState {
                 }
                 "Dexterity reward"
             }
-            _ => {
+            Some(LordBritishCampStatReward::Intelligence) => {
                 if member_index == 0 {
                     self.avatar_stats.increase_intelligence();
                     self.party_intelligence[0] = self.avatar_stats.intelligence;
@@ -374,6 +374,7 @@ impl PlayState {
                 }
                 "Intelligence reward"
             }
+            None => unreachable!("Lord British camp stat roll is constrained to 1..=3"),
         }
     }
 
@@ -396,7 +397,7 @@ impl PlayState {
                 .copied()
                 .unwrap_or(self.avatar_stats.intelligence)
         };
-        if let Some(mana) = class_refreshed_mana(member.class_byte, intelligence) {
+        if let Some(mana) = lord_british_camp_refreshed_mana(member.class_byte, intelligence) {
             if let Some(member) = self.party.get_mut(member_index) {
                 member.mana = mana;
             }
@@ -462,6 +463,9 @@ impl PlayState {
     pub fn restore_sleep_ambush_party_statuses(&mut self, entry_statuses: &[u8]) -> usize {
         let mut restored = 0;
         for (index, member) in self.party.iter_mut().enumerate() {
+            if !member.living() {
+                continue;
+            }
             let Some(entry_status) = entry_statuses
                 .get(index)
                 .and_then(|status| character_status_for_byte(*status))
@@ -502,12 +506,13 @@ impl PlayState {
         let mut recovered_hp = 0;
         let mut recovered_mana = 0;
         for index in 0..self.party.len() {
-            if !matches!(self.party[index].status, b'G' | b'P' | b'S')
-                || !self.party[index].living()
-            {
+            let Some(status) = character_status_for_byte(self.party[index].status) else {
+                continue;
+            };
+            if !rest_with_watch_participates(status) || !self.party[index].living() {
                 continue;
             }
-            if self.party[index].status != b'P' {
+            if rest_with_watch_recovers_hp(status) {
                 let hp_recovery = self.rest_hp_recovery_roll(index);
                 recovered_hp += self.party[index].heal_by(u16::from(hp_recovery));
             }
@@ -520,7 +525,10 @@ impl PlayState {
     pub fn mark_town_rest_sleepers(&mut self) -> usize {
         let mut marked = 0;
         for member in &mut self.party {
-            if member.status == b'G' && member.living() {
+            let Some(status) = character_status_for_byte(member.status) else {
+                continue;
+            };
+            if town_rest_temp_sleep_marked(status) && member.living() {
                 member.status = b'S';
                 marked += 1;
             }
@@ -531,7 +539,10 @@ impl PlayState {
     pub fn wake_town_rest_sleepers(&mut self) -> usize {
         let mut woke = 0;
         for member in &mut self.party {
-            if member.status == b'S' && member.hp > 0 {
+            let Some(status) = character_status_for_byte(member.status) else {
+                continue;
+            };
+            if rest_cleanup_transitions_to_good(status) && member.hp > 0 {
                 member.status = b'G';
                 woke += 1;
             }
@@ -559,7 +570,13 @@ impl PlayState {
     pub fn wake_initial_rest_sleepers(&mut self, asleep_at_start: &[u8]) -> usize {
         let mut woke = 0;
         for member in &mut self.party {
-            if member.status == b'S' && member.hp > 0 && asleep_at_start.contains(&member.slot) {
+            let Some(status) = character_status_for_byte(member.status) else {
+                continue;
+            };
+            if rest_cleanup_transitions_to_good(status)
+                && member.hp > 0
+                && asleep_at_start.contains(&member.slot)
+            {
                 member.status = b'G';
                 woke += 1;
             }

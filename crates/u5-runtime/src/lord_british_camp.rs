@@ -69,3 +69,15 @@ pub const fn lord_british_camp_stat_reward(roll: u8) -> Option<LordBritishCampSt
         _ => return None,
     })
 }
+
+/// `rest-and-camp.md §7`: after the Lord British camp event reaches
+/// the class-refresh branch, Avatar and Mage set current MP from
+/// Intelligence, Bard sets current MP from half Intelligence, and
+/// other classes leave MP unchanged.
+pub const fn lord_british_camp_refreshed_mana(class_byte: u8, intelligence: u8) -> Option<u8> {
+    match class_byte {
+        b'A' | b'M' => Some(intelligence),
+        b'B' => Some(intelligence / 2),
+        _ => None,
+    }
+}

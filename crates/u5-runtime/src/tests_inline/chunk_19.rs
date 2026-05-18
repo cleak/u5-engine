@@ -880,6 +880,41 @@
     }
 
     #[test]
+    fn sleep_ambush_cleanup_does_not_revive_members_killed_during_rest() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(WORLD_DAMAGE_TILE_TABLE_FILE),
+            "BRITANNIA 0 15 DROWNING 5\n",
+        )
+        .unwrap();
+        let mut state = britannia_state(open_world_grid(), 0, 15);
+        state.clock = GameClock::new(0, 0).unwrap();
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: b'A',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 0,
+            hp: 1,
+            max_hp: 1,
+            level: 8,
+        }];
+
+        assert_eq!(
+            state.hole_up_command(&dir, Some(1)).unwrap(),
+            MoveOutcome::Rested
+        );
+
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("Ambushed!"));
+        assert!(state.combat_active);
+        assert_eq!(state.party[0].hp, 0);
+        assert_eq!(state.party[0].status, b'D');
+        assert!(state.combat_actors[0].is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn rest_with_watch_heals_living_members_and_wakes_initial_sleepers() {
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.clock = GameClock::new(8, 0).unwrap();
@@ -1016,9 +1051,19 @@
         state.party[0].max_hp = 30;
         state.party[0].mana = 0;
         state.party[0].climb_stat = 20;
-        state.party_experience = vec![200];
-        state.party_strengths = vec![20];
-        state.party_intelligence = vec![18];
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'F',
+            status: b'G',
+            climb_stat: 20,
+            mana: REST_MANA_CAP,
+            hp: 10,
+            max_hp: 30,
+            level: 1,
+        });
+        state.party_experience = vec![200, 200];
+        state.party_strengths = vec![20, 20];
+        state.party_intelligence = vec![18, 24];
         state.moral_standing = 80;
 
         assert_eq!(state.hole_up_command(&dir, Some(1)).unwrap(), MoveOutcome::Rested);
@@ -1029,9 +1074,14 @@
         assert_eq!(state.avatar_stats.dexterity, 21);
         assert_eq!(state.party[0].climb_stat, 21);
         assert_eq!(state.party[0].mana, 18);
+        assert_eq!(state.party[1].level, 3);
+        assert_eq!(state.party[1].hp, 90);
+        assert_eq!(state.party[1].max_hp, 90);
+        assert_eq!(state.party[1].mana, REST_MANA_CAP);
         assert!(state.visibility_dirty);
         assert!(state.message.contains("Lord British-in-disguise camp event."));
         assert!(state.message.contains("P1 reached level 3 from 200 XP"));
+        assert!(state.message.contains("P2 reached level 3 from 200 XP"));
         assert!(state.message.contains("Dexterity reward"));
         assert!(state.message.contains("Verdict: camp-top"));
         let _ = fs::remove_dir_all(dir);
