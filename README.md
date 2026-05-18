@@ -74,6 +74,7 @@ Input map (visual mode):
 | `Space`                                             | Pass              |
 | `B`, `C`, `F`-`J`, `L`-`R`, `T`-`V`, `X`-`Z`        | Command letters   |
 | `Shift+A` / `Shift+S`                               | Attack / Search   |
+| `Ctrl+S`                                            | Toggle music      |
 | number row `0`-`9`                                  | Modal selections  |
 | text + `Backspace` + `Enter`                        | Text prompts      |
 | `Q`                                                 | Save/exit prompt  |

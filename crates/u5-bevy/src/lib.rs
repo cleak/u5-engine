@@ -15,9 +15,9 @@ use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::text::TextBounds;
 
 use u5_runtime::{
-    Area, Direction, PlayInputDisposition, PlayOptions, PlayState, TILE_ATLAS_SIDE, TileAtlas,
-    TileGraphicsDepth, handle_play_key_input, load_tile_atlas, render_text_panel_rgba,
-    shop_runtime::SageState, shop_session::ActiveShopSession,
+    Area, Direction, PLAY_MUSIC_TOGGLE_KEY, PlayInputDisposition, PlayOptions, PlayState,
+    TILE_ATLAS_SIDE, TileAtlas, TileGraphicsDepth, handle_play_key_input, load_tile_atlas,
+    render_text_panel_rgba, shop_runtime::SageState, shop_session::ActiveShopSession,
 };
 
 const VIEWPORT_RADIUS: usize = 5;
@@ -27,7 +27,7 @@ const DISPLAY_SCALE: f32 = 3.0;
 const STATUS_PANEL_HEIGHT: f32 = 96.0;
 
 const READY_HINT: &str =
-    "WASD/arrows: move. Command letters work; Shift+A attacks, Shift+S searches. Esc quit.";
+    "WASD/arrows: move. Shift+A attacks, Shift+S searches. Ctrl+S music. Esc quit.";
 
 pub fn run_visual_loop(
     game_dir: &Path,
@@ -308,6 +308,8 @@ fn drive_visual(
     let mut handled = false;
     let shift_pressed =
         keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
+    let control_pressed =
+        keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
     for key in keyboard.get_just_pressed() {
         if visual_line_prompt_active(&visual.state) {
             let game_dir = visual.game_dir.clone();
@@ -317,6 +319,7 @@ fn drive_visual(
                 &mut v.input_line,
                 *key,
                 shift_pressed,
+                control_pressed,
                 &game_dir,
             );
             match result {
@@ -336,7 +339,7 @@ fn drive_visual(
                 }
             }
         }
-        let Some(ch) = key_code_to_char(*key, shift_pressed) else {
+        let Some(ch) = key_code_to_char(*key, shift_pressed, control_pressed) else {
             continue;
         };
         let game_dir = visual.game_dir.clone();
@@ -391,12 +394,13 @@ fn summarize(state: &mut PlayState, fallback: &str, input_line: &str) -> String 
         state.message.clone()
     };
     let mut summary = format!(
-        "{} ({}, {}) facing {} — turn {}{}\n{}",
+        "{} ({}, {}) facing {} — turn {} — music {}{}\n{}",
         state.current_area_label(),
         state.player.x,
         state.player.y,
         Direction::name(state.player.facing),
         state.turn,
+        if state.music_enabled { "on" } else { "off" },
         dungeon_note,
         msg
     );
@@ -425,9 +429,13 @@ fn handle_visual_line_key(
     input_line: &mut String,
     key: KeyCode,
     shift_pressed: bool,
+    control_pressed: bool,
     game_dir: &Path,
 ) -> std::io::Result<Option<PlayInputDisposition>> {
     use KeyCode::*;
+    if control_pressed {
+        return Ok(None);
+    }
     match key {
         Enter | NumpadEnter => {
             let submitted = std::mem::take(input_line);
@@ -526,8 +534,15 @@ fn letter_for_shift(lower: char, shift_pressed: bool) -> char {
     }
 }
 
-fn key_code_to_char(key: KeyCode, shift_pressed: bool) -> Option<char> {
+fn key_code_to_char(key: KeyCode, shift_pressed: bool, control_pressed: bool) -> Option<char> {
     use KeyCode::*;
+    if control_pressed {
+        return match key {
+            KeyS => Some(PLAY_MUSIC_TOGGLE_KEY),
+            _ => None,
+        };
+    }
+
     if shift_pressed {
         let ch = match key {
             KeyA => 'A',
@@ -714,15 +729,30 @@ mod tests {
 
     #[test]
     fn visual_key_map_keeps_wasd_movement_and_shift_command_conflicts() {
-        assert_eq!(key_code_to_char(KeyCode::KeyW, false), Some('w'));
-        assert_eq!(key_code_to_char(KeyCode::KeyA, false), Some('a'));
-        assert_eq!(key_code_to_char(KeyCode::KeyS, false), Some('s'));
-        assert_eq!(key_code_to_char(KeyCode::KeyD, false), Some('d'));
-        assert_eq!(key_code_to_char(KeyCode::KeyA, true), Some('A'));
-        assert_eq!(key_code_to_char(KeyCode::KeyS, true), Some('S'));
-        assert_eq!(key_code_to_char(KeyCode::KeyQ, false), Some('Q'));
-        assert_eq!(key_code_to_char(KeyCode::KeyU, false), Some('U'));
-        assert_eq!(key_code_to_char(KeyCode::Digit2, false), Some('2'));
+        assert_eq!(key_code_to_char(KeyCode::KeyW, false, false), Some('w'));
+        assert_eq!(key_code_to_char(KeyCode::KeyA, false, false), Some('a'));
+        assert_eq!(key_code_to_char(KeyCode::KeyS, false, false), Some('s'));
+        assert_eq!(key_code_to_char(KeyCode::KeyD, false, false), Some('d'));
+        assert_eq!(key_code_to_char(KeyCode::KeyA, true, false), Some('A'));
+        assert_eq!(key_code_to_char(KeyCode::KeyS, true, false), Some('S'));
+        assert_eq!(
+            key_code_to_char(KeyCode::KeyS, false, true),
+            Some(PLAY_MUSIC_TOGGLE_KEY)
+        );
+        assert_eq!(key_code_to_char(KeyCode::KeyA, false, true), None);
+        assert_eq!(key_code_to_char(KeyCode::KeyQ, false, false), Some('Q'));
+        assert_eq!(key_code_to_char(KeyCode::KeyU, false, false), Some('U'));
+        assert_eq!(key_code_to_char(KeyCode::Digit2, false, false), Some('2'));
+    }
+
+    #[test]
+    fn visual_status_reports_music_toggle_state() {
+        let mut state = test_state(open_grid(), 1, 1);
+
+        assert!(summarize(&mut state, "", "").contains("music on"));
+        handle_play_key_input(&mut state, PLAY_MUSIC_TOGGLE_KEY, "", Path::new("")).unwrap();
+
+        assert!(summarize(&mut state, "", "").contains("music off"));
     }
 
     #[test]
@@ -736,6 +766,7 @@ mod tests {
             &mut input_line,
             KeyCode::KeyJ,
             false,
+            false,
             Path::new(""),
         )
         .unwrap();
@@ -744,6 +775,7 @@ mod tests {
             &mut input_line,
             KeyCode::KeyO,
             false,
+            false,
             Path::new(""),
         )
         .unwrap();
@@ -751,6 +783,7 @@ mod tests {
             &mut state,
             &mut input_line,
             KeyCode::KeyB,
+            false,
             false,
             Path::new(""),
         )
@@ -764,6 +797,7 @@ mod tests {
             &mut state,
             &mut input_line,
             KeyCode::Enter,
+            false,
             false,
             Path::new(""),
         )
@@ -784,6 +818,7 @@ mod tests {
             &mut input_line,
             KeyCode::KeyJ,
             false,
+            false,
             Path::new(""),
         )
         .unwrap();
@@ -791,6 +826,7 @@ mod tests {
             &mut state,
             &mut input_line,
             KeyCode::KeyX,
+            false,
             false,
             Path::new(""),
         )
@@ -800,6 +836,7 @@ mod tests {
             &mut input_line,
             KeyCode::Backspace,
             false,
+            false,
             Path::new(""),
         )
         .unwrap();
@@ -807,6 +844,28 @@ mod tests {
         assert_eq!(input_line, "j");
         let summary = summarize(&mut state, "", &input_line);
         assert!(summary.ends_with("\n> j"));
+    }
+
+    #[test]
+    fn visual_line_input_ignores_control_shortcuts() {
+        let mut state = test_state(open_grid(), 1, 1);
+        install_test_conversation(&mut state);
+        let mut input_line = String::new();
+
+        let result = handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::KeyS,
+            false,
+            true,
+            Path::new(""),
+        )
+        .unwrap();
+
+        assert_eq!(result, None);
+        assert!(input_line.is_empty());
+        assert!(state.music_enabled);
+        assert!(state.active_conversation.is_some());
     }
 
     #[test]
@@ -825,12 +884,20 @@ mod tests {
 
         let mut input_line = String::new();
         for key in [KeyCode::KeyA, KeyCode::KeyH, KeyCode::KeyM] {
-            handle_visual_line_key(&mut state, &mut input_line, key, false, &dir).unwrap();
+            handle_visual_line_key(&mut state, &mut input_line, key, false, false, &dir).unwrap();
         }
         assert_eq!(input_line, "ahm");
         assert_eq!(state.shrine_ordained_mask, 0);
 
-        handle_visual_line_key(&mut state, &mut input_line, KeyCode::Enter, false, &dir).unwrap();
+        handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::Enter,
+            false,
+            false,
+            &dir,
+        )
+        .unwrap();
 
         assert!(input_line.is_empty());
         assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
