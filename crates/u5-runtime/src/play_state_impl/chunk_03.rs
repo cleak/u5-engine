@@ -2444,6 +2444,13 @@ impl PlayState {
         direction: Option<Direction>,
         _game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
+        if self.combat_active {
+            return Ok(self.cast_unmodeled_combat_utility_spell(
+                caster_index,
+                OPEN_SPELL_INDEX,
+                OPEN_SPELL_COST,
+            ));
+        }
         if !matches!(self.area, Area::Dungeon { .. }) {
             let Some(direction) = direction else {
                 self.message = "Direction? Use C1AS8/C1AS6/C1AS2/C1AS4.".to_string();
@@ -2710,6 +2717,13 @@ impl PlayState {
             self.message = "Direction? Use C1IP6.".to_string();
             return Ok(MoveOutcome::Blocked);
         };
+        if self.combat_active {
+            return Ok(self.cast_unmodeled_combat_utility_spell(
+                caster_index,
+                BLINK_SPELL_INDEX,
+                BLINK_COST,
+            ));
+        }
         let Some(entry) = self.blink_target_at(game_dir, direction)? else {
             self.message = "No Blink target.".to_string();
             return Ok(MoveOutcome::Blocked);

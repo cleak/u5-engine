@@ -2587,6 +2587,31 @@
     }
 
     #[test]
+    fn combat_allowed_open_reaches_resource_gate_without_rewriting_underlying_map() {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(6, 5)] = 0x97;
+        let mut state = britannia_state(grid, 5, 5);
+        state.combat_active = true;
+        state.spell_charges[OPEN_SPELL_INDEX] = 1;
+        state.party[0].mana = OPEN_SPELL_COST;
+        state.party[0].level = OPEN_SPELL_COST;
+
+        assert_eq!(
+            state
+                .cast_spell_from_suffix("1AS6", Path::new(""))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.grid[world_cell_index(6, 5)], 0x97);
+        assert_eq!(state.spell_charges[OPEN_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+        assert_eq!(state.message, "Failed!");
+    }
+
+    #[test]
     fn cast_blink_uses_clean_sidecar_target_and_leaves_intervening_lock() {
         let dir = debug_game_dir();
         fs::write(
@@ -2716,6 +2741,34 @@
         assert_eq!(blocked_destination.party[0].mana, 0);
         assert_eq!(blocked_destination.turn, 1);
         assert_eq!(blocked_destination.message, "Failed!");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn combat_allowed_blink_reaches_resource_gate_without_using_sidecar_teleport() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(BLINK_TARGET_TABLE_FILE),
+            "BRITANNIA 0 1 1 E 3 1 5 5\n",
+        )
+        .unwrap();
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.combat_active = true;
+        state.spell_charges[BLINK_SPELL_INDEX] = 1;
+        state.party[0].mana = BLINK_COST;
+        state.party[0].level = BLINK_COST;
+
+        assert_eq!(
+            state.cast_spell_from_suffix("1IP6", &dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+        assert_eq!(state.message, "Failed!");
         let _ = fs::remove_dir_all(dir);
     }
 
