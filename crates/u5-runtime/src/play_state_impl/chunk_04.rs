@@ -144,6 +144,7 @@ impl PlayState {
             Some(UseItemRequest::SkullKey) => self.use_skull_key(game_dir)?,
             Some(UseItemRequest::Sextant) => self.use_sextant(),
             Some(UseItemRequest::PocketWatch) => self.use_pocket_watch(),
+            Some(UseItemRequest::ShadowlordShard(index)) => self.use_shadowlord_shard(index),
             Some(UseItemRequest::Moonstone(slot_index)) => {
                 self.use_moonstone_phase(Some(slot_index))
             }
@@ -458,6 +459,24 @@ impl PlayState {
         );
         self.push_owned_use_row(
             &mut rows,
+            SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
+            "Shard of Falsehood",
+            UseItemRequest::ShadowlordShard(SHADOWLORD_FALSEHOOD_INDEX),
+        );
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_SHARD_HATRED_INDEX,
+            "Shard of Hatred",
+            UseItemRequest::ShadowlordShard(SHADOWLORD_HATRED_INDEX),
+        );
+        self.push_owned_use_row(
+            &mut rows,
+            SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+            "Shard of Cowardice",
+            UseItemRequest::ShadowlordShard(SHADOWLORD_COWARDICE_INDEX),
+        );
+        self.push_owned_use_row(
+            &mut rows,
             SPECIAL_ITEM_WOODEN_BOX_INDEX,
             "Wooden Box",
             UseItemRequest::WoodenBox,
@@ -550,6 +569,29 @@ impl PlayState {
         }
         self.message = "Wooden Box: How use it?".to_string();
         MoveOutcome::PromptDeclined
+    }
+
+    pub fn use_shadowlord_shard(&mut self, index: usize) -> MoveOutcome {
+        let Some(item_index) = shadowlord_shard_special_item_index(index) else {
+            self.message = "No such Shard.".to_string();
+            return MoveOutcome::Blocked;
+        };
+        let name = special_item_name(item_index);
+        if self.special_items[item_index] == 0 {
+            self.message = format!("No {name}!");
+            return MoveOutcome::Blocked;
+        }
+        if !self.shadowlord_alive(index) {
+            self.message = format!("{name}: matching Shadowlord is already vanquished.");
+            return MoveOutcome::Blocked;
+        }
+        if !self.shadowlord_name_encounter_present(index) {
+            self.message = format!("{name}: no matching Shadowlord is nearby.");
+            return MoveOutcome::Blocked;
+        }
+
+        self.message = format!("{name}: no matching Eternal Flame is here.");
+        MoveOutcome::Blocked
     }
 
     pub fn use_worn_regalia(
@@ -2714,6 +2756,15 @@ fn pending_action_for_use_request(request: UseItemRequest) -> Option<UsePendingA
         } => Some(UsePendingAction::ScrollResurrectionTarget {
             index: SCROLL_RESURRECTION_INDEX,
         }),
+        _ => None,
+    }
+}
+
+fn shadowlord_shard_special_item_index(index: usize) -> Option<usize> {
+    match index {
+        SHADOWLORD_FALSEHOOD_INDEX => Some(SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX),
+        SHADOWLORD_HATRED_INDEX => Some(SPECIAL_ITEM_SHARD_HATRED_INDEX),
+        SHADOWLORD_COWARDICE_INDEX => Some(SPECIAL_ITEM_SHARD_COWARDICE_INDEX),
         _ => None,
     }
 }

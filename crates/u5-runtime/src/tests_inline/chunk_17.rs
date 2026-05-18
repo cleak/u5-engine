@@ -902,6 +902,57 @@
     }
 
     #[test]
+    fn active_use_picker_lists_shadowlord_shards_and_routes_to_handler() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_use.is_some());
+        assert!(state.message.contains("Shard of Falsehood"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_use.is_none());
+        assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
+        assert_eq!(state.turn, 0);
+        assert_eq!(
+            state.message,
+            "Shard of Falsehood: no matching Shadowlord is nearby."
+        );
+    }
+
+    #[test]
+    fn use_shadowlord_shard_refuses_missing_and_vanquished_states_without_consuming() {
+        let mut missing = test_state(open_grid(), 5, 5);
+        assert_eq!(
+            missing.use_shadowlord_shard(SHADOWLORD_HATRED_INDEX),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(missing.message, "No Shard of Hatred!");
+        assert_eq!(missing.turn, 0);
+
+        let mut vanquished = test_state(open_grid(), 5, 5);
+        vanquished.special_items[SPECIAL_ITEM_SHARD_COWARDICE_INDEX] = 1;
+        vanquished.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX] = SHADOWLORD_VANQUISHED;
+        assert_eq!(
+            vanquished.use_shadowlord_shard(SHADOWLORD_COWARDICE_INDEX),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(vanquished.special_items[SPECIAL_ITEM_SHARD_COWARDICE_INDEX], 1);
+        assert_eq!(
+            vanquished.message,
+            "Shard of Cowardice: matching Shadowlord is already vanquished."
+        );
+        assert_eq!(vanquished.turn, 0);
+    }
+
+    #[test]
     fn inline_use_suffix_still_bypasses_active_picker() {
         let mut state = test_state(open_grid(), 5, 5);
         state.torches = 1;

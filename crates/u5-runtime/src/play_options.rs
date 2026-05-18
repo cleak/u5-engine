@@ -285,6 +285,7 @@ pub enum UseItemRequest {
     SkullKey,
     Sextant,
     PocketWatch,
+    ShadowlordShard(usize),
     Moonstone(usize),
     Invalid,
 }
