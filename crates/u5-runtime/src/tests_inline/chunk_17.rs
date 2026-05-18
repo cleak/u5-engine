@@ -238,6 +238,56 @@
     }
 
     #[test]
+    fn active_cast_prompt_collects_selector_and_dispatches_spell() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.party[0].mana = IN_LOR_COST;
+        state.party[0].level = IN_LOR_COST;
+        state.spell_charges[IN_LOR_SPELL_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_cast.is_some());
+        assert_eq!(state.turn, 0);
+        assert!(state.message.contains("Spell name: _"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'I', "L", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_cast.is_some());
+        assert!(state.message.contains("Spell name: IL"));
+        assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_cast.is_none());
+        assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.light_spell_counter, IN_LOR_LIGHT_DURATION);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Light!");
+    }
+
+    #[test]
+    fn active_cast_prompt_ignores_j_o_and_supports_backspace_cancel() {
+        let mut state = test_state(open_grid(), 5, 5);
+
+        assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+        assert!(state.step_active_cast('J', "OI", Path::new("")).unwrap().is_none());
+        assert!(state.message.contains("Spell name: I"));
+        assert!(state.step_active_cast('\u{8}', "", Path::new("")).unwrap().is_none());
+        assert!(state.message.contains("Spell name: _"));
+        assert!(state.step_active_cast('\u{1b}', "", Path::new("")).unwrap().is_none());
+        assert!(state.active_cast.is_none());
+        assert_eq!(state.message, "None!");
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
     fn active_use_picker_refuses_when_no_usable_items_are_available() {
         let mut state = dungeon_state(vec![0; DUNGEON_SIDE * DUNGEON_SIDE], 0, 1, 1);
 

@@ -77,6 +77,14 @@ pub struct UseSession {
     pub pending: Option<UsePendingAction>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CastSession {
+    pub caster_index: usize,
+    pub buffer: String,
+    pub combat_actor_slot: Option<usize>,
+    pub combat_had_foe: bool,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UsePendingAction {
     PotionTarget { index: usize },
@@ -171,6 +179,47 @@ pub enum UseInputAction {
     PagePrevious,
     Redraw,
     Discard,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CastInputAction {
+    Cancel,
+    Complete,
+    Backspace,
+    Append(char),
+    Discard,
+}
+
+impl CastSession {
+    pub fn new(caster_index: usize) -> Self {
+        Self {
+            caster_index,
+            buffer: String::new(),
+            combat_actor_slot: None,
+            combat_had_foe: false,
+        }
+    }
+
+    pub fn for_combat_actor(actor_slot: usize, combat_had_foe: bool) -> Self {
+        Self {
+            caster_index: actor_slot,
+            buffer: String::new(),
+            combat_actor_slot: Some(actor_slot),
+            combat_had_foe,
+        }
+    }
+}
+
+pub fn cast_input_action(key: char) -> CastInputAction {
+    match key {
+        '\u{1b}' => CastInputAction::Cancel,
+        '\r' | '\n' | ' ' => CastInputAction::Complete,
+        '\u{8}' | '\u{7f}' => CastInputAction::Backspace,
+        ch if ch.is_ascii_alphabetic() && !spell_selector_is_ignored(ch as u8) => {
+            CastInputAction::Append(ch.to_ascii_uppercase())
+        }
+        _ => CastInputAction::Discard,
+    }
 }
 
 pub fn ready_input_action(key: char) -> ReadyInputAction {

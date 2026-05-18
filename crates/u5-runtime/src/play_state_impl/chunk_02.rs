@@ -166,8 +166,7 @@ impl PlayState {
                 handled!();
             }
             'c' => {
-                self.message = cast_prompt_message();
-                handled!();
+                handled!(self.start_cast_spell_prompt());
             }
             'm' => {
                 self.message = mix_prompt_message();
@@ -241,8 +240,7 @@ impl PlayState {
                     handled!(self.board_vehicle());
                 }
                 'C' => {
-                    self.message = cast_prompt_message();
-                    handled!();
+                    handled!(self.start_cast_spell_prompt());
                 }
                 'D' | 'W' => {
                     self.message = "What?".to_string();
@@ -358,6 +356,7 @@ impl PlayState {
                 }
             }
             'z' => self.z_stats(),
+            'c' => self.start_cast_spell_prompt(),
             'r' => self.start_ready_equipment(),
             'u' => {
                 if inline_use_request.is_some() {

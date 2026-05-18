@@ -23,6 +23,9 @@ pub fn handle_play_key_input(
     if state.active_blackthorn.is_some() {
         return handle_active_blackthorn_key_input(state, key, suffix, game_dir);
     }
+    if state.active_cast.is_some() {
+        return handle_active_cast_key_input(state, key, suffix, game_dir);
+    }
     if state.active_ready.is_some() {
         return Ok(handle_active_ready_key_input(state, key, suffix));
     }
@@ -182,6 +185,31 @@ fn handle_active_ready_key_input(
 ) -> PlayInputDisposition {
     state.step_active_ready(key, suffix);
     PlayInputDisposition::Continue
+}
+
+fn handle_active_cast_key_input(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    let turn_before = state.turn;
+    let Some((outcome, combat)) = state.step_active_cast(key, suffix, game_dir)? else {
+        return Ok(PlayInputDisposition::Continue);
+    };
+    state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+    if let Some((actor_slot, had_foe)) = combat {
+        state.pending_combat_actor_slot = None;
+        let cast_message = state.message.clone();
+        let ring_pass = state.apply_visible_combat_magic_ring_pass_to_slot(actor_slot);
+        state.message = combat_magic_ring_pass_message(ring_pass).unwrap_or(cast_message);
+        if state.combat_active && had_foe && !combat_has_active_non_party_actor(state) {
+            state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+        } else if state.combat_active {
+            advance_combat_round_after_actor_and_append_message(state, actor_slot);
+        }
+    }
+    Ok(PlayInputDisposition::Continue)
 }
 
 fn handle_active_use_key_input(
@@ -1318,6 +1346,14 @@ fn handle_combat_multistage_command(
     match branch {
         CombatCommandBranch::Ready => {
             state.start_combat_ready_equipment(actor_slot);
+            state.pending_combat_actor_slot = Some(actor_slot);
+            true
+        }
+        CombatCommandBranch::CastSpell => {
+            state.start_combat_cast_spell_prompt(
+                actor_slot,
+                combat_has_active_non_party_actor(state),
+            );
             state.pending_combat_actor_slot = Some(actor_slot);
             true
         }

@@ -48,6 +48,112 @@ impl PlayState {
             .unwrap_or_else(|| self.z_stats_message())
     }
 
+    pub fn start_cast_spell_prompt(&mut self) -> MoveOutcome {
+        if self.party.is_empty() {
+            self.message = "No party members are available.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let caster_index = self
+            .active_player
+            .filter(|slot| *slot < self.party.len())
+            .unwrap_or(0);
+        self.active_cast = Some(CastSession::new(caster_index));
+        self.message = self.render_active_cast();
+        MoveOutcome::Observed
+    }
+
+    pub fn start_combat_cast_spell_prompt(
+        &mut self,
+        actor_slot: usize,
+        combat_had_foe: bool,
+    ) -> MoveOutcome {
+        if !self.combat_active
+            || actor_slot >= COMBAT_PARTY_ACTOR_SLOTS
+            || actor_slot >= self.party.len()
+            || !self
+                .combat_actors
+                .get(actor_slot)
+                .copied()
+                .is_some_and(combat_actor_is_active_not_dead)
+        {
+            self.message = "No active combatant.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        self.active_cast = Some(CastSession::for_combat_actor(actor_slot, combat_had_foe));
+        self.message = self.render_active_cast();
+        MoveOutcome::Observed
+    }
+
+    pub fn render_active_cast(&self) -> String {
+        self.active_cast
+            .as_ref()
+            .map(|session| self.render_cast_session(session))
+            .unwrap_or_else(cast_prompt_message)
+    }
+
+    pub fn render_cast_session(&self, session: &CastSession) -> String {
+        let prompt = if session.buffer.is_empty() {
+            "Spell name: _".to_string()
+        } else {
+            format!("Spell name: {}", session.buffer)
+        };
+        format!(
+            "Cast: party member {}. {prompt}\nType selector letters; Enter/Space casts; Backspace erases; Esc cancels.",
+            session.caster_index + 1
+        )
+    }
+
+    pub fn step_active_cast(
+        &mut self,
+        key: char,
+        suffix: &str,
+        game_dir: &Path,
+    ) -> io::Result<Option<(MoveOutcome, Option<(usize, bool)>)>> {
+        let Some(mut session) = self.active_cast.take() else {
+            return Ok(None);
+        };
+        for ch in std::iter::once(key).chain(suffix.chars()) {
+            match cast_input_action(ch) {
+                CastInputAction::Cancel => {
+                    self.message = "None!".to_string();
+                    return Ok(None);
+                }
+                CastInputAction::Complete => {
+                    if session.buffer.is_empty() {
+                        self.message = "None!".to_string();
+                        return Ok(None);
+                    }
+                    let suffix = format!("{}{}", session.caster_index + 1, session.buffer);
+                    let combat = session
+                        .combat_actor_slot
+                        .map(|slot| (slot, session.combat_had_foe));
+                    let outcome = self.cast_spell_from_suffix(&suffix, game_dir)?;
+                    return Ok(Some((outcome, combat)));
+                }
+                CastInputAction::Backspace => {
+                    session.buffer.pop();
+                }
+                CastInputAction::Append(ch) => {
+                    if session.buffer.len() < SPELL_SELECTOR_MAX_LEN {
+                        session.buffer.push(ch);
+                    }
+                    if session.buffer.len() >= SPELL_SELECTOR_MAX_LEN {
+                        let suffix = format!("{}{}", session.caster_index + 1, session.buffer);
+                        let combat = session
+                            .combat_actor_slot
+                            .map(|slot| (slot, session.combat_had_foe));
+                        let outcome = self.cast_spell_from_suffix(&suffix, game_dir)?;
+                        return Ok(Some((outcome, combat)));
+                    }
+                }
+                CastInputAction::Discard => {}
+            }
+        }
+        self.message = self.render_cast_session(&session);
+        self.active_cast = Some(session);
+        Ok(None)
+    }
+
     pub fn render_stats_panel_view(&self) -> String {
         render_stats_panel(self, self.active_player)
     }

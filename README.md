@@ -206,11 +206,14 @@ the stock no-response line and world/vehicle command
 letters are routed as dungeon refusals before they can trigger overworld
 handlers. `I`gnite consumes a torch and starts or extends the torch counter with
 deterministic first-playable timing.
-Dungeon command letters whose full systems are outside this slice (`C` without
-an inline supported spell suffix, `R`, and `Y`) now route as command placeholders
-rather than vi diagonal movement fallbacks; bare `U` prompts for the inline Use
-shortcut, bare `M` prompts for the inline mix shortcut, and bare `N` prompts for
-the inline New Order shortcut. `J` routes to the first-playable Jimmy/key
+Dungeon command letters whose full systems are outside this slice no longer fall
+through to vi diagonal movement fallbacks. Bare `C` opens a spell-name prompt
+that accepts compact selector letters, ignores `J`/`O`, supports backspace and
+Escape/empty cancellation, and dispatches through the same spell resource and
+scene gates as inline `C1...` casts. Bare `U` opens the Use picker, bare `R`
+opens the Ready picker, bare `M` prompts for the inline mix shortcut, bare `N`
+prompts for the inline New Order shortcut, and bare `Y` prompts for a yell word.
+`J` routes to the first-playable Jimmy/key
 guard instead of the movement helper, with optional town lock and dungeon door
 metadata able to unlock authored door cells. Numeric diagonals still refuse as
 unsupported dungeon movement, and dungeon `Q` routes to the public mode-loop

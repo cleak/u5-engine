@@ -17815,7 +17815,7 @@
     fn top_down_uppercase_command_letters_preempt_vi_movement() {
         for (key, expected) in [
             ('A', "Attack where?"),
-            ('C', "Cast what?"),
+            ('C', "Spell name:"),
             ('D', "What?"),
             ('M', "Mix what?"),
             ('N', "New order?"),
@@ -18129,10 +18129,8 @@
 
     #[test]
     fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
-        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
-
         for (key, expected) in [
-            ('C', "Cast what?"),
+            ('C', "Spell name:"),
             ('M', "Mix what?"),
             ('N', "New order?"),
             ('R', "Ready:"),
@@ -18140,6 +18138,8 @@
             ('Y', "Yell what?"),
             ('Z', "Z-stats:"),
         ] {
+            let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+
             assert!(state.handle_dungeon_key(key, Path::new("")).unwrap());
             assert!(
                 state.message.contains(expected),
@@ -18149,6 +18149,8 @@
             assert_eq!((state.player.x, state.player.y), (1, 1));
             assert_eq!(state.turn, 0);
         }
+
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
 
         for key in ['7', '9', '1', '3'] {
             assert!(state.handle_dungeon_key(key, Path::new("")).unwrap());
