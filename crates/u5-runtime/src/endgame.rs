@@ -130,6 +130,7 @@ pub struct EndgameState {
     pub outcome: Option<EndgameOutcome>,
     pub certificate: Option<String>,
     pub cinematic: crate::endgame_cinematic::EndgameCinematic,
+    pub messages: Option<EndgameMessages>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -140,22 +141,35 @@ pub enum EndgameOutcome {
 
 impl EndgameState {
     pub fn awaiting_first_confirmation() -> Self {
+        Self::awaiting_first_confirmation_with_messages(None)
+    }
+
+    pub fn awaiting_first_confirmation_with_messages(messages: Option<EndgameMessages>) -> Self {
         Self {
             first_confirmation: None,
             final_confirmation: None,
             outcome: None,
             certificate: None,
             cinematic: crate::endgame_cinematic::EndgameCinematic::default(),
+            messages,
         }
     }
 
     pub fn awaiting_final_confirmation(first_confirmation: bool) -> Self {
+        Self::awaiting_final_confirmation_with_messages(first_confirmation, None)
+    }
+
+    pub fn awaiting_final_confirmation_with_messages(
+        first_confirmation: bool,
+        messages: Option<EndgameMessages>,
+    ) -> Self {
         Self {
             first_confirmation: Some(first_confirmation),
             final_confirmation: None,
             outcome: None,
             certificate: None,
             cinematic: crate::endgame_cinematic::EndgameCinematic::default(),
+            messages,
         }
     }
 
@@ -164,10 +178,15 @@ impl EndgameState {
         final_confirmation: bool,
         has_sandalwood_box: bool,
         certificate: String,
+        messages: Option<EndgameMessages>,
     ) -> Self {
         let outcome = endgame_outcome(final_confirmation, has_sandalwood_box);
         let cinematic = if outcome == EndgameOutcome::Victory {
-            crate::endgame_cinematic::EndgameCinematic::start()
+            let rite_count = messages
+                .as_ref()
+                .map(|messages| messages.rite_messages().len().min(u8::MAX as usize) as u8)
+                .unwrap_or(0);
+            crate::endgame_cinematic::EndgameCinematic::start_with_rite_messages(rite_count)
         } else {
             crate::endgame_cinematic::EndgameCinematic::default()
         };
@@ -177,6 +196,7 @@ impl EndgameState {
             outcome: Some(outcome),
             certificate: (outcome == EndgameOutcome::Victory).then_some(certificate),
             cinematic,
+            messages,
         }
     }
 
@@ -195,6 +215,63 @@ impl EndgameState {
 
     pub fn is_terminal(&self) -> bool {
         self.outcome.is_some()
+    }
+
+    pub fn first_prompt_text(&self, leader_name: &str) -> String {
+        if let Some(messages) = &self.messages {
+            let mut lines = Vec::new();
+            if let Some(greeting) = messages.initial_greeting() {
+                lines.push(format!("{leader_name}: {greeting}"));
+            }
+            if let Some(prompt) = messages.first_box_prompt() {
+                lines.push(prompt.to_string());
+            }
+            if !lines.is_empty() {
+                lines.push("(Y/N)".to_string());
+                return lines.join("\n");
+            }
+        }
+        "Endgame: Lord British asks whether thou hast brought his box. (Y/N)".to_string()
+    }
+
+    pub fn second_prompt_text(&self, first_answer: bool) -> String {
+        if let Some(messages) = &self.messages {
+            if let Some(prompt) = messages.second_box_prompt() {
+                return format!(
+                    "Thou answered {}.\n{prompt}\n(Y/N)",
+                    yes_no_word(first_answer)
+                );
+            }
+        }
+        "Endgame: Lord British asks again for the sandalwood box. (Y/N)".to_string()
+    }
+
+    pub fn refusal_text(&self) -> String {
+        self.messages
+            .as_ref()
+            .and_then(|messages| messages.refusal_branch())
+            .map(str::to_string)
+            .unwrap_or_else(|| {
+                "Endgame: the sandalwood box handoff failed; the ending tableau is terminal."
+                    .to_string()
+            })
+    }
+
+    pub fn current_cinematic_text(&self) -> String {
+        match self.cinematic.step {
+            crate::endgame_cinematic::EndgameCinematicStep::RiteMessage(index) => self
+                .messages
+                .as_ref()
+                .and_then(|messages| messages.rite_messages().get(index as usize))
+                .cloned()
+                .unwrap_or_else(|| self.cinematic.banner_label().to_string()),
+            crate::endgame_cinematic::EndgameCinematicStep::Certificate
+            | crate::endgame_cinematic::EndgameCinematicStep::Finished => self
+                .certificate
+                .clone()
+                .unwrap_or_else(|| self.cinematic.banner_label().to_string()),
+            _ => self.cinematic.banner_label().to_string(),
+        }
     }
 }
 
@@ -215,6 +292,10 @@ pub fn endgame_outcome(final_confirmation: bool, has_sandalwood_box: bool) -> En
     } else {
         EndgameOutcome::MissingBoxOrRefused
     }
+}
+
+fn yes_no_word(answer: bool) -> &'static str {
+    if answer { "yes" } else { "no" }
 }
 
 /// `endgame.md §9` certificate elapsed-time baseline. The certificate
@@ -428,6 +509,21 @@ pub fn endgame_step_toward_target(
 
 impl PlayState {
     pub fn enter_endgame(&mut self) -> MoveOutcome {
+        self.enter_endgame_with_messages(None)
+    }
+
+    pub fn enter_endgame_from_game_dir(
+        &mut self,
+        game_dir: Option<&std::path::Path>,
+    ) -> std::io::Result<MoveOutcome> {
+        let messages = game_dir.map(load_endgame_messages).transpose()?.flatten();
+        Ok(self.enter_endgame_with_messages(messages))
+    }
+
+    pub fn enter_endgame_with_messages(
+        &mut self,
+        messages: Option<EndgameMessages>,
+    ) -> MoveOutcome {
         self.pending_moongate = None;
         self.combat_active = false;
         self.pending_combat_actor_slot = None;
@@ -436,10 +532,28 @@ impl PlayState {
         // restored state for the ending tableau, with current health restored
         // from the stored maximum.
         self.restore_party_for_endgame_tableau();
-        self.endgame = Some(EndgameState::awaiting_first_confirmation());
-        self.message =
-            "Endgame: Lord British asks whether thou hast brought his box. (Y/N)".to_string();
+        self.endgame = Some(EndgameState::awaiting_first_confirmation_with_messages(
+            messages,
+        ));
+        self.message = self
+            .endgame
+            .as_ref()
+            .expect("endgame state was just installed")
+            .first_prompt_text(&self.party_leader_name());
         MoveOutcome::EndgameEntered
+    }
+
+    pub fn ensure_endgame_messages_loaded(
+        &mut self,
+        game_dir: &std::path::Path,
+    ) -> std::io::Result<()> {
+        let Some(state) = self.endgame.as_mut() else {
+            return Ok(());
+        };
+        if state.messages.is_none() {
+            state.messages = load_endgame_messages(game_dir)?;
+        }
+        Ok(())
     }
 
     /// endgame.md section 10: restore Dead travelling-party members to Good status with
@@ -468,20 +582,10 @@ impl PlayState {
             if matches!(current.outcome, Some(EndgameOutcome::Victory)) {
                 if let Some(state) = self.endgame.as_mut() {
                     if state.cinematic_is_finished() {
-                        self.message = state
-                            .certificate
-                            .clone()
-                            .unwrap_or_else(|| "The victory ending is complete.".to_string());
+                        self.message = state.current_cinematic_text();
                     } else {
-                        let banner = state.advance_cinematic();
-                        self.message = if state.cinematic_is_finished() {
-                            state
-                                .certificate
-                                .clone()
-                                .unwrap_or_else(|| "The victory ending is complete.".to_string())
-                        } else {
-                            banner.to_string()
-                        };
+                        state.advance_cinematic();
+                        self.message = state.current_cinematic_text();
                     }
                     return MoveOutcome::Observed;
                 }
@@ -499,22 +603,41 @@ impl PlayState {
         }
 
         if current.first_confirmation.is_none() {
-            self.endgame = Some(EndgameState::awaiting_final_confirmation(answer));
-            self.message =
-                "Endgame: Lord British asks again for the sandalwood box. (Y/N)".to_string();
+            self.endgame = Some(EndgameState::awaiting_final_confirmation_with_messages(
+                answer,
+                current.messages,
+            ));
+            self.message = self
+                .endgame
+                .as_ref()
+                .expect("endgame state was just installed")
+                .second_prompt_text(answer);
             return MoveOutcome::Used;
         }
 
         let first = current.first_confirmation.unwrap_or(false);
         let has_box = self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] != 0;
         let certificate = endgame_certificate_summary(&self.party_leader_name(), self.clock);
-        let next = EndgameState::terminal(first, answer, has_box, certificate.clone());
+        let next = EndgameState::terminal(
+            first,
+            answer,
+            has_box,
+            certificate.clone(),
+            current.messages,
+        );
         self.message = match next.outcome {
-            Some(EndgameOutcome::Victory) => certificate,
-            Some(EndgameOutcome::MissingBoxOrRefused) => {
-                "Endgame: the sandalwood box handoff failed; the ending tableau is terminal."
-                    .to_string()
+            Some(EndgameOutcome::Victory) => {
+                if next
+                    .messages
+                    .as_ref()
+                    .is_some_and(|messages| !messages.rite_messages().is_empty())
+                {
+                    next.current_cinematic_text()
+                } else {
+                    certificate
+                }
             }
+            Some(EndgameOutcome::MissingBoxOrRefused) => next.refusal_text(),
             None => unreachable!("terminal endgame has an outcome"),
         };
         self.endgame = Some(next);

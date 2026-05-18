@@ -482,7 +482,7 @@ impl PlayState {
         let arena = dungeon_room_arena_index(scene, tile);
         let dungeon_cbt_available = game_dir.is_some_and(|dir| dir.join(DUNGEON_CBT_FILE).exists());
         if doom_final_room && !dungeon_cbt_available {
-            return Ok(self.enter_endgame());
+            return self.enter_endgame_from_game_dir(game_dir);
         }
         let marked_helper = !helper_state && !doom_final_room;
         if marked_helper {

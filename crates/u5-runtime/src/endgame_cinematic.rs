@@ -13,6 +13,9 @@ pub enum EndgameCinematicStep {
     /// No cinematic active.
     #[default]
     Inactive,
+    /// One Lord British victory-rite message from `ENDMSG.DAT` is on screen,
+    /// indexed `0..rite_message_count`.
+    RiteMessage(u8),
     /// Throne-room tableau is on screen; awaiting first key to begin
     /// the narrative scroll.
     ThroneTableau,
@@ -34,6 +37,9 @@ pub const ENDGAME_NARRATIVE_WINDOW_COUNT: u8 = 6;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct EndgameCinematic {
     pub step: EndgameCinematicStep,
+    /// Number of Lord British victory-rite message records to page through
+    /// before the fixed final narrative windows.
+    pub rite_message_count: u8,
     /// Number of keystrokes consumed since the cinematic began. Useful
     /// for testing and for the UI's page indicator.
     pub keystrokes: u32,
@@ -42,8 +48,19 @@ pub struct EndgameCinematic {
 impl EndgameCinematic {
     /// Begin the cinematic. Returns the new state.
     pub fn start() -> Self {
+        Self::start_with_rite_messages(0)
+    }
+
+    /// Begin the cinematic after `rite_message_count` Lord British message
+    /// records. A count of zero preserves the legacy direct-to-tableau path.
+    pub fn start_with_rite_messages(rite_message_count: u8) -> Self {
         Self {
-            step: EndgameCinematicStep::ThroneTableau,
+            step: if rite_message_count == 0 {
+                EndgameCinematicStep::ThroneTableau
+            } else {
+                EndgameCinematicStep::RiteMessage(0)
+            },
+            rite_message_count,
             keystrokes: 0,
         }
     }
@@ -54,6 +71,14 @@ impl EndgameCinematic {
         self.keystrokes = self.keystrokes.saturating_add(1);
         self.step = match self.step {
             EndgameCinematicStep::Inactive | EndgameCinematicStep::Finished => self.step,
+            EndgameCinematicStep::RiteMessage(idx) => {
+                let next = idx.saturating_add(1);
+                if next < self.rite_message_count {
+                    EndgameCinematicStep::RiteMessage(next)
+                } else {
+                    EndgameCinematicStep::ThroneTableau
+                }
+            }
             EndgameCinematicStep::ThroneTableau => EndgameCinematicStep::NarrativeWindow(0),
             EndgameCinematicStep::NarrativeWindow(idx) => {
                 let next = idx.saturating_add(1);
@@ -81,6 +106,7 @@ impl EndgameCinematic {
     pub fn banner_label(&self) -> &'static str {
         match self.step {
             EndgameCinematicStep::Inactive => "(no cinematic)",
+            EndgameCinematicStep::RiteMessage(_) => "Lord British rite",
             EndgameCinematicStep::ThroneTableau => "Throne-room tableau",
             EndgameCinematicStep::NarrativeWindow(0) => "Return-home arc (1)",
             EndgameCinematicStep::NarrativeWindow(1) => "Return-home arc (2)",

@@ -13959,6 +13959,66 @@
     }
 
     #[test]
+    fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
+        let labels = [
+            "Welcome back",
+            "Hast thou brought my box?",
+            "The sandalwood box itself?",
+            "Rite 1",
+            "Rite 2",
+            "Rite 3",
+            "Rite 4",
+            "Rite 5",
+            "Rite 6",
+            "Rite 7",
+            "Wait here without the box",
+        ];
+        let mut bytes = Vec::new();
+        for label in labels {
+            bytes.extend_from_slice(label.as_bytes());
+            bytes.push(0x00);
+        }
+        let messages = parse_endgame_messages(&bytes).unwrap();
+
+        let dir = debug_game_dir();
+        fs::write(dir.join("ENDMSG.DAT"), &bytes).unwrap();
+        let mut loaded = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        loaded.party_names = vec![*b"AVATAR\0\0\0"];
+        loaded
+            .enter_endgame_from_game_dir(Some(&dir))
+            .expect("synthetic ENDMSG.DAT should load");
+        assert!(loaded.message.contains("Welcome back"));
+        assert!(loaded.message.contains("Hast thou brought my box?"));
+        let _ = fs::remove_dir_all(dir);
+
+        let mut refusal = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        refusal.party_names = vec![*b"AVATAR\0\0\0"];
+        refusal.enter_endgame_with_messages(Some(messages.clone()));
+        assert!(refusal.message.contains("AVATAR"));
+        assert!(refusal.message.contains("Welcome back"));
+        assert!(refusal.message.contains("Hast thou brought my box?"));
+
+        refusal.resolve_endgame_confirmation(true);
+        assert!(refusal.message.contains("Thou answered yes."));
+        assert!(refusal.message.contains("The sandalwood box itself?"));
+        refusal.resolve_endgame_confirmation(false);
+        assert_eq!(refusal.message, "Wait here without the box");
+
+        let mut victory = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        victory.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 1;
+        victory.enter_endgame_with_messages(Some(messages));
+        victory.resolve_endgame_confirmation(true);
+        victory.resolve_endgame_confirmation(true);
+        assert_eq!(victory.message, "Rite 1");
+        for expected in ["Rite 2", "Rite 3", "Rite 4", "Rite 5", "Rite 6", "Rite 7"] {
+            victory.resolve_endgame_confirmation(true);
+            assert_eq!(victory.message, expected);
+        }
+        victory.resolve_endgame_confirmation(true);
+        assert_eq!(victory.message, "Throne-room tableau");
+    }
+
+    #[test]
     fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_state() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 1;

@@ -19,7 +19,7 @@ pub fn handle_play_key_input(
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
     if state.endgame.is_some() {
-        return Ok(handle_endgame_key_input(state, key, suffix));
+        return handle_endgame_key_input(state, key, suffix, game_dir);
     }
     if state.active_blackthorn.is_some() {
         return handle_active_blackthorn_key_input(state, key, suffix, game_dir);
@@ -1496,7 +1496,9 @@ fn handle_endgame_key_input(
     state: &mut PlayState,
     key: char,
     suffix: &str,
-) -> PlayInputDisposition {
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    state.ensure_endgame_messages_loaded(game_dir)?;
     let answer = parse_inline_yes_no(suffix).or_else(|| match key {
         'Y' | 'y' => Some(true),
         'N' | 'n' => Some(false),
@@ -1513,7 +1515,7 @@ fn handle_endgame_key_input(
     } else {
         state.message = "Endgame confirmation requires Y or N.".to_string();
     }
-    PlayInputDisposition::Continue
+    Ok(PlayInputDisposition::Continue)
 }
 
 fn combat_has_dispatchable_party_actor(state: &PlayState) -> bool {
