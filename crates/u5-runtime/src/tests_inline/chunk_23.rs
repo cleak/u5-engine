@@ -9266,6 +9266,253 @@
     }
 
     #[test]
+    fn combat_cast_repel_undead_routes_resources_and_dispels_undead_classes() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.party[0].mana = REPEL_UNDEAD_COST;
+        state.party[0].level = REPEL_UNDEAD_COST;
+        state.party_experience = vec![10];
+        state.spell_charges[REPEL_UNDEAD_SPELL_INDEX] = 1;
+
+        let ghost = combat_class_stats(23).unwrap();
+        let skeleton = combat_class_stats(33).unwrap();
+        let orc = combat_class_stats(32).unwrap();
+        state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS] =
+            CombatActorDescriptor::for_monster_placement(
+                ghost,
+                COMBAT_PARTY_ACTOR_SLOTS as u8,
+                4,
+                5,
+                COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                0,
+            );
+        state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1] =
+            CombatActorDescriptor::for_monster_placement(
+                skeleton,
+                (COMBAT_PARTY_ACTOR_SLOTS + 1) as u8,
+                5,
+                5,
+                COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                0,
+            );
+        state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 2] =
+            CombatActorDescriptor::for_monster_placement(
+                orc,
+                (COMBAT_PARTY_ACTOR_SLOTS + 2) as u8,
+                6,
+                5,
+                COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                0,
+            );
+
+        assert_eq!(
+            state
+                .cast_spell_from_suffix("1ACX", std::path::Path::new(""))
+                .unwrap(),
+            MoveOutcome::Cast
+        );
+
+        assert_eq!(state.spell_charges[REPEL_UNDEAD_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert!(state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_marked_dead());
+        assert!(state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].is_marked_dead());
+        assert!(!state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 2].is_marked_dead());
+        assert_eq!(
+            state.party_experience[0],
+            10 + u16::from(ghost.reward_unit()) + u16::from(skeleton.reward_unit())
+        );
+        assert_eq!(state.message, "Repel Undead! 2 undead repelled.");
+    }
+
+    #[test]
+    fn combat_cast_directed_sleep_and_poison_wind_mutate_party_targets() {
+        let mut sleep = world_state(open_world_grid(), 10, 20);
+        sleep.combat_active = true;
+        sleep.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: 1,
+                status: b'G',
+                climb_stat: 0,
+                mana: SLEEP_COST,
+                hp: 12,
+                max_hp: 20,
+                level: SLEEP_COST,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: 1,
+                status: b'G',
+                climb_stat: 0,
+                mana: 0,
+                hp: 12,
+                max_hp: 20,
+                level: 1,
+            },
+        ];
+        sleep.spell_charges[SLEEP_SPELL_INDEX] = 1;
+        sleep.combat_actors[0] =
+            CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+        sleep.combat_actors[1] =
+            CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 1, 0, 6, 5]);
+
+        assert_eq!(
+            sleep
+                .cast_spell_from_suffix("1IZ2", std::path::Path::new(""))
+                .unwrap(),
+            MoveOutcome::Cast
+        );
+
+        assert_eq!(sleep.spell_charges[SLEEP_SPELL_INDEX], 0);
+        assert_eq!(sleep.party[0].mana, 0);
+        assert_eq!(sleep.party[1].status, b'S');
+        assert_eq!(sleep.message, "Sleep!");
+
+        let mut poison = world_state(open_world_grid(), 10, 20);
+        poison.combat_active = true;
+        poison.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: 1,
+                status: b'G',
+                climb_stat: 0,
+                mana: POISON_WIND_COST,
+                hp: 12,
+                max_hp: 20,
+                level: POISON_WIND_COST,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: 1,
+                status: b'G',
+                climb_stat: 0,
+                mana: 0,
+                hp: 12,
+                max_hp: 20,
+                level: 1,
+            },
+            PartyMember {
+                slot: 2,
+                class_byte: 1,
+                status: b'G',
+                climb_stat: 0,
+                mana: 0,
+                hp: 12,
+                max_hp: 20,
+                level: 1,
+            },
+        ];
+        poison.spell_charges[POISON_WIND_SPELL_INDEX] = 1;
+        poison.combat_actors[0] =
+            CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+        poison.combat_actors[2] =
+            CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 2, 0, 6, 5]);
+
+        assert_eq!(
+            poison
+                .cast_spell_from_suffix("1HIN3", std::path::Path::new(""))
+                .unwrap(),
+            MoveOutcome::Cast
+        );
+
+        assert_eq!(poison.spell_charges[POISON_WIND_SPELL_INDEX], 0);
+        assert_eq!(poison.party[0].mana, 0);
+        assert_eq!(poison.party[2].status, b'P');
+        assert_eq!(poison.message, "Poison wind!");
+    }
+
+    #[test]
+    fn combat_cast_directed_damage_winds_route_damage_and_friendly_fire() {
+        let mut death = world_state(open_world_grid(), 10, 20);
+        death.combat_active = true;
+        death.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: 1,
+                status: b'G',
+                climb_stat: 0,
+                mana: DEATH_WIND_COST,
+                hp: 12,
+                max_hp: 20,
+                level: DEATH_WIND_COST,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: 1,
+                status: b'G',
+                climb_stat: 0,
+                mana: 0,
+                hp: 12,
+                max_hp: 20,
+                level: 1,
+            },
+        ];
+        death.party_experience = vec![10, 20];
+        death.spell_charges[DEATH_WIND_SPELL_INDEX] = 1;
+        death.combat_actors[0] =
+            CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+        death.combat_actors[1] =
+            CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 1, 0, 6, 5]);
+        let stats = combat_class_stats(32).unwrap();
+        death.combat_actors[COMBAT_PARTY_ACTOR_SLOTS] =
+            CombatActorDescriptor::for_monster_placement(
+                stats,
+                COMBAT_PARTY_ACTOR_SLOTS as u8,
+                7,
+                5,
+                COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                0,
+            );
+
+        assert_eq!(
+            death
+                .cast_spell_from_suffix("1CGIV7", std::path::Path::new(""))
+                .unwrap(),
+            MoveOutcome::Cast
+        );
+
+        assert_eq!(death.spell_charges[DEATH_WIND_SPELL_INDEX], 0);
+        assert_eq!(death.party[0].status, b'G');
+        assert_eq!(death.party[1].status, b'D');
+        assert!(death.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_marked_dead());
+        assert_eq!(
+            death.party_experience[0],
+            10 + u16::from(stats.reward_unit())
+        );
+        assert_eq!(death.message, "Death wind!");
+
+        let mut flame = world_state(open_world_grid(), 10, 20);
+        flame.combat_active = true;
+        flame.party[0].mana = FLAME_WIND_COST;
+        flame.party[0].level = FLAME_WIND_COST;
+        flame.party_experience = vec![10];
+        flame.spell_charges[FLAME_WIND_SPELL_INDEX] = 1;
+        flame.combat_actors[0] =
+            CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+        flame.combat_actors[COMBAT_PARTY_ACTOR_SLOTS] =
+            CombatActorDescriptor::for_monster_placement(
+                stats,
+                COMBAT_PARTY_ACTOR_SLOTS as u8,
+                6,
+                5,
+                COMBAT_ACTOR_FLAG_SELECTABLE_80,
+                0,
+            );
+
+        assert_eq!(
+            flame
+                .cast_spell_from_suffix("1FHI7", std::path::Path::new(""))
+                .unwrap(),
+            MoveOutcome::Cast
+        );
+
+        assert_eq!(flame.spell_charges[FLAME_WIND_SPELL_INDEX], 0);
+        assert!(flame.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].hp_or_wound < stats.max_hp);
+        assert_eq!(flame.message, "Flame wind!");
+    }
+
+    #[test]
     fn active_target_spell_damage_application_preserves_kill_and_miss_routes() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.party = vec![PartyMember {

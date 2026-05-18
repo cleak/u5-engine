@@ -414,6 +414,13 @@ impl PlayState {
                     game_dir,
                 )
             }
+            "ACX" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1ACX for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_repel_undead(caster_index))
+            }
             "AT" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
                     self.message = "Who casts? Use C1AT for party slot 1.".to_string();
@@ -719,6 +726,26 @@ impl PlayState {
                 };
                 Ok(self.cast_tremor_combat_spell(caster_index, spell_index.unwrap()))
             }
+            "IZ" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1IZ7 for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                if !self.combat_active {
+                    self.message = "Not here!".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                }
+                let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
+                    self.message = "Target? Use C1IZ7 to target combat slot 7.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_directed_combat_spell(
+                    caster_index,
+                    spell_index.unwrap(),
+                    CombatDirectedSpellEffect::Sleep,
+                    target_slot,
+                ))
+            }
             "IQW" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
                     self.message = "Who casts? Use C1IQW for party slot 1.".to_string();
@@ -739,6 +766,26 @@ impl PlayState {
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_invisibility(caster_index))
+            }
+            "HIN" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1HIN7 for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                if !self.combat_active {
+                    self.message = "Not here!".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                }
+                let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
+                    self.message = "Target? Use C1HIN7 to target combat slot 7.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_directed_combat_spell(
+                    caster_index,
+                    spell_index.unwrap(),
+                    CombatDirectedSpellEffect::PoisonWind,
+                    target_slot,
+                ))
             }
             "HR" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
@@ -811,12 +858,52 @@ impl PlayState {
                 };
                 Ok(self.cast_combat_summon_daemon_spell(caster_index, spell_index.unwrap()))
             }
+            "CGIV" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1CGIV7 for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                if !self.combat_active {
+                    self.message = "Not here!".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                }
+                let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
+                    self.message = "Target? Use C1CGIV7 to target combat slot 7.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_directed_combat_spell(
+                    caster_index,
+                    spell_index.unwrap(),
+                    CombatDirectedSpellEffect::DeathWind,
+                    target_slot,
+                ))
+            }
             "CIQ" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
                     self.message = "Who casts? Use C1CIQ for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_cause_fear(caster_index))
+            }
+            "FHI" => {
+                let Some(caster_index) = parse_inline_party_index(suffix) else {
+                    self.message = "Who casts? Use C1FHI7 for party slot 1.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                if !self.combat_active {
+                    self.message = "Not here!".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                }
+                let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
+                    self.message = "Target? Use C1FHI7 to target combat slot 7.".to_string();
+                    return Ok(MoveOutcome::Blocked);
+                };
+                Ok(self.cast_directed_combat_spell(
+                    caster_index,
+                    spell_index.unwrap(),
+                    CombatDirectedSpellEffect::FlameWind,
+                    target_slot,
+                ))
             }
             "PU" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {

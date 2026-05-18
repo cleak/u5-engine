@@ -507,6 +507,20 @@ impl PlayState {
             .wrapping_add(spell_index as u8)
     }
 
+    pub fn directed_combat_spell_roll(
+        &self,
+        caster_index: usize,
+        target_slot: usize,
+        spell_index: usize,
+        target_index: usize,
+    ) -> u8 {
+        (self.turn as u8)
+            .wrapping_add((caster_index as u8).wrapping_mul(17))
+            .wrapping_add((target_slot as u8).wrapping_mul(7))
+            .wrapping_add((target_index as u8).wrapping_mul(3))
+            .wrapping_add(spell_index as u8)
+    }
+
     pub fn combat_arena_field_placement_callback_accepts(
         &self,
         caster_index: usize,
@@ -1961,6 +1975,191 @@ impl PlayState {
             effect,
             applications,
         })
+    }
+
+    pub fn directed_combat_spell_target_cells(
+        &self,
+        caster_index: usize,
+        target_slot: usize,
+        effect: CombatDirectedSpellEffect,
+    ) -> Option<Vec<(u8, u8)>> {
+        let caster = self.combat_actors.get(caster_index).copied()?;
+        let target = self.combat_actors.get(target_slot).copied()?;
+        if !combat_actor_is_active_not_dead(caster) || !directed_spell_actor_is_eligible(target) {
+            return None;
+        }
+        if matches!(effect, CombatDirectedSpellEffect::Sleep) {
+            return Some(vec![(target.x, target.y)]);
+        }
+
+        let delta_x = target.x as i16 - caster.x as i16;
+        let delta_y = target.y as i16 - caster.y as i16;
+        let (forward_x, forward_y) = if delta_x.abs() >= delta_y.abs() {
+            (delta_x.signum(), 0)
+        } else {
+            (0, delta_y.signum())
+        };
+        if forward_x == 0 && forward_y == 0 {
+            return Some(vec![(caster.x, caster.y)]);
+        }
+        let (side_x, side_y) = (-forward_y, forward_x);
+        let mut cells = Vec::new();
+        for distance in 1..COMBAT_ARENA_SIDE as i16 {
+            let lateral_radius = (distance / 2).min(2);
+            for lateral in -lateral_radius..=lateral_radius {
+                let x = caster.x as i16 + forward_x * distance + side_x * lateral;
+                let y = caster.y as i16 + forward_y * distance + side_y * lateral;
+                if (0..COMBAT_ARENA_SIDE as i16).contains(&x)
+                    && (0..COMBAT_ARENA_SIDE as i16).contains(&y)
+                {
+                    let cell = (x as u8, y as u8);
+                    if !cells.contains(&cell) {
+                        cells.push(cell);
+                        if cells.len() == DIRECTED_TARGET_WALK_MAX_CELLS {
+                            return Some(cells);
+                        }
+                    }
+                }
+            }
+        }
+        Some(cells)
+    }
+
+    pub fn cast_directed_combat_spell(
+        &mut self,
+        caster_index: usize,
+        spell_index: usize,
+        effect: CombatDirectedSpellEffect,
+        target_slot: usize,
+    ) -> MoveOutcome {
+        if !self.combat_active || !self.spell_allowed_in_current_cast_context(spell_index) {
+            self.message = "Not here!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if target_slot >= COMBAT_ACTOR_SLOTS
+            || !self
+                .combat_actors
+                .get(target_slot)
+                .copied()
+                .is_some_and(directed_spell_actor_is_eligible)
+        {
+            self.message = "Target? Use C1IZ7 to target a live visible combat slot.".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        let Some(target_cells) =
+            self.directed_combat_spell_target_cells(caster_index, target_slot, effect)
+        else {
+            self.message = "Target? Use C1IZ7 to target a live visible combat slot.".to_string();
+            return MoveOutcome::Blocked;
+        };
+
+        let mana_cost = (spell_index / 6 + 1) as u8;
+        if let Some(outcome) = self.cast_spell_resource_gate(caster_index, spell_index, mana_cost) {
+            return outcome;
+        }
+
+        let target_slots = collect_directed_spell_actor_slots(&self.combat_actors, &target_cells);
+        let applied = match effect {
+            CombatDirectedSpellEffect::Sleep => self
+                .apply_directed_combat_spell_status(effect, &target_cells, &[], &[])
+                .map(|application| !application.applications.is_empty()),
+            CombatDirectedSpellEffect::PoisonWind => {
+                let gate_accepts = target_slots
+                    .iter()
+                    .copied()
+                    .enumerate()
+                    .map(|(index, slot)| {
+                        self.directed_combat_spell_roll(caster_index, slot, spell_index, index) & 1
+                            == 0
+                    })
+                    .collect::<Vec<_>>();
+                let damage_rolls = target_slots
+                    .iter()
+                    .copied()
+                    .enumerate()
+                    .map(|(index, slot)| {
+                        self.directed_combat_spell_roll(caster_index, slot, spell_index, index)
+                    })
+                    .collect::<Vec<_>>();
+                self.apply_directed_combat_spell_status(
+                    effect,
+                    &target_cells,
+                    &gate_accepts,
+                    &damage_rolls,
+                )
+                .map(|application| !application.applications.is_empty())
+            }
+            CombatDirectedSpellEffect::DeathWind | CombatDirectedSpellEffect::FlameWind => {
+                let damage_rolls = target_slots
+                    .iter()
+                    .copied()
+                    .enumerate()
+                    .map(|(index, slot)| {
+                        self.directed_combat_spell_roll(caster_index, slot, spell_index, index)
+                    })
+                    .collect::<Vec<_>>();
+                self.apply_directed_combat_spell_damage(
+                    Some(caster_index),
+                    effect,
+                    &target_cells,
+                    &damage_rolls,
+                )
+                .map(|application| !application.applications.is_empty())
+            }
+        };
+
+        self.advance_turn();
+        self.message = match (effect, applied.unwrap_or(false)) {
+            (CombatDirectedSpellEffect::Sleep, true) => "Sleep!".to_string(),
+            (CombatDirectedSpellEffect::PoisonWind, true) => "Poison wind!".to_string(),
+            (CombatDirectedSpellEffect::DeathWind, true) => "Death wind!".to_string(),
+            (CombatDirectedSpellEffect::FlameWind, true) => "Flame wind!".to_string(),
+            _ => "Failed!".to_string(),
+        };
+        if applied.unwrap_or(false) {
+            MoveOutcome::Cast
+        } else {
+            MoveOutcome::Blocked
+        }
+    }
+
+    pub fn cast_repel_undead(&mut self, caster_index: usize) -> MoveOutcome {
+        if !self.combat_active
+            || !self.spell_allowed_in_current_cast_context(REPEL_UNDEAD_SPELL_INDEX)
+        {
+            self.message = "Not here!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if let Some(outcome) =
+            self.cast_spell_resource_gate(caster_index, REPEL_UNDEAD_SPELL_INDEX, REPEL_UNDEAD_COST)
+        {
+            return outcome;
+        }
+
+        let target_slots = collect_repel_undead_actor_slots(&self.combat_actors);
+        let mut affected = 0usize;
+        for slot in target_slots {
+            if self
+                .apply_combat_weapon_damage_to_target(
+                    Some(caster_index),
+                    slot,
+                    COMBAT_INSTANT_KILL_DAMAGE,
+                    true,
+                )
+                .is_some()
+            {
+                affected += 1;
+            }
+        }
+
+        self.advance_turn();
+        self.message = if affected == 0 {
+            "Repel Undead found no target.".to_string()
+        } else {
+            format!("Repel Undead! {affected} undead repelled.")
+        };
+        MoveOutcome::Cast
     }
 
     pub fn apply_combat_arena_field_contact(

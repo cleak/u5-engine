@@ -1589,6 +1589,24 @@ pub fn collect_directed_spell_actor_slots(
     slots
 }
 
+/// `magic.md §8` / `catalogs/monster-bestiary.md §6`: the repel-undead
+/// player spell targets the published undead/spectral combat classes.
+pub const fn combat_class_is_repel_undead_target(class: u8) -> bool {
+    matches!(class, 23 | 33)
+}
+
+pub fn collect_repel_undead_actor_slots(actors: &[CombatActorDescriptor]) -> Vec<usize> {
+    let mut slots = Vec::new();
+    for (slot, actor) in actors.iter().copied().enumerate() {
+        if directed_spell_actor_is_eligible(actor)
+            && combat_class_is_repel_undead_target(actor.owner_target_class)
+        {
+            slots.push(slot);
+        }
+    }
+    slots
+}
+
 pub fn collect_tremor_spell_actor_slots(
     actors: &[CombatActorDescriptor],
     gate_accepts: &[bool],
