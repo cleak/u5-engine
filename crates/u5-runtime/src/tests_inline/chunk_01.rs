@@ -457,6 +457,48 @@
     }
 
     #[test]
+    fn bit_graphics_parses_sparse_strip_resource_body() {
+        // formats/bit.md section 3: a sparse resource starts with an entry
+        // count, then four-byte pointer/metadata entries. WD.BIT's one-entry
+        // layout is valid because its pointer targets the metadata word, which
+        // then doubles as the strip width word.
+        let mut body = Vec::new();
+        body.extend_from_slice(&1u16.to_le_bytes());
+        body.extend_from_slice(&4u16.to_le_bytes());
+        body.extend_from_slice(&9u16.to_le_bytes());
+        body.extend_from_slice(&2u16.to_le_bytes());
+        body.extend_from_slice(&[0b1010_1010, 0b1100_0011, 0b1000_0000]);
+
+        let images = parse_sparse_bit_images(&body, "fixture.bit").unwrap();
+
+        assert_eq!(images.blocks.len(), 1);
+        let bitmap = &images.blocks[0];
+        assert_eq!((bitmap.width, bitmap.height), (9, 2));
+        assert_eq!(bitmap.pixels.len(), 18);
+        assert_eq!(&bitmap.pixels[..10], &[1, 0, 1, 0, 1, 0, 1, 0, 1, 1]);
+        assert_eq!(&bitmap.pixels[16..], &[1, 0]);
+    }
+
+    #[test]
+    fn bit_graphics_parse_title_accepts_raw_sparse_resource() {
+        let mut body = Vec::new();
+        body.extend_from_slice(&2u16.to_le_bytes());
+        body.extend_from_slice(&0u16.to_le_bytes());
+        body.extend_from_slice(&123u16.to_le_bytes());
+        body.extend_from_slice(&10u16.to_le_bytes());
+        body.extend_from_slice(&0u16.to_le_bytes());
+        body.extend_from_slice(&8u16.to_le_bytes());
+        body.extend_from_slice(&1u16.to_le_bytes());
+        body.push(0b1010_0000);
+
+        let title = parse_title_bit(&body).unwrap();
+
+        assert_eq!(title.blocks.len(), 1);
+        assert_eq!((title.blocks[0].width, title.blocks[0].height), (8, 1));
+        assert_eq!(title.blocks[0].pixels, vec![1, 0, 1, 0, 0, 0, 0, 0]);
+    }
+
+    #[test]
     fn bit_graphics_parses_title_bitmap_directory_body() {
         let mut body = Vec::new();
         body.extend_from_slice(&2u16.to_le_bytes());
@@ -496,6 +538,13 @@
         bad_length.extend_from_slice(&1u16.to_le_bytes());
 
         assert!(parse_single_image_bit_body(&bad_length, "fixture").is_err());
+        assert!(parse_sparse_bit_images(&[0], "fixture.bit").is_err());
+
+        let mut bad_sparse_pointer = Vec::new();
+        bad_sparse_pointer.extend_from_slice(&1u16.to_le_bytes());
+        bad_sparse_pointer.extend_from_slice(&99u16.to_le_bytes());
+        bad_sparse_pointer.extend_from_slice(&0u16.to_le_bytes());
+        assert!(parse_sparse_bit_images(&bad_sparse_pointer, "fixture.bit").is_err());
     }
 
     #[test]

@@ -13,8 +13,24 @@ pub fn load_title_bit(game_dir: &Path) -> io::Result<TitleBitImages> {
 
 #[cfg(test)]
 pub fn parse_title_bit(bytes: &[u8]) -> io::Result<TitleBitImages> {
-    let body = decode_lzw_envelope(bytes, TITLE_BIT_FILE)?;
-    parse_title_bit_body(&body, TITLE_BIT_FILE)
+    parse_sparse_bit_images(bytes, TITLE_BIT_FILE).or_else(|raw_err| {
+        let body = decode_lzw_envelope(bytes, TITLE_BIT_FILE).map_err(|lzw_err| {
+            io::Error::new(
+                lzw_err.kind(),
+                format!(
+                    "{TITLE_BIT_FILE} is neither a sparse strip resource ({raw_err}) nor a legacy LZW-wrapped bitmap directory ({lzw_err})"
+                ),
+            )
+        })?;
+        parse_title_bit_body(&body, TITLE_BIT_FILE)
+    })
+}
+
+#[cfg(test)]
+pub fn parse_sparse_bit_images(bytes: &[u8], resource_name: &str) -> io::Result<TitleBitImages> {
+    Ok(TitleBitImages {
+        blocks: parse_sparse_strip_resource(bytes, resource_name)?,
+    })
 }
 
 #[cfg(test)]
@@ -67,8 +83,17 @@ pub fn load_british_bit(game_dir: &Path) -> io::Result<MonochromeBitmap> {
 
 #[cfg(test)]
 pub fn parse_british_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
-    let body = decode_lzw_envelope(bytes, BRITISH_BIT_FILE)?;
-    parse_single_image_bit_body(&body, BRITISH_BIT_FILE)
+    parse_single_sparse_bit_image(bytes, BRITISH_BIT_FILE).or_else(|raw_err| {
+        let body = decode_lzw_envelope(bytes, BRITISH_BIT_FILE).map_err(|lzw_err| {
+            io::Error::new(
+                lzw_err.kind(),
+                format!(
+                    "{BRITISH_BIT_FILE} is neither a sparse strip resource ({raw_err}) nor a legacy LZW-wrapped bitmap ({lzw_err})"
+                ),
+            )
+        })?;
+        parse_single_image_bit_body(&body, BRITISH_BIT_FILE)
+    })
 }
 
 #[cfg(test)]
@@ -78,7 +103,102 @@ pub fn load_wd_bit(game_dir: &Path) -> io::Result<MonochromeBitmap> {
 
 #[cfg(test)]
 pub fn parse_wd_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
-    parse_single_image_bit_body(bytes, WD_BIT_FILE)
+    parse_single_sparse_bit_image(bytes, WD_BIT_FILE)
+}
+
+#[cfg(test)]
+pub fn parse_single_sparse_bit_image(
+    bytes: &[u8],
+    resource_name: &str,
+) -> io::Result<MonochromeBitmap> {
+    let mut strips = parse_sparse_strip_resource(bytes, resource_name)?;
+    if strips.len() != 1 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{resource_name} sparse strip resource must contain exactly one populated strip, got {}",
+                strips.len()
+            ),
+        ));
+    }
+    Ok(strips.remove(0))
+}
+
+#[cfg(test)]
+pub fn parse_sparse_strip_resource(
+    bytes: &[u8],
+    resource_name: &str,
+) -> io::Result<Vec<MonochromeBitmap>> {
+    if bytes.len() < BIT_ENTRY_COUNT_WORD_LEN {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{resource_name} sparse strip resource is shorter than its count word"),
+        ));
+    }
+    let entry_count = u16_at(bytes, 0) as usize;
+    let mut strips = Vec::new();
+    for slot in 0..entry_count {
+        let entry_offset = BIT_ENTRY_COUNT_WORD_LEN
+            .checked_add(
+                slot.checked_mul(BIT_POINTER_TABLE_ENTRY_LEN)
+                    .ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            format!(
+                                "{resource_name} sparse strip table slot {slot} offset overflows"
+                            ),
+                        )
+                    })?,
+            )
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("{resource_name} sparse strip table slot {slot} offset overflows"),
+                )
+            })?;
+        if entry_offset >= bytes.len() {
+            break;
+        }
+        if entry_offset + BIT_POINTER_TABLE_ENTRY_LEN > bytes.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{resource_name} sparse strip table slot {slot} is truncated"),
+            ));
+        }
+        let pointer = u16_at(bytes, entry_offset);
+        if pointer == BIT_STRIP_POINTER_NONE {
+            continue;
+        }
+        strips.push(parse_sparse_strip_body(
+            bytes,
+            pointer as usize,
+            resource_name,
+            slot,
+        )?);
+    }
+    if strips.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{resource_name} sparse strip resource has no populated strips"),
+        ));
+    }
+    Ok(strips)
+}
+
+#[cfg(test)]
+pub fn parse_sparse_strip_body(
+    bytes: &[u8],
+    offset: usize,
+    resource_name: &str,
+    slot: usize,
+) -> io::Result<MonochromeBitmap> {
+    if offset + BIT_STRIP_HEADER_LEN > bytes.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{resource_name} sparse strip slot {slot} header at {offset} is truncated"),
+        ));
+    }
+    parse_monochrome_bitmap_payload(bytes, offset, resource_name)
 }
 
 #[cfg(test)]
