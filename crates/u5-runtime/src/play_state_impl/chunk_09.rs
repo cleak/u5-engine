@@ -1001,18 +1001,10 @@ impl PlayState {
         y: isize,
         visible_radius: usize,
     ) -> bool {
-        if !cell_in_visibility_radius(px, py, x, y, visible_radius) {
+        let Some(index) = visibility_view_index(px, py, x, y, visible_radius) else {
             return false;
-        }
-        if !(0..32).contains(&x) || !(0..32).contains(&y) {
-            return false;
-        }
-        surface_line_unblocked(px, py, x, y, |sx, sy| {
-            if !(0..32).contains(&sx) || !(0..32).contains(&sy) {
-                return true;
-            }
-            self.town_cell_blocks_sight(sx as usize, sy as usize)
-        })
+        };
+        self.surface_visibility_carve(px, py, visible_radius, false)[index]
     }
 
     pub fn town_cell_blocks_sight(&self, x: usize, y: usize) -> bool {
@@ -1028,19 +1020,83 @@ impl PlayState {
         y: isize,
         visible_radius: usize,
     ) -> bool {
-        if !cell_in_visibility_radius(px, py, x, y, visible_radius) {
+        let Some(index) = visibility_view_index(px, py, x, y, visible_radius) else {
             return false;
-        }
-        surface_line_unblocked(px, py, x, y, |sx, sy| {
-            let wx = sx.rem_euclid(WORLD_SIDE as isize) as usize;
-            let wy = sy.rem_euclid(WORLD_SIDE as isize) as usize;
-            self.world_cell_blocks_sight(wx, wy)
-        })
+        };
+        self.surface_visibility_carve(px, py, visible_radius, true)[index]
     }
 
     pub fn world_cell_blocks_sight(&self, x: usize, y: usize) -> bool {
         self.sight_blocking_object_at_current_floor(x, y).is_some()
             || world_surface_tile_blocks_sight(self.grid[world_cell_index(x, y)])
+    }
+
+    pub fn surface_visibility_carve(
+        &self,
+        px: isize,
+        py: isize,
+        radius: usize,
+        wrap_world: bool,
+    ) -> Vec<bool> {
+        let side = radius.saturating_mul(2).saturating_add(1);
+        let cell_count = side.saturating_mul(side);
+        let mut visible = vec![false; cell_count];
+        if cell_count == 0 {
+            return visible;
+        }
+
+        let center = radius * side + radius;
+        visible[center] = true;
+        let mut considered = vec![false; cell_count];
+        considered[center] = true;
+        let mut queue = std::collections::VecDeque::from([(px, py)]);
+        let light_threshold = (radius as u32).saturating_mul(radius as u32);
+
+        while let Some((cx, cy)) = queue.pop_front() {
+            for (dx, dy) in VISIBILITY_CARVE_NEIGHBOR_ORDER {
+                let x = cx + isize::from(dx);
+                let y = cy + isize::from(dy);
+                let Some(index) = visibility_view_index(px, py, x, y, radius) else {
+                    continue;
+                };
+                if considered[index] {
+                    continue;
+                }
+                considered[index] = true;
+
+                let Some(tile) = self.surface_visibility_tile(x, y, wrap_world) else {
+                    continue;
+                };
+                let squared_distance = visibility_squared_distance(px, py, x, y);
+                if !visibility_in_radius(squared_distance, light_threshold) {
+                    continue;
+                }
+
+                visible[index] = true;
+                let propagates = if wrap_world {
+                    surface_tile_propagates_visibility(tile, squared_distance)
+                } else {
+                    town_tile_propagates_visibility(tile, squared_distance)
+                };
+                if propagates {
+                    queue.push_back((x, y));
+                }
+            }
+        }
+
+        visible
+    }
+
+    fn surface_visibility_tile(&self, x: isize, y: isize, wrap_world: bool) -> Option<u8> {
+        if wrap_world {
+            let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
+            let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
+            Some(self.grid[world_cell_index(wx, wy)])
+        } else if (0..32).contains(&x) && (0..32).contains(&y) {
+            Some(self.grid[y as usize * 32 + x as usize])
+        } else {
+            None
+        }
     }
 
     pub fn advance_turn(&mut self) {
@@ -1983,6 +2039,47 @@ fn draw_feature_marker(viewport: &mut TileViewport, rect: DungeonRect, colour: u
         center_y + size,
         colour,
     );
+}
+
+pub fn visibility_view_index(
+    px: isize,
+    py: isize,
+    x: isize,
+    y: isize,
+    radius: usize,
+) -> Option<usize> {
+    let r = isize::try_from(radius).ok()?;
+    let col = x - px + r;
+    let row = y - py + r;
+    let side = r.checked_mul(2)?.checked_add(1)?;
+    if !(0..side).contains(&col) || !(0..side).contains(&row) {
+        return None;
+    }
+    Some(row as usize * side as usize + col as usize)
+}
+
+pub fn visibility_squared_distance(px: isize, py: isize, x: isize, y: isize) -> u32 {
+    let dx = (x - px).unsigned_abs() as u32;
+    let dy = (y - py).unsigned_abs() as u32;
+    dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
+}
+
+pub fn surface_tile_propagates_visibility(tile: u8, squared_distance: u32) -> bool {
+    if tile_blocks_sight_propagation(tile) {
+        false
+    } else if tile_propagates_sight_only_when_adjacent(tile) {
+        squared_distance == 1
+    } else {
+        true
+    }
+}
+
+pub fn town_tile_propagates_visibility(tile: u8, squared_distance: u32) -> bool {
+    if surface_tile_blocks_sight(tile) {
+        false
+    } else {
+        surface_tile_propagates_visibility(tile, squared_distance)
+    }
 }
 
 pub fn wrapped_world_axis_delta(from: usize, to: usize) -> i8 {

@@ -448,14 +448,13 @@ world-location row supplies only the target plane/map to materialize that scene
 clear. Plane swaps, moongates into a different plane, and scripted
 dungeon-to-world descents clear ship-sailing cadence/refusal feedback when they
 force foot transport. The terminal surface
-renderer uses that cached light as a first-playable visibility radius gate and
-a class-based line-of-sight blocker pass for walls, closed doors, mountain-family
-tiles, and blocking active objects; an overworld water tile under the party
-clears the effective radius for that render iteration. Town and world active
-objects composite with their current tile glyphs and lower active-object slot
-priority in overlapping cells, while line of sight still checks every same-cell
-active object for blocking tiles. Exact original ray stepping and tile-attribute
-tables remain out of scope. The
+renderer uses that cached light as a visibility-radius gate and runs the public
+centre-out visibility carve with the fixed W/SW/S/SE/E/NE/N/NW neighbour order,
+terrain propagation blockers, and orthogonal-only propagation tiles. An
+overworld water tile under the party clears the effective radius for that render
+iteration. Town and world active objects composite with their current tile glyphs
+and lower active-object slot priority in overlapping cells; they do not
+participate in terrain visibility propagation. The
 active-object tick covers phase countdowns, vehicle frame updates, wind-driven
 ship-family drift, phase-zero ambient actor wandering with low-to-high slot
 order and collision/terrain checks, and consumed-turn post-animation scroll-base

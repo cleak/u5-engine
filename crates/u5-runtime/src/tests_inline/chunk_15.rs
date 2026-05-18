@@ -29,7 +29,7 @@
     }
 
     #[test]
-    fn town_render_checks_all_overlapping_objects_for_sight_blocking() {
+    fn town_render_active_objects_do_not_block_visibility_carve() {
         let mut state = test_state(open_grid(), 1, 1);
         state.active_objects.push(ActiveObject {
             type_byte: 16,
@@ -57,16 +57,20 @@
 
         assert_eq!(row[2], '@');
         assert_eq!(row[3], '.');
-        assert_eq!(row[4], ' ');
+        assert_ne!(row[4], ' ');
     }
 
     #[test]
     fn world_render_line_of_sight_wraps_with_viewport() {
-        // On the overworld only mountain tiles (10..=15) block sight. Wall
-        // tile ids 24..=79 are landmark icons (towns, shrines, dwellings)
-        // visible from distance, not sight-blocking obstructions.
+        // A propagation-blocking barrier at the wrapped viewport edge should
+        // be visible itself while preventing the carve from reaching cells
+        // behind it.
         let mut grid = open_world_grid();
+        grid[world_cell_index(0, 254)] = 10;
+        grid[world_cell_index(0, 255)] = 10;
         grid[world_cell_index(0, 0)] = 10;
+        grid[world_cell_index(0, 1)] = 10;
+        grid[world_cell_index(0, 2)] = 10;
         grid[world_cell_index(1, 0)] = 5;
         let mut state = britannia_state(grid, 255, 0);
         state.ambient_light = FULL_DAYLIGHT;
@@ -93,14 +97,14 @@
         state.ambient_light = FULL_DAYLIGHT;
 
         let view = state.render_text_view(2);
-        let row: Vec<_> = view.lines().nth(2).unwrap().chars().collect();
+        let row: Vec<_> = view.lines().nth(3).unwrap().chars().collect();
 
         // The cell two steps east of the player must be visible (not space).
         assert_ne!(row[4], ' ', "landmark tile must not occlude cell behind it");
     }
 
     #[test]
-    fn world_render_checks_all_overlapping_objects_for_sight_blocking() {
+    fn world_render_active_objects_do_not_block_visibility_carve() {
         let mut state = britannia_state(open_world_grid(), 5, 5);
         state.ambient_light = FULL_DAYLIGHT;
         state.active_objects.push(ActiveObject {
@@ -129,7 +133,44 @@
 
         assert_eq!(row[2], '@');
         assert_eq!(row[3], '.');
+        assert_ne!(row[4], ' ');
+    }
+
+    #[test]
+    fn world_render_visibility_carve_stops_at_propagation_blockers() {
+        let mut grid = open_world_grid();
+        for y in 3..=7 {
+            grid[world_cell_index(6, y)] = 0x0a;
+        }
+        grid[world_cell_index(7, 5)] = 5;
+        let mut state = britannia_state(grid, 5, 5);
+        state.ambient_light = FULL_DAYLIGHT;
+
+        let view = state.render_text_view(2);
+        let row: Vec<_> = view.lines().nth(3).unwrap().chars().collect();
+
+        assert_eq!(row[2], '@');
+        assert_ne!(row[3], ' ');
         assert_eq!(row[4], ' ');
+    }
+
+    #[test]
+    fn world_render_visibility_carve_limits_orthogonal_only_tiles() {
+        let mut grid = open_world_grid();
+        for y in 2..=8 {
+            grid[world_cell_index(7, y)] = 0x0a;
+        }
+        grid[world_cell_index(8, 5)] = 5;
+        grid[world_cell_index(7, 5)] = 0x98;
+        let mut state = britannia_state(grid, 5, 5);
+        state.ambient_light = FULL_DAYLIGHT;
+
+        let view = state.render_text_view(3);
+        let row: Vec<_> = view.lines().nth(4).unwrap().chars().collect();
+
+        assert_eq!(row[3], '@');
+        assert_ne!(row[5], ' ');
+        assert_eq!(row[6], ' ');
     }
 
     #[test]

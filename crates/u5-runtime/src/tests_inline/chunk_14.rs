@@ -1163,9 +1163,11 @@
     }
 
     #[test]
-    fn town_render_uses_line_of_sight_blockers() {
+    fn town_render_visibility_carve_uses_terrain_blockers() {
         let mut grid = open_grid();
+        grid[2] = 24;
         grid[32 + 2] = 24;
+        grid[64 + 2] = 24;
         grid[32 + 3] = 16;
         let state = test_state(grid, 1, 1);
 
@@ -1193,7 +1195,7 @@
     }
 
     #[test]
-    fn town_render_active_object_blocks_line_of_sight_behind_it() {
+    fn town_render_active_object_does_not_block_visibility_carve() {
         let mut state = test_state(open_grid(), 1, 1);
         state.active_objects.push(ActiveObject {
             type_byte: 192,
@@ -1211,6 +1213,6 @@
 
         assert_eq!(row[2], '@');
         assert_eq!(row[3], 'n');
-        assert_eq!(row[4], ' ');
+        assert_eq!(row[4], '.');
     }
 
