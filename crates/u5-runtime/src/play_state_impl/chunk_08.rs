@@ -1109,9 +1109,17 @@ impl PlayState {
         }
 
         self.grid[idx] = NATURAL_MOONGATE_RESTORED_TERRAIN_TILE;
+        self.natural_moongate_live_cells
+            .retain(|tracked_idx| *tracked_idx != idx);
         self.mark_visibility_dirty();
 
-        if self.clock.hour == 0 && self.clock.minute < 10 {
+        if natural_moongate_dispatches_meditate(self.clock.hour, self.clock.minute) {
+            if let Some(outcome) = self.read_codex_urn_at_current_position(game_dir)? {
+                return Ok(Some(outcome));
+            }
+            if let Some(outcome) = self.start_shrine_prompt_at_current_position(game_dir)? {
+                return Ok(Some(outcome));
+            }
             self.message = "Natural moongate opened the shrine meditation path.".to_string();
             return Ok(Some(MoveOutcome::Observed));
         }
@@ -1146,7 +1154,7 @@ impl PlayState {
     }
 
     pub fn cached_natural_moongate_slot_index(&self) -> Option<usize> {
-        let moon = if self.clock.hour < 12 { 0 } else { 1 };
+        let moon = natural_moongate_cached_glyph_slot(self.clock.hour) as usize;
         self.cached_moon_glyph_slots[moon].filter(|slot| *slot < MOONSTONE_SLOT_COUNT)
     }
 

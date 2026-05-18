@@ -1531,12 +1531,48 @@
     }
 
     #[test]
+    fn natural_moongate_entry_uses_second_cached_moon_slot_after_noon() {
+        let dir = debug_game_dir();
+        let origin_idx = world_cell_index(5, 5);
+        let mut grid = open_world_grid();
+        grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+        let mut state = britannia_state(grid, 5, 5);
+        state.clock = GameClock::new(12, 0).unwrap();
+        state.set_cached_moon_glyph_slots(Some(1), Some(2));
+        state.moonstone_slots[1] = MoonstoneGateSlot {
+            scene: 0,
+            x: 6,
+            y: 7,
+            z: WorldPlane::Britannia.save_floor() as u8,
+        };
+        state.moonstone_slots[2] = MoonstoneGateSlot {
+            scene: 0,
+            x: 8,
+            y: 9,
+            z: WorldPlane::Britannia.save_floor() as u8,
+        };
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!((state.player.x, state.player.y), (8, 9));
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
+        assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert_eq!(state.message, "Gate Travel phase 3 -> BRITANNIA at (8, 9).");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn natural_moongate_entry_clears_tile_and_reports_missing_glyph_cache() {
         let origin_idx = world_cell_index(5, 5);
         let mut grid = open_world_grid();
         grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
         let mut state = britannia_state(grid, 5, 5);
         state.clock = GameClock::new(11, 58).unwrap();
+        state.natural_moongate_live_cells.push(origin_idx);
 
         assert_eq!(
             handle_play_key_input(&mut state, 'q', "", Path::new("")).unwrap(),
@@ -1546,6 +1582,7 @@
         assert_eq!((state.player.x, state.player.y), (5, 5));
         assert_eq!(state.turn, 0);
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert!(state.natural_moongate_live_cells.is_empty());
         assert!(state.visibility_dirty);
         assert_eq!(
             state.message,
@@ -1554,7 +1591,54 @@
     }
 
     #[test]
-    fn natural_moongate_midnight_window_clears_tile_without_glyph_cache() {
+    fn natural_moongate_midnight_window_starts_shrine_prompt_after_clearing_tile() {
+        let dir = debug_game_dir();
+        let origin_idx = world_cell_index(5, 5);
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 5 5 HONESTY 5\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+        let mut state = britannia_state(grid, 5, 5);
+        state.clock = GameClock::new(0, 9).unwrap();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert!(state.active_shrine.is_some());
+        assert!(state.message.contains("Shrine of Honesty mantra?"));
+        assert_eq!(state.turn, 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn natural_moongate_midnight_window_reads_codex_urn_before_shrine_prompt() {
+        let dir = debug_game_dir();
+        let origin_idx = world_cell_index(5, 5);
+        fs::write(dir.join(CODEX_URN_TABLE_FILE), "BRITANNIA 5 5 5\n").unwrap();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 5 5 HONESTY 5\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+        let mut state = britannia_state(grid, 5, 5);
+        state.clock = GameClock::new(0, 0).unwrap();
+        state.shrine_ordained_mask = ShrineVirtue::Justice.bit();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'q', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert!(state.active_shrine.is_none());
+        assert_eq!(state.shrine_codex_mask, ShrineVirtue::Justice.bit());
+        assert!(state.message.contains("Codex page for Justice"));
+        assert_eq!(state.turn, 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn natural_moongate_midnight_window_reports_meditation_without_sidecar_match() {
         let origin_idx = world_cell_index(5, 5);
         let mut grid = open_world_grid();
         grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
