@@ -243,6 +243,135 @@ pub const CHARGEN_STARTING_DAY: u8 = 5;
 pub const CHARGEN_STARTING_HOUR: u8 = 8;
 pub const CHARGEN_STARTING_MINUTE: u8 = 35;
 
+/// Per-question outcome from the chargen tournament loop.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChargenTournamentQuestion {
+    /// 1-based round index (1, 2, or 3).
+    pub round: u8,
+    /// Smaller-numbered virtue (the "A" slot).
+    pub option_a: ShrineVirtue,
+    /// Larger-numbered virtue (the "B" slot).
+    pub option_b: ShrineVirtue,
+    /// `QUESTION.DAT` record index used for this question.
+    pub question_record: usize,
+    /// `true` when the player chose A; `false` for B.
+    pub chose_a: bool,
+    /// Winner virtue after applying the player's choice.
+    pub winner: ShrineVirtue,
+    /// Loser virtue; flagged lost-forever after this question.
+    pub loser: ShrineVirtue,
+}
+
+/// Reasons the tournament could not finish.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChargenTournamentError {
+    /// Out of random bytes while drawing the next virtue.
+    RngExhausted { question_index: usize },
+    /// Out of A/B answers (callers must supply seven).
+    AnswersExhausted { question_index: usize },
+    /// Two random draws ended up on the same virtue index — should not
+    /// be reachable per spec, but we surface it defensively.
+    SelfPair { question_index: usize },
+}
+
+/// Result of running the full questionnaire.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChargenTournamentOutcome {
+    /// Seven per-question outcomes, in chronological order.
+    pub questions: Vec<ChargenTournamentQuestion>,
+    /// Stats produced from the winners with the STR floor applied.
+    pub stats: ChargenStats,
+    /// Final winner of round 3.
+    pub final_winner: ShrineVirtue,
+}
+
+/// Drive the chargen questionnaire per `chargen.md §6`. The rejection-
+/// sampled random picker draws virtue indices from `rng_bytes`; the
+/// `answers` slice supplies A (`true`) or B (`false`) for each of the
+/// seven questions in order. The picker re-rolls on bytes that pick a
+/// virtue already flagged selected-this-round or lost-forever.
+pub fn run_chargen_tournament(
+    rng_bytes: &[u8],
+    answers: &[bool],
+) -> Result<ChargenTournamentOutcome, ChargenTournamentError> {
+    let mut rng_cursor = 0usize;
+    let mut question_index = 0usize;
+    let mut lost_forever = [false; 8];
+    let mut questions: Vec<ChargenTournamentQuestion> = Vec::with_capacity(CHARGEN_QUESTION_COUNT);
+    let mut winners: Vec<ShrineVirtue> = Vec::with_capacity(CHARGEN_QUESTION_COUNT);
+
+    for (round_zero, &questions_in_round) in CHARGEN_QUESTIONS_PER_ROUND.iter().enumerate() {
+        let mut selected_this_round = [false; 8];
+        for _ in 0..questions_in_round {
+            let answer = *answers
+                .get(question_index)
+                .ok_or(ChargenTournamentError::AnswersExhausted { question_index })?;
+            let first_idx =
+                draw_virtue(rng_bytes, &mut rng_cursor, &selected_this_round, &lost_forever)
+                    .ok_or(ChargenTournamentError::RngExhausted { question_index })?;
+            selected_this_round[first_idx] = true;
+            let second_idx =
+                draw_virtue(rng_bytes, &mut rng_cursor, &selected_this_round, &lost_forever)
+                    .ok_or(ChargenTournamentError::RngExhausted { question_index })?;
+            selected_this_round[second_idx] = true;
+
+            if first_idx == second_idx {
+                return Err(ChargenTournamentError::SelfPair { question_index });
+            }
+            let (a_idx, b_idx) = if first_idx < second_idx {
+                (first_idx, second_idx)
+            } else {
+                (second_idx, first_idx)
+            };
+            let option_a = ShrineVirtue::from_index(a_idx).expect("virtue index in range");
+            let option_b = ShrineVirtue::from_index(b_idx).expect("virtue index in range");
+            let question_record = chargen_question_record_for_pair(option_a, option_b)
+                .map_err(|_| ChargenTournamentError::SelfPair { question_index })?;
+            let winner = if answer { option_a } else { option_b };
+            let loser = if answer { option_b } else { option_a };
+            lost_forever[loser.index()] = true;
+            winners.push(winner);
+            questions.push(ChargenTournamentQuestion {
+                round: (round_zero + 1) as u8,
+                option_a,
+                option_b,
+                question_record,
+                chose_a: answer,
+                winner,
+                loser,
+            });
+            question_index += 1;
+        }
+    }
+
+    let final_winner = winners
+        .last()
+        .copied()
+        .expect("tournament always produces a final winner");
+    let stats = chargen_stats_from_winners(&winners);
+    Ok(ChargenTournamentOutcome {
+        questions,
+        stats,
+        final_winner,
+    })
+}
+
+fn draw_virtue(
+    rng_bytes: &[u8],
+    cursor: &mut usize,
+    selected_this_round: &[bool; 8],
+    lost_forever: &[bool; 8],
+) -> Option<usize> {
+    loop {
+        let byte = *rng_bytes.get(*cursor)?;
+        *cursor += 1;
+        let idx = (byte & 0x07) as usize;
+        if !selected_this_round[idx] && !lost_forever[idx] {
+            return Some(idx);
+        }
+    }
+}
+
 pub fn chargen_stats_from_winners(winners: &[ShrineVirtue]) -> ChargenStats {
     let mut strength = 0u8;
     let mut dexterity = 0u8;
@@ -336,6 +465,151 @@ fn normalize_chargen_name(
         return Err(ChargenError::BlankName);
     }
     Ok(name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn always_a() -> [bool; 7] {
+        [true; 7]
+    }
+
+    /// 64-byte deterministic stream (`0..64`) that gives the
+    /// rejection-sampled picker plenty of headroom even when later
+    /// rounds whittle the eligible pool down to two virtues.
+    fn rng_pool() -> [u8; 64] {
+        let mut bytes = [0u8; 64];
+        for (i, b) in bytes.iter_mut().enumerate() {
+            *b = i as u8;
+        }
+        bytes
+    }
+
+    #[test]
+    fn tournament_completes_seven_questions_with_three_round_layout() {
+        let rng = rng_pool();
+        let outcome = run_chargen_tournament(&rng, &always_a()).unwrap();
+        assert_eq!(outcome.questions.len(), CHARGEN_QUESTION_COUNT);
+        let rounds: Vec<u8> = outcome.questions.iter().map(|q| q.round).collect();
+        assert_eq!(rounds, vec![1, 1, 1, 1, 2, 2, 3]);
+    }
+
+    #[test]
+    fn tournament_marks_loser_lost_forever_so_no_loser_re_appears() {
+        let rng = rng_pool();
+        let outcome = run_chargen_tournament(&rng, &always_a()).unwrap();
+        let mut seen_after_loss = std::collections::HashSet::new();
+        for question in &outcome.questions {
+            assert!(
+                !seen_after_loss.contains(&question.option_a),
+                "loser {:?} should not reappear",
+                question.option_a
+            );
+            assert!(!seen_after_loss.contains(&question.option_b));
+            seen_after_loss.insert(question.loser);
+        }
+    }
+
+    #[test]
+    fn tournament_sorts_pair_so_option_a_has_smaller_index() {
+        let mut rng = rng_pool();
+        rng[0..8].copy_from_slice(&[7, 0, 6, 1, 5, 2, 4, 3]);
+        let outcome = run_chargen_tournament(&rng, &always_a()).unwrap();
+        for question in &outcome.questions {
+            assert!(question.option_a.index() < question.option_b.index());
+        }
+    }
+
+    #[test]
+    fn tournament_chose_a_picks_smaller_indexed_virtue_as_winner() {
+        let rng = rng_pool();
+        let outcome = run_chargen_tournament(&rng, &always_a()).unwrap();
+        for q in &outcome.questions {
+            assert_eq!(q.winner, q.option_a);
+            assert_eq!(q.loser, q.option_b);
+        }
+    }
+
+    #[test]
+    fn tournament_chose_b_picks_larger_indexed_virtue_as_winner() {
+        let rng = rng_pool();
+        let outcome = run_chargen_tournament(&rng, &[false; 7]).unwrap();
+        for q in &outcome.questions {
+            assert_eq!(q.winner, q.option_b);
+            assert_eq!(q.loser, q.option_a);
+        }
+    }
+
+    #[test]
+    fn tournament_applies_str_floor_to_emitted_stats() {
+        let rng = rng_pool();
+        let outcome = run_chargen_tournament(&rng, &always_a()).unwrap();
+        assert_eq!(outcome.stats.strength, CHARGEN_STR_FLOOR);
+    }
+
+    #[test]
+    fn tournament_rejection_samples_past_selected_and_lost_virtues() {
+        // First four rng bytes pick 0, 0, 1, 2 - the picker should skip
+        // the duplicate 0 and the rejected 0 in later rounds.
+        let mut rng = rng_pool();
+        rng[0..4].copy_from_slice(&[0, 0, 1, 2]);
+        let outcome = run_chargen_tournament(&rng, &always_a()).unwrap();
+        // First question used draws 0 (kept) and then needed another byte
+        // before picking the second virtue.
+        let first = &outcome.questions[0];
+        assert!(first.option_a.index() == 0 || first.option_b.index() == 0);
+    }
+
+    #[test]
+    fn tournament_returns_rng_exhausted_when_byte_stream_runs_out() {
+        let rng = [0, 1];
+        let err = run_chargen_tournament(&rng, &always_a()).unwrap_err();
+        assert!(matches!(err, ChargenTournamentError::RngExhausted { .. }));
+    }
+
+    #[test]
+    fn tournament_returns_answers_exhausted_when_fewer_than_seven_supplied() {
+        let rng = rng_pool();
+        let err = run_chargen_tournament(&rng, &[true; 3]).unwrap_err();
+        assert!(matches!(err, ChargenTournamentError::AnswersExhausted { .. }));
+    }
+
+    #[test]
+    fn tournament_records_question_dat_record_indices_in_range() {
+        let rng = rng_pool();
+        let outcome = run_chargen_tournament(&rng, &always_a()).unwrap();
+        for q in &outcome.questions {
+            // QUESTION.DAT has 30 records (0-29); records 2..=29 are
+            // the 28 virtue-pair dilemmas.
+            assert!((2..=29).contains(&q.question_record));
+        }
+    }
+
+    #[test]
+    fn final_winner_is_last_questions_winner() {
+        let rng = rng_pool();
+        let outcome = run_chargen_tournament(&rng, &always_a()).unwrap();
+        assert_eq!(outcome.final_winner, outcome.questions.last().unwrap().winner);
+    }
+
+    #[test]
+    fn tournament_keeps_winners_eligible_for_next_round() {
+        // Round 1 winners (with always_a) are the smaller-indexed
+        // virtues; round 2 must draw from those four winners only.
+        let rng = rng_pool();
+        let outcome = run_chargen_tournament(&rng, &always_a()).unwrap();
+        let round1_winners: std::collections::HashSet<ShrineVirtue> = outcome
+            .questions
+            .iter()
+            .filter(|q| q.round == 1)
+            .map(|q| q.winner)
+            .collect();
+        for q in outcome.questions.iter().filter(|q| q.round == 2) {
+            assert!(round1_winners.contains(&q.option_a));
+            assert!(round1_winners.contains(&q.option_b));
+        }
+    }
 }
 
 fn read_init_ool_plane(game_dir: &Path) -> io::Result<Vec<u8>> {

@@ -129,6 +129,7 @@ pub struct EndgameState {
     pub final_confirmation: Option<bool>,
     pub outcome: Option<EndgameOutcome>,
     pub certificate: Option<String>,
+    pub cinematic: crate::endgame_cinematic::EndgameCinematic,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -144,6 +145,7 @@ impl EndgameState {
             final_confirmation: None,
             outcome: None,
             certificate: None,
+            cinematic: crate::endgame_cinematic::EndgameCinematic::default(),
         }
     }
 
@@ -153,6 +155,7 @@ impl EndgameState {
             final_confirmation: None,
             outcome: None,
             certificate: None,
+            cinematic: crate::endgame_cinematic::EndgameCinematic::default(),
         }
     }
 
@@ -163,12 +166,31 @@ impl EndgameState {
         certificate: String,
     ) -> Self {
         let outcome = endgame_outcome(final_confirmation, has_sandalwood_box);
+        let cinematic = if outcome == EndgameOutcome::Victory {
+            crate::endgame_cinematic::EndgameCinematic::start()
+        } else {
+            crate::endgame_cinematic::EndgameCinematic::default()
+        };
         Self {
             first_confirmation: Some(first_confirmation),
             final_confirmation: Some(final_confirmation),
             outcome: Some(outcome),
             certificate: (outcome == EndgameOutcome::Victory).then_some(certificate),
+            cinematic,
         }
+    }
+
+    /// Advance the post-victory cinematic by one keystroke. Returns
+    /// the new step's banner label for caller-side display.
+    pub fn advance_cinematic(&mut self) -> &'static str {
+        self.cinematic.advance();
+        self.cinematic.banner_label()
+    }
+
+    /// `true` when the post-victory cinematic has presented every
+    /// screen and the engine should return to the title menu.
+    pub fn cinematic_is_finished(&self) -> bool {
+        self.cinematic.is_finished()
     }
 
     pub fn is_terminal(&self) -> bool {
@@ -437,6 +459,27 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
         if current.is_terminal() {
+            // Victory branch advances the cinematic page-flip on every
+            // keystroke until the closer is finished, at which point
+            // control returns to the title menu (the engine clears
+            // `endgame` so the caller can route there).
+            if matches!(current.outcome, Some(EndgameOutcome::Victory)) {
+                if let Some(state) = self.endgame.as_mut() {
+                    let banner = state.advance_cinematic();
+                    self.message = banner.to_string();
+                    if state.cinematic_is_finished() {
+                        // Cinematic is done; clear endgame so the caller
+                        // returns to the title menu.
+                        let certificate = state
+                            .certificate
+                            .clone()
+                            .unwrap_or_else(|| "Quest complete.".to_string());
+                        self.message = certificate;
+                        self.endgame = None;
+                    }
+                    return MoveOutcome::Observed;
+                }
+            }
             self.message = match current.outcome {
                 Some(EndgameOutcome::Victory) => current
                     .certificate

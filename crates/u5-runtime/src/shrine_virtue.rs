@@ -1,6 +1,6 @@
 //! Eight-virtue shrine system: parsing, indexing, mantras.
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ShrineVirtue {
     Honesty,
     Compassion,
@@ -29,6 +29,20 @@ impl ShrineVirtue {
             "HUMILITY" => Some(Self::Humility),
             _ => None,
         }
+    }
+
+    pub fn from_index(index: usize) -> Option<Self> {
+        Some(match index {
+            0 => Self::Honesty,
+            1 => Self::Compassion,
+            2 => Self::Valor,
+            3 => Self::Justice,
+            4 => Self::Sacrifice,
+            5 => Self::Honor,
+            6 => Self::Spirituality,
+            7 => Self::Humility,
+            _ => return None,
+        })
     }
 
     pub fn index(self) -> usize {

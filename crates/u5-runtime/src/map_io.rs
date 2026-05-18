@@ -12,6 +12,71 @@ pub fn parse_tlk(path: &Path) -> io::Result<HashMap<u16, Vec<String>>> {
     parse_tlk_bytes(&bytes)
 }
 
+/// Like [`parse_tlk_bytes`] but returns the raw bytes of each NUL-terminated
+/// field in every NPC blob. The bytes are still bit-7 XOR-encoded in their
+/// on-disk form so callers can feed them directly into
+/// [`crate::tlk_runner::run_tlk_stream`] without round-tripping through the
+/// string decoder. Each inner `Vec<u8>` does **not** include the NUL
+/// separator itself; that boundary is preserved by the outer split.
+pub fn parse_tlk_blob_fields_raw(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<Vec<u8>>>> {
+    if bytes.len() < 4 {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "short TLK"));
+    }
+    let count = u16_at(&bytes, 0) as usize;
+    let mut entries = Vec::new();
+    for k in 1..count {
+        let off = u16_at(&bytes, 4 * k) as usize;
+        let id = u16_at(&bytes, 4 * k + 2);
+        entries.push((id, off));
+    }
+    entries.sort_by_key(|(_, off)| *off);
+    let mut out: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+    for (idx, (id, off)) in entries.iter().enumerate() {
+        let nominal_end = entries
+            .get(idx + 1)
+            .map(|(_, next)| *next)
+            .unwrap_or(bytes.len());
+        let end = nominal_end.min(off.saturating_add(1024));
+        if *off >= bytes.len() || *off >= end {
+            continue;
+        }
+        let mut fields: Vec<Vec<u8>> = Vec::new();
+        let mut pos = *off;
+        let mut current: Vec<u8> = Vec::new();
+        while pos < end && fields.len() < 40 {
+            let byte = bytes[pos];
+            pos += 1;
+            if byte == 0 {
+                fields.push(std::mem::take(&mut current));
+                if fields.len() >= 5 && current.is_empty() && pos >= end {
+                    break;
+                }
+                continue;
+            }
+            current.push(byte);
+        }
+        if !current.is_empty() {
+            fields.push(current);
+        }
+        out.insert(*id, fields);
+    }
+    if !out.contains_key(&1) {
+        if let Some((first_id, _)) = entries.first() {
+            if let Some(fields) = out.get(first_id).cloned() {
+                out.insert(1, fields);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Convenience wrapper: read the supplied path and parse the raw-bytes
+/// fields per NPC id.
+pub fn parse_tlk_raw(path: &Path) -> io::Result<HashMap<u16, Vec<Vec<u8>>>> {
+    let bytes = read(path)?;
+    parse_tlk_blob_fields_raw(&bytes)
+}
+
 pub fn parse_tlk_bytes(bytes: &[u8]) -> io::Result<HashMap<u16, Vec<String>>> {
     if bytes.len() < 4 {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "short TLK"));
@@ -86,6 +151,30 @@ pub fn decode_tlk_field(bytes: &[u8], mut pos: usize, end: usize) -> (String, us
 pub fn non_empty_talk_keyword(keyword: &str) -> Option<&str> {
     let keyword = keyword.trim();
     (!keyword.is_empty()).then_some(keyword)
+}
+
+/// Like [`talk_keyword_response`] but returns the matched field's index
+/// into the blob (0-based). Used by callers that need the raw bytes for
+/// the byte-runner rather than the decoded string. Returns the index of
+/// the response field, not the keyword field.
+pub fn resolve_keyword_response_field_index(fields: &[String], keyword: &str) -> Option<usize> {
+    if talk_keyword_matches("NAME", keyword) {
+        return Some(0);
+    }
+    if talk_keyword_matches("JOB", keyword) || talk_keyword_matches("WORK", keyword) {
+        return Some(3);
+    }
+    if talk_keyword_matches("BYE", keyword) || talk_keyword_matches("THANK", keyword) {
+        return Some(4);
+    }
+    fields
+        .get(5..)
+        .unwrap_or_default()
+        .chunks_exact(2)
+        .enumerate()
+        .find_map(|(pair_idx, pair)| {
+            talk_keyword_matches(&pair[0], keyword).then_some(5 + pair_idx * 2 + 1)
+        })
 }
 
 pub fn talk_keyword_response<'a>(fields: &'a [String], keyword: &str) -> Option<&'a str> {

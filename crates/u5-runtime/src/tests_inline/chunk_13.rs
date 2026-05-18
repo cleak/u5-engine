@@ -13622,6 +13622,33 @@
     }
 
     #[test]
+    fn victory_endgame_cinematic_advances_through_all_panels_then_clears() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 1;
+        state.party_names = vec![*b"AVATAR\0\0\0"];
+        state.clock = GameClock::with_date(141, 5, 6, 12, 0).unwrap();
+        state.enter_endgame();
+        state.resolve_endgame_confirmation(true);
+        state.resolve_endgame_confirmation(true);
+
+        // Victory now active. Each additional confirmation advances
+        // the cinematic by one panel until it finishes and clears.
+        let endgame = state.endgame.as_ref().unwrap();
+        assert!(matches!(
+            endgame.cinematic.step,
+            crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau,
+        ));
+
+        // Walk all panels: throne → 6 narrative windows → certificate
+        // → origin closer → finished. That's 1 + 6 + 1 + 1 = 9 steps;
+        // the 9th call clears `endgame` to None.
+        for _ in 0..9 {
+            state.resolve_endgame_confirmation(true);
+        }
+        assert!(state.endgame.is_none());
+    }
+
+    #[test]
     fn enter_endgame_restores_dead_party_for_tableau() {
         // endgame.md §10: dead party members are mutated into a present /
         // restored state for the ending tableau, with current health restored

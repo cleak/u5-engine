@@ -306,6 +306,57 @@ fn cli_parser_help_short_circuits_save_init_conflict() {
 }
 
 #[test]
+fn cli_parser_accepts_chargen_answers_and_derives_winners() {
+    let args = parse_cli_args([
+        "--create-character",
+        "AVATAR",
+        "--gender",
+        "male",
+        "--chargen-answers",
+        "AAAAAAA",
+        r"C:\Games\U5-Clean",
+    ])
+    .unwrap();
+    let command = args.create_character.unwrap();
+    assert_eq!(command.name, b"AVATAR");
+    assert!(command.male);
+    // Tournament always produces exactly seven winners.
+    assert_eq!(command.winners.len(), 7);
+    // STR floor (20) always applies for the questionnaire path.
+    assert_eq!(command.stats.strength, 20);
+}
+
+#[test]
+fn cli_parser_rejects_invalid_chargen_answer_string() {
+    let err = parse_cli_args([
+        "--create-character",
+        "AVATAR",
+        "--gender",
+        "male",
+        "--chargen-answers",
+        "AAAQAAA",
+        r"C:\Games\U5-Clean",
+    ])
+    .unwrap_err();
+    assert!(err.to_string().contains("A or B") || err.to_string().contains("chargen-answers"));
+}
+
+#[test]
+fn cli_parser_rejects_wrong_length_chargen_answer_string() {
+    let err = parse_cli_args([
+        "--create-character",
+        "AVATAR",
+        "--gender",
+        "male",
+        "--chargen-answers",
+        "AAA",
+        r"C:\Games\U5-Clean",
+    ])
+    .unwrap_err();
+    assert!(err.to_string().contains("seven characters"));
+}
+
+#[test]
 fn cli_parser_accepts_deterministic_create_character_command() {
     let args = parse_cli_args([
         "--create-character",

@@ -13,6 +13,7 @@ use u5_runtime::{
     GameClock, PendingVehicleAcquisition, PlayOptions, PlayTarget, ShrineVirtue, TileGraphicsDepth,
     TimingStatusTag, TransportState, WindState, chargen_stats_from_winners, commit_chargen_save,
     load_play_options_from_init, load_play_options_from_save, parse_u8_literal,
+    run_chargen_tournament,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -143,6 +144,25 @@ where
                     )
                 })?;
                 create_character_winners = Some(parse_chargen_winners_arg(&value)?);
+            }
+            "--chargen-answers" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--chargen-answers requires a seven-character A/B string",
+                    )
+                })?;
+                let answers = parse_chargen_answers_arg(&value)?;
+                let rng = chargen_default_rng_pool();
+                let outcome = run_chargen_tournament(&rng, &answers).map_err(|err| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("chargen tournament failed: {err:?}"),
+                    )
+                })?;
+                let winners: Vec<ShrineVirtue> =
+                    outcome.questions.iter().map(|q| q.winner).collect();
+                create_character_winners = Some(winners);
             }
             "--scene" => {
                 let value = args.next().ok_or_else(|| {
@@ -362,6 +382,44 @@ SMOKE COMMANDS:
     cargo run --features visual -- --visual --scene BRITANNIA C:\\Games\\U5-Clean
     cargo run --features visual -- --visual --scene CASTLE:0 --floor 0 C:\\Games\\U5-Clean
 ";
+
+pub fn parse_chargen_answers_arg(value: &str) -> io::Result<Vec<bool>> {
+    let trimmed = value.trim();
+    if trimmed.len() != 7 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "--chargen-answers requires exactly seven characters, got {}",
+                trimmed.len()
+            ),
+        ));
+    }
+    let mut answers = Vec::with_capacity(7);
+    for ch in trimmed.chars() {
+        match ch.to_ascii_uppercase() {
+            'A' => answers.push(true),
+            'B' => answers.push(false),
+            other => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("--chargen-answers must be A or B, got `{other}`"),
+                ));
+            }
+        }
+    }
+    Ok(answers)
+}
+
+/// Deterministic 64-byte RNG pool fed to the tournament's
+/// rejection-sampled virtue picker. Using a fixed pool keeps the CLI
+/// command reproducible across invocations.
+pub fn chargen_default_rng_pool() -> [u8; 64] {
+    let mut bytes = [0u8; 64];
+    for (i, b) in bytes.iter_mut().enumerate() {
+        *b = i as u8;
+    }
+    bytes
+}
 
 pub fn run_create_character_command(
     game_dir: &Path,

@@ -1458,7 +1458,9 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         };
         let dialogue = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
-        Ok(self.talk_facing_with_dialogue_and_keyword(&dialogue, keyword))
+        let raw_blob = parse_tlk_raw(&game_dir.join(format!("{}.TLK", scene.family.stem())))
+            .unwrap_or_default();
+        Ok(self.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw_blob, keyword))
     }
 
     pub fn facing_talk_target(&self) -> Option<(u8, usize, usize)> {
@@ -1512,21 +1514,24 @@ impl PlayState {
             return MoveOutcome::Blocked;
         };
 
-        if let Some((role, family)) = talk_shop_trigger(dialog_id) {
-            // shops.md §2: ordinary shop arms refuse before opening their menu
-            // when the party is mounted on a horse; only the horse trader
-            // (0x83) is reachable on horseback.
+        if let Some((role, _family)) = talk_shop_trigger(dialog_id) {
             if self.player.transport.is_horse() && dialog_id != 0x83 {
                 self.message = format!(
                     "{role} refuses thee on horseback; dismount before commerce."
                 );
                 return MoveOutcome::Blocked;
             }
-            self.advance_turn();
-            self.message = format!(
-                "Talk reached {role} shop trigger 0x{dialog_id:02X} at ({x}, {y}); dispatch family: {family}."
-            );
-            return MoveOutcome::Talked;
+            if let Some(session) =
+                crate::shop_session::shop_session_for_dialog_id(dialog_id)
+            {
+                self.advance_turn();
+                let label = session.shop_label().to_string();
+                self.active_shop = Some(session);
+                self.message = format!(
+                    "{label} is now open. Choose Buy / Sell / Yes / No."
+                );
+                return MoveOutcome::Talked;
+            }
         }
         if dialog_id == 0 {
             self.message = "They give thee a funny look.".to_string();
@@ -1576,6 +1581,337 @@ impl PlayState {
             self.message = format!("Talked to {name}: {description}. {greeting} Your interest?");
         }
         MoveOutcome::Talked
+    }
+
+    /// Talk dispatch wrapper that uses the byte-runner against the raw
+    /// blob bytes when they are available, falling back to the existing
+    /// string-based path otherwise. The richer renderer expands engine
+    /// control bytes (printable text, action dispatch, IF/ELSE, GOTO
+    /// labels) per `systems/conversation.md` §7 and updates active-scene
+    /// branch flags so subsequent visits see the same set-flag state.
+    pub fn talk_facing_with_dialogue_and_keyword_raw(
+        &mut self,
+        dialogue: &HashMap<u16, Vec<String>>,
+        raw_blob: &HashMap<u16, Vec<Vec<u8>>>,
+        keyword: Option<&str>,
+    ) -> MoveOutcome {
+        if !matches!(self.area, Area::Town { .. }) {
+            self.message = "Funny, no response!".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        let Some((dialog_id, x, y)) = self.facing_talk_target() else {
+            self.message = TALK_NOBODY_HERE_MESSAGE.to_string();
+            return MoveOutcome::Blocked;
+        };
+
+        if let Some((role, family)) = talk_shop_trigger(dialog_id) {
+            if self.player.transport.is_horse() && dialog_id != 0x83 {
+                self.message = format!(
+                    "{role} refuses thee on horseback; dismount before commerce."
+                );
+                return MoveOutcome::Blocked;
+            }
+            self.advance_turn();
+            self.message = format!(
+                "Talk reached {role} shop trigger 0x{dialog_id:02X} at ({x}, {y}); dispatch family: {family}."
+            );
+            return MoveOutcome::Talked;
+        }
+        if dialog_id == 0 {
+            self.message = "They give thee a funny look.".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        let Some(fields) = dialogue.get(&(dialog_id as u16)) else {
+            self.message = format!("Dialogue id {dialog_id} is unresolved for this scene.");
+            return MoveOutcome::Blocked;
+        };
+        if fields.len() < 3 {
+            self.message = format!("Dialogue id {dialog_id} has no complete talk envelope.");
+            return MoveOutcome::Blocked;
+        }
+        let raw_fields = raw_blob.get(&(dialog_id as u16));
+
+        let name = fields
+            .first()
+            .filter(|name| !name.is_empty())
+            .map(String::as_str)
+            .unwrap_or("someone");
+        let description = fields
+            .get(1)
+            .filter(|description| !description.is_empty())
+            .map(String::as_str)
+            .unwrap_or("no description");
+
+        self.advance_turn();
+
+        let scene_for_flags = match self.area {
+            Area::Town { scene, .. } => Some(scene),
+            _ => None,
+        };
+
+        // Compose the inputs for the byte-runner once per call; the
+        // avatar name is the first party member's name (or "Avatar"
+        // when the roster has not been seeded yet).
+        let avatar_name = self
+            .party_names
+            .first()
+            .map(|name| {
+                let trimmed: Vec<u8> = name.iter().take_while(|b| **b != 0).copied().collect();
+                String::from_utf8_lossy(&trimmed).into_owned()
+            })
+            .unwrap_or_else(|| "Avatar".to_string());
+        let branch_flags = scene_for_flags
+            .map(|scene| self.talk_branch_slot_for_scene(scene))
+            .unwrap_or(0);
+        let inputs = crate::tlk_runner::TlkRunInputs {
+            avatar_name: &avatar_name,
+            branch_flags,
+            moral_standing: self.moral_standing,
+            dictionary: None,
+            curse_seen: false,
+            gold_payment_accepted: false,
+            ask_party_name_response: 0,
+            ask_who_response: 0,
+            yield_on_pause: false,
+        };
+
+        // Resolve which field(s) to run through the byte runner.
+        let run_field = |idx: usize| -> Option<crate::tlk_runner::TlkRunOutput> {
+            raw_fields
+                .and_then(|raw| raw.get(idx))
+                .map(|bytes| crate::tlk_runner::run_tlk_stream(bytes, &inputs))
+        };
+
+        let mut applied_grants: Vec<crate::tlk_control_codes::TlkActionDispatchVerb> = Vec::new();
+        let mut applied_flags: u32 = 0;
+
+        if let Some(keyword) = keyword.and_then(non_empty_talk_keyword) {
+            if fields.len() < 5 {
+                self.message = format!("Dialogue id {dialog_id} has no complete talk envelope.");
+                return MoveOutcome::Talked;
+            }
+            let response_field_index = resolve_keyword_response_field_index(fields, keyword);
+            let response_text = if let Some(idx) = response_field_index {
+                if let Some(output) = run_field(idx) {
+                    applied_grants.extend(output.action_grants.iter().copied());
+                    applied_flags |= output.branch_flags_set;
+                    if output.text.is_empty() {
+                        TLK_NO_KEYWORD_MATCH_MESSAGE.to_string()
+                    } else {
+                        output.text
+                    }
+                } else {
+                    talk_keyword_response(fields, keyword)
+                        .filter(|response| !response.is_empty())
+                        .unwrap_or(TLK_NO_KEYWORD_MATCH_MESSAGE)
+                        .to_string()
+                }
+            } else {
+                TLK_NO_KEYWORD_MATCH_MESSAGE.to_string()
+            };
+            let (legacy_text, legacy_actions) =
+                talk_response_text_and_actions(&response_text);
+            self.apply_tlk_action_grants(&applied_grants);
+            self.apply_talk_action_grants(&legacy_actions);
+            if let Some(scene) = scene_for_flags {
+                self.merge_talk_branch_flags(scene, applied_flags);
+            }
+            self.message = format!("Talked to {name}: {legacy_text}");
+        } else {
+            let greeting_text = if let Some(output) = run_field(2) {
+                applied_grants.extend(output.action_grants.iter().copied());
+                applied_flags |= output.branch_flags_set;
+                if output.text.is_empty() {
+                    "...".to_string()
+                } else {
+                    output.text
+                }
+            } else {
+                fields
+                    .get(2)
+                    .filter(|greeting| !greeting.is_empty())
+                    .map(String::clone)
+                    .unwrap_or_else(|| "...".to_string())
+            };
+            let (legacy_text, legacy_actions) =
+                talk_response_text_and_actions(&greeting_text);
+            self.apply_tlk_action_grants(&applied_grants);
+            self.apply_talk_action_grants(&legacy_actions);
+            if let Some(scene) = scene_for_flags {
+                self.merge_talk_branch_flags(scene, applied_flags);
+            }
+            self.message =
+                format!("Talked to {name}: {description}. {legacy_text} Your interest?");
+        }
+        MoveOutcome::Talked
+    }
+
+    /// Apply the byte-runner's recorded [`TlkActionDispatchVerb`] grants
+    /// to the live runtime counters per `conversation.md §7.6`.
+    pub fn apply_tlk_action_grants(
+        &mut self,
+        grants: &[crate::tlk_control_codes::TlkActionDispatchVerb],
+    ) {
+        use crate::tlk_control_codes::TlkActionDispatchVerb;
+        for grant in grants {
+            match grant {
+                TlkActionDispatchVerb::RaiseFood => {
+                    self.food = self.food.saturating_add(1);
+                }
+                TlkActionDispatchVerb::RaiseGold => {
+                    self.gold = self.gold.saturating_add(1);
+                }
+                TlkActionDispatchVerb::RaiseKeys => {
+                    self.keys = self.keys.saturating_add(1);
+                }
+                TlkActionDispatchVerb::RaiseGems => {
+                    self.gems = self.gems.saturating_add(1);
+                }
+                TlkActionDispatchVerb::RaiseTorches => {
+                    self.torches = self.torches.saturating_add(1);
+                }
+                TlkActionDispatchVerb::SetGrappleGate => {
+                    self.climbing_gear = 1;
+                }
+                TlkActionDispatchVerb::RaiseCarpets => {
+                    if SPECIAL_ITEM_COUNT > 0 {
+                        let slot = self.special_items[0].saturating_add(1);
+                        self.special_items[0] = slot;
+                    }
+                }
+                TlkActionDispatchVerb::SetSextantCarried => {
+                    self.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
+                }
+                TlkActionDispatchVerb::SetSpyglassCarried => {
+                    self.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = 1;
+                }
+                TlkActionDispatchVerb::SetBlackBadgeCarried => {
+                    self.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX] = 1;
+                }
+                TlkActionDispatchVerb::RaiseSkullKeys => {
+                    if SPECIAL_ITEM_COUNT > 1 {
+                        let slot = self.special_items[1].saturating_add(1);
+                        self.special_items[1] = slot;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Merge a byte-runner-produced set-flag mask into the active scene's
+    /// branch-flag slot.
+    pub fn merge_talk_branch_flags(&mut self, scene: Scene, mask: u32) {
+        if mask == 0 {
+            return;
+        }
+        let slot = self.talk_branch_flags.entry(scene.byte).or_insert(0);
+        *slot |= mask;
+    }
+
+    /// Open a multi-turn conversation session for the facing NPC.
+    /// Returns the rendered greeting text. Returns `None` when there
+    /// is no NPC, the NPC is a shop trigger, or the area is not a
+    /// town-class scene.
+    pub fn open_conversation_session(
+        &mut self,
+        dialogue: &HashMap<u16, Vec<String>>,
+        raw_blob: &HashMap<u16, Vec<Vec<u8>>>,
+    ) -> Option<String> {
+        if !matches!(self.area, Area::Town { .. }) {
+            return None;
+        }
+        let (dialog_id, _, _) = self.facing_talk_target()?;
+        if dialog_id == 0 || talk_shop_trigger(dialog_id).is_some() {
+            return None;
+        }
+        let fields = dialogue.get(&(dialog_id as u16))?;
+        let raw = raw_blob.get(&(dialog_id as u16))?;
+        let session = crate::conversation_session::ConversationSession::new(
+            raw.clone(),
+            fields.clone(),
+        );
+        self.active_conversation = Some(Box::new(session));
+        // Run the greeting now so the caller sees the opening line.
+        Some(self.advance_active_conversation_greeting())
+    }
+
+    /// Render the active conversation's greeting and put it in
+    /// `state.message`. Returns the rendered text.
+    pub fn advance_active_conversation_greeting(&mut self) -> String {
+        let avatar_name = self
+            .party_names
+            .first()
+            .map(|name| {
+                let trimmed: Vec<u8> = name.iter().take_while(|b| **b != 0).copied().collect();
+                String::from_utf8_lossy(&trimmed).into_owned()
+            })
+            .unwrap_or_else(|| "Avatar".to_string());
+        let branch_flags = match self.area {
+            Area::Town { scene, .. } => self.talk_branch_slot_for_scene(scene),
+            _ => 0,
+        };
+        let ctx = crate::conversation_session::ConversationContext {
+            avatar_name: &avatar_name,
+            branch_flags,
+            moral_standing: self.moral_standing,
+            dictionary: None,
+        };
+        let mut text = String::new();
+        if let Some(session) = self.active_conversation.as_mut() {
+            let output = session.present_greeting(&ctx);
+            text = output.text.clone();
+            self.apply_tlk_action_grants(&output.action_grants);
+            if let Area::Town { scene, .. } = self.area {
+                self.merge_talk_branch_flags(scene, output.branch_flags_set);
+            }
+        }
+        self.message = text.clone();
+        text
+    }
+
+    /// Submit one typed keyword line to the active conversation.
+    /// Returns the rendered response text and a flag indicating
+    /// whether the session has ended.
+    pub fn submit_active_conversation_keyword(&mut self, line: &str) -> (String, bool) {
+        let avatar_name = self
+            .party_names
+            .first()
+            .map(|name| {
+                let trimmed: Vec<u8> = name.iter().take_while(|b| **b != 0).copied().collect();
+                String::from_utf8_lossy(&trimmed).into_owned()
+            })
+            .unwrap_or_else(|| "Avatar".to_string());
+        let branch_flags = match self.area {
+            Area::Town { scene, .. } => self.talk_branch_slot_for_scene(scene),
+            _ => 0,
+        };
+        let ctx = crate::conversation_session::ConversationContext {
+            avatar_name: &avatar_name,
+            branch_flags,
+            moral_standing: self.moral_standing,
+            dictionary: None,
+        };
+        let mut text = String::new();
+        let mut ended = false;
+        if let Some(session) = self.active_conversation.as_mut() {
+            let output = session.submit_keyword(line, &ctx);
+            text = output.text.clone();
+            ended = output.ended;
+            self.apply_tlk_action_grants(&output.action_grants);
+            if let Area::Town { scene, .. } = self.area {
+                self.merge_talk_branch_flags(scene, output.branch_flags_set);
+            }
+        }
+        if ended {
+            if let Some(session) = self.active_conversation.as_mut() {
+                session.acknowledge_close();
+            }
+            self.active_conversation = None;
+        }
+        self.message = text.clone();
+        (text, ended)
     }
 
     pub fn apply_talk_action_grants(&mut self, actions: &[char]) {

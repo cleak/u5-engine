@@ -83,6 +83,8 @@ pub struct PlayState {
     pub typeahead_buffer_enabled: bool,
     pub pending_moongate: Option<MoongateEntry>,
     pub endgame: Option<EndgameState>,
+    pub active_shop: Option<crate::shop_session::ActiveShopSession>,
+    pub active_conversation: Option<Box<crate::conversation_session::ConversationSession>>,
     pub pickpocketed_npcs: Vec<(u8, i8, usize)>,
     pub removed_town_npcs: Vec<(u8, i8, usize)>,
     pub talk_branch_flags: HashMap<u8, u32>,

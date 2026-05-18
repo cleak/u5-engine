@@ -504,6 +504,79 @@
     }
 
     #[test]
+    fn resolve_keyword_response_field_index_matches_reserved_and_pair_keywords() {
+        let fields = vec![
+            "Ada".to_string(),
+            "smith".to_string(),
+            "Greetings".to_string(),
+            "I mend gear".to_string(),
+            "Farewell".to_string(),
+            "GRAN".to_string(),
+            "Short answer".to_string(),
+            "GRANDPA".to_string(),
+            "Long answer".to_string(),
+        ];
+
+        assert_eq!(resolve_keyword_response_field_index(&fields, "name"), Some(0));
+        assert_eq!(resolve_keyword_response_field_index(&fields, "job"), Some(3));
+        assert_eq!(resolve_keyword_response_field_index(&fields, "work"), Some(3));
+        assert_eq!(resolve_keyword_response_field_index(&fields, "bye"), Some(4));
+        assert_eq!(resolve_keyword_response_field_index(&fields, "thank"), Some(4));
+        assert_eq!(
+            resolve_keyword_response_field_index(&fields, "grandpa"),
+            Some(8)
+        );
+        assert_eq!(
+            resolve_keyword_response_field_index(&fields, "gran news"),
+            Some(6)
+        );
+        assert_eq!(
+            resolve_keyword_response_field_index(&fields, "granite"),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_tlk_blob_fields_raw_round_trips_a_minimal_blob() {
+        // Synthetic minimal TLK: header count=2 (so 1 live NPC) at offset 0.
+        // Header entry layout: 2 bytes blob_offset, 2 bytes npc_id.
+        // Slot 0 is the sentinel; slot 1 is the live NPC. The actual file
+        // starts with the count word, then `count - 1` header entries.
+        let blob_offset: u16 = 8;
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&2u16.to_le_bytes()); // count
+        bytes.extend_from_slice(&[0u8; 2]); // slot-0 sentinel padding
+        bytes.extend_from_slice(&blob_offset.to_le_bytes()); // blob offset for npc 1
+        bytes.extend_from_slice(&0x0042u16.to_le_bytes()); // npc id 0x42
+        // Two fields: "Ada\0" then "smith\0" (XOR-encoded).
+        let xor = 0x80u8;
+        let field_a = b"Ada";
+        let field_b = b"smith";
+        for b in field_a {
+            bytes.push(*b ^ xor);
+        }
+        bytes.push(0);
+        for b in field_b {
+            bytes.push(*b ^ xor);
+        }
+        bytes.push(0);
+
+        let parsed = parse_tlk_blob_fields_raw(&bytes).unwrap();
+        let fields = parsed.get(&0x0042).expect("npc 0x42 missing");
+        assert!(fields.len() >= 2);
+        // Each field's bytes are still XOR-encoded; running through the
+        // byte-runner produces "Ada" and "smith".
+        let inputs = crate::tlk_runner::TlkRunInputs {
+            avatar_name: "X",
+            ..Default::default()
+        };
+        let out0 = crate::tlk_runner::run_tlk_stream(&fields[0], &inputs);
+        let out1 = crate::tlk_runner::run_tlk_stream(&fields[1], &inputs);
+        assert_eq!(out0.text, "Ada");
+        assert_eq!(out1.text, "smith");
+    }
+
+    #[test]
     fn talk_response_text_and_actions_strips_action_markers() {
         assert_eq!(
             talk_response_text_and_actions("Take this {ACTION:F} friend"),
@@ -846,8 +919,8 @@
             MoveOutcome::Talked
         );
 
-        assert!(state.message.contains("Ship broker / shipwright shop trigger 0x84"));
-        assert!(state.message.contains("Shipwright sale arm"));
+        assert!(state.message.contains("Shipwright"));
+        assert!(state.active_shop.is_some());
         assert!(!state.message.contains("out of scope"));
         assert_eq!(state.turn, 1);
     }
@@ -924,9 +997,212 @@
             MoveOutcome::Talked
         );
 
-        assert!(state.message.contains("Horse trader shop trigger 0x83"));
-        assert!(state.message.contains("Vehicle-sale arm"));
+        assert!(state.message.contains("Horse Trader"));
+        assert!(state.active_shop.is_some());
         assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn open_conversation_session_renders_greeting_and_stores_session() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Maris".to_string(),
+                "a quiet sage".to_string(),
+                "Greetings".to_string(),
+                "I read books".to_string(),
+                "Farewell".to_string(),
+            ],
+        );
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Maris"),
+                enc("a quiet sage"),
+                enc("Greetings"),
+                enc("I read books"),
+                enc("Farewell"),
+            ],
+        );
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        let greeting = state.open_conversation_session(&dialogue, &raw);
+        assert!(greeting.is_some());
+        assert!(state.message.contains("Greetings"));
+        assert!(state.active_conversation.is_some());
+    }
+
+    #[test]
+    fn submit_conversation_keyword_returns_job_response() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Maris".to_string(),
+                "a quiet sage".to_string(),
+                "Greetings".to_string(),
+                "I read books".to_string(),
+                "Farewell".to_string(),
+            ],
+        );
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Maris"),
+                enc("a quiet sage"),
+                enc("Greetings"),
+                enc("I read books"),
+                enc("Farewell"),
+            ],
+        );
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        state.open_conversation_session(&dialogue, &raw);
+        let (text, ended) = state.submit_active_conversation_keyword("job");
+        assert!(text.contains("read books"));
+        assert!(!ended);
+    }
+
+    #[test]
+    fn submit_conversation_keyword_bye_ends_session() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Maris".to_string(),
+                "a sage".to_string(),
+                "Greetings".to_string(),
+                "books".to_string(),
+                "Farewell".to_string(),
+            ],
+        );
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Maris"),
+                enc("a sage"),
+                enc("Greetings"),
+                enc("books"),
+                enc("Farewell"),
+            ],
+        );
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        state.open_conversation_session(&dialogue, &raw);
+        let (text, ended) = state.submit_active_conversation_keyword("bye");
+        assert!(text.contains("Farewell"));
+        assert!(ended);
+        assert!(state.active_conversation.is_none());
+    }
+
+    #[test]
+    fn end_to_end_innkeeper_session_through_input_dispatcher() {
+        let dialogue = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.gold = 100;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x88,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        // Talk opens the inn.
+        assert_eq!(
+            state.talk_facing_with_dialogue(&dialogue),
+            MoveOutcome::Talked
+        );
+        assert!(state.active_shop.is_some());
+        // First key 'Y' (greeting accept) → ConfirmRoom.
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        assert!(state.message.contains("room"));
+        // 'Y' again to confirm.
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        assert!(state.message.contains("Rented"));
+        assert!(state.gold < 100);
+    }
+
+    #[test]
+    fn end_to_end_innkeeper_decline_returns_to_greeting_without_charge() {
+        use crate::shop_runtime::*;
+        use crate::shop_session::ActiveShopSession;
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 100;
+        state.active_shop = Some(ActiveShopSession::Innkeeper(
+            InnkeeperState::ConfirmRoom { cost: 25 },
+        ));
+        // Pass 'n' via the suffix so the bare-N New-Order intercept in
+        // the outer dispatcher does not eat the key before the shop
+        // session sees it.
+        handle_play_key_input(&mut state, ' ', "n", Path::new("")).unwrap();
+        assert_eq!(state.gold, 100);
+        assert!(
+            state.message.contains("As you wish")
+                || state.message.contains("Farewell"),
+            "decline message was: {}",
+            state.message
+        );
+    }
+
+    #[test]
+    fn end_to_end_arms_shop_exit_clears_session() {
+        let dialogue = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot { slot: 1, type_byte: 1, dialog_id: 0x81, schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20], name: None },
+        ]);
+        state.talk_facing_with_dialogue(&dialogue);
+        assert!(state.active_shop.is_some());
+        // Space exits the arms shop greeting.
+        handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+        assert!(state.active_shop.is_none());
+        assert!(state.message.contains("Farewell"));
     }
 
     #[test]
