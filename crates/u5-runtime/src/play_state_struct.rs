@@ -89,6 +89,7 @@ pub struct PlayState {
     pub blackthorn_jailed_party_slots: Vec<u8>,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,
     pub active_conversation: Option<Box<crate::conversation_session::ConversationSession>>,
+    pub active_z_stats: Option<crate::z_stats::ZStatsSession>,
     pub pickpocketed_npcs: Vec<(u8, i8, usize)>,
     pub removed_town_npcs: Vec<(u8, i8, usize)>,
     pub town_npc_alarm_states: Vec<TownNpcAlarmMarker>,

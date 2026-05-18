@@ -103,6 +103,7 @@ pub mod world_tables;
 pub mod world_tables_io;
 pub mod world_tables_io_get_pickup;
 pub mod world_tables_io_locations;
+pub mod z_stats;
 
 pub use active_object_io::*;
 pub use animation::{ActiveObject, ActiveShipWind, AnimationClock, PhaseTick};
@@ -547,6 +548,7 @@ pub use world_tables::*;
 pub use world_tables_io::*;
 pub use world_tables_io_get_pickup::*;
 pub use world_tables_io_locations::*;
+pub use z_stats::*;
 
 #[cfg(test)]
 mod tests {

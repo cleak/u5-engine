@@ -8,8 +8,252 @@ use crate::*;
 
 impl PlayState {
     pub fn z_stats(&mut self) -> MoveOutcome {
-        self.message = self.z_stats_message();
+        let selected = self.z_stats_initial_party_index();
+        self.active_z_stats = Some(ZStatsSession::new(selected));
+        self.message = self.render_active_z_stats();
         MoveOutcome::Observed
+    }
+
+    pub fn z_stats_initial_party_index(&self) -> usize {
+        if self.combat_active {
+            if let Some(slot) = self.pending_combat_actor_slot {
+                if slot < self.party.len()
+                    && slot < COMBAT_PARTY_ACTOR_SLOTS
+                    && self
+                        .party
+                        .get(slot)
+                        .copied()
+                        .is_some_and(PartyMember::living)
+                {
+                    return slot;
+                }
+            }
+        }
+        self.active_player
+            .filter(|slot| *slot < self.party.len())
+            .unwrap_or(0)
+    }
+
+    pub fn render_active_z_stats(&self) -> String {
+        self.active_z_stats
+            .as_ref()
+            .map(|session| self.render_z_stats_session(session))
+            .unwrap_or_else(|| self.z_stats_message())
+    }
+
+    pub fn render_z_stats_session(&self, session: &ZStatsSession) -> String {
+        let mut lines = vec![format!(
+            "Z-stats: {} page, party member {} of {}.",
+            session.page.title(),
+            session.selected_party_index + 1,
+            self.party.len()
+        )];
+        lines.push(self.z_stats_navigation_hint());
+        match session.page {
+            ZStatsPage::Stats => self.render_z_stats_character_page(session, &mut lines),
+            ZStatsPage::Equipment => self.render_z_stats_equipment_page(session, &mut lines),
+            ZStatsPage::Reagents => self.render_z_stats_reagent_page(&mut lines),
+            ZStatsPage::Spells => self.render_z_stats_spell_page(&mut lines),
+            ZStatsPage::SpecialUse => self.render_z_stats_special_use_page(&mut lines),
+            ZStatsPage::EquipmentStock => self.render_z_stats_equipment_stock_page(&mut lines),
+        }
+        lines.join("\n")
+    }
+
+    pub fn step_active_z_stats(&mut self, key: char, suffix: &str) -> bool {
+        let Some(mut session) = self.active_z_stats.take() else {
+            return false;
+        };
+        let key = z_stats_first_input_key(key, suffix);
+        match z_stats_input_action(key) {
+            ZStatsInputAction::Exit => {
+                self.message = "Z-stats closed.".to_string();
+            }
+            ZStatsInputAction::NextPage => {
+                session.move_next_page();
+                self.message = self.render_z_stats_session(&session);
+                self.active_z_stats = Some(session);
+            }
+            ZStatsInputAction::PreviousPage => {
+                session.move_previous_page();
+                self.message = self.render_z_stats_session(&session);
+                self.active_z_stats = Some(session);
+            }
+            ZStatsInputAction::SelectParty(index) => {
+                if index < self.party.len() {
+                    session.select_party_index(index);
+                    self.message = self.render_z_stats_session(&session);
+                } else {
+                    self.message = format!(
+                        "Party has {} member{}.\n{}",
+                        self.party.len(),
+                        if self.party.len() == 1 { "" } else { "s" },
+                        self.render_z_stats_session(&session)
+                    );
+                }
+                self.active_z_stats = Some(session);
+            }
+            ZStatsInputAction::Redraw | ZStatsInputAction::Discard => {
+                self.message = self.render_z_stats_session(&session);
+                self.active_z_stats = Some(session);
+            }
+        }
+        true
+    }
+
+    fn z_stats_navigation_hint(&self) -> String {
+        "Use </> for pages, 1-6 for party, Space/Esc to exit.".to_string()
+    }
+
+    fn render_z_stats_character_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
+        let Some(member) = self.party.get(session.selected_party_index).copied() else {
+            lines.push("No party member selected.".to_string());
+            return;
+        };
+        let name = self.party_member_display_name(session.selected_party_index);
+        let class = character_class_for_byte(member.class_byte)
+            .map(CharacterClass::display_name)
+            .unwrap_or("Unknown");
+        let status = party_status_name(member.status);
+        let strength = self
+            .party_strengths
+            .get(session.selected_party_index)
+            .copied()
+            .unwrap_or(self.avatar_stats.strength);
+        let dexterity = member.climb_stat;
+        let intellect = self
+            .party_intelligence
+            .get(session.selected_party_index)
+            .copied()
+            .unwrap_or(self.avatar_stats.intelligence);
+        let experience = self
+            .party_experience
+            .get(session.selected_party_index)
+            .copied()
+            .unwrap_or(0);
+        lines.push(format!("Name: {name}"));
+        lines.push(format!("Class: {class}"));
+        lines.push(format!("Status: {status}"));
+        lines.push(format!("Level: {}", member.level));
+        lines.push(format!(
+            "STR {strength:>2} DEX {dexterity:>2} INT {intellect:>2}"
+        ));
+        lines.push(format!(
+            "HP {}/{} MP {} XP {}",
+            member.hp, member.max_hp, member.mana, experience
+        ));
+    }
+
+    fn render_z_stats_equipment_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
+        let Some(equipment) = self.party_equipment.get(session.selected_party_index) else {
+            lines.push("Nothing equipped.".to_string());
+            return;
+        };
+        let mut count = 0;
+        for (slot, item) in equipment.iter().copied().enumerate() {
+            if item == EQUIPMENT_EMPTY {
+                continue;
+            }
+            count += 1;
+            lines.push(format!(
+                "{}: {}",
+                slot_name(slot),
+                equipment_name(item as usize)
+            ));
+        }
+        if count == 0 {
+            lines.push("Nothing equipped.".to_string());
+        }
+    }
+
+    fn render_z_stats_reagent_page(&self, lines: &mut Vec<String>) {
+        const REAGENTS: [Reagent; REAGENT_COUNT] = [
+            Reagent::SulfurAsh,
+            Reagent::Ginseng,
+            Reagent::Garlic,
+            Reagent::SpiderSilk,
+            Reagent::BloodMoss,
+            Reagent::BlackPearl,
+            Reagent::Nightshade,
+            Reagent::Mandrake,
+        ];
+        let rows = REAGENTS
+            .iter()
+            .filter_map(|reagent| {
+                let count = self.reagents[reagent.inventory_index()];
+                (count > 0).then(|| format!("{}: {count}", reagent.display_name()))
+            })
+            .collect::<Vec<_>>();
+        append_inventory_rows(lines, rows);
+    }
+
+    fn render_z_stats_spell_page(&self, lines: &mut Vec<String>) {
+        let rows = self
+            .spell_charges
+            .iter()
+            .copied()
+            .enumerate()
+            .filter_map(|(index, count)| {
+                (count > 0).then(|| {
+                    let name = spell_common_name(index).unwrap_or("Unknown Spell");
+                    format!("{} {}: {count}", SPELL_CODES[index], name)
+                })
+            })
+            .collect::<Vec<_>>();
+        append_inventory_rows(lines, rows);
+    }
+
+    fn render_z_stats_special_use_page(&self, lines: &mut Vec<String>) {
+        let mut rows = Vec::new();
+        if self.keys > 0 {
+            rows.push(format!("Keys: {}", self.keys));
+        }
+        if self.gems > 0 {
+            rows.push(format!("Gems: {}", self.gems));
+        }
+        if self.torches > 0 {
+            rows.push(format!("Torches: {}", self.torches));
+        }
+        if self.climbing_gear > 0 {
+            rows.push(format!("Grapple: {}", self.climbing_gear));
+        }
+        for (index, count) in self.special_items.iter().copied().enumerate() {
+            if count > 0 {
+                rows.push(format!("{}: {count}", special_item_name(index)));
+            }
+        }
+        for (index, count) in self.scroll_stock.iter().copied().enumerate() {
+            if count > 0 {
+                let label = SCROLL_SPELL_LABELS.get(index).copied().unwrap_or("Unknown");
+                rows.push(format!("Scroll {label}: {count}"));
+            }
+        }
+        for (index, count) in self.potion_stock.iter().copied().enumerate() {
+            if count > 0 {
+                rows.push(format!("{}: {count}", potion_inventory_name(index)));
+            }
+        }
+        append_inventory_rows(lines, rows);
+    }
+
+    fn render_z_stats_equipment_stock_page(&self, lines: &mut Vec<String>) {
+        let rows = self
+            .equipment_stock
+            .iter()
+            .copied()
+            .enumerate()
+            .filter_map(|(index, count)| {
+                (count > 0).then(|| format!("{}: {count}", equipment_name(index)))
+            })
+            .collect::<Vec<_>>();
+        append_inventory_rows(lines, rows);
+    }
+
+    fn party_member_display_name(&self, index: usize) -> String {
+        self.party_names
+            .get(index)
+            .and_then(|name| party_name_to_string(name))
+            .unwrap_or_else(|| format!("Party member {}", index + 1))
     }
 
     pub fn z_stats_message(&self) -> String {
@@ -1346,5 +1590,21 @@ impl PlayState {
         self.advance_turn();
         self.message = "Unlocked!".to_string();
         Ok(MoveOutcome::Cast)
+    }
+}
+
+fn append_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>) {
+    if rows.is_empty() {
+        lines.push("None.".to_string());
+        return;
+    }
+    let mut shown = 0;
+    let total = rows.len();
+    for row in rows.into_iter().take(Z_STATS_INVENTORY_PANEL_ROWS) {
+        shown += 1;
+        lines.push(row);
+    }
+    if total > shown {
+        lines.push(format!("... {} more", total - shown));
     }
 }

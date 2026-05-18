@@ -25,6 +25,9 @@ pub fn handle_play_key_input(
     if state.active_blackthorn.is_some() {
         return handle_active_blackthorn_key_input(state, key, suffix, game_dir);
     }
+    if state.active_z_stats.is_some() {
+        return Ok(handle_active_z_stats_key_input(state, key, suffix));
+    }
     if state.active_shop.is_some() {
         return Ok(handle_active_shop_key_input(state, key, suffix));
     }
@@ -50,6 +53,10 @@ pub fn handle_play_key_input(
     }
     if key == PLAY_TYPEAHEAD_TOGGLE_KEY {
         state.toggle_typeahead_buffer();
+        return Ok(PlayInputDisposition::Continue);
+    }
+    if key == 'Z' {
+        state.z_stats();
         return Ok(PlayInputDisposition::Continue);
     }
     if state.combat_active
@@ -152,6 +159,15 @@ pub fn handle_play_key_input(
     }
     state.message = format!("Unhandled command `{key}`.");
     Ok(PlayInputDisposition::Continue)
+}
+
+fn handle_active_z_stats_key_input(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+) -> PlayInputDisposition {
+    state.step_active_z_stats(key, suffix);
+    PlayInputDisposition::Continue
 }
 
 fn handle_active_shop_key_input(

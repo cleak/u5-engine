@@ -1,27 +1,12 @@
     #[test]
-    fn z_stats_reports_runtime_state_without_turn() {
+    fn z_stats_opens_browser_stats_page_without_turn() {
         let mut state = test_state(open_grid(), 5, 5);
-        state.food = 123;
-        state.gold = 987;
-        state.keys = 7;
-        state.gems = 3;
-        state.torches = 5;
-        state.climbing_gear = 1;
-        state.torch_counter = 12;
-        state.light_spell_counter = 34;
-        state.ambient_light = 56;
-        state.time_stop_counter = 2;
-        state.wind = WindState::East;
-        state.timing_status = TimingStatusTag::NoMinuteLight;
-        state.spell_charges[IN_LOR_SPELL_INDEX] = 2;
-        state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
-        state.reagents = [1, 2, 3, 4, 5, 6, 7, 8];
         state.party = vec![
             PartyMember {
                 slot: 0,
-                class_byte: b'A',
+                class_byte: b'B',
                 status: b'G',
-                climb_stat: 10,
+                climb_stat: 11,
                 mana: 4,
                 hp: 10,
                 max_hp: 20,
@@ -29,15 +14,19 @@
             },
             PartyMember {
                 slot: 2,
-                class_byte: b'A',
+                class_byte: b'M',
                 status: b'P',
-                climb_stat: 30,
+                climb_stat: 13,
                 mana: 5,
                 hp: 6,
                 max_hp: 30,
                 level: 3,
             },
         ];
+        state.party_names = vec![*b"AVATAR\0\0\0", *b"MARIA\0\0\0\0"];
+        state.party_strengths = vec![12, 14];
+        state.party_intelligence = vec![16, 18];
+        state.party_experience = vec![1234, 5678];
 
         assert_eq!(
             handle_play_key_input(&mut state, 'Z', "", Path::new("")).unwrap(),
@@ -46,58 +35,204 @@
 
         assert_eq!((state.player.x, state.player.y), (5, 5));
         assert_eq!(state.turn, 0);
-        assert!(
-            state
-                .message
-                .contains("Z-stats: CASTLE:0 floor 0 at (5, 5)")
+        assert_eq!(
+            state.active_z_stats.as_ref().map(|session| session.page),
+            Some(ZStatsPage::Stats)
         );
-        assert!(state.message.contains("facing South"));
-        assert!(state.message.contains("date Y139 M4 D5 12:00"));
-        assert!(state.message.contains("transport foot"));
-        assert!(state.message.contains("East Winds"));
-        assert!(state.message.contains("timing no-minute-light"));
-        assert!(
-            state
-                .message
-                .contains("light torch=12 spell=34 ambient=56 time-stop=2")
-        );
-        assert!(state.message.contains(
-            "inventory food=123 gold=987 keys=7 gems=3 torches=5 climbing=1 reagents=36"
-        ));
-        assert!(state.message.contains("spells IL=2, PRV=1"));
-        assert!(state.message.contains("party P1:slot0 good STR"));
-        assert!(state.message.contains("HP 10/20 MP 4 L2 equip [none]"));
-        assert!(state.message.contains("P2:slot2 poisoned STR"));
-        assert!(state.message.contains("HP 6/30 MP 5 L3 equip [none]"));
+        assert!(state.message.contains("Z-stats: Stats page"));
+        assert!(state.message.contains("party member 1 of 2"));
+        assert!(state.message.contains("Name: AVATAR"));
+        assert!(state.message.contains("Class: Bard"));
+        assert!(state.message.contains("Status: good"));
+        assert!(state.message.contains("STR 12 DEX 11 INT 16"));
+        assert!(state.message.contains("HP 10/20 MP 4 XP 1234"));
     }
 
     #[test]
-    fn z_stats_reports_empty_spell_stock() {
+    fn z_stats_equipment_page_skips_empty_slots_and_falls_back() {
         let mut state = test_state(open_grid(), 1, 1);
-        state.spell_charges = [0; SPELL_COUNT];
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 10,
+                max_hp: 20,
+                level: 1,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'F',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 11,
+                max_hp: 21,
+                level: 1,
+            },
+        ];
+        state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0"];
+        state.party_equipment = default_party_equipment(2);
+        state.party_equipment[0][EQUIP_SLOT_HELM] = 1;
+        state.party_equipment[0][EQUIP_SLOT_WEAPON] = EQUIPMENT_ID_BOW as u8;
 
         assert_eq!(state.z_stats(), MoveOutcome::Observed);
+        assert!(state.step_active_z_stats('>', ""));
 
         assert_eq!(state.turn, 0);
-        assert!(state.message.contains("spells none"));
-        assert!(state.message.contains("party P1:slot0 good"));
+        assert_eq!(
+            state.active_z_stats.as_ref().map(|session| session.page),
+            Some(ZStatsPage::Equipment)
+        );
+        assert!(state.message.contains("helm: "));
+        assert!(state.message.contains(equipment_name(EQUIPMENT_ID_BOW)));
+        assert!(!state.message.contains("offhand:"));
+
+        assert!(state.step_active_z_stats('2', ""));
+        assert_eq!(
+            state
+                .active_z_stats
+                .as_ref()
+                .map(|session| (session.selected_party_index, session.page)),
+            Some((1, ZStatsPage::Equipment))
+        );
+        assert!(state.message.contains("Nothing equipped."));
     }
 
     #[test]
-    fn dungeon_z_stats_reports_level_without_turn() {
-        let mut state = dungeon_state(open_dungeon_record(), 3, 1, 1);
+    fn z_stats_inventory_pages_skip_zero_rows() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.reagents = [3, 0, 0, 0, 0, 0, 0, 0];
+        state.spell_charges = [0; SPELL_COUNT];
+        state.spell_charges[IN_LOR_SPELL_INDEX] = 2;
+        state.keys = 0;
+        state.gems = 2;
+        state.torches = 0;
+        state.climbing_gear = 1;
+        state.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
+        state.scroll_stock[SCROLL_LIGHT_INDEX] = 1;
+        state.potion_stock[POTION_BLUE_INDEX] = 4;
+        state.equipment_stock[EQUIPMENT_ID_BOW] = 2;
 
-        assert!(state.handle_dungeon_key('Z', Path::new("")).unwrap());
+        assert_eq!(state.z_stats(), MoveOutcome::Observed);
+        assert!(state.step_active_z_stats('>', ""));
+        assert!(state.step_active_z_stats('>', ""));
 
-        assert_eq!((state.player.x, state.player.y), (1, 1));
-        assert_eq!(state.turn, 0);
-        assert!(
-            state
-                .message
-                .contains("Z-stats: DUNGEON:0 level 3 at (1, 1)")
+        assert_eq!(
+            state.active_z_stats.as_ref().map(|session| session.page),
+            Some(ZStatsPage::Reagents)
         );
-        assert!(state.message.contains("transport foot"));
-        assert!(state.message.contains("spells none"));
+        assert!(state.message.contains("Sulfur Ash: 3"));
+        assert!(!state.message.contains("Ginseng:"));
+
+        assert!(state.step_active_z_stats('>', ""));
+        assert!(state.message.contains("IL Light: 2"));
+        assert!(!state.message.contains("GP Magic Missile"));
+
+        assert!(state.step_active_z_stats('>', ""));
+        assert!(state.message.contains("Gems: 2"));
+        assert!(state.message.contains("Grapple: 1"));
+        assert!(state.message.contains("Sextant: 1"));
+        assert!(state.message.contains("Scroll LV: 1"));
+        assert!(state.message.contains("Blue Potion: 4"));
+        assert!(!state.message.contains("Keys:"));
+
+        assert!(state.step_active_z_stats('>', ""));
+        assert!(state.message.contains(&format!(
+            "{}: 2",
+            equipment_name(EQUIPMENT_ID_BOW)
+        )));
+        assert!(!state.message.contains(equipment_name(EQUIPMENT_ID_CROSSBOW)));
+    }
+
+    #[test]
+    fn z_stats_navigation_rejects_out_of_range_party_and_exits() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'F',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 0,
+            hp: 11,
+            max_hp: 21,
+            level: 1,
+        });
+        state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0"];
+        state.party_equipment = default_party_equipment(2);
+
+        assert_eq!(state.z_stats(), MoveOutcome::Observed);
+        assert!(state.step_active_z_stats('>', ""));
+        assert!(state.step_active_z_stats('2', ""));
+        assert_eq!(
+            state
+                .active_z_stats
+                .as_ref()
+                .map(|session| (session.selected_party_index, session.page)),
+            Some((1, ZStatsPage::Equipment))
+        );
+
+        assert!(state.step_active_z_stats('6', ""));
+        assert!(state.message.contains("Party has 2 members."));
+        assert_eq!(
+            state
+                .active_z_stats
+                .as_ref()
+                .map(|session| (session.selected_party_index, session.page)),
+            Some((1, ZStatsPage::Equipment))
+        );
+
+        assert!(state.step_active_z_stats(' ', ""));
+        assert!(state.active_z_stats.is_none());
+        assert_eq!(state.message, "Z-stats closed.");
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn combat_z_stats_binds_pending_party_actor() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 10,
+                max_hp: 20,
+                level: 1,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'M',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 3,
+                hp: 12,
+                max_hp: 22,
+                level: 2,
+            },
+        ];
+        state.party_names = vec![*b"AVATAR\0\0\0", *b"MARIA\0\0\0\0"];
+        state.combat_active = true;
+        state.pending_combat_actor_slot = Some(1);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Z', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.turn, 0);
+        assert_eq!(
+            state
+                .active_z_stats
+                .as_ref()
+                .map(|session| (session.selected_party_index, session.page)),
+            Some((1, ZStatsPage::Stats))
+        );
+        assert!(state.message.contains("Name: MARIA"));
     }
 
     #[test]
