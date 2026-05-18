@@ -101,6 +101,25 @@ pub fn run_play_script_commands(
     Ok(())
 }
 
+pub fn replay_play_script_commands<F>(
+    state: &mut PlayState,
+    game_dir: &Path,
+    commands: &[String],
+    mut after_command: F,
+) -> io::Result<()>
+where
+    F: FnMut(&mut PlayState, usize, &str) -> io::Result<()>,
+{
+    for (index, command) in commands.iter().enumerate() {
+        let disposition = handle_play_script_command(state, command, game_dir)?;
+        after_command(state, index, command)?;
+        if disposition == PlayInputDisposition::Quit {
+            break;
+        }
+    }
+    Ok(())
+}
+
 pub fn print_play_frame(state: &mut PlayState, tile_atlas: Option<&TileAtlas>) -> io::Result<()> {
     println!();
     println!("{}", state.render_text_frame(5));

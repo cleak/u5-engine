@@ -12,7 +12,7 @@ use u5_runtime::{
     render_text_panel_rgba,
 };
 
-use crate::{handle_play_script_command, raster_frame_kind};
+use crate::{raster_frame_kind, replay_play_script_commands};
 
 const VIEWPORT_RADIUS: usize = 5;
 
@@ -27,9 +27,7 @@ pub fn run_save_frame(
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
 
     if let Some(commands) = script {
-        for command in commands {
-            handle_play_script_command(&mut state, &command, game_dir)?;
-        }
+        replay_play_script_commands(&mut state, game_dir, &commands, |_, _, _| Ok(()))?;
     }
 
     let cells = VIEWPORT_RADIUS * 2 + 1;

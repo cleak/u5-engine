@@ -452,6 +452,52 @@ fn play_script_command_routes_movement_pass_idle_and_quit() {
     assert_eq!(state.turn, 3);
 }
 
+#[test]
+fn shared_script_replay_stops_after_quit_before_later_commands() {
+    let mut state = test_state(open_grid(), 1, 1);
+    let commands = vec!["q".to_string(), "d".to_string()];
+    let mut observed = Vec::new();
+
+    replay_play_script_commands(
+        &mut state,
+        Path::new(""),
+        &commands,
+        |state, index, command| {
+            observed.push((index, command.to_string(), state.player.x, state.turn));
+            Ok(())
+        },
+    )
+    .unwrap();
+
+    assert_eq!(observed, vec![(0, "q".to_string(), 1, 0)]);
+    assert_eq!((state.player.x, state.player.y), (1, 1));
+    assert_eq!(state.turn, 0);
+}
+
+#[test]
+fn every_published_spell_code_reaches_a_modeled_dispatch_branch() {
+    for (index, code) in SPELL_CODES.iter().enumerate() {
+        let mut state = if SPELL_SCENE_MASKS[index] & SPELL_SCENE_COMBAT != 0 {
+            let mut state = world_state(open_world_grid(), 5, 5);
+            state.combat_active = true;
+            state
+        } else if SPELL_SCENE_MASKS[index] & SPELL_SCENE_OVERWORLD != 0 {
+            world_state(open_world_grid(), 5, 5)
+        } else if SPELL_SCENE_MASKS[index] & SPELL_SCENE_INDOOR != 0 {
+            test_state(open_grid(), 5, 5)
+        } else {
+            dungeon_state(open_dungeon_record(), 0, 1, 1)
+        };
+
+        state.cast_spell_from_suffix(code, Path::new("")).unwrap();
+
+        assert_ne!(
+            state.message, "No effect!",
+            "{code} should have an explicit dispatcher branch"
+        );
+    }
+}
+
 // from chunk_19
 #[test]
 fn play_script_idle_count_replays_no_turn_visual_ticks() {
