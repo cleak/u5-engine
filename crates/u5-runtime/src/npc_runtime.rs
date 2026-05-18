@@ -1,6 +1,5 @@
 //! Runtime NPC + door tracker + location markers.
 
-
 use crate::*;
 
 /// Per `npc-schedules.md §7`: NPC schedule state-machine values `0..=8`.

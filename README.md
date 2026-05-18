@@ -15,7 +15,8 @@ at runtime and checks the current public specs against real files:
 - public LZW graphics-envelope decoding for tile atlases, image directories,
   sprite/mask sheets, standalone `.BIT` bitmaps, and proportional/fixed font
   rasterization;
-- atlas-backed top-down viewport rasterization for town/world scenes; and
+- atlas-backed top-down viewport rasterization for town/world scenes plus a
+  clean first-person dungeon raster; and
 - a small class-derived movement/pathfinding smoke test.
 
 The repository does not include game assets. Run it with a local Ultima V
@@ -40,8 +41,8 @@ cargo run -- --play C:\Games\U5-Clean
 
 A minimal Bevy frontend renders the same `PlayState` to a real window instead
 of the terminal. It is feature-gated so the default build keeps the lean
-verification dependency surface, and it currently covers only top-down
-overworld and town scenes:
+verification dependency surface. It currently covers top-down overworld/town
+scenes plus the clean first-person dungeon raster:
 
 ```powershell
 cargo run --features visual -- --visual --scene BRITANNIA C:\Games\U5-Clean
@@ -53,10 +54,9 @@ indexed framebuffer converted to RGBA) into one Bevy `Image` and displays it
 through one nearest-neighbor sprite. Gameplay still lives in `PlayState`: the
 input system maps keyboard events into the same handlers used by the terminal
 harness, so movement, blocking, doors, and supported area transitions work out
-of the box. Active dungeon scenes show a `Dungeon view is text-only in this
-slice` notice underneath the viewport; combat, shops, conversations,
-character creation, and the first-person dungeon renderer remain out of scope
-for this slice.
+of the box. Dungeon scenes render a light-gated first-person corridor panel;
+combat, shops, conversations, and character creation remain modal runtime
+flows rather than bespoke Bevy UI.
 
 Input map (visual mode):
 

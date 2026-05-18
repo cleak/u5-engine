@@ -281,10 +281,10 @@ experience.
 
 - A first visual slice now exists behind `cargo run --features visual --
   --visual ...`. It opens one Bevy window, renders a single CPU-generated
-  RGBA framebuffer of the existing top-down viewport into one `Image`, and
-  routes keyboard input through the same handlers used by the terminal play
-  loop. Dungeon scenes still fall back to a placeholder notice because the
-  first-person renderer is not part of this slice.
+  RGBA framebuffer of the current viewport into one `Image`, and routes
+  keyboard input through the same handlers used by the terminal play loop.
+  Town/world scenes use the tile-atlas top-down view; dungeon scenes use a
+  clean first-person raster with the public light gate and wall/feature cues.
 
 - Establish a Bevy app shell. (visual slice landed)
   - Game state resource wraps or adapts the existing `PlayState`. (done)

@@ -1,6 +1,5 @@
 //! Data structures for the dungeon TSV tables (deeper transitions, teleports, chests, wind, exits, doors, secret doors).
 
-
 use crate::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

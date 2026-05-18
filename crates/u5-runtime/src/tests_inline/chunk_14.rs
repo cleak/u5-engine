@@ -219,6 +219,36 @@
     }
 
     #[test]
+    fn dungeon_raster_frame_respects_light_gate() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.visibility_dirty = true;
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+
+        assert_eq!(viewport.width, 11 * TILE_ATLAS_SIDE);
+        assert!(viewport.pixels.iter().all(|&pixel| pixel == 0));
+        assert!(!state.visibility_dirty);
+    }
+
+    #[test]
+    fn dungeon_raster_frame_draws_facing_relative_wall_and_feature_cues() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x40;
+        grid[dungeon_cell_index(0, 2, 0)] = 0xb0;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.player.facing = Direction::East;
+        state.torch_counter = 9;
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+
+        assert!(viewport.pixels.iter().any(|&pixel| pixel == 15));
+        assert!(viewport.pixels.iter().any(|&pixel| pixel == 8));
+        assert!(viewport.pixels.iter().any(|&pixel| pixel == 6));
+    }
+
+    #[test]
     fn dungeon_look_uses_tile_description_when_lit() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 2, 1)] = 0x40;
@@ -985,11 +1015,15 @@
 
 
     #[test]
-    fn top_down_viewport_skips_dungeon_area() {
-        let state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    fn viewport_renders_lit_dungeon_area() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.torch_counter = 9;
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
 
-        assert!(state.render_top_down_viewport(1, &atlas).unwrap().is_none());
+        let viewport = state.render_top_down_viewport(1, &atlas).unwrap().unwrap();
+
+        assert_eq!(viewport.width, 3 * TILE_ATLAS_SIDE);
+        assert!(viewport.pixels.iter().any(|&pixel| pixel != 0));
     }
 
     #[test]

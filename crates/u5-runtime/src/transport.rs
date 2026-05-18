@@ -1,6 +1,5 @@
 //! Transport state (foot/horse/ship/skiff/carpet/balloon), pending-vehicle acquisitions, and board-vehicle candidates.
 
-
 use crate::*;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

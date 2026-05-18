@@ -34,7 +34,7 @@ pub struct CliArgs {
     pub game_dir: PathBuf,
     pub play_options: PlayOptions,
     pub help: bool,
-    /// If set, render the top-down viewport after the play-script runs and
+    /// If set, render the current viewport after the play-script runs and
     /// write it to this path as a PNG. Bypasses the interactive play loop
     /// and the Bevy harness; useful for verifying movement without a desktop.
     pub save_frame: Option<PathBuf>,
@@ -367,9 +367,9 @@ OPTIONS:
         --chargen-winners <V> Seven comma-separated winning virtues for chargen.
         --raster-diagnostics  Emit per-frame raster diagnostics.
         --raster-depth <D>    ega|cga (default ega).
-        --visual              Launch the Bevy top-down visual harness.
+        --visual              Launch the Bevy visual harness.
                               Requires building with `--features visual`.
-        --save-frame <PATH>   Render the top-down viewport (after running
+        --save-frame <PATH>   Render the current viewport (after running
                               --play-script if given) to a PNG and exit.
                               Useful for verifying movement without a desktop.
 

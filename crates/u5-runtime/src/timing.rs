@@ -1,6 +1,5 @@
 //! Timing status tag, save-template source, dungeon field effect.
 
-
 use crate::*;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

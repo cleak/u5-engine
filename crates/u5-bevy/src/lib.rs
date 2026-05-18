@@ -397,14 +397,14 @@ mod tests {
     use super::*;
     use u5_runtime::test_fixtures::{dungeon_state, open_dungeon_record, synthetic_tile_atlas};
     use u5_runtime::{
-        Direction, TEXT_PANEL_BODY_RGBA, TEXT_PANEL_HEADER_RGBA, TileGraphicsDepth,
-        dungeon_cell_index, wrap_text_panel_lines,
+        Direction, EGA_PALETTE_RGB, TileGraphicsDepth, dungeon_cell_index, wrap_text_panel_lines,
     };
 
     #[test]
-    fn dungeon_framebuffer_renders_text_panel_instead_of_blank_placeholder() {
+    fn dungeon_framebuffer_renders_first_person_raster_when_lit() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 2, 1)] = 0x40;
+        grid[dungeon_cell_index(0, 2, 0)] = 0xb0;
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.player.facing = Direction::East;
         state.torch_counter = 9;
@@ -416,13 +416,37 @@ mod tests {
             rgba.len(),
             (VIEWPORT_SIZE_PX as usize) * (VIEWPORT_SIZE_PX as usize) * 4
         );
-        assert!(
-            rgba.chunks_exact(4)
-                .any(|pixel| pixel == TEXT_PANEL_HEADER_RGBA)
+        assert!(rgba.chunks_exact(4).any(|pixel| pixel
+            == [
+                EGA_PALETTE_RGB[15][0],
+                EGA_PALETTE_RGB[15][1],
+                EGA_PALETTE_RGB[15][2],
+                0xff
+            ]));
+        assert!(rgba.chunks_exact(4).any(|pixel| pixel
+            == [
+                EGA_PALETTE_RGB[8][0],
+                EGA_PALETTE_RGB[8][1],
+                EGA_PALETTE_RGB[8][2],
+                0xff
+            ]));
+    }
+
+    #[test]
+    fn dungeon_framebuffer_stays_black_without_light() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.player.facing = Direction::East;
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let rgba = render_framebuffer(&mut state, &atlas);
+
+        assert_eq!(
+            rgba.len(),
+            (VIEWPORT_SIZE_PX as usize) * (VIEWPORT_SIZE_PX as usize) * 4
         );
         assert!(
             rgba.chunks_exact(4)
-                .any(|pixel| pixel == TEXT_PANEL_BODY_RGBA)
+                .all(|pixel| pixel == [0x00, 0x00, 0x00, 0xff])
         );
     }
 

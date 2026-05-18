@@ -1,6 +1,5 @@
 //! Data structures for the town TSV tables (fire sources, pushables, get-tiles, rest beds, stairs, trap doors, exits, locks).
 
-
 use crate::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -1,5 +1,5 @@
 //! `--save-frame` driver: load PlayState, optionally replay a script,
-//! render the top-down viewport, write it to a PNG, and exit.
+//! render the current viewport, write it to a PNG, and exit.
 //!
 //! Useful for verifying visual output without a desktop session.
 

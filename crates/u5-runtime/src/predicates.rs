@@ -1,6 +1,5 @@
 //! Tile passability/water/lava/door predicates plus table-match helpers used during runtime checks.
 
-
 use crate::*;
 
 /// `catalogs/tile-catalog.md` §6: any tile id in the door family

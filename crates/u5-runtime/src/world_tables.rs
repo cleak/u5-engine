@@ -1,6 +1,5 @@
 //! Data structures for the world TSV tables (locations, plane transitions, get-tiles, pickups, waterfalls, damage, encounters, shrines).
 
-
 use crate::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

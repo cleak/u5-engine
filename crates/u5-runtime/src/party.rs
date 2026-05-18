@@ -1,6 +1,5 @@
 //! Area, party roster, avatar stats, moonstone gate slots.
 
-
 use crate::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

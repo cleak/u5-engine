@@ -1,6 +1,5 @@
 //! Animation clock, active object, phase ticking, active-ship wind state.
 
-
 use crate::*;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
