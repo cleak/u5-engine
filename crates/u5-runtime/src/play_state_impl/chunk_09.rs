@@ -50,9 +50,21 @@ impl PlayState {
         game_dir: &Path,
         plane: WorldPlane,
     ) -> io::Result<Option<usize>> {
-        let Some(entries) = load_world_encounter_entries(game_dir)? else {
+        if self.combat_active {
             return Ok(None);
+        }
+        let Some(entries) = load_world_encounter_entries(game_dir)? else {
+            return Ok(self.apply_native_world_encounter_probe(plane));
         };
+        self.apply_world_encounter_sidecar_probe(&entries, game_dir, plane)
+    }
+
+    pub fn apply_world_encounter_sidecar_probe(
+        &mut self,
+        entries: &[WorldEncounterEntry],
+        game_dir: &Path,
+        plane: WorldPlane,
+    ) -> io::Result<Option<usize>> {
         let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
         let Some(entry) = entries
             .iter()
@@ -61,7 +73,7 @@ impl PlayState {
         else {
             return Ok(None);
         };
-        if entry.threshold == 0 || self.world_encounter_roll(entry) > entry.threshold {
+        if !random_encounter_probe_fires(entry.threshold, self.world_encounter_roll(entry)) {
             return Ok(None);
         }
 
@@ -90,6 +102,152 @@ impl PlayState {
         };
         self.mark_visibility_dirty();
         Ok(Some(slot))
+    }
+
+    pub fn apply_native_world_encounter_probe(&mut self, plane: WorldPlane) -> Option<usize> {
+        let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
+        let threshold =
+            random_encounter_threshold(plane == WorldPlane::Underworld, tile, self.clock.hour);
+        let roll = self.native_world_encounter_roll_1_to_30(0);
+        if !random_encounter_probe_fires(threshold, roll) {
+            return None;
+        }
+        self.spawn_native_world_encounter(plane)
+    }
+
+    pub fn spawn_native_world_encounter(&mut self, plane: WorldPlane) -> Option<usize> {
+        let scroll_base = world_scroll_base(self.player.x, self.player.y);
+        for attempt in 0..ENCOUNTER_SPAWNER_RETRY_LIMIT {
+            let x = (scroll_base.0
+                + usize::from(self.native_world_encounter_seed(attempt, 0x21))
+                    % OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE)
+                % WORLD_SIDE;
+            let y = (scroll_base.1
+                + usize::from(self.native_world_encounter_seed(attempt, 0x43))
+                    % OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE)
+                % WORLD_SIDE;
+            if !encounter_spawner_separation_ok(
+                x as u8,
+                y as u8,
+                self.player.x as u8,
+                self.player.y as u8,
+            ) || self.world_object_at(x, y).is_some()
+            {
+                continue;
+            }
+
+            let tile = self.grid[world_cell_index(x, y)];
+            let Some(type_byte) = self.native_world_encounter_type(plane, tile, attempt) else {
+                continue;
+            };
+            if sea_creature_spawn_seeds_aux(type_byte) && (tile & 0xf0) == 0x60 {
+                continue;
+            }
+
+            let dx = wrapped_world_axis_delta(self.player.x, x);
+            let dy = wrapped_world_axis_delta(self.player.y, y);
+            let object = ActiveObject {
+                type_byte,
+                tile: type_byte,
+                x,
+                y,
+                z: plane.save_floor(),
+                phase: active_object_phase_toward_player(dx, dy),
+                aux1: if sea_creature_spawn_seeds_aux(type_byte) {
+                    SEA_CREATURE_SPAWN_AUX_SEED
+                } else {
+                    0
+                },
+                aux3: 0,
+            };
+            let slot = self.allocate_active_object_slot(object)?;
+            self.mark_visibility_dirty();
+            return Some(slot);
+        }
+        None
+    }
+
+    pub fn native_world_encounter_type(
+        &self,
+        plane: WorldPlane,
+        tile: u8,
+        attempt: u8,
+    ) -> Option<u8> {
+        let underworld = plane == WorldPlane::Underworld;
+        match spawn_terrain_branch(tile, underworld) {
+            SpawnTerrainBranch::SurfaceTile1WhirlpoolOrAquatic => {
+                if self.native_world_encounter_mod(attempt, 0x61, SPAWN_WHIRLPOOL_DENOMINATOR) == 0
+                {
+                    Some(0xEC)
+                } else {
+                    self.native_world_encounter_bucket_pick(&SURFACE_AQUATIC_BUCKET, attempt, 0x62)
+                }
+            }
+            SpawnTerrainBranch::SeaSerpentAdjacency => {
+                (self.native_world_encounter_mod(attempt, 0x63, SPAWN_SEA_SERPENT_DENOMINATOR)
+                    == 0)
+                    .then_some(0xE0)
+            }
+            SpawnTerrainBranch::UnderworldTile4RotWorm => Some(0xF8),
+            SpawnTerrainBranch::HardReject | SpawnTerrainBranch::HighTileReject => None,
+            SpawnTerrainBranch::LowTileAllowance => {
+                if self.native_world_encounter_mod(
+                    attempt,
+                    0x64,
+                    SPAWN_LOW_TILE_ALLOWANCE_DENOMINATOR,
+                ) != 0
+                {
+                    return None;
+                }
+                if underworld {
+                    self.native_world_encounter_bucket_pick(
+                        &UNDERWORLD_AQUATIC_BUCKET,
+                        attempt,
+                        0x65,
+                    )
+                } else {
+                    self.native_world_encounter_bucket_pick(&SURFACE_AQUATIC_BUCKET, attempt, 0x65)
+                }
+            }
+            SpawnTerrainBranch::LandBucket => {
+                if underworld {
+                    self.native_world_encounter_bucket_pick(&UNDERWORLD_LAND_BUCKET, attempt, 0x66)
+                } else {
+                    self.native_world_encounter_bucket_pick(&SURFACE_LAND_BUCKET, attempt, 0x66)
+                }
+            }
+        }
+    }
+
+    pub fn native_world_encounter_bucket_pick(
+        &self,
+        bucket: &[(u8, u8)],
+        attempt: u8,
+        salt: u8,
+    ) -> Option<u8> {
+        pick_random_spawn_bucket(bucket, self.native_world_encounter_seed(attempt, salt))
+    }
+
+    pub fn native_world_encounter_roll_1_to_30(&self, salt: u8) -> u8 {
+        1 + self.native_world_encounter_seed(0, salt) % RANDOM_ENCOUNTER_DIE
+    }
+
+    pub fn native_world_encounter_mod(&self, attempt: u8, salt: u8, modulus: u8) -> u8 {
+        if modulus == 0 {
+            0
+        } else {
+            self.native_world_encounter_seed(attempt, salt) % modulus
+        }
+    }
+
+    pub fn native_world_encounter_seed(&self, attempt: u8, salt: u8) -> u8 {
+        self.turn as u8
+            ^ self.clock.hour.wrapping_mul(3)
+            ^ self.clock.minute.wrapping_mul(5)
+            ^ (self.player.x as u8).wrapping_mul(7)
+            ^ (self.player.y as u8).wrapping_mul(11)
+            ^ attempt.wrapping_mul(17)
+            ^ salt
     }
 
     pub fn world_encounter_roll(&self, entry: WorldEncounterEntry) -> u8 {
@@ -1057,5 +1215,14 @@ impl PlayState {
         if pruned {
             self.mark_visibility_dirty();
         }
+    }
+}
+
+pub fn wrapped_world_axis_delta(from: usize, to: usize) -> i8 {
+    let forward = (to + WORLD_SIDE - from) % WORLD_SIDE;
+    if forward <= i8::MAX as usize {
+        forward as i8
+    } else {
+        -((WORLD_SIDE - forward).min(i8::MAX as usize) as i8)
     }
 }

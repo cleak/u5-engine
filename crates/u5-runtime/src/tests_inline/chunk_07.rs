@@ -1336,6 +1336,136 @@ BRITANNIA 11 21 UNDERWORLD 30 40
     }
 
     #[test]
+    fn world_encounter_sidecar_uses_strict_threshold_predicate() {
+        let dir = debug_game_dir();
+        let entry = WorldEncounterEntry {
+            plane: WorldPlane::Britannia,
+            tile: 5,
+            threshold: 22,
+            type_byte: 192,
+            dx: 2,
+            dy: 0,
+            phase: active_object_phase_from_direction(Direction::West, 0),
+        };
+        let mut equal_roll = britannia_state(vec![5; WORLD_CELLS], 10, 10);
+        assert_eq!(equal_roll.world_encounter_roll(entry), 22);
+
+        assert_eq!(
+            equal_roll
+                .apply_world_encounter_sidecar_probe(&[entry], &dir, WorldPlane::Britannia)
+                .unwrap(),
+            None
+        );
+
+        let mut below_threshold = britannia_state(vec![5; WORLD_CELLS], 10, 10);
+        let spawning_entry = WorldEncounterEntry {
+            threshold: 23,
+            ..entry
+        };
+        assert_eq!(
+            below_threshold
+                .apply_world_encounter_sidecar_probe(&[spawning_entry], &dir, WorldPlane::Britannia)
+                .unwrap(),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn native_world_encounter_probe_runs_when_sidecar_is_absent() {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(vec![0x04; WORLD_CELLS], 1, 11);
+
+        let slot = state
+            .apply_world_encounter_probe(&dir, WorldPlane::Britannia)
+            .unwrap();
+
+        assert_eq!(slot, Some(1));
+        assert_eq!(
+            state.active_objects[1],
+            ActiveObject {
+                type_byte: 0xC8,
+                tile: 0xC8,
+                x: 11,
+                y: 25,
+                z: WorldPlane::Britannia.save_floor(),
+                phase: active_object_phase_toward_player(10, 14),
+                aux1: 0,
+                aux3: 0,
+            }
+        );
+        assert!(state.visibility_dirty);
+    }
+
+    #[test]
+    fn native_world_encounter_probe_respects_zero_threshold() {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(vec![0x20; WORLD_CELLS], 1, 11);
+        state.clock.hour = 12;
+
+        let slot = state
+            .apply_world_encounter_probe(&dir, WorldPlane::Britannia)
+            .unwrap();
+
+        assert_eq!(slot, None);
+        assert_eq!(state.active_objects.len(), 1);
+        assert!(!state.visibility_dirty);
+    }
+
+    #[test]
+    fn native_world_encounter_probe_skips_during_active_combat() {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(vec![0x04; WORLD_CELLS], 1, 11);
+        state.combat_active = true;
+
+        let slot = state
+            .apply_world_encounter_probe(&dir, WorldPlane::Britannia)
+            .unwrap();
+
+        assert_eq!(slot, None);
+        assert_eq!(state.active_objects.len(), 1);
+    }
+
+    #[test]
+    fn native_world_encounter_spawner_seeds_sea_creature_auxiliary() {
+        let mut state = britannia_state(vec![0x02; WORLD_CELLS], 0, 40);
+
+        let slot = state.spawn_native_world_encounter(WorldPlane::Britannia);
+
+        assert_eq!(slot, Some(1));
+        assert_eq!(
+            state.active_objects[1],
+            ActiveObject {
+                type_byte: 0x2C,
+                tile: 0x2C,
+                x: 13,
+                y: 63,
+                z: WorldPlane::Britannia.save_floor(),
+                phase: active_object_phase_toward_player(13, 23),
+                aux1: SEA_CREATURE_SPAWN_AUX_SEED,
+                aux3: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn native_world_encounter_type_handles_special_terrain_branches() {
+        let state = britannia_state(vec![0x04; WORLD_CELLS], 1, 11);
+
+        assert_eq!(
+            state.native_world_encounter_type(WorldPlane::Underworld, 0x04, 0),
+            Some(0xF8)
+        );
+        assert_eq!(
+            state.native_world_encounter_type(WorldPlane::Britannia, 0x0C, 0),
+            None
+        );
+        assert_eq!(
+            state.native_world_encounter_type(WorldPlane::Britannia, 0x80, 0),
+            None
+        );
+    }
+
+    #[test]
     fn world_encounter_spawn_is_included_in_saved_overworld_overlay() {
         let dir = debug_game_dir();
         fs::write(dir.join("INIT.GAM"), saved_game_seed_bytes(0, 0, 10, 10)).unwrap();
@@ -1596,4 +1726,3 @@ BRITANNIA 11 21 UNDERWORLD 30 40
         assert!(!state.message.contains("waterfall swept"));
         let _ = fs::remove_dir_all(dir);
     }
-
