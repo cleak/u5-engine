@@ -553,6 +553,104 @@
     }
 
     #[test]
+    fn town_open_object_chest_consumes_slot_trap_and_public_reward_pools() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.moral_standing = 8;
+        state.visibility_dirty = false;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x4f,
+            tile: 0x4f,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0xff,
+            aux3: 0,
+        });
+
+        assert_eq!(state.open_facing(), MoveOutcome::ContainerOpened);
+
+        assert!(state.active_objects[1].is_empty());
+        assert_eq!(state.moral_standing, 6);
+        assert!(state.visibility_dirty);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("Opened object chest at (2, 1)"));
+        assert!(state.message.contains("trap"));
+        assert!(state.message.contains("chest grants"));
+        assert!(state.food > DEFAULT_FOOD_STOCK || state.gold > DEFAULT_GOLD_STOCK);
+    }
+
+    #[test]
+    fn town_get_object_chest_uses_chest_helper_before_blocking_object_refusal() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x4f,
+            tile: 0x4f,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0x7f,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.get_town_facing(Path::new(""), Scene::new(0x11).unwrap(), 0).unwrap(),
+            MoveOutcome::ContainerOpened
+        );
+
+        assert!(state.active_objects[1].is_empty());
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("Got object chest at (2, 1)"));
+        assert!(state.message.contains("chest grants"));
+    }
+
+    #[test]
+    fn town_jimmy_object_chest_uses_stat_high_bit_lock_rule() {
+        let mut success = test_state(open_grid(), 1, 1);
+        success.player.facing = Direction::East;
+        success.party[0].class_byte = 1;
+        success.active_objects.push(ActiveObject {
+            type_byte: 0x4f,
+            tile: 0x4f,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0x90,
+            aux3: 0,
+        });
+
+        assert_eq!(success.jimmy_facing(), MoveOutcome::LockTried);
+        assert_eq!(success.keys, DEFAULT_KEY_STOCK - 1);
+        assert_eq!(success.active_objects[1].aux1, 0x90);
+        assert_eq!(success.turn, 1);
+        assert_eq!(success.message, "Unlocked!");
+
+        let mut failure = test_state(open_grid(), 1, 1);
+        failure.player.facing = Direction::East;
+        failure.party[0].class_byte = 60;
+        failure.active_objects.push(ActiveObject {
+            type_byte: 0x4f,
+            tile: 0x4f,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0x81,
+            aux3: 0,
+        });
+
+        assert_eq!(failure.jimmy_facing(), MoveOutcome::LockTried);
+        assert_eq!(failure.keys, DEFAULT_KEY_STOCK);
+        assert_eq!(failure.active_objects[1].aux1, 0x01);
+        assert_eq!(failure.turn, 1);
+        assert_eq!(failure.message, "Key broke!");
+    }
+
+    #[test]
     fn town_jimmy_without_inline_party_prompts_without_turn() {
         let dir = debug_game_dir();
         fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 97 96\n").unwrap();

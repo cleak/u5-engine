@@ -212,6 +212,13 @@ impl PlayState {
                 return self.open_dungeon_underfoot(game_dir, scene, level);
             }
             Area::World { .. } => {
+                let (dx, dy) = direction.delta();
+                let tx = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
+                let ty = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
+                if let Some(outcome) = self.consume_surface_object_chest_at(tx, ty, None, "Opened")
+                {
+                    return Ok(outcome);
+                }
                 self.message = "Nothing to open here.".to_string();
                 return Ok(MoveOutcome::Blocked);
             }
@@ -242,6 +249,9 @@ impl PlayState {
         {
             self.message = "Locked!".to_string();
             return Ok(MoveOutcome::Blocked);
+        }
+        if let Some(outcome) = self.consume_surface_object_chest_at(tx, ty, None, "Opened") {
+            return Ok(outcome);
         }
         if !(96..=103).contains(&tile) {
             self.message = "Nothing to open!".to_string();
@@ -551,6 +561,9 @@ impl PlayState {
         }
         let tx = tx as usize;
         let ty = ty as usize;
+        if let Some(outcome) = self.jimmy_surface_object_chest_at(tx, ty, member_index) {
+            return Ok(outcome);
+        }
         if self.blocking_object_at(tx, ty).is_some() {
             return self.jimmy_town_pickpocket(game_dir, scene, floor, tx, ty, member_index);
         }
@@ -641,6 +654,278 @@ impl PlayState {
         }
         self.pickpocketed_npcs.push(marker);
         true
+    }
+
+    pub fn surface_object_chest_slot_at(
+        &self,
+        x: usize,
+        y: usize,
+    ) -> Option<(usize, ActiveObject)> {
+        self.active_objects
+            .iter()
+            .copied()
+            .enumerate()
+            .skip(1)
+            .find_map(|(slot, object)| {
+                (self.object_occupies(object, x, y)
+                    && Self::surface_object_chest_stat(object).is_some())
+                .then_some((slot, object))
+            })
+    }
+
+    pub fn surface_object_chest_stat(object: ActiveObject) -> Option<u8> {
+        let is_furniture_chest = (TILE_FURNITURE_FIRST..=TILE_FURNITURE_LAST)
+            .contains(&object.type_byte)
+            || (TILE_FURNITURE_FIRST..=TILE_FURNITURE_LAST).contains(&object.tile);
+        (is_furniture_chest && object.aux1 != 0).then_some(object.aux1)
+    }
+
+    pub fn jimmy_surface_object_chest_at(
+        &mut self,
+        x: usize,
+        y: usize,
+        member_index: usize,
+    ) -> Option<MoveOutcome> {
+        let (slot, object) = self.surface_object_chest_slot_at(x, y)?;
+        let stat = Self::surface_object_chest_stat(object)?;
+        let Some(threshold) =
+            object_chest_jimmy_threshold(stat, self.party[member_index].class_byte)
+        else {
+            self.advance_turn();
+            self.message = "Key broke!".to_string();
+            return Some(MoveOutcome::LockTried);
+        };
+        let roll = self.surface_object_chest_jimmy_roll(slot, x, y, member_index, stat);
+        if object_chest_jimmy_succeeds(threshold, roll) {
+            self.keys = self.keys.saturating_sub(1);
+            self.advance_turn();
+            self.message = "Unlocked!".to_string();
+        } else {
+            if let Some(object) = self.active_objects.get_mut(slot) {
+                object.aux1 &= 0x7f;
+            }
+            self.advance_turn();
+            self.message = "Key broke!".to_string();
+        }
+        Some(MoveOutcome::LockTried)
+    }
+
+    pub fn surface_object_chest_jimmy_roll(
+        &self,
+        slot: usize,
+        x: usize,
+        y: usize,
+        member_index: usize,
+        stat: u8,
+    ) -> u8 {
+        1 + (self.surface_object_chest_seed(slot, x, y, stat & 0x7f, member_index, 0)
+            % JIMMY_OBJECT_DIE_HIGH)
+    }
+
+    pub fn consume_surface_object_chest_at(
+        &mut self,
+        x: usize,
+        y: usize,
+        member_index: Option<usize>,
+        verb: &str,
+    ) -> Option<MoveOutcome> {
+        let (slot, object) = self.surface_object_chest_slot_at(x, y)?;
+        let stat = Self::surface_object_chest_stat(object)?;
+        let chest_class = stat & 0x7f;
+        let trap_note = (stat & 0x80 != 0).then(|| {
+            let target = member_index.unwrap_or_else(|| self.shared_trap_default_target_slot());
+            self.apply_shared_trap_effect_to_slot(target)
+        });
+        let content_note = self.generate_surface_object_chest_content(slot, x, y, chest_class);
+        self.free_active_object_slot(slot);
+        if matches!(self.area, Area::Town { .. }) {
+            self.moral_standing = town_chest_open_standing(self.moral_standing);
+        } else if matches!(self.area, Area::World { .. }) {
+            self.cache_current_world_overlay();
+        }
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = match trap_note {
+            Some(trap) => {
+                format!("{verb} object chest at ({x}, {y}); {trap}; {content_note}.")
+            }
+            None => format!("{verb} object chest at ({x}, {y}); {content_note}."),
+        };
+        Some(MoveOutcome::ContainerOpened)
+    }
+
+    pub fn generate_surface_object_chest_content(
+        &mut self,
+        slot: usize,
+        x: usize,
+        y: usize,
+        chest_class: u8,
+    ) -> String {
+        let mut parts = Vec::new();
+        for (row, threshold) in CHEST_PRIMARY_POOL_THRESHOLDS.iter().copied().enumerate() {
+            let roll = self.surface_object_chest_roll(slot, x, y, chest_class, row, 0, 30);
+            if !chest_primary_pool_row_succeeds(chest_class, threshold, roll) {
+                continue;
+            }
+            match row {
+                0 => {
+                    let amount = self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, 2);
+                    self.apply_object_pickup(ObjectPickupKind::Food, amount);
+                    parts.push(format!("{amount} food"));
+                }
+                1 => {
+                    let amount = self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, 2);
+                    self.apply_object_pickup(ObjectPickupKind::Torches, amount);
+                    parts.push(format!("{amount} torches"));
+                }
+                2 => {
+                    let amount = self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, 2);
+                    self.apply_object_pickup(ObjectPickupKind::Gems, amount);
+                    parts.push(format!("{amount} gems"));
+                }
+                3 => {
+                    let amount = self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, 2);
+                    self.apply_object_pickup(ObjectPickupKind::Keys, amount);
+                    parts.push(format!("{amount} keys"));
+                }
+                4 => {
+                    let subtype = self.surface_object_chest_zero_based_roll(
+                        slot,
+                        x,
+                        y,
+                        chest_class,
+                        row,
+                        1,
+                        8,
+                    );
+                    let kind = ObjectPickupKind::Scroll(subtype);
+                    self.apply_object_pickup(kind, 1);
+                    parts.push(format!("1 {}", kind.label()));
+                }
+                5 => {
+                    let subtype = self.surface_object_chest_zero_based_roll(
+                        slot,
+                        x,
+                        y,
+                        chest_class,
+                        row,
+                        1,
+                        8,
+                    );
+                    self.apply_object_pickup(ObjectPickupKind::Potion(subtype), 1);
+                    parts.push(format!("1 {} potion", potion_label(subtype)));
+                }
+                6 => {
+                    let upper = chest_class.saturating_mul(3);
+                    if upper != 0 {
+                        let amount =
+                            self.surface_object_chest_roll(slot, x, y, chest_class, row, 1, upper);
+                        self.apply_object_pickup(ObjectPickupKind::Gold, amount);
+                        parts.push(format!("{amount} gold"));
+                    }
+                }
+                7 => {
+                    let marker = self.surface_object_chest_roll(
+                        slot,
+                        x,
+                        y,
+                        chest_class,
+                        row,
+                        1,
+                        chest_class,
+                    );
+                    parts.push(format!("marker {marker}"));
+                }
+                _ => {}
+            }
+        }
+
+        let attempts = chest_secondary_pool_attempts(chest_class);
+        for attempt in 0..attempts {
+            let row = self.surface_object_chest_zero_based_roll(
+                slot,
+                x,
+                y,
+                chest_class,
+                usize::from(attempt),
+                2,
+                CHEST_SECONDARY_POOL_ROW_COUNT,
+            );
+            let Some(threshold) = chest_secondary_pool_threshold(row) else {
+                continue;
+            };
+            let roll = self.surface_object_chest_roll(
+                slot,
+                x,
+                y,
+                chest_class,
+                usize::from(attempt),
+                3,
+                30,
+            );
+            if chest_primary_pool_row_succeeds(chest_class, threshold, roll) {
+                self.apply_object_pickup(ObjectPickupKind::Equipment(row), 1);
+                parts.push(format!("1 {}", equipment_name(row)));
+            }
+        }
+
+        if parts.is_empty() {
+            "chest was empty".to_string()
+        } else {
+            format!("chest grants {}", parts.join(", "))
+        }
+    }
+
+    pub fn surface_object_chest_roll(
+        &self,
+        slot: usize,
+        x: usize,
+        y: usize,
+        chest_class: u8,
+        row: usize,
+        stage: u8,
+        upper: u8,
+    ) -> u8 {
+        if upper == 0 {
+            0
+        } else {
+            1 + (self.surface_object_chest_seed(slot, x, y, chest_class, row, stage) % upper)
+        }
+    }
+
+    pub fn surface_object_chest_zero_based_roll(
+        &self,
+        slot: usize,
+        x: usize,
+        y: usize,
+        chest_class: u8,
+        row: usize,
+        stage: u8,
+        upper: usize,
+    ) -> usize {
+        if upper == 0 {
+            0
+        } else {
+            usize::from(self.surface_object_chest_seed(slot, x, y, chest_class, row, stage)) % upper
+        }
+    }
+
+    pub fn surface_object_chest_seed(
+        &self,
+        slot: usize,
+        x: usize,
+        y: usize,
+        chest_class: u8,
+        row: usize,
+        stage: u8,
+    ) -> u8 {
+        (self.turn as u8)
+            ^ (slot as u8).wrapping_mul(7)
+            ^ (x as u8).wrapping_mul(11)
+            ^ (y as u8).wrapping_mul(13)
+            ^ chest_class.wrapping_mul(17)
+            ^ (row as u8).wrapping_mul(19)
+            ^ stage.wrapping_mul(23)
     }
 
     pub fn add_moral_standing(&mut self, amount: u8) -> u8 {
@@ -1028,6 +1313,9 @@ impl PlayState {
         )? {
             return Ok(outcome);
         }
+        if let Some(outcome) = self.consume_surface_object_chest_at(tx, ty, None, "Got") {
+            return Ok(outcome);
+        }
         if self.world_object_at(tx, ty).is_some() {
             self.message = "Nothing to get there.".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -1096,6 +1384,9 @@ impl PlayState {
         if let Some(outcome) =
             self.get_object_pickup_at(game_dir, PlayTarget::Town(scene), floor, tx, ty)?
         {
+            return Ok(outcome);
+        }
+        if let Some(outcome) = self.consume_surface_object_chest_at(tx, ty, None, "Got") {
             return Ok(outcome);
         }
         if self.blocking_object_at(tx, ty).is_some() {
