@@ -217,8 +217,9 @@ party member, combat slot, or Gate Travel moon phase now prompt for that choice
 before any spell charge or mana is spent. Bare `U` opens the Use picker, bare
 `R` opens the Ready picker, bare `M` opens the reagent mixer, bare `N` opens the
 New Order party-slot prompt, and bare `Y` opens the free-text yell prompt.
-`J` routes to the first-playable Jimmy/key
-guard instead of the movement helper, with optional town lock and dungeon door
+Bare `J` opens the Jimmy party-member picker, and inline forms such as `J1`
+still route in one command. The command uses the first-playable Jimmy/key guard
+instead of the movement helper, with optional town lock and dungeon door
 metadata able to unlock authored door cells. Numeric diagonals still refuse as
 unsupported dungeon movement, and dungeon `Q` routes to the public mode-loop
 `Exit to DOS?` prompt instead of the resident save writer.

@@ -566,11 +566,65 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.message, "Who picks? Use J<party>.");
+        assert!(state.message.contains("Who picks?"));
+        assert!(state.active_jimmy.is_some());
         assert_eq!(state.grid[32 + 2], 97);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
         assert_eq!(state.turn, 0);
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn active_town_jimmy_picker_unlocks_with_selected_member() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 97 96\n").unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = 97;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+
+        handle_play_key_input(&mut state, 'J', "", &dir).unwrap();
+        assert!(state.active_jimmy.is_some());
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '1', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_jimmy.is_none());
+        assert_eq!(state.grid[32 + 2], 96);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Unlocked!");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn active_dungeon_jimmy_picker_preserves_prompt_before_key_check() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x4b;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.keys = 0;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'J', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_jimmy.is_some());
+        assert!(state.message.contains("Who picks?"));
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.keys, 0);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_jimmy.is_none());
+        assert_eq!(state.message, "No keys!");
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.keys, 0);
     }
 
     #[test]

@@ -64,10 +64,11 @@
             state
                 .jimmy_facing_with_game_dir_and_member(None, None)
                 .unwrap(),
-            MoveOutcome::PromptDeclined
+            MoveOutcome::Observed
         );
 
-        assert_eq!(state.message, "Who picks? Use J<party>.");
+        assert!(state.message.contains("Who picks?"));
+        assert!(state.active_jimmy.is_some());
         assert_eq!(state.turn, 0);
         assert_eq!(state.keys, 0);
     }

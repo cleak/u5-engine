@@ -116,6 +116,11 @@ pub enum RestPhase {
     WatchSlot,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct JimmySession {
+    pub direction: Direction,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MixSession {
     pub phase: MixPhase,
@@ -320,6 +325,12 @@ impl RestSession {
             phase: RestPhase::Hours,
             hours: None,
         }
+    }
+}
+
+impl JimmySession {
+    pub const fn new(direction: Direction) -> Self {
+        Self { direction }
     }
 }
 

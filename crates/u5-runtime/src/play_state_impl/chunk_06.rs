@@ -319,6 +319,52 @@ impl PlayState {
         }
     }
 
+    pub fn start_jimmy_party_prompt(&mut self, direction: Direction) -> MoveOutcome {
+        self.active_jimmy = Some(JimmySession::new(direction));
+        self.message = self.render_active_jimmy();
+        MoveOutcome::Observed
+    }
+
+    pub fn render_active_jimmy(&self) -> String {
+        let last = self.party.len().min(6);
+        format!("Who picks? _\nChoose party member 1-{last}; Space/Esc cancels.")
+    }
+
+    pub fn step_active_jimmy(
+        &mut self,
+        key: char,
+        suffix: &str,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let Some(session) = self.active_jimmy.take() else {
+            return Ok(None);
+        };
+        for ch in std::iter::once(key).chain(suffix.chars()) {
+            if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
+                self.message = "None!".to_string();
+                return Ok(Some(MoveOutcome::PromptDeclined));
+            }
+            let Some(digit) = ch
+                .to_digit(10)
+                .and_then(|digit| usize::try_from(digit).ok())
+            else {
+                continue;
+            };
+            if !(1..=self.party.len().min(6)).contains(&digit) {
+                continue;
+            }
+            let outcome = self.jimmy_direction_with_game_dir_and_member(
+                session.direction,
+                Some(game_dir),
+                Some(digit - 1),
+            )?;
+            return Ok(Some(outcome));
+        }
+        self.active_jimmy = Some(session);
+        self.message = self.render_active_jimmy();
+        Ok(None)
+    }
+
     #[cfg(test)]
     pub fn jimmy_facing(&mut self) -> MoveOutcome {
         self.jimmy_facing_with_game_dir_and_member(None, Some(0))
@@ -429,7 +475,10 @@ impl PlayState {
         member_index: Option<usize>,
     ) -> io::Result<MoveOutcome> {
         if let Area::Dungeon { scene, level } = self.area {
-            let Some(member_index) = self.resolve_jimmy_member_index(member_index) else {
+            let Some(member_index) = member_index else {
+                return Ok(self.start_jimmy_party_prompt(direction));
+            };
+            let Some(member_index) = self.resolve_jimmy_member_index(Some(member_index)) else {
                 return Ok(MoveOutcome::PromptDeclined);
             };
             return self.jimmy_dungeon_underfoot(game_dir, scene, level, member_index);
@@ -438,7 +487,10 @@ impl PlayState {
             self.message = "No keys!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
-        let Some(member_index) = self.resolve_jimmy_member_index(member_index) else {
+        let Some(member_index) = member_index else {
+            return Ok(self.start_jimmy_party_prompt(direction));
+        };
+        let Some(member_index) = self.resolve_jimmy_member_index(Some(member_index)) else {
             return Ok(MoveOutcome::PromptDeclined);
         };
         match self.area {
