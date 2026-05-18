@@ -543,6 +543,28 @@
     }
 
     #[test]
+    fn town_get_table_food_clamps_to_party_food_cap() {
+        let dir = debug_game_dir();
+        let mut grid = open_grid();
+        grid[32 + 2] = 0x9b;
+        let mut state = test_state(grid, 2, 2);
+        state.player.facing = Direction::North;
+        state.food = PARTY_FOOD_CAP;
+        state.moral_standing = 1;
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+
+        assert_eq!(state.grid[32 + 2], 0x95);
+        assert_eq!(state.food, PARTY_FOOD_CAP);
+        assert_eq!(state.moral_standing, 0);
+        assert_eq!(state.turn, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn town_get_table_food_invalid_reach_refuses_without_mutation_or_turn() {
         let dir = debug_game_dir();
         let mut grid = open_grid();
@@ -1233,6 +1255,31 @@
             MoveOutcome::Searched
         );
         assert_eq!(state.fixed_hidden_treasure_daily_day, 6);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn fixed_hidden_treasure_food_clamps_to_party_food_cap() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 18, 24);
+        state.area = Area::Town {
+            scene: Scene::new(1).unwrap(),
+            floor: 1,
+        };
+        state.player.facing = Direction::East;
+        state.food = PARTY_FOOD_CAP - 1;
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+
+        assert_eq!(state.food, PARTY_FOOD_CAP);
+        assert!(state.message.contains("added 10 food"));
         let _ = fs::remove_dir_all(dir);
     }
 

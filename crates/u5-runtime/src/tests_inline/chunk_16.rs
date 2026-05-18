@@ -888,6 +888,29 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
     }
 
     #[test]
+    fn cast_create_food_clamps_to_party_food_cap() {
+        let mut state = britannia_state(open_world_grid(), 5, 5);
+        state.food = PARTY_FOOD_CAP - 1;
+        state.spell_charges[CREATE_FOOD_SPELL_INDEX] = 1;
+        state.party[0].mana = CREATE_FOOD_COST;
+        state.party[0].level = CREATE_FOOD_COST;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1IMX", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.food, PARTY_FOOD_CAP);
+        assert_eq!(state.spell_charges[CREATE_FOOD_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!(
+            state.message,
+            format!("Created 1 food; stock is {PARTY_FOOD_CAP}.")
+        );
+    }
+
+    #[test]
     fn cast_create_food_resource_gate_precedes_food_change() {
         let mut state = test_state(open_grid(), 5, 5);
         state.food = 12;

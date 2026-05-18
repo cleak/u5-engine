@@ -1161,7 +1161,7 @@ impl PlayState {
         };
 
         self.grid[idx] = replacement;
-        self.food = self.food.saturating_add(1);
+        self.food = self.food.saturating_add(1).min(PARTY_FOOD_CAP);
         self.moral_standing = self
             .moral_standing
             .saturating_sub(KARMA_CROP_OR_TABLE_FOOD_DEBIT);
@@ -1623,7 +1623,10 @@ impl PlayState {
     ) -> String {
         match pickup {
             HiddenTreasurePickup::Food => {
-                self.food = self.food.saturating_add(u16::from(state));
+                self.food = self
+                    .food
+                    .saturating_add(u16::from(state))
+                    .min(PARTY_FOOD_CAP);
                 format!("; added {state} food")
             }
             HiddenTreasurePickup::SackOfGold => {

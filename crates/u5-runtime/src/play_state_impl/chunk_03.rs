@@ -2212,7 +2212,10 @@ impl PlayState {
         }
 
         let before = self.food;
-        self.food = self.food.saturating_add(CREATE_FOOD_AMOUNT);
+        self.food = self
+            .food
+            .saturating_add(CREATE_FOOD_AMOUNT)
+            .min(PARTY_FOOD_CAP);
         let created = self.food.saturating_sub(before);
         self.advance_turn();
         self.message = format!("Created {created} food; stock is {}.", self.food);

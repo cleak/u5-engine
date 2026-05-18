@@ -268,9 +268,9 @@ Negate Magic's cast absorption. `C1IW` casts the
 narrow overworld Locate hook, reporting the current plane, coordinate, facing,
 wind, and time
 after the saved charge/MP/level gates succeed. `C1IMX` casts the narrow Create
-Food hook, adding a first-playable fixed food amount to the save-backed food
-counter after the saved charge/MP/level gates succeed while the exact amount
-and carry cap remain open. `C1AS` casts the narrow An Sanct
+Food hook, adding 100 units to the save-backed food counter after the saved
+charge/MP/level gates succeed and clamping at the shared 9999 party food cap.
+`C1AS` casts the narrow An Sanct
 Open hook from party slot 1, safely consuming an underfoot dungeon chest through
 the visit-local chest rewrite after the saved charge/MP/level gates succeed;
 other currently unmodeled chest targets spend the cast and fail in place. `C1HR`
