@@ -1301,6 +1301,56 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
     }
 
     #[test]
+    fn active_shrine_prompt_collects_mantra_and_ordains() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 136\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 136;
+        let mut state = britannia_state(grid, 10, 20);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_shrine.is_some());
+        assert!(state.active_mix.is_none());
+        assert!(state.message.contains("Shrine of Honesty mantra?"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "hm\r", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_shrine.is_none());
+        assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
+        assert_eq!(state.shrine_codex_mask, 0);
+        assert_eq!(state.turn, 0);
+        assert!(state.message.contains("ordained"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn active_shrine_prompt_blank_mantra_has_no_effect() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 136\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 136;
+        let mut state = britannia_state(grid, 10, 20);
+
+        handle_play_key_input(&mut state, 'M', "", &dir).unwrap();
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_shrine.is_none());
+        assert_eq!(state.shrine_ordained_mask, 0);
+        assert_eq!(state.shrine_codex_mask, 0);
+        assert_eq!(state.message, "No effect!");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn shrine_meditation_wrong_mantra_and_tile_guard_do_not_mutate_state() {
         let dir = debug_game_dir();
         fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 136\n").unwrap();
@@ -1398,6 +1448,80 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         );
         assert_eq!(state.gold, 150);
         assert_eq!(state.message, "Need 900 gold for offering.");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn active_completed_shrine_prompt_collects_offering_digit() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(SHRINE_TABLE_FILE),
+            "BRITANNIA 10 20 COMPASSION 136\n",
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 136;
+        let mut state = britannia_state(grid, 10, 20);
+        let virtue = ShrineVirtue::Compassion;
+        state.shrine_codex_mask = virtue.bit();
+        state.gold = 350;
+
+        handle_play_key_input(&mut state, 'M', "", &dir).unwrap();
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "u\r", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_shrine.is_some());
+        assert!(state.message.contains("Offering at the Shrine of Compassion?"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '2', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_shrine.is_none());
+        assert_eq!(state.gold, 150);
+        assert_eq!(state.shrine_standing[virtue.index()], 2);
+        assert_eq!(state.moral_standing, 2);
+        assert_eq!(state.message, "Offered 200 gold at the Shrine of Compassion; standing +2 to 2; moral +2 to 2.");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn active_completed_shrine_offering_repeats_until_affordable_or_cancelled() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(SHRINE_TABLE_FILE),
+            "BRITANNIA 10 20 COMPASSION 136\n",
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 136;
+        let mut state = britannia_state(grid, 10, 20);
+        let virtue = ShrineVirtue::Compassion;
+        state.shrine_codex_mask = virtue.bit();
+        state.gold = 100;
+
+        handle_play_key_input(&mut state, 'M', "", &dir).unwrap();
+        handle_play_key_input(&mut state, 'M', "u\r", &dir).unwrap();
+        assert_eq!(
+            handle_play_key_input(&mut state, '9', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_shrine.is_some());
+        assert_eq!(state.gold, 100);
+        assert_eq!(state.shrine_standing[virtue.index()], 0);
+        assert!(state.message.contains("Need 900 gold for offering."));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '1', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_shrine.is_none());
+        assert_eq!(state.gold, 0);
+        assert_eq!(state.shrine_standing[virtue.index()], 1);
+        assert!(state.message.contains("Offered 100 gold"));
         let _ = fs::remove_dir_all(dir);
     }
 

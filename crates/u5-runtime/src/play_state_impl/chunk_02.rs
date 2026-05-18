@@ -296,11 +296,10 @@ impl PlayState {
                 'M' => {
                     if let Some(outcome) = self.read_codex_urn_at_current_position(game_dir)? {
                         handled!(outcome);
-                    } else if let Some(message) =
-                        self.shrine_prompt_at_current_position(game_dir)?
+                    } else if let Some(outcome) =
+                        self.start_shrine_prompt_at_current_position(game_dir)?
                     {
-                        self.message = message;
-                        handled!();
+                        handled!(outcome);
                     } else {
                         handled!(self.start_mix_reagents_prompt());
                     }
@@ -439,9 +438,10 @@ impl PlayState {
             'm' => {
                 if let Some(outcome) = self.read_codex_urn_at_current_position(game_dir)? {
                     outcome
-                } else if let Some(message) = self.shrine_prompt_at_current_position(game_dir)? {
-                    self.message = message;
-                    MoveOutcome::Observed
+                } else if let Some(outcome) =
+                    self.start_shrine_prompt_at_current_position(game_dir)?
+                {
+                    outcome
                 } else {
                     self.start_mix_reagents_prompt()
                 }
@@ -1325,6 +1325,136 @@ impl PlayState {
         Ok(self
             .current_shrine_entry(game_dir)?
             .map(|entry| shrine_prompt_message(entry.virtue)))
+    }
+
+    pub fn start_shrine_prompt_at_current_position(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let Some(entry) = self.current_shrine_entry(game_dir)? else {
+            return Ok(None);
+        };
+        self.active_shrine = Some(ShrineSession::new(entry.virtue));
+        self.message = self.render_active_shrine();
+        Ok(Some(MoveOutcome::Observed))
+    }
+
+    pub fn render_active_shrine(&self) -> String {
+        self.active_shrine
+            .as_ref()
+            .map(|session| self.render_shrine_session(session))
+            .unwrap_or_else(|| "Mantra?".to_string())
+    }
+
+    fn render_shrine_session(&self, session: &ShrineSession) -> String {
+        match session.phase {
+            ShrinePhase::Mantra => {
+                let mantra = if session.mantra_buffer.is_empty() {
+                    "_".to_string()
+                } else {
+                    session.mantra_buffer.clone()
+                };
+                format!(
+                    "Shrine of {} mantra? {mantra}\nType up to {SHRINE_MANTRA_INPUT_LIMIT} characters; Enter accepts; Esc cancels.",
+                    session.virtue.name()
+                )
+            }
+            ShrinePhase::Offering => {
+                format!(
+                    "Offering at the Shrine of {}? _\nChoose 1-9; 0/Space/Esc cancels.",
+                    session.virtue.name()
+                )
+            }
+        }
+    }
+
+    pub fn step_active_shrine(
+        &mut self,
+        key: char,
+        suffix: &str,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let Some(mut session) = self.active_shrine.take() else {
+            return Ok(None);
+        };
+        for ch in std::iter::once(key).chain(suffix.chars()) {
+            match session.phase {
+                ShrinePhase::Mantra => {
+                    if ch == '\u{1b}' {
+                        self.message = "None!".to_string();
+                        return Ok(Some(MoveOutcome::PromptDeclined));
+                    }
+                    match ch {
+                        '\r' | '\n' => {
+                            return self.complete_active_shrine_mantra(session, game_dir);
+                        }
+                        '\u{8}' | '\u{7f}' => {
+                            session.mantra_buffer.pop();
+                        }
+                        ch if !ch.is_control()
+                            && session.mantra_buffer.len() < SHRINE_MANTRA_INPUT_LIMIT =>
+                        {
+                            session.mantra_buffer.push(ch);
+                        }
+                        _ => {}
+                    }
+                }
+                ShrinePhase::Offering => {
+                    if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
+                        self.message = "No effect!".to_string();
+                        return Ok(Some(MoveOutcome::PromptDeclined));
+                    }
+                    let Some(digit) = ch.to_digit(10).and_then(|digit| u8::try_from(digit).ok())
+                    else {
+                        continue;
+                    };
+                    if !(1..=9).contains(&digit) {
+                        continue;
+                    }
+                    if let Some(cost) = ShrineVirtue::shrine_offering_cost(digit) {
+                        if self.gold < cost {
+                            self.message = format!(
+                                "Need {cost} gold for offering.\n{}",
+                                self.render_shrine_session(&session)
+                            );
+                            self.active_shrine = Some(session);
+                            return Ok(None);
+                        }
+                    }
+                    let suffix = format!("{}/{}", session.mantra_buffer, digit);
+                    return Ok(self.meditate_shrine_from_suffix(&suffix, game_dir)?);
+                }
+            }
+        }
+        self.message = self.render_shrine_session(&session);
+        self.active_shrine = Some(session);
+        Ok(None)
+    }
+
+    fn complete_active_shrine_mantra(
+        &mut self,
+        mut session: ShrineSession,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        if session.mantra_buffer.is_empty() {
+            self.message = "No effect!".to_string();
+            return Ok(Some(MoveOutcome::Blocked));
+        }
+        let mantra_matches = session
+            .mantra_buffer
+            .eq_ignore_ascii_case(session.virtue.mantra());
+        if mantra_matches {
+            let bit = session.virtue.bit();
+            let ordained = self.shrine_ordained_mask & bit != 0;
+            let codex = self.shrine_codex_mask & bit != 0;
+            if !ordained && codex {
+                session.phase = ShrinePhase::Offering;
+                self.message = self.render_shrine_session(&session);
+                self.active_shrine = Some(session);
+                return Ok(None);
+            }
+        }
+        self.meditate_shrine_from_suffix(&session.mantra_buffer, game_dir)
     }
 
     pub fn meditate_shrine_from_suffix(

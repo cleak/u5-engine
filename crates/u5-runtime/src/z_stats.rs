@@ -122,6 +122,19 @@ pub struct JimmySession {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShrineSession {
+    pub virtue: ShrineVirtue,
+    pub phase: ShrinePhase,
+    pub mantra_buffer: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShrinePhase {
+    Mantra,
+    Offering,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MixSession {
     pub phase: MixPhase,
     pub spell_buffer: String,
@@ -331,6 +344,16 @@ impl RestSession {
 impl JimmySession {
     pub const fn new(direction: Direction) -> Self {
         Self { direction }
+    }
+}
+
+impl ShrineSession {
+    pub fn new(virtue: ShrineVirtue) -> Self {
+        Self {
+            virtue,
+            phase: ShrinePhase::Mantra,
+            mantra_buffer: String::new(),
+        }
     }
 }
 

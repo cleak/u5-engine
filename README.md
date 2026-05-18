@@ -305,17 +305,20 @@ Stop hook from party slot 1, starting a ten-turn runtime counter after the saved
 charge/MP/level gates
 succeed; while it is active, consumed turns keep clocks, light, doors, and
 static animation moving but freeze scheduled NPCs and active-object
-animation/wandering. Bare `M` opens the reagent mixer; inline
+animation/wandering. Bare `M` opens shrine meditation when the party is on a
+clean shrine row, otherwise it opens the reagent mixer; inline
 `M<spell>/<reagent-mask>/<quantity>` still mixes saved reagent counters into
 pre-mixed spell charges for terminal testing. For example,
 `MIL/0x80/1` mixes In Lor from sulfurous ash, while `MAS/0x88/1` mixes An
 Sanct/Open from sulfurous ash plus blood moss. Exact public recipe masks add
 charges capped at 99; wrong masks consume the selected reagents without adding
 charges, and zero, empty, or insufficient selections leave stock unchanged.
-When the party stands on a clean `shrines.tsv` row, `M<mantra>` runs the
-first-playable shrine meditation state machine against the public ordained and
-Codex quest masks; completed shrines accept `M<mantra>/<offering-digit>` gold
-offerings while the exact persistent standing-byte layout remains open.
+When the party stands on a clean `shrines.tsv` row, bare `M` prompts for the
+shrine mantra, then prompts for an offering digit on completed shrines.
+`M<mantra>` and `M<mantra>/<offering-digit>` remain inline shortcuts for the
+same first-playable shrine meditation state machine against the public ordained
+and Codex quest masks while the exact persistent standing-byte layout remains
+open.
 `UT`/`UI` use a torch, `UG`/`UV` use a gem, and `UK`/`UJ` use a key through the
 shared first-playable Use command wrapper; key use reuses the same sidecar-backed
 town lock and dungeon heavy-door path as `J`. `U1` through `U8` bury the
