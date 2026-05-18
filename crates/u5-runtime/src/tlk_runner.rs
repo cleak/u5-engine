@@ -239,6 +239,7 @@ pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
                 out.events.push(TlkRunEvent::AskedWho(slot));
             }
             TLK_CODE_GOLD_PAYMENT => {
+                let arg_start = pos;
                 let span = bytes.get(pos..pos + 3);
                 let Some(span) = span else {
                     out.stop = TlkRunStop::MalformedIntroducer(pos);
@@ -246,6 +247,7 @@ pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
                     return out;
                 };
                 pos += 3;
+                let arg_end = pos;
                 if let Some(amount) = tlk_gold_payment_amount(span[0], span[1], span[2]) {
                     let accepted = inputs.gold_payment_accepted
                         && inputs
@@ -260,7 +262,9 @@ pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
                     } else {
                         TLK_CODE_GOTO_LABEL_LAST
                     };
-                    if let Some(target_pos) = find_label_position_from(bytes, target_label, pos) {
+                    if let Some(target_pos) =
+                        find_label_position_excluding(bytes, target_label, arg_start, arg_end)
+                    {
                         out.events.push(TlkRunEvent::GotoLabel {
                             from: TLK_CODE_GOLD_PAYMENT,
                             to: target_label,
@@ -307,6 +311,7 @@ pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
                 }
             }
             TLK_CODE_IF_ELSE_ALT => {
+                let arg_start = pos;
                 let span = bytes.get(pos..pos + 2);
                 let Some(span) = span else {
                     out.stop = TlkRunStop::MalformedIntroducer(pos);
@@ -314,6 +319,7 @@ pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
                     return out;
                 };
                 pos += 2;
+                let arg_end = pos;
                 let threshold = span[0];
                 let target_label = span[1];
                 let branched = tlk_if_else_alt_branches(inputs.moral_standing, threshold);
@@ -323,7 +329,9 @@ pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
                     branched,
                 });
                 if branched {
-                    if let Some(target_pos) = find_label_position_from(bytes, target_label, pos) {
+                    if let Some(target_pos) =
+                        find_label_position_excluding(bytes, target_label, arg_start, arg_end)
+                    {
                         out.events.push(TlkRunEvent::GotoLabel {
                             from: TLK_CODE_IF_ELSE_ALT,
                             to: target_label,
@@ -398,17 +406,42 @@ fn skip_to_next_label(bytes: &[u8], from: usize) -> usize {
     pos
 }
 
-/// Scan forward from byte 0 for the supplied label byte. The first
-/// match's position (one past the label) is returned. Labels are not
-/// unique inside a blob; the first match wins, matching the original
-/// dispatcher's forward-scan behaviour.
+/// Scan forward from byte 0 for the supplied label byte after a label
+/// transfer rewinds to the loaded blob start. The first match's position
+/// (one past the label) is returned. Labels are not unique inside a blob;
+/// the first match wins, matching the original dispatcher's scan
+/// behaviour.
 pub fn find_label_position(bytes: &[u8], label: u8) -> Option<usize> {
     find_label_position_from(bytes, label, 0)
 }
 
-/// Scan forward from `start` for the supplied label byte. Used by the
-/// IF-ELSE-ALT branch logic to avoid matching label bytes that happen to
-/// occur as arguments inside the introducer's own argument span.
+fn find_label_position_excluding(
+    bytes: &[u8],
+    label: u8,
+    exclude_start: usize,
+    exclude_end: usize,
+) -> Option<usize> {
+    if !is_tlk_label_byte(label) {
+        return None;
+    }
+    let mut pos = 0usize;
+    while pos < bytes.len() {
+        if pos >= exclude_start && pos < exclude_end {
+            pos = exclude_end;
+            continue;
+        }
+        if bytes[pos] == label {
+            return Some(pos + 1);
+        }
+        pos += 1;
+    }
+    None
+}
+
+/// Scan forward from `start` for the supplied label byte. Kept for callers
+/// that need a bounded local scan; label-transfer paths should scan from the
+/// blob start while excluding the introducer argument span currently being
+/// consumed.
 pub fn find_label_position_from(bytes: &[u8], label: u8, start: usize) -> Option<usize> {
     if !is_tlk_label_byte(label) {
         return None;
@@ -573,6 +606,27 @@ mod tests {
         assert!(!out.text.contains("low"));
         assert!(out.text.contains("high"));
         let _ = label_pos;
+    }
+
+    #[test]
+    fn label_transfer_lookup_uses_blob_start_not_current_cursor() {
+        let bytes = [
+            0x92,
+            b'e' | TLK_TEXT_XOR_MASK,
+            b'a' | TLK_TEXT_XOR_MASK,
+            b'r' | TLK_TEXT_XOR_MASK,
+            b'l' | TLK_TEXT_XOR_MASK,
+            b'y' | TLK_TEXT_XOR_MASK,
+            TLK_CODE_END_OF_RESPONSE,
+            TLK_CODE_IF_ELSE_ALT,
+            0x01,
+            0x92,
+        ];
+        let branch_cursor = 10;
+
+        assert_eq!(find_label_position(&bytes, 0x92), Some(1));
+        assert_eq!(find_label_position_excluding(&bytes, 0x92, 8, 10), Some(1));
+        assert_eq!(find_label_position_from(&bytes, 0x92, branch_cursor), None);
     }
 
     #[test]
