@@ -1644,6 +1644,12 @@ impl PlayState {
         if first < self.party_strengths.len() && second < self.party_strengths.len() {
             self.party_strengths.swap(first, second);
         }
+        if first < self.party_intelligence.len() && second < self.party_intelligence.len() {
+            self.party_intelligence.swap(first, second);
+        }
+        if first < self.party_experience.len() && second < self.party_experience.len() {
+            self.party_experience.swap(first, second);
+        }
         if first < self.party_equipment.len() && second < self.party_equipment.len() {
             self.party_equipment.swap(first, second);
         }

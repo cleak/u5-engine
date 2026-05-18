@@ -132,11 +132,11 @@ impl PlayState {
             .take(SAVE_PARTY_SIZE_MAX as usize)
             .enumerate()
         {
-            let record = SAVE_ROSTER_OFFSET + member.slot as usize * SAVE_CHARACTER_RECORD_LEN;
+            let record = SAVE_ROSTER_OFFSET + party_index * SAVE_CHARACTER_RECORD_LEN;
             if record + SAVE_CHARACTER_MAX_HP_OFFSET + 1 >= save.len() {
                 continue;
             }
-            if member.slot != 0 {
+            if party_index != 0 {
                 if let Some(strength) = self.party_strengths.get(party_index).copied() {
                     save[record + SAVE_CHARACTER_STR_OFFSET] = strength;
                 }
@@ -146,7 +146,7 @@ impl PlayState {
                 save[record..record + SAVE_CHARACTER_NAME_LEN].copy_from_slice(name);
             }
             save[record + SAVE_CHARACTER_STATUS_OFFSET] = member.status;
-            if member.slot != 0 {
+            if party_index != 0 {
                 if let Some(intelligence) = self.party_intelligence.get(party_index).copied() {
                     save[record + SAVE_CHARACTER_INT_OFFSET] = intelligence;
                 }

@@ -341,9 +341,8 @@ an unverified byte mapping.
 per `commands.md` §6, for example `N23` swaps the second and third travelling
 members. Slot one is the leader and refuses to move; selecting the same nonzero
 slot twice is accepted as a turn-consuming no-op. The swap affects later
-party-position prompts such as `C2...` casts and runtime damage checks, while
-save export still updates each member's original roster record because the
-persistent party-order table is not yet public.
+party-position prompts such as `C2...` casts and runtime damage checks, and
+save export writes the reordered active records back to the front roster slots.
 In overworld ship mode, bare `F`/`f` opens the fire direction prompt and an
 inline direction (for example `f4`) fires a first-playable broadside:
 bow/stern shots refuse, legal broadsides trace up to three cells, and the first

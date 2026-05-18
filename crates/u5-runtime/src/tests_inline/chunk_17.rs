@@ -1410,6 +1410,8 @@
         ];
         state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0", *b"DUPRE\0\0\0\0"];
         state.party_strengths = vec![10, 12, 34];
+        state.party_intelligence = vec![20, 21, 22];
+        state.party_experience = vec![100, 200, 300];
         state.party_equipment = vec![
             [
                 EQUIPMENT_EMPTY,
@@ -1444,9 +1446,100 @@
             vec![*b"AVATAR\0\0\0", *b"DUPRE\0\0\0\0", *b"IOLO\0\0\0\0\0"]
         );
         assert_eq!(state.party_strengths, vec![10, 34, 12]);
+        assert_eq!(state.party_intelligence, vec![20, 22, 21]);
+        assert_eq!(state.party_experience, vec![100, 300, 200]);
         assert_eq!(state.party_equipment[1][EQUIP_SLOT_WEAPON], 16);
         assert_eq!(state.party_equipment[2][EQUIP_SLOT_HELM], 1);
         assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn new_order_save_export_writes_active_roster_order() {
+        // saved-gam.md section 3: the travelling order is the order of the first
+        // party-size roster records. After New Order, save export must write
+        // the active party positions, not each member's original slot id.
+        let dir = debug_game_dir();
+        fs::write(dir.join("SAVED.GAM"), saved_game_seed_bytes(0, 0xff, 10, 20)).unwrap();
+        fs::write(dir.join("SAVED.OOL"), vec![0; SAVED_OOL_LEN]).unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: 5,
+                mana: 1,
+                hp: 10,
+                max_hp: 20,
+                level: 1,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'B',
+                status: b'P',
+                climb_stat: 10,
+                mana: 2,
+                hp: 11,
+                max_hp: 21,
+                level: 2,
+            },
+            PartyMember {
+                slot: 2,
+                class_byte: b'F',
+                status: b'S',
+                climb_stat: 20,
+                mana: 3,
+                hp: 12,
+                max_hp: 22,
+                level: 3,
+            },
+        ];
+        state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0", *b"DUPRE\0\0\0\0"];
+        state.party_strengths = vec![30, 12, 34];
+        state.party_intelligence = vec![30, 13, 35];
+        state.party_experience = vec![100, 200, 300];
+        state.party_stay_counters = vec![1, 2, 3];
+        state.party_equipment = default_party_equipment(3);
+        state.party_equipment[1][EQUIP_SLOT_HELM] = 1;
+        state.party_equipment[2][EQUIP_SLOT_WEAPON] = 16;
+
+        assert_eq!(state.new_order_from_suffix("23"), MoveOutcome::Used);
+        assert_eq!(
+            state.save_game_command(&dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+
+        let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+        let second = SAVE_ROSTER_OFFSET + SAVE_CHARACTER_RECORD_LEN;
+        let third = second + SAVE_CHARACTER_RECORD_LEN;
+        assert_eq!(&saved[second..second + SAVE_CHARACTER_NAME_LEN], b"DUPRE\0\0\0\0");
+        assert_eq!(saved[second + SAVE_CHARACTER_CLASS_OFFSET], b'F');
+        assert_eq!(saved[second + SAVE_CHARACTER_STATUS_OFFSET], b'S');
+        assert_eq!(saved[second + SAVE_CHARACTER_STR_OFFSET], 34);
+        assert_eq!(saved[second + SAVE_CHARACTER_DEX_OFFSET], 20);
+        assert_eq!(saved[second + SAVE_CHARACTER_INT_OFFSET], 35);
+        assert_eq!(saved[second + SAVE_CHARACTER_MANA_OFFSET], 3);
+        assert_eq!(u16_at(&saved, second + SAVE_CHARACTER_HP_OFFSET), 12);
+        assert_eq!(u16_at(&saved, second + SAVE_CHARACTER_MAX_HP_OFFSET), 22);
+        assert_eq!(u16_at(&saved, second + SAVE_CHARACTER_EXPERIENCE_OFFSET), 300);
+        assert_eq!(saved[second + SAVE_CHARACTER_STAY_COUNTER_OFFSET], 3);
+        assert_eq!(saved[second + SAVE_CHARACTER_LEVEL_OFFSET], 3);
+        assert_eq!(saved[second + SAVE_CHARACTER_EQUIPMENT_OFFSET + EQUIP_SLOT_WEAPON], 16);
+
+        assert_eq!(&saved[third..third + SAVE_CHARACTER_NAME_LEN], b"IOLO\0\0\0\0\0");
+        assert_eq!(saved[third + SAVE_CHARACTER_CLASS_OFFSET], b'B');
+        assert_eq!(saved[third + SAVE_CHARACTER_STATUS_OFFSET], b'P');
+        assert_eq!(saved[third + SAVE_CHARACTER_STR_OFFSET], 12);
+        assert_eq!(saved[third + SAVE_CHARACTER_DEX_OFFSET], 10);
+        assert_eq!(saved[third + SAVE_CHARACTER_INT_OFFSET], 13);
+        assert_eq!(saved[third + SAVE_CHARACTER_MANA_OFFSET], 2);
+        assert_eq!(u16_at(&saved, third + SAVE_CHARACTER_HP_OFFSET), 11);
+        assert_eq!(u16_at(&saved, third + SAVE_CHARACTER_MAX_HP_OFFSET), 21);
+        assert_eq!(u16_at(&saved, third + SAVE_CHARACTER_EXPERIENCE_OFFSET), 200);
+        assert_eq!(saved[third + SAVE_CHARACTER_STAY_COUNTER_OFFSET], 2);
+        assert_eq!(saved[third + SAVE_CHARACTER_LEVEL_OFFSET], 2);
+        assert_eq!(saved[third + SAVE_CHARACTER_EQUIPMENT_OFFSET + EQUIP_SLOT_HELM], 1);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
