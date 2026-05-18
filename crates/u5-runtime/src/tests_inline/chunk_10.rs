@@ -112,7 +112,7 @@
         assert_eq!(
             state.active_objects[2],
             ActiveObject {
-                type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+                type_byte: SHIP_PARKED_FIRST,
                 tile: FIRST_PLAYABLE_FRIGATE_TILE,
                 x: 12,
                 y: 21,
@@ -143,7 +143,7 @@
         assert_eq!(
             state.active_objects[1],
             ActiveObject {
-                type_byte: FIRST_PLAYABLE_SKIFF_TILE,
+                type_byte: SKIFF_PARKED_FIRST,
                 tile: FIRST_PLAYABLE_SKIFF_TILE,
                 x: 12,
                 y: 21,

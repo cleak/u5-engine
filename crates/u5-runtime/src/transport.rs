@@ -139,7 +139,7 @@ impl PendingVehicleAcquisition {
     pub fn active_object(self, z: i8) -> ActiveObject {
         match self {
             Self::Frigate { x, y, skiffs } => ActiveObject {
-                type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+                type_byte: SHIP_PARKED_FIRST,
                 tile: FIRST_PLAYABLE_FRIGATE_TILE,
                 x,
                 y,
@@ -149,7 +149,7 @@ impl PendingVehicleAcquisition {
                 aux3: skiffs,
             },
             Self::Skiff { x, y } => ActiveObject {
-                type_byte: FIRST_PLAYABLE_SKIFF_TILE,
+                type_byte: SKIFF_PARKED_FIRST,
                 tile: FIRST_PLAYABLE_SKIFF_TILE,
                 x,
                 y,

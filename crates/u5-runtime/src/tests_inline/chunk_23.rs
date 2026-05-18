@@ -589,7 +589,8 @@
         assert!(state.restore_return_world());
         assert_eq!(state.area, Area::World { plane: WorldPlane::Britannia });
         assert_eq!(state.active_objects.len(), 2);
-        assert_eq!(state.active_objects[1].type_byte, FIRST_PLAYABLE_FRIGATE_TILE);
+        assert_eq!(state.active_objects[1].type_byte, SHIP_PARKED_FIRST);
+        assert_eq!(state.active_objects[1].tile, FIRST_PLAYABLE_FRIGATE_TILE);
         assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (12, 21));
         assert_eq!(state.active_objects[1].aux1, FIRST_PLAYABLE_FULL_SHIP_HULL);
         assert_eq!(state.active_objects[1].aux3, 2);
@@ -617,7 +618,7 @@
         assert_eq!(
             bought.horse,
             ActiveObject {
-                type_byte: FIRST_PLAYABLE_HORSE_TILE,
+                type_byte: HORSE_PARKED_FIRST,
                 tile: FIRST_PLAYABLE_HORSE_TILE,
                 x: 9,
                 y: 8,
@@ -631,7 +632,7 @@
         assert!(matches!(
             state.boardable_vehicle_slot_at(9, 8).map(|candidate| candidate.transport),
             Some(TransportState::Horse {
-                type_byte: FIRST_PLAYABLE_HORSE_TILE,
+                type_byte: HORSE_MOUNTED_FIRST,
                 tile: FIRST_PLAYABLE_HORSE_TILE,
             })
         ));
@@ -675,7 +676,7 @@
         assert!(!full
             .active_objects
             .iter()
-            .any(|object| object.type_byte == FIRST_PLAYABLE_HORSE_TILE));
+            .any(|object| object.type_byte == HORSE_PARKED_FIRST));
     }
 
     #[test]
