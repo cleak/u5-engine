@@ -2104,11 +2104,7 @@ pub const fn apply_combat_spell_experience_reward(current_experience: u16, rewar
 }
 
 pub const fn cause_fear_forced_current_hp(max_hp: u8) -> u8 {
-    if max_hp == 0 {
-        0
-    } else {
-        (max_hp - 1) / 4
-    }
+    if max_hp == 0 { 0 } else { (max_hp - 1) / 4 }
 }
 
 pub const fn resolve_conjure_spell_class(selector: u8) -> u8 {
@@ -2749,11 +2745,7 @@ pub const fn resolve_combat_hit(attacker_rating: u8, defender_rating: u8, roll: 
 }
 
 pub const fn resolve_mass_charm_target_group(normal_group: u8, threshold: u8, roll: u8) -> u8 {
-    if roll > threshold {
-        0
-    } else {
-        normal_group
-    }
+    if roll > threshold { 0 } else { normal_group }
 }
 
 pub fn party_name_forces_monster_combat_group(name: &[u8]) -> bool {

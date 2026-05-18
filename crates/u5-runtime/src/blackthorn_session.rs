@@ -3,8 +3,8 @@
 //! [`crate::blackthorn`] into a four-prompt interactive flow.
 
 use crate::blackthorn::{
-    blackthorn_challenge_answer_matches, blackthorn_challenge_prompt,
-    BLACKTHORN_CHALLENGE_PROMPT_COUNT,
+    BLACKTHORN_CHALLENGE_PROMPT_COUNT, blackthorn_challenge_answer_matches,
+    blackthorn_challenge_prompt,
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

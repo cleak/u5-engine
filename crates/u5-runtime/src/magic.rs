@@ -681,9 +681,5 @@ pub const fn spell_rune_name(index: usize) -> Option<&'static str> {
 /// amount in inclusive range `1..=30`.
 pub const fn heal_spell_amount_from_raw_roll_u8(raw_roll_0_to_60: u8) -> u8 {
     let halved = raw_roll_0_to_60 / 2;
-    if halved == 0 {
-        1
-    } else {
-        halved
-    }
+    if halved == 0 { 1 } else { halved }
 }

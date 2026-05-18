@@ -266,18 +266,10 @@ pub const fn search_trap_detection_threshold(
 ) -> u8 {
     if trappable {
         let raw = (difficulty as i16) - (member_trap_detection as i16) + 30;
-        if raw < 0 {
-            0
-        } else {
-            (raw as u16 / 2) as u8
-        }
+        if raw < 0 { 0 } else { (raw as u16 / 2) as u8 }
     } else {
         let raw = 30i16 - member_trap_detection as i16;
-        if raw < 0 {
-            0
-        } else {
-            (raw as u16 / 2) as u8
-        }
+        if raw < 0 { 0 } else { (raw as u16 / 2) as u8 }
     }
 }
 

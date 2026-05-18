@@ -6,8 +6,8 @@
 //! in the play-state dispatcher; this is just the canonical
 //! letter-to-name table.
 
-use crate::input_case_fold;
 use crate::Direction;
+use crate::input_case_fold;
 
 /// `commands.md §4` resident A-Z command identities.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

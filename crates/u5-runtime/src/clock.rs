@@ -232,11 +232,7 @@ impl GameClock {
     }
 
     pub fn am_pm_suffix(self) -> &'static str {
-        if self.hour < 12 {
-            "A.M."
-        } else {
-            "P.M."
-        }
+        if self.hour < 12 { "A.M." } else { "P.M." }
     }
 
     pub fn advance_hour(&mut self) {

@@ -1377,6 +1377,111 @@
     }
 
     #[test]
+    fn town_talk_guild_shop_uses_scene_local_prices() {
+        let dialogue = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(24).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.gold = 500;
+        state.keys = 0;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x86,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue(&dialogue),
+            MoveOutcome::Talked
+        );
+        assert!(state.message.contains("The Nemesis"));
+
+        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
+        assert!(state.message.contains("The Nemesis sells keys for 185 gold each"));
+        handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 130);
+        assert_eq!(state.keys, 2);
+        assert!(state.message.contains("The Nemesis sold 2 keys for 370 gold"));
+    }
+
+    #[test]
+    fn town_talk_herbalist_uses_scene_local_reagent_menu() {
+        let dialogue = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(23).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.gold = 100;
+        state.reagents = [0; REAGENT_COUNT];
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x85,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue(&dialogue),
+            MoveOutcome::Talked
+        );
+        assert!(state.message.contains("Mysticism"));
+
+        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
+        assert!(state.message.contains("Mysticism sells Spider Silk for 6 gold each"));
+        handle_play_key_input(&mut state, '3', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 82);
+        assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 3);
+        assert!(state.message.contains("Mysticism sold 3 Spider Silk for 18 gold"));
+    }
+
+    #[test]
+    fn town_talk_horse_trader_uses_scene_local_stable_price() {
+        let dialogue = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(20).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.gold = 200;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x83,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue(&dialogue),
+            MoveOutcome::Talked
+        );
+        assert!(state.message.contains("The Stablehouse"));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        assert!(state.message.contains("130 gold"));
+    }
+
+    #[test]
     fn open_conversation_session_renders_greeting_and_stores_session() {
         let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
         dialogue.insert(

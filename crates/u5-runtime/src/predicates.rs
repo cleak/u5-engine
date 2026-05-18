@@ -688,11 +688,7 @@ pub const fn random_encounter_probe_spawns(roll: u8, threshold: u8) -> bool {
 /// returns `threshold - 1` for thresholds `2..=30`. Caller divides by
 /// 30 to get the spawn probability.
 pub const fn random_encounter_spawn_outcomes(threshold: u8) -> u8 {
-    if threshold == 0 {
-        0
-    } else {
-        threshold - 1
-    }
+    if threshold == 0 { 0 } else { threshold - 1 }
 }
 
 /// `vehicles.md §2` clean-seed foot/avatar transport marker. The

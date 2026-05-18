@@ -16,13 +16,13 @@ use crate::shops::{
     GuildShopAction, Herbalist, INN_REGISTRY_CAP, Inn, InnMainAction, ProvisionPurchaseError,
     Reagent, ReagentPurchaseError, SageRumourError, SageRumourQuote, SageTopic, Shipwright,
     ShipwrightMenuAction, ShipwrightPurchaseError, ShipwrightPurchaseOutcome,
-    ShipwrightPurchaseQuote, Tavern, TavernDrinkError, TavernDrinkPrompt, apply_blue_boar_drink,
-    apply_guild_purchase, apply_provision_purchase, apply_reagent_purchase,
+    ShipwrightPurchaseQuote, Stable, Tavern, TavernDrinkError, TavernDrinkPrompt,
+    apply_blue_boar_drink, apply_guild_purchase, apply_provision_purchase, apply_reagent_purchase,
     apply_shipwright_purchase, apply_tavern_round_drink, arms_shop_action, arms_shop_buy_quote,
     arms_shop_sell_offer, find_sage_topic, guild_shop_action, guild_unit_price,
     herbalist_menu_entries, inn_base_room_rate, inn_leave_companion_deposit, inn_main_action,
     inn_pickup_bill, quote_inn_rest, quote_shipwright_purchase, render_sage_rumour,
-    shipwright_menu_action, tavern_drink_prompt, tavern_provision_unit_price,
+    shipwright_menu_action, stable_horse_price, tavern_drink_prompt, tavern_provision_unit_price,
     tavern_round_drink_menu_letter,
 };
 use crate::transport::PendingVehicleAcquisition;
@@ -643,8 +643,12 @@ pub fn step_innkeeper(
 /// from the current herbalist's stocked menu and then a quantity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReagentShopState {
-    Greeting { herbalist: Herbalist },
-    PickReagent { herbalist: Herbalist },
+    Greeting {
+        herbalist: Herbalist,
+    },
+    PickReagent {
+        herbalist: Herbalist,
+    },
     PickQuantity {
         herbalist: Herbalist,
         reagent: Reagent,
@@ -970,7 +974,9 @@ pub const fn blue_boar_choice_for_key(byte: u8) -> Option<BlueBoarDrinkChoice> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SageState {
-    Prompt { topics: &'static [SageTopic] },
+    Prompt {
+        topics: &'static [SageTopic],
+    },
     Confirm {
         topics: &'static [SageTopic],
         quote: SageRumourQuote,
@@ -1022,22 +1028,23 @@ pub enum SageOutcome {
 
 pub fn step_sage(state: &mut SageState, input: SageInput<'_>, gold: &mut u16) -> SageOutcome {
     match (*state, input) {
-        (SageState::Prompt { topics }, SageInput::Topic(text)) => match find_sage_topic(topics, text)
-        {
-            Ok(quote) => {
-                *state = SageState::Confirm { topics, quote };
-                SageOutcome::QuotedRumour { quote }
+        (SageState::Prompt { topics }, SageInput::Topic(text)) => {
+            match find_sage_topic(topics, text) {
+                Ok(quote) => {
+                    *state = SageState::Confirm { topics, quote };
+                    SageOutcome::QuotedRumour { quote }
+                }
+                Err(SageRumourError::EmptyInput) => {
+                    *state = SageState::Exited;
+                    SageOutcome::Exited
+                }
+                Err(SageRumourError::InputTooLong { limit, actual }) => {
+                    SageOutcome::InputTooLong { limit, actual }
+                }
+                Err(SageRumourError::NoTopicMatch) => SageOutcome::NoTopicMatch,
+                Err(SageRumourError::InsufficientGold { .. }) => SageOutcome::InvalidInput,
             }
-            Err(SageRumourError::EmptyInput) => {
-                *state = SageState::Exited;
-                SageOutcome::Exited
-            }
-            Err(SageRumourError::InputTooLong { limit, actual }) => {
-                SageOutcome::InputTooLong { limit, actual }
-            }
-            Err(SageRumourError::NoTopicMatch) => SageOutcome::NoTopicMatch,
-            Err(SageRumourError::InsufficientGold { .. }) => SageOutcome::InvalidInput,
-        },
+        }
         (SageState::Confirm { topics, quote }, SageInput::Confirm(true)) => {
             *state = SageState::Prompt { topics };
             if *gold < quote.topic.fee {
@@ -1064,14 +1071,25 @@ pub fn step_sage(state: &mut SageState, input: SageInput<'_>, gold: &mut u16) ->
 
 // ---------- Horse trader ----------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HorseTraderState {
-    #[default]
-    Greeting,
-    ConfirmPurchase {
-        price: u16,
-    },
+    Greeting { stable: Stable },
+    ConfirmPurchase { stable: Stable, price: u16 },
     Exited,
+}
+
+impl Default for HorseTraderState {
+    fn default() -> Self {
+        Self::Greeting {
+            stable: Stable::HorseAndRider,
+        }
+    }
+}
+
+impl HorseTraderState {
+    pub const fn for_stable(stable: Stable) -> Self {
+        Self::Greeting { stable }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1090,7 +1108,7 @@ pub enum HorseTraderOutcome {
     InvalidInput,
 }
 
-pub const HORSE_TRADER_DEFAULT_PRICE: u16 = 250;
+pub const HORSE_TRADER_DEFAULT_PRICE: u16 = stable_horse_price(Stable::HorseAndRider);
 
 pub fn step_horse_trader(
     state: &mut HorseTraderState,
@@ -1099,23 +1117,20 @@ pub fn step_horse_trader(
     horse_delivery_pending: &mut bool,
 ) -> HorseTraderOutcome {
     match (*state, input) {
-        (HorseTraderState::Greeting, HorseTraderInput::Key(b)) => match b {
+        (HorseTraderState::Greeting { stable }, HorseTraderInput::Key(b)) => match b {
             b'Y' | b'y' | b'B' | b'b' => {
-                *state = HorseTraderState::ConfirmPurchase {
-                    price: HORSE_TRADER_DEFAULT_PRICE,
-                };
-                HorseTraderOutcome::QuotedPrice {
-                    price: HORSE_TRADER_DEFAULT_PRICE,
-                }
+                let price = stable_horse_price(stable);
+                *state = HorseTraderState::ConfirmPurchase { stable, price };
+                HorseTraderOutcome::QuotedPrice { price }
             }
             _ => {
                 *state = HorseTraderState::Exited;
                 HorseTraderOutcome::Exited
             }
         },
-        (HorseTraderState::ConfirmPurchase { price }, HorseTraderInput::Confirm(true)) => {
+        (HorseTraderState::ConfirmPurchase { stable, price }, HorseTraderInput::Confirm(true)) => {
             if *gold < price {
-                *state = HorseTraderState::Greeting;
+                *state = HorseTraderState::Greeting { stable };
                 return HorseTraderOutcome::RefusedShortFunds { price };
             }
             *gold -= price;
@@ -1123,8 +1138,8 @@ pub fn step_horse_trader(
             *state = HorseTraderState::Exited;
             HorseTraderOutcome::Purchased { price }
         }
-        (HorseTraderState::ConfirmPurchase { .. }, HorseTraderInput::Confirm(false)) => {
-            *state = HorseTraderState::Greeting;
+        (HorseTraderState::ConfirmPurchase { stable, .. }, HorseTraderInput::Confirm(false)) => {
+            *state = HorseTraderState::Greeting { stable };
             HorseTraderOutcome::Declined
         }
         (HorseTraderState::Exited, _) => HorseTraderOutcome::Exited,
@@ -1249,8 +1264,12 @@ pub fn step_ship_broker(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GuildShopState {
-    Greeting { shop: GuildShop },
-    PickItem { shop: GuildShop },
+    Greeting {
+        shop: GuildShop,
+    },
+    PickItem {
+        shop: GuildShop,
+    },
     PickQuantity {
         shop: GuildShop,
         commodity: GuildCommodity,
@@ -2183,7 +2202,12 @@ mod tests {
                 rendered: "Seek ye the Codex in the Underworld!".to_string(),
             }
         );
-        assert_eq!(state, SageState::Prompt { topics: &TEST_SAGE_TOPICS });
+        assert_eq!(
+            state,
+            SageState::Prompt {
+                topics: &TEST_SAGE_TOPICS
+            }
+        );
     }
 
     #[test]
@@ -2196,7 +2220,12 @@ mod tests {
             SageOutcome::NoTopicMatch
         );
         assert_eq!(gold, 10);
-        assert_eq!(state, SageState::Prompt { topics: &TEST_SAGE_TOPICS });
+        assert_eq!(
+            state,
+            SageState::Prompt {
+                topics: &TEST_SAGE_TOPICS
+            }
+        );
 
         assert!(matches!(
             step_sage(&mut state, SageInput::Topic("shard"), &mut gold),
@@ -2210,7 +2239,12 @@ mod tests {
             }
         );
         assert_eq!(gold, 10);
-        assert_eq!(state, SageState::Prompt { topics: &TEST_SAGE_TOPICS });
+        assert_eq!(
+            state,
+            SageState::Prompt {
+                topics: &TEST_SAGE_TOPICS
+            }
+        );
 
         assert_eq!(
             step_sage(&mut state, SageInput::Topic(" "), &mut gold),
@@ -2221,7 +2255,7 @@ mod tests {
 
     #[test]
     fn horse_trader_purchase_path_marks_pending_delivery() {
-        let mut state = HorseTraderState::Greeting;
+        let mut state = HorseTraderState::default();
         let mut gold = 500u16;
         let mut pending = false;
         step_horse_trader(
@@ -2243,7 +2277,7 @@ mod tests {
 
     #[test]
     fn horse_trader_short_funds_refuses() {
-        let mut state = HorseTraderState::Greeting;
+        let mut state = HorseTraderState::default();
         let mut gold = 10u16;
         let mut pending = false;
         step_horse_trader(

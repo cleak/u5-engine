@@ -491,10 +491,8 @@ fn handle_active_shop_key_input(
                                 outcome.party_index + 1,
                                 outcome.deposit
                             );
-                            let surcharge = apply_active_shop_surcharge(
-                                state,
-                                ACTIVE_SHOP_SURCHARGE_INN_GUEST,
-                            );
+                            let surcharge =
+                                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_INN_GUEST);
                             append_active_shop_surcharge(message, surcharge)
                         }
                         Err(err) => format_inn_error(err),
@@ -568,10 +566,8 @@ fn handle_active_shop_key_input(
                                 outcome.party_index + 1,
                                 outcome.bill
                             );
-                            let surcharge = apply_active_shop_surcharge(
-                                state,
-                                ACTIVE_SHOP_SURCHARGE_INN_GUEST,
-                            );
+                            let surcharge =
+                                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_INN_GUEST);
                             append_active_shop_surcharge(message, surcharge)
                         }
                         Ok(outcome) => {
@@ -580,10 +576,8 @@ fn handle_active_shop_key_input(
                                 outcome.party_index + 1,
                                 outcome.bill
                             );
-                            let surcharge = apply_active_shop_surcharge(
-                                state,
-                                ACTIVE_SHOP_SURCHARGE_INN_GUEST,
-                            );
+                            let surcharge =
+                                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_INN_GUEST);
                             append_active_shop_surcharge(message, surcharge)
                         }
                         Err(err) => format_inn_error(err),
@@ -667,7 +661,12 @@ fn handle_active_shop_key_input(
             let mut stock = state.reagents;
             let outcome = match (*s, inline_digit) {
                 (ReagentShopState::Greeting { .. } | ReagentShopState::PickReagent { .. }, _) => {
-                    step_reagent_shop(s, ReagentShopInput::Key(key_byte), &mut state.gold, &mut stock)
+                    step_reagent_shop(
+                        s,
+                        ReagentShopInput::Key(key_byte),
+                        &mut state.gold,
+                        &mut stock,
+                    )
                 }
                 (ReagentShopState::PickQuantity { .. }, Some(q)) => step_reagent_shop(
                     s,
@@ -683,7 +682,7 @@ fn handle_active_shop_key_input(
         ActiveShopSession::HorseTrader(s) => {
             let mut pending = false;
             let outcome = match (*s, yes, no) {
-                (HorseTraderState::Greeting, _, _) => step_horse_trader(
+                (HorseTraderState::Greeting { .. }, _, _) => step_horse_trader(
                     s,
                     HorseTraderInput::Key(key_byte),
                     &mut state.gold,
@@ -1006,7 +1005,10 @@ fn format_reagent_outcome(outcome: crate::shop_runtime::ReagentShopOutcome) -> S
     use crate::shop_runtime::ReagentShopOutcome::*;
     match outcome {
         EnteredMenu { herbalist } => {
-            format!("{} offers reagents A-E, or Space.", herbalist.display_name())
+            format!(
+                "{} offers reagents A-E, or Space.",
+                herbalist.display_name()
+            )
         }
         QuotedUnit {
             herbalist,

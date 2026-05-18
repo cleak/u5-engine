@@ -550,10 +550,11 @@ mod tests {
         bytes.push(TLK_CODE_END_OF_RESPONSE);
         let out = render(&bytes);
         assert_eq!(out.action_grants, vec![TlkActionDispatchVerb::RaiseFood]);
-        assert!(out
-            .events
-            .iter()
-            .any(|e| matches!(e, TlkRunEvent::Action(TlkActionDispatchVerb::RaiseFood))));
+        assert!(
+            out.events
+                .iter()
+                .any(|e| matches!(e, TlkRunEvent::Action(TlkActionDispatchVerb::RaiseFood)))
+        );
     }
 
     #[test]
@@ -734,14 +735,16 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert!(out
-            .events
-            .iter()
-            .any(|e| matches!(e, TlkRunEvent::AskedPartyName(2))));
-        assert!(out
-            .events
-            .iter()
-            .any(|e| matches!(e, TlkRunEvent::AskedWho(3))));
+        assert!(
+            out.events
+                .iter()
+                .any(|e| matches!(e, TlkRunEvent::AskedPartyName(2)))
+        );
+        assert!(
+            out.events
+                .iter()
+                .any(|e| matches!(e, TlkRunEvent::AskedWho(3)))
+        );
     }
 
     #[test]

@@ -220,11 +220,7 @@ pub fn class_refreshed_mana(class_byte: u8, intelligence: u8) -> Option<u8> {
 
 pub const fn heal_spell_amount_from_raw_roll(raw_roll: u8) -> u16 {
     let amount = raw_roll / 2;
-    if amount == 0 {
-        1
-    } else {
-        amount as u16
-    }
+    if amount == 0 { 1 } else { amount as u16 }
 }
 
 /// `magic.md §8` per-level maximum-HP factor used when a successful

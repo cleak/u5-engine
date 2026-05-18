@@ -184,9 +184,8 @@ impl PlayState {
 
         let cursor = session.cursor.min(rows.len() - 1);
         let panel_start = (cursor / USE_PICKER_PANEL_ROWS) * USE_PICKER_PANEL_ROWS;
-        let mut lines = vec![
-            "Use: Enter activates; </> move; [] page; Space/Esc exits.".to_string(),
-        ];
+        let mut lines =
+            vec!["Use: Enter activates; </> move; [] page; Space/Esc exits.".to_string()];
         for (index, row) in rows
             .iter()
             .enumerate()
@@ -1980,7 +1979,13 @@ impl PlayState {
                     format!("{role} refuses thee on horseback; dismount before commerce.");
                 return MoveOutcome::Blocked;
             }
-            if let Some(session) = crate::shop_session::shop_session_for_dialog_id(dialog_id) {
+            let scene_byte = match self.area {
+                Area::Town { scene, .. } => Some(scene.byte),
+                _ => None,
+            };
+            if let Some(session) =
+                crate::shop_session::shop_session_for_talk_context(dialog_id, scene_byte)
+            {
                 self.advance_turn();
                 let label = session.shop_label().to_string();
                 let prompt = session.opening_prompt().to_string();
@@ -2067,14 +2072,18 @@ impl PlayState {
                     format!("{role} refuses thee on horseback; dismount before commerce.");
                 return MoveOutcome::Blocked;
             }
-            if let Some(session) = crate::shop_session::shop_session_for_dialog_id(dialog_id) {
+            let scene_byte = match self.area {
+                Area::Town { scene, .. } => Some(scene.byte),
+                _ => None,
+            };
+            if let Some(session) =
+                crate::shop_session::shop_session_for_talk_context(dialog_id, scene_byte)
+            {
                 self.advance_turn();
                 let label = session.shop_label().to_string();
                 let prompt = session.opening_prompt().to_string();
                 self.active_shop = Some(session);
-                self.message = format!(
-                    "{label} is now open. {prompt} Dispatch family: {family}."
-                );
+                self.message = format!("{label} is now open. {prompt} Dispatch family: {family}.");
                 return MoveOutcome::Talked;
             }
         }
@@ -2483,14 +2492,17 @@ pub fn scroll_label(index: usize) -> &'static str {
 
 fn pending_action_for_use_request(request: UseItemRequest) -> Option<UsePendingAction> {
     match request {
-        UseItemRequest::Potion { index, target: None } => {
-            Some(UsePendingAction::PotionTarget { index })
-        }
+        UseItemRequest::Potion {
+            index,
+            target: None,
+        } => Some(UsePendingAction::PotionTarget { index }),
         UseItemRequest::Scroll {
             index: SCROLL_WIND_CHANGE_INDEX,
             direction: None,
             ..
-        } => Some(UsePendingAction::ScrollWindDirection { index: SCROLL_WIND_CHANGE_INDEX }),
+        } => Some(UsePendingAction::ScrollWindDirection {
+            index: SCROLL_WIND_CHANGE_INDEX,
+        }),
         UseItemRequest::Scroll {
             index: SCROLL_RESURRECTION_INDEX,
             target: None,

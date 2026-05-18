@@ -36,22 +36,14 @@ fn wrapped_step_axis(actor: u8, player: u8) -> i8 {
     }
     let forward = (player as i32 - actor as i32).rem_euclid(WORLD_SIDE);
     let backward = (actor as i32 - player as i32).rem_euclid(WORLD_SIDE);
-    if forward <= backward {
-        1
-    } else {
-        -1
-    }
+    if forward <= backward { 1 } else { -1 }
 }
 
 /// Axis-first selector for the one-bit random roll documented in §8: bit 0
 /// of the roll picks X first, bit 1 picks Y first. The caller falls back to
 /// the other axis if the chosen direction is blocked.
 pub const fn axis_first_choice(rng_bit: u8) -> Axis {
-    if rng_bit & 1 == 0 {
-        Axis::X
-    } else {
-        Axis::Y
-    }
+    if rng_bit & 1 == 0 { Axis::X } else { Axis::Y }
 }
 
 /// Per-destination-tile chance gate for ordinary outdoor movers per

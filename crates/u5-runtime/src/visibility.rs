@@ -161,11 +161,7 @@ pub const VIEWPORT_MAX_INDEX: u8 = (VIEWPORT_SIDE - 1) as u8;
 /// can be computed as a 6x6 table (`folded = min(coord, VIEWPORT_MAX_INDEX - coord)`).
 pub const fn fog_refine_folded_coord(coord: u8) -> u8 {
     let mirrored = VIEWPORT_MAX_INDEX.saturating_sub(coord);
-    if coord < mirrored {
-        coord
-    } else {
-        mirrored
-    }
+    if coord < mirrored { coord } else { mirrored }
 }
 
 /// `visibility.md §7`: squared centre-relative distance the fog

@@ -20,7 +20,7 @@
 use std::collections::HashMap;
 
 use crate::tlk_control_codes::*;
-use crate::tlk_runner::{run_tlk_stream, TlkRunEvent, TlkRunInputs, TlkRunOutput, TlkRunStop};
+use crate::tlk_runner::{TlkRunEvent, TlkRunInputs, TlkRunOutput, TlkRunStop, run_tlk_stream};
 
 /// Phase the conversation is currently in.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

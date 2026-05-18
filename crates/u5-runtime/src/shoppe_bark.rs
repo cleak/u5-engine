@@ -13,9 +13,9 @@ use std::io;
 use std::path::Path;
 
 use crate::shops::{
-    shop_placeholder_kind, shoppe_time_of_day_word, ShopPlaceholderKind, SHOPPE_DAT_RECORD_SLOTS,
+    SHOPPE_DAT_RECORD_SLOTS, ShopPlaceholderKind, shop_placeholder_kind, shoppe_time_of_day_word,
 };
-use crate::tlk_control_codes::{shoppe_dictionary_index, COMMON_WORD_DICTIONARY_ENTRIES};
+use crate::tlk_control_codes::{COMMON_WORD_DICTIONARY_ENTRIES, shoppe_dictionary_index};
 
 /// Per-record sliced view of a loaded SHOPPE.DAT.
 #[derive(Clone, Debug, Default)]

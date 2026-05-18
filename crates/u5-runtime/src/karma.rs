@@ -39,11 +39,7 @@ impl KarmaAction {
             KarmaAction::CompletedShrineOffering { digit } => digit as i16,
             KarmaAction::CodexShrineTurnIn { humility } => {
                 let base = ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE as i16;
-                if humility {
-                    base * 2
-                } else {
-                    base
-                }
+                if humility { base * 2 } else { base }
             }
             KarmaAction::TownChestOpened => -(TOWN_CHEST_OPEN_KARMA_DEBIT as i16),
             KarmaAction::CropOrTableFoodTaken => -(KARMA_CROP_OR_TABLE_FOOD_DEBIT as i16),

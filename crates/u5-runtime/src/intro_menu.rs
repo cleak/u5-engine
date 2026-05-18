@@ -12,7 +12,7 @@
 //! sub-flows themselves live in [`crate::chargen`], [`crate::u4_transfer`],
 //! and [`crate::intro`]; the menu just sequences them.
 
-use crate::intro::{intro_menu_action, IntroMenuAction};
+use crate::intro::{IntroMenuAction, intro_menu_action};
 
 /// Where the intro menu currently sits.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
