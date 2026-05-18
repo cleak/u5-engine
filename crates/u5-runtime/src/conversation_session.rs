@@ -144,14 +144,16 @@ impl ConversationSession {
         match self.phase {
             ConversationSessionPhase::AwaitingKeyword => {}
             ConversationSessionPhase::AwaitingAskPartyName { field_idx, cursor } => {
-                let slot = tlk_ask_party_name_match(line.trim().as_bytes(), ctx.party_member_names);
+                let input = capped_tlk_input_bytes(line);
+                let slot = tlk_ask_party_name_match(&input, ctx.party_member_names);
                 self.phase = ConversationSessionPhase::AwaitingKeyword;
                 let mut out = self.run_field_from(field_idx, cursor, ctx, slot, 0);
                 out.asked_party_name = Some(slot);
                 return out;
             }
             ConversationSessionPhase::AwaitingAskWho { field_idx, cursor } => {
-                let slot = tlk_ask_party_name_match(line.trim().as_bytes(), ctx.party_member_names);
+                let input = capped_tlk_input_bytes(line);
+                let slot = tlk_ask_party_name_match(&input, ctx.party_member_names);
                 self.phase = ConversationSessionPhase::AwaitingKeyword;
                 let mut out = self.run_field_from(field_idx, cursor, ctx, 0, slot);
                 out.asked_who = Some(slot);
@@ -172,7 +174,7 @@ impl ConversationSession {
             _ => return ConversationSessionOutput::default(),
         }
         self.keyword_turns = self.keyword_turns.saturating_add(1);
-        let input = line.trim().as_bytes();
+        let input = capped_tlk_input_bytes(line);
         let input_upper: Vec<u8> = input
             .iter()
             .map(|b| (*b & 0x7F).to_ascii_uppercase())
@@ -383,6 +385,15 @@ fn conversation_payment_answer(line: &str) -> Option<bool> {
     }
 }
 
+fn capped_tlk_input_bytes(line: &str) -> Vec<u8> {
+    line.trim()
+        .as_bytes()
+        .iter()
+        .take(TLK_INPUT_MAX_LEN)
+        .copied()
+        .collect()
+}
+
 /// Lookup-style helper: convert a `HashMap<u16, Vec<Vec<u8>>>` raw
 /// blob and a `HashMap<u16, Vec<String>>` decoded blob into the two
 /// vectors a [`ConversationSession`] needs.
@@ -513,6 +524,46 @@ mod tests {
         assert_eq!(second.asked_party_name, Some(2));
         assert_eq!(second.text, " Done.");
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    #[test]
+    fn ask_party_name_caps_typed_answer_at_fifteen_bytes() {
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("JOIN"),
+            {
+                let mut bytes = enc("Name thy companion.");
+                bytes.push(TLK_CODE_ASK_PARTY_NAME);
+                bytes.extend_from_slice(&enc(" Done."));
+                bytes.push(TLK_CODE_END_OF_RESPONSE);
+                bytes
+            },
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Greetings.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "JOIN".to_string(),
+            "Name thy companion.".to_string(),
+        ];
+        let party_names: [&[u8]; 1] = [b"ABCDEFGHIJKLMNO"];
+        let context = ConversationContext {
+            party_member_names: &party_names,
+            ..ctx()
+        };
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&context);
+        s.submit_keyword("join", &context);
+
+        let second = s.submit_keyword("ABCDEFGHIJKLMNOEXTRA", &context);
+        assert_eq!(second.asked_party_name, Some(1));
+        assert_eq!(second.text, " Done.");
     }
 
     #[test]
@@ -668,6 +719,37 @@ mod tests {
         // boundary).
         let out = s.submit_keyword("gran news", &ctx());
         assert!(out.text.contains("Short"));
+    }
+
+    #[test]
+    fn ordinary_keyword_input_is_capped_at_fifteen_bytes() {
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("ABCDEFGHIJKLMNO"),
+            enc("Fifteen."),
+            enc("ABCDEFGHIJKLMNOP"),
+            enc("Sixteen."),
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Greetings.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "ABCDEFGHIJKLMNO".to_string(),
+            "Fifteen.".to_string(),
+            "ABCDEFGHIJKLMNOP".to_string(),
+            "Sixteen.".to_string(),
+        ];
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&ctx());
+
+        let out = s.submit_keyword("ABCDEFGHIJKLMNOP", &ctx());
+        assert_eq!(out.text, "Fifteen.");
     }
 
     #[test]
