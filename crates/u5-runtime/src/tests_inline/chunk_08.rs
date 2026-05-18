@@ -93,6 +93,65 @@
     }
 
     #[test]
+    fn foot_steps_on_native_molten_lava_and_takes_damage() {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(1, 0)] = 0x8f;
+        let mut state = world_state(grid, 0, 0);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: 30,
+                mana: 8,
+                hp: 12,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'A',
+                status: b'D',
+                climb_stat: 30,
+                mana: 8,
+                hp: 9,
+                max_hp: 20,
+                level: 8,
+            },
+        ];
+
+        assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+        assert_eq!((state.player.x, state.player.y), (1, 0));
+        assert_eq!(state.turn, 1);
+        assert!(state.party[0].hp < 12);
+        assert_eq!(state.party[1].hp, 9);
+        assert!(state.message.contains("underfoot special"));
+        assert!(state.message.contains("lava damage"));
+        assert!(state.message.contains("party slot 0"));
+        assert!(!state.message.contains("party slot 1"));
+    }
+
+    #[test]
+    fn native_molten_lava_blocks_horse_without_spending_turn() {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(1, 0)] = 0x8f;
+        let mut state = world_state(grid, 0, 0);
+        state.player.transport = TransportState::Horse {
+            type_byte: 18,
+            tile: 18,
+        };
+        state.sync_player_object();
+
+        assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
+
+        assert_eq!((state.player.x, state.player.y), (0, 0));
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP);
+        assert_eq!(state.message, "Blocked by lava at (1, 0).");
+    }
+
+    #[test]
     fn foot_enters_clean_drowning_water_sidecar_and_takes_damage() {
         let dir = debug_game_dir();
         fs::write(

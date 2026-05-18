@@ -215,6 +215,7 @@ pub enum WorldWaterfallSweep {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WorldDamageEffect {
     Lava,
+    NativeLava,
     Drowning,
 }
 
@@ -229,7 +230,7 @@ impl WorldDamageEffect {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Lava => "lava",
+            Self::Lava | Self::NativeLava => "lava",
             Self::Drowning => "drowning",
         }
     }
@@ -239,6 +240,12 @@ impl WorldDamageEffect {
             Self::Lava => matches!(
                 transport,
                 TransportState::Carpet { .. } | TransportState::Balloon { .. }
+            ),
+            Self::NativeLava => matches!(
+                transport,
+                TransportState::Foot
+                    | TransportState::Carpet { .. }
+                    | TransportState::Balloon { .. }
             ),
             Self::Drowning => matches!(
                 transport,
@@ -254,6 +261,12 @@ impl WorldDamageEffect {
     pub fn damages_transport(self, transport: TransportState) -> bool {
         match self {
             Self::Lava => matches!(transport, TransportState::Carpet { .. }),
+            Self::NativeLava => {
+                matches!(
+                    transport,
+                    TransportState::Foot | TransportState::Carpet { .. }
+                )
+            }
             Self::Drowning => matches!(transport, TransportState::Foot),
         }
     }
@@ -266,6 +279,21 @@ pub struct WorldDamageTileEntry {
     pub y: usize,
     pub effect: WorldDamageEffect,
     pub expected_tile: Option<u8>,
+}
+
+pub fn intrinsic_world_damage_tile_entry(
+    plane: WorldPlane,
+    x: usize,
+    y: usize,
+    tile: u8,
+) -> Option<WorldDamageTileEntry> {
+    is_lava_tile(tile).then_some(WorldDamageTileEntry {
+        plane,
+        x,
+        y,
+        effect: WorldDamageEffect::NativeLava,
+        expected_tile: Some(tile),
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -190,7 +190,9 @@ impl PlayState {
                 recovered_hp += hp;
                 recovered_mana += mana;
                 if let (Some(game_dir), Area::World { plane }) = (game_dir, self.area) {
-                    if let Some(report) = self.apply_world_underfoot_damage(game_dir, plane)? {
+                    if let Some(report) =
+                        self.apply_world_underfoot_damage(Some(game_dir), plane)?
+                    {
                         world_damage_ticks += 1;
                         last_world_damage = Some(report);
                     }
@@ -1555,7 +1557,7 @@ impl PlayState {
         tile: u8,
     ) -> io::Result<Option<WorldDamageTileEntry>> {
         let Some(entries) = load_world_damage_tile_entries(game_dir)? else {
-            return Ok(None);
+            return Ok(intrinsic_world_damage_tile_entry(plane, x, y, tile));
         };
         Ok(world_damage_tile_entry_at(&entries, plane, x, y, tile))
     }
@@ -1565,9 +1567,6 @@ impl PlayState {
         game_dir: Option<&Path>,
         plane: WorldPlane,
     ) -> io::Result<()> {
-        let Some(game_dir) = game_dir else {
-            return Ok(());
-        };
         if let Some(report) = self.apply_world_underfoot_damage(game_dir, plane)? {
             self.message.push_str(&format!(" {report}."));
         }
@@ -1576,15 +1575,16 @@ impl PlayState {
 
     pub fn apply_world_underfoot_damage(
         &mut self,
-        game_dir: &Path,
+        game_dir: Option<&Path>,
         plane: WorldPlane,
     ) -> io::Result<Option<String>> {
         let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
-        let Some(entry) =
+        let entry = if let Some(game_dir) = game_dir {
             self.world_damage_tile_at(game_dir, plane, self.player.x, self.player.y, tile)?
-        else {
-            return Ok(None);
+        } else {
+            intrinsic_world_damage_tile_entry(plane, self.player.x, self.player.y, tile)
         };
+        let Some(entry) = entry else { return Ok(None) };
         if entry.effect.damages_transport(self.player.transport) {
             Ok(Some(self.apply_world_damage_tile(entry)))
         } else {

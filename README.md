@@ -749,8 +749,11 @@ immediately; if it reaches a visible moongate origin, the normal landing prompt
 is queued. The optional tile guard keeps stale coordinates from firing after
 local map edits.
 
-World damaging terrain cells can be supplied as a clean-room sidecar while the
-exact lava/water tile-id split and original damage formula remain open:
+World damaging terrain includes the public molten-lava tile `0x8F`; foot and
+carpet travel can enter it and take deterministic first-playable lava damage,
+while mounted horses and watercraft are blocked. Additional authored damage
+cells can be supplied as a clean-room sidecar while the exact water/current
+damage split and original damage formula remain open:
 
 ```text
 # PLANE X Y EFFECT [TILE]

@@ -1242,6 +1242,7 @@ pub fn world_damage_tile_entry_at(
         .iter()
         .find(|entry| world_damage_tile_matches(**entry, plane, x, y, tile))
         .copied()
+        .or_else(|| intrinsic_world_damage_tile_entry(plane, x, y, tile))
 }
 
 pub fn town_get_tile_matches(

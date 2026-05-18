@@ -877,7 +877,7 @@ impl PlayState {
             if let Some(game_dir) = game_dir {
                 self.world_damage_tile_at(game_dir, plane, nx, ny, tile)?
             } else {
-                None
+                intrinsic_world_damage_tile_entry(plane, nx, ny, tile)
             }
         } else {
             None
