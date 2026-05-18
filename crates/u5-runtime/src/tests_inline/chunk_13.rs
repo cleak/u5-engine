@@ -5702,6 +5702,7 @@
         assert_eq!(Th.expansion(), "TH");
         assert_eq!(Ng.expansion(), "NG");
         assert_eq!(Er.expansion(), "ER");
+        assert_eq!(render_miscmsg_tile_glyph_text("TRU[@_"), "TRUTH ER");
         // Ordinary ASCII letters and punctuation are not digraphs.
         assert_eq!(tile_glyph_digraph(b'A'), None);
         assert_eq!(tile_glyph_digraph(b' '), None);

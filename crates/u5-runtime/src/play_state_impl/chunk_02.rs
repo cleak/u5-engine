@@ -1346,10 +1346,27 @@ impl PlayState {
                 "Codex urn: no ordained virtue is ready.".to_string()
             }
             CodexUrnReadOutcome::Stamped(virtue) => {
-                format!("Read Codex page for {}; Codex-read bit set.", virtue.name())
+                let status = format!("Read Codex page for {}; Codex-read bit set.", virtue.name());
+                match self.codex_urn_text_for_virtue(game_dir, virtue)? {
+                    Some(text) if !text.is_empty() => format!("{status} {text}"),
+                    _ => status,
+                }
             }
         };
         Ok(Some(MoveOutcome::Observed))
+    }
+
+    pub fn codex_urn_text_for_virtue(
+        &self,
+        game_dir: &Path,
+        virtue: ShrineVirtue,
+    ) -> io::Result<Option<String>> {
+        let Some(messages) = load_misc_messages(game_dir)? else {
+            return Ok(None);
+        };
+        Ok(messages
+            .urn_codex_for_virtue_index(virtue.index())
+            .map(render_miscmsg_tile_glyph_text))
     }
 
     pub fn current_codex_urn_entry(&self, game_dir: &Path) -> io::Result<Option<CodexUrnEntry>> {

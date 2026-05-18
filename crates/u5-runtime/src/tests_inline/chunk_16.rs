@@ -1157,6 +1157,16 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
     fn codex_urn_suffix_routing_precedes_mix_reagents() {
         let dir = debug_game_dir();
         fs::write(dir.join(CODEX_URN_TABLE_FILE), "BRITANNIA 10 20 136\n").unwrap();
+        let mut miscmsg = Vec::new();
+        for index in 0..MISCMSG_DAT_RECORDS {
+            if index == *MISCMSG_URN_CODEX_RANGE.start() + ShrineVirtue::Justice.index() {
+                miscmsg.extend_from_slice(b"JUS@[_");
+            } else {
+                miscmsg.extend_from_slice(format!("rec{index}").as_bytes());
+            }
+            miscmsg.push(0);
+        }
+        fs::write(dir.join(MISCMSG_DAT_FILE), miscmsg).unwrap();
         let mut grid = open_world_grid();
         grid[world_cell_index(10, 20)] = 136;
         let mut state = britannia_state(grid, 10, 20);
@@ -1173,6 +1183,7 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 1);
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
         assert!(state.message.contains("Codex page for Justice"));
+        assert!(state.message.contains("JUS THER"));
         let _ = fs::remove_dir_all(dir);
     }
 

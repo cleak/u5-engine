@@ -146,6 +146,10 @@ impl MiscMessages {
     pub fn urn_codex(&self) -> &[String] {
         slice_range(&self.records, &MISCMSG_URN_CODEX_RANGE)
     }
+
+    pub fn urn_codex_for_virtue_index(&self, virtue_index: usize) -> Option<&str> {
+        self.urn_codex().get(virtue_index).map(String::as_str)
+    }
 }
 
 fn slice_range<'a>(records: &'a [String], range: &std::ops::RangeInclusive<usize>) -> &'a [String] {
@@ -211,6 +215,18 @@ fn decode_misc_record(bytes: &[u8]) -> String {
             // sign-style tile-glyph renderer per the spec.
             ch if (0x20..=0x7e).contains(&ch) => out.push(ch as char),
             _ => {}
+        }
+    }
+    out
+}
+
+pub fn render_miscmsg_tile_glyph_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for byte in text.bytes() {
+        if let Some(digraph) = tile_glyph_digraph(byte) {
+            out.push_str(digraph.expansion());
+        } else {
+            out.push(byte as char);
         }
     }
     out

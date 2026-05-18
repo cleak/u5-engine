@@ -326,8 +326,9 @@ pub use map_io::*;
 pub use misc_tables::*;
 pub use misc_tables_io::*;
 pub use miscmsg_io::{
-    load_misc_messages, miscmsg_family, parse_misc_messages, tile_glyph_digraph, MiscMessages,
-    MiscMsgFamily, TileGlyphDigraph, MISCMSG_DAT_FILE, MISCMSG_DAT_LEN, MISCMSG_DAT_RECORDS,
+    load_misc_messages, miscmsg_family, parse_misc_messages, render_miscmsg_tile_glyph_text,
+    tile_glyph_digraph, MiscMessages, MiscMsgFamily, TileGlyphDigraph, MISCMSG_DAT_FILE,
+    MISCMSG_DAT_LEN, MISCMSG_DAT_RECORDS, MISCMSG_URN_CODEX_RANGE,
 };
 pub use moongate::{
     is_surface_chasm_cell, moonstone_burial_tile_accepted, natural_moongate_advance_counter,
