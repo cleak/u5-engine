@@ -15,7 +15,7 @@ This executable is a parity harness. It reads original data at runtime but does 
 
 Representative roster names, limited to avoid dialogue or roster dumps:
 
-- `CASTLE:0`: Alistair Bard, Stephen, Treanna, Margaret, Desiree, Drudgeworth, Saduj, Stillwelt
+- `CASTLE:0`: Alistair Bard, Alistair Bard, Stephen, Treanna, Margaret, Desiree, Drudgeworth, Saduj, ... +1 more
 - `CASTLE:4`: Squire Jimmy, Kurt, Sir Adam Torch
 - `KEEP:4`: Elistaria
 
@@ -37,7 +37,7 @@ Representative roster names, limited to avoid dialogue or roster dumps:
 ## Schedule/conversation checks
 
 - Occupied `CASTLE:0` roster slots: 31.
-- Occupied slots with resolved TLK display names: 8.
+- Occupied slots with resolved TLK display names: 9.
 - Noon waypoint sample:
   - slot 1 dlg 0 `(unnamed)` -> waypoint 1 at (17, 28, 0).
   - slot 2 dlg 0 `(unnamed)` -> waypoint 1 at (13, 28, 0).
