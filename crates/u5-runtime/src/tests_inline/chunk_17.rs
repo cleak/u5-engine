@@ -288,6 +288,124 @@
     }
 
     #[test]
+    fn active_mix_prompt_collects_spell_reagent_and_quantity() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.reagents = [0; REAGENT_COUNT];
+        state.reagents[REAGENT_SULFUR_ASH] = 2;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_mix.is_some());
+        assert!(state.message.contains(MMIX_SPELL_PROMPT_MESSAGE));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'I', "L", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_mix.is_some());
+        assert!(state.message.contains("Mix reagents:"));
+        assert!(state.message.contains("Sulfur Ash (2)"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.message.contains(">* 1. Sulfur Ash"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.message.contains(MMIX_QUANTITY_PROMPT_MESSAGE));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_mix.is_some());
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_mix.is_none());
+        assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 1);
+        assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Mixed 1 IL charge; stock is 1.");
+    }
+
+    #[test]
+    fn active_new_order_prompt_swaps_non_leader_slots() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'F',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 0,
+            hp: 20,
+            max_hp: 20,
+            level: 1,
+        });
+        state.party.push(PartyMember {
+            slot: 2,
+            class_byte: b'M',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 4,
+            hp: 18,
+            max_hp: 18,
+            level: 2,
+        });
+        state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0", *b"MARIA\0\0\0\0"];
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'N', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_new_order.is_some());
+        assert!(state.message.contains("choose first member"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '2', "3", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_new_order.is_none());
+        assert_eq!(state.party[1].slot, 2);
+        assert_eq!(state.party[2].slot, 1);
+        assert_eq!(&state.party_names[1], b"MARIA\0\0\0\0");
+        assert_eq!(&state.party_names[2], b"IOLO\0\0\0\0\0");
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "New order: party slots 2 and 3 swapped.");
+    }
+
+    #[test]
+    fn active_yell_prompt_submits_free_text_word() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_yell.is_some());
+        assert!(state.message.contains("Yell what?"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'f', "allax", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_yell.is_none());
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("Yelled FALLAX"));
+        assert!(state.message.contains("Word of Power for Deceit"));
+    }
+
+    #[test]
     fn active_use_picker_refuses_when_no_usable_items_are_available() {
         let mut state = dungeon_state(vec![0; DUNGEON_SIDE * DUNGEON_SIDE], 0, 1, 1);
 

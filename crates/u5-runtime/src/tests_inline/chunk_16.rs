@@ -1274,7 +1274,8 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         );
 
         assert_eq!(state.shrine_codex_mask, 0);
-        assert!(state.message.contains("Mix what?"));
+        assert!(state.active_mix.is_some());
+        assert!(state.message.contains(MMIX_SPELL_PROMPT_MESSAGE));
         let _ = fs::remove_dir_all(dir);
     }
 

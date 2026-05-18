@@ -169,12 +169,10 @@ impl PlayState {
                 handled!(self.start_cast_spell_prompt());
             }
             'm' => {
-                self.message = mix_prompt_message();
-                handled!();
+                handled!(self.start_mix_reagents_prompt());
             }
             'n' => {
-                self.message = new_order_prompt_message();
-                handled!();
+                handled!(self.start_new_order_prompt());
             }
             'r' => {
                 handled!(self.start_ready_equipment());
@@ -188,7 +186,7 @@ impl PlayState {
                 handled!(outcome);
             }
             'y' => {
-                handled!(self.yell_command(None));
+                handled!(self.start_yell_prompt());
             }
             'z' => {
                 handled!(self.z_stats());
@@ -273,16 +271,17 @@ impl PlayState {
                 'M' => {
                     if let Some(outcome) = self.read_codex_urn_at_current_position(game_dir)? {
                         handled!(outcome);
-                    } else {
-                        self.message = self
-                            .shrine_prompt_at_current_position(game_dir)?
-                            .unwrap_or_else(mix_prompt_message);
+                    } else if let Some(message) =
+                        self.shrine_prompt_at_current_position(game_dir)?
+                    {
+                        self.message = message;
                         handled!();
+                    } else {
+                        handled!(self.start_mix_reagents_prompt());
                     }
                 }
                 'N' => {
-                    self.message = new_order_prompt_message();
-                    handled!();
+                    handled!(self.start_new_order_prompt());
                 }
                 'O' => {
                     handled!(self.open_facing_with_game_dir(Some(game_dir))?);
@@ -317,7 +316,7 @@ impl PlayState {
                     handled!(self.exit_vehicle_with_game_dir(Some(game_dir))?);
                 }
                 'Y' => {
-                    handled!(self.yell_command(None));
+                    handled!(self.start_yell_prompt());
                 }
                 'Z' => {
                     handled!(self.z_stats());
@@ -348,15 +347,16 @@ impl PlayState {
             'm' => {
                 if let Some(outcome) = self.read_codex_urn_at_current_position(game_dir)? {
                     outcome
-                } else {
-                    self.message = self
-                        .shrine_prompt_at_current_position(game_dir)?
-                        .unwrap_or_else(mix_prompt_message);
+                } else if let Some(message) = self.shrine_prompt_at_current_position(game_dir)? {
+                    self.message = message;
                     MoveOutcome::Observed
+                } else {
+                    self.start_mix_reagents_prompt()
                 }
             }
             'z' => self.z_stats(),
             'c' => self.start_cast_spell_prompt(),
+            'n' => self.start_new_order_prompt(),
             'r' => self.start_ready_equipment(),
             'u' => {
                 if inline_use_request.is_some() {
@@ -365,7 +365,7 @@ impl PlayState {
                     self.start_use_item()
                 }
             }
-            'y' => self.yell_command(None),
+            'y' => self.start_yell_prompt(),
             '<' => self.climb(game_dir, ClimbIntent::Up)?,
             '>' => self.climb(game_dir, ClimbIntent::Down)?,
             '.' => self.idle_tick(),

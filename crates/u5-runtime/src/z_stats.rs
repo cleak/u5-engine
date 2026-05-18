@@ -85,6 +85,33 @@ pub struct CastSession {
     pub combat_had_foe: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MixSession {
+    pub phase: MixPhase,
+    pub spell_buffer: String,
+    pub spell_index: Option<usize>,
+    pub reagent_mask: u8,
+    pub reagent_cursor: usize,
+    pub quantity_buffer: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MixPhase {
+    Spell,
+    Reagents,
+    Quantity,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NewOrderSession {
+    pub first: Option<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct YellSession {
+    pub buffer: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UsePendingAction {
     PotionTarget { index: usize },
@@ -206,6 +233,33 @@ impl CastSession {
             buffer: String::new(),
             combat_actor_slot: Some(actor_slot),
             combat_had_foe,
+        }
+    }
+}
+
+impl MixSession {
+    pub fn new() -> Self {
+        Self {
+            phase: MixPhase::Spell,
+            spell_buffer: String::new(),
+            spell_index: None,
+            reagent_mask: 0,
+            reagent_cursor: 0,
+            quantity_buffer: String::new(),
+        }
+    }
+}
+
+impl NewOrderSession {
+    pub const fn new() -> Self {
+        Self { first: None }
+    }
+}
+
+impl YellSession {
+    pub fn new() -> Self {
+        Self {
+            buffer: String::new(),
         }
     }
 }

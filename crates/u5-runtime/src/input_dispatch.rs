@@ -26,6 +26,15 @@ pub fn handle_play_key_input(
     if state.active_cast.is_some() {
         return handle_active_cast_key_input(state, key, suffix, game_dir);
     }
+    if state.active_mix.is_some() {
+        return Ok(handle_active_mix_key_input(state, key, suffix));
+    }
+    if state.active_new_order.is_some() {
+        return Ok(handle_active_new_order_key_input(state, key, suffix));
+    }
+    if state.active_yell.is_some() {
+        return handle_active_yell_key_input(state, key, suffix, game_dir);
+    }
     if state.active_ready.is_some() {
         return Ok(handle_active_ready_key_input(state, key, suffix));
     }
@@ -208,6 +217,37 @@ fn handle_active_cast_key_input(
         } else if state.combat_active {
             advance_combat_round_after_actor_and_append_message(state, actor_slot);
         }
+    }
+    Ok(PlayInputDisposition::Continue)
+}
+
+fn handle_active_mix_key_input(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+) -> PlayInputDisposition {
+    let _ = state.step_active_mix(key, suffix);
+    PlayInputDisposition::Continue
+}
+
+fn handle_active_new_order_key_input(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+) -> PlayInputDisposition {
+    let _ = state.step_active_new_order(key, suffix);
+    PlayInputDisposition::Continue
+}
+
+fn handle_active_yell_key_input(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    let turn_before = state.turn;
+    if let Some(outcome) = state.step_active_yell(key, suffix) {
+        state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
     }
     Ok(PlayInputDisposition::Continue)
 }

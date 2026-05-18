@@ -17817,8 +17817,8 @@
             ('A', "Attack where?"),
             ('C', "Spell name:"),
             ('D', "What?"),
-            ('M', "Mix what?"),
-            ('N', "New order?"),
+            ('M', MMIX_SPELL_PROMPT_MESSAGE),
+            ('N', "New order:"),
             ('Q', "Save game?"),
             ('U', "Use:"),
             ('W', "What?"),
@@ -18131,8 +18131,8 @@
     fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
         for (key, expected) in [
             ('C', "Spell name:"),
-            ('M', "Mix what?"),
-            ('N', "New order?"),
+            ('M', MMIX_SPELL_PROMPT_MESSAGE),
+            ('N', "New order:"),
             ('R', "Ready:"),
             ('U', "No usable items."),
             ('Y', "Yell what?"),

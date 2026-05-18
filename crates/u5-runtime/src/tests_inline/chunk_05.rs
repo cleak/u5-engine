@@ -577,7 +577,8 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(foot.message, "Yell what? Use Y<word>.");
+        assert!(foot.active_yell.is_some());
+        assert!(foot.message.contains("Yell what?"));
         assert_eq!(foot.turn, 0);
     }
 

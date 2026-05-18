@@ -154,6 +154,350 @@ impl PlayState {
         Ok(None)
     }
 
+    pub fn start_mix_reagents_prompt(&mut self) -> MoveOutcome {
+        if self.reagents.iter().all(|count| *count == 0) {
+            self.message = MMIX_NO_REAGENTS_OWNED_MESSAGE.to_string();
+            return MoveOutcome::Blocked;
+        }
+        self.active_mix = Some(MixSession::new());
+        self.message = self.render_active_mix();
+        MoveOutcome::Observed
+    }
+
+    pub fn render_active_mix(&self) -> String {
+        self.active_mix
+            .as_ref()
+            .map(|session| self.render_mix_session(session))
+            .unwrap_or_else(mix_prompt_message)
+    }
+
+    pub fn render_mix_session(&self, session: &MixSession) -> String {
+        match session.phase {
+            MixPhase::Spell => {
+                let spell = if session.spell_buffer.is_empty() {
+                    "_".to_string()
+                } else {
+                    session.spell_buffer.clone()
+                };
+                format!(
+                    "{MMIX_SPELL_PROMPT_MESSAGE} {spell}\nType selector letters; Enter accepts; Esc cancels."
+                )
+            }
+            MixPhase::Reagents => {
+                let mut lines =
+                    vec!["Mix reagents: Enter/Space toggles, M accepts, Esc cancels.".to_string()];
+                let visible = self.mix_visible_reagents();
+                for (row, index) in visible.iter().copied().enumerate() {
+                    let reagent = REAGENT_VENDOR_ORDER[index];
+                    let marker = if row == session.reagent_cursor {
+                        ">"
+                    } else {
+                        " "
+                    };
+                    let selected = if session.reagent_mask & REAGENT_MASKS[index] != 0 {
+                        "*"
+                    } else {
+                        " "
+                    };
+                    lines.push(format!(
+                        "{marker}{selected} {}. {} ({})",
+                        row + 1,
+                        reagent.abbreviation(),
+                        self.reagents[index]
+                    ));
+                }
+                if visible.is_empty() {
+                    lines.push(MMIX_NO_REAGENTS_OWNED_MESSAGE.to_string());
+                }
+                lines.join("\n")
+            }
+            MixPhase::Quantity => {
+                let quantity = if session.quantity_buffer.is_empty() {
+                    "_".to_string()
+                } else {
+                    session.quantity_buffer.clone()
+                };
+                format!(
+                    "{MMIX_QUANTITY_PROMPT_MESSAGE} {quantity}\nEnter accepts; Backspace erases; Esc cancels."
+                )
+            }
+        }
+    }
+
+    pub fn step_active_mix(&mut self, key: char, suffix: &str) -> Option<MoveOutcome> {
+        let Some(mut session) = self.active_mix.take() else {
+            return None;
+        };
+        let had_suffix = !suffix.is_empty();
+        for ch in std::iter::once(key).chain(suffix.chars()) {
+            if let Some(outcome) = self.step_mix_session_char(&mut session, ch) {
+                return Some(outcome);
+            }
+        }
+        if had_suffix {
+            if session.phase == MixPhase::Spell && !session.spell_buffer.is_empty() {
+                self.accept_mix_spell(&mut session);
+            } else if session.phase == MixPhase::Quantity && !session.quantity_buffer.is_empty() {
+                if let Some(outcome) = self.complete_mix_session(&mut session) {
+                    return Some(outcome);
+                }
+            }
+        }
+        self.message = self.render_mix_session(&session);
+        self.active_mix = Some(session);
+        None
+    }
+
+    fn step_mix_session_char(&mut self, session: &mut MixSession, ch: char) -> Option<MoveOutcome> {
+        match session.phase {
+            MixPhase::Spell => match cast_input_action(ch) {
+                CastInputAction::Cancel => {
+                    self.message = "None!".to_string();
+                    Some(MoveOutcome::PromptDeclined)
+                }
+                CastInputAction::Complete => {
+                    if session.spell_buffer.is_empty() {
+                        self.message = "None!".to_string();
+                        Some(MoveOutcome::PromptDeclined)
+                    } else {
+                        self.accept_mix_spell(session);
+                        None
+                    }
+                }
+                CastInputAction::Backspace => {
+                    session.spell_buffer.pop();
+                    None
+                }
+                CastInputAction::Append(ch) => {
+                    if session.spell_buffer.len() < SPELL_SELECTOR_MAX_LEN {
+                        session.spell_buffer.push(ch);
+                    }
+                    if session.spell_buffer.len() >= SPELL_SELECTOR_MAX_LEN {
+                        self.accept_mix_spell(session);
+                    }
+                    None
+                }
+                CastInputAction::Discard => None,
+            },
+            MixPhase::Reagents => match ch {
+                '\u{1b}' => {
+                    self.message = "None!".to_string();
+                    Some(MoveOutcome::PromptDeclined)
+                }
+                '\r' | '\n' | ' ' => {
+                    self.toggle_mix_reagent(session);
+                    None
+                }
+                'M' | 'm' => {
+                    session.phase = MixPhase::Quantity;
+                    session.quantity_buffer.clear();
+                    None
+                }
+                '>' | '+' | '2' | 'j' | 'J' => {
+                    self.move_mix_reagent_cursor(session, 1);
+                    None
+                }
+                '<' | '-' | '8' | 'k' | 'K' => {
+                    self.move_mix_reagent_cursor(session, -1);
+                    None
+                }
+                '1'..='8' => {
+                    let row = (ch as u8 - b'1') as usize;
+                    self.toggle_mix_reagent_row(session, row);
+                    None
+                }
+                _ => None,
+            },
+            MixPhase::Quantity => match ch {
+                '\u{1b}' => {
+                    self.message = "None!".to_string();
+                    Some(MoveOutcome::PromptDeclined)
+                }
+                '\r' | '\n' | ' ' => self.complete_mix_session(session),
+                '\u{8}' | '\u{7f}' => {
+                    session.quantity_buffer.pop();
+                    None
+                }
+                ch if ch.is_ascii_digit()
+                    && session.quantity_buffer.len() < MMIX_QUANTITY_PROMPT_DIGITS =>
+                {
+                    session.quantity_buffer.push(ch);
+                    if session.quantity_buffer.len() >= MMIX_QUANTITY_PROMPT_DIGITS {
+                        return self.complete_mix_session(session);
+                    }
+                    None
+                }
+                _ => None,
+            },
+        }
+    }
+
+    fn accept_mix_spell(&mut self, session: &mut MixSession) {
+        let code = inline_spell_code(&session.spell_buffer);
+        session.spell_buffer = code.clone();
+        session.spell_index = spell_index_from_code(&code);
+        session.phase = MixPhase::Reagents;
+        session.reagent_cursor = 0;
+    }
+
+    fn complete_mix_session(&mut self, session: &mut MixSession) -> Option<MoveOutcome> {
+        let amount = session.quantity_buffer.parse::<u8>().unwrap_or(0);
+        if amount > 0 {
+            for index in selected_reagent_indices(session.reagent_mask) {
+                if self.reagents[index] < amount {
+                    session.quantity_buffer.clear();
+                    self.message = format!(
+                        "{}\n{}",
+                        MMIX_INSUFFICIENT_REAGENTS_MESSAGE,
+                        self.render_mix_session(session)
+                    );
+                    self.active_mix = Some(session.clone());
+                    return Some(MoveOutcome::Blocked);
+                }
+            }
+        }
+        let suffix = format!(
+            "{}/{}/{}",
+            session.spell_buffer, session.reagent_mask, amount
+        );
+        Some(self.mix_reagents_from_suffix(&suffix))
+    }
+
+    fn mix_visible_reagents(&self) -> Vec<usize> {
+        (0..REAGENT_COUNT)
+            .filter(|index| self.reagents[*index] > 0)
+            .collect()
+    }
+
+    fn toggle_mix_reagent(&self, session: &mut MixSession) {
+        let visible = self.mix_visible_reagents();
+        if let Some(index) = visible.get(session.reagent_cursor).copied() {
+            session.reagent_mask ^= REAGENT_MASKS[index];
+        }
+    }
+
+    fn toggle_mix_reagent_row(&self, session: &mut MixSession, row: usize) {
+        let visible = self.mix_visible_reagents();
+        if let Some(index) = visible.get(row).copied() {
+            session.reagent_cursor = row;
+            session.reagent_mask ^= REAGENT_MASKS[index];
+        }
+    }
+
+    fn move_mix_reagent_cursor(&self, session: &mut MixSession, delta: isize) {
+        let visible = self.mix_visible_reagents();
+        if visible.is_empty() {
+            session.reagent_cursor = 0;
+            return;
+        }
+        let len = visible.len() as isize;
+        let current = session.reagent_cursor.min(visible.len() - 1) as isize;
+        session.reagent_cursor = (current + delta).rem_euclid(len) as usize;
+    }
+
+    pub fn start_new_order_prompt(&mut self) -> MoveOutcome {
+        self.active_new_order = Some(NewOrderSession::new());
+        self.message = self.render_active_new_order();
+        MoveOutcome::Observed
+    }
+
+    pub fn render_active_new_order(&self) -> String {
+        self.active_new_order
+            .as_ref()
+            .map(|session| self.render_new_order_session(session))
+            .unwrap_or_else(new_order_prompt_message)
+    }
+
+    pub fn render_new_order_session(&self, session: &NewOrderSession) -> String {
+        match session.first {
+            Some(first) => format!(
+                "New order: first party member {}. Choose second member (1-{}) or Space/Esc to exit.",
+                first + 1,
+                self.party.len().min(6)
+            ),
+            None => format!(
+                "New order: choose first member (1-{}) or Space/Esc to exit.",
+                self.party.len().min(6)
+            ),
+        }
+    }
+
+    pub fn step_active_new_order(&mut self, key: char, suffix: &str) -> Option<MoveOutcome> {
+        let Some(mut session) = self.active_new_order.take() else {
+            return None;
+        };
+        for ch in std::iter::once(key).chain(suffix.chars()) {
+            match ch {
+                '\u{1b}' | ' ' => {
+                    self.message = "None!".to_string();
+                    return Some(MoveOutcome::PromptDeclined);
+                }
+                '1'..='6' => {
+                    let selected = (ch as u8 - b'1') as usize;
+                    if let Some(first) = session.first {
+                        let suffix = format!("{}{}", first + 1, selected + 1);
+                        return Some(self.new_order_from_suffix(&suffix));
+                    }
+                    session.first = Some(selected);
+                }
+                _ => {}
+            }
+        }
+        self.message = self.render_new_order_session(&session);
+        self.active_new_order = Some(session);
+        None
+    }
+
+    pub fn start_yell_prompt(&mut self) -> MoveOutcome {
+        if matches!(self.player.transport, TransportState::Ship { .. }) {
+            return self.yell_command(None);
+        }
+        self.active_yell = Some(YellSession::new());
+        self.message = self.render_active_yell();
+        MoveOutcome::Observed
+    }
+
+    pub fn render_active_yell(&self) -> String {
+        self.active_yell
+            .as_ref()
+            .map(|session| self.render_yell_session(session))
+            .unwrap_or_else(yell_prompt_message)
+    }
+
+    pub fn render_yell_session(&self, session: &YellSession) -> String {
+        let word = if session.buffer.is_empty() {
+            "_".to_string()
+        } else {
+            session.buffer.clone()
+        };
+        format!("Yell what? {word}\nType a word and press Enter; Esc cancels.")
+    }
+
+    pub fn step_active_yell(&mut self, key: char, suffix: &str) -> Option<MoveOutcome> {
+        let Some(mut session) = self.active_yell.take() else {
+            return None;
+        };
+        if key == '\u{1b}' {
+            self.message = "None!".to_string();
+            return Some(MoveOutcome::PromptDeclined);
+        }
+        let mut line = String::new();
+        if !matches!(key, '\r' | '\n') {
+            line.push(key);
+        }
+        line.push_str(suffix);
+        if line.is_empty() && matches!(key, '\r' | '\n') {
+            return Some(self.yell_command(Some("")));
+        }
+        if !line.is_empty() {
+            session.buffer.push_str(&line);
+            return Some(self.yell_command(Some(&session.buffer)));
+        }
+        self.message = self.render_yell_session(&session);
+        self.active_yell = Some(session);
+        None
+    }
+
     pub fn render_stats_panel_view(&self) -> String {
         render_stats_panel(self, self.active_player)
     }

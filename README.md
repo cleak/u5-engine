@@ -211,8 +211,8 @@ through to vi diagonal movement fallbacks. Bare `C` opens a spell-name prompt
 that accepts compact selector letters, ignores `J`/`O`, supports backspace and
 Escape/empty cancellation, and dispatches through the same spell resource and
 scene gates as inline `C1...` casts. Bare `U` opens the Use picker, bare `R`
-opens the Ready picker, bare `M` prompts for the inline mix shortcut, bare `N`
-prompts for the inline New Order shortcut, and bare `Y` prompts for a yell word.
+opens the Ready picker, bare `M` opens the reagent mixer, bare `N` opens the
+New Order party-slot prompt, and bare `Y` opens the free-text yell prompt.
 `J` routes to the first-playable Jimmy/key
 guard instead of the movement helper, with optional town lock and dungeon door
 metadata able to unlock authored door cells. Numeric diagonals still refuse as
@@ -300,8 +300,9 @@ Stop hook from party slot 1, starting a ten-turn runtime counter after the saved
 charge/MP/level gates
 succeed; while it is active, consumed turns keep clocks, light, doors, and
 static animation moving but freeze scheduled NPCs and active-object
-animation/wandering. `M<spell>/<reagent-mask>/<quantity>` mixes saved reagent
-counters into pre-mixed spell charges for terminal testing. For example,
+animation/wandering. Bare `M` opens the reagent mixer; inline
+`M<spell>/<reagent-mask>/<quantity>` still mixes saved reagent counters into
+pre-mixed spell charges for terminal testing. For example,
 `MIL/0x80/1` mixes In Lor from sulfurous ash, while `MAS/0x88/1` mixes An
 Sanct/Open from sulfurous ash plus blood moss. Exact public recipe masks add
 charges capped at 99; wrong masks consume the selected reagents without adding
