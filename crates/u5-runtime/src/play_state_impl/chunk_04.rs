@@ -2218,6 +2218,7 @@ impl PlayState {
             ask_who_response: 0,
             yield_on_pause: false,
             yield_on_ask: false,
+            yield_on_gold_payment: false,
         };
 
         // Resolve which field(s) to run through the byte runner.

@@ -62,6 +62,11 @@ pub struct TlkRunInputs<'a> {
     /// interactive conversation wrapper can collect a free-text answer
     /// and resume the same stream with the matched party slot.
     pub yield_on_ask: bool,
+    /// `0x85` GOLD-PAYMENT behaviour. When `true`, the runner stops
+    /// before applying the payment branch so the interactive wrapper
+    /// can ask the player whether to pay and then resume from the
+    /// payment opcode with the selected answer.
+    pub yield_on_gold_payment: bool,
 }
 
 /// Reason the runner stopped processing the current stream.
@@ -84,6 +89,11 @@ pub enum TlkRunStop {
     AskingPartyName(usize),
     /// Stopped at `0x88` ASK-WHO (only when `yield_on_ask` is set).
     AskingWho(usize),
+    /// Stopped at `0x85` GOLD-PAYMENT (only when
+    /// `yield_on_gold_payment` is set). `cursor` points back to the
+    /// payment opcode so a caller can resume from the branch point
+    /// after the player answers.
+    AskingGoldPayment { cursor: usize, amount: u16 },
     /// Encountered a malformed multi-byte introducer (short arg span).
     MalformedIntroducer(usize),
     /// Encountered an unresolved GOTO-LABEL target (label byte not found
@@ -270,6 +280,7 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                 out.events.push(TlkRunEvent::AskedWho(slot));
             }
             TLK_CODE_GOLD_PAYMENT => {
+                let code_start = pos - 1;
                 let arg_start = pos;
                 let span = bytes.get(pos..pos + 3);
                 let Some(span) = span else {
@@ -280,6 +291,14 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                 pos += 3;
                 let arg_end = pos;
                 if let Some(amount) = tlk_gold_payment_amount(span[0], span[1], span[2]) {
+                    if inputs.yield_on_gold_payment {
+                        out.stop = TlkRunStop::AskingGoldPayment {
+                            cursor: code_start,
+                            amount,
+                        };
+                        out.consumed = pos;
+                        return out;
+                    }
                     let accepted = inputs.gold_payment_accepted
                         && inputs
                             .gold_available

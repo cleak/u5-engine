@@ -37,6 +37,13 @@ pub enum ConversationSessionPhase {
     /// A TLK `0x88` ASK-WHO prompt is waiting for a free-text party-member
     /// name, then resumes the response at `cursor`.
     AwaitingAskWho { field_idx: usize, cursor: usize },
+    /// A TLK `0x85` GOLD-PAYMENT prompt is waiting for a yes/no answer,
+    /// then resumes the response from the payment opcode at `cursor`.
+    AwaitingGoldPayment {
+        field_idx: usize,
+        cursor: usize,
+        amount: u16,
+    },
     /// NPC's Bye response is being presented; the session is about
     /// to close. The harness flushes the response and then calls
     /// `acknowledge_close`.
@@ -150,6 +157,18 @@ impl ConversationSession {
                 out.asked_who = Some(slot);
                 return out;
             }
+            ConversationSessionPhase::AwaitingGoldPayment {
+                field_idx,
+                cursor,
+                amount: _,
+            } => {
+                let Some(accepted) = conversation_payment_answer(line) else {
+                    return ConversationSessionOutput::default();
+                };
+                self.phase = ConversationSessionPhase::AwaitingKeyword;
+                return self
+                    .run_field_from_with_options(field_idx, cursor, ctx, 0, 0, accepted, false);
+            }
             _ => return ConversationSessionOutput::default(),
         }
         self.keyword_turns = self.keyword_turns.saturating_add(1);
@@ -198,13 +217,18 @@ impl ConversationSession {
     }
 
     /// Current prompt text for the active outer input loop.
-    pub fn prompt_message(&self) -> &'static str {
+    pub fn prompt_message(&self) -> String {
         match self.phase {
-            ConversationSessionPhase::AwaitingKeyword => "Your interest?",
-            ConversationSessionPhase::AwaitingAskPartyName { .. } => "Name?",
-            ConversationSessionPhase::AwaitingAskWho { .. } => "Who?",
-            ConversationSessionPhase::Opened => "Your interest?",
-            ConversationSessionPhase::PresentingBye | ConversationSessionPhase::Closed => "",
+            ConversationSessionPhase::AwaitingKeyword => "Your interest?".to_string(),
+            ConversationSessionPhase::AwaitingAskPartyName { .. } => "Name?".to_string(),
+            ConversationSessionPhase::AwaitingAskWho { .. } => "Who?".to_string(),
+            ConversationSessionPhase::AwaitingGoldPayment { amount, .. } => {
+                format!("Pay {amount} gold? (Y/N)")
+            }
+            ConversationSessionPhase::Opened => "Your interest?".to_string(),
+            ConversationSessionPhase::PresentingBye | ConversationSessionPhase::Closed => {
+                String::new()
+            }
         }
     }
 
@@ -243,9 +267,36 @@ impl ConversationSession {
         ask_party_name_response: u8,
         ask_who_response: u8,
     ) -> ConversationSessionOutput {
+        self.run_field_from_with_options(
+            field_idx,
+            start,
+            ctx,
+            ask_party_name_response,
+            ask_who_response,
+            ctx.gold_payment_accepted,
+            true,
+        )
+    }
+
+    fn run_field_from_with_options(
+        &mut self,
+        field_idx: usize,
+        start: usize,
+        ctx: &ConversationContext<'_>,
+        ask_party_name_response: u8,
+        ask_who_response: u8,
+        gold_payment_accepted: bool,
+        yield_on_gold_payment: bool,
+    ) -> ConversationSessionOutput {
         let mut out = ConversationSessionOutput::default();
         let Some(run) = self.fields.get(field_idx).map(|bytes| {
-            let inputs = make_inputs(ctx, ask_party_name_response, ask_who_response);
+            let inputs = make_inputs(
+                ctx,
+                ask_party_name_response,
+                ask_who_response,
+                gold_payment_accepted,
+                yield_on_gold_payment,
+            );
             run_tlk_stream_from(bytes, start, &inputs)
         }) else {
             return out;
@@ -279,6 +330,13 @@ impl ConversationSession {
             TlkRunStop::AskingWho(cursor) => {
                 self.phase = ConversationSessionPhase::AwaitingAskWho { field_idx, cursor };
             }
+            TlkRunStop::AskingGoldPayment { cursor, amount } => {
+                self.phase = ConversationSessionPhase::AwaitingGoldPayment {
+                    field_idx,
+                    cursor,
+                    amount,
+                };
+            }
             TlkRunStop::EndOfStream | TlkRunStop::NulTerminator => {
                 // End-of-stream forces a hard close; the keyword loop must
                 // not continue prompting after that.
@@ -294,6 +352,8 @@ fn make_inputs<'a>(
     ctx: &'a ConversationContext<'a>,
     ask_party_name_response: u8,
     ask_who_response: u8,
+    gold_payment_accepted: bool,
+    yield_on_gold_payment: bool,
 ) -> TlkRunInputs<'a> {
     TlkRunInputs {
         avatar_name: ctx.avatar_name,
@@ -301,12 +361,25 @@ fn make_inputs<'a>(
         moral_standing: ctx.moral_standing,
         dictionary: ctx.dictionary,
         curse_seen: false,
-        gold_payment_accepted: ctx.gold_payment_accepted,
+        gold_payment_accepted,
         gold_available: ctx.gold_available,
         ask_party_name_response,
         ask_who_response,
         yield_on_pause: false,
         yield_on_ask: true,
+        yield_on_gold_payment,
+    }
+}
+
+fn conversation_payment_answer(line: &str) -> Option<bool> {
+    let trimmed = line.trim_start();
+    if trimmed.is_empty() {
+        return Some(false);
+    }
+    match trimmed.bytes().next()?.to_ascii_uppercase() {
+        b'Y' => Some(true),
+        b'N' | b' ' => Some(false),
+        _ => None,
     }
 }
 
@@ -439,6 +512,114 @@ mod tests {
         let second = s.submit_keyword("iolo", &context);
         assert_eq!(second.asked_party_name, Some(2));
         assert_eq!(second.text, " Done.");
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    #[test]
+    fn gold_payment_prompt_waits_for_answer_then_resumes_branch() {
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("PAY"),
+            {
+                let mut bytes = enc("A toll.");
+                bytes.extend_from_slice(&[TLK_CODE_GOLD_PAYMENT, b'0', b'2', b'5']);
+                bytes.push(TLK_CODE_GOTO_LABEL_FIRST);
+                bytes.extend_from_slice(&enc(" Paid."));
+                bytes.push(TLK_CODE_END_OF_RESPONSE);
+                bytes.push(TLK_CODE_GOTO_LABEL_LAST);
+                bytes.extend_from_slice(&enc(" Refused."));
+                bytes.push(TLK_CODE_END_OF_RESPONSE);
+                bytes
+            },
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Greetings.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "PAY".to_string(),
+            "A toll.".to_string(),
+        ];
+        let context = ConversationContext {
+            gold_payment_accepted: true,
+            gold_available: Some(30),
+            ..ctx()
+        };
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&context);
+
+        let prompt = s.submit_keyword("pay", &context);
+        assert_eq!(prompt.text, "A toll.");
+        assert_eq!(s.prompt_message(), "Pay 25 gold? (Y/N)");
+        assert!(matches!(
+            s.phase,
+            ConversationSessionPhase::AwaitingGoldPayment { amount: 25, .. }
+        ));
+
+        let paid = s.submit_keyword("y", &context);
+        assert_eq!(paid.text, " Paid.");
+        assert_eq!(
+            paid.gold_payments,
+            vec![ConversationGoldPayment {
+                amount: 25,
+                accepted: true
+            }]
+        );
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    #[test]
+    fn gold_payment_empty_answer_declines_and_takes_refusal_branch() {
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("PAY"),
+            {
+                let mut bytes = vec![TLK_CODE_GOLD_PAYMENT, b'0', b'2', b'5'];
+                bytes.push(TLK_CODE_GOTO_LABEL_FIRST);
+                bytes.extend_from_slice(&enc(" Paid."));
+                bytes.push(TLK_CODE_END_OF_RESPONSE);
+                bytes.push(TLK_CODE_GOTO_LABEL_LAST);
+                bytes.extend_from_slice(&enc(" Refused."));
+                bytes.push(TLK_CODE_END_OF_RESPONSE);
+                bytes
+            },
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Greetings.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "PAY".to_string(),
+            String::new(),
+        ];
+        let context = ConversationContext {
+            gold_payment_accepted: true,
+            gold_available: Some(30),
+            ..ctx()
+        };
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&context);
+        s.submit_keyword("pay", &context);
+
+        let declined = s.submit_keyword("", &context);
+        assert_eq!(declined.text, " Refused.");
+        assert_eq!(
+            declined.gold_payments,
+            vec![ConversationGoldPayment {
+                amount: 25,
+                accepted: false
+            }]
+        );
         assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
 

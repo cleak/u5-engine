@@ -1520,6 +1520,17 @@
         ]);
         state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
         let (text, ended) = state.submit_active_conversation_keyword("pay");
+        assert_eq!(text, "");
+        assert!(!ended);
+        assert_eq!(state.gold, 30);
+        assert!(matches!(
+            state
+                .active_conversation
+                .as_ref()
+                .map(|session| session.prompt_message()),
+            Some(prompt) if prompt == "Pay 25 gold? (Y/N)"
+        ));
+        let (text, ended) = state.submit_active_conversation_keyword("y");
         assert_eq!(text, "Paid");
         assert!(!ended);
         assert_eq!(state.gold, 5);
@@ -1528,6 +1539,10 @@
         poor_state.gold = 10;
         poor_state.open_conversation_session(&dialogue, &raw);
         let (text, ended) = poor_state.submit_active_conversation_keyword("pay");
+        assert_eq!(text, "");
+        assert!(!ended);
+        assert_eq!(poor_state.gold, 10);
+        let (text, ended) = poor_state.submit_active_conversation_keyword("y");
         assert_eq!(text, "Too poor");
         assert!(!ended);
         assert_eq!(poor_state.gold, 10);
