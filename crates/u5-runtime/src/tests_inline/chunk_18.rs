@@ -237,6 +237,47 @@
     }
 
     #[test]
+    fn combat_allowed_lock_utility_spells_reach_resource_gate_before_unmodeled_failure() {
+        let mut magic_lock = britannia_state(open_world_grid(), 5, 5);
+        magic_lock.combat_active = true;
+        magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX] = 1;
+        magic_lock.party[0].mana = MAGIC_LOCK_COST;
+        magic_lock.party[0].level = MAGIC_LOCK_COST;
+
+        assert_eq!(
+            magic_lock
+                .cast_spell_from_suffix("1AEP", Path::new(""))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX], 0);
+        assert_eq!(magic_lock.party[0].mana, 0);
+        assert_eq!(magic_lock.turn, 1);
+        assert_eq!(magic_lock.clock, GameClock::new(12, 2).unwrap());
+        assert_eq!(magic_lock.message, "Failed!");
+
+        let mut unlock_magic = britannia_state(open_world_grid(), 5, 5);
+        unlock_magic.combat_active = true;
+        unlock_magic.spell_charges[UNLOCK_MAGIC_SPELL_INDEX] = 1;
+        unlock_magic.party[0].mana = UNLOCK_MAGIC_COST;
+        unlock_magic.party[0].level = UNLOCK_MAGIC_COST;
+
+        assert_eq!(
+            unlock_magic
+                .cast_spell_from_suffix("1EIP", Path::new(""))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(unlock_magic.spell_charges[UNLOCK_MAGIC_SPELL_INDEX], 0);
+        assert_eq!(unlock_magic.party[0].mana, 0);
+        assert_eq!(unlock_magic.turn, 1);
+        assert_eq!(unlock_magic.clock, GameClock::new(12, 2).unwrap());
+        assert_eq!(unlock_magic.message, "Failed!");
+    }
+
+    #[test]
     fn cast_magic_lock_non_magic_sidecar_consumes_cast_and_fails() {
         let dir = debug_game_dir();
         fs::write(dir.join(TOWN_LOCK_TABLE_FILE), "CASTLE:0 0 2 1 97 96\n").unwrap();
@@ -260,6 +301,28 @@
         assert_eq!(state.clock, GameClock::new(12, 1).unwrap());
         assert_eq!(state.message, "Failed!");
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn combat_allowed_vanish_reaches_resource_gate_before_unmodeled_failure() {
+        let mut state = britannia_state(open_world_grid(), 5, 5);
+        state.combat_active = true;
+        state.spell_charges[VANISH_SPELL_INDEX] = 1;
+        state.party[0].mana = VANISH_COST;
+        state.party[0].level = VANISH_COST;
+
+        assert_eq!(
+            state
+                .cast_spell_from_suffix("1AY6", Path::new(""))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.spell_charges[VANISH_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+        assert_eq!(state.message, "Failed!");
     }
 
     #[test]

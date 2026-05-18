@@ -1943,10 +1943,6 @@ impl PlayState {
         caster_index: usize,
         direction: Option<Direction>,
     ) -> MoveOutcome {
-        let Area::Town { .. } = self.area else {
-            self.message = "Not here!".to_string();
-            return MoveOutcome::Blocked;
-        };
         let Some(direction) = direction else {
             self.message = "Direction? Use C1AY8/C1AY6/C1AY2/C1AY4.".to_string();
             return MoveOutcome::Blocked;
@@ -1955,6 +1951,17 @@ impl PlayState {
             self.message = "Vanish requires a cardinal direction.".to_string();
             return MoveOutcome::Blocked;
         }
+        if self.combat_active {
+            return self.cast_unmodeled_combat_utility_spell(
+                caster_index,
+                VANISH_SPELL_INDEX,
+                VANISH_COST,
+            );
+        }
+        let Area::Town { .. } = self.area else {
+            self.message = "Not here!".to_string();
+            return MoveOutcome::Blocked;
+        };
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, VANISH_SPELL_INDEX, VANISH_COST)
         {
@@ -2008,6 +2015,21 @@ impl PlayState {
                 }
                 (64..=159).contains(&object.tile).then_some(slot)
             })
+    }
+
+    pub fn cast_unmodeled_combat_utility_spell(
+        &mut self,
+        caster_index: usize,
+        spell_index: usize,
+        mana_cost: u8,
+    ) -> MoveOutcome {
+        if let Some(outcome) = self.cast_spell_resource_gate(caster_index, spell_index, mana_cost) {
+            return outcome;
+        }
+
+        self.advance_turn();
+        self.message = "Failed!".to_string();
+        MoveOutcome::Blocked
     }
 
     pub fn cast_active_effect_spell(
@@ -2822,6 +2844,13 @@ impl PlayState {
         caster_index: usize,
         game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
+        if self.combat_active {
+            return Ok(self.cast_unmodeled_combat_utility_spell(
+                caster_index,
+                MAGIC_LOCK_SPELL_INDEX,
+                MAGIC_LOCK_COST,
+            ));
+        }
         let Area::Town { scene, floor } = self.area else {
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
@@ -2864,6 +2893,13 @@ impl PlayState {
         caster_index: usize,
         game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
+        if self.combat_active {
+            return Ok(self.cast_unmodeled_combat_utility_spell(
+                caster_index,
+                UNLOCK_MAGIC_SPELL_INDEX,
+                UNLOCK_MAGIC_COST,
+            ));
+        }
         let Area::Town { scene, floor } = self.area else {
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
