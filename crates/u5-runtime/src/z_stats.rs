@@ -86,6 +86,22 @@ pub struct CastSession {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CastFollowupSession {
+    pub caster_index: usize,
+    pub spell_code: String,
+    pub kind: CastFollowupKind,
+    pub combat_actor_slot: Option<usize>,
+    pub combat_had_foe: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CastFollowupKind {
+    Direction { pass_allowed: bool },
+    PartyTarget,
+    GatePhase,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MixSession {
     pub phase: MixPhase,
     pub spell_buffer: String,
@@ -259,6 +275,24 @@ impl CastSession {
             caster_index: actor_slot,
             buffer: String::new(),
             combat_actor_slot: Some(actor_slot),
+            combat_had_foe,
+        }
+    }
+}
+
+impl CastFollowupSession {
+    pub fn new(
+        caster_index: usize,
+        spell_code: String,
+        kind: CastFollowupKind,
+        combat_actor_slot: Option<usize>,
+        combat_had_foe: bool,
+    ) -> Self {
+        Self {
+            caster_index,
+            spell_code,
+            kind,
+            combat_actor_slot,
             combat_had_foe,
         }
     }

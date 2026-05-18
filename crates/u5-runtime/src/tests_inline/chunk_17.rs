@@ -288,6 +288,144 @@
     }
 
     #[test]
+    fn active_cast_direction_followup_collects_cardinal_before_spending_resources() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(BLINK_TARGET_TABLE_FILE),
+            "CASTLE:0 0 1 1 E 3 1 16 16\n",
+        )
+        .unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.spell_charges[BLINK_SPELL_INDEX] = 1;
+        state.party[0].mana = BLINK_COST;
+        state.party[0].level = BLINK_COST;
+
+        assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+        assert!(state.step_active_cast('I', "P", &dir).unwrap().is_none());
+        assert!(state.step_active_cast(' ', "", &dir).unwrap().is_none());
+        assert!(state.active_cast.is_none());
+        assert!(state.active_cast_followup.is_some());
+        assert_eq!(state.message, "Direction-");
+        assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 1);
+        assert_eq!(state.party[0].mana, BLINK_COST);
+        assert_eq!(state.turn, 0);
+
+        assert!(
+            state
+                .step_active_cast_followup('X', "", &dir)
+                .unwrap()
+                .is_none()
+        );
+        assert!(state.active_cast_followup.is_some());
+        assert_eq!(state.message, "Direction-");
+
+        let result = state
+            .step_active_cast_followup('6', "", &dir)
+            .unwrap()
+            .expect("east direction should finish Blink");
+        assert_eq!(result.0, MoveOutcome::Cast);
+        assert_eq!(result.1, None);
+        assert!(state.active_cast_followup.is_none());
+        assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Blinked East to (3, 1) in CASTLE:0 floor 0.");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn active_cast_party_target_followup_collects_party_slot() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'M',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: HEAL_COST,
+                hp: 20,
+                max_hp: 20,
+                level: HEAL_COST,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'B',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 3,
+                max_hp: 20,
+                level: 1,
+            },
+        ];
+        state.spell_charges[HEAL_SPELL_INDEX] = 1;
+
+        assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+        assert!(state.step_active_cast('M', "", Path::new("")).unwrap().is_none());
+        assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
+        assert!(state.active_cast_followup.is_some());
+        assert!(state.message.contains("Whom?"));
+        assert_eq!(state.spell_charges[HEAL_SPELL_INDEX], 1);
+        assert_eq!(state.party[0].mana, HEAL_COST);
+        assert_eq!(state.turn, 0);
+
+        assert!(
+            state
+                .step_active_cast_followup('9', "", Path::new(""))
+                .unwrap()
+                .is_none()
+        );
+        assert!(state.active_cast_followup.is_some());
+
+        let result = state
+            .step_active_cast_followup('2', "", Path::new(""))
+            .unwrap()
+            .expect("party target should finish Heal");
+        assert_eq!(result.0, MoveOutcome::Cast);
+        assert!(state.party[1].hp > 3);
+        assert_eq!(state.spell_charges[HEAL_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.starts_with("Healed party member 2"));
+    }
+
+    #[test]
+    fn active_cast_gate_phase_followup_collects_moon_phase() {
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
+        state.party[0].mana = GATE_TRAVEL_COST;
+        state.party[0].level = GATE_TRAVEL_COST;
+
+        assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
+        assert!(state.step_active_cast('P', "RV", Path::new("")).unwrap().is_none());
+        assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
+        assert!(state.active_cast_followup.is_some());
+        assert!(state.message.contains("To phase?"));
+        assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 1);
+        assert_eq!(state.party[0].mana, GATE_TRAVEL_COST);
+        assert_eq!(state.turn, 0);
+
+        assert!(
+            state
+                .step_active_cast_followup('9', "", Path::new(""))
+                .unwrap()
+                .is_none()
+        );
+        assert!(state.active_cast_followup.is_some());
+
+        let result = state
+            .step_active_cast_followup('1', "", Path::new(""))
+            .unwrap()
+            .expect("phase choice should finish Gate Travel");
+        assert_eq!(result.0, MoveOutcome::Blocked);
+        assert!(state.active_cast_followup.is_none());
+        assert_eq!(state.spell_charges[GATE_TRAVEL_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Gate Travel phase 1 is not set.");
+    }
+
+    #[test]
     fn active_mix_prompt_collects_spell_reagent_and_quantity() {
         let mut state = test_state(open_grid(), 5, 5);
         state.reagents = [0; REAGENT_COUNT];

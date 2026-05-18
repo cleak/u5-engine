@@ -212,9 +212,11 @@ Dungeon command letters whose full systems are outside this slice no longer fall
 through to vi diagonal movement fallbacks. Bare `C` opens a spell-name prompt
 that accepts compact selector letters, ignores `J`/`O`, supports backspace and
 Escape/empty cancellation, and dispatches through the same spell resource and
-scene gates as inline `C1...` casts. Bare `U` opens the Use picker, bare `R`
-opens the Ready picker, bare `M` opens the reagent mixer, bare `N` opens the
-New Order party-slot prompt, and bare `Y` opens the free-text yell prompt.
+scene gates as inline `C1...` casts. Spells that need a follow-up direction,
+party member, or Gate Travel moon phase now prompt for that choice before any
+spell charge or mana is spent. Bare `U` opens the Use picker, bare `R` opens the
+Ready picker, bare `M` opens the reagent mixer, bare `N` opens the New Order
+party-slot prompt, and bare `Y` opens the free-text yell prompt.
 `J` routes to the first-playable Jimmy/key
 guard instead of the movement helper, with optional town lock and dungeon door
 metadata able to unlock authored door cells. Numeric diagonals still refuse as

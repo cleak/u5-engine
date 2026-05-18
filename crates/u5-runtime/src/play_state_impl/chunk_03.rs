@@ -4,6 +4,16 @@ use std::path::Path;
 use crate::play_state_impl::chunk_04::sextant_coordinate;
 use crate::*;
 
+fn cardinal_direction_key(direction: Direction) -> char {
+    match direction {
+        Direction::North => '8',
+        Direction::East => '6',
+        Direction::South => '2',
+        Direction::West => '4',
+        _ => unreachable!("caller filters cardinal directions"),
+    }
+}
+
 impl PlayState {
     pub fn z_stats(&mut self) -> MoveOutcome {
         let selected = self.z_stats_initial_party_index();
@@ -123,11 +133,20 @@ impl PlayState {
                         self.message = "None!".to_string();
                         return Ok(None);
                     }
-                    let suffix = format!("{}{}", session.caster_index + 1, session.buffer);
+                    let spell_code = inline_spell_code(&session.buffer);
+                    let suffix = format!("{}{}", session.caster_index + 1, spell_code);
                     let combat = session
                         .combat_actor_slot
                         .map(|slot| (slot, session.combat_had_foe));
                     let outcome = self.cast_spell_from_suffix(&suffix, game_dir)?;
+                    if self.start_cast_followup_from_prompt(
+                        session.caster_index,
+                        spell_code,
+                        session.combat_actor_slot,
+                        session.combat_had_foe,
+                    ) {
+                        return Ok(None);
+                    }
                     return Ok(Some((outcome, combat)));
                 }
                 CastInputAction::Backspace => {
@@ -138,11 +157,20 @@ impl PlayState {
                         session.buffer.push(ch);
                     }
                     if session.buffer.len() >= SPELL_SELECTOR_MAX_LEN {
-                        let suffix = format!("{}{}", session.caster_index + 1, session.buffer);
+                        let spell_code = inline_spell_code(&session.buffer);
+                        let suffix = format!("{}{}", session.caster_index + 1, spell_code);
                         let combat = session
                             .combat_actor_slot
                             .map(|slot| (slot, session.combat_had_foe));
                         let outcome = self.cast_spell_from_suffix(&suffix, game_dir)?;
+                        if self.start_cast_followup_from_prompt(
+                            session.caster_index,
+                            spell_code,
+                            session.combat_actor_slot,
+                            session.combat_had_foe,
+                        ) {
+                            return Ok(None);
+                        }
                         return Ok(Some((outcome, combat)));
                     }
                 }
@@ -152,6 +180,149 @@ impl PlayState {
         self.message = self.render_cast_session(&session);
         self.active_cast = Some(session);
         Ok(None)
+    }
+
+    pub fn render_active_cast_followup(&self) -> String {
+        self.active_cast_followup
+            .as_ref()
+            .map(|session| match session.kind {
+                CastFollowupKind::Direction { pass_allowed } => {
+                    if pass_allowed {
+                        format!("{SPELL_DIRECTION_PROMPT_PREFIX}\nChoose a cardinal direction; Space passes.")
+                    } else {
+                        SPELL_DIRECTION_PROMPT_PREFIX.to_string()
+                    }
+                }
+                CastFollowupKind::PartyTarget => {
+                    let last = self.party.len().min(6);
+                    format!("Whom? _\nChoose party member 1-{last}; Esc cancels.")
+                }
+                CastFollowupKind::GatePhase => {
+                    "To phase? _\nChoose moon phase 1-8; Esc cancels.".to_string()
+                }
+            })
+            .unwrap_or_else(|| "Cast target?".to_string())
+    }
+
+    pub fn step_active_cast_followup(
+        &mut self,
+        key: char,
+        suffix: &str,
+        game_dir: &Path,
+    ) -> io::Result<Option<(MoveOutcome, Option<(usize, bool)>)>> {
+        let Some(session) = self.active_cast_followup.take() else {
+            return Ok(None);
+        };
+        for ch in std::iter::once(key).chain(suffix.chars()) {
+            match session.kind {
+                CastFollowupKind::Direction { pass_allowed } => {
+                    if ch == '\u{1b}' {
+                        self.message = "None!".to_string();
+                        return Ok(None);
+                    }
+                    if ch == ' ' {
+                        if pass_allowed {
+                            return self.finish_active_cast_followup(session, " ", game_dir);
+                        }
+                        self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
+                        return Ok(None);
+                    }
+                    let Some(direction) =
+                        Direction::from_play_key(ch).filter(|direction| direction.is_cardinal())
+                    else {
+                        continue;
+                    };
+                    let direction_key = cardinal_direction_key(direction);
+                    return self.finish_active_cast_followup(
+                        session,
+                        &direction_key.to_string(),
+                        game_dir,
+                    );
+                }
+                CastFollowupKind::PartyTarget => {
+                    if matches!(ch, '\u{1b}' | ' ' | '\r' | '\n' | '0') {
+                        self.message = "None!".to_string();
+                        return Ok(None);
+                    }
+                    let Some(digit) = ch
+                        .to_digit(10)
+                        .and_then(|digit| usize::try_from(digit).ok())
+                    else {
+                        continue;
+                    };
+                    let max_party_slot = self.party.len().min(6);
+                    if !(1..=max_party_slot).contains(&digit) {
+                        continue;
+                    }
+                    return self.finish_active_cast_followup(session, &digit.to_string(), game_dir);
+                }
+                CastFollowupKind::GatePhase => {
+                    if matches!(ch, '\u{1b}' | ' ' | '\r' | '\n' | '0') {
+                        self.message = "None!".to_string();
+                        return Ok(None);
+                    }
+                    let Some(digit) = ch
+                        .to_digit(10)
+                        .and_then(|digit| usize::try_from(digit).ok())
+                    else {
+                        continue;
+                    };
+                    if !(1..=MOONSTONE_SLOT_COUNT).contains(&digit) {
+                        continue;
+                    }
+                    return self.finish_active_cast_followup(session, &digit.to_string(), game_dir);
+                }
+            }
+        }
+        self.active_cast_followup = Some(session);
+        self.message = self.render_active_cast_followup();
+        Ok(None)
+    }
+
+    fn finish_active_cast_followup(
+        &mut self,
+        session: CastFollowupSession,
+        tail: &str,
+        game_dir: &Path,
+    ) -> io::Result<Option<(MoveOutcome, Option<(usize, bool)>)>> {
+        let suffix = format!("{}{}{}", session.caster_index + 1, session.spell_code, tail);
+        let combat = session
+            .combat_actor_slot
+            .map(|slot| (slot, session.combat_had_foe));
+        let outcome = self.cast_spell_from_suffix(&suffix, game_dir)?;
+        Ok(Some((outcome, combat)))
+    }
+
+    fn start_cast_followup_from_prompt(
+        &mut self,
+        caster_index: usize,
+        spell_code: String,
+        combat_actor_slot: Option<usize>,
+        combat_had_foe: bool,
+    ) -> bool {
+        let kind = if self.message.starts_with("Direction? Use C") {
+            Some(CastFollowupKind::Direction {
+                pass_allowed: spell_code == "HR",
+            })
+        } else if self.message.starts_with("Whom? Use C") {
+            Some(CastFollowupKind::PartyTarget)
+        } else if self.message.starts_with("To phase? Use C") {
+            Some(CastFollowupKind::GatePhase)
+        } else {
+            None
+        };
+        let Some(kind) = kind else {
+            return false;
+        };
+        self.active_cast_followup = Some(CastFollowupSession::new(
+            caster_index,
+            spell_code,
+            kind,
+            combat_actor_slot,
+            combat_had_foe,
+        ));
+        self.message = self.render_active_cast_followup();
+        true
     }
 
     pub fn start_mix_reagents_prompt(&mut self) -> MoveOutcome {
