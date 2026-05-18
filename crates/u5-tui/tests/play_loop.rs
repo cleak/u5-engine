@@ -7,6 +7,8 @@
 
 use std::path::Path;
 
+use u5_runtime::shop_runtime::ReagentShopState;
+use u5_runtime::shop_session::ActiveShopSession;
 use u5_runtime::test_fixtures::*;
 use u5_runtime::*;
 use u5_tui::*;
@@ -230,6 +232,68 @@ fn typeahead_input_parser_only_splits_simple_keys() {
     );
 }
 
+#[test]
+fn typeahead_buffer_pauses_during_modal_prompts() {
+    let mut state = world_state(open_world_grid(), 4, 5);
+    assert!(play_state_accepts_typeahead(&state));
+
+    state.typeahead_buffer_enabled = true;
+    state.pending_moongate = Some(MoongateEntry {
+        x: 4,
+        y: 5,
+        destination_plane: WorldPlane::Britannia,
+        destination_x: 6,
+        destination_y: 7,
+        active_hours: None,
+        expected_tile: None,
+    });
+
+    assert_eq!(play_input_typeahead_chars("12"), Some(vec!['1', '2']));
+    assert!(!play_state_accepts_typeahead(&state));
+    assert_eq!(
+        handle_play_script_command(&mut state, "12", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+
+    assert_eq!(state.turn, 0);
+    assert_eq!((state.player.x, state.player.y), (4, 5));
+    assert!(state.pending_moongate.is_some());
+    assert_eq!(state.message, "Enter moongate? (Y/N).");
+}
+
+#[test]
+fn typeahead_buffer_preserves_multi_digit_shop_quantity_lines() {
+    let mut state = test_state(open_grid(), 1, 1);
+    state.typeahead_buffer_enabled = true;
+    state.gold = 100;
+    state.reagents = [0; REAGENT_COUNT];
+    state.active_shop = Some(ActiveShopSession::Reagent(ReagentShopState::for_herbalist(
+        Herbalist::Mysticism,
+    )));
+
+    assert_eq!(
+        handle_play_script_command(&mut state, "A", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(matches!(
+        state.active_shop.as_ref(),
+        Some(ActiveShopSession::Reagent(
+            ReagentShopState::PickQuantity { .. }
+        ))
+    ));
+    assert!(!play_state_accepts_typeahead(&state));
+    assert_eq!(play_input_typeahead_chars("12"), Some(vec!['1', '2']));
+
+    assert_eq!(
+        handle_play_script_command(&mut state, "12", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+
+    assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 12);
+    assert_eq!(state.gold, 28);
+    assert!(state.message.contains("72 gold"));
+}
+
 // from chunk_18
 #[test]
 fn ansi_function_keys_are_ignored_before_command_dispatch() {
@@ -392,6 +456,20 @@ fn empty_play_input_repeats_pending_moongate_prompt_without_turn() {
 
     assert_eq!(unprompted.turn, 1);
     assert_eq!(unprompted.message, "Passed.");
+}
+
+#[test]
+fn empty_play_input_submits_modal_prompt_enter_without_passing_turn() {
+    let mut prompted = test_state(open_grid(), 1, 1);
+    assert_eq!(prompted.start_yell_prompt(), MoveOutcome::Observed);
+    assert!(prompted.active_yell.is_some());
+    assert!(!play_state_accepts_typeahead(&prompted));
+
+    handle_empty_play_input(&mut prompted, Path::new("")).unwrap();
+
+    assert_eq!(prompted.turn, 0);
+    assert!(prompted.active_yell.is_none());
+    assert_eq!(prompted.message, YELL_NOTHING_SAID_MESSAGE);
 }
 
 // from chunk_19

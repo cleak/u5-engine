@@ -43,6 +43,9 @@ pub fn run_play_loop(
     let mut queued_input = VecDeque::new();
     loop {
         print_play_frame(&mut state, tile_atlas.as_ref())?;
+        if !play_state_accepts_typeahead(&state) {
+            queued_input.clear();
+        }
         let (key, suffix) = if let Some(key) = queued_input.pop_front() {
             (key, String::new())
         } else {
@@ -52,7 +55,7 @@ pub fn run_play_loop(
             if io::stdin().read_line(&mut input)? == 0 {
                 break;
             }
-            if state.typeahead_buffer_enabled {
+            if state.typeahead_buffer_enabled && play_state_accepts_typeahead(&state) {
                 if let Some(keys) = play_input_typeahead_chars(&input) {
                     let mut keys = keys.into_iter();
                     let key = keys.next().expect("typeahead input is non-empty");
@@ -290,8 +293,8 @@ pub fn unclassified_escape_sequence(input: &str) -> bool {
 }
 
 pub fn handle_empty_play_input(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
-    if state.pending_moongate.is_some() {
-        state.resolve_moongate_prompt('\n', game_dir)?;
+    if !play_state_accepts_typeahead(state) {
+        let _ = handle_play_key_input(state, '\n', "", game_dir)?;
     } else if state
         .resolve_current_dungeon_room_trigger(Some(game_dir))?
         .is_none()
@@ -325,9 +328,12 @@ pub fn handle_play_script_command(
         }
         return Ok(PlayInputDisposition::Continue);
     }
-    if state.typeahead_buffer_enabled {
+    if state.typeahead_buffer_enabled && play_state_accepts_typeahead(state) {
         if let Some(keys) = play_input_typeahead_chars(command) {
             for key in keys {
+                if !play_state_accepts_typeahead(state) {
+                    break;
+                }
                 if handle_play_key_input(state, key, "", game_dir)? == PlayInputDisposition::Quit {
                     return Ok(PlayInputDisposition::Quit);
                 }
@@ -340,6 +346,28 @@ pub fn handle_play_script_command(
         return Ok(PlayInputDisposition::Continue);
     };
     handle_play_key_input(state, key, &suffix, game_dir)
+}
+
+pub fn play_state_accepts_typeahead(state: &PlayState) -> bool {
+    state.pending_moongate.is_none()
+        && state.pending_town_arrest.is_none()
+        && state.endgame.is_none()
+        && state.active_blackthorn.is_none()
+        && state.active_shop.is_none()
+        && state.active_conversation.is_none()
+        && state.active_z_stats.is_none()
+        && state.active_ready.is_none()
+        && state.active_use.is_none()
+        && state.active_cast.is_none()
+        && state.active_cast_followup.is_none()
+        && state.active_rest.is_none()
+        && state.active_jimmy.is_none()
+        && state.active_shrine.is_none()
+        && state.active_mix.is_none()
+        && state.active_new_order.is_none()
+        && state.active_yell.is_none()
+        && state.active_direction_prompt.is_none()
+        && state.active_yes_no_prompt.is_none()
 }
 
 pub fn play_script_idle_tick_count(command: &str) -> io::Result<Option<usize>> {
