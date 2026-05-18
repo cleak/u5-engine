@@ -565,6 +565,30 @@ pub const fn npc_dynamic_obstacle_blocks(
     (dx + dy) < NPC_DYNAMIC_OBSTACLE_MANHATTAN_RADIUS as i32
 }
 
+/// `npc-schedules.md §10`: dedicated NPC pathfinding bitmap. This is
+/// intentionally separate from player/vehicle terrain passability; set bits
+/// mark tile ids the NPC workspace treats as open.
+pub const fn npc_path_tile_open(tile: u8) -> bool {
+    matches!(
+        tile,
+        0x01..=0x03
+            | 0x0C..=0x0D
+            | 0x10..=0x1C
+            | 0x27..=0x2B
+            | 0x2E..=0x3F
+            | 0x41..=0x43
+            | 0x46
+            | 0x4A..=0x69
+            | 0x6C..=0x86
+            | 0x88..=0x8F
+            | 0x94..=0xA9
+            | 0xAB..=0xB7
+            | 0xB9
+            | 0xBB..=0xC3
+            | 0xCA..=0xFF
+    )
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeNpc {
     pub slot: usize,

@@ -649,13 +649,13 @@ impl PlayState {
             }
             let start = (self.npcs[index].x, self.npcs[index].y);
             let direct_step = step_toward(start, (tx, ty))
-                .filter(|(nx, ny)| self.npc_can_step(index, *nx, *ny, floor));
+                .filter(|(nx, ny)| self.npc_can_step_toward(index, *nx, *ny, floor, tx, ty));
             let Some((nx, ny)) =
                 direct_step.or_else(|| self.npc_path_step(index, start, (tx, ty), floor))
             else {
                 continue;
             };
-            if !self.npc_can_step(index, nx, ny, floor) {
+            if !self.npc_can_step_toward(index, nx, ny, floor, tx, ty) {
                 continue;
             }
             self.npcs[index].x = nx;
@@ -697,14 +697,28 @@ impl PlayState {
         [primary, secondary]
             .into_iter()
             .flatten()
-            .find_map(|direction| self.town_npc_step_in_direction(npc_index, floor, direction))
+            .find_map(|direction| {
+                self.town_npc_step_in_direction_toward(
+                    npc_index,
+                    floor,
+                    direction,
+                    self.player.x,
+                    self.player.y,
+                )
+            })
     }
 
     pub fn town_npc_flee_step(&self, npc_index: usize, floor: u8) -> Option<(usize, usize)> {
         let mut best = None;
         let mut best_distance = self.town_npc_player_distance(npc_index);
         for direction in TOWN_NPC_CARDINAL_DIRECTIONS {
-            if let Some((nx, ny)) = self.town_npc_step_in_direction(npc_index, floor, direction) {
+            if let Some((nx, ny)) = self.town_npc_step_in_direction_toward(
+                npc_index,
+                floor,
+                direction,
+                self.player.x,
+                self.player.y,
+            ) {
                 let distance = nx.abs_diff(self.player.x) + ny.abs_diff(self.player.y);
                 if distance > best_distance {
                     best_distance = distance;
@@ -728,8 +742,9 @@ impl PlayState {
         for offset in 0..TOWN_NPC_CARDINAL_DIRECTIONS.len() {
             let direction =
                 TOWN_NPC_CARDINAL_DIRECTIONS[(start + offset) % TOWN_NPC_CARDINAL_DIRECTIONS.len()];
-            let Some((nx, ny)) = self.town_npc_step_in_direction(npc_index, floor, direction)
-            else {
+            let Some((nx, ny)) = self.town_npc_step_in_direction_toward(
+                npc_index, floor, direction, waypoint_x, waypoint_y,
+            ) else {
                 continue;
             };
             if bounded
@@ -762,6 +777,27 @@ impl PlayState {
             .then_some((nx, ny))
     }
 
+    pub fn town_npc_step_in_direction_toward(
+        &self,
+        npc_index: usize,
+        floor: u8,
+        direction: Direction,
+        destination_x: usize,
+        destination_y: usize,
+    ) -> Option<(usize, usize)> {
+        let (dx, dy) = direction.delta();
+        let npc = &self.npcs[npc_index];
+        let nx = npc.x as isize + dx;
+        let ny = npc.y as isize + dy;
+        if !(0..32).contains(&nx) || !(0..32).contains(&ny) {
+            return None;
+        }
+        let nx = nx as usize;
+        let ny = ny as usize;
+        self.npc_can_step_toward(npc_index, nx, ny, floor, destination_x, destination_y)
+            .then_some((nx, ny))
+    }
+
     pub fn npc_path_step(
         &self,
         npc_index: usize,
@@ -780,7 +816,9 @@ impl PlayState {
         while let Some((x, y)) = q.pop_front() {
             for (nx, ny) in neighbors(x, y) {
                 let idx = ny * 32 + nx;
-                if seen[idx] || !self.npc_can_step(npc_index, nx, ny, floor) {
+                if seen[idx]
+                    || !self.npc_can_step_toward(npc_index, nx, ny, floor, target.0, target.1)
+                {
                     continue;
                 }
                 seen[idx] = true;

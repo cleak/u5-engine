@@ -645,6 +645,72 @@
     }
 
     #[test]
+    fn scheduled_npc_uses_npc_path_bitmap_for_direct_step() {
+        let mut grid = open_grid();
+        grid[32 + 3] = 0x0C;
+        let mut state = test_state(grid, 10, 10);
+        state.clock = GameClock::new(17, 59).unwrap();
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0,
+                schedule: [0, 0, 0, 0, 2, 4, 1, 1, 1, 0, 0, 0, 8, 12, 18, 22],
+                name: None,
+            },
+        ]);
+
+        state.advance_turn();
+
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (3, 1));
+        assert_eq!(
+            (state.active_objects[1].x, state.active_objects[1].y),
+            (3, 1)
+        );
+    }
+
+    #[test]
+    fn scheduled_npc_dynamic_obstacle_radius_ignores_far_occupant() {
+        let mut state = test_state(open_grid(), 10, 10);
+        state.clock = GameClock::new(17, 59).unwrap();
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0,
+                schedule: [0, 0, 0, 0, 2, 20, 1, 1, 1, 0, 0, 0, 8, 12, 18, 22],
+                name: None,
+            },
+            NpcSlot {
+                slot: 2,
+                type_byte: 1,
+                dialog_id: 0,
+                schedule: [0, 0, 0, 0, 3, 3, 1, 1, 1, 0, 0, 0, 8, 12, 18, 22],
+                name: None,
+            },
+        ]);
+
+        state.advance_turn();
+
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (3, 1));
+        assert_eq!((state.npcs[1].x, state.npcs[1].y), (3, 1));
+    }
+
+    #[test]
     fn adjacent_hostile_town_npc_raises_alarm_without_combat() {
         let dir = debug_game_dir();
         let mut state = test_state(open_grid(), 5, 5);
@@ -834,9 +900,9 @@
     #[test]
     fn scheduled_npc_pathfinds_around_blocked_direct_step() {
         let mut grid = open_grid();
-        grid[1 * 32 + 1] = 24;
-        grid[1 * 32 + 3] = 24;
-        grid[2 * 32 + 2] = 24;
+        grid[32 + 1] = 0x2C;
+        grid[32 + 3] = 0x2C;
+        grid[2 * 32 + 2] = 0x2C;
         let mut state = test_state(grid, 10, 10);
         state.clock = GameClock::new(17, 59).unwrap();
         let slots = vec![

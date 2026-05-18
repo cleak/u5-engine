@@ -16684,6 +16684,28 @@
     }
 
     #[test]
+    fn npc_path_tile_open_matches_published_bitmap_ranges() {
+        // npc-schedules.md section 10: NPC pathfinding uses its own tile-open
+        // bitmap, independent of player and vehicle passability.
+        for tile in [
+            0x01u8, 0x03, 0x0C, 0x0D, 0x10, 0x1C, 0x27, 0x2B, 0x2E, 0x3F, 0x41, 0x43,
+            0x46, 0x4A, 0x69, 0x6C, 0x86, 0x88, 0x8F, 0x94, 0xA9, 0xAB, 0xB7, 0xB9,
+            0xBB, 0xC3, 0xCA, 0xFF,
+        ] {
+            assert!(npc_path_tile_open(tile), "tile 0x{tile:02X} should be open");
+        }
+        for tile in [
+            0x00u8, 0x04, 0x0B, 0x0E, 0x1D, 0x26, 0x2C, 0x2D, 0x40, 0x44, 0x45, 0x47,
+            0x49, 0x6A, 0x6B, 0x87, 0x90, 0x93, 0xAA, 0xB8, 0xBA, 0xC4, 0xC9,
+        ] {
+            assert!(
+                !npc_path_tile_open(tile),
+                "tile 0x{tile:02X} should be blocked"
+            );
+        }
+    }
+
+    #[test]
     fn npc_schedule_state_constants_match_published_state_machine() {
         // npc-schedules.md §7: 0=empty, 1=idle, 2=in-plane move, 3=replay
         // queue, 4=descend, 5=ascend, 6=climb up off, 7=climb down off,
