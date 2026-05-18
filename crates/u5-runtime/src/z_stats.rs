@@ -10,6 +10,7 @@ pub const USE_PICKER_PANEL_ROWS: usize = 8;
 pub enum ZStatsPage {
     Stats,
     Equipment,
+    SpellBook,
     Reagents,
     Spells,
     SpecialUse,
@@ -17,9 +18,10 @@ pub enum ZStatsPage {
 }
 
 impl ZStatsPage {
-    pub const ORDERED: [Self; 6] = [
+    pub const ORDERED: [Self; 7] = [
         Self::Stats,
         Self::Equipment,
+        Self::SpellBook,
         Self::Reagents,
         Self::Spells,
         Self::SpecialUse,
@@ -30,6 +32,7 @@ impl ZStatsPage {
         match self {
             Self::Stats => "Stats",
             Self::Equipment => "Equipment",
+            Self::SpellBook => "Spell Book",
             Self::Reagents => "Reagents",
             Self::Spells => "Spell Charges",
             Self::SpecialUse => "Special/Use Items",
@@ -220,6 +223,45 @@ pub fn z_stats_first_input_key(key: char, suffix: &str) -> char {
         .chars()
         .find(|ch| !ch.is_ascii_whitespace())
         .unwrap_or(key)
+}
+
+/// `magic.md section 11` per-character spell-book class filter. Mage,
+/// Druid, and Avatar-class records are full spellcasters; Bard and
+/// Tinker records keep the smaller bard-family half-magic book;
+/// fighter-family records do not publish a spell-book list. This is
+/// display-only: the C-Cast dispatcher still owns resource gates and
+/// effect legality.
+pub const fn z_stats_spell_book_max_circle(class_byte: u8) -> u8 {
+    match class_byte {
+        b'A' | b'M' | b'D' => 8,
+        b'B' | b'T' => 4,
+        _ => 0,
+    }
+}
+
+pub fn spell_recipe_label(mask: u8) -> String {
+    const REAGENTS: [Reagent; REAGENT_COUNT] = [
+        Reagent::SulfurAsh,
+        Reagent::Ginseng,
+        Reagent::Garlic,
+        Reagent::SpiderSilk,
+        Reagent::BloodMoss,
+        Reagent::BlackPearl,
+        Reagent::Nightshade,
+        Reagent::Mandrake,
+    ];
+    let names = REAGENTS
+        .iter()
+        .zip(REAGENT_MASKS.iter())
+        .filter_map(|(reagent, reagent_mask)| {
+            (mask & *reagent_mask != 0).then(|| reagent.abbreviation())
+        })
+        .collect::<Vec<_>>();
+    if names.is_empty() {
+        "no reagents".to_string()
+    } else {
+        names.join("+")
+    }
 }
 
 pub fn special_item_name(index: usize) -> &'static str {

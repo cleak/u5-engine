@@ -72,6 +72,7 @@ impl PlayState {
         match session.page {
             ZStatsPage::Stats => self.render_z_stats_character_page(session, &mut lines),
             ZStatsPage::Equipment => self.render_z_stats_equipment_page(session, &mut lines),
+            ZStatsPage::SpellBook => self.render_z_stats_spell_book_page(session, &mut lines),
             ZStatsPage::Reagents => self.render_z_stats_reagent_page(&mut lines),
             ZStatsPage::Spells => self.render_z_stats_spell_page(&mut lines),
             ZStatsPage::SpecialUse => self.render_z_stats_special_use_page(&mut lines),
@@ -454,6 +455,39 @@ impl PlayState {
         if count == 0 {
             lines.push("Nothing equipped.".to_string());
         }
+    }
+
+    fn render_z_stats_spell_book_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
+        let Some(member) = self.party.get(session.selected_party_index).copied() else {
+            lines.push("No party member selected.".to_string());
+            return;
+        };
+        let max_circle = z_stats_spell_book_max_circle(member.class_byte);
+        if max_circle == 0 {
+            lines.push("No spell access.".to_string());
+            return;
+        }
+
+        let visible_circle = max_circle.min(member.level).min(8);
+        if visible_circle == 0 {
+            lines.push("No spell access at current level.".to_string());
+            return;
+        }
+
+        let rows = (0..SPELL_COUNT)
+            .filter(|index| {
+                spell_circle_for(*index as u8).is_some_and(|circle| circle <= visible_circle)
+            })
+            .map(|index| {
+                let circle = spell_circle_for(index as u8).unwrap_or(0);
+                let code = SPELL_CODES[index];
+                let rune = spell_rune_name(index).unwrap_or("Unknown");
+                let name = spell_common_name(index).unwrap_or("Unknown Spell");
+                let recipe = spell_recipe_label(SPELL_RECIPE_MASKS[index]);
+                format!("C{circle} {code:<4} {rune} / {name} / {recipe}")
+            })
+            .collect::<Vec<_>>();
+        append_inventory_rows(lines, rows);
     }
 
     fn render_z_stats_reagent_page(&self, lines: &mut Vec<String>) {

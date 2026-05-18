@@ -119,6 +119,7 @@
         assert_eq!(state.z_stats(), MoveOutcome::Observed);
         assert!(state.step_active_z_stats('>', ""));
         assert!(state.step_active_z_stats('>', ""));
+        assert!(state.step_active_z_stats('>', ""));
 
         assert_eq!(
             state.active_z_stats.as_ref().map(|session| session.page),
@@ -145,6 +146,52 @@
             equipment_name(EQUIPMENT_ID_BOW)
         )));
         assert!(!state.message.contains(equipment_name(EQUIPMENT_ID_CROSSBOW)));
+    }
+
+    #[test]
+    fn z_stats_spell_book_filters_by_class_and_level_without_using_charges() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'B',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 10,
+                max_hp: 20,
+                level: 2,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'F',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 10,
+                max_hp: 20,
+                level: 8,
+            },
+        ];
+        state.spell_charges = [0; SPELL_COUNT];
+
+        assert_eq!(state.z_stats(), MoveOutcome::Observed);
+        assert!(state.step_active_z_stats('>', ""));
+        assert!(state.step_active_z_stats('>', ""));
+
+        assert_eq!(
+            state.active_z_stats.as_ref().map(|session| session.page),
+            Some(ZStatsPage::SpellBook)
+        );
+        assert!(state.message.contains("Z-stats: Spell Book page"));
+        assert!(state.message.contains("C1 IL"));
+        assert!(state.message.contains("In Lor / Light"));
+        assert!(state.message.contains("C2 AS"));
+        assert!(!state.message.contains("C3 LV"));
+        assert!(!state.message.contains("IL Light: 0"));
+
+        assert!(state.step_active_z_stats('2', ""));
+        assert!(state.message.contains("No spell access."));
     }
 
     #[test]
