@@ -296,6 +296,43 @@ fn cli_parser_recognizes_help_short_flag() {
     assert!(args.help);
 }
 
+#[test]
+fn cli_parser_accepts_intro_menu_mode() {
+    let args = parse_cli_args([
+        "--intro",
+        "--raster-diagnostics",
+        "--raster-depth",
+        "cga",
+        r"C:\Games\U5-Clean",
+    ])
+    .unwrap();
+
+    assert!(args.intro);
+    assert!(!args.play);
+    assert_eq!(args.raster_depth, TileGraphicsDepth::Cga4);
+    assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
+}
+
+#[test]
+fn cli_intro_rejects_direct_play_or_save_creation_modes() {
+    assert!(parse_cli_args(["--intro", "--play"]).is_err());
+    assert!(parse_cli_args(["--intro", "--from-save"]).is_err());
+    assert!(parse_cli_args(["--intro", "--save-frame", "frame.png"]).is_err());
+    assert!(parse_cli_args(["--intro", "--create-character-interactive"]).is_err());
+    assert!(
+        parse_cli_args([
+            "--intro",
+            "--create-character",
+            "Avatar",
+            "--gender",
+            "male",
+            "--chargen-winners",
+            "Honesty,Compassion,Valor,Justice,Sacrifice,Honor,Spirituality",
+        ])
+        .is_err()
+    );
+}
+
 // from chunk_02
 #[test]
 fn cli_parser_help_short_circuits_save_init_conflict() {

@@ -26,6 +26,7 @@ pub struct CreateCharacterCommand {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CliArgs {
+    pub intro: bool,
     pub play: bool,
     pub visual: bool,
     pub raster_diagnostics: bool,
@@ -57,6 +58,7 @@ where
     I::Item: Into<String>,
 {
     let mut play = false;
+    let mut intro = false;
     let mut visual = false;
     let mut raster_diagnostics = false;
     let mut raster_depth = TileGraphicsDepth::Ega16;
@@ -79,6 +81,7 @@ where
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" | "-h" => help = true,
+            "--intro" => intro = true,
             "--play" => play = true,
             "--visual" => visual = true,
             "--save-frame" => {
@@ -254,6 +257,7 @@ where
     if help {
         return Ok(CliArgs {
             play: false,
+            intro: false,
             visual: false,
             raster_diagnostics: false,
             raster_depth,
@@ -272,12 +276,18 @@ where
             "--from-save and --from-init are mutually exclusive",
         ));
     }
+    if intro && (play || visual || save_frame.is_some() || from_save || from_init) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--intro owns the title/menu flow; it cannot be combined with play, visual, save-frame, from-save, or from-init",
+        ));
+    }
     if create_character_interactive
-        && (play || visual || save_frame.is_some() || from_save || from_init)
+        && (intro || play || visual || save_frame.is_some() || from_save || from_init)
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--create-character-interactive writes a save and returns to the intro/menu state; it cannot be combined with play, visual, save-frame, from-save, or from-init",
+            "--create-character-interactive writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, save-frame, from-save, or from-init",
         ));
     }
     if create_character_interactive && create_character_name.is_some() {
@@ -288,10 +298,10 @@ where
     }
 
     let create_character = if let Some(name) = create_character_name {
-        if play || visual || save_frame.is_some() || from_save || from_init {
+        if intro || play || visual || save_frame.is_some() || from_save || from_init {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "--create-character writes a save and returns to the intro/menu state; it cannot be combined with play, visual, save-frame, from-save, or from-init",
+                "--create-character writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, save-frame, from-save, or from-init",
             ));
         }
         let male = create_character_male.ok_or_else(|| {
@@ -345,6 +355,7 @@ where
     }
 
     Ok(CliArgs {
+        intro,
         play,
         visual,
         raster_diagnostics,
@@ -370,6 +381,7 @@ Lord British throne-room verification report.
 
 OPTIONS:
     -h, --help                Print this usage and exit.
+        --intro               Launch the terminal title/menu flow.
         --play                Launch the terminal first-playable harness.
         --play-script <CMDS>  Run a semicolon-separated script then exit.
                               Implies --play.
