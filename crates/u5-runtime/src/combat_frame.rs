@@ -2588,6 +2588,24 @@ impl PlayState {
             CombatPlayerCommandAction::XitCleanup { allowed: true } => {
                 CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
             }
+            CombatPlayerCommandAction::StepOrAttack {
+                direction_code,
+                outcome: CombatStepOrAttackPrimitiveOutcome::OutOfArena { .. },
+                ..
+            } if matches!(
+                resolve_combat_out_of_arena_leave(
+                    false,
+                    direction_code,
+                    false,
+                    false,
+                    None,
+                    combat_has_active_not_dead_non_party_actor(&self.combat_actors),
+                ),
+                CombatOutOfArenaLeaveOutcome::Accepted { .. }
+            ) =>
+            {
+                CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
+            }
             _ => self.combat_round_loop_control(false, false),
         };
         let weapon_attack = self.apply_combat_player_weapon_attack_for_action(

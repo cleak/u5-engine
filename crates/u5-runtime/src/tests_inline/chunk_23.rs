@@ -7139,6 +7139,30 @@
     }
 
     #[test]
+    fn combat_player_command_out_of_arena_direction_exits_combat() {
+        let mut state = combat_player_command_state(8, 5);
+        state.combat_actors[0].x = 10;
+        state.active_objects[0].x = 10;
+
+        let application = state
+            .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Direction(2), 1)
+            .unwrap();
+
+        assert_eq!(
+            application.action,
+            CombatPlayerCommandAction::StepOrAttack {
+                prompted_attack: false,
+                direction_code: 2,
+                outcome: CombatStepOrAttackPrimitiveOutcome::OutOfArena { x: 11, y: 5 },
+            }
+        );
+        assert_eq!(
+            application.control_after,
+            CombatRoundLoopControl::Exit(CombatRoundLoopExit::LeaveCombat)
+        );
+    }
+
+    #[test]
     fn combat_player_command_attack_applies_readied_weapon_damage() {
         let mut state = combat_player_command_state(6, 5);
         state.party_equipment = default_party_equipment(1);
@@ -7399,6 +7423,51 @@
         );
 
         assert_eq!(state.message, "Combat abandoned.");
+        assert!(!state.combat_active);
+        assert_eq!(state.combat_frame_snapshot, None);
+        assert_eq!(state.player, original_player);
+        assert_eq!(state.active_objects, original_objects);
+        assert_eq!(
+            state.combat_actors,
+            [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS]
+        );
+    }
+
+    #[test]
+    fn combat_input_dispatch_out_of_arena_move_restores_stored_frame_snapshot() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let original_player = state.player;
+        let original_objects = state.active_objects.clone();
+        let mut combat_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+        combat_objects[0] = ActiveObject {
+            type_byte: 0x80,
+            tile: 0x80,
+            x: 10,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+        let mut combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+        combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            10,
+            5,
+        ]);
+        state.enter_combat_frame(combat_objects, combat_actors).unwrap();
+        state.pending_combat_actor_slot = Some(0);
+        state.player.x = 99;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '6', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.message, "Leaving combat.");
         assert!(!state.combat_active);
         assert_eq!(state.combat_frame_snapshot, None);
         assert_eq!(state.player, original_player);
