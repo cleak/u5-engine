@@ -27,7 +27,7 @@ use u5_runtime::{
     intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_play_options_from_save,
     load_return_to_view_assets, load_story_records, load_tile_atlas,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
-    render_text_panel_rgba,
+    render_return_to_view_preview_viewport, render_text_panel_rgba,
     shop_runtime::SageState,
     shop_session::ActiveShopSession,
     summarize_return_to_view_preview, summarize_return_to_view_script,
@@ -114,7 +114,7 @@ pub fn run_visual_intro_loop(
     raster_depth: TileGraphicsDepth,
 ) -> std::io::Result<()> {
     let launch_result = Arc::new(Mutex::new(None));
-    run_visual_intro_menu_app(game_dir.to_path_buf(), launch_result.clone());
+    run_visual_intro_menu_app(game_dir.to_path_buf(), raster_depth, launch_result.clone());
     let options = launch_result
         .lock()
         .expect("visual intro launch lock poisoned")
@@ -125,7 +125,11 @@ pub fn run_visual_intro_loop(
     Ok(())
 }
 
-fn run_visual_intro_menu_app(game_dir: PathBuf, launch_result: Arc<Mutex<Option<PlayOptions>>>) {
+fn run_visual_intro_menu_app(
+    game_dir: PathBuf,
+    raster_depth: TileGraphicsDepth,
+    launch_result: Arc<Mutex<Option<PlayOptions>>>,
+) {
     let screenshot_path: Option<PathBuf> =
         std::env::var("U5_BEVY_SCREENSHOT").ok().map(PathBuf::from);
     let screenshot_delay: u32 = std::env::var("U5_BEVY_SCREENSHOT_DELAY")
@@ -150,6 +154,7 @@ fn run_visual_intro_menu_app(game_dir: PathBuf, launch_result: Arc<Mutex<Option<
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(VisualIntroState {
             game_dir,
+            raster_depth,
             dispatch: UnifiedMenuDispatch::new(),
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -271,6 +276,7 @@ struct StatusText;
 #[derive(Resource)]
 struct VisualIntroState {
     game_dir: PathBuf,
+    raster_depth: TileGraphicsDepth,
     dispatch: UnifiedMenuDispatch,
     message: String,
     panel: VisualIntroPanel,
@@ -289,6 +295,9 @@ enum VisualIntroPanel {
     Acknowledgements,
     ReturnToView {
         summary: String,
+        preview_rgba: Option<Vec<u8>>,
+        preview_width: usize,
+        preview_height: usize,
     },
 }
 
@@ -630,8 +639,13 @@ fn resolve_visual_intro_subflow(
             intro.message.clear();
         }
         IntroSubflow::ReturnToView => {
+            let (summary, preview_rgba, preview_width, preview_height) =
+                visual_return_to_view_summary(&intro.game_dir, intro.raster_depth);
             intro.panel = VisualIntroPanel::ReturnToView {
-                summary: visual_return_to_view_summary(&intro.game_dir),
+                summary,
+                preview_rgba,
+                preview_width,
+                preview_height,
             };
             intro.message.clear();
         }
@@ -736,14 +750,24 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
             ]
             .join("\n");
         }
-        VisualIntroPanel::ReturnToView { summary } => {
+        VisualIntroPanel::ReturnToView { summary, .. } => {
             return [
                 "Return to View".to_string(),
                 String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
                 summary.clone(),
                 String::new(),
-                "This visual harness reports the clean preview layout and returns to the menu."
-                    .to_string(),
+                "The preview above is rendered from the dry-run Return-to-View state.".to_string(),
                 "Press any key to return to the intro menu.".to_string(),
             ]
             .join("\n");
@@ -827,17 +851,68 @@ fn format_story_art_line(file: &str, placement: IntroStoryArtPlacement) -> Strin
 }
 
 fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
-    render_text_panel_rgba(
+    let mut rgba = render_text_panel_rgba(
         &summarize_intro(intro),
         INTRO_FRAMEBUFFER_WIDTH as usize,
         INTRO_FRAMEBUFFER_HEIGHT as usize,
     )
     .unwrap_or_else(|_| {
         vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4]
-    })
+    });
+    if let VisualIntroPanel::ReturnToView {
+        preview_rgba: Some(preview_rgba),
+        preview_width,
+        preview_height,
+        ..
+    } = &intro.panel
+    {
+        let x = ((INTRO_FRAMEBUFFER_WIDTH as usize).saturating_sub(*preview_width)) / 2;
+        blit_rgba(
+            &mut rgba,
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+            preview_rgba,
+            *preview_width,
+            *preview_height,
+            x,
+            18,
+        );
+    }
+    rgba
 }
 
-fn visual_return_to_view_summary(game_dir: &Path) -> String {
+fn blit_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    src: &[u8],
+    src_width: usize,
+    src_height: usize,
+    dst_x: usize,
+    dst_y: usize,
+) {
+    for row in 0..src_height {
+        let y = dst_y + row;
+        if y >= dst_height {
+            break;
+        }
+        let src_row = row * src_width * 4;
+        let dst_row = (y * dst_width + dst_x) * 4;
+        let cols = src_width.min(dst_width.saturating_sub(dst_x));
+        let bytes = cols * 4;
+        if let (Some(src_slice), Some(dst_slice)) = (
+            src.get(src_row..src_row + bytes),
+            dst.get_mut(dst_row..dst_row + bytes),
+        ) {
+            dst_slice.copy_from_slice(src_slice);
+        }
+    }
+}
+
+fn visual_return_to_view_summary(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+) -> (String, Option<Vec<u8>>, usize, usize) {
     let path = game_dir.join(MISCMAPS_DAT_FILE);
     match std::fs::metadata(&path) {
         Ok(metadata) => {
@@ -853,23 +928,55 @@ fn visual_return_to_view_summary(game_dir: &Path) -> String {
             match load_return_to_view_assets(game_dir) {
                 Ok(Some(assets)) => {
                     let script_summary = summarize_return_to_view_script(&assets.script);
-                    match summarize_return_to_view_preview(&assets.strips, &assets.script) {
-                        Ok(preview_summary) => {
-                            format!("{header} {script_summary} {preview_summary}")
-                        }
-                        Err(err) => {
-                            format!("{header} {script_summary} Dry-run error: {err}")
-                        }
+                    let preview = load_tile_atlas(game_dir, raster_depth).and_then(|atlas| {
+                        render_return_to_view_preview_viewport(
+                            &assets.strips,
+                            &assets.script,
+                            &atlas,
+                        )
+                    });
+                    match (
+                        summarize_return_to_view_preview(&assets.strips, &assets.script),
+                        preview,
+                    ) {
+                        (Ok(preview_summary), Ok((viewport, _report))) => (
+                            format!("{header} {script_summary} {preview_summary}"),
+                            Some(viewport.to_rgba()),
+                            viewport.width,
+                            viewport.height,
+                        ),
+                        (Ok(preview_summary), Err(err)) => (
+                            format!(
+                                "{header} {script_summary} {preview_summary} Render error: {err}"
+                            ),
+                            None,
+                            0,
+                            0,
+                        ),
+                        (Err(err), _) => (
+                            format!("{header} {script_summary} Dry-run error: {err}"),
+                            None,
+                            0,
+                            0,
+                        ),
                     }
                 }
-                Ok(None) => format!("{MISCMAPS_DAT_FILE} is missing; preview cannot run."),
-                Err(err) => format!("{header} Script error: {err}"),
+                Ok(None) => (
+                    format!("{MISCMAPS_DAT_FILE} is missing; preview cannot run."),
+                    None,
+                    0,
+                    0,
+                ),
+                Err(err) => (format!("{header} Script error: {err}"), None, 0, 0),
             }
         }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            format!("{MISCMAPS_DAT_FILE} is missing; preview cannot run.")
-        }
-        Err(err) => format!("Return-to-View preview error: {err}"),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => (
+            format!("{MISCMAPS_DAT_FILE} is missing; preview cannot run."),
+            None,
+            0,
+            0,
+        ),
+        Err(err) => (format!("Return-to-View preview error: {err}"), None, 0, 0),
     }
 }
 
@@ -1572,6 +1679,7 @@ mod tests {
     fn visual_intro_summary_switches_from_title_to_menu() {
         let mut intro = VisualIntroState {
             game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
             message: String::new(),
             panel: VisualIntroPanel::Menu,
@@ -1597,11 +1705,15 @@ mod tests {
         let dir = debug_game_dir();
         fs::write(dir.join(MISCMAPS_DAT_FILE), vec![0u8; 128]).unwrap();
 
-        let summary = visual_return_to_view_summary(&dir);
+        let (summary, preview_rgba, preview_width, preview_height) =
+            visual_return_to_view_summary(&dir, TileGraphicsDepth::Ega16);
 
         assert!(summary.contains(MISCMAPS_DAT_FILE));
         assert!(summary.contains("128 bytes"));
         assert!(summary.contains("Return-to-View strips"));
+        assert!(preview_rgba.is_none());
+        assert_eq!(preview_width, 0);
+        assert_eq!(preview_height, 0);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1624,6 +1736,7 @@ mod tests {
     fn visual_intro_story_panel_pages_back_to_menu_after_final_step() {
         let mut intro = VisualIntroState {
             game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
             message: String::new(),
             panel: VisualIntroPanel::Story {
@@ -1646,6 +1759,35 @@ mod tests {
             intro.dispatch.submit_menu_key(b'A'),
             UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
         ));
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn return_to_view_intro_frame_overlays_preview_rgba() {
+        let preview_rgba = vec![
+            0xff, 0x00, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff,
+        ];
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            message: String::new(),
+            panel: VisualIntroPanel::ReturnToView {
+                summary: "Preview".to_string(),
+                preview_rgba: Some(preview_rgba),
+                preview_width: 2,
+                preview_height: 2,
+            },
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        let frame = render_intro_frame(&mut intro);
+        let x = ((INTRO_FRAMEBUFFER_WIDTH as usize) - 2) / 2;
+        let offset = ((18 * INTRO_FRAMEBUFFER_WIDTH as usize) + x) * 4;
+
+        assert_eq!(&frame[offset..offset + 4], &[0xff, 0x00, 0x00, 0xff]);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 }

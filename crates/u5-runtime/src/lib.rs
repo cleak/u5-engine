@@ -403,12 +403,13 @@ pub use return_to_view::{
     RTV_OPEN_EFFECT_FINAL_TILE, RTV_PREVIEW_CELLS, RTV_PREVIEW_SIDE, RTV_STRIP_RECORD_BYTES,
     RTV_STRIP_TILE_COUNT, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
     RTV_TEMPORARY_ACTOR_TILE, ReturnToViewActor, ReturnToViewAssets, ReturnToViewCommand,
-    ReturnToViewControl, ReturnToViewMapStrips, ReturnToViewPreviewReport,
+    ReturnToViewControl, ReturnToViewMapStrips, ReturnToViewPreviewReport, ReturnToViewPreviewRun,
     ReturnToViewPreviewState, ReturnToViewScript, load_return_to_view_assets,
     load_return_to_view_map_strips, load_return_to_view_script, parse_return_to_view_commands,
     parse_return_to_view_map_strips, parse_return_to_view_map_strips_file,
-    parse_return_to_view_script_file, return_to_view_command_histogram,
-    return_to_view_command_name, run_return_to_view_preview_until_restart,
+    parse_return_to_view_script_file, render_return_to_view_preview_viewport,
+    return_to_view_command_histogram, return_to_view_command_name,
+    run_return_to_view_preview_state_until_restart, run_return_to_view_preview_until_restart,
     summarize_return_to_view_preview, summarize_return_to_view_script,
 };
 pub use save_load::*;

@@ -12,7 +12,8 @@ use std::path::Path;
 use crate::{
     MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_ROW_STRIDE,
     MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, RTV_COMMAND_COUNT,
-    RTV_COMMAND_STREAM_BYTES, RTV_STRIP_COUNT,
+    RTV_COMMAND_STREAM_BYTES, RTV_STRIP_COUNT, TILE_ATLAS_SIDE, TileAtlas, TileViewport,
+    blit_tile_to_viewport,
 };
 
 pub const RTV_PREVIEW_SIDE: usize = 32;
@@ -346,6 +347,12 @@ pub struct ReturnToViewPreviewReport {
     pub cached_effect_cell: Option<(u8, u8)>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReturnToViewPreviewRun {
+    pub state: ReturnToViewPreviewState,
+    pub report: ReturnToViewPreviewReport,
+}
+
 impl ReturnToViewCommand {
     pub const fn opcode(self) -> u8 {
         match self {
@@ -651,6 +658,14 @@ pub fn run_return_to_view_preview_until_restart(
     script: &ReturnToViewScript,
     max_commands: usize,
 ) -> io::Result<ReturnToViewPreviewReport> {
+    Ok(run_return_to_view_preview_state_until_restart(strips, script, max_commands)?.report)
+}
+
+pub fn run_return_to_view_preview_state_until_restart(
+    strips: &ReturnToViewMapStrips,
+    script: &ReturnToViewScript,
+    max_commands: usize,
+) -> io::Result<ReturnToViewPreviewRun> {
     let mut state = ReturnToViewPreviewState::default();
     let mut applied_commands = 0usize;
     let mut pc = 0usize;
@@ -676,7 +691,7 @@ pub fn run_return_to_view_preview_until_restart(
         }
         applied_commands += 1;
     }
-    Ok(ReturnToViewPreviewReport {
+    let report = ReturnToViewPreviewReport {
         applied_commands,
         restart_seen,
         max_commands_reached: !restart_seen
@@ -688,7 +703,8 @@ pub fn run_return_to_view_preview_until_restart(
         temporary_actor_draws: state.temporary_actor_draws,
         fixed_wipes: state.fixed_wipes,
         cached_effect_cell: state.cached_effect_cell,
-    })
+    };
+    Ok(ReturnToViewPreviewRun { state, report })
 }
 
 pub fn summarize_return_to_view_preview(
@@ -712,6 +728,52 @@ pub fn summarize_return_to_view_preview(
         report.temporary_actor_draws,
         report.fixed_wipes
     ))
+}
+
+pub fn render_return_to_view_preview_viewport(
+    strips: &ReturnToViewMapStrips,
+    script: &ReturnToViewScript,
+    atlas: &TileAtlas,
+) -> io::Result<(TileViewport, ReturnToViewPreviewReport)> {
+    let run = run_return_to_view_preview_state_until_restart(strips, script, 4096)?;
+    let width = RTV_STRIP_VISIBLE_COLUMNS
+        .checked_mul(TILE_ATLAS_SIDE)
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "RTV viewport width overflows")
+        })?;
+    let height = RTV_STRIP_VISIBLE_ROWS
+        .checked_mul(TILE_ATLAS_SIDE)
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "RTV viewport height overflows")
+        })?;
+    let pixel_count = width.checked_mul(height).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "RTV viewport pixel count overflows",
+        )
+    })?;
+    let mut viewport = TileViewport {
+        depth: atlas.depth,
+        cells_wide: RTV_STRIP_VISIBLE_COLUMNS,
+        cells_high: RTV_STRIP_VISIBLE_ROWS,
+        width,
+        height,
+        pixels: vec![0; pixel_count],
+    };
+    for cell_y in 0..RTV_STRIP_VISIBLE_ROWS {
+        for cell_x in 0..RTV_STRIP_VISIBLE_COLUMNS {
+            let tile = run.state.visible[cell_y * RTV_PREVIEW_SIDE + cell_x];
+            blit_tile_to_viewport(&mut viewport, atlas, tile, cell_x, cell_y)?;
+        }
+    }
+    for actor in run.state.actors.iter().filter(|actor| actor.drawable) {
+        let x = usize::from(actor.x);
+        let y = usize::from(actor.y);
+        if x < RTV_STRIP_VISIBLE_COLUMNS && y < RTV_STRIP_VISIBLE_ROWS {
+            blit_tile_to_viewport(&mut viewport, atlas, actor.tile0, x, y)?;
+        }
+    }
+    Ok((viewport, run.report))
 }
 
 fn rtv_slot_index(slot: u8) -> io::Result<usize> {
@@ -985,5 +1047,44 @@ mod tests {
 
         assert_eq!(state.actors[0].x, 31);
         assert_eq!(state.actors[0].y, 31);
+    }
+
+    #[test]
+    fn render_return_to_view_preview_viewport_blits_visible_strip_and_actor() {
+        let mut strips = ReturnToViewMapStrips {
+            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
+        };
+        strips.strips[0][0] = 1;
+        strips.strips[0][1] = 2;
+        let script = ReturnToViewScript {
+            commands: vec![
+                ReturnToViewCommand::LoadMapStrip { strip: 0 },
+                ReturnToViewCommand::SetActor {
+                    slot: 0,
+                    tile: 3,
+                    x: 1,
+                    y: 0,
+                },
+                ReturnToViewCommand::RestartStream,
+            ],
+        };
+        let mut pixels = Vec::new();
+        for tile in 0..4 {
+            pixels.extend(std::iter::repeat_n(tile, TILE_ATLAS_SIDE * TILE_ATLAS_SIDE));
+        }
+        let atlas = TileAtlas {
+            depth: crate::TileGraphicsDepth::Ega16,
+            pixels,
+        };
+
+        let (viewport, report) =
+            render_return_to_view_preview_viewport(&strips, &script, &atlas).unwrap();
+
+        assert_eq!(viewport.cells_wide, RTV_STRIP_VISIBLE_COLUMNS);
+        assert_eq!(viewport.cells_high, RTV_STRIP_VISIBLE_ROWS);
+        assert_eq!(viewport.pixel(0, 0), Some(1));
+        assert_eq!(viewport.pixel(TILE_ATLAS_SIDE, 0), Some(3));
+        assert_eq!(report.drawable_actor_count, 1);
+        assert!(report.restart_seen);
     }
 }
