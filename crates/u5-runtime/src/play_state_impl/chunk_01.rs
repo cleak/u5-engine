@@ -417,6 +417,10 @@ impl PlayState {
             removed_town_npcs: Vec::new(),
             town_npc_alarm_states: Vec::new(),
             talk_branch_flags: HashMap::new(),
+            conversation_resource_signals: [0; CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT],
+            conversation_signal_flags: [0; TLK_GENERIC_SIGNAL_COUNT],
+            conversation_signal_bank_a: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
+            conversation_signal_bank_b: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
             inn_registry: options.inn_registry,
         };
         if has_saved_active_objects {
@@ -601,6 +605,10 @@ impl PlayState {
             removed_town_npcs: Vec::new(),
             town_npc_alarm_states: Vec::new(),
             talk_branch_flags: HashMap::new(),
+            conversation_resource_signals: [0; CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT],
+            conversation_signal_flags: [0; TLK_GENERIC_SIGNAL_COUNT],
+            conversation_signal_bank_a: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
+            conversation_signal_bank_b: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
             inn_registry: options.inn_registry,
         };
         state.mode_zero_cleanup();
@@ -800,6 +808,10 @@ impl PlayState {
             removed_town_npcs: Vec::new(),
             town_npc_alarm_states: Vec::new(),
             talk_branch_flags: HashMap::new(),
+            conversation_resource_signals: [0; CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT],
+            conversation_signal_flags: [0; TLK_GENERIC_SIGNAL_COUNT],
+            conversation_signal_bank_a: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
+            conversation_signal_bank_b: [0; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
             inn_registry: options.inn_registry,
         };
         state.sync_player_object();

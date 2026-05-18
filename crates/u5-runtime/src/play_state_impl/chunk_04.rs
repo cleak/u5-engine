@@ -2446,6 +2446,7 @@ impl PlayState {
             text = output.text.clone();
             self.apply_tlk_action_grants(&output.action_grants);
             self.apply_tlk_gold_payments(&output.gold_payments);
+            self.record_tlk_signal_flags(&output.signal_flags);
             if let Area::Town { scene, .. } = self.area {
                 self.merge_talk_branch_flags(scene, output.branch_flags_set);
             }
@@ -2494,6 +2495,7 @@ impl PlayState {
             ended = output.ended;
             self.apply_tlk_action_grants(&output.action_grants);
             self.apply_tlk_gold_payments(&output.gold_payments);
+            self.record_tlk_signal_flags(&output.signal_flags);
             if let Area::Town { scene, .. } = self.area {
                 self.merge_talk_branch_flags(scene, output.branch_flags_set);
             }
@@ -2503,9 +2505,98 @@ impl PlayState {
                 session.acknowledge_close();
             }
             self.active_conversation = None;
+            if let Some(cleanup) = self.run_final_conversation_cleanup() {
+                if !text.is_empty() {
+                    text.push(' ');
+                }
+                text.push_str(&cleanup);
+            }
         }
         self.message = text.clone();
         (text, ended)
+    }
+
+    /// Shared town/conversation sentinel per `quest-flags.md §5` and
+    /// `shops.md §6.2`. Town setup exposes either a tracked
+    /// Shadowlord slot index (`0..=2`) for the active scene or the
+    /// no-slot marker. Cleanup and shop surcharge readers only use
+    /// the zero-versus-nonzero predicate.
+    pub fn shared_town_conversation_sentinel(&self) -> u8 {
+        let Area::Town { scene, .. } = self.area else {
+            return CONVERSATION_SHARED_NO_SLOT_SENTINEL;
+        };
+        self.shadowlord_hideouts
+            .iter()
+            .copied()
+            .enumerate()
+            .find_map(|(slot, hideout)| (hideout == scene.byte).then_some(slot as u8))
+            .unwrap_or(CONVERSATION_SHARED_NO_SLOT_SENTINEL)
+    }
+
+    /// Record numeric TLK `0x86` action-dispatch arguments into the
+    /// generic one-conversation signal band. The public contract says
+    /// these writes use a nonzero marker rather than a durable bit.
+    pub fn record_tlk_signal_flags(&mut self, flags: &[u8]) {
+        for flag in flags {
+            let index = usize::from(*flag);
+            if let Some(slot) = self.conversation_signal_flags.get_mut(index) {
+                *slot = 1;
+            }
+        }
+    }
+
+    /// Run final conversation cleanup after Bye/empty-input close.
+    /// Returns presentation text for the status line when the zero
+    /// sentinel allowed cleanup; returns `None` when the sentinel
+    /// suppresses the pass.
+    pub fn run_final_conversation_cleanup(&mut self) -> Option<String> {
+        if self.shared_town_conversation_sentinel() != 0 {
+            return None;
+        }
+
+        let reseed = self.conversation_cleanup_reseed();
+        if let Some(index) =
+            decrement_random_resource_signal(&mut self.conversation_resource_signals, reseed)
+        {
+            return Some(format!(
+                "Stolen-action warning. Conversation resource signal {} reconciled.",
+                index + 1
+            ));
+        }
+        if let Some(index) = decrement_signal_high_to_low(&mut self.conversation_signal_flags) {
+            return Some(format!(
+                "Stolen-action warning. Conversation signal {index} reconciled."
+            ));
+        }
+        if let Some(index) = decrement_signal_high_to_low(&mut self.conversation_signal_bank_a) {
+            return Some(format!(
+                "Stolen-action warning. Conversation side signal A{} reconciled.",
+                index + 1
+            ));
+        }
+        if let Some(index) = decrement_signal_high_to_low(&mut self.conversation_signal_bank_b) {
+            return Some(format!(
+                "Stolen-action warning. Conversation side signal B{} reconciled.",
+                index + 1
+            ));
+        }
+
+        let debit = conversation_cleanup_gold_debit_from_seed(reseed);
+        let before = self.gold;
+        self.gold = self.gold.saturating_sub(debit);
+        let paid = before - self.gold;
+        Some(format!("Stolen-action warning. Gold -{paid}."))
+    }
+
+    pub fn conversation_cleanup_reseed(&self) -> u8 {
+        (self.turn as u8).wrapping_mul(29)
+            ^ self.clock.month.wrapping_mul(31)
+            ^ self.clock.day.wrapping_mul(7)
+            ^ self.clock.hour.wrapping_mul(11)
+            ^ self.clock.minute.wrapping_mul(13)
+            ^ (self.player.x as u8).wrapping_mul(17)
+            ^ (self.player.y as u8).wrapping_mul(19)
+            ^ (self.gold as u8).wrapping_mul(23)
     }
 
     pub fn apply_talk_action_grants(&mut self, actions: &[char]) {
@@ -2566,6 +2657,30 @@ impl PlayState {
         };
         self.set_talk_branch_flag_for_scene(scene, bit_index)
     }
+}
+
+pub fn decrement_signal_high_to_low(signals: &mut [u8]) -> Option<usize> {
+    for index in (0..signals.len()).rev() {
+        if signals[index] != 0 {
+            signals[index] = signals[index].saturating_sub(1);
+            return Some(index);
+        }
+    }
+    None
+}
+
+pub fn decrement_random_resource_signal(signals: &mut [u8; 3], seed: u8) -> Option<usize> {
+    if signals.iter().all(|value| *value == 0) {
+        return None;
+    }
+    for attempt in 0..signals.len() {
+        let index = usize::from(seed.wrapping_add(attempt as u8) % signals.len() as u8);
+        if signals[index] != 0 {
+            signals[index] = signals[index].saturating_sub(1);
+            return Some(index);
+        }
+    }
+    None
 }
 
 pub fn sextant_coordinate(coordinate: usize) -> String {

@@ -1089,19 +1089,8 @@ const ACTIVE_SHOP_SURCHARGE_TAVERN: u8 = 0x59;
 const ACTIVE_SHOP_SURCHARGE_SAGE: u8 = 0x6B;
 const ACTIVE_SHOP_SURCHARGE_HORSE: u8 = 0x7D;
 const ACTIVE_SHOP_SURCHARGE_SHIP: u8 = 0x8F;
-const ACTIVE_SHOP_SURCHARGE_NO_SLOT_SENTINEL: u8 = 0xFF;
-
 fn active_shop_surcharge_sentinel(state: &PlayState) -> u8 {
-    let Area::Town { scene, .. } = state.area else {
-        return ACTIVE_SHOP_SURCHARGE_NO_SLOT_SENTINEL;
-    };
-    state
-        .shadowlord_hideouts
-        .iter()
-        .copied()
-        .enumerate()
-        .find_map(|(slot, hideout)| (hideout == scene.byte).then_some(slot as u8))
-        .unwrap_or(ACTIVE_SHOP_SURCHARGE_NO_SLOT_SENTINEL)
+    state.shared_town_conversation_sentinel()
 }
 
 fn active_shop_surcharge_roll_seed(state: &PlayState, family_salt: u8) -> u8 {

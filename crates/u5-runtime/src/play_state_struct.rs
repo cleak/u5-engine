@@ -104,6 +104,10 @@ pub struct PlayState {
     pub removed_town_npcs: Vec<(u8, i8, usize)>,
     pub town_npc_alarm_states: Vec<TownNpcAlarmMarker>,
     pub talk_branch_flags: HashMap<u8, u32>,
+    pub conversation_resource_signals: [u8; CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT],
+    pub conversation_signal_flags: [u8; TLK_GENERIC_SIGNAL_COUNT],
+    pub conversation_signal_bank_a: [u8; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
+    pub conversation_signal_bank_b: [u8; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
     pub inn_registry: Vec<InnGuestRecord>,
 }
 

@@ -1549,6 +1549,117 @@
     }
 
     #[test]
+    fn active_conversation_records_numeric_signal_and_cleanup_reconciles_on_bye() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Maris".to_string(),
+                "a quiet sage".to_string(),
+                "Greetings".to_string(),
+                "I read books".to_string(),
+                "Farewell".to_string(),
+                "MARK".to_string(),
+                "Marked".to_string(),
+            ],
+        );
+
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        let mut mark_response = enc("Marked");
+        mark_response.push(TLK_CODE_ACTION_DISPATCH);
+        mark_response.push(5);
+        mark_response.push(TLK_CODE_END_OF_RESPONSE);
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Maris"),
+                enc("a quiet sage"),
+                enc("Greetings"),
+                enc("I read books"),
+                enc("Farewell"),
+                enc("MARK"),
+                mark_response,
+            ],
+        );
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[0]).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
+
+        let (text, ended) = state.submit_active_conversation_keyword("mark");
+        assert_eq!(text, "Marked");
+        assert!(!ended);
+        assert_eq!(state.conversation_signal_flags[5], 1);
+
+        let (text, ended) = state.submit_active_conversation_keyword("bye");
+        assert!(ended);
+        assert!(state.active_conversation.is_none());
+        assert_eq!(state.conversation_signal_flags[5], 0);
+        assert_eq!(
+            text,
+            "Farewell Stolen-action warning. Conversation signal 5 reconciled."
+        );
+    }
+
+    #[test]
+    fn final_conversation_cleanup_suppresses_on_nonzero_shared_sentinel() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.record_tlk_signal_flags(&[7]);
+        let gold_before = state.gold;
+
+        assert_eq!(state.shared_town_conversation_sentinel(), CONVERSATION_SHARED_NO_SLOT_SENTINEL);
+        assert_eq!(state.run_final_conversation_cleanup(), None);
+        assert_eq!(state.conversation_signal_flags[7], 1);
+        assert_eq!(state.gold, gold_before);
+    }
+
+    #[test]
+    fn final_conversation_cleanup_prioritizes_resource_then_generic_then_gold() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[0]).unwrap(),
+            floor: 0,
+        };
+        state.conversation_resource_signals[1] = 2;
+        state.record_tlk_signal_flags(&[3, 12]);
+        let gold_before = state.gold;
+
+        let first = state.run_final_conversation_cleanup().unwrap();
+        assert!(first.contains("resource signal"));
+        assert_eq!(state.conversation_resource_signals[1], 1);
+        assert_eq!(state.conversation_signal_flags[12], 1);
+        assert_eq!(state.gold, gold_before);
+
+        state.conversation_resource_signals = [0; CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT];
+        let second = state.run_final_conversation_cleanup().unwrap();
+        assert!(second.contains("Conversation signal 12"));
+        assert_eq!(state.conversation_signal_flags[12], 0);
+        assert_eq!(state.conversation_signal_flags[3], 1);
+        assert_eq!(state.gold, gold_before);
+
+        state.conversation_signal_flags = [0; TLK_GENERIC_SIGNAL_COUNT];
+        state.gold = 10;
+        let third = state.run_final_conversation_cleanup().unwrap();
+        assert!(third.contains("Gold -"));
+        assert!(state.gold < 10);
+    }
+
+    #[test]
     fn town_talk_horse_mounted_refuses_non_horse_trader_shops() {
         // shops.md §2: ordinary shop arms refuse before opening their menu when
         // the party is mounted on a horse; only the 0x83 horse trader remains.

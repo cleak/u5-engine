@@ -540,6 +540,30 @@ pub const fn tlk_action_dispatch_is_signal_flag(arg: u8) -> bool {
     arg < b'A'
 }
 
+/// `quest-flags.md §4`: numeric `0x86` action-dispatch arguments
+/// below `A` address the generic transient conversation signal band.
+/// Values are post-mask (`0x00..=0x40`), so the array needs exactly
+/// `b'A'` slots.
+pub const TLK_GENERIC_SIGNAL_COUNT: usize = b'A' as usize;
+
+/// `quest-flags.md §5`: final conversation cleanup first checks a
+/// three-slot resource/special transient band before scanning generic
+/// signal flags.
+pub const CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT: usize = 3;
+
+/// `quest-flags.md §5`: after generic signals, cleanup scans two
+/// eight-slot transient signal arrays from high to low.
+pub const CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT: usize = 8;
+
+/// `quest-flags.md §5` / `shops.md §6.2`: the shared town/conversation
+/// sentinel uses a no-slot marker distinct from tracked slot indices.
+pub const CONVERSATION_SHARED_NO_SLOT_SENTINEL: u8 = 0xFF;
+
+/// `quest-flags.md §5`: random gold fallback subtracts `1..=15`.
+pub const fn conversation_cleanup_gold_debit_from_seed(seed: u8) -> u16 {
+    (seed as u16 % 15) + 1
+}
+
 /// `conversation.md §7.6`: decode the `0x85` GOLD-PAYMENT introducer's
 /// three argument bytes. Each byte is masked to seven bits and
 /// interpreted as an ASCII decimal digit; the three digits compose a
