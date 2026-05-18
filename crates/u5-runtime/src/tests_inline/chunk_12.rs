@@ -527,7 +527,7 @@
     }
 
     #[test]
-    fn dungeon_fall_trap_chain_uses_clean_location_table_when_exiting_past_bottom_level() {
+    fn dungeon_fall_trap_chain_clears_scene_at_trap_coordinate_with_location_table_plane() {
         let dir = debug_game_dir();
         let scene = DungeonScene::new(33).unwrap();
         fs::write(
@@ -544,7 +544,10 @@
             state
                 .step_with_game_dir(Direction::East, Some(&dir))
                 .unwrap(),
-            MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
+            MoveOutcome::Transition(AreaTransition::ExitedDungeonToWorldPlane {
+                scene,
+                plane: WorldPlane::Underworld
+            })
         );
 
         assert_eq!(
@@ -553,11 +556,74 @@
                 plane: WorldPlane::Underworld
             }
         );
-        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert_eq!((state.player.x, state.player.y), (2, 1));
         assert_eq!(state.active_objects[0].z, -1);
-        assert_eq!(state.grid[world_cell_index(10, 20)], 5);
-        assert!(state.message.contains("world-location table return point"));
+        assert_eq!(state.grid[world_cell_index(2, 1)], 5);
+        assert!(state.message.contains("cleared dungeon scene"));
+        assert!(state.message.contains("trap-chain coordinate (2, 1)"));
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dungeon_fall_trap_chain_restores_snapshot_grid_without_exterior_coordinate_reset() {
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(6, 2, 1)] = 0x61;
+        grid[dungeon_cell_index(7, 2, 1)] = 0x61;
+        let mut state = dungeon_state(grid, 6, 1, 1);
+        let mut world_grid = open_world_grid();
+        world_grid[world_cell_index(2, 1)] = 7;
+        world_grid[world_cell_index(10, 20)] = 9;
+        state.return_world = Some(WorldReturn {
+            plane: WorldPlane::Britannia,
+            x: 10,
+            y: 20,
+            transport: TransportState::Carpet {
+                type_byte: 184,
+                tile: 184,
+            },
+            timing_status: TimingStatusTag::HalfTime,
+            sail_cadence: 3,
+            sail_stall_pending: true,
+            grid: world_grid,
+            active_objects: vec![ActiveObject {
+                type_byte: PLAYER_TILE,
+                tile: PLAYER_TILE,
+                x: 10,
+                y: 20,
+                z: WorldPlane::Britannia.save_floor(),
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            }],
+            pending_vehicle: None,
+        });
+
+        assert_eq!(
+            state.step(Direction::East),
+            MoveOutcome::Transition(AreaTransition::ExitedDungeonToWorldPlane {
+                scene,
+                plane: WorldPlane::Britannia
+            })
+        );
+
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Britannia
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (2, 1));
+        assert_eq!(state.player.transport, TransportState::Foot);
+        assert_eq!(state.timing_status, TimingStatusTag::HalfTime);
+        assert_eq!(state.sail_cadence, 0);
+        assert!(!state.sail_stall_pending);
+        assert_eq!(state.grid[world_cell_index(2, 1)], 7);
+        assert_eq!(state.grid[world_cell_index(10, 20)], 9);
+        assert_eq!(state.active_objects[0].x, 2);
+        assert_eq!(state.active_objects[0].y, 1);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("trap-chain coordinate (2, 1)"));
     }
 
     #[test]

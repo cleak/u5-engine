@@ -705,40 +705,14 @@ impl PlayState {
             self.mark_visibility_dirty();
             drops += 1;
             let Some(next_level) = level.checked_add(1).filter(|next| *next <= 7) else {
-                if advance_turn {
-                    self.advance_turn();
-                }
-                if self.restore_return_world() {
-                    self.message = format!(
-                        "Fell out of {} ({}) to overworld debug return point.",
-                        scene.key(),
-                        scene.name()
-                    );
-                } else if let Some(game_dir) = game_dir {
-                    if self.restore_world_for_target(game_dir, PlayTarget::Dungeon(scene))? {
-                        self.message = format!(
-                            "Fell out of {} ({}) to world-location table return point.",
-                            scene.key(),
-                            scene.name()
-                        );
-                    } else {
-                        return Ok(self.block_missing_dungeon_return(
-                            scene,
-                            level,
-                            format!("Fell out of {} ({})", scene.key(), scene.name()),
-                        ));
-                    }
-                } else {
-                    return Ok(self.block_missing_dungeon_return(
-                        scene,
-                        level,
-                        format!("Fell out of {} ({})", scene.key(), scene.name()),
-                    ));
-                }
-                self.mark_visibility_dirty();
-                return Ok(MoveOutcome::Transition(AreaTransition::ExitedDungeon(
+                return self.resolve_dungeon_fall_off_bottom(
                     scene,
-                )));
+                    level,
+                    x,
+                    y,
+                    game_dir,
+                    advance_turn,
+                );
             };
 
             level = next_level;
@@ -761,6 +735,114 @@ impl PlayState {
         );
         Ok(MoveOutcome::Transition(
             AreaTransition::ChangedDungeonLevel { scene, level },
+        ))
+    }
+
+    pub fn resolve_dungeon_fall_off_bottom(
+        &mut self,
+        scene: DungeonScene,
+        level: u8,
+        x: usize,
+        y: usize,
+        game_dir: Option<&Path>,
+        advance_turn: bool,
+    ) -> io::Result<MoveOutcome> {
+        if advance_turn {
+            self.advance_turn();
+        }
+        if let Some(return_world) = self.return_world.take() {
+            let plane = return_world.plane;
+            self.area = Area::World { plane };
+            self.player.x = x;
+            self.player.y = y;
+            self.player.transport = TransportState::Foot;
+            self.timing_status = return_world.timing_status;
+            self.sail_cadence = 0;
+            self.sail_stall_pending = false;
+            self.grid = return_world.grid;
+            self.natural_moongate_live_cells.clear();
+            self.npcs.clear();
+            self.active_objects = return_world.active_objects;
+            self.sync_player_object();
+            self.cache_current_world_overlay();
+            self.clear_open_town_door_state();
+            self.pending_moongate = None;
+            self.pending_town_arrest = None;
+            self.active_blackthorn = None;
+            self.mode_zero_cleanup();
+            self.mark_visibility_dirty();
+            self.message = format!(
+                "Fell out of {} ({}) past level {}; cleared dungeon scene at trap-chain coordinate ({x}, {y}) on {:?}.",
+                scene.key(),
+                scene.name(),
+                level + 1,
+                plane
+            );
+            return Ok(MoveOutcome::Transition(
+                AreaTransition::ExitedDungeonToWorldPlane { scene, plane },
+            ));
+        }
+
+        if let Some(game_dir) = game_dir {
+            let Some(entries) = load_world_location_entries(game_dir)? else {
+                return Ok(self.block_missing_dungeon_return(
+                    scene,
+                    level,
+                    format!("Fell out of {} ({})", scene.key(), scene.name()),
+                ));
+            };
+            let matches: Vec<_> = entries
+                .iter()
+                .copied()
+                .filter(|entry| entry.target == PlayTarget::Dungeon(scene))
+                .collect();
+            let Some(entry) = matches.first().copied() else {
+                return Ok(self.block_missing_dungeon_return(
+                    scene,
+                    level,
+                    format!("Fell out of {} ({})", scene.key(), scene.name()),
+                ));
+            };
+            if matches.len() > 1 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "{WORLD_LOCATION_TABLE_FILE} has multiple return rows for {}",
+                        PlayTarget::Dungeon(scene).key()
+                    ),
+                ));
+            }
+            let plane = entry.plane;
+            self.area = Area::World { plane };
+            self.player.x = x;
+            self.player.y = y;
+            self.force_foot_transport();
+            self.grid = load_world_map(game_dir, plane)?;
+            self.natural_moongate_live_cells.clear();
+            self.npcs.clear();
+            self.replace_world_active_objects(game_dir, plane, x, y)?;
+            self.clear_open_town_door_state();
+            self.pending_moongate = None;
+            self.pending_town_arrest = None;
+            self.active_blackthorn = None;
+            self.mode_zero_cleanup();
+            self.mark_visibility_dirty();
+            self.message = format!(
+                "Fell out of {} ({}) past level {}; cleared dungeon scene at trap-chain coordinate ({x}, {y}) on {:?}.",
+                scene.key(),
+                scene.name(),
+                level + 1,
+                plane
+            );
+            return Ok(MoveOutcome::Transition(
+                AreaTransition::ExitedDungeonToWorldPlane { scene, plane },
+            ));
+        }
+
+        Ok(self.block_missing_dungeon_return(
+            scene,
+            level,
+            format!("Fell out of {} ({})", scene.key(), scene.name()),
         ))
     }
 

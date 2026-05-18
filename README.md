@@ -426,9 +426,13 @@ first-playable fall damage only to conscious party members.
 Snapshot-backed interior entries start on foot while preserving the outside
 world snapshot; exits restore the saved world grid, active objects, boarded
 transport, and timing/status plus ship-sailing cadence/refusal feedback, while
-the clean world-location table fallback returns on foot. Plane swaps, moongates into a
-different plane, and scripted dungeon-to-world descents clear ship-sailing
-cadence/refusal feedback when they force foot transport. The terminal surface
+the clean world-location table fallback returns on foot. Dungeon fall-trap
+chains that run past level 7 clear dungeon mode at the trap-chain X/Y instead
+of using the exterior return coordinate; with no in-memory world snapshot, the
+world-location row supplies only the target plane/map to materialize that scene
+clear. Plane swaps, moongates into a different plane, and scripted
+dungeon-to-world descents clear ship-sailing cadence/refusal feedback when they
+force foot transport. The terminal surface
 renderer uses that cached light as a first-playable visibility radius gate and
 a class-based line-of-sight blocker pass for walls, closed doors, mountain-family
 tiles, and blocking active objects; an overworld water tile under the party
