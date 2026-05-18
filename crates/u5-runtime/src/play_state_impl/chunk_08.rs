@@ -1471,6 +1471,20 @@ impl PlayState {
         x: usize,
         y: usize,
     ) -> io::Result<Option<WorldPlaneTransitionEntry>> {
+        if plane == WorldPlane::Britannia
+            && x == usize::from(SURFACE_CHASM_X)
+            && y == usize::from(SURFACE_CHASM_Y)
+        {
+            return Ok(Some(WorldPlaneTransitionEntry {
+                from_plane: WorldPlane::Britannia,
+                x,
+                y,
+                to_plane: WorldPlane::Underworld,
+                to_x: x,
+                to_y: y,
+                expected_tile: None,
+            }));
+        }
         let tile = self.grid[world_cell_index(x, y)];
         Ok(
             load_world_plane_transition_entries(game_dir)?.and_then(|entries| {

@@ -440,6 +440,106 @@
     }
 
     #[test]
+    fn fixed_surface_chasm_fires_without_sidecar_table() {
+        let dir = debug_game_dir();
+        let mut under_ool = vec![0; OOL_PLANE_LEN];
+        let slot = OOL_RECORD_LEN;
+        under_ool[slot] = 168;
+        under_ool[slot + 1] = 169;
+        under_ool[slot + 2] = SURFACE_CHASM_X.wrapping_add(1);
+        under_ool[slot + 3] = SURFACE_CHASM_Y;
+        under_ool[slot + 4] = 0xff;
+        under_ool[slot + 6] = 0x22;
+        fs::write(dir.join("UNDER.OOL"), under_ool).unwrap();
+
+        let mut state = world_state(
+            open_world_grid(),
+            usize::from(SURFACE_CHASM_X - 1),
+            usize::from(SURFACE_CHASM_Y),
+        );
+        state.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        state.party[0].hp = 10;
+        state.active_objects[0].z = WorldPlane::Britannia.save_floor();
+        state.sync_player_object();
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
+                from: WorldPlane::Britannia,
+                to: WorldPlane::Underworld
+            })
+        );
+
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!(
+            (state.player.x, state.player.y),
+            (usize::from(SURFACE_CHASM_X), usize::from(SURFACE_CHASM_Y))
+        );
+        assert_eq!(state.active_objects[0].z, WorldPlane::Underworld.save_floor());
+        assert_eq!(
+            state.active_objects[1],
+            ActiveObject {
+                type_byte: 168,
+                tile: 169,
+                x: usize::from(SURFACE_CHASM_X.wrapping_add(1)),
+                y: usize::from(SURFACE_CHASM_Y),
+                z: -1,
+                phase: 0x22,
+                aux1: 0,
+                aux3: 0,
+            }
+        );
+        assert!(state.party[0].hp < 10);
+        assert!(state.message.contains("F-A-L-L-S"));
+        assert!(state.message.contains("fall damage"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn fixed_surface_chasm_underfoot_pass_triggers_without_sidecar_table() {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(
+            open_world_grid(),
+            usize::from(SURFACE_CHASM_X),
+            usize::from(SURFACE_CHASM_Y),
+        );
+        state.party[0].hp = 10;
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+            MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
+                from: WorldPlane::Britannia,
+                to: WorldPlane::Underworld
+            })
+        );
+
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!(
+            (state.player.x, state.player.y),
+            (usize::from(SURFACE_CHASM_X), usize::from(SURFACE_CHASM_Y))
+        );
+        assert_eq!(state.turn, 1);
+        assert!(state.message.starts_with("Passed."));
+        assert!(state.message.contains("F-A-L-L-S"));
+        assert!(state.party[0].hp < 10);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn world_plane_transition_table_overrides_base_tile_blocking() {
         let dir = debug_game_dir();
         fs::write(
