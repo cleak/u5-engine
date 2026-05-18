@@ -546,6 +546,22 @@ pub enum CombatSceneAbortVerb {
     View,
 }
 
+pub const fn combat_scene_abort_verb_prefix(verb: CombatSceneAbortVerb) -> &'static str {
+    match verb {
+        CombatSceneAbortVerb::Board => "Board",
+        CombatSceneAbortVerb::Enter => "Enter",
+        CombatSceneAbortVerb::Fire => "Fire",
+        CombatSceneAbortVerb::HoleUp => "Hole up",
+        CombatSceneAbortVerb::IgniteTorch => "Ignite",
+        CombatSceneAbortVerb::Look => "Look",
+        CombatSceneAbortVerb::Mix => "Mix",
+        CombatSceneAbortVerb::NewOrder => "New order",
+        CombatSceneAbortVerb::Talk => "Talk",
+        CombatSceneAbortVerb::UseItem => "Use",
+        CombatSceneAbortVerb::View => "View",
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CombatCommandBranch {
     Attack,
@@ -1964,9 +1980,9 @@ pub const fn combat_command_branch_published_label(
         CombatCommandBranch::Push => Some("Push-"),
         CombatCommandBranch::Search => Some("Search-"),
         CombatCommandBranch::WWhatRefusal => Some("W-What?"),
+        CombatCommandBranch::SceneMessageAbort(_) => None,
         CombatCommandBranch::Attack
         | CombatCommandBranch::CastSpell
-        | CombatCommandBranch::SceneMessageAbort(_)
         | CombatCommandBranch::Klimb
         | CombatCommandBranch::QuitDefeat
         | CombatCommandBranch::Ready

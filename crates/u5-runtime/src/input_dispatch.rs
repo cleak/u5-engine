@@ -1765,7 +1765,38 @@ fn combat_player_command_message(action: &CombatPlayerCommandAction) -> String {
         CombatPlayerCommandAction::QuitDefeat => "Combat abandoned.".to_string(),
         CombatPlayerCommandAction::XitCleanup { allowed: true } => "Exit combat.".to_string(),
         CombatPlayerCommandAction::XitCleanup { allowed: false } => "Foes remain.".to_string(),
-        CombatPlayerCommandAction::Branch { branch, .. } => format!("{branch:?}."),
+        CombatPlayerCommandAction::Branch { branch, .. } => combat_command_branch_message(*branch),
+    }
+}
+
+fn combat_command_branch_message(branch: CombatCommandBranch) -> String {
+    if let Some(label) = combat_command_branch_published_label(branch) {
+        return label.to_string();
+    }
+
+    match branch {
+        CombatCommandBranch::SceneMessageAbort(verb) => {
+            format!("{}-Not here!", combat_scene_abort_verb_prefix(verb))
+        }
+        CombatCommandBranch::Klimb => "Klimb-What?".to_string(),
+        CombatCommandBranch::AbortPrompt => "Aborted.".to_string(),
+        CombatCommandBranch::ToggleMusic => "Sound toggled.".to_string(),
+        CombatCommandBranch::Invalid => "What?".to_string(),
+        CombatCommandBranch::Attack
+        | CombatCommandBranch::CastSpell
+        | CombatCommandBranch::QuitDefeat
+        | CombatCommandBranch::Ready
+        | CombatCommandBranch::XitCleanup
+        | CombatCommandBranch::Yell
+        | CombatCommandBranch::ZStats
+        | CombatCommandBranch::Pass
+        | CombatCommandBranch::Get
+        | CombatCommandBranch::Jimmy
+        | CombatCommandBranch::Open
+        | CombatCommandBranch::Push
+        | CombatCommandBranch::Search
+        | CombatCommandBranch::DWhatRefusal
+        | CombatCommandBranch::WWhatRefusal => format!("{branch:?}."),
     }
 }
 

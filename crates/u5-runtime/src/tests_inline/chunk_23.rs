@@ -5007,6 +5007,15 @@
             )),
             None
         );
+
+        assert_eq!(
+            combat_scene_abort_verb_prefix(CombatSceneAbortVerb::UseItem),
+            "Use"
+        );
+        assert_eq!(
+            combat_scene_abort_verb_prefix(CombatSceneAbortVerb::HoleUp),
+            "Hole up"
+        );
     }
 
     #[test]
@@ -7682,6 +7691,26 @@
         );
         assert_eq!(state.party[0].status, b'P');
         assert_eq!(state.pending_combat_actor_slot, Some(0));
+    }
+
+    #[test]
+    fn combat_input_dispatch_scene_abort_branches_use_visible_refusals_without_item_effects() {
+        let game_dir = std::path::Path::new(".");
+        let mut use_state = combat_player_command_state(8, 5);
+        use_state.potion_stock[POTION_BLUE_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut use_state, 'U', "blue1", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(use_state.potion_stock[POTION_BLUE_INDEX], 1);
+        assert!(use_state.active_use.is_none());
+        assert_eq!(
+            use_state.message,
+            "Use-Not here!\nGiant Rat moved to (7, 5)."
+        );
+        assert!(use_state.combat_active);
     }
 
     #[test]
