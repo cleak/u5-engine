@@ -31,8 +31,7 @@ pub const SIGNS_DAT_FILE: &str = "SIGNS.DAT";
 /// byte 0) and the 32 town-family scenes (1..=SCENE_TOWN_
 /// FAMILY_LAST). Anchored to `SCENE_TOWN_FAMILY_LAST as usize +
 /// 1` so the directory size derives from the scene partition.
-pub const SIGNS_DAT_SCENE_DIRECTORY_SLOTS: usize =
-    crate::SCENE_TOWN_FAMILY_LAST as usize + 1;
+pub const SIGNS_DAT_SCENE_DIRECTORY_SLOTS: usize = crate::SCENE_TOWN_FAMILY_LAST as usize + 1;
 pub const SIGNS_DAT_SCENE_DIRECTORY_BYTES: usize = SIGNS_DAT_SCENE_DIRECTORY_SLOTS * 2;
 /// `formats/signs-dat.md §3`: each sign record begins with a four-byte
 /// `(scene, z, y, x)` header followed by a NUL-terminated payload.
@@ -212,4 +211,12 @@ pub fn find_sign(records: &[SignRecord], scene: u8, z: u8, y: u8, x: u8) -> Opti
     records
         .iter()
         .find(|r| r.scene == scene && r.z == z && r.y == y && r.x == x)
+}
+
+pub fn matching_sign_bodies(records: &[SignRecord], scene: u8, z: u8, y: u8, x: u8) -> Vec<&str> {
+    records
+        .iter()
+        .filter(|r| r.scene == scene && r.z == z && r.y == y && r.x == x)
+        .map(|r| r.body.as_str())
+        .collect()
 }

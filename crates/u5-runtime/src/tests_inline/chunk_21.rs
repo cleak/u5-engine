@@ -240,6 +240,73 @@
         assert_eq!(state.clock, GameClock::default());
     }
 
+    fn signs_dat_bytes_for_test(records: &[(u8, u8, u8, u8, &[u8])]) -> Vec<u8> {
+        let mut bytes = vec![0; SIGNS_DAT_SCENE_DIRECTORY_BYTES];
+        if let Some((scene, ..)) = records.first() {
+            let offset = SIGNS_DAT_SCENE_DIRECTORY_BYTES as u16;
+            bytes[*scene as usize * 2..*scene as usize * 2 + 2]
+                .copy_from_slice(&offset.to_le_bytes());
+        }
+        for (scene, z, y, x, body) in records {
+            bytes.extend_from_slice(&[*scene, *z, *y, *x]);
+            bytes.extend_from_slice(body);
+            bytes.push(0);
+        }
+        bytes.extend_from_slice(&[0, 0, 0, 0]);
+        bytes
+    }
+
+    #[test]
+    fn town_look_renders_matching_signs_dat_record_without_spending_turn() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[(0x5a, "a sign")])).unwrap();
+        fs::write(
+            dir.join(SIGNS_DAT_FILE),
+            signs_dat_bytes_for_test(&[(17, 0, 1, 2, b"North Road")]),
+        )
+        .unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = 0x5a;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+
+        assert_eq!(
+            state.look_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Observed
+        );
+
+        assert_eq!(state.message, "Sign:\nNorth Road");
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn world_look_special_map_tile_routes_to_britannia_overview() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(LOOK2_DAT_FILE),
+            look2_bytes(&[(BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE as usize, "map trigger")]),
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(2, 1)] = BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE;
+        let mut state = britannia_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+
+        assert_eq!(
+            state.look_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Observed
+        );
+
+        assert!(state.message.starts_with("Britannia overview from Look"));
+        assert_eq!(state.message.lines().skip(1).count(), BRITANNIA_CHUNK_MAP_ROWS as usize);
+        assert!(!state.message.contains("map trigger"));
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn look_clock_tiles_append_twelve_hour_time_context() {
         let table = parse_look2_dat(&look2_bytes(&[(0xfa, "a clock")])).unwrap();
@@ -289,7 +356,14 @@
     #[test]
     fn world_look_uses_look2_description_for_wrapped_object() {
         let dir = debug_game_dir();
-        fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[(170, "frigate")])).unwrap();
+        fs::write(
+            dir.join(LOOK2_DAT_FILE),
+            look2_bytes(&[
+                (170, "terrain frigate"),
+                (LOOK2_DAT_TERRAIN_ENTRIES + 170, "object frigate"),
+            ]),
+        )
+        .unwrap();
         let mut state = world_state(open_world_grid(), 255, 0);
         state.player.facing = Direction::East;
         state.active_objects.push(ActiveObject {
@@ -308,7 +382,8 @@
             MoveOutcome::Observed
         );
 
-        assert!(state.message.contains("frigate"));
+        assert!(state.message.contains("object frigate"));
+        assert!(!state.message.contains("terrain frigate"));
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::default());
     }

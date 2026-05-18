@@ -1336,12 +1336,20 @@ impl PlayState {
                     self.message = if look_table.is_some() {
                         format!(
                             "You see: {} at ({x}, {y}).",
-                            self.look_description(object.tile, look_table)
+                            self.look_object_description(object.tile, look_table)
                         )
                     } else {
                         format!("You see: an actor tile {} at ({x}, {y}).", object.tile)
                     };
                     return Ok(MoveOutcome::Observed);
+                }
+                if let Area::Town { scene, floor } = self.area {
+                    if let Some(sign) =
+                        self.sign_message_at(game_dir, scene.byte, floor as u8, y as u8, x as u8)?
+                    {
+                        self.message = sign;
+                        return Ok(MoveOutcome::Observed);
+                    }
                 }
                 let tile = self.grid[y * 32 + x];
                 self.message = format!(
@@ -1358,7 +1366,7 @@ impl PlayState {
                     self.message = if look_table.is_some() {
                         format!(
                             "You see: {} at ({x}, {y}).",
-                            self.look_description(object.tile, look_table)
+                            self.look_object_description(object.tile, look_table)
                         )
                     } else {
                         format!("You see: an object tile {} at ({x}, {y}).", object.tile)
@@ -1366,6 +1374,24 @@ impl PlayState {
                     return Ok(MoveOutcome::Observed);
                 }
                 let tile = self.grid[world_cell_index(x, y)];
+                if tile == BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE {
+                    self.message = format!(
+                        "Britannia overview from Look at ({x}, {y}) on {}:\n{}",
+                        plane.key(),
+                        self.britannia_chunk_overview_map()
+                    );
+                    return Ok(MoveOutcome::Observed);
+                }
+                if let Some(sign) = self.sign_message_at(
+                    game_dir,
+                    SCENE_OVERWORLD,
+                    plane.save_floor() as u8,
+                    y as u8,
+                    x as u8,
+                )? {
+                    self.message = sign;
+                    return Ok(MoveOutcome::Observed);
+                }
                 let description =
                     self.look_description_for_world_tile(tile, look_table, game_dir, plane, x, y)?;
                 self.message =
@@ -1395,6 +1421,40 @@ impl PlayState {
         } else {
             base
         }
+    }
+
+    pub fn look_object_description(&self, object_id: u8, look_table: Option<&LookTable>) -> String {
+        look_table
+            .and_then(|table| {
+                table
+                    .description(LOOK2_DAT_TERRAIN_ENTRIES + object_id as usize)
+                    .filter(|description| {
+                        !description.is_empty() && !table.is_sentinel(description)
+                    })
+            })
+            .map(str::to_string)
+            .unwrap_or_else(|| tile_class(object_id).to_string())
+    }
+
+    pub fn sign_message_at(
+        &self,
+        game_dir: Option<&Path>,
+        scene: u8,
+        z: u8,
+        y: u8,
+        x: u8,
+    ) -> io::Result<Option<String>> {
+        let Some(game_dir) = game_dir else {
+            return Ok(None);
+        };
+        let Some(records) = load_sign_records(game_dir)? else {
+            return Ok(None);
+        };
+        let bodies = crate::signs_io::matching_sign_bodies(&records, scene, z, y, x);
+        if bodies.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(format!("Sign:\n{}", bodies.join("\n"))))
     }
 
     pub fn look_description_for_world_tile(
