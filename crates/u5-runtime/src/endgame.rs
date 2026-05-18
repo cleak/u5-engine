@@ -131,6 +131,7 @@ pub struct EndgameState {
     pub certificate: Option<String>,
     pub cinematic: crate::endgame_cinematic::EndgameCinematic,
     pub messages: Option<EndgameMessages>,
+    pub final_narrative: Option<EndNarrative>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -152,6 +153,7 @@ impl EndgameState {
             certificate: None,
             cinematic: crate::endgame_cinematic::EndgameCinematic::default(),
             messages,
+            final_narrative: None,
         }
     }
 
@@ -170,6 +172,7 @@ impl EndgameState {
             certificate: None,
             cinematic: crate::endgame_cinematic::EndgameCinematic::default(),
             messages,
+            final_narrative: None,
         }
     }
 
@@ -179,6 +182,7 @@ impl EndgameState {
         has_sandalwood_box: bool,
         certificate: String,
         messages: Option<EndgameMessages>,
+        final_narrative: Option<EndNarrative>,
     ) -> Self {
         let outcome = endgame_outcome(final_confirmation, has_sandalwood_box);
         let cinematic = if outcome == EndgameOutcome::Victory {
@@ -197,6 +201,9 @@ impl EndgameState {
             certificate: (outcome == EndgameOutcome::Victory).then_some(certificate),
             cinematic,
             messages,
+            final_narrative: (outcome == EndgameOutcome::Victory)
+                .then_some(final_narrative)
+                .flatten(),
         }
     }
 
@@ -571,6 +578,33 @@ impl PlayState {
     }
 
     pub fn resolve_endgame_confirmation(&mut self, answer: bool) -> MoveOutcome {
+        self.resolve_endgame_confirmation_with_narrative(answer, None)
+    }
+
+    pub fn resolve_endgame_confirmation_from_game_dir(
+        &mut self,
+        answer: bool,
+        game_dir: &std::path::Path,
+    ) -> std::io::Result<MoveOutcome> {
+        let needs_final_narrative = self.endgame.as_ref().is_some_and(|state| {
+            !state.is_terminal()
+                && state.first_confirmation.is_some()
+                && answer
+                && self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] != 0
+        });
+        let final_narrative = if needs_final_narrative {
+            Some(require_end_narrative(game_dir)?)
+        } else {
+            None
+        };
+        Ok(self.resolve_endgame_confirmation_with_narrative(answer, final_narrative))
+    }
+
+    fn resolve_endgame_confirmation_with_narrative(
+        &mut self,
+        answer: bool,
+        final_narrative: Option<EndNarrative>,
+    ) -> MoveOutcome {
         let Some(current) = self.endgame.clone() else {
             self.message = "No endgame confirmation is pending.".to_string();
             return MoveOutcome::Blocked;
@@ -624,6 +658,7 @@ impl PlayState {
             has_box,
             certificate.clone(),
             current.messages,
+            final_narrative,
         );
         self.message = match next.outcome {
             Some(EndgameOutcome::Victory) => {

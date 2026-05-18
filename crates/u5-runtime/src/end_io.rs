@@ -146,6 +146,18 @@ pub fn load_end_narrative(game_dir: &Path) -> io::Result<Option<EndNarrative>> {
     parse_end_narrative(&bytes).map(Some)
 }
 
+pub fn require_end_narrative(game_dir: &Path) -> io::Result<EndNarrative> {
+    load_end_narrative(game_dir)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!(
+                "{}: required endgame narrative resource is missing",
+                game_dir.join(END_DAT_FILE).display()
+            ),
+        )
+    })
+}
+
 pub fn parse_end_narrative(bytes: &[u8]) -> io::Result<EndNarrative> {
     if bytes.is_empty() {
         return Err(io::Error::new(

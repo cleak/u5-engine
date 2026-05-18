@@ -13728,6 +13728,14 @@
         fs::write(dir.join("ENDMSG.DAT"), synthetic_endmsg_dat_bytes()).unwrap();
     }
 
+    fn write_synthetic_end_dat(dir: &std::path::Path) {
+        fs::write(
+            dir.join("END.DAT"),
+            b"{Return home narrative\n{Blackthorn judgment narrative",
+        )
+        .unwrap();
+    }
+
     #[test]
     fn endgame_real_handoff_requires_endmsg_dat_resource() {
         let dir = debug_game_dir();
@@ -13737,6 +13745,45 @@
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
         assert!(err.to_string().contains("ENDMSG.DAT"));
         assert!(state.endgame.is_none());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn endgame_real_victory_requires_end_dat_resource() {
+        let dir = debug_game_dir();
+        write_synthetic_endmsg_dat(&dir);
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 1;
+        state
+            .enter_endgame_from_game_dir(Some(&dir))
+            .expect("ENDMSG.DAT should load");
+
+        assert_eq!(
+            state
+                .resolve_endgame_confirmation_from_game_dir(true, &dir)
+                .unwrap(),
+            MoveOutcome::Used
+        );
+        let err = state
+            .resolve_endgame_confirmation_from_game_dir(true, &dir)
+            .unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(err.to_string().contains("END.DAT"));
+        assert_eq!(
+            state.endgame.as_ref().and_then(|state| state.final_confirmation),
+            None
+        );
+
+        write_synthetic_end_dat(&dir);
+        assert_eq!(
+            state
+                .resolve_endgame_confirmation_from_game_dir(true, &dir)
+                .unwrap(),
+            MoveOutcome::EndgameEntered
+        );
+        let endgame = state.endgame.as_ref().unwrap();
+        assert_eq!(endgame.outcome, Some(EndgameOutcome::Victory));
+        assert!(endgame.final_narrative.is_some());
         let _ = fs::remove_dir_all(dir);
     }
 

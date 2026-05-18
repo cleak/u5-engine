@@ -1505,7 +1505,7 @@ fn handle_endgame_key_input(
         _ => None,
     });
     if let Some(answer) = answer {
-        state.resolve_endgame_confirmation(answer);
+        state.resolve_endgame_confirmation_from_game_dir(answer, game_dir)?;
     } else if state
         .endgame
         .as_ref()
