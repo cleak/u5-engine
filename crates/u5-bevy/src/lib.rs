@@ -16,21 +16,25 @@ use bevy::sprite::Anchor;
 use bevy::text::TextBounds;
 
 use u5_runtime::{
-    Area, Direction, INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, IntroStoryArtPlacement,
-    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    Area, ChargenSession, ChargenSessionResult, ChargenSessionStep, Direction,
+    INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, IntroStoryArtPlacement, MISCMAPS_DAT_FILE,
+    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, PLAY_MUSIC_TOGGLE_KEY, PlayInputDisposition, PlayOptions,
     PlayState, RTV_COMMAND_STREAM_BYTES, StoryRecords, TILE_ATLAS_SIDE, TileAtlas,
-    TileGraphicsDepth, handle_play_key_input,
+    TileGraphicsDepth, U4TransferOverrides, U4TransferSource, commit_chargen_save,
+    commit_u4_transfer_save, handle_play_key_input,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
     intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_play_options_from_save,
-    load_return_to_view_assets, load_story_records, load_tile_atlas,
+    load_question_records, load_return_to_view_assets, load_story_records, load_tile_atlas,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
-    render_return_to_view_preview_viewport, render_text_panel_rgba,
+    read_u4_transfer_source_from_party_sav, render_return_to_view_preview_viewport,
+    render_text_panel_rgba,
     shop_runtime::{GuildShopState, ReagentShopState, SageState, TavernState},
     shop_session::ActiveShopSession,
     summarize_return_to_view_preview, summarize_return_to_view_script,
+    u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
 };
 
 const VIEWPORT_RADIUS: usize = 5;
@@ -288,6 +292,17 @@ struct VisualIntroState {
 enum VisualIntroPanel {
     #[default]
     Menu,
+    CharacterCreation {
+        session: ChargenSession,
+        input_line: String,
+    },
+    U4Transfer {
+        source: U4TransferSource,
+        preview: U4TransferPreview,
+        overrides: U4TransferOverrides,
+        stage: VisualU4TransferStage,
+        input_line: String,
+    },
     Story {
         records: StoryRecords,
         step: usize,
@@ -299,6 +314,15 @@ enum VisualIntroPanel {
         preview_width: usize,
         preview_height: usize,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum VisualU4TransferStage {
+    ConfirmName,
+    ReplacementName,
+    ConfirmGender,
+    ReplacementGender,
+    ConfirmCommit,
 }
 
 /// Drives the static-tile animator (water cycle) at a fixed wall-clock
@@ -501,7 +525,7 @@ fn step_visual_intro(
     exit: &mut EventWriter<AppExit>,
 ) -> bool {
     if !matches!(intro.panel, VisualIntroPanel::Menu) {
-        return step_visual_intro_panel(intro);
+        return step_visual_intro_panel(intro, ch);
     }
 
     if matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle) {
@@ -536,40 +560,267 @@ fn step_visual_intro(
     }
 }
 
-fn step_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
-    match &mut intro.panel {
-        VisualIntroPanel::Menu => false,
+enum VisualIntroPanelOutcome {
+    Stay,
+    ReturnToMenu {
+        subflow: IntroSubflow,
+        result: IntroSubflowResult,
+        message: String,
+    },
+    CommitChargen(ChargenSessionResult),
+    CommitU4Transfer {
+        source: U4TransferSource,
+        overrides: U4TransferOverrides,
+    },
+}
+
+fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
+    let outcome = match &mut intro.panel {
+        VisualIntroPanel::Menu => return false,
+        VisualIntroPanel::CharacterCreation {
+            session,
+            input_line,
+        } => step_visual_chargen_panel(session, input_line, ch),
+        VisualIntroPanel::U4Transfer {
+            source,
+            overrides,
+            stage,
+            input_line,
+            ..
+        } => step_visual_u4_transfer_panel(source, overrides, stage, input_line, ch),
         VisualIntroPanel::Story { step, .. } => {
             if *step + 1 < INTRO_STORY_STEP_COUNT {
                 *step += 1;
+                VisualIntroPanelOutcome::Stay
             } else {
-                intro.panel = VisualIntroPanel::Menu;
-                intro.dispatch.complete_subflow(
-                    IntroSubflow::StorySlides,
-                    IntroSubflowResult::ReturnedToMenu,
-                );
-                intro.message = "Ultima V Introduction complete.".to_string();
+                VisualIntroPanelOutcome::ReturnToMenu {
+                    subflow: IntroSubflow::StorySlides,
+                    result: IntroSubflowResult::ReturnedToMenu,
+                    message: "Ultima V Introduction complete.".to_string(),
+                }
             }
-            true
         }
-        VisualIntroPanel::Acknowledgements => {
+        VisualIntroPanel::Acknowledgements => VisualIntroPanelOutcome::ReturnToMenu {
+            subflow: IntroSubflow::Acknowledgements,
+            result: IntroSubflowResult::ReturnedToMenu,
+            message: "Acknowledgements complete.".to_string(),
+        },
+        VisualIntroPanel::ReturnToView { .. } => VisualIntroPanelOutcome::ReturnToMenu {
+            subflow: IntroSubflow::ReturnToView,
+            result: IntroSubflowResult::ReturnedToMenu,
+            message: "Return-to-View preview complete.".to_string(),
+        },
+    };
+
+    match outcome {
+        VisualIntroPanelOutcome::Stay => {}
+        VisualIntroPanelOutcome::ReturnToMenu {
+            subflow,
+            result,
+            message,
+        } => {
             intro.panel = VisualIntroPanel::Menu;
-            intro.dispatch.complete_subflow(
-                IntroSubflow::Acknowledgements,
-                IntroSubflowResult::ReturnedToMenu,
-            );
-            intro.message = "Acknowledgements complete.".to_string();
-            true
+            intro.dispatch.complete_subflow(subflow, result);
+            intro.message = message;
         }
-        VisualIntroPanel::ReturnToView { .. } => {
-            intro.panel = VisualIntroPanel::Menu;
-            intro.dispatch.complete_subflow(
-                IntroSubflow::ReturnToView,
-                IntroSubflowResult::ReturnedToMenu,
-            );
-            intro.message = "Return-to-View preview complete.".to_string();
-            true
+        VisualIntroPanelOutcome::CommitChargen(result) => {
+            match commit_chargen_save(
+                &intro.game_dir,
+                &result.entered_name,
+                result.male,
+                result.tournament.stats,
+            ) {
+                Ok(avatar) => {
+                    intro.panel = VisualIntroPanel::Menu;
+                    intro.dispatch.complete_subflow(
+                        IntroSubflow::CharacterCreation,
+                        IntroSubflowResult::SaveReady,
+                    );
+                    intro.message = format!(
+                        "Created {}. Choose Journey Onward to load the new save.",
+                        display_name_bytes(&avatar.name)
+                    );
+                }
+                Err(err) => {
+                    intro.panel = VisualIntroPanel::Menu;
+                    intro.dispatch.complete_subflow(
+                        IntroSubflow::CharacterCreation,
+                        IntroSubflowResult::Cancelled,
+                    );
+                    intro.message = format!("Character creation failed: {err}");
+                }
+            }
         }
+        VisualIntroPanelOutcome::CommitU4Transfer { source, overrides } => {
+            match commit_u4_transfer_save(&intro.game_dir, &source, Some(&overrides)) {
+                Ok(avatar) => {
+                    intro.panel = VisualIntroPanel::Menu;
+                    intro.dispatch.complete_subflow(
+                        IntroSubflow::UltimaIvTransfer,
+                        IntroSubflowResult::SaveReady,
+                    );
+                    intro.message = format!(
+                        "Transferred {}. Choose Journey Onward to load the new save.",
+                        display_name_bytes(&avatar.name)
+                    );
+                }
+                Err(err) => {
+                    intro.panel = VisualIntroPanel::Menu;
+                    intro.dispatch.complete_subflow(
+                        IntroSubflow::UltimaIvTransfer,
+                        IntroSubflowResult::Cancelled,
+                    );
+                    intro.message = format!("Transfer failed: {err}");
+                }
+            }
+        }
+    }
+    true
+}
+
+fn step_visual_chargen_panel(
+    session: &mut ChargenSession,
+    input_line: &mut String,
+    ch: char,
+) -> VisualIntroPanelOutcome {
+    match session.current_step() {
+        ChargenSessionStep::PromptName => match ch {
+            '\r' | '\n' => {
+                let submitted = std::mem::take(input_line);
+                match session.submit_name(&submitted) {
+                    ChargenSessionStep::Aborted => VisualIntroPanelOutcome::ReturnToMenu {
+                        subflow: IntroSubflow::CharacterCreation,
+                        result: IntroSubflowResult::Cancelled,
+                        message: "Character creation aborted; returning to the intro menu."
+                            .to_string(),
+                    },
+                    _ => VisualIntroPanelOutcome::Stay,
+                }
+            }
+            '\u{8}' => {
+                input_line.pop();
+                VisualIntroPanelOutcome::Stay
+            }
+            _ if ch.is_ascii_graphic() || ch == ' ' => {
+                if input_line.len() < u5_runtime::CHARGEN_NAME_INPUT_LIMIT {
+                    input_line.push(ch);
+                }
+                VisualIntroPanelOutcome::Stay
+            }
+            _ => VisualIntroPanelOutcome::Stay,
+        },
+        ChargenSessionStep::PromptGender => {
+            session.submit_gender_key(ch as u8);
+            VisualIntroPanelOutcome::Stay
+        }
+        ChargenSessionStep::PresentIntro { .. } => {
+            session.advance_intro();
+            VisualIntroPanelOutcome::Stay
+        }
+        ChargenSessionStep::PresentQuestion(_) => {
+            session.submit_answer_key(ch as u8);
+            match session.current_step() {
+                ChargenSessionStep::Completed(result) => {
+                    VisualIntroPanelOutcome::CommitChargen(result)
+                }
+                _ => VisualIntroPanelOutcome::Stay,
+            }
+        }
+        ChargenSessionStep::Completed(result) => VisualIntroPanelOutcome::CommitChargen(result),
+        ChargenSessionStep::Aborted => VisualIntroPanelOutcome::ReturnToMenu {
+            subflow: IntroSubflow::CharacterCreation,
+            result: IntroSubflowResult::Cancelled,
+            message: "Character creation aborted; returning to the intro menu.".to_string(),
+        },
+        ChargenSessionStep::Ignored => VisualIntroPanelOutcome::Stay,
+    }
+}
+
+fn step_visual_u4_transfer_panel(
+    source: &U4TransferSource,
+    overrides: &mut U4TransferOverrides,
+    stage: &mut VisualU4TransferStage,
+    input_line: &mut String,
+    ch: char,
+) -> VisualIntroPanelOutcome {
+    match *stage {
+        VisualU4TransferStage::ConfirmName => match yes_no_key(ch) {
+            Some(true) => {
+                *stage = VisualU4TransferStage::ConfirmGender;
+                VisualIntroPanelOutcome::Stay
+            }
+            Some(false) => {
+                input_line.clear();
+                *stage = VisualU4TransferStage::ReplacementName;
+                VisualIntroPanelOutcome::Stay
+            }
+            None => VisualIntroPanelOutcome::Stay,
+        },
+        VisualU4TransferStage::ReplacementName => match ch {
+            '\r' | '\n' => {
+                if !input_line.trim().is_empty() {
+                    overrides.name = Some(input_line.trim().as_bytes().to_vec());
+                    input_line.clear();
+                    *stage = VisualU4TransferStage::ConfirmGender;
+                }
+                VisualIntroPanelOutcome::Stay
+            }
+            '\u{8}' => {
+                input_line.pop();
+                VisualIntroPanelOutcome::Stay
+            }
+            _ if ch.is_ascii_graphic() || ch == ' ' => {
+                if input_line.len() < u5_runtime::CHARGEN_NAME_INPUT_LIMIT {
+                    input_line.push(ch);
+                }
+                VisualIntroPanelOutcome::Stay
+            }
+            _ => VisualIntroPanelOutcome::Stay,
+        },
+        VisualU4TransferStage::ConfirmGender => match yes_no_key(ch) {
+            Some(true) => {
+                *stage = VisualU4TransferStage::ConfirmCommit;
+                VisualIntroPanelOutcome::Stay
+            }
+            Some(false) => {
+                *stage = VisualU4TransferStage::ReplacementGender;
+                VisualIntroPanelOutcome::Stay
+            }
+            None => VisualIntroPanelOutcome::Stay,
+        },
+        VisualU4TransferStage::ReplacementGender => match ch.to_ascii_uppercase() {
+            'M' => {
+                overrides.male = Some(true);
+                *stage = VisualU4TransferStage::ConfirmCommit;
+                VisualIntroPanelOutcome::Stay
+            }
+            'F' => {
+                overrides.male = Some(false);
+                *stage = VisualU4TransferStage::ConfirmCommit;
+                VisualIntroPanelOutcome::Stay
+            }
+            _ => VisualIntroPanelOutcome::Stay,
+        },
+        VisualU4TransferStage::ConfirmCommit => match yes_no_key(ch) {
+            Some(true) => VisualIntroPanelOutcome::CommitU4Transfer {
+                source: source.clone(),
+                overrides: overrides.clone(),
+            },
+            Some(false) => VisualIntroPanelOutcome::ReturnToMenu {
+                subflow: IntroSubflow::UltimaIvTransfer,
+                result: IntroSubflowResult::Cancelled,
+                message: "Transfer aborted; returning to the intro menu.".to_string(),
+            },
+            None => VisualIntroPanelOutcome::Stay,
+        },
+    }
+}
+
+fn yes_no_key(ch: char) -> Option<bool> {
+    match ch.to_ascii_uppercase() {
+        'Y' => Some(true),
+        'N' => Some(false),
+        _ => None,
     }
 }
 
@@ -597,22 +848,72 @@ fn resolve_visual_intro_subflow(
                 intro.message = format!("No loadable saved game: {err}");
             }
         },
-        IntroSubflow::CharacterCreation => {
-            intro.panel = VisualIntroPanel::Menu;
-            intro
-                .dispatch
-                .complete_subflow(subflow, IntroSubflowResult::Cancelled);
-            intro.message =
-                "Create New Character is available from terminal intro or --create-character."
-                    .to_string();
-        }
+        IntroSubflow::CharacterCreation => match load_question_records(&intro.game_dir) {
+            Ok(Some(records)) => {
+                match ChargenSession::new(records.records, visual_chargen_rng_pool()) {
+                    Ok(session) => {
+                        intro.panel = VisualIntroPanel::CharacterCreation {
+                            session,
+                            input_line: String::new(),
+                        };
+                        intro.message.clear();
+                    }
+                    Err(err) => {
+                        intro.panel = VisualIntroPanel::Menu;
+                        intro
+                            .dispatch
+                            .complete_subflow(subflow, IntroSubflowResult::Cancelled);
+                        intro.message = format!("QUESTION.DAT could not start chargen: {err}");
+                    }
+                }
+            }
+            Ok(None) => {
+                intro.panel = VisualIntroPanel::Menu;
+                intro
+                    .dispatch
+                    .complete_subflow(subflow, IntroSubflowResult::Cancelled);
+                intro.message =
+                    "QUESTION.DAT is required for visual character creation.".to_string();
+            }
+            Err(err) => {
+                intro.panel = VisualIntroPanel::Menu;
+                intro
+                    .dispatch
+                    .complete_subflow(subflow, IntroSubflowResult::Cancelled);
+                intro.message = format!("QUESTION.DAT could not be loaded: {err}");
+            }
+        },
         IntroSubflow::UltimaIvTransfer => {
-            intro.panel = VisualIntroPanel::Menu;
-            intro
-                .dispatch
-                .complete_subflow(subflow, IntroSubflowResult::Cancelled);
-            intro.message =
-                "Ultima IV Transfer is available from the terminal intro flow.".to_string();
+            match read_u4_transfer_source_from_party_sav(&intro.game_dir) {
+                Ok(source) => {
+                    let preview = u4_transfer_preview_from_u4_values(
+                        display_name_bytes(&source.name),
+                        source.class_index,
+                        source.strength,
+                        source.dexterity,
+                        source.intelligence,
+                        0,
+                    );
+                    intro.panel = VisualIntroPanel::U4Transfer {
+                        source,
+                        preview,
+                        overrides: U4TransferOverrides {
+                            name: None,
+                            male: None,
+                        },
+                        stage: VisualU4TransferStage::ConfirmName,
+                        input_line: String::new(),
+                    };
+                    intro.message.clear();
+                }
+                Err(err) => {
+                    intro.panel = VisualIntroPanel::Menu;
+                    intro
+                        .dispatch
+                        .complete_subflow(subflow, IntroSubflowResult::Cancelled);
+                    intro.message = format!("Transfer source rejected: {err}");
+                }
+            }
         }
         IntroSubflow::StorySlides => match load_story_records(&intro.game_dir) {
             Ok(Some(records)) => {
@@ -735,6 +1036,21 @@ fn drive_visual(
 fn summarize_intro(intro: &mut VisualIntroState) -> String {
     match &intro.panel {
         VisualIntroPanel::Menu => {}
+        VisualIntroPanel::CharacterCreation {
+            session,
+            input_line,
+        } => {
+            return summarize_visual_chargen(session, input_line);
+        }
+        VisualIntroPanel::U4Transfer {
+            source,
+            preview,
+            overrides,
+            stage,
+            input_line,
+        } => {
+            return summarize_visual_u4_transfer(source, preview, overrides, *stage, input_line);
+        }
         VisualIntroPanel::Story { records, step } => {
             return summarize_intro_story(records, *step);
         }
@@ -794,6 +1110,112 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
     if !intro.message.is_empty() {
         lines.push(String::new());
         lines.push(intro.message.clone());
+    }
+    lines.join("\n")
+}
+
+fn summarize_visual_chargen(session: &ChargenSession, input_line: &str) -> String {
+    match session.current_step() {
+        ChargenSessionStep::PromptName => [
+            "Create New Character".to_string(),
+            String::new(),
+            "By what name shalt thou be known?".to_string(),
+            format!("> {input_line}"),
+        ]
+        .join("\n"),
+        ChargenSessionStep::PromptGender => [
+            "Create New Character".to_string(),
+            String::new(),
+            "Art thou Male or Female?".to_string(),
+            "Press M or F.".to_string(),
+        ]
+        .join("\n"),
+        ChargenSessionStep::PresentIntro { text, .. } => [
+            "Create New Character".to_string(),
+            String::new(),
+            text,
+            String::new(),
+            "Press any key to continue.".to_string(),
+        ]
+        .join("\n"),
+        ChargenSessionStep::PresentQuestion(question) => [
+            "Create New Character".to_string(),
+            format!(
+                "Question {} of {} (round {})",
+                question.question_index + 1,
+                u5_runtime::CHARGEN_QUESTION_COUNT,
+                question.round
+            ),
+            String::new(),
+            question.text,
+            String::new(),
+            format!(
+                "A: {}    B: {}",
+                question.option_a.name(),
+                question.option_b.name()
+            ),
+            "Choose A or B.".to_string(),
+        ]
+        .join("\n"),
+        ChargenSessionStep::Completed(result) => [
+            "Create New Character".to_string(),
+            String::new(),
+            format!("Writing save for {}.", display_name_bytes(&result.name)),
+        ]
+        .join("\n"),
+        ChargenSessionStep::Aborted => "Character creation aborted.".to_string(),
+        ChargenSessionStep::Ignored => "Character creation is waiting.".to_string(),
+    }
+}
+
+fn summarize_visual_u4_transfer(
+    source: &U4TransferSource,
+    preview: &U4TransferPreview,
+    overrides: &U4TransferOverrides,
+    stage: VisualU4TransferStage,
+    input_line: &str,
+) -> String {
+    let selected_name = overrides
+        .name
+        .as_deref()
+        .map(display_name_bytes)
+        .unwrap_or_else(|| preview.name.clone());
+    let selected_gender = overrides.male.unwrap_or(source.male);
+    let mut lines = vec![
+        "Transfer from Ultima IV".to_string(),
+        String::new(),
+        format!(
+            "Preview: {} class {}, {}, STR {}, DEX {}, INT {}, XP {}.",
+            selected_name,
+            preview.class_index,
+            if selected_gender { "male" } else { "female" },
+            preview.strength,
+            preview.dexterity,
+            preview.intelligence,
+            source.experience / 10
+        ),
+        String::new(),
+    ];
+    match stage {
+        VisualU4TransferStage::ConfirmName => {
+            lines.push(format!("Use imported name {}? Press Y or N.", preview.name));
+        }
+        VisualU4TransferStage::ReplacementName => {
+            lines.push("Replacement name:".to_string());
+            lines.push(format!("> {input_line}"));
+        }
+        VisualU4TransferStage::ConfirmGender => {
+            lines.push(format!(
+                "Use imported gender {}? Press Y or N.",
+                if source.male { "M" } else { "F" }
+            ));
+        }
+        VisualU4TransferStage::ReplacementGender => {
+            lines.push("Replacement gender: press M or F.".to_string());
+        }
+        VisualU4TransferStage::ConfirmCommit => {
+            lines.push("Commit transfer save? Press Y or N.".to_string());
+        }
     }
     lines.join("\n")
 }
@@ -978,6 +1400,24 @@ fn visual_return_to_view_summary(
         ),
         Err(err) => (format!("Return-to-View preview error: {err}"), None, 0, 0),
     }
+}
+
+fn visual_chargen_rng_pool() -> Vec<u8> {
+    let offset = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos() as u64)
+        .unwrap_or(0)
+        .to_le_bytes()[0]
+        & 0x07;
+    (0u8..128).map(|byte| byte.wrapping_add(offset)).collect()
+}
+
+fn display_name_bytes(name: &[u8]) -> String {
+    let end = name
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(name.len());
+    String::from_utf8_lossy(&name[..end]).trim_end().to_string()
 }
 
 fn render_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
@@ -1321,12 +1761,16 @@ mod tests {
     use u5_runtime::shop_session::ActiveShopSession;
     use u5_runtime::test_fixtures::{
         debug_game_dir, dungeon_state, open_dungeon_record, open_grid, open_world_grid,
-        synthetic_tile_atlas, test_state, world_state,
+        saved_game_seed_bytes, synthetic_tile_atlas, test_state, world_state,
     };
     use u5_runtime::tlk_control_codes::TLK_TEXT_XOR_MASK;
     use u5_runtime::{
-        Area, Direction, EGA_PALETTE_RGB, GuildShop, Herbalist, REAGENT_COUNT, REAGENT_SPIDER_SILK,
-        SHRINE_TABLE_FILE, ShrineVirtue, Tavern, TileGraphicsDepth, WorldPlane, dungeon_cell_index,
+        Area, BRIT_OOL_FILENAME, Direction, EGA_PALETTE_RGB, GuildShop, Herbalist,
+        INIT_GAM_FILENAME, INIT_OOL_FILENAME, OOL_PLANE_LEN, REAGENT_COUNT, REAGENT_SPIDER_SILK,
+        SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET,
+        SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME,
+        SAVED_OOL_FILENAME, SHRINE_TABLE_FILE, ShrineVirtue, Tavern, TileGraphicsDepth,
+        U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane, dungeon_cell_index,
         world_cell_index, wrap_text_panel_lines,
     };
 
@@ -1875,7 +2319,7 @@ mod tests {
         intro.dispatch.dismiss_title();
         intro.dispatch.submit_menu_key(b'U');
 
-        assert!(step_visual_intro_panel(&mut intro));
+        assert!(step_visual_intro_panel(&mut intro, ' '));
 
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert!(intro.message.contains("Introduction complete"));
@@ -1884,6 +2328,146 @@ mod tests {
             UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
         ));
         let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    fn chargen_records() -> Vec<String> {
+        (0..30)
+            .map(|index| format!("Questionnaire record {index}"))
+            .collect()
+    }
+
+    fn visual_intro_state_with_panel(
+        dir: std::path::PathBuf,
+        panel: VisualIntroPanel,
+    ) -> VisualIntroState {
+        let mut dispatch = UnifiedMenuDispatch::new();
+        dispatch.dismiss_title();
+        VisualIntroState {
+            game_dir: dir,
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch,
+            message: String::new(),
+            panel,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        }
+    }
+
+    #[test]
+    fn visual_intro_character_creation_writes_save_and_returns_to_menu() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(INIT_GAM_FILENAME),
+            saved_game_seed_bytes(13, 0, 15, 15),
+        )
+        .unwrap();
+        fs::write(dir.join(INIT_OOL_FILENAME), vec![0x44; OOL_PLANE_LEN]).unwrap();
+        let session = ChargenSession::new(chargen_records(), (0u8..=127).collect()).unwrap();
+        let mut intro = visual_intro_state_with_panel(
+            dir.clone(),
+            VisualIntroPanel::CharacterCreation {
+                session,
+                input_line: String::new(),
+            },
+        );
+
+        for ch in "Avatar".chars() {
+            step_visual_intro_panel(&mut intro, ch);
+        }
+        step_visual_intro_panel(&mut intro, '\r');
+        step_visual_intro_panel(&mut intro, 'M');
+        step_visual_intro_panel(&mut intro, ' ');
+        step_visual_intro_panel(&mut intro, ' ');
+        for _ in 0..7 {
+            step_visual_intro_panel(&mut intro, 'A');
+        }
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message.contains("Created Avatar"));
+        let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        assert_eq!(
+            &saved[SAVE_ROSTER_OFFSET..SAVE_ROSTER_OFFSET + SAVE_CHARACTER_NAME_LEN - 1],
+            b"Avatar\0\0"
+        );
+        assert_eq!(
+            saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_GENDER_OFFSET],
+            0x0b
+        );
+        assert_eq!(saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_STR_OFFSET], 20);
+        assert!(saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_DEX_OFFSET] > 0);
+        assert!(saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_INT_OFFSET] > 0);
+        assert_eq!(
+            fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap(),
+            [vec![0u8; OOL_PLANE_LEN], vec![0x44; OOL_PLANE_LEN]].concat()
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_intro_u4_transfer_accepts_overrides_and_writes_save() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(U4_TRANSFER_U5_SEED_GAM_FILENAME),
+            saved_game_seed_bytes(0, 0, 10, 20),
+        )
+        .unwrap();
+        fs::write(dir.join(BRIT_OOL_FILENAME), vec![0x55; OOL_PLANE_LEN]).unwrap();
+        let source = U4TransferSource {
+            name: b"OLDNAME\0\0".to_vec(),
+            male: true,
+            class_index: 6,
+            strength: 35,
+            dexterity: 20,
+            intelligence: 22,
+            experience: 1500,
+        };
+        let preview = u4_transfer_preview_from_u4_values(
+            display_name_bytes(&source.name),
+            source.class_index,
+            source.strength,
+            source.dexterity,
+            source.intelligence,
+            0,
+        );
+        let mut intro = visual_intro_state_with_panel(
+            dir.clone(),
+            VisualIntroPanel::U4Transfer {
+                source,
+                preview,
+                overrides: U4TransferOverrides {
+                    name: None,
+                    male: None,
+                },
+                stage: VisualU4TransferStage::ConfirmName,
+                input_line: String::new(),
+            },
+        );
+
+        step_visual_intro_panel(&mut intro, 'N');
+        for ch in "New".chars() {
+            step_visual_intro_panel(&mut intro, ch);
+        }
+        step_visual_intro_panel(&mut intro, '\r');
+        step_visual_intro_panel(&mut intro, 'N');
+        step_visual_intro_panel(&mut intro, 'F');
+        step_visual_intro_panel(&mut intro, 'Y');
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message.contains("Transferred New"));
+        let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        assert_eq!(
+            &saved[SAVE_ROSTER_OFFSET..SAVE_ROSTER_OFFSET + SAVE_CHARACTER_NAME_LEN - 1],
+            b"New\0\0\0\0\0"
+        );
+        assert_eq!(
+            saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_GENDER_OFFSET],
+            0x0c
+        );
+        assert_eq!(
+            fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap(),
+            [vec![0u8; OOL_PLANE_LEN], vec![0x55; OOL_PLANE_LEN]].concat()
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
