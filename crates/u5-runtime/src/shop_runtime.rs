@@ -12,10 +12,11 @@
 
 use crate::constants::{EQUIPMENT_COUNT, EQUIPMENT_STOCK_CAP};
 use crate::shops::{
+    ArmsShopAction, INN_REGISTRY_CAP, Inn, InnMainAction, Shipwright, ShipwrightMenuAction,
+    ShipwrightPurchaseError, ShipwrightPurchaseOutcome, ShipwrightPurchaseQuote,
     apply_shipwright_purchase, arms_shop_action, arms_shop_buy_quote, arms_shop_sell_offer,
-    quote_shipwright_purchase, shipwright_menu_action, ArmsShopAction, Shipwright,
-    ShipwrightMenuAction, ShipwrightPurchaseError, ShipwrightPurchaseOutcome,
-    ShipwrightPurchaseQuote,
+    inn_base_room_rate, inn_leave_companion_deposit, inn_main_action, inn_pickup_bill,
+    quote_inn_rest, quote_shipwright_purchase, shipwright_menu_action,
 };
 use crate::transport::PendingVehicleAcquisition;
 
@@ -30,6 +31,8 @@ pub struct ShopTransactionContext {
     /// In-world hour (used by tavern and innkeeper for time-of-day
     /// pricing where applicable).
     pub world_hour: u8,
+    /// Current active party size, used by innkeeper room quotes.
+    pub party_size: usize,
 }
 
 // ---------- Arms shop ----------
@@ -392,89 +395,233 @@ pub fn apply_healer_service(service: HealerService, member: &mut HealerPartyMemb
 
 // ---------- Innkeeper ----------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InnkeeperState {
-    #[default]
-    Greeting,
-    ConfirmRoom {
-        cost: u16,
+    Greeting {
+        inn: Inn,
     },
-    Resting {
-        hours_remaining: u8,
+    ConfirmRest {
+        inn: Inn,
+        adjusted_room_rate: u16,
+        total_price: u16,
+    },
+    PickLeaveCompanion {
+        inn: Inn,
+        deposit: u16,
+    },
+    ConfirmLeaveCompanion {
+        inn: Inn,
+        party_index: usize,
+        deposit: u16,
+    },
+    PickUpCompanion {
+        inn: Inn,
+        guest_indices: [usize; INN_REGISTRY_CAP],
+        guest_count: u8,
+        adjusted_lodging_charge: u16,
+    },
+    ConfirmPickUpCompanion {
+        inn: Inn,
+        registry_index: usize,
+        adjusted_lodging_charge: u16,
+        bill: u16,
     },
     Exited,
+}
+
+impl Default for InnkeeperState {
+    fn default() -> Self {
+        Self::Greeting {
+            inn: Inn::TheWayfarerInn,
+        }
+    }
+}
+
+impl InnkeeperState {
+    pub const fn for_inn(inn: Inn) -> Self {
+        Self::Greeting { inn }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InnkeeperInput {
     Key(u8),
+    Slot(usize),
+    GuestChoice(usize),
     Confirm(bool),
-    /// Hours requested (clamped to [1, 24]).
-    Hours(u8),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InnkeeperOutcome {
-    QuotedCost { cost: u16 },
-    Rented { cost: u16, hours: u8 },
-    RefusedShortFunds { cost: u16 },
+    QuotedRest {
+        inn: Inn,
+        adjusted_room_rate: u16,
+        total_price: u16,
+    },
+    RestConfirmed {
+        inn: Inn,
+        adjusted_room_rate: u16,
+        total_price: u16,
+    },
+    PickLeaveCompanion {
+        deposit: u16,
+    },
+    QuotedLeaveCompanion {
+        party_index: usize,
+        deposit: u16,
+    },
+    LeaveConfirmed {
+        party_index: usize,
+        deposit: u16,
+    },
+    PickUpCompanion,
+    QuotedPickUpCompanion {
+        registry_index: usize,
+        bill: u16,
+    },
+    PickUpConfirmed {
+        registry_index: usize,
+        bill: u16,
+    },
     Declined,
     Exited,
     InvalidInput,
 }
 
-pub const INN_DEFAULT_COST_PER_NIGHT: u16 = 25;
-
 pub fn step_innkeeper(
     state: &mut InnkeeperState,
     input: InnkeeperInput,
-    gold: &mut u16,
+    ctx: ShopTransactionContext,
 ) -> InnkeeperOutcome {
     match (*state, input) {
-        (InnkeeperState::Greeting, InnkeeperInput::Key(b)) => match b {
-            b'Y' | b'y' | b'H' | b'h' => {
-                let cost = INN_DEFAULT_COST_PER_NIGHT;
-                *state = InnkeeperState::ConfirmRoom { cost };
-                InnkeeperOutcome::QuotedCost { cost }
+        (InnkeeperState::Greeting { inn }, InnkeeperInput::Key(b)) => match inn_main_action(b) {
+            InnMainAction::Rest => {
+                let adjusted_room_rate = inn_base_room_rate(inn);
+                let total_price = quote_inn_rest(inn, ctx.party_size, adjusted_room_rate)
+                    .map(|quote| quote.total_price)
+                    .unwrap_or(0);
+                *state = InnkeeperState::ConfirmRest {
+                    inn,
+                    adjusted_room_rate,
+                    total_price,
+                };
+                InnkeeperOutcome::QuotedRest {
+                    inn,
+                    adjusted_room_rate,
+                    total_price,
+                }
             }
-            _ => {
+            InnMainAction::LeaveCompanion => {
+                let deposit = inn_leave_companion_deposit(inn_base_room_rate(inn));
+                *state = InnkeeperState::PickLeaveCompanion { inn, deposit };
+                InnkeeperOutcome::PickLeaveCompanion { deposit }
+            }
+            InnMainAction::PickUpCompanion => {
+                *state = InnkeeperState::PickUpCompanion {
+                    inn,
+                    guest_indices: [0; INN_REGISTRY_CAP],
+                    guest_count: 0,
+                    adjusted_lodging_charge: inn_leave_companion_deposit(inn_base_room_rate(inn)),
+                };
+                InnkeeperOutcome::PickUpCompanion
+            }
+            InnMainAction::Exit => {
                 *state = InnkeeperState::Exited;
                 InnkeeperOutcome::Exited
             }
+            InnMainAction::Discard => InnkeeperOutcome::InvalidInput,
         },
-        (InnkeeperState::ConfirmRoom { cost }, InnkeeperInput::Confirm(true)) => {
-            if *gold < cost {
-                *state = InnkeeperState::Greeting;
-                return InnkeeperOutcome::RefusedShortFunds { cost };
+        (
+            InnkeeperState::ConfirmRest {
+                inn,
+                adjusted_room_rate,
+                total_price,
+            },
+            InnkeeperInput::Confirm(true),
+        ) => {
+            *state = InnkeeperState::Greeting { inn };
+            InnkeeperOutcome::RestConfirmed {
+                inn,
+                adjusted_room_rate,
+                total_price,
             }
-            *gold -= cost;
-            let hours = 8u8;
-            *state = InnkeeperState::Resting {
-                hours_remaining: hours,
-            };
-            InnkeeperOutcome::Rented { cost, hours }
         }
-        (InnkeeperState::ConfirmRoom { .. }, InnkeeperInput::Confirm(false)) => {
-            *state = InnkeeperState::Greeting;
+        (InnkeeperState::ConfirmRest { inn, .. }, InnkeeperInput::Confirm(false)) => {
+            *state = InnkeeperState::Greeting { inn };
             InnkeeperOutcome::Declined
         }
-        (InnkeeperState::ConfirmRoom { cost }, InnkeeperInput::Hours(hours)) => {
-            // Some inns let the player specify hours rather than a
-            // fixed nightly rate; charge `cost * hours / 8`.
-            let hours = hours.clamp(1, 24);
-            let total_cost = ((cost as u32 * hours as u32) / 8).min(u16::MAX as u32) as u16;
-            if *gold < total_cost {
-                *state = InnkeeperState::Greeting;
-                return InnkeeperOutcome::RefusedShortFunds { cost: total_cost };
-            }
-            *gold -= total_cost;
-            *state = InnkeeperState::Resting {
-                hours_remaining: hours,
+        (
+            InnkeeperState::PickLeaveCompanion { inn, deposit },
+            InnkeeperInput::Slot(party_index),
+        ) => {
+            *state = InnkeeperState::ConfirmLeaveCompanion {
+                inn,
+                party_index,
+                deposit,
             };
-            InnkeeperOutcome::Rented {
-                cost: total_cost,
-                hours,
+            InnkeeperOutcome::QuotedLeaveCompanion {
+                party_index,
+                deposit,
             }
+        }
+        (
+            InnkeeperState::ConfirmLeaveCompanion {
+                inn,
+                party_index,
+                deposit,
+            },
+            InnkeeperInput::Confirm(true),
+        ) => {
+            *state = InnkeeperState::Greeting { inn };
+            InnkeeperOutcome::LeaveConfirmed {
+                party_index,
+                deposit,
+            }
+        }
+        (InnkeeperState::ConfirmLeaveCompanion { inn, .. }, InnkeeperInput::Confirm(false)) => {
+            *state = InnkeeperState::Greeting { inn };
+            InnkeeperOutcome::Declined
+        }
+        (
+            InnkeeperState::PickUpCompanion {
+                inn,
+                guest_indices,
+                guest_count,
+                adjusted_lodging_charge,
+            },
+            InnkeeperInput::GuestChoice(choice),
+        ) if choice < guest_count as usize => {
+            let registry_index = guest_indices[choice];
+            let bill = inn_pickup_bill(adjusted_lodging_charge, 1);
+            *state = InnkeeperState::ConfirmPickUpCompanion {
+                inn,
+                registry_index,
+                adjusted_lodging_charge,
+                bill,
+            };
+            InnkeeperOutcome::QuotedPickUpCompanion {
+                registry_index,
+                bill,
+            }
+        }
+        (
+            InnkeeperState::ConfirmPickUpCompanion {
+                inn,
+                registry_index,
+                adjusted_lodging_charge: _,
+                bill,
+            },
+            InnkeeperInput::Confirm(true),
+        ) => {
+            *state = InnkeeperState::Greeting { inn };
+            InnkeeperOutcome::PickUpConfirmed {
+                registry_index,
+                bill,
+            }
+        }
+        (InnkeeperState::ConfirmPickUpCompanion { inn, .. }, InnkeeperInput::Confirm(false)) => {
+            *state = InnkeeperState::Greeting { inn };
+            InnkeeperOutcome::Declined
         }
         (InnkeeperState::Exited, _) => InnkeeperOutcome::Exited,
         _ => InnkeeperOutcome::InvalidInput,
@@ -905,10 +1052,7 @@ pub fn step_ship_broker(
                 Err(ShipwrightPurchaseError::NoReturnWorld) => ShipBrokerOutcome::InvalidInput,
             }
         }
-        (
-            ShipBrokerState::ConfirmPurchase { quote, .. },
-            ShipBrokerInput::Confirm(false),
-        ) => {
+        (ShipBrokerState::ConfirmPurchase { quote, .. }, ShipBrokerInput::Confirm(false)) => {
             *state = ShipBrokerState::Greeting {
                 shipwright: quote.shipwright,
             };
@@ -1102,6 +1246,7 @@ mod tests {
             party_gold: gold,
             speaker_intelligence: 10,
             world_hour: 12,
+            party_size: 1,
         };
 
         assert_eq!(
@@ -1153,6 +1298,7 @@ mod tests {
             party_gold: 0,
             speaker_intelligence: 10,
             world_hour: 12,
+            party_size: 1,
         };
 
         step_arms_shop(
@@ -1194,6 +1340,7 @@ mod tests {
             party_gold: 1,
             speaker_intelligence: 0,
             world_hour: 12,
+            party_size: 1,
         };
         step_arms_shop(
             &mut state,
@@ -1468,42 +1615,75 @@ mod tests {
     }
 
     #[test]
-    fn innkeeper_rent_debits_gold_and_returns_resting_hours() {
-        let mut state = InnkeeperState::Greeting;
-        let mut gold = 100u16;
-        step_innkeeper(&mut state, InnkeeperInput::Key(b'Y'), &mut gold);
-        let outcome = step_innkeeper(&mut state, InnkeeperInput::Confirm(true), &mut gold);
-        assert!(matches!(outcome, InnkeeperOutcome::Rented { hours: 8, .. }));
-        assert_eq!(gold, 100 - INN_DEFAULT_COST_PER_NIGHT);
-    }
+    fn innkeeper_rest_path_quotes_public_room_rate() {
+        let mut state = InnkeeperState::for_inn(Inn::TheWayfarerInn);
+        let ctx = ShopTransactionContext {
+            party_gold: 100,
+            speaker_intelligence: 30,
+            world_hour: 12,
+            party_size: 2,
+        };
 
-    #[test]
-    fn innkeeper_short_funds_refuses_without_debiting() {
-        let mut state = InnkeeperState::Greeting;
-        let mut gold = 5u16;
-        step_innkeeper(&mut state, InnkeeperInput::Key(b'Y'), &mut gold);
-        let outcome = step_innkeeper(&mut state, InnkeeperInput::Confirm(true), &mut gold);
+        let outcome = step_innkeeper(&mut state, InnkeeperInput::Key(b'R'), ctx);
+        assert_eq!(
+            outcome,
+            InnkeeperOutcome::QuotedRest {
+                inn: Inn::TheWayfarerInn,
+                adjusted_room_rate: 2,
+                total_price: 4,
+            }
+        );
+
+        let outcome = step_innkeeper(&mut state, InnkeeperInput::Confirm(true), ctx);
         assert!(matches!(
             outcome,
-            InnkeeperOutcome::RefusedShortFunds { .. }
+            InnkeeperOutcome::RestConfirmed {
+                inn: Inn::TheWayfarerInn,
+                total_price: 4,
+                ..
+            }
         ));
-        assert_eq!(gold, 5);
     }
 
     #[test]
-    fn innkeeper_custom_hours_scales_cost() {
-        let mut state = InnkeeperState::Greeting;
-        let mut gold = 100u16;
-        step_innkeeper(&mut state, InnkeeperInput::Key(b'Y'), &mut gold);
-        let outcome = step_innkeeper(&mut state, InnkeeperInput::Hours(16), &mut gold);
-        if let InnkeeperOutcome::Rented { cost, hours } = outcome {
-            assert_eq!(hours, 16);
-            // 16 hours at 25/8 = 50 gold.
-            assert_eq!(cost, 50);
-            assert_eq!(gold, 50);
-        } else {
-            panic!("expected Rented outcome");
-        }
+    fn innkeeper_leave_path_quotes_deposit_and_target() {
+        let mut state = InnkeeperState::for_inn(Inn::HotelBrittany);
+        let ctx = ShopTransactionContext {
+            party_gold: 100,
+            speaker_intelligence: 30,
+            world_hour: 12,
+            party_size: 2,
+        };
+
+        let outcome = step_innkeeper(&mut state, InnkeeperInput::Key(b'L'), ctx);
+        assert_eq!(
+            outcome,
+            InnkeeperOutcome::PickLeaveCompanion { deposit: 30 }
+        );
+
+        let outcome = step_innkeeper(&mut state, InnkeeperInput::Slot(1), ctx);
+        assert_eq!(
+            outcome,
+            InnkeeperOutcome::QuotedLeaveCompanion {
+                party_index: 1,
+                deposit: 30,
+            }
+        );
+    }
+
+    #[test]
+    fn innkeeper_space_exits_from_greeting() {
+        let mut state = InnkeeperState::default();
+        let ctx = ShopTransactionContext {
+            party_gold: 100,
+            speaker_intelligence: 30,
+            world_hour: 12,
+            party_size: 1,
+        };
+
+        let outcome = step_innkeeper(&mut state, InnkeeperInput::Key(b' '), ctx);
+        assert_eq!(outcome, InnkeeperOutcome::Exited);
+        assert_eq!(state, InnkeeperState::Exited);
     }
 
     #[test]

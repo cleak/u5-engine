@@ -1531,12 +1531,12 @@
             MoveOutcome::Talked
         );
         assert!(state.active_shop.is_some());
-        // First key 'Y' (greeting accept) → ConfirmRoom.
-        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        // First key 'R' selects inn rest.
+        handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
         assert!(state.message.contains("room"));
         // 'Y' again to confirm.
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        assert!(state.message.contains("Rented"));
+        assert!(state.message.contains("Rested"));
         assert!(state.gold < 100);
     }
 
@@ -1547,7 +1547,11 @@
         let mut state = test_state(open_grid(), 1, 1);
         state.gold = 100;
         state.active_shop = Some(ActiveShopSession::Innkeeper(
-            InnkeeperState::ConfirmRoom { cost: 25 },
+            InnkeeperState::ConfirmRest {
+                inn: Inn::TheWayfarerInn,
+                adjusted_room_rate: 2,
+                total_price: 2,
+            },
         ));
         // Pass 'n' via the suffix so the bare-N New-Order intercept in
         // the outer dispatcher does not eat the key before the shop
@@ -1560,6 +1564,101 @@
             "decline message was: {}",
             state.message
         );
+    }
+
+    #[test]
+    fn end_to_end_innkeeper_leave_companion_moves_roster_to_registry() {
+        use crate::shop_runtime::InnkeeperState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 100;
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: 10,
+                mana: 8,
+                hp: 30,
+                max_hp: 30,
+                level: 5,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'B',
+                status: b'G',
+                climb_stat: 7,
+                mana: 3,
+                hp: 12,
+                max_hp: 28,
+                level: 3,
+            },
+        ];
+        state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0"];
+        state.party_stay_counters = vec![8, 9];
+        state.party_strengths = vec![30, 17];
+        state.party_intelligence = vec![30, 19];
+        state.party_experience = vec![0, 700];
+        state.party_equipment = default_party_equipment(2);
+        state.active_shop = Some(ActiveShopSession::Innkeeper(
+            InnkeeperState::for_inn(Inn::HotelBrittany),
+        ));
+
+        handle_play_key_input(&mut state, 'L', "", Path::new("")).unwrap();
+        assert!(state.message.contains("Deposit is 30 gold"));
+        handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
+        assert!(state.message.contains("party member 2"));
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 70);
+        assert_eq!(state.party.len(), 1);
+        assert_eq!(state.party_names, vec![*b"AVATAR\0\0\0"]);
+        assert_eq!(state.inn_registry.len(), 1);
+        assert_eq!(state.inn_registry[0].scene_marker, 0x11);
+        assert_eq!(state.inn_registry[0].name, *b"IOLO\0\0\0\0\0");
+        assert!(state.message.contains("Left companion 2"));
+    }
+
+    #[test]
+    fn end_to_end_innkeeper_pickup_restores_matching_guest() {
+        use crate::shop_runtime::InnkeeperState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 100;
+        state.inn_registry.push(InnGuestRecord {
+            scene_marker: 0x11,
+            name: *b"IOLO\0\0\0\0\0",
+            member: PartyMember {
+                slot: 4,
+                class_byte: b'B',
+                status: b'P',
+                climb_stat: 7,
+                mana: 3,
+                hp: 12,
+                max_hp: 28,
+                level: 3,
+            },
+            strength: 17,
+            intelligence: 19,
+            experience: 700,
+            equipment: [1, 2, 3, 4, 5, 6],
+            stay_counter: 0,
+        });
+        state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::default()));
+
+        handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
+        assert!(state.message.contains("20 gold"));
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 80);
+        assert!(state.inn_registry.is_empty());
+        assert_eq!(state.party.len(), 2);
+        assert_eq!(state.party[1].status, b'D');
+        assert_eq!(state.party[1].hp, 0);
+        assert_eq!(state.party_names[1], *b"IOLO\0\0\0\0\0");
+        assert!(state.message.contains("has died"));
     }
 
     #[test]

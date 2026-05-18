@@ -186,12 +186,14 @@ fn handle_active_shop_key_input(
         party_gold: state.gold,
         speaker_intelligence: state.party_intelligence.first().copied().unwrap_or(0),
         world_hour: state.clock.hour,
+        party_size: state.party.len(),
     };
     let key_byte = key as u8;
     let inline_digit = suffix
         .chars()
         .find(|c| c.is_ascii_digit())
-        .and_then(|c| c.to_digit(10).map(|d| d as u8));
+        .and_then(|c| c.to_digit(10).map(|d| d as u8))
+        .or_else(|| key.to_digit(10).map(|d| d as u8));
     let yes = matches!(key_byte, b'Y' | b'y') || suffix.chars().any(|c| matches!(c, 'Y' | 'y'));
     let no = matches!(key_byte, b'N' | b'n') || suffix.chars().any(|c| matches!(c, 'N' | 'n'));
 
@@ -316,22 +318,217 @@ fn handle_active_shop_key_input(
             format_healer_outcome(outcome)
         }
         ActiveShopSession::Innkeeper(s) => {
-            let outcome = match (*s, yes, no, inline_digit) {
-                (InnkeeperState::Greeting, _, _, _) => {
-                    step_innkeeper(s, InnkeeperInput::Key(key_byte), &mut state.gold)
+            let scene_marker = active_inn_scene_marker(state);
+            match (*s, yes, no, inline_digit) {
+                (InnkeeperState::Greeting { inn }, _, _, _) => match inn_main_action(key_byte) {
+                    InnMainAction::Rest => {
+                        let adjusted_room_rate = inn_base_room_rate(inn);
+                        let total_price =
+                            quote_inn_rest(inn, state.party.len(), adjusted_room_rate)
+                                .map(|quote| quote.total_price)
+                                .unwrap_or(0);
+                        *s = InnkeeperState::ConfirmRest {
+                            inn,
+                            adjusted_room_rate,
+                            total_price,
+                        };
+                        format!(
+                            "{} room and board costs {total_price} gold. (Y/N)",
+                            inn.display_name()
+                        )
+                    }
+                    InnMainAction::LeaveCompanion => {
+                        let deposit = inn_leave_companion_deposit(inn_base_room_rate(inn));
+                        *s = InnkeeperState::PickLeaveCompanion { inn, deposit };
+                        format!("Leave which companion? Deposit is {deposit} gold. (1-6)")
+                    }
+                    InnMainAction::PickUpCompanion => {
+                        let adjusted_lodging_charge =
+                            inn_leave_companion_deposit(inn_base_room_rate(inn));
+                        let guests = inn_guest_indices_for_scene(&state.inn_registry, scene_marker);
+                        if guests.is_empty() {
+                            *s = InnkeeperState::Greeting { inn };
+                            "No one here is from thy party!".to_string()
+                        } else if guests.len() == 1 {
+                            let registry_index = guests[0];
+                            let bill = state
+                                .inn_registry
+                                .get(registry_index)
+                                .map(|guest| {
+                                    inn_pickup_bill(adjusted_lodging_charge, guest.stay_counter)
+                                })
+                                .unwrap_or(0);
+                            *s = InnkeeperState::ConfirmPickUpCompanion {
+                                inn,
+                                registry_index,
+                                adjusted_lodging_charge,
+                                bill,
+                            };
+                            format!("Pickup bill is {bill} gold. (Y/N)")
+                        } else {
+                            let mut guest_indices = [0usize; INN_REGISTRY_CAP];
+                            for (slot, registry_index) in
+                                guests.iter().copied().take(INN_REGISTRY_CAP).enumerate()
+                            {
+                                guest_indices[slot] = registry_index;
+                            }
+                            let guest_count = guests.len().min(INN_REGISTRY_CAP) as u8;
+                            *s = InnkeeperState::PickUpCompanion {
+                                inn,
+                                guest_indices,
+                                guest_count,
+                                adjusted_lodging_charge,
+                            };
+                            format!(
+                                "Guest register has {guest_count} companion(s). Pick 1-{guest_count}."
+                            )
+                        }
+                    }
+                    InnMainAction::Exit => {
+                        *s = InnkeeperState::Exited;
+                        "Farewell.".to_string()
+                    }
+                    InnMainAction::Discard => {
+                        "Rest (R), Leave (L), Pick up (P), or Space.".to_string()
+                    }
+                },
+                (
+                    InnkeeperState::ConfirmRest {
+                        inn,
+                        adjusted_room_rate,
+                        ..
+                    },
+                    true,
+                    _,
+                    _,
+                ) => {
+                    let result = state.pay_inn_rest(inn, adjusted_room_rate);
+                    *s = InnkeeperState::Greeting { inn };
+                    match result {
+                        Ok(outcome) => apply_paid_inn_rest(state, outcome.quote.total_price),
+                        Err(err) => format_inn_error(err),
+                    }
                 }
-                (InnkeeperState::ConfirmRoom { .. }, _, _, Some(h)) if h > 0 => {
-                    step_innkeeper(s, InnkeeperInput::Hours(h), &mut state.gold)
+                (InnkeeperState::ConfirmRest { inn, .. }, _, true, _) => {
+                    *s = InnkeeperState::Greeting { inn };
+                    "As you wish.".to_string()
                 }
-                (InnkeeperState::ConfirmRoom { .. }, true, _, _) => {
-                    step_innkeeper(s, InnkeeperInput::Confirm(true), &mut state.gold)
+                (InnkeeperState::PickLeaveCompanion { inn, deposit: _ }, _, true, _) => {
+                    *s = InnkeeperState::Greeting { inn };
+                    "As you wish.".to_string()
                 }
-                (InnkeeperState::ConfirmRoom { .. }, _, true, _) => {
-                    step_innkeeper(s, InnkeeperInput::Confirm(false), &mut state.gold)
+                (InnkeeperState::PickLeaveCompanion { inn, deposit }, _, _, Some(d)) if d >= 1 => {
+                    let party_index = usize::from(d - 1);
+                    *s = InnkeeperState::ConfirmLeaveCompanion {
+                        inn,
+                        party_index,
+                        deposit,
+                    };
+                    format!("Leave party member {d} for {deposit} gold? (Y/N)")
                 }
-                _ => InnkeeperOutcome::InvalidInput,
-            };
-            format_innkeeper_outcome(outcome)
+                (
+                    InnkeeperState::ConfirmLeaveCompanion {
+                        inn,
+                        party_index,
+                        deposit,
+                    },
+                    true,
+                    _,
+                    _,
+                ) => {
+                    let result = state.leave_inn_companion(scene_marker, party_index, deposit);
+                    *s = InnkeeperState::Greeting { inn };
+                    match result {
+                        Ok(outcome) => format!(
+                            "Left companion {} at the inn for {} gold.",
+                            outcome.party_index + 1,
+                            outcome.deposit
+                        ),
+                        Err(err) => format_inn_error(err),
+                    }
+                }
+                (InnkeeperState::ConfirmLeaveCompanion { inn, .. }, _, true, _) => {
+                    *s = InnkeeperState::Greeting { inn };
+                    "As you wish.".to_string()
+                }
+                (
+                    InnkeeperState::PickUpCompanion {
+                        inn,
+                        guest_indices,
+                        guest_count,
+                        adjusted_lodging_charge,
+                    },
+                    _,
+                    true,
+                    _,
+                ) => {
+                    let _ = (guest_indices, guest_count, adjusted_lodging_charge);
+                    *s = InnkeeperState::Greeting { inn };
+                    "As you wish.".to_string()
+                }
+                (
+                    InnkeeperState::PickUpCompanion {
+                        inn,
+                        guest_indices,
+                        guest_count,
+                        adjusted_lodging_charge,
+                    },
+                    _,
+                    _,
+                    Some(d),
+                ) if d >= 1 && d <= guest_count => {
+                    let registry_index = guest_indices[usize::from(d - 1)];
+                    let bill = state
+                        .inn_registry
+                        .get(registry_index)
+                        .map(|guest| inn_pickup_bill(adjusted_lodging_charge, guest.stay_counter))
+                        .unwrap_or(0);
+                    *s = InnkeeperState::ConfirmPickUpCompanion {
+                        inn,
+                        registry_index,
+                        adjusted_lodging_charge,
+                        bill,
+                    };
+                    format!("Pickup bill is {bill} gold. (Y/N)")
+                }
+                (
+                    InnkeeperState::ConfirmPickUpCompanion {
+                        inn,
+                        registry_index,
+                        adjusted_lodging_charge,
+                        ..
+                    },
+                    true,
+                    _,
+                    _,
+                ) => {
+                    let result = state.pickup_inn_guest(
+                        scene_marker,
+                        registry_index,
+                        adjusted_lodging_charge,
+                    );
+                    *s = InnkeeperState::Greeting { inn };
+                    match result {
+                        Ok(outcome) if outcome.returned_dead_from_poison => format!(
+                            "Picked up companion {} for {} gold. Thy friend has died, by the way.",
+                            outcome.party_index + 1,
+                            outcome.bill
+                        ),
+                        Ok(outcome) => format!(
+                            "Picked up companion {} for {} gold.",
+                            outcome.party_index + 1,
+                            outcome.bill
+                        ),
+                        Err(err) => format_inn_error(err),
+                    }
+                }
+                (InnkeeperState::ConfirmPickUpCompanion { inn, .. }, _, true, _) => {
+                    *s = InnkeeperState::Greeting { inn };
+                    "As you wish.".to_string()
+                }
+                (InnkeeperState::Exited, _, _, _) => "Farewell.".to_string(),
+                _ => "I do not understand.".to_string(),
+            }
         }
         ActiveShopSession::Tavern(s) => {
             let mut food = state.food;
@@ -551,6 +748,49 @@ fn handle_active_shop_key_input(
     PlayInputDisposition::Continue
 }
 
+fn active_inn_scene_marker(state: &PlayState) -> u8 {
+    match state.area {
+        Area::Town { scene, .. } => scene.byte,
+        _ => 0,
+    }
+}
+
+fn apply_paid_inn_rest(state: &mut PlayState, cost: u16) -> String {
+    const INN_REST_HOURS: u8 = 8;
+    state.mark_town_rest_sleepers();
+    let mut recovered_hp = 0;
+    let mut recovered_mana = 0;
+    for _ in 0..INN_REST_HOURS {
+        state.advance_turn_with_minutes(MINUTES_PER_HOUR);
+        let (hp, mana) = state.apply_rest_recovery_tick();
+        recovered_hp += hp;
+        recovered_mana += mana;
+    }
+    let woke = state.wake_town_rest_sleepers();
+    format!(
+        "Rested {INN_REST_HOURS} hours at the inn for {cost} gold; recovered {recovered_hp} HP and {recovered_mana} MP; woke {woke} asleep member(s)."
+    )
+}
+
+fn format_inn_error(err: InnError) -> String {
+    match err {
+        InnError::EmptyParty => "No one is here to lodge.".to_string(),
+        InnError::PartyTooSmallToLeave => "Thou must keep at least one companion.".to_string(),
+        InnError::PartyFull => "Thy party is already full.".to_string(),
+        InnError::InvalidPartyIndex { .. } => "That companion is not in thy party.".to_string(),
+        InnError::InvalidGuestIndex { .. } | InnError::GuestNotAtInn { .. } => {
+            "No one here is from thy party!".to_string()
+        }
+        InnError::RegistryFull => "The inn has no more room for guests.".to_string(),
+        InnError::BelowMinimumGold { minimum, .. } => {
+            format!("Thou needest at least {minimum} gold to lodge here.")
+        }
+        InnError::InsufficientGold { required, .. } => {
+            format!("Thou lackest the {required} gold.")
+        }
+    }
+}
+
 fn format_arms_outcome(outcome: crate::shop_runtime::ArmsShopOutcome) -> String {
     use crate::shop_runtime::ArmsShopOutcome::*;
     match outcome {
@@ -583,18 +823,6 @@ fn format_healer_outcome(outcome: crate::shop_runtime::HealerOutcome) -> String 
         Served { slot, cost, .. } => format!("Served party member {slot} for {cost} gold."),
         RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
         RefusedNotEligible { .. } => "That treatment is not needed.".to_string(),
-        Declined => "As you wish.".to_string(),
-        Exited => "Farewell.".to_string(),
-        InvalidInput => "I do not understand.".to_string(),
-    }
-}
-
-fn format_innkeeper_outcome(outcome: crate::shop_runtime::InnkeeperOutcome) -> String {
-    use crate::shop_runtime::InnkeeperOutcome::*;
-    match outcome {
-        QuotedCost { cost } => format!("A room costs {cost} gold. (Y/N or enter hours)"),
-        Rented { cost, hours } => format!("Rented a room for {hours} hours at {cost} gold."),
-        RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
         Declined => "As you wish.".to_string(),
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),
@@ -677,10 +905,16 @@ fn format_ship_broker_outcome(outcome: crate::shop_runtime::ShipBrokerOutcome) -
         }
         PurchaseApplied { outcome } => match outcome.status {
             crate::shops::ShipwrightPurchaseStatus::QueuedFrigate => {
-                format!("Frigate purchased for {} gold. Delivery is queued.", outcome.quote.price)
+                format!(
+                    "Frigate purchased for {} gold. Delivery is queued.",
+                    outcome.quote.price
+                )
             }
             crate::shops::ShipwrightPurchaseStatus::QueuedSkiff => {
-                format!("Skiff purchased for {} gold. Delivery is queued.", outcome.quote.price)
+                format!(
+                    "Skiff purchased for {} gold. Delivery is queued.",
+                    outcome.quote.price
+                )
             }
             crate::shops::ShipwrightPurchaseStatus::AddedSkiffToPendingFrigate => format!(
                 "Skiff purchased for {} gold and added to the pending frigate.",

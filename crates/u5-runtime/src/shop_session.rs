@@ -54,6 +54,7 @@ impl ActiveShopSession {
     /// Short first prompt shown when Talk opens the overlay.
     pub fn opening_prompt(&self) -> &'static str {
         match self {
+            Self::Innkeeper(_) => "Rest (R), Leave (L), Pick up (P), or Space.",
             Self::ShipBroker(_) => "Choose Frigate (F), Skiff (S), or Space.",
             _ => "Choose Buy / Sell / Yes / No.",
         }
@@ -72,7 +73,7 @@ pub fn shop_session_for_dialog_id(dialog_id: u8) -> Option<ActiveShopSession> {
         0x85 => ActiveShopSession::Reagent(ReagentShopState::Greeting),
         0x86 => ActiveShopSession::Guild(GuildShopState::Greeting),
         0x87 => ActiveShopSession::Healer(HealerShopState::Greeting),
-        0x88 => ActiveShopSession::Innkeeper(InnkeeperState::Greeting),
+        0x88 => ActiveShopSession::Innkeeper(InnkeeperState::default()),
         _ => return None,
     })
 }
