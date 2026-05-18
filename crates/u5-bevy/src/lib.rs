@@ -412,6 +412,8 @@ fn summarize(state: &mut PlayState, fallback: &str, input_line: &str) -> String 
 fn visual_line_prompt_active(state: &PlayState) -> bool {
     state.active_conversation.is_some()
         || state.active_blackthorn.is_some()
+        || state.active_shrine.is_some()
+        || state.active_yell.is_some()
         || matches!(
             state.active_shop.as_ref(),
             Some(ActiveShopSession::Sage(SageState::Prompt { .. }))
@@ -431,7 +433,13 @@ fn handle_visual_line_key(
             let submitted = std::mem::take(input_line);
             let mut chars = submitted.chars();
             let (key, suffix) = match chars.next() {
-                Some(first) => (first, chars.collect::<String>()),
+                Some(first) => {
+                    let mut suffix = chars.collect::<String>();
+                    if state.active_shrine.is_some() {
+                        suffix.push('\n');
+                    }
+                    (first, suffix)
+                }
                 None => ('\n', String::new()),
             };
             handle_play_key_input(state, key, &suffix, game_dir).map(Some)
@@ -607,14 +615,17 @@ fn key_code_to_char(key: KeyCode, shift_pressed: bool) -> Option<char> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::path::Path;
     use u5_runtime::conversation_session::ConversationSession;
     use u5_runtime::test_fixtures::{
-        dungeon_state, open_dungeon_record, open_grid, synthetic_tile_atlas, test_state,
+        debug_game_dir, dungeon_state, open_dungeon_record, open_grid, open_world_grid,
+        synthetic_tile_atlas, test_state, world_state,
     };
     use u5_runtime::tlk_control_codes::TLK_TEXT_XOR_MASK;
     use u5_runtime::{
-        Direction, EGA_PALETTE_RGB, TileGraphicsDepth, dungeon_cell_index, wrap_text_panel_lines,
+        Area, Direction, EGA_PALETTE_RGB, SHRINE_TABLE_FILE, ShrineVirtue, TileGraphicsDepth,
+        WorldPlane, dungeon_cell_index, world_cell_index, wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
@@ -796,5 +807,34 @@ mod tests {
         assert_eq!(input_line, "j");
         let summary = summarize(&mut state, "", &input_line);
         assert!(summary.ends_with("\n> j"));
+    }
+
+    #[test]
+    fn visual_line_input_buffers_shrine_mantra_until_enter() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 136\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 136;
+        let mut state = world_state(grid, 10, 20);
+        state.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+
+        handle_play_key_input(&mut state, 'M', "", &dir).unwrap();
+        assert!(visual_line_prompt_active(&state));
+
+        let mut input_line = String::new();
+        for key in [KeyCode::KeyA, KeyCode::KeyH, KeyCode::KeyM] {
+            handle_visual_line_key(&mut state, &mut input_line, key, false, &dir).unwrap();
+        }
+        assert_eq!(input_line, "ahm");
+        assert_eq!(state.shrine_ordained_mask, 0);
+
+        handle_visual_line_key(&mut state, &mut input_line, KeyCode::Enter, false, &dir).unwrap();
+
+        assert!(input_line.is_empty());
+        assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
+        assert!(state.message.contains("ordained"));
+        let _ = fs::remove_dir_all(dir);
     }
 }
