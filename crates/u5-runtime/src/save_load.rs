@@ -189,7 +189,7 @@ pub fn play_options_from_save_bytes_named(
         gold: u16_at(bytes, SAVE_GOLD_STOCK_OFFSET),
         keys: bytes[SAVE_KEY_STOCK_OFFSET],
         gems: bytes[SAVE_GEM_STOCK_OFFSET],
-        climbing_gear: bytes[SAVE_CLIMBING_GEAR_OFFSET],
+        climbing_gear: bytes[SAVE_GRAPPLE_OFFSET],
         special_items,
         party,
         party_names,

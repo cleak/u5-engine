@@ -470,7 +470,7 @@
         bytes[SAVE_X_OFFSET] = 15;
         bytes[SAVE_Y_OFFSET] = 15;
         bytes[SAVE_MORAL_STANDING_OFFSET] = 37;
-        bytes[SAVE_CLIMBING_GEAR_OFFSET] = 1;
+        bytes[SAVE_GRAPPLE_OFFSET] = 1;
         bytes[SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_SEXTANT_INDEX] = 1;
         bytes[SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_SPYGLASS_INDEX] = 1;
         bytes[SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_POCKET_WATCH_INDEX] = 1;
@@ -489,6 +489,7 @@
         assert_eq!(options.wind, WindState::Calm);
         assert_eq!(options.keys, 0);
         assert_eq!(options.moral_standing, 37);
+        assert_eq!(SAVE_GRAPPLE_OFFSET, SAVE_CLIMBING_GEAR_OFFSET);
         assert_eq!(options.climbing_gear, 1);
         assert_eq!(options.special_items[SPECIAL_ITEM_SEXTANT_INDEX], 1);
         assert_eq!(options.special_items[SPECIAL_ITEM_SPYGLASS_INDEX], 1);

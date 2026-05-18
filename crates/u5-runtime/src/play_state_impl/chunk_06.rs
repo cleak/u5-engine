@@ -9,13 +9,16 @@ impl PlayState {
         game_dir: &Path,
         plane: WorldPlane,
     ) -> io::Result<MoveOutcome> {
-        if self.climbing_gear == 0 {
-            self.message = "With what?".to_string();
-            return Ok(MoveOutcome::Blocked);
-        }
-        if !self.player.transport.is_foot() {
-            self.message = "On foot!".to_string();
-            return Ok(MoveOutcome::Blocked);
+        match overworld_klimb_entry_gate(self.climbing_gear != 0, self.player.transport.is_foot()) {
+            OverworldKlimbEntryGate::NoGrapple => {
+                self.message = "With what?".to_string();
+                return Ok(MoveOutcome::Blocked);
+            }
+            OverworldKlimbEntryGate::NotOnFoot => {
+                self.message = "On foot!".to_string();
+                return Ok(MoveOutcome::Blocked);
+            }
+            OverworldKlimbEntryGate::Proceed => {}
         }
 
         let direction = self.player.facing;
@@ -89,7 +92,7 @@ impl PlayState {
             }
             checked += 1;
             let roll = self.outdoor_climb_stat_roll(index);
-            if self.party[index].climb_stat < roll {
+            if outdoor_klimb_member_falls(self.party[index].climb_stat, roll) {
                 let damage = self.outdoor_climb_damage_roll(index);
                 let slot = self.party[index].slot;
                 let applied = self.party[index].apply_damage(damage);

@@ -332,9 +332,9 @@ pub const SAVE_PARTY_SIZE_MAX: u8 = 6;
 /// `formats/saved-gam.md §4` party inventory band starts at
 /// 0x0202 with the word-sized food counter. The subsequent
 /// counters chain by their stored widths: food/gold are words
-/// (2 bytes each); key/gem/torch/climbing gear are single
-/// bytes. Anchor each offset to the chain so resizing any
-/// stock counter automatically shifts the later offsets.
+/// (2 bytes each); key/gem/torch/Grapple are single bytes. The
+/// Grapple byte is the legacy "climbing gear" / magic-powder slot
+/// used by outdoor K-Klimb.
 pub const SAVE_FOOD_STOCK_OFFSET: usize = SAVE_ROSTER_OFFSET + SAVE_ROSTER_REGION_LEN;
 pub const SAVE_GOLD_STOCK_OFFSET: usize = SAVE_FOOD_STOCK_OFFSET + 2;
 pub const SAVE_KEY_STOCK_OFFSET: usize = SAVE_GOLD_STOCK_OFFSET + 2;
@@ -475,7 +475,7 @@ pub const SAVE_GOLD_OFFSET: usize = 0x0204;
 pub const SAVE_KEYS_OFFSET: usize = 0x0206;
 pub const SAVE_GEMS_OFFSET: usize = 0x0207;
 pub const SAVE_TORCHES_OFFSET: usize = 0x0208;
-pub const SAVE_GRAPPLE_OFFSET: usize = 0x0209;
+pub const SAVE_GRAPPLE_OFFSET: usize = SAVE_CLIMBING_GEAR_OFFSET;
 pub const SAVE_EQUIPMENT_INVENTORY_OFFSET: usize = 0x021A;
 pub const SAVE_SPELL_CHARGE_BLOCK_OFFSET: usize = 0x024A;
 pub const SAVE_SCROLL_COUNTERS_OFFSET: usize = 0x027A;

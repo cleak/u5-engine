@@ -565,6 +565,36 @@
     }
 
     #[test]
+    fn world_k_dexterity_equal_to_roll_does_not_fall() {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(11, 20)] = 0x0c;
+        let mut state = world_state(grid, 10, 20);
+        state.climbing_gear = 1;
+        state.player.facing = Direction::East;
+        let roll = state.outdoor_climb_stat_roll(0);
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: b'A',
+            status: b'G',
+            climb_stat: roll,
+            mana: 8,
+            hp: 10,
+            max_hp: 20,
+            level: 8,
+        }];
+
+        assert_eq!(
+            state.klimb_command(Path::new("")).unwrap(),
+            MoveOutcome::Moved
+        );
+
+        assert_eq!((state.player.x, state.player.y), (11, 20));
+        assert_eq!(state.party[0].hp, 10);
+        assert!(state.message.contains("fall checks passed for 1 living"));
+        assert!(!state.message.contains("Fell!"));
+    }
+
+    #[test]
     fn dungeon_fall_trap_chain_restores_snapshot_grid_without_exterior_coordinate_reset() {
         let scene = DungeonScene::new(33).unwrap();
         let mut grid = open_dungeon_record();

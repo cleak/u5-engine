@@ -217,11 +217,12 @@ where
                 })?;
                 wind_override = Some(WindState::from_key(&value)?);
             }
-            "--climbing-gear" => {
+            "--climbing-gear" | "--grapple" => {
+                let option = arg.as_str();
                 let value = args.next().ok_or_else(|| {
                     io::Error::new(
                         io::ErrorKind::InvalidInput,
-                        "--climbing-gear requires a byte value",
+                        format!("{option} requires a byte value"),
                     )
                 })?;
                 climbing_gear_override = Some(parse_u8_literal(&value)?);

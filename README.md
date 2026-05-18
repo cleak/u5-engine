@@ -139,12 +139,11 @@ runtime party order without spending a turn.
 triggers the floor change; clean `town_stairs.tsv` rows can pin one-way versus
 two-way stair direction where the public subtype table is still open, and
 two-way town stairs prompt and let `<`/`>` choose the floor direction from the
-stair cell. Outdoor `K` follows the public
-no-gear/on-foot gates and has a semantic `--climbing-gear` startup hook for
-first-playable
-class-derived mountain-family climbs. First-playable fall checks run against
-living saved-party members and use saved roster Dexterity as the clean
-climb-stat proxy while the exact gear byte and stat identity remain open.
+stair cell. Outdoor `K` follows the spec Grapple/on-foot gates and exposes
+semantic `--grapple` plus legacy `--climbing-gear` startup hooks for
+first-playable class-derived mountain-family climbs. Fall checks run against
+living saved-party members and use the saved roster Dexterity byte at `0x0D`;
+the Grapple gate reads the legacy magic-powder/climbing-gear byte at `0x0209`.
 Outdoor `K` also respects clean lava sidecar blockers and fires clean world
 plane-transition rows after a successful climb. Town
 and overworld `L`ook now resolves the facing tile or active
@@ -415,7 +414,7 @@ outdoor turn cadence with the saved `Q` timing tag providing skiff/raft
 half-time plus alternate-turn active-object/encounter epilogue cadence, and
 the saved `T` tag skipping minute/light-counter writes while suppressing that
 world object epilogue. The play harness exposes semantic `--wind`,
-`--climbing-gear`, `--transport`, and `--pending-vehicle` startup hooks for focused testing;
+`--grapple`/`--climbing-gear`, `--transport`, and `--pending-vehicle` startup hooks for focused testing;
 world load and overworld entry messages report `Calm/North/South/East/West
 Winds` without claiming byte-perfect save mappings. Mode entry and cross-area
 transitions run a zero-minute cleanup that refreshes the cached ambient
@@ -646,7 +645,7 @@ The overworld maps can be entered directly for movement testing:
 ```powershell
 cargo run -- --play --scene BRITANNIA C:\Games\U5-Clean
 cargo run -- --play --scene BRITANNIA --wind east C:\Games\U5-Clean
-cargo run -- --play --scene BRITANNIA --climbing-gear 1 C:\Games\U5-Clean
+cargo run -- --play --scene BRITANNIA --grapple 1 C:\Games\U5-Clean
 cargo run -- --play --scene BRITANNIA --transport balloon --wind east C:\Games\U5-Clean
 cargo run -- --play --scene BRITANNIA --pending-vehicle frigate:10,20,2 C:\Games\U5-Clean
 cargo run -- --play --scene UNDERWORLD C:\Games\U5-Clean

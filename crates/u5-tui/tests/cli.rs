@@ -76,6 +76,21 @@ fn cli_parser_accepts_pending_vehicle_acquisition() {
     assert!(parse_pending_vehicle_arg("balloon:1,2").is_err());
 }
 
+#[test]
+fn cli_parser_accepts_grapple_alias_for_climbing_gear() {
+    let args = parse_cli_args([
+        "--play",
+        "--scene",
+        "BRITANNIA",
+        "--grapple",
+        "0x04",
+        r"C:\Games\U5-Clean",
+    ])
+    .unwrap();
+
+    assert_eq!(args.play_options.climbing_gear, 4);
+}
+
 // from chunk_02
 #[test]
 fn cli_parser_accepts_world_start_coordinates() {

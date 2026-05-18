@@ -89,7 +89,7 @@ impl PlayState {
         save[SAVE_KEY_STOCK_OFFSET] = self.keys;
         save[SAVE_GEM_STOCK_OFFSET] = self.gems;
         save[SAVE_TORCH_STOCK_OFFSET] = self.torches;
-        save[SAVE_CLIMBING_GEAR_OFFSET] = self.climbing_gear;
+        save[SAVE_GRAPPLE_OFFSET] = self.climbing_gear;
         save[SAVE_SPECIAL_ITEM_OFFSET..SAVE_SPECIAL_ITEM_OFFSET + SPECIAL_ITEM_COUNT]
             .copy_from_slice(&self.special_items);
         save[SAVE_EQUIPMENT_STOCK_OFFSET..SAVE_EQUIPMENT_STOCK_OFFSET + EQUIPMENT_COUNT]

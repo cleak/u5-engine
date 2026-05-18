@@ -2426,6 +2426,7 @@
         assert_eq!(SAVE_GEM_STOCK_OFFSET, 0x0207);
         assert_eq!(SAVE_TORCH_STOCK_OFFSET, 0x0208);
         assert_eq!(SAVE_CLIMBING_GEAR_OFFSET, 0x0209);
+        assert_eq!(SAVE_GRAPPLE_OFFSET, SAVE_CLIMBING_GEAR_OFFSET);
         assert_eq!(SAVE_SPECIAL_ITEM_OFFSET, 0x020a);
     }
 
