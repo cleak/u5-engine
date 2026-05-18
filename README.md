@@ -56,7 +56,9 @@ input system maps keyboard events into the same handlers used by the terminal
 harness, so movement, blocking, doors, and supported area transitions work out
 of the box. Dungeon scenes render a light-gated first-person corridor panel;
 combat, shops, conversations, and character creation remain modal runtime
-flows rather than bespoke Bevy UI.
+flows rather than bespoke Bevy UI. Line-oriented modal prompts such as
+conversation keywords, Blackthorn answers, and sage topics collect typed text
+in the status panel, support Backspace, and submit on Enter.
 
 Input map (visual mode):
 
@@ -72,6 +74,7 @@ Input map (visual mode):
 | `B`, `C`, `F`-`J`, `L`-`R`, `T`-`V`, `X`-`Z`        | Command letters   |
 | `Shift+A` / `Shift+S`                               | Attack / Search   |
 | number row `0`-`9`                                  | Modal selections  |
+| text + `Backspace` + `Enter`                        | Text prompts      |
 | `Q`                                                 | Save/exit prompt  |
 | `Esc`                                               | Quit              |
 

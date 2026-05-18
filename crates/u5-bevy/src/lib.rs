@@ -17,6 +17,7 @@ use bevy::text::TextBounds;
 use u5_runtime::{
     Area, Direction, PlayInputDisposition, PlayOptions, PlayState, TILE_ATLAS_SIDE, TileAtlas,
     TileGraphicsDepth, handle_play_key_input, load_tile_atlas, render_text_panel_rgba,
+    shop_runtime::SageState, shop_session::ActiveShopSession,
 };
 
 const VIEWPORT_RADIUS: usize = 5;
@@ -134,7 +135,7 @@ fn screenshot_system(
                 image.data = Some(rgba);
             }
             if let Ok(mut text) = text_query.single_mut() {
-                text.0 = summarize(&v.state, "");
+                text.0 = summarize(&v.state, "", &v.input_line);
             }
             state.preset_keys_applied = true;
         }
@@ -170,6 +171,7 @@ struct VisualState {
     state: PlayState,
     atlas: TileAtlas,
     image_handle: Handle<Image>,
+    input_line: String,
 }
 
 #[derive(Component)]
@@ -267,7 +269,7 @@ fn setup(
         Transform::from_xyz(0.0, STATUS_PANEL_HEIGHT * 0.5, 0.0),
     ));
     commands.spawn((
-        Text2d::new(summarize(&state, READY_HINT)),
+        Text2d::new(summarize(&state, READY_HINT, "")),
         TextFont {
             font_size: 16.0,
             ..default()
@@ -284,6 +286,7 @@ fn setup(
         state,
         atlas,
         image_handle,
+        input_line: String::new(),
     });
     commands.remove_resource::<PendingBootstrap>();
 }
@@ -306,6 +309,33 @@ fn drive_visual(
     let shift_pressed =
         keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
     for key in keyboard.get_just_pressed() {
+        if visual_line_prompt_active(&visual.state) {
+            let game_dir = visual.game_dir.clone();
+            let v: &mut VisualState = visual.as_mut();
+            let result = handle_visual_line_key(
+                &mut v.state,
+                &mut v.input_line,
+                *key,
+                shift_pressed,
+                &game_dir,
+            );
+            match result {
+                Ok(Some(PlayInputDisposition::Quit)) => {
+                    exit.write(AppExit::Success);
+                    return;
+                }
+                Ok(Some(PlayInputDisposition::Continue)) => {
+                    handled = true;
+                    continue;
+                }
+                Ok(None) => continue,
+                Err(err) => {
+                    visual.state.message = format!("Input error: {err}");
+                    handled = true;
+                    continue;
+                }
+            }
+        }
         let Some(ch) = key_code_to_char(*key, shift_pressed) else {
             continue;
         };
@@ -332,7 +362,7 @@ fn drive_visual(
         image.data = Some(rgba);
     }
     if let Ok(mut text) = text_query.single_mut() {
-        let summary = summarize(&v.state, "");
+        let summary = summarize(&v.state, "", &v.input_line);
         text.0 = summary;
     }
 }
@@ -349,7 +379,7 @@ fn render_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
     }
 }
 
-fn summarize(state: &PlayState, fallback: &str) -> String {
+fn summarize(state: &PlayState, fallback: &str, input_line: &str) -> String {
     let dungeon_note = if matches!(state.area, Area::Dungeon { .. }) {
         " [Dungeon first-person panel]"
     } else {
@@ -360,7 +390,7 @@ fn summarize(state: &PlayState, fallback: &str) -> String {
     } else {
         state.message.clone()
     };
-    format!(
+    let mut summary = format!(
         "{} ({}, {}) facing {} — turn {}{}\n{}",
         state.current_area_label(),
         state.player.x,
@@ -369,7 +399,121 @@ fn summarize(state: &PlayState, fallback: &str) -> String {
         state.turn,
         dungeon_note,
         msg
-    )
+    );
+    if visual_line_prompt_active(state) {
+        summary.push_str("\n> ");
+        summary.push_str(input_line);
+    }
+    summary
+}
+
+fn visual_line_prompt_active(state: &PlayState) -> bool {
+    state.active_conversation.is_some()
+        || state.active_blackthorn.is_some()
+        || matches!(
+            state.active_shop.as_ref(),
+            Some(ActiveShopSession::Sage(SageState::Prompt { .. }))
+        )
+}
+
+fn handle_visual_line_key(
+    state: &mut PlayState,
+    input_line: &mut String,
+    key: KeyCode,
+    shift_pressed: bool,
+    game_dir: &Path,
+) -> std::io::Result<Option<PlayInputDisposition>> {
+    use KeyCode::*;
+    match key {
+        Enter | NumpadEnter => {
+            let submitted = std::mem::take(input_line);
+            let mut chars = submitted.chars();
+            let (key, suffix) = match chars.next() {
+                Some(first) => (first, chars.collect::<String>()),
+                None => ('\n', String::new()),
+            };
+            handle_play_key_input(state, key, &suffix, game_dir).map(Some)
+        }
+        Backspace => {
+            input_line.pop();
+            Ok(Some(PlayInputDisposition::Continue))
+        }
+        _ => {
+            if let Some(ch) = key_code_to_line_char(key, shift_pressed) {
+                input_line.push(ch);
+                Ok(Some(PlayInputDisposition::Continue))
+            } else {
+                Ok(None)
+            }
+        }
+    }
+}
+
+fn key_code_to_line_char(key: KeyCode, shift_pressed: bool) -> Option<char> {
+    use KeyCode::*;
+    let ch = match key {
+        KeyA => letter_for_shift('a', shift_pressed),
+        KeyB => letter_for_shift('b', shift_pressed),
+        KeyC => letter_for_shift('c', shift_pressed),
+        KeyD => letter_for_shift('d', shift_pressed),
+        KeyE => letter_for_shift('e', shift_pressed),
+        KeyF => letter_for_shift('f', shift_pressed),
+        KeyG => letter_for_shift('g', shift_pressed),
+        KeyH => letter_for_shift('h', shift_pressed),
+        KeyI => letter_for_shift('i', shift_pressed),
+        KeyJ => letter_for_shift('j', shift_pressed),
+        KeyK => letter_for_shift('k', shift_pressed),
+        KeyL => letter_for_shift('l', shift_pressed),
+        KeyM => letter_for_shift('m', shift_pressed),
+        KeyN => letter_for_shift('n', shift_pressed),
+        KeyO => letter_for_shift('o', shift_pressed),
+        KeyP => letter_for_shift('p', shift_pressed),
+        KeyQ => letter_for_shift('q', shift_pressed),
+        KeyR => letter_for_shift('r', shift_pressed),
+        KeyS => letter_for_shift('s', shift_pressed),
+        KeyT => letter_for_shift('t', shift_pressed),
+        KeyU => letter_for_shift('u', shift_pressed),
+        KeyV => letter_for_shift('v', shift_pressed),
+        KeyW => letter_for_shift('w', shift_pressed),
+        KeyX => letter_for_shift('x', shift_pressed),
+        KeyY => letter_for_shift('y', shift_pressed),
+        KeyZ => letter_for_shift('z', shift_pressed),
+        Digit0 | Numpad0 => '0',
+        Digit1 | Numpad1 => '1',
+        Digit2 | Numpad2 => '2',
+        Digit3 | Numpad3 => '3',
+        Digit4 | Numpad4 => '4',
+        Digit5 | Numpad5 => '5',
+        Digit6 | Numpad6 => '6',
+        Digit7 | Numpad7 => '7',
+        Digit8 | Numpad8 => '8',
+        Digit9 | Numpad9 => '9',
+        Space => ' ',
+        Comma => {
+            if shift_pressed {
+                '<'
+            } else {
+                ','
+            }
+        }
+        Period => {
+            if shift_pressed {
+                '>'
+            } else {
+                '.'
+            }
+        }
+        _ => return None,
+    };
+    Some(ch)
+}
+
+fn letter_for_shift(lower: char, shift_pressed: bool) -> char {
+    if shift_pressed {
+        lower.to_ascii_uppercase()
+    } else {
+        lower
+    }
 }
 
 fn key_code_to_char(key: KeyCode, shift_pressed: bool) -> Option<char> {
@@ -461,10 +605,38 @@ fn key_code_to_char(key: KeyCode, shift_pressed: bool) -> Option<char> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use u5_runtime::test_fixtures::{dungeon_state, open_dungeon_record, synthetic_tile_atlas};
+    use std::path::Path;
+    use u5_runtime::conversation_session::ConversationSession;
+    use u5_runtime::test_fixtures::{
+        dungeon_state, open_dungeon_record, open_grid, synthetic_tile_atlas, test_state,
+    };
+    use u5_runtime::tlk_control_codes::TLK_TEXT_XOR_MASK;
     use u5_runtime::{
         Direction, EGA_PALETTE_RGB, TileGraphicsDepth, dungeon_cell_index, wrap_text_panel_lines,
     };
+
+    fn enc_tlk_text(text: &str) -> Vec<u8> {
+        text.bytes().map(|b| b ^ TLK_TEXT_XOR_MASK).collect()
+    }
+
+    fn install_test_conversation(state: &mut PlayState) {
+        let raw = vec![
+            enc_tlk_text("Ada"),
+            enc_tlk_text("a quiet smith"),
+            enc_tlk_text("Greetings, traveller."),
+            enc_tlk_text("I mend gear."),
+            enc_tlk_text("Farewell."),
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Greetings, traveller.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+        ];
+        state.active_conversation = Some(Box::new(ConversationSession::new(raw, decoded)));
+        state.advance_active_conversation_greeting();
+    }
 
     #[test]
     fn dungeon_framebuffer_renders_first_person_raster_when_lit() {
@@ -538,5 +710,89 @@ mod tests {
         assert_eq!(key_code_to_char(KeyCode::KeyQ, false), Some('Q'));
         assert_eq!(key_code_to_char(KeyCode::KeyU, false), Some('U'));
         assert_eq!(key_code_to_char(KeyCode::Digit2, false), Some('2'));
+    }
+
+    #[test]
+    fn visual_line_input_buffers_conversation_keyword_until_enter() {
+        let mut state = test_state(open_grid(), 1, 1);
+        install_test_conversation(&mut state);
+        let mut input_line = String::new();
+
+        handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::KeyJ,
+            false,
+            Path::new(""),
+        )
+        .unwrap();
+        handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::KeyO,
+            false,
+            Path::new(""),
+        )
+        .unwrap();
+        handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::KeyB,
+            false,
+            Path::new(""),
+        )
+        .unwrap();
+
+        assert_eq!(input_line, "job");
+        assert!(state.active_conversation.is_some());
+        assert!(!state.message.contains("mend"));
+
+        handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::Enter,
+            false,
+            Path::new(""),
+        )
+        .unwrap();
+
+        assert!(input_line.is_empty());
+        assert!(state.message.contains("mend"));
+    }
+
+    #[test]
+    fn visual_line_input_supports_backspace_and_status_echo() {
+        let mut state = test_state(open_grid(), 1, 1);
+        install_test_conversation(&mut state);
+        let mut input_line = String::new();
+
+        handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::KeyJ,
+            false,
+            Path::new(""),
+        )
+        .unwrap();
+        handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::KeyX,
+            false,
+            Path::new(""),
+        )
+        .unwrap();
+        handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::Backspace,
+            false,
+            Path::new(""),
+        )
+        .unwrap();
+
+        assert_eq!(input_line, "j");
+        let summary = summarize(&state, "", &input_line);
+        assert!(summary.ends_with("\n> j"));
     }
 }
