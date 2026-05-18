@@ -27,6 +27,14 @@ pub struct ShrineEntry {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CodexUrnEntry {
+    pub plane: WorldPlane,
+    pub x: usize,
+    pub y: usize,
+    pub expected_tile: Option<u8>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorldPlaneTransitionEntry {
     pub from_plane: WorldPlane,
     pub x: usize,

@@ -74,11 +74,12 @@ pub fn handle_play_key_input(
         return Ok(PlayInputDisposition::Continue);
     }
     if key == 'M' && !suffix.is_empty() {
-        if inline_mix_candidate(suffix) {
-            state.mix_reagents_from_suffix(suffix);
-        } else if state
+        if state
             .meditate_shrine_from_suffix(suffix, game_dir)?
             .is_none()
+            && state
+                .read_codex_urn_at_current_position(game_dir)?
+                .is_none()
         {
             state.mix_reagents_from_suffix(suffix);
         }

@@ -302,6 +302,104 @@ pub fn parse_shrine_entries(text: &str) -> io::Result<Vec<ShrineEntry>> {
     Ok(entries)
 }
 
+pub fn load_codex_urn_entries(game_dir: &Path) -> io::Result<Option<Vec<CodexUrnEntry>>> {
+    let path = game_dir.join(CODEX_URN_TABLE_FILE);
+    let text = match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => {
+            return Err(io::Error::new(
+                err.kind(),
+                format!("{}: {err}", path.display()),
+            ));
+        }
+    };
+    parse_codex_urn_entries(&text).map(Some)
+}
+
+pub fn parse_codex_urn_entries(text: &str) -> io::Result<Vec<CodexUrnEntry>> {
+    let mut entries = Vec::new();
+    for (line_index, line) in text.lines().enumerate() {
+        let line_number = line_index + 1;
+        let line = line
+            .split_once('#')
+            .map_or(line, |(prefix, _)| prefix)
+            .trim();
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<_> = line
+            .split(|ch: char| ch == ',' || ch == '\t' || ch.is_whitespace())
+            .filter(|part| !part.is_empty())
+            .collect();
+        if !matches!(parts.len(), 3 | 4) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{CODEX_URN_TABLE_FILE} line {line_number} must be: PLANE X Y [TILE]"),
+            ));
+        }
+        let plane = WorldPlane::from_key(parts[0]).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{CODEX_URN_TABLE_FILE} line {line_number} has unknown plane `{}`",
+                    parts[0]
+                ),
+            )
+        })?;
+        let x = parse_u8_literal(parts[1]).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!(
+                    "{CODEX_URN_TABLE_FILE} line {line_number} has invalid X `{}`: {err}",
+                    parts[1]
+                ),
+            )
+        })? as usize;
+        let y = parse_u8_literal(parts[2]).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!(
+                    "{CODEX_URN_TABLE_FILE} line {line_number} has invalid Y `{}`: {err}",
+                    parts[2]
+                ),
+            )
+        })? as usize;
+        let expected_tile = if parts.len() == 4 {
+            Some(parse_u8_literal(parts[3]).map_err(|err| {
+                io::Error::new(
+                    err.kind(),
+                    format!(
+                        "{CODEX_URN_TABLE_FILE} line {line_number} has invalid tile `{}`: {err}",
+                        parts[3]
+                    ),
+                )
+            })?)
+        } else {
+            None
+        };
+        if entries
+            .iter()
+            .any(|entry: &CodexUrnEntry| entry.plane == plane && entry.x == x && entry.y == y)
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{CODEX_URN_TABLE_FILE} line {line_number} duplicates {}/{x},{y}",
+                    plane.key()
+                ),
+            ));
+        }
+        entries.push(CodexUrnEntry {
+            plane,
+            x,
+            y,
+            expected_tile,
+        });
+    }
+    Ok(entries)
+}
+
 pub fn load_world_plane_transition_entries(
     game_dir: &Path,
 ) -> io::Result<Option<Vec<WorldPlaneTransitionEntry>>> {

@@ -268,10 +268,14 @@ impl PlayState {
                     handled!(self.look_facing_with_game_dir(game_dir)?);
                 }
                 'M' => {
-                    self.message = self
-                        .shrine_prompt_at_current_position(game_dir)?
-                        .unwrap_or_else(mix_prompt_message);
-                    handled!();
+                    if let Some(outcome) = self.read_codex_urn_at_current_position(game_dir)? {
+                        handled!(outcome);
+                    } else {
+                        self.message = self
+                            .shrine_prompt_at_current_position(game_dir)?
+                            .unwrap_or_else(mix_prompt_message);
+                        handled!();
+                    }
                 }
                 'N' => {
                     self.message = new_order_prompt_message();
@@ -334,10 +338,14 @@ impl PlayState {
             'k' => self.klimb_command(game_dir)?,
             'x' => self.exit_vehicle_with_game_dir(Some(game_dir))?,
             'm' => {
-                self.message = self
-                    .shrine_prompt_at_current_position(game_dir)?
-                    .unwrap_or_else(mix_prompt_message);
-                MoveOutcome::Observed
+                if let Some(outcome) = self.read_codex_urn_at_current_position(game_dir)? {
+                    outcome
+                } else {
+                    self.message = self
+                        .shrine_prompt_at_current_position(game_dir)?
+                        .unwrap_or_else(mix_prompt_message);
+                    MoveOutcome::Observed
+                }
             }
             'z' => self.z_stats(),
             'r' => self.ready_equipment_from_suffix(""),
@@ -1320,6 +1328,46 @@ impl PlayState {
             }
         };
         Ok(Some(outcome))
+    }
+
+    pub fn read_codex_urn_at_current_position(
+        &mut self,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let Some(_entry) = self.current_codex_urn_entry(game_dir)? else {
+            return Ok(None);
+        };
+        self.message = match read_codex_urn(self.shrine_ordained_mask, &mut self.shrine_codex_mask)
+        {
+            CodexUrnReadOutcome::Completed => {
+                "Codex urn: all virtue pages have already been read.".to_string()
+            }
+            CodexUrnReadOutcome::NoOrdained => {
+                "Codex urn: no ordained virtue is ready.".to_string()
+            }
+            CodexUrnReadOutcome::Stamped(virtue) => {
+                format!("Read Codex page for {}; Codex-read bit set.", virtue.name())
+            }
+        };
+        Ok(Some(MoveOutcome::Observed))
+    }
+
+    pub fn current_codex_urn_entry(&self, game_dir: &Path) -> io::Result<Option<CodexUrnEntry>> {
+        let Area::World { plane } = self.area else {
+            return Ok(None);
+        };
+        let Some(entries) = load_codex_urn_entries(game_dir)? else {
+            return Ok(None);
+        };
+        let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
+        Ok(entries.into_iter().find(|entry| {
+            entry.plane == plane
+                && entry.x == self.player.x
+                && entry.y == self.player.y
+                && entry
+                    .expected_tile
+                    .map_or(true, |expected| expected == tile)
+        }))
     }
 
     pub fn current_shrine_entry(&self, game_dir: &Path) -> io::Result<Option<ShrineEntry>> {

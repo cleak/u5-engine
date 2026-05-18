@@ -247,6 +247,37 @@ BRITANNIA 11 21 shrine:humility
     }
 
     #[test]
+    fn parse_codex_urn_entries_accepts_world_rows() {
+        let entries = parse_codex_urn_entries(
+            "\
+UNDERWORLD 10 20 136
+BRITANNIA 11 21
+",
+        )
+        .unwrap();
+
+        assert_eq!(
+            entries,
+            vec![
+                CodexUrnEntry {
+                    plane: WorldPlane::Underworld,
+                    x: 10,
+                    y: 20,
+                    expected_tile: Some(136),
+                },
+                CodexUrnEntry {
+                    plane: WorldPlane::Britannia,
+                    x: 11,
+                    y: 21,
+                    expected_tile: None,
+                },
+            ]
+        );
+        assert!(parse_codex_urn_entries("MOON 1 2\n").is_err());
+        assert!(parse_codex_urn_entries("BRITANNIA 1 2\nBRITANNIA 1 2 136\n").is_err());
+    }
+
+    #[test]
     fn parse_inline_shrine_request_accepts_mantra_and_offering() {
         assert_eq!(
             parse_inline_shrine_request("Ahm").unwrap(),
@@ -1099,6 +1130,94 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 1);
         assert_eq!(state.turn, 0);
         assert_eq!(state.message, "Mixed 1 IL charge; stock is 1.");
+    }
+
+    #[test]
+    fn codex_urn_reads_first_ordained_virtue_from_clean_sidecar() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(CODEX_URN_TABLE_FILE), "BRITANNIA 10 20 136\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 136;
+        let mut state = britannia_state(grid, 10, 20);
+        state.shrine_ordained_mask = ShrineVirtue::Honesty.bit() | ShrineVirtue::Justice.bit();
+        state.shrine_codex_mask = 0;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.shrine_codex_mask, ShrineVirtue::Honesty.bit());
+        assert_eq!(state.turn, 0);
+        assert!(state.message.contains("Codex page for Honesty"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn codex_urn_suffix_routing_precedes_mix_reagents() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(CODEX_URN_TABLE_FILE), "BRITANNIA 10 20 136\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 136;
+        let mut state = britannia_state(grid, 10, 20);
+        state.reagents = [0; REAGENT_COUNT];
+        state.reagents[REAGENT_SULFUR_ASH] = 1;
+        state.shrine_ordained_mask = ShrineVirtue::Justice.bit();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "IL/0x80/1", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.shrine_codex_mask, ShrineVirtue::Justice.bit());
+        assert_eq!(state.reagents[REAGENT_SULFUR_ASH], 1);
+        assert_eq!(state.spell_charges[IN_LOR_SPELL_INDEX], 0);
+        assert!(state.message.contains("Codex page for Justice"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn codex_urn_no_ordained_and_completed_branches_do_not_stamp_new_bits() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(CODEX_URN_TABLE_FILE), "BRITANNIA 10 20 136\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = 136;
+        let mut state = britannia_state(grid, 10, 20);
+        state.shrine_codex_mask = ShrineVirtue::Valor.bit();
+
+        assert_eq!(
+            state.read_codex_urn_at_current_position(&dir).unwrap(),
+            Some(MoveOutcome::Observed)
+        );
+        assert_eq!(state.shrine_codex_mask, ShrineVirtue::Valor.bit());
+        assert!(state.message.contains("no ordained virtue"));
+
+        state.shrine_ordained_mask = 0xFF;
+        state.shrine_codex_mask = 0xFF;
+        assert_eq!(
+            state.read_codex_urn_at_current_position(&dir).unwrap(),
+            Some(MoveOutcome::Observed)
+        );
+        assert_eq!(state.shrine_codex_mask, 0xFF);
+        assert!(state.message.contains("already been read"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn codex_urn_tile_guard_falls_back_to_mix_prompt() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(CODEX_URN_TABLE_FILE), "BRITANNIA 10 20 136\n").unwrap();
+        let mut state = britannia_state(open_world_grid(), 10, 20);
+        state.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.shrine_codex_mask, 0);
+        assert!(state.message.contains("Mix what?"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
