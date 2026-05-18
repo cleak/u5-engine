@@ -4383,6 +4383,26 @@
             aux1: 0,
             aux3: 0,
         };
+        state.active_objects[12] = ActiveObject {
+            type_byte: 0xc0,
+            tile: 0xc0,
+            x: 7,
+            y: 5,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+        state.active_objects[13] = ActiveObject {
+            type_byte: 0xc0,
+            tile: 0xc0,
+            x: 8,
+            y: 5,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
         state.combat_actors[6] = CombatActorDescriptor::from_row([
             10,
             1,
@@ -4391,6 +4411,26 @@
             6,
             0,
             6,
+            5,
+        ]);
+        state.combat_actors[9] = CombatActorDescriptor::from_row([
+            10,
+            1,
+            COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+            0,
+            12,
+            0,
+            7,
+            5,
+        ]);
+        state.combat_actors[10] = CombatActorDescriptor::from_row([
+            10,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            13,
+            0,
+            8,
             5,
         ]);
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
@@ -4412,6 +4452,27 @@
             0x04 % atlas.depth.pixel_limit(),
             "hidden combat actor must not overwrite terrain"
         );
+        assert_eq!(
+            viewport_palette_at_cell(&viewport, 7, 5),
+            0x04 % atlas.depth.pixel_limit(),
+            "hidden combat actor must be found through active_object_slot, not slot index"
+        );
+        assert_eq!(
+            viewport_palette_at_cell(&viewport, 8, 5),
+            0xc0 % atlas.depth.pixel_limit(),
+            "visible combat actor with a non-parallel active object slot still renders"
+        );
+    }
+
+    #[test]
+    fn combat_viewport_reports_visible_animated_terrain() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        assert!(!state.viewport_has_animated_tiles(5));
+
+        state.combat_terrain[3][4] = 0x01;
+        assert!(state.viewport_has_animated_tiles(5));
     }
 
     #[test]

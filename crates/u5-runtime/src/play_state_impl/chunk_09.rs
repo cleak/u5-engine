@@ -561,12 +561,10 @@ impl PlayState {
                 if object.is_empty() || object.x != x || object.y != y {
                     return None;
                 }
-                if self
-                    .combat_actors
-                    .get(slot)
-                    .copied()
-                    .is_some_and(|actor| !actor.is_empty() && actor.is_hidden_or_unrevealed())
-                {
+                let linked_actor = self.combat_actors.iter().copied().find(|actor| {
+                    !actor.is_empty() && usize::from(actor.active_object_slot) == slot
+                });
+                if linked_actor.is_some_and(CombatActorDescriptor::is_hidden_or_unrevealed) {
                     return None;
                 }
                 Some(if object.tile == PLAYER_TILE {
@@ -819,6 +817,15 @@ impl PlayState {
     }
 
     pub fn viewport_has_animated_tiles(&self, radius: usize) -> bool {
+        if self.combat_active {
+            return self
+                .combat_terrain
+                .iter()
+                .flatten()
+                .copied()
+                .any(|tile| static_tile_animation_family(tile).is_some());
+        }
+
         let Some(area) = self.top_down_render_area() else {
             return false;
         };

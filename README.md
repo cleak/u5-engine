@@ -55,8 +55,9 @@ through one nearest-neighbor sprite. Gameplay still lives in `PlayState`: the
 input system maps keyboard events into the same handlers used by the terminal
 harness, so movement, blocking, doors, and supported area transitions work out
 of the box. Dungeon scenes render a light-gated first-person corridor panel;
-combat, shops, conversations, and character creation remain modal runtime
-flows rather than bespoke Bevy UI. Line-oriented modal prompts such as
+combat scenes render the tactical arena through the same atlas-backed viewport,
+while shops, conversations, and character creation remain modal runtime flows
+rather than bespoke Bevy UI. Line-oriented modal prompts such as
 conversation keywords, Blackthorn answers, and sage topics collect typed text
 in the status panel, support Backspace, and submit on Enter.
 
@@ -261,7 +262,9 @@ HP restore capped at the target's max HP. Great Heal and Resurrect restore to
 max HP until exact HP math is public. `C1IS`, `C1RT`, and `C1AI` cast the
 shared active-effect wrappers for Protection, Quickness, and Negate Magic,
 recording the public `P`/20, `Q`/30, or `N`/10 runtime tag and aging it on
-consumed turns; combat-side consumers remain out of scope. `C1IW` casts the
+consumed turns. Combat consumes those shared tags for Protection's equipped-stat
+bonus, Quickness's player-dispatch skip gate, Mass Charm's AI target remap, and
+Negate Magic's cast absorption. `C1IW` casts the
 narrow overworld Locate hook, reporting the current plane, coordinate, facing,
 wind, and time
 after the saved charge/MP/level gates succeed. `C1IMX` casts the narrow Create
