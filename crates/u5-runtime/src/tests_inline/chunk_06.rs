@@ -1399,10 +1399,13 @@
     fn natural_moongate_refresh_stamps_and_wanes_world_slots() {
         let gate_idx = world_cell_index(6, 7);
         let stale_idx = world_cell_index(9, 10);
+        let unrelated_idx = world_cell_index(11, 10);
         let mut grid = open_world_grid();
         grid[stale_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+        grid[unrelated_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
         let mut state = britannia_state(grid, 4, 5);
         state.clock = GameClock::new(20, 0).unwrap();
+        state.natural_moongate_live_cells.push(stale_idx);
         state.moonstone_slots[1] = MoonstoneGateSlot {
             scene: 0,
             x: 6,
@@ -1415,6 +1418,8 @@
         assert_eq!(state.natural_moongate_counter, 1);
         assert_eq!(state.grid[gate_idx], NATURAL_MOONGATE_TERRAIN_TILE);
         assert_eq!(state.grid[stale_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert_eq!(state.grid[unrelated_idx], NATURAL_MOONGATE_TERRAIN_TILE);
+        assert_eq!(state.natural_moongate_live_cells, vec![gate_idx]);
         assert!(state.visibility_dirty);
 
         state.visibility_dirty = false;
@@ -1424,7 +1429,46 @@
 
         assert_eq!(state.natural_moongate_counter, 0);
         assert_eq!(state.grid[gate_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert!(state.natural_moongate_live_cells.is_empty());
         assert!(state.visibility_dirty);
+    }
+
+    #[test]
+    fn natural_moongate_refresh_uses_wrapping_world_chunk_window() {
+        let wrapped_idx = world_cell_index(250, 250);
+        let near_zero_idx = world_cell_index(0, 0);
+        let outside_idx = world_cell_index(32, 32);
+        let mut state = britannia_state(open_world_grid(), 4, 5);
+        state.clock = GameClock::new(20, 0).unwrap();
+        state.moonstone_slots[0] = MoonstoneGateSlot {
+            scene: 0,
+            x: 250,
+            y: 250,
+            z: WorldPlane::Britannia.save_floor() as u8,
+        };
+        state.moonstone_slots[1] = MoonstoneGateSlot {
+            scene: 0,
+            x: 0,
+            y: 0,
+            z: WorldPlane::Britannia.save_floor() as u8,
+        };
+        state.moonstone_slots[2] = MoonstoneGateSlot {
+            scene: 0,
+            x: 32,
+            y: 32,
+            z: WorldPlane::Britannia.save_floor() as u8,
+        };
+
+        assert_eq!(state.natural_moongate_chunk_window(), Some((240, 240, 32, 32)));
+        assert!(state.refresh_natural_moongates());
+
+        assert_eq!(state.grid[wrapped_idx], NATURAL_MOONGATE_TERRAIN_TILE);
+        assert_eq!(state.grid[near_zero_idx], NATURAL_MOONGATE_TERRAIN_TILE);
+        assert_eq!(state.grid[outside_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert_eq!(
+            state.natural_moongate_live_cells,
+            vec![wrapped_idx, near_zero_idx]
+        );
     }
 
     #[test]

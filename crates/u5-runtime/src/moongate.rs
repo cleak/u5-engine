@@ -68,7 +68,11 @@ pub fn natural_moongate_slot_eligible(
     let Some((x0, y0, w, h)) = chunk_window else {
         return true;
     };
-    slot_x >= x0 && slot_x < x0.saturating_add(w) && slot_y >= y0 && slot_y < y0.saturating_add(h)
+    coordinate_in_wrapping_window(slot_x, x0, w) && coordinate_in_wrapping_window(slot_y, y0, h)
+}
+
+const fn coordinate_in_wrapping_window(coordinate: u8, start: u8, len: u8) -> bool {
+    len != 0 && coordinate.wrapping_sub(start) < len
 }
 
 /// `overworld.md §9`: live-gate entry hook secondary outcome — when the

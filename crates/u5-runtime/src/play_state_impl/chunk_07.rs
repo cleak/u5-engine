@@ -1982,6 +1982,7 @@ impl PlayState {
         let scene = Scene::new(TOWN_ARREST_JAIL_SCENE)?;
         let floor = TOWN_ARREST_JAIL_FLOOR as i8;
         self.grid = load_town_runtime_floor(game_dir, scene, floor, self.clock.hour)?;
+        self.natural_moongate_live_cells.clear();
         self.area = Area::Town { scene, floor };
         self.player.x = TOWN_ARREST_JAIL_X as usize;
         self.player.y = TOWN_ARREST_JAIL_Y as usize;
@@ -2192,6 +2193,7 @@ impl PlayState {
         let scene = Scene::new(BLACKTHORN_CAPTIVE_CELL_SCENE)?;
         let floor = 0i8;
         self.grid = load_town_runtime_floor(game_dir, scene, floor, self.clock.hour)?;
+        self.natural_moongate_live_cells.clear();
         self.area = Area::Town { scene, floor };
         self.player.x = BLACKTHORN_CAPTIVE_CELL_X as usize;
         self.player.y = BLACKTHORN_CAPTIVE_CELL_Y as usize;
@@ -2231,6 +2233,7 @@ impl PlayState {
         let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
         let floor = 0i8;
         self.grid = load_town_runtime_floor(game_dir, scene, floor, self.clock.hour)?;
+        self.natural_moongate_live_cells.clear();
         self.area = Area::Town { scene, floor };
         self.player.x = BLACKTHORN_RESCUE_HANDOFF_X as usize;
         self.player.y = BLACKTHORN_RESCUE_HANDOFF_Y as usize;

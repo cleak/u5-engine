@@ -19,6 +19,7 @@ pub struct PlayState {
     pub clock: GameClock,
     pub animation: AnimationClock,
     pub natural_moongate_counter: u8,
+    pub natural_moongate_live_cells: Vec<usize>,
     pub cached_moon_glyph_slots: [Option<usize>; 2],
     pub food: u16,
     pub gold: u16,

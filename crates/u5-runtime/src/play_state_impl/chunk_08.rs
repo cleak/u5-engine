@@ -787,6 +787,7 @@ impl PlayState {
             Err(err) => return Err(err),
         };
         self.grid = next_grid;
+        self.natural_moongate_live_cells.clear();
         self.area = Area::Town {
             scene,
             floor: next_floor,
@@ -919,6 +920,7 @@ impl PlayState {
         self.player.y = entry.to_y;
         self.force_foot_transport();
         self.grid = load_world_map(game_dir, entry.to_plane)?;
+        self.natural_moongate_live_cells.clear();
         self.npcs.clear();
         self.replace_world_active_objects(game_dir, entry.to_plane, entry.to_x, entry.to_y)?;
         self.clear_open_town_door_state();
@@ -1019,6 +1021,7 @@ impl PlayState {
             self.area = Area::World { plane: to_plane };
             self.force_foot_transport();
             self.grid = load_world_map(game_dir, to_plane)?;
+            self.natural_moongate_live_cells.clear();
             self.npcs.clear();
             self.replace_world_active_objects(
                 game_dir,
@@ -1174,6 +1177,7 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         }
 
+        self.restore_tracked_natural_moongates();
         self.cache_current_world_overlay();
         let return_world = WorldReturn {
             plane,
@@ -1328,6 +1332,7 @@ impl PlayState {
         self.sail_cadence = return_world.sail_cadence;
         self.sail_stall_pending = return_world.sail_stall_pending;
         self.grid = return_world.grid;
+        self.natural_moongate_live_cells.clear();
         self.npcs.clear();
         self.active_objects = return_world.active_objects;
         if let Some(pending) = return_world.pending_vehicle {
@@ -1379,6 +1384,7 @@ impl PlayState {
         self.player.y = entry.y;
         self.force_foot_transport();
         self.grid = load_world_map(game_dir, entry.plane)?;
+        self.natural_moongate_live_cells.clear();
         self.npcs.clear();
         self.replace_world_active_objects(game_dir, entry.plane, entry.x, entry.y)?;
         self.clear_open_town_door_state();

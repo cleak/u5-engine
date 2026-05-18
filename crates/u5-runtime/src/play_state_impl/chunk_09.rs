@@ -335,6 +335,7 @@ impl PlayState {
         self.player.y = entry.to_y;
         self.force_foot_transport();
         self.grid = load_world_map(game_dir, entry.to_plane)?;
+        self.natural_moongate_live_cells.clear();
         self.npcs.clear();
         self.replace_world_active_objects(game_dir, entry.to_plane, entry.to_x, entry.to_y)?;
         self.clear_open_town_door_state();
@@ -1126,35 +1127,42 @@ impl PlayState {
     }
 
     pub fn refresh_natural_moongates(&mut self) -> bool {
-        if self.natural_moongate_night_window() {
-            self.natural_moongate_counter = self
-                .natural_moongate_counter
-                .saturating_add(1)
-                .min(NATURAL_MOONGATE_COUNTER_MAX);
-        } else {
-            self.natural_moongate_counter = self.natural_moongate_counter.saturating_sub(1);
-        }
+        self.natural_moongate_counter =
+            natural_moongate_advance_counter(self.natural_moongate_counter, self.clock.hour);
 
         let Some(indices) = self.natural_moongate_slot_indices_for_current_scene() else {
+            self.natural_moongate_live_cells.clear();
             return false;
         };
         let present = self.natural_moongate_counter != 0;
+        let previous_live_cells = std::mem::take(&mut self.natural_moongate_live_cells);
         let mut changed = false;
 
-        for idx in 0..self.grid.len() {
-            let eligible = indices.contains(&idx);
-            let target = if eligible && present {
-                NATURAL_MOONGATE_TERRAIN_TILE
-            } else if (eligible && !present)
-                || (!eligible && self.grid[idx] == NATURAL_MOONGATE_TERRAIN_TILE)
-            {
-                NATURAL_MOONGATE_RESTORED_TERRAIN_TILE
+        for idx in previous_live_cells {
+            if !indices.contains(&idx) {
+                if let Some(tile) = self.grid.get_mut(idx) {
+                    if *tile == NATURAL_MOONGATE_LIVE_TILE {
+                        *tile = NATURAL_MOONGATE_UNDERLYING_TILE;
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        for idx in indices {
+            let target = if present {
+                NATURAL_MOONGATE_LIVE_TILE
             } else {
-                self.grid[idx]
+                NATURAL_MOONGATE_UNDERLYING_TILE
             };
-            if self.grid[idx] != target {
-                self.grid[idx] = target;
-                changed = true;
+            if let Some(tile) = self.grid.get_mut(idx) {
+                if *tile != target {
+                    *tile = target;
+                    changed = true;
+                }
+            }
+            if present && !self.natural_moongate_live_cells.contains(&idx) {
+                self.natural_moongate_live_cells.push(idx);
             }
         }
 
@@ -1165,33 +1173,102 @@ impl PlayState {
         changed
     }
 
+    pub fn natural_moongate_chunk_window(&self) -> Option<(u8, u8, u8, u8)> {
+        match self.area {
+            Area::World { .. } => {
+                let (x, y) = world_scroll_base(self.player.x, self.player.y);
+                Some((
+                    x as u8,
+                    y as u8,
+                    OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE as u8,
+                    OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE as u8,
+                ))
+            }
+            Area::Town { .. } => None,
+            Area::Dungeon { .. } => None,
+        }
+    }
+
+    pub fn natural_moongate_index_for_slot(&self, slot: MoonstoneGateSlot) -> Option<usize> {
+        if !slot.is_valid() {
+            return None;
+        }
+        match self.area {
+            Area::World { plane } => {
+                let window = self.natural_moongate_chunk_window();
+                if natural_moongate_slot_eligible(
+                    slot.scene,
+                    slot.z,
+                    slot.x,
+                    slot.y,
+                    0,
+                    plane.save_floor() as u8,
+                    window,
+                ) {
+                    Some(world_cell_index(slot.x as usize, slot.y as usize))
+                } else {
+                    None
+                }
+            }
+            Area::Town { scene, floor } => {
+                if natural_moongate_slot_eligible(
+                    slot.scene,
+                    slot.z,
+                    slot.x,
+                    slot.y,
+                    scene.byte,
+                    floor as u8,
+                    None,
+                ) && (slot.x as usize) < 32
+                    && (slot.y as usize) < 32
+                {
+                    Some(slot.y as usize * 32 + slot.x as usize)
+                } else {
+                    None
+                }
+            }
+            Area::Dungeon { .. } => None,
+        }
+    }
+
+    pub fn restore_tracked_natural_moongates(&mut self) -> bool {
+        let previous_live_cells = std::mem::take(&mut self.natural_moongate_live_cells);
+        let mut changed = false;
+        for idx in previous_live_cells {
+            if let Some(tile) = self.grid.get_mut(idx) {
+                if *tile == NATURAL_MOONGATE_LIVE_TILE {
+                    *tile = NATURAL_MOONGATE_UNDERLYING_TILE;
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            self.mark_visibility_dirty();
+            self.recompute_daylight();
+        }
+        changed
+    }
+
     pub fn natural_moongate_night_window(&self) -> bool {
-        matches!(self.clock.hour, 20..=23 | 0..=4)
+        matches!(
+            natural_moongate_counter_step(self.clock.hour),
+            NaturalMoongateCounterStep::Increase
+        )
     }
 
     pub fn natural_moongate_slot_indices_for_current_scene(&self) -> Option<Vec<usize>> {
         match self.area {
-            Area::World { plane } => Some(
-                self.moonstone_slots
-                    .iter()
-                    .copied()
-                    .filter(|slot| slot.scene == 0 && WorldPlane::from_save_z(slot.z) == plane)
-                    .map(|slot| world_cell_index(slot.x as usize, slot.y as usize))
-                    .collect(),
-            ),
-            Area::Town { scene, floor } => Some(
-                self.moonstone_slots
-                    .iter()
-                    .copied()
-                    .filter(|slot| {
-                        slot.scene == scene.byte
-                            && slot.z as i8 == floor
-                            && (slot.x as usize) < 32
-                            && (slot.y as usize) < 32
-                    })
-                    .map(|slot| slot.y as usize * 32 + slot.x as usize)
-                    .collect(),
-            ),
+            Area::World { .. } | Area::Town { .. } => {
+                let mut indices = Vec::new();
+                for slot in self.moonstone_slots.iter().copied() {
+                    if let Some(idx) = self.natural_moongate_index_for_slot(slot) {
+                        if !indices.contains(&idx) {
+                            indices.push(idx);
+                        }
+                    }
+                }
+                Some(indices)
+            }
             Area::Dungeon { .. } => None,
         }
     }

@@ -332,6 +332,7 @@ impl PlayState {
             clock: options.clock,
             animation: AnimationClock::default(),
             natural_moongate_counter: 0,
+            natural_moongate_live_cells: Vec::new(),
             cached_moon_glyph_slots: [None, None],
             food: options.food,
             gold: options.gold,
@@ -511,6 +512,7 @@ impl PlayState {
             clock: options.clock,
             animation: AnimationClock::default(),
             natural_moongate_counter: 0,
+            natural_moongate_live_cells: Vec::new(),
             cached_moon_glyph_slots: [None, None],
             food: options.food,
             gold: options.gold,
@@ -709,6 +711,7 @@ impl PlayState {
             clock: options.clock,
             animation: AnimationClock::default(),
             natural_moongate_counter: 0,
+            natural_moongate_live_cells: Vec::new(),
             cached_moon_glyph_slots: [None, None],
             food: options.food,
             gold: options.gold,
@@ -1094,6 +1097,7 @@ impl PlayState {
         advance_turn: bool,
     ) -> io::Result<MoveOutcome> {
         self.grid = load_town_runtime_floor(game_dir, scene, entry.to_floor, self.clock.hour)?;
+        self.natural_moongate_live_cells.clear();
         self.area = Area::Town {
             scene,
             floor: entry.to_floor,
