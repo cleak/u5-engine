@@ -150,7 +150,11 @@ impl PlayState {
                 handled!();
             }
             'q' => {
-                let _ = self.exit_to_dos_prompt(inline_drink);
+                if inline_drink.is_some() {
+                    let _ = self.exit_to_dos_prompt(inline_drink);
+                } else {
+                    let _ = self.start_exit_to_dos_prompt();
+                }
                 Ok(true)
             }
             'h' => {
@@ -232,7 +236,13 @@ impl PlayState {
         if key.is_ascii_uppercase() {
             match key {
                 'A' => {
-                    handled!(self.attack_command_with_game_dir(inline_direction, Some(game_dir))?);
+                    if let Some(direction) = inline_direction {
+                        handled!(
+                            self.attack_command_with_game_dir(Some(direction), Some(game_dir))?
+                        );
+                    } else {
+                        handled!(self.start_attack_direction_prompt());
+                    }
                 }
                 'B' => {
                     handled!(self.board_vehicle());
@@ -248,7 +258,16 @@ impl PlayState {
                     handled!(self.enter_current_location(game_dir)?);
                 }
                 'F' => {
-                    handled!(self.fire_command(inline_direction, game_dir)?);
+                    if let Some(direction) = inline_direction {
+                        handled!(self.fire_command(Some(direction), game_dir)?);
+                    } else if matches!(
+                        (self.area, self.player.transport),
+                        (Area::World { .. }, TransportState::Ship { .. })
+                    ) {
+                        handled!(self.start_fire_direction_prompt());
+                    } else {
+                        handled!(self.fire_command(None, game_dir)?);
+                    }
                 }
                 'G' => {
                     handled!(self.get_facing_with_game_dir(game_dir)?);
@@ -287,10 +306,20 @@ impl PlayState {
                     handled!(self.open_facing_with_game_dir(Some(game_dir))?);
                 }
                 'P' => {
-                    handled!(self.push_facing_with_game_dir(game_dir)?);
+                    if let Some(direction) = inline_direction {
+                        handled!(self.push_direction_with_game_dir(direction, game_dir)?);
+                    } else if matches!(self.area, Area::Town { .. }) {
+                        handled!(self.start_push_direction_prompt());
+                    } else {
+                        handled!(self.push_facing_with_game_dir(game_dir)?);
+                    }
                 }
                 'Q' => {
-                    handled!(self.save_game_command(game_dir, inline_yes_no)?);
+                    if inline_yes_no.is_some() {
+                        handled!(self.save_game_command(game_dir, inline_yes_no)?);
+                    } else {
+                        handled!(self.start_save_game_prompt());
+                    }
                 }
                 'R' => {
                     handled!(self.start_ready_equipment());
@@ -337,8 +366,27 @@ impl PlayState {
             'v' => self.view_gem(),
             'i' => self.ignite_torch(),
             'h' => self.hole_up_command(game_dir, inline_rest)?,
-            'f' => self.fire_command(inline_direction, game_dir)?,
-            'p' => self.push_facing_with_game_dir(game_dir)?,
+            'f' => {
+                if let Some(direction) = inline_direction {
+                    self.fire_command(Some(direction), game_dir)?
+                } else if matches!(
+                    (self.area, self.player.transport),
+                    (Area::World { .. }, TransportState::Ship { .. })
+                ) {
+                    self.start_fire_direction_prompt()
+                } else {
+                    self.fire_command(None, game_dir)?
+                }
+            }
+            'p' => {
+                if let Some(direction) = inline_direction {
+                    self.push_direction_with_game_dir(direction, game_dir)?
+                } else if matches!(self.area, Area::Town { .. }) {
+                    self.start_push_direction_prompt()
+                } else {
+                    self.push_facing_with_game_dir(game_dir)?
+                }
+            }
             'g' => self.get_facing_with_game_dir(game_dir)?,
             't' => self.talk_facing_with_game_dir(game_dir)?,
             'j' => self.jimmy_facing_with_game_dir(Some(game_dir))?,

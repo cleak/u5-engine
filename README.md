@@ -126,10 +126,10 @@ running a dungeon idle tick.
 Other unclassified multi-byte escape sequences follow the public unused-key
 path and are also ignored before dispatch; a lone Escape remains a regular
 control byte for prompt-specific cancellation paths as they are promoted.
-In top-down scenes, `QY`/`QN` route through the resident save-and-continue
-command. In dungeon mode, uppercase `Q` is the public mode-loop `Exit to DOS?`
-prompt (`QY` exits the terminal play loop, `QN` cancels) and lowercase `q`
-remains a harness-only immediate quit.
+In top-down scenes, bare `Q` opens the resident save-and-continue prompt;
+`QY`/`QN` remain inline shortcuts. In dungeon mode, uppercase `Q` opens the
+public mode-loop `Exit to DOS?` prompt (`QY` exits the terminal play loop,
+`QN` cancels) and lowercase `q` remains a harness-only immediate quit.
 `Z` prints a first-playable text status summary covering active area, position,
 time, transport, wind, typeahead status, light, inventory, mixed spells, and
 runtime party order without spending a turn.
@@ -328,19 +328,19 @@ slot twice is accepted as a turn-consuming no-op. The swap affects later
 party-position prompts such as `C2...` casts and runtime damage checks, while
 save export still updates each member's original roster record because the
 persistent party-order table is not yet public.
-In overworld ship mode,
-`f` plus an inline direction (for example `f4`) fires a first-playable
-broadside: bow/stern shots refuse, legal broadsides trace up to three cells,
-and the first target object's active-object slot is zeroed while exact
-durability tables remain out of scope. In town mode, `F`/`f` can fire an
+In overworld ship mode, bare `F`/`f` opens the fire direction prompt and an
+inline direction (for example `f4`) fires a first-playable broadside:
+bow/stern shots refuse, legal broadsides trace up to three cells, and the first
+target object's active-object slot is zeroed while exact durability tables
+remain out of scope. In town mode, `F`/`f` can fire an
 adjacent clean-room authored fire-source row from `town_fire_sources.tsv`,
 running the public door auto-close pass before tracing up to three cells from
 the source direction and destroying the first door or zeroing the first object
 target slot. Destroying a door also clears the active door auto-close tracker.
 
-In top-down scenes, `QY` writes a first-playable save-and-continue snapshot to
-`SAVED.GAM` and `SAVED.OOL`; `QN` cancels without disk writes, and bare `Q`
-prints the inline confirmation hint. The writer patches the supported scene,
+In top-down scenes, bare `Q` opens the save prompt, `QY` writes a
+first-playable save-and-continue snapshot to `SAVED.GAM` and `SAVED.OOL`, and
+`QN` cancels without disk writes. The writer patches the supported scene,
 position,
 calendar/clock, party status/HP/MP/level, spell-charge stock, reagent stock,
 Moonstone phase slots, inventory counters, active-object table, timing tag, and
@@ -1027,9 +1027,9 @@ On `--from-save`, the loader also validates canonical `SAVED.OOL` and refreshes
 the per-plane `BRIT.OOL` and `UNDER.OOL` mirrors from its two halves, matching
 the public load-time mirror contract before gameplay starts.
 
-During top-down play, uppercase `Q` follows the public save-and-continue shape
-with an inline confirmation shortcut: enter `QY` to write `SAVED.GAM` and
-canonical `SAVED.OOL`, or `QN` to cancel. The first-playable writer
+During top-down play, uppercase `Q` opens the public save-and-continue prompt,
+with inline confirmation shortcuts still accepted: enter `QY` to write
+`SAVED.GAM` and canonical `SAVED.OOL`, or `QN` to cancel. The first-playable writer
 intentionally leaves `INIT.GAM`, `INIT.OOL`, `BRIT.OOL`, `UNDER.OOL`, and static
 map assets alone; after `--from-init`, unresolved `SAVED.GAM` bytes are
 templated from `INIT.GAM` instead of any stale saved game.

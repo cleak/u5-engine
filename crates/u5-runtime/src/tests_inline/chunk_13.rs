@@ -18082,10 +18082,8 @@
         }
 
         assert!(state.handle_dungeon_key('Q', Path::new("")).unwrap());
-        assert_eq!(
-            state.message,
-            "Exit to DOS? Use QY to exit or QN to cancel."
-        );
+        assert!(state.active_yes_no_prompt.is_some());
+        assert_eq!(state.message, "Exit to DOS?");
         assert_eq!(state.turn, 0);
     }
 
@@ -18101,15 +18099,13 @@
             handle_play_key_input(&mut state, 'Q', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert_eq!(
-            state.message,
-            "Exit to DOS? Use QY to exit or QN to cancel."
-        );
+        assert!(state.active_yes_no_prompt.is_some());
+        assert_eq!(state.message, "Exit to DOS?");
         assert_eq!(state.turn, 0);
         assert!(!dir.join("SAVED.OOL").exists());
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'Q', "N", &dir).unwrap(),
+            handle_play_key_input(&mut state, 'N', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
         assert_eq!(state.message, "No.");

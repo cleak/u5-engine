@@ -23,6 +23,12 @@ pub fn handle_play_key_input(
     if state.active_blackthorn.is_some() {
         return handle_active_blackthorn_key_input(state, key, suffix, game_dir);
     }
+    if state.active_yes_no_prompt.is_some() {
+        return handle_active_yes_no_prompt_key_input(state, key, suffix, game_dir);
+    }
+    if state.active_direction_prompt.is_some() {
+        return handle_active_direction_prompt_key_input(state, key, suffix, game_dir);
+    }
     if state.active_cast.is_some() {
         return handle_active_cast_key_input(state, key, suffix, game_dir);
     }
@@ -135,7 +141,11 @@ pub fn handle_play_key_input(
         return Ok(PlayInputDisposition::Quit);
     }
     if matches!(state.area, Area::Dungeon { .. }) && key == 'Q' {
-        return Ok(state.exit_to_dos_prompt(parse_inline_yes_no(suffix)));
+        if let Some(confirm) = parse_inline_yes_no(suffix) {
+            return Ok(state.exit_to_dos_prompt(Some(confirm)));
+        }
+        state.start_exit_to_dos_prompt();
+        return Ok(PlayInputDisposition::Continue);
     }
     let inline_direction = suffix.chars().find_map(Direction::from_play_key);
     let inline_rest = parse_inline_rest_request(suffix);
@@ -250,6 +260,30 @@ fn handle_active_yell_key_input(
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
     }
     Ok(PlayInputDisposition::Continue)
+}
+
+fn handle_active_direction_prompt_key_input(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    let turn_before = state.turn;
+    if let Some(outcome) = state.step_active_direction_prompt(key, suffix, game_dir)? {
+        state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+    }
+    Ok(PlayInputDisposition::Continue)
+}
+
+fn handle_active_yes_no_prompt_key_input(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    Ok(state
+        .step_active_yes_no_prompt(key, suffix, game_dir)?
+        .unwrap_or(PlayInputDisposition::Continue))
 }
 
 fn handle_active_use_key_input(

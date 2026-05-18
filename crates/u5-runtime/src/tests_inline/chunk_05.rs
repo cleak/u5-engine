@@ -761,7 +761,8 @@
 
         assert_eq!((state.player.x, state.player.y), (5, 5));
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Attack where? Use A<direction>.");
+        assert!(state.active_direction_prompt.is_some());
+        assert_eq!(state.message, "Attack where?");
     }
 
     #[test]

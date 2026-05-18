@@ -1400,8 +1400,18 @@ impl PlayState {
     }
 
     pub fn push_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+        self.push_direction_with_game_dir(self.player.facing, game_dir)
+    }
+
+    pub fn push_direction_with_game_dir(
+        &mut self,
+        direction: Direction,
+        game_dir: &Path,
+    ) -> io::Result<MoveOutcome> {
         match self.area {
-            Area::Town { scene, floor } => self.push_town_facing(game_dir, scene, floor),
+            Area::Town { scene, floor } => {
+                self.push_town_direction(game_dir, scene, floor, direction)
+            }
             Area::Dungeon { .. } => {
                 self.message = "What?".to_string();
                 Ok(MoveOutcome::Blocked)
@@ -1419,7 +1429,16 @@ impl PlayState {
         scene: Scene,
         floor: i8,
     ) -> io::Result<MoveOutcome> {
-        let direction = self.player.facing;
+        self.push_town_direction(game_dir, scene, floor, self.player.facing)
+    }
+
+    pub fn push_town_direction(
+        &mut self,
+        game_dir: &Path,
+        scene: Scene,
+        floor: i8,
+        direction: Direction,
+    ) -> io::Result<MoveOutcome> {
         if !direction.is_cardinal() {
             self.message = "Push requires a cardinal facing direction.".to_string();
             return Ok(MoveOutcome::Blocked);

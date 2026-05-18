@@ -113,6 +113,29 @@ pub struct YellSession {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DirectionPromptSession {
+    pub kind: DirectionPromptKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DirectionPromptKind {
+    Attack,
+    Fire,
+    Push,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct YesNoPromptSession {
+    pub kind: YesNoPromptKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum YesNoPromptKind {
+    SaveGame,
+    ExitToDos,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UsePendingAction {
     PotionTarget { index: usize },
     ScrollWindDirection { index: usize },
@@ -261,6 +284,18 @@ impl YellSession {
         Self {
             buffer: String::new(),
         }
+    }
+}
+
+impl DirectionPromptSession {
+    pub const fn new(kind: DirectionPromptKind) -> Self {
+        Self { kind }
+    }
+}
+
+impl YesNoPromptSession {
+    pub const fn new(kind: YesNoPromptKind) -> Self {
+        Self { kind }
     }
 }
 

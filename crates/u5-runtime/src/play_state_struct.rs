@@ -93,6 +93,8 @@ pub struct PlayState {
     pub active_mix: Option<crate::z_stats::MixSession>,
     pub active_new_order: Option<crate::z_stats::NewOrderSession>,
     pub active_yell: Option<crate::z_stats::YellSession>,
+    pub active_direction_prompt: Option<crate::z_stats::DirectionPromptSession>,
+    pub active_yes_no_prompt: Option<crate::z_stats::YesNoPromptSession>,
     pub pickpocketed_npcs: Vec<(u8, i8, usize)>,
     pub removed_town_npcs: Vec<(u8, i8, usize)>,
     pub town_npc_alarm_states: Vec<TownNpcAlarmMarker>,

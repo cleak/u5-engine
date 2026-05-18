@@ -406,6 +406,132 @@
     }
 
     #[test]
+    fn active_direction_prompt_routes_attack_and_cancel() {
+        let mut state = world_state(open_world_grid(), 5, 5);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_direction_prompt.is_some());
+        assert_eq!(state.message, "Attack where?");
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '9', "x", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_direction_prompt.is_some());
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '6', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_direction_prompt.is_none());
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("Attacked East"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(
+            handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_direction_prompt.is_none());
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, DIRECTION_PROMPT_LABEL_PASS);
+    }
+
+    #[test]
+    fn active_direction_prompt_routes_fire_and_push() {
+        let dir = debug_game_dir();
+
+        let mut ship = world_state(open_world_grid(), 5, 5);
+        ship.player.transport = TransportState::Ship {
+            type_byte: 168,
+            tile: 168,
+            sails_hoisted: false,
+            hull: 77,
+            skiffs: 2,
+        };
+        ship.player.facing = Direction::South;
+
+        assert_eq!(
+            handle_play_key_input(&mut ship, 'F', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(ship.active_direction_prompt.is_some());
+        assert_eq!(ship.message, "Fire- which direction?");
+        assert_eq!(
+            handle_play_key_input(&mut ship, '4', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(ship.active_direction_prompt.is_none());
+        assert_eq!(ship.turn, 1);
+        assert!(ship.message.contains("BOOOM! Ship broadside fired West"));
+
+        fs::write(dir.join(TOWN_PUSHABLE_TABLE_FILE), "CASTLE:0 0 2 1 44\n").unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = 44;
+        let mut push = test_state(grid, 1, 1);
+        assert_eq!(
+            handle_play_key_input(&mut push, 'P', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(push.active_direction_prompt.is_some());
+        assert_eq!(push.message, "Push-");
+        assert_eq!(
+            handle_play_key_input(&mut push, '6', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(push.active_direction_prompt.is_none());
+        assert_eq!(push.grid[32 + 3], 44);
+        assert_eq!(push.turn, 1);
+        assert!(push.message.contains("Pushed tile 44 East"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn active_yes_no_prompt_routes_save_cancel_and_dungeon_exit() {
+        let dir = debug_game_dir();
+        fs::write(dir.join("SAVED.GAM"), saved_game_seed_bytes(0, 0xff, 10, 20)).unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Q', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_yes_no_prompt.is_some());
+        assert_eq!(state.message, SAVE_PROMPT_MESSAGE);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'N', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_yes_no_prompt.is_none());
+        assert_eq!(state.message, "No.");
+        assert!(!dir.join("SAVED.OOL").exists());
+        assert_eq!(state.turn, 0);
+
+        let mut dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        assert_eq!(
+            handle_play_key_input(&mut dungeon, 'Q', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(dungeon.active_yes_no_prompt.is_some());
+        assert_eq!(dungeon.message, "Exit to DOS?");
+        assert_eq!(
+            handle_play_key_input(&mut dungeon, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Quit
+        );
+        assert!(dungeon.active_yes_no_prompt.is_none());
+        assert_eq!(dungeon.message, "Yes. Exiting to DOS.");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn active_use_picker_refuses_when_no_usable_items_are_available() {
         let mut state = dungeon_state(vec![0; DUNGEON_SIDE * DUNGEON_SIDE], 0, 1, 1);
 

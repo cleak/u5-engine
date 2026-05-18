@@ -498,6 +498,128 @@ impl PlayState {
         None
     }
 
+    pub fn start_attack_direction_prompt(&mut self) -> MoveOutcome {
+        self.active_direction_prompt =
+            Some(DirectionPromptSession::new(DirectionPromptKind::Attack));
+        self.message = self.render_active_direction_prompt();
+        MoveOutcome::Observed
+    }
+
+    pub fn start_fire_direction_prompt(&mut self) -> MoveOutcome {
+        self.active_direction_prompt = Some(DirectionPromptSession::new(DirectionPromptKind::Fire));
+        self.message = self.render_active_direction_prompt();
+        MoveOutcome::Observed
+    }
+
+    pub fn start_push_direction_prompt(&mut self) -> MoveOutcome {
+        self.active_direction_prompt = Some(DirectionPromptSession::new(DirectionPromptKind::Push));
+        self.message = self.render_active_direction_prompt();
+        MoveOutcome::Observed
+    }
+
+    pub fn render_active_direction_prompt(&self) -> String {
+        self.active_direction_prompt
+            .as_ref()
+            .map(|session| match session.kind {
+                DirectionPromptKind::Attack => "Attack where?".to_string(),
+                DirectionPromptKind::Fire => "Fire- which direction?".to_string(),
+                DirectionPromptKind::Push => "Push-".to_string(),
+            })
+            .unwrap_or_else(|| "Direction?".to_string())
+    }
+
+    pub fn step_active_direction_prompt(
+        &mut self,
+        key: char,
+        suffix: &str,
+        game_dir: &Path,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let Some(session) = self.active_direction_prompt.take() else {
+            return Ok(None);
+        };
+        for ch in std::iter::once(key).chain(suffix.chars()) {
+            if matches!(ch, '\u{1b}' | ' ') {
+                self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
+                return Ok(Some(MoveOutcome::PromptDeclined));
+            }
+            let Some(direction) =
+                Direction::from_play_key(ch).filter(|direction| direction.is_cardinal())
+            else {
+                continue;
+            };
+            let outcome = match session.kind {
+                DirectionPromptKind::Attack => {
+                    self.attack_command_with_game_dir(Some(direction), Some(game_dir))?
+                }
+                DirectionPromptKind::Fire => self.fire_command(Some(direction), game_dir)?,
+                DirectionPromptKind::Push => {
+                    self.push_direction_with_game_dir(direction, game_dir)?
+                }
+            };
+            return Ok(Some(outcome));
+        }
+        self.active_direction_prompt = Some(session);
+        self.message = self.render_active_direction_prompt();
+        Ok(None)
+    }
+
+    pub fn start_save_game_prompt(&mut self) -> MoveOutcome {
+        self.active_yes_no_prompt = Some(YesNoPromptSession::new(YesNoPromptKind::SaveGame));
+        self.message = self.render_active_yes_no_prompt();
+        MoveOutcome::Observed
+    }
+
+    pub fn start_exit_to_dos_prompt(&mut self) -> MoveOutcome {
+        self.active_yes_no_prompt = Some(YesNoPromptSession::new(YesNoPromptKind::ExitToDos));
+        self.message = self.render_active_yes_no_prompt();
+        MoveOutcome::Observed
+    }
+
+    pub fn render_active_yes_no_prompt(&self) -> String {
+        self.active_yes_no_prompt
+            .as_ref()
+            .map(|session| match session.kind {
+                YesNoPromptKind::SaveGame => SAVE_PROMPT_MESSAGE.to_string(),
+                YesNoPromptKind::ExitToDos => "Exit to DOS?".to_string(),
+            })
+            .unwrap_or_else(|| "Yes or no?".to_string())
+    }
+
+    pub fn step_active_yes_no_prompt(
+        &mut self,
+        key: char,
+        suffix: &str,
+        game_dir: &Path,
+    ) -> io::Result<Option<PlayInputDisposition>> {
+        let Some(session) = self.active_yes_no_prompt.take() else {
+            return Ok(None);
+        };
+        for ch in std::iter::once(key).chain(suffix.chars()) {
+            match ch.to_ascii_uppercase() {
+                'Y' => {
+                    return match session.kind {
+                        YesNoPromptKind::SaveGame => {
+                            let _ = self.save_game_command(game_dir, Some(true))?;
+                            Ok(Some(PlayInputDisposition::Continue))
+                        }
+                        YesNoPromptKind::ExitToDos => {
+                            self.message = "Yes. Exiting to DOS.".to_string();
+                            Ok(Some(PlayInputDisposition::Quit))
+                        }
+                    };
+                }
+                'N' | '\u{1b}' => {
+                    self.message = "No.".to_string();
+                    return Ok(Some(PlayInputDisposition::Continue));
+                }
+                _ => {}
+            }
+        }
+        self.active_yes_no_prompt = Some(session);
+        self.message = self.render_active_yes_no_prompt();
+        Ok(None)
+    }
+
     pub fn render_stats_panel_view(&self) -> String {
         render_stats_panel(self, self.active_player)
     }
