@@ -214,7 +214,7 @@ pub fn step_arms_shop(
 
 // ---------- Healer ----------
 
-/// Healer / sanctum services per `shops.md §8.5`.
+/// Healer / sanctum services per `shops.md §8.3`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HealerService {
     /// `C` — Cure poison. Flat cost.
@@ -225,12 +225,13 @@ pub enum HealerService {
     Resurrect,
 }
 
-/// Default healer service costs (gold) used when a per-shop override
-/// is not supplied. Values are first-playable approximations of the
-/// commonly-quoted vanilla v1 prices.
-pub const HEALER_COST_CURE: u16 = 100;
-pub const HEALER_COST_HEAL: u16 = 200;
-pub const HEALER_COST_RESURRECT: u16 = 300;
+/// Default healer service costs (gold) used by the standalone
+/// healer state machine. The active shop flow uses the scene-local
+/// healer table in `shops.rs`; these defaults mirror the
+/// `Wounds of Honour` public row from `shops.md §8.3`.
+pub const HEALER_COST_CURE: u16 = 25;
+pub const HEALER_COST_HEAL: u16 = 40;
+pub const HEALER_COST_RESURRECT: u16 = 215;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum HealerShopState {
@@ -376,7 +377,7 @@ pub const fn healer_service_cost(service: HealerService) -> u16 {
 pub fn healer_service_eligible(service: HealerService, member: HealerPartyMemberView) -> bool {
     match service {
         HealerService::Cure => member.status == b'P',
-        HealerService::Heal => member.status == b'G' && member.hp < member.max_hp,
+        HealerService::Heal => member.status != b'D' && member.hp < member.max_hp,
         HealerService::Resurrect => member.status == b'D',
     }
 }
@@ -389,7 +390,7 @@ pub fn apply_healer_service(service: HealerService, member: &mut HealerPartyMemb
             }
         }
         HealerService::Heal => {
-            if member.status == b'G' {
+            if member.status != b'D' {
                 member.hp = member.max_hp;
             }
         }
@@ -1755,6 +1756,54 @@ mod tests {
     }
 
     #[test]
+    fn healer_heal_accepts_poisoned_member_without_curing_status() {
+        let mut state = HealerShopState::Greeting;
+        let mut gold = 1000u16;
+        let mut members = vec![HealerPartyMemberView {
+            status: b'P',
+            hp: 20,
+            max_hp: 50,
+        }];
+        step_healer_shop(
+            &mut state,
+            HealerShopInput::Key(b'Y'),
+            &mut gold,
+            &mut members,
+        );
+        step_healer_shop(
+            &mut state,
+            HealerShopInput::Service(HealerService::Heal),
+            &mut gold,
+            &mut members,
+        );
+        step_healer_shop(
+            &mut state,
+            HealerShopInput::Slot(0),
+            &mut gold,
+            &mut members,
+        );
+
+        let outcome = step_healer_shop(
+            &mut state,
+            HealerShopInput::Confirm(true),
+            &mut gold,
+            &mut members,
+        );
+
+        assert!(matches!(
+            outcome,
+            HealerOutcome::Served {
+                service: HealerService::Heal,
+                slot: 0,
+                ..
+            }
+        ));
+        assert_eq!(members[0].status, b'P');
+        assert_eq!(members[0].hp, 50);
+        assert_eq!(gold, 1000 - HEALER_COST_HEAL);
+    }
+
+    #[test]
     fn healer_resurrect_returns_dead_party_member_to_life() {
         let mut state = HealerShopState::Greeting;
         let mut gold = 1000u16;
@@ -2565,6 +2614,7 @@ mod tests {
         assert!(healer_service_eligible(HealerService::Cure, poisoned));
         assert!(!healer_service_eligible(HealerService::Heal, good_full));
         assert!(healer_service_eligible(HealerService::Heal, good_low));
+        assert!(healer_service_eligible(HealerService::Heal, poisoned));
         assert!(!healer_service_eligible(HealerService::Heal, dead));
         assert!(healer_service_eligible(HealerService::Resurrect, dead));
         assert!(!healer_service_eligible(
