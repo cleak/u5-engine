@@ -25,12 +25,12 @@ use u5_runtime::{
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
     intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_play_options_from_save,
-    load_return_to_view_script, load_story_records, load_tile_atlas,
+    load_return_to_view_assets, load_story_records, load_tile_atlas,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     render_text_panel_rgba,
     shop_runtime::SageState,
     shop_session::ActiveShopSession,
-    summarize_return_to_view_script,
+    summarize_return_to_view_preview, summarize_return_to_view_script,
 };
 
 const VIEWPORT_RADIUS: usize = 5;
@@ -850,9 +850,17 @@ fn visual_return_to_view_summary(game_dir: &Path) -> String {
                 MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
                 RTV_COMMAND_STREAM_BYTES
             );
-            match load_return_to_view_script(game_dir) {
-                Ok(Some(script)) => {
-                    format!("{header} {}", summarize_return_to_view_script(&script))
+            match load_return_to_view_assets(game_dir) {
+                Ok(Some(assets)) => {
+                    let script_summary = summarize_return_to_view_script(&assets.script);
+                    match summarize_return_to_view_preview(&assets.strips, &assets.script) {
+                        Ok(preview_summary) => {
+                            format!("{header} {script_summary} {preview_summary}")
+                        }
+                        Err(err) => {
+                            format!("{header} {script_summary} Dry-run error: {err}")
+                        }
+                    }
                 }
                 Ok(None) => format!("{MISCMAPS_DAT_FILE} is missing; preview cannot run."),
                 Err(err) => format!("{header} Script error: {err}"),

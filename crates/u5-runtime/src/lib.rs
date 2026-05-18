@@ -399,9 +399,17 @@ pub use question_io::{
 };
 pub use report::run_report;
 pub use return_to_view::{
-    ReturnToViewCommand, ReturnToViewScript, load_return_to_view_script,
-    parse_return_to_view_commands, parse_return_to_view_script_file,
-    return_to_view_command_histogram, return_to_view_command_name, summarize_return_to_view_script,
+    RTV_ACTOR_SLOTS, RTV_CLOSE_EFFECT_FINAL_TILE, RTV_EFFECT_SENTINEL_TILE,
+    RTV_OPEN_EFFECT_FINAL_TILE, RTV_PREVIEW_CELLS, RTV_PREVIEW_SIDE, RTV_STRIP_RECORD_BYTES,
+    RTV_STRIP_TILE_COUNT, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
+    RTV_TEMPORARY_ACTOR_TILE, ReturnToViewActor, ReturnToViewAssets, ReturnToViewCommand,
+    ReturnToViewControl, ReturnToViewMapStrips, ReturnToViewPreviewReport,
+    ReturnToViewPreviewState, ReturnToViewScript, load_return_to_view_assets,
+    load_return_to_view_map_strips, load_return_to_view_script, parse_return_to_view_commands,
+    parse_return_to_view_map_strips, parse_return_to_view_map_strips_file,
+    parse_return_to_view_script_file, return_to_view_command_histogram,
+    return_to_view_command_name, run_return_to_view_preview_until_restart,
+    summarize_return_to_view_preview, summarize_return_to_view_script,
 };
 pub use save_load::*;
 pub use scene::{
