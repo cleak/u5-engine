@@ -22,7 +22,7 @@ impl PlayState {
 
     #[cfg(test)]
     pub fn handle_dungeon_key(&mut self, key: char, game_dir: &Path) -> io::Result<bool> {
-        self.handle_dungeon_key_with_inline(key, game_dir, None, None, None, None)
+        self.handle_dungeon_key_with_inline(key, game_dir, None, None, None, None, None)
     }
 
     pub fn handle_dungeon_key_with_inline(
@@ -33,6 +33,7 @@ impl PlayState {
         inline_drink: Option<bool>,
         inline_party_index: Option<usize>,
         inline_use_request: Option<UseItemRequest>,
+        inline_look_focus: Option<DungeonLookFocus>,
     ) -> io::Result<bool> {
         let inline_rest = inline_rest.into();
         if !matches!(self.area, Area::Dungeon { .. }) {
@@ -64,7 +65,7 @@ impl PlayState {
             handled!(self.attack_command_with_game_dir(None, Some(game_dir))?);
         }
         match key.to_ascii_lowercase() {
-            '8' | 'w' => {
+            '8' | 'w' | '.' | '\r' | '\n' => {
                 handled!(self.step_with_game_dir(self.player.facing, Some(game_dir))?);
             }
             '2' | 's' => {
@@ -98,7 +99,12 @@ impl PlayState {
                 handled!(self.climb(game_dir, ClimbIntent::Down)?);
             }
             'l' => {
-                handled!(self.look_dungeon_with_drink(inline_drink, inline_party_index));
+                let outcome = if let Some(focus) = inline_look_focus {
+                    self.look_dungeon_with_focus(inline_drink, inline_party_index, focus)
+                } else {
+                    self.start_dungeon_look_prompt(inline_party_index, inline_drink)
+                };
+                handled!(outcome);
             }
             'g' => {
                 let Area::Dungeon { scene, level } = self.area else {

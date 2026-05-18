@@ -1412,6 +1412,15 @@ impl PlayState {
         drink: Option<bool>,
         party_index: Option<usize>,
     ) -> MoveOutcome {
+        self.look_dungeon_with_focus(drink, party_index, DungeonLookFocus::Ahead)
+    }
+
+    pub fn look_dungeon_with_focus(
+        &mut self,
+        drink: Option<bool>,
+        party_index: Option<usize>,
+        focus: DungeonLookFocus,
+    ) -> MoveOutcome {
         let Area::Dungeon { level, .. } = self.area else {
             self.message = "Look is only implemented for dungeon mode in this slice.".to_string();
             return MoveOutcome::Blocked;
@@ -1420,15 +1429,9 @@ impl PlayState {
             self.message = "You see: darkness.".to_string();
             return MoveOutcome::Observed;
         }
-        let (dx, dy) = self.player.facing.delta();
-        let x = self.player.x as isize + dx;
-        let y = self.player.y as isize + dy;
-        if !(0..DUNGEON_SIDE as isize).contains(&x) || !(0..DUNGEON_SIDE as isize).contains(&y) {
-            self.message = "You see: the dungeon boundary.".to_string();
-            return MoveOutcome::Observed;
-        }
+        let (x, y) = self.dungeon_look_focus_coord(focus);
 
-        let tile = self.dungeon_cell(level, x as usize, y as usize);
+        let tile = self.dungeon_cell(level, x, y);
         let description = dungeon_look_description(tile);
         if (tile >> 4) == 0x5 {
             self.message = match drink {
@@ -1459,6 +1462,20 @@ impl PlayState {
 
         self.message = format!("You see: {description}.");
         MoveOutcome::Observed
+    }
+
+    pub fn dungeon_look_focus_coord(&self, focus: DungeonLookFocus) -> (usize, usize) {
+        let direction = match focus {
+            DungeonLookFocus::Ahead => Some(self.player.facing),
+            DungeonLookFocus::Right => self.player.facing.turn_right_cardinal(),
+            DungeonLookFocus::Left => self.player.facing.turn_left_cardinal(),
+            DungeonLookFocus::Here => None,
+        };
+        let (dx, dy) = direction.map(Direction::delta).unwrap_or((0, 0));
+        (
+            (self.player.x as isize + dx).rem_euclid(DUNGEON_SIDE as isize) as usize,
+            (self.player.y as isize + dy).rem_euclid(DUNGEON_SIDE as isize) as usize,
+        )
     }
 
     pub fn apply_dungeon_fountain_effect(

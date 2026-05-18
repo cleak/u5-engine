@@ -457,6 +457,7 @@
                     Some(true),
                     Some(1),
                     None,
+                    Some(DungeonLookFocus::Ahead),
                 )
                 .unwrap()
         );

@@ -18210,6 +18210,37 @@
     }
 
     #[test]
+    fn dungeon_period_and_enter_keys_move_forward() {
+        let mut period = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        period.player.facing = Direction::East;
+
+        assert!(period.handle_dungeon_key('.', Path::new("")).unwrap());
+        assert_eq!((period.player.x, period.player.y), (2, 1));
+        assert_eq!(period.turn, 1);
+
+        let mut enter = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        enter.player.facing = Direction::East;
+
+        assert!(enter.handle_dungeon_key('\r', Path::new("")).unwrap());
+        assert_eq!((enter.player.x, enter.player.y), (2, 1));
+        assert_eq!(enter.turn, 1);
+    }
+
+    #[test]
+    fn dungeon_period_forward_respects_wall_blocking() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0xb0;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.player.facing = Direction::East;
+
+        assert!(state.handle_dungeon_key('.', Path::new("")).unwrap());
+
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Blocked!");
+    }
+
+    #[test]
     fn dungeon_play_keys_turn_without_changing_cell() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.player.facing = Direction::East;
@@ -18237,8 +18268,79 @@
 
         assert_eq!(state.player.facing, Direction::East);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.look_dungeon(), MoveOutcome::Observed);
+        assert_eq!(
+            state.active_direction_prompt.as_ref().map(|session| session.kind),
+            Some(DirectionPromptKind::DungeonLook {
+                party_index: None,
+                drink: None,
+            })
+        );
+        assert_eq!(
+            handle_play_key_input(&mut state, '1', "A", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
         assert!(state.message.contains("passage"));
+    }
+
+    #[test]
+    fn dungeon_l_key_relative_focus_prompt_uses_selected_party_member() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x40;
+        grid[dungeon_cell_index(0, 1, 2)] = 0x50;
+        grid[dungeon_cell_index(0, 1, 0)] = 0x80;
+        grid[dungeon_cell_index(0, 1, 1)] = 0x20;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.player.facing = Direction::East;
+        state.torch_counter = 5;
+        state.party.push(state.party[0]);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'L', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(
+            state.active_direction_prompt.as_ref().map(|session| session.kind),
+            Some(DirectionPromptKind::DungeonLook {
+                party_index: None,
+                drink: None,
+            })
+        );
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(
+            state.active_direction_prompt.as_ref().map(|session| session.kind),
+            Some(DirectionPromptKind::DungeonLook {
+                party_index: Some(1),
+                drink: None,
+            })
+        );
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.message.contains("fountain"));
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn dungeon_l_inline_relative_focus_wraps_level_coordinates() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 0, 7)] = 0x40;
+        let mut state = dungeon_state(grid, 0, 7, 7);
+        state.player.facing = Direction::East;
+        state.torch_counter = 5;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'L', "1A", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.message.contains("wooden chest"));
+        assert_eq!(state.turn, 0);
     }
 
     #[test]

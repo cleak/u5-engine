@@ -1096,7 +1096,7 @@
 
         assert!(
             state
-                .handle_dungeon_key_with_inline('h', Path::new(""), Some(1), None, None, None)
+                .handle_dungeon_key_with_inline('h', Path::new(""), Some(1), None, None, None, None)
                 .unwrap()
         );
 

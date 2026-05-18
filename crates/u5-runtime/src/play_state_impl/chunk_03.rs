@@ -771,11 +771,37 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    pub fn start_dungeon_look_prompt(
+        &mut self,
+        party_index: Option<usize>,
+        drink: Option<bool>,
+    ) -> MoveOutcome {
+        self.active_direction_prompt = Some(DirectionPromptSession::new(
+            DirectionPromptKind::DungeonLook { party_index, drink },
+        ));
+        self.message = self.render_active_direction_prompt();
+        MoveOutcome::Observed
+    }
+
     pub fn render_active_direction_prompt(&self) -> String {
         self.active_direction_prompt
             .as_ref()
             .map(|session| match session.kind {
                 DirectionPromptKind::Attack => "Attack where?".to_string(),
+                DirectionPromptKind::DungeonLook {
+                    party_index: None,
+                    ..
+                } => {
+                    let last = self.party.len().max(1);
+                    format!("Look: choose party member (1-{last}); Space/Esc cancels.")
+                }
+                DirectionPromptKind::DungeonLook {
+                    party_index: Some(index),
+                    ..
+                } => format!(
+                    "Look: party member {}. Choose A-head, R-ight, L-eft, or H-ere; Space/Esc cancels.",
+                    index + 1
+                ),
                 DirectionPromptKind::Klimb => "Klimb-".to_string(),
                 DirectionPromptKind::CombatKlimb { .. } => "Klimb-".to_string(),
                 DirectionPromptKind::CombatPush { .. } => "Push-".to_string(),
@@ -800,7 +826,7 @@ impl PlayState {
         suffix: &str,
         game_dir: &Path,
     ) -> io::Result<Option<MoveOutcome>> {
-        let Some(session) = self.active_direction_prompt.take() else {
+        let Some(mut session) = self.active_direction_prompt.take() else {
             return Ok(None);
         };
         for ch in std::iter::once(key).chain(suffix.chars()) {
@@ -814,6 +840,31 @@ impl PlayState {
                     '>' => return self.climb(game_dir, ClimbIntent::Down).map(Some),
                     _ => continue,
                 }
+            }
+            if let DirectionPromptKind::DungeonLook {
+                mut party_index,
+                drink,
+            } = session.kind
+            {
+                if party_index.is_none() {
+                    if let Some(digit) = ch.to_digit(10) {
+                        let index = digit.saturating_sub(1) as usize;
+                        if index < self.party.len() {
+                            party_index = Some(index);
+                            session.kind = DirectionPromptKind::DungeonLook { party_index, drink };
+                        }
+                    }
+                }
+                if let Some(index) = party_index {
+                    if let Some(focus) = dungeon_look_focus_from_key(ch) {
+                        return Ok(Some(self.look_dungeon_with_focus(
+                            drink,
+                            Some(index),
+                            focus,
+                        )));
+                    }
+                }
+                continue;
             }
             if let DirectionPromptKind::CombatKlimb { actor_slot } = session.kind {
                 match ch {
@@ -839,6 +890,9 @@ impl PlayState {
                 DirectionPromptKind::Attack => {
                     self.attack_command_with_game_dir(Some(direction), Some(game_dir))?
                 }
+                DirectionPromptKind::DungeonLook { .. } => unreachable!(
+                    "dungeon look prompt is handled before cardinal direction dispatch"
+                ),
                 DirectionPromptKind::Klimb => {
                     self.message = "Klimb-".to_string();
                     MoveOutcome::Blocked

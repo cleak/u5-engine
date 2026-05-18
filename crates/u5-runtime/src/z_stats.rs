@@ -169,6 +169,10 @@ pub struct DirectionPromptSession {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DirectionPromptKind {
     Attack,
+    DungeonLook {
+        party_index: Option<usize>,
+        drink: Option<bool>,
+    },
     Klimb,
     CombatKlimb {
         actor_slot: usize,
@@ -186,6 +190,24 @@ pub enum DirectionPromptKind {
     Push,
     Search,
     Talk,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonLookFocus {
+    Ahead,
+    Right,
+    Left,
+    Here,
+}
+
+pub fn dungeon_look_focus_from_key(key: char) -> Option<DungeonLookFocus> {
+    match key.to_ascii_lowercase() {
+        'a' => Some(DungeonLookFocus::Ahead),
+        'r' => Some(DungeonLookFocus::Right),
+        'l' => Some(DungeonLookFocus::Left),
+        'h' => Some(DungeonLookFocus::Here),
+        _ => None,
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

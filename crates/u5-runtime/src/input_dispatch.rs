@@ -169,6 +169,7 @@ pub fn handle_play_key_input(
     let inline_drink = parse_inline_yes_no(suffix);
     let inline_party_index = parse_inline_party_index(suffix);
     let inline_use_request = parse_inline_use_request(suffix);
+    let inline_look_focus = suffix.chars().find_map(dungeon_look_focus_from_key);
     let inline_talk_keyword = non_empty_talk_keyword(suffix);
     if state.handle_dungeon_key_with_inline(
         key,
@@ -177,6 +178,7 @@ pub fn handle_play_key_input(
         inline_drink,
         inline_party_index,
         inline_use_request,
+        inline_look_focus,
     )? {
         return Ok(PlayInputDisposition::Continue);
     }
