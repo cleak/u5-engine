@@ -25,6 +25,7 @@ fn raster_diagnostic_line_reports_hash_without_pixels() {
 
     let line = raster_diagnostic_line(&mut state, 1, &atlas).unwrap();
 
+    assert!(line.contains("Raster tile viewport"));
     assert!(line.contains("48x48 px"));
     assert!(line.contains("3x3 cells"));
     assert!(line.contains("EGA tile atlas"));
@@ -55,11 +56,25 @@ fn raster_diagnostic_line_reports_dungeon_raster_and_clears_dirty() {
 
     let line = raster_diagnostic_line(&mut state, 1, &atlas).unwrap();
 
+    assert!(line.contains("Raster dungeon first-person viewport"));
     assert!(line.contains("48x48 px"));
     assert!(line.contains("3x3 cells"));
     assert!(line.contains("EGA tile atlas"));
     assert!(line.contains(&format!("{expected_hash:016x}")));
     assert!(!state.visibility_dirty);
+}
+
+#[test]
+fn raster_frame_kind_names_dungeon_combat_and_tile_modes() {
+    let town = test_state(open_grid(), 1, 1);
+    assert_eq!(raster_frame_kind(&town), "tile viewport");
+
+    let dungeon = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    assert_eq!(raster_frame_kind(&dungeon), "dungeon first-person viewport");
+
+    let mut combat = test_state(open_grid(), 1, 1);
+    combat.combat_active = true;
+    assert_eq!(raster_frame_kind(&combat), "combat viewport");
 }
 
 // from chunk_16

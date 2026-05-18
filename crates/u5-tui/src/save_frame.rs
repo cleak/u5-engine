@@ -12,7 +12,7 @@ use u5_runtime::{
     render_text_panel_rgba,
 };
 
-use crate::handle_play_script_command;
+use crate::{handle_play_script_command, raster_frame_kind};
 
 const VIEWPORT_RADIUS: usize = 5;
 
@@ -40,7 +40,7 @@ pub fn run_save_frame(
                 viewport.width as u32,
                 viewport.height as u32,
                 viewport.to_rgba(),
-                "tile viewport",
+                raster_frame_kind(&state),
             )
         } else {
             (

@@ -9,7 +9,7 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use u5_runtime::{
-    Direction, PLAY_IGNORED_INPUT_KEY, PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS,
+    Area, Direction, PLAY_IGNORED_INPUT_KEY, PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS,
     PLAY_TYPEAHEAD_TOGGLE_KEY, PlayInputDisposition, PlayOptions, PlayState, TileAtlas,
     TileGraphicsDepth, handle_play_key_input, hash_bytes, hash_palette_indices, load_tile_atlas,
 };
@@ -129,10 +129,11 @@ pub fn raster_diagnostic_line(
     atlas: &TileAtlas,
 ) -> io::Result<String> {
     let Some(viewport) = state.render_top_down_frame(radius, atlas)? else {
-        return Ok("Raster viewport: unavailable for dungeon mode.".to_string());
+        return Ok("Raster viewport: unavailable for this mode.".to_string());
     };
     Ok(format!(
-        "Raster viewport: {}x{} px, {}x{} cells, {}, hash {:016x}.",
+        "Raster {}: {}x{} px, {}x{} cells, {}, hash {:016x}.",
+        raster_frame_kind(state),
         viewport.width,
         viewport.height,
         viewport.cells_wide,
@@ -140,6 +141,16 @@ pub fn raster_diagnostic_line(
         viewport.depth.label(),
         hash_palette_indices(&viewport.pixels)
     ))
+}
+
+pub fn raster_frame_kind(state: &PlayState) -> &'static str {
+    if state.combat_active {
+        "combat viewport"
+    } else if matches!(state.area, Area::Dungeon { .. }) {
+        "dungeon first-person viewport"
+    } else {
+        "tile viewport"
+    }
 }
 
 pub fn play_script_state_line(state: &PlayState) -> String {
