@@ -823,6 +823,79 @@
     }
 
     #[test]
+    fn stats_panel_renders_six_fixed_party_rows_and_bottom_block() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'P',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 4,
+            hp: 87,
+            max_hp: 120,
+            level: 3,
+        });
+        state.party_names.push(*b"Julia\0\0\0\0");
+        state.active_player = Some(1);
+        state.food = 123;
+        state.gold = 456;
+        state.clock = GameClock::with_date(12, 5, 18, 12, 0).unwrap();
+
+        let panel = state.render_stats_panel_view();
+        let lines = panel.lines().collect::<Vec<_>>();
+
+        assert_eq!(lines.len(), STATS_PANEL_PARTY_ROWS + 5);
+        assert!(lines.iter().all(|line| line.chars().count() == STATS_PANEL_WIDTH));
+        assert!(lines[1].contains("Avatar"));
+        assert!(lines[2].contains("Julia"));
+        assert!(lines[2].contains(">  87P"));
+        assert!(lines[7].contains("Food"));
+        assert!(lines[7].contains("123"));
+        assert!(lines[8].contains("Gold"));
+        assert!(lines[8].contains("456"));
+        assert!(lines[9].contains("05-18"));
+        assert!(lines[10].contains("Sky"));
+    }
+
+    #[test]
+    fn stats_panel_frame_consumes_visible_active_player_cursor_only() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_player = Some(0);
+
+        let visible_panel = state.render_stats_panel_frame();
+
+        assert!(visible_panel.lines().nth(1).unwrap().contains(">"));
+        assert_eq!(state.active_player, None);
+
+        state.active_player = Some(0);
+        state.party[0].status = b'S';
+        let sleeping_panel = state.render_stats_panel_frame();
+
+        assert!(!sleeping_panel.lines().nth(1).unwrap().contains(">"));
+        assert_eq!(state.active_player, Some(0));
+    }
+
+    #[test]
+    fn stats_panel_ship_marker_middle_counter_renders_hull_instead_of_gold() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 999;
+        state.player.transport = TransportState::Ship {
+            type_byte: TRANSPORT_MARKER_SHIP_HOISTED_FIRST,
+            tile: TRANSPORT_MARKER_SHIP_HOISTED_FIRST,
+            sails_hoisted: true,
+            hull: 42,
+            skiffs: 2,
+        };
+
+        let panel = state.render_stats_panel_view();
+        let middle = panel.lines().nth(8).unwrap();
+
+        assert!(middle.contains("Ship hull"));
+        assert!(middle.contains("42"));
+        assert!(!middle.contains("999"));
+    }
+
+    #[test]
     fn top_down_viewport_rasterizes_town_tiles_player_and_objects() {
         let mut grid = open_grid();
         grid[1 * 32 + 2] = 17;

@@ -80,6 +80,7 @@ pub mod shrine_virtue;
 pub mod signs_io;
 pub mod start_validation;
 pub mod stat_arithmetic;
+pub mod stats_panel;
 pub mod story_io;
 pub mod test_fixtures;
 pub mod text_wrap;
@@ -418,6 +419,10 @@ pub use signs_io::{
 };
 pub use start_validation::*;
 pub use stat_arithmetic::{capped_add_u8, capped_add_word, floor_sub_u8, floor_sub_word};
+pub use stats_panel::{
+    STATS_PANEL_PARTY_ROWS, STATS_PANEL_WIDTH, render_stats_panel,
+    stats_panel_active_cursor_visible,
+};
 pub use story_io::{
     INTRO_AUTO_OPENING_STEP, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_0_TRANSITION_STRIPS,
     INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE,

@@ -48,6 +48,19 @@ impl PlayState {
             .unwrap_or_else(|| self.z_stats_message())
     }
 
+    pub fn render_stats_panel_view(&self) -> String {
+        render_stats_panel(self, self.active_player)
+    }
+
+    pub fn render_stats_panel_frame(&mut self) -> String {
+        let active_cursor = self.active_player;
+        let panel = render_stats_panel(self, active_cursor);
+        if stats_panel_active_cursor_visible(self, active_cursor) {
+            self.active_player = None;
+        }
+        panel
+    }
+
     pub fn render_z_stats_session(&self, session: &ZStatsSession) -> String {
         let mut lines = vec![format!(
             "Z-stats: {} page, party member {} of {}.",

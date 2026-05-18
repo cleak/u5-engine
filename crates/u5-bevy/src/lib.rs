@@ -135,7 +135,7 @@ fn screenshot_system(
                 image.data = Some(rgba);
             }
             if let Ok(mut text) = text_query.single_mut() {
-                text.0 = summarize(&v.state, "", &v.input_line);
+                text.0 = summarize(&mut v.state, "", &v.input_line);
             }
             state.preset_keys_applied = true;
         }
@@ -269,7 +269,7 @@ fn setup(
         Transform::from_xyz(0.0, STATUS_PANEL_HEIGHT * 0.5, 0.0),
     ));
     commands.spawn((
-        Text2d::new(summarize(&state, READY_HINT, "")),
+        Text2d::new(summarize(&mut state, READY_HINT, "")),
         TextFont {
             font_size: 16.0,
             ..default()
@@ -362,7 +362,7 @@ fn drive_visual(
         image.data = Some(rgba);
     }
     if let Ok(mut text) = text_query.single_mut() {
-        let summary = summarize(&v.state, "", &v.input_line);
+        let summary = summarize(&mut v.state, "", &v.input_line);
         text.0 = summary;
     }
 }
@@ -379,7 +379,7 @@ fn render_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
     }
 }
 
-fn summarize(state: &PlayState, fallback: &str, input_line: &str) -> String {
+fn summarize(state: &mut PlayState, fallback: &str, input_line: &str) -> String {
     let dungeon_note = if matches!(state.area, Area::Dungeon { .. }) {
         " [Dungeon first-person panel]"
     } else {
@@ -400,6 +400,8 @@ fn summarize(state: &PlayState, fallback: &str, input_line: &str) -> String {
         dungeon_note,
         msg
     );
+    summary.push('\n');
+    summary.push_str(&state.render_stats_panel_frame());
     if visual_line_prompt_active(state) {
         summary.push_str("\n> ");
         summary.push_str(input_line);
@@ -792,7 +794,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(input_line, "j");
-        let summary = summarize(&state, "", &input_line);
+        let summary = summarize(&mut state, "", &input_line);
         assert!(summary.ends_with("\n> j"));
     }
 }

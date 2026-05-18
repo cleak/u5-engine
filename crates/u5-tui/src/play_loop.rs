@@ -104,6 +104,7 @@ pub fn run_play_script_commands(
 pub fn print_play_frame(state: &mut PlayState, tile_atlas: Option<&TileAtlas>) -> io::Result<()> {
     println!();
     println!("{}", state.render_text_frame(5));
+    println!("{}", state.render_stats_panel_frame());
     if let Some(atlas) = tile_atlas {
         println!("{}", raster_diagnostic_line(state, 5, atlas)?);
     }
@@ -115,6 +116,7 @@ pub fn print_play_script_snapshot(
     tile_atlas: Option<&TileAtlas>,
 ) -> io::Result<()> {
     println!("{}", play_script_state_line(state));
+    println!("{}", state.render_stats_panel_frame());
     if let Some(atlas) = tile_atlas {
         println!("{}", raster_diagnostic_line(state, 5, atlas)?);
     }
