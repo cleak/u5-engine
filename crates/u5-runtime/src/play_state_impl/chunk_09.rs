@@ -1093,6 +1093,9 @@ impl PlayState {
             age_stay_counters_month(&mut self.party_stay_counters);
             age_inn_registry_month(&mut self.inn_registry);
         }
+        if self.clock.hour != previous_hour {
+            self.apply_hourly_status_provision_pass();
+        }
         self.decay_light_counters(effective_minutes);
         if matches!(self.area, Area::Town { .. })
             && self.clock.hour != previous_hour
@@ -1122,6 +1125,21 @@ impl PlayState {
             self.tick_door_tracker();
         }
         self.advance_animation_clock();
+    }
+
+    pub fn hourly_provision_consumer_count(&self) -> u16 {
+        self.party
+            .iter()
+            .filter(|member| !matches!(member.status, b'D' | b'A' | b'S'))
+            .count() as u16
+    }
+
+    pub fn apply_hourly_status_provision_pass(&mut self) -> u16 {
+        let consumers = self.hourly_provision_consumer_count();
+        if self.food != 0 && is_provision_decrement_hour(self.clock.hour) {
+            self.food = self.food.saturating_sub(consumers);
+        }
+        consumers
     }
 
     pub fn mode_zero_cleanup(&mut self) {

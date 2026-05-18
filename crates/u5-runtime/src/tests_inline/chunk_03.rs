@@ -1000,6 +1000,102 @@
     }
 
     #[test]
+    fn hourly_status_pass_spends_food_at_public_decrement_hours() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.clock = GameClock::with_date(139, 4, 5, 5, 59).unwrap();
+        state.food = 10;
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: 30,
+                mana: 8,
+                hp: 12,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'F',
+                status: b'P',
+                climb_stat: 30,
+                mana: 8,
+                hp: 12,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 2,
+                class_byte: b'M',
+                status: b'S',
+                climb_stat: 30,
+                mana: 8,
+                hp: 12,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 3,
+                class_byte: b'D',
+                status: b'D',
+                climb_stat: 30,
+                mana: 8,
+                hp: 0,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 4,
+                class_byte: b'B',
+                status: b'A',
+                climb_stat: 30,
+                mana: 8,
+                hp: 0,
+                max_hp: 20,
+                level: 8,
+            },
+        ];
+
+        assert_eq!(state.hourly_provision_consumer_count(), 2);
+        state.advance_turn_with_minutes(1);
+
+        assert_eq!(state.clock.hour, 6);
+        assert_eq!(state.food, 8);
+    }
+
+    #[test]
+    fn hourly_status_pass_only_spends_food_on_decrement_hours_and_floors() {
+        let mut off_hour = world_state(open_world_grid(), 10, 20);
+        off_hour.clock = GameClock::with_date(139, 4, 5, 6, 59).unwrap();
+        off_hour.food = 1;
+
+        off_hour.advance_turn_with_minutes(1);
+
+        assert_eq!(off_hour.clock.hour, 7);
+        assert_eq!(off_hour.food, 1);
+
+        let mut noon = world_state(open_world_grid(), 10, 20);
+        noon.clock = GameClock::with_date(139, 4, 5, 11, 59).unwrap();
+        noon.food = 1;
+        noon.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'F',
+            status: b'G',
+            climb_stat: 30,
+            mana: 8,
+            hp: 12,
+            max_hp: 20,
+            level: 8,
+        });
+
+        noon.advance_turn_with_minutes(1);
+
+        assert_eq!(noon.clock.hour, 12);
+        assert_eq!(noon.food, 0);
+    }
+
+    #[test]
     fn validate_start_rejects_blocked_tiles() {
         let mut grid = open_grid();
         grid[3 * 32 + 4] = 24;

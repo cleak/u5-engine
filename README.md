@@ -1050,7 +1050,9 @@ saved Moonstone phase slots are read so the narrow Light, restore, Rel Hur,
 Create Food, field placement, Dispel Field, Magic Lock, Unlock Magic, Gate
 Travel, and M-Mix hooks can exercise the public resource gates. The food and
 gold counters are also read for Z-stats, object pickups, and save export, while
-Create Food updates the food counter.
+Create Food updates the food counter. Hour-crossing cleanup now applies the
+public provision cadence, subtracting active eaters at 06:00, 12:00, and 18:00
+with Dead, Ashes, and Sleeping members excluded.
 The
 harness does not require character creation first, so clean test saves with a
 blank Avatar name can still seed the playable slice:
