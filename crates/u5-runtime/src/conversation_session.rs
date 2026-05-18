@@ -20,7 +20,7 @@
 use std::collections::HashMap;
 
 use crate::tlk_control_codes::*;
-use crate::tlk_runner::{run_tlk_stream, TlkRunInputs, TlkRunOutput, TlkRunStop};
+use crate::tlk_runner::{run_tlk_stream, TlkRunEvent, TlkRunInputs, TlkRunOutput, TlkRunStop};
 
 /// Phase the conversation is currently in.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -49,6 +49,18 @@ pub struct ConversationContext<'a> {
     pub moral_standing: u8,
     /// Common-word dictionary (128 slots); `None` is acceptable.
     pub dictionary: Option<&'a [&'a str; COMMON_WORD_DICTIONARY_ENTRIES]>,
+    /// Whether the player accepts conversation gold-payment prompts.
+    pub gold_payment_accepted: bool,
+    /// Party gold available for the current prompt, used to refuse
+    /// unaffordable payments.
+    pub gold_available: Option<u16>,
+}
+
+/// Accepted or refused gold payment emitted by a TLK response stream.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ConversationGoldPayment {
+    pub amount: u16,
+    pub accepted: bool,
 }
 
 /// Output of stepping the session.
@@ -60,6 +72,8 @@ pub struct ConversationSessionOutput {
     pub branch_flags_set: u32,
     /// Action grants encountered in the response.
     pub action_grants: Vec<TlkActionDispatchVerb>,
+    /// Gold payments encountered in the response.
+    pub gold_payments: Vec<ConversationGoldPayment>,
     /// Signal-flag bits encountered in the response (`0x86` arg <`A`).
     pub signal_flags: Vec<u8>,
     /// `true` when this step ended the conversation (Bye fired or the
@@ -184,6 +198,14 @@ impl ConversationSession {
         out.text.push_str(&run.text);
         out.branch_flags_set |= run.branch_flags_set;
         out.action_grants.extend(run.action_grants.iter().copied());
+        out.gold_payments
+            .extend(run.events.iter().filter_map(|event| match event {
+                TlkRunEvent::GoldPayment { amount, accepted } => Some(ConversationGoldPayment {
+                    amount: *amount,
+                    accepted: *accepted,
+                }),
+                _ => None,
+            }));
         out.signal_flags.extend(run.signal_flags.iter().copied());
         if matches!(run.stop, TlkRunStop::EndOfStream | TlkRunStop::NulTerminator) {
             // End-of-stream forces a hard close; the keyword loop must
@@ -205,7 +227,8 @@ fn make_inputs<'a>(
         moral_standing: ctx.moral_standing,
         dictionary: ctx.dictionary,
         curse_seen: false,
-        gold_payment_accepted: false,
+        gold_payment_accepted: ctx.gold_payment_accepted,
+        gold_available: ctx.gold_available,
         ask_party_name_response,
         ask_who_response,
         yield_on_pause: false,
@@ -239,6 +262,8 @@ mod tests {
             branch_flags: 0,
             moral_standing: 0,
             dictionary: None,
+            gold_payment_accepted: false,
+            gold_available: None,
         }
     }
 

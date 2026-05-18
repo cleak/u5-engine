@@ -1689,7 +1689,8 @@ impl PlayState {
             moral_standing: self.moral_standing,
             dictionary: None,
             curse_seen: false,
-            gold_payment_accepted: false,
+            gold_payment_accepted: true,
+            gold_available: Some(self.gold),
             ask_party_name_response: 0,
             ask_who_response: 0,
             yield_on_pause: false,
@@ -1703,6 +1704,8 @@ impl PlayState {
         };
 
         let mut applied_grants: Vec<crate::tlk_control_codes::TlkActionDispatchVerb> = Vec::new();
+        let mut applied_payments: Vec<crate::conversation_session::ConversationGoldPayment> =
+            Vec::new();
         let mut applied_flags: u32 = 0;
 
         if let Some(keyword) = keyword {
@@ -1714,6 +1717,15 @@ impl PlayState {
             let response_text = if let Some(idx) = response_field_index {
                 if let Some(output) = run_field(idx) {
                     applied_grants.extend(output.action_grants.iter().copied());
+                    applied_payments.extend(output.events.iter().filter_map(|event| match event {
+                        crate::tlk_runner::TlkRunEvent::GoldPayment { amount, accepted } => {
+                            Some(crate::conversation_session::ConversationGoldPayment {
+                                amount: *amount,
+                                accepted: *accepted,
+                            })
+                        }
+                        _ => None,
+                    }));
                     applied_flags |= output.branch_flags_set;
                     if output.text.is_empty() {
                         TLK_NO_KEYWORD_MATCH_MESSAGE.to_string()
@@ -1731,6 +1743,7 @@ impl PlayState {
             };
             let (legacy_text, legacy_actions) = talk_response_text_and_actions(&response_text);
             self.apply_tlk_action_grants(&applied_grants);
+            self.apply_tlk_gold_payments(&applied_payments);
             self.apply_talk_action_grants(&legacy_actions);
             if let Some(scene) = scene_for_flags {
                 self.merge_talk_branch_flags(scene, applied_flags);
@@ -1739,6 +1752,15 @@ impl PlayState {
         } else {
             let greeting_text = if let Some(output) = run_field(2) {
                 applied_grants.extend(output.action_grants.iter().copied());
+                applied_payments.extend(output.events.iter().filter_map(|event| match event {
+                    crate::tlk_runner::TlkRunEvent::GoldPayment { amount, accepted } => {
+                        Some(crate::conversation_session::ConversationGoldPayment {
+                            amount: *amount,
+                            accepted: *accepted,
+                        })
+                    }
+                    _ => None,
+                }));
                 applied_flags |= output.branch_flags_set;
                 if output.text.is_empty() {
                     "...".to_string()
@@ -1754,6 +1776,7 @@ impl PlayState {
             };
             let (legacy_text, legacy_actions) = talk_response_text_and_actions(&greeting_text);
             self.apply_tlk_action_grants(&applied_grants);
+            self.apply_tlk_gold_payments(&applied_payments);
             self.apply_talk_action_grants(&legacy_actions);
             if let Some(scene) = scene_for_flags {
                 self.merge_talk_branch_flags(scene, applied_flags);
@@ -1815,6 +1838,18 @@ impl PlayState {
         }
     }
 
+    /// Apply accepted conversation gold payments emitted by TLK `0x85`.
+    pub fn apply_tlk_gold_payments(
+        &mut self,
+        payments: &[crate::conversation_session::ConversationGoldPayment],
+    ) {
+        for payment in payments {
+            if payment.accepted && self.gold >= payment.amount {
+                self.gold -= payment.amount;
+            }
+        }
+    }
+
     /// Merge a byte-runner-produced set-flag mask into the active scene's
     /// branch-flag slot.
     pub fn merge_talk_branch_flags(&mut self, scene: Scene, mask: u32) {
@@ -1870,12 +1905,15 @@ impl PlayState {
             branch_flags,
             moral_standing: self.moral_standing,
             dictionary: None,
+            gold_payment_accepted: true,
+            gold_available: Some(self.gold),
         };
         let mut text = String::new();
         if let Some(session) = self.active_conversation.as_mut() {
             let output = session.present_greeting(&ctx);
             text = output.text.clone();
             self.apply_tlk_action_grants(&output.action_grants);
+            self.apply_tlk_gold_payments(&output.gold_payments);
             if let Area::Town { scene, .. } = self.area {
                 self.merge_talk_branch_flags(scene, output.branch_flags_set);
             }
@@ -1905,6 +1943,8 @@ impl PlayState {
             branch_flags,
             moral_standing: self.moral_standing,
             dictionary: None,
+            gold_payment_accepted: true,
+            gold_available: Some(self.gold),
         };
         let mut text = String::new();
         let mut ended = false;
@@ -1913,6 +1953,7 @@ impl PlayState {
             text = output.text.clone();
             ended = output.ended;
             self.apply_tlk_action_grants(&output.action_grants);
+            self.apply_tlk_gold_payments(&output.gold_payments);
             if let Area::Town { scene, .. } = self.area {
                 self.merge_talk_branch_flags(scene, output.branch_flags_set);
             }

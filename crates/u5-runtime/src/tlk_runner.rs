@@ -39,6 +39,10 @@ pub struct TlkRunInputs<'a> {
     /// gold. The runner records the amount regardless and uses this flag
     /// to choose between the `0x9E` "paid" and `0x9F` "refused" follow-ups.
     pub gold_payment_accepted: bool,
+    /// Optional party gold available to the payment prompt. When supplied,
+    /// the runner treats an otherwise accepted payment as refused if the
+    /// requested amount exceeds this value.
+    pub gold_available: Option<u16>,
     /// `0x84` ASK-PARTY-NAME response: 1-based party-slot index that
     /// matched, or `0` for no match. The runner stores it for the caller
     /// but does not branch on it directly (the shipped blobs gate the
@@ -243,10 +247,26 @@ pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
                 };
                 pos += 3;
                 if let Some(amount) = tlk_gold_payment_amount(span[0], span[1], span[2]) {
+                    let accepted = inputs.gold_payment_accepted
+                        && inputs
+                            .gold_available
+                            .map_or(true, |available| available >= amount);
                     out.events.push(TlkRunEvent::GoldPayment {
                         amount,
-                        accepted: inputs.gold_payment_accepted,
+                        accepted,
                     });
+                    let target_label = if accepted {
+                        TLK_CODE_GOTO_LABEL_FIRST
+                    } else {
+                        TLK_CODE_GOTO_LABEL_LAST
+                    };
+                    if let Some(target_pos) = find_label_position_from(bytes, target_label, pos) {
+                        out.events.push(TlkRunEvent::GotoLabel {
+                            from: TLK_CODE_GOLD_PAYMENT,
+                            to: target_label,
+                        });
+                        pos = target_pos;
+                    }
                 }
             }
             TLK_CODE_ACTION_DISPATCH => {
@@ -575,6 +595,55 @@ mod tests {
             }
         }
         assert!(saw, "expected GoldPayment event");
+    }
+
+    #[test]
+    fn gold_payment_branches_to_paid_or_refused_label_by_affordability() {
+        let mut bytes = vec![TLK_CODE_GOLD_PAYMENT, b'0', b'2', b'5'];
+        bytes.push(TLK_CODE_GOTO_LABEL_FIRST);
+        bytes.extend_from_slice(&enc("paid"));
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
+        bytes.push(TLK_CODE_GOTO_LABEL_LAST);
+        bytes.extend_from_slice(&enc("refused"));
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
+
+        let paid = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                gold_payment_accepted: true,
+                gold_available: Some(30),
+                ..Default::default()
+            },
+        );
+        assert_eq!(paid.text, "paid");
+        assert!(paid.events.iter().any(|event| {
+            matches!(
+                event,
+                TlkRunEvent::GoldPayment {
+                    amount: 25,
+                    accepted: true
+                }
+            )
+        }));
+
+        let refused = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                gold_payment_accepted: true,
+                gold_available: Some(10),
+                ..Default::default()
+            },
+        );
+        assert_eq!(refused.text, "refused");
+        assert!(refused.events.iter().any(|event| {
+            matches!(
+                event,
+                TlkRunEvent::GoldPayment {
+                    amount: 25,
+                    accepted: false
+                }
+            )
+        }));
     }
 
     #[test]

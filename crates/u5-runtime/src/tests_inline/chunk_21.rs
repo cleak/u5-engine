@@ -1110,6 +1110,73 @@
     }
 
     #[test]
+    fn town_raw_tlk_gold_payment_debits_only_affordable_accepted_payment() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Maris".to_string(),
+                "a quiet sage".to_string(),
+                "Greetings".to_string(),
+                "I read books".to_string(),
+                "Farewell".to_string(),
+                "PAY".to_string(),
+                "placeholder".to_string(),
+            ],
+        );
+
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        let mut pay_response = vec![0x85, b'0', b'2', b'5'];
+        pay_response.push(0x9E);
+        pay_response.extend(enc("Paid"));
+        pay_response.push(0xFF);
+        pay_response.push(0x9F);
+        pay_response.extend(enc("Too poor"));
+        pay_response.push(0xFF);
+
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Maris"),
+                enc("a quiet sage"),
+                enc("Greetings"),
+                enc("I read books"),
+                enc("Farewell"),
+                enc("PAY"),
+                pay_response,
+            ],
+        );
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.gold = 30;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
+        let (text, ended) = state.submit_active_conversation_keyword("pay");
+        assert_eq!(text, "Paid");
+        assert!(!ended);
+        assert_eq!(state.gold, 5);
+
+        let mut poor_state = state.clone();
+        poor_state.gold = 10;
+        poor_state.open_conversation_session(&dialogue, &raw);
+        let (text, ended) = poor_state.submit_active_conversation_keyword("pay");
+        assert_eq!(text, "Too poor");
+        assert!(!ended);
+        assert_eq!(poor_state.gold, 10);
+    }
+
+    #[test]
     fn town_talk_horse_mounted_refuses_non_horse_trader_shops() {
         // shops.md §2: ordinary shop arms refuse before opening their menu when
         // the party is mounted on a horse; only the 0x83 horse trader remains.
