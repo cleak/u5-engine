@@ -421,11 +421,11 @@
     #[test]
     fn object_pickup_gold_updates_save_backed_counter_with_saturation() {
         let mut state = test_state(open_grid(), 1, 1);
-        state.gold = u16::MAX - 1;
+        state.gold = PARTY_GOLD_CAP - 1;
 
         state.apply_object_pickup(ObjectPickupKind::Gold, 5);
 
-        assert_eq!(state.gold, u16::MAX);
+        assert_eq!(state.gold, PARTY_GOLD_CAP);
     }
 
     #[test]

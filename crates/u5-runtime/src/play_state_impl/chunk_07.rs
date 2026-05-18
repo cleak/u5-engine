@@ -169,37 +169,37 @@ impl PlayState {
 
         if self.dungeon_chest_gate_succeeds(level, x, y, tile, 0, 2, gate_upper) {
             let amount = self.dungeon_chest_roll(level, x, y, tile, 0, 1, 31);
-            self.food = self.food.saturating_add(u16::from(amount));
+            self.apply_object_pickup(ObjectPickupKind::Food, amount);
             parts.push(format!("{amount} food"));
         }
         if self.dungeon_chest_gate_succeeds(level, x, y, tile, 1, 4, gate_upper) {
             let amount = self.dungeon_chest_gold_roll(level, x, y, tile);
-            self.gold = self.gold.saturating_add(u16::from(amount));
+            self.apply_object_pickup(ObjectPickupKind::Gold, amount);
             parts.push(format!("{amount} gold"));
         }
         if self.dungeon_chest_gate_succeeds(level, x, y, tile, 2, 5, gate_upper) {
             let amount = self.dungeon_chest_roll(level, x, y, tile, 2, 1, 3);
-            self.keys = self.keys.saturating_add(amount);
+            self.apply_object_pickup(ObjectPickupKind::Keys, amount);
             parts.push(format!("{amount} keys"));
         }
         if self.dungeon_chest_gate_succeeds(level, x, y, tile, 3, 10, gate_upper) {
             let amount = self.dungeon_chest_roll(level, x, y, tile, 3, 1, 3);
-            self.gems = self.gems.saturating_add(amount);
+            self.apply_object_pickup(ObjectPickupKind::Gems, amount);
             parts.push(format!("{amount} gems"));
         }
         if self.dungeon_chest_gate_succeeds(level, x, y, tile, 4, 20, gate_upper) {
             let amount = self.dungeon_chest_roll(level, x, y, tile, 4, 1, 3);
-            self.torches = self.torches.saturating_add(amount);
+            self.apply_object_pickup(ObjectPickupKind::Torches, amount);
             parts.push(format!("{amount} torches"));
         }
         if self.dungeon_chest_gate_succeeds(level, x, y, tile, 5, 25, gate_upper) {
             let subtype = self.dungeon_chest_zero_based_roll(level, x, y, tile, 5, 1, POTION_COUNT);
-            self.potion_stock[subtype] = self.potion_stock[subtype].saturating_add(1).min(99);
+            self.apply_object_pickup(ObjectPickupKind::Potion(subtype), 1);
             parts.push(format!("1 {} potion", potion_label(subtype)));
         }
         if self.dungeon_chest_gate_succeeds(level, x, y, tile, 6, 25, gate_upper) {
             let subtype = self.dungeon_chest_zero_based_roll(level, x, y, tile, 6, 1, SCROLL_COUNT);
-            self.scroll_stock[subtype] = self.scroll_stock[subtype].saturating_add(1).min(99);
+            self.apply_object_pickup(ObjectPickupKind::Scroll(subtype), 1);
             parts.push(format!("1 {} scroll", scroll_label(subtype)));
         }
 

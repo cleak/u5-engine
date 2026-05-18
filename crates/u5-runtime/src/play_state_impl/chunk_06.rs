@@ -809,11 +809,79 @@ impl PlayState {
 
     pub fn apply_object_pickup(&mut self, kind: ObjectPickupKind, amount: u8) {
         match kind {
-            ObjectPickupKind::Food => self.food = self.food.saturating_add(u16::from(amount)),
-            ObjectPickupKind::Gold => self.gold = self.gold.saturating_add(u16::from(amount)),
-            ObjectPickupKind::Keys => self.keys = self.keys.saturating_add(amount),
+            ObjectPickupKind::Food => {
+                self.food = self
+                    .food
+                    .saturating_add(u16::from(amount))
+                    .min(PARTY_FOOD_CAP)
+            }
+            ObjectPickupKind::Gold => {
+                self.gold = self
+                    .gold
+                    .saturating_add(u16::from(amount))
+                    .min(PARTY_GOLD_CAP)
+            }
+            ObjectPickupKind::Keys => {
+                self.keys = self.keys.saturating_add(amount).min(PARTY_BYTE_STOCK_CAP)
+            }
             ObjectPickupKind::Gems => self.gems = self.gems.saturating_add(amount),
-            ObjectPickupKind::Torches => self.torches = self.torches.saturating_add(amount),
+            ObjectPickupKind::Torches => {
+                self.torches = self
+                    .torches
+                    .saturating_add(amount)
+                    .min(PARTY_BYTE_STOCK_CAP)
+            }
+            ObjectPickupKind::SkullKeys => {
+                let slot = &mut self.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX];
+                *slot = slot.saturating_add(amount).min(PARTY_BYTE_STOCK_CAP);
+            }
+            ObjectPickupKind::Potion(index) => {
+                if let Some(stock) = self.potion_stock.get_mut(index) {
+                    *stock = stock.saturating_add(amount).min(PARTY_BYTE_STOCK_CAP);
+                }
+            }
+            ObjectPickupKind::Scroll(index) => {
+                if let Some(stock) = self.scroll_stock.get_mut(index) {
+                    *stock = stock.saturating_add(amount).min(PARTY_BYTE_STOCK_CAP);
+                }
+            }
+            ObjectPickupKind::Equipment(index) => {
+                if let Some(stock) = self.equipment_stock.get_mut(index) {
+                    let units = inventory_add_equipment_units(index).saturating_mul(amount);
+                    *stock = stock.saturating_add(units).min(PARTY_BYTE_STOCK_CAP);
+                }
+            }
+            ObjectPickupKind::MagicCarpet => {
+                let slot = &mut self.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX];
+                *slot = slot.saturating_add(amount).min(PARTY_BYTE_STOCK_CAP);
+            }
+            ObjectPickupKind::HmsCapePlans => {
+                self.special_items[SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX] = self.special_items
+                    [SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX]
+                    .max(SPECIAL_ITEM_OWNED_VALUE);
+            }
+            ObjectPickupKind::SandalwoodBox => {
+                self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] =
+                    self.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX].max(SPECIAL_ITEM_OWNED_VALUE);
+            }
+            ObjectPickupKind::CrownOfLordBritish => {
+                self.special_items[SPECIAL_ITEM_CROWN_LB_INDEX] =
+                    self.special_items[SPECIAL_ITEM_CROWN_LB_INDEX].max(SPECIAL_ITEM_OWNED_VALUE);
+            }
+            ObjectPickupKind::SceptreOfLordBritish => {
+                self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] =
+                    self.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX].max(SPECIAL_ITEM_OWNED_VALUE);
+            }
+            ObjectPickupKind::AmuletOfLordBritish => {
+                self.special_items[SPECIAL_ITEM_AMULET_LB_INDEX] =
+                    self.special_items[SPECIAL_ITEM_AMULET_LB_INDEX].max(SPECIAL_ITEM_OWNED_VALUE);
+            }
+            ObjectPickupKind::ShadowlordShard(index) => {
+                if index < SHADOWLORD_COUNT {
+                    self.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX + index] =
+                        SPECIAL_ITEM_OWNED_VALUE;
+                }
+            }
         }
     }
 

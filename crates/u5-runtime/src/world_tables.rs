@@ -57,29 +57,102 @@ pub enum ObjectPickupKind {
     Keys,
     Gems,
     Torches,
+    SkullKeys,
+    Potion(usize),
+    Scroll(usize),
+    Equipment(usize),
+    MagicCarpet,
+    HmsCapePlans,
+    SandalwoodBox,
+    CrownOfLordBritish,
+    SceptreOfLordBritish,
+    AmuletOfLordBritish,
+    ShadowlordShard(usize),
 }
 
 impl ObjectPickupKind {
     pub fn from_key(key: &str) -> Option<Self> {
-        match key.to_ascii_lowercase().as_str() {
+        let key = key.to_ascii_lowercase();
+        if let Some(index) = parse_indexed_pickup_key(&key, "potion", POTION_COUNT) {
+            return Some(Self::Potion(index));
+        }
+        if let Some(index) = parse_indexed_pickup_key(&key, "scroll", SCROLL_COUNT) {
+            return Some(Self::Scroll(index));
+        }
+        if let Some(index) = parse_indexed_pickup_key(&key, "equipment", EQUIPMENT_COUNT)
+            .or_else(|| parse_indexed_pickup_key(&key, "equip", EQUIPMENT_COUNT))
+        {
+            return Some(Self::Equipment(index));
+        }
+        if let Some(index) = parse_indexed_pickup_key(&key, "shard", SHADOWLORD_COUNT) {
+            return Some(Self::ShadowlordShard(index));
+        }
+        match key.as_str() {
             "food" | "ration" | "rations" => Some(Self::Food),
             "gold" | "coin" | "coins" => Some(Self::Gold),
             "key" | "keys" => Some(Self::Keys),
+            "skullkey" | "skullkeys" | "skull_key" | "skull_keys" | "specialkey"
+            | "specialkeys" | "special_key" | "special_keys" => Some(Self::SkullKeys),
             "gem" | "gems" => Some(Self::Gems),
             "torch" | "torches" => Some(Self::Torches),
+            "carpet" | "magiccarpet" | "magic_carpet" => Some(Self::MagicCarpet),
+            "plans" | "hmscapeplans" | "hms_cape_plans" => Some(Self::HmsCapePlans),
+            "box" | "woodenbox" | "wooden_box" | "sandalwoodbox" | "sandalwood_box" => {
+                Some(Self::SandalwoodBox)
+            }
+            "crown" | "crown_lb" | "crown_of_lord_british" => Some(Self::CrownOfLordBritish),
+            "sceptre"
+            | "scepter"
+            | "sceptre_lb"
+            | "scepter_lb"
+            | "sceptre_of_lord_british"
+            | "scepter_of_lord_british" => Some(Self::SceptreOfLordBritish),
+            "amulet" | "amulet_lb" | "amulet_of_lord_british" => Some(Self::AmuletOfLordBritish),
             _ => None,
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Self::Food => "food",
-            Self::Gold => "gold",
-            Self::Keys => "keys",
-            Self::Gems => "gems",
-            Self::Torches => "torches",
+            Self::Food => "food".to_string(),
+            Self::Gold => "gold".to_string(),
+            Self::Keys => "keys".to_string(),
+            Self::Gems => "gems".to_string(),
+            Self::Torches => "torches".to_string(),
+            Self::SkullKeys => "skull keys".to_string(),
+            Self::Potion(index) => format!("{} potion", potion_label(index)),
+            Self::Scroll(index) => format!(
+                "{} scroll",
+                SCROLL_SPELL_LABELS.get(index).copied().unwrap_or("unknown")
+            ),
+            Self::Equipment(index) => equipment_name(index).to_string(),
+            Self::MagicCarpet => "magic carpet".to_string(),
+            Self::HmsCapePlans => "HMS Cape plans".to_string(),
+            Self::SandalwoodBox => "sandalwood box".to_string(),
+            Self::CrownOfLordBritish => "Crown of Lord British".to_string(),
+            Self::SceptreOfLordBritish => "Sceptre of Lord British".to_string(),
+            Self::AmuletOfLordBritish => "Amulet of Lord British".to_string(),
+            Self::ShadowlordShard(index) => match index {
+                0 => "Shard of Falsehood".to_string(),
+                1 => "Shard of Hatred".to_string(),
+                2 => "Shard of Cowardice".to_string(),
+                _ => "Shadowlord shard".to_string(),
+            },
         }
     }
+}
+
+fn parse_indexed_pickup_key(key: &str, prefix: &str, limit: usize) -> Option<usize> {
+    let suffix = key.strip_prefix(prefix)?;
+    let suffix = suffix
+        .strip_prefix(':')
+        .or_else(|| suffix.strip_prefix('_'))
+        .or_else(|| suffix.strip_prefix('-'))
+        .unwrap_or(suffix);
+    if suffix.is_empty() {
+        return None;
+    }
+    suffix.parse::<usize>().ok().filter(|index| *index < limit)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

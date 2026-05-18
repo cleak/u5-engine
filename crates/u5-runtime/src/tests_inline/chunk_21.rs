@@ -876,6 +876,76 @@
     }
 
     #[test]
+    fn object_pickup_parser_accepts_extended_inventory_grants() {
+        let entries = parse_object_pickup_entries(
+            "CASTLE:0 0 1 2 POTION:3 2 0x42\n\
+             CASTLE:0 0 2 2 SCROLL_4 1\n\
+             CASTLE:0 0 3 2 EQUIP-27 1\n\
+             CASTLE:0 0 4 2 SHARD:2 1\n\
+             CASTLE:0 0 5 2 SANDALWOOD_BOX 1\n",
+        )
+        .unwrap();
+
+        assert_eq!(entries[0].kind, ObjectPickupKind::Potion(3));
+        assert_eq!(entries[0].amount, 2);
+        assert_eq!(entries[0].expected_tile, Some(0x42));
+        assert_eq!(entries[1].kind, ObjectPickupKind::Scroll(4));
+        assert_eq!(entries[2].kind, ObjectPickupKind::Equipment(EQUIPMENT_ID_ARROWS));
+        assert_eq!(entries[3].kind, ObjectPickupKind::ShadowlordShard(2));
+        assert_eq!(entries[4].kind, ObjectPickupKind::SandalwoodBox);
+    }
+
+    #[test]
+    fn object_pickup_inventory_grants_cover_caps_equipment_and_story_items() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.food = PARTY_FOOD_CAP - 1;
+        state.gold = PARTY_GOLD_CAP - 1;
+        state.keys = PARTY_BYTE_STOCK_CAP - 1;
+        state.torches = PARTY_BYTE_STOCK_CAP - 1;
+        state.potion_stock[3] = PARTY_BYTE_STOCK_CAP - 1;
+        state.scroll_stock[4] = PARTY_BYTE_STOCK_CAP - 1;
+        state.equipment_stock[EQUIPMENT_ID_ARROWS] = PARTY_BYTE_STOCK_CAP - 3;
+        state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = PARTY_BYTE_STOCK_CAP - 1;
+
+        state.apply_object_pickup(ObjectPickupKind::Food, 5);
+        state.apply_object_pickup(ObjectPickupKind::Gold, 5);
+        state.apply_object_pickup(ObjectPickupKind::Keys, 5);
+        state.apply_object_pickup(ObjectPickupKind::Gems, 5);
+        state.apply_object_pickup(ObjectPickupKind::Torches, 5);
+        state.apply_object_pickup(ObjectPickupKind::Potion(3), 5);
+        state.apply_object_pickup(ObjectPickupKind::Scroll(4), 5);
+        state.apply_object_pickup(ObjectPickupKind::Equipment(EQUIPMENT_ID_ARROWS), 1);
+        state.apply_object_pickup(ObjectPickupKind::MagicCarpet, 5);
+        state.apply_object_pickup(ObjectPickupKind::SkullKeys, 2);
+        state.apply_object_pickup(ObjectPickupKind::HmsCapePlans, 1);
+        state.apply_object_pickup(ObjectPickupKind::SandalwoodBox, 1);
+        state.apply_object_pickup(ObjectPickupKind::CrownOfLordBritish, 1);
+        state.apply_object_pickup(ObjectPickupKind::SceptreOfLordBritish, 1);
+        state.apply_object_pickup(ObjectPickupKind::AmuletOfLordBritish, 1);
+        state.apply_object_pickup(ObjectPickupKind::ShadowlordShard(2), 1);
+
+        assert_eq!(state.food, PARTY_FOOD_CAP);
+        assert_eq!(state.gold, PARTY_GOLD_CAP);
+        assert_eq!(state.keys, PARTY_BYTE_STOCK_CAP);
+        assert_eq!(state.gems, DEFAULT_GEM_STOCK.saturating_add(5));
+        assert_eq!(state.torches, PARTY_BYTE_STOCK_CAP);
+        assert_eq!(state.potion_stock[3], PARTY_BYTE_STOCK_CAP);
+        assert_eq!(state.scroll_stock[4], PARTY_BYTE_STOCK_CAP);
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_ARROWS], PARTY_BYTE_STOCK_CAP);
+        assert_eq!(
+            state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX],
+            PARTY_BYTE_STOCK_CAP
+        );
+        assert_eq!(state.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX], 2);
+        assert_eq!(state.special_items[SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX], 1);
+        assert_eq!(state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX], 1);
+        assert_eq!(state.special_items[SPECIAL_ITEM_CROWN_LB_INDEX], 1);
+        assert_eq!(state.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX], 1);
+        assert_eq!(state.special_items[SPECIAL_ITEM_AMULET_LB_INDEX], 1);
+        assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_COWARDICE_INDEX], 1);
+    }
+
+    #[test]
     fn play_input_talk_suffix_routes_to_one_shot_keyword_lookup() {
         let dir = debug_game_dir();
         fs::write(
