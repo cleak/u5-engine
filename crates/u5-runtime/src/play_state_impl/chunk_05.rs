@@ -505,7 +505,8 @@ impl PlayState {
         };
         if dungeon_cbt_available {
             let game_dir = game_dir.expect("availability checked from game_dir");
-            let combat_note = self.enter_dungeon_room_combat(game_dir, scene, level, arena)?;
+            let combat_note =
+                self.enter_dungeon_room_combat(game_dir, scene, level, arena, doom_final_room)?;
             self.message = format!(
                 "Entered dungeon {trigger_kind} slot {slot} at ({x}, {y}) on {} level {level}; {combat_note}; {state_note}.",
                 scene.key()

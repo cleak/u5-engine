@@ -13797,6 +13797,120 @@
     }
 
     #[test]
+    fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_marker() {
+        let dir = debug_game_dir();
+        let scene = DungeonScene::new(40).unwrap();
+        let mut record = synthetic_combat_arena_record();
+        let source_base =
+            DUNGEON_ROOM_SOURCE_ROW * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_SOURCE_COLUMN;
+        record[source_base] = DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE;
+        record[source_base + 1] = 0x44;
+        let mut dungeon_cbt = Vec::new();
+        for index in 0..DUNGEON_CBT_RECORDS {
+            if index == DUNGEON_CBT_RECORDS - 1 {
+                dungeon_cbt.extend_from_slice(&record);
+            } else {
+                dungeon_cbt.extend_from_slice(&synthetic_combat_arena_record());
+            }
+        }
+        fs::write(dir.join(DUNGEON_CBT_FILE), dungeon_cbt).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(
+            DOOM_FINAL_ROOM_LEVEL,
+            DOOM_FINAL_ROOM_X,
+            DOOM_FINAL_ROOM_Y,
+        )] = 0xf0 | DOOM_FINAL_ROOM_SLOT;
+        let mut state = dungeon_state(grid, DOOM_FINAL_ROOM_LEVEL, 4, DOOM_FINAL_ROOM_Y);
+        state.area = Area::Dungeon {
+            scene,
+            level: DOOM_FINAL_ROOM_LEVEL,
+        };
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Moved
+        );
+        assert_eq!(
+            state
+                .combat_frame_snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.enter_endgame_after_successful_combat),
+            Some(true)
+        );
+        state.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+
+        let application = state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+
+        assert_eq!(application.result_code, COMBAT_ROUND_RESULT_SUCCESS);
+        assert!(application.restored_snapshot);
+        assert!(!state.combat_active);
+        assert_eq!(
+            state.endgame,
+            Some(EndgameState::awaiting_first_confirmation())
+        );
+        assert_eq!(
+            state.grid[dungeon_cell_index(
+                DOOM_FINAL_ROOM_LEVEL,
+                DOOM_FINAL_ROOM_X,
+                DOOM_FINAL_ROOM_Y,
+            )],
+            0xf0 | DOOM_FINAL_ROOM_SLOT
+        );
+        assert!(!dungeon_room_clear_bit_is_set(
+            &state.dungeon_room_clear_bitmap,
+            scene,
+            DOOM_FINAL_ROOM_SLOT
+        ));
+        assert!(state.message.contains("Lord British asks"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn doom_final_room_defeated_dungeon_cbt_combat_does_not_enter_endgame() {
+        let dir = debug_game_dir();
+        let scene = DungeonScene::new(40).unwrap();
+        let mut record = synthetic_combat_arena_record();
+        let source_base =
+            DUNGEON_ROOM_SOURCE_ROW * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_SOURCE_COLUMN;
+        record[source_base] = DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE;
+        record[source_base + 1] = 0x44;
+        let mut dungeon_cbt = Vec::new();
+        for index in 0..DUNGEON_CBT_RECORDS {
+            if index == DUNGEON_CBT_RECORDS - 1 {
+                dungeon_cbt.extend_from_slice(&record);
+            } else {
+                dungeon_cbt.extend_from_slice(&synthetic_combat_arena_record());
+            }
+        }
+        fs::write(dir.join(DUNGEON_CBT_FILE), dungeon_cbt).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(
+            DOOM_FINAL_ROOM_LEVEL,
+            DOOM_FINAL_ROOM_X,
+            DOOM_FINAL_ROOM_Y,
+        )] = 0xf0 | DOOM_FINAL_ROOM_SLOT;
+        let mut state = dungeon_state(grid, DOOM_FINAL_ROOM_LEVEL, 4, DOOM_FINAL_ROOM_Y);
+        state.area = Area::Dungeon {
+            scene,
+            level: DOOM_FINAL_ROOM_LEVEL,
+        };
+        state
+            .step_with_game_dir(Direction::East, Some(&dir))
+            .unwrap();
+
+        let application = state.apply_combat_round_loop_exit(CombatRoundLoopExit::Defeat);
+
+        assert_eq!(application.result_code, COMBAT_ROUND_RESULT_DEFEAT);
+        assert!(application.restored_snapshot);
+        assert!(!state.combat_active);
+        assert_eq!(state.endgame, None);
+        assert!(state.message.contains("entered dungeon combat"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn endgame_confirmation_gates_victory_on_final_answer_and_box_flag() {
         let dir = debug_game_dir();
         let mut missing_box = dungeon_state(open_dungeon_record(), 0, 1, 1);

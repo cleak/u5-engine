@@ -11,6 +11,7 @@ pub struct CombatFrameSnapshot {
     pub active_objects: Vec<ActiveObject>,
     pub active_player: Option<usize>,
     pub combat_terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    pub enter_endgame_after_successful_combat: bool,
 }
 
 /// `combat.md §5` ambush / camp-attack reveal-slot capacity.
@@ -1577,6 +1578,7 @@ impl PlayState {
             active_objects: self.active_objects.clone(),
             active_player: self.active_player,
             combat_terrain: self.combat_terrain,
+            enter_endgame_after_successful_combat: false,
         };
         self.active_objects = active_objects;
         self.combat_actors = actors;
@@ -1628,7 +1630,12 @@ impl PlayState {
         let body_retrieval_exit =
             combat_exit_requests_body_retrieval_reconcile(exit, &self.combat_actors);
         let restored_snapshot = if let Some(snapshot) = self.combat_frame_snapshot.take() {
+            let enter_endgame_after_restore =
+                snapshot.enter_endgame_after_successful_combat && body_retrieval_exit;
             self.restore_combat_frame_with_trigger_reconcile(snapshot, body_retrieval_exit);
+            if enter_endgame_after_restore {
+                self.enter_endgame();
+            }
             true
         } else {
             self.combat_active = false;

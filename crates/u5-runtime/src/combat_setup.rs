@@ -382,6 +382,7 @@ impl PlayState {
         scene: DungeonScene,
         level: u8,
         arena_index: usize,
+        enter_endgame_after_successful_absorbable_combat: bool,
     ) -> io::Result<String> {
         let bank = load_dungeon_cbt(game_dir)?;
         let record = bank.record(arena_index).ok_or_else(|| {
@@ -391,6 +392,10 @@ impl PlayState {
             )
         })?;
         let setup = dungeon_room_combat_setup_from_record(arena_index, record);
+        let has_absorbable_field = setup
+            .setup_sources
+            .iter()
+            .any(|source| source.kind == DungeonRoomSetupSourceKind::AbsorbableField);
         let mut instance = dungeon_room_combat_instance_from_setup(&setup, level as i8);
         self.populate_terrain_combat_party(
             &mut instance.active_objects,
@@ -404,6 +409,11 @@ impl PlayState {
             instance.actors,
             setup.terrain,
         )?;
+        if enter_endgame_after_successful_absorbable_combat && has_absorbable_field {
+            if let Some(snapshot) = &mut self.combat_frame_snapshot {
+                snapshot.enter_endgame_after_successful_combat = true;
+            }
+        }
         Ok(format!(
             "entered dungeon combat from {} level {level} using DUNGEON.CBT arena {arena_index}; placed {placed_count} ordinary combatant(s) from {requested_count} room source marker(s)",
             scene.key()
