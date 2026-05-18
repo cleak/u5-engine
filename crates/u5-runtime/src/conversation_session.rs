@@ -150,6 +150,9 @@ impl ConversationSession {
             out.text = TLK_NO_KEYWORD_MATCH_MESSAGE.to_string();
             return out;
         }
+        if matches!(kind, TlkPlayerInputKind::EmptyByeShortcut) {
+            out.text.push_str(TLK_EMPTY_INPUT_BYE_MESSAGE);
+        }
         if let Some(bytes) = self.fields.get(field_idx) {
             let inputs = make_inputs(ctx, 0, 0);
             let run = run_tlk_stream(bytes, &inputs);
@@ -344,6 +347,8 @@ mod tests {
         let mut s = baseline_session();
         s.present_greeting(&ctx());
         let out = s.submit_keyword("", &ctx());
+        assert!(out.text.starts_with(TLK_EMPTY_INPUT_BYE_MESSAGE));
+        assert!(out.text.contains("Farewell"));
         assert!(out.ended);
     }
 

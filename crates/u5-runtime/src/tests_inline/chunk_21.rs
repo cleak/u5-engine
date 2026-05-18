@@ -1002,8 +1002,53 @@
             handle_play_key_input(&mut state, 'J', "OB", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert_eq!(state.message, "I mend gear");
+        assert_eq!(state.message, "I mend gear Your interest?");
         assert!(state.active_conversation.is_some());
+        assert_eq!(state.turn, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn play_input_conversation_empty_line_emits_bye_envelope_and_closes() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join("CASTLE.TLK"),
+            tlk_bytes(&[(
+                2,
+                &["Ada", "a test smith", "Greetings", "I mend gear", "Farewell"],
+            )]),
+        )
+        .unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 2,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: Some("Ada".to_string()),
+            },
+        ]);
+
+        handle_play_key_input(&mut state, 'T', "", &dir).unwrap();
+        assert!(state.active_conversation.is_some());
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '\n', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.message.starts_with(TLK_EMPTY_INPUT_BYE_MESSAGE));
+        assert!(state.message.contains("Farewell"));
+        assert!(state.active_conversation.is_none());
         assert_eq!(state.turn, 1);
         let _ = fs::remove_dir_all(dir);
     }
@@ -1061,6 +1106,44 @@
         assert_eq!(state.message, "Nobody's here!");
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::default());
+    }
+
+    #[test]
+    fn town_talk_liveness_gate_blocks_before_lookup_without_printing() {
+        let dialogue = parse_tlk_bytes(&tlk_bytes(&[(
+            2,
+            &["Ada", "a test smith", "Greetings", "I mend gear", "Bye"],
+        )]))
+        .unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.message = "previous line".to_string();
+        state.player.facing = Direction::East;
+        state.active_player = Some(0);
+        state.party[0].status = b'S';
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 2,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: Some("Ada".to_string()),
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue(&dialogue),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.message, "previous line");
+        assert_eq!(state.turn, 0);
     }
 
     #[test]

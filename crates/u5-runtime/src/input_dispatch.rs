@@ -1143,7 +1143,14 @@ fn handle_active_conversation_key_input(
     }
     line.push_str(suffix);
     let line = line.trim().to_string();
-    let (_text, _ended) = state.submit_active_conversation_keyword(&line);
+    let (text, ended) = state.submit_active_conversation_keyword(&line);
+    if !ended && state.active_conversation.is_some() {
+        let prompt = TLK_KEYWORD_PROMPT
+            .lines()
+            .next()
+            .unwrap_or("Your interest?");
+        state.message = format!("{text} {prompt}");
+    }
     PlayInputDisposition::Continue
 }
 

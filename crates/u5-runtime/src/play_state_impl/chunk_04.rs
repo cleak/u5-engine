@@ -1916,6 +1916,9 @@ impl PlayState {
             self.message = "Funny, no response!".to_string();
             return Ok(MoveOutcome::Blocked);
         };
+        if self.talk_liveness_blocked() {
+            return Ok(MoveOutcome::Blocked);
+        }
         let dialogue = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let raw_blob = parse_tlk_raw(&game_dir.join(format!("{}.TLK", scene.family.stem())))
             .unwrap_or_default();
@@ -1965,6 +1968,9 @@ impl PlayState {
     ) -> MoveOutcome {
         if !matches!(self.area, Area::Town { .. }) {
             self.message = "Funny, no response!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if self.talk_liveness_blocked() {
             return MoveOutcome::Blocked;
         }
 
@@ -2058,6 +2064,9 @@ impl PlayState {
     ) -> MoveOutcome {
         if !matches!(self.area, Area::Town { .. }) {
             self.message = "Funny, no response!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if self.talk_liveness_blocked() {
             return MoveOutcome::Blocked;
         }
 
@@ -2337,6 +2346,9 @@ impl PlayState {
         if !matches!(self.area, Area::Town { .. }) {
             return None;
         }
+        if self.talk_liveness_blocked() {
+            return None;
+        }
         let (dialog_id, _, _) = self.facing_talk_target()?;
         if dialog_id == 0 || talk_shop_trigger(dialog_id).is_some() {
             return None;
@@ -2443,6 +2455,20 @@ impl PlayState {
                 _ => {}
             }
         }
+    }
+
+    pub fn talk_liveness_blocked(&self) -> bool {
+        let active_asleep = self
+            .active_player
+            .and_then(|index| self.party.get(index))
+            .is_some_and(|member| member.status == b'S');
+        talk_liveness_refusal(
+            self.combat_active,
+            active_asleep,
+            self.food == 0,
+            self.active_conversation.is_some(),
+        )
+        .is_some()
     }
 
     pub fn talk_branch_slot_for_scene(&self, scene: Scene) -> u32 {
