@@ -516,7 +516,7 @@ impl PlayState {
         &mut self,
         game_dir: Option<&std::path::Path>,
     ) -> std::io::Result<MoveOutcome> {
-        let messages = game_dir.map(load_endgame_messages).transpose()?.flatten();
+        let messages = game_dir.map(require_endgame_messages).transpose()?;
         Ok(self.enter_endgame_with_messages(messages))
     }
 

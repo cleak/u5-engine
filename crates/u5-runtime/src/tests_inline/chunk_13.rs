@@ -13702,6 +13702,44 @@
         assert!(state.message.contains("slot 3"));
     }
 
+    fn synthetic_endmsg_dat_bytes() -> Vec<u8> {
+        let labels = [
+            "Welcome back",
+            "Hast thou brought my box?",
+            "The sandalwood box itself?",
+            "Rite 1",
+            "Rite 2",
+            "Rite 3",
+            "Rite 4",
+            "Rite 5",
+            "Rite 6",
+            "Rite 7",
+            "Wait here without the box",
+        ];
+        let mut bytes = Vec::new();
+        for label in labels {
+            bytes.extend_from_slice(label.as_bytes());
+            bytes.push(0x00);
+        }
+        bytes
+    }
+
+    fn write_synthetic_endmsg_dat(dir: &std::path::Path) {
+        fs::write(dir.join("ENDMSG.DAT"), synthetic_endmsg_dat_bytes()).unwrap();
+    }
+
+    #[test]
+    fn endgame_real_handoff_requires_endmsg_dat_resource() {
+        let dir = debug_game_dir();
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        let err = state.enter_endgame_from_game_dir(Some(&dir)).unwrap_err();
+
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(err.to_string().contains("ENDMSG.DAT"));
+        assert!(state.endgame.is_none());
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn doom_final_room_trigger_enters_endgame_without_room_rewrite() {
         let scene = DungeonScene::new(40).unwrap();
@@ -13739,6 +13777,7 @@
     #[test]
     fn doom_final_room_trigger_loads_dungeon_cbt_before_endgame_when_available() {
         let dir = debug_game_dir();
+        write_synthetic_endmsg_dat(&dir);
         let scene = DungeonScene::new(40).unwrap();
         let mut record = synthetic_combat_arena_record();
         let source_base =
@@ -13799,6 +13838,7 @@
     #[test]
     fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_marker() {
         let dir = debug_game_dir();
+        write_synthetic_endmsg_dat(&dir);
         let scene = DungeonScene::new(40).unwrap();
         let mut record = synthetic_combat_arena_record();
         let source_base =
@@ -13846,10 +13886,9 @@
         assert_eq!(application.result_code, COMBAT_ROUND_RESULT_SUCCESS);
         assert!(application.restored_snapshot);
         assert!(!state.combat_active);
-        assert_eq!(
-            state.endgame,
-            Some(EndgameState::awaiting_first_confirmation())
-        );
+        let endgame = state.endgame.as_ref().unwrap();
+        assert_eq!(endgame.first_confirmation, None);
+        assert!(endgame.messages.is_some());
         assert_eq!(
             state.grid[dungeon_cell_index(
                 DOOM_FINAL_ROOM_LEVEL,
@@ -13863,13 +13902,15 @@
             scene,
             DOOM_FINAL_ROOM_SLOT
         ));
-        assert!(state.message.contains("Lord British asks"));
+        assert!(state.message.contains("Welcome back"));
+        assert!(state.message.contains("Hast thou brought my box?"));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn doom_final_room_defeated_dungeon_cbt_combat_does_not_enter_endgame() {
         let dir = debug_game_dir();
+        write_synthetic_endmsg_dat(&dir);
         let scene = DungeonScene::new(40).unwrap();
         let mut record = synthetic_combat_arena_record();
         let source_base =

@@ -59,6 +59,18 @@ pub fn load_endgame_messages(game_dir: &Path) -> io::Result<Option<EndgameMessag
     parse_endgame_messages(&bytes).map(Some)
 }
 
+pub fn require_endgame_messages(game_dir: &Path) -> io::Result<EndgameMessages> {
+    load_endgame_messages(game_dir)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!(
+                "{}: required endgame dialogue resource is missing",
+                game_dir.join(ENDMSG_DAT_FILE).display()
+            ),
+        )
+    })
+}
+
 pub fn parse_endgame_messages(bytes: &[u8]) -> io::Result<EndgameMessages> {
     let mut records = Vec::with_capacity(EXPECTED_RECORD_COUNT);
     let mut start = 0;

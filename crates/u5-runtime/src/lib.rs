@@ -212,7 +212,7 @@ pub use end_io::{
 pub use endgame::*;
 pub use endmsg_io::{
     ENDMSG_DAT_LEN, ENDMSG_DAT_RECORDS, EndgameMessages, load_endgame_messages,
-    parse_endgame_messages,
+    parse_endgame_messages, require_endgame_messages,
 };
 pub use equipment::*;
 #[cfg(test)]
