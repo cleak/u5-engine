@@ -878,7 +878,41 @@
 
         assert!(state.handle_dungeon_key('S', &dir).unwrap());
 
+        assert_eq!(
+            state.active_direction_prompt.as_ref().map(|session| session.kind),
+            Some(DirectionPromptKind::DungeonSearch)
+        );
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x30);
+        assert_eq!(state.turn, 0);
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
         assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xF0);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("Revealed dungeon secret door"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dungeon_search_prompt_can_target_relative_right() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(SECRET_DOOR_TABLE_FILE),
+            "DUNGEON DUNGEON:0 0 1 2 0xF0\n",
+        )
+        .unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 2)] = 0x30;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.player.facing = Direction::East;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'S', "R", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 2)], 0xF0);
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("Revealed dungeon secret door"));
         let _ = fs::remove_dir_all(dir);

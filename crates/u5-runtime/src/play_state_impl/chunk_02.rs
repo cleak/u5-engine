@@ -59,7 +59,12 @@ impl PlayState {
         }
 
         if key == 'S' {
-            handled!(self.search_facing_with_game_dir(game_dir)?);
+            let outcome = if let Some(focus) = inline_look_focus {
+                self.search_dungeon_focus_with_game_dir(focus, game_dir)?
+            } else {
+                self.start_dungeon_search_prompt()
+            };
+            handled!(outcome);
         }
         if key == 'A' {
             handled!(self.attack_command_with_game_dir(None, Some(game_dir))?);

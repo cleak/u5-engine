@@ -1688,15 +1688,44 @@ impl PlayState {
         scene: DungeonScene,
         level: u8,
     ) -> MoveOutcome {
-        let (dx, dy) = self.player.facing.delta();
-        let tx = self.player.x as isize + dx;
-        let ty = self.player.y as isize + dy;
-        if !(0..DUNGEON_SIDE as isize).contains(&tx) || !(0..DUNGEON_SIDE as isize).contains(&ty) {
-            self.message = "Nothing to search there.".to_string();
-            return MoveOutcome::Blocked;
-        }
-        let tx = tx as usize;
-        let ty = ty as usize;
+        self.search_dungeon_secret_focus(
+            entries,
+            _chest_entries,
+            scene,
+            level,
+            DungeonLookFocus::Ahead,
+        )
+    }
+
+    pub fn search_dungeon_focus_with_game_dir(
+        &mut self,
+        focus: DungeonLookFocus,
+        game_dir: &Path,
+    ) -> io::Result<MoveOutcome> {
+        let Area::Dungeon { scene, level } = self.area else {
+            self.message = "Search is only implemented for dungeon mode in this slice.".to_string();
+            return Ok(MoveOutcome::Blocked);
+        };
+        let entries = load_secret_door_entries(game_dir)?.unwrap_or_default();
+        let chest_entries = load_dungeon_chest_content_entries(game_dir)?;
+        Ok(self.search_dungeon_secret_focus(
+            &entries,
+            chest_entries.as_deref(),
+            scene,
+            level,
+            focus,
+        ))
+    }
+
+    pub fn search_dungeon_secret_focus(
+        &mut self,
+        entries: &[SecretDoorEntry],
+        _chest_entries: Option<&[DungeonChestContentEntry]>,
+        scene: DungeonScene,
+        level: u8,
+        focus: DungeonLookFocus,
+    ) -> MoveOutcome {
+        let (tx, ty) = self.dungeon_look_focus_coord(focus);
         let idx = dungeon_cell_index(level, tx, ty);
         let tile = self.grid[idx];
         if let Some(reveal_cell) = entries.iter().find_map(|entry| match *entry {

@@ -758,6 +758,14 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    pub fn start_dungeon_search_prompt(&mut self) -> MoveOutcome {
+        self.active_direction_prompt = Some(DirectionPromptSession::new(
+            DirectionPromptKind::DungeonSearch,
+        ));
+        self.message = self.render_active_direction_prompt();
+        MoveOutcome::Observed
+    }
+
     pub fn start_talk_direction_prompt(&mut self) -> MoveOutcome {
         self.active_direction_prompt = Some(DirectionPromptSession::new(DirectionPromptKind::Talk));
         self.message = self.render_active_direction_prompt();
@@ -802,6 +810,10 @@ impl PlayState {
                     "Look: party member {}. Choose A-head, R-ight, L-eft, or H-ere; Space/Esc cancels.",
                     index + 1
                 ),
+                DirectionPromptKind::DungeonSearch => {
+                    "Search: choose A-head, R-ight, L-eft, or H-ere; Space/Esc cancels."
+                        .to_string()
+                }
                 DirectionPromptKind::Klimb => "Klimb-".to_string(),
                 DirectionPromptKind::CombatKlimb { .. } => "Klimb-".to_string(),
                 DirectionPromptKind::CombatPush { .. } => "Push-".to_string(),
@@ -866,6 +878,14 @@ impl PlayState {
                 }
                 continue;
             }
+            if matches!(session.kind, DirectionPromptKind::DungeonSearch) {
+                if let Some(focus) = dungeon_look_focus_from_key(ch) {
+                    return self
+                        .search_dungeon_focus_with_game_dir(focus, game_dir)
+                        .map(Some);
+                }
+                continue;
+            }
             if let DirectionPromptKind::CombatKlimb { actor_slot } = session.kind {
                 match ch {
                     '<' => {
@@ -892,6 +912,9 @@ impl PlayState {
                 }
                 DirectionPromptKind::DungeonLook { .. } => unreachable!(
                     "dungeon look prompt is handled before cardinal direction dispatch"
+                ),
+                DirectionPromptKind::DungeonSearch => unreachable!(
+                    "dungeon search prompt is handled before cardinal direction dispatch"
                 ),
                 DirectionPromptKind::Klimb => {
                     self.message = "Klimb-".to_string();
