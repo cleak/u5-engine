@@ -1423,11 +1423,136 @@ impl PlayState {
                 self.message = "What?".to_string();
                 Ok(MoveOutcome::Blocked)
             }
-            Area::World { .. } => {
-                self.message = "Nothing to push here.".to_string();
-                Ok(MoveOutcome::Blocked)
-            }
+            Area::World { .. } => Ok(self.push_world_direction(direction)),
         }
+    }
+
+    pub fn push_world_direction(&mut self, direction: Direction) -> MoveOutcome {
+        if !direction.is_cardinal() {
+            self.message = "Push requires a cardinal facing direction.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let (tx, ty) = self.world_push_coordinate(self.player.x, self.player.y, direction, 1);
+        let (px, py) = self.world_push_coordinate(self.player.x, self.player.y, direction, 2);
+        let target_idx = world_cell_index(tx, ty);
+        let target_tile = self.grid[target_idx];
+
+        if let Some((slot, object)) = self.object_slot_at_current_floor(tx, ty) {
+            return self.push_world_dynamic_object(direction, tx, ty, px, py, slot, *object);
+        }
+
+        let Some(family) = pushable_tile_family(target_tile) else {
+            self.message = "Nothing to push there.".to_string();
+            return MoveOutcome::Blocked;
+        };
+
+        self.push_world_static_family(direction, tx, ty, px, py, family)
+    }
+
+    fn world_push_coordinate(
+        &self,
+        x: usize,
+        y: usize,
+        direction: Direction,
+        distance: isize,
+    ) -> (usize, usize) {
+        let (dx, dy) = direction.delta();
+        (
+            (x as isize + dx * distance).rem_euclid(WORLD_SIDE as isize) as usize,
+            (y as isize + dy * distance).rem_euclid(WORLD_SIDE as isize) as usize,
+        )
+    }
+
+    fn push_world_static_family(
+        &mut self,
+        direction: Direction,
+        tx: usize,
+        ty: usize,
+        px: usize,
+        py: usize,
+        family: PushableTileFamily,
+    ) -> MoveOutcome {
+        let target_idx = world_cell_index(tx, ty);
+        let dest_idx = world_cell_index(px, py);
+        let player_idx = world_cell_index(self.player.x, self.player.y);
+        let target_tile = self.grid[target_idx];
+        let stamp = family.floor_stamp();
+        if self.blocking_object_at(px, py).is_none() && self.grid[dest_idx] == stamp {
+            self.grid[target_idx] = stamp;
+            self.grid[dest_idx] = pushable_oriented_tile(target_tile, direction);
+            self.finish_world_push(tx, ty);
+            self.message = format!(
+                "Pushed tile {target_tile} {} from ({tx}, {ty}) to ({px}, {py}).",
+                direction.name()
+            );
+            return MoveOutcome::Pushed;
+        }
+
+        if self.grid[player_idx] == stamp {
+            let pull_direction = direction.opposite_cardinal().unwrap_or(direction);
+            let old_player_x = self.player.x;
+            let old_player_y = self.player.y;
+            self.grid[player_idx] = pushable_oriented_tile(target_tile, pull_direction);
+            self.grid[target_idx] = stamp;
+            self.finish_world_push(tx, ty);
+            self.message = format!(
+                "Pulled tile {target_tile} {} from ({tx}, {ty}) to ({old_player_x}, {old_player_y}).",
+                direction.name()
+            );
+            return MoveOutcome::Pushed;
+        }
+
+        self.advance_turn();
+        self.message = "Push blocked; it won't budge.".to_string();
+        MoveOutcome::Blocked
+    }
+
+    fn push_world_dynamic_object(
+        &mut self,
+        direction: Direction,
+        tx: usize,
+        ty: usize,
+        px: usize,
+        py: usize,
+        slot: usize,
+        object: ActiveObject,
+    ) -> MoveOutcome {
+        if self.blocking_object_at(px, py).is_some() {
+            self.advance_turn();
+            self.message = format!("Push blocked by actor at ({px}, {py}).");
+            return MoveOutcome::Blocked;
+        }
+        let dest_idx = world_cell_index(px, py);
+        if !self.tile_walkable(self.grid[dest_idx]) {
+            self.advance_turn();
+            self.message = format!(
+                "Push blocked by {} at ({px}, {py}).",
+                tile_class(self.grid[dest_idx])
+            );
+            return MoveOutcome::Blocked;
+        }
+
+        if let Some(moved) = self.active_objects.get_mut(slot) {
+            moved.x = px;
+            moved.y = py;
+            moved.tile = pushable_oriented_tile(moved.tile, direction);
+            moved.type_byte = pushable_oriented_tile(moved.type_byte, direction);
+        }
+        self.finish_world_push(tx, ty);
+        self.message = format!(
+            "Pushed object tile {} {} from ({tx}, {ty}) to ({px}, {py}).",
+            object.tile,
+            direction.name()
+        );
+        MoveOutcome::Pushed
+    }
+
+    fn finish_world_push(&mut self, tx: usize, ty: usize) {
+        self.player.x = tx;
+        self.player.y = ty;
+        self.sync_player_object();
+        self.mark_visibility_dirty();
+        self.advance_turn();
     }
 
     pub fn push_town_facing(

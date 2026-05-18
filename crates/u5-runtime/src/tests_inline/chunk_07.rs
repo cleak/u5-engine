@@ -916,6 +916,143 @@ fn town_push_consumes_turn_when_pushable_destination_is_blocked() {
 }
 
 #[test]
+fn world_push_static_family_wraps_and_advances_avatar() {
+    let dir = debug_game_dir();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(255, 1)] = 0x90;
+    grid[world_cell_index(0, 1)] = PUSHABLE_GENERIC_FLOOR_STAMP;
+    let mut state = world_state(grid, 254, 1);
+    state.player.facing = Direction::East;
+    state.visibility_dirty = false;
+
+    assert_eq!(
+        state.push_facing_with_game_dir(&dir).unwrap(),
+        MoveOutcome::Pushed
+    );
+
+    assert_eq!(
+        state.grid[world_cell_index(255, 1)],
+        PUSHABLE_GENERIC_FLOOR_STAMP
+    );
+    assert_eq!(state.grid[world_cell_index(0, 1)], 0x91);
+    assert_eq!((state.player.x, state.player.y), (255, 1));
+    assert_eq!(state.turn, 1);
+    assert!(state.visibility_dirty);
+    assert!(state.message.contains("Pushed tile 144 East"));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn world_push_static_family_pulls_when_far_cell_blocked_and_player_on_stamp() {
+    let dir = debug_game_dir();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(1, 1)] = PUSHABLE_GENERIC_FLOOR_STAMP;
+    grid[world_cell_index(2, 1)] = 0x90;
+    grid[world_cell_index(3, 1)] = 24;
+    let mut state = world_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+
+    assert_eq!(
+        state.push_facing_with_game_dir(&dir).unwrap(),
+        MoveOutcome::Pushed
+    );
+
+    assert_eq!(state.grid[world_cell_index(1, 1)], 0x93);
+    assert_eq!(
+        state.grid[world_cell_index(2, 1)],
+        PUSHABLE_GENERIC_FLOOR_STAMP
+    );
+    assert_eq!(state.grid[world_cell_index(3, 1)], 24);
+    assert_eq!((state.player.x, state.player.y), (2, 1));
+    assert_eq!(state.turn, 1);
+    assert!(state.message.contains("Pulled tile 144 East"));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn world_push_dynamic_object_moves_slot_and_avatar() {
+    let dir = debug_game_dir();
+    let mut state = world_state(open_world_grid(), 1, 1);
+    state.player.facing = Direction::East;
+    state.active_objects.push(ActiveObject {
+        type_byte: 0x5B,
+        tile: 0x5B,
+        x: 2,
+        y: 1,
+        z: WorldPlane::Underworld.save_floor(),
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
+
+    assert_eq!(
+        state.push_facing_with_game_dir(&dir).unwrap(),
+        MoveOutcome::Pushed
+    );
+
+    assert_eq!(
+        (state.active_objects[1].x, state.active_objects[1].y),
+        (3, 1)
+    );
+    assert_eq!((state.player.x, state.player.y), (2, 1));
+    assert_eq!(state.turn, 1);
+    assert!(state.message.contains("Pushed object tile 91 East"));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn world_push_consumes_turn_when_pushable_destination_is_blocked() {
+    let dir = debug_game_dir();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(2, 1)] = 0x90;
+    grid[world_cell_index(3, 1)] = 24;
+    let mut state = world_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+
+    assert_eq!(
+        state.push_facing_with_game_dir(&dir).unwrap(),
+        MoveOutcome::Blocked
+    );
+
+    assert_eq!(state.grid[world_cell_index(2, 1)], 0x90);
+    assert_eq!(state.grid[world_cell_index(3, 1)], 24);
+    assert_eq!((state.player.x, state.player.y), (1, 1));
+    assert_eq!(state.turn, 1);
+    assert!(state.message.contains("Push blocked"));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn world_push_prompt_routes_to_overworld_push() {
+    let dir = debug_game_dir();
+    let mut grid = open_world_grid();
+    grid[world_cell_index(2, 1)] = 0x90;
+    grid[world_cell_index(3, 1)] = PUSHABLE_GENERIC_FLOOR_STAMP;
+    let mut state = world_state(grid, 1, 1);
+
+    assert_eq!(
+        handle_play_key_input(&mut state, 'p', "", &dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert_eq!(state.turn, 0);
+    assert_eq!(state.message, "Push-");
+
+    assert_eq!(
+        handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+        PlayInputDisposition::Continue
+    );
+
+    assert_eq!(
+        state.grid[world_cell_index(2, 1)],
+        PUSHABLE_GENERIC_FLOOR_STAMP
+    );
+    assert_eq!(state.grid[world_cell_index(3, 1)], 0x91);
+    assert_eq!((state.player.x, state.player.y), (2, 1));
+    assert_eq!(state.turn, 1);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn ship_transport_can_move_over_water_that_blocks_foot() {
     let mut grid = open_world_grid();
     grid[world_cell_index(1, 0)] = 1;
