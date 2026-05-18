@@ -1725,6 +1725,10 @@ impl PlayState {
         level: u8,
         focus: DungeonLookFocus,
     ) -> MoveOutcome {
+        if !self.has_personal_light() {
+            self.message = "You see: darkness.".to_string();
+            return MoveOutcome::Blocked;
+        }
         let (tx, ty) = self.dungeon_look_focus_coord(focus);
         let idx = dungeon_cell_index(level, tx, ty);
         let tile = self.grid[idx];
@@ -1758,17 +1762,136 @@ impl PlayState {
 
         match tile >> 4 {
             0x4 => self.search_dungeon_chest(scene, level, tx, ty, tile),
+            _ if tile == 0x60 => self.search_dungeon_pit(scene, level, tx, ty),
+            _ if dungeon_search_secret_pit_reveal(tile, level).is_some() => {
+                self.search_dungeon_secret_pit(scene, level, tx, ty, idx, tile)
+            }
             _ if is_dungeon_bomb_trap(tile) => {
-                self.grid[idx] = 0x6a;
+                self.search_dungeon_bomb_trap(scene, level, tx, ty, idx, tile)
+            }
+            _ if dungeon_search_wall_rewrite(tile).is_some() => {
+                self.search_dungeon_wall_rewrite(scene, level, tx, ty, idx, tile)
+            }
+            _ => self.search_dungeon_feature(scene, level, tx, ty, tile),
+        }
+    }
+
+    pub fn search_dungeon_pit(
+        &mut self,
+        scene: DungeonScene,
+        level: u8,
+        x: usize,
+        y: usize,
+    ) -> MoveOutcome {
+        self.advance_turn();
+        self.message = format!(
+            "Searched dungeon pit at ({x}, {y}) on {} level {level}; nothing found.",
+            scene.key()
+        );
+        MoveOutcome::Searched
+    }
+
+    pub fn search_dungeon_secret_pit(
+        &mut self,
+        scene: DungeonScene,
+        level: u8,
+        x: usize,
+        y: usize,
+        idx: usize,
+        tile: u8,
+    ) -> MoveOutcome {
+        let Some(reveal) = dungeon_search_secret_pit_reveal(tile, level) else {
+            return self.search_dungeon_feature(scene, level, x, y, tile);
+        };
+        self.grid[idx] = 0x60;
+        if matches!(
+            reveal,
+            DungeonSearchSecretPitReveal::RewriteAndStampLevelBelow
+        ) {
+            let below_idx = dungeon_cell_index(level + 1, x, y);
+            self.grid[below_idx] |= DUNGEON_RUNTIME_VARIANT_BIT;
+        }
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = format!(
+            "Searched dungeon pit at ({x}, {y}) on {} level {level}; found a secret door.",
+            scene.key()
+        );
+        MoveOutcome::Searched
+    }
+
+    pub fn search_dungeon_bomb_trap(
+        &mut self,
+        scene: DungeonScene,
+        level: u8,
+        x: usize,
+        y: usize,
+        idx: usize,
+        tile: u8,
+    ) -> MoveOutcome {
+        let class_byte = self
+            .party
+            .iter()
+            .find(|member| member.living())
+            .map(|member| member.class_byte)
+            .unwrap_or_default();
+        let threshold = Self::dungeon_chest_pick_threshold(level, class_byte);
+        let roll = self.dungeon_chest_trap_roll(level, x, y, tile, 0, 30);
+        match dungeon_bomb_search_outcome(threshold, roll) {
+            DungeonBombSearchOutcome::NothingOnPit => {
+                self.advance_turn();
+                self.message = format!(
+                    "Searched dungeon pit at ({x}, {y}) on {} level {level}; nothing found.",
+                    scene.key()
+                );
+            }
+            DungeonBombSearchOutcome::SpringBomb => {
+                self.grid[idx] = 0x00;
                 self.mark_visibility_dirty();
                 self.advance_turn();
                 self.message = format!(
-                    "Cleared dungeon bomb trap at ({tx}, {ty}) on {} level {level}.",
+                    "Searched dungeon bomb trap at ({x}, {y}) on {} level {level}; sprung the bomb.",
+                    scene.key()
+                );
+            }
+        }
+        MoveOutcome::Searched
+    }
+
+    pub fn search_dungeon_wall_rewrite(
+        &mut self,
+        scene: DungeonScene,
+        level: u8,
+        x: usize,
+        y: usize,
+        idx: usize,
+        tile: u8,
+    ) -> MoveOutcome {
+        match dungeon_search_wall_rewrite(tile) {
+            Some(DungeonSearchWallRewrite::NarrateOnly) => {
+                self.search_dungeon_feature(scene, level, x, y, tile)
+            }
+            Some(DungeonSearchWallRewrite::ToFlavourFind(reveal_cell)) => {
+                self.grid[idx] = reveal_cell;
+                self.mark_visibility_dirty();
+                self.advance_turn();
+                self.message = format!(
+                    "Searched dungeon wall at ({x}, {y}) on {} level {level}; found a hidden passage.",
                     scene.key()
                 );
                 MoveOutcome::Searched
             }
-            _ => self.search_dungeon_feature(scene, level, tx, ty, tile),
+            Some(DungeonSearchWallRewrite::ToHiddenWallReveal(reveal_cell)) => {
+                self.grid[idx] = reveal_cell;
+                self.mark_visibility_dirty();
+                self.advance_turn();
+                self.message = format!(
+                    "Searched dungeon wall at ({x}, {y}) on {} level {level}; revealed a hidden wall.",
+                    scene.key()
+                );
+                MoveOutcome::Searched
+            }
+            None => self.search_dungeon_feature(scene, level, x, y, tile),
         }
     }
 

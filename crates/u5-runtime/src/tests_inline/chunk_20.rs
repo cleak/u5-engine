@@ -875,6 +875,7 @@
         grid[dungeon_cell_index(0, 2, 1)] = 0x30;
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.player.facing = Direction::East;
+        state.torch_counter = 5;
 
         assert!(state.handle_dungeon_key('S', &dir).unwrap());
 
@@ -906,6 +907,7 @@
         grid[dungeon_cell_index(0, 1, 2)] = 0x30;
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.player.facing = Direction::East;
+        state.torch_counter = 5;
 
         assert_eq!(
             handle_play_key_input(&mut state, 'S', "R", &dir).unwrap(),
@@ -931,6 +933,7 @@
         grid[dungeon_cell_index(0, 2, 1)] = 0x4c;
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.player.facing = Direction::East;
+        state.torch_counter = 5;
         state.visibility_dirty = false;
 
         assert_eq!(
@@ -954,6 +957,7 @@
         grid[dungeon_cell_index(0, 2, 1)] = 0x4c;
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.player.facing = Direction::East;
+        state.torch_counter = 5;
         state.visibility_dirty = false;
 
         assert_eq!(
@@ -977,6 +981,8 @@
         grid[dungeon_cell_index(0, 2, 1)] = 0x62;
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.player.facing = Direction::East;
+        state.torch_counter = 5;
+        state.party[0].class_byte = 30;
         state.visibility_dirty = false;
 
         assert_eq!(
@@ -986,13 +992,109 @@
 
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
         assert_eq!((state.player.x, state.player.y), (1, 1));
-        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x6a);
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x00);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
         assert_eq!(
             state.message,
-            "Cleared dungeon bomb trap at (2, 1) on DUNGEON:0 level 0."
+            "Searched dungeon bomb trap at (2, 1) on DUNGEON:0 level 0; sprung the bomb."
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dungeon_search_bomb_trap_can_report_nothing_without_rewrite() {
+        let dir = debug_game_dir();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x62;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.player.facing = Direction::East;
+        state.torch_counter = 5;
+        state.party[0].class_byte = b'A';
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x62);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("nothing found"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dungeon_search_requires_light_before_revealing_or_mutating() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(SECRET_DOOR_TABLE_FILE),
+            "DUNGEON DUNGEON:0 0 2 1 0xF0\n",
+        )
+        .unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x30;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.player.facing = Direction::East;
+
+        assert_eq!(
+            state.search_dungeon_focus_with_game_dir(DungeonLookFocus::Ahead, &dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x30);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "You see: darkness.");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dungeon_search_secret_pit_rewrites_and_marks_level_below() {
+        let dir = debug_game_dir();
+        let scene = DungeonScene::new(33).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x61;
+        grid[dungeon_cell_index(1, 2, 1)] = 0x00;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.player.facing = Direction::East;
+        state.torch_counter = 5;
+        state.visibility_dirty = false;
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+
+        assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x60);
+        assert_eq!(
+            state.grid[dungeon_cell_index(1, 2, 1)] & DUNGEON_RUNTIME_VARIANT_BIT,
+            DUNGEON_RUNTIME_VARIANT_BIT
+        );
+        assert_eq!(state.turn, 1);
+        assert!(state.visibility_dirty);
+        assert!(state.message.contains("found a secret door"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dungeon_search_wall_rewrite_updates_visit_local_cell() {
+        let dir = debug_game_dir();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0xD8;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.player.facing = Direction::East;
+        state.torch_counter = 5;
+        state.visibility_dirty = false;
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xE8);
+        assert_eq!(state.turn, 1);
+        assert!(state.visibility_dirty);
+        assert!(state.message.contains("revealed a hidden wall"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1004,6 +1106,7 @@
         grid[dungeon_cell_index(0, 2, 1)] = 0x69;
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.player.facing = Direction::East;
+        state.torch_counter = 5;
 
         assert_eq!(
             state.search_facing_with_game_dir(&dir).unwrap(),
@@ -1026,6 +1129,7 @@
         grid[dungeon_cell_index(0, 2, 1)] = 0x89;
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.player.facing = Direction::East;
+        state.torch_counter = 5;
         state.party = vec![PartyMember {
             slot: 0,
             class_byte: b'A',
@@ -1212,6 +1316,7 @@
         grid[dungeon_cell_index(0, 2, 1)] = 0x4c;
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.player.facing = Direction::East;
+        state.torch_counter = 5;
         state.keys = 1;
 
         assert_eq!(
@@ -1230,6 +1335,7 @@
         mismatch_grid[dungeon_cell_index(0, 2, 1)] = 0x4b;
         let mut mismatch = dungeon_state(mismatch_grid, 0, 1, 1);
         mismatch.player.facing = Direction::East;
+        mismatch.torch_counter = 5;
         mismatch.keys = 1;
 
         assert_eq!(
