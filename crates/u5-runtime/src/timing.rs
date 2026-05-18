@@ -1,9 +1,5 @@
 //! Timing status tag, save-template source, dungeon field effect.
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
-use std::io;
-use std::path::Path;
 
 use crate::*;
 

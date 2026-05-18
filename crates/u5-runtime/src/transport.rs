@@ -1,9 +1,5 @@
 //! Transport state (foot/horse/ship/skiff/carpet/balloon), pending-vehicle acquisitions, and board-vehicle candidates.
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
-use std::io;
-use std::path::Path;
 
 use crate::*;
 

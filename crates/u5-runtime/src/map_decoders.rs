@@ -1,9 +1,7 @@
 //! Britannia/underworld chunk decoders, BRIT.DAT chunk index finder, map analysis (analyze_map, harvest_location_markers, etc.), pathfinding helpers.
 
 use std::collections::{HashMap, VecDeque};
-use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
 
 use crate::*;
 

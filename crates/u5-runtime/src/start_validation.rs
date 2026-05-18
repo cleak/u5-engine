@@ -1,9 +1,8 @@
 //! Validation of start coordinates against passability, plus tiny IO/format helpers.
 
-use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::*;
 

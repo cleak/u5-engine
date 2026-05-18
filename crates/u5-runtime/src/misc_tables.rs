@@ -1,9 +1,6 @@
 //! Misc TSV-table data structures: blink targets, town fire targets, moongates, tile descriptions, location floor/entry-y.
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
 
 use crate::*;
 

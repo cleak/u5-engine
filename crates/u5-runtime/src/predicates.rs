@@ -1,9 +1,5 @@
 //! Tile passability/water/lava/door predicates plus table-match helpers used during runtime checks.
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
 
 use crate::*;
 

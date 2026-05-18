@@ -1,9 +1,5 @@
 //! Data structures for the world TSV tables (locations, plane transitions, get-tiles, pickups, waterfalls, damage, encounters, shrines).
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
 
 use crate::*;
 

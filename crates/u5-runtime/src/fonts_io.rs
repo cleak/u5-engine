@@ -1,10 +1,9 @@
 //! Loaders/parsers for fixed and proportional fonts plus monochrome bitmaps (BIT/CH/HCS/PCS).
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::{fs::read, io, path::Path};
 
+#[cfg(test)]
 use crate::*;
 
 #[cfg(test)]

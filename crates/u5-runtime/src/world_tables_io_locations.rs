@@ -1,9 +1,8 @@
 //! Loaders/parsers for world location, shrine, and plane-transition tables.
 
-use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::*;
 

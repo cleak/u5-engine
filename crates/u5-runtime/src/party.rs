@@ -1,9 +1,5 @@
 //! Area, party roster, avatar stats, moonstone gate slots.
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
-use std::io;
-use std::path::Path;
 
 use crate::*;
 

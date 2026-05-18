@@ -1,9 +1,6 @@
 //! The PlayState struct and overlay caches (impl blocks live in parts/play_state_impl/).
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
+use std::collections::HashMap;
 
 use crate::*;
 

@@ -1,9 +1,5 @@
 //! Data structures for the town TSV tables (fire sources, pushables, get-tiles, rest beds, stairs, trap doors, exits, locks).
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
 
 use crate::*;
 

@@ -1,9 +1,5 @@
 //! Data structures for the dungeon TSV tables (deeper transitions, teleports, chests, wind, exits, doors, secret doors).
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
 
 use crate::*;
 

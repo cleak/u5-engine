@@ -1,9 +1,6 @@
 //! Tile atlas, viewport, palettes, and image/font formats (TileGraphicsDepth, TileAtlas, TileViewport, GraphicImage*, MonochromeBitmap, TitleBitImages, FixedFont, ProportionalFont).
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
 
 use crate::*;
 

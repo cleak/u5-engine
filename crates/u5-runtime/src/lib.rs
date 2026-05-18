@@ -213,6 +213,7 @@ pub use endmsg_io::{
     parse_endgame_messages,
 };
 pub use equipment::*;
+#[cfg(test)]
 pub use fonts_io::*;
 pub use graphics::*;
 pub use graphics_io::*;
@@ -555,10 +556,9 @@ mod tests {
     use std::collections::HashMap;
     use std::fs;
     use std::io;
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
     use super::*;
-    use crate::test_fixtures::*;
     include!("tests_inline/chunk_01.rs");
     include!("tests_inline/chunk_02.rs");
     include!("tests_inline/chunk_03.rs");

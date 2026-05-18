@@ -7,7 +7,7 @@
 //! player slot, and records the resulting state transitions for
 //! inspection.
 
-use crate::combat_actor::{COMBAT_PARTY_ACTOR_SLOTS, CombatRoundLoopExit};
+use crate::combat_actor::CombatRoundLoopExit;
 use crate::combat_frame::CombatActorSlotDispatchApplication;
 use crate::play_state_struct::PlayState;
 

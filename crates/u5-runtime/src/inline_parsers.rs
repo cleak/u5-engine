@@ -1,9 +1,6 @@
 //! Inline parsers for command suffixes typed at the play prompt, spell-code helpers, and prompt messages.
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
 
 use crate::*;
 

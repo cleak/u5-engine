@@ -1,9 +1,6 @@
 //! GIF-style LZW bit reader and codec used by tile/graphic asset envelopes.
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
 
 use crate::*;
 

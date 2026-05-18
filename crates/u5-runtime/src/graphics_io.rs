@@ -1,9 +1,7 @@
 //! LZW codec, tile-atlas loading, GraphicImage* parsing, sprite-sheet parsing, monochrome-bitmap parsing.
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::*;
 

@@ -1,9 +1,6 @@
 //! PlayOptions + small action enums + moonstone gate helpers + initial overlay cache.
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
+use std::collections::HashMap;
 
 use crate::*;
 

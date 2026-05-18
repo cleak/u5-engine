@@ -1,9 +1,7 @@
 //! Loaders that turn SAVED.GAM/SAVED.OOL/INIT.GAM into PlayOptions.
 
-use std::collections::{HashMap, VecDeque};
-use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::*;
 
