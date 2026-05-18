@@ -174,6 +174,9 @@ impl PlayState {
     }
 
     pub fn render_use_session(&self, session: &UseSession) -> String {
+        if let Some(pending) = session.pending {
+            return self.render_pending_use_action(pending);
+        }
         let rows = self.use_item_picker_rows();
         if rows.is_empty() {
             return "No usable items.".to_string();
@@ -217,6 +220,9 @@ impl PlayState {
             return Ok(false);
         };
         let key = ready_first_input_key(key, suffix);
+        if let Some(pending) = session.pending {
+            return self.step_pending_use_action(session, pending, key, suffix, game_dir);
+        }
         match use_input_action(key) {
             UseInputAction::Exit => {
                 self.message = "Use closed.".to_string();
@@ -246,6 +252,13 @@ impl PlayState {
                     self.message = "No usable items.".to_string();
                     return Ok(true);
                 };
+                if let Some(pending) = pending_action_for_use_request(row.request) {
+                    let _ = self.use_item_command(Some(row.request), Some(game_dir))?;
+                    session.pending = Some(pending);
+                    self.message = self.render_use_session(&session);
+                    self.active_use = Some(session);
+                    return Ok(true);
+                }
                 let turn_before = self.turn;
                 let outcome = self.use_item_command(Some(row.request), Some(game_dir))?;
                 self.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
@@ -257,6 +270,104 @@ impl PlayState {
             }
         }
         Ok(true)
+    }
+
+    fn step_pending_use_action(
+        &mut self,
+        mut session: UseSession,
+        pending: UsePendingAction,
+        key: char,
+        suffix: &str,
+        game_dir: &Path,
+    ) -> io::Result<bool> {
+        if matches!(use_input_action(key), UseInputAction::Exit) {
+            self.message = "Use closed.".to_string();
+            return Ok(true);
+        }
+
+        let turn_before = self.turn;
+        let outcome = match pending {
+            UsePendingAction::PotionTarget { index } => {
+                if let Some(target) = pending_use_party_target(key, suffix) {
+                    if target < self.party.len() {
+                        self.use_potion_consumed_target(index, target)
+                    } else {
+                        self.message = party_member_unavailable_message(self.party.len());
+                        MoveOutcome::Blocked
+                    }
+                } else {
+                    session.pending = Some(pending);
+                    self.message = self.render_use_session(&session);
+                    self.active_use = Some(session);
+                    return Ok(true);
+                }
+            }
+            UsePendingAction::ScrollWindDirection { .. } => {
+                if let Some(direction) = pending_use_cardinal_direction(key, suffix) {
+                    self.use_wind_change_scroll(Some(direction))
+                } else {
+                    session.pending = Some(pending);
+                    self.message = self.render_use_session(&session);
+                    self.active_use = Some(session);
+                    return Ok(true);
+                }
+            }
+            UsePendingAction::ScrollResurrectionTarget { index } => {
+                if let Some(target) = pending_use_party_target(key, suffix) {
+                    self.use_resurrection_scroll_consumed_target(index, target)
+                } else {
+                    session.pending = Some(pending);
+                    self.message = self.render_use_session(&session);
+                    self.active_use = Some(session);
+                    return Ok(true);
+                }
+            }
+        };
+        self.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+        Ok(true)
+    }
+
+    fn render_pending_use_action(&self, pending: UsePendingAction) -> String {
+        match pending {
+            UsePendingAction::PotionTarget { index } => format!(
+                "Use {}: choose party member (1-{}) or Space/Esc to exit.",
+                potion_inventory_name(index),
+                self.party.len().min(6)
+            ),
+            UsePendingAction::ScrollWindDirection { index } => format!(
+                "Use Scroll {}: choose direction (8/6/2/4) or Space/Esc to exit.",
+                scroll_label(index)
+            ),
+            UsePendingAction::ScrollResurrectionTarget { index } => format!(
+                "Use Scroll {}: choose party member (1-{}) or Space/Esc to exit.",
+                scroll_label(index),
+                self.party.len().min(6)
+            ),
+        }
+    }
+
+    fn use_potion_consumed_target(&mut self, index: usize, target_index: usize) -> MoveOutcome {
+        if target_index >= self.party.len() {
+            self.message = party_member_unavailable_message(self.party.len());
+            return MoveOutcome::Blocked;
+        }
+
+        let variation_roll = self.potion_variation_roll(index, target_index);
+        let random_roll = self.potion_random_effect_roll(index, target_index);
+        let effect_index = potion_effect_index_after_variation(index, variation_roll, random_roll);
+        self.use_potion_with_effect(index, target_index, effect_index)
+    }
+
+    fn use_resurrection_scroll_consumed_target(
+        &mut self,
+        index: usize,
+        target_index: usize,
+    ) -> MoveOutcome {
+        if index != SCROLL_RESURRECTION_INDEX {
+            self.message = "No effect!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        self.use_resurrection_scroll(Some(target_index))
     }
 
     fn use_selected_item(&self, session: &UseSession) -> Option<UseItemPickerRow> {
@@ -2368,4 +2479,39 @@ pub fn sextant_coordinate(coordinate: usize) -> String {
 
 pub fn scroll_label(index: usize) -> &'static str {
     SCROLL_SPELL_LABELS.get(index).copied().unwrap_or("Unknown")
+}
+
+fn pending_action_for_use_request(request: UseItemRequest) -> Option<UsePendingAction> {
+    match request {
+        UseItemRequest::Potion { index, target: None } => {
+            Some(UsePendingAction::PotionTarget { index })
+        }
+        UseItemRequest::Scroll {
+            index: SCROLL_WIND_CHANGE_INDEX,
+            direction: None,
+            ..
+        } => Some(UsePendingAction::ScrollWindDirection { index: SCROLL_WIND_CHANGE_INDEX }),
+        UseItemRequest::Scroll {
+            index: SCROLL_RESURRECTION_INDEX,
+            target: None,
+            ..
+        } => Some(UsePendingAction::ScrollResurrectionTarget {
+            index: SCROLL_RESURRECTION_INDEX,
+        }),
+        _ => None,
+    }
+}
+
+fn pending_use_party_target(key: char, suffix: &str) -> Option<usize> {
+    let mut value = String::new();
+    value.push(key);
+    value.push_str(suffix);
+    parse_inline_party_index(&value)
+}
+
+fn pending_use_cardinal_direction(key: char, suffix: &str) -> Option<Direction> {
+    std::iter::once(key)
+        .chain(suffix.chars())
+        .find_map(Direction::from_play_key)
+        .filter(|direction| direction.opposite_cardinal().is_some())
 }

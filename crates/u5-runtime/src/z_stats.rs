@@ -71,6 +71,14 @@ pub struct ReadySession {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UseSession {
     pub cursor: usize,
+    pub pending: Option<UsePendingAction>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UsePendingAction {
+    PotionTarget { index: usize },
+    ScrollWindDirection { index: usize },
+    ScrollResurrectionTarget { index: usize },
 }
 
 impl ReadySession {
@@ -96,7 +104,10 @@ impl ReadySession {
 
 impl UseSession {
     pub const fn new() -> Self {
-        Self { cursor: 0 }
+        Self {
+            cursor: 0,
+            pending: None,
+        }
     }
 }
 

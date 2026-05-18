@@ -250,6 +250,102 @@
     }
 
     #[test]
+    fn active_use_picker_potion_prompts_for_target_after_consuming_stock() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.party[0].hp = 4;
+        state.party[0].max_hp = 25;
+        state.potion_stock[POTION_YELLOW_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.message.contains("Yellow Potion"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.potion_stock[POTION_YELLOW_INDEX], 0);
+        assert_eq!(state.turn, 0);
+        assert!(state.active_use.is_some());
+        assert!(state.message.contains("choose party member"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_use.is_none());
+        assert_eq!(state.turn, 1);
+        assert!(state.party[0].hp > 4);
+        assert!(state.message.contains("potion"));
+        assert!(state.message.contains("party member 1"));
+    }
+
+    #[test]
+    fn active_use_picker_wind_scroll_prompts_for_direction_after_consuming_stock() {
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.scroll_stock[SCROLL_WIND_CHANGE_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.message.contains("Scroll HR"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.scroll_stock[SCROLL_WIND_CHANGE_INDEX], 0);
+        assert_eq!(state.turn, 0);
+        assert!(state.active_use.is_some());
+        assert!(state.message.contains("choose direction"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '6', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_use.is_none());
+        assert_eq!(state.wind, WindState::East);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("Wind change!"));
+    }
+
+    #[test]
+    fn active_use_picker_resurrection_scroll_prompts_for_target_after_consuming_stock() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.party[0].status = b'D';
+        state.party[0].hp = 0;
+        state.scroll_stock[SCROLL_RESURRECTION_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'U', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.message.contains("Scroll CIM"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '\r', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.scroll_stock[SCROLL_RESURRECTION_INDEX], 0);
+        assert_eq!(state.turn, 0);
+        assert!(state.active_use.is_some());
+        assert!(state.message.contains("choose party member"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_use.is_none());
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.party[0].status, b'G');
+        assert_eq!(state.party[0].hp, 1);
+        assert!(state.message.contains("Resurrection! party member 1"));
+    }
+
+    #[test]
     fn inline_use_suffix_still_bypasses_active_picker() {
         let mut state = test_state(open_grid(), 5, 5);
         state.torches = 1;
