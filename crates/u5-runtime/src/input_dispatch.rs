@@ -426,6 +426,7 @@ fn handle_active_shop_key_input(
         .find(|c| c.is_ascii_digit())
         .and_then(|c| c.to_digit(10).map(|d| d as u8))
         .or_else(|| key.to_digit(10).map(|d| d as u8));
+    let inline_quantity = parse_active_shop_inline_quantity(key, suffix);
     let yes = matches!(key_byte, b'Y' | b'y') || suffix.chars().any(|c| matches!(c, 'Y' | 'y'));
     let no = matches!(key_byte, b'N' | b'n') || suffix.chars().any(|c| matches!(c, 'N' | 'n'));
 
@@ -861,13 +862,19 @@ fn handle_active_shop_key_input(
                     *s = TavernState::Exited;
                     TavernOutcome::Exited
                 }
-                (TavernState::PickProvisionQuantity { .. }, _, _, Some(quantity)) => step_tavern(
-                    s,
-                    TavernInput::Quantity(u16::from(quantity)),
-                    ctx,
-                    &mut state.gold,
-                    &mut food,
-                ),
+                (TavernState::PickProvisionQuantity { .. }, _, _, _) => {
+                    if let Some(quantity) = inline_quantity {
+                        step_tavern(
+                            s,
+                            TavernInput::Quantity(quantity),
+                            ctx,
+                            &mut state.gold,
+                            &mut food,
+                        )
+                    } else {
+                        TavernOutcome::InvalidInput
+                    }
+                }
                 _ => TavernOutcome::InvalidInput,
             };
             state.food = food;
@@ -915,12 +922,18 @@ fn handle_active_shop_key_input(
                         &mut stock,
                     )
                 }
-                (ReagentShopState::PickQuantity { .. }, Some(q)) => step_reagent_shop(
-                    s,
-                    ReagentShopInput::Quantity(q),
-                    &mut state.gold,
-                    &mut stock,
-                ),
+                (ReagentShopState::PickQuantity { .. }, _) => {
+                    if let Some(q) = inline_quantity.and_then(|q| u8::try_from(q).ok()) {
+                        step_reagent_shop(
+                            s,
+                            ReagentShopInput::Quantity(q),
+                            &mut state.gold,
+                            &mut stock,
+                        )
+                    } else {
+                        ReagentShopOutcome::InvalidInput
+                    }
+                }
                 _ => ReagentShopOutcome::InvalidInput,
             };
             state.reagents = stock;
@@ -1036,14 +1049,20 @@ fn handle_active_shop_key_input(
                         &mut torches,
                     )
                 }
-                (GuildShopState::PickQuantity { .. }, Some(q)) => step_guild_shop(
-                    s,
-                    GuildShopInput::Quantity(q),
-                    &mut state.gold,
-                    &mut gems,
-                    &mut keys,
-                    &mut torches,
-                ),
+                (GuildShopState::PickQuantity { .. }, _) => {
+                    if let Some(q) = inline_quantity.and_then(|q| u8::try_from(q).ok()) {
+                        step_guild_shop(
+                            s,
+                            GuildShopInput::Quantity(q),
+                            &mut state.gold,
+                            &mut gems,
+                            &mut keys,
+                            &mut torches,
+                        )
+                    } else {
+                        GuildShopOutcome::InvalidInput
+                    }
+                }
                 _ => GuildShopOutcome::InvalidInput,
             };
             state.gems = gems;
@@ -1096,6 +1115,17 @@ fn active_shop_text_line(key: char, suffix: &str) -> String {
     }
     line.push_str(suffix);
     line
+}
+
+fn parse_active_shop_inline_quantity(key: char, suffix: &str) -> Option<u16> {
+    let digits: String = std::iter::once(key)
+        .chain(suffix.chars())
+        .filter(|ch| ch.is_ascii_digit())
+        .collect();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.parse().ok()
 }
 
 fn active_inn_scene_marker(state: &PlayState) -> u8 {

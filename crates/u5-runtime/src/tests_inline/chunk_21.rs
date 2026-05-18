@@ -2382,6 +2382,28 @@
     }
 
     #[test]
+    fn end_to_end_tavern_provisions_accept_multi_digit_inline_quantity() {
+        use crate::shop_runtime::TavernState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 1000;
+        state.food = 0;
+        state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(
+            Tavern::TheWayfarerTavern,
+        )));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '1', "2", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 820);
+        assert_eq!(state.food, 12);
+        assert!(state.message.contains("sold 12/12"));
+        assert!(state.active_shop.is_some());
+    }
+
+    #[test]
     fn end_to_end_healer_mission_cure_bypasses_gold_path() {
         use crate::shop_runtime::HealerShopState;
         use crate::shop_session::ActiveShopSession;
@@ -2529,6 +2551,27 @@
     }
 
     #[test]
+    fn end_to_end_reagent_vendor_accepts_multi_digit_inline_quantity() {
+        use crate::shop_runtime::ReagentShopState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 100;
+        state.reagents = [0; REAGENT_COUNT];
+        state.active_shop = Some(ActiveShopSession::Reagent(
+            ReagentShopState::for_herbalist(Herbalist::Mysticism),
+        ));
+
+        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '1', "2", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 28);
+        assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 12);
+        assert!(state.message.contains("72 gold"));
+        assert!(state.active_shop.is_some());
+    }
+
+    #[test]
     fn end_to_end_guildmaster_uses_shop_letter_prices() {
         use crate::shop_runtime::GuildShopState;
         use crate::shop_session::ActiveShopSession;
@@ -2547,6 +2590,27 @@
         assert_eq!(state.gold, 120);
         assert_eq!(state.keys, 2);
         assert!(state.message.contains("380 gold"));
+        assert!(state.active_shop.is_some());
+    }
+
+    #[test]
+    fn end_to_end_guildmaster_accepts_multi_digit_inline_quantity() {
+        use crate::shop_runtime::GuildShopState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 2000;
+        state.keys = 0;
+        state.active_shop = Some(ActiveShopSession::Guild(GuildShopState::for_shop(
+            GuildShop::TheDen,
+        )));
+
+        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '1', "0", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 100);
+        assert_eq!(state.keys, 10);
+        assert!(state.message.contains("1900 gold"));
         assert!(state.active_shop.is_some());
     }
 
