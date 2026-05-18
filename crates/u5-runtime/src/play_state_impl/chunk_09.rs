@@ -440,7 +440,9 @@ impl PlayState {
         radius: usize,
         atlas: &TileAtlas,
     ) -> io::Result<Option<TileViewport>> {
-        self.sync_player_object();
+        if !self.combat_active {
+            self.sync_player_object();
+        }
         let viewport = self.render_top_down_viewport(radius, atlas)?;
         if viewport.is_some() {
             self.visibility_dirty = false;
@@ -478,6 +480,11 @@ impl PlayState {
             pixels: vec![0; pixel_count],
         };
 
+        if self.combat_active {
+            self.render_combat_viewport(&mut viewport, atlas)?;
+            return Ok(Some(viewport));
+        }
+
         let Some(area) = self.top_down_render_area() else {
             return self.render_dungeon_viewport(radius, atlas.depth).map(Some);
         };
@@ -514,6 +521,60 @@ impl PlayState {
             }
         }
         Ok(Some(viewport))
+    }
+
+    pub fn render_combat_viewport(
+        &self,
+        viewport: &mut TileViewport,
+        atlas: &TileAtlas,
+    ) -> io::Result<()> {
+        let x_offset = (viewport.cells_wide as isize - COMBAT_ARENA_SIDE as isize) / 2;
+        let y_offset = (viewport.cells_high as isize - COMBAT_ARENA_SIDE as isize) / 2;
+        for cell_y in 0..viewport.cells_high {
+            for cell_x in 0..viewport.cells_wide {
+                let arena_x = cell_x as isize - x_offset;
+                let arena_y = cell_y as isize - y_offset;
+                if !(0..COMBAT_ARENA_SIDE as isize).contains(&arena_x)
+                    || !(0..COMBAT_ARENA_SIDE as isize).contains(&arena_y)
+                {
+                    continue;
+                }
+                let arena_x = arena_x as usize;
+                let arena_y = arena_y as usize;
+                let terrain = self
+                    .animation
+                    .resolve_static_tile(self.combat_terrain[arena_y][arena_x]);
+                blit_tile_to_viewport(viewport, atlas, terrain, cell_x, cell_y)?;
+                if let Some(sprite) = self.combat_render_sprite_at(arena_x, arena_y) {
+                    blit_tile_id_to_viewport(viewport, atlas, sprite, cell_x, cell_y)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn combat_render_sprite_at(&self, x: usize, y: usize) -> Option<usize> {
+        self.active_objects
+            .iter()
+            .enumerate()
+            .find_map(|(slot, object)| {
+                if object.is_empty() || object.x != x || object.y != y {
+                    return None;
+                }
+                if self
+                    .combat_actors
+                    .get(slot)
+                    .copied()
+                    .is_some_and(|actor| !actor.is_empty() && actor.is_hidden_or_unrevealed())
+                {
+                    return None;
+                }
+                Some(if object.tile == PLAYER_TILE {
+                    PLAYER_SPRITE_TILE
+                } else {
+                    object.tile as usize
+                })
+            })
     }
 
     pub fn render_dungeon_viewport(

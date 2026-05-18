@@ -4350,6 +4350,69 @@
         assert!(state.visibility_dirty);
     }
 
+    fn viewport_palette_at_cell(viewport: &TileViewport, cell_x: usize, cell_y: usize) -> u8 {
+        viewport.pixels[cell_y * TILE_ATLAS_SIDE * viewport.width + cell_x * TILE_ATLAS_SIDE]
+    }
+
+    #[test]
+    fn combat_raster_renders_arena_terrain_and_visible_actor_sprites() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        state.combat_terrain[0][0] = 0x0c;
+        state.combat_terrain[5][5] = 0x05;
+        state.active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+        state.active_objects[0] = ActiveObject {
+            type_byte: PLAYER_TILE,
+            tile: PLAYER_TILE,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+        state.active_objects[6] = ActiveObject {
+            type_byte: 0xc0,
+            tile: 0xc0,
+            x: 6,
+            y: 5,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+        state.combat_actors[6] = CombatActorDescriptor::from_row([
+            10,
+            1,
+            COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+            0,
+            6,
+            0,
+            6,
+            5,
+        ]);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+
+        assert_eq!(viewport.cells_wide, COMBAT_ARENA_SIDE);
+        assert_eq!(viewport.cells_high, COMBAT_ARENA_SIDE);
+        assert_eq!(
+            viewport_palette_at_cell(&viewport, 0, 0),
+            0x0c % atlas.depth.pixel_limit()
+        );
+        assert_eq!(
+            viewport_palette_at_cell(&viewport, 5, 5),
+            (PLAYER_SPRITE_TILE as u8) % atlas.depth.pixel_limit()
+        );
+        assert_eq!(
+            viewport_palette_at_cell(&viewport, 6, 5),
+            0x04 % atlas.depth.pixel_limit(),
+            "hidden combat actor must not overwrite terrain"
+        );
+    }
+
     #[test]
     fn combat_frame_restore_clears_dead_or_asleep_saved_active_player() {
         let mut state = world_state(open_world_grid(), 10, 20);
