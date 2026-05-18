@@ -430,6 +430,9 @@ impl PlayState {
     }
 
     pub fn render_text_frame(&mut self, radius: usize) -> String {
+        if let Some(overlay) = self.active_view_overlay.as_ref() {
+            return format!("{}:\n{}", overlay.title, overlay.text_map);
+        }
         self.sync_player_object();
         let frame = self.render_text_view(radius);
         self.visibility_dirty = false;
@@ -441,6 +444,9 @@ impl PlayState {
         radius: usize,
         atlas: &TileAtlas,
     ) -> io::Result<Option<TileViewport>> {
+        if let Some(viewport) = self.render_active_view_overlay(atlas.depth) {
+            return Ok(Some(viewport));
+        }
         if !self.combat_active {
             self.sync_player_object();
         }

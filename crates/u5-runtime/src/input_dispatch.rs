@@ -54,6 +54,10 @@ pub fn handle_play_key_input(
     if state.active_yell.is_some() {
         return handle_active_yell_key_input(state, key, suffix, game_dir);
     }
+    if state.active_view_overlay.is_some() {
+        state.clear_active_view_overlay();
+        return Ok(PlayInputDisposition::Continue);
+    }
     if state.active_ready.is_some() {
         return Ok(handle_active_ready_key_input(state, key, suffix));
     }

@@ -1529,40 +1529,151 @@ impl PlayState {
         match self.area {
             Area::Dungeon { scene, level } => {
                 self.gems = self.gems.saturating_sub(1);
-                self.message = format!(
-                    "Dungeon view of {} ({}) level {} ({} gem(s) remain; centered flood map):\n{}",
+                let title = format!(
+                    "Dungeon view of {} ({}) level {} ({} gem(s) remain; centered flood map)",
                     scene.key(),
                     scene.name(),
                     level,
-                    self.gems,
-                    self.dungeon_vision_map(level)
+                    self.gems
                 );
+                let text_map = self.dungeon_vision_map(level);
+                self.active_view_overlay = Some(ViewOverlay {
+                    title: title.clone(),
+                    text_map: text_map.clone(),
+                    kind: ViewOverlayKind::Dungeon { level },
+                });
+                self.message = format!("{title}:\n{text_map}");
                 MoveOutcome::Observed
             }
             Area::Town { scene, floor } => {
                 self.gems = self.gems.saturating_sub(1);
-                self.message = format!(
-                    "Gem view of {} floor {} ({} gem(s) remain; 32x32 class map):\n{}",
+                let title = format!(
+                    "Gem view of {} floor {} ({} gem(s) remain; 32x32 class map)",
                     scene.key(),
                     floor,
-                    self.gems,
-                    self.surface_view_map()
+                    self.gems
                 );
+                let text_map = self.surface_view_map();
+                self.active_view_overlay = Some(ViewOverlay {
+                    title: title.clone(),
+                    text_map: text_map.clone(),
+                    kind: ViewOverlayKind::Surface,
+                });
+                self.message = format!("{title}:\n{text_map}");
                 MoveOutcome::Observed
             }
             Area::World { plane } => {
                 self.gems = self.gems.saturating_sub(1);
-                self.message = format!(
-                    "Gem view of {} at ({}, {}) ({} gem(s) remain; 32x32 class map):\n{}",
+                let title = format!(
+                    "Gem view of {} at ({}, {}) ({} gem(s) remain; 32x32 class map)",
                     plane.key(),
                     self.player.x,
                     self.player.y,
-                    self.gems,
-                    self.surface_view_map()
+                    self.gems
                 );
+                let text_map = self.surface_view_map();
+                self.active_view_overlay = Some(ViewOverlay {
+                    title: title.clone(),
+                    text_map: text_map.clone(),
+                    kind: ViewOverlayKind::Surface,
+                });
+                self.message = format!("{title}:\n{text_map}");
                 MoveOutcome::Observed
             }
         }
+    }
+
+    pub fn clear_active_view_overlay(&mut self) {
+        self.active_view_overlay = None;
+        self.message = "View closed.".to_string();
+    }
+
+    pub fn render_active_view_overlay(&self, depth: TileGraphicsDepth) -> Option<TileViewport> {
+        match self.active_view_overlay.as_ref()?.kind {
+            ViewOverlayKind::Surface => Some(self.render_surface_view_overlay(depth)),
+            ViewOverlayKind::Dungeon { level } => {
+                Some(self.render_dungeon_view_overlay(level, depth))
+            }
+        }
+    }
+
+    pub fn render_surface_view_overlay(&self, depth: TileGraphicsDepth) -> TileViewport {
+        let cells = LOCAL_VIEW_OVERLAY_SIDE;
+        let scale = LOCAL_VIEW_CELL_PIXEL_SCALE;
+        let width = cells * scale;
+        let mut viewport = TileViewport {
+            depth,
+            cells_wide: cells,
+            cells_high: cells,
+            width,
+            height: width,
+            pixels: vec![0; width * width],
+        };
+        for cell_y in 0..cells {
+            for cell_x in 0..cells {
+                let tile = self.surface_view_tile_at(cell_x, cell_y);
+                let class = surface_view_class(tile);
+                draw_surface_view_cell(&mut viewport, cell_x, cell_y, scale, class, tile, false);
+            }
+        }
+        draw_surface_view_cell(&mut viewport, cells / 2, cells / 2, scale, 0, 0, true);
+        viewport
+    }
+
+    fn surface_view_tile_at(&self, cell_x: usize, cell_y: usize) -> u8 {
+        let px = self.player.x as isize;
+        let py = self.player.y as isize;
+        let side = LOCAL_VIEW_OVERLAY_SIDE as isize;
+        let x = px - side / 2 + cell_x as isize;
+        let y = py - side / 2 + cell_y as isize;
+        match self.area {
+            Area::Town { .. } => {
+                if !(0..32).contains(&x) || !(0..32).contains(&y) {
+                    return 0;
+                }
+                if let Some(object) = self.object_at_current_floor(x as usize, y as usize) {
+                    object.tile
+                } else {
+                    let tile = self.grid[y as usize * 32 + x as usize];
+                    self.animation.resolve_static_tile(tile)
+                }
+            }
+            Area::World { plane } => {
+                let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
+                let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
+                if let Some(object) = self.world_object_at(wx, wy) {
+                    object.tile
+                } else if self.visible_moongate_at(plane, wx, wy) {
+                    self.animation.resolve_moongate_tile()
+                } else {
+                    let tile = self.grid[world_cell_index(wx, wy)];
+                    self.animation.resolve_static_tile(tile)
+                }
+            }
+            Area::Dungeon { .. } => 0,
+        }
+    }
+
+    pub fn render_dungeon_view_overlay(&self, level: u8, depth: TileGraphicsDepth) -> TileViewport {
+        let radius = DUNGEON_GEM_VIEW_RADIUS;
+        let cells = (radius * 2 + 1) as usize;
+        let scale = LOCAL_VIEW_CELL_PIXEL_SCALE;
+        let width = cells * scale;
+        let mut viewport = TileViewport {
+            depth,
+            cells_wide: cells,
+            cells_high: cells,
+            width,
+            height: width,
+            pixels: vec![0; width * width],
+        };
+        let map = self.dungeon_vision_map(level);
+        for (cell_y, row) in map.lines().enumerate() {
+            for (cell_x, glyph) in row.chars().enumerate() {
+                draw_dungeon_view_cell(&mut viewport, cell_x, cell_y, scale, glyph);
+            }
+        }
+        viewport
     }
 
     pub fn dungeon_vision_map(&self, level: u8) -> String {
@@ -2874,4 +2985,236 @@ fn pending_use_cardinal_direction(key: char, suffix: &str) -> Option<Direction> 
         .chain(suffix.chars())
         .find_map(Direction::from_play_key)
         .filter(|direction| direction.opposite_cardinal().is_some())
+}
+
+fn draw_surface_view_cell(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    class: u8,
+    tile: u8,
+    player_marker: bool,
+) {
+    if player_marker {
+        for offset in 0..scale {
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, offset, scale / 2, 15);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, offset, 15);
+        }
+        return;
+    }
+
+    let color = surface_view_class_color(class);
+    match class {
+        0x00 | 0x0C => {}
+        0x01 => {
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 0, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale - 1, 0, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, scale - 1, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale - 1, scale - 1, color);
+        }
+        0x02 | 0x03 | 0x0D | 0x0F => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
+        0x04 => {
+            draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 0, color);
+            draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale - 1, color);
+        }
+        0x05 => {
+            for y in (scale / 2).saturating_sub(1)..=(scale / 2) {
+                for x in 1..scale.saturating_sub(1) {
+                    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, color);
+                }
+            }
+        }
+        0x06 => draw_view_overlay_box(viewport, cell_x, cell_y, scale, color),
+        0x07 | 0x0B => draw_view_overlay_diagonals(viewport, cell_x, cell_y, scale, color),
+        0x08 => {
+            for y in 0..scale {
+                for x in 0..scale {
+                    if (x < scale / 2 && y < scale / 2) || (x >= scale / 2 && y >= scale / 2) {
+                        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, color);
+                    }
+                }
+            }
+        }
+        0x09 => {
+            draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 1.min(scale - 1), color);
+            for y in scale / 2..scale {
+                for x in (y + cell_x) % 2..scale {
+                    if x % 2 == 0 {
+                        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, color);
+                    }
+                }
+            }
+        }
+        0x0A => {
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 0, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale - 1, 0, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, scale - 1, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale - 1, scale - 1, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, scale / 2, color);
+        }
+        0x0E => {
+            for y in 0..scale {
+                set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, y, color);
+                set_view_overlay_pixel(viewport, cell_x, cell_y, scale, (scale / 2) + 1, y, color);
+            }
+        }
+        0x10 => draw_view_overlay_fence(viewport, cell_x, cell_y, scale, color, tile),
+        _ => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
+    }
+}
+
+fn draw_dungeon_view_cell(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    glyph: char,
+) {
+    match glyph {
+        '@' => draw_surface_view_cell(viewport, cell_x, cell_y, scale, 0, 0, true),
+        '#' => draw_view_overlay_box(viewport, cell_x, cell_y, scale, 8),
+        '>' | '<' => draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, 14),
+        '$' => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, 6),
+        '+' => draw_view_overlay_diagonals(viewport, cell_x, cell_y, scale, 11),
+        '~' => draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 1.min(scale - 1), 9),
+        '*' => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, 12),
+        ' ' => {}
+        _ => set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, scale / 2, 7),
+    }
+}
+
+fn surface_view_class_color(class: u8) -> u8 {
+    match class {
+        0x01 => 7,
+        0x02 => 2,
+        0x03 => 3,
+        0x04 => 14,
+        0x05 => 15,
+        0x06 => 8,
+        0x07 => 6,
+        0x08 => 5,
+        0x09 => 10,
+        0x0A => 11,
+        0x0B => 13,
+        0x0D => 12,
+        0x0E => 9,
+        0x0F => 4,
+        0x10 => 1,
+        _ => 7,
+    }
+}
+
+fn fill_view_overlay_cell(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    color: u8,
+) {
+    for y in 0..scale {
+        for x in 0..scale {
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, color);
+        }
+    }
+}
+
+fn draw_view_overlay_box(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    color: u8,
+) {
+    draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 0, color);
+    draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale - 1, color);
+    draw_view_overlay_vline(viewport, cell_x, cell_y, scale, 0, color);
+    draw_view_overlay_vline(viewport, cell_x, cell_y, scale, scale - 1, color);
+}
+
+fn draw_view_overlay_diagonals(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    color: u8,
+) {
+    for offset in 0..scale {
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, offset, offset, color);
+        set_view_overlay_pixel(
+            viewport,
+            cell_x,
+            cell_y,
+            scale,
+            scale - 1 - offset,
+            offset,
+            color,
+        );
+    }
+}
+
+fn draw_view_overlay_fence(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    color: u8,
+    tile: u8,
+) {
+    let mask = tile & 0x0f;
+    if mask == 0 || mask & 0x1 != 0 {
+        draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 0, color);
+    }
+    if mask == 0 || mask & 0x2 != 0 {
+        draw_view_overlay_vline(viewport, cell_x, cell_y, scale, scale - 1, color);
+    }
+    if mask == 0 || mask & 0x4 != 0 {
+        draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale - 1, color);
+    }
+    if mask == 0 || mask & 0x8 != 0 {
+        draw_view_overlay_vline(viewport, cell_x, cell_y, scale, 0, color);
+    }
+}
+
+fn draw_view_overlay_hline(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    y: usize,
+    color: u8,
+) {
+    for x in 0..scale {
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, color);
+    }
+}
+
+fn draw_view_overlay_vline(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    x: usize,
+    color: u8,
+) {
+    for y in 0..scale {
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, color);
+    }
+}
+
+fn set_view_overlay_pixel(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    local_x: usize,
+    local_y: usize,
+    color: u8,
+) {
+    let x = cell_x * scale + local_x;
+    let y = cell_y * scale + local_y;
+    if x < viewport.width && y < viewport.height {
+        let limit = viewport.depth.pixel_limit();
+        viewport.pixels[y * viewport.width + x] = color % limit;
+    }
 }

@@ -590,6 +590,19 @@
         assert!(rows.iter().all(|row| row.chars().count() == 32));
         assert_eq!(rows[16].chars().nth(16), Some('@'));
         assert_eq!(rows[16].chars().nth(17), Some('3'));
+        assert!(state.active_view_overlay.is_some());
+        let atlas = TileAtlas {
+            depth: TileGraphicsDepth::Ega16,
+            pixels: Vec::new(),
+        };
+        let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+        assert_eq!(viewport.cells_wide, LOCAL_VIEW_OVERLAY_SIDE);
+        assert_eq!(viewport.cells_high, LOCAL_VIEW_OVERLAY_SIDE);
+        assert_eq!(
+            viewport.width,
+            LOCAL_VIEW_OVERLAY_SIDE * LOCAL_VIEW_CELL_PIXEL_SCALE
+        );
+        assert_eq!(viewport.pixel(66, 64), Some(15));
     }
 
     #[test]
@@ -619,6 +632,47 @@
         assert_eq!(rows[16].chars().nth(15), Some('3'));
         assert_eq!(rows[16].chars().nth(16), Some('@'));
         assert_eq!(rows[16].chars().nth(17), Some('1'));
+    }
+
+    #[test]
+    fn active_view_overlay_clears_on_next_key_without_turn_or_extra_gem() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.gems = 2;
+
+        assert_eq!(state.view_gem(), MoveOutcome::Observed);
+        assert!(state.active_view_overlay.is_some());
+        assert_eq!(state.gems, 1);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_view_overlay.is_none());
+        assert_eq!(state.message, "View closed.");
+        assert_eq!(state.gems, 1);
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn dungeon_view_overlay_renders_centered_minimap_raster() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x40;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.gems = 1;
+
+        assert_eq!(state.view_gem(), MoveOutcome::Observed);
+
+        let overlay = state.active_view_overlay.as_ref().unwrap();
+        assert!(matches!(
+            overlay.kind,
+            ViewOverlayKind::Dungeon { level: 0 }
+        ));
+        let viewport = state.render_active_view_overlay(TileGraphicsDepth::Ega16).unwrap();
+        assert_eq!(viewport.cells_wide, 11);
+        assert_eq!(viewport.cells_high, 11);
+        assert_eq!(viewport.width, 11 * LOCAL_VIEW_CELL_PIXEL_SCALE);
+        assert_eq!(viewport.pixel(22, 20), Some(15));
     }
 
     #[test]

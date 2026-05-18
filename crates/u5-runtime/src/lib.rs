@@ -376,7 +376,9 @@ pub use party::{
     resurrection_adjusted_experience, resurrection_max_hp_for_level,
 };
 pub use play_options::*;
-pub use play_state_struct::{PlayState, WorldOverlayCache, WorldReturn};
+pub use play_state_struct::{
+    PlayState, ViewOverlay, ViewOverlayKind, WorldOverlayCache, WorldReturn,
+};
 pub use predicates::*;
 pub use prng::*;
 pub use pth::{

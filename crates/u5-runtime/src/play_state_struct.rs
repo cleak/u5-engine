@@ -99,6 +99,7 @@ pub struct PlayState {
     pub active_mix: Option<crate::z_stats::MixSession>,
     pub active_new_order: Option<crate::z_stats::NewOrderSession>,
     pub active_yell: Option<crate::z_stats::YellSession>,
+    pub active_view_overlay: Option<ViewOverlay>,
     pub active_direction_prompt: Option<crate::z_stats::DirectionPromptSession>,
     pub active_yes_no_prompt: Option<crate::z_stats::YesNoPromptSession>,
     pub pickpocketed_npcs: Vec<(u8, i8, usize)>,
@@ -110,6 +111,19 @@ pub struct PlayState {
     pub conversation_signal_bank_a: [u8; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
     pub conversation_signal_bank_b: [u8; CONVERSATION_CLEANUP_SECONDARY_SIGNAL_COUNT],
     pub inn_registry: Vec<InnGuestRecord>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ViewOverlay {
+    pub title: String,
+    pub text_map: String,
+    pub kind: ViewOverlayKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ViewOverlayKind {
+    Surface,
+    Dungeon { level: u8 },
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
