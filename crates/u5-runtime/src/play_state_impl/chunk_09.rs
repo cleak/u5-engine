@@ -1038,7 +1038,11 @@ impl PlayState {
         if matches!(self.area, Area::Dungeon { .. }) {
             return;
         }
-        self.animate_active_objects();
+        if matches!(self.area, Area::World { .. }) {
+            self.advance_outdoor_active_objects();
+        } else {
+            self.animate_active_objects();
+        }
         self.prune_far_overworld_objects();
     }
 
@@ -1067,6 +1071,45 @@ impl PlayState {
             let wandered = !ship_wind_changed
                 && (self.active_objects[slot].phase & 0x0f) == 0
                 && self.try_wander_active_object(slot);
+            if wandered {
+                self.active_objects[slot].phase = (self.active_objects[slot].phase & 0xf0) | 0x02;
+            }
+            if ship_wind_changed
+                || wandered
+                || matches!(tick, PhaseTick::Countdown | PhaseTick::DecisionPoint)
+            {
+                if let Some(tile) = active_object_frame_tile(
+                    self.active_objects[slot].type_byte,
+                    self.active_objects[slot].phase,
+                ) {
+                    if self.active_objects[slot].tile != tile {
+                        self.active_objects[slot].tile = tile;
+                        self.mark_visibility_dirty();
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn advance_outdoor_active_objects(&mut self) {
+        let mut last_vacated = None;
+        for slot in (1..self.active_objects.len()).rev() {
+            if self.active_objects[slot].is_empty()
+                || self.active_objects[slot].is_player()
+                || self.active_objects[slot].is_player_phantom()
+            {
+                continue;
+            }
+            let tick = self.active_objects[slot].tick_phase();
+            let ship_wind = if (self.active_objects[slot].phase & 0x0f) == 0 {
+                self.try_drift_active_ship(slot, tick)
+            } else {
+                ActiveShipWind::None
+            };
+            let ship_wind_changed = !matches!(ship_wind, ActiveShipWind::None);
+            let wandered = !ship_wind_changed
+                && (self.active_objects[slot].phase & 0x0f) == 0
+                && self.try_wander_active_object_with_last_vacated(slot, &mut last_vacated);
             if wandered {
                 self.active_objects[slot].phase = (self.active_objects[slot].phase & 0xf0) | 0x02;
             }
@@ -1155,23 +1198,72 @@ impl PlayState {
     }
 
     pub fn try_wander_active_object(&mut self, slot: usize) -> bool {
+        let mut last_vacated = None;
+        self.try_wander_active_object_with_last_vacated(slot, &mut last_vacated)
+    }
+
+    pub fn try_wander_active_object_with_last_vacated(
+        &mut self,
+        slot: usize,
+        last_vacated: &mut Option<(usize, usize)>,
+    ) -> bool {
         let Area::World { plane } = self.area else {
             return false;
         };
         let object = self.active_objects[slot];
-        if object.z != plane.save_floor() {
+        if object.z != plane.save_floor() || !is_outdoor_active_object_walker(object) {
             return false;
         }
-        if !is_ambient_wanderer_object(object) {
-            return false;
+
+        if let Some(direction) = self.outdoor_directed_step_direction(slot, object) {
+            let (dx, dy) = direction.delta();
+            if self.try_step_outdoor_active_object(slot, object, dx, dy, direction, last_vacated) {
+                return true;
+            }
         }
-        let Some(direction) = direction_from_active_object_phase(object.phase) else {
+
+        let Some(direction) = direction_from_active_object_phase(object.phase)
+            .filter(|direction| direction.is_cardinal())
+        else {
             return false;
         };
         let (dx, dy) = direction.delta();
+        self.try_step_outdoor_active_object(slot, object, dx, dy, direction, last_vacated)
+    }
+
+    pub fn outdoor_directed_step_direction(
+        &self,
+        slot: usize,
+        object: ActiveObject,
+    ) -> Option<Direction> {
+        let (dx, dy) = directed_step_offsets(
+            object.x as u8,
+            object.y as u8,
+            self.player.x as u8,
+            self.player.y as u8,
+        );
+        let candidates = match axis_first_choice(self.outdoor_active_object_step_seed(slot, 0)) {
+            Axis::X => [(dx, 0), (0, dy)],
+            Axis::Y => [(0, dy), (dx, 0)],
+        };
+        candidates
+            .into_iter()
+            .filter(|(sx, sy)| *sx != 0 || *sy != 0)
+            .find_map(|(sx, sy)| cardinal_direction_from_delta(sx, sy))
+    }
+
+    pub fn try_step_outdoor_active_object(
+        &mut self,
+        slot: usize,
+        object: ActiveObject,
+        dx: isize,
+        dy: isize,
+        direction: Direction,
+        last_vacated: &mut Option<(usize, usize)>,
+    ) -> bool {
         let nx = (object.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
         let ny = (object.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
-        if (nx, ny) == (self.player.x, self.player.y) {
+        if (nx, ny) == (self.player.x, self.player.y) || *last_vacated == Some((nx, ny)) {
             return false;
         }
         if self
@@ -1185,13 +1277,97 @@ impl PlayState {
             return false;
         }
         let tile = self.grid[world_cell_index(nx, ny)];
-        if !is_tile_walkable_for_transport(tile, self.passability.as_ref(), TransportState::Foot) {
+        if !outdoor_active_object_step_accepts_tile(
+            object.type_byte,
+            tile,
+            self.passability.as_ref(),
+        ) {
             return false;
         }
+        if !type_bypasses_terrain_chance_gate(object.type_byte) {
+            if let Some(denominator) = terrain_chance_gate_denominator(tile) {
+                if self.outdoor_active_object_step_seed(slot, tile) % denominator != 0 {
+                    return false;
+                }
+            }
+        }
+
+        *last_vacated = Some((object.x, object.y));
+        if outdoor_step_clears_on_destination(tile) {
+            self.free_active_object_slot(slot);
+            self.mark_visibility_dirty();
+            return true;
+        }
+        if sea_creature_spawn_seeds_aux(object.type_byte) {
+            let facing = match direction {
+                Direction::North => 0x2c,
+                Direction::East => 0x2d,
+                Direction::South => 0x2e,
+                Direction::West => 0x2f,
+                _ => object.type_byte,
+            };
+            self.active_objects[slot].type_byte = facing;
+            self.active_objects[slot].tile = facing;
+        }
+        self.active_objects[slot].phase =
+            active_object_phase_from_direction(direction, object.phase & 0x0f);
         self.active_objects[slot].x = nx;
         self.active_objects[slot].y = ny;
         self.mark_visibility_dirty();
         true
+    }
+
+    pub fn outdoor_active_object_step_seed(&self, slot: usize, salt: u8) -> u8 {
+        self.turn as u8
+            ^ self.clock.hour
+            ^ self.clock.minute
+            ^ (slot as u8).wrapping_mul(17)
+            ^ (self.player.x as u8).wrapping_mul(3)
+            ^ (self.player.y as u8).wrapping_mul(5)
+            ^ salt
+    }
+
+    pub fn apply_world_active_object_engagement(
+        &mut self,
+        game_dir: &Path,
+        plane: WorldPlane,
+    ) -> io::Result<Option<MoveOutcome>> {
+        if self.combat_active {
+            return Ok(None);
+        }
+        for direction in [
+            Direction::North,
+            Direction::East,
+            Direction::South,
+            Direction::West,
+        ] {
+            let (dx, dy) = direction.delta();
+            let x = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
+            let y = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
+            let Some((object_slot, object)) = self
+                .world_object_slot_at(x, y)
+                .map(|(slot, object)| (slot, *object))
+            else {
+                continue;
+            };
+            if is_whirlpool_object(object) {
+                continue;
+            }
+            if game_dir.join(BRIT_CBT_FILE).exists()
+                && outdoor_combat_arena_index_for_object(object).is_some()
+                && terrain_combat_base_class(object).is_some()
+            {
+                let note =
+                    self.enter_terrain_combat_from_world_object(game_dir, plane, object_slot, object)?;
+                self.message = format!(
+                    "World object tile {} engaged from the {}; {note}.",
+                    object.tile,
+                    direction.name()
+                );
+                return Ok(Some(MoveOutcome::Used));
+            }
+        }
+        Ok(None)
     }
 
     pub fn prune_far_overworld_objects(&mut self) {
@@ -1224,5 +1400,52 @@ pub fn wrapped_world_axis_delta(from: usize, to: usize) -> i8 {
         forward as i8
     } else {
         -((WORLD_SIDE - forward).min(i8::MAX as usize) as i8)
+    }
+}
+
+pub fn cardinal_direction_from_delta(dx: i8, dy: i8) -> Option<Direction> {
+    match (dx, dy) {
+        (0, -1) => Some(Direction::North),
+        (1, 0) => Some(Direction::East),
+        (0, 1) => Some(Direction::South),
+        (-1, 0) => Some(Direction::West),
+        _ => None,
+    }
+}
+
+pub fn is_outdoor_active_object_walker(object: ActiveObject) -> bool {
+    is_outdoor_active_object_walker_byte(object.type_byte)
+        || is_outdoor_active_object_walker_byte(object.tile)
+}
+
+pub const fn is_outdoor_active_object_walker_byte(byte: u8) -> bool {
+    matches!(byte, 0x2c..=0x2f | 0x80..=0xff)
+}
+
+pub fn outdoor_active_object_step_accepts_tile(
+    class_byte: u8,
+    tile: u8,
+    passability: Option<&TilePassability>,
+) -> bool {
+    if outdoor_active_object_class_immobile(class_byte) {
+        return false;
+    }
+    if let Some(single_tile) = outdoor_active_object_single_tile_query(class_byte) {
+        return tile == single_tile;
+    }
+    match class_byte {
+        0x2c..=0x2f => water_creature_terrain_accepts(tile),
+        0x80..=0x8f | 0x9c..=0x9f | 0xfc..=0xff => {
+            tile <= 0x03 || (0x60..=0x6f).contains(&tile)
+        }
+        0x94..=0x97 | 0xb0..=0xb3 | 0xd8..=0xdf | 0xf0..=0xf3 => {
+            (is_base_tile_passable(tile, passability) || is_water_tile(tile) || is_lava_tile(tile))
+                && !is_mountain_tile(tile)
+                && !is_wall_or_closed_door_tile(tile)
+        }
+        _ => {
+            is_base_tile_passable(tile, passability)
+                && !movement_chair_force_reject_applies(class_byte, tile)
+        }
     }
 }

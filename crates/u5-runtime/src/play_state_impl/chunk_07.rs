@@ -1600,6 +1600,15 @@ impl PlayState {
             };
             return Ok(Some(MoveOutcome::Transition(transition)));
         }
+        if let Some(outcome) = self.apply_world_active_object_engagement(game_dir, plane)? {
+            let engagement_message = self.message.clone();
+            self.message = if pre_effect_message.is_empty() {
+                engagement_message
+            } else {
+                format!("{pre_effect_message} {engagement_message}")
+            };
+            return Ok(Some(outcome));
+        }
         self.append_world_damage_tile_message(Some(game_dir), plane)?;
         if let Some(slot) = self.apply_world_encounter_probe(game_dir, plane)? {
             self.message
