@@ -402,6 +402,17 @@ impl PlayState {
             self.message = "Magic absorbed!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
+        if let (Some(spell_index), Some(caster_index)) =
+            (spell_index, parse_inline_party_index(suffix))
+        {
+            if spell_index != BLINK_SPELL_INDEX
+                && self.party.get(caster_index).is_some()
+                && !self.spell_allowed_in_current_cast_context(spell_index)
+            {
+                self.message = "Not here!".to_string();
+                return Ok(MoveOutcome::Blocked);
+            }
+        }
         match spell_code.as_str() {
             "AG" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {

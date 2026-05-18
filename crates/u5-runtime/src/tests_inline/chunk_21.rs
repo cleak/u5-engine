@@ -1371,7 +1371,7 @@
             MoveOutcome::Talked
         );
 
-        assert!(state.message.contains("Horse Trader"));
+        assert!(state.message.contains("Horse & Rider"));
         assert!(state.active_shop.is_some());
         assert_eq!(state.turn, 1);
     }

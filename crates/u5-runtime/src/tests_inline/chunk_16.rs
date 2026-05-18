@@ -678,6 +678,53 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
     }
 
     #[test]
+    fn cast_scene_gate_runs_before_resources_for_implemented_noncombat_spells() {
+        let mut peer = test_state(open_grid(), 1, 1);
+        peer.combat_active = true;
+        peer.spell_charges[PEER_SPELL_INDEX] = 1;
+        peer.party[0].mana = PEER_COST;
+        peer.party[0].level = PEER_COST;
+
+        assert_eq!(
+            handle_play_key_input(&mut peer, 'C', "1IQW", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(peer.spell_charges[PEER_SPELL_INDEX], 1);
+        assert_eq!(peer.party[0].mana, PEER_COST);
+        assert_eq!(peer.turn, 0);
+        assert_eq!(peer.message, "Not here!");
+
+        let mut resurrect = test_state(open_grid(), 1, 1);
+        resurrect.combat_active = true;
+        resurrect.spell_charges[RESURRECT_SPELL_INDEX] = 1;
+        resurrect.party[0].mana = RESURRECT_COST;
+        resurrect.party[0].level = RESURRECT_COST;
+        resurrect.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'M',
+            status: b'G',
+            climb_stat: 10,
+            mana: 0,
+            hp: 0,
+            max_hp: 20,
+            level: 1,
+        });
+        resurrect.party[1].status = b'D';
+
+        assert_eq!(
+            handle_play_key_input(&mut resurrect, 'C', "1CIM2", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(resurrect.spell_charges[RESURRECT_SPELL_INDEX], 1);
+        assert_eq!(resurrect.party[0].mana, RESURRECT_COST);
+        assert_eq!(resurrect.party[1].status, b'D');
+        assert_eq!(resurrect.turn, 0);
+        assert_eq!(resurrect.message, "Not here!");
+    }
+
+    #[test]
     fn spell_scene_bits_match_published_mask_values() {
         assert_eq!(SPELL_SCENE_DUNGEON, 0x01);
         assert_eq!(SPELL_SCENE_COMBAT, 0x02);
