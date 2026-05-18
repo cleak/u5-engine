@@ -1662,6 +1662,50 @@
     }
 
     #[test]
+    fn end_to_end_tavern_blue_boar_fixed_drink_debits_gold() {
+        use crate::shop_runtime::TavernState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 200;
+        state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(
+            Tavern::TheBlueBoarTavern,
+        )));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        assert!(state.message.contains("Blue Boar"));
+        handle_play_key_input(&mut state, 'W', "", Path::new("")).unwrap();
+        assert!(state.message.contains("A-F"));
+        handle_play_key_input(&mut state, 'F', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 102);
+        assert!(state.message.contains("98 gold"));
+        assert!(state.active_shop.is_some());
+    }
+
+    #[test]
+    fn end_to_end_tavern_provisions_partially_fill_to_food_cap() {
+        use crate::shop_runtime::TavernState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 50;
+        state.food = SHOP_FOOD_STOCK_CAP - 1;
+        state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(
+            Tavern::TheWayfarerTavern,
+        )));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
+        assert!(state.message.contains("15 gold each"));
+        handle_play_key_input(&mut state, '5', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 35);
+        assert_eq!(state.food, SHOP_FOOD_STOCK_CAP);
+        assert!(state.message.contains("sold 1/5"));
+    }
+
+    #[test]
     fn end_to_end_arms_shop_exit_clears_session() {
         let dialogue = HashMap::new();
         let mut state = test_state(open_grid(), 1, 1);

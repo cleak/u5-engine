@@ -12,11 +12,14 @@
 
 use crate::constants::{EQUIPMENT_COUNT, EQUIPMENT_STOCK_CAP};
 use crate::shops::{
-    ArmsShopAction, INN_REGISTRY_CAP, Inn, InnMainAction, Shipwright, ShipwrightMenuAction,
-    ShipwrightPurchaseError, ShipwrightPurchaseOutcome, ShipwrightPurchaseQuote,
-    apply_shipwright_purchase, arms_shop_action, arms_shop_buy_quote, arms_shop_sell_offer,
+    ArmsShopAction, BlueBoarDrinkChoice, INN_REGISTRY_CAP, Inn, InnMainAction,
+    ProvisionPurchaseError, Shipwright, ShipwrightMenuAction, ShipwrightPurchaseError,
+    ShipwrightPurchaseOutcome, ShipwrightPurchaseQuote, Tavern, TavernDrinkError,
+    TavernDrinkPrompt, apply_blue_boar_drink, apply_provision_purchase, apply_shipwright_purchase,
+    apply_tavern_round_drink, arms_shop_action, arms_shop_buy_quote, arms_shop_sell_offer,
     inn_base_room_rate, inn_leave_companion_deposit, inn_main_action, inn_pickup_bill,
-    quote_inn_rest, quote_shipwright_purchase, shipwright_menu_action,
+    quote_inn_rest, quote_shipwright_purchase, shipwright_menu_action, tavern_drink_prompt,
+    tavern_provision_unit_price, tavern_round_drink_menu_letter,
 };
 use crate::transport::PendingVehicleAcquisition;
 
@@ -33,6 +36,8 @@ pub struct ShopTransactionContext {
     pub world_hour: u8,
     /// Current active party size, used by innkeeper room quotes.
     pub party_size: usize,
+    /// Living party members, used by tavern round-drink pricing.
+    pub living_party_members: u8,
 }
 
 // ---------- Arms shop ----------
@@ -780,103 +785,174 @@ pub fn step_reagent_shop(
 
 // ---------- Tavern ----------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TavernState {
-    #[default]
-    Greeting,
-    PickService,
-    ConfirmMeal {
-        cost: u16,
-    },
+    Greeting { tavern: Tavern },
+    Menu { tavern: Tavern },
+    PickProvisionQuantity { tavern: Tavern, unit_price: u16 },
+    BlueBoarDrinkList { tavern: Tavern },
     Exited,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TavernService {
-    Meal,
-    Drink,
-    Rumour,
+impl Default for TavernState {
+    fn default() -> Self {
+        Self::Greeting {
+            tavern: Tavern::TheHonestMeal,
+        }
+    }
+}
+
+impl TavernState {
+    pub const fn for_tavern(tavern: Tavern) -> Self {
+        Self::Greeting { tavern }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TavernInput {
     Key(u8),
-    Service(TavernService),
-    Confirm(bool),
+    Quantity(u16),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TavernOutcome {
-    EnteredMenu,
-    QuotedMealCost { cost: u16 },
-    MealServed { cost: u16, food_added: u16 },
-    DrinkServed { cost: u16 },
-    RumourTold,
-    RefusedShortFunds { cost: u16 },
-    Declined,
+    EnteredMenu {
+        tavern: Tavern,
+        round_letter: char,
+    },
+    RoundDrinkServed {
+        tavern: Tavern,
+        cost: u16,
+    },
+    PickBlueBoarDrink,
+    BlueBoarDrinkServed {
+        choice: BlueBoarDrinkChoice,
+        cost: u16,
+    },
+    PickProvisionQuantity {
+        tavern: Tavern,
+        unit_price: u16,
+    },
+    ProvisionsPurchased {
+        tavern: Tavern,
+        requested_quantity: u16,
+        purchased_quantity: u16,
+        paid: u16,
+        food_added: u16,
+    },
+    RefusedShortFunds {
+        cost: u16,
+    },
+    RefusedNoLivingParty,
+    RefusedNoNeed,
     Exited,
     InvalidInput,
 }
 
-pub const TAVERN_MEAL_COST: u16 = 8;
-pub const TAVERN_DRINK_COST: u16 = 2;
-pub const TAVERN_MEAL_FOOD_ADD: u16 = 12;
-
 pub fn step_tavern(
     state: &mut TavernState,
     input: TavernInput,
+    ctx: ShopTransactionContext,
     gold: &mut u16,
     food: &mut u16,
 ) -> TavernOutcome {
     match (*state, input) {
-        (TavernState::Greeting, TavernInput::Key(b)) => match b {
-            b'Y' | b'y' | b'M' | b'm' | b'D' | b'd' | b'R' | b'r' => {
-                *state = TavernState::PickService;
-                TavernOutcome::EnteredMenu
+        (TavernState::Greeting { tavern }, TavernInput::Key(b)) => match tavern_drink_prompt(b) {
+            TavernDrinkPrompt::Enter => {
+                *state = TavernState::Menu { tavern };
+                TavernOutcome::EnteredMenu {
+                    tavern,
+                    round_letter: tavern_round_drink_menu_letter(tavern),
+                }
             }
-            _ => {
+            TavernDrinkPrompt::Leave => {
                 *state = TavernState::Exited;
                 TavernOutcome::Exited
             }
+            TavernDrinkPrompt::Discard => TavernOutcome::InvalidInput,
         },
-        (TavernState::PickService, TavernInput::Service(TavernService::Meal)) => {
-            let cost = TAVERN_MEAL_COST;
-            *state = TavernState::ConfirmMeal { cost };
-            TavernOutcome::QuotedMealCost { cost }
-        }
-        (TavernState::ConfirmMeal { cost }, TavernInput::Confirm(true)) => {
-            if *gold < cost {
-                *state = TavernState::Greeting;
-                return TavernOutcome::RefusedShortFunds { cost };
+        (TavernState::Menu { tavern }, TavernInput::Key(b)) => {
+            let upper = b.to_ascii_uppercase();
+            if upper == b' ' || upper == 0x1B || upper == b'N' {
+                *state = TavernState::Exited;
+                return TavernOutcome::Exited;
             }
-            *gold -= cost;
-            *food = food.saturating_add(TAVERN_MEAL_FOOD_ADD);
-            *state = TavernState::Greeting;
-            TavernOutcome::MealServed {
-                cost,
-                food_added: TAVERN_MEAL_FOOD_ADD,
+            if upper == tavern_round_drink_menu_letter(tavern) as u8 {
+                let outcome = apply_tavern_round_drink(gold, tavern, ctx.living_party_members);
+                *state = TavernState::Menu { tavern };
+                return match outcome {
+                    Ok(outcome) => TavernOutcome::RoundDrinkServed {
+                        tavern,
+                        cost: outcome.total_price,
+                    },
+                    Err(TavernDrinkError::NoLivingParty) => TavernOutcome::RefusedNoLivingParty,
+                    Err(TavernDrinkError::InsufficientGold { required, .. }) => {
+                        TavernOutcome::RefusedShortFunds { cost: required }
+                    }
+                };
+            }
+            if matches!(tavern, Tavern::TheBlueBoarTavern) && upper == b'W' {
+                *state = TavernState::BlueBoarDrinkList { tavern };
+                return TavernOutcome::PickBlueBoarDrink;
+            }
+            if upper == b'P' {
+                let unit_price = tavern_provision_unit_price(tavern);
+                *state = TavernState::PickProvisionQuantity { tavern, unit_price };
+                return TavernOutcome::PickProvisionQuantity { tavern, unit_price };
+            }
+            TavernOutcome::InvalidInput
+        }
+        (TavernState::PickProvisionQuantity { tavern, .. }, TavernInput::Quantity(quantity)) => {
+            let outcome = apply_provision_purchase(gold, food, tavern, quantity);
+            *state = TavernState::Menu { tavern };
+            match outcome {
+                Ok(outcome) => TavernOutcome::ProvisionsPurchased {
+                    tavern,
+                    requested_quantity: outcome.requested_quantity,
+                    purchased_quantity: outcome.purchased_quantity,
+                    paid: outcome.total_price,
+                    food_added: outcome.food_after.saturating_sub(outcome.food_before),
+                },
+                Err(ProvisionPurchaseError::ZeroQuantity) => TavernOutcome::InvalidInput,
+                Err(ProvisionPurchaseError::NoNeed) => TavernOutcome::RefusedNoNeed,
+                Err(ProvisionPurchaseError::InsufficientGold {
+                    required_per_unit, ..
+                }) => TavernOutcome::RefusedShortFunds {
+                    cost: required_per_unit,
+                },
             }
         }
-        (TavernState::ConfirmMeal { .. }, TavernInput::Confirm(false)) => {
-            *state = TavernState::Greeting;
-            TavernOutcome::Declined
-        }
-        (TavernState::PickService, TavernInput::Service(TavernService::Drink)) => {
-            let cost = TAVERN_DRINK_COST;
-            if *gold < cost {
-                *state = TavernState::Greeting;
-                return TavernOutcome::RefusedShortFunds { cost };
+        (TavernState::BlueBoarDrinkList { tavern }, TavernInput::Key(b)) => {
+            let Some(choice) = blue_boar_choice_for_key(b) else {
+                return TavernOutcome::InvalidInput;
+            };
+            let outcome = apply_blue_boar_drink(gold, choice);
+            *state = TavernState::Menu { tavern };
+            match outcome {
+                Ok(outcome) => TavernOutcome::BlueBoarDrinkServed {
+                    choice,
+                    cost: outcome.total_price,
+                },
+                Err(TavernDrinkError::NoLivingParty) => TavernOutcome::RefusedNoLivingParty,
+                Err(TavernDrinkError::InsufficientGold { required, .. }) => {
+                    TavernOutcome::RefusedShortFunds { cost: required }
+                }
             }
-            *gold -= cost;
-            *state = TavernState::Greeting;
-            TavernOutcome::DrinkServed { cost }
-        }
-        (TavernState::PickService, TavernInput::Service(TavernService::Rumour)) => {
-            *state = TavernState::Greeting;
-            TavernOutcome::RumourTold
         }
         (TavernState::Exited, _) => TavernOutcome::Exited,
         _ => TavernOutcome::InvalidInput,
+    }
+}
+
+pub const fn blue_boar_choice_for_key(byte: u8) -> Option<BlueBoarDrinkChoice> {
+    match byte {
+        b'A' | b'a' => Some(BlueBoarDrinkChoice::A),
+        b'B' | b'b' => Some(BlueBoarDrinkChoice::B),
+        b'C' | b'c' => Some(BlueBoarDrinkChoice::C),
+        b'D' | b'd' => Some(BlueBoarDrinkChoice::D),
+        b'E' | b'e' => Some(BlueBoarDrinkChoice::E),
+        b'F' | b'f' => Some(BlueBoarDrinkChoice::F),
+        _ => None,
     }
 }
 
@@ -1247,6 +1323,7 @@ mod tests {
             speaker_intelligence: 10,
             world_hour: 12,
             party_size: 1,
+            living_party_members: 1,
         };
 
         assert_eq!(
@@ -1299,6 +1376,7 @@ mod tests {
             speaker_intelligence: 10,
             world_hour: 12,
             party_size: 1,
+            living_party_members: 1,
         };
 
         step_arms_shop(
@@ -1341,6 +1419,7 @@ mod tests {
             speaker_intelligence: 0,
             world_hour: 12,
             party_size: 1,
+            living_party_members: 1,
         };
         step_arms_shop(
             &mut state,
@@ -1622,6 +1701,7 @@ mod tests {
             speaker_intelligence: 30,
             world_hour: 12,
             party_size: 2,
+            living_party_members: 2,
         };
 
         let outcome = step_innkeeper(&mut state, InnkeeperInput::Key(b'R'), ctx);
@@ -1653,6 +1733,7 @@ mod tests {
             speaker_intelligence: 30,
             world_hour: 12,
             party_size: 2,
+            living_party_members: 2,
         };
 
         let outcome = step_innkeeper(&mut state, InnkeeperInput::Key(b'L'), ctx);
@@ -1679,6 +1760,7 @@ mod tests {
             speaker_intelligence: 30,
             world_hour: 12,
             party_size: 1,
+            living_party_members: 1,
         };
 
         let outcome = step_innkeeper(&mut state, InnkeeperInput::Key(b' '), ctx);
@@ -1801,49 +1883,118 @@ mod tests {
     }
 
     #[test]
-    fn tavern_meal_increases_food_and_charges_gold() {
-        let mut state = TavernState::Greeting;
+    fn tavern_round_drink_charges_per_living_member() {
+        let mut state = TavernState::for_tavern(Tavern::TheSwordAndKeg);
         let mut gold = 100u16;
         let mut food = 30u16;
-        step_tavern(&mut state, TavernInput::Key(b'Y'), &mut gold, &mut food);
-        step_tavern(
+        let ctx = ShopTransactionContext {
+            party_gold: gold,
+            speaker_intelligence: 0,
+            world_hour: 12,
+            party_size: 3,
+            living_party_members: 3,
+        };
+
+        let entered = step_tavern(
             &mut state,
-            TavernInput::Service(TavernService::Meal),
+            TavernInput::Key(b'Y'),
+            ctx,
             &mut gold,
             &mut food,
         );
-        let outcome = step_tavern(&mut state, TavernInput::Confirm(true), &mut gold, &mut food);
-        assert!(matches!(outcome, TavernOutcome::MealServed { .. }));
-        assert_eq!(food, 30 + TAVERN_MEAL_FOOD_ADD);
-        assert_eq!(gold, 100 - TAVERN_MEAL_COST);
+        assert_eq!(
+            entered,
+            TavernOutcome::EnteredMenu {
+                tavern: Tavern::TheSwordAndKeg,
+                round_letter: 'M',
+            }
+        );
+        let outcome = step_tavern(
+            &mut state,
+            TavernInput::Key(b'M'),
+            ctx,
+            &mut gold,
+            &mut food,
+        );
+        assert_eq!(
+            outcome,
+            TavernOutcome::RoundDrinkServed {
+                tavern: Tavern::TheSwordAndKeg,
+                cost: 15,
+            }
+        );
+        assert_eq!(food, 30);
+        assert_eq!(gold, 85);
     }
 
     #[test]
-    fn tavern_drink_charges_without_food_change() {
-        let mut state = TavernState::Greeting;
-        let mut gold = 100u16;
+    fn tavern_blue_boar_w_branch_sells_fixed_drink_choice() {
+        let mut state = TavernState::for_tavern(Tavern::TheBlueBoarTavern);
+        let mut gold = 200u16;
         let mut food = 30u16;
-        step_tavern(&mut state, TavernInput::Key(b'Y'), &mut gold, &mut food);
-        let outcome = step_tavern(
+        let ctx = ShopTransactionContext {
+            party_gold: gold,
+            speaker_intelligence: 0,
+            world_hour: 12,
+            party_size: 1,
+            living_party_members: 1,
+        };
+
+        step_tavern(
             &mut state,
-            TavernInput::Service(TavernService::Drink),
+            TavernInput::Key(b'Y'),
+            ctx,
             &mut gold,
             &mut food,
         );
-        assert!(matches!(outcome, TavernOutcome::DrinkServed { .. }));
-        assert_eq!(food, 30);
-        assert_eq!(gold, 100 - TAVERN_DRINK_COST);
+        let list = step_tavern(
+            &mut state,
+            TavernInput::Key(b'W'),
+            ctx,
+            &mut gold,
+            &mut food,
+        );
+        assert_eq!(list, TavernOutcome::PickBlueBoarDrink);
+        let outcome = step_tavern(
+            &mut state,
+            TavernInput::Key(b'F'),
+            ctx,
+            &mut gold,
+            &mut food,
+        );
+        assert_eq!(
+            outcome,
+            TavernOutcome::BlueBoarDrinkServed {
+                choice: BlueBoarDrinkChoice::F,
+                cost: 98,
+            }
+        );
+        assert_eq!(gold, 102);
     }
 
     #[test]
     fn tavern_drink_short_funds_refuses() {
-        let mut state = TavernState::Greeting;
+        let mut state = TavernState::for_tavern(Tavern::TheSwordAndKeg);
         let mut gold = 1u16;
         let mut food = 0u16;
-        step_tavern(&mut state, TavernInput::Key(b'Y'), &mut gold, &mut food);
+        let ctx = ShopTransactionContext {
+            party_gold: gold,
+            speaker_intelligence: 0,
+            world_hour: 12,
+            party_size: 1,
+            living_party_members: 1,
+        };
+        step_tavern(
+            &mut state,
+            TavernInput::Key(b'Y'),
+            ctx,
+            &mut gold,
+            &mut food,
+        );
         let outcome = step_tavern(
             &mut state,
-            TavernInput::Service(TavernService::Drink),
+            TavernInput::Key(b'M'),
+            ctx,
             &mut gold,
             &mut food,
         );
@@ -1852,20 +2003,63 @@ mod tests {
     }
 
     #[test]
-    fn tavern_rumour_returns_to_greeting_without_charge() {
-        let mut state = TavernState::Greeting;
+    fn tavern_provisions_purchase_can_partially_fill_requested_quantity() {
+        let mut state = TavernState::for_tavern(Tavern::TheWayfarerTavern);
         let mut gold = 100u16;
-        let mut food = 0u16;
-        step_tavern(&mut state, TavernInput::Key(b'R'), &mut gold, &mut food);
-        let outcome = step_tavern(
+        let mut food = crate::SHOP_FOOD_STOCK_CAP - 2;
+        let ctx = ShopTransactionContext {
+            party_gold: gold,
+            speaker_intelligence: 0,
+            world_hour: 12,
+            party_size: 1,
+            living_party_members: 1,
+        };
+        step_tavern(
             &mut state,
-            TavernInput::Service(TavernService::Rumour),
+            TavernInput::Key(b'Y'),
+            ctx,
             &mut gold,
             &mut food,
         );
-        assert_eq!(outcome, TavernOutcome::RumourTold);
-        assert_eq!(gold, 100);
-        assert_eq!(state, TavernState::Greeting);
+        let prompt = step_tavern(
+            &mut state,
+            TavernInput::Key(b'P'),
+            ctx,
+            &mut gold,
+            &mut food,
+        );
+        assert_eq!(
+            prompt,
+            TavernOutcome::PickProvisionQuantity {
+                tavern: Tavern::TheWayfarerTavern,
+                unit_price: 15,
+            }
+        );
+        let outcome = step_tavern(
+            &mut state,
+            TavernInput::Quantity(5),
+            ctx,
+            &mut gold,
+            &mut food,
+        );
+        assert_eq!(
+            outcome,
+            TavernOutcome::ProvisionsPurchased {
+                tavern: Tavern::TheWayfarerTavern,
+                requested_quantity: 5,
+                purchased_quantity: 2,
+                paid: 30,
+                food_added: 2,
+            }
+        );
+        assert_eq!(gold, 70);
+        assert_eq!(food, crate::SHOP_FOOD_STOCK_CAP);
+        assert_eq!(
+            state,
+            TavernState::Menu {
+                tavern: Tavern::TheWayfarerTavern,
+            }
+        );
     }
 
     #[test]

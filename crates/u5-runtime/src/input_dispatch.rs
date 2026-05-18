@@ -187,6 +187,12 @@ fn handle_active_shop_key_input(
         speaker_intelligence: state.party_intelligence.first().copied().unwrap_or(0),
         world_hour: state.clock.hour,
         party_size: state.party.len(),
+        living_party_members: state
+            .party
+            .iter()
+            .filter(|member| member.living())
+            .count()
+            .min(u8::MAX as usize) as u8,
     };
     let key_byte = key as u8;
     let inline_digit = suffix
@@ -532,29 +538,34 @@ fn handle_active_shop_key_input(
         }
         ActiveShopSession::Tavern(s) => {
             let mut food = state.food;
-            let outcome = match (*s, yes, no) {
-                (TavernState::Greeting, _, _) => {
-                    step_tavern(s, TavernInput::Key(key_byte), &mut state.gold, &mut food)
+            let outcome = match (*s, yes, no, inline_digit) {
+                (TavernState::Greeting { .. }, _, _, _) => step_tavern(
+                    s,
+                    TavernInput::Key(key_byte),
+                    ctx,
+                    &mut state.gold,
+                    &mut food,
+                ),
+                (TavernState::Menu { .. } | TavernState::BlueBoarDrinkList { .. }, _, _, _) => {
+                    step_tavern(
+                        s,
+                        TavernInput::Key(key_byte),
+                        ctx,
+                        &mut state.gold,
+                        &mut food,
+                    )
                 }
-                (TavernState::PickService, _, _) => {
-                    let svc = match key_byte {
-                        b'M' | b'm' => Some(TavernService::Meal),
-                        b'D' | b'd' => Some(TavernService::Drink),
-                        b'R' | b'r' => Some(TavernService::Rumour),
-                        _ => None,
-                    };
-                    if let Some(svc) = svc {
-                        step_tavern(s, TavernInput::Service(svc), &mut state.gold, &mut food)
-                    } else {
-                        TavernOutcome::InvalidInput
-                    }
+                (TavernState::PickProvisionQuantity { .. }, _, true, _) => {
+                    *s = TavernState::Exited;
+                    TavernOutcome::Exited
                 }
-                (TavernState::ConfirmMeal { .. }, true, _) => {
-                    step_tavern(s, TavernInput::Confirm(true), &mut state.gold, &mut food)
-                }
-                (TavernState::ConfirmMeal { .. }, _, true) => {
-                    step_tavern(s, TavernInput::Confirm(false), &mut state.gold, &mut food)
-                }
+                (TavernState::PickProvisionQuantity { .. }, _, _, Some(quantity)) => step_tavern(
+                    s,
+                    TavernInput::Quantity(u16::from(quantity)),
+                    ctx,
+                    &mut state.gold,
+                    &mut food,
+                ),
                 _ => TavernOutcome::InvalidInput,
             };
             state.food = food;
@@ -832,15 +843,39 @@ fn format_healer_outcome(outcome: crate::shop_runtime::HealerOutcome) -> String 
 fn format_tavern_outcome(outcome: crate::shop_runtime::TavernOutcome) -> String {
     use crate::shop_runtime::TavernOutcome::*;
     match outcome {
-        EnteredMenu => "Meal (M), Drink (D), or Rumour (R)?".to_string(),
-        QuotedMealCost { cost } => format!("A meal costs {cost} gold. (Y/N)"),
-        MealServed { cost, food_added } => {
-            format!("Meal served: {cost} gold spent, food +{food_added}.")
+        EnteredMenu {
+            tavern,
+            round_letter,
+        } => {
+            format!(
+                "{}: drink round ({round_letter}), provisions (P), or Space.",
+                tavern.display_name()
+            )
         }
-        DrinkServed { cost } => format!("Drink served for {cost} gold."),
-        RumourTold => "The tavern-keeper shares a rumour.".to_string(),
+        RoundDrinkServed { tavern, cost } => {
+            format!("{} served a round for {cost} gold.", tavern.display_name())
+        }
+        PickBlueBoarDrink => "Choose Blue Boar drink A-F.".to_string(),
+        BlueBoarDrinkServed { choice, cost } => {
+            format!("Blue Boar drink {:?} served for {cost} gold.", choice)
+        }
+        PickProvisionQuantity { tavern, unit_price } => format!(
+            "{} provisions cost {unit_price} gold each. Quantity?",
+            tavern.display_name()
+        ),
+        ProvisionsPurchased {
+            tavern,
+            requested_quantity,
+            purchased_quantity,
+            paid,
+            food_added,
+        } => format!(
+            "{} sold {purchased_quantity}/{requested_quantity} provisions for {paid} gold; food +{food_added}.",
+            tavern.display_name()
+        ),
         RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
-        Declined => "As you wish.".to_string(),
+        RefusedNoLivingParty => "No one can drink right now.".to_string(),
+        RefusedNoNeed => "Thou needest no provisions.".to_string(),
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),
     }

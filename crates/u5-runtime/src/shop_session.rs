@@ -56,6 +56,7 @@ impl ActiveShopSession {
         match self {
             Self::Innkeeper(_) => "Rest (R), Leave (L), Pick up (P), or Space.",
             Self::ShipBroker(_) => "Choose Frigate (F), Skiff (S), or Space.",
+            Self::Tavern(_) => "Drink? Yes (Y), No (N), or Space.",
             _ => "Choose Buy / Sell / Yes / No.",
         }
     }
@@ -67,7 +68,7 @@ impl ActiveShopSession {
 pub fn shop_session_for_dialog_id(dialog_id: u8) -> Option<ActiveShopSession> {
     Some(match dialog_id {
         0x81 => ActiveShopSession::Arms(ArmsShopState::Greeting),
-        0x82 => ActiveShopSession::Tavern(TavernState::Greeting),
+        0x82 => ActiveShopSession::Tavern(TavernState::default()),
         0x83 => ActiveShopSession::HorseTrader(HorseTraderState::Greeting),
         0x84 => ActiveShopSession::ShipBroker(ShipBrokerState::default()),
         0x85 => ActiveShopSession::Reagent(ReagentShopState::Greeting),
