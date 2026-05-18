@@ -168,6 +168,35 @@ fn typeahead_buffer_toggle_is_no_turn_and_visible_in_status() {
 
 // from chunk_18
 #[test]
+fn music_toggle_token_maps_to_ctrl_s_and_is_visible_in_status() {
+    let mut state = test_state(open_grid(), 1, 1);
+
+    assert_eq!(
+        play_input_key_and_suffix("music\n"),
+        Some((PLAY_MUSIC_TOGGLE_KEY, String::new()))
+    );
+    assert_eq!(play_input_typeahead_chars("music\n"), None);
+    assert_eq!(
+        handle_play_script_command(&mut state, "music", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+
+    assert!(!state.music_enabled);
+    assert_eq!(state.turn, 0);
+    assert_eq!(state.message, "Music Off.");
+    assert!(play_script_state_line(&state).contains("music off"));
+    assert!(state.z_stats_message().contains("music off"));
+
+    assert_eq!(
+        handle_play_script_command(&mut state, "ctrl-s", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(state.music_enabled);
+    assert_eq!(state.message, "Music On.");
+}
+
+// from chunk_18
+#[test]
 fn typeahead_input_parser_only_splits_simple_keys() {
     assert_eq!(
         play_input_typeahead_chars("dd.\n"),

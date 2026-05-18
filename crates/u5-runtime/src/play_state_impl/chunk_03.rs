@@ -1454,7 +1454,7 @@ impl PlayState {
         let equipment = equipment_stock_summary(&self.equipment_stock);
         let effect = self.active_effect_status();
         format!(
-            "Z-stats: {area} at ({}, {}), facing {}, date Y{} M{} D{} {:02}:{:02}, turn {}; transport {}; wind {}; typeahead {}; timing {}; light torch={} spell={} ambient={} time-stop={} effect={}; inventory food={} gold={} keys={} gems={} torches={} climbing={} reagents={}; equipment {}; spells {}; party {}.",
+            "Z-stats: {area} at ({}, {}), facing {}, date Y{} M{} D{} {:02}:{:02}, turn {}; transport {}; wind {}; typeahead {}; music {}; timing {}; light torch={} spell={} ambient={} time-stop={} effect={}; inventory food={} gold={} keys={} gems={} torches={} climbing={} reagents={}; equipment {}; spells {}; party {}.",
             self.player.x,
             self.player.y,
             self.player.facing.name(),
@@ -1467,6 +1467,7 @@ impl PlayState {
             self.player.transport.status_label(),
             self.wind.status_message(),
             self.typeahead_status_label(),
+            self.music_status_label(),
             self.timing_status.status_label(),
             self.torch_counter,
             self.light_spell_counter,
@@ -1505,6 +1506,16 @@ impl PlayState {
         .to_string();
     }
 
+    pub fn toggle_music(&mut self) {
+        self.music_enabled = !self.music_enabled;
+        self.message = if self.music_enabled {
+            "Music On."
+        } else {
+            "Music Off."
+        }
+        .to_string();
+    }
+
     pub fn exit_to_dos_prompt(&mut self, confirm: Option<bool>) -> PlayInputDisposition {
         match confirm {
             None => {
@@ -1528,6 +1539,10 @@ impl PlayState {
         } else {
             "off"
         }
+    }
+
+    pub fn music_status_label(&self) -> &'static str {
+        if self.music_enabled { "on" } else { "off" }
     }
 
     pub fn area_status_label(&self) -> String {

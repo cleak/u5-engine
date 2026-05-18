@@ -80,6 +80,7 @@ pub struct PlayState {
     pub world_overlays: WorldOverlayCache,
     pub save_template_source: SaveTemplateSource,
     pub typeahead_buffer_enabled: bool,
+    pub music_enabled: bool,
     pub pending_moongate: Option<MoongateEntry>,
     pub pending_town_arrest: Option<TownArrestPrompt>,
     pub endgame: Option<EndgameState>,

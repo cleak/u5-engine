@@ -90,6 +90,10 @@ pub fn handle_play_key_input(
         state.toggle_typeahead_buffer();
         return Ok(PlayInputDisposition::Continue);
     }
+    if key == PLAY_MUSIC_TOGGLE_KEY {
+        state.toggle_music();
+        return Ok(PlayInputDisposition::Continue);
+    }
     if state.combat_active
         && combat_has_dispatchable_party_actor(state)
         && (state.pending_combat_actor_slot.is_some() || combat_has_active_non_party_actor(state))
@@ -1573,6 +1577,11 @@ fn handle_combat_cast_key_input(
 }
 
 fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> PlayInputDisposition {
+    if key == '\u{1b}' && suffix.is_empty() {
+        state.message = "Aborted.".to_string();
+        return PlayInputDisposition::Continue;
+    }
+
     state.ensure_pending_combat_player_turn();
     let Some(actor_slot) = state.pending_combat_actor_slot.take() else {
         state.message = "No active combatant.".to_string();
@@ -1861,7 +1870,7 @@ fn combat_command_branch_message(branch: CombatCommandBranch) -> String {
         }
         CombatCommandBranch::Klimb => "Klimb-What?".to_string(),
         CombatCommandBranch::AbortPrompt => "Aborted.".to_string(),
-        CombatCommandBranch::ToggleMusic => "Sound toggled.".to_string(),
+        CombatCommandBranch::ToggleMusic => "Music toggled.".to_string(),
         CombatCommandBranch::Invalid => "What?".to_string(),
         CombatCommandBranch::Attack
         | CombatCommandBranch::CastSpell

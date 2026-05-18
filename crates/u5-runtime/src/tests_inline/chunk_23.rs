@@ -4155,6 +4155,32 @@
     }
 
     #[test]
+    fn combat_ctrl_s_and_escape_are_no_turn_top_level_controls() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(10, 10);
+
+        assert!(state.music_enabled);
+        assert_eq!(
+            handle_play_key_input(&mut state, PLAY_MUSIC_TOGGLE_KEY, "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(!state.music_enabled);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.pending_combat_actor_slot, None);
+        assert_eq!(state.message, "Music Off.");
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (10, 10));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '\u{1b}', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.pending_combat_actor_slot, None);
+        assert_eq!(state.message, "Aborted.");
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (10, 10));
+    }
+
+    #[test]
     fn combat_active_player_digit_selection_maps_only_published_keys() {
         assert_eq!(
             resolve_combat_active_player_digit('0'),

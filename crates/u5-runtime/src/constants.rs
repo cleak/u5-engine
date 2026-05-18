@@ -271,6 +271,7 @@ pub const PLAY_SCRIPT_MAX_IDLE_TICKS: usize = 1024;
 pub const KARMA_RECORD_COUNT: usize = KARMA_DAT_RECORDS;
 pub const PLAY_IGNORED_INPUT_KEY: char = '\u{1e}';
 pub const PLAY_TYPEAHEAD_TOGGLE_KEY: char = '\u{1f}';
+pub const PLAY_MUSIC_TOGGLE_KEY: char = '\u{13}';
 pub const TRAP_NON_COMBAT_EFFECT_TABLE: [u8; 8] = [0, 0, 0, 1, 1, 2, 2, 3];
 pub const TRAP_ACID_DAMAGE_MAX: u8 = 30;
 pub const TRAP_BOMB_DAMAGE_MAX: u8 = 8;
