@@ -7346,7 +7346,7 @@
             PlayInputDisposition::Continue
         );
         assert_eq!((move_state.combat_actors[0].x, move_state.combat_actors[0].y), (6, 5));
-        assert_eq!(move_state.message, "Moved.");
+        assert_eq!(move_state.message, "Moved to (6, 5).");
         assert_eq!(move_state.pending_combat_actor_slot, Some(0));
 
         let mut attack_state = combat_player_command_state(6, 5);
@@ -7359,7 +7359,7 @@
             (attack_state.combat_actors[0].x, attack_state.combat_actors[0].y),
             (5, 5)
         );
-        assert_eq!(attack_state.message, "Attack.");
+        assert_eq!(attack_state.message, "Attack: no readied weapon.");
         assert_eq!(attack_state.pending_combat_actor_slot, Some(0));
 
         let mut quit_state = combat_player_command_state(8, 5);
@@ -7370,6 +7370,53 @@
         assert_eq!(quit_state.message, "Combat abandoned.");
         assert!(!quit_state.combat_active);
         assert_eq!(quit_state.pending_combat_actor_slot, None);
+    }
+
+    #[test]
+    fn combat_input_dispatch_reports_weapon_hit_damage_and_xp() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(6, 5);
+        state.party_equipment = default_party_equipment(1);
+        state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
+        state.party_strengths = vec![255];
+        state.party_experience = vec![0];
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "6", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(
+            state.message,
+            "Hit Giant Rat for 1 damage with melee. Gained 1 XP."
+        );
+        assert_eq!(state.combat_actors[8].hp_or_wound, 9);
+        assert_eq!(state.party_experience[0], 1);
+        assert_eq!(state.pending_combat_actor_slot, Some(0));
+    }
+
+    #[test]
+    fn combat_input_dispatch_reports_weapon_kill_and_exits_combat() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(6, 5);
+        state.party_equipment = default_party_equipment(1);
+        state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
+        state.party_strengths = vec![255];
+        state.party_experience = vec![0];
+        state.combat_actors[8].hp_or_wound = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'A', "6", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(
+            state.message,
+            "Hit Giant Rat for 1 damage with melee. Giant Rat is defeated. Gained 3 XP."
+        );
+        assert_eq!(state.party_experience[0], 3);
+        assert!(!state.combat_active);
+        assert_eq!(state.pending_combat_actor_slot, None);
     }
 
     #[test]
@@ -7467,7 +7514,7 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.message, "Leaving combat.");
+        assert_eq!(state.message, "Leaving combat at (11, 5).");
         assert!(!state.combat_active);
         assert_eq!(state.combat_frame_snapshot, None);
         assert_eq!(state.player, original_player);
@@ -7583,7 +7630,7 @@
         assert_eq!((state.combat_actors[1].x, state.combat_actors[1].y), (4, 6));
         assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (4, 6));
         assert_ne!((state.combat_actors[0].x, state.combat_actors[0].y), (4, 6));
-        assert_eq!(state.message, "Moved.");
+        assert_eq!(state.message, "Moved to (4, 6).");
     }
 
     #[test]
@@ -7603,7 +7650,7 @@
             PlayInputDisposition::Continue
         );
         assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (6, 5));
-        assert_eq!(state.message, "Moved.");
+        assert_eq!(state.message, "Moved to (6, 5).");
     }
 
     #[test]

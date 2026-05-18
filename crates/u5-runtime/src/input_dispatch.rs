@@ -1279,8 +1279,7 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         state.message = "No active combatant.".to_string();
         return PlayInputDisposition::Continue;
     };
-    state.message = combat_magic_ring_pass_message(application.ring_pass)
-        .unwrap_or_else(|| combat_player_command_message(&application.action));
+    state.message = combat_player_command_application_message(&application);
     if handle_combat_multistage_command(state, actor_slot, &application.action, suffix) {
         return PlayInputDisposition::Continue;
     }
@@ -1429,11 +1428,18 @@ fn combat_player_command_message(action: &CombatPlayerCommandAction) -> String {
         CombatPlayerCommandAction::PromptForAttackDirection => "Attack-".to_string(),
         CombatPlayerCommandAction::StepOrAttack { outcome, .. } => match outcome {
             CombatStepOrAttackPrimitiveOutcome::InactiveActor => "No active combatant.".to_string(),
-            CombatStepOrAttackPrimitiveOutcome::OutOfArena { .. } => "Leaving combat.".to_string(),
-            CombatStepOrAttackPrimitiveOutcome::Moved { .. } => "Moved.".to_string(),
+            CombatStepOrAttackPrimitiveOutcome::OutOfArena { x, y } => {
+                format!("Leaving combat at ({x}, {y}).")
+            }
+            CombatStepOrAttackPrimitiveOutcome::Moved { commit } => {
+                let (x, y) = commit.actor_position_after;
+                format!("Moved to ({x}, {y}).")
+            }
             CombatStepOrAttackPrimitiveOutcome::Attack { .. } => "Attack.".to_string(),
-            CombatStepOrAttackPrimitiveOutcome::BlockedActor { .. }
-            | CombatStepOrAttackPrimitiveOutcome::BlockedWall => "Blocked.".to_string(),
+            CombatStepOrAttackPrimitiveOutcome::BlockedActor { target_slot } => {
+                format!("Blocked by combatant in slot {target_slot}.")
+            }
+            CombatStepOrAttackPrimitiveOutcome::BlockedWall => "Blocked by wall.".to_string(),
         },
         CombatPlayerCommandAction::InvalidDirection { .. } => "Direction?".to_string(),
         CombatPlayerCommandAction::QuitDefeat => "Combat abandoned.".to_string(),
@@ -1441,4 +1447,125 @@ fn combat_player_command_message(action: &CombatPlayerCommandAction) -> String {
         CombatPlayerCommandAction::XitCleanup { allowed: false } => "Foes remain.".to_string(),
         CombatPlayerCommandAction::Branch { branch, .. } => format!("{branch:?}."),
     }
+}
+
+fn combat_player_command_application_message(
+    application: &CombatPlayerCommandApplication,
+) -> String {
+    if let Some(ring_message) = combat_magic_ring_pass_message(application.ring_pass) {
+        return ring_message;
+    }
+    let CombatPlayerCommandAction::StepOrAttack {
+        outcome: CombatStepOrAttackPrimitiveOutcome::Attack { target_slot },
+        ..
+    } = application.action
+    else {
+        return combat_player_command_message(&application.action);
+    };
+    combat_weapon_attack_message(target_slot, application.weapon_attack)
+}
+
+fn combat_weapon_attack_message(
+    target_slot: usize,
+    weapon_attack: Option<CombatWeaponAttackApplication>,
+) -> String {
+    let Some(weapon_attack) = weapon_attack else {
+        return "Attack: no readied weapon.".to_string();
+    };
+    match weapon_attack.resolution {
+        CombatWeaponAttackResolution::OutOfRange {
+            target_range,
+            range_cap,
+        } => {
+            format!("Attack missed: target range {target_range} exceeds weapon range {range_cap}.")
+        }
+        CombatWeaponAttackResolution::NoOrdinaryDamage { route } => {
+            format!(
+                "Attack used {} with no ordinary damage.",
+                combat_attack_route_label(route)
+            )
+        }
+        CombatWeaponAttackResolution::Miss { route, .. } => {
+            format!("Attack missed with {}.", combat_attack_route_label(route))
+        }
+        CombatWeaponAttackResolution::Special { route } => {
+            format!(
+                "Attack used {} with a special weapon effect.",
+                combat_attack_route_label(route)
+            )
+        }
+        CombatWeaponAttackResolution::Hit { raw_damage, route } => {
+            combat_weapon_damage_message(target_slot, raw_damage, route, weapon_attack)
+        }
+    }
+}
+
+fn combat_attack_route_label(route: CombatWeaponAttackRangeRoute) -> &'static str {
+    match route {
+        CombatWeaponAttackRangeRoute::Melee => "melee",
+        CombatWeaponAttackRangeRoute::Ranged { .. } => "ranged attack",
+    }
+}
+
+fn combat_weapon_damage_message(
+    target_slot: usize,
+    raw_damage: i16,
+    route: CombatWeaponAttackRangeRoute,
+    weapon_attack: CombatWeaponAttackApplication,
+) -> String {
+    match weapon_attack.damage_application {
+        Some(CombatWeaponDamageApplication::Monster {
+            damage,
+            credited_experience,
+            ..
+        }) => {
+            let target = combat_monster_target_label(target_slot, damage.class);
+            if damage.missed {
+                return format!("Attack hit {target}, but did no damage.");
+            }
+            let mut message = format!(
+                "Hit {target} for {} damage with {}.",
+                damage.applied_damage,
+                combat_attack_route_label(route)
+            );
+            if damage.killed {
+                message.push_str(&format!(" {target} is defeated."));
+            }
+            if let Some(xp) = credited_experience {
+                message.push_str(&format!(" Gained {xp} XP."));
+            }
+            message
+        }
+        Some(CombatWeaponDamageApplication::Party {
+            target_slot,
+            damage,
+        }) => {
+            if damage.missed {
+                return format!(
+                    "Attack hit party member {}, but did no damage.",
+                    target_slot + 1
+                );
+            }
+            let mut message = format!(
+                "Hit party member {} for {} damage with {}.",
+                target_slot + 1,
+                damage.applied_damage,
+                combat_attack_route_label(route)
+            );
+            if damage.killed {
+                message.push_str(" Party member fell.");
+            }
+            message
+        }
+        None => format!(
+            "Attack hit for raw {raw_damage} with {}, but no damage was applied.",
+            combat_attack_route_label(route)
+        ),
+    }
+}
+
+fn combat_monster_target_label(target_slot: usize, class: u8) -> String {
+    combat_class_stats(class)
+        .map(|stats| stats.name.to_string())
+        .unwrap_or_else(|| format!("combatant in slot {target_slot}"))
 }
