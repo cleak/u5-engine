@@ -2724,6 +2724,10 @@ impl PlayState {
                 BLINK_COST,
             ));
         }
+        if !self.spell_allowed_in_current_cast_context(BLINK_SPELL_INDEX) {
+            self.message = "Not here!".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
         let Some(entry) = self.blink_target_at(game_dir, direction)? else {
             self.message = "No Blink target.".to_string();
             return Ok(MoveOutcome::Blocked);
