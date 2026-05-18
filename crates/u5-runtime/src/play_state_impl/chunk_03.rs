@@ -939,10 +939,12 @@ impl PlayState {
             ZStatsPage::Stats => self.render_z_stats_character_page(session, &mut lines),
             ZStatsPage::Equipment => self.render_z_stats_equipment_page(session, &mut lines),
             ZStatsPage::SpellBook => self.render_z_stats_spell_book_page(session, &mut lines),
-            ZStatsPage::Reagents => self.render_z_stats_reagent_page(&mut lines),
-            ZStatsPage::Spells => self.render_z_stats_spell_page(&mut lines),
-            ZStatsPage::SpecialUse => self.render_z_stats_special_use_page(&mut lines),
-            ZStatsPage::EquipmentStock => self.render_z_stats_equipment_stock_page(&mut lines),
+            ZStatsPage::Reagents => self.render_z_stats_reagent_page(session, &mut lines),
+            ZStatsPage::Spells => self.render_z_stats_spell_page(session, &mut lines),
+            ZStatsPage::SpecialUse => self.render_z_stats_special_use_page(session, &mut lines),
+            ZStatsPage::EquipmentStock => {
+                self.render_z_stats_equipment_stock_page(session, &mut lines)
+            }
         }
         lines.join("\n")
     }
@@ -963,6 +965,22 @@ impl PlayState {
             }
             ZStatsInputAction::PreviousPage => {
                 session.move_previous_page();
+                self.message = self.render_z_stats_session(&session);
+                self.active_z_stats = Some(session);
+            }
+            ZStatsInputAction::InventoryPageNext => {
+                self.move_z_stats_inventory_cursor(
+                    &mut session,
+                    Z_STATS_INVENTORY_PANEL_ROWS as isize,
+                );
+                self.message = self.render_z_stats_session(&session);
+                self.active_z_stats = Some(session);
+            }
+            ZStatsInputAction::InventoryPagePrevious => {
+                self.move_z_stats_inventory_cursor(
+                    &mut session,
+                    -(Z_STATS_INVENTORY_PANEL_ROWS as isize),
+                );
                 self.message = self.render_z_stats_session(&session);
                 self.active_z_stats = Some(session);
             }
@@ -1259,7 +1277,81 @@ impl PlayState {
     }
 
     fn z_stats_navigation_hint(&self) -> String {
-        "Use </> for pages, 1-6 for party, Space/Esc to exit.".to_string()
+        "Use </> for pages, [] for inventory rows, 1-6 for party, Space/Esc to exit.".to_string()
+    }
+
+    fn move_z_stats_inventory_cursor(&self, session: &mut ZStatsSession, delta: isize) {
+        let Some(row_count) = self.z_stats_inventory_row_count(session) else {
+            session.inventory_cursor = 0;
+            return;
+        };
+        if row_count <= Z_STATS_INVENTORY_PANEL_ROWS {
+            session.inventory_cursor = 0;
+            return;
+        }
+
+        let last_start =
+            ((row_count - 1) / Z_STATS_INVENTORY_PANEL_ROWS) * Z_STATS_INVENTORY_PANEL_ROWS;
+        let current = session.inventory_cursor.min(last_start);
+        session.inventory_cursor = if delta >= 0 {
+            let next = current.saturating_add(delta as usize);
+            if next > last_start { 0 } else { next }
+        } else {
+            let step = delta.unsigned_abs();
+            if step > current {
+                last_start
+            } else {
+                current - step
+            }
+        };
+    }
+
+    fn z_stats_inventory_row_count(&self, session: &ZStatsSession) -> Option<usize> {
+        match session.page {
+            ZStatsPage::Stats | ZStatsPage::Equipment => None,
+            ZStatsPage::SpellBook => {
+                let member = self.party.get(session.selected_party_index).copied()?;
+                let max_circle = z_stats_spell_book_max_circle(member.class_byte);
+                let visible_circle = max_circle.min(member.level).min(8);
+                Some(usize::from(visible_circle) * SPELLS_PER_CIRCLE)
+            }
+            ZStatsPage::Reagents => Some(REAGENT_COUNT),
+            ZStatsPage::Spells => Some(SPELL_COUNT),
+            ZStatsPage::SpecialUse => Some(self.z_stats_special_use_row_count()),
+            ZStatsPage::EquipmentStock => Some(
+                self.equipment_stock
+                    .iter()
+                    .copied()
+                    .filter(|count| *count > 0)
+                    .count(),
+            ),
+        }
+    }
+
+    fn z_stats_special_use_row_count(&self) -> usize {
+        let fixed = usize::from(self.keys > 0)
+            + usize::from(self.gems > 0)
+            + usize::from(self.torches > 0)
+            + usize::from(self.climbing_gear > 0);
+        fixed
+            + self
+                .special_items
+                .iter()
+                .copied()
+                .filter(|count| *count > 0)
+                .count()
+            + self
+                .scroll_stock
+                .iter()
+                .copied()
+                .filter(|count| *count > 0)
+                .count()
+            + self
+                .potion_stock
+                .iter()
+                .copied()
+                .filter(|count| *count > 0)
+                .count()
     }
 
     fn render_z_stats_character_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
@@ -1350,13 +1442,13 @@ impl PlayState {
                 let rune = spell_rune_name(index).unwrap_or("Unknown");
                 let name = spell_common_name(index).unwrap_or("Unknown Spell");
                 let recipe = spell_recipe_label(SPELL_RECIPE_MASKS[index]);
-                format!("C{circle} {code:<4} {rune} / {name} / {recipe}")
+                format!("C{circle} MP{circle} {code:<4} {rune} / {name} / {recipe}")
             })
             .collect::<Vec<_>>();
-        append_inventory_rows(lines, rows);
+        append_inventory_rows(lines, rows, session.inventory_cursor);
     }
 
-    fn render_z_stats_reagent_page(&self, lines: &mut Vec<String>) {
+    fn render_z_stats_reagent_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
         const REAGENTS: [Reagent; REAGENT_COUNT] = [
             Reagent::SulfurAsh,
             Reagent::Ginseng,
@@ -1369,31 +1461,33 @@ impl PlayState {
         ];
         let rows = REAGENTS
             .iter()
-            .filter_map(|reagent| {
+            .map(|reagent| {
                 let count = self.reagents[reagent.inventory_index()];
-                (count > 0).then(|| format!("{}: {count}", reagent.display_name()))
+                format!("{}: {count}", reagent.display_name())
             })
             .collect::<Vec<_>>();
-        append_inventory_rows(lines, rows);
+        append_inventory_rows(lines, rows, session.inventory_cursor);
     }
 
-    fn render_z_stats_spell_page(&self, lines: &mut Vec<String>) {
+    fn render_z_stats_spell_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
         let rows = self
             .spell_charges
             .iter()
             .copied()
             .enumerate()
-            .filter_map(|(index, count)| {
-                (count > 0).then(|| {
-                    let name = spell_common_name(index).unwrap_or("Unknown Spell");
+            .map(|(index, count)| {
+                let name = spell_common_name(index).unwrap_or("Unknown Spell");
+                if count == 0 {
+                    format!("{} {}: 0 (zero)", SPELL_CODES[index], name)
+                } else {
                     format!("{} {}: {count}", SPELL_CODES[index], name)
-                })
+                }
             })
             .collect::<Vec<_>>();
-        append_inventory_rows(lines, rows);
+        append_inventory_rows(lines, rows, session.inventory_cursor);
     }
 
-    fn render_z_stats_special_use_page(&self, lines: &mut Vec<String>) {
+    fn render_z_stats_special_use_page(&self, session: &ZStatsSession, lines: &mut Vec<String>) {
         let mut rows = Vec::new();
         if self.keys > 0 {
             rows.push(format!("Keys: {}", self.keys));
@@ -1423,10 +1517,14 @@ impl PlayState {
                 rows.push(format!("{}: {count}", potion_inventory_name(index)));
             }
         }
-        append_inventory_rows(lines, rows);
+        append_inventory_rows(lines, rows, session.inventory_cursor);
     }
 
-    fn render_z_stats_equipment_stock_page(&self, lines: &mut Vec<String>) {
+    fn render_z_stats_equipment_stock_page(
+        &self,
+        session: &ZStatsSession,
+        lines: &mut Vec<String>,
+    ) {
         let rows = self
             .equipment_stock
             .iter()
@@ -1436,7 +1534,7 @@ impl PlayState {
                 (count > 0).then(|| format!("{}: {count}", equipment_name(index)))
             })
             .collect::<Vec<_>>();
-        append_inventory_rows(lines, rows);
+        append_inventory_rows(lines, rows, session.inventory_cursor);
     }
 
     fn party_member_display_name(&self, index: usize) -> String {
@@ -2807,18 +2905,31 @@ impl PlayState {
     }
 }
 
-fn append_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>) {
+fn append_inventory_rows(lines: &mut Vec<String>, rows: Vec<String>, cursor: usize) {
     if rows.is_empty() {
         lines.push("None.".to_string());
         return;
     }
-    let mut shown = 0;
     let total = rows.len();
-    for row in rows.into_iter().take(Z_STATS_INVENTORY_PANEL_ROWS) {
+    let start = if total <= Z_STATS_INVENTORY_PANEL_ROWS {
+        0
+    } else {
+        (cursor.min(total - 1) / Z_STATS_INVENTORY_PANEL_ROWS) * Z_STATS_INVENTORY_PANEL_ROWS
+    };
+    let end = (start + Z_STATS_INVENTORY_PANEL_ROWS).min(total);
+    if total > Z_STATS_INVENTORY_PANEL_ROWS {
+        lines.push(format!("Rows {}-{end} of {total}", start + 1));
+    }
+    let mut shown = 0;
+    for row in rows
+        .into_iter()
+        .skip(start)
+        .take(Z_STATS_INVENTORY_PANEL_ROWS)
+    {
         shown += 1;
         lines.push(row);
     }
-    if total > shown {
-        lines.push(format!("... {} more", total - shown));
+    if total > start + shown {
+        lines.push(format!("... {} more", total - start - shown));
     }
 }

@@ -102,7 +102,7 @@
     }
 
     #[test]
-    fn z_stats_inventory_pages_skip_zero_rows() {
+    fn z_stats_magic_inventory_pages_show_zero_rows() {
         let mut state = test_state(open_grid(), 1, 1);
         state.reagents = [3, 0, 0, 0, 0, 0, 0, 0];
         state.spell_charges = [0; SPELL_COUNT];
@@ -126,11 +126,17 @@
             Some(ZStatsPage::Reagents)
         );
         assert!(state.message.contains("Sulfur Ash: 3"));
-        assert!(!state.message.contains("Ginseng:"));
+        assert!(state.message.contains("Ginseng: 0"));
 
         assert!(state.step_active_z_stats('>', ""));
+        assert!(state.message.contains("Rows 1-8 of 48"));
         assert!(state.message.contains("IL Light: 2"));
-        assert!(!state.message.contains("GP Magic Missile"));
+        assert!(state.message.contains("GP Magic Missile: 0 (zero)"));
+
+        assert!(state.step_active_z_stats(']', ""));
+        assert!(state.message.contains("Rows 9-16 of 48"));
+        assert!(state.message.contains("HR Wind Change: 0 (zero)"));
+        assert!(!state.message.contains("IL Light: 2"));
 
         assert!(state.step_active_z_stats('>', ""));
         assert!(state.message.contains("Gems: 2"));
@@ -184,9 +190,9 @@
             Some(ZStatsPage::SpellBook)
         );
         assert!(state.message.contains("Z-stats: Spell Book page"));
-        assert!(state.message.contains("C1 IL"));
+        assert!(state.message.contains("C1 MP1 IL"));
         assert!(state.message.contains("In Lor / Light"));
-        assert!(state.message.contains("C2 AS"));
+        assert!(state.message.contains("C2 MP2 AS"));
         assert!(!state.message.contains("C3 LV"));
         assert!(!state.message.contains("IL Light: 0"));
 
