@@ -1397,6 +1397,63 @@
     }
 
     #[test]
+    fn town_raw_tlk_opening_runs_description_stream_before_greeting() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Maris".to_string(),
+                "a quiet sage".to_string(),
+                "Greetings".to_string(),
+                "I read books".to_string(),
+                "Farewell".to_string(),
+            ],
+        );
+
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        let mut description = enc("a sage watching ");
+        description.push(TLK_CODE_PRINT_AVATAR_NAME);
+        description.push(TLK_CODE_ACTION_DISPATCH);
+        description.push(6);
+        description.push(TLK_CODE_END_OF_RESPONSE);
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Maris"),
+                description,
+                enc("Greetings"),
+                enc("I read books"),
+                enc("Farewell"),
+            ],
+        );
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_names = vec![*b"AVATAR\0\0\0"];
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+            MoveOutcome::Talked
+        );
+
+        assert!(state.message.contains("Talked to Maris: a sage watching AVATAR."));
+        assert!(state.message.contains("Greetings Your interest?"));
+        assert_eq!(state.conversation_signal_flags[6], 1);
+        assert!(state.active_conversation.is_some());
+    }
+
+    #[test]
     fn active_conversation_ask_party_name_consumes_next_line_as_answer() {
         let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
         dialogue.insert(

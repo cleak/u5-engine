@@ -2217,6 +2217,7 @@ impl PlayState {
 
         if keyword.is_none() {
             if let Some(raw_fields) = raw_fields {
+                let description_text = self.render_raw_conversation_description(raw_fields, fields);
                 let session = crate::conversation_session::ConversationSession::new(
                     raw_fields.clone(),
                     fields.clone(),
@@ -2227,7 +2228,8 @@ impl PlayState {
                     .lines()
                     .next()
                     .unwrap_or("Your interest?");
-                self.message = format!("Talked to {name}: {description}. {greeting_text} {prompt}");
+                self.message =
+                    format!("Talked to {name}: {description_text}. {greeting_text} {prompt}");
                 return MoveOutcome::Talked;
             }
         }
@@ -2424,6 +2426,77 @@ impl PlayState {
         }
         let slot = self.talk_branch_flags.entry(scene.byte).or_insert(0);
         *slot |= mask;
+    }
+
+    /// Render the raw TLK Description entry for a conversation opening
+    /// and apply any byte-runner side effects it emits. The normal
+    /// keyword session owns the Greeting and later responses; the
+    /// Description preamble runs once before the session is installed.
+    pub fn render_raw_conversation_description(
+        &mut self,
+        raw_fields: &[Vec<u8>],
+        decoded_fields: &[String],
+    ) -> String {
+        let fallback = decoded_fields
+            .get(1)
+            .filter(|description| !description.is_empty())
+            .map(String::as_str)
+            .unwrap_or("no description");
+        let Some(bytes) = raw_fields.get(1) else {
+            return fallback.to_string();
+        };
+
+        let avatar_name = self
+            .party_names
+            .first()
+            .map(|name| {
+                let trimmed: Vec<u8> = name.iter().take_while(|b| **b != 0).copied().collect();
+                String::from_utf8_lossy(&trimmed).into_owned()
+            })
+            .unwrap_or_else(|| "Avatar".to_string());
+        let branch_flags = match self.area {
+            Area::Town { scene, .. } => self.talk_branch_slot_for_scene(scene),
+            _ => 0,
+        };
+        let inputs = crate::tlk_runner::TlkRunInputs {
+            avatar_name: &avatar_name,
+            branch_flags,
+            moral_standing: self.moral_standing,
+            dictionary: None,
+            curse_seen: false,
+            gold_payment_accepted: true,
+            gold_available: Some(self.gold),
+            ask_party_name_response: 0,
+            ask_who_response: 0,
+            yield_on_pause: false,
+            yield_on_ask: false,
+            yield_on_gold_payment: false,
+        };
+        let output = crate::tlk_runner::run_tlk_stream(bytes, &inputs);
+        self.apply_tlk_action_grants(&output.action_grants);
+        let gold_payments: Vec<_> = output
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                crate::tlk_runner::TlkRunEvent::GoldPayment { amount, accepted } => {
+                    Some(crate::conversation_session::ConversationGoldPayment {
+                        amount: *amount,
+                        accepted: *accepted,
+                    })
+                }
+                _ => None,
+            })
+            .collect();
+        self.apply_tlk_gold_payments(&gold_payments);
+        self.record_tlk_signal_flags(&output.signal_flags);
+        if let Area::Town { scene, .. } = self.area {
+            self.merge_talk_branch_flags(scene, output.branch_flags_set);
+        }
+        if output.text.is_empty() {
+            fallback.to_string()
+        } else {
+            output.text
+        }
     }
 
     /// Open a multi-turn conversation session for the facing NPC.
