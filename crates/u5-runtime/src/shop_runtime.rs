@@ -854,6 +854,7 @@ pub enum TavernOutcome {
         paid: u16,
         food_added: u16,
     },
+    Declined,
     RefusedShortFunds {
         cost: u16,
     },
@@ -927,7 +928,7 @@ pub fn step_tavern(
                     paid: outcome.total_price,
                     food_added: outcome.food_after.saturating_sub(outcome.food_before),
                 },
-                Err(ProvisionPurchaseError::ZeroQuantity) => TavernOutcome::InvalidInput,
+                Err(ProvisionPurchaseError::ZeroQuantity) => TavernOutcome::Declined,
                 Err(ProvisionPurchaseError::NoNeed) => TavernOutcome::RefusedNoNeed,
                 Err(ProvisionPurchaseError::InsufficientGold {
                     required_per_unit, ..
@@ -2169,6 +2170,52 @@ mod tests {
             state,
             TavernState::Menu {
                 tavern: Tavern::TheWayfarerTavern,
+            }
+        );
+    }
+
+    #[test]
+    fn tavern_zero_provision_quantity_declines_without_state_change() {
+        let mut state = TavernState::for_tavern(Tavern::TheHonestMeal);
+        let mut gold = 100u16;
+        let mut food = 30u16;
+        let ctx = ShopTransactionContext {
+            party_gold: gold,
+            speaker_intelligence: 0,
+            world_hour: 12,
+            party_size: 1,
+            living_party_members: 1,
+        };
+
+        step_tavern(
+            &mut state,
+            TavernInput::Key(b'Y'),
+            ctx,
+            &mut gold,
+            &mut food,
+        );
+        step_tavern(
+            &mut state,
+            TavernInput::Key(b'P'),
+            ctx,
+            &mut gold,
+            &mut food,
+        );
+        let outcome = step_tavern(
+            &mut state,
+            TavernInput::Quantity(0),
+            ctx,
+            &mut gold,
+            &mut food,
+        );
+
+        assert_eq!(outcome, TavernOutcome::Declined);
+        assert_eq!(gold, 100);
+        assert_eq!(food, 30);
+        assert_eq!(
+            state,
+            TavernState::Menu {
+                tavern: Tavern::TheHonestMeal,
             }
         );
     }

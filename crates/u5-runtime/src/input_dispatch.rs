@@ -1282,6 +1282,7 @@ fn format_tavern_outcome(outcome: crate::shop_runtime::TavernOutcome) -> String 
             "{} sold {purchased_quantity}/{requested_quantity} provisions for {paid} gold; food +{food_added}.",
             tavern.display_name()
         ),
+        Declined => "No provisions purchased.".to_string(),
         RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
         RefusedNoLivingParty => "No one can drink right now.".to_string(),
         RefusedNoNeed => "Thou needest no provisions.".to_string(),
