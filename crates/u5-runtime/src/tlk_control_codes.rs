@@ -285,14 +285,14 @@ pub const TLK_DICTIONARY_TOKEN_FIRST: u8 = 0x01;
 pub const TLK_DICTIONARY_TOKEN_LAST: u8 = 0x7F;
 
 /// `conversation.md §8`: TLK dialogue dictionary tokens are nonzero
-/// high-bit-clear bytes (`TLK_DICTIONARY_TOKEN_FIRST..=TLK_DICTIONARY_TOKEN_LAST`);
-/// the byte runner's range maps directly to the 128-entry index
-/// `0..=127` (less the NUL slot).
+/// high-bit-clear bytes (`TLK_DICTIONARY_TOKEN_FIRST..=TLK_DICTIONARY_TOKEN_LAST`).
+/// Token `0x01` resolves to dictionary entry zero, matching the shop
+/// renderer's token `0x80` bias.
 pub const fn tlk_dictionary_index(token: u8) -> Option<usize> {
     if token < TLK_DICTIONARY_TOKEN_FIRST || token > TLK_DICTIONARY_TOKEN_LAST {
         None
     } else {
-        Some(token as usize)
+        Some((token - TLK_DICTIONARY_TOKEN_FIRST) as usize)
     }
 }
 

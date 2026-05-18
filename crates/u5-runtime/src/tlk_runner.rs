@@ -158,6 +158,7 @@ pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
     // Track the last *emitted* printable byte (pre-mask, post-XOR) so we
     // can collapse the on-disk `""` double-quote artefact per §7.5.
     let mut last_emitted: Option<u8> = None;
+    let mut leading_space_pending = false;
     // Curse check is reset when the runner starts and may flip later.
     let mut curse_pending = inputs.curse_seen;
 
@@ -182,6 +183,10 @@ pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
                 return out;
             }
             TLK_CODE_PRINT_AVATAR_NAME => {
+                if leading_space_pending {
+                    out.text.push(' ');
+                    leading_space_pending = false;
+                }
                 out.text.push_str(inputs.avatar_name);
                 last_emitted = inputs.avatar_name.bytes().last();
             }
@@ -350,19 +355,30 @@ pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
                     continue;
                 }
                 if (TLK_DICTIONARY_TOKEN_FIRST..=TLK_DICTIONARY_TOKEN_LAST).contains(&byte) {
-                    let idx = byte as usize;
-                    let expansion = inputs
-                        .dictionary
-                        .and_then(|dict| dict.get(idx).copied())
-                        .unwrap_or("");
-                    if expansion.is_empty() {
+                    let idx = tlk_dictionary_index(byte)
+                        .expect("byte is inside the TLK dictionary-token range");
+                    if let Some(dict) = inputs.dictionary {
+                        let expansion = dict.get(idx).copied().unwrap_or("");
+                        if expansion.is_empty() {
+                            leading_space_pending = true;
+                        } else {
+                            if leading_space_pending {
+                                out.text.push(' ');
+                                leading_space_pending = false;
+                            }
+                            out.text.push_str(expansion);
+                            last_emitted = expansion.bytes().last();
+                        }
+                    } else {
                         // Fallback placeholder keeps the runner
                         // deterministic even without dictionary bytes.
-                        out.text.push_str(&format!("[w{idx:02X}]"));
-                    } else {
-                        out.text.push_str(expansion);
+                        if leading_space_pending {
+                            out.text.push(' ');
+                            leading_space_pending = false;
+                        }
+                        out.text.push_str(&format!("[w{byte:02X}]"));
+                        last_emitted = Some(b']');
                     }
-                    last_emitted = expansion.bytes().last().or(Some(b' '));
                 } else if (TLK_PRINTABLE_TEXT_FIRST..=TLK_PRINTABLE_TEXT_LAST).contains(&byte) {
                     let glyph = byte ^ TLK_TEXT_XOR_MASK;
                     if byte == TLK_DOUBLE_QUOTE_ENCODED && last_emitted == Some(b'"') {
@@ -376,6 +392,10 @@ pub fn run_tlk_stream(bytes: &[u8], inputs: &TlkRunInputs) -> TlkRunOutput {
                         // soft flush — the rendered text is identical in
                         // our single-pass model, but we record the state
                         // for completeness.
+                    }
+                    if leading_space_pending {
+                        out.text.push(' ');
+                        leading_space_pending = false;
                     }
                     out.text.push(glyph as char);
                     last_emitted = Some(glyph);
@@ -797,7 +817,7 @@ mod tests {
     #[test]
     fn dictionary_token_uses_expansion_when_provided() {
         let mut dict: [&str; COMMON_WORD_DICTIONARY_ENTRIES] = [""; COMMON_WORD_DICTIONARY_ENTRIES];
-        dict[0x10] = "Britannia";
+        dict[0x0f] = "Britannia";
         let mut bytes = vec![0x10u8];
         bytes.push(TLK_CODE_END_OF_RESPONSE);
         let out = run_tlk_stream(
@@ -808,6 +828,36 @@ mod tests {
             },
         );
         assert_eq!(out.text, "Britannia");
+    }
+
+    #[test]
+    fn first_dialogue_dictionary_token_uses_entry_zero() {
+        let mut dict: [&str; COMMON_WORD_DICTIONARY_ENTRIES] = [""; COMMON_WORD_DICTIONARY_ENTRIES];
+        dict[0] = "the";
+        let out = run_tlk_stream(
+            &[0x01u8, TLK_CODE_END_OF_RESPONSE],
+            &TlkRunInputs {
+                dictionary: Some(&dict),
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.text, "the");
+    }
+
+    #[test]
+    fn empty_dictionary_entry_adds_space_before_next_text() {
+        let dict: [&str; COMMON_WORD_DICTIONARY_ENTRIES] = [""; COMMON_WORD_DICTIONARY_ENTRIES];
+        let mut bytes = vec![0x01u8];
+        bytes.extend_from_slice(&enc("word"));
+        bytes.push(TLK_CODE_END_OF_RESPONSE);
+        let out = run_tlk_stream(
+            &bytes,
+            &TlkRunInputs {
+                dictionary: Some(&dict),
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.text, " word");
     }
 
     #[test]

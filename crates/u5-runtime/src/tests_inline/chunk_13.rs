@@ -3217,8 +3217,8 @@
     #[test]
     fn tlk_dictionary_token_range_matches_spec() {
         // conversation.md §8: dialogue dictionary tokens are nonzero
-        // high-bit-clear bytes (0x01..=0x7F); each token is the
-        // direct 0..=127 index into the 128-entry common-word table.
+        // high-bit-clear bytes (0x01..=0x7F); token 0x01 maps to
+        // entry zero in the 128-entry common-word table.
         assert_eq!(TLK_DICTIONARY_TOKEN_FIRST, 0x01);
         assert_eq!(TLK_DICTIONARY_TOKEN_LAST, 0x7F);
         // Token 0 (NUL) and 0x80..=0xFF are not dictionary tokens
@@ -3228,11 +3228,11 @@
         // Boundary tokens round-trip through the index helper.
         assert_eq!(
             tlk_dictionary_index(TLK_DICTIONARY_TOKEN_FIRST),
-            Some(TLK_DICTIONARY_TOKEN_FIRST as usize),
+            Some(0),
         );
         assert_eq!(
             tlk_dictionary_index(TLK_DICTIONARY_TOKEN_LAST),
-            Some(TLK_DICTIONARY_TOKEN_LAST as usize),
+            Some((TLK_DICTIONARY_TOKEN_LAST - TLK_DICTIONARY_TOKEN_FIRST) as usize),
         );
         // The shop-renderer token range covers entries 0..=127 (one
         // more than the dialogue range because the shop renderer
@@ -12763,8 +12763,8 @@
         assert_eq!(COMMON_WORD_DICTIONARY_ENTRIES, 128);
         // TLK dictionary tokens are 0x01..=0x7F; NUL and high-bit bytes are not tokens.
         assert_eq!(tlk_dictionary_index(0x00), None);
-        assert_eq!(tlk_dictionary_index(0x01), Some(1));
-        assert_eq!(tlk_dictionary_index(0x7F), Some(127));
+        assert_eq!(tlk_dictionary_index(0x01), Some(0));
+        assert_eq!(tlk_dictionary_index(0x7F), Some(126));
         assert_eq!(tlk_dictionary_index(0x80), None);
         assert_eq!(tlk_dictionary_index(0xFF), None);
         // Shoppe phrase tokens use 0x80..=0xFF; shop token 0x80 maps
