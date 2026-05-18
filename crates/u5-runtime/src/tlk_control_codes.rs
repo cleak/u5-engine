@@ -361,6 +361,7 @@ pub const TLK_CODE_IF_ELSE: u8 = 0x8C;
 pub const TLK_CODE_IF_ELSE_ALT: u8 = 0xFE;
 
 // §7.7 labels, GOTO, and scoped prompts (and §7 dispatcher boundaries)
+pub const TLK_CODE_LABEL_RECORD: u8 = 0x90;
 pub const TLK_LABEL_FIRST: u8 = 0x91;
 /// `conversation.md §7.7`: the label band ends at the last
 /// GOTO-label byte (0x9F). Anchored to

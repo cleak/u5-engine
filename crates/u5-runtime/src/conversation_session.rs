@@ -31,6 +31,9 @@ pub enum ConversationSessionPhase {
     Opened,
     /// Greeting was presented; keyword input loop is active.
     AwaitingKeyword,
+    /// A labelled block opened a scoped `Your interest?` prompt. Top-level
+    /// reserved responses are suppressed while this phase is active.
+    AwaitingScopedKeyword { label: u8 },
     /// A TLK `0x84` ASK-PARTY-NAME prompt is waiting for a free-text
     /// party-member name, then resumes the response at `cursor`.
     AwaitingAskPartyName { field_idx: usize, cursor: usize },
@@ -143,6 +146,9 @@ impl ConversationSession {
     ) -> ConversationSessionOutput {
         match self.phase {
             ConversationSessionPhase::AwaitingKeyword => {}
+            ConversationSessionPhase::AwaitingScopedKeyword { label } => {
+                return self.submit_scoped_keyword(label, line, ctx);
+            }
             ConversationSessionPhase::AwaitingAskPartyName { field_idx, cursor } => {
                 let input = capped_tlk_input_bytes(line);
                 let slot = tlk_ask_party_name_match(&input, ctx.party_member_names);
@@ -222,6 +228,7 @@ impl ConversationSession {
     pub fn prompt_message(&self) -> String {
         match self.phase {
             ConversationSessionPhase::AwaitingKeyword => "Your interest?".to_string(),
+            ConversationSessionPhase::AwaitingScopedKeyword { .. } => "Your interest?".to_string(),
             ConversationSessionPhase::AwaitingAskPartyName { .. } => "Name?".to_string(),
             ConversationSessionPhase::AwaitingAskWho { .. } => "Who?".to_string(),
             ConversationSessionPhase::AwaitingGoldPayment { amount, .. } => {
@@ -339,6 +346,11 @@ impl ConversationSession {
                     amount,
                 };
             }
+            TlkRunStop::LabelTransfer(label) => {
+                if self.has_scoped_label_records(label) {
+                    self.phase = ConversationSessionPhase::AwaitingScopedKeyword { label };
+                }
+            }
             TlkRunStop::EndOfStream | TlkRunStop::NulTerminator => {
                 // End-of-stream forces a hard close; the keyword loop must
                 // not continue prompting after that.
@@ -348,6 +360,148 @@ impl ConversationSession {
             _ => {}
         }
     }
+
+    fn submit_scoped_keyword(
+        &mut self,
+        label: u8,
+        line: &str,
+        ctx: &ConversationContext<'_>,
+    ) -> ConversationSessionOutput {
+        self.keyword_turns = self.keyword_turns.saturating_add(1);
+        let input = capped_tlk_input_bytes(line);
+        let input_upper: Vec<u8> = input
+            .iter()
+            .map(|b| (*b & 0x7F).to_ascii_uppercase())
+            .collect();
+
+        if input_upper.is_empty() {
+            let out = ConversationSessionOutput {
+                text: TLK_EMPTY_INPUT_BYE_MESSAGE.to_string(),
+                ..Default::default()
+            };
+            self.phase = ConversationSessionPhase::AwaitingScopedKeyword { label };
+            return out;
+        }
+
+        if let Some(response) = self.find_scoped_label_response(label, &input_upper) {
+            self.phase = ConversationSessionPhase::AwaitingKeyword;
+            return self.run_ephemeral_stream(&response, ctx, 0, 0);
+        }
+
+        self.phase = ConversationSessionPhase::AwaitingKeyword;
+        if let Some(field_idx) = self.find_ordinary_keyword_response_index(&input_upper) {
+            return self.run_field_from(field_idx, 0, ctx, 0, 0);
+        }
+
+        ConversationSessionOutput {
+            text: TLK_NO_KEYWORD_MATCH_MESSAGE.to_string(),
+            ..Default::default()
+        }
+    }
+
+    fn has_scoped_label_records(&self, label: u8) -> bool {
+        self.fields
+            .iter()
+            .any(|bytes| find_next_label_record(bytes, label, 0).is_some())
+    }
+
+    fn find_scoped_label_response(&self, label: u8, input_upper: &[u8]) -> Option<Vec<u8>> {
+        for bytes in &self.fields {
+            let mut search_from = 0usize;
+            while let Some((record_start, record_end)) =
+                find_next_label_record(bytes, label, search_from)
+            {
+                if let Some(response) = find_scoped_response_in_record(
+                    &bytes[record_start..record_end],
+                    label,
+                    input_upper,
+                ) {
+                    return Some(response);
+                }
+                search_from = record_end.saturating_add(1);
+            }
+        }
+        None
+    }
+
+    fn run_ephemeral_stream(
+        &mut self,
+        bytes: &[u8],
+        ctx: &ConversationContext<'_>,
+        ask_party_name_response: u8,
+        ask_who_response: u8,
+    ) -> ConversationSessionOutput {
+        let inputs = make_inputs(
+            ctx,
+            ask_party_name_response,
+            ask_who_response,
+            ctx.gold_payment_accepted,
+            false,
+        );
+        let run = run_tlk_stream_from(bytes, 0, &inputs);
+        let mut out = ConversationSessionOutput::default();
+        self.absorb_ephemeral_run(&run, &mut out);
+        out
+    }
+
+    fn absorb_ephemeral_run(&mut self, run: &TlkRunOutput, out: &mut ConversationSessionOutput) {
+        out.text.push_str(&run.text);
+        out.branch_flags_set |= run.branch_flags_set;
+        out.action_grants.extend(run.action_grants.iter().copied());
+        out.gold_payments
+            .extend(run.events.iter().filter_map(|event| match event {
+                TlkRunEvent::GoldPayment { amount, accepted } => Some(ConversationGoldPayment {
+                    amount: *amount,
+                    accepted: *accepted,
+                }),
+                _ => None,
+            }));
+        out.signal_flags.extend(run.signal_flags.iter().copied());
+        match run.stop {
+            TlkRunStop::LabelTransfer(label) if self.has_scoped_label_records(label) => {
+                self.phase = ConversationSessionPhase::AwaitingScopedKeyword { label };
+            }
+            TlkRunStop::EndOfStream | TlkRunStop::NulTerminator => {
+                self.phase = ConversationSessionPhase::PresentingBye;
+                out.ended = true;
+            }
+            _ => {}
+        }
+    }
+}
+
+fn find_next_label_record(bytes: &[u8], label: u8, from: usize) -> Option<(usize, usize)> {
+    if !is_tlk_label_byte(label) {
+        return None;
+    }
+    let mut pos = from;
+    while pos + 1 < bytes.len() {
+        if bytes[pos] == TLK_CODE_LABEL_RECORD && bytes[pos + 1] == label {
+            let record_start = pos + 2;
+            let mut record_end = record_start;
+            while record_end < bytes.len() && bytes[record_end] != TLK_CODE_LABEL_RECORD {
+                record_end += 1;
+            }
+            return Some((record_start, record_end));
+        }
+        pos += 1;
+    }
+    None
+}
+
+fn find_scoped_response_in_record(record: &[u8], label: u8, input_upper: &[u8]) -> Option<Vec<u8>> {
+    let mut segments = record
+        .split(|byte| *byte == label)
+        .filter(|segment| !segment.is_empty());
+    while let Some(keyword) = segments.next() {
+        let Some(response) = segments.next() else {
+            break;
+        };
+        if tlk_keyword_matches(keyword, input_upper) {
+            return Some(response.to_vec());
+        }
+    }
+    None
 }
 
 fn make_inputs<'a>(
@@ -758,6 +912,172 @@ mod tests {
         s.present_greeting(&ctx());
         let out = s.submit_keyword("xyzzy", &ctx());
         assert_eq!(out.text, TLK_NO_KEYWORD_MATCH_MESSAGE);
+    }
+
+    #[test]
+    fn label_transfer_enters_scoped_prompt_and_matches_local_keyword() {
+        let mut scoped = enc("Topic?");
+        scoped.push(0x91);
+        scoped.push(TLK_CODE_END_OF_RESPONSE);
+        scoped.push(TLK_CODE_LABEL_RECORD);
+        scoped.push(0x91);
+        scoped.extend_from_slice(&enc("APPLE"));
+        scoped.push(0x91);
+        scoped.extend_from_slice(&enc("Local answer."));
+        scoped.push(TLK_CODE_END_OF_RESPONSE);
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("ASK"),
+            scoped,
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Greetings.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "ASK".to_string(),
+            "Topic?".to_string(),
+        ];
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&ctx());
+
+        let first = s.submit_keyword("ask", &ctx());
+        assert_eq!(first.text, "Topic?");
+        assert_eq!(
+            s.phase,
+            ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }
+        );
+        assert_eq!(s.prompt_message(), "Your interest?");
+
+        let second = s.submit_keyword("apple", &ctx());
+        assert_eq!(second.text, "Local answer.");
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    #[test]
+    fn scoped_prompt_empty_input_reissues_without_closing() {
+        let mut scoped = enc("Topic?");
+        scoped.push(0x91);
+        scoped.push(TLK_CODE_LABEL_RECORD);
+        scoped.push(0x91);
+        scoped.extend_from_slice(&enc("APPLE"));
+        scoped.push(0x91);
+        scoped.extend_from_slice(&enc("Local answer."));
+        scoped.push(TLK_CODE_END_OF_RESPONSE);
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("ASK"),
+            scoped,
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Greetings.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "ASK".to_string(),
+            "Topic?".to_string(),
+        ];
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&ctx());
+        s.submit_keyword("ask", &ctx());
+
+        let empty = s.submit_keyword("", &ctx());
+        assert_eq!(empty.text, TLK_EMPTY_INPUT_BYE_MESSAGE);
+        assert!(!empty.ended);
+        assert_eq!(
+            s.phase,
+            ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }
+        );
+    }
+
+    #[test]
+    fn scoped_prompt_suppresses_reserved_words_before_top_level_fallback() {
+        let mut scoped = enc("Topic?");
+        scoped.push(0x91);
+        scoped.push(TLK_CODE_LABEL_RECORD);
+        scoped.push(0x91);
+        scoped.extend_from_slice(&enc("APPLE"));
+        scoped.push(0x91);
+        scoped.extend_from_slice(&enc("Local answer."));
+        scoped.push(TLK_CODE_END_OF_RESPONSE);
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("ASK"),
+            scoped,
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Greetings.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "ASK".to_string(),
+            "Topic?".to_string(),
+        ];
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&ctx());
+        s.submit_keyword("ask", &ctx());
+
+        let name = s.submit_keyword("name", &ctx());
+        assert_eq!(name.text, TLK_NO_KEYWORD_MATCH_MESSAGE);
+        assert!(!name.text.contains("Ada"));
+        assert!(!name.ended);
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    #[test]
+    fn scoped_prompt_unmatched_keyword_can_fall_back_to_top_level_pair() {
+        let mut scoped = enc("Topic?");
+        scoped.push(0x91);
+        scoped.push(TLK_CODE_LABEL_RECORD);
+        scoped.push(0x91);
+        scoped.extend_from_slice(&enc("APPLE"));
+        scoped.push(0x91);
+        scoped.extend_from_slice(&enc("Local answer."));
+        scoped.push(TLK_CODE_END_OF_RESPONSE);
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("ASK"),
+            scoped,
+            enc("GRAN"),
+            enc("Top-level answer."),
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Greetings.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "ASK".to_string(),
+            "Topic?".to_string(),
+            "GRAN".to_string(),
+            "Top-level answer.".to_string(),
+        ];
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&ctx());
+        s.submit_keyword("ask", &ctx());
+
+        let fallback = s.submit_keyword("gran", &ctx());
+        assert_eq!(fallback.text, "Top-level answer.");
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
 
     #[test]

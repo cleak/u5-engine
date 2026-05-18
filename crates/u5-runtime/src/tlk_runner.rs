@@ -100,6 +100,10 @@ pub enum TlkRunStop {
     /// in the stream beyond the current cursor). The runner stops to
     /// avoid an infinite loop.
     UnresolvedGotoLabel(u8),
+    /// Encountered a `0x91..=0x9F` label byte through ordinary stream
+    /// execution. The conversation session owns the labelled-record
+    /// handler and any scoped prompt that follows.
+    LabelTransfer(u8),
 }
 
 /// One side-effect emitted while running a stream.
@@ -394,9 +398,9 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
             }
             _ => {
                 if is_tlk_label_byte(byte) {
-                    // Labels are flow markers; when the runner reaches one
-                    // through ordinary fall-through it simply continues.
-                    continue;
+                    out.stop = TlkRunStop::LabelTransfer(byte);
+                    out.consumed = pos;
+                    return out;
                 }
                 if (TLK_DICTIONARY_TOKEN_FIRST..=TLK_DICTIONARY_TOKEN_LAST).contains(&byte) {
                     let idx = tlk_dictionary_index(byte)
@@ -996,5 +1000,16 @@ mod tests {
     #[test]
     fn find_label_position_rejects_non_label_bytes() {
         assert!(find_label_position(&[0xA1], 0x42).is_none());
+    }
+
+    #[test]
+    fn ordinary_label_byte_stops_for_session_label_handler() {
+        let mut bytes = enc("Ask");
+        bytes.push(0x91);
+        bytes.extend_from_slice(&enc("ignored"));
+        let out = render(&bytes);
+
+        assert_eq!(out.text, "Ask");
+        assert_eq!(out.stop, TlkRunStop::LabelTransfer(0x91));
     }
 }
