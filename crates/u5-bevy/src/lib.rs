@@ -28,7 +28,7 @@ use u5_runtime::{
     load_return_to_view_assets, load_story_records, load_tile_atlas,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     render_return_to_view_preview_viewport, render_text_panel_rgba,
-    shop_runtime::SageState,
+    shop_runtime::{GuildShopState, ReagentShopState, SageState, TavernState},
     shop_session::ActiveShopSession,
     summarize_return_to_view_preview, summarize_return_to_view_script,
 };
@@ -1030,7 +1030,12 @@ fn visual_line_prompt_active(state: &PlayState) -> bool {
         || state.active_yell.is_some()
         || matches!(
             state.active_shop.as_ref(),
-            Some(ActiveShopSession::Sage(SageState::Prompt { .. }))
+            Some(
+                ActiveShopSession::Sage(SageState::Prompt { .. })
+                    | ActiveShopSession::Tavern(TavernState::PickProvisionQuantity { .. })
+                    | ActiveShopSession::Reagent(ReagentShopState::PickQuantity { .. })
+                    | ActiveShopSession::Guild(GuildShopState::PickQuantity { .. })
+            )
         )
 }
 
@@ -1311,14 +1316,17 @@ mod tests {
     use std::fs;
     use std::path::Path;
     use u5_runtime::conversation_session::ConversationSession;
+    use u5_runtime::shop_runtime::{GuildShopState, ReagentShopState, TavernState};
+    use u5_runtime::shop_session::ActiveShopSession;
     use u5_runtime::test_fixtures::{
         debug_game_dir, dungeon_state, open_dungeon_record, open_grid, open_world_grid,
         synthetic_tile_atlas, test_state, world_state,
     };
     use u5_runtime::tlk_control_codes::TLK_TEXT_XOR_MASK;
     use u5_runtime::{
-        Area, Direction, EGA_PALETTE_RGB, SHRINE_TABLE_FILE, ShrineVirtue, TileGraphicsDepth,
-        WorldPlane, dungeon_cell_index, world_cell_index, wrap_text_panel_lines,
+        Area, Direction, EGA_PALETTE_RGB, GuildShop, Herbalist, REAGENT_COUNT, REAGENT_SPIDER_SILK,
+        SHRINE_TABLE_FILE, ShrineVirtue, Tavern, TileGraphicsDepth, WorldPlane, dungeon_cell_index,
+        world_cell_index, wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
@@ -1607,6 +1615,83 @@ mod tests {
         assert!(input_line.is_empty());
         assert!(state.music_enabled);
         assert!(state.active_conversation.is_some());
+    }
+
+    #[test]
+    fn visual_line_input_buffers_shop_quantity_until_enter() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 100;
+        state.reagents = [0; REAGENT_COUNT];
+        state.active_shop = Some(ActiveShopSession::Reagent(ReagentShopState::for_herbalist(
+            Herbalist::Mysticism,
+        )));
+        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
+        assert!(matches!(
+            state.active_shop.as_ref(),
+            Some(ActiveShopSession::Reagent(
+                ReagentShopState::PickQuantity { .. }
+            ))
+        ));
+        assert!(visual_line_prompt_active(&state));
+
+        let mut input_line = String::new();
+        handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::Digit1,
+            false,
+            false,
+            Path::new(""),
+        )
+        .unwrap();
+        handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::Digit2,
+            false,
+            false,
+            Path::new(""),
+        )
+        .unwrap();
+
+        assert_eq!(input_line, "12");
+        assert_eq!(state.gold, 100);
+        assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 0);
+
+        handle_visual_line_key(
+            &mut state,
+            &mut input_line,
+            KeyCode::Enter,
+            false,
+            false,
+            Path::new(""),
+        )
+        .unwrap();
+
+        assert!(input_line.is_empty());
+        assert_eq!(state.gold, 28);
+        assert_eq!(state.reagents[REAGENT_SPIDER_SILK], 12);
+        assert!(state.message.contains("72 gold"));
+    }
+
+    #[test]
+    fn visual_line_prompt_active_covers_quantity_shop_states() {
+        let mut tavern = test_state(open_grid(), 1, 1);
+        tavern.active_shop = Some(ActiveShopSession::Tavern(
+            TavernState::PickProvisionQuantity {
+                tavern: Tavern::TheWayfarerTavern,
+                unit_price: 15,
+            },
+        ));
+        assert!(visual_line_prompt_active(&tavern));
+
+        let mut guild = test_state(open_grid(), 1, 1);
+        guild.active_shop = Some(ActiveShopSession::Guild(GuildShopState::PickQuantity {
+            shop: GuildShop::TheDen,
+            commodity: u5_runtime::GuildCommodity::Keys,
+            unit_price: 190,
+        }));
+        assert!(visual_line_prompt_active(&guild));
     }
 
     #[test]
