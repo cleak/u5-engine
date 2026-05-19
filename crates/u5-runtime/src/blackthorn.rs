@@ -104,6 +104,187 @@ pub const BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS: [BlackthornCutsceneActorPlacemen
     },
 ];
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BlackthornCutsceneActorState {
+    pub x: usize,
+    pub y: usize,
+    pub visible: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlackthornCutsceneCommand {
+    End,
+    SetRepeat(u8),
+    SetPairedMovement {
+        actor: BlackthornCutsceneActor,
+        direction: crate::Direction,
+    },
+    SetPerStepPause(bool),
+    OutputByte(u8),
+    WriteTile {
+        x: usize,
+        y: usize,
+        tile: u8,
+    },
+    ClearScreen,
+    TimedPause(u8),
+    ClearActor(BlackthornCutsceneActor),
+    MoveActor {
+        actor: BlackthornCutsceneActor,
+        direction: crate::Direction,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BlackthornCutsceneVm {
+    pub actors: [Option<BlackthornCutsceneActorState>; BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT],
+    pub tile_buffer: Vec<u8>,
+    pub output_bytes: Vec<u8>,
+    pub pause_ticks: u16,
+    pub screen_cleared: bool,
+    pub ended: bool,
+    repeat_count: u8,
+    paired_movement: Option<(BlackthornCutsceneActor, crate::Direction)>,
+    per_step_pause: bool,
+}
+
+pub const BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT: usize = 9;
+
+impl BlackthornCutsceneVm {
+    pub fn new(tile_buffer: Vec<u8>) -> Self {
+        Self {
+            actors: [None; BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT],
+            tile_buffer,
+            output_bytes: Vec::new(),
+            pause_ticks: 0,
+            screen_cleared: false,
+            ended: false,
+            repeat_count: 1,
+            paired_movement: None,
+            per_step_pause: false,
+        }
+    }
+
+    pub fn with_audience_setup(tile_buffer: Vec<u8>) -> Self {
+        let mut vm = Self::new(tile_buffer);
+        for placement in BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS {
+            vm.set_actor(
+                placement.actor,
+                BlackthornCutsceneActorState {
+                    x: placement.x,
+                    y: placement.y,
+                    visible: true,
+                },
+            );
+        }
+        vm
+    }
+
+    pub fn actor(&self, actor: BlackthornCutsceneActor) -> Option<BlackthornCutsceneActorState> {
+        self.actors
+            .get(actor.slot_index() as usize)
+            .and_then(|actor| *actor)
+    }
+
+    pub fn set_actor(
+        &mut self,
+        actor: BlackthornCutsceneActor,
+        state: BlackthornCutsceneActorState,
+    ) {
+        self.actors[actor.slot_index() as usize] = Some(state);
+    }
+
+    pub fn tile(&self, x: usize, y: usize, width: usize) -> Option<u8> {
+        let index = y.checked_mul(width)?.checked_add(x)?;
+        self.tile_buffer.get(index).copied()
+    }
+
+    pub fn step(&mut self, command: BlackthornCutsceneCommand) {
+        if self.ended {
+            return;
+        }
+        match command {
+            BlackthornCutsceneCommand::End => {
+                self.ended = true;
+            }
+            BlackthornCutsceneCommand::SetRepeat(count) => {
+                self.repeat_count = count.max(1);
+            }
+            BlackthornCutsceneCommand::SetPairedMovement { actor, direction } => {
+                self.paired_movement = Some((actor, direction));
+            }
+            BlackthornCutsceneCommand::SetPerStepPause(enabled) => {
+                self.per_step_pause = enabled;
+            }
+            BlackthornCutsceneCommand::OutputByte(byte) => {
+                self.output_bytes.push(byte);
+            }
+            BlackthornCutsceneCommand::WriteTile { x, y, tile } => {
+                if let Some(index) = blackthorn_cutscene_tile_index(x, y) {
+                    if let Some(cell) = self.tile_buffer.get_mut(index) {
+                        *cell = tile;
+                    }
+                }
+            }
+            BlackthornCutsceneCommand::ClearScreen => {
+                self.screen_cleared = true;
+                self.tile_buffer.fill(0);
+            }
+            BlackthornCutsceneCommand::TimedPause(ticks) => {
+                self.pause_ticks = self
+                    .pause_ticks
+                    .saturating_add(u16::from(ticks) * u16::from(self.repeat_count));
+                self.repeat_count = 1;
+            }
+            BlackthornCutsceneCommand::ClearActor(actor) => {
+                self.actors[actor.slot_index() as usize] = None;
+            }
+            BlackthornCutsceneCommand::MoveActor { actor, direction } => {
+                let repeat_count = self.repeat_count;
+                let paired = self.paired_movement.take();
+                for _ in 0..repeat_count {
+                    self.move_actor_one_step(actor, direction);
+                    if let Some((second_actor, second_direction)) = paired {
+                        self.move_actor_one_step(second_actor, second_direction);
+                    }
+                    if self.per_step_pause {
+                        self.pause_ticks = self.pause_ticks.saturating_add(1);
+                    }
+                }
+                self.repeat_count = 1;
+            }
+        }
+    }
+
+    pub fn run(&mut self, commands: &[BlackthornCutsceneCommand]) {
+        for command in commands {
+            self.step(*command);
+            if self.ended {
+                break;
+            }
+        }
+    }
+
+    fn move_actor_one_step(&mut self, actor: BlackthornCutsceneActor, direction: crate::Direction) {
+        let Some(mut state) = self.actor(actor) else {
+            return;
+        };
+        match direction {
+            crate::Direction::North => state.y = state.y.saturating_sub(1),
+            crate::Direction::East => state.x = state.x.saturating_add(1),
+            crate::Direction::South => state.y = state.y.saturating_add(1),
+            crate::Direction::West => state.x = state.x.saturating_sub(1),
+            _ => return,
+        }
+        self.set_actor(actor, state);
+    }
+}
+
+pub fn blackthorn_cutscene_tile_index(x: usize, y: usize) -> Option<usize> {
+    (x < crate::MISCMAPS_CUTSCENE_VISIBLE_COLUMNS && y < crate::MISCMAPS_CUTSCENE_ROWS)
+        .then(|| y * crate::MISCMAPS_CUTSCENE_VISIBLE_COLUMNS + x)
+}
+
 /// `blackthorn.md §6`: classify a cutscene-VM actor slot byte.
 /// Returns `None` for indices outside the published role table; the
 /// script VM treats those as caller-private temporaries rather than

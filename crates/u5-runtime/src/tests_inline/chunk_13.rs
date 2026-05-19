@@ -9659,6 +9659,104 @@
     }
 
     #[test]
+    fn blackthorn_cutscene_vm_runs_repeat_pair_and_step_pause() {
+        let mut vm = BlackthornCutsceneVm::with_audience_setup(vec![
+            0;
+            MISCMAPS_CUTSCENE_ROWS * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS
+        ]);
+        let blackthorn_start = vm.actor(BlackthornCutsceneActor::Blackthorn).unwrap();
+        let attendant_start = vm.actor(BlackthornCutsceneActor::Attendant).unwrap();
+
+        vm.run(&[
+            BlackthornCutsceneCommand::SetRepeat(2),
+            BlackthornCutsceneCommand::SetPairedMovement {
+                actor: BlackthornCutsceneActor::Attendant,
+                direction: Direction::North,
+            },
+            BlackthornCutsceneCommand::SetPerStepPause(true),
+            BlackthornCutsceneCommand::MoveActor {
+                actor: BlackthornCutsceneActor::Blackthorn,
+                direction: Direction::North,
+            },
+        ]);
+
+        assert_eq!(
+            vm.actor(BlackthornCutsceneActor::Blackthorn).unwrap().y,
+            blackthorn_start.y - 2
+        );
+        assert_eq!(
+            vm.actor(BlackthornCutsceneActor::Attendant).unwrap().y,
+            attendant_start.y - 2
+        );
+        assert_eq!(vm.pause_ticks, 2);
+
+        vm.step(BlackthornCutsceneCommand::MoveActor {
+            actor: BlackthornCutsceneActor::Blackthorn,
+            direction: Direction::East,
+        });
+        assert_eq!(
+            vm.actor(BlackthornCutsceneActor::Blackthorn).unwrap().x,
+            blackthorn_start.x + 1
+        );
+        assert_eq!(
+            vm.actor(BlackthornCutsceneActor::Attendant).unwrap().y,
+            attendant_start.y - 2
+        );
+
+        vm.step(BlackthornCutsceneCommand::MoveActor {
+            actor: BlackthornCutsceneActor::Blackthorn,
+            direction: Direction::NorthEast,
+        });
+        assert_eq!(
+            vm.actor(BlackthornCutsceneActor::Blackthorn).unwrap().x,
+            blackthorn_start.x + 1
+        );
+        assert_eq!(
+            vm.actor(BlackthornCutsceneActor::Blackthorn).unwrap().y,
+            blackthorn_start.y - 2
+        );
+    }
+
+    #[test]
+    fn blackthorn_cutscene_vm_writes_tiles_output_and_clears_actor() {
+        let mut vm = BlackthornCutsceneVm::with_audience_setup(vec![
+            0;
+            MISCMAPS_CUTSCENE_ROWS * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS
+        ]);
+
+        vm.run(&[
+            BlackthornCutsceneCommand::WriteTile {
+                x: 2,
+                y: 3,
+                tile: 0x44,
+            },
+            BlackthornCutsceneCommand::OutputByte(0x0d),
+            BlackthornCutsceneCommand::SetRepeat(3),
+            BlackthornCutsceneCommand::TimedPause(4),
+            BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::Throne),
+        ]);
+
+        assert_eq!(
+            vm.tile(2, 3, MISCMAPS_CUTSCENE_VISIBLE_COLUMNS),
+            Some(0x44)
+        );
+        assert_eq!(vm.output_bytes, vec![0x0d]);
+        assert_eq!(vm.pause_ticks, 12);
+        assert_eq!(vm.actor(BlackthornCutsceneActor::Throne), None);
+
+        vm.run(&[
+            BlackthornCutsceneCommand::ClearScreen,
+            BlackthornCutsceneCommand::End,
+            BlackthornCutsceneCommand::OutputByte(0xff),
+        ]);
+
+        assert!(vm.screen_cleared);
+        assert!(vm.ended);
+        assert!(vm.tile_buffer.iter().all(|tile| *tile == 0));
+        assert_eq!(vm.output_bytes, vec![0x0d]);
+    }
+
+    #[test]
     fn blackthorn_captive_cell_handoff_matches_spec_coordinates() {
         // blackthorn.md §3
         assert_eq!(BLACKTHORN_CAPTIVE_CELL_SCENE, 18);
