@@ -616,6 +616,11 @@ impl PlayState {
         self.revealed_town_secret_doors.clear();
     }
 
+    pub fn clear_town_visit_state(&mut self) {
+        self.clear_open_town_door_state();
+        self.town_npc_alarm_states.clear();
+    }
+
     pub fn clear_town_floor_reload_door_state(&mut self) {
         self.door_tracker = None;
         let revealed = self.revealed_town_secret_doors.clone();

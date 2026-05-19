@@ -733,6 +733,7 @@
         state.record_open_town_door(scene, 0, 3, 1);
         state.record_revealed_town_secret_door(scene, 0, 4, 1);
         state.record_open_town_door(scene, 0, 4, 1);
+        state.set_town_npc_alarm_state(scene, 0, 2, TownNpcAlarmState::Fleeing);
 
         assert_eq!(
             state
@@ -755,6 +756,7 @@
         assert_eq!(state.door_tracker, None);
         assert!(state.opened_town_doors.is_empty());
         assert!(state.revealed_town_secret_doors.is_empty());
+        assert!(state.town_npc_alarm_states.is_empty());
         assert_eq!(state.turn, 1);
         let _ = fs::remove_dir_all(dir);
     }

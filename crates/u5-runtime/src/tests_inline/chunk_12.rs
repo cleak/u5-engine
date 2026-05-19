@@ -292,6 +292,7 @@
             ],
             pending_vehicle: None,
         });
+        state.set_town_npc_alarm_state(Scene::new(17).unwrap(), 0, 2, TownNpcAlarmState::Fleeing);
 
         assert!(state.restore_return_world());
 
@@ -318,6 +319,7 @@
         );
         assert!(state.active_objects[1].is_empty());
         assert_eq!(state.active_objects[2], vehicle);
+        assert!(state.town_npc_alarm_states.is_empty());
     }
 
     #[test]

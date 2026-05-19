@@ -933,7 +933,7 @@ impl PlayState {
         self.natural_moongate_live_cells.clear();
         self.npcs.clear();
         self.replace_world_active_objects(game_dir, entry.to_plane, entry.to_x, entry.to_y)?;
-        self.clear_open_town_door_state();
+        self.clear_town_visit_state();
         self.return_world = None;
         self.pending_moongate = None;
         self.pending_town_arrest = None;
@@ -1366,7 +1366,7 @@ impl PlayState {
         }
         self.sync_player_object();
         self.cache_current_world_overlay();
-        self.clear_open_town_door_state();
+        self.clear_town_visit_state();
         self.pending_moongate = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
@@ -1409,7 +1409,7 @@ impl PlayState {
         self.natural_moongate_live_cells.clear();
         self.npcs.clear();
         self.replace_world_active_objects(game_dir, entry.plane, entry.x, entry.y)?;
-        self.clear_open_town_door_state();
+        self.clear_town_visit_state();
         self.pending_moongate = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
