@@ -649,19 +649,21 @@ fn animate_static_tiles(
     let mut advanced = false;
     while pump.accumulator >= pump.interval {
         pump.accumulator -= pump.interval;
-        visual.state.animation.tick_static_tiles();
-        advanced = true;
+        advanced |= visual_idle_tick(&mut visual.state);
     }
-    if !advanced || !visual.state.viewport_has_animated_tiles(VIEWPORT_RADIUS) {
-        // Tick still consumed (state advances even when nothing visible
-        // animates so re-entering a water scene picks up at the right
-        // phase), but skip the framebuffer re-blit.
+    if !advanced {
         return;
     }
     let v: &mut VisualState = visual.as_mut();
     let rgba = render_framebuffer(&mut v.state, &v.atlas);
     if let Some(image) = images.get_mut(&v.image_handle) {
         image.data = Some(rgba);
+    }
+    let input_line = v.input_line.clone();
+    let text_font = v.text_font.clone();
+    let status_rgba = render_status_framebuffer(&mut v.state, &input_line, "", &text_font);
+    if let Some(image) = images.get_mut(&v.status_image_handle) {
+        image.data = Some(status_rgba);
     }
 }
 
@@ -2065,6 +2067,14 @@ fn visual_modal_prompt_active(state: &PlayState) -> bool {
         || state.endgame.is_some()
 }
 
+fn visual_idle_tick(state: &mut PlayState) -> bool {
+    if visual_modal_prompt_active(state) {
+        return false;
+    }
+    let _ = state.idle_tick();
+    true
+}
+
 fn should_escape_quit_visual(state: &PlayState) -> bool {
     !visual_modal_prompt_active(state)
 }
@@ -2717,6 +2727,33 @@ mod tests {
         chest.start_surface_object_chest_prompt(2, 1, SurfaceChestVerb::Open);
         assert!(chest.active_surface_chest.is_some());
         assert!(!should_escape_quit_visual(&chest));
+    }
+
+    #[test]
+    fn visual_idle_tick_advances_runtime_wait_tick_without_game_time() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let clock_before = state.clock;
+
+        assert!(visual_idle_tick(&mut state));
+
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, clock_before);
+        assert_eq!(state.animation.frame, 1);
+        assert!(state.message.contains("Idle animation tick."));
+    }
+
+    #[test]
+    fn visual_idle_tick_suppresses_world_tick_during_modal_prompt() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let _ = state.start_wishing_well_prompt(Direction::East);
+        let clock_before = state.clock;
+
+        assert!(!visual_idle_tick(&mut state));
+
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, clock_before);
+        assert_eq!(state.animation.frame, 0);
+        assert_eq!(state.message, "Wishing well: toss a coin? (Y/N)");
     }
 
     #[test]
