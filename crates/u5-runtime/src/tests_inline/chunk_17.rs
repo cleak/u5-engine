@@ -934,6 +934,64 @@
     }
 
     #[test]
+    fn inline_use_routes_shadowlord_shard_names_to_handler() {
+        let cases = [
+            (
+                "Falsehood",
+                SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
+                "Shard of Falsehood: no matching Shadowlord is nearby.",
+            ),
+            (
+                "Shard Hatred",
+                SPECIAL_ITEM_SHARD_HATRED_INDEX,
+                "Shard of Hatred: no matching Shadowlord is nearby.",
+            ),
+            (
+                "CW",
+                SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+                "Shard of Cowardice: no matching Shadowlord is nearby.",
+            ),
+        ];
+
+        for (suffix, item_index, expected_message) in cases {
+            let mut state = test_state(open_grid(), 5, 5);
+            state.special_items[item_index] = 1;
+
+            assert_eq!(
+                handle_play_key_input(&mut state, 'U', suffix, Path::new("")).unwrap(),
+                PlayInputDisposition::Continue
+            );
+
+            assert!(state.active_use.is_none());
+            assert_eq!(state.special_items[item_index], 1);
+            assert_eq!(state.turn, 0);
+            assert_eq!(state.message, expected_message);
+        }
+    }
+
+    #[test]
+    fn inline_use_prompt_and_carpet_alias_remain_unambiguous() {
+        let prompt = use_prompt_message();
+        assert!(!prompt.contains("UT torch"));
+        assert!(!prompt.contains("UG gem"));
+        assert!(prompt.contains("UC carpet"));
+        assert!(prompt.contains("shard names"));
+
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 1;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'U', "C", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_use.is_none());
+        assert_eq!(state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 0);
+        assert!(matches!(state.player.transport, TransportState::Carpet { .. }));
+        assert_eq!(state.turn, 1);
+    }
+
+    #[test]
     fn use_shadowlord_shard_refuses_missing_and_vanquished_states_without_consuming() {
         let mut missing = test_state(open_grid(), 5, 5);
         assert_eq!(

@@ -205,6 +205,9 @@ pub fn parse_inline_use_request(value: &str) -> Option<UseItemRequest> {
             target: None,
         });
     }
+    if let Some(index) = parse_inline_shadowlord_shard_index(trimmed) {
+        return Some(UseItemRequest::ShadowlordShard(index));
+    }
     let token = trimmed.chars().next()?;
     match token.to_ascii_uppercase() {
         'B' => Some(UseItemRequest::WoodenBox),
@@ -219,6 +222,25 @@ pub fn parse_inline_use_request(value: &str) -> Option<UseItemRequest> {
             .map(UseItemRequest::Moonstone),
         _ => Some(UseItemRequest::Invalid),
     }
+}
+
+pub fn parse_inline_shadowlord_shard_index(value: &str) -> Option<usize> {
+    let token = normalized_inline_use_token(value);
+    let shard = token.strip_prefix("SHARD").unwrap_or(token.as_str());
+    match shard {
+        "FALSEHOOD" | "FALSE" | "SF" | "F" => Some(SHADOWLORD_FALSEHOOD_INDEX),
+        "HATRED" | "HATE" | "SH" | "H" => Some(SHADOWLORD_HATRED_INDEX),
+        "COWARDICE" | "COWARD" | "CW" => Some(SHADOWLORD_COWARDICE_INDEX),
+        _ => None,
+    }
+}
+
+fn normalized_inline_use_token(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .map(|ch| ch.to_ascii_uppercase())
+        .collect()
 }
 
 pub fn parse_inline_potion_index(value: &str) -> Option<usize> {
@@ -487,7 +509,7 @@ pub fn cast_prompt_message() -> String {
 }
 
 pub fn use_prompt_message() -> String {
-    "Use what? Use UT torch, UG gem, UK key, scroll codes, potion colors, USC Sceptre, USP Spyglass, UCR Crown, UAM Amulet, UBB Badge, or U1..U8 Moonstone."
+    "Use what? Use UK key, UC carpet, UP plans, US sextant, UW watch, UB box, USP Spyglass, UCR/UAM/USC/UBB regalia, scroll codes, potion colors, shard names, or U1..U8 Moonstone."
         .to_string()
 }
 
