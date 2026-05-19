@@ -715,6 +715,40 @@
     }
 
     #[test]
+    fn active_direction_prompt_routes_top_down_look_without_spending_turn() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(LOOK2_DAT_FILE),
+            look2_bytes(&[(16, "east road"), (17, "south road")]),
+        )
+        .unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = 16;
+        grid[2 * 32 + 1] = 17;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::South;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'L', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_direction_prompt.is_some());
+        assert_eq!(state.message, "Look-");
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '6', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_direction_prompt.is_none());
+        assert!(state.message.contains("east road at (2, 1)"));
+        assert!(!state.message.contains("south road"));
+        assert_eq!(state.player.facing, Direction::South);
+        assert_eq!(state.turn, 0);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn active_yes_no_prompt_routes_save_cancel_and_dungeon_exit() {
         let dir = debug_game_dir();
         fs::write(dir.join("SAVED.GAM"), saved_game_seed_bytes(0, 0xff, 10, 20)).unwrap();

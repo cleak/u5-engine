@@ -2022,13 +2022,31 @@ impl PlayState {
     }
 
     pub fn look_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
+        self.look_direction_with_game_dir(self.player.facing, game_dir)
+    }
+
+    pub fn look_direction_with_game_dir(
+        &mut self,
+        direction: Direction,
+        game_dir: &Path,
+    ) -> io::Result<MoveOutcome> {
         let look_table = load_look_table(game_dir)?;
-        self.look_facing_with_resources(Some(&look_table), Some(game_dir))
+        self.look_direction_with_resources(direction, Some(&look_table), Some(game_dir))
     }
 
     #[cfg(test)]
     pub fn look_facing_with_table(&mut self, look_table: Option<&LookTable>) -> MoveOutcome {
-        self.look_facing_with_resources(look_table, None)
+        self.look_direction_with_resources(self.player.facing, look_table, None)
+            .expect("look without a game dir cannot perform file-backed look context")
+    }
+
+    #[cfg(test)]
+    pub fn look_direction_with_table(
+        &mut self,
+        direction: Direction,
+        look_table: Option<&LookTable>,
+    ) -> MoveOutcome {
+        self.look_direction_with_resources(direction, look_table, None)
             .expect("look without a game dir cannot perform file-backed look context")
     }
 
@@ -2037,10 +2055,19 @@ impl PlayState {
         look_table: Option<&LookTable>,
         game_dir: Option<&Path>,
     ) -> io::Result<MoveOutcome> {
+        self.look_direction_with_resources(self.player.facing, look_table, game_dir)
+    }
+
+    pub fn look_direction_with_resources(
+        &mut self,
+        direction: Direction,
+        look_table: Option<&LookTable>,
+        game_dir: Option<&Path>,
+    ) -> io::Result<MoveOutcome> {
         match self.area {
             Area::Dungeon { .. } => Ok(self.look_dungeon()),
             Area::Town { .. } => {
-                let (dx, dy) = self.player.facing.delta();
+                let (dx, dy) = direction.delta();
                 let x = self.player.x as isize + dx;
                 let y = self.player.y as isize + dy;
                 if !(0..32).contains(&x) || !(0..32).contains(&y) {
@@ -2076,7 +2103,7 @@ impl PlayState {
                 Ok(MoveOutcome::Observed)
             }
             Area::World { plane } => {
-                let (dx, dy) = self.player.facing.delta();
+                let (dx, dy) = direction.delta();
                 let x = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
                 let y = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
                 if let Some(object) = self.world_object_at(x, y) {

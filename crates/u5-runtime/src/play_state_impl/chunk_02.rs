@@ -280,7 +280,11 @@ impl PlayState {
                     handled!(self.klimb_command(game_dir)?);
                 }
                 'L' => {
-                    handled!(self.look_facing_with_game_dir(game_dir)?);
+                    if let Some(direction) = inline_direction {
+                        handled!(self.look_direction_with_game_dir(direction, game_dir)?);
+                    } else {
+                        handled!(self.start_look_direction_prompt());
+                    }
                 }
                 'M' => {
                     if let Some(outcome) = self.read_codex_urn_at_current_position(game_dir)? {
@@ -380,7 +384,13 @@ impl PlayState {
                     self.open_facing_with_game_dir(Some(game_dir))?
                 }
             }
-            'l' => self.look_facing_with_game_dir(game_dir)?,
+            'l' => {
+                if let Some(direction) = inline_direction {
+                    self.look_direction_with_game_dir(direction, game_dir)?
+                } else {
+                    self.look_facing_with_game_dir(game_dir)?
+                }
+            }
             'v' => self.view_gem(),
             'i' => self.ignite_torch(),
             'h' => self.hole_up_command(game_dir, inline_rest)?,

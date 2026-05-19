@@ -224,6 +224,28 @@
     }
 
     #[test]
+    fn town_look_direction_samples_selected_direction_without_turn_or_turning() {
+        let table = parse_look2_dat(&look2_bytes(&[(16, "east road"), (17, "south road")]))
+            .unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = 16;
+        grid[2 * 32 + 1] = 17;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::South;
+
+        assert_eq!(
+            state.look_direction_with_table(Direction::East, Some(&table)),
+            MoveOutcome::Observed
+        );
+
+        assert!(state.message.contains("east road at (2, 1)"));
+        assert!(!state.message.contains("south road"));
+        assert_eq!(state.player.facing, Direction::South);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
+    }
+
+    #[test]
     fn town_look_uses_look2_description_when_available() {
         let dir = debug_game_dir();
         fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[(16, "stone path")])).unwrap();

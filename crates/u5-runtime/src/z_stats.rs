@@ -200,6 +200,7 @@ pub enum DirectionPromptKind {
     },
     Fire,
     Get,
+    Look,
     Open,
     Push,
     Search,

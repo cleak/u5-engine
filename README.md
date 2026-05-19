@@ -237,6 +237,9 @@ instead of the movement helper, with optional town lock and dungeon door
 metadata able to unlock authored door cells. Numeric diagonals still refuse as
 unsupported dungeon movement, and dungeon `Q` routes to the public mode-loop
 `Exit to DOS?` prompt instead of the resident save writer.
+Top-down uppercase `L` opens the Look direction prompt, while inline forms such
+as `L6` and lowercase quick-look continue to route in one command without
+turning the party or spending a turn.
 Unhandled dungeon keys run the public sleep/idle polling path as a no-turn
 `Zzzzzz...` visual tick instead of using the top-down generic unhandled-command
 message.

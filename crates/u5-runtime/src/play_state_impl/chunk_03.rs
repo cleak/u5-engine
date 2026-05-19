@@ -739,6 +739,12 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    pub fn start_look_direction_prompt(&mut self) -> MoveOutcome {
+        self.active_direction_prompt = Some(DirectionPromptSession::new(DirectionPromptKind::Look));
+        self.message = self.render_active_direction_prompt();
+        MoveOutcome::Observed
+    }
+
     pub fn start_open_direction_prompt(&mut self) -> MoveOutcome {
         self.active_direction_prompt = Some(DirectionPromptSession::new(DirectionPromptKind::Open));
         self.message = self.render_active_direction_prompt();
@@ -824,6 +830,7 @@ impl PlayState {
                 }
                 DirectionPromptKind::Fire => "Fire- which direction?".to_string(),
                 DirectionPromptKind::Get => "Get-".to_string(),
+                DirectionPromptKind::Look => "Look-".to_string(),
                 DirectionPromptKind::Open => "Open-".to_string(),
                 DirectionPromptKind::Push => "Push-".to_string(),
                 DirectionPromptKind::Search => "Search-".to_string(),
@@ -932,6 +939,9 @@ impl PlayState {
                 DirectionPromptKind::Fire => self.fire_command(Some(direction), game_dir)?,
                 DirectionPromptKind::Get => {
                     self.get_direction_with_game_dir(direction, game_dir)?
+                }
+                DirectionPromptKind::Look => {
+                    self.look_direction_with_game_dir(direction, game_dir)?
                 }
                 DirectionPromptKind::Open => {
                     self.open_direction_with_game_dir(direction, Some(game_dir))?
