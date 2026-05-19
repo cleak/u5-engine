@@ -2694,12 +2694,29 @@ impl PlayState {
             } => prompt,
             _ => "Virtue",
         };
+        let opening = self
+            .blackthorn_audience_opening_text(game_dir)?
+            .unwrap_or_else(|| {
+                "the party is overcome and dragged before Lord Blackthorn".to_string()
+            });
         self.active_blackthorn = Some(challenge);
         self.message = format!(
-            "Blackthorn audience: the party is overcome and dragged before Lord Blackthorn. Party slot {} is challenged for {prompt}.",
+            "Blackthorn audience: {opening}. Party slot {} is challenged for {prompt}.",
             target_slot + 1
         );
         Ok(Some(MoveOutcome::Used))
+    }
+
+    pub fn blackthorn_audience_opening_text(&self, game_dir: &Path) -> io::Result<Option<String>> {
+        let Some(messages) = load_misc_messages(game_dir)? else {
+            return Ok(None);
+        };
+        Ok(messages
+            .blackthorn_audience()
+            .iter()
+            .map(|record| record.trim())
+            .find(|record| !record.is_empty())
+            .map(str::to_string))
     }
 
     pub fn submit_blackthorn_audience_answer(

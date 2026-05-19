@@ -917,6 +917,33 @@
     }
 
     #[test]
+    fn blackthorn_audience_uses_miscmsg_opening_when_available() {
+        let dir = debug_game_dir();
+        let mut miscmsg = Vec::new();
+        for index in 0..MISCMSG_DAT_RECORDS {
+            if index == 0 {
+                miscmsg.extend_from_slice(b"authored capture line");
+            } else {
+                miscmsg.extend_from_slice(format!("rec{index}").as_bytes());
+            }
+            miscmsg.push(0);
+        }
+        fs::write(dir.join(MISCMSG_DAT_FILE), miscmsg).unwrap();
+
+        let mut state = test_state(open_grid(), 5, 5);
+
+        assert_eq!(
+            state.begin_blackthorn_audience_capture(&dir).unwrap(),
+            Some(MoveOutcome::Used)
+        );
+
+        assert!(state.active_blackthorn.is_some());
+        assert!(state.message.contains("authored capture line"));
+        assert!(state.message.contains("Honesty"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn blackthorn_rescue_restores_party_and_clamps_standing() {
         let dir = debug_game_dir();
         fs::write(
