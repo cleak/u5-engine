@@ -2,7 +2,7 @@
 //!
 //! The runner walks one response-stream's raw bytes, classifies each via
 //! [`tlk_control_codes`], emits rendered text into a buffer, applies action
-//! grants and branch-flag sets, and records prompts encountered along the
+//! grants, and records prompts encountered along the
 //! way. The deterministic-with-inputs pattern matches the rest of the
 //! runtime: any byte-level decision that would normally require an input
 //! prompt is pre-decided by the caller through [`TlkRunInputs`], so the
@@ -13,7 +13,7 @@
 //! per-stream engine: feed bytes in, get rendered text and side effects
 //! out.
 
-use crate::map_io::{talk_branch_flag_is_set, talk_branch_flag_mask};
+use crate::map_io::talk_branch_flag_is_set;
 use crate::tlk_control_codes::*;
 
 /// Inputs the runner needs to interpret control codes that would otherwise
@@ -100,6 +100,10 @@ pub enum TlkRunStop {
     /// in the stream beyond the current cursor). The runner stops to
     /// avoid an infinite loop.
     UnresolvedGotoLabel(u8),
+    /// Hit `0x87` SET-FLAG / follow-up keyword scan. `cursor` points
+    /// just past the control byte; the conversation wrapper owns the
+    /// recursive keyword scan and then resumes this stream from there.
+    FollowUpKeywordScan(usize),
     /// Encountered a `0x91..=0x9F` label byte through ordinary stream
     /// execution. The conversation session owns the labelled-record
     /// handler and any scoped prompt that follows.
@@ -113,8 +117,6 @@ pub enum TlkRunEvent {
     Action(TlkActionDispatchVerb),
     /// `0x86` argument below `'A'` (per-conversation signal flag bit).
     SignalFlag(u8),
-    /// `0x87` SET-FLAG: bit index into the branch-flag slot.
-    SetFlag(u8),
     /// `0x85` GOLD-PAYMENT (amount, accepted).
     GoldPayment { amount: u16, accepted: bool },
     /// `0x84` ASK-PARTY-NAME: 1-based slot match (0 = no match).
@@ -153,7 +155,11 @@ pub struct TlkRunOutput {
     /// bytes (`0xA0..=0xFD`) and expands dictionary tokens through the
     /// supplied dictionary (or `[w<n>]` placeholders).
     pub text: String,
-    /// Mask of branch-flag bits the stream set via `0x87`.
+    /// Mask of branch-flag bits the stream set.
+    ///
+    /// Kept for conversation-session compatibility with callers that
+    /// merge branch effects, though the public `0x87` contract is a
+    /// follow-up keyword scan rather than a direct bit setter.
     pub branch_flags_set: u32,
     /// Action-dispatch verbs encountered, in order.
     pub action_grants: Vec<TlkActionDispatchVerb>,
@@ -254,16 +260,9 @@ pub fn run_tlk_stream_from(bytes: &[u8], start: usize, inputs: &TlkRunInputs) ->
                 curse_pending = false;
             }
             TLK_CODE_SET_FLAG => {
-                let Some(&arg) = bytes.get(pos) else {
-                    out.stop = TlkRunStop::MalformedIntroducer(pos);
-                    out.consumed = pos;
-                    return out;
-                };
-                pos += 1;
-                let bit = arg & 0x7F;
-                let mask = talk_branch_flag_mask(bit);
-                out.branch_flags_set |= mask;
-                out.events.push(TlkRunEvent::SetFlag(bit));
+                out.stop = TlkRunStop::FollowUpKeywordScan(pos);
+                out.consumed = pos;
+                return out;
             }
             TLK_CODE_ASK_PARTY_NAME => {
                 if inputs.yield_on_ask {
@@ -615,11 +614,17 @@ mod tests {
     }
 
     #[test]
-    fn set_flag_records_branch_bit() {
-        let mut bytes = vec![TLK_CODE_SET_FLAG, 0x03];
+    fn set_flag_yields_follow_up_keyword_scan_without_consuming_next_byte() {
+        let mut bytes = vec![TLK_CODE_SET_FLAG];
+        bytes.extend_from_slice(&enc("tail"));
         bytes.push(TLK_CODE_END_OF_RESPONSE);
         let out = render(&bytes);
-        assert_eq!(out.branch_flags_set, 1u32 << 3);
+        assert_eq!(out.stop, TlkRunStop::FollowUpKeywordScan(1));
+        assert_eq!(out.consumed, 1);
+        assert!(out.text.is_empty());
+
+        let resumed = run_tlk_stream_from(&bytes, out.consumed, &TlkRunInputs::default());
+        assert_eq!(resumed.text, "tail");
     }
 
     #[test]

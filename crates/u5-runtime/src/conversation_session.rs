@@ -88,7 +88,7 @@ pub struct ConversationGoldPayment {
 pub struct ConversationSessionOutput {
     /// Rendered text from the most-recent response stream.
     pub text: String,
-    /// New branch-flag bits the response set via `0x87`.
+    /// New branch-flag bits the response set.
     pub branch_flags_set: u32,
     /// Action grants encountered in the response.
     pub action_grants: Vec<TlkActionDispatchVerb>,
@@ -118,6 +118,11 @@ pub struct ConversationSession {
     pub decoded_fields: Vec<String>,
     /// Number of keyword lines processed so far (telemetry / UI).
     pub keyword_turns: u32,
+}
+
+struct KeywordMatch {
+    response_idx: usize,
+    remainder: Vec<u8>,
 }
 
 impl ConversationSession {
@@ -174,8 +179,16 @@ impl ConversationSession {
                     return ConversationSessionOutput::default();
                 };
                 self.phase = ConversationSessionPhase::AwaitingKeyword;
-                return self
-                    .run_field_from_with_options(field_idx, cursor, ctx, 0, 0, accepted, false);
+                return self.run_field_from_with_options(
+                    field_idx,
+                    cursor,
+                    ctx,
+                    0,
+                    0,
+                    accepted,
+                    false,
+                    &[],
+                );
             }
             _ => return ConversationSessionOutput::default(),
         }
@@ -192,7 +205,8 @@ impl ConversationSession {
             TlkPlayerInputKind::Reserved(ReservedKeywordEffect::JobEntry) => 3,
             TlkPlayerInputKind::Reserved(ReservedKeywordEffect::ByePath) => 4,
             TlkPlayerInputKind::OrdinaryKeywordScan => self
-                .find_ordinary_keyword_response_index(&input_upper)
+                .find_ordinary_keyword_match_from(&input_upper, TLK_LEADING_ENTRY_COUNT)
+                .map(|matched| matched.response_idx)
                 .unwrap_or(usize::MAX),
         };
         let mut out = ConversationSessionOutput::default();
@@ -207,7 +221,14 @@ impl ConversationSession {
         ) {
             out.text.push_str(TLK_EMPTY_INPUT_BYE_MESSAGE);
         }
-        let response = self.run_field_from(field_idx, 0, ctx, 0, 0);
+        let followup_input = match kind {
+            TlkPlayerInputKind::OrdinaryKeywordScan => self
+                .find_ordinary_keyword_match_from(&input_upper, TLK_LEADING_ENTRY_COUNT)
+                .map(|matched| matched.remainder)
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        };
+        let response = self.run_field_from_for_input(field_idx, 0, ctx, 0, 0, &followup_input);
         out.text.push_str(&response.text);
         out.branch_flags_set |= response.branch_flags_set;
         out.action_grants.extend(response.action_grants);
@@ -285,15 +306,30 @@ impl ConversationSession {
     }
 
     fn find_ordinary_keyword_response_index(&self, input_upper: &[u8]) -> Option<usize> {
+        self.find_ordinary_keyword_match_from(input_upper, TLK_LEADING_ENTRY_COUNT)
+            .map(|matched| matched.response_idx)
+    }
+
+    fn find_ordinary_keyword_match_from(
+        &self,
+        input_upper: &[u8],
+        start_idx: usize,
+    ) -> Option<KeywordMatch> {
         // Pairs start at field index 5: (keyword, response, keyword,
         // response, ...). Scan keyword positions; the response is the
         // next index.
-        let mut idx = 5usize;
+        let mut idx = start_idx.max(TLK_LEADING_ENTRY_COUNT);
+        if idx % 2 == 0 {
+            idx += 1;
+        }
         while idx + 1 < self.decoded_fields.len() {
             let keyword_field = &self.decoded_fields[idx];
             let keyword = keyword_field.trim().as_bytes();
-            if !keyword.is_empty() && tlk_keyword_matches(keyword, input_upper) {
-                return Some(idx + 1);
+            if let Some(remainder) = tlk_keyword_match_remainder(keyword, input_upper) {
+                return Some(KeywordMatch {
+                    response_idx: idx + 1,
+                    remainder,
+                });
             }
             idx += 2;
         }
@@ -308,6 +344,25 @@ impl ConversationSession {
         ask_party_name_response: u8,
         ask_who_response: u8,
     ) -> ConversationSessionOutput {
+        self.run_field_from_for_input(
+            field_idx,
+            start,
+            ctx,
+            ask_party_name_response,
+            ask_who_response,
+            &[],
+        )
+    }
+
+    fn run_field_from_for_input(
+        &mut self,
+        field_idx: usize,
+        start: usize,
+        ctx: &ConversationContext<'_>,
+        ask_party_name_response: u8,
+        ask_who_response: u8,
+        followup_input_upper: &[u8],
+    ) -> ConversationSessionOutput {
         self.run_field_from_with_options(
             field_idx,
             start,
@@ -316,6 +371,7 @@ impl ConversationSession {
             ask_who_response,
             ctx.gold_payment_accepted,
             true,
+            followup_input_upper,
         )
     }
 
@@ -328,9 +384,11 @@ impl ConversationSession {
         ask_who_response: u8,
         gold_payment_accepted: bool,
         yield_on_gold_payment: bool,
+        followup_input_upper: &[u8],
     ) -> ConversationSessionOutput {
         let mut out = ConversationSessionOutput::default();
-        let Some(run) = self.fields.get(field_idx).map(|bytes| {
+        let mut cursor = start;
+        while let Some(run) = self.fields.get(field_idx).map(|bytes| {
             let inputs = make_inputs(
                 ctx,
                 ask_party_name_response,
@@ -338,11 +396,32 @@ impl ConversationSession {
                 gold_payment_accepted,
                 yield_on_gold_payment,
             );
-            run_tlk_stream_from(bytes, start, &inputs)
-        }) else {
-            return out;
-        };
-        self.absorb_run(field_idx, &run, &mut out);
+            run_tlk_stream_from(bytes, cursor, &inputs)
+        }) {
+            self.absorb_run(field_idx, &run, &mut out);
+            let TlkRunStop::FollowUpKeywordScan(next_cursor) = run.stop else {
+                break;
+            };
+
+            if let Some(matched) =
+                self.find_ordinary_keyword_match_from(followup_input_upper, field_idx + 1)
+            {
+                let nested = self.run_field_from_for_input(
+                    matched.response_idx,
+                    0,
+                    ctx,
+                    0,
+                    0,
+                    &matched.remainder,
+                );
+                merge_session_output(&mut out, nested);
+                if !matches!(self.phase, ConversationSessionPhase::AwaitingKeyword) {
+                    break;
+                }
+            }
+
+            cursor = next_cursor;
+        }
         out
     }
 
@@ -492,6 +571,28 @@ impl ConversationSession {
             _ => {}
         }
     }
+}
+
+fn merge_session_output(out: &mut ConversationSessionOutput, nested: ConversationSessionOutput) {
+    out.text.push_str(&nested.text);
+    out.branch_flags_set |= nested.branch_flags_set;
+    out.action_grants.extend(nested.action_grants);
+    out.gold_payments.extend(nested.gold_payments);
+    out.signal_flags.extend(nested.signal_flags);
+    out.asked_party_name = nested.asked_party_name.or(out.asked_party_name);
+    out.asked_who = nested.asked_who.or(out.asked_who);
+    out.ended |= nested.ended;
+}
+
+fn tlk_keyword_match_remainder(keyword: &[u8], input_upper: &[u8]) -> Option<Vec<u8>> {
+    if !tlk_keyword_matches(keyword, input_upper) {
+        return None;
+    }
+    let mut start = keyword.len().min(input_upper.len());
+    while start < input_upper.len() && input_upper[start] == b' ' {
+        start += 1;
+    }
+    Some(input_upper[start..].to_vec())
 }
 
 fn find_next_label_record(bytes: &[u8], label: u8, from: usize) -> Option<(usize, usize)> {
@@ -942,6 +1043,78 @@ mod tests {
         // boundary).
         let out = s.submit_keyword("gran news", &ctx());
         assert!(out.text.contains("Short"));
+    }
+
+    #[test]
+    fn set_flag_follow_up_keyword_scan_runs_response_for_remaining_input() {
+        let mut response = enc("Base ");
+        response.push(TLK_CODE_SET_FLAG);
+        response.extend_from_slice(&enc(" after."));
+        response.push(TLK_CODE_END_OF_RESPONSE);
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("GRAN"),
+            response,
+            enc("NEWS"),
+            enc_with_stop("Nested", TLK_CODE_END_OF_RESPONSE),
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Greetings.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "GRAN".to_string(),
+            String::new(),
+            "NEWS".to_string(),
+            "Nested".to_string(),
+        ];
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&ctx());
+
+        let out = s.submit_keyword("gran news", &ctx());
+        assert_eq!(out.text, "Base Nested after.");
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+    }
+
+    #[test]
+    fn set_flag_follow_up_keyword_scan_restores_stream_on_miss() {
+        let mut response = enc("Base ");
+        response.push(TLK_CODE_SET_FLAG);
+        response.extend_from_slice(&enc(" after."));
+        response.push(TLK_CODE_END_OF_RESPONSE);
+        let raw = vec![
+            enc("Ada"),
+            enc("a quiet smith"),
+            enc("Greetings."),
+            enc("I mend gear."),
+            enc("Farewell."),
+            enc("GRAN"),
+            response,
+            enc("NEWS"),
+            enc_with_stop("Nested", TLK_CODE_END_OF_RESPONSE),
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Greetings.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "GRAN".to_string(),
+            String::new(),
+            "NEWS".to_string(),
+            "Nested".to_string(),
+        ];
+        let mut s = ConversationSession::new(raw, decoded);
+        s.present_greeting(&ctx());
+
+        let out = s.submit_keyword("gran gossip", &ctx());
+        assert_eq!(out.text, "Base  after.");
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
 
     #[test]

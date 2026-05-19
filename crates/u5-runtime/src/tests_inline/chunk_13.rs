@@ -4591,8 +4591,10 @@
             tlk_introducer_argument_count(TLK_CODE_IF_ELSE_ALT),
             Some(TLK_IF_ELSE_ALT_ARGUMENT_BYTES)
         );
-        // Non-introducer codes still return None.
+        // Non-introducer codes still return None, including 0x87's
+        // no-argument follow-up keyword scan.
         assert_eq!(tlk_introducer_argument_count(TLK_CODE_PAUSE), None);
+        assert_eq!(tlk_introducer_argument_count(TLK_CODE_SET_FLAG), None);
         assert_eq!(tlk_introducer_argument_count(0), None);
     }
 
@@ -5144,8 +5146,8 @@
             assert_eq!(mask, 1u32 << bit);
         }
         // Bits at or beyond the bank build a zero mask. An IF test
-        // therefore reads as clear, and a SET-FLAG write does not
-        // mutate the slot.
+        // therefore reads as clear, and branch-bank writes reject the
+        // out-of-range bit.
         assert_eq!(talk_branch_flag_mask(TALK_BRANCH_FLAG_BANK_BITS), 0);
         assert_eq!(talk_branch_flag_mask(50), 0);
         assert!(!talk_branch_flag_is_set(u32::MAX, TALK_BRANCH_FLAG_BANK_BITS));
@@ -17446,6 +17448,7 @@
             TLK_CODE_WAIT_KEY,
             TLK_CODE_CURSE_CHECK,
             TLK_CODE_PROTECT_RUN,
+            TLK_CODE_SET_FLAG,
             TLK_CODE_END_OF_RESPONSE,
         ] {
             assert_eq!(tlk_introducer_argument_count(code), None);
