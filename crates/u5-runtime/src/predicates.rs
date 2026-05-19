@@ -297,6 +297,27 @@ pub const fn transport_marker_facing(marker: u8) -> Option<Direction> {
     })
 }
 
+/// `vehicles.md §2`: rewrite the marker's facing bits while preserving
+/// the known transport family. Horse transport is constrained by the
+/// existing clean-engine mounted range (`0x12..=0x13`), so only its low
+/// east/west bit can be represented here.
+pub const fn transport_marker_with_facing(marker: u8, facing: Direction) -> Option<u8> {
+    let Some(index) = facing.cardinal_facing_index() else {
+        return None;
+    };
+    let Some(family) = transport_family(marker) else {
+        return None;
+    };
+    Some(match family {
+        TransportFamily::MountedHorse => HORSE_TRANSPORT_FIRST + (index & 0x01),
+        TransportFamily::MagicCarpet => TRANSPORT_MARKER_MAGIC_CARPET_FIRST + index,
+        TransportFamily::Foot => TRANSPORT_MARKER_FOOT_FIRST + index,
+        TransportFamily::ShipHoisted => TRANSPORT_MARKER_SHIP_HOISTED_FIRST + index,
+        TransportFamily::ShipFurled => TRANSPORT_MARKER_SHIP_FURLED_FIRST + index,
+        TransportFamily::Skiff => TRANSPORT_MARKER_SKIFF_FIRST + index,
+    })
+}
+
 /// `stats-panel.md §5` middle-counter selection. The bottom block's
 /// middle counter shows the saved party gold word in ordinary and
 /// combat scenes; when the transport/action marker byte is in the

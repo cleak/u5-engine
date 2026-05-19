@@ -766,7 +766,8 @@ impl PlayState {
                     self.player.transport = TransportState::Skiff {
                         type_byte: FIRST_PLAYABLE_SKIFF_TILE,
                         tile: FIRST_PLAYABLE_SKIFF_TILE,
-                    };
+                    }
+                    .with_facing(self.player.facing);
                     self.timing_status = TimingStatusTag::for_transport(self.player.transport);
                     self.sail_cadence = 0;
                     self.sail_stall_pending = false;

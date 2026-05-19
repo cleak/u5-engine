@@ -1429,6 +1429,7 @@ impl PlayState {
             active_player: self.active_player,
             combat_round_counter: self.combat_round_counter,
             transport: TransportState::Foot,
+            facing: Some(self.player.facing),
             pending_vehicle: None,
             inn_registry: self.inn_registry.clone(),
             initial_britannia_overlay: self.world_overlays.get(WorldPlane::Britannia),

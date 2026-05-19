@@ -570,7 +570,7 @@
         let saved_gam = fs::read(dir.join("SAVED.GAM")).unwrap();
         assert_eq!(
             saved_gam[SAVE_TRANSPORT_MARKER_OFFSET],
-            FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER
+            FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER + 2
         );
         let saved_active = decode_active_object_table(
             &saved_gam[SAVE_ACTIVE_OBJECTS_OFFSET..SAVE_ACTIVE_OBJECTS_OFFSET + OOL_PLANE_LEN],

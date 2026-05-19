@@ -302,6 +302,30 @@
     }
 
     #[test]
+    fn save_game_command_writes_foot_transport_marker_with_current_facing() {
+        let dir = debug_game_dir();
+        let mut template = saved_game_seed_bytes(0, 0xff, 10, 20);
+        template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        fs::write(dir.join(SAVED_GAM_FILENAME), template).unwrap();
+        fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+        fs::write(dir.join(BRIT_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+        fs::write(dir.join(UNDER_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.player.transport = TransportState::Foot;
+        state.player.facing = Direction::West;
+
+        assert_eq!(
+            state.save_game_command(&dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+
+        let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        assert_eq!(saved[SAVE_TRANSPORT_MARKER_OFFSET], TRANSPORT_MARKER_FOOT_LAST);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn save_game_command_does_not_persist_transient_potion_presentation() {
         let base_dir = debug_game_dir();
         let transient_dir = debug_game_dir();
@@ -916,6 +940,7 @@
 
         bytes[SAVE_TRANSPORT_MARKER_OFFSET] = TRANSPORT_MARKER_SHIP_HOISTED_FIRST + 1;
         let hoisted = play_options_from_save_bytes(&bytes).unwrap();
+        assert_eq!(hoisted.facing, Some(Direction::East));
         assert_eq!(
             hoisted.transport,
             TransportState::Ship {
@@ -929,6 +954,7 @@
 
         bytes[SAVE_TRANSPORT_MARKER_OFFSET] = TRANSPORT_MARKER_SHIP_FURLED_FIRST + 2;
         let furled = play_options_from_save_bytes(&bytes).unwrap();
+        assert_eq!(furled.facing, Some(Direction::South));
         assert_eq!(
             furled.transport,
             TransportState::Ship {
@@ -942,6 +968,7 @@
 
         bytes[SAVE_TRANSPORT_MARKER_OFFSET] = TRANSPORT_MARKER_MAGIC_CARPET_LAST;
         let carpet = play_options_from_save_bytes(&bytes).unwrap();
+        assert_eq!(carpet.facing, Some(Direction::West));
         assert_eq!(
             carpet.transport,
             TransportState::Carpet {
@@ -952,6 +979,7 @@
 
         bytes[SAVE_TRANSPORT_MARKER_OFFSET] = TRANSPORT_MARKER_SKIFF_LAST;
         let skiff = play_options_from_save_bytes(&bytes).unwrap();
+        assert_eq!(skiff.facing, Some(Direction::West));
         assert_eq!(
             skiff.transport,
             TransportState::Skiff {
@@ -959,6 +987,11 @@
                 tile: FIRST_PLAYABLE_SKIFF_TILE + 3,
             }
         );
+
+        bytes[SAVE_TRANSPORT_MARKER_OFFSET] = TRANSPORT_MARKER_FOOT_LAST;
+        let foot = play_options_from_save_bytes(&bytes).unwrap();
+        assert_eq!(foot.transport, TransportState::Foot);
+        assert_eq!(foot.facing, Some(Direction::West));
     }
 
     #[test]
@@ -1372,6 +1405,7 @@
             active_player: None,
             combat_round_counter: 0,
             transport: TransportState::Foot,
+            facing: None,
             pending_vehicle: None,
             inn_registry: Vec::new(),
             initial_britannia_overlay: None,

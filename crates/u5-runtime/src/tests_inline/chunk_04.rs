@@ -507,6 +507,29 @@
     }
 
     #[test]
+    fn vehicle_directional_step_refreshes_transport_marker_and_player_tile() {
+        let mut state = world_state(open_world_grid(), 4, 4);
+        state.player.transport = TransportState::Carpet {
+            type_byte: TRANSPORT_MARKER_MAGIC_CARPET_FIRST,
+            tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+        };
+        state.sync_player_object();
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::West, None)
+                .expect("world carpet step is in-memory"),
+            MoveOutcome::Moved
+        );
+
+        assert_eq!(
+            state.player.transport.save_marker(),
+            TRANSPORT_MARKER_MAGIC_CARPET_LAST
+        );
+        assert_eq!(state.active_objects[0].tile, FIRST_PLAYABLE_MAGIC_CARPET_TILE + 3);
+    }
+
+    #[test]
     fn board_ship_accepts_carpet_north_east_and_stows_carpet() {
         for marker in [TRANSPORT_MARKER_MAGIC_CARPET_FIRST, TRANSPORT_MARKER_MAGIC_CARPET_FIRST + 1] {
             let mut state = world_state(open_world_grid(), 0, 0);

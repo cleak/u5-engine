@@ -1154,7 +1154,8 @@ fn ship_transport_can_move_over_water_that_blocks_foot() {
     assert_eq!(ship.step(Direction::East), MoveOutcome::Moved);
 
     assert_eq!((ship.player.x, ship.player.y), (1, 0));
-    assert_eq!(ship.active_objects[0].tile, 168);
+    assert_eq!(ship.player.transport.save_marker(), TRANSPORT_MARKER_SHIP_FURLED_FIRST + 1);
+    assert_eq!(ship.active_objects[0].tile, FIRST_PLAYABLE_FRIGATE_TILE + 1);
 }
 
 #[test]

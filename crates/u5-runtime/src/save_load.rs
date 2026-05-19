@@ -179,6 +179,8 @@ pub fn play_options_from_save_bytes_named(
     let special_items = decode_special_items(bytes);
     let inn_registry = decode_inn_registry(bytes);
 
+    let transport_marker = bytes[SAVE_TRANSPORT_MARKER_OFFSET];
+
     Ok(PlayOptions {
         target,
         floor,
@@ -233,7 +235,8 @@ pub fn play_options_from_save_bytes_named(
         fortunes_of_war: bytes[SAVE_FORTUNES_OF_WAR_OFFSET],
         active_player: decode_active_player_slot(bytes[SAVE_ACTIVE_PLAYER_OFFSET], party_size),
         combat_round_counter: bytes[SAVE_COMBAT_ROUND_COUNTER_OFFSET],
-        transport: transport_from_save_marker(bytes[SAVE_TRANSPORT_MARKER_OFFSET]),
+        transport: transport_from_save_marker(transport_marker),
+        facing: transport_marker_facing(transport_marker),
         pending_vehicle: None,
         inn_registry,
         initial_britannia_overlay: None,

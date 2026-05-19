@@ -223,6 +223,11 @@ impl TransportState {
         }
     }
 
+    pub fn avatar_tile_with_facing(self, facing: Direction) -> u8 {
+        transport_visual_tile_for_marker(self.save_marker_with_facing(facing))
+            .unwrap_or_else(|| self.avatar_tile())
+    }
+
     pub fn kind_name(self) -> &'static str {
         match self {
             Self::Foot => "foot",
@@ -282,6 +287,45 @@ impl TransportState {
                     .unwrap_or(FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER)
             }
             Self::Balloon { .. } => FIRST_PLAYABLE_FOOT_TRANSPORT_MARKER,
+        }
+    }
+
+    pub fn save_marker_with_facing(self, facing: Direction) -> u8 {
+        let marker = self.save_marker();
+        transport_marker_with_facing(marker, facing).unwrap_or(marker)
+    }
+
+    pub fn with_facing(self, facing: Direction) -> Self {
+        let marker = self.save_marker_with_facing(facing);
+        let tile = transport_visual_tile_for_marker(marker);
+        match self {
+            Self::Foot => Self::Foot,
+            Self::Horse { tile: old_tile, .. } => Self::Horse {
+                type_byte: marker,
+                tile: tile.unwrap_or(old_tile),
+            },
+            Self::Ship {
+                tile: old_tile,
+                sails_hoisted,
+                hull,
+                skiffs,
+                ..
+            } => Self::Ship {
+                type_byte: marker,
+                tile: tile.unwrap_or(old_tile),
+                sails_hoisted,
+                hull,
+                skiffs,
+            },
+            Self::Skiff { tile: old_tile, .. } => Self::Skiff {
+                type_byte: marker,
+                tile: tile.unwrap_or(old_tile),
+            },
+            Self::Carpet { tile: old_tile, .. } => Self::Carpet {
+                type_byte: marker,
+                tile: tile.unwrap_or(old_tile),
+            },
+            Self::Balloon { type_byte, tile } => Self::Balloon { type_byte, tile },
         }
     }
 

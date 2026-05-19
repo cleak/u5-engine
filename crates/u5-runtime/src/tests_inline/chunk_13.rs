@@ -8317,6 +8317,38 @@
     }
 
     #[test]
+    fn transport_marker_with_facing_preserves_transport_family() {
+        assert_eq!(
+            transport_marker_with_facing(TRANSPORT_MARKER_FOOT_FIRST, Direction::West),
+            Some(TRANSPORT_MARKER_FOOT_LAST)
+        );
+        assert_eq!(
+            transport_marker_with_facing(TRANSPORT_MARKER_MAGIC_CARPET_FIRST, Direction::South),
+            Some(TRANSPORT_MARKER_MAGIC_CARPET_FIRST + 2)
+        );
+        assert_eq!(
+            transport_marker_with_facing(TRANSPORT_MARKER_SHIP_HOISTED_FIRST, Direction::East),
+            Some(TRANSPORT_MARKER_SHIP_HOISTED_FIRST + 1)
+        );
+        assert_eq!(
+            transport_marker_with_facing(TRANSPORT_MARKER_SHIP_FURLED_FIRST, Direction::West),
+            Some(TRANSPORT_MARKER_SHIP_FURLED_LAST)
+        );
+        assert_eq!(
+            transport_marker_with_facing(TRANSPORT_MARKER_SKIFF_FIRST, Direction::South),
+            Some(TRANSPORT_MARKER_SKIFF_FIRST + 2)
+        );
+        assert_eq!(
+            transport_marker_with_facing(TRANSPORT_MARKER_FOOT_FIRST, Direction::NorthEast),
+            None
+        );
+        assert_eq!(
+            transport_marker_with_facing(0xff, Direction::North),
+            None
+        );
+    }
+
+    #[test]
     fn overworld_klimb_entry_gate_orders_grapple_before_on_foot() {
         // doors-and-z-transitions.md §9: the Grapple-flag check is
         // consulted first; the vehicle gate is only reached when the

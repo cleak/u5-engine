@@ -126,7 +126,13 @@ impl PlayState {
         }
         save[SAVE_ACTIVE_PLAYER_OFFSET] = encode_active_player_slot(self.active_player);
         save[SAVE_COMBAT_ROUND_COUNTER_OFFSET] = self.combat_round_counter;
-        save[SAVE_TRANSPORT_MARKER_OFFSET] = self.player.transport.save_marker();
+        save[SAVE_TRANSPORT_MARKER_OFFSET] = if self.player.transport.is_foot() {
+            self.player
+                .transport
+                .save_marker_with_facing(self.player.facing)
+        } else {
+            self.player.transport.save_marker()
+        };
         save[SAVE_WIND_OFFSET] = self.wind_save_byte;
         save[SAVE_PARTY_SIZE_OFFSET] = self.party.len().min(SAVE_PARTY_SIZE_MAX as usize) as u8;
         let avatar_record = SAVE_ROSTER_OFFSET;
@@ -326,7 +332,7 @@ impl PlayState {
             player: Player {
                 x,
                 y,
-                facing: Direction::South,
+                facing: options.facing.unwrap_or(Direction::South),
                 transport: TransportState::Foot,
             },
             active_objects,
@@ -529,7 +535,7 @@ impl PlayState {
             player: Player {
                 x,
                 y,
-                facing: Direction::East,
+                facing: options.facing.unwrap_or(Direction::East),
                 transport: TransportState::Foot,
             },
             active_objects,
@@ -737,7 +743,7 @@ impl PlayState {
             player: Player {
                 x,
                 y,
-                facing: Direction::South,
+                facing: options.facing.unwrap_or(Direction::South),
                 transport,
             },
             active_objects,
@@ -870,6 +876,12 @@ impl PlayState {
         game_dir: Option<&Path>,
     ) -> io::Result<MoveOutcome> {
         self.player.facing = direction;
+        let previous_avatar_tile = self.player.transport.avatar_tile();
+        self.player.transport = self.player.transport.with_facing(direction);
+        if self.player.transport.avatar_tile() != previous_avatar_tile {
+            self.sync_player_object();
+            self.mark_visibility_dirty();
+        }
         let (dx, dy) = direction.delta();
         let nx = self.player.x as isize + dx;
         let ny = self.player.y as isize + dy;
