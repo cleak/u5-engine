@@ -744,6 +744,113 @@
     }
 
     #[test]
+    fn scheduled_npc_continues_waypoint_move_after_boundary_hour() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.clock = GameClock::new(17, 59).unwrap();
+        let slots = vec![
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0,
+                schedule: [0, 0, 0, 0, 2, 6, 1, 1, 1, 0, 0, 0, 8, 12, 18, 22],
+                name: None,
+            },
+        ];
+        state.load_scheduled_npcs(&slots);
+
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (2, 1));
+        state.advance_turn();
+
+        assert_eq!(state.clock, GameClock::new(18, 0).unwrap());
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (3, 1));
+        assert_eq!(state.npcs[0].state, NPC_STATE_INPLANE_MOVE);
+        assert_eq!(state.npcs[0].cached_wp, 1);
+
+        state.clock = GameClock::new(19, 0).unwrap();
+        state.advance_npc_schedules();
+
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (4, 1));
+        assert_eq!(state.npcs[0].state, NPC_STATE_INPLANE_MOVE);
+        assert_eq!(state.npcs[0].cached_wp, 1);
+    }
+
+    #[test]
+    fn scheduled_npc_floor_link_route_uses_single_bfs_over_matching_markers() {
+        let mut grid = open_grid();
+        grid[5 * 32 + 4] = 0;
+        grid[5 * 32 + 6] = 0;
+        grid[5 * 32 + 7] = NPC_FLOOR_LINK_TILE_C9;
+        grid[8 * 32 + 5] = NPC_FLOOR_LINK_TILE_C9;
+        let mut state = test_state(grid, 10, 10);
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0,
+                schedule: [0, 0, 0, 5, 5, 5, 5, 5, 5, 0, 0, 0, 8, 12, 18, 22],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.npc_path_step_to_floor_link(0, NPC_FLOOR_LINK_TILE_C9, 5, 8, 0),
+            Some((5, 6))
+        );
+    }
+
+    #[test]
+    fn scheduled_npc_floor_link_route_ignores_opposite_marker_id() {
+        let mut grid = open_grid();
+        grid[6 * 32 + 5] = NPC_FLOOR_LINK_TILE_C8;
+        grid[4 * 32 + 5] = NPC_FLOOR_LINK_TILE_C9;
+        let mut state = test_state(grid, 10, 10);
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0,
+                schedule: [0, 0, 0, 5, 5, 5, 5, 5, 5, 0, 0, 0, 8, 12, 18, 22],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.npc_path_step_to_floor_link(0, NPC_FLOOR_LINK_TILE_C9, 5, 4, 0),
+            Some((5, 4))
+        );
+        assert!(!state.npc_can_step_toward(0, 5, 4, 0, 5, 5));
+        assert!(state.npc_can_step_toward_floor_link_marker(
+            0,
+            5,
+            4,
+            NPC_FLOOR_LINK_TILE_C9,
+            (5, 4),
+            0
+        ));
+    }
+
+    #[test]
     fn hostile_town_npc_chases_player_from_active_waypoint() {
         let mut state = test_state(open_grid(), 5, 5);
         state.load_scheduled_npcs(&[

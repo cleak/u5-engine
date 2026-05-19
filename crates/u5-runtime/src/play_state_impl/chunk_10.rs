@@ -845,7 +845,7 @@ impl PlayState {
         if (x, y, z) == (target_x, target_y, target_z) {
             self.npcs[npc_index].set_settled_at_waypoint(waypoint);
         } else {
-            self.npcs[npc_index].set_idle();
+            self.npcs[npc_index].state = schedule_floor_state(z, target_z, floor);
             self.npcs[npc_index].stuck_counter = 0;
         }
         old != (x, y, z) || linked_changed
@@ -1068,16 +1068,18 @@ impl PlayState {
                 {
                     self.npcs[npc_index].set_settled_at_waypoint(waypoint);
                 } else {
-                    self.npcs[npc_index].set_idle();
+                    self.npcs[npc_index].state = schedule_floor_state(next_z, target_z, floor);
                     self.npcs[npc_index].stuck_counter = 0;
                 }
                 return self.sync_npc_active_object(npc_index, floor);
             }
-            if let Some((nx, ny)) = self.npc_path_step_to_floor_link(npc_index, marker, floor) {
+            if let Some((nx, ny)) =
+                self.npc_path_step_to_floor_link(npc_index, marker, target_x, target_y, floor)
+            {
                 self.npcs[npc_index].x = nx;
                 self.npcs[npc_index].y = ny;
                 self.sync_npc_active_object(npc_index, floor);
-                self.npcs[npc_index].set_idle();
+                self.npcs[npc_index].state = schedule_floor_state(npc_z, target_z, floor);
                 self.npcs[npc_index].stuck_counter = 0;
                 return true;
             }
@@ -1097,7 +1099,7 @@ impl PlayState {
             if (x, y) == (target_x, target_y) {
                 self.npcs[npc_index].set_settled_at_waypoint(waypoint);
             } else {
-                self.npcs[npc_index].set_idle();
+                self.npcs[npc_index].state = schedule_floor_state(floor, target_z, floor);
                 self.npcs[npc_index].stuck_counter = 0;
             }
             return self.sync_npc_active_object(npc_index, floor);
@@ -1116,25 +1118,123 @@ impl PlayState {
         &self,
         npc_index: usize,
         marker: u8,
+        destination_x: usize,
+        destination_y: usize,
         floor: u8,
     ) -> Option<(usize, usize)> {
         let start = (self.npcs[npc_index].x, self.npcs[npc_index].y);
-        self.floor_link_marker_coordinates(marker)
+        let code = self
+            .npc_path_route_to_floor_link_marker(
+                npc_index,
+                start,
+                marker,
+                (destination_x, destination_y),
+                floor,
+            )?
             .into_iter()
-            .filter_map(|target| {
-                if start == target {
-                    return None;
+            .next()?;
+        npc_step_from_direction_code(start, code)
+    }
+
+    pub fn npc_path_route_to_floor_link_marker(
+        &self,
+        npc_index: usize,
+        start: (usize, usize),
+        marker: u8,
+        destination: (usize, usize),
+        floor: u8,
+    ) -> Option<Vec<u8>> {
+        if start.0 >= 32 || start.1 >= 32 {
+            return None;
+        }
+        let mut prev = vec![None::<(usize, usize)>; 1024];
+        let mut seen = vec![false; 1024];
+        let mut q = VecDeque::new();
+        q.push_back(start);
+        seen[start.1 * 32 + start.0] = true;
+        while let Some((x, y)) = q.pop_front() {
+            for (nx, ny) in neighbors(x, y) {
+                let idx = ny * 32 + nx;
+                if seen[idx]
+                    || !self.npc_can_step_toward_floor_link_marker(
+                        npc_index,
+                        nx,
+                        ny,
+                        marker,
+                        destination,
+                        floor,
+                    )
+                {
+                    continue;
                 }
-                self.npc_path_step(npc_index, start, target, floor)
-                    .map(|step| {
-                        (
-                            target.0.abs_diff(start.0) + target.1.abs_diff(start.1),
-                            step,
-                        )
-                    })
+                seen[idx] = true;
+                prev[idx] = Some((x, y));
+                if self.grid[idx] == marker {
+                    let mut cells = vec![(nx, ny)];
+                    let mut current = (nx, ny);
+                    while let Some(parent) = prev[current.1 * 32 + current.0] {
+                        if parent == start {
+                            break;
+                        }
+                        cells.push(parent);
+                        current = parent;
+                    }
+                    cells.reverse();
+                    let mut route = Vec::with_capacity(cells.len());
+                    let mut from = start;
+                    for to in cells {
+                        route.push(npc_direction_code_between(from, to)?);
+                        from = to;
+                    }
+                    return (!route.is_empty()).then_some(route);
+                }
+                if q.len() < NPC_PATH_QUEUE_LIMIT {
+                    q.push_back((nx, ny));
+                }
+            }
+        }
+        None
+    }
+
+    pub fn npc_can_step_toward_floor_link_marker(
+        &self,
+        npc_index: usize,
+        x: usize,
+        y: usize,
+        marker: u8,
+        destination: (usize, usize),
+        floor: u8,
+    ) -> bool {
+        if x >= 32 || y >= 32 {
+            return false;
+        }
+        let tile = self.grid[y * 32 + x];
+        if tile != marker && !npc_path_tile_open(tile) {
+            return false;
+        }
+
+        if (x, y) == (self.player.x, self.player.y) {
+            return false;
+        }
+
+        let own_active_object = self.npcs[npc_index].active_object;
+        !self
+            .active_objects
+            .iter()
+            .enumerate()
+            .any(|(slot, object)| {
+                Some(slot) != own_active_object
+                    && !object.is_empty()
+                    && object.x == x
+                    && object.y == y
+                    && object.z == floor as i8
+                    && npc_dynamic_obstacle_blocks(
+                        object.x as i32,
+                        object.y as i32,
+                        destination.0 as i32,
+                        destination.1 as i32,
+                    )
             })
-            .min_by_key(|(distance, _)| *distance)
-            .map(|(_, step)| step)
     }
 
     pub fn nearest_npc_floor_link_to(

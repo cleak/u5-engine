@@ -527,10 +527,11 @@ Goal: turn diagnostic interactions into game-like content.
     - cannon/fire durability details.
 
 - NPC schedules and conversations.
-  - Current schedules link and move NPCs in town-family scenes.
+  - Current schedules link and move NPCs in town-family scenes, preserve
+    cached-waypoint movement state until a transition settles, and route
+    floor changes through the `0xC8`/`0xC9` floor-link marker BFS.
   - Remaining work:
-    - complete cached-waypoint arrival semantics,
-    - floor-changing schedule paths through stairs,
+    - exact audit of every authored schedule/AI edge,
     - conversation keyword loops and side effects,
     - shop/service conversations,
     - NPC memory flags such as thanked/picked/quest state.
