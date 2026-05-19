@@ -4,7 +4,7 @@
 
 use crate::blackthorn::{
     BLACKTHORN_CHALLENGE_PROMPT_COUNT, blackthorn_challenge_answer_matches,
-    blackthorn_challenge_prompt,
+    blackthorn_challenge_limited_input, blackthorn_challenge_prompt,
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -66,7 +66,8 @@ impl BlackthornChallenge {
                     return BlackthornChallengeOutcome::Survived;
                 };
                 let _ = prompt;
-                if blackthorn_challenge_answer_matches(typed, expected) {
+                let typed = blackthorn_challenge_limited_input(typed);
+                if blackthorn_challenge_answer_matches(&typed, expected) {
                     self.correct_count = self.correct_count.saturating_add(1);
                     let next_ordinal = ordinal + 1;
                     if (next_ordinal as usize) >= BLACKTHORN_CHALLENGE_PROMPT_COUNT {
@@ -173,11 +174,34 @@ mod tests {
     fn case_insensitive_substring_match() {
         let mut c = BlackthornChallenge::new();
         c.begin();
-        let outcome = c.submit("the word is AHM, my lord");
+        let outcome = c.submit("word AHM");
         assert!(matches!(
             outcome,
             BlackthornChallengeOutcome::Correct { ordinal: 0 }
         ));
+    }
+
+    #[test]
+    fn input_limit_applies_before_substring_match() {
+        let mut c = BlackthornChallenge::new();
+        c.begin();
+        let outcome = c.submit("xxxxxxxxxxxxxxAhm");
+        assert_eq!(
+            outcome,
+            BlackthornChallengeOutcome::Wrong {
+                ordinal: 0,
+                expected: "Ahm"
+            }
+        );
+        assert!(c.is_punished());
+    }
+
+    #[test]
+    fn input_limit_keeps_answers_inside_fourteen_characters() {
+        let mut c = BlackthornChallenge::new();
+        c.begin();
+        let outcome = c.submit("xxxxxxxxxxxAhm trailing text");
+        assert_eq!(outcome, BlackthornChallengeOutcome::Correct { ordinal: 0 });
     }
 
     #[test]

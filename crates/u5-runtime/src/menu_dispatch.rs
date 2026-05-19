@@ -266,6 +266,16 @@ mod tests {
     }
 
     #[test]
+    fn blackthorn_answer_limit_applies_through_menu_dispatch() {
+        let mut d = UnifiedMenuDispatch::new();
+        d.open_blackthorn();
+        assert_eq!(
+            d.submit_blackthorn_answer("xxxxxxxxxxxxxxAhm"),
+            UnifiedMenuStep::BlackthornEnded { survived: false }
+        );
+    }
+
+    #[test]
     fn u4_transfer_step_records_session_advancement() {
         use crate::u4_transfer_session::U4TransferInput;
         let mut d = UnifiedMenuDispatch::new();

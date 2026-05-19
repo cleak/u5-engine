@@ -2707,11 +2707,7 @@ impl PlayState {
         typed: &str,
         game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
-        let answer: String = typed
-            .trim()
-            .chars()
-            .take(BLACKTHORN_CHALLENGE_INPUT_LIMIT)
-            .collect();
+        let answer = blackthorn_challenge_limited_input(typed);
         if answer.is_empty() {
             self.message = self.blackthorn_current_prompt_message();
             return Ok(MoveOutcome::PromptDeclined);

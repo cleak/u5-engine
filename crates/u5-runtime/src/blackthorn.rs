@@ -140,6 +140,18 @@ pub fn blackthorn_challenge_answer_matches(typed: &str, expected_mantra: &str) -
     typed_upper.contains(&expected_upper)
 }
 
+/// `blackthorn.md §4`: prompt input accepts at most fourteen typed
+/// characters before the case-insensitive substring comparison runs.
+/// Trimming matches the play prompt path, which treats blank answers as
+/// a prompt repeat rather than as a failed challenge answer.
+pub fn blackthorn_challenge_limited_input(typed: &str) -> String {
+    typed
+        .trim()
+        .chars()
+        .take(BLACKTHORN_CHALLENGE_INPUT_LIMIT)
+        .collect()
+}
+
 /// `formats/karma-dat.md §4`: Lord British-in-disguise camp event
 /// verdict-record selector. Uses the same twenty-point band scale for
 /// the lower range, selecting records `0..=3` for bands below 80; for

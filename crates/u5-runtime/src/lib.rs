@@ -116,8 +116,9 @@ pub use blackthorn::{
     BLACKTHORN_RESCUE_HANDOFF_SCENE, BLACKTHORN_RESCUE_HANDOFF_X, BLACKTHORN_RESCUE_HANDOFF_Y,
     BLACKTHORN_RESCUE_STANDING_FLOOR, BlackthornCutsceneActor, BlackthornEntryFamily,
     KARMA_DAT_BAND_WIDTH, KarmaDatTier, blackthorn_challenge_answer_matches,
-    blackthorn_challenge_prompt, blackthorn_cutscene_actor, blackthorn_rescue_post_print_standing,
-    blackthorn_rescue_verdict_record, karma_dat_tier, lord_british_camp_verdict_record,
+    blackthorn_challenge_limited_input, blackthorn_challenge_prompt, blackthorn_cutscene_actor,
+    blackthorn_rescue_post_print_standing, blackthorn_rescue_verdict_record, karma_dat_tier,
+    lord_british_camp_verdict_record,
 };
 pub use boot::{
     DATA_OVL_FILENAME, DRIVER_SELECTOR_CGA, DRIVER_SELECTOR_EGA, DRIVER_SELECTOR_HERCULES,
