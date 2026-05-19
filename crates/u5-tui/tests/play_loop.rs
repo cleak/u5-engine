@@ -736,13 +736,22 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "britannia-save-refusal")
     );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "britannia-view-overlay")
+    );
     assert!(cases.iter().any(|case| case.name == "castle-save-refusal"));
+    assert!(cases.iter().any(|case| case.name == "castle-view-overlay"));
+    assert!(cases.iter().any(|case| case.name == "castle-peer-overlay"));
+    assert!(cases.iter().any(|case| case.name == "castle-x-ray-overlay"));
     assert!(
         cases
             .iter()
             .any(|case| case.name == "dungeon-turn-and-blocked-step")
     );
     assert!(cases.iter().any(|case| case.name == "dungeon-exit-confirm"));
+    assert!(cases.iter().any(|case| case.name == "dungeon-view-overlay"));
     assert!(
         cases
             .iter()
@@ -762,6 +771,11 @@ fn route_smoke_cases_cover_representative_modes() {
         cases
             .iter()
             .any(|case| case.name == "doom-room-combat-trigger")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-view-label-only")
     );
 }
 

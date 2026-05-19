@@ -7,9 +7,9 @@ use std::io;
 use std::path::Path;
 
 use u5_runtime::{
-    Area, DungeonScene, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, PlayOptions,
-    PlayState, PlayTarget, Scene, TileGraphicsDepth, TransportState, WindState, WorldPlane,
-    load_tile_atlas,
+    Area, DungeonScene, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, PEER_COST,
+    PEER_SPELL_INDEX, PlayOptions, PlayState, PlayTarget, Scene, TileGraphicsDepth, TransportState,
+    WindState, WorldPlane, X_RAY_COST, X_RAY_SPELL_INDEX, load_tile_atlas,
 };
 
 use crate::{
@@ -126,6 +126,26 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         floor: 0,
         ..PlayOptions::default()
     };
+
+    let mut britannia_view = world.clone();
+    britannia_view.gems = 1;
+
+    let mut castle_view = PlayOptions::default();
+    castle_view.gems = 1;
+
+    let mut dungeon_view = dungeon_options.clone();
+    dungeon_view.gems = 1;
+
+    let mut peer_view = PlayOptions::default();
+    peer_view.spell_charges[PEER_SPELL_INDEX] = 1;
+    peer_view.party[0].mana = PEER_COST + 1;
+    peer_view.party[0].level = PEER_COST;
+
+    let mut x_ray_view = PlayOptions::default();
+    x_ray_view.spell_charges[X_RAY_SPELL_INDEX] = 1;
+    x_ray_view.party[0].mana = X_RAY_COST + 1;
+    x_ray_view.party[0].level = X_RAY_COST;
+
     let doom_options = PlayOptions {
         target: PlayTarget::Dungeon(doom),
         floor: 0,
@@ -158,6 +178,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "britannia-view-overlay",
+            options: britannia_view,
+            script: &["v"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 0,
+            expected_frame_kind: "view overlay",
+        },
+        RouteSmokeCase {
             name: "britannia-save-refusal",
             options: world,
             script: &["Q", "N"],
@@ -188,6 +216,30 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-view-overlay",
+            options: castle_view,
+            script: &["v"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "view overlay",
+        },
+        RouteSmokeCase {
+            name: "castle-peer-overlay",
+            options: peer_view,
+            script: &["C1QWI"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "view overlay",
+        },
+        RouteSmokeCase {
+            name: "castle-x-ray-overlay",
+            options: x_ray_view,
+            script: &["C1AWY"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "view overlay",
         },
         RouteSmokeCase {
             name: "castle-save-refusal",
@@ -254,6 +306,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "dungeon first-person viewport",
         },
         RouteSmokeCase {
+            name: "dungeon-view-overlay",
+            options: dungeon_view,
+            script: &["v"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 0,
+            expected_frame_kind: "view overlay",
+        },
+        RouteSmokeCase {
             name: "dungeon-turn-and-blocked-step",
             options: dungeon_options.clone(),
             script: &["w", "a", "d", "s"],
@@ -271,8 +331,16 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         },
         RouteSmokeCase {
             name: "doom-room-combat-trigger",
-            options: doom_options,
+            options: doom_options.clone(),
             script: &["empty"],
+            expected: RouteSmokeExpectation::Dungeon(doom),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "doom-combat-view-label-only",
+            options: doom_options,
+            script: &["empty", "V"],
             expected: RouteSmokeExpectation::Dungeon(doom),
             min_turn: 1,
             expected_frame_kind: "combat viewport",
