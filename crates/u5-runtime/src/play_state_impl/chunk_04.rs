@@ -885,10 +885,14 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        self.message = format!(
-            "Spyglass: Looking at the stars over Britannia.\n{}",
-            self.britannia_chunk_overview_map()
-        );
+        let title = "Spyglass: Looking at the stars over Britannia".to_string();
+        let text_map = self.britannia_chunk_overview_map();
+        self.active_view_overlay = Some(ViewOverlay {
+            title: title.clone(),
+            text_map: text_map.clone(),
+            kind: ViewOverlayKind::BritanniaChunkMap,
+        });
+        self.message = format!("{title}:\n{text_map}");
         MoveOutcome::Observed
     }
 
@@ -1747,6 +1751,9 @@ impl PlayState {
     pub fn render_active_view_overlay(&self, depth: TileGraphicsDepth) -> Option<TileViewport> {
         match self.active_view_overlay.as_ref()?.kind {
             ViewOverlayKind::Surface => Some(self.render_surface_view_overlay(depth)),
+            ViewOverlayKind::BritanniaChunkMap => {
+                Some(self.render_britannia_chunk_map_overlay(depth))
+            }
             ViewOverlayKind::Dungeon { level } => {
                 Some(self.render_dungeon_view_overlay(level, depth))
             }
@@ -1825,6 +1832,29 @@ impl PlayState {
         };
         let map = self.dungeon_vision_map(level);
         for (cell_y, row) in map.lines().enumerate() {
+            for (cell_x, glyph) in row.chars().enumerate() {
+                draw_dungeon_view_cell(&mut viewport, cell_x, cell_y, scale, glyph);
+            }
+        }
+        viewport
+    }
+
+    pub fn render_britannia_chunk_map_overlay(&self, depth: TileGraphicsDepth) -> TileViewport {
+        let text_map = self.britannia_chunk_overview_map();
+        let cells_high = text_map.lines().count();
+        let cells_wide = text_map.lines().map(str::len).max().unwrap_or(0);
+        let scale = LOCAL_VIEW_CELL_PIXEL_SCALE;
+        let width = cells_wide * scale;
+        let height = cells_high * scale;
+        let mut viewport = TileViewport {
+            depth,
+            cells_wide,
+            cells_high,
+            width,
+            height,
+            pixels: vec![0; width * height],
+        };
+        for (cell_y, row) in text_map.lines().enumerate() {
             for (cell_x, glyph) in row.chars().enumerate() {
                 draw_dungeon_view_cell(&mut viewport, cell_x, cell_y, scale, glyph);
             }

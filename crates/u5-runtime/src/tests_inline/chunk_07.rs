@@ -108,7 +108,26 @@ fn use_command_routes_inline_spyglass_request_to_britannia_overview() {
     );
     assert!(world.message.starts_with("Spyglass: Looking at the stars"));
     assert!(world.message.contains('+'));
+    assert_eq!(
+        world.active_view_overlay.as_ref().map(|overlay| overlay.kind),
+        Some(ViewOverlayKind::BritanniaChunkMap)
+    );
+    let viewport = world
+        .render_active_view_overlay(TileGraphicsDepth::Ega16)
+        .expect("spyglass should install a renderable modal overlay");
+    assert_eq!(viewport.cells_wide, 22);
+    assert_eq!(viewport.cells_high, 8);
+    assert!(viewport.pixels.iter().any(|pixel| *pixel != 0));
     assert_eq!(world.britannia_chunk_overview_map().lines().count(), 8);
+
+    assert_eq!(
+        handle_play_key_input(&mut world, ' ', "", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(world.active_view_overlay.is_none());
+    assert_eq!(world.turn, 0);
+    assert_eq!(world.gems, 3);
+    assert_eq!(world.message, "View closed.");
 }
 
 #[test]

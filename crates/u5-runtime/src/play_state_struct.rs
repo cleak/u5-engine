@@ -130,6 +130,7 @@ pub struct ViewOverlay {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ViewOverlayKind {
     Surface,
+    BritanniaChunkMap,
     Dungeon { level: u8 },
 }
 
