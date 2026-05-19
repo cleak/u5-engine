@@ -12,18 +12,19 @@
 
 use crate::constants::{EQUIPMENT_COUNT, EQUIPMENT_STOCK_CAP};
 use crate::shops::{
-    ArmsShopAction, BlueBoarDrinkChoice, GuildCommodity, GuildPurchaseError, GuildShop,
-    GuildShopAction, Herbalist, INN_REGISTRY_CAP, Inn, InnMainAction, ProvisionPurchaseError,
-    Reagent, ReagentPurchaseError, SageRumourError, SageRumourQuote, SageTopic, Shipwright,
-    ShipwrightMenuAction, ShipwrightPurchaseError, ShipwrightPurchaseOutcome,
-    ShipwrightPurchaseQuote, Stable, StationaryDisplayPrompt, Tavern, TavernDrinkError,
-    TavernDrinkPrompt, apply_blue_boar_drink, apply_guild_purchase, apply_provision_purchase,
-    apply_reagent_purchase, apply_shipwright_purchase, apply_tavern_round_drink, arms_shop_action,
-    arms_shop_buy_quote, arms_shop_sell_offer, find_sage_topic, guild_shop_action,
-    guild_unit_price, herbalist_menu_entries, inn_base_room_rate, inn_leave_companion_deposit,
-    inn_main_action, inn_pickup_bill, quote_inn_rest, quote_shipwright_purchase,
-    render_sage_rumour, shipwright_menu_action, stable_horse_price, stationary_display_prompt,
-    tavern_drink_prompt, tavern_provision_unit_price, tavern_round_drink_menu_letter,
+    ArmsShopAction, ArmsStockTable, BlueBoarDrinkChoice, GuildCommodity, GuildPurchaseError,
+    GuildShop, GuildShopAction, Herbalist, INN_REGISTRY_CAP, Inn, InnMainAction,
+    ProvisionPurchaseError, Reagent, ReagentPurchaseError, SageRumourError, SageRumourQuote,
+    SageTopic, Shipwright, ShipwrightMenuAction, ShipwrightPurchaseError,
+    ShipwrightPurchaseOutcome, ShipwrightPurchaseQuote, Stable, StationaryDisplayPrompt, Tavern,
+    TavernDrinkError, TavernDrinkPrompt, apply_blue_boar_drink, apply_guild_purchase,
+    apply_provision_purchase, apply_reagent_purchase, apply_shipwright_purchase,
+    apply_tavern_round_drink, arms_shop_action, arms_shop_buy_quote, arms_shop_sell_offer,
+    arms_shop_stock_item_for_letter, find_sage_topic, guild_shop_action, guild_unit_price,
+    herbalist_menu_entries, inn_base_room_rate, inn_leave_companion_deposit, inn_main_action,
+    inn_pickup_bill, quote_inn_rest, quote_shipwright_purchase, render_sage_rumour,
+    shipwright_menu_action, stable_horse_price, stationary_display_prompt, tavern_drink_prompt,
+    tavern_provision_unit_price, tavern_round_drink_menu_letter,
 };
 use crate::transport::PendingVehicleAcquisition;
 
@@ -72,6 +73,9 @@ pub enum ArmsShopInput {
     Key(u8),
     /// Item id from a list pick (Buy or Sell).
     Item(u8),
+    /// Buy-menu letter resolved through the current shop's decoded
+    /// eight-slot stock table.
+    StockLetter { letter: u8, table: ArmsStockTable },
     /// Yes/No confirmation answer.
     Confirm(bool),
 }
@@ -136,22 +140,13 @@ pub fn step_arms_shop(
             }
         },
         (ArmsShopState::BuyPickItem, ArmsShopInput::Item(item)) => {
-            let item_idx = item as usize;
-            if item_idx >= EQUIPMENT_COUNT {
+            quote_arms_shop_buy_item(state, item, ctx, base_price_table)
+        }
+        (ArmsShopState::BuyPickItem, ArmsShopInput::StockLetter { letter, table }) => {
+            let Ok(item) = arms_shop_stock_item_for_letter(table, letter) else {
                 return ArmsShopOutcome::InvalidInput;
-            }
-            let base = base_price_table[item_idx];
-            if base == 0 {
-                // Items the shop does not stock at all are treated as
-                // an invalid pick rather than an offer of free goods.
-                return ArmsShopOutcome::InvalidInput;
-            }
-            let price = arms_shop_buy_quote(base, ctx.speaker_intelligence);
-            *state = ArmsShopState::BuyConfirm {
-                item,
-                quoted_price: price,
             };
-            ArmsShopOutcome::QuotedBuyPrice { item, price }
+            quote_arms_shop_buy_item(state, item, ctx, base_price_table)
         }
         (ArmsShopState::BuyConfirm { item, quoted_price }, ArmsShopInput::Confirm(true)) => {
             if *gold < quoted_price {
@@ -210,6 +205,30 @@ pub fn step_arms_shop(
         (ArmsShopState::Exited, _) => ArmsShopOutcome::Exited,
         _ => ArmsShopOutcome::InvalidInput,
     }
+}
+
+fn quote_arms_shop_buy_item(
+    state: &mut ArmsShopState,
+    item: u8,
+    ctx: ShopTransactionContext,
+    base_price_table: &[u16; EQUIPMENT_COUNT],
+) -> ArmsShopOutcome {
+    let item_idx = item as usize;
+    if item_idx >= EQUIPMENT_COUNT {
+        return ArmsShopOutcome::InvalidInput;
+    }
+    let base = base_price_table[item_idx];
+    if base == 0 {
+        // Items the shop does not stock at all are treated as an
+        // invalid pick rather than an offer of free goods.
+        return ArmsShopOutcome::InvalidInput;
+    }
+    let price = arms_shop_buy_quote(base, ctx.speaker_intelligence);
+    *state = ArmsShopState::BuyConfirm {
+        item,
+        quoted_price: price,
+    };
+    ArmsShopOutcome::QuotedBuyPrice { item, price }
 }
 
 // ---------- Stationary display purchase ----------
@@ -1639,6 +1658,103 @@ mod tests {
         assert!(matches!(outcome, ArmsShopOutcome::Bought { item: 3, .. }));
         assert_eq!(stock[3], 1);
         assert!(gold < 100);
+    }
+
+    #[test]
+    fn arms_shop_buy_letter_uses_decoded_stock_table_without_item_translation() {
+        let mut state = ArmsShopState::Greeting;
+        let prices = make_price_table();
+        let table = ArmsStockTable::new([11, 7, 23, 0, 0, 0, 0, 0], 3);
+        let mut stock = make_stock();
+        let mut gold = 1000u16;
+        let ctx = ShopTransactionContext {
+            speaker_intelligence: 10,
+            ..ShopTransactionContext::default()
+        };
+
+        assert_eq!(
+            step_arms_shop(
+                &mut state,
+                ArmsShopInput::Key(b'B'),
+                ctx,
+                &mut gold,
+                &mut stock,
+                &prices,
+            ),
+            ArmsShopOutcome::EnteredBuy
+        );
+
+        assert_eq!(
+            step_arms_shop(
+                &mut state,
+                ArmsShopInput::StockLetter {
+                    letter: b'B',
+                    table,
+                },
+                ctx,
+                &mut gold,
+                &mut stock,
+                &prices,
+            ),
+            ArmsShopOutcome::QuotedBuyPrice {
+                item: 7,
+                price: arms_shop_buy_quote(prices[7], 10),
+            }
+        );
+
+        assert_eq!(
+            step_arms_shop(
+                &mut state,
+                ArmsShopInput::Confirm(true),
+                ctx,
+                &mut gold,
+                &mut stock,
+                &prices,
+            ),
+            ArmsShopOutcome::Bought {
+                item: 7,
+                paid: arms_shop_buy_quote(prices[7], 10),
+            }
+        );
+        assert_eq!(stock[7], 1);
+        assert_eq!(stock[1], 0);
+    }
+
+    #[test]
+    fn arms_shop_buy_letter_rejects_letters_outside_decoded_stock_prefix() {
+        let mut state = ArmsShopState::Greeting;
+        let prices = make_price_table();
+        let table = ArmsStockTable::new([11, 7, 23, 0, 0, 0, 0, 0], 3);
+        let mut stock = make_stock();
+        let mut gold = 1000u16;
+        let ctx = ShopTransactionContext::default();
+
+        step_arms_shop(
+            &mut state,
+            ArmsShopInput::Key(b'B'),
+            ctx,
+            &mut gold,
+            &mut stock,
+            &prices,
+        );
+
+        assert_eq!(
+            step_arms_shop(
+                &mut state,
+                ArmsShopInput::StockLetter {
+                    letter: b'd',
+                    table,
+                },
+                ctx,
+                &mut gold,
+                &mut stock,
+                &prices,
+            ),
+            ArmsShopOutcome::InvalidInput
+        );
+        assert_eq!(state, ArmsShopState::BuyPickItem);
+        assert_eq!(gold, 1000);
+        assert!(stock.iter().all(|count| *count == 0));
     }
 
     #[test]

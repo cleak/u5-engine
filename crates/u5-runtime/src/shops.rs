@@ -18,6 +18,82 @@ pub const ARMS_SHOP_INTELLIGENCE_WEIGHT: i32 = 3;
 /// is `floor(base * 3 * intelligence / 100) + 1`, so every accepted
 /// Sell credits at least one gold even when intelligence is zero.
 pub const ARMS_SHOP_SELL_MIN_OFFER_BIAS: u32 = 1;
+/// `shops.md §§6-8.1` arms-shop Buy menus expose at most eight
+/// per-shop stock candidates, rendered as menu letters `a` through
+/// `h`. The raw resident sentinel value is a loader concern; runtime
+/// helpers operate on the decoded non-sentinel prefix length.
+pub const ARMS_SHOP_STOCK_TABLE_LEN: usize = 8;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArmsStockTable {
+    pub item_ids: [u8; ARMS_SHOP_STOCK_TABLE_LEN],
+    pub len: u8,
+}
+
+impl ArmsStockTable {
+    pub const EMPTY: Self = Self {
+        item_ids: [0; ARMS_SHOP_STOCK_TABLE_LEN],
+        len: 0,
+    };
+
+    pub const fn new(item_ids: [u8; ARMS_SHOP_STOCK_TABLE_LEN], len: u8) -> Self {
+        let len = if len as usize > ARMS_SHOP_STOCK_TABLE_LEN {
+            ARMS_SHOP_STOCK_TABLE_LEN as u8
+        } else {
+            len
+        };
+        Self { item_ids, len }
+    }
+
+    pub const fn len(self) -> usize {
+        self.len as usize
+    }
+
+    pub const fn is_empty(self) -> bool {
+        self.len == 0
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArmsStockLetterError {
+    InvalidLetter,
+    EmptySlot,
+}
+
+/// `shops.md §8.1`: convert an arms-shop Buy menu letter into its
+/// zero-based table slot. Visible choices are `a` through `h`;
+/// upper-case input is accepted by the same case-insensitive input
+/// convention used by the rest of the shop menu classifiers.
+pub const fn arms_shop_stock_letter_index(byte: u8) -> Option<usize> {
+    let folded = if byte >= b'A' && byte <= b'Z' {
+        byte + (b'a' - b'A')
+    } else {
+        byte
+    };
+    if folded >= b'a' && folded < b'a' + ARMS_SHOP_STOCK_TABLE_LEN as u8 {
+        Some((folded - b'a') as usize)
+    } else {
+        None
+    }
+}
+
+/// `shops.md §§6-8.1`: resolve a displayed `a..h` arms-shop Buy
+/// choice to the direct equipment item id stored in the current
+/// shop's decoded stock table. There is intentionally no item-id
+/// translation layer here.
+pub const fn arms_shop_stock_item_for_letter(
+    table: ArmsStockTable,
+    byte: u8,
+) -> Result<u8, ArmsStockLetterError> {
+    let index = match arms_shop_stock_letter_index(byte) {
+        Some(index) => index,
+        None => return Err(ArmsStockLetterError::InvalidLetter),
+    };
+    if index >= table.len() {
+        return Err(ArmsStockLetterError::EmptySlot);
+    }
+    Ok(table.item_ids[index])
+}
 
 /// `shops.md §6` arms-shop Buy quote. The shop's quote is the
 /// canonical base price plus the integer-truncated Intelligence
