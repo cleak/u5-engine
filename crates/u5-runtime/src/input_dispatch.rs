@@ -1651,7 +1651,7 @@ fn handle_active_conversation_key_input(
             } else if text.is_empty() {
                 prompt.to_string()
             } else {
-                format!("{text} {prompt}")
+                format!("{text}\n{prompt}")
             };
         }
     }

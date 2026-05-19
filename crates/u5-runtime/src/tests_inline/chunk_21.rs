@@ -1237,7 +1237,7 @@
             handle_play_key_input(&mut state, 'J', "OB", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
-        assert_eq!(state.message, "I mend gear Your interest?");
+        assert_eq!(state.message, "I mend gear\nYour interest?\n:");
         assert!(state.active_conversation.is_some());
         assert_eq!(state.turn, 1);
         let _ = fs::remove_dir_all(dir);
@@ -1539,9 +1539,9 @@
             MoveOutcome::Talked
         );
 
-        assert!(state.message.contains("Talked to Maris"));
+        assert!(state.message.contains("Thou seest a quiet sage"));
         assert!(state.message.contains("Greetings"));
-        assert!(state.message.contains("Your interest?"));
+        assert!(state.message.ends_with(TLK_KEYWORD_PROMPT));
         assert!(state.active_conversation.is_some());
         assert_eq!(state.turn, 1);
 
@@ -1602,8 +1602,8 @@
             MoveOutcome::Talked
         );
 
-        assert!(state.message.contains("Talked to Maris: a sage watching AVATAR."));
-        assert!(state.message.contains("Greetings Your interest?"));
+        assert!(state.message.contains("Thou seest a sage watching AVATAR"));
+        assert!(state.message.contains("Greetings\nYour interest?\n:"));
         assert_eq!(state.conversation_signal_flags[6], 1);
         assert!(state.active_conversation.is_some());
     }
@@ -1672,9 +1672,9 @@
         );
 
         handle_play_key_input(&mut state, 'J', "OIN", Path::new("")).unwrap();
-        assert_eq!(state.message, "Name thy companion. Name?");
+        assert_eq!(state.message, "Name thy companion.\nName?");
         handle_play_key_input(&mut state, 'i', "olo", Path::new("")).unwrap();
-        assert_eq!(state.message, " Accepted. Your interest?");
+        assert_eq!(state.message, " Accepted.\nYour interest?\n:");
         assert!(state.active_conversation.is_some());
     }
 

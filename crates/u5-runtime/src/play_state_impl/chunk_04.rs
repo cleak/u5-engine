@@ -2616,12 +2616,7 @@ impl PlayState {
                 );
                 self.active_conversation = Some(Box::new(session));
                 let greeting_text = self.advance_active_conversation_greeting();
-                let prompt = TLK_KEYWORD_PROMPT
-                    .lines()
-                    .next()
-                    .unwrap_or("Your interest?");
-                self.message =
-                    format!("Talked to {name}: {description_text}. {greeting_text} {prompt}");
+                self.message = conversation_opening_text(&description_text, &greeting_text);
                 return MoveOutcome::Talked;
             }
         }
@@ -2916,11 +2911,14 @@ impl PlayState {
         }
         let fields = dialogue.get(&(dialog_id as u16))?;
         let raw = raw_blob.get(&(dialog_id as u16))?;
+        let description_text = self.render_raw_conversation_description(raw, fields);
         let session =
             crate::conversation_session::ConversationSession::new(raw.clone(), fields.clone());
         self.active_conversation = Some(Box::new(session));
-        // Run the greeting now so the caller sees the opening line.
-        Some(self.advance_active_conversation_greeting())
+        let greeting_text = self.advance_active_conversation_greeting();
+        let opening = conversation_opening_text(&description_text, &greeting_text);
+        self.message = opening.clone();
+        Some(opening)
     }
 
     /// Render the active conversation's greeting and put it in
@@ -3694,4 +3692,16 @@ fn set_view_overlay_pixel(
         let limit = viewport.depth.pixel_limit();
         viewport.pixels[y * viewport.width + x] = color % limit;
     }
+}
+
+fn conversation_opening_text(description: &str, greeting: &str) -> String {
+    let mut text = String::from(TLK_OPENING_DESCRIPTION_PREFIX);
+    text.push_str(description.trim());
+    text.push_str("\n\n");
+    text.push_str(greeting.trim());
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(TLK_KEYWORD_PROMPT);
+    text
 }

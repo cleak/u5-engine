@@ -227,14 +227,16 @@ impl ConversationSession {
     /// Current prompt text for the active outer input loop.
     pub fn prompt_message(&self) -> String {
         match self.phase {
-            ConversationSessionPhase::AwaitingKeyword => "Your interest?".to_string(),
-            ConversationSessionPhase::AwaitingScopedKeyword { .. } => "Your interest?".to_string(),
+            ConversationSessionPhase::AwaitingKeyword => TLK_KEYWORD_PROMPT.to_string(),
+            ConversationSessionPhase::AwaitingScopedKeyword { .. } => {
+                TLK_KEYWORD_PROMPT.to_string()
+            }
             ConversationSessionPhase::AwaitingAskPartyName { .. } => "Name?".to_string(),
             ConversationSessionPhase::AwaitingAskWho { .. } => "Who?".to_string(),
             ConversationSessionPhase::AwaitingGoldPayment { amount, .. } => {
                 format!("Pay {amount} gold? (Y/N)")
             }
-            ConversationSessionPhase::Opened => "Your interest?".to_string(),
+            ConversationSessionPhase::Opened => TLK_KEYWORD_PROMPT.to_string(),
             ConversationSessionPhase::PresentingBye | ConversationSessionPhase::Closed => {
                 String::new()
             }
@@ -1014,7 +1016,7 @@ mod tests {
             s.phase,
             ConversationSessionPhase::AwaitingScopedKeyword { label: 0x91 }
         );
-        assert_eq!(s.prompt_message(), "Your interest?");
+        assert_eq!(s.prompt_message(), TLK_KEYWORD_PROMPT);
 
         let second = s.submit_keyword("apple", &ctx());
         assert_eq!(second.text, "Local answer.");

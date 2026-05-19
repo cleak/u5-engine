@@ -386,6 +386,10 @@ pub const TLK_CODE_END_OF_RESPONSE: u8 = 0xFF;
 /// handling may strip the embedded newline.
 pub const TLK_KEYWORD_PROMPT: &str = "Your interest?\n:";
 
+/// `conversation.md §9` opening preamble emitted before the NPC
+/// Description entry.
+pub const TLK_OPENING_DESCRIPTION_PREFIX: &str = "Thou seest ";
+
 /// `conversation.md §6` empty-input shortcut. Pressing Enter on an
 /// empty line prints this line and runs the NPC's `Bye` entry; it
 /// is the most common way conversations end.
