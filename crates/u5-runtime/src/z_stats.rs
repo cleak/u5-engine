@@ -236,6 +236,10 @@ pub enum YesNoPromptKind {
         party_index: usize,
         focus: DungeonLookFocus,
     },
+    TownExit {
+        entry: TownExitTileEntry,
+        advance_turn: bool,
+    },
     SaveGame,
     ExitToDos,
 }

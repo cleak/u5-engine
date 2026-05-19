@@ -987,12 +987,28 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    pub fn start_town_exit_prompt(
+        &mut self,
+        entry: TownExitTileEntry,
+        advance_turn: bool,
+    ) -> MoveOutcome {
+        self.active_yes_no_prompt = Some(YesNoPromptSession::new(YesNoPromptKind::TownExit {
+            entry,
+            advance_turn,
+        }));
+        self.message = self.render_active_yes_no_prompt();
+        MoveOutcome::Observed
+    }
+
     pub fn render_active_yes_no_prompt(&self) -> String {
         self.active_yes_no_prompt
             .as_ref()
             .map(|session| match session.kind {
                 YesNoPromptKind::DungeonFountainDrink { .. } => {
                     "You see: a fountain. Will you drink?".to_string()
+                }
+                YesNoPromptKind::TownExit { entry, .. } => {
+                    format!("Leave {}?", entry.scene.key())
                 }
                 YesNoPromptKind::SaveGame => SAVE_PROMPT_MESSAGE.to_string(),
                 YesNoPromptKind::ExitToDos => "Exit to DOS?".to_string(),
@@ -1015,6 +1031,19 @@ impl PlayState {
                     return match session.kind {
                         YesNoPromptKind::DungeonFountainDrink { party_index, focus } => {
                             self.look_dungeon_with_focus(Some(true), Some(party_index), focus);
+                            Ok(Some(PlayInputDisposition::Continue))
+                        }
+                        YesNoPromptKind::TownExit {
+                            entry,
+                            advance_turn,
+                        } => {
+                            let _ = self.resolve_town_exit_tile_transition(
+                                game_dir,
+                                entry.scene,
+                                entry.floor,
+                                entry,
+                                advance_turn,
+                            )?;
                             Ok(Some(PlayInputDisposition::Continue))
                         }
                         YesNoPromptKind::SaveGame => {

@@ -374,7 +374,17 @@
             state
                 .step_with_game_dir(Direction::East, Some(&dir))
                 .unwrap(),
-            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+            MoveOutcome::Observed
+        );
+
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!((state.player.x, state.player.y), (1, 0));
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Leave CASTLE:0?");
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
         );
 
         assert_eq!(
@@ -416,7 +426,17 @@
             state
                 .step_with_game_dir(Direction::East, Some(&dir))
                 .unwrap(),
-            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+            MoveOutcome::Observed
+        );
+
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!((state.player.x, state.player.y), (1, 0));
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Leave CASTLE:0?");
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
         );
 
         assert_eq!(
@@ -431,6 +451,40 @@
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("town exit tile"));
         assert!(state.message.contains("world-location table point"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn rejecting_town_exit_tile_prompt_stays_in_location_without_turn() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 CASTLE:0\n",
+        )
+        .unwrap();
+        fs::write(dir.join(TOWN_EXIT_TILE_TABLE_FILE), "CASTLE:0 0 1 0 55\n").unwrap();
+        let mut grid = open_grid();
+        grid[1] = 55;
+        let mut state = test_state(grid, 0, 0);
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Observed
+        );
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'N', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!((state.player.x, state.player.y), (1, 0));
+        assert_eq!(state.active_yes_no_prompt, None);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "No.");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -451,7 +505,25 @@
             state
                 .step_with_game_dir(Direction::East, Some(&dir))
                 .unwrap(),
-            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+            MoveOutcome::Observed
+        );
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!((state.player.x, state.player.y), (1, 0));
+        assert_eq!(state.turn, 0);
+        assert!(matches!(
+            state.active_yes_no_prompt,
+            Some(YesNoPromptSession {
+                kind: YesNoPromptKind::TownExit {
+                    entry,
+                    advance_turn: true
+                }
+            }) if entry.scene == scene && entry.floor == 0 && entry.x == 1 && entry.y == 0
+        ));
+        assert_eq!(state.message, "Leave CASTLE:0?");
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
         );
 
         assert_eq!(
@@ -610,7 +682,12 @@
             state
                 .step_with_game_dir(Direction::East, Some(&dir))
                 .unwrap(),
-            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+            MoveOutcome::Observed
+        );
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
         );
 
         assert_eq!(
@@ -639,7 +716,15 @@
             state
                 .step_with_game_dir(Direction::East, Some(&dir))
                 .unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Observed
+        );
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!((state.player.x, state.player.y), (1, 0));
+        assert_eq!(state.turn, 0);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
         );
 
         assert_eq!(state.area, Area::Town { scene, floor: 0 });

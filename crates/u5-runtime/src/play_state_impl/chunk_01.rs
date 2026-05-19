@@ -931,7 +931,7 @@ impl PlayState {
                 self.player.y = ny;
                 self.sync_player_object();
                 self.mark_visibility_dirty();
-                return self.resolve_town_exit_tile(game_dir, scene, floor, entry);
+                return Ok(self.start_town_exit_prompt(entry, true));
             }
         }
         if let Some(game_dir) = game_dir {
