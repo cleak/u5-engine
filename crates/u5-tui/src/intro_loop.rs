@@ -74,9 +74,7 @@ pub fn run_intro_menu_loop(
                     return Ok(());
                 }
             }
-            UnifiedMenuStep::Ignored => {
-                println!("Choose J, C, T, U, A, R, or press Enter to repeat the last choice.");
-            }
+            UnifiedMenuStep::Ignored => {}
             UnifiedMenuStep::PresentMenu | UnifiedMenuStep::ReturnedToMenu => {}
             UnifiedMenuStep::LaunchGameplay => {
                 let options = load_play_options_from_save(game_dir)?;

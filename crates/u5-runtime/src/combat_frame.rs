@@ -1885,6 +1885,68 @@ impl PlayState {
         Some(*experience)
     }
 
+    fn apply_combat_monster_death_active_object_effect(
+        &mut self,
+        target_slot: usize,
+        damage: CombatMonsterDamageOutcome,
+    ) -> bool {
+        let Some(death_path) = damage.death_path else {
+            return false;
+        };
+        let Some(actor) = self.combat_actors.get(target_slot) else {
+            return false;
+        };
+        let active_object_slot = usize::from(actor.active_object_slot);
+        let mut changed = false;
+
+        match death_path {
+            CombatMonsterDeathPath::Vanish => {
+                if let Some(object) = self.active_objects.get_mut(active_object_slot) {
+                    object.type_byte = COMBAT_DEFAULT_DEATH_NO_DROP_TILE;
+                    object.tile = COMBAT_DEFAULT_DEATH_NO_DROP_TILE;
+                    object.phase = STEADY_PHASE;
+                    object.aux1 = 0;
+                }
+                self.combat_actors[target_slot].clear();
+                changed = true;
+            }
+            CombatMonsterDeathPath::DefaultDropCheck => {
+                let Some(stats) = combat_class_stats(damage.class) else {
+                    return changed;
+                };
+                let drop_cap = stats.default_drop_cap;
+                let first_roll = self.random_range_u8(0, COMBAT_DEFAULT_DEATH_DROP_ROLL_MAX);
+                let second_roll = self.random_range_u8(0, COMBAT_DEFAULT_DEATH_DROP_ROLL_MAX);
+                let marker = resolve_default_monster_death_marker(
+                    drop_cap,
+                    combat_default_death_drop_gate_accepts(drop_cap, first_roll),
+                    combat_default_death_drop_gate_accepts(drop_cap, second_roll),
+                );
+                if let Some(object) = self.active_objects.get_mut(active_object_slot) {
+                    match marker {
+                        CombatDefaultDeathMarker::Drop { loot_byte } => {
+                            object.type_byte = COMBAT_DEFAULT_DEATH_DROP_TILE;
+                            object.tile = COMBAT_DEFAULT_DEATH_DROP_TILE;
+                            object.aux1 = loot_byte;
+                        }
+                        CombatDefaultDeathMarker::NoDrop => {
+                            object.type_byte = COMBAT_DEFAULT_DEATH_NO_DROP_TILE;
+                            object.tile = COMBAT_DEFAULT_DEATH_NO_DROP_TILE;
+                            object.aux1 = 0;
+                        }
+                    }
+                    object.phase = STEADY_PHASE;
+                    changed = true;
+                }
+            }
+            CombatMonsterDeathPath::SpecialTileTransition => {}
+        }
+        if changed {
+            self.mark_visibility_dirty();
+        }
+        changed
+    }
+
     pub fn apply_combat_weapon_damage_to_target(
         &mut self,
         attacker_slot: Option<usize>,
@@ -1904,6 +1966,9 @@ impl PlayState {
             .combat_actors
             .get_mut(target_slot)?
             .apply_monster_damage(raw_damage, magical)?;
+        if damage.killed {
+            self.apply_combat_monster_death_active_object_effect(target_slot, damage);
+        }
         let credited_experience = if damage.return_value == 0 {
             None
         } else {

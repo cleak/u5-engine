@@ -3,8 +3,9 @@
 //! Moved from `u5-runtime` when CLI parsing was lifted into the TUI crate.
 
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use u5_runtime::test_fixtures::*;
 use u5_runtime::*;
@@ -508,6 +509,28 @@ fn cli_intro_rejects_direct_play_or_save_creation_modes() {
         ])
         .is_err()
     );
+}
+
+#[test]
+fn cli_intro_ignores_invalid_menu_key_without_explanatory_text() {
+    let dir = debug_game_dir();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_u5-engine"))
+        .arg("--intro")
+        .arg(dir.to_str().unwrap())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.as_mut().unwrap().write_all(b" \nX\n").unwrap();
+
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Intro Menu"));
+    assert!(!stdout.contains("Choose J, C, T, U, A, R"));
+    assert!(String::from_utf8(output.stderr).unwrap().is_empty());
+    let _ = fs::remove_dir_all(dir);
 }
 
 // from chunk_02

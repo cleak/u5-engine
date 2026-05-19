@@ -10162,6 +10162,149 @@
         );
     }
 
+    fn seed_for_default_death_gates(
+        drop_cap: u8,
+        first_accepts: bool,
+        second_accepts: bool,
+    ) -> u16 {
+        for seed in 0..=u16::MAX {
+            let mut prng = seed;
+            let first = u5_prng_range_u16(
+                &mut prng,
+                0,
+                u16::from(COMBAT_DEFAULT_DEATH_DROP_ROLL_MAX),
+            ) as u8;
+            let second = u5_prng_range_u16(
+                &mut prng,
+                0,
+                u16::from(COMBAT_DEFAULT_DEATH_DROP_ROLL_MAX),
+            ) as u8;
+            if combat_default_death_drop_gate_accepts(drop_cap, first) == first_accepts
+                && combat_default_death_drop_gate_accepts(drop_cap, second) == second_accepts
+            {
+                return seed;
+            }
+        }
+        panic!("no deterministic PRNG seed found for requested default-death gates");
+    }
+
+    fn place_death_side_effect_monster(
+        state: &mut PlayState,
+        class: u8,
+        actor_slot: usize,
+        active_object_slot: usize,
+    ) -> CombatClassStats {
+        let stats = combat_class_stats(class).unwrap();
+        state
+            .active_objects
+            .resize(COMBAT_ACTOR_SLOTS, ActiveObject::empty());
+        state.combat_actors[actor_slot] = CombatActorDescriptor::for_monster_placement(
+            stats,
+            active_object_slot as u8,
+            4,
+            5,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+        );
+        state.active_objects[active_object_slot] = ActiveObject {
+            type_byte: COMBAT_DEFAULT_DEATH_DROP_TILE + class,
+            tile: COMBAT_DEFAULT_DEATH_DROP_TILE + class,
+            x: 4,
+            y: 5,
+            z: 0,
+            phase: 7,
+            aux1: 0x55,
+            aux3: 0,
+        };
+        stats
+    }
+
+    #[test]
+    fn combat_monster_default_death_materializes_drop_marker() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let actor_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        let active_object_slot = 9;
+        let stats = place_death_side_effect_monster(&mut state, 32, actor_slot, active_object_slot);
+        state.prng_state = seed_for_default_death_gates(stats.default_drop_cap, true, false);
+
+        let application = state
+            .apply_combat_weapon_damage_to_target(None, actor_slot, COMBAT_INSTANT_KILL_DAMAGE, true)
+            .unwrap();
+
+        assert!(matches!(
+            application,
+            CombatWeaponDamageApplication::Monster { damage, .. }
+                if damage.death_path == Some(CombatMonsterDeathPath::DefaultDropCheck)
+        ));
+        assert!(state.combat_actors[actor_slot].is_marked_dead());
+        assert_eq!(
+            state.active_objects[active_object_slot].type_byte,
+            COMBAT_DEFAULT_DEATH_DROP_TILE
+        );
+        assert_eq!(
+            state.active_objects[active_object_slot].tile,
+            COMBAT_DEFAULT_DEATH_DROP_TILE
+        );
+        assert_eq!(
+            state.active_objects[active_object_slot].aux1,
+            stats.default_drop_cap
+        );
+        assert_eq!(state.active_objects[active_object_slot].phase, STEADY_PHASE);
+    }
+
+    #[test]
+    fn combat_monster_default_death_materializes_no_drop_marker() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let actor_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        let active_object_slot = 10;
+        let stats = place_death_side_effect_monster(&mut state, 32, actor_slot, active_object_slot);
+        state.prng_state = seed_for_default_death_gates(stats.default_drop_cap, false, true);
+
+        state
+            .apply_combat_weapon_damage_to_target(None, actor_slot, COMBAT_INSTANT_KILL_DAMAGE, true)
+            .unwrap();
+
+        assert!(state.combat_actors[actor_slot].is_marked_dead());
+        assert_eq!(
+            state.active_objects[active_object_slot].type_byte,
+            COMBAT_DEFAULT_DEATH_NO_DROP_TILE
+        );
+        assert_eq!(
+            state.active_objects[active_object_slot].tile,
+            COMBAT_DEFAULT_DEATH_NO_DROP_TILE
+        );
+        assert_eq!(state.active_objects[active_object_slot].aux1, 0);
+    }
+
+    #[test]
+    fn combat_monster_vanish_death_clears_actor_and_updates_visual_marker() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let actor_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        let active_object_slot = 11;
+        place_death_side_effect_monster(&mut state, 13, actor_slot, active_object_slot);
+
+        let application = state
+            .apply_combat_weapon_damage_to_target(None, actor_slot, COMBAT_INSTANT_KILL_DAMAGE, true)
+            .unwrap();
+
+        assert!(matches!(
+            application,
+            CombatWeaponDamageApplication::Monster { damage, .. }
+                if damage.death_path == Some(CombatMonsterDeathPath::Vanish)
+        ));
+        assert!(state.combat_actors[actor_slot].is_empty());
+        assert_eq!(
+            state.active_objects[active_object_slot].type_byte,
+            COMBAT_DEFAULT_DEATH_NO_DROP_TILE
+        );
+        assert_eq!(
+            state.active_objects[active_object_slot].tile,
+            COMBAT_DEFAULT_DEATH_NO_DROP_TILE
+        );
+        assert_eq!(state.active_objects[active_object_slot].aux1, 0);
+        assert_eq!(state.active_objects[active_object_slot].phase, STEADY_PHASE);
+    }
+
     #[test]
     fn combat_weapon_attack_application_uses_actor_range_and_applies_hit_damage() {
         let mut state = world_state(open_world_grid(), 10, 20);
@@ -12518,6 +12661,11 @@
 
     #[test]
     fn default_monster_death_marker_keeps_drop_cap_and_special_bit_separate() {
+        assert_eq!(COMBAT_DEFAULT_DEATH_DROP_ROLL_MAX, 99);
+        assert_eq!(COMBAT_DEFAULT_DEATH_DROP_TILE, 0x1e);
+        assert_eq!(COMBAT_DEFAULT_DEATH_NO_DROP_TILE, 0x1f);
+        assert!(combat_default_death_drop_gate_accepts(11, 10));
+        assert!(!combat_default_death_drop_gate_accepts(11, 11));
         assert_eq!(
             resolve_default_monster_death_marker(0x1e, false, true),
             CombatDefaultDeathMarker::NoDrop

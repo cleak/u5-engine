@@ -214,6 +214,15 @@ pub const COMBAT_ACTOR_FLAG_MARKED_DEAD: u8 = 0x20;
 pub const COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED: u8 = 0x04;
 pub const COMBAT_FIELD_REJECTED_ACTIVE_OBJECT_TILE: u8 = 0xf4;
 pub const COMBAT_INSTANT_KILL_DAMAGE: i16 = 99;
+/// `combat.md §12`: default monster death drop gates use the
+/// class drop-cap byte as a percentage over a `0..=99` roll.
+pub const COMBAT_DEFAULT_DEATH_DROP_ROLL_MAX: u8 = 99;
+/// `combat.md §12`: LOOK2 object-domain corpse marker used when the
+/// default kill path promotes byte five into a temporary loot marker.
+pub const COMBAT_DEFAULT_DEATH_DROP_TILE: u8 = 0x1E;
+/// `combat.md §12`: alternate corpse marker used for default
+/// no-drop deaths and boss-style vanish deaths.
+pub const COMBAT_DEFAULT_DEATH_NO_DROP_TILE: u8 = 0x1F;
 /// `catalogs/spell-list.md §5` Magic Missile raw damage roll cap.
 /// Anchored to [`crate::MAGIC_MISSILE_RAW_DAMAGE_MAX`] so the
 /// combat-side roll cap and the spell-list-side raw cap stay one
@@ -2425,6 +2434,10 @@ pub const fn resolve_default_monster_death_marker(
     } else {
         CombatDefaultDeathMarker::NoDrop
     }
+}
+
+pub const fn combat_default_death_drop_gate_accepts(drop_cap: u8, roll_0_to_99: u8) -> bool {
+    roll_0_to_99 < drop_cap
 }
 
 pub fn resolve_default_monster_death_marker_for_class(
