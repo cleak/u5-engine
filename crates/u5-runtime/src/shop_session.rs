@@ -20,6 +20,7 @@ pub enum ActiveShopSession {
     HorseTrader(HorseTraderState),
     ShipBroker(ShipBrokerState),
     Guild(GuildShopState),
+    StationaryDisplay(StationaryDisplayState),
 }
 
 impl ActiveShopSession {
@@ -37,6 +38,7 @@ impl ActiveShopSession {
             Self::HorseTrader(s) => matches!(s, HorseTraderState::Exited),
             Self::ShipBroker(s) => matches!(s, ShipBrokerState::Exited),
             Self::Guild(s) => matches!(s, GuildShopState::Exited),
+            Self::StationaryDisplay(s) => matches!(s, StationaryDisplayState::Exited),
         }
     }
 
@@ -80,6 +82,7 @@ impl ActiveShopSession {
             | Self::Guild(GuildShopState::PickItem { shop })
             | Self::Guild(GuildShopState::PickQuantity { shop, .. }) => shop.display_name(),
             Self::Guild(GuildShopState::Exited) => "Guildmaster",
+            Self::StationaryDisplay(_) => "Shop Display",
         }
     }
 
@@ -92,6 +95,7 @@ impl ActiveShopSession {
             Self::Sage(_) => "Of what wouldst thou hear my lore?",
             Self::Reagent(_) => "Choose reagent A-E, or Space.",
             Self::Guild(_) => "Keys (A), Gems (B), Torches (C), or Space.",
+            Self::StationaryDisplay(_) => "Buy display item? Yes (Y), No (N), or Space.",
             _ => "Choose Buy / Sell / Yes / No.",
         }
     }

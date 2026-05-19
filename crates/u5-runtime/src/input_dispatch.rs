@@ -1090,6 +1090,45 @@ fn handle_active_shop_key_input(
             state.torches = torches;
             format_guild_outcome(outcome)
         }
+        ActiveShopSession::StationaryDisplay(s) => {
+            let mut stock = state.equipment_stock;
+            let outcome = match (*s, yes, no) {
+                (StationaryDisplayState::Prompt { .. }, _, _) => step_stationary_display(
+                    s,
+                    StationaryDisplayInput::Key(key_byte),
+                    &mut state.gold,
+                    &mut stock,
+                ),
+                (StationaryDisplayState::Confirm { .. }, true, _) => step_stationary_display(
+                    s,
+                    StationaryDisplayInput::Confirm(true),
+                    &mut state.gold,
+                    &mut stock,
+                ),
+                (StationaryDisplayState::Confirm { .. }, _, true) => step_stationary_display(
+                    s,
+                    StationaryDisplayInput::Confirm(false),
+                    &mut state.gold,
+                    &mut stock,
+                ),
+                _ => StationaryDisplayOutcome::InvalidInput,
+            };
+            state.equipment_stock = stock;
+            if let StationaryDisplayOutcome::Purchased {
+                object_slot: Some(slot),
+                ..
+            } = outcome
+            {
+                state.free_active_object_slot(slot);
+                state.mark_visibility_dirty();
+            }
+            let surcharge = if matches!(outcome, StationaryDisplayOutcome::Purchased { .. }) {
+                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_STATIONARY_DISPLAY)
+            } else {
+                None
+            };
+            append_active_shop_surcharge(format_stationary_display_outcome(outcome), surcharge)
+        }
     };
     state.message = message;
 
@@ -1163,6 +1202,7 @@ const ACTIVE_SHOP_SURCHARGE_TAVERN: u8 = 0x59;
 const ACTIVE_SHOP_SURCHARGE_SAGE: u8 = 0x6B;
 const ACTIVE_SHOP_SURCHARGE_HORSE: u8 = 0x7D;
 const ACTIVE_SHOP_SURCHARGE_SHIP: u8 = 0x8F;
+const ACTIVE_SHOP_SURCHARGE_STATIONARY_DISPLAY: u8 = 0xA1;
 fn active_shop_surcharge_sentinel(state: &PlayState) -> u8 {
     state.shared_town_conversation_sentinel()
 }
@@ -1492,6 +1532,35 @@ fn format_guild_outcome(outcome: crate::shop_runtime::GuildShopOutcome) -> Strin
         RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
         RefusedStockCap { cap, .. } => format!("Thou canst carry only {cap}."),
         Declined => "As you wish.".to_string(),
+        Exited => "Farewell.".to_string(),
+        InvalidInput => "I do not understand.".to_string(),
+    }
+}
+
+fn format_stationary_display_outcome(
+    outcome: crate::shop_runtime::StationaryDisplayOutcome,
+) -> String {
+    use crate::shop_runtime::StationaryDisplayOutcome::*;
+    match outcome {
+        Offered { item, price } => {
+            format!(
+                "{} costs {price} gold. (Y/N)",
+                equipment_name(item as usize)
+            )
+        }
+        Purchased {
+            item,
+            price,
+            party_index,
+            ..
+        } => format!(
+            "Party member {} bought {} for {price} gold.",
+            party_index + 1,
+            equipment_name(item as usize)
+        ),
+        RefusedShortFunds { price, .. } => format!("Thou lackest the {price} gold."),
+        RefusedStockCap { .. } => "Thou canst carry no more of those.".to_string(),
+        Declined { .. } => "As you wish.".to_string(),
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),
     }

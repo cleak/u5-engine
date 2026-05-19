@@ -2501,6 +2501,85 @@
     }
 
     #[test]
+    fn end_to_end_stationary_display_purchase_removes_display_and_grants_item() {
+        use crate::shop_runtime::StationaryDisplayState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.shadowlord_hideouts = [250, 251, 252];
+        state.gold = 100;
+        state.visibility_dirty = false;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x90,
+            tile: 0x90,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        state.active_shop = Some(ActiveShopSession::StationaryDisplay(
+            StationaryDisplayState::new(EQUIPMENT_ID_BOW as u8, 75, 0, Some(1)),
+        ));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        assert_eq!(state.gold, 100);
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 0);
+        assert!(!state.active_objects[1].is_empty());
+        assert!(state.active_shop.is_some());
+        assert!(state.message.contains("Bow costs 75 gold"));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 25);
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
+        assert!(state.active_objects[1].is_empty());
+        assert!(state.visibility_dirty);
+        assert!(state.active_shop.is_none());
+        assert!(state.message.contains("Party member 1 bought Bow"));
+    }
+
+    #[test]
+    fn end_to_end_stationary_display_refusal_keeps_display_and_inventory() {
+        use crate::shop_runtime::StationaryDisplayState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 10;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x90,
+            tile: 0x90,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        state.active_shop = Some(ActiveShopSession::StationaryDisplay(
+            StationaryDisplayState::new(30, 70, 0, Some(1)),
+        ));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 10);
+        assert_eq!(state.equipment_stock[30], 0);
+        assert!(!state.active_objects[1].is_empty());
+        assert!(state.active_shop.is_none());
+        assert!(state.message.contains("Thou lackest the 70 gold"));
+
+        state.active_shop = Some(ActiveShopSession::StationaryDisplay(
+            StationaryDisplayState::new(30, 70, 0, Some(1)),
+        ));
+        handle_play_key_input(&mut state, ' ', "", Path::new("")).unwrap();
+        assert_eq!(state.message, "Farewell.");
+        assert!(state.active_shop.is_none());
+        assert!(!state.active_objects[1].is_empty());
+    }
+
+    #[test]
     fn end_to_end_sage_rumour_quotes_confirms_and_debits_gold() {
         use crate::shop_runtime::SageState;
         use crate::shop_session::ActiveShopSession;

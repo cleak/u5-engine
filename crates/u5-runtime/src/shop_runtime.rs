@@ -16,14 +16,14 @@ use crate::shops::{
     GuildShopAction, Herbalist, INN_REGISTRY_CAP, Inn, InnMainAction, ProvisionPurchaseError,
     Reagent, ReagentPurchaseError, SageRumourError, SageRumourQuote, SageTopic, Shipwright,
     ShipwrightMenuAction, ShipwrightPurchaseError, ShipwrightPurchaseOutcome,
-    ShipwrightPurchaseQuote, Stable, Tavern, TavernDrinkError, TavernDrinkPrompt,
-    apply_blue_boar_drink, apply_guild_purchase, apply_provision_purchase, apply_reagent_purchase,
-    apply_shipwright_purchase, apply_tavern_round_drink, arms_shop_action, arms_shop_buy_quote,
-    arms_shop_sell_offer, find_sage_topic, guild_shop_action, guild_unit_price,
-    herbalist_menu_entries, inn_base_room_rate, inn_leave_companion_deposit, inn_main_action,
-    inn_pickup_bill, quote_inn_rest, quote_shipwright_purchase, render_sage_rumour,
-    shipwright_menu_action, stable_horse_price, tavern_drink_prompt, tavern_provision_unit_price,
-    tavern_round_drink_menu_letter,
+    ShipwrightPurchaseQuote, Stable, StationaryDisplayPrompt, Tavern, TavernDrinkError,
+    TavernDrinkPrompt, apply_blue_boar_drink, apply_guild_purchase, apply_provision_purchase,
+    apply_reagent_purchase, apply_shipwright_purchase, apply_tavern_round_drink, arms_shop_action,
+    arms_shop_buy_quote, arms_shop_sell_offer, find_sage_topic, guild_shop_action,
+    guild_unit_price, herbalist_menu_entries, inn_base_room_rate, inn_leave_companion_deposit,
+    inn_main_action, inn_pickup_bill, quote_inn_rest, quote_shipwright_purchase,
+    render_sage_rumour, shipwright_menu_action, stable_horse_price, stationary_display_prompt,
+    tavern_drink_prompt, tavern_provision_unit_price, tavern_round_drink_menu_letter,
 };
 use crate::transport::PendingVehicleAcquisition;
 
@@ -209,6 +209,145 @@ pub fn step_arms_shop(
         }
         (ArmsShopState::Exited, _) => ArmsShopOutcome::Exited,
         _ => ArmsShopOutcome::InvalidInput,
+    }
+}
+
+// ---------- Stationary display purchase ----------
+
+/// `shops.md §8.10` stationary-display purchase flow. The display
+/// marker has already selected an equipment item and price before the
+/// Y/N loop starts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StationaryDisplayState {
+    Prompt {
+        item: u8,
+        price: u16,
+        party_index: usize,
+        object_slot: Option<usize>,
+    },
+    Confirm {
+        item: u8,
+        price: u16,
+        party_index: usize,
+        object_slot: Option<usize>,
+    },
+    Exited,
+}
+
+impl StationaryDisplayState {
+    pub const fn new(item: u8, price: u16, party_index: usize, object_slot: Option<usize>) -> Self {
+        Self::Prompt {
+            item,
+            price,
+            party_index,
+            object_slot,
+        }
+    }
+}
+
+/// Input to the stationary-display Y/N and confirmation prompts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StationaryDisplayInput {
+    Key(u8),
+    Confirm(bool),
+}
+
+/// Outcome of one stationary-display transition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StationaryDisplayOutcome {
+    Offered {
+        item: u8,
+        price: u16,
+    },
+    Exited,
+    Declined {
+        item: u8,
+    },
+    Purchased {
+        item: u8,
+        price: u16,
+        party_index: usize,
+        object_slot: Option<usize>,
+    },
+    RefusedShortFunds {
+        item: u8,
+        price: u16,
+    },
+    RefusedStockCap {
+        item: u8,
+    },
+    InvalidInput,
+}
+
+pub fn step_stationary_display(
+    state: &mut StationaryDisplayState,
+    input: StationaryDisplayInput,
+    gold: &mut u16,
+    stock: &mut EquipmentStock,
+) -> StationaryDisplayOutcome {
+    match (*state, input) {
+        (
+            StationaryDisplayState::Prompt {
+                item,
+                price,
+                party_index,
+                object_slot,
+            },
+            StationaryDisplayInput::Key(byte),
+        ) => match stationary_display_prompt(byte) {
+            StationaryDisplayPrompt::Offer => {
+                *state = StationaryDisplayState::Confirm {
+                    item,
+                    price,
+                    party_index,
+                    object_slot,
+                };
+                StationaryDisplayOutcome::Offered { item, price }
+            }
+            StationaryDisplayPrompt::Exit => {
+                *state = StationaryDisplayState::Exited;
+                StationaryDisplayOutcome::Exited
+            }
+            StationaryDisplayPrompt::Discard => StationaryDisplayOutcome::InvalidInput,
+        },
+        (
+            StationaryDisplayState::Confirm {
+                item,
+                price,
+                party_index,
+                object_slot,
+            },
+            StationaryDisplayInput::Confirm(true),
+        ) => {
+            let item_index = item as usize;
+            if item_index >= EQUIPMENT_COUNT {
+                *state = StationaryDisplayState::Exited;
+                return StationaryDisplayOutcome::InvalidInput;
+            }
+            if stock[item_index] >= EQUIPMENT_STOCK_CAP {
+                *state = StationaryDisplayState::Exited;
+                return StationaryDisplayOutcome::RefusedStockCap { item };
+            }
+            if *gold < price {
+                *state = StationaryDisplayState::Exited;
+                return StationaryDisplayOutcome::RefusedShortFunds { item, price };
+            }
+            *gold -= price;
+            stock[item_index] = stock[item_index].saturating_add(1);
+            *state = StationaryDisplayState::Exited;
+            StationaryDisplayOutcome::Purchased {
+                item,
+                price,
+                party_index,
+                object_slot,
+            }
+        }
+        (StationaryDisplayState::Confirm { item, .. }, StationaryDisplayInput::Confirm(false)) => {
+            *state = StationaryDisplayState::Exited;
+            StationaryDisplayOutcome::Declined { item }
+        }
+        (StationaryDisplayState::Exited, _) => StationaryDisplayOutcome::Exited,
+        _ => StationaryDisplayOutcome::InvalidInput,
     }
 }
 
@@ -2586,6 +2725,90 @@ mod tests {
         assert_eq!(outcome, GuildShopOutcome::RefusedShortFunds { cost: 200 });
         assert_eq!(gold, 100);
         assert_eq!(gems, 0);
+    }
+
+    #[test]
+    fn stationary_display_purchase_requires_offer_then_confirmation() {
+        let mut state = StationaryDisplayState::new(26, 75, 1, Some(3));
+        let mut gold = 100u16;
+        let mut stock = [0u8; EQUIPMENT_COUNT];
+
+        assert_eq!(
+            step_stationary_display(
+                &mut state,
+                StationaryDisplayInput::Key(b'Y'),
+                &mut gold,
+                &mut stock,
+            ),
+            StationaryDisplayOutcome::Offered {
+                item: 26,
+                price: 75
+            }
+        );
+        assert_eq!(gold, 100);
+        assert_eq!(stock[26], 0);
+        assert!(matches!(state, StationaryDisplayState::Confirm { .. }));
+
+        assert_eq!(
+            step_stationary_display(
+                &mut state,
+                StationaryDisplayInput::Confirm(true),
+                &mut gold,
+                &mut stock,
+            ),
+            StationaryDisplayOutcome::Purchased {
+                item: 26,
+                price: 75,
+                party_index: 1,
+                object_slot: Some(3),
+            }
+        );
+        assert_eq!(gold, 25);
+        assert_eq!(stock[26], 1);
+        assert_eq!(state, StationaryDisplayState::Exited);
+    }
+
+    #[test]
+    fn stationary_display_purchase_exits_and_refuses_without_mutation() {
+        let mut exit_state = StationaryDisplayState::new(30, 70, 0, None);
+        let mut gold = 10u16;
+        let mut stock = [0u8; EQUIPMENT_COUNT];
+        assert_eq!(
+            step_stationary_display(
+                &mut exit_state,
+                StationaryDisplayInput::Key(b'N'),
+                &mut gold,
+                &mut stock,
+            ),
+            StationaryDisplayOutcome::Exited
+        );
+        assert_eq!(gold, 10);
+        assert_eq!(stock[30], 0);
+
+        let mut short_state = StationaryDisplayState::new(30, 70, 0, None);
+        assert!(matches!(
+            step_stationary_display(
+                &mut short_state,
+                StationaryDisplayInput::Key(b'Y'),
+                &mut gold,
+                &mut stock,
+            ),
+            StationaryDisplayOutcome::Offered { .. }
+        ));
+        assert_eq!(
+            step_stationary_display(
+                &mut short_state,
+                StationaryDisplayInput::Confirm(true),
+                &mut gold,
+                &mut stock,
+            ),
+            StationaryDisplayOutcome::RefusedShortFunds {
+                item: 30,
+                price: 70
+            }
+        );
+        assert_eq!(gold, 10);
+        assert_eq!(stock[30], 0);
     }
 
     #[test]
