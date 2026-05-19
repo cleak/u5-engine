@@ -1524,13 +1524,16 @@ impl PlayState {
 
     pub fn mode_zero_cleanup(&mut self) {
         self.recompute_daylight();
-        self.refresh_natural_moongates();
+        self.refresh_natural_moongates_for_current_counter();
     }
 
     pub fn refresh_natural_moongates(&mut self) -> bool {
         self.natural_moongate_counter =
             natural_moongate_advance_counter(self.natural_moongate_counter, self.clock.hour);
+        self.refresh_natural_moongates_for_current_counter()
+    }
 
+    pub fn refresh_natural_moongates_for_current_counter(&mut self) -> bool {
         let Some(indices) = self.natural_moongate_slot_indices_for_current_scene() else {
             self.natural_moongate_live_cells.clear();
             return false;

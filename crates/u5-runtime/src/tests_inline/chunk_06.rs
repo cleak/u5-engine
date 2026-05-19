@@ -1736,6 +1736,32 @@
     }
 
     #[test]
+    fn mode_zero_cleanup_reapplies_natural_moongates_without_advancing_counter() {
+        let gate_idx = world_cell_index(6, 7);
+        let mut state = britannia_state(open_world_grid(), 4, 5);
+        state.clock = GameClock::new(23, 0).unwrap();
+        state.moonstone_slots[1] = MoonstoneGateSlot {
+            scene: 0,
+            x: 6,
+            y: 7,
+            z: WorldPlane::Britannia.save_floor() as u8,
+        };
+
+        state.mode_zero_cleanup();
+
+        assert_eq!(state.natural_moongate_counter, 0);
+        assert_eq!(state.grid[gate_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert!(state.natural_moongate_live_cells.is_empty());
+
+        state.natural_moongate_counter = 2;
+        state.mode_zero_cleanup();
+
+        assert_eq!(state.natural_moongate_counter, 2);
+        assert_eq!(state.grid[gate_idx], NATURAL_MOONGATE_TERRAIN_TILE);
+        assert_eq!(state.natural_moongate_live_cells, vec![gate_idx]);
+    }
+
+    #[test]
     fn natural_moongate_entry_uses_cached_moon_slot_without_spending_turn() {
         let dir = debug_game_dir();
         let origin_idx = world_cell_index(5, 5);

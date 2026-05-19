@@ -50,6 +50,10 @@ Current worktree context when this TODO was refreshed:
 - Town-family exit thresholds now prompt both when stepped onto and when
   observed underfoot after a consumed turn; accepting exits through clean
   return metadata, refusing leaves town mode active.
+- Natural moongate live-tile refresh now keeps mode-zero scene/light cleanup
+  from advancing the shared gate-presence counter. The remaining exact gap is
+  the public moon-glyph phase table that feeds the cached Trammel/Felucca slot
+  used by live-gate entry; current tests seed that cache directly.
 
 Before starting a major slice, inspect `git status --short` and preserve user
 changes. Do not revert unrelated work.
