@@ -13726,7 +13726,9 @@
             dungeon_field_effect(0x8b),
             Some(DungeonFieldEffect::Electric)
         );
-        assert_eq!(dungeon_field_effect(0x90), Some(DungeonFieldEffect::Energy));
+        assert_eq!(dungeon_field_effect(0x84), Some(DungeonFieldEffect::Energy));
+        assert_eq!(dungeon_field_effect(0x8f), Some(DungeonFieldEffect::Energy));
+        assert_eq!(dungeon_field_effect(0x90), None);
         assert_eq!(dungeon_field_effect(0x70), None);
     }
 

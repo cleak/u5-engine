@@ -212,9 +212,10 @@ immediate exit-dungeon cells while their exact encoding remains open. Runtime
 triggers while keeping its low-nibble arena slot. Optional `dungeon_doors.tsv`
 rows split heavy or revealed secret doors from room-trigger cells and provide
 the open-cell rewrite used by `O` and `J`. Stepping into public
-sleep/poison/fire/electric field cells now applies first-playable party status
-or deterministic damage while unresolved generic field subtypes remain
-diagnostic. Looking at public fountain cells prompts for a drink; inline
+sleep/poison/fire/electric field cells now applies party status or deterministic
+damage; generic `0x84..0x8F` energy-field contact has no status/damage effect,
+and the secondary `0x9?` visual family remains descriptive only. Looking at
+public fountain cells prompts for a drink; inline
 responses like `lY`, `lN`, or `l2Y` apply the cure/heal/poison/bad-taste
 subtypes to the selected party member without spending a turn. `T`alk reports
 the stock no-response line and world/vehicle command

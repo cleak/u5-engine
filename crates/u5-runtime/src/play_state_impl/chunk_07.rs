@@ -2994,7 +2994,7 @@ impl PlayState {
             return Ok(None);
         }
         if let Some(field) = dungeon_field_effect(tile) {
-            let field_report = self.apply_dungeon_field_effect(field);
+            let field_report = self.apply_dungeon_field_effect_at(level, x, y, tile, field);
             let field_message = format!("Triggered {}; {field_report}.", field.label());
             self.message = if self.message.is_empty() {
                 field_message

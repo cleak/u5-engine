@@ -84,7 +84,7 @@ impl PlayState {
             return Ok(MoveOutcome::Moved);
         }
         if let Some(field) = dungeon_field_effect(tile) {
-            let field_report = self.apply_dungeon_field_effect(field);
+            let field_report = self.apply_dungeon_field_effect_at(level, nx, ny, tile, field);
             self.advance_turn();
             self.message = format!(
                 "Moved {} to ({nx}, {ny}) on {} level {level}; triggered {}; {field_report}.",
@@ -240,6 +240,22 @@ impl PlayState {
             .unwrap_or_default()
             .into_iter()
             .any(|entry| dungeon_exit_tile_matches(entry, scene, level, x, y, cell)))
+    }
+
+    pub fn apply_dungeon_field_effect_at(
+        &mut self,
+        level: u8,
+        x: usize,
+        y: usize,
+        tile: u8,
+        field: DungeonFieldEffect,
+    ) -> String {
+        let report = self.apply_dungeon_field_effect(field);
+        if field == DungeonFieldEffect::Sleep {
+            self.grid[dungeon_cell_index(level, x, y)] = tile & DUNGEON_VISIT_MARKER_BIT;
+            self.mark_visibility_dirty();
+        }
+        report
     }
 
     pub fn apply_dungeon_field_effect(&mut self, field: DungeonFieldEffect) -> String {

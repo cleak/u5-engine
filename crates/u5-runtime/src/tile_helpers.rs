@@ -105,7 +105,7 @@ pub fn dungeon_field_effect(tile: u8) -> Option<DungeonFieldEffect> {
         0x81 | 0x89 => Some(DungeonFieldEffect::PoisonGas),
         0x82 | 0x8a => Some(DungeonFieldEffect::Fire),
         0x83 | 0x8b => Some(DungeonFieldEffect::Electric),
-        0x84..=0x9f => Some(DungeonFieldEffect::Energy),
+        0x84..=0x8f => Some(DungeonFieldEffect::Energy),
         _ => None,
     }
 }

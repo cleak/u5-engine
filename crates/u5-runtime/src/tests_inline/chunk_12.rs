@@ -827,7 +827,7 @@
     #[test]
     fn dungeon_generic_energy_field_moves_without_status_damage_or_placeholder() {
         let mut grid = open_dungeon_record();
-        grid[dungeon_cell_index(0, 2, 1)] = 0x90;
+        grid[dungeon_cell_index(0, 2, 1)] = 0x84;
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.party[0].status = b'G';
         state.party[0].hp = 10;
@@ -844,7 +844,25 @@
     }
 
     #[test]
-    fn dungeon_sleep_field_marker_variant_sets_living_party_asleep() {
+    fn dungeon_secondary_field_visual_family_is_not_contact_field() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x90;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.party[0].status = b'G';
+        state.party[0].hp = 10;
+
+        assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+        assert_eq!((state.player.x, state.player.y), (2, 1));
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.party[0].status, b'G');
+        assert_eq!(state.party[0].hp, 10);
+        assert!(state.message.contains("underfoot energy field"));
+        assert!(!state.message.contains("triggered energy field"));
+    }
+
+    #[test]
+    fn dungeon_sleep_field_marker_variant_sets_living_party_asleep_and_clears_cell() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 2, 1)] = 0x88;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -876,8 +894,21 @@
         assert_eq!((state.player.x, state.player.y), (2, 1));
         assert_eq!(state.party[0].status, b'S');
         assert_eq!(state.party[1].status, b'A');
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], DUNGEON_VISIT_MARKER_BIT);
         assert!(state.message.contains("sleep field"));
         assert!(state.message.contains("asleep"));
+    }
+
+    #[test]
+    fn dungeon_sleep_field_base_variant_clears_to_open_passage() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x80;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+
+        assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x00);
+        assert_eq!(state.party[0].status, b'S');
     }
 
     #[test]
@@ -954,6 +985,23 @@
     }
 
     #[test]
+    fn consumed_dungeon_action_on_sleep_field_clears_underfoot_field_after_turn() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x80;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.party[0].status = b'G';
+
+        assert!(state.handle_dungeon_key('i', Path::new("")).unwrap());
+
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.party[0].status, b'S');
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x00);
+        assert!(state.message.contains("Ignited a torch"));
+        assert!(state.message.contains("sleep field"));
+        assert!(state.message.contains("asleep"));
+    }
+
+    #[test]
     fn no_turn_dungeon_action_on_field_skips_underfoot_field() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 1, 1)] = 0x80;
@@ -967,6 +1015,7 @@
         assert_eq!((state.player.x, state.player.y), (1, 1));
         assert!(!state.message.contains("sleep field"));
         assert!(!state.message.contains("asleep"));
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x80);
     }
 
     #[test]
