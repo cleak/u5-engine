@@ -81,7 +81,10 @@ Current worktree context when this TODO was refreshed:
 - Natural moongate live-tile refresh now keeps mode-zero scene/light cleanup
   from advancing the shared gate-presence counter. The remaining exact gap is
   the public moon-glyph phase table that feeds the cached Trammel/Felucca slot
-  used by live-gate entry; current tests seed that cache directly.
+  used by live-gate entry; current tests seed that cache directly. This is
+  tracked in `cleak/u5-spec#38`; a 2026-05-19 public-source check confirmed
+  the high-level destination order but not the DOS glyph table, byte-to-slot
+  mapping, or cache refresh timing needed for implementation.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry, and
   seeded ship/skiff sailing routes, plus broader dungeon and combat command
