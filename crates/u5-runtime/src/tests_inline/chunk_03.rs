@@ -244,6 +244,67 @@
     }
 
     #[test]
+    fn save_game_command_does_not_persist_transient_potion_presentation() {
+        let base_dir = debug_game_dir();
+        let transient_dir = debug_game_dir();
+        for dir in [&base_dir, &transient_dir] {
+            let mut template = saved_game_seed_bytes(0, 0xff, 10, 20);
+            template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+            fs::write(dir.join("SAVED.GAM"), template).unwrap();
+            fs::write(dir.join("SAVED.OOL"), vec![0; SAVED_OOL_LEN]).unwrap();
+        }
+
+        let mut base = world_state(open_world_grid(), 10, 20);
+        assert_eq!(
+            base.save_game_command(&base_dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+        let base_gam = fs::read(base_dir.join("SAVED.GAM")).unwrap();
+        let base_ool = fs::read(base_dir.join("SAVED.OOL")).unwrap();
+
+        let mut transient = world_state(open_world_grid(), 10, 20);
+        transient.white_potion_sweep = Some(WhitePotionSweep {
+            frames_remaining: 7,
+            radius: 3,
+            center_x: 10,
+            center_y: 20,
+        });
+        transient.combat_potion_presentation = Some(CombatPotionPresentation {
+            kind: CombatPotionPresentationKind::Poof,
+            actor_slot: 0,
+            active_object_slot: 0,
+            frames_remaining: 1,
+        });
+        assert_eq!(
+            transient
+                .save_game_command(&transient_dir, Some(true))
+                .unwrap(),
+            MoveOutcome::Saved
+        );
+
+        assert_eq!(fs::read(transient_dir.join("SAVED.GAM")).unwrap(), base_gam);
+        assert_eq!(fs::read(transient_dir.join("SAVED.OOL")).unwrap(), base_ool);
+        let _ = fs::remove_dir_all(base_dir);
+        let _ = fs::remove_dir_all(transient_dir);
+    }
+
+    #[test]
+    fn load_scene_starts_with_no_transient_potion_presentation() {
+        let dir = debug_game_dir();
+        let mut save = saved_game_seed_bytes(0, 0xff, 10, 20);
+        save[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        fs::write(dir.join("SAVED.GAM"), save).unwrap();
+        fs::write(dir.join("SAVED.OOL"), vec![0; SAVED_OOL_LEN]).unwrap();
+
+        let options = load_play_options_from_save(&dir).unwrap();
+        let state = PlayState::load_scene(&dir, options).unwrap();
+
+        assert_eq!(state.white_potion_sweep, None);
+        assert_eq!(state.combat_potion_presentation, None);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn from_save_decodes_dungeon_room_clear_bitmap() {
         let mut bytes = saved_game_seed_bytes(33, 0, 1, 1);
         bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';

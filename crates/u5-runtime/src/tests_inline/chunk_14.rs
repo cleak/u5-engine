@@ -1142,6 +1142,97 @@
     }
 
     #[test]
+    fn white_potion_sweep_renders_for_counted_frames_then_clears() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.visibility_dirty = false;
+        state.white_potion_sweep = Some(WhitePotionSweep {
+            frames_remaining: 2,
+            radius: 0,
+            center_x: 1,
+            center_y: 1,
+        });
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let first = state.render_top_down_frame(1, &atlas).unwrap().unwrap();
+
+        assert_eq!(first.pixel(24, 24), Some(15));
+        assert_eq!(
+            state.white_potion_sweep.map(|sweep| sweep.frames_remaining),
+            Some(1)
+        );
+        assert!(state.visibility_dirty);
+
+        let second = state.render_top_down_frame(1, &atlas).unwrap().unwrap();
+
+        assert_eq!(second.pixel(24, 24), Some(15));
+        assert_eq!(state.white_potion_sweep, None);
+        assert!(state.visibility_dirty);
+
+        let third = state.render_top_down_frame(1, &atlas).unwrap().unwrap();
+
+        assert_ne!(third.pixel(24, 24), Some(15));
+        assert!(!state.visibility_dirty);
+    }
+
+    #[test]
+    fn combat_potion_presentation_renders_sleep_and_one_frame_poof_marks() {
+        let mut combat = test_state(open_grid(), 1, 1);
+        combat.combat_active = true;
+        combat.active_objects.push(ActiveObject {
+            type_byte: 0x81,
+            tile: 0x81,
+            x: 5,
+            y: 5,
+            ..ActiveObject::empty()
+        });
+        combat.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            0,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            1,
+            1,
+            5,
+            5,
+        ]);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        combat.combat_potion_presentation = Some(CombatPotionPresentation {
+            kind: CombatPotionPresentationKind::Sleep,
+            actor_slot: 0,
+            active_object_slot: 1,
+            frames_remaining: COMBAT_POTION_SLEEP_PRESENTATION_FRAMES,
+        });
+        let sleep = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
+
+        assert_eq!(sleep.pixel(84, 84), Some(11));
+        assert_eq!(
+            combat.combat_potion_presentation
+                .map(|presentation| presentation.kind),
+            Some(CombatPotionPresentationKind::Sleep)
+        );
+        assert!(!combat.visibility_dirty);
+
+        combat.visibility_dirty = false;
+        combat.combat_potion_presentation = Some(CombatPotionPresentation {
+            kind: CombatPotionPresentationKind::Poof,
+            actor_slot: 0,
+            active_object_slot: 1,
+            frames_remaining: COMBAT_POTION_POOF_PRESENTATION_FRAMES,
+        });
+        let poof = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
+
+        assert_eq!(poof.pixel(88, 88), Some(13));
+        assert_eq!(combat.combat_potion_presentation, None);
+        assert!(combat.visibility_dirty);
+
+        let cleared = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
+
+        assert_ne!(cleared.pixel(88, 88), Some(13));
+        assert!(!combat.visibility_dirty);
+    }
+
+    #[test]
     fn tile_viewport_to_rgba_matches_dimensions_and_palette() {
         let mut state = test_state(open_grid(), 1, 1);
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);

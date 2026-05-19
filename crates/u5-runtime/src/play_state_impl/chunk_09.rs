@@ -469,6 +469,7 @@ impl PlayState {
         let viewport = self.render_top_down_viewport(radius, atlas)?;
         if viewport.is_some() {
             self.visibility_dirty = false;
+            self.advance_presentation_frame();
         }
         Ok(viewport)
     }
@@ -532,6 +533,7 @@ impl PlayState {
                 blit_tile_id_to_viewport(&mut viewport, atlas, tile_id, cell_x, cell_y)?;
             }
         }
+        self.draw_white_potion_sweep_overlay(area, radius, &prepared, &mut viewport);
         Ok(Some(viewport))
     }
 
@@ -560,9 +562,78 @@ impl PlayState {
                 if let Some(sprite) = self.combat_render_sprite_at(arena_x, arena_y) {
                     blit_tile_id_to_viewport(viewport, atlas, sprite, cell_x, cell_y)?;
                 }
+                if let Some(kind) = self.combat_potion_presentation_at(arena_x, arena_y) {
+                    draw_combat_potion_presentation_cell(viewport, cell_x, cell_y, kind);
+                }
             }
         }
         Ok(())
+    }
+
+    fn draw_white_potion_sweep_overlay(
+        &self,
+        area: TopDownRenderArea,
+        radius: usize,
+        prepared: &[Option<PreparedTopDownCell>],
+        viewport: &mut TileViewport,
+    ) {
+        let Some(sweep) = self.white_potion_sweep else {
+            return;
+        };
+        if sweep.frames_remaining == 0 {
+            return;
+        }
+        let cells = radius.saturating_mul(2).saturating_add(1);
+        let px = self.player.x as isize;
+        let py = self.player.y as isize;
+        let r = radius as isize;
+        let radius_sq = u32::from(sweep.radius).saturating_mul(u32::from(sweep.radius));
+        for cell_y in 0..cells {
+            for cell_x in 0..cells {
+                if prepared
+                    .get(cell_y * cells + cell_x)
+                    .and_then(|cell| *cell)
+                    .is_none()
+                {
+                    continue;
+                }
+                let world_x = px + cell_x as isize - r;
+                let world_y = py + cell_y as isize - r;
+                let (dx, dy) = match area {
+                    TopDownRenderArea::Town => (
+                        world_x - sweep.center_x as isize,
+                        world_y - sweep.center_y as isize,
+                    ),
+                    TopDownRenderArea::World(_) => {
+                        let wx = world_x.rem_euclid(WORLD_SIDE as isize) as usize;
+                        let wy = world_y.rem_euclid(WORLD_SIDE as isize) as usize;
+                        (
+                            isize::from(wrapped_world_axis_delta(sweep.center_x, wx)),
+                            isize::from(wrapped_world_axis_delta(sweep.center_y, wy)),
+                        )
+                    }
+                };
+                let dx = dx.unsigned_abs() as u32;
+                let dy = dy.unsigned_abs() as u32;
+                let distance_sq = dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy));
+                if distance_sq <= radius_sq {
+                    draw_white_potion_sweep_cell(viewport, cell_x, cell_y);
+                }
+            }
+        }
+    }
+
+    fn combat_potion_presentation_at(
+        &self,
+        x: usize,
+        y: usize,
+    ) -> Option<CombatPotionPresentationKind> {
+        let presentation = self.combat_potion_presentation?;
+        let object = self.active_objects.get(presentation.active_object_slot)?;
+        if object.is_empty() || object.x != x || object.y != y {
+            return None;
+        }
+        Some(presentation.kind)
     }
 
     pub fn combat_render_sprite_at(&self, x: usize, y: usize) -> Option<usize> {
@@ -1015,6 +1086,14 @@ impl PlayState {
     }
 
     pub fn viewport_has_animated_tiles(&self, radius: usize) -> bool {
+        if self.visibility_dirty
+            || self.white_potion_sweep.is_some()
+            || self
+                .combat_potion_presentation
+                .is_some_and(|presentation| presentation.kind == CombatPotionPresentationKind::Poof)
+        {
+            return true;
+        }
         if self.combat_active {
             return self
                 .combat_terrain
@@ -1363,6 +1442,35 @@ impl PlayState {
             self.tick_door_tracker();
         }
         self.advance_animation_clock();
+    }
+
+    pub fn advance_presentation_frame(&mut self) {
+        let mut needs_redraw = false;
+        if let Some(mut sweep) = self.white_potion_sweep {
+            if sweep.frames_remaining <= 1 {
+                self.white_potion_sweep = None;
+            } else {
+                sweep.frames_remaining -= 1;
+                self.white_potion_sweep = Some(sweep);
+            }
+            needs_redraw = true;
+        }
+        if let Some(mut presentation) = self.combat_potion_presentation {
+            if presentation.kind != CombatPotionPresentationKind::Sleep
+                && presentation.frames_remaining != u8::MAX
+            {
+                if presentation.frames_remaining <= 1 {
+                    self.combat_potion_presentation = None;
+                } else {
+                    presentation.frames_remaining -= 1;
+                    self.combat_potion_presentation = Some(presentation);
+                }
+                needs_redraw = true;
+            }
+        }
+        if needs_redraw {
+            self.mark_visibility_dirty();
+        }
     }
 
     pub fn hourly_provision_consumer_count(&self) -> u16 {
@@ -2045,6 +2153,125 @@ fn put_viewport_pixel(viewport: &mut TileViewport, x: i32, y: i32, colour: u8) {
         return;
     }
     viewport.pixels[y * viewport.width + x] = colour % viewport.depth.pixel_limit();
+}
+
+fn presentation_palette_index(depth: TileGraphicsDepth, ega_index: u8) -> u8 {
+    match depth {
+        TileGraphicsDepth::Ega16 => ega_index,
+        TileGraphicsDepth::Cga4 => match ega_index {
+            11 => 1,
+            13 => 2,
+            0 => 0,
+            _ => 3,
+        },
+    }
+}
+
+fn draw_white_potion_sweep_cell(viewport: &mut TileViewport, cell_x: usize, cell_y: usize) {
+    let colour = presentation_palette_index(viewport.depth, 15);
+    draw_presentation_cross(viewport, cell_x, cell_y, colour);
+    draw_presentation_cell_corners(viewport, cell_x, cell_y, colour);
+}
+
+fn draw_combat_potion_presentation_cell(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    kind: CombatPotionPresentationKind,
+) {
+    let ega_colour = match kind {
+        CombatPotionPresentationKind::Sleep => 11,
+        CombatPotionPresentationKind::Poof => 13,
+    };
+    let colour = presentation_palette_index(viewport.depth, ega_colour);
+    match kind {
+        CombatPotionPresentationKind::Sleep => {
+            draw_presentation_sleep_mark(viewport, cell_x, cell_y, colour)
+        }
+        CombatPotionPresentationKind::Poof => {
+            draw_presentation_star(viewport, cell_x, cell_y, colour)
+        }
+    }
+}
+
+fn draw_presentation_cross(viewport: &mut TileViewport, cell_x: usize, cell_y: usize, colour: u8) {
+    let left = (cell_x * TILE_ATLAS_SIDE) as i32;
+    let top = (cell_y * TILE_ATLAS_SIDE) as i32;
+    let mid_x = left + (TILE_ATLAS_SIDE / 2) as i32;
+    let mid_y = top + (TILE_ATLAS_SIDE / 2) as i32;
+    draw_line(
+        viewport,
+        left + 2,
+        mid_y,
+        left + TILE_ATLAS_SIDE as i32 - 3,
+        mid_y,
+        colour,
+    );
+    draw_line(
+        viewport,
+        mid_x,
+        top + 2,
+        mid_x,
+        top + TILE_ATLAS_SIDE as i32 - 3,
+        colour,
+    );
+}
+
+fn draw_presentation_cell_corners(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    colour: u8,
+) {
+    let left = (cell_x * TILE_ATLAS_SIDE) as i32;
+    let top = (cell_y * TILE_ATLAS_SIDE) as i32;
+    let right = left + TILE_ATLAS_SIDE as i32 - 1;
+    let bottom = top + TILE_ATLAS_SIDE as i32 - 1;
+    for offset in 0..3 {
+        put_viewport_pixel(viewport, left + offset, top, colour);
+        put_viewport_pixel(viewport, left, top + offset, colour);
+        put_viewport_pixel(viewport, right - offset, top, colour);
+        put_viewport_pixel(viewport, right, top + offset, colour);
+        put_viewport_pixel(viewport, left + offset, bottom, colour);
+        put_viewport_pixel(viewport, left, bottom - offset, colour);
+        put_viewport_pixel(viewport, right - offset, bottom, colour);
+        put_viewport_pixel(viewport, right, bottom - offset, colour);
+    }
+}
+
+fn draw_presentation_star(viewport: &mut TileViewport, cell_x: usize, cell_y: usize, colour: u8) {
+    draw_presentation_cross(viewport, cell_x, cell_y, colour);
+    let left = (cell_x * TILE_ATLAS_SIDE) as i32;
+    let top = (cell_y * TILE_ATLAS_SIDE) as i32;
+    draw_line(
+        viewport,
+        left + 3,
+        top + 3,
+        left + TILE_ATLAS_SIDE as i32 - 4,
+        top + TILE_ATLAS_SIDE as i32 - 4,
+        colour,
+    );
+    draw_line(
+        viewport,
+        left + TILE_ATLAS_SIDE as i32 - 4,
+        top + 3,
+        left + 3,
+        top + TILE_ATLAS_SIDE as i32 - 4,
+        colour,
+    );
+}
+
+fn draw_presentation_sleep_mark(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    colour: u8,
+) {
+    let left = (cell_x * TILE_ATLAS_SIDE) as i32;
+    let top = (cell_y * TILE_ATLAS_SIDE) as i32;
+    draw_line(viewport, left + 4, top + 4, left + 11, top + 4, colour);
+    draw_line(viewport, left + 11, top + 4, left + 4, top + 11, colour);
+    draw_line(viewport, left + 4, top + 11, left + 11, top + 11, colour);
 }
 
 fn draw_line(viewport: &mut TileViewport, x0: i32, y0: i32, x1: i32, y1: i32, colour: u8) {
