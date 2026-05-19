@@ -1664,6 +1664,9 @@ impl PlayState {
         let (dx, dy) = direction.delta();
         let tx = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
         let ty = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
+        if let Some(outcome) = self.search_active_object_treasure_marker_at(tx, ty) {
+            return outcome;
+        }
         if let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
             moonstone_slot_matches_world(slot, plane, tx, ty)
         }) {
@@ -1711,6 +1714,9 @@ impl PlayState {
         let ty = ty as usize;
         let idx = ty * 32 + tx;
         let tile = self.grid[idx];
+        if let Some(outcome) = self.search_active_object_treasure_marker_at(tx, ty) {
+            return outcome;
+        }
         let reveal_tile = entries.iter().find_map(|entry| match *entry {
             SecretDoorEntry::Town {
                 scene: entry_scene,
@@ -2032,6 +2038,52 @@ impl PlayState {
                     None
                 }
             })
+    }
+
+    pub fn active_object_treasure_marker_at(&self, x: usize, y: usize) -> Option<(usize, usize)> {
+        self.active_objects
+            .iter()
+            .copied()
+            .enumerate()
+            .skip(1)
+            .rev()
+            .find_map(|(object_slot, object)| {
+                if !self.object_occupies(object, x, y)
+                    || object.type_byte != FIXED_HIDDEN_TREASURE_OBJECT_TILE
+                {
+                    return None;
+                }
+                object
+                    .fixed_hidden_treasure_record()
+                    .or_else(|| {
+                        let record = object.aux1 as usize;
+                        (record < FIXED_HIDDEN_TREASURE_COUNT).then_some(record)
+                    })
+                    .map(|record| (object_slot, record))
+            })
+    }
+
+    pub fn search_active_object_treasure_marker_at(
+        &mut self,
+        x: usize,
+        y: usize,
+    ) -> Option<MoveOutcome> {
+        let (object_slot, record) = self.active_object_treasure_marker_at(x, y)?;
+        let Some(entry) = FIXED_HIDDEN_TREASURES
+            .iter()
+            .find(|entry| entry.record == record)
+            .copied()
+        else {
+            self.message = "Unknown active-object treasure marker.".to_string();
+            return Some(MoveOutcome::Blocked);
+        };
+
+        self.free_active_object_slot(object_slot);
+        let grant = self.apply_fixed_hidden_treasure_pickup(entry.pickup, entry.state);
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = format!("Found {}{}.", entry.pickup.label(), grant);
+        Some(MoveOutcome::Searched)
     }
 
     pub fn get_fixed_hidden_treasure_pickup_at(

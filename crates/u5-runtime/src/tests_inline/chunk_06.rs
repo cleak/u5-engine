@@ -1172,6 +1172,61 @@
     }
 
     #[test]
+    fn search_active_object_treasure_marker_uses_highest_slot_before_live_tile() {
+        let mut grid = open_grid();
+        grid[8 * 32 + 5] = 0x4e;
+        let mut state = test_state(grid, 4, 8);
+        state.player.facing = Direction::East;
+        state.visibility_dirty = false;
+        state
+            .active_objects
+            .push(ActiveObject::fixed_hidden_treasure_pickup(18, 5, 8, 0));
+        state
+            .active_objects
+            .push(ActiveObject::fixed_hidden_treasure_pickup(13, 5, 8, 0));
+
+        assert_eq!(
+            state.search_facing_secret(&[], None),
+            MoveOutcome::Searched
+        );
+
+        assert!(!state.active_objects[1].is_empty());
+        assert!(state.active_objects[2].is_empty());
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK + 9);
+        assert_eq!(state.gems, DEFAULT_GEM_STOCK);
+        assert_eq!(state.grid[8 * 32 + 5], 0x4e);
+        assert_eq!(state.turn, 1);
+        assert!(state.visibility_dirty);
+        assert_eq!(state.message, "Found ring of keys; added 9 keys.");
+    }
+
+    #[test]
+    fn search_active_object_treasure_marker_accepts_plain_class_record() {
+        let mut state = test_state(open_grid(), 4, 8);
+        state.player.facing = Direction::East;
+        state.active_objects.push(ActiveObject {
+            type_byte: FIXED_HIDDEN_TREASURE_OBJECT_TILE,
+            tile: 0x55,
+            x: 5,
+            y: 8,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 18,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.search_facing_secret(&[], None),
+            MoveOutcome::Searched
+        );
+
+        assert!(state.active_objects[1].is_empty());
+        assert_eq!(state.gems, DEFAULT_GEM_STOCK + 1);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Found gem; added 1 gems.");
+    }
+
+    #[test]
     fn search_world_moonstone_surfaces_highest_matching_phase_and_get_invalidates_slot() {
         let dir = debug_game_dir();
         let mut state = britannia_state(open_world_grid(), 4, 5);
