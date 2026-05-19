@@ -2455,7 +2455,7 @@ impl PlayState {
 
         let mut groups = [0u8; COMBAT_ACTOR_SLOTS];
         for (slot, group) in groups.iter_mut().enumerate() {
-            *group = resolve_combat_target_group_for_actor(self.combat_actors[slot], slot, None);
+            *group = self.combat_target_group_for_slot(slot);
         }
         let protected_or_immune = [false; COMBAT_ACTOR_SLOTS];
         let caster_group = groups.get(caster_index).copied().unwrap_or(1);

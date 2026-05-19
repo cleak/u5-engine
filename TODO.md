@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-19, including 2395 tests.
+- `cargo test -p u5-runtime` passed on 2026-05-19, including 2409 tests.
 - `cargo test -p u5-tui` passed on 2026-05-19.
 - `cargo test -p u5-bevy` passed on 2026-05-19, including 31 tests.
 - `cargo fmt -- --check` passed on 2026-05-19 after the latest Rust changes.
@@ -62,8 +62,8 @@ Last known verification state:
 - `--save-frame <PATH>` is the current headless PNG capture path for local
   asset visual checks.
 - `cargo run -- --help` is a supported no-asset usage path.
-- The latest checkpointed engine commit at the time of this refresh was the
-  route-smoke harness commit.
+- The latest checkpointed engine commit at the time of this refresh included
+  combat AI target/flee/status parity work.
 - The spec checkout used for the most recent audit was `5b816cc Complete
   cleanroom specification`.
 
@@ -84,6 +84,11 @@ Current worktree context when this TODO was refreshed:
   using clean return metadata in memory, an Underworld-to-castle entry, and
   seeded ship/skiff sailing routes; native exact coordinate-table coverage
   still depends on public gazetteer/sidecar rows.
+- Combat AI now threads party-name faction grouping into live target scans,
+  applies wound morale/flee inversion in production turns, honors Doom and
+  Shadow Lord suppression-filter bypasses, mutates non-party Sleep Field
+  disable state, prefers summon-daemon placement near the current step
+  direction, and skips actors standing on loaded blocked arena terrain.
 
 Before starting a major slice, inspect `git status --short` and preserve user
 changes. Do not revert unrelated work.

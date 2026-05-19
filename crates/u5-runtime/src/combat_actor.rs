@@ -206,6 +206,8 @@ pub const fn first_monster_ability(class_flags: u16) -> Option<MonsterAbility> {
 }
 
 pub const COMBAT_ACTOR_FLAG_TEAM_TOGGLE: u8 = 0x01;
+pub const COMBAT_ACTOR_FLAG_STATUS_DISABLED: u8 = 0x02;
+pub const COMBAT_ACTOR_FLAG_FLEEING: u8 = 0x08;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_80: u8 = 0x80;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_40: u8 = 0x40;
 pub const COMBAT_ACTOR_FLAG_MARKED_DEAD: u8 = 0x20;
@@ -950,6 +952,14 @@ impl CombatActorDescriptor {
         self.flags & COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED != 0
     }
 
+    pub const fn is_status_disabled(self) -> bool {
+        self.flags & COMBAT_ACTOR_FLAG_STATUS_DISABLED != 0
+    }
+
+    pub const fn is_fleeing(self) -> bool {
+        self.flags & COMBAT_ACTOR_FLAG_FLEEING != 0
+    }
+
     pub const fn has_field_lookup_selectable_bit(self) -> bool {
         self.flags & (COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_SELECTABLE_40) != 0
     }
@@ -971,6 +981,18 @@ impl CombatActorDescriptor {
 
     pub fn mark_dead(&mut self) {
         self.flags |= COMBAT_ACTOR_FLAG_MARKED_DEAD;
+    }
+
+    pub fn set_status_disabled(&mut self) {
+        self.flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+    }
+
+    pub fn set_fleeing(&mut self, fleeing: bool) {
+        if fleeing {
+            self.flags |= COMBAT_ACTOR_FLAG_FLEEING;
+        } else {
+            self.flags &= !COMBAT_ACTOR_FLAG_FLEEING;
+        }
     }
 
     pub fn range_to(self, other: Self) -> u8 {
@@ -1481,11 +1503,17 @@ pub const fn resolve_active_target_spell_damage(
 }
 
 pub const fn directed_spell_actor_is_eligible(actor: CombatActorDescriptor) -> bool {
-    !actor.is_empty() && !actor.is_marked_dead() && !actor.is_hidden_or_unrevealed()
+    !actor.is_empty()
+        && !actor.is_marked_dead()
+        && !actor.is_status_disabled()
+        && !actor.is_hidden_or_unrevealed()
 }
 
 pub const fn combat_actor_is_active_not_dead(actor: CombatActorDescriptor) -> bool {
-    !actor.is_empty() && !actor.is_marked_dead() && actor.has_field_lookup_selectable_bit()
+    !actor.is_empty()
+        && !actor.is_marked_dead()
+        && !actor.is_status_disabled()
+        && actor.has_field_lookup_selectable_bit()
 }
 
 pub const fn combat_actor_is_revealable(actor: CombatActorDescriptor) -> bool {
@@ -2076,6 +2104,7 @@ pub fn apply_cause_fear_critical_hp_setup(
             continue;
         };
         actor.hp_or_wound = cause_fear_forced_current_hp(stats.max_hp);
+        actor.set_fleeing(true);
         applied += 1;
     }
     applied
@@ -2356,6 +2385,29 @@ pub fn combat_neighbor_candidate_coordinates(
             combat_arena_coordinate_in_bounds(x, y).then_some((x as u8, y as u8))
         })
         .collect()
+}
+
+pub fn combat_step_direction_candidate_coordinates(
+    center_x: u8,
+    center_y: u8,
+    step_vector: CombatStepVector,
+    seed: u8,
+) -> Vec<(u8, u8)> {
+    let mut candidates = Vec::new();
+    let preferred_x = i16::from(center_x) + i16::from(step_vector.dx);
+    let preferred_y = i16::from(center_y) + i16::from(step_vector.dy);
+    if (step_vector.dx != 0 || step_vector.dy != 0)
+        && combat_arena_coordinate_in_bounds(preferred_x, preferred_y)
+    {
+        candidates.push((preferred_x as u8, preferred_y as u8));
+    }
+
+    for candidate in combat_neighbor_candidate_coordinates(center_x, center_y, seed) {
+        if !candidates.contains(&candidate) {
+            candidates.push(candidate);
+        }
+    }
+    candidates
 }
 
 pub const fn resolve_default_monster_death_marker(
@@ -2914,10 +2966,10 @@ pub fn find_combat_ai_target(
         let candidate = actors[slot];
         if candidate.descriptor.is_empty()
             || candidate.descriptor.is_marked_dead()
+            || candidate.descriptor.is_status_disabled()
             || candidate.group == acting_group
             || (!bypass_suppression_filter && candidate.suppressed)
             || candidate.invisible_or_unrevealed
-            || candidate.descriptor.is_hidden_or_unrevealed()
         {
             continue;
         }
@@ -2958,6 +3010,7 @@ pub fn apply_combat_ai_center_fallback_markers(actors: &mut [CombatActorDescript
             continue;
         };
         actor.hp_or_wound = cause_fear_forced_current_hp(stats.max_hp);
+        actor.set_fleeing(true);
         critical_hp_flee_slots.push(slot);
     }
     critical_hp_flee_slots

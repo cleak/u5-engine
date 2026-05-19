@@ -506,6 +506,85 @@ pub struct CombatRoundLoopExitApplication {
 }
 
 impl PlayState {
+    pub(crate) fn combat_party_name_for_slot(&self, slot: usize) -> Option<&[u8]> {
+        (slot < COMBAT_PARTY_ACTOR_SLOTS)
+            .then(|| self.party_names.get(slot).map(|name| name.as_slice()))
+            .flatten()
+    }
+
+    pub(crate) fn combat_target_group_for_slot(&self, slot: usize) -> u8 {
+        self.combat_actors
+            .get(slot)
+            .copied()
+            .map(|actor| {
+                resolve_combat_target_group_for_actor(
+                    actor,
+                    slot,
+                    self.combat_party_name_for_slot(slot),
+                )
+            })
+            .unwrap_or(COMBAT_TARGET_GROUP_NEUTRAL)
+    }
+
+    pub(crate) fn combat_target_candidate_view(
+        &self,
+        descriptor: CombatActorDescriptor,
+        slot: usize,
+        suppressed: bool,
+        invisible_or_unrevealed: bool,
+    ) -> CombatTargetCandidateView {
+        combat_target_candidate_view_from_descriptor(
+            descriptor,
+            slot,
+            self.combat_party_name_for_slot(slot),
+            suppressed,
+            invisible_or_unrevealed,
+        )
+    }
+
+    fn combat_suppression_filter_bypassed_for_class(&self, class: u8) -> bool {
+        class == COMBAT_CLASS_SHADOW_LORD
+            || matches!(
+                self.combat_frame_snapshot.as_ref().map(|snapshot| snapshot.area),
+                Some(Area::Dungeon { scene, .. }) if scene.record == DOOM_DUNGEON_RECORD
+            )
+    }
+
+    fn combat_ai_morale_roll(&self, actor_slot: usize) -> u8 {
+        (self.turn as u8)
+            .wrapping_add((actor_slot as u8).wrapping_mul(29))
+            .wrapping_add(self.combat_round_counter)
+    }
+
+    fn combat_ai_actor_fleeing(&mut self, actor_slot: usize) -> bool {
+        let Some(actor) = self.combat_actors.get(actor_slot).copied() else {
+            return false;
+        };
+        if actor_slot < COMBAT_PARTY_ACTOR_SLOTS || !combat_actor_is_active_not_dead(actor) {
+            return false;
+        }
+        let Some(morale) = resolve_combat_wound_morale_for_class(
+            actor.hp_or_wound,
+            actor.owner_target_class,
+            self.combat_ai_morale_roll(actor_slot),
+        ) else {
+            return actor.is_fleeing();
+        };
+        self.combat_actors[actor_slot].set_fleeing(morale.fleeing);
+        morale.fleeing
+    }
+
+    fn combat_actor_stands_on_walkable_arena_cell(&self, actor: CombatActorDescriptor) -> bool {
+        if !self.combat_terrain.iter().flatten().any(|tile| *tile != 0) {
+            return true;
+        }
+        let x = actor.x as usize;
+        let y = actor.y as usize;
+        y < COMBAT_ARENA_SIDE
+            && x < COMBAT_ARENA_SIDE
+            && is_probe_walkable(self.combat_terrain[y][x])
+    }
+
     pub fn spell_allowed_in_current_cast_context(&self, spell_index: usize) -> bool {
         if spell_index >= SPELL_COUNT {
             return false;
@@ -902,18 +981,13 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let caster_actor = self
-            .combat_actors
-            .get(caster_index)
-            .copied()
-            .unwrap_or_default();
         let target_actor = self
             .combat_actors
             .get(target_slot)
             .copied()
             .unwrap_or_default();
-        let caster_group = resolve_combat_target_group_for_actor(caster_actor, caster_index, None);
-        let target_group = resolve_combat_target_group_for_actor(target_actor, target_slot, None);
+        let caster_group = self.combat_target_group_for_slot(caster_index);
+        let target_group = self.combat_target_group_for_slot(target_slot);
         if !creature_prompt_target_is_eligible(target_actor, target_group, caster_group, false) {
             self.message = "Target? Use C1BRX7 to target a hostile creature.".to_string();
             return MoveOutcome::Blocked;
@@ -963,18 +1037,13 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let caster_actor = self
-            .combat_actors
-            .get(caster_index)
-            .copied()
-            .unwrap_or_default();
         let target_actor = self
             .combat_actors
             .get(target_slot)
             .copied()
             .unwrap_or_default();
-        let caster_group = resolve_combat_target_group_for_actor(caster_actor, caster_index, None);
-        let target_group = resolve_combat_target_group_for_actor(target_actor, target_slot, None);
+        let caster_group = self.combat_target_group_for_slot(caster_index);
+        let target_group = self.combat_target_group_for_slot(target_slot);
         if !creature_prompt_target_is_eligible(target_actor, target_group, caster_group, false) {
             self.message = "Target? Use C1AEX7 to target a hostile creature.".to_string();
             return MoveOutcome::Blocked;
@@ -1285,6 +1354,7 @@ impl PlayState {
         let class = actor.owner_target_class;
         let mut special = None;
         let mut possess_hook_handled = false;
+        let mut summon_hook_pending = false;
         let summon_can_place_daemon = if combat_class_traits(class)
             .is_some_and(|traits| traits.summon_daemon)
         {
@@ -1316,16 +1386,12 @@ impl PlayState {
                 special = self.apply_combat_ai_blink_special(actor_slot);
             }
             Some(CombatAiSpecialHook::SummonDaemon) => {
-                special = self.apply_combat_ai_summon_daemon_special_with_candidates(
-                    actor_slot,
-                    summon_candidate_coordinates,
-                );
+                summon_hook_pending = true;
             }
             None => {}
         }
 
-        let actor = self.combat_actors[actor_slot];
-        let normal_group = resolve_combat_target_group_for_actor(actor, actor_slot, None);
+        let normal_group = self.combat_target_group_for_slot(actor_slot);
         let acting_group = if active_effect_is_active(
             self.active_effect_tag,
             self.active_effect_counter,
@@ -1350,16 +1416,15 @@ impl PlayState {
             .copied()
             .enumerate()
             .map(|(slot, descriptor)| {
-                combat_target_candidate_view_from_descriptor(
+                self.combat_target_candidate_view(
                     descriptor,
                     slot,
-                    None,
                     descriptor.is_hidden_or_unrevealed(),
                     false,
                 )
             })
             .collect::<Vec<_>>();
-        let bypass_suppression_filter = class == COMBAT_CLASS_SHADOW_LORD;
+        let bypass_suppression_filter = self.combat_suppression_filter_bypassed_for_class(class);
         let pick = find_combat_ai_target(
             &candidates,
             actor_slot,
@@ -1393,8 +1458,26 @@ impl PlayState {
             }
         };
 
+        let fleeing = fleeing || self.combat_ai_actor_fleeing(actor_slot);
         let actor = self.combat_actors[actor_slot];
         let step_vector = combat_ai_step_vector(actor.x, actor.y, target_x, target_y, fleeing);
+        if summon_hook_pending {
+            let mut directional_candidates = combat_step_direction_candidate_coordinates(
+                actor.x,
+                actor.y,
+                step_vector,
+                self.combat_ai_summon_roll(actor_slot),
+            );
+            for candidate in summon_candidate_coordinates.iter().copied() {
+                if !directional_candidates.contains(&candidate) {
+                    directional_candidates.push(candidate);
+                }
+            }
+            special = self.apply_combat_ai_summon_daemon_special_with_candidates(
+                actor_slot,
+                &directional_candidates,
+            );
+        }
         let target_range = target_slot.map(|slot| actor.range_to(self.combat_actors[slot]));
         let attack_route =
             target_range.and_then(|range| resolve_combat_ai_attack_route(class, range));
@@ -1627,18 +1710,13 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let caster_actor = self
-            .combat_actors
-            .get(caster_index)
-            .copied()
-            .unwrap_or_default();
         let target_actor = self
             .combat_actors
             .get(target_slot)
             .copied()
             .unwrap_or_default();
-        let caster_group = resolve_combat_target_group_for_actor(caster_actor, caster_index, None);
-        let target_group = resolve_combat_target_group_for_actor(target_actor, target_slot, None);
+        let caster_group = self.combat_target_group_for_slot(caster_index);
+        let target_group = self.combat_target_group_for_slot(target_slot);
         if !creature_prompt_target_is_eligible(target_actor, target_group, caster_group, false) {
             self.message = "Target? Use C1IQX7 to target a hostile creature.".to_string();
             return MoveOutcome::Blocked;
@@ -2086,6 +2164,9 @@ impl PlayState {
                     }
                 }
                 CombatDirectedSpellEffect::Sleep => {
+                    if let Some(actor) = self.combat_actors.get_mut(slot) {
+                        actor.set_status_disabled();
+                    }
                     CombatDirectedSpellSlotStatusApplication::NonPartySleepDisabled {
                         target_slot: slot,
                     }
@@ -2369,6 +2450,15 @@ impl PlayState {
                 )
             }
         };
+
+        if matches!(
+            contact_outcome,
+            CombatArenaFieldContactOutcome::SleepDisabledNonParty
+        ) {
+            if let Some(actor) = self.combat_actors.get_mut(target_slot) {
+                actor.set_status_disabled();
+            }
+        }
 
         let damage_application = match contact_outcome {
             CombatArenaFieldContactOutcome::PoisonFallbackDamage { raw_damage } => {
@@ -2862,8 +2952,7 @@ impl PlayState {
                 if !combat_direction_code_is_cardinal(direction_code) {
                     CombatPlayerCommandAction::InvalidDirection { direction_code }
                 } else {
-                    let attacker_group =
-                        resolve_combat_target_group_for_actor(active_actor, actor_slot, None);
+                    let attacker_group = self.combat_target_group_for_slot(actor_slot);
                     let destination_walkable =
                         self.combat_destination_walkable_for_direction(actor_slot, direction_code)?;
                     let outcome = self.apply_combat_step_or_attack_primitive(
@@ -3048,6 +3137,15 @@ impl PlayState {
 
         let actor = self.combat_actors[slot];
         if !combat_actor_is_active_not_dead(actor) {
+            return CombatActorSlotDispatchApplication::Slot {
+                slot,
+                phase_tick: Some(CombatActorPhaseTick::Inactive),
+                action: CombatActorDispatchAction::Inactive,
+                control_after: self.combat_round_loop_control(leave_combat_flag, false),
+            };
+        }
+
+        if !self.combat_actor_stands_on_walkable_arena_cell(actor) {
             return CombatActorSlotDispatchApplication::Slot {
                 slot,
                 phase_tick: Some(CombatActorPhaseTick::Inactive),
@@ -3463,10 +3561,9 @@ impl PlayState {
             .copied()
             .enumerate()
             .map(|(slot, descriptor)| {
-                combat_target_candidate_view_from_descriptor(
+                self.combat_target_candidate_view(
                     descriptor,
                     slot,
-                    None,
                     false,
                     descriptor.is_hidden_or_unrevealed(),
                 )

@@ -5489,7 +5489,10 @@
             actors[4].hp_or_wound,
             cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_PYTHON).unwrap().max_hp)
         );
-        assert_eq!(actors[4].flags, COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED);
+        assert_eq!(
+            actors[4].flags,
+            COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED | COMBAT_ACTOR_FLAG_FLEEING
+        );
         assert_eq!(actors[6].hp_or_wound, 20);
         assert_eq!(actors[8].hp_or_wound, 20);
     }
@@ -6887,7 +6890,7 @@
             CombatActorDescriptor::from_row([
                 10,
                 1,
-                COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+                COMBAT_ACTOR_FLAG_STATUS_DISABLED,
                 0,
                 0,
                 0,
@@ -6918,6 +6921,32 @@
         let bypassed = find_combat_ai_target(&actors, 10, 2, true);
         assert_eq!(bypassed.slot, Some(4));
         assert!(bypassed.first_five_party_slot_survived);
+    }
+
+    #[test]
+    fn combat_ai_target_picker_skips_status_disabled_targets() {
+        let mut actors = [combat_target_view(CombatActorDescriptor::empty(), 0); COMBAT_ACTOR_SLOTS];
+        actors[10] = combat_target_view(
+            CombatActorDescriptor::from_row([10, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 32, 10, 0, 5, 5]),
+            2,
+        );
+        actors[0] = combat_target_view(
+            CombatActorDescriptor::from_row([
+                10,
+                1,
+                COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_STATUS_DISABLED,
+                0,
+                0,
+                0,
+                4,
+                5,
+            ]),
+            1,
+        );
+
+        let pick = find_combat_ai_target(&actors, 10, 2, false);
+        assert_eq!(pick.slot, None);
+        assert!(!pick.first_five_party_slot_survived);
     }
 
     fn combat_ai_turn_state(monster_x: u8, monster_y: u8) -> PlayState {
@@ -7016,6 +7045,169 @@
         assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (7, 5));
         assert_eq!((state.active_objects[8].x, state.active_objects[8].y), (7, 5));
         assert!(state.visibility_dirty);
+    }
+
+    #[test]
+    fn combat_ai_turn_uses_wound_morale_to_flee_from_target() {
+        let mut state = combat_ai_turn_state(8, 5);
+        state.combat_actors[8].hp_or_wound = 2;
+
+        let application = state
+            .apply_combat_ai_turn_with_inputs(
+                8,
+                false,
+                0,
+                false,
+                1,
+                1,
+                &[],
+                None,
+                0,
+                false,
+                None,
+                true,
+                &[4, 1, 3, 2],
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(
+            application.step_vector,
+            Some(CombatStepVector { dx: 1, dy: 0 })
+        );
+        assert_eq!(
+            application.movement,
+            Some(CombatAiMovementOutcome::Step {
+                direction_code: 2,
+                x: 9,
+                y: 5,
+            })
+        );
+        assert!(state.combat_actors[8].is_fleeing());
+    }
+
+    #[test]
+    fn combat_ai_turn_applies_saduj_name_group_to_target_scan() {
+        let mut state = combat_ai_turn_state(8, 5);
+        state.party_names[0] = *b"ABCDj\0\0\0\0";
+
+        let application = state
+            .apply_combat_ai_turn_with_inputs(
+                8,
+                false,
+                0,
+                false,
+                1,
+                1,
+                &[],
+                None,
+                0,
+                false,
+                None,
+                true,
+                &[4, 1, 3, 2],
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(
+            application.target,
+            CombatAiTargetResolution::CenterFallback {
+                x: COMBAT_ARENA_CENTER_COORDINATE,
+                y: COMBAT_ARENA_CENTER_COORDINATE,
+                critical_hp_flee_slots: vec![8],
+            }
+        );
+    }
+
+    #[test]
+    fn combat_ai_turn_doom_context_bypasses_suppressed_phase_targets() {
+        let mut state = combat_ai_turn_state(8, 5);
+        state.combat_actors[0].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+        state.combat_frame_snapshot = Some(CombatFrameSnapshot {
+            area: Area::Dungeon {
+                scene: DungeonScene {
+                    byte: DUNGEON_DOOM_SCENE_BYTE,
+                    record: DOOM_DUNGEON_RECORD,
+                },
+                level: 0,
+            },
+            player: state.player,
+            active_objects: state.active_objects.clone(),
+            active_player: state.active_player,
+            combat_terrain: state.combat_terrain,
+            enter_endgame_after_successful_combat: false,
+            endgame_messages: None,
+        });
+
+        let application = state
+            .apply_combat_ai_turn_with_inputs(
+                8,
+                false,
+                0,
+                false,
+                1,
+                1,
+                &[],
+                None,
+                0,
+                false,
+                None,
+                true,
+                &[4, 1, 3, 2],
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(
+            application.target,
+            CombatAiTargetResolution::ChosenActor {
+                slot: 0,
+                x: 5,
+                y: 5,
+            }
+        );
+    }
+
+    #[test]
+    fn combat_ai_summon_daemon_prefers_current_step_direction() {
+        let mut state = combat_ai_turn_state(8, 5);
+        let stats = combat_class_stats(COMBAT_CLASS_DRAGON).unwrap();
+        state.combat_actors[8] = CombatActorDescriptor::for_monster_placement(
+            stats,
+            8,
+            8,
+            5,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+        );
+        state.active_objects[8].type_byte = 0xdc;
+        state.active_objects[8].tile = 0xdc;
+
+        let application = state
+            .apply_combat_ai_turn_with_inputs(
+                8,
+                false,
+                0,
+                false,
+                1,
+                8,
+                &[(9, 5), (7, 5)],
+                None,
+                0,
+                false,
+                None,
+                true,
+                &[4, 1, 3, 2],
+                None,
+            )
+            .unwrap();
+
+        let Some(CombatAiSpecialApplication::SummonDaemon { summon, .. }) = application.special
+        else {
+            panic!("dragon should summon a daemon");
+        };
+        assert_eq!((summon.x, summon.y), (7, 5));
     }
 
     #[test]
@@ -8536,6 +8728,45 @@
         assert_eq!(state.combat_actors[8].phase_counter, 2);
         assert_eq!(state.combat_round_counter, 4);
         assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (8, 5));
+    }
+
+    #[test]
+    fn combat_actor_slot_dispatch_skips_actor_standing_on_blocked_arena_cell() {
+        let mut state = combat_ai_turn_state(8, 5);
+        state.combat_actors[8].phase_counter = 1;
+        state.combat_round_counter = 4;
+        state.combat_terrain[5][8] = 0;
+
+        let application = state.apply_combat_actor_slot_dispatch_with_inputs(
+            8,
+            30,
+            false,
+            false,
+            0,
+            false,
+            1,
+            1,
+            &[],
+            None,
+            0,
+            false,
+            None,
+            true,
+            &[1, 2, 3, 4],
+            &[],
+        );
+
+        assert_eq!(
+            application,
+            CombatActorSlotDispatchApplication::Slot {
+                slot: 8,
+                phase_tick: Some(CombatActorPhaseTick::Inactive),
+                action: CombatActorDispatchAction::Inactive,
+                control_after: CombatRoundLoopControl::ContinueActorWalk,
+            }
+        );
+        assert_eq!(state.combat_actors[8].phase_counter, 1);
+        assert_eq!(state.combat_round_counter, 4);
     }
 
     #[test]
@@ -11491,6 +11722,7 @@
             })
         );
         assert_eq!(state.party[0].status, b'S');
+        assert!(state.combat_actors[target_slot].is_status_disabled());
         assert_eq!(
             state.apply_directed_combat_spell_status(
                 CombatDirectedSpellEffect::DeathWind,
@@ -11763,19 +11995,20 @@
             state.apply_combat_arena_field_contact(
                 CombatArenaFieldKind::Sleep,
                 0,
-                first_slot,
+                second_slot,
                 0,
                 0,
                 0,
             ),
             Some(CombatArenaFieldContactApplication {
                 field: CombatArenaFieldKind::Sleep,
-                target_slot: first_slot,
+                target_slot: second_slot,
                 contact_outcome: CombatArenaFieldContactOutcome::SleepDisabledNonParty,
                 damage_application: None,
             })
         );
         assert_eq!(state.combat_actors[first_slot].hp_or_wound, stats.max_hp);
+        assert!(state.combat_actors[second_slot].is_status_disabled());
 
         assert_eq!(
             state.apply_combat_arena_field_contact(
