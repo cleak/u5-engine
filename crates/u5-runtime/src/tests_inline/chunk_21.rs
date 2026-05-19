@@ -362,9 +362,76 @@
         );
         assert!(state.active_wishing_well.is_none());
         assert_eq!(state.gold, 1);
-        assert_eq!(state.message, "Wishing well: no effect.");
+        assert_eq!(state.message, "Wishing well: a horse appears.");
+        let horse = state
+            .active_objects
+            .iter()
+            .find(|object| object.type_byte == HORSE_PARKED_FIRST)
+            .expect("accepted wishing-well wish should spawn a horse");
+        assert_eq!((horse.x, horse.y), (2, 1));
+        assert_eq!(
+            state.boardable_vehicle_slot_at(2, 1).map(|candidate| candidate.transport),
+            Some(TransportState::Horse {
+                type_byte: HORSE_MOUNTED_FIRST,
+                tile: FIRST_PLAYABLE_HORSE_TILE,
+            })
+        );
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::default());
+    }
+
+    #[test]
+    fn town_surface_wishing_well_rejects_unknown_wish_after_coin() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xa1;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.gold = 2;
+        assert_eq!(state.look_facing(), MoveOutcome::Observed);
+        assert_eq!(state.step_active_wishing_well('Y', ""), None);
+
+        assert_eq!(
+            state.step_active_wishing_well('A', "vatar"),
+            Some(MoveOutcome::Observed)
+        );
+
+        assert!(state.active_wishing_well.is_none());
+        assert_eq!(state.gold, 1);
+        assert_eq!(state.message, "Wishing well: no effect.");
+        assert!(
+            state
+                .active_objects
+                .iter()
+                .skip(1)
+                .all(|object| object.type_byte != HORSE_PARKED_FIRST)
+        );
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
+    }
+
+    #[test]
+    fn town_surface_wishing_well_car_wish_spawns_boardable_horse() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xa1;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.gold = 2;
+        assert_eq!(state.look_facing(), MoveOutcome::Observed);
+        assert_eq!(state.step_active_wishing_well('Y', ""), None);
+
+        assert_eq!(
+            state.step_active_wishing_well('F', "errari"),
+            Some(MoveOutcome::Observed)
+        );
+
+        assert_eq!(state.message, "Wishing well: a horse appears.");
+        assert_eq!(
+            state.boardable_vehicle_slot_at(2, 1).map(|candidate| candidate.transport),
+            Some(TransportState::Horse {
+                type_byte: HORSE_MOUNTED_FIRST,
+                tile: FIRST_PLAYABLE_HORSE_TILE,
+            })
+        );
     }
 
     #[test]

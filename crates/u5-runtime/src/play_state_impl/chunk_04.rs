@@ -2242,10 +2242,11 @@ impl PlayState {
         direction: Direction,
         typed_wish: &str,
     ) -> MoveOutcome {
-        let Some(tile) = self.surface_look_target_tile(direction) else {
+        let Some((x, y)) = self.surface_look_target_position(direction) else {
             self.message = "Wishing well: no effect.".to_string();
             return MoveOutcome::Observed;
         };
+        let tile = self.surface_tile_at(x, y);
         if !surface_wishing_well_look_tile(tile) {
             self.message = "Wishing well: no effect.".to_string();
             return MoveOutcome::Observed;
@@ -2255,28 +2256,50 @@ impl PlayState {
             return MoveOutcome::Observed;
         }
 
-        self.message = "Wishing well: no effect.".to_string();
+        if self.object_at_current_floor(x, y).is_some() {
+            self.message = "Wishing well: no effect.".to_string();
+            return MoveOutcome::Observed;
+        }
+        let Some(z) = self.current_floor() else {
+            self.message = "Wishing well: no effect.".to_string();
+            return MoveOutcome::Observed;
+        };
+        if self
+            .allocate_active_object_slot(horse_purchase_active_object(x, y, z))
+            .is_none()
+        {
+            self.message = "Wishing well: no effect.".to_string();
+            return MoveOutcome::Observed;
+        }
+
+        self.mark_visibility_dirty();
+        self.message = "Wishing well: a horse appears.".to_string();
         MoveOutcome::Observed
     }
 
     fn surface_look_target_tile(&self, direction: Direction) -> Option<u8> {
+        let (x, y) = self.surface_look_target_position(direction)?;
+        Some(self.surface_tile_at(x, y))
+    }
+
+    fn surface_look_target_position(&self, direction: Direction) -> Option<(usize, usize)> {
         match self.area {
-            Area::Town { .. } => {
-                let (dx, dy) = direction.delta();
-                let x = self.player.x as isize + dx;
-                let y = self.player.y as isize + dy;
-                if !(0..32).contains(&x) || !(0..32).contains(&y) {
-                    return None;
-                }
-                Some(self.grid[y as usize * 32 + x as usize])
-            }
+            Area::Town { .. } => self.adjacent_position(direction),
             Area::World { .. } => {
                 let (dx, dy) = direction.delta();
                 let x = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
                 let y = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
-                Some(self.grid[world_cell_index(x, y)])
+                Some((x, y))
             }
             Area::Dungeon { .. } => None,
+        }
+    }
+
+    fn surface_tile_at(&self, x: usize, y: usize) -> u8 {
+        match self.area {
+            Area::Town { .. } => self.grid[y * 32 + x],
+            Area::World { .. } => self.grid[world_cell_index(x, y)],
+            Area::Dungeon { .. } => unreachable!("surface helper is not used in dungeon mode"),
         }
     }
 
