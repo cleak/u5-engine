@@ -718,11 +718,9 @@ impl PlayState {
                 continue;
             }
             if self.npcs[index].z != floor || tz != floor {
-                self.npcs[index].x = tx;
-                self.npcs[index].y = ty;
-                self.npcs[index].z = tz;
-                self.npcs[index].cached_wp = wp;
-                moved |= self.sync_npc_active_object(index, floor);
+                if self.advance_npc_floor_transition_step(index, wp, tx, ty, tz, floor) {
+                    moved = true;
+                }
                 continue;
             }
             let start = (self.npcs[index].x, self.npcs[index].y);
@@ -918,6 +916,110 @@ impl PlayState {
         }
         None
     }
+
+    pub fn advance_npc_floor_transition_step(
+        &mut self,
+        npc_index: usize,
+        waypoint: usize,
+        target_x: usize,
+        target_y: usize,
+        target_z: u8,
+        floor: u8,
+    ) -> bool {
+        let npc_z = self.npcs[npc_index].z;
+        if npc_z == floor {
+            if target_z == floor {
+                return false;
+            }
+            let marker = npc_floor_link_marker_for_delta(npc_z, target_z);
+            let current = (self.npcs[npc_index].x, self.npcs[npc_index].y);
+            if self.grid[current.1 * 32 + current.0] == marker {
+                let next_z = next_floor_toward(npc_z, target_z);
+                self.npcs[npc_index].z = next_z;
+                if (self.npcs[npc_index].x, self.npcs[npc_index].y, next_z)
+                    == (target_x, target_y, target_z)
+                {
+                    self.npcs[npc_index].cached_wp = waypoint;
+                }
+                return self.sync_npc_active_object(npc_index, floor);
+            }
+            if let Some((nx, ny)) = self.npc_path_step_to_floor_link(npc_index, marker, floor) {
+                self.npcs[npc_index].x = nx;
+                self.npcs[npc_index].y = ny;
+                self.sync_npc_active_object(npc_index, floor);
+                return true;
+            }
+            return false;
+        }
+
+        if target_z == floor {
+            let marker = npc_floor_link_marker_for_delta(npc_z, target_z);
+            let Some((x, y)) = self.nearest_npc_floor_link_to(marker, target_x, target_y) else {
+                return false;
+            };
+            self.npcs[npc_index].x = x;
+            self.npcs[npc_index].y = y;
+            self.npcs[npc_index].z = floor;
+            if (x, y) == (target_x, target_y) {
+                self.npcs[npc_index].cached_wp = waypoint;
+            }
+            return self.sync_npc_active_object(npc_index, floor);
+        }
+
+        if (self.npcs[npc_index].x, self.npcs[npc_index].y, npc_z) == (target_x, target_y, target_z)
+        {
+            self.npcs[npc_index].cached_wp = waypoint;
+        }
+        false
+    }
+
+    pub fn npc_path_step_to_floor_link(
+        &self,
+        npc_index: usize,
+        marker: u8,
+        floor: u8,
+    ) -> Option<(usize, usize)> {
+        let start = (self.npcs[npc_index].x, self.npcs[npc_index].y);
+        self.floor_link_marker_coordinates(marker)
+            .into_iter()
+            .filter_map(|target| {
+                if start == target {
+                    return None;
+                }
+                self.npc_path_step(npc_index, start, target, floor)
+                    .map(|step| {
+                        (
+                            target.0.abs_diff(start.0) + target.1.abs_diff(start.1),
+                            step,
+                        )
+                    })
+            })
+            .min_by_key(|(distance, _)| *distance)
+            .map(|(_, step)| step)
+    }
+
+    pub fn nearest_npc_floor_link_to(
+        &self,
+        marker: u8,
+        target_x: usize,
+        target_y: usize,
+    ) -> Option<(usize, usize)> {
+        self.floor_link_marker_coordinates(marker)
+            .into_iter()
+            .min_by_key(|(x, y)| x.abs_diff(target_x) + y.abs_diff(target_y))
+    }
+
+    pub fn floor_link_marker_coordinates(&self, marker: u8) -> Vec<(usize, usize)> {
+        self.grid
+            .chunks_exact(32)
+            .enumerate()
+            .flat_map(|(y, row)| {
+                row.iter()
+                    .enumerate()
+                    .filter_map(move |(x, tile)| (*tile == marker).then_some((x, y)))
+            })
+            .collect()
+    }
 }
 
 const TOWN_NPC_CHASE_RADIUS: usize = 8;
@@ -936,6 +1038,24 @@ fn cardinal_direction_from_sign(dx: isize, dy: isize) -> Option<Direction> {
         (0, -1) => Some(Direction::North),
         (0, 1) => Some(Direction::South),
         _ => None,
+    }
+}
+
+fn npc_floor_link_marker_for_delta(from_z: u8, to_z: u8) -> u8 {
+    if to_z < from_z {
+        NPC_FLOOR_LINK_TILE_C8
+    } else {
+        NPC_FLOOR_LINK_TILE_C9
+    }
+}
+
+fn next_floor_toward(from_z: u8, to_z: u8) -> u8 {
+    if to_z < from_z {
+        from_z.saturating_sub(1)
+    } else if to_z > from_z {
+        from_z.saturating_add(1)
+    } else {
+        from_z
     }
 }
 

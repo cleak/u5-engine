@@ -562,8 +562,10 @@
     }
 
     #[test]
-    fn scheduled_npc_leaving_current_floor_zeroes_active_object_slot() {
-        let mut state = test_state(open_grid(), 10, 10);
+    fn scheduled_npc_leaving_current_floor_uses_floor_link_before_detaching() {
+        let mut grid = open_grid();
+        grid[32 + 3] = NPC_FLOOR_LINK_TILE_C9;
+        let mut state = test_state(grid, 10, 10);
         state.clock = GameClock::new(17, 59).unwrap();
         let slots = vec![
             NpcSlot {
@@ -589,7 +591,21 @@
         assert_eq!(state.clock, GameClock::new(18, 0).unwrap());
         assert_eq!(
             (state.npcs[0].x, state.npcs[0].y, state.npcs[0].z),
-            (6, 6, 1)
+            (3, 1, 0)
+        );
+        assert_eq!(state.npcs[0].active_object, Some(1));
+        assert_eq!(
+            (state.active_objects[1].x, state.active_objects[1].y),
+            (3, 1)
+        );
+        assert!(state.visibility_dirty);
+
+        state.visibility_dirty = false;
+        state.advance_npc_schedules();
+
+        assert_eq!(
+            (state.npcs[0].x, state.npcs[0].y, state.npcs[0].z),
+            (3, 1, 1)
         );
         assert_eq!(state.npcs[0].active_object, None);
         assert!(state.active_objects[1].is_empty());
@@ -597,8 +613,10 @@
     }
 
     #[test]
-    fn scheduled_npc_arriving_on_current_floor_allocates_first_empty_slot() {
-        let mut state = test_state(open_grid(), 10, 10);
+    fn scheduled_npc_arriving_on_current_floor_uses_floor_link_before_waypoint() {
+        let mut grid = open_grid();
+        grid[6 * 32 + 5] = NPC_FLOOR_LINK_TILE_C8;
+        let mut state = test_state(grid, 10, 10);
         state.clock = GameClock::new(17, 59).unwrap();
         let slots = vec![
             NpcSlot {
@@ -626,11 +644,15 @@
         assert_eq!(state.clock, GameClock::new(18, 0).unwrap());
         assert_eq!(state.npcs[0].active_object, Some(1));
         assert_eq!(
+            (state.npcs[0].x, state.npcs[0].y, state.npcs[0].z),
+            (5, 6, 0)
+        );
+        assert_eq!(
             state.active_objects[1],
             ActiveObject {
                 type_byte: 192,
                 tile: 192,
-                x: 6,
+                x: 5,
                 y: 6,
                 z: 0,
                 phase: STEADY_PHASE,
@@ -640,6 +662,45 @@
         );
         assert!(state.active_objects[2].is_empty());
         assert!(state.visibility_dirty);
+    }
+
+    #[test]
+    fn scheduled_npc_off_floor_to_off_floor_stays_parked_without_teleport() {
+        let mut state = test_state(open_grid(), 10, 10);
+        state.clock = GameClock::new(17, 59).unwrap();
+        let slots = vec![
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0,
+                schedule: [0, 0, 0, 0, 2, 6, 0, 1, 6, 1, 1, 2, 8, 12, 18, 22],
+                name: None,
+            },
+        ];
+        state.load_scheduled_npcs(&slots);
+
+        assert_eq!(
+            (state.npcs[0].x, state.npcs[0].y, state.npcs[0].z),
+            (2, 1, 1)
+        );
+        assert_eq!(state.npcs[0].active_object, None);
+        state.clock = GameClock::new(18, 0).unwrap();
+        state.advance_npc_schedules();
+
+        assert_eq!(state.clock, GameClock::new(18, 0).unwrap());
+        assert_eq!(
+            (state.npcs[0].x, state.npcs[0].y, state.npcs[0].z),
+            (2, 1, 1)
+        );
+        assert_eq!(state.npcs[0].active_object, None);
+        assert!(!state.visibility_dirty);
     }
 
     #[test]
