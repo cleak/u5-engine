@@ -2783,7 +2783,21 @@ impl PlayState {
         input: CombatPlayerCommandInput,
         quickness_roll: u8,
     ) -> Option<CombatPlayerCommandApplication> {
-        let weapon_attack_inputs = self.combat_player_weapon_attack_inputs(actor_slot);
+        let quickness_consumed = resolve_quickness_dispatch_consumed(
+            self.active_effect_tag,
+            self.active_effect_counter,
+            quickness_roll,
+        );
+        let weapon_attack_inputs = if quickness_consumed
+            || !matches!(
+                input,
+                CombatPlayerCommandInput::Direction(_)
+                    | CombatPlayerCommandInput::AttackDirection(_)
+            ) {
+            CombatPlayerWeaponAttackInputs::default()
+        } else {
+            self.combat_player_weapon_attack_inputs(actor_slot)
+        };
         self.apply_combat_player_command_with_attack_inputs(
             actor_slot,
             input,
@@ -2793,40 +2807,58 @@ impl PlayState {
     }
 
     pub fn combat_player_weapon_attack_inputs(
-        &self,
+        &mut self,
         attacker_slot: usize,
     ) -> CombatPlayerWeaponAttackInputs {
+        let _ = attacker_slot;
         CombatPlayerWeaponAttackInputs {
-            hit_roll: (self.turn as u8).wrapping_add(attacker_slot as u8),
-            damage_roll: (self.turn as u8).wrapping_add((attacker_slot as u8).wrapping_mul(3)),
+            hit_roll: self.random_range_u8(0, u8::MAX),
+            damage_roll: self.random_range_u8(0, u8::MAX),
             forced_hit: None,
         }
     }
 
-    pub fn combat_quickness_dispatch_roll(&self, actor_slot: usize) -> u8 {
-        (self.turn as u8).wrapping_add(actor_slot as u8) & 1
+    pub fn combat_quickness_dispatch_roll(&mut self, actor_slot: usize) -> u8 {
+        let _ = actor_slot;
+        if active_effect_is_active(
+            self.active_effect_tag,
+            self.active_effect_counter,
+            QUICKNESS_ACTIVE_EFFECT_TAG,
+        ) {
+            self.random_mod_u8(2)
+        } else {
+            1
+        }
     }
 
-    pub fn combat_magic_ring_regeneration_roll(&self, actor_slot: usize) -> u8 {
-        (self.turn as u8).wrapping_add((actor_slot as u8).wrapping_mul(5)) & 0x07
+    pub fn combat_magic_ring_regeneration_roll(&mut self, actor_slot: usize) -> u8 {
+        let _ = actor_slot;
+        self.random_mod_u8(8)
     }
 
-    pub fn combat_magic_ring_vanish_roll(&self, actor_slot: usize) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((actor_slot as u8).wrapping_mul(13))
-            .wrapping_add(1)
-            & 0x0f
+    pub fn combat_magic_ring_vanish_roll(&mut self, actor_slot: usize) -> u8 {
+        let _ = actor_slot;
+        self.random_mod_u8(16)
     }
 
     pub fn apply_visible_combat_magic_ring_pass_to_slot(
         &mut self,
         slot: usize,
     ) -> Option<CombatMagicRingPassOutcome> {
-        let outcome = self.apply_combat_magic_ring_pass_to_slot(
-            slot,
-            self.combat_magic_ring_regeneration_roll(slot),
-            self.combat_magic_ring_vanish_roll(slot),
-        )?;
+        let ring = *self.party_equipment.get(slot)?.get(EQUIP_SLOT_RING)?;
+        if ring != EQUIPMENT_ID_RING_INVISIBILITY as u8
+            && ring != EQUIPMENT_ID_RING_REGENERATION as u8
+        {
+            return None;
+        }
+        let regeneration_roll = if ring == EQUIPMENT_ID_RING_REGENERATION as u8 {
+            self.combat_magic_ring_regeneration_roll(slot)
+        } else {
+            7
+        };
+        let vanish_roll = self.combat_magic_ring_vanish_roll(slot);
+        let outcome =
+            self.apply_combat_magic_ring_pass_to_slot(slot, regeneration_roll, vanish_roll)?;
         (outcome != CombatMagicRingPassOutcome::default()).then_some(outcome)
     }
 

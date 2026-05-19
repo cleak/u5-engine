@@ -7911,10 +7911,15 @@
     #[test]
     fn combat_player_command_quickness_can_consume_dispatch_before_input() {
         let mut state = combat_player_command_state(8, 5);
+        assert_eq!(state.combat_quickness_dispatch_roll(0), 1);
+        assert_eq!(state.prng_state, 0);
+
         state.active_effect_tag = Some(QUICKNESS_ACTIVE_EFFECT_TAG);
         state.active_effect_counter = 3;
-        assert_eq!(state.combat_quickness_dispatch_roll(0), 0);
-        assert_eq!(state.combat_quickness_dispatch_roll(1), 1);
+        let mut expected_prng = state.prng_state;
+        let quickness_roll = u5_prng_range_u16(&mut expected_prng, 0, 1) as u8;
+        assert_eq!(state.combat_quickness_dispatch_roll(0), quickness_roll);
+        assert_eq!(state.prng_state, expected_prng);
 
         let application = state
             .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key('Q'), 0)
@@ -8105,7 +8110,12 @@
         state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
         state.party[0].hp = state.party[0].hp.saturating_sub(3);
         let hp_before = state.party[0].hp;
-        state.turn = 0;
+        state.prng_state = 0x0030;
+        let mut expected_prng = state.prng_state;
+        let regeneration_roll = u5_prng_range_u16(&mut expected_prng, 0, 7);
+        let vanish_roll = u5_prng_range_u16(&mut expected_prng, 0, 15);
+        assert_eq!(regeneration_roll, 0);
+        assert_ne!(vanish_roll, 0);
 
         let application = state
             .apply_combat_player_command_with_inputs(0, CombatPlayerCommandInput::Key(' '), 1)
@@ -8120,6 +8130,7 @@
             })
         );
         assert_eq!(state.party[0].hp, hp_before + 1);
+        assert_eq!(state.prng_state, expected_prng);
         assert_eq!(
             state.party_equipment[0][EQUIP_SLOT_RING],
             EQUIPMENT_ID_RING_REGENERATION as u8
@@ -8246,6 +8257,11 @@
         state.party_equipment[0][EQUIP_SLOT_WEAPON] = 16;
         state.party_strengths = vec![255];
         state.party_experience = vec![0];
+        let mut expected_prng = state.prng_state;
+        let _hit_roll = u5_prng_range_u16(&mut expected_prng, 0, u16::from(u8::MAX));
+        let damage_roll = u5_prng_range_u16(&mut expected_prng, 0, u16::from(u8::MAX)) as u8;
+        let expected_damage =
+            combat_spell_damage_roll(damage_roll, equipment_attack_max(16).unwrap()) as u8;
 
         assert_eq!(
             handle_play_key_input(&mut state, 'A', "6", game_dir).unwrap(),
@@ -8254,10 +8270,13 @@
 
         assert_eq!(
             state.message,
-            "Hit Giant Rat for 1 damage with melee. Gained 1 XP.\nGiant Rat poisoned party member 1."
+            format!(
+                "Hit Giant Rat for {expected_damage} damage with melee. Gained {expected_damage} XP.\nGiant Rat poisoned party member 1."
+            )
         );
-        assert_eq!(state.combat_actors[8].hp_or_wound, 9);
-        assert_eq!(state.party_experience[0], 1);
+        assert_eq!(state.combat_actors[8].hp_or_wound, 10 - expected_damage);
+        assert_eq!(state.party_experience[0], u16::from(expected_damage));
+        assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.pending_combat_actor_slot, Some(0));
     }
 
@@ -8625,7 +8644,10 @@
         let mut state = combat_player_command_state(8, 5);
         state.party_equipment = default_party_equipment(1);
         state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_INVISIBILITY as u8;
-        state.turn = 15;
+        state.prng_state = 0x0070;
+        let mut expected_prng = state.prng_state;
+        let vanish_roll = u5_prng_range_u16(&mut expected_prng, 0, 15);
+        assert_eq!(vanish_roll, 0);
 
         assert_eq!(
             handle_play_key_input(&mut state, ' ', "", game_dir).unwrap(),
@@ -8638,6 +8660,7 @@
         );
         assert_eq!(state.party_equipment[0][EQUIP_SLOT_RING], EQUIPMENT_EMPTY);
         assert!(!state.combat_actors[0].is_hidden_or_unrevealed());
+        assert_eq!(state.prng_state, expected_prng);
     }
 
     #[test]
