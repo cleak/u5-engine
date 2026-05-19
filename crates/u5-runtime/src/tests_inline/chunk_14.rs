@@ -471,7 +471,9 @@
                 level: 8,
             },
         ];
-        let expected_damage = state.dungeon_fountain_damage_roll(1, 0x53) as u16;
+        state.prng_state = 0;
+        let mut expected_prng = state.prng_state;
+        let expected_damage = u5_prng_range_u16(&mut expected_prng, 0, 7) as u16;
 
         assert_eq!(
             state.look_dungeon_with_drink(Some(true), Some(1)),
@@ -480,6 +482,7 @@
 
         assert_eq!(state.party[0].hp, 10);
         assert_eq!(state.party[1].hp, 10 - expected_damage);
+        assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.turn, 0);
         assert!(state.message.contains("Bad taste."));
         assert!(state.message.contains("slot 1 took"));

@@ -162,12 +162,19 @@
             aux3: 0,
         };
         state.active_objects.push(target);
-        let damage = state.ship_broadside_damage_roll(Direction::East, 1, target);
+        state.prng_state = 0;
+        let mut expected_prng = state.prng_state;
+        let damage = u5_prng_range_u16(
+            &mut expected_prng,
+            SHIP_BROADSIDE_DAMAGE_MIN.into(),
+            SHIP_BROADSIDE_DAMAGE_MAX.into(),
+        ) as u8;
 
         assert_eq!(state.fire_ship_broadside(Some(Direction::East)), MoveOutcome::Fired);
 
         assert!(!state.active_objects[1].is_empty());
         assert_eq!(state.active_objects[1].aux1, 80 - damage);
+        assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
         assert!(state.message.contains("durability now"));
@@ -1418,6 +1425,13 @@
         state.clock = GameClock::with_date(139, 4, 5, 0, 17).unwrap();
         state.reagents[REAGENT_MANDRAKE] = 98;
         state.visibility_dirty = false;
+        state.prng_state = 0;
+        let mut expected_prng = state.prng_state;
+        let expected_amount = u5_prng_range_u16(
+            &mut expected_prng,
+            RARE_REAGENT_HARVEST_QUANTITY_MIN.into(),
+            RARE_REAGENT_HARVEST_QUANTITY_MAX.into(),
+        ) as u8;
 
         assert_eq!(
             state.search_facing_with_game_dir(&dir).unwrap(),
@@ -1427,6 +1441,8 @@
         assert_eq!(state.turn, 1);
         assert_eq!(state.reagents[REAGENT_MANDRAKE], 99);
         assert_eq!(state.rare_reagent_harvest_days[0], 5);
+        assert_eq!(state.prng_state, expected_prng);
+        assert!(state.message.contains(&format!("{expected_amount} sprigs")));
         assert!(state.message.contains("sprigs of Mandrake Root"));
 
         assert_eq!(

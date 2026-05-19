@@ -1670,7 +1670,7 @@ impl PlayState {
             .map(|slot| (slot, self.active_objects[slot]));
         let mut hit_report = None;
         if let Some((slot, object)) = hit {
-            let damage = self.ship_broadside_damage_roll(direction, slot, object);
+            let damage = self.ship_broadside_damage_roll();
             if let Some(remaining) = ship_broadside_apply_damage(object.aux1, damage) {
                 if let Some(target) = self.active_objects.get_mut(slot) {
                     target.aux1 = remaining;
@@ -1722,32 +1722,8 @@ impl PlayState {
         None
     }
 
-    pub fn ship_broadside_damage_roll(
-        &self,
-        direction: Direction,
-        slot: usize,
-        object: ActiveObject,
-    ) -> u8 {
-        SHIP_BROADSIDE_DAMAGE_MIN
-            + (self.ship_broadside_damage_seed(direction, slot, object) % SHIP_BROADSIDE_DAMAGE_MAX)
-    }
-
-    pub fn ship_broadside_damage_seed(
-        &self,
-        direction: Direction,
-        slot: usize,
-        object: ActiveObject,
-    ) -> u8 {
-        self.turn as u8
-            ^ self.clock.hour.wrapping_mul(3)
-            ^ self.clock.minute.wrapping_mul(5)
-            ^ (self.player.x as u8).wrapping_mul(7)
-            ^ (self.player.y as u8).wrapping_mul(11)
-            ^ (direction as u8).wrapping_mul(13)
-            ^ (slot as u8).wrapping_mul(17)
-            ^ object.type_byte.wrapping_mul(19)
-            ^ object.tile.wrapping_mul(23)
-            ^ object.aux1.wrapping_mul(29)
+    pub fn ship_broadside_damage_roll(&mut self) -> u8 {
+        self.random_range_u8(SHIP_BROADSIDE_DAMAGE_MIN, SHIP_BROADSIDE_DAMAGE_MAX)
     }
 
     pub fn decrease_moral_standing(&mut self, amount: u8) -> u8 {

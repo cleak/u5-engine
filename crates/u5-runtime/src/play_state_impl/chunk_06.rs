@@ -91,9 +91,9 @@ impl PlayState {
                 continue;
             }
             checked += 1;
-            let roll = self.outdoor_climb_stat_roll(index);
+            let roll = self.outdoor_climb_stat_roll();
             if outdoor_klimb_member_falls(self.party[index].climb_stat, roll) {
-                let damage = self.outdoor_climb_damage_roll(index);
+                let damage = self.outdoor_climb_damage_roll();
                 let slot = self.party[index].slot;
                 let applied = self.party[index].apply_damage(damage);
                 falls.push(format!(
@@ -105,21 +105,12 @@ impl PlayState {
         (checked, falls)
     }
 
-    pub fn outdoor_climb_stat_roll(&self, member_index: usize) -> u8 {
-        1 + (self.outdoor_climb_roll_seed(member_index) % 30)
+    pub fn outdoor_climb_stat_roll(&mut self) -> u8 {
+        self.random_range_u8(1, 30)
     }
 
-    pub fn outdoor_climb_damage_roll(&self, member_index: usize) -> u8 {
-        1 + (self.outdoor_climb_roll_seed(member_index).wrapping_add(17) % 5)
-    }
-
-    pub fn outdoor_climb_roll_seed(&self, member_index: usize) -> u8 {
-        self.turn as u8
-            ^ self.clock.hour.wrapping_mul(3)
-            ^ self.clock.minute.wrapping_mul(5)
-            ^ (self.player.x as u8).wrapping_mul(7)
-            ^ (self.player.y as u8).wrapping_mul(11)
-            ^ (member_index as u8).wrapping_mul(13)
+    pub fn outdoor_climb_damage_roll(&mut self) -> u8 {
+        self.random_range_u8(1, 5)
     }
 
     pub fn resolve_sailed_ship_wind_gate(&mut self, direction: Direction) -> Option<MoveOutcome> {
@@ -2059,20 +2050,11 @@ impl PlayState {
         Some(MoveOutcome::Searched)
     }
 
-    pub fn rare_reagent_harvest_amount(&self, point_index: usize) -> u8 {
-        rare_reagent_harvest_quantity(self.rare_reagent_harvest_seed(point_index))
-    }
-
-    pub fn rare_reagent_harvest_seed(&self, point_index: usize) -> u8 {
-        (self.turn as u8).wrapping_mul(17)
-            ^ self.clock.year as u8
-            ^ self.clock.month.wrapping_mul(3)
-            ^ self.clock.day.wrapping_mul(5)
-            ^ self.clock.hour.wrapping_mul(7)
-            ^ self.clock.minute.wrapping_mul(11)
-            ^ (self.player.x as u8).wrapping_mul(13)
-            ^ (self.player.y as u8).wrapping_mul(19)
-            ^ (point_index as u8).wrapping_mul(23)
+    pub fn rare_reagent_harvest_amount(&mut self, _point_index: usize) -> u8 {
+        self.random_range_u8(
+            RARE_REAGENT_HARVEST_QUANTITY_MIN,
+            RARE_REAGENT_HARVEST_QUANTITY_MAX,
+        )
     }
 
     pub fn search_fixed_hidden_treasure_at(

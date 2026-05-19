@@ -49,7 +49,10 @@
             max_hp: 20,
             level: 8,
         }];
-        let expected_damage = state.outdoor_climb_damage_roll(0) as u16;
+        state.prng_state = 0;
+        let mut expected_prng = state.prng_state;
+        let _stat_roll = u5_prng_range_u16(&mut expected_prng, 1, 30);
+        let expected_damage = u5_prng_range_u16(&mut expected_prng, 1, 5) as u16;
 
         assert_eq!(
             state.klimb_command(Path::new("")).unwrap(),
@@ -59,6 +62,7 @@
         assert_eq!((state.player.x, state.player.y), (11, 20));
         assert_eq!(state.turn, 1);
         assert_eq!(state.party[0].hp, 10 - expected_damage);
+        assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.party[0].status, b'G');
         assert!(state.message.contains("Fell! slot 0 took"));
         assert!(
@@ -573,7 +577,9 @@
         let mut state = world_state(grid, 10, 20);
         state.climbing_gear = 1;
         state.player.facing = Direction::East;
-        let roll = state.outdoor_climb_stat_roll(0);
+        state.prng_state = 0;
+        let mut expected_prng = state.prng_state;
+        let roll = u5_prng_range_u16(&mut expected_prng, 1, 30) as u8;
         state.party = vec![PartyMember {
             slot: 0,
             class_byte: b'A',
@@ -592,6 +598,7 @@
 
         assert_eq!((state.player.x, state.player.y), (11, 20));
         assert_eq!(state.party[0].hp, 10);
+        assert_eq!(state.prng_state, expected_prng);
         assert!(state.message.contains("fall checks passed for 1 living"));
         assert!(!state.message.contains("Fell!"));
     }
@@ -940,16 +947,15 @@
                 level: 8,
             },
         ];
-        let mut damage_probe = fire.clone();
-        damage_probe.player.x = 2;
-        damage_probe.player.y = 1;
-        let expected_fire_damage =
-            damage_probe.dungeon_field_damage_roll(0, DungeonFieldEffect::Fire);
+        fire.prng_state = 0;
+        let mut expected_fire_prng = fire.prng_state;
+        let expected_fire_damage = u5_prng_range_u16(&mut expected_fire_prng, 1, 8) as u8;
 
         assert_eq!(fire.step(Direction::East), MoveOutcome::Moved);
 
         assert_eq!(fire.party[0].hp, 10 - expected_fire_damage as u16);
         assert_eq!(fire.party[1].hp, 9);
+        assert_eq!(fire.prng_state, expected_fire_prng);
         assert!(fire.message.contains("wall of fire"));
         assert!(fire.message.contains("slot 0 took"));
 
@@ -957,15 +963,14 @@
         electric_grid[dungeon_cell_index(0, 2, 1)] = 0x8b;
         let mut electric = dungeon_state(electric_grid, 0, 1, 1);
         electric.party[0].hp = 10;
-        let mut electric_probe = electric.clone();
-        electric_probe.player.x = 2;
-        electric_probe.player.y = 1;
-        let expected_electric_damage =
-            electric_probe.dungeon_field_damage_roll(0, DungeonFieldEffect::Electric);
+        electric.prng_state = 0;
+        let mut expected_electric_prng = electric.prng_state;
+        let expected_electric_damage = u5_prng_range_u16(&mut expected_electric_prng, 1, 8) as u8;
 
         assert_eq!(electric.step(Direction::East), MoveOutcome::Moved);
 
         assert_eq!(electric.party[0].hp, 10 - expected_electric_damage as u16);
+        assert_eq!(electric.prng_state, expected_electric_prng);
         assert!(electric.message.contains("electric field"));
     }
 
@@ -1026,9 +1031,9 @@
         grid[dungeon_cell_index(0, 1, 1)] = 0x82;
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.party[0].hp = 20;
-        let mut damage_probe = state.clone();
-        damage_probe.advance_turn();
-        let expected_damage = damage_probe.dungeon_field_damage_roll(0, DungeonFieldEffect::Fire);
+        state.prng_state = 0;
+        let mut expected_prng = state.prng_state;
+        let expected_damage = u5_prng_range_u16(&mut expected_prng, 1, 8) as u8;
 
         assert_eq!(
             state.pass_turn_with_game_dir(Some(Path::new(""))).unwrap(),
@@ -1037,6 +1042,7 @@
 
         assert_eq!(state.turn, 1);
         assert_eq!(state.party[0].hp, 20 - expected_damage as u16);
+        assert_eq!(state.prng_state, expected_prng);
         assert!(state.message.starts_with("Passed."));
         assert!(state.message.contains("wall of fire"));
         assert!(state.message.contains("slot 0 took"));

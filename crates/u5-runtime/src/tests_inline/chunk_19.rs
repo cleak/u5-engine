@@ -896,8 +896,8 @@
             status: b'G',
             climb_stat: DEFAULT_CLIMB_STAT,
             mana: 0,
-            hp: 12,
-            max_hp: 12,
+            hp: 50,
+            max_hp: 50,
             level: 8,
         }];
 
@@ -907,7 +907,7 @@
         );
 
         assert_eq!(state.turn, 3);
-        assert!(state.party[0].hp < 12);
+        assert!(state.party[0].hp < 50);
         assert!(
             state
                 .message
@@ -928,7 +928,7 @@
         .unwrap();
         let mut state = britannia_state(open_world_grid(), 0, 15);
         state.clock = GameClock::new(0, 0).unwrap();
-        state.prng_state = 0x00f0;
+        state.prng_state = 0x0270;
         state.party = vec![PartyMember {
             slot: 0,
             class_byte: b'A',

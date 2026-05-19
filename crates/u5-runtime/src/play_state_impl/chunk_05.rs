@@ -249,7 +249,7 @@ impl PlayState {
                 if !self.party[index].living() {
                     continue;
                 }
-                let damage = self.dungeon_field_damage_roll(index, field);
+                let damage = self.dungeon_field_damage_roll();
                 let slot = self.party[index].slot;
                 let applied = self.party[index].apply_damage(damage);
                 reports.push(format!(
@@ -266,33 +266,12 @@ impl PlayState {
         "generic energy field has no contact effect".to_string()
     }
 
-    pub fn dungeon_field_damage_roll(&self, member_index: usize, field: DungeonFieldEffect) -> u8 {
-        1 + (self.dungeon_field_damage_seed(member_index, field) % 8)
+    pub fn dungeon_field_damage_roll(&mut self) -> u8 {
+        self.random_range_u8(1, 8)
     }
 
-    pub fn dungeon_field_damage_seed(&self, member_index: usize, field: DungeonFieldEffect) -> u8 {
-        self.turn as u8
-            ^ self.clock.hour.wrapping_mul(7)
-            ^ self.clock.minute.wrapping_mul(11)
-            ^ (self.player.x as u8).wrapping_mul(13)
-            ^ (self.player.y as u8).wrapping_mul(17)
-            ^ (member_index as u8).wrapping_mul(23)
-            ^ field.damage_seed_bias()
-    }
-
-    pub fn dungeon_fountain_damage_roll(&self, member_index: usize, tile: u8) -> u8 {
-        self.dungeon_fountain_damage_seed(member_index, tile) % 8
-    }
-
-    pub fn dungeon_fountain_damage_seed(&self, member_index: usize, tile: u8) -> u8 {
-        self.turn as u8
-            ^ self.clock.hour.wrapping_mul(5)
-            ^ self.clock.minute.wrapping_mul(9)
-            ^ (self.player.x as u8).wrapping_mul(13)
-            ^ (self.player.y as u8).wrapping_mul(17)
-            ^ (self.player.facing as u8).wrapping_mul(19)
-            ^ (member_index as u8).wrapping_mul(23)
-            ^ (tile & 0x0f).wrapping_mul(29)
+    pub fn dungeon_fountain_damage_roll(&mut self) -> u8 {
+        self.random_range_u8(0, 7)
     }
 
     pub fn resolve_dungeon_exit_tile(

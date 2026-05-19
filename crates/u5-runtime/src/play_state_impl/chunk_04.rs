@@ -1675,7 +1675,7 @@ impl PlayState {
                 Some(format!("Poisoned! slot {slot} is poisoned"))
             }
             _ => {
-                let damage = self.dungeon_fountain_damage_roll(member_index, tile);
+                let damage = self.dungeon_fountain_damage_roll();
                 let member = self.party.get_mut(member_index)?;
                 let slot = member.slot;
                 let applied = member.apply_damage(damage);

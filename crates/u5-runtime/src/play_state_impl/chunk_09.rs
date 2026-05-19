@@ -28,7 +28,7 @@ impl PlayState {
                 continue;
             }
             checked += 1;
-            let damage = self.world_damage_tile_roll(index, entry);
+            let damage = self.world_damage_tile_roll();
             let slot = self.party[index].slot;
             let applied = self.party[index].apply_damage(damage);
             reports.push(format!(
@@ -46,17 +46,8 @@ impl PlayState {
         }
     }
 
-    pub fn world_damage_tile_roll(&self, member_index: usize, entry: WorldDamageTileEntry) -> u8 {
-        1 + (self.world_damage_tile_seed(member_index, entry) % 8)
-    }
-
-    pub fn world_damage_tile_seed(&self, member_index: usize, entry: WorldDamageTileEntry) -> u8 {
-        self.turn as u8
-            ^ self.clock.hour.wrapping_mul(3)
-            ^ self.clock.minute.wrapping_mul(5)
-            ^ (entry.x as u8).wrapping_mul(7)
-            ^ (entry.y as u8).wrapping_mul(11)
-            ^ (member_index as u8).wrapping_mul(13)
+    pub fn world_damage_tile_roll(&mut self) -> u8 {
+        self.random_range_u8(1, 8)
     }
 
     pub fn apply_world_encounter_probe(
@@ -392,7 +383,7 @@ impl PlayState {
                 continue;
             }
             checked += 1;
-            let damage = self.world_plane_fall_damage_roll(index, entry);
+            let damage = self.world_plane_fall_damage_roll();
             let slot = self.party[index].slot;
             let applied = self.party[index].apply_damage(damage);
             reports.push(format!(
@@ -410,27 +401,8 @@ impl PlayState {
         }
     }
 
-    pub fn world_plane_fall_damage_roll(
-        &self,
-        member_index: usize,
-        entry: WorldPlaneTransitionEntry,
-    ) -> u8 {
-        1 + (self.world_plane_fall_damage_seed(member_index, entry) % WORLD_PLANE_FALL_DAMAGE_MAX)
-    }
-
-    pub fn world_plane_fall_damage_seed(
-        &self,
-        member_index: usize,
-        entry: WorldPlaneTransitionEntry,
-    ) -> u8 {
-        self.turn as u8
-            ^ self.clock.hour.wrapping_mul(5)
-            ^ self.clock.minute.wrapping_mul(3)
-            ^ (entry.x as u8).wrapping_mul(7)
-            ^ (entry.y as u8).wrapping_mul(11)
-            ^ (entry.to_x as u8).wrapping_mul(13)
-            ^ (entry.to_y as u8).wrapping_mul(17)
-            ^ (member_index as u8).wrapping_mul(19)
+    pub fn world_plane_fall_damage_roll(&mut self) -> u8 {
+        self.random_range_u8(1, WORLD_PLANE_FALL_DAMAGE_MAX)
     }
 
     pub fn render_text_frame(&mut self, radius: usize) -> String {
