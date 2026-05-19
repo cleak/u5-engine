@@ -16,13 +16,13 @@ use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use image::{ImageBuffer, Rgba};
 
 use u5_runtime::{
-    CGA_PALETTE_RGB, COMBAT_ARENA_SIDE, ChargenSession, ChargenSessionResult, ChargenSessionStep,
-    DungeonScene, EGA_PALETTE_RGB, FixedCellFont, GraphicImage, INTRO_INLINE_DOORWAY_STEP,
-    INTRO_STORY_STEP_COUNT, IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
-    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
-    MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, PLAY_MUSIC_TOGGLE_KEY,
-    PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
-    RTV_COMMAND_STREAM_BYTES, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
+    BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB, COMBAT_ARENA_SIDE, ChargenSession,
+    ChargenSessionResult, ChargenSessionStep, DungeonScene, EGA_PALETTE_RGB, FixedCellFont,
+    GraphicImage, INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, IntroStoryArtPlacement,
+    MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
+    MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap,
+    PLAY_MUSIC_TOGGLE_KEY, PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition, PlayOptions, PlayState,
+    PlayTarget, RTV_COMMAND_STREAM_BYTES, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
     STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, StoryRecords, TEXT_SCREEN_ROWS,
     TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
@@ -33,7 +33,7 @@ use u5_runtime::{
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
     intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_british_bit,
-    load_graphic_image_directory, load_ibm_ch_font, load_play_options_from_save,
+    load_british_pth, load_graphic_image_directory, load_ibm_ch_font, load_play_options_from_save,
     load_question_records, load_return_to_view_assets, load_story_records, load_tile_atlas,
     load_title_bit,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
@@ -466,6 +466,8 @@ fn run_visual_intro_menu_app(
             game_dir,
             raster_depth,
             dispatch: UnifiedMenuDispatch::new(),
+            title_signature_progress: 0,
+            title_signature_complete: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
             launch_result,
@@ -478,7 +480,14 @@ fn run_visual_intro_menu_app(
         })
         .insert_resource(ScreenshotState::default())
         .add_systems(Startup, setup_intro)
-        .add_systems(Update, (drive_visual_intro, screenshot_system))
+        .add_systems(
+            Update,
+            (
+                drive_visual_intro,
+                animate_visual_intro_signature,
+                screenshot_system,
+            ),
+        )
         .run();
 }
 
@@ -585,6 +594,8 @@ struct VisualIntroState {
     game_dir: PathBuf,
     raster_depth: TileGraphicsDepth,
     dispatch: UnifiedMenuDispatch,
+    title_signature_progress: usize,
+    title_signature_complete: bool,
     message: String,
     panel: VisualIntroPanel,
     launch_result: Arc<Mutex<Option<PlayOptions>>>,
@@ -818,6 +829,46 @@ fn drive_visual_intro(
     }
 }
 
+fn animate_visual_intro_signature(
+    intro: Option<ResMut<VisualIntroState>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    const SIGNATURE_STEPS_PER_FRAME: usize = 24;
+
+    let Some(mut intro) = intro else {
+        return;
+    };
+    if !matches!(intro.panel, VisualIntroPanel::Menu)
+        || !matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
+        || intro.title_signature_complete
+    {
+        return;
+    }
+    let Ok(signature) = load_british_pth(&intro.game_dir) else {
+        intro.title_signature_complete = true;
+        return;
+    };
+    let total_steps = british_signature_step_count(&signature);
+    if total_steps == 0 {
+        intro.title_signature_complete = true;
+        return;
+    }
+
+    intro.title_signature_progress =
+        (intro.title_signature_progress + SIGNATURE_STEPS_PER_FRAME).min(total_steps);
+    if intro.title_signature_progress >= total_steps {
+        intro.title_signature_progress = 0;
+        intro.title_signature_complete = true;
+    }
+
+    let rgba = render_intro_frame(&mut intro);
+    if let Some(handle) = intro.image_handle.as_ref() {
+        if let Some(image) = images.get_mut(handle) {
+            image.data = Some(rgba);
+        }
+    }
+}
+
 fn step_visual_intro(
     intro: &mut VisualIntroState,
     ch: char,
@@ -829,6 +880,8 @@ fn step_visual_intro(
 
     if matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle) {
         intro.dispatch.dismiss_title();
+        intro.title_signature_progress = 0;
+        intro.title_signature_complete = true;
         if ch.eq_ignore_ascii_case(&'J') {
             return resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward, exit);
         }
@@ -1628,7 +1681,9 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4]
     });
     if title_visible {
-        if let Some(title_rgba) = visual_intro_title_art_rgba(&intro.game_dir) {
+        let signature_progress =
+            (!intro.title_signature_complete).then_some(intro.title_signature_progress);
+        if let Some(title_rgba) = visual_intro_title_art_rgba(&intro.game_dir, signature_progress) {
             blit_rgba(
                 &mut rgba,
                 INTRO_FRAMEBUFFER_WIDTH as usize,
@@ -1679,10 +1734,24 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     rgba
 }
 
-fn visual_intro_title_art_rgba(game_dir: &Path) -> Option<Vec<u8>> {
+fn visual_intro_title_art_rgba(
+    game_dir: &Path,
+    signature_progress: Option<usize>,
+) -> Option<Vec<u8>> {
     let title = load_title_bit(game_dir).ok()?;
     let british = load_british_bit(game_dir).ok()?;
-    Some(compose_intro_title_art_rgba(&title, &british))
+    let mut rgba = compose_intro_title_art_rgba(&title, &british);
+    if let Some(progress) = signature_progress.filter(|progress| *progress > 0) {
+        let signature = load_british_pth(game_dir).ok()?;
+        draw_british_signature_rgba(
+            &mut rgba,
+            TITLE_SURFACE_WIDTH as usize,
+            TITLE_SURFACE_HEIGHT as usize,
+            &signature,
+            progress,
+        );
+    }
+    Some(rgba)
 }
 
 fn compose_intro_title_art_rgba(title: &TitleBitImages, british: &MonochromeBitmap) -> Vec<u8> {
@@ -1756,6 +1825,53 @@ fn blit_intro_title_placement_rgba(
             dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
         }
     }
+}
+
+fn draw_british_signature_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    signature: &BritishPth,
+    max_steps: usize,
+) {
+    let mut remaining = max_steps;
+    for (segment_index, origin) in BRITISH_PTH_PEN_ORIGINS.iter().enumerate() {
+        let Some(segment) = signature.segment(segment_index) else {
+            continue;
+        };
+        let mut x = i16::from(origin.0);
+        let mut y = i16::from(origin.1);
+        for stroke in segment {
+            if remaining == 0 {
+                return;
+            }
+            x += i16::from(stroke.dx);
+            y += i16::from(stroke.dy);
+            if stroke.pen_down {
+                paint_signature_pixel_rgba(dst, dst_width, dst_height, x, y);
+            }
+            remaining -= 1;
+        }
+    }
+}
+
+fn british_signature_step_count(signature: &BritishPth) -> usize {
+    signature.segments.iter().map(Vec::len).sum()
+}
+
+fn paint_signature_pixel_rgba(dst: &mut [u8], dst_width: usize, dst_height: usize, x: i16, y: i16) {
+    let Ok(x) = usize::try_from(x) else {
+        return;
+    };
+    let Ok(y) = usize::try_from(y) else {
+        return;
+    };
+    if x >= dst_width || y >= dst_height {
+        return;
+    }
+    let rgb = EGA_PALETTE_RGB[15];
+    let offset = (y * dst_width + x) * 4;
+    dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
 }
 
 fn visual_intro_story_art_rgba(
@@ -1856,6 +1972,8 @@ fn write_visual_intro_report(
         game_dir: game_dir.to_path_buf(),
         raster_depth,
         dispatch: UnifiedMenuDispatch::new(),
+        title_signature_progress: 0,
+        title_signature_complete: false,
         message: String::new(),
         panel,
         launch_result: Arc::new(Mutex::new(None)),
@@ -2558,7 +2676,7 @@ mod tests {
     use u5_runtime::{
         Area, BRIT_OOL_FILENAME, CH_FONT_LEN, COMBAT_ARENA_SIDE, DEFAULT_GAME_DIR, Direction,
         EGA_PALETTE_RGB, GuildShop, Herbalist, IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME,
-        OOL_PLANE_LEN, REAGENT_COUNT, REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET,
+        OOL_PLANE_LEN, PenStroke, REAGENT_COUNT, REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET,
         SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN,
         SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
         SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern,
@@ -2746,6 +2864,8 @@ mod tests {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
+            title_signature_progress: 0,
+            title_signature_complete: false,
             message: "Intro menu smoke".to_string(),
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
@@ -2796,6 +2916,67 @@ mod tests {
         assert_eq!(rgba_pixel(&rgba, width, 20, 140), [0, 0, 0, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 108, 140), [0xff, 0xff, 0xff, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 24, 66), [0xff, 0xff, 0xff, 0xff]);
+    }
+
+    #[test]
+    fn british_signature_renderer_paints_pen_down_steps_from_spec_origins() {
+        let mut rgba =
+            vec![0; (TITLE_SURFACE_WIDTH as usize) * (TITLE_SURFACE_HEIGHT as usize) * 4];
+        for pixel in rgba.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+        }
+        let signature = BritishPth {
+            segments: vec![
+                vec![
+                    PenStroke {
+                        dx: 1,
+                        dy: 0,
+                        pen_down: true,
+                    },
+                    PenStroke {
+                        dx: 5,
+                        dy: 0,
+                        pen_down: false,
+                    },
+                    PenStroke {
+                        dx: 0,
+                        dy: 1,
+                        pen_down: true,
+                    },
+                ],
+                vec![PenStroke {
+                    dx: 0,
+                    dy: 1,
+                    pen_down: true,
+                }],
+                vec![PenStroke {
+                    dx: -1,
+                    dy: 0,
+                    pen_down: true,
+                }],
+                vec![PenStroke {
+                    dx: 1,
+                    dy: -1,
+                    pen_down: false,
+                }],
+            ],
+        };
+
+        draw_british_signature_rgba(
+            &mut rgba,
+            TITLE_SURFACE_WIDTH as usize,
+            TITLE_SURFACE_HEIGHT as usize,
+            &signature,
+            usize::MAX,
+        );
+        let width = TITLE_SURFACE_WIDTH as usize;
+
+        assert_eq!(rgba_pixel(&rgba, width, 69, 44), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 74, 44), [0, 0, 0, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 74, 45), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 94, 65), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 77, 143), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 106, 166), [0, 0, 0, 0xff]);
     }
 
     #[test]
@@ -3386,6 +3567,8 @@ mod tests {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
+            title_signature_progress: 0,
+            title_signature_complete: false,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
@@ -3459,6 +3642,8 @@ mod tests {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
+            title_signature_progress: 0,
+            title_signature_complete: false,
             message: String::new(),
             panel: VisualIntroPanel::Story {
                 records: StoryRecords {
@@ -3499,6 +3684,8 @@ mod tests {
             game_dir: dir,
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch,
+            title_signature_progress: 0,
+            title_signature_complete: false,
             message: String::new(),
             panel,
             launch_result: Arc::new(Mutex::new(None)),
@@ -3705,6 +3892,8 @@ mod tests {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
+            title_signature_progress: 0,
+            title_signature_complete: false,
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),

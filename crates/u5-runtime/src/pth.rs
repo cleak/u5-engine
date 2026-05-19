@@ -6,6 +6,12 @@
 //! (paints at the new position) only when both nibble magnitudes are
 //! `0..=2`; otherwise the byte is a pen-up move.
 
+use std::fs::read;
+use std::io;
+use std::path::Path;
+
+/// `formats/pth.md §1`: shipped DOS file name.
+pub const BRITISH_PTH_FILE: &str = "BRITISH.PTH";
 /// `formats/pth.md §1`: shipped DOS file size in bytes.
 pub const BRITISH_PTH_LEN: usize = 2_783;
 /// `formats/pth.md §2`: number of segments the four NUL terminators
@@ -23,6 +29,20 @@ pub struct PenStroke {
     /// `true` when the pen is "down" and the new position should be
     /// painted; `false` for pen-up skip moves.
     pub pen_down: bool,
+}
+
+/// Decoded `BRITISH.PTH` stream split at the four NUL segment
+/// terminators. Each segment restarts from the matching title-screen
+/// pen origin supplied by `intro.md`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BritishPth {
+    pub segments: Vec<Vec<PenStroke>>,
+}
+
+impl BritishPth {
+    pub fn segment(&self, index: usize) -> Option<&[PenStroke]> {
+        self.segments.get(index).map(Vec::as_slice)
+    }
 }
 
 /// `formats/pth.md §3` per-nibble magnitude mask (low three bits).
@@ -62,4 +82,105 @@ pub const fn pth_decode_byte(byte: u8) -> Option<PenStroke> {
     // either above it → pen up for this byte only.
     let pen_down = high_mag <= PTH_PEN_DOWN_MAX_MAGNITUDE && low_mag <= PTH_PEN_DOWN_MAX_MAGNITUDE;
     Some(PenStroke { dx, dy, pen_down })
+}
+
+pub fn load_british_pth(game_dir: &Path) -> io::Result<BritishPth> {
+    parse_british_pth(&read(game_dir.join(BRITISH_PTH_FILE))?)
+}
+
+pub fn parse_british_pth(bytes: &[u8]) -> io::Result<BritishPth> {
+    if bytes.len() != BRITISH_PTH_LEN {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{BRITISH_PTH_FILE} must be {BRITISH_PTH_LEN} bytes, got {}",
+                bytes.len()
+            ),
+        ));
+    }
+
+    let mut segments = Vec::with_capacity(BRITISH_PTH_SEGMENT_COUNT);
+    let mut current = Vec::new();
+    for byte in bytes {
+        let Some(stroke) = pth_decode_byte(*byte) else {
+            if current.is_empty() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("{BRITISH_PTH_FILE} contains an empty path segment"),
+                ));
+            }
+            segments.push(current);
+            current = Vec::new();
+            continue;
+        };
+        current.push(stroke);
+    }
+
+    if !current.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{BRITISH_PTH_FILE} is missing its final segment terminator"),
+        ));
+    }
+    if segments.len() != BRITISH_PTH_SEGMENT_COUNT {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{BRITISH_PTH_FILE} must contain {BRITISH_PTH_SEGMENT_COUNT} segments, got {}",
+                segments.len()
+            ),
+        ));
+    }
+
+    Ok(BritishPth { segments })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn synthetic_british_pth_bytes() -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(BRITISH_PTH_LEN);
+        for len in [856usize, 548, 411, 964] {
+            bytes.extend(std::iter::repeat(0x11).take(len));
+            bytes.push(0);
+        }
+        bytes
+    }
+
+    #[test]
+    fn parse_british_pth_splits_four_spec_segments() {
+        let pth = parse_british_pth(&synthetic_british_pth_bytes()).unwrap();
+
+        assert_eq!(pth.segments.len(), BRITISH_PTH_SEGMENT_COUNT);
+        assert_eq!(pth.segment(0).unwrap().len(), 856);
+        assert_eq!(pth.segment(1).unwrap().len(), 548);
+        assert_eq!(pth.segment(2).unwrap().len(), 411);
+        assert_eq!(pth.segment(3).unwrap().len(), 964);
+        assert_eq!(
+            pth.segment(0).unwrap()[0],
+            PenStroke {
+                dx: 1,
+                dy: 1,
+                pen_down: true,
+            }
+        );
+        assert!(pth.segment(4).is_none());
+    }
+
+    #[test]
+    fn parse_british_pth_rejects_bad_shape() {
+        let err = parse_british_pth(&[0x11, 0]).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+
+        let mut missing_final_terminator = synthetic_british_pth_bytes();
+        *missing_final_terminator.last_mut().unwrap() = 0x11;
+        let err = parse_british_pth(&missing_final_terminator).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+
+        let mut empty_segment = synthetic_british_pth_bytes();
+        empty_segment[0] = 0;
+        let err = parse_british_pth(&empty_segment).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
 }
