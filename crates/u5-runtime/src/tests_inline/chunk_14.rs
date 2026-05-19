@@ -250,6 +250,39 @@
     }
 
     #[test]
+    fn dungeon_raster_room_helper_blocks_far_features() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0xa0;
+        grid[dungeon_cell_index(0, 3, 1)] = 0x40;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.player.facing = Direction::East;
+        state.torch_counter = 9;
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+
+        assert!(viewport.pixels.iter().any(|&pixel| pixel == 15));
+        assert!(viewport.pixels.iter().any(|&pixel| pixel == 14));
+        assert!(!viewport.pixels.iter().any(|&pixel| pixel == 6));
+    }
+
+    #[test]
+    fn dungeon_raster_draws_side_feature_and_field_cues() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 0)] = 0x80;
+        grid[dungeon_cell_index(0, 2, 2)] = 0x50;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.player.facing = Direction::East;
+        state.light_spell_counter = 9;
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+
+        assert!(viewport.pixels.iter().any(|&pixel| pixel == 12));
+        assert!(viewport.pixels.iter().any(|&pixel| pixel == 11));
+    }
+
+    #[test]
     fn dungeon_look_uses_tile_description_when_lit() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 2, 1)] = 0x40;
