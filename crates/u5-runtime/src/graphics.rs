@@ -448,7 +448,6 @@ pub struct GraphicSpriteSheet {
     pub sprites: Vec<Option<GraphicSprite>>,
 }
 
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MonochromeBitmap {
     pub width: usize,
@@ -456,7 +455,6 @@ pub struct MonochromeBitmap {
     pub pixels: Vec<u8>,
 }
 
-#[cfg(test)]
 impl MonochromeBitmap {
     pub fn pixel(&self, x: usize, y: usize) -> Option<u8> {
         if x >= self.width || y >= self.height {
@@ -466,7 +464,6 @@ impl MonochromeBitmap {
     }
 }
 
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TitleBitImages {
     pub blocks: Vec<MonochromeBitmap>,

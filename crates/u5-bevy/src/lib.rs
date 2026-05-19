@@ -20,19 +20,22 @@ use u5_runtime::{
     DungeonScene, EGA_PALETTE_RGB, FixedCellFont, GraphicImage, INTRO_INLINE_DOORWAY_STEP,
     INTRO_STORY_STEP_COUNT, IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
     MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
-    MISCMAPS_RTV_STRIP_SECTION_OFFSET, PLAY_MUSIC_TOGGLE_KEY, PROMPT_TEXT_WINDOW_INDEX,
-    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, RTV_COMMAND_STREAM_BYTES,
-    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
-    STATS_PANEL_TEXT_WINDOW_INDEX, Scene, StoryRecords, TEXT_SCREEN_ROWS,
-    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TextWindowSystem,
-    TileAtlas, TileGraphicsDepth, U4TransferOverrides, U4TransferSource, WorldPlane,
-    commit_chargen_save, commit_u4_transfer_save, handle_play_key_input, hash_bytes,
+    MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, PLAY_MUSIC_TOGGLE_KEY,
+    PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
+    RTV_COMMAND_STREAM_BYTES, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
+    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, StoryRecords, TEXT_SCREEN_ROWS,
+    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
+    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
+    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TextWindowSystem, TileAtlas, TileGraphicsDepth,
+    TitleBitAsset, TitleBitImages, TitleBitPlacement, U4TransferOverrides, U4TransferSource,
+    WorldPlane, commit_chargen_save, commit_u4_transfer_save, handle_play_key_input, hash_bytes,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
-    intro_story_step_waits_for_input, intro_story6_secondary_subimage,
+    intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_british_bit,
     load_graphic_image_directory, load_ibm_ch_font, load_play_options_from_save,
     load_question_records, load_return_to_view_assets, load_story_records, load_tile_atlas,
+    load_title_bit,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_message_text_window, paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
     read_u4_transfer_source_from_party_sav, render_play_text_window_system,
@@ -1614,6 +1617,8 @@ fn format_story_art_line(file: &str, placement: IntroStoryArtPlacement) -> Strin
 }
 
 fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
+    let title_visible = matches!(intro.panel, VisualIntroPanel::Menu)
+        && matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
     let mut rgba = render_text_panel_rgba(
         &summarize_intro(intro),
         INTRO_FRAMEBUFFER_WIDTH as usize,
@@ -1622,6 +1627,20 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     .unwrap_or_else(|_| {
         vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4]
     });
+    if title_visible {
+        if let Some(title_rgba) = visual_intro_title_art_rgba(&intro.game_dir) {
+            blit_rgba(
+                &mut rgba,
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                INTRO_FRAMEBUFFER_HEIGHT as usize,
+                &title_rgba,
+                TITLE_SURFACE_WIDTH as usize,
+                TITLE_SURFACE_HEIGHT as usize,
+                0,
+                0,
+            );
+        }
+    }
     if let VisualIntroPanel::Story { step, .. } = &intro.panel {
         if let Some((art_rgba, art_width, art_height, dst_x, dst_y)) =
             visual_intro_story_art_rgba(&intro.game_dir, intro.raster_depth, *step)
@@ -1658,6 +1677,85 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         );
     }
     rgba
+}
+
+fn visual_intro_title_art_rgba(game_dir: &Path) -> Option<Vec<u8>> {
+    let title = load_title_bit(game_dir).ok()?;
+    let british = load_british_bit(game_dir).ok()?;
+    Some(compose_intro_title_art_rgba(&title, &british))
+}
+
+fn compose_intro_title_art_rgba(title: &TitleBitImages, british: &MonochromeBitmap) -> Vec<u8> {
+    let width = TITLE_SURFACE_WIDTH as usize;
+    let height = TITLE_SURFACE_HEIGHT as usize;
+    let mut rgba = vec![0; width * height * 4];
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+    }
+
+    for placement in &TITLE_BIT_INITIAL_PLACEMENTS {
+        blit_intro_title_placement_rgba(&mut rgba, width, height, title, british, *placement);
+    }
+    clear_rgba_band(&mut rgba, width, height, TITLE_LOWER_BAND_CLEAR_Y as usize);
+    for placement in &TITLE_BIT_REMAINING_PLACEMENTS {
+        blit_intro_title_placement_rgba(&mut rgba, width, height, title, british, *placement);
+    }
+
+    rgba
+}
+
+fn clear_rgba_band(rgba: &mut [u8], width: usize, height: usize, start_y: usize) {
+    if start_y >= height {
+        return;
+    }
+    for y in start_y..height {
+        for x in 0..width {
+            let offset = (y * width + x) * 4;
+            rgba[offset..offset + 4].copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+        }
+    }
+}
+
+fn blit_intro_title_placement_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    title: &TitleBitImages,
+    british: &MonochromeBitmap,
+    placement: TitleBitPlacement,
+) {
+    let src = match placement.asset {
+        TitleBitAsset::Title => title.blocks.get(usize::from(placement.slot)),
+        TitleBitAsset::British => (placement.slot == 0).then_some(british),
+    };
+    let Some(src) = src else {
+        return;
+    };
+
+    let draw_width = usize::from(placement.width).min(src.width);
+    let draw_height = usize::from(placement.height).min(src.height);
+    let base_x = usize::from(placement.top_left_x);
+    let base_y = usize::from(placement.top_left_y);
+    for y in 0..draw_height {
+        let target_y = base_y + y;
+        if target_y >= dst_height {
+            break;
+        }
+        for x in 0..draw_width {
+            let target_x = base_x + x;
+            if target_x >= dst_width {
+                break;
+            }
+            let source_pixel = src.pixels[y * src.width + x];
+            let rgb = if source_pixel == 0 {
+                [0x00, 0x00, 0x00]
+            } else {
+                EGA_PALETTE_RGB[15]
+            };
+            let offset = (target_y * dst_width + target_x) * 4;
+            dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
+        }
+    }
 }
 
 fn visual_intro_story_art_rgba(
@@ -2514,6 +2612,16 @@ mod tests {
         );
     }
 
+    fn rgba_pixel(rgba: &[u8], width: usize, x: usize, y: usize) -> [u8; 4] {
+        let offset = (y * width + x) * 4;
+        [
+            rgba[offset],
+            rgba[offset + 1],
+            rgba[offset + 2],
+            rgba[offset + 3],
+        ]
+    }
+
     #[test]
     fn world_framebuffer_renders_top_down_rgba() {
         let mut state = world_state(open_world_grid(), 10, 20);
@@ -2653,6 +2761,41 @@ mod tests {
         assert!(frame.chunks_exact(4).all(|pixel| pixel[3] == 0xff));
         assert_nonblack_rgba(&frame);
         let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_title_art_composition_clears_lower_band_then_draws_remaining_slots() {
+        let blank = MonochromeBitmap {
+            width: 1,
+            height: 1,
+            pixels: vec![0],
+        };
+        let mut blocks = vec![blank; 10];
+        blocks[6] = MonochromeBitmap {
+            width: 1,
+            height: 24,
+            pixels: vec![1; 24],
+        };
+        blocks[7] = MonochromeBitmap {
+            width: 1,
+            height: 1,
+            pixels: vec![1],
+        };
+        let title = TitleBitImages { blocks };
+        let british = MonochromeBitmap {
+            width: 1,
+            height: 1,
+            pixels: vec![1],
+        };
+
+        let rgba = compose_intro_title_art_rgba(&title, &british);
+        let width = TITLE_SURFACE_WIDTH as usize;
+
+        assert_eq!(rgba.len(), width * (TITLE_SURFACE_HEIGHT as usize) * 4);
+        assert_eq!(rgba_pixel(&rgba, width, 20, 139), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 20, 140), [0, 0, 0, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 108, 140), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 24, 66), [0xff, 0xff, 0xff, 0xff]);
     }
 
     #[test]

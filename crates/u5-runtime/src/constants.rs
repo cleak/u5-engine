@@ -143,11 +143,8 @@ pub const HCS_BYTES_PER_ROW: usize = HCS_CELL_WIDTH / 8;
 /// so the per-glyph byte count and the cell geometry stay one
 /// value.
 pub const HCS_GLYPH_BYTES: usize = HCS_CELL_HEIGHT * HCS_BYTES_PER_ROW;
-#[cfg(test)]
 pub const TITLE_BIT_FILE: &str = "TITLE.BIT";
-#[cfg(test)]
 pub const BRITISH_BIT_FILE: &str = "BRITISH.BIT";
-#[cfg(test)]
 pub const WD_BIT_FILE: &str = "WD.BIT";
 pub const IBM_CH_FILE: &str = "IBM.CH";
 #[cfg(test)]
@@ -225,9 +222,7 @@ pub const TILE_IMAGE_DIRECTORY_OFFSET_BYTES: usize = 4;
 /// two-byte unsigned-word type the directory itself uses) so the
 /// per-image header derives from the format's word size.
 pub const TILE_IMAGE_BLOCK_HEADER_BYTES: usize = 2 * TILE_IMAGE_DIRECTORY_COUNT_BYTES;
-#[cfg(test)]
 pub const SINGLE_IMAGE_BIT_FORMAT_MARKER: u16 = 1;
-#[cfg(test)]
 pub const SINGLE_IMAGE_BIT_MODE_MARKER: u16 = 4;
 /// Both shipped fixed-cell fonts (.CH and .HCS) carry exactly 128
 /// glyphs (`formats/font-ch.md §2`, `formats/font-hcs.md §2`).

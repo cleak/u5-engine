@@ -1,17 +1,13 @@
 //! Loaders/parsers for fixed and proportional fonts plus monochrome bitmaps (BIT/CH/HCS/PCS).
 
-#[cfg(test)]
 use std::{fs::read, io, path::Path};
 
-#[cfg(test)]
 use crate::*;
 
-#[cfg(test)]
 pub fn load_title_bit(game_dir: &Path) -> io::Result<TitleBitImages> {
     parse_title_bit(&read(&game_dir.join(TITLE_BIT_FILE))?)
 }
 
-#[cfg(test)]
 pub fn parse_title_bit(bytes: &[u8]) -> io::Result<TitleBitImages> {
     parse_sparse_bit_images(bytes, TITLE_BIT_FILE).or_else(|raw_err| {
         let body = decode_lzw_envelope(bytes, TITLE_BIT_FILE).map_err(|lzw_err| {
@@ -26,14 +22,12 @@ pub fn parse_title_bit(bytes: &[u8]) -> io::Result<TitleBitImages> {
     })
 }
 
-#[cfg(test)]
 pub fn parse_sparse_bit_images(bytes: &[u8], resource_name: &str) -> io::Result<TitleBitImages> {
     Ok(TitleBitImages {
         blocks: parse_sparse_strip_resource(bytes, resource_name)?,
     })
 }
 
-#[cfg(test)]
 pub fn parse_title_bit_body(body: &[u8], resource_name: &str) -> io::Result<TitleBitImages> {
     if body.len() < 2 {
         return Err(io::Error::new(
@@ -76,12 +70,10 @@ pub fn parse_title_bit_body(body: &[u8], resource_name: &str) -> io::Result<Titl
     Ok(TitleBitImages { blocks })
 }
 
-#[cfg(test)]
 pub fn load_british_bit(game_dir: &Path) -> io::Result<MonochromeBitmap> {
     parse_british_bit(&read(&game_dir.join(BRITISH_BIT_FILE))?)
 }
 
-#[cfg(test)]
 pub fn parse_british_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
     parse_single_sparse_bit_image(bytes, BRITISH_BIT_FILE).or_else(|raw_err| {
         let body = decode_lzw_envelope(bytes, BRITISH_BIT_FILE).map_err(|lzw_err| {
@@ -96,17 +88,14 @@ pub fn parse_british_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
     })
 }
 
-#[cfg(test)]
 pub fn load_wd_bit(game_dir: &Path) -> io::Result<MonochromeBitmap> {
     parse_wd_bit(&read(&game_dir.join(WD_BIT_FILE))?)
 }
 
-#[cfg(test)]
 pub fn parse_wd_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
     parse_single_sparse_bit_image(bytes, WD_BIT_FILE)
 }
 
-#[cfg(test)]
 pub fn parse_single_sparse_bit_image(
     bytes: &[u8],
     resource_name: &str,
@@ -124,7 +113,6 @@ pub fn parse_single_sparse_bit_image(
     Ok(strips.remove(0))
 }
 
-#[cfg(test)]
 pub fn parse_sparse_strip_resource(
     bytes: &[u8],
     resource_name: &str,
@@ -185,7 +173,6 @@ pub fn parse_sparse_strip_resource(
     Ok(strips)
 }
 
-#[cfg(test)]
 pub fn parse_sparse_strip_body(
     bytes: &[u8],
     offset: usize,
@@ -201,7 +188,6 @@ pub fn parse_sparse_strip_body(
     parse_monochrome_bitmap_payload(bytes, offset, resource_name)
 }
 
-#[cfg(test)]
 pub fn parse_single_image_bit_body(
     body: &[u8],
     resource_name: &str,
@@ -245,7 +231,6 @@ pub fn parse_single_image_bit_body(
     Ok(bitmap)
 }
 
-#[cfg(test)]
 pub fn parse_monochrome_bitmap_block(
     body: &[u8],
     offset: usize,
@@ -260,7 +245,6 @@ pub fn parse_monochrome_bitmap_block(
     parse_monochrome_bitmap_payload(body, offset, resource_name)
 }
 
-#[cfg(test)]
 pub fn parse_monochrome_bitmap_payload(
     body: &[u8],
     offset: usize,
@@ -306,7 +290,6 @@ pub fn parse_monochrome_bitmap_payload(
     })
 }
 
-#[cfg(test)]
 pub fn monochrome_bitmap_payload_len(width: usize, height: usize) -> io::Result<usize> {
     width
         .checked_mul(height)
@@ -320,7 +303,6 @@ pub fn monochrome_bitmap_payload_len(width: usize, height: usize) -> io::Result<
         })
 }
 
-#[cfg(test)]
 pub fn unpack_monochrome_bits(bytes: &[u8], pixel_count: usize) -> Vec<u8> {
     let mut pixels = Vec::with_capacity(pixel_count);
     for pixel in 0..pixel_count {

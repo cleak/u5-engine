@@ -241,7 +241,6 @@ pub use endmsg_io::{
     parse_endgame_messages, require_endgame_messages,
 };
 pub use equipment::*;
-#[cfg(test)]
 pub use fonts_io::*;
 pub use graphics::*;
 pub use graphics_io::*;
