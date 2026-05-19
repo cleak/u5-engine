@@ -8,7 +8,8 @@ use std::path::Path;
 
 use image::{ImageBuffer, Rgba};
 use u5_runtime::{
-    DungeonScene, PlayOptions, PlayState, PlayTarget, Scene, TILE_ATLAS_SIDE, TileGraphicsDepth,
+    COMBAT_ARENA_SIDE, DungeonScene, PlayOptions, PlayState, PlayTarget, Scene,
+    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TileGraphicsDepth,
     WorldPlane, hash_bytes, load_tile_atlas, render_text_panel_rgba,
 };
 
@@ -105,6 +106,18 @@ pub fn save_frame_suite(
         }
         reports.push(report);
     }
+    for report in [
+        save_frame_suite_combat(game_dir, raster_depth, &out_dir.join("combat.png"))?,
+        save_frame_suite_endgame(game_dir, &out_dir.join("endgame-status.png"))?,
+    ] {
+        if report.nonblack_pixels == 0 {
+            return Err(io::Error::other(format!(
+                "frame suite `{}` produced an all-black PNG",
+                report.label
+            )));
+        }
+        reports.push(report);
+    }
     write_frame_suite_manifest(out_dir, &reports)?;
     Ok(reports)
 }
@@ -172,6 +185,15 @@ fn save_frame_capture(
         replay_play_script_commands(&mut state, game_dir, &commands, |_, _, _| Ok(()))?;
     }
 
+    save_frame_capture_state(state, &atlas, out)
+}
+
+fn save_frame_capture_state(
+    state: PlayState,
+    atlas: &u5_runtime::TileAtlas,
+    out: &Path,
+) -> io::Result<SavedFrameReport> {
+    let mut state = state;
     let cells = VIEWPORT_RADIUS * 2 + 1;
     let fallback_width = cells * TILE_ATLAS_SIDE;
     let (width, height, rgba, frame_kind) =
@@ -211,6 +233,66 @@ fn save_frame_capture(
         width,
         height,
         frame_kind,
+        player_x: state.player.x,
+        player_y: state.player.y,
+        facing: u5_runtime::Direction::name(state.player.facing),
+        turn: state.turn,
+        byte_hash,
+        nonblack_pixels,
+    })
+}
+
+fn save_frame_suite_combat(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    out: &Path,
+) -> io::Result<SavedFrameReport> {
+    let mut state = PlayState::load_scene(
+        game_dir,
+        PlayOptions {
+            target: PlayTarget::World(WorldPlane::Britannia),
+            start: Some((62, 124)),
+            ..PlayOptions::default()
+        },
+    )?;
+    state.combat_active = true;
+    state.combat_terrain = [[5; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+    state.combat_terrain[0][0] = 12;
+    state.combat_terrain[5][5] = 4;
+    state.combat_terrain[6][5] = 1;
+    let atlas = load_tile_atlas(game_dir, raster_depth)?;
+    save_frame_capture_state(state, &atlas, out)
+}
+
+fn save_frame_suite_endgame(game_dir: &Path, out: &Path) -> io::Result<SavedFrameReport> {
+    let mut state = PlayState::load_scene(game_dir, PlayOptions::default())?;
+    state.enter_endgame();
+    let rgba = render_text_panel_rgba(
+        &state.render_text_window_frame(None),
+        TEXT_WINDOW_RENDER_WIDTH,
+        TEXT_WINDOW_RENDER_HEIGHT,
+    )?;
+    let byte_hash = hash_bytes(&rgba);
+    let nonblack_pixels = rgba
+        .chunks_exact(4)
+        .filter(|pixel| pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
+        .count();
+    write_rgba_png(
+        out,
+        TEXT_WINDOW_RENDER_WIDTH as u32,
+        TEXT_WINDOW_RENDER_HEIGHT as u32,
+        rgba,
+    )?;
+    Ok(SavedFrameReport {
+        label: out
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("frame")
+            .to_string(),
+        path: out.to_path_buf(),
+        width: TEXT_WINDOW_RENDER_WIDTH as u32,
+        height: TEXT_WINDOW_RENDER_HEIGHT as u32,
+        frame_kind: "text window",
         player_x: state.player.x,
         player_y: state.player.y,
         facing: u5_runtime::Direction::name(state.player.facing),
@@ -313,17 +395,31 @@ mod tests {
         let dir = temp_output_dir("suite");
         let reports = save_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 4);
+        assert_eq!(reports.len(), 6);
         for report in &reports {
             assert!(report.path.exists());
-            assert_eq!(report.width, 176);
-            assert_eq!(report.height, 176);
             assert!(report.nonblack_pixels > 0);
         }
+        for label in ["britannia", "britannia-step", "castle", "dungeon", "combat"] {
+            let report = reports
+                .iter()
+                .find(|report| report.label == label)
+                .expect("expected viewport report");
+            assert_eq!(report.width, 176);
+            assert_eq!(report.height, 176);
+        }
+        let endgame = reports
+            .iter()
+            .find(|report| report.label == "endgame-status")
+            .expect("expected endgame text-window report");
+        assert_eq!(endgame.width, TEXT_WINDOW_RENDER_WIDTH as u32);
+        assert_eq!(endgame.height, TEXT_WINDOW_RENDER_HEIGHT as u32);
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
         assert!(manifest.contains("britannia"));
         assert!(manifest.contains("castle"));
         assert!(manifest.contains("dungeon"));
+        assert!(manifest.contains("combat"));
+        assert!(manifest.contains("endgame-status"));
         assert!(!manifest.contains("Avatar"));
         let _ = fs::remove_dir_all(dir);
     }
