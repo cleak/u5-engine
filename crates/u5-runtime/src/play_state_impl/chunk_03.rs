@@ -3004,11 +3004,7 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         };
         if self.combat_active {
-            return Ok(self.cast_unmodeled_combat_utility_spell(
-                caster_index,
-                BLINK_SPELL_INDEX,
-                BLINK_COST,
-            ));
+            return Ok(self.cast_combat_blink(caster_index, Some(direction)));
         }
         if !self.spell_allowed_in_current_cast_context(BLINK_SPELL_INDEX) {
             self.message = "Not here!".to_string();
@@ -3043,6 +3039,69 @@ impl PlayState {
             self.current_area_label()
         );
         Ok(MoveOutcome::Cast)
+    }
+
+    pub fn cast_combat_blink(
+        &mut self,
+        caster_index: usize,
+        direction: Option<Direction>,
+    ) -> MoveOutcome {
+        if !self.combat_active || !self.spell_allowed_in_current_cast_context(BLINK_SPELL_INDEX) {
+            self.message = "Not here!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let Some(direction) = direction else {
+            self.message = "Direction? Use C1IP6.".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !direction.is_cardinal() {
+            self.message = "Blink requires a cardinal direction.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let Some(caster_actor) = self.combat_actors.get(caster_index).copied() else {
+            self.message = "Who casts?".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !combat_actor_is_active_not_dead(caster_actor) {
+            self.message = "Who casts?".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if let Some(outcome) =
+            self.cast_spell_resource_gate(caster_index, BLINK_SPELL_INDEX, BLINK_COST)
+        {
+            return outcome;
+        }
+
+        let (dx, dy) = direction.delta();
+        let tx = caster_actor.x as isize + dx;
+        let ty = caster_actor.y as isize + dy;
+        let legal_cells = self.combat_legal_cell_mask();
+        let legal = combat_arena_coordinate_in_bounds(tx as i16, ty as i16)
+            && legal_cells[ty as usize][tx as usize];
+
+        self.advance_turn();
+        if !legal {
+            self.message = "Failed!".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        let Some(commit) = commit_combat_actor_linked_position(
+            &mut self.combat_actors[caster_index],
+            &mut self.active_objects,
+            tx as u8,
+            ty as u8,
+        ) else {
+            self.message = "Who casts?".to_string();
+            return MoveOutcome::Blocked;
+        };
+        self.mark_visibility_dirty();
+        self.message = format!(
+            "Blinked {} to ({}, {}).",
+            direction.name(),
+            commit.actor_position_after.0,
+            commit.actor_position_after.1
+        );
+        MoveOutcome::Cast
     }
 
     pub fn blink_target_at(

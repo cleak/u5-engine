@@ -3105,7 +3105,7 @@
     }
 
     #[test]
-    fn combat_allowed_blink_reaches_resource_gate_without_using_sidecar_teleport() {
+    fn combat_allowed_blink_moves_linked_actor_without_using_sidecar_teleport() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(BLINK_TARGET_TABLE_FILE),
@@ -3114,22 +3114,73 @@
         .unwrap();
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.combat_active = true;
+        state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            1,
+            1,
+        ]);
         state.spell_charges[BLINK_SPELL_INDEX] = 1;
         state.party[0].mana = BLINK_COST;
         state.party[0].level = BLINK_COST;
+        state.visibility_dirty = false;
 
         assert_eq!(
             state.cast_spell_from_suffix("1IP6", &dir).unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Cast
         );
 
         assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (2, 1));
+        assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (2, 1));
         assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-        assert_eq!(state.message, "Failed!");
+        assert!(state.visibility_dirty);
+        assert_eq!(state.message, "Blinked East to (2, 1).");
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn combat_blink_failure_spends_resources_without_moving_actor() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.combat_active = true;
+        state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        state.combat_terrain[1][2] = 0x0c;
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            1,
+            1,
+        ]);
+        state.spell_charges[BLINK_SPELL_INDEX] = 1;
+        state.party[0].mana = BLINK_COST;
+        state.party[0].level = BLINK_COST;
+        state.visibility_dirty = false;
+
+        assert_eq!(
+            state
+                .cast_spell_from_suffix("1IP6", Path::new(""))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (1, 1));
+        assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (1, 1));
+        assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Failed!");
     }
 
     #[test]
