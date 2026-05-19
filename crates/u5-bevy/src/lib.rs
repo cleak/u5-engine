@@ -26,7 +26,8 @@ use u5_runtime::{
     STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, StoryRecords, TEXT_SCREEN_ROWS,
     TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
-    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TextWindowSystem, TileAtlas, TileGraphicsDepth,
+    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
+    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TextWindowSystem, TileAtlas, TileGraphicsDepth,
     TitleBitAsset, TitleBitImages, TitleBitPlacement, U4TransferOverrides, U4TransferSource,
     WorldPlane, commit_chargen_save, commit_u4_transfer_save, handle_play_key_input, hash_bytes,
     intro_menu::{IntroSubflow, IntroSubflowResult},
@@ -43,7 +44,7 @@ use u5_runtime::{
     shop_runtime::{GuildShopState, ReagentShopState, SageState, TavernState},
     shop_session::ActiveShopSession,
     stats_panel_active_cursor_visible, summarize_return_to_view_preview,
-    summarize_return_to_view_script,
+    summarize_return_to_view_script, title_tick_next_frame,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
 };
 
@@ -468,6 +469,7 @@ fn run_visual_intro_menu_app(
             dispatch: UnifiedMenuDispatch::new(),
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_tick_frame: 0,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
             launch_result,
@@ -484,7 +486,7 @@ fn run_visual_intro_menu_app(
             Update,
             (
                 drive_visual_intro,
-                animate_visual_intro_signature,
+                animate_visual_intro_title_effects,
                 screenshot_system,
             ),
         )
@@ -596,6 +598,7 @@ struct VisualIntroState {
     dispatch: UnifiedMenuDispatch,
     title_signature_progress: usize,
     title_signature_complete: bool,
+    title_tick_frame: u8,
     message: String,
     panel: VisualIntroPanel,
     launch_result: Arc<Mutex<Option<PlayOptions>>>,
@@ -829,7 +832,7 @@ fn drive_visual_intro(
     }
 }
 
-fn animate_visual_intro_signature(
+fn animate_visual_intro_title_effects(
     intro: Option<ResMut<VisualIntroState>>,
     mut images: ResMut<Assets<Image>>,
 ) {
@@ -840,25 +843,29 @@ fn animate_visual_intro_signature(
     };
     if !matches!(intro.panel, VisualIntroPanel::Menu)
         || !matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
-        || intro.title_signature_complete
     {
         return;
     }
-    let Ok(signature) = load_british_pth(&intro.game_dir) else {
-        intro.title_signature_complete = true;
-        return;
-    };
-    let total_steps = british_signature_step_count(&signature);
-    if total_steps == 0 {
-        intro.title_signature_complete = true;
-        return;
-    }
 
-    intro.title_signature_progress =
-        (intro.title_signature_progress + SIGNATURE_STEPS_PER_FRAME).min(total_steps);
-    if intro.title_signature_progress >= total_steps {
-        intro.title_signature_progress = 0;
-        intro.title_signature_complete = true;
+    intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
+
+    if !intro.title_signature_complete {
+        let Ok(signature) = load_british_pth(&intro.game_dir) else {
+            intro.title_signature_complete = true;
+            return;
+        };
+        let total_steps = british_signature_step_count(&signature);
+        if total_steps == 0 {
+            intro.title_signature_complete = true;
+            return;
+        }
+
+        intro.title_signature_progress =
+            (intro.title_signature_progress + SIGNATURE_STEPS_PER_FRAME).min(total_steps);
+        if intro.title_signature_progress >= total_steps {
+            intro.title_signature_progress = 0;
+            intro.title_signature_complete = true;
+        }
     }
 
     let rgba = render_intro_frame(&mut intro);
@@ -882,6 +889,7 @@ fn step_visual_intro(
         intro.dispatch.dismiss_title();
         intro.title_signature_progress = 0;
         intro.title_signature_complete = true;
+        intro.title_tick_frame = 0;
         if ch.eq_ignore_ascii_case(&'J') {
             return resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward, exit);
         }
@@ -1683,7 +1691,9 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     if title_visible {
         let signature_progress =
             (!intro.title_signature_complete).then_some(intro.title_signature_progress);
-        if let Some(title_rgba) = visual_intro_title_art_rgba(&intro.game_dir, signature_progress) {
+        if let Some(title_rgba) =
+            visual_intro_title_art_rgba(&intro.game_dir, signature_progress, intro.title_tick_frame)
+        {
             blit_rgba(
                 &mut rgba,
                 INTRO_FRAMEBUFFER_WIDTH as usize,
@@ -1737,6 +1747,7 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
 fn visual_intro_title_art_rgba(
     game_dir: &Path,
     signature_progress: Option<usize>,
+    title_tick_frame: u8,
 ) -> Option<Vec<u8>> {
     let title = load_title_bit(game_dir).ok()?;
     let british = load_british_bit(game_dir).ok()?;
@@ -1751,6 +1762,12 @@ fn visual_intro_title_art_rgba(
             progress,
         );
     }
+    draw_title_tick_overlay_rgba(
+        &mut rgba,
+        TITLE_SURFACE_WIDTH as usize,
+        TITLE_SURFACE_HEIGHT as usize,
+        title_tick_frame,
+    );
     Some(rgba)
 }
 
@@ -1857,6 +1874,40 @@ fn draw_british_signature_rgba(
 
 fn british_signature_step_count(signature: &BritishPth) -> usize {
     signature.segments.iter().map(Vec::len).sum()
+}
+
+fn draw_title_tick_overlay_rgba(dst: &mut [u8], dst_width: usize, dst_height: usize, frame: u8) {
+    let frame = usize::from(frame % 4);
+    let start_x = TITLE_TICK_FRAME_X as usize;
+    let start_y = TITLE_TICK_FRAME_Y as usize;
+    let end_x = start_x
+        .saturating_add(TITLE_TICK_FRAME_WIDTH as usize)
+        .min(dst_width);
+    let end_y = start_y
+        .saturating_add(TITLE_TICK_FRAME_HEIGHT as usize)
+        .min(dst_height);
+
+    for y in start_y..end_y {
+        let local_y = y - start_y;
+        for x in start_x..end_x {
+            let local_x = x - start_x;
+            let offset = (y * dst_width + x) * 4;
+            if dst[offset] != 0 || dst[offset + 1] != 0 || dst[offset + 2] != 0 {
+                continue;
+            }
+            let spark = (local_x + local_y * 3 + frame * 17) % 53 == 0;
+            let ember = local_y % 3 == 0 && ((local_x / 8 + local_y + frame * 7) % 29 == 0);
+            if !spark && !ember {
+                continue;
+            }
+            let rgb = if spark {
+                EGA_PALETTE_RGB[8]
+            } else {
+                EGA_PALETTE_RGB[7]
+            };
+            dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
+        }
+    }
 }
 
 fn paint_signature_pixel_rgba(dst: &mut [u8], dst_width: usize, dst_height: usize, x: i16, y: i16) {
@@ -1974,6 +2025,7 @@ fn write_visual_intro_report(
         dispatch: UnifiedMenuDispatch::new(),
         title_signature_progress: 0,
         title_signature_complete: false,
+        title_tick_frame: 0,
         message: String::new(),
         panel,
         launch_result: Arc::new(Mutex::new(None)),
@@ -2866,6 +2918,7 @@ mod tests {
             dispatch: UnifiedMenuDispatch::new(),
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_tick_frame: 0,
             message: "Intro menu smoke".to_string(),
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
@@ -2977,6 +3030,49 @@ mod tests {
         assert_eq!(rgba_pixel(&rgba, width, 94, 65), [0xff, 0xff, 0xff, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 77, 143), [0xff, 0xff, 0xff, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 106, 166), [0, 0, 0, 0xff]);
+    }
+
+    #[test]
+    fn title_tick_overlay_stays_inside_spec_strip_and_preserves_title_pixels() {
+        let width = TITLE_SURFACE_WIDTH as usize;
+        let height = TITLE_SURFACE_HEIGHT as usize;
+        let mut frame0 = vec![0; width * height * 4];
+        for pixel in frame0.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+        }
+        let preserved_x = 16usize;
+        let preserved_y = TITLE_TICK_FRAME_Y as usize + 2;
+        let preserved_offset = (preserved_y * width + preserved_x) * 4;
+        frame0[preserved_offset..preserved_offset + 4].copy_from_slice(&[0xff, 0xff, 0xff, 0xff]);
+        let mut frame1 = frame0.clone();
+
+        draw_title_tick_overlay_rgba(&mut frame0, width, height, 0);
+        draw_title_tick_overlay_rgba(&mut frame1, width, height, 1);
+
+        assert_eq!(
+            rgba_pixel(&frame0, width, preserved_x, preserved_y),
+            [0xff, 0xff, 0xff, 0xff]
+        );
+        assert!(frame0.chunks_exact(4).enumerate().any(|(index, pixel)| {
+            let x = index % width;
+            let y = index / width;
+            y >= TITLE_TICK_FRAME_Y as usize
+                && y < (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT) as usize
+                && x < TITLE_TICK_FRAME_WIDTH as usize
+                && (pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
+        }));
+        assert!(
+            frame0
+                .chunks_exact(4)
+                .enumerate()
+                .filter(|(index, _)| {
+                    let y = index / width;
+                    y < TITLE_TICK_FRAME_Y as usize
+                        || y >= (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT) as usize
+                })
+                .all(|(_, pixel)| pixel == [0x00, 0x00, 0x00, 0xff])
+        );
+        assert_ne!(frame0, frame1);
     }
 
     #[test]
@@ -3569,6 +3665,7 @@ mod tests {
             dispatch: UnifiedMenuDispatch::new(),
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_tick_frame: 0,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
@@ -3644,6 +3741,7 @@ mod tests {
             dispatch: UnifiedMenuDispatch::new(),
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_tick_frame: 0,
             message: String::new(),
             panel: VisualIntroPanel::Story {
                 records: StoryRecords {
@@ -3686,6 +3784,7 @@ mod tests {
             dispatch,
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_tick_frame: 0,
             message: String::new(),
             panel,
             launch_result: Arc::new(Mutex::new(None)),
@@ -3894,6 +3993,7 @@ mod tests {
             dispatch: UnifiedMenuDispatch::new(),
             title_signature_progress: 0,
             title_signature_complete: false,
+            title_tick_frame: 0,
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),
