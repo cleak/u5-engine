@@ -505,8 +505,7 @@
     fn town_hole_up_poisoned_member_keeps_status_and_skips_hp_recovery() {
         // commands.md §10: poisoned and dead members are not treated like
         // healthy sleepers. The town bed-rest path must skip HP gain for
-        // poisoned members while still ticking mana, mirroring the
-        // rest-with-watch contract.
+        // poisoned members while still ticking mana and hourly poison.
         let dir = debug_game_dir();
         fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
         let mut grid = open_grid();
@@ -530,7 +529,7 @@
         );
 
         assert_eq!(state.party[0].status, b'P');
-        assert_eq!(state.party[0].hp, 4);
+        assert_eq!(state.party[0].hp, 3);
         assert!(state.party[0].mana >= 90);
         assert!(state.message.contains("recovered 0 HP"));
         let _ = fs::remove_dir_all(dir);
@@ -990,7 +989,7 @@
         assert_eq!(state.party[3].hp, 6);
         assert_eq!(state.party[3].mana, 4);
         assert_eq!(state.party[4].status, b'P');
-        assert_eq!(state.party[4].hp, 7);
+        assert_eq!(state.party[4].hp, 6);
         assert_eq!(state.party[4].mana, REST_MANA_CAP);
         assert!(state.message.contains("recovered "));
         assert!(state.message.contains(" MP"));
@@ -1018,7 +1017,7 @@
         );
 
         assert_eq!(state.party[0].status, b'P');
-        assert_eq!(state.party[0].hp, 3);
+        assert_eq!(state.party[0].hp, 2);
         assert_eq!(state.party[0].mana, REST_MANA_CAP);
         assert!(state.message.contains("recovered 0 HP"));
         assert!(state.message.contains("MP"));

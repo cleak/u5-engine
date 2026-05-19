@@ -1332,6 +1332,10 @@
 
         assert_eq!(state.clock.hour, 6);
         assert_eq!(state.food, 8);
+        assert_eq!(state.party[0].hp, 12);
+        assert_eq!(state.party[1].hp, 11);
+        assert_eq!(state.party[1].status, b'P');
+        assert_eq!(state.party[2].hp, 12);
     }
 
     #[test]
@@ -1363,6 +1367,44 @@
 
         assert_eq!(noon.clock.hour, 12);
         assert_eq!(noon.food, 0);
+    }
+
+    #[test]
+    fn hourly_poison_tick_can_kill_poisoned_living_member() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.clock = GameClock::with_date(139, 4, 5, 7, 59).unwrap();
+        state.food = 99;
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'P',
+                climb_stat: 30,
+                mana: 8,
+                hp: 1,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'F',
+                status: b'G',
+                climb_stat: 30,
+                mana: 8,
+                hp: 1,
+                max_hp: 20,
+                level: 8,
+            },
+        ];
+
+        state.advance_turn_with_minutes(1);
+
+        assert_eq!(state.clock.hour, 8);
+        assert_eq!(state.food, 99);
+        assert_eq!(state.party[0].hp, 0);
+        assert_eq!(state.party[0].status, b'D');
+        assert_eq!(state.party[1].hp, 1);
+        assert_eq!(state.party[1].status, b'G');
     }
 
     #[test]

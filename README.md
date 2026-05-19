@@ -1152,9 +1152,10 @@ Travel, and M-Mix hooks can exercise the public resource gates. The food and
 gold counters are also read for Z-stats, object pickups, and save export, while
 Create Food updates the food counter. Hour-crossing cleanup now applies the
 public provision cadence, subtracting active eaters at 06:00, 12:00, and 18:00
-with Dead, Ashes, and Sleeping members excluded.
-The
-harness does not require character creation first, so clean test saves with a
+with Dead, Ashes, and Sleeping members excluded. Poisoned living members still
+count as provision consumers and take a first-playable one-HP poison tick on
+each hourly status/provision pass. The harness does not require character
+creation first, so clean test saves with a
 blank Avatar name can still seed the playable slice:
 
 ```powershell

@@ -1533,10 +1533,23 @@ impl PlayState {
 
     pub fn apply_hourly_status_provision_pass(&mut self) -> u16 {
         let consumers = self.hourly_provision_consumer_count();
+        self.apply_hourly_poison_tick();
         if self.food != 0 && is_provision_decrement_hour(self.clock.hour) {
             self.food = self.food.saturating_sub(consumers);
         }
         consumers
+    }
+
+    pub fn apply_hourly_poison_tick(&mut self) -> u16 {
+        let mut damaged = 0;
+        for member in &mut self.party {
+            if member.status != b'P' || !member.living() {
+                continue;
+            }
+            member.apply_damage(FIRST_PLAYABLE_HOURLY_POISON_DAMAGE);
+            damaged += 1;
+        }
+        damaged
     }
 
     pub fn mode_zero_cleanup(&mut self) {
