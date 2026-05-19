@@ -1,5 +1,9 @@
 //! Intro-menu key dispatch per `intro.md` §6.
 
+use std::fs;
+use std::io;
+use std::path::Path;
+
 use crate::input_case_fold;
 
 /// `intro.md §3` title-screen surface dimensions. The title flow
@@ -186,6 +190,73 @@ pub const MISCMAPS_CUTSCENE_VISIBLE_COLUMNS: usize = 11;
 pub const MISCMAPS_CUTSCENE_RECORD_COUNT: usize = 4;
 pub const MISCMAPS_CUTSCENE_RECORD_BYTES: usize =
     MISCMAPS_CUTSCENE_ROW_STRIDE * MISCMAPS_CUTSCENE_ROWS;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MiscmapsCutsceneMap {
+    pub record_index: usize,
+    pub tiles: Vec<u8>,
+}
+
+impl MiscmapsCutsceneMap {
+    pub fn tile(&self, x: usize, y: usize) -> Option<u8> {
+        (x < MISCMAPS_CUTSCENE_VISIBLE_COLUMNS && y < MISCMAPS_CUTSCENE_ROWS)
+            .then(|| self.tiles[y * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS + x])
+    }
+}
+
+pub fn load_miscmaps_cutscene_map(
+    game_dir: &Path,
+    record_index: usize,
+) -> io::Result<Option<MiscmapsCutsceneMap>> {
+    let path = game_dir.join(MISCMAPS_DAT_FILE);
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => {
+            return Err(io::Error::new(
+                err.kind(),
+                format!("{}: {err}", path.display()),
+            ));
+        }
+    };
+    parse_miscmaps_cutscene_map_file(&bytes, record_index).map(Some)
+}
+
+pub fn parse_miscmaps_cutscene_map_file(
+    bytes: &[u8],
+    record_index: usize,
+) -> io::Result<MiscmapsCutsceneMap> {
+    if record_index >= MISCMAPS_CUTSCENE_RECORD_COUNT {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "MISCMAPS cutscene record must be 0..{}, got {record_index}",
+                MISCMAPS_CUTSCENE_RECORD_COUNT - 1
+            ),
+        ));
+    }
+    let start = MISCMAPS_CUTSCENE_SECTION_OFFSET + record_index * MISCMAPS_CUTSCENE_RECORD_BYTES;
+    let end = start + MISCMAPS_CUTSCENE_RECORD_BYTES;
+    if bytes.len() < end {
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            format!(
+                "{MISCMAPS_DAT_FILE}: expected at least {end} bytes for cutscene record {record_index}, found {}",
+                bytes.len()
+            ),
+        ));
+    }
+
+    let mut tiles = Vec::with_capacity(MISCMAPS_CUTSCENE_ROWS * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS);
+    for row in 0..MISCMAPS_CUTSCENE_ROWS {
+        let row_start = start + row * MISCMAPS_CUTSCENE_ROW_STRIDE;
+        tiles.extend_from_slice(&bytes[row_start..row_start + MISCMAPS_CUTSCENE_VISIBLE_COLUMNS]);
+    }
+    Ok(MiscmapsCutsceneMap {
+        record_index,
+        tiles,
+    })
+}
 
 /// `formats/location-dat.md §11` Return-to-View map strip section
 /// offset (immediately after the cutscene section).

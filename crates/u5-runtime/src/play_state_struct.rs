@@ -85,6 +85,7 @@ pub struct PlayState {
     pub pending_town_arrest: Option<TownArrestPrompt>,
     pub endgame: Option<EndgameState>,
     pub active_blackthorn: Option<crate::blackthorn_session::BlackthornChallenge>,
+    pub blackthorn_audience_map: Option<MiscmapsCutsceneMap>,
     pub blackthorn_jailed_party_slots: Vec<u8>,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,
     pub active_conversation: Option<Box<crate::conversation_session::ConversationSession>>,

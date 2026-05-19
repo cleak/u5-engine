@@ -91,6 +91,10 @@ pub enum BlackthornEntryFamily {
     RescueRefuge,
 }
 
+/// `blackthorn.md §3` / `formats/location-dat.md §11`: the audience
+/// capture presentation loads cutscene-map record 0 from `MISCMAPS.DAT`.
+pub const BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD: usize = 0;
+
 /// `blackthorn.md §5` failure-reaction victim slot. When a
 /// punishable challenge branch fails, the failure beat names the
 /// party's second visible member (zero-based slot index `1`) as the

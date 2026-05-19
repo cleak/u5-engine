@@ -4506,6 +4506,32 @@
     }
 
     #[test]
+    fn miscmaps_cutscene_map_parser_extracts_visible_cells() {
+        let mut bytes = vec![0xee; MISCMAPS_CUTSCENE_SECTION_BYTES];
+        for row in 0..MISCMAPS_CUTSCENE_ROWS {
+            let row_start = MISCMAPS_CUTSCENE_RECORD_BYTES + row * MISCMAPS_CUTSCENE_ROW_STRIDE;
+            for col in 0..MISCMAPS_CUTSCENE_VISIBLE_COLUMNS {
+                bytes[row_start + col] = (row * 16 + col) as u8;
+            }
+            for pad in MISCMAPS_CUTSCENE_VISIBLE_COLUMNS..MISCMAPS_CUTSCENE_ROW_STRIDE {
+                bytes[row_start + pad] = 0xf0 + pad as u8;
+            }
+        }
+
+        let map = parse_miscmaps_cutscene_map_file(&bytes, 1).unwrap();
+
+        assert_eq!(map.record_index, 1);
+        assert_eq!(
+            map.tiles.len(),
+            MISCMAPS_CUTSCENE_ROWS * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS
+        );
+        assert_eq!(map.tile(0, 0), Some(0));
+        assert_eq!(map.tile(10, 10), Some(170));
+        assert_eq!(map.tile(11, 0), None);
+        assert!(!map.tiles.contains(&(0xf0 + MISCMAPS_CUTSCENE_VISIBLE_COLUMNS as u8)));
+    }
+
+    #[test]
     fn tlk_introducer_argument_widths_match_spec_table() {
         // formats/tlk.md §9.1 publishes the multi-byte introducer
         // argument widths: GOLD-PAYMENT (0x85) takes three ASCII

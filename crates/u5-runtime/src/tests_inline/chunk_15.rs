@@ -944,6 +944,40 @@
     }
 
     #[test]
+    fn blackthorn_audience_loads_miscmaps_cutscene_record_zero() {
+        let dir = debug_game_dir();
+        let mut miscmaps = vec![0; MISCMAPS_CUTSCENE_SECTION_BYTES];
+        for row in 0..MISCMAPS_CUTSCENE_ROWS {
+            let row_start = row * MISCMAPS_CUTSCENE_ROW_STRIDE;
+            for col in 0..MISCMAPS_CUTSCENE_VISIBLE_COLUMNS {
+                miscmaps[row_start + col] = (row * 16 + col) as u8;
+            }
+        }
+        fs::write(dir.join(MISCMAPS_DAT_FILE), miscmaps).unwrap();
+
+        let mut state = test_state(open_grid(), 5, 5);
+
+        assert_eq!(
+            state.begin_blackthorn_audience_capture(&dir).unwrap(),
+            Some(MoveOutcome::Used)
+        );
+
+        let map = state
+            .blackthorn_audience_map
+            .as_ref()
+            .expect("audience should retain cutscene map");
+        assert_eq!(map.record_index, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD);
+        assert_eq!(map.tile(0, 0), Some(0));
+        assert_eq!(map.tile(10, 10), Some(170));
+
+        state
+            .apply_blackthorn_captive_cell_handoff(&dir, "done")
+            .unwrap();
+        assert!(state.blackthorn_audience_map.is_none());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn blackthorn_rescue_restores_party_and_clamps_standing() {
         let dir = debug_game_dir();
         fs::write(

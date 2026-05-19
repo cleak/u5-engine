@@ -2674,6 +2674,7 @@ impl PlayState {
     ) -> io::Result<Option<MoveOutcome>> {
         self.pending_town_arrest = None;
         self.pending_moongate = None;
+        self.blackthorn_audience_map = None;
         self.clear_non_player_active_objects();
         self.sync_player_object();
         self.mark_visibility_dirty();
@@ -2699,6 +2700,8 @@ impl PlayState {
             .unwrap_or_else(|| {
                 "the party is overcome and dragged before Lord Blackthorn".to_string()
             });
+        self.blackthorn_audience_map =
+            load_miscmaps_cutscene_map(game_dir, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD)?;
         self.active_blackthorn = Some(challenge);
         self.message = format!(
             "Blackthorn audience: {opening}. Party slot {} is challenged for {prompt}.",
@@ -2865,6 +2868,7 @@ impl PlayState {
         self.pending_moongate = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
+        self.blackthorn_audience_map = None;
         self.clear_town_floor_reload_door_state();
         self.town_npc_alarm_states
             .retain(|marker| marker.scene_byte == scene.byte && marker.floor == floor);
@@ -2906,6 +2910,7 @@ impl PlayState {
         self.pending_moongate = None;
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
+        self.blackthorn_audience_map = None;
         self.clear_town_floor_reload_door_state();
         let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;
