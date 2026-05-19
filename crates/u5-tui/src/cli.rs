@@ -372,7 +372,7 @@ where
 }
 
 pub const CLI_USAGE: &str = "\
-Ultima V verification + first-playable harness (clean-room).
+Ultima V clean-room verification and playable harness.
 
 USAGE:
     cargo run -- [OPTIONS] [GAME_DIR]
@@ -383,7 +383,7 @@ Lord British throne-room verification report.
 OPTIONS:
     -h, --help                Print this usage and exit.
         --intro               Launch the terminal title/menu flow.
-        --play                Launch the terminal first-playable harness.
+        --play                Launch the terminal playable harness.
         --play-script <CMDS>  Run a semicolon-separated script then exit.
                               Implies --play.
         --scene <KEY>         Start scene, e.g. CASTLE:0 or DUNGEON:0.
