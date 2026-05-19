@@ -14,6 +14,32 @@ pub enum EternalFlame {
     Courage,
 }
 
+impl EternalFlame {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Truth => "Flame of Truth",
+            Self::Love => "Flame of Love",
+            Self::Courage => "Flame of Courage",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        let key = key.to_ascii_lowercase();
+        let key = key
+            .strip_prefix("flame_of_")
+            .or_else(|| key.strip_prefix("flame-of-"))
+            .or_else(|| key.strip_prefix("flameof"))
+            .or_else(|| key.strip_prefix("flame"))
+            .unwrap_or(&key);
+        match key.trim_matches(['_', '-']) {
+            "truth" => Some(Self::Truth),
+            "love" => Some(Self::Love),
+            "courage" => Some(Self::Courage),
+            _ => None,
+        }
+    }
+}
+
 /// `catalogs/quest-graph.md §5`: the Eternal-Flame paired with each
 /// Shadowlord (by zero-based slot 0=Falsehood / 1=Hatred / 2=Cowardice).
 pub const fn eternal_flame_for_shadowlord(slot: usize) -> Option<EternalFlame> {

@@ -142,7 +142,9 @@ impl PlayState {
             Some(UseItemRequest::SkullKey) => self.use_skull_key(game_dir)?,
             Some(UseItemRequest::Sextant) => self.use_sextant(),
             Some(UseItemRequest::PocketWatch) => self.use_pocket_watch(),
-            Some(UseItemRequest::ShadowlordShard(index)) => self.use_shadowlord_shard(index),
+            Some(UseItemRequest::ShadowlordShard(index)) => {
+                self.use_shadowlord_shard(index, game_dir)?
+            }
             Some(UseItemRequest::Moonstone(slot_index)) => {
                 self.use_moonstone_phase(Some(slot_index))
             }
@@ -569,27 +571,95 @@ impl PlayState {
         MoveOutcome::PromptDeclined
     }
 
-    pub fn use_shadowlord_shard(&mut self, index: usize) -> MoveOutcome {
+    pub fn use_shadowlord_shard(
+        &mut self,
+        index: usize,
+        game_dir: Option<&Path>,
+    ) -> io::Result<MoveOutcome> {
         let Some(item_index) = shadowlord_shard_special_item_index(index) else {
             self.message = "No such Shard.".to_string();
-            return MoveOutcome::Blocked;
+            return Ok(MoveOutcome::Blocked);
         };
         let name = special_item_name(item_index);
         if self.special_items[item_index] == 0 {
             self.message = format!("No {name}!");
-            return MoveOutcome::Blocked;
+            return Ok(MoveOutcome::Blocked);
         }
         if !self.shadowlord_alive(index) {
             self.message = format!("{name}: matching Shadowlord is already vanquished.");
-            return MoveOutcome::Blocked;
+            return Ok(MoveOutcome::Blocked);
         }
         if !self.shadowlord_name_encounter_present(index) {
             self.message = format!("{name}: no matching Shadowlord is nearby.");
-            return MoveOutcome::Blocked;
+            return Ok(MoveOutcome::Blocked);
         }
 
-        self.message = format!("{name}: no matching Eternal Flame is here.");
-        MoveOutcome::Blocked
+        let required_flame = eternal_flame_for_shadowlord(index).expect("valid shard index");
+        let flame_entry = if let Some(game_dir) = game_dir {
+            self.eternal_flame_at_current_position(game_dir)?
+        } else {
+            None
+        };
+        let Some(flame_entry) = flame_entry else {
+            self.message = format!("{name}: no matching Eternal Flame is here.");
+            return Ok(MoveOutcome::Blocked);
+        };
+        if flame_entry.flame != required_flame {
+            self.message = format!(
+                "{name}: {} does not oppose this Shadowlord.",
+                flame_entry.flame.label()
+            );
+            return Ok(MoveOutcome::Blocked);
+        }
+
+        self.special_items[item_index] = 0;
+        self.vanquish_shadowlord(index);
+        let cleared = self.clear_shadowlord_name_encounters(index);
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = format!(
+            "{name}: cast into {}; {} vanquished; cleared {cleared} encounter(s).",
+            required_flame.label(),
+            Self::shadowlord_title_for_index(index).unwrap_or("Shadowlord")
+        );
+        Ok(MoveOutcome::Used)
+    }
+
+    pub fn eternal_flame_at_current_position(
+        &self,
+        game_dir: &Path,
+    ) -> io::Result<Option<EternalFlameEntry>> {
+        let Some(entries) = load_eternal_flame_entries(game_dir)? else {
+            return Ok(None);
+        };
+        Ok(entries
+            .into_iter()
+            .find(|entry| self.eternal_flame_entry_matches(*entry)))
+    }
+
+    pub fn eternal_flame_entry_matches(&self, entry: EternalFlameEntry) -> bool {
+        let (target, floor, x, y) = self.current_blink_context();
+        entry.target == target
+            && entry.floor == floor
+            && entry.x == x
+            && entry.y == y
+            && entry.expected_tile.map_or(true, |expected| {
+                expected == self.current_area_tile(entry.x, entry.y)
+            })
+    }
+
+    pub fn clear_shadowlord_name_encounters(&mut self, index: usize) -> usize {
+        let Some(floor) = self.current_floor() else {
+            return 0;
+        };
+        let mut cleared = 0;
+        for object in self.active_objects.iter_mut().skip(1) {
+            if object.z == floor && Self::shadowlord_name_encounter_index(*object) == Some(index) {
+                object.free();
+                cleared += 1;
+            }
+        }
+        cleared
     }
 
     pub fn use_worn_regalia(

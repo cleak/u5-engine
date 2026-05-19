@@ -37,6 +37,7 @@ pub const TOWN_TRAP_DOOR_TABLE_FILE: &str = "town_trap_doors.tsv";
 pub const TOWN_EXIT_TILE_TABLE_FILE: &str = "town_exit_tiles.tsv";
 pub const TOWN_LOCK_TABLE_FILE: &str = "town_locks.tsv";
 pub const BLINK_TARGET_TABLE_FILE: &str = "blink_targets.tsv";
+pub const ETERNAL_FLAME_TABLE_FILE: &str = "eternal_flames.tsv";
 pub const MOONGATE_TABLE_FILE: &str = "moongates.tsv";
 pub const LOCATION_FLOOR_TABLE_FILE: &str = "location_floor_pages.tsv";
 pub const LOCATION_ENTRY_Y_TABLE_FILE: &str = "location_entry_y.tsv";

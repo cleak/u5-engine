@@ -30,6 +30,16 @@ pub struct CodexUrnEntry {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EternalFlameEntry {
+    pub target: PlayTarget,
+    pub floor: i8,
+    pub x: usize,
+    pub y: usize,
+    pub flame: EternalFlame,
+    pub expected_tile: Option<u8>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorldPlaneTransitionEntry {
     pub from_plane: WorldPlane,
     pub x: usize,

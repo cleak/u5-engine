@@ -937,7 +937,9 @@
     fn use_shadowlord_shard_refuses_missing_and_vanquished_states_without_consuming() {
         let mut missing = test_state(open_grid(), 5, 5);
         assert_eq!(
-            missing.use_shadowlord_shard(SHADOWLORD_HATRED_INDEX),
+            missing
+                .use_shadowlord_shard(SHADOWLORD_HATRED_INDEX, None)
+                .unwrap(),
             MoveOutcome::Blocked
         );
         assert_eq!(missing.message, "No Shard of Hatred!");
@@ -947,7 +949,9 @@
         vanquished.special_items[SPECIAL_ITEM_SHARD_COWARDICE_INDEX] = 1;
         vanquished.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX] = SHADOWLORD_VANQUISHED;
         assert_eq!(
-            vanquished.use_shadowlord_shard(SHADOWLORD_COWARDICE_INDEX),
+            vanquished
+                .use_shadowlord_shard(SHADOWLORD_COWARDICE_INDEX, None)
+                .unwrap(),
             MoveOutcome::Blocked
         );
         assert_eq!(vanquished.special_items[SPECIAL_ITEM_SHARD_COWARDICE_INDEX], 1);
@@ -956,6 +960,72 @@
             "Shard of Cowardice: matching Shadowlord is already vanquished."
         );
         assert_eq!(vanquished.turn, 0);
+    }
+
+    #[test]
+    fn use_shadowlord_shard_with_matching_flame_vanquishes_and_consumes() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(ETERNAL_FLAME_TABLE_FILE),
+            "CASTLE:0 0 5 5 TRUTH 16\nCASTLE:0 0 4 4 LOVE\n",
+        )
+        .unwrap();
+        let mut state = test_state(open_grid(), 5, 5);
+        state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
+        state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
+        let z = state.current_floor().unwrap();
+        state.active_objects.push(
+            state
+                .shadowlord_name_encounter_object(SHADOWLORD_FALSEHOOD_INDEX, 6, 5, z)
+                .unwrap(),
+        );
+
+        assert_eq!(
+            state
+                .use_shadowlord_shard(SHADOWLORD_FALSEHOOD_INDEX, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Used
+        );
+
+        assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 0);
+        assert!(state.shadowlord_vanquished(SHADOWLORD_FALSEHOOD_INDEX));
+        assert!(!state.shadowlord_name_encounter_present(SHADOWLORD_FALSEHOOD_INDEX));
+        assert_eq!(state.turn, 1);
+        assert_eq!(
+            state.message,
+            "Shard of Falsehood: cast into Flame of Truth; Falsehood vanquished; cleared 1 encounter(s)."
+        );
+    }
+
+    #[test]
+    fn use_shadowlord_shard_rejects_wrong_flame_without_consuming() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(ETERNAL_FLAME_TABLE_FILE), "CASTLE:0 0 5 5 LOVE 16\n").unwrap();
+        let mut state = test_state(open_grid(), 5, 5);
+        state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
+        state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
+        let z = state.current_floor().unwrap();
+        state.active_objects.push(
+            state
+                .shadowlord_name_encounter_object(SHADOWLORD_FALSEHOOD_INDEX, 6, 5, z)
+                .unwrap(),
+        );
+
+        assert_eq!(
+            state
+                .use_shadowlord_shard(SHADOWLORD_FALSEHOOD_INDEX, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
+        assert!(state.shadowlord_alive(SHADOWLORD_FALSEHOOD_INDEX));
+        assert!(state.shadowlord_name_encounter_present(SHADOWLORD_FALSEHOOD_INDEX));
+        assert_eq!(state.turn, 0);
+        assert_eq!(
+            state.message,
+            "Shard of Falsehood: Flame of Love does not oppose this Shadowlord."
+        );
     }
 
     #[test]

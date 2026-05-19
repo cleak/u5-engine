@@ -930,6 +930,25 @@ shared inventory effect, marks visibility dirty, and consumes one turn. Missing
 rows, mismatched floor/coordinate data, or a mismatched optional tile guard
 leave the object in place and fall through to the normal active-object refusal.
 
+Eternal Flame coordinates can be supplied as clean-room metadata while the
+public coordinate catalog remains deferred:
+
+```text
+# TARGET FLOOR X Y FLAME [TILE]
+BRITANNIA 0 5 5 TRUTH 16
+UNDERWORLD -1 20 40 LOVE
+CASTLE:0 0 12 10 COURAGE 80
+```
+
+`U`se on a carried Shadowlord shard now checks the existing public shard
+preconditions, then looks for a matching `eternal_flames.tsv` row at the
+party's current target/floor/coordinate. The row's `FLAME` must be the opposed
+principle for that shard, and the optional tile guard checks the current map
+tile. On success the shard is consumed, the matching Shadowlord slot is marked
+vanquished, matching active Shadowlord encounter objects on the current floor
+are cleared, and one turn is consumed. Missing rows, stale tile guards, or the
+wrong flame keep the existing no-effect branch without consuming the shard.
+
 Town Push is externalized for the same clean-room reason: the public spec
 defines the swap behavior, but not the complete movable-tile table. Place rows
 next to the game data as `town_pushables.tsv`:

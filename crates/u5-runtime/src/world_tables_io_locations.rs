@@ -399,6 +399,144 @@ pub fn parse_codex_urn_entries(text: &str) -> io::Result<Vec<CodexUrnEntry>> {
     Ok(entries)
 }
 
+pub fn load_eternal_flame_entries(game_dir: &Path) -> io::Result<Option<Vec<EternalFlameEntry>>> {
+    let path = game_dir.join(ETERNAL_FLAME_TABLE_FILE);
+    let text = match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => {
+            return Err(io::Error::new(
+                err.kind(),
+                format!("{}: {err}", path.display()),
+            ));
+        }
+    };
+    parse_eternal_flame_entries(&text).map(Some)
+}
+
+pub fn parse_eternal_flame_entries(text: &str) -> io::Result<Vec<EternalFlameEntry>> {
+    let mut entries = Vec::new();
+    for (line_index, line) in text.lines().enumerate() {
+        let line_number = line_index + 1;
+        let line = line
+            .split_once('#')
+            .map_or(line, |(prefix, _)| prefix)
+            .trim();
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<_> = line
+            .split(|ch: char| ch == ',' || ch == '\t' || ch.is_whitespace())
+            .filter(|part| !part.is_empty())
+            .collect();
+        if !(5..=6).contains(&parts.len()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{ETERNAL_FLAME_TABLE_FILE} line {line_number} must be: TARGET FLOOR X Y FLAME [TILE]"
+                ),
+            ));
+        }
+
+        let target = PlayTarget::from_key(parts[0]).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!(
+                    "{ETERNAL_FLAME_TABLE_FILE} line {line_number} has invalid target `{}`: {err}",
+                    parts[0]
+                ),
+            )
+        })?;
+        let floor = parse_i8_literal(parts[1]).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!(
+                    "{ETERNAL_FLAME_TABLE_FILE} line {line_number} has invalid floor `{}`: {err}",
+                    parts[1]
+                ),
+            )
+        })?;
+        let x = parse_u8_literal(parts[2]).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!(
+                    "{ETERNAL_FLAME_TABLE_FILE} line {line_number} has invalid X `{}`: {err}",
+                    parts[2]
+                ),
+            )
+        })? as usize;
+        let y = parse_u8_literal(parts[3]).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!(
+                    "{ETERNAL_FLAME_TABLE_FILE} line {line_number} has invalid Y `{}`: {err}",
+                    parts[3]
+                ),
+            )
+        })? as usize;
+        match target {
+            PlayTarget::Town(_) if x >= 32 || y >= 32 => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "{ETERNAL_FLAME_TABLE_FILE} line {line_number} town coordinate must be inside 0..31, got ({x}, {y})"
+                    ),
+                ));
+            }
+            PlayTarget::Dungeon(_) if x >= DUNGEON_SIDE || y >= DUNGEON_SIDE => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "{ETERNAL_FLAME_TABLE_FILE} line {line_number} dungeon coordinate must be inside 0..7, got ({x}, {y})"
+                    ),
+                ));
+            }
+            _ => {}
+        }
+        let flame = EternalFlame::from_key(parts[4]).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{ETERNAL_FLAME_TABLE_FILE} line {line_number} has unknown flame `{}`",
+                    parts[4]
+                ),
+            )
+        })?;
+        let expected_tile = if let Some(tile) = parts.get(5) {
+            Some(parse_u8_literal(tile).map_err(|err| {
+                io::Error::new(
+                    err.kind(),
+                    format!(
+                        "{ETERNAL_FLAME_TABLE_FILE} line {line_number} has invalid tile `{tile}`: {err}"
+                    ),
+                )
+            })?)
+        } else {
+            None
+        };
+        if entries.iter().any(|entry: &EternalFlameEntry| {
+            entry.target == target && entry.floor == floor && entry.x == x && entry.y == y
+        }) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{ETERNAL_FLAME_TABLE_FILE} line {line_number} duplicates {} floor {floor} at ({x}, {y})",
+                    target.key()
+                ),
+            ));
+        }
+        entries.push(EternalFlameEntry {
+            target,
+            floor,
+            x,
+            y,
+            flame,
+            expected_tile,
+        });
+    }
+    Ok(entries)
+}
+
 pub fn load_world_plane_transition_entries(
     game_dir: &Path,
 ) -> io::Result<Option<Vec<WorldPlaneTransitionEntry>>> {
