@@ -87,7 +87,7 @@ pub struct PlayState {
     pub endgame: Option<EndgameState>,
     pub active_blackthorn: Option<crate::blackthorn_session::BlackthornChallenge>,
     pub blackthorn_audience_map: Option<MiscmapsCutsceneMap>,
-    pub blackthorn_jailed_party_slots: Vec<u8>,
+    pub blackthorn_story: BlackthornStoryState,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,
     pub common_word_dictionary: Option<crate::common_words_io::CommonWordDictionary>,
     pub active_conversation: Option<Box<crate::conversation_session::ConversationSession>>,

@@ -1261,6 +1261,7 @@ impl PlayState {
             facing: None,
             pending_vehicle: None,
             inn_registry: self.inn_registry.clone(),
+            blackthorn_story: self.blackthorn_story,
             initial_britannia_overlay: None,
             debug_enter: self.debug_enter,
             saved_active_objects: None,

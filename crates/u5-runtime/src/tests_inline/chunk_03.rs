@@ -1426,6 +1426,7 @@
             facing: None,
             pending_vehicle: None,
             inn_registry: Vec::new(),
+            blackthorn_story: BlackthornStoryState::default(),
             initial_britannia_overlay: None,
             debug_enter: None,
             saved_active_objects: None,

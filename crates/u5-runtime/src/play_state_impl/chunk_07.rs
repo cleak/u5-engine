@@ -2937,17 +2937,14 @@ impl PlayState {
     pub fn next_blackthorn_challenge_target_slot(&self) -> Option<usize> {
         self.party.iter().enumerate().find_map(|(index, member)| {
             let slot = member.slot;
-            (member.living() && !self.blackthorn_jailed_party_slots.contains(&slot))
-                .then_some(index)
+            (member.living() && !self.blackthorn_story.is_party_slot_jailed(slot)).then_some(index)
         })
     }
 
     pub fn mark_blackthorn_current_target_handled(&mut self) -> Option<usize> {
         let index = self.next_blackthorn_challenge_target_slot()?;
         let slot = self.party[index].slot;
-        if !self.blackthorn_jailed_party_slots.contains(&slot) {
-            self.blackthorn_jailed_party_slots.push(slot);
-        }
+        self.blackthorn_story.mark_party_slot_jailed(slot);
         Some(index)
     }
 
@@ -2958,9 +2955,7 @@ impl PlayState {
             self.next_blackthorn_challenge_target_slot()?
         };
         let slot = self.party[index].slot;
-        if !self.blackthorn_jailed_party_slots.contains(&slot) {
-            self.blackthorn_jailed_party_slots.push(slot);
-        }
+        self.blackthorn_story.mark_party_slot_jailed(slot);
         Some(index)
     }
 
@@ -2981,6 +2976,9 @@ impl PlayState {
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
         self.blackthorn_audience_map = None;
+        if self.blackthorn_story.captive_cell_counter == 0 {
+            self.blackthorn_story.captive_cell_counter = 1;
+        }
         self.clear_town_floor_reload_door_state();
         self.town_npc_alarm_states
             .retain(|marker| marker.scene_byte == scene.byte && marker.floor == floor);
@@ -3006,11 +3004,15 @@ impl PlayState {
         let verdict_message = self.blackthorn_rescue_verdict_message(game_dir, verdict as usize)?;
         let previous_standing = self.moral_standing;
         self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);
+        self.blackthorn_story.rescue_progression = self
+            .blackthorn_story
+            .rescue_progression
+            .max(self.moral_standing);
         for member in &mut self.party {
             member.status = b'G';
             member.hp = member.max_hp.max(1);
         }
-        self.blackthorn_jailed_party_slots.clear();
+        self.blackthorn_story.clear_jailed_party_slots();
         let scene = Scene::new(BLACKTHORN_RESCUE_HANDOFF_SCENE)?;
         let floor = 0i8;
         self.grid = load_town_runtime_floor(game_dir, scene, floor, self.clock.hour)?;
@@ -3023,6 +3025,10 @@ impl PlayState {
         self.pending_town_arrest = None;
         self.active_blackthorn = None;
         self.blackthorn_audience_map = None;
+        if self.blackthorn_story.captive_cell_counter == 0 {
+            self.blackthorn_story.captive_cell_counter = 1;
+        }
+        self.blackthorn_story.capture_context = BLACKTHORN_CAPTURE_CONTEXT_NONE;
         self.clear_town_floor_reload_door_state();
         let tlk = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let npc_slots = parse_npc_block(game_dir, scene, &tlk)?;

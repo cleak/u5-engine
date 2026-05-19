@@ -9,6 +9,7 @@ pub fn load_play_options_from_save(game_dir: &Path) -> io::Result<PlayOptions> {
     let mut options =
         load_play_options_from_save_file(game_dir, SAVED_GAM_FILENAME, "--from-save", true)?;
     refresh_saved_ool_mirrors_for_load(game_dir)?;
+    options.blackthorn_story = load_blackthorn_story_state(game_dir)?;
     options.save_template_source = SaveTemplateSource::SavedGame;
     Ok(options)
 }
@@ -241,6 +242,7 @@ pub fn play_options_from_save_bytes_named(
         facing: transport_marker_facing(transport_marker),
         pending_vehicle: None,
         inn_registry,
+        blackthorn_story: BlackthornStoryState::default(),
         initial_britannia_overlay: None,
         debug_enter: None,
         saved_active_objects: if include_active_objects {

@@ -1,40 +1,145 @@
-//! Blackthorn cutscene helpers per `blackthorn.md` §7.
+//! Blackthorn cutscene helpers per `blackthorn.md` section 7.
 
-/// `blackthorn.md §7`: scene byte the rescue/refuge path hands control
-/// to (`CASTLE:0` — Lord British's Castle, scene byte 17). Anchored
+use std::fs;
+use std::io;
+use std::path::Path;
+
+/// Clean-engine companion save file for Blackthorn story state whose
+/// exact original `SAVED.GAM` byte offsets are not yet public. The
+/// main save image remains byte-preserving for unknown fields; this
+/// sidecar carries only clean semantic state named by
+/// `systems/blackthorn.md` section 8.
+pub const BLACKTHORN_STORY_STATE_FILE: &str = "SAVED.BTH";
+pub const BLACKTHORN_STORY_STATE_MAGIC: [u8; 4] = *b"BTH1";
+pub const BLACKTHORN_STORY_STATE_LEN: usize = 9;
+pub const BLACKTHORN_CAPTURE_CONTEXT_NONE: u8 = 0;
+
+/// `blackthorn.md` section 8 durable capture/rescue state. Jailed or handled
+/// party-member flags are represented as roster-slot bits so the state
+/// survives mode changes and save/load without depending on current
+/// marching order.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BlackthornStoryState {
+    pub jailed_slots_mask: u16,
+    pub captive_cell_counter: u8,
+    pub rescue_progression: u8,
+    pub capture_context: u8,
+}
+
+impl BlackthornStoryState {
+    pub const fn is_party_slot_jailed(self, slot: u8) -> bool {
+        if slot >= crate::SAVE_ROSTER_SLOT_COUNT as u8 {
+            false
+        } else {
+            (self.jailed_slots_mask & (1u16 << slot)) != 0
+        }
+    }
+
+    pub fn mark_party_slot_jailed(&mut self, slot: u8) -> bool {
+        if slot >= crate::SAVE_ROSTER_SLOT_COUNT as u8 {
+            return false;
+        }
+        let bit = 1u16 << slot;
+        let was_clear = (self.jailed_slots_mask & bit) == 0;
+        self.jailed_slots_mask |= bit;
+        was_clear
+    }
+
+    pub fn clear_jailed_party_slots(&mut self) {
+        self.jailed_slots_mask = 0;
+    }
+
+    pub fn jailed_party_slots(self) -> Vec<u8> {
+        (0..crate::SAVE_ROSTER_SLOT_COUNT as u8)
+            .filter(|slot| self.is_party_slot_jailed(*slot))
+            .collect()
+    }
+
+    pub fn encoded(self) -> [u8; BLACKTHORN_STORY_STATE_LEN] {
+        let mut bytes = [0; BLACKTHORN_STORY_STATE_LEN];
+        bytes[0..4].copy_from_slice(&BLACKTHORN_STORY_STATE_MAGIC);
+        bytes[4..6].copy_from_slice(&self.jailed_slots_mask.to_le_bytes());
+        bytes[6] = self.captive_cell_counter;
+        bytes[7] = self.rescue_progression;
+        bytes[8] = self.capture_context;
+        bytes
+    }
+
+    pub fn decode(bytes: &[u8]) -> io::Result<Self> {
+        if bytes.len() != BLACKTHORN_STORY_STATE_LEN {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{BLACKTHORN_STORY_STATE_FILE} must be {BLACKTHORN_STORY_STATE_LEN} bytes, got {}",
+                    bytes.len()
+                ),
+            ));
+        }
+        if bytes[0..4] != BLACKTHORN_STORY_STATE_MAGIC[..] {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{BLACKTHORN_STORY_STATE_FILE} has an invalid signature"),
+            ));
+        }
+        Ok(Self {
+            jailed_slots_mask: u16::from_le_bytes([bytes[4], bytes[5]]),
+            captive_cell_counter: bytes[6],
+            rescue_progression: bytes[7],
+            capture_context: bytes[8],
+        })
+    }
+}
+
+pub fn load_blackthorn_story_state(game_dir: &Path) -> io::Result<BlackthornStoryState> {
+    match fs::read(game_dir.join(BLACKTHORN_STORY_STATE_FILE)) {
+        Ok(bytes) => BlackthornStoryState::decode(&bytes),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(BlackthornStoryState::default()),
+        Err(err) => Err(err),
+    }
+}
+
+pub fn write_blackthorn_story_state(
+    game_dir: &Path,
+    state: BlackthornStoryState,
+) -> io::Result<()> {
+    fs::write(game_dir.join(BLACKTHORN_STORY_STATE_FILE), state.encoded())
+}
+
+/// `blackthorn.md` section 7: scene byte the rescue/refuge path hands control
+/// to (`CASTLE:0`, Lord British's Castle, scene byte 17). Anchored
 /// to [`crate::SCENE_LORD_BRITISHS_CASTLE`] so the rescue handoff
 /// and the named scene constant share one source of truth.
 pub const BLACKTHORN_RESCUE_HANDOFF_SCENE: u8 = crate::SCENE_LORD_BRITISHS_CASTLE;
 
-/// `blackthorn.md §7`: local position (X, Y) the rescue path hands the
+/// `blackthorn.md` section 7: local position (X, Y) the rescue path hands the
 /// party to inside the rescue handoff scene.
 pub const BLACKTHORN_RESCUE_HANDOFF_X: u8 = 10;
 pub const BLACKTHORN_RESCUE_HANDOFF_Y: u8 = 10;
 
-/// `blackthorn.md §7`: the rescue path raises the shared moral-standing
+/// `blackthorn.md` section 7: the rescue path raises the shared moral-standing
 /// selector to at least this floor after printing the verdict.
 pub const BLACKTHORN_RESCUE_STANDING_FLOOR: u8 = 75;
 
-/// `blackthorn.md §6` cutscene-VM actor families. The audience and
+/// `blackthorn.md` section 6 cutscene-VM actor families. The audience and
 /// failure beats reference these slots by index when emitting
 /// movement descriptors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlackthornCutsceneActor {
-    /// Slot 0 — Avatar / party-leader presentation actor.
+    /// Slot 0: Avatar / party-leader presentation actor.
     Avatar,
-    /// Slot 1 — second party member; dragged-away victim of the
+    /// Slot 1: second party member; dragged-away victim of the
     /// failed-challenge punishment beat.
     SecondPartyMember,
-    /// Slot 6 — Blackthorn.
+    /// Slot 6: Blackthorn.
     Blackthorn,
-    /// Slot 7 — attendant or guard.
+    /// Slot 7: attendant or guard.
     Attendant,
-    /// Slot 8 — throne or throne-marker tile.
+    /// Slot 8: throne or throne-marker tile.
     Throne,
 }
 
 impl BlackthornCutsceneActor {
-    /// `blackthorn.md §6`: returns the cinematic actor slot index
+    /// `blackthorn.md` section 6: returns the cinematic actor slot index
     /// the script VM uses for this role.
     pub const fn slot_index(self) -> u8 {
         match self {
@@ -62,7 +167,7 @@ pub const BLACKTHORN_CUTSCENE_BLACKTHORN_TYPE: u8 = 0xf2;
 pub const BLACKTHORN_CUTSCENE_ATTENDANT_TYPE: u8 = 0xf3;
 pub const BLACKTHORN_CUTSCENE_THRONE_TYPE: u8 = 0xf4;
 
-/// `blackthorn.md §6`: clean semantic placements for the named
+/// `blackthorn.md` section 6: clean semantic placements for the named
 /// cutscene-VM actor slots. Exact tile art and byte-script pixel
 /// parity remain visual work, so non-Avatar roles use hidden tiles
 /// with distinct nonzero type tags instead of claiming final art ids.

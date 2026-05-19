@@ -958,7 +958,8 @@
         );
 
         assert!(state.active_blackthorn.is_none());
-        assert!(state.blackthorn_jailed_party_slots.contains(&0));
+        assert!(state.blackthorn_story.is_party_slot_jailed(0));
+        assert_eq!(state.blackthorn_story.captive_cell_counter, 1);
         assert_eq!(
             state.area,
             Area::Town {
@@ -974,6 +975,58 @@
             )
         );
         assert!(state.message.contains("Returned to Blackthorn's captive cell"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn blackthorn_story_state_codec_round_trips() {
+        let mut story = BlackthornStoryState {
+            jailed_slots_mask: 0,
+            captive_cell_counter: 3,
+            rescue_progression: 75,
+            capture_context: 2,
+        };
+        assert!(story.mark_party_slot_jailed(0));
+        assert!(story.mark_party_slot_jailed(15));
+        assert!(!story.mark_party_slot_jailed(16));
+
+        let decoded = BlackthornStoryState::decode(&story.encoded()).unwrap();
+
+        assert_eq!(decoded, story);
+        assert_eq!(decoded.jailed_party_slots(), vec![0, 15]);
+        assert!(BlackthornStoryState::decode(&[0; BLACKTHORN_STORY_STATE_LEN]).is_err());
+    }
+
+    #[test]
+    fn blackthorn_story_state_sidecar_save_load_round_trips() {
+        let dir = debug_game_dir();
+        let mut save = saved_game_seed_bytes(17, 0, 15, 15);
+        save[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        fs::write(dir.join(SAVED_GAM_FILENAME), save).unwrap();
+        fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+        let mut story = BlackthornStoryState {
+            jailed_slots_mask: 0,
+            captive_cell_counter: 2,
+            rescue_progression: 7,
+            capture_context: 3,
+        };
+        assert!(story.mark_party_slot_jailed(2));
+        write_blackthorn_story_state(&dir, story).unwrap();
+
+        let options = load_play_options_from_save(&dir).unwrap();
+        assert_eq!(options.blackthorn_story, story);
+        let mut state =
+            PlayState::load_town_scene(&dir, Scene::new(17).unwrap(), options).unwrap();
+        assert_eq!(state.blackthorn_story, story);
+
+        assert!(state.blackthorn_story.mark_party_slot_jailed(4));
+        state.blackthorn_story.captive_cell_counter = 5;
+        state.save_game_command(&dir, Some(true)).unwrap();
+
+        let reloaded = load_blackthorn_story_state(&dir).unwrap();
+        assert!(reloaded.is_party_slot_jailed(2));
+        assert!(reloaded.is_party_slot_jailed(4));
+        assert_eq!(reloaded.captive_cell_counter, 5);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1179,7 +1232,7 @@
             max_hp: 42,
             level: 3,
         });
-        state.blackthorn_jailed_party_slots.push(1);
+        state.blackthorn_story.mark_party_slot_jailed(1);
         state.moral_standing = 12;
 
         assert!(matches!(
@@ -1189,7 +1242,12 @@
         ));
 
         assert_eq!(state.moral_standing, BLACKTHORN_RESCUE_STANDING_FLOOR);
-        assert!(state.blackthorn_jailed_party_slots.is_empty());
+        assert!(state.blackthorn_story.jailed_party_slots().is_empty());
+        assert_eq!(state.blackthorn_story.captive_cell_counter, 1);
+        assert_eq!(
+            state.blackthorn_story.rescue_progression,
+            BLACKTHORN_RESCUE_STANDING_FLOOR
+        );
         assert_eq!(state.party[1].status, b'G');
         assert_eq!(state.party[1].hp, 42);
         assert_eq!(

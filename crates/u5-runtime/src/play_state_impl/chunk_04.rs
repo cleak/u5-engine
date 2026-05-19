@@ -1503,6 +1503,7 @@ impl PlayState {
             facing: Some(self.player.facing),
             pending_vehicle: None,
             inn_registry: self.inn_registry.clone(),
+            blackthorn_story: self.blackthorn_story,
             initial_britannia_overlay: self.world_overlays.get(WorldPlane::Britannia),
             debug_enter: self.debug_enter,
             saved_active_objects: None,

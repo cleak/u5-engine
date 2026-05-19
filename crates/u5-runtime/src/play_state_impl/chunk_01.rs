@@ -187,6 +187,7 @@ impl PlayState {
         write_saved_ool_mirrors_for_save(game_dir, &saved_ool, 0)?;
         fs::write(game_dir.join(SAVED_GAM_FILENAME), save)?;
         fs::write(game_dir.join(SAVED_OOL_FILENAME), saved_ool)?;
+        write_blackthorn_story_state(game_dir, self.blackthorn_story)?;
         Ok(())
     }
 
@@ -402,7 +403,7 @@ impl PlayState {
             endgame: None,
             active_blackthorn: None,
             blackthorn_audience_map: None,
-            blackthorn_jailed_party_slots: Vec::new(),
+            blackthorn_story: options.blackthorn_story,
             active_shop: None,
             common_word_dictionary: None,
             active_conversation: None,
@@ -613,7 +614,7 @@ impl PlayState {
             endgame: None,
             active_blackthorn: None,
             blackthorn_audience_map: None,
-            blackthorn_jailed_party_slots: Vec::new(),
+            blackthorn_story: options.blackthorn_story,
             active_shop: None,
             common_word_dictionary: None,
             active_conversation: None,
@@ -825,7 +826,7 @@ impl PlayState {
             endgame: None,
             active_blackthorn: None,
             blackthorn_audience_map: None,
-            blackthorn_jailed_party_slots: Vec::new(),
+            blackthorn_story: options.blackthorn_story,
             active_shop: None,
             common_word_dictionary: None,
             active_conversation: None,
