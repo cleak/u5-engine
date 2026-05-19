@@ -145,6 +145,15 @@ for N no-turn visual ticks:
 cargo run -- --play-script "d;empty;idle:4;q" --raster-diagnostics C:\Games\U5-Clean
 ```
 
+`--route-smoke` runs a bundled local-asset route suite covering default castle
+play, Britannia movement, Z-stats modal routing, debug-enter town/dungeon
+transitions, and dungeon exit refusal. It prints sanitized state lines and
+raster hashes:
+
+```powershell
+cargo run -- --route-smoke C:\Games\U5-Clean
+```
+
 `--play-script` can be combined with `--scene` and `--debug-enter` for
 transition plumbing while exact public overworld entrance coordinates remain
 unpublished:

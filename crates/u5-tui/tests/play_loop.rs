@@ -691,3 +691,43 @@ fn play_script_local_clean_smoke_runs_default_scene_when_present() {
         PlayInputDisposition::Quit
     );
 }
+
+#[test]
+fn route_smoke_cases_cover_representative_modes() {
+    let cases = route_smoke_cases();
+
+    assert!(cases.iter().any(|case| matches!(
+        case.expected,
+        RouteSmokeExpectation::World(WorldPlane::Britannia)
+    )));
+    assert!(
+        cases
+            .iter()
+            .any(|case| matches!(case.expected, RouteSmokeExpectation::Town(_)))
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| matches!(case.expected, RouteSmokeExpectation::Dungeon(_)))
+    );
+    assert!(cases.iter().any(|case| case.name == "debug-enter-castle"));
+    assert!(cases.iter().any(|case| case.name == "debug-enter-dungeon"));
+}
+
+#[test]
+fn route_smoke_local_clean_cases_run_when_present() {
+    let game_dir = Path::new(DEFAULT_GAME_DIR);
+    if !game_dir.join("CASTLE.DAT").exists() || !game_dir.join(TILES_EGA_FILE).exists() {
+        return;
+    }
+
+    let atlas = load_tile_atlas(game_dir, TileGraphicsDepth::Ega16).unwrap();
+    for case in route_smoke_cases() {
+        let report = run_route_smoke_case(game_dir, &atlas, &case).unwrap();
+        assert_eq!(report.name, case.name);
+        assert_eq!(report.commands_run, case.script.len());
+        assert!(report.final_state_line.contains("State:"));
+        assert!(report.final_raster_line.contains(case.expected_frame_kind));
+        assert!(report.final_raster_line.contains(" hash "));
+    }
+}

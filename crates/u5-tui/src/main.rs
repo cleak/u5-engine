@@ -4,7 +4,8 @@ use std::io;
 use u5_runtime::run_report;
 use u5_tui::{
     CLI_USAGE, CliArgs, parse_cli_args, run_create_character_command,
-    run_interactive_create_character, run_intro_menu_loop, run_play_loop, run_save_frame,
+    run_interactive_create_character, run_intro_menu_loop, run_play_loop, run_route_smoke,
+    run_save_frame,
 };
 
 fn main() -> io::Result<()> {
@@ -43,6 +44,9 @@ fn main() -> io::Result<()> {
             args.play_script,
             out,
         );
+    }
+    if args.route_smoke {
+        return run_route_smoke(&args.game_dir, args.raster_depth);
     }
     if args.visual {
         return run_visual(args);

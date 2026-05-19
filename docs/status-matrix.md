@@ -4,7 +4,7 @@ This matrix summarizes current implementation status against the active
 full-game goal. It is intentionally evidence-oriented: passing tests are useful
 only for the behavior they actually cover.
 
-Last refreshed on 2026-05-19 during the Bevy fixed-font status surface work.
+Last refreshed on 2026-05-19 during the route-smoke harness work.
 
 | Area | Current status | Evidence | Remaining risk |
 |---|---|---|---|
@@ -17,7 +17,7 @@ Last refreshed on 2026-05-19 during the Bevy fixed-font status surface work.
 | Shops | Arms, healers, inns, taverns, sages, reagent sellers, guilds, shipwrights, horse traders, and companion flows are modeled. | `shop_runtime` tests and end-to-end talk/shop tests in chunk 21. | Exact bark layout/pacing and every shop content edge should continue to be audited. |
 | Conversations | TLK runner, keyword loop, scoped prompts, action dispatch, shop routing, and dictionary expansion are implemented without committing transcripts. | `conversation_session`, `tlk_runner`, and chunk 21 tests. | Content-specific side effects and NPC memory flags need continuing audit. |
 | Save/load | Known save fields, active objects, spell/reagent stock, transport markers, overlays, dungeon working buffer, and mirror files are covered. | Save/load tests in chunks 03, 12, 23. | Unknown byte preservation must be kept when adding new durable fields. |
-| Rendering | TUI text/raster diagnostics, headless `--save-frame` PNG capture, Bevy atlas-backed views, and a fixed-cell text-window runtime surface exist for world, town, dungeon, combat, intro, status, and modal panels. Bevy gameplay status renders the shared text-window surface through the runtime-loaded `IBM.CH` font into a texture. | Raster hash smoke notes in `TODO.md`; text-window and fixed-font renderer tests in chunks 13 and 14; `u5-tui` save-frame/play-loop tests; Bevy crate tests/build path. | Representative screenshot baselines across all modes are incomplete; exact original modal rectangles and full UI composition parity remain presentation work. |
+| Rendering | TUI text/raster diagnostics, headless `--save-frame` PNG capture, Bevy atlas-backed views, route-smoke scripted hashes, and a fixed-cell text-window runtime surface exist for world, town, dungeon, combat, intro, status, and modal panels. Bevy gameplay status renders the shared text-window surface through the runtime-loaded `IBM.CH` font into a texture. | Raster hash smoke notes in `TODO.md`; text-window and fixed-font renderer tests in chunks 13 and 14; `u5-tui` save-frame/play-loop/route-smoke tests; Bevy crate tests/build path. | Representative screenshot baselines across all modes are incomplete; exact original modal rectangles and full UI composition parity remain presentation work. |
 | Clean-room hygiene | Runtime reads local assets; repo excludes game assets and generated raw dumps. | `.gitignore`, report policy, parser tests, clean status checks. | Continue reviewing any new reports or fixtures before commit. |
 
 ## Current Verification Baseline
@@ -35,7 +35,7 @@ For visual/raster work, also run at least one scripted raster smoke and one Bevy
 scene launch with local assets:
 
 ```powershell
-cargo run -- --play-script "idle:1;q" --raster-diagnostics C:\Games\U5-Clean
+cargo run -- --route-smoke C:\Games\U5-Clean
 cargo run -- --save-frame screenshots\britannia.png --scene BRITANNIA C:\Games\U5-Clean
 cargo run --features visual -- --visual --scene BRITANNIA C:\Games\U5-Clean
 ```

@@ -6,6 +6,7 @@
 pub mod cli;
 pub mod intro_loop;
 pub mod play_loop;
+pub mod route_smoke;
 pub mod save_frame;
 
 pub use cli::{
@@ -23,5 +24,9 @@ pub use play_loop::{
     print_play_frame, print_play_script_snapshot, raster_diagnostic_line, raster_frame_kind,
     replay_play_script_commands, run_play_loop, run_play_script_commands,
     unclassified_escape_sequence,
+};
+pub use route_smoke::{
+    RouteSmokeCase, RouteSmokeExpectation, RouteSmokeReport, route_smoke_cases, run_route_smoke,
+    run_route_smoke_case,
 };
 pub use save_frame::run_save_frame;

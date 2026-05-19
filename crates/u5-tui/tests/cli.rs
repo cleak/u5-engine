@@ -290,6 +290,32 @@ fn cli_parser_accepts_play_script_and_implies_play_mode() {
 }
 
 #[test]
+fn cli_parser_accepts_route_smoke_mode() {
+    let args = parse_cli_args([
+        "--route-smoke",
+        "--raster-depth",
+        "cga",
+        r"C:\Games\U5-Clean",
+    ])
+    .unwrap();
+
+    assert!(args.route_smoke);
+    assert!(!args.play);
+    assert!(!args.visual);
+    assert_eq!(args.raster_depth, TileGraphicsDepth::Cga4);
+    assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
+}
+
+#[test]
+fn cli_route_smoke_rejects_other_play_modes_and_overrides() {
+    assert!(parse_cli_args(["--route-smoke", "--play"]).is_err());
+    assert!(parse_cli_args(["--route-smoke", "--visual"]).is_err());
+    assert!(parse_cli_args(["--route-smoke", "--save-frame", "frame.png"]).is_err());
+    assert!(parse_cli_args(["--route-smoke", "--scene", "BRITANNIA"]).is_err());
+    assert!(parse_cli_args(["--route-smoke", "--wind", "north"]).is_err());
+}
+
+#[test]
 fn cli_parser_accepts_save_frame_with_script_and_scene_options() {
     let args = parse_cli_args([
         "--save-frame",
@@ -580,6 +606,7 @@ fn cli_create_character_rejects_incomplete_or_play_combined_invocations() {
 fn cli_usage_lists_documented_smoke_commands() {
     assert!(CLI_USAGE.contains("--play"));
     assert!(CLI_USAGE.contains("--play-script"));
+    assert!(CLI_USAGE.contains("--route-smoke"));
     assert!(CLI_USAGE.contains("--scene"));
     assert!(CLI_USAGE.contains("--floor"));
     assert!(CLI_USAGE.contains("--create-character"));

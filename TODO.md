@@ -20,15 +20,18 @@ Last known verification state:
 - `cargo fmt -- --check` passed on 2026-05-19 after the latest Rust changes.
 - Representative raster smoke checks with local assets produced nonblank hashes:
   `BRITANNIA` top-down `fd923dc0f87a9f3c`, `BRITANNIA` after movement
-  `1eb882f27b1d216c`, `CASTLE:0` top-down `be84488b7b199310`, and
-  `DUNGEON:0` first-person `161ad48dd2a91725`.
+  `1eb882f27b1d216c`, route-smoke Britannia movement `bef4c9fc1eecf9fb`,
+  `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
+  `161ad48dd2a91725`.
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
+  2026-05-19 with six scripted route cases.
 - Bevy visual screenshot smoke with local assets produced a nonblank
   `792x1182` PNG at `target\codex-fixed-font-status-smoke.png`.
 - `--save-frame <PATH>` is the current headless PNG capture path for local
   asset visual checks.
 - `cargo run -- --help` is a supported no-asset usage path.
-- The latest checkpointed engine commit at the time of this refresh was
-  `1664e1a Bridge frontends to text window surface`.
+- The latest checkpointed engine commit at the time of this refresh was the
+  route-smoke harness commit.
 - The spec checkout used for the most recent audit was `5b816cc Complete
   cleanroom specification`.
 
@@ -174,7 +177,7 @@ non-combat-first version before moving into Bevy.
     - replace sidecar-only transition coordinates where public default tables
       become available,
     - verify every vehicle transport against public passability rules,
-    - add more route-level smoke scripts that cross multiple transition types,
+    - continue expanding route-smoke scripts across more transition types,
     - audit horse stride edge cases around hazards, moongates, and encounters.
 
 - Town movement.

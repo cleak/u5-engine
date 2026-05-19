@@ -31,6 +31,7 @@ pub struct CliArgs {
     pub visual: bool,
     pub raster_diagnostics: bool,
     pub raster_depth: TileGraphicsDepth,
+    pub route_smoke: bool,
     pub play_script: Option<Vec<String>>,
     pub game_dir: PathBuf,
     pub play_options: PlayOptions,
@@ -62,6 +63,7 @@ where
     let mut visual = false;
     let mut raster_diagnostics = false;
     let mut raster_depth = TileGraphicsDepth::Ega16;
+    let mut route_smoke = false;
     let mut play_script = None;
     let mut game_dir = None;
     let mut options = PlayOptions::default();
@@ -110,6 +112,7 @@ where
                 }
             }
             "--raster-diagnostics" => raster_diagnostics = true,
+            "--route-smoke" => route_smoke = true,
             "--raster-depth" => {
                 let value = args.next().ok_or_else(|| {
                     io::Error::new(
@@ -262,6 +265,7 @@ where
             visual: false,
             raster_diagnostics: false,
             raster_depth,
+            route_smoke: false,
             play_script: None,
             game_dir,
             play_options: PlayOptions::default(),
@@ -277,18 +281,41 @@ where
             "--from-save and --from-init are mutually exclusive",
         ));
     }
-    if intro && (play || save_frame.is_some() || from_save || from_init) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "--intro owns the title/menu flow; it cannot be combined with play, save-frame, from-save, or from-init",
-        ));
-    }
-    if create_character_interactive
-        && (intro || play || visual || save_frame.is_some() || from_save || from_init)
+    if route_smoke
+        && (play
+            || visual
+            || save_frame.is_some()
+            || from_save
+            || from_init
+            || options != PlayOptions::default()
+            || wind_override.is_some()
+            || climbing_gear_override.is_some()
+            || pending_vehicle_override.is_some()
+            || transport_override.is_some())
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--create-character-interactive writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, save-frame, from-save, or from-init",
+            "--route-smoke runs its own scripted scenes; it cannot be combined with play, visual, save-frame, from-save, from-init, scene, start, or gameplay overrides",
+        ));
+    }
+    if intro && (play || save_frame.is_some() || route_smoke || from_save || from_init) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--intro owns the title/menu flow; it cannot be combined with play, route-smoke, save-frame, from-save, or from-init",
+        ));
+    }
+    if create_character_interactive
+        && (intro
+            || play
+            || visual
+            || save_frame.is_some()
+            || route_smoke
+            || from_save
+            || from_init)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--create-character-interactive writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, route-smoke, save-frame, from-save, or from-init",
         ));
     }
     if create_character_interactive && create_character_name.is_some() {
@@ -299,10 +326,11 @@ where
     }
 
     let create_character = if let Some(name) = create_character_name {
-        if intro || play || visual || save_frame.is_some() || from_save || from_init {
+        if intro || play || visual || save_frame.is_some() || route_smoke || from_save || from_init
+        {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "--create-character writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, save-frame, from-save, or from-init",
+                "--create-character writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, route-smoke, save-frame, from-save, or from-init",
             ));
         }
         let male = create_character_male.ok_or_else(|| {
@@ -361,6 +389,7 @@ where
         visual,
         raster_diagnostics,
         raster_depth,
+        route_smoke,
         play_script,
         game_dir,
         play_options: options,
@@ -401,6 +430,7 @@ OPTIONS:
         --gender <G>          male|female for --create-character.
         --chargen-winners <V> Seven comma-separated winning virtues for chargen.
         --raster-diagnostics  Emit per-frame raster diagnostics.
+        --route-smoke         Run route-level scripted smoke cases and exit.
         --raster-depth <D>    ega|cga (default ega).
         --visual              Launch the Bevy visual harness.
                               Requires building with `--features visual`.
@@ -413,6 +443,7 @@ SMOKE COMMANDS:
     cargo run -- C:\\Games\\U5-Clean
     cargo run -- --play C:\\Games\\U5-Clean
     cargo run -- --play-script \"z;q\" C:\\Games\\U5-Clean
+    cargo run -- --route-smoke C:\\Games\\U5-Clean
     cargo run -- --play --scene DUNGEON:0 --floor 0 C:\\Games\\U5-Clean
     cargo run -- --create-character Avatar --gender male --chargen-winners Honesty,Compassion,Valor,Justice,Sacrifice,Honor,Spirituality C:\\Games\\U5-Clean
     cargo run --features visual -- --visual --scene BRITANNIA C:\\Games\\U5-Clean
