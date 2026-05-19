@@ -2486,12 +2486,12 @@ impl PlayState {
             self.town_exit_tile_at(game_dir, scene, floor, self.player.x, self.player.y, tile)?
         {
             let pre_effect_message = self.message.clone();
-            let outcome = self.resolve_town_exit_tile_after_turn(game_dir, scene, floor, entry)?;
-            let transition_message = self.message.clone();
+            let outcome = self.start_town_exit_prompt(entry, false);
+            let prompt_message = self.message.clone();
             self.message = if pre_effect_message.is_empty() {
-                transition_message
+                prompt_message
             } else {
-                format!("{pre_effect_message} {transition_message}")
+                format!("{pre_effect_message} {prompt_message}")
             };
             return Ok(Some(outcome));
         }

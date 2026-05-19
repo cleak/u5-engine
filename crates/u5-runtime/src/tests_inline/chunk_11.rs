@@ -540,8 +540,9 @@
     }
 
     #[test]
-    fn consumed_top_down_action_on_clean_town_exit_tile_applies_underfoot_exit() {
+    fn consumed_top_down_action_on_clean_town_exit_tile_prompts_then_exits_on_accept() {
         let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
         write_castle_exit_tile_fixture(&dir);
         let mut state = town_exit_tile_origin_state();
 
@@ -553,6 +554,29 @@
 
         assert_eq!(
             state.area,
+            Area::Town { scene, floor: 0 }
+        );
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("Ignited a torch"));
+        assert!(state.message.contains("Leave CASTLE:0?"));
+        assert!(matches!(
+            state.active_yes_no_prompt,
+            Some(YesNoPromptSession {
+                kind: YesNoPromptKind::TownExit {
+                    entry,
+                    advance_turn: false
+                }
+            }) if entry.scene == scene && entry.floor == 0 && entry.x == 1 && entry.y == 1
+        ));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(
+            state.area,
             Area::World {
                 plane: WorldPlane::Britannia
             }
@@ -560,7 +584,6 @@
         assert_eq!((state.player.x, state.player.y), (10, 20));
         assert_eq!(state.active_objects[0].z, 0);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Ignited a torch"));
         assert!(state.message.contains("town exit tile"));
         assert!(state.message.contains("world-location table point"));
         assert_eq!(
@@ -598,7 +621,7 @@
     }
 
     #[test]
-    fn pass_turn_on_clean_town_exit_tile_applies_underfoot_exit() {
+    fn pass_turn_on_clean_town_exit_tile_prompt_can_be_refused() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
         write_castle_exit_tile_fixture(&dir);
@@ -606,26 +629,40 @@
 
         assert_eq!(
             state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
-            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+            MoveOutcome::Observed
         );
 
-        assert_eq!(
-            state.area,
-            Area::World {
-                plane: WorldPlane::Britannia
-            }
-        );
-        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!((state.player.x, state.player.y), (1, 1));
         assert_eq!(state.active_objects[0].z, 0);
         assert_eq!(state.turn, 1);
         assert!(state.message.starts_with("Passed."));
-        assert!(state.message.contains("town exit tile"));
-        assert!(state.message.contains("world-location table point"));
+        assert!(state.message.contains("Leave CASTLE:0?"));
+        assert!(matches!(
+            state.active_yes_no_prompt,
+            Some(YesNoPromptSession {
+                kind: YesNoPromptKind::TownExit {
+                    entry,
+                    advance_turn: false
+                }
+            }) if entry.scene == scene && entry.floor == 0 && entry.x == 1 && entry.y == 1
+        ));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'N', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.active_yes_no_prompt, None);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "No.");
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn pass_turn_on_native_town_exit_threshold_tile_applies_underfoot_exit() {
+    fn pass_turn_on_native_town_exit_threshold_tile_prompts_then_exits_on_accept() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
         fs::write(
@@ -639,7 +676,27 @@
 
         assert_eq!(
             state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
-            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+            MoveOutcome::Observed
+        );
+
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.turn, 1);
+        assert!(state.message.starts_with("Passed."));
+        assert!(state.message.contains("Leave CASTLE:0?"));
+        assert!(matches!(
+            state.active_yes_no_prompt,
+            Some(YesNoPromptSession {
+                kind: YesNoPromptKind::TownExit {
+                    entry,
+                    advance_turn: false
+                }
+            }) if entry.scene == scene && entry.floor == 0 && entry.x == 1 && entry.y == 1
+        ));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'Y', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
         );
 
         assert_eq!(
@@ -650,7 +707,6 @@
         );
         assert_eq!((state.player.x, state.player.y), (10, 20));
         assert_eq!(state.turn, 1);
-        assert!(state.message.starts_with("Passed."));
         assert!(state.message.contains("town exit tile"));
         let _ = fs::remove_dir_all(dir);
     }
