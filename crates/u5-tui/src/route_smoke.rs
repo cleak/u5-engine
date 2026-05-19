@@ -7,9 +7,10 @@ use std::io;
 use std::path::Path;
 
 use u5_runtime::{
-    Area, DungeonScene, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, PEER_COST,
-    PEER_SPELL_INDEX, PlayOptions, PlayState, PlayTarget, Scene, TileGraphicsDepth, TransportState,
-    WindState, WorldPlane, X_RAY_COST, X_RAY_SPELL_INDEX, load_tile_atlas,
+    Area, DungeonScene, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, GameClock,
+    PEER_COST, PEER_SPELL_INDEX, PlayOptions, PlayState, PlayTarget, SPECIAL_ITEM_OWNED_VALUE,
+    SPECIAL_ITEM_SPYGLASS_INDEX, Scene, TileGraphicsDepth, TransportState, WindState, WorldPlane,
+    X_RAY_COST, X_RAY_SPELL_INDEX, load_tile_atlas,
 };
 
 use crate::{
@@ -130,6 +131,13 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
     let mut britannia_view = world.clone();
     britannia_view.gems = 1;
 
+    let mut britannia_spyglass = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        clock: GameClock::new(20, 0).expect("20:00 is a valid game-clock time"),
+        ..PlayOptions::default()
+    };
+    britannia_spyglass.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+
     let mut castle_view = PlayOptions::default();
     castle_view.gems = 1;
 
@@ -181,6 +189,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             name: "britannia-view-overlay",
             options: britannia_view,
             script: &["v"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 0,
+            expected_frame_kind: "view overlay",
+        },
+        RouteSmokeCase {
+            name: "britannia-spyglass-chunk-map",
+            options: britannia_spyglass,
+            script: &["USP"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 0,
             expected_frame_kind: "view overlay",

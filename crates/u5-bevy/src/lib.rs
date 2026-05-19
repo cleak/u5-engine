@@ -18,15 +18,16 @@ use image::{ImageBuffer, Rgba};
 use u5_runtime::{
     BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB, COMBAT_ARENA_SIDE, ChargenSession,
     ChargenSessionResult, ChargenSessionStep, DungeonScene, EGA_PALETTE_RGB, FixedCellFont,
-    GraphicImage, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
-    INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y,
-    INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA,
-    IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
-    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    GameClock, GraphicImage, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X,
+    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_6_EXTRA_ART_X,
+    INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
+    INTRO_STORY6_SECONDARY_Y_DELTA, IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX,
+    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, PLAY_MUSIC_TOGGLE_KEY,
     PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
-    RTV_COMMAND_STREAM_BYTES, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
-    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, StoryRecords, TEXT_SCREEN_ROWS,
+    RTV_COMMAND_STREAM_BYTES, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX,
+    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
+    STATS_PANEL_TEXT_WINDOW_INDEX, Scene, StoryRecords, TEXT_SCREEN_ROWS,
     TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
     TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
@@ -383,6 +384,21 @@ fn visual_gameplay_frame_cases() -> Vec<VisualGameplayFrameCase> {
             configure: Some(|state| {
                 state.gems = 1;
                 state.view_gem();
+            }),
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "britannia-chunk-map-overlay",
+            frame_kind: "visual view overlay frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            inputs: None,
+            configure: Some(|state| {
+                state.clock = GameClock::new(20, 0).expect("20:00 is a valid game-clock time");
+                state.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+                state.use_spyglass();
             }),
             synthetic_combat: false,
         },
@@ -3441,7 +3457,7 @@ mod tests {
         let reports = visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
         let has_story = game_dir.join(STORY_DAT_FILE).exists();
-        assert_eq!(reports.len(), if has_story { 16 } else { 15 });
+        assert_eq!(reports.len(), if has_story { 17 } else { 16 });
         for report in &reports {
             assert!(report.path.exists());
             assert!(report.nonblack_pixels > 0);
@@ -3455,6 +3471,7 @@ mod tests {
             "combat-play",
             "surface-view-overlay",
             "dungeon-view-overlay",
+            "britannia-chunk-map-overlay",
             "peer-view-overlay",
             "x-ray-view-overlay",
             "z-stats-modal",
@@ -3494,6 +3511,7 @@ mod tests {
         assert!(manifest.contains("combat-play"));
         assert!(manifest.contains("surface-view-overlay"));
         assert!(manifest.contains("dungeon-view-overlay"));
+        assert!(manifest.contains("britannia-chunk-map-overlay"));
         assert!(manifest.contains("peer-view-overlay"));
         assert!(manifest.contains("x-ray-view-overlay"));
         assert!(manifest.contains("z-stats-modal"));

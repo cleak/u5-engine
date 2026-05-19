@@ -24,9 +24,10 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-19 with 44 scripted route cases covering world/town look and
-  save-refusal prompts, surface/town/dungeon View overlays, Peer and X-Ray
-  overlays, Underworld startup, debug-entered town return to world,
+  2026-05-19 with 45 scripted route cases covering world/town look and
+  save-refusal prompts, surface/town/dungeon View overlays, Spyglass
+  Britannia chunk-map overlay (`2ea15622716e09aa`), Peer and X-Ray overlays,
+  Underworld startup, debug-entered town return to world,
   Underworld-to-town debug entry, ship X-it/skiff launch, hoisted-sail movement,
   dungeon turn/block movement, dungeon exit confirmation/refusal, a Doom room
   trigger that enters a combat raster viewport, dungeon Attack/Search/Get/
@@ -44,15 +45,16 @@ Last known verification state:
   `bf7a428a4b00ad2b`, `z-stats-modal` `61b033bfa2488b46`, and
   `endgame-status` `532cb7f1bdd03ffd`.
 - `cargo run -p u5-tui --features visual -- --visual-frame-suite
-  target\codex-intro-finished-menu-suite C:\Games\U5-Clean` passed on
-  2026-05-19 and wrote sixteen nonblank Bevy-owned PNGs plus a sanitized
+  target\codex-britannia-chunk-map-suite C:\Games\U5-Clean` passed on
+  2026-05-19 and wrote seventeen nonblank Bevy-owned PNGs plus a sanitized
   manifest:
   `world-play` `f68b906acde0bd4a`, `world-after-step`
   `b9720ab18affa566`, `town-play` `2beb3b7734800e11`,
   `dungeon-play` `67e7e116d8be67aa`, `dungeon-dark`
   `29289813c0f0397c`, `combat-play` `9b1937b3e807ba05`,
   `surface-view-overlay` `c82bbd585b1d8f6b`, `dungeon-view-overlay`
-  `e995f913cb07aca2`, `peer-view-overlay` `34e217c3c9fdc23c`,
+  `e995f913cb07aca2`, `britannia-chunk-map-overlay`
+  `2e843bf012b76297`, `peer-view-overlay` `34e217c3c9fdc23c`,
   `x-ray-view-overlay` `34e217c3c9fdc23c`, `z-stats-modal`
   `bee4e11801862ad1`, `endgame-status` `a2362c168f42d288`,
   `intro-menu` `74547d4e4d487e9c`, `intro-finished-menu`
@@ -114,10 +116,11 @@ Current worktree context when this TODO was refreshed:
   but the exact public roll odds and per-member semantics are blocked on clean
   spec clarification in `cleak/u5-spec#51`.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
-  using clean return metadata in memory, an Underworld-to-castle entry, and
-  seeded ship/skiff sailing routes, plus broader dungeon and combat command
-  branches; native exact coordinate-table coverage still depends on public
-  gazetteer/sidecar rows.
+  using clean return metadata in memory, an Underworld-to-castle entry,
+  seeded ship/skiff sailing routes, and a Spyglass-triggered Britannia
+  chunk-map overlay, plus broader dungeon and combat command branches; native
+  exact coordinate-table coverage still depends on public gazetteer/sidecar
+  rows.
 - Combat AI now threads party-name faction grouping into live target scans,
   applies wound morale/flee inversion in production turns, honors Doom and
   Shadow Lord suppression-filter bypasses, mutates non-party Sleep Field

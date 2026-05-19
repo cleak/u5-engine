@@ -741,6 +741,11 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "britannia-view-overlay")
     );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "britannia-spyglass-chunk-map")
+    );
     assert!(cases.iter().any(|case| case.name == "castle-save-refusal"));
     assert!(cases.iter().any(|case| case.name == "castle-view-overlay"));
     assert!(cases.iter().any(|case| case.name == "castle-peer-overlay"));
