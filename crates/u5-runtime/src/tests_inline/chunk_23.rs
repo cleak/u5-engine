@@ -11793,6 +11793,75 @@
     }
 
     #[test]
+    fn combat_step_post_field_contact_applies_without_consuming_marker() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: 1,
+            status: b'G',
+            climb_stat: 0,
+            mana: 0,
+            hp: 20,
+            max_hp: 20,
+            level: 1,
+        }];
+        state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            3,
+            3,
+        ]);
+        state.active_objects[0] = ActiveObject {
+            type_byte: PLAYER_TILE,
+            tile: PLAYER_TILE,
+            x: 3,
+            y: 3,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+        state.active_objects[1] = ActiveObject {
+            type_byte: COMBAT_FIELD_KIND_FIRE,
+            tile: COMBAT_FIELD_KIND_FIRE,
+            x: 4,
+            y: 3,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+
+        let outcome = state.apply_combat_step_or_attack_primitive(0, 1, COMBAT_DIRECTION_EAST, true);
+
+        assert!(outcome.committed_movement());
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (4, 3));
+        assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (4, 3));
+        assert_eq!(state.party[0].hp, 13);
+        assert_eq!(state.party[0].status, b'G');
+        assert_eq!(
+            state.active_objects[1],
+            ActiveObject {
+                type_byte: COMBAT_FIELD_KIND_FIRE,
+                tile: COMBAT_FIELD_KIND_FIRE,
+                x: 4,
+                y: 3,
+                z: 0,
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            }
+        );
+        assert!(state.visibility_dirty);
+    }
+
+    #[test]
     fn combat_round_counter_state_wrapper_updates_byte_and_marks_wrap_redraw() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_round_counter = COMBAT_ROUND_COUNTER_WRAP - 2;

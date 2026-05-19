@@ -65,6 +65,12 @@ pub const COMBAT_SPLIT_PLACEMENT_ATTEMPTS: u8 = 8;
 /// roll subtracts a random value driven by this byte.
 pub const CHARACTER_DEFENSE_FACTORY_SEED: u8 = 7;
 
+/// Field-marker contact reached from the terrain/effect hook is not owned by
+/// a caster slot. Use an out-of-range sentinel so the shared contact helper
+/// does not treat the actor stepping onto the marker as the spell's active
+/// caster.
+pub const COMBAT_FIELD_CONTACT_NO_ACTIVE_SKIP_SLOT: usize = COMBAT_ACTOR_SLOTS;
+
 /// `combat.md §11` step-or-attack direction codes. The world-mode
 /// loops and the combat dispatcher share this mapping: `1 = west`,
 /// `2 = east`, `3 = north`, `4 = south`. Code `0` (or any value out
@@ -565,6 +571,37 @@ impl PlayState {
         spell_index: usize,
     ) -> u8 {
         self.active_target_combat_spell_defense_roll(caster_index, target_slot, spell_index)
+    }
+
+    pub fn combat_arena_field_post_step_poison_damage_roll(
+        &self,
+        actor_slot: usize,
+        field: CombatArenaFieldKind,
+    ) -> u8 {
+        (self.turn as u8)
+            .wrapping_add((actor_slot as u8).wrapping_mul(5))
+            .wrapping_add(field.kind_byte())
+    }
+
+    pub fn combat_arena_field_post_step_fire_damage_roll(
+        &self,
+        actor_slot: usize,
+        field: CombatArenaFieldKind,
+    ) -> u8 {
+        (self.turn as u8)
+            .wrapping_add((actor_slot as u8).wrapping_mul(7))
+            .wrapping_add(field.kind_byte())
+    }
+
+    pub fn combat_arena_field_post_step_defense_roll(
+        &self,
+        actor_slot: usize,
+        field: CombatArenaFieldKind,
+    ) -> u8 {
+        (self.turn as u8)
+            .wrapping_add((actor_slot as u8).wrapping_mul(3))
+            .wrapping_add(field.kind_byte())
+            & 0x07
     }
 
     pub fn apply_combat_arena_field_placement(
@@ -1388,6 +1425,7 @@ impl PlayState {
         );
         if movement_commit.is_some() {
             self.mark_visibility_dirty();
+            let _ = self.apply_combat_arena_field_contact_for_actor_position(actor_slot);
         }
         let movement_direction_code = match movement {
             CombatAiMovementOutcome::Step { direction_code, .. } => Some(direction_code),
@@ -2333,6 +2371,32 @@ impl PlayState {
         })
     }
 
+    pub fn apply_combat_arena_field_contact_for_actor_position(
+        &mut self,
+        actor_slot: usize,
+    ) -> Option<CombatArenaFieldContactApplication> {
+        let actor = self.combat_actors.get(actor_slot).copied()?;
+        if !combat_actor_is_active_not_dead(actor) {
+            return None;
+        }
+        let (_, field) = self.find_combat_arena_field_marker(actor.x, actor.y)?;
+        let poison_damage_roll =
+            self.combat_arena_field_post_step_poison_damage_roll(actor_slot, field);
+        let fire_damage_roll =
+            self.combat_arena_field_post_step_fire_damage_roll(actor_slot, field);
+        let defense_roll = self.combat_arena_field_post_step_defense_roll(actor_slot, field);
+        let application = self.apply_combat_arena_field_contact(
+            field,
+            COMBAT_FIELD_CONTACT_NO_ACTIVE_SKIP_SLOT,
+            actor_slot,
+            poison_damage_roll,
+            fire_damage_roll,
+            defense_roll,
+        )?;
+        self.mark_visibility_dirty();
+        Some(application)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn resolve_and_apply_combat_equipment_weapon_attack(
         &mut self,
@@ -3256,6 +3320,7 @@ impl PlayState {
         );
         if outcome.committed_movement() {
             self.mark_visibility_dirty();
+            let _ = self.apply_combat_arena_field_contact_for_actor_position(moving_slot);
         }
         outcome
     }
