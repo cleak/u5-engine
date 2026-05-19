@@ -770,6 +770,16 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "endgame-missing-box-confirmation")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "endgame-box-victory-confirmation")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "virtue-town-shadowlord-entry")
     );
     assert!(

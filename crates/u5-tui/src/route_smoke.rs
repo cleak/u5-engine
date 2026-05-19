@@ -303,6 +303,22 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "endgame-missing-box-confirmation",
+            options: PlayOptions::default(),
+            script: &["Y", "Y"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "endgame-box-victory-confirmation",
+            options: PlayOptions::default(),
+            script: &["Y", "Y", "empty"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "virtue-town-shadowlord-entry",
             options: shadowlord_town_entry,
             script: &[],
@@ -655,6 +671,7 @@ pub fn run_route_smoke_case(
     case: &RouteSmokeCase,
 ) -> io::Result<RouteSmokeReport> {
     let mut state = PlayState::load_scene(game_dir, case.options.clone())?;
+    apply_route_smoke_case_setup(&mut state, case.name);
     let commands = case
         .script
         .iter()
@@ -702,6 +719,19 @@ pub fn run_route_smoke_case(
         final_state_line: play_script_state_line(&state),
         final_raster_line,
     })
+}
+
+fn apply_route_smoke_case_setup(state: &mut PlayState, case_name: &str) {
+    match case_name {
+        "endgame-missing-box-confirmation" => {
+            state.enter_endgame();
+        }
+        "endgame-box-victory-confirmation" => {
+            state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+            state.enter_endgame();
+        }
+        _ => {}
+    }
 }
 
 fn require_raster_hash(case: &RouteSmokeCase, raster: &str) -> io::Result<()> {
