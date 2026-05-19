@@ -550,10 +550,9 @@ impl PlayState {
             )
     }
 
-    fn combat_ai_morale_roll(&self, actor_slot: usize) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((actor_slot as u8).wrapping_mul(29))
-            .wrapping_add(self.combat_round_counter)
+    fn combat_ai_morale_roll(&mut self, actor_slot: usize) -> u8 {
+        let _ = actor_slot;
+        self.random_range_u8(0, u8::MAX)
     }
 
     fn combat_ai_actor_fleeing(&mut self, actor_slot: usize) -> bool {
@@ -563,13 +562,16 @@ impl PlayState {
         if actor_slot < COMBAT_PARTY_ACTOR_SLOTS || !combat_actor_is_active_not_dead(actor) {
             return false;
         }
-        let Some(morale) = resolve_combat_wound_morale_for_class(
-            actor.hp_or_wound,
-            actor.owner_target_class,
-            self.combat_ai_morale_roll(actor_slot),
-        ) else {
+        let Some(stats) = combat_class_stats(actor.owner_target_class) else {
             return actor.is_fleeing();
         };
+        let bucket = combat_wound_score_bucket(actor.hp_or_wound, stats.max_hp);
+        let morale_roll = if matches!(bucket, CombatWoundScoreBucket::OneQuarterToUnderHalf) {
+            self.combat_ai_morale_roll(actor_slot)
+        } else {
+            0
+        };
+        let morale = resolve_combat_wound_morale(actor.hp_or_wound, stats.max_hp, morale_roll);
         self.combat_actors[actor_slot].set_fleeing(morale.fleeing);
         morale.fleeing
     }
@@ -1383,7 +1385,7 @@ impl PlayState {
                 actor.x,
                 actor.y,
                 step_vector,
-                self.combat_ai_summon_roll(actor_slot),
+                summon_roll,
             );
             for candidate in summon_candidate_coordinates.iter().copied() {
                 if !directional_candidates.contains(&candidate) {
@@ -2605,7 +2607,7 @@ impl PlayState {
     }
 
     pub fn combat_monster_amulet_turning_scatter_applies(
-        &self,
+        &mut self,
         attacker_slot: usize,
         target_slot: usize,
     ) -> bool {
@@ -2618,14 +2620,14 @@ impl PlayState {
         let Some(target) = self.party.get(target_slot).copied() else {
             return false;
         };
-        let Some(equipment) = self.party_equipment.get(target_slot) else {
+        let Some(equipment) = self.party_equipment.get(target_slot).copied() else {
             return false;
         };
         let roll = self.combat_monster_amulet_turning_roll(attacker_slot, target_slot);
         resolve_amulet_turning_scatter_for_party_target(
             attacker.owner_target_class,
             target,
-            equipment,
+            &equipment,
             roll,
         )
         .unwrap_or(false)
@@ -3180,15 +3182,73 @@ impl PlayState {
             };
         }
 
-        let possess_target_slot = self.combat_ai_possess_target_slot_roll(slot);
-        let possess_candidate_reaches_resistance =
-            self.combat_ai_possess_candidate_reaches_resistance_from_roll(possess_target_slot);
-        let possess_resistance_blocks =
-            self.combat_ai_possess_resistance_blocks(slot, possess_target_slot);
-        let summon_candidate_coordinates = self.combat_ai_summon_candidate_coordinates(slot);
-        let random_cardinal_direction_codes = self.combat_ai_random_cardinal_direction_codes(slot);
-        let monster_attack_inputs = self.combat_monster_attack_inputs(slot);
-        let monster_attack_inputs_by_slot = [(slot, monster_attack_inputs)];
+        let actor = self.combat_actors[slot];
+        let generate_ai_inputs = slot >= COMBAT_PARTY_ACTOR_SLOTS
+            && combat_actor_is_active_not_dead(actor)
+            && self.combat_actor_stands_on_walkable_arena_cell(actor)
+            && actor.phase_counter <= 1;
+        let traits = generate_ai_inputs
+            .then(|| combat_class_traits(actor.owner_target_class))
+            .flatten();
+
+        let possess_target_slot = if traits.is_some_and(|traits| traits.possess) {
+            self.combat_ai_possess_target_slot_roll(slot)
+        } else {
+            0
+        };
+        let possess_candidate_reaches_resistance = traits.is_some_and(|traits| traits.possess)
+            && self.combat_ai_possess_candidate_reaches_resistance_from_roll(possess_target_slot);
+        let possess_resistance_blocks = if possess_candidate_reaches_resistance {
+            self.combat_ai_possess_resistance_blocks(slot, possess_target_slot)
+        } else {
+            false
+        };
+        let blink_roll = if traits.is_some_and(|traits| traits.blink) {
+            self.combat_ai_blink_roll(slot)
+        } else {
+            1
+        };
+        let summon_roll = if traits.is_some_and(|traits| traits.summon_daemon) {
+            self.combat_ai_summon_roll(slot)
+        } else {
+            1
+        };
+        let summon_candidate_coordinates = if traits.is_some_and(|traits| traits.summon_daemon) {
+            self.combat_ai_summon_candidate_coordinates_from_seed(slot, summon_roll)
+        } else {
+            Vec::new()
+        };
+        let mass_charm_roll = if generate_ai_inputs
+            && active_effect_is_active(
+                self.active_effect_tag,
+                self.active_effect_counter,
+                MASS_CHARM_ACTIVE_EFFECT_TAG,
+            ) {
+            self.combat_ai_mass_charm_roll(slot)
+        } else {
+            0
+        };
+        let teleport_candidate = traits.and_then(|traits| {
+            traits
+                .teleport_capable
+                .then(|| self.combat_ai_teleport_candidate(slot))
+                .flatten()
+        });
+        let horizontal_axis_first = if generate_ai_inputs {
+            self.combat_ai_horizontal_axis_first(slot)
+        } else {
+            true
+        };
+        let random_cardinal_direction_codes = if generate_ai_inputs {
+            self.combat_ai_random_cardinal_direction_codes(slot)
+        } else {
+            [1, 2, 3, 4]
+        };
+        let monster_attack_inputs_by_slot = if generate_ai_inputs {
+            [(slot, self.combat_monster_attack_inputs(slot))]
+        } else {
+            [(slot, CombatMonsterAttackInputs::default())]
+        };
 
         self.apply_combat_actor_slot_dispatch_with_inputs(
             slot,
@@ -3197,14 +3257,14 @@ impl PlayState {
             possess_candidate_reaches_resistance,
             possess_target_slot,
             possess_resistance_blocks,
-            self.combat_ai_blink_roll(slot),
-            self.combat_ai_summon_roll(slot),
+            blink_roll,
+            summon_roll,
             &summon_candidate_coordinates,
             None,
-            self.combat_ai_mass_charm_roll(slot),
+            mass_charm_roll,
             false,
-            None,
-            self.combat_ai_horizontal_axis_first(slot),
+            teleport_candidate,
+            horizontal_axis_first,
             &random_cardinal_direction_codes,
             &monster_attack_inputs_by_slot,
         )
@@ -3340,23 +3400,18 @@ impl PlayState {
         }
     }
 
-    pub fn combat_ai_possess_target_slot_roll(&self, actor_slot: usize) -> usize {
-        (self.turn as usize)
-            .wrapping_add(actor_slot)
-            .wrapping_add(usize::from(self.combat_round_counter))
-            % COMBAT_ACTOR_SLOTS
+    pub fn combat_ai_possess_target_slot_roll(&mut self, actor_slot: usize) -> usize {
+        let _ = actor_slot;
+        usize::from(self.random_range_u8(0, (COMBAT_ACTOR_SLOTS - 1) as u8))
     }
 
     pub fn combat_ai_possess_resistance_blocks(
-        &self,
+        &mut self,
         actor_slot: usize,
         target_slot: usize,
     ) -> bool {
-        (self.turn as u8)
-            .wrapping_add(actor_slot as u8)
-            .wrapping_add(target_slot as u8)
-            & 1
-            != 0
+        let _ = (actor_slot, target_slot);
+        self.random_mod_u8(2) != 0
     }
 
     pub fn combat_ai_possess_candidate_reaches_resistance_from_roll(
@@ -3381,84 +3436,83 @@ impl PlayState {
         combat_possess_candidate_reaches_resistance(target_slot, candidate, self.active_player)
     }
 
-    pub fn combat_ai_blink_roll(&self, actor_slot: usize) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((actor_slot as u8).wrapping_mul(3))
-            .wrapping_add(self.combat_round_counter)
+    pub fn combat_ai_blink_roll(&mut self, actor_slot: usize) -> u8 {
+        let _ = actor_slot;
+        self.random_mod_u8(8)
     }
 
-    pub fn combat_ai_summon_roll(&self, actor_slot: usize) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((actor_slot as u8).wrapping_mul(5))
-            .wrapping_add(self.combat_round_counter)
+    pub fn combat_ai_summon_roll(&mut self, actor_slot: usize) -> u8 {
+        let _ = actor_slot;
+        self.random_mod_u8(8)
     }
 
-    pub fn combat_ai_summon_candidate_coordinates(&self, actor_slot: usize) -> Vec<(u8, u8)> {
+    pub fn combat_ai_summon_candidate_coordinates_from_seed(
+        &self,
+        actor_slot: usize,
+        seed: u8,
+    ) -> Vec<(u8, u8)> {
         let Some(actor) = self.combat_actors.get(actor_slot).copied() else {
             return Vec::new();
         };
-        combat_neighbor_candidate_coordinates(
-            actor.x,
-            actor.y,
-            self.combat_ai_summon_roll(actor_slot),
-        )
+        combat_neighbor_candidate_coordinates(actor.x, actor.y, seed)
     }
 
-    pub fn combat_ai_mass_charm_roll(&self, actor_slot: usize) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((actor_slot as u8).wrapping_mul(7))
-            .wrapping_add(self.combat_round_counter)
+    pub fn combat_ai_summon_candidate_coordinates(&mut self, actor_slot: usize) -> Vec<(u8, u8)> {
+        let seed = self.combat_ai_summon_roll(actor_slot);
+        self.combat_ai_summon_candidate_coordinates_from_seed(actor_slot, seed)
     }
 
-    pub fn combat_ai_horizontal_axis_first(&self, actor_slot: usize) -> bool {
-        (self.turn as u8)
-            .wrapping_add(actor_slot as u8)
-            .wrapping_add(self.combat_round_counter)
-            & 1
-            == 0
+    pub fn combat_ai_mass_charm_roll(&mut self, actor_slot: usize) -> u8 {
+        let _ = actor_slot;
+        self.random_range_u8(0, u8::MAX)
     }
 
-    pub fn combat_ai_random_cardinal_direction_codes(&self, actor_slot: usize) -> [u8; 4] {
-        let base = [1, 2, 3, 4];
-        let start = usize::from(
-            (self.turn as u8)
-                .wrapping_add(actor_slot as u8)
-                .wrapping_add(self.combat_round_counter)
-                & 3,
-        );
+    pub fn combat_ai_teleport_candidate(&mut self, actor_slot: usize) -> Option<(u8, u8)> {
+        let _ = actor_slot;
+        Some((
+            self.random_range_u8(0, (COMBAT_ARENA_SIDE - 1) as u8),
+            self.random_range_u8(0, (COMBAT_ARENA_SIDE - 1) as u8),
+        ))
+    }
+
+    pub fn combat_ai_horizontal_axis_first(&mut self, actor_slot: usize) -> bool {
+        let _ = actor_slot;
+        self.random_mod_u8(2) == 0
+    }
+
+    pub fn combat_ai_random_cardinal_direction_codes(&mut self, actor_slot: usize) -> [u8; 4] {
+        let _ = actor_slot;
         [
-            base[start],
-            base[(start + 1) % base.len()],
-            base[(start + 2) % base.len()],
-            base[(start + 3) % base.len()],
+            self.random_range_u8(1, 4),
+            self.random_range_u8(1, 4),
+            self.random_range_u8(1, 4),
+            self.random_range_u8(1, 4),
         ]
     }
 
-    pub fn combat_monster_attack_inputs(&self, attacker_slot: usize) -> CombatMonsterAttackInputs {
+    pub fn combat_monster_attack_inputs(
+        &mut self,
+        attacker_slot: usize,
+    ) -> CombatMonsterAttackInputs {
+        let _ = attacker_slot;
         CombatMonsterAttackInputs {
             party_defender_rating: 7,
-            hit_roll: (self.turn as u8).wrapping_add(attacker_slot as u8),
-            damage_roll: (self.turn as u8).wrapping_add((attacker_slot as u8).wrapping_mul(3)),
-            poison_gate_accepts: (self.turn as u8)
-                .wrapping_add((attacker_slot as u8).wrapping_mul(11))
-                & 1
-                == 0,
-            poison_damage_roll: (self.turn as u8)
-                .wrapping_add((attacker_slot as u8).wrapping_mul(13)),
+            hit_roll: self.random_range_u8(0, u8::MAX),
+            damage_roll: self.random_range_u8(0, u8::MAX),
+            poison_gate_accepts: self.random_mod_u8(2) == 0,
+            poison_damage_roll: self.random_mod_u8(20),
             forced_hit: None,
-            amulet_turning_scatter_roll: (self.turn as u8)
-                .wrapping_add((attacker_slot as u8).wrapping_mul(23)),
+            amulet_turning_scatter_roll: self.random_mod_u8(8),
         }
     }
 
     pub fn combat_monster_amulet_turning_roll(
-        &self,
+        &mut self,
         attacker_slot: usize,
         target_slot: usize,
     ) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((attacker_slot as u8).wrapping_mul(7))
-            .wrapping_add((target_slot as u8).wrapping_mul(19))
+        let _ = (attacker_slot, target_slot);
+        self.random_range_u8(0, u8::MAX)
     }
 
     pub fn ensure_pending_combat_player_turn(&mut self) -> Option<CombatRoundWalkApplication> {

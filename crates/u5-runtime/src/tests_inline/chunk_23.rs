@@ -7445,7 +7445,7 @@
         state.combat_actors[8].owner_target_class = 28;
         state.combat_actors[8].phase_counter = 1;
         state.next_combat_actor_slot = 8;
-        state.turn = 24;
+        state.prng_state = 0x00f0;
 
         let application = state.ensure_pending_combat_player_turn().unwrap();
 
@@ -7464,7 +7464,6 @@
     fn combat_round_walk_production_path_applies_monster_attack_damage() {
         let mut state = combat_ai_turn_state(6, 5);
         state.combat_actors[8].phase_counter = 1;
-        state.turn = 1;
         state.party[0].status = b'G';
         state.party[0].hp = 20;
         state.party[0].max_hp = 20;
@@ -7490,13 +7489,15 @@
         assert_eq!(monster_attack.attacker_slot, 8);
         assert_eq!(monster_attack.target_slot, 0);
         assert_eq!(
-            monster_attack.resolution,
-            Some(CombatWeaponAttackResolution::Hit {
-                route: CombatWeaponAttackRangeRoute::Melee,
-                raw_damage: 2,
+            monster_attack.poison_status_outcome,
+            Some(CombatPoisonStatusAttackOutcome::PoisonedPartyMember {
+                status_before: b'G',
+                status_after: b'P',
             })
         );
-        assert_eq!(state.party[0].hp, 18);
+        assert_eq!(monster_attack.resolution, None);
+        assert_eq!(state.party[0].status, b'P');
+        assert_eq!(state.party[0].hp, 20);
     }
 
     #[test]
@@ -7544,7 +7545,7 @@
         let mut state = combat_ai_turn_state(8, 5);
         state.combat_actors[8].owner_target_class = 28;
         state.combat_actors[8].phase_counter = 1;
-        state.turn = 0;
+        state.prng_state = 0x0003;
         state.party[0].status = b'G';
         state.party[0].hp = 20;
         state.party[0].max_hp = 20;
@@ -7593,17 +7594,29 @@
             monster_attack.resolution,
             Some(CombatWeaponAttackResolution::Hit {
                 route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 6 },
-                raw_damage: 5,
+                raw_damage: 1,
             })
         );
         assert_eq!(state.party[0].hp, 20);
-        assert_eq!(state.party[1].hp, 15);
+        assert_eq!(state.party[1].hp, 19);
     }
 
     fn combat_player_command_state(monster_x: u8, monster_y: u8) -> PlayState {
         let mut state = combat_ai_turn_state(monster_x, monster_y);
         state.combat_actors[8].phase_counter = 0;
         state
+    }
+
+    fn advance_expected_giant_rat_ai_input_prng(expected_prng: &mut u16) {
+        let _ = u5_prng_range_u16(expected_prng, 0, 1);
+        for _ in 0..4 {
+            let _ = u5_prng_range_u16(expected_prng, 1, 4);
+        }
+        let _ = u5_prng_range_u16(expected_prng, 0, u16::from(u8::MAX));
+        let _ = u5_prng_range_u16(expected_prng, 0, u16::from(u8::MAX));
+        let _ = u5_prng_range_u16(expected_prng, 0, 1);
+        let _ = u5_prng_range_u16(expected_prng, 0, 19);
+        let _ = u5_prng_range_u16(expected_prng, 0, 7);
     }
 
     #[test]
@@ -7739,7 +7752,7 @@
         assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 4));
         assert_eq!(
             state.message,
-            "Klimbed North to (5, 4).\nGiant Rat moved to (10, 9)."
+            "Klimbed North to (5, 4).\nGiant Rat moved to (9, 10)."
         );
         assert!(state.visibility_dirty);
         assert!(state.combat_active);
@@ -8262,6 +8275,7 @@
         let damage_roll = u5_prng_range_u16(&mut expected_prng, 0, u16::from(u8::MAX)) as u8;
         let expected_damage =
             combat_spell_damage_roll(damage_roll, equipment_attack_max(16).unwrap()) as u8;
+        advance_expected_giant_rat_ai_input_prng(&mut expected_prng);
 
         assert_eq!(
             handle_play_key_input(&mut state, 'A', "6", game_dir).unwrap(),
@@ -8350,7 +8364,7 @@
         state.party[0].status = b'G';
         state.party[0].hp = 1;
         state.party[0].max_hp = 20;
-        state.turn = 1;
+        state.prng_state = 0x0070;
 
         assert_eq!(
             handle_play_key_input(&mut state, ' ', "", game_dir).unwrap(),
@@ -8648,6 +8662,7 @@
         let mut expected_prng = state.prng_state;
         let vanish_roll = u5_prng_range_u16(&mut expected_prng, 0, 15);
         assert_eq!(vanish_roll, 0);
+        advance_expected_giant_rat_ai_input_prng(&mut expected_prng);
 
         assert_eq!(
             handle_play_key_input(&mut state, ' ', "", game_dir).unwrap(),

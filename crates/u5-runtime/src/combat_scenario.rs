@@ -263,7 +263,7 @@ mod tests {
         state.party[0].status = b'G';
         state.party[0].hp = 1;
         state.party[0].max_hp = 20;
-        state.turn = 1;
+        state.prng_state = 0x0070;
         state
     }
 

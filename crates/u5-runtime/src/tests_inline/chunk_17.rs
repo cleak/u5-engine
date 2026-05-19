@@ -2148,7 +2148,7 @@
         );
         assert_eq!(
             state.message,
-            "Cause Fear affected 2 combat actor(s).\nDaemon hit party member 1 for 20 damage with ranged attack."
+            "Cause Fear affected 2 combat actor(s).\nDaemon missed party member 1 with ranged attack."
         );
     }
 
