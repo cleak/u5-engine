@@ -14,9 +14,8 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test` passed on 2026-05-19, including 2362 `u5-runtime` tests.
-- `cargo fmt -- --check` had passed in the prior checkpoint; rerun before any
-  code commit that changes Rust files.
+- `cargo test -p u5-runtime` passed on 2026-05-19, including 2363 tests.
+- `cargo fmt -- --check` passed on 2026-05-19 after the latest Rust changes.
 - `cargo test -p u5-tui cli_binary_help_prints_usage_without_assets -- --exact`
   passed on 2026-05-18; rerun when CLI/TUI code changes.
 - Representative raster smoke checks with local assets produced nonblank hashes:
@@ -25,7 +24,7 @@ Last known verification state:
   `DUNGEON:0` first-person `161ad48dd2a91725`.
 - `cargo run -- --help` is a supported no-asset usage path.
 - The latest checkpointed engine commit at the time of this refresh was
-  `02dbe07 Preserve conversation BYE and no-match envelopes`.
+  `6d38260 Prompt on underfoot town exits`.
 - The spec checkout used for the most recent audit was `5b816cc Complete
   cleanroom specification`.
 
@@ -35,6 +34,9 @@ Current worktree context when this TODO was refreshed:
 - `git status --short` was clean in `u5-spec`.
 - `journal/capture/notes.py` was not present in the workspace, engine, or spec
   repository.
+- Town-family exit thresholds now prompt both when stepped onto and when
+  observed underfoot after a consumed turn; accepting exits through clean
+  return metadata, refusing leaves town mode active.
 
 Before starting a major slice, inspect `git status --short` and preserve user
 changes. Do not revert unrelated work.
