@@ -1182,7 +1182,9 @@ with Dead, Ashes, and Sleeping members excluded. Poisoned living members still
 count as provision consumers and take a first-playable one-HP poison tick on
 each hourly status/provision pass. If food is already zero at an hour crossing,
 the starvation branch appends a warning and applies first-playable one-HP
-starvation damage to living members. The harness does not require character
+starvation damage to living members. The exact poison/starvation damage
+amounts and per-member roll semantics remain blocked on clean spec issue
+`cleak/u5-spec#50`. The harness does not require character
 creation first, so clean test saves with a
 blank Avatar name can still seed the playable slice:
 

@@ -99,6 +99,9 @@ Current worktree context when this TODO was refreshed:
   clarification in `cleak/u5-spec#27` because the public spec does not yet
   publish the toll-progress counter, milestone predicate, reset/increment
   rules, or qualifying payment contexts.
+- Hourly poison and starvation damage use a one-HP first-playable policy while
+  the exact public damage amount/range and per-member roll semantics are
+  blocked on clean spec clarification in `cleak/u5-spec#50`.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry, and
   seeded ship/skiff sailing routes, plus broader dungeon and combat command
@@ -352,7 +355,8 @@ first-playable session without losing supported state.
     - persistent party order table once public,
     - complete equipment/readied-item fields,
     - exact status byte transitions for all supported spells and hazards,
-    - exact HP/MP recovery and damage formulas where still first-playable.
+    - exact HP/MP recovery and hourly poison/starvation damage formulas where
+      still first-playable.
 
 - Quest and shrine state.
   - Current shrine implementation uses public ordained/Codex masks and
