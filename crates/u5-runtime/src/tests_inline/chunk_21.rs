@@ -2734,6 +2734,63 @@
     }
 
     #[test]
+    fn end_to_end_stocked_arms_shop_buys_by_menu_letter() {
+        use crate::shop_runtime::ArmsShopState;
+        use crate::shop_session::ActiveShopSession;
+        use crate::shops::ArmsStockTable;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 1000;
+        state.party_intelligence[0] = 10;
+        state.active_shop = Some(ActiveShopSession::ArmsStocked(
+            ArmsShopState::Greeting,
+            ArmsStockTable::new([23, 24, 30, 0, 0, 0, 0, 0], 3),
+        ));
+
+        handle_play_key_input(&mut state, 'B', "", Path::new("")).unwrap();
+        assert!(state.message.contains("a) Short Sword"));
+        assert!(state.message.contains("b) Mace"));
+
+        handle_play_key_input(&mut state, 'b', "", Path::new("")).unwrap();
+        assert!(state.message.contains("Item 24 costs"));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        assert_eq!(state.equipment_stock[24], 1);
+        assert_eq!(state.equipment_stock[1], 0);
+        assert!(state.gold < 1000);
+        assert!(state.message.contains("Bought item 24"));
+        assert!(state.active_shop.is_some());
+    }
+
+    #[test]
+    fn end_to_end_stocked_arms_shop_rejects_empty_stock_letters() {
+        use crate::shop_runtime::ArmsShopState;
+        use crate::shop_session::ActiveShopSession;
+        use crate::shops::ArmsStockTable;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 1000;
+        state.active_shop = Some(ActiveShopSession::ArmsStocked(
+            ArmsShopState::Greeting,
+            ArmsStockTable::new([23, 24, 30, 0, 0, 0, 0, 0], 3),
+        ));
+
+        handle_play_key_input(&mut state, 'B', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'd', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 1000);
+        assert!(state.equipment_stock.iter().all(|count| *count == 0));
+        assert_eq!(state.message, "I do not understand.");
+        assert!(matches!(
+            state.active_shop,
+            Some(ActiveShopSession::ArmsStocked(
+                ArmsShopState::BuyPickItem,
+                _
+            ))
+        ));
+    }
+
+    #[test]
     fn end_to_end_shipwright_frigate_queues_return_world_delivery() {
         use crate::shop_runtime::ShipBrokerState;
         use crate::shop_session::ActiveShopSession;

@@ -452,64 +452,18 @@ fn handle_active_shop_key_input(
 
     let message = match &mut session {
         ActiveShopSession::Arms(s) => {
-            let mut prices = [0u16; crate::EQUIPMENT_COUNT];
-            prices.copy_from_slice(&crate::EQUIPMENT_BASE_PRICES);
-            let mut stock = state.equipment_stock;
-            let outcome = match (*s, yes, no, inline_digit) {
-                (ArmsShopState::Greeting, _, _, _) => step_arms_shop(
-                    s,
-                    ArmsShopInput::Key(key_byte),
-                    ctx,
-                    &mut state.gold,
-                    &mut stock,
-                    &prices,
-                ),
-                (ArmsShopState::BuyPickItem | ArmsShopState::SellPickItem, _, _, Some(d)) => {
-                    step_arms_shop(
-                        s,
-                        ArmsShopInput::Item(d),
-                        ctx,
-                        &mut state.gold,
-                        &mut stock,
-                        &prices,
-                    )
-                }
-                (
-                    ArmsShopState::BuyConfirm { .. } | ArmsShopState::SellConfirm { .. },
-                    true,
-                    _,
-                    _,
-                ) => step_arms_shop(
-                    s,
-                    ArmsShopInput::Confirm(true),
-                    ctx,
-                    &mut state.gold,
-                    &mut stock,
-                    &prices,
-                ),
-                (
-                    ArmsShopState::BuyConfirm { .. } | ArmsShopState::SellConfirm { .. },
-                    _,
-                    true,
-                    _,
-                ) => step_arms_shop(
-                    s,
-                    ArmsShopInput::Confirm(false),
-                    ctx,
-                    &mut state.gold,
-                    &mut stock,
-                    &prices,
-                ),
-                _ => ArmsShopOutcome::InvalidInput,
-            };
-            state.equipment_stock = stock;
-            let surcharge = if matches!(outcome, ArmsShopOutcome::Bought { .. }) {
-                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_ARMS)
-            } else {
-                None
-            };
-            append_active_shop_surcharge(format_arms_outcome(outcome), surcharge)
+            handle_arms_shop_key_input(state, s, None, ctx, key_byte, inline_digit, yes, no)
         }
+        ActiveShopSession::ArmsStocked(s, stock_table) => handle_arms_shop_key_input(
+            state,
+            s,
+            Some(*stock_table),
+            ctx,
+            key_byte,
+            inline_digit,
+            yes,
+            no,
+        ),
         ActiveShopSession::Healer(s, healer) => match (*s, yes, no, inline_digit) {
             (HealerShopState::Greeting, _, true, _) => {
                 *s = HealerShopState::Exited;
@@ -1254,6 +1208,112 @@ fn apply_paid_inn_rest(state: &mut PlayState, cost: u16) -> String {
     format!(
         "Rested {INN_REST_HOURS} hours at the inn for {cost} gold; recovered {recovered_hp} HP and {recovered_mana} MP; woke {woke} asleep member(s)."
     )
+}
+
+fn handle_arms_shop_key_input(
+    state: &mut PlayState,
+    shop_state: &mut crate::shop_runtime::ArmsShopState,
+    stock_table: Option<crate::shops::ArmsStockTable>,
+    ctx: crate::shop_runtime::ShopTransactionContext,
+    key_byte: u8,
+    inline_digit: Option<u8>,
+    yes: bool,
+    no: bool,
+) -> String {
+    use crate::shop_runtime::{ArmsShopInput, ArmsShopOutcome, ArmsShopState, step_arms_shop};
+
+    let mut prices = [0u16; crate::EQUIPMENT_COUNT];
+    prices.copy_from_slice(&crate::EQUIPMENT_BASE_PRICES);
+    let mut stock = state.equipment_stock;
+    let outcome = match (*shop_state, yes, no, inline_digit) {
+        (ArmsShopState::Greeting, _, _, _) => step_arms_shop(
+            shop_state,
+            ArmsShopInput::Key(key_byte),
+            ctx,
+            &mut state.gold,
+            &mut stock,
+            &prices,
+        ),
+        (ArmsShopState::BuyPickItem, _, _, _) => {
+            if let Some(table) = stock_table {
+                step_arms_shop(
+                    shop_state,
+                    ArmsShopInput::StockLetter {
+                        letter: key_byte,
+                        table,
+                    },
+                    ctx,
+                    &mut state.gold,
+                    &mut stock,
+                    &prices,
+                )
+            } else if let Some(d) = inline_digit {
+                step_arms_shop(
+                    shop_state,
+                    ArmsShopInput::Item(d),
+                    ctx,
+                    &mut state.gold,
+                    &mut stock,
+                    &prices,
+                )
+            } else {
+                ArmsShopOutcome::InvalidInput
+            }
+        }
+        (ArmsShopState::SellPickItem, _, _, Some(d)) => step_arms_shop(
+            shop_state,
+            ArmsShopInput::Item(d),
+            ctx,
+            &mut state.gold,
+            &mut stock,
+            &prices,
+        ),
+        (ArmsShopState::BuyConfirm { .. } | ArmsShopState::SellConfirm { .. }, true, _, _) => {
+            step_arms_shop(
+                shop_state,
+                ArmsShopInput::Confirm(true),
+                ctx,
+                &mut state.gold,
+                &mut stock,
+                &prices,
+            )
+        }
+        (ArmsShopState::BuyConfirm { .. } | ArmsShopState::SellConfirm { .. }, _, true, _) => {
+            step_arms_shop(
+                shop_state,
+                ArmsShopInput::Confirm(false),
+                ctx,
+                &mut state.gold,
+                &mut stock,
+                &prices,
+            )
+        }
+        _ => ArmsShopOutcome::InvalidInput,
+    };
+    state.equipment_stock = stock;
+    let surcharge = if matches!(outcome, ArmsShopOutcome::Bought { .. }) {
+        apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_ARMS)
+    } else {
+        None
+    };
+    let message = match (outcome, stock_table) {
+        (ArmsShopOutcome::EnteredBuy, Some(table)) => format_arms_stock_buy_menu(table),
+        (outcome, _) => format_arms_outcome(outcome),
+    };
+    append_active_shop_surcharge(message, surcharge)
+}
+
+fn format_arms_stock_buy_menu(table: crate::shops::ArmsStockTable) -> String {
+    if table.is_empty() {
+        return "We have nothing for sale.".to_string();
+    }
+    let mut entries = Vec::new();
+    for index in 0..table.len() {
+        let item = table.item_ids[index] as usize;
+        let letter = (b'a' + index as u8) as char;
+        entries.push(format!("{letter}) {}", equipment_name(item)));
+    }
+    format!("We have: {}.", entries.join(", "))
 }
 
 fn format_inn_error(err: InnError) -> String {

@@ -5,13 +5,14 @@
 //! gold/equipment/party counters.
 
 use crate::shop_runtime::*;
-use crate::shops::{GuildShop, Healer, Herbalist, Inn, Shipwright, Stable, Tavern};
+use crate::shops::{ArmsStockTable, GuildShop, Healer, Herbalist, Inn, Shipwright, Stable, Tavern};
 
 /// Identifies which of the eight shop kinds is open and owns its
 /// per-shop state machine.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ActiveShopSession {
     Arms(ArmsShopState),
+    ArmsStocked(ArmsShopState, ArmsStockTable),
     Healer(HealerShopState, Healer),
     Innkeeper(InnkeeperState),
     Reagent(ReagentShopState),
@@ -29,7 +30,7 @@ impl ActiveShopSession {
     /// and return control to the world loop.
     pub fn is_exited(&self) -> bool {
         match self {
-            Self::Arms(s) => matches!(s, ArmsShopState::Exited),
+            Self::Arms(s) | Self::ArmsStocked(s, _) => matches!(s, ArmsShopState::Exited),
             Self::Healer(s, _) => matches!(s, HealerShopState::Exited),
             Self::Innkeeper(s) => matches!(s, InnkeeperState::Exited),
             Self::Reagent(s) => matches!(s, ReagentShopState::Exited),
@@ -45,7 +46,7 @@ impl ActiveShopSession {
     /// Short human-readable label for status/banner display.
     pub fn shop_label(&self) -> &'static str {
         match self {
-            Self::Arms(_) => "Weaponsmith / Armourer",
+            Self::Arms(_) | Self::ArmsStocked(_, _) => "Weaponsmith / Armourer",
             Self::Healer(_, healer) => healer.display_name(),
             Self::Innkeeper(InnkeeperState::Greeting { inn })
             | Self::Innkeeper(InnkeeperState::ConfirmRest { inn, .. })
@@ -96,6 +97,7 @@ impl ActiveShopSession {
             Self::Reagent(_) => "Choose reagent A-E, or Space.",
             Self::Guild(_) => "Keys (A), Gems (B), Torches (C), or Space.",
             Self::StationaryDisplay(_) => "Buy display item? Yes (Y), No (N), or Space.",
+            Self::ArmsStocked(_, _) => "Buy (B), Sell (S), or Space.",
             _ => "Choose Buy / Sell / Yes / No.",
         }
     }
