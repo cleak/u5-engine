@@ -746,6 +746,11 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "britannia-spyglass-chunk-map")
     );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "britannia-hole-up-rest")
+    );
     assert!(cases.iter().any(|case| case.name == "castle-save-refusal"));
     assert!(cases.iter().any(|case| case.name == "castle-view-overlay"));
     assert!(cases.iter().any(|case| case.name == "castle-peer-overlay"));
@@ -777,6 +782,7 @@ fn route_smoke_cases_cover_representative_modes() {
     );
     assert!(cases.iter().any(|case| case.name == "dungeon-exit-confirm"));
     assert!(cases.iter().any(|case| case.name == "dungeon-view-overlay"));
+    assert!(cases.iter().any(|case| case.name == "dungeon-hole-up-rest"));
     assert!(
         cases
             .iter()

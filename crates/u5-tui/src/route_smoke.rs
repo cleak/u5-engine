@@ -202,6 +202,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "view overlay",
         },
         RouteSmokeCase {
+            name: "britannia-hole-up-rest",
+            options: world.clone(),
+            script: &["H1"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 3,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "britannia-save-refusal",
             options: world,
             script: &["Q", "N"],
@@ -328,6 +336,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected: RouteSmokeExpectation::Dungeon(dungeon),
             min_turn: 0,
             expected_frame_kind: "view overlay",
+        },
+        RouteSmokeCase {
+            name: "dungeon-hole-up-rest",
+            options: dungeon_options.clone(),
+            script: &["H1"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 3,
+            expected_frame_kind: "dungeon first-person viewport",
         },
         RouteSmokeCase {
             name: "dungeon-turn-and-blocked-step",
