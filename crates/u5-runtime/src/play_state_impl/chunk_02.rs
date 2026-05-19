@@ -479,6 +479,7 @@ impl PlayState {
         let spell_index = spell_index_from_code(&spell_code);
         if spell_index.is_some()
             && parse_inline_party_index(suffix).is_some()
+            && spell_index != Some(TIME_STOP_SPELL_INDEX)
             && self.current_scene_absorbs_casts()
         {
             self.message = "Absorbed!".to_string();

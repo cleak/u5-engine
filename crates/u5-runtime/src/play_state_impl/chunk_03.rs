@@ -2976,6 +2976,10 @@ impl PlayState {
     }
 
     pub fn cast_time_stop(&mut self, caster_index: usize) -> MoveOutcome {
+        if self.current_scene_absorbs_casts() {
+            self.message = "Magic absorbed!".to_string();
+            return MoveOutcome::Blocked;
+        }
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, TIME_STOP_SPELL_INDEX, TIME_STOP_COST)
         {

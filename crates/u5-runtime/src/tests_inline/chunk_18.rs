@@ -667,6 +667,47 @@
     }
 
     #[test]
+    fn cast_time_stop_scene_absorption_uses_special_message_without_resources() {
+        let mut stonegate = test_state(open_grid(), 5, 5);
+        stonegate.area = Area::Town {
+            scene: Scene::new(STONEGATE_SCENE_BYTE).unwrap(),
+            floor: 0,
+        };
+        stonegate.spell_charges[TIME_STOP_SPELL_INDEX] = 1;
+        stonegate.party[0].mana = TIME_STOP_COST;
+        stonegate.party[0].level = TIME_STOP_COST;
+
+        assert_eq!(
+            handle_play_key_input(&mut stonegate, 'C', "1AT", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(stonegate.spell_charges[TIME_STOP_SPELL_INDEX], 1);
+        assert_eq!(stonegate.party[0].mana, TIME_STOP_COST);
+        assert_eq!(stonegate.turn, 0);
+        assert_eq!(stonegate.active_effect_tag, None);
+        assert_eq!(stonegate.active_effect_counter, 0);
+        assert_eq!(stonegate.message, "Magic absorbed!");
+
+        let mut blackthorn = test_state(open_grid(), 5, 5);
+        blackthorn.area = Area::Town {
+            scene: Scene::new(LORD_BLACKTHORN_CASTLE_SCENE_BYTE).unwrap(),
+            floor: 0,
+        };
+        blackthorn.spell_charges[TIME_STOP_SPELL_INDEX] = 1;
+        blackthorn.party[0].mana = TIME_STOP_COST;
+        blackthorn.party[0].level = TIME_STOP_COST;
+
+        assert_eq!(blackthorn.cast_time_stop(0), MoveOutcome::Blocked);
+        assert_eq!(blackthorn.spell_charges[TIME_STOP_SPELL_INDEX], 1);
+        assert_eq!(blackthorn.party[0].mana, TIME_STOP_COST);
+        assert_eq!(blackthorn.turn, 0);
+        assert_eq!(blackthorn.active_effect_tag, None);
+        assert_eq!(blackthorn.active_effect_counter, 0);
+        assert_eq!(blackthorn.message, "Magic absorbed!");
+    }
+
+    #[test]
     fn negate_time_t_tag_freezes_minutes_npcs_and_active_objects_while_counter_decays() {
         let mut state = test_state(open_grid(), 1, 1);
         state.clock = GameClock::new(17, 59).unwrap();
