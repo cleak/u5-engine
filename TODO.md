@@ -24,10 +24,11 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-19 with seventeen scripted route cases covering world/town look and
+  2026-05-19 with eighteen scripted route cases covering world/town look and
   save-refusal prompts, Underworld startup, debug-entered town return to world,
   Underworld-to-town debug entry, ship X-it/skiff launch, hoisted-sail movement,
-  dungeon turn/block movement, and dungeon exit confirmation/refusal.
+  dungeon turn/block movement, dungeon exit confirmation/refusal, and a
+  Doom room trigger that enters a combat raster viewport.
 - `cargo run -p u5-tui -- --save-frame-suite target\codex-frame-suite
   C:\Games\U5-Clean` passed on 2026-05-19 and wrote nine nonblank PNGs:
   `britannia` `859a1bdabe5c9b7a`, `britannia-step` `05b13e47da048fe6`,

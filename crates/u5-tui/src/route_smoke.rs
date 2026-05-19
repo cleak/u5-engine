@@ -65,6 +65,7 @@ pub struct RouteSmokeReport {
 pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
     let castle = Scene::new(0x11).expect("castle scene is valid");
     let dungeon = DungeonScene::new(0x21).expect("dungeon scene is valid");
+    let doom = DungeonScene::new(0x28).expect("doom dungeon scene is valid");
 
     let world = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
@@ -122,6 +123,11 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
 
     let dungeon_options = PlayOptions {
         target: PlayTarget::Dungeon(dungeon),
+        floor: 0,
+        ..PlayOptions::default()
+    };
+    let doom_options = PlayOptions {
+        target: PlayTarget::Dungeon(doom),
         floor: 0,
         ..PlayOptions::default()
     };
@@ -262,6 +268,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected: RouteSmokeExpectation::Dungeon(dungeon),
             min_turn: 0,
             expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
+            name: "doom-room-combat-trigger",
+            options: doom_options,
+            script: &["empty"],
+            expected: RouteSmokeExpectation::Dungeon(doom),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
         },
     ]
 }

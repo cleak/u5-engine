@@ -753,6 +753,11 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "ship-hoist-and-sail-east")
     );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-room-combat-trigger")
+    );
 }
 
 #[test]
