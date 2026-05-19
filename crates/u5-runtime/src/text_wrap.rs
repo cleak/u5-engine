@@ -101,6 +101,9 @@ pub const fn text_window_clamp_rectangle(
 pub const TEXT_WINDOW_DEFAULT_FOREGROUND: u8 = 15;
 pub const TEXT_WINDOW_DEFAULT_BACKGROUND: u8 = 0;
 pub const TEXT_WINDOW_DEFAULT_ACTIVE_INDEX: u8 = 0;
+pub const TEXT_WINDOW_FLAG_UNDERLINE: u8 = 0x01;
+pub const TEXT_WINDOW_FLAG_CENTRE: u8 = 0x02;
+pub const TEXT_WINDOW_FLAG_INVERSE: u8 = 0x04;
 
 /// `text-output.md §3` text-window packed colour-byte layout. The
 /// active window's colour attribute carries the foreground palette
@@ -126,6 +129,308 @@ pub const fn text_color_background(packed: u8) -> u8 {
 /// boot defaults (low nibble fg, high nibble bg).
 pub const fn text_window_default_color_byte() -> u8 {
     (TEXT_WINDOW_DEFAULT_BACKGROUND << TEXT_COLOR_BACKGROUND_SHIFT) | TEXT_WINDOW_DEFAULT_FOREGROUND
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TextCell {
+    pub byte: u8,
+    pub color: u8,
+    pub underline: bool,
+    pub inverse: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TextWindowDescriptor {
+    pub top_left_x: u8,
+    pub top_left_y: u8,
+    pub bottom_right_x: u8,
+    pub bottom_right_y: u8,
+    pub cursor_x: u8,
+    pub cursor_y: u8,
+    pub color: u8,
+    pub flags: u8,
+}
+
+impl Default for TextWindowDescriptor {
+    fn default() -> Self {
+        Self {
+            top_left_x: 0,
+            top_left_y: 0,
+            bottom_right_x: TEXT_SCREEN_COLUMNS - 1,
+            bottom_right_y: TEXT_SCREEN_ROWS - 1,
+            cursor_x: 0,
+            cursor_y: 0,
+            color: text_window_default_color_byte(),
+            flags: 0,
+        }
+    }
+}
+
+impl TextWindowDescriptor {
+    pub const fn inner_width(self) -> u8 {
+        text_window_inner_width(self.top_left_x, self.bottom_right_x)
+    }
+
+    pub const fn height(self) -> u8 {
+        self.bottom_right_y - self.top_left_y + 1
+    }
+
+    pub const fn absolute_cursor(self) -> Option<(u8, u8)> {
+        let x = self.top_left_x.saturating_add(self.cursor_x);
+        let y = self.top_left_y.saturating_add(self.cursor_y);
+        if x < TEXT_SCREEN_COLUMNS && y < TEXT_SCREEN_ROWS {
+            Some((x, y))
+        } else {
+            None
+        }
+    }
+
+    pub const fn centre_enabled(self) -> bool {
+        self.flags & TEXT_WINDOW_FLAG_CENTRE != 0
+    }
+
+    pub const fn underline_enabled(self) -> bool {
+        self.flags & TEXT_WINDOW_FLAG_UNDERLINE != 0
+    }
+
+    pub const fn inverse_enabled(self) -> bool {
+        self.flags & TEXT_WINDOW_FLAG_INVERSE != 0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TextWindowSystem {
+    windows: [TextWindowDescriptor; TEXT_WINDOW_COUNT],
+    active_window: usize,
+    cells: Vec<Option<TextCell>>,
+    cursor_advance_enabled: bool,
+}
+
+impl Default for TextWindowSystem {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TextWindowSystem {
+    pub fn new() -> Self {
+        Self {
+            windows: [TextWindowDescriptor::default(); TEXT_WINDOW_COUNT],
+            active_window: TEXT_WINDOW_DEFAULT_ACTIVE_INDEX as usize,
+            cells: vec![None; TEXT_SCREEN_COLUMNS as usize * TEXT_SCREEN_ROWS as usize],
+            cursor_advance_enabled: true,
+        }
+    }
+
+    pub fn active_window_index(&self) -> usize {
+        self.active_window
+    }
+
+    pub fn window(&self, index: usize) -> Option<TextWindowDescriptor> {
+        self.windows.get(index).copied()
+    }
+
+    pub fn active_window(&self) -> TextWindowDescriptor {
+        self.windows[self.active_window]
+    }
+
+    pub fn set_active_window(&mut self, index: usize) {
+        if index < TEXT_WINDOW_COUNT {
+            self.active_window = index;
+        }
+    }
+
+    pub fn set_window_rect(&mut self, index: usize, x1: u8, y1: u8, x2: u8, y2: u8) {
+        let Some(window) = self.windows.get_mut(index) else {
+            return;
+        };
+        let (left, top, right, bottom) = text_window_clamp_rectangle(x1, y1, x2, y2);
+        window.top_left_x = left;
+        window.top_left_y = top;
+        window.bottom_right_x = right;
+        window.bottom_right_y = bottom;
+    }
+
+    pub fn set_active_color(&mut self, color: u8) {
+        self.windows[self.active_window].color = color;
+    }
+
+    pub fn set_active_flags(&mut self, flags: u8) {
+        self.windows[self.active_window].flags = flags;
+    }
+
+    pub fn clear_active_flags(&mut self) {
+        self.windows[self.active_window].flags = 0;
+    }
+
+    pub fn active_cursor(&self) -> (u8, u8) {
+        let window = self.active_window();
+        (window.cursor_x, window.cursor_y)
+    }
+
+    pub fn set_active_cursor(&mut self, x: u8, y: u8) {
+        let window = self.active_window();
+        let absolute_x = window.top_left_x.saturating_add(x);
+        let absolute_y = window.top_left_y.saturating_add(y);
+        if absolute_x < TEXT_SCREEN_COLUMNS && absolute_y < TEXT_SCREEN_ROWS {
+            let window = &mut self.windows[self.active_window];
+            window.cursor_x = x;
+            window.cursor_y = y;
+        }
+    }
+
+    pub fn cell(&self, x: u8, y: u8) -> Option<TextCell> {
+        if x >= TEXT_SCREEN_COLUMNS || y >= TEXT_SCREEN_ROWS {
+            return None;
+        }
+        self.cells[usize::from(y) * TEXT_SCREEN_COLUMNS as usize + usize::from(x)]
+    }
+
+    pub fn emit_byte(&mut self, byte: u8) {
+        match text_emitter_byte_kind(byte) {
+            EmitterByteKind::Glyph(glyph) => self.emit_glyph(glyph),
+            EmitterByteKind::LineFeed => self.line_feed(),
+            EmitterByteKind::CarriageReturn => self.carriage_return(),
+            EmitterByteKind::Control(control) => self.apply_control(control),
+            EmitterByteKind::Other => {}
+        }
+    }
+
+    pub fn print_wrapped_string(&mut self, source: &str) {
+        if source.is_empty() {
+            return;
+        }
+        let window = self.active_window();
+        let width = usize::from(window.inner_width()).max(1);
+        let lines = wrap_text(source, width, usize::from(window.cursor_x));
+        let last = lines.len().saturating_sub(1);
+        for (index, line) in lines.into_iter().enumerate() {
+            if self.active_window().centre_enabled() {
+                let start = text_window_centred_start_column(
+                    self.active_window().inner_width(),
+                    line.len().min(u8::MAX as usize) as u8,
+                );
+                self.set_active_cursor(start, self.active_window().cursor_y);
+            }
+            let before_y = self.active_window().cursor_y;
+            for byte in line.bytes() {
+                self.emit_byte(byte);
+            }
+            if index != last && self.active_window().cursor_y == before_y {
+                self.emit_byte(b'\r');
+                self.emit_byte(b'\n');
+            }
+        }
+    }
+
+    pub fn print_number(&mut self, value: i16, width: usize, pad: u8) {
+        let rendered = format_signed_number(value, width.min(39), char::from(pad));
+        self.print_wrapped_string(&rendered);
+    }
+
+    pub fn erase_typed_spaces(&mut self, count: usize) {
+        let saved = self.active_cursor();
+        let old_gate = self.cursor_advance_enabled;
+        self.cursor_advance_enabled = false;
+        for offset in 0..count {
+            let x = saved.0.saturating_add(offset.min(u8::MAX as usize) as u8);
+            self.set_active_cursor(x, saved.1);
+            self.emit_byte(b' ');
+        }
+        self.cursor_advance_enabled = old_gate;
+        self.set_active_cursor(saved.0, saved.1);
+    }
+
+    fn emit_glyph(&mut self, glyph: u8) {
+        let window = self.active_window();
+        if let Some((x, y)) = window.absolute_cursor() {
+            let index = usize::from(y) * TEXT_SCREEN_COLUMNS as usize + usize::from(x);
+            self.cells[index] = Some(TextCell {
+                byte: glyph,
+                color: window.color,
+                underline: window.underline_enabled(),
+                inverse: window.inverse_enabled(),
+            });
+        }
+        if self.cursor_advance_enabled {
+            self.advance_cursor_after_glyph();
+        }
+    }
+
+    fn advance_cursor_after_glyph(&mut self) {
+        let printable_width = self.active_window().inner_width().max(1);
+        let window = &mut self.windows[self.active_window];
+        window.cursor_x = window.cursor_x.saturating_add(1);
+        if window.cursor_x >= printable_width {
+            window.cursor_x = 0;
+            self.line_feed();
+        }
+    }
+
+    fn line_feed(&mut self) {
+        let height = self.active_window().height();
+        let window = &mut self.windows[self.active_window];
+        window.cursor_y = window.cursor_y.saturating_add(1);
+        if window.cursor_y >= height {
+            window.cursor_y = height.saturating_sub(1);
+            self.scroll_active_window();
+        }
+    }
+
+    fn carriage_return(&mut self) {
+        self.windows[self.active_window].cursor_x = 0;
+    }
+
+    fn apply_control(&mut self, control: TextControlByte) {
+        let window = &mut self.windows[self.active_window];
+        match control {
+            TextControlByte::CentreOff => window.flags &= !TEXT_WINDOW_FLAG_CENTRE,
+            TextControlByte::CentreOn => window.flags |= TEXT_WINDOW_FLAG_CENTRE,
+            TextControlByte::InverseToggle => window.flags ^= TEXT_WINDOW_FLAG_INVERSE,
+            TextControlByte::UnderlineToggle => window.flags ^= TEXT_WINDOW_FLAG_UNDERLINE,
+            TextControlByte::ClearWindow => self.clear_active_window_cells(),
+        }
+    }
+
+    fn clear_active_window_cells(&mut self) {
+        let window = self.active_window();
+        for y in window.top_left_y..=window.bottom_right_y {
+            for x in window.top_left_x..=window.bottom_right_x {
+                let index = usize::from(y) * TEXT_SCREEN_COLUMNS as usize + usize::from(x);
+                self.cells[index] = None;
+            }
+        }
+    }
+
+    fn scroll_active_window(&mut self) {
+        let window = self.active_window();
+        for y in window.top_left_y..window.bottom_right_y {
+            for x in window.top_left_x..=window.bottom_right_x {
+                let dst = usize::from(y) * TEXT_SCREEN_COLUMNS as usize + usize::from(x);
+                let src = usize::from(y + 1) * TEXT_SCREEN_COLUMNS as usize + usize::from(x);
+                self.cells[dst] = self.cells[src];
+            }
+        }
+        for x in window.top_left_x..=window.bottom_right_x {
+            let index =
+                usize::from(window.bottom_right_y) * TEXT_SCREEN_COLUMNS as usize + usize::from(x);
+            self.cells[index] = None;
+        }
+    }
+}
+
+pub fn format_signed_number(value: i16, width: usize, pad: char) -> String {
+    let value_text = value.to_string();
+    if value_text.len() >= width {
+        value_text
+    } else {
+        let mut rendered = String::with_capacity(width);
+        for _ in 0..width - value_text.len() {
+            rendered.push(pad);
+        }
+        rendered.push_str(&value_text);
+        rendered
+    }
 }
 
 /// `text-output.md §3` extended text-control byte values. The per-

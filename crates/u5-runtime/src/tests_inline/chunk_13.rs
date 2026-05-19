@@ -8073,6 +8073,128 @@
     }
 
     #[test]
+    fn text_window_system_defaults_and_preserves_per_window_cursor() {
+        let mut system = TextWindowSystem::new();
+
+        assert_eq!(system.active_window_index(), 0);
+        for index in 0..TEXT_WINDOW_COUNT {
+            assert_eq!(system.window(index), Some(TextWindowDescriptor::default()));
+        }
+
+        system.set_window_rect(0, 2, 2, 8, 4);
+        system.emit_byte(b'A');
+        system.emit_byte(b'B');
+        assert_eq!(system.active_cursor(), (2, 0));
+        assert_eq!(system.cell(2, 2).unwrap().byte, b'A');
+        assert_eq!(system.cell(3, 2).unwrap().byte, b'B');
+
+        system.set_active_window(1);
+        system.emit_byte(b'C');
+        assert_eq!(system.cell(0, 0).unwrap().byte, b'C');
+
+        system.set_active_window(0);
+        assert_eq!(system.active_cursor(), (2, 0));
+        system.emit_byte(b'D');
+        assert_eq!(system.cell(4, 2).unwrap().byte, b'D');
+
+        system.set_active_window(TEXT_WINDOW_COUNT);
+        assert_eq!(system.active_window_index(), 0);
+    }
+
+    #[test]
+    fn text_window_system_applies_controls_clear_and_cursor_rules() {
+        let mut system = TextWindowSystem::new();
+        system.set_window_rect(0, 0, 0, 6, 2);
+        system.set_active_cursor(2, 1);
+
+        system.emit_byte(TEXT_CTRL_CENTRE_ON);
+        system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
+        system.emit_byte(TEXT_CTRL_UNDERLINE_TOGGLE);
+        assert!(system.active_window().centre_enabled());
+        assert!(system.active_window().inverse_enabled());
+        assert!(system.active_window().underline_enabled());
+
+        system.emit_byte(b'X');
+        let styled = system.cell(2, 1).unwrap();
+        assert_eq!(styled.byte, b'X');
+        assert!(styled.inverse);
+        assert!(styled.underline);
+        assert_eq!(system.active_cursor(), (3, 1));
+
+        system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
+        assert_eq!(system.cell(2, 1), None);
+        assert_eq!(system.active_cursor(), (3, 1));
+
+        system.set_active_cursor(50, 0);
+        assert_eq!(system.active_cursor(), (3, 1));
+        system.set_active_cursor(1, 0);
+        assert_eq!(system.active_cursor(), (1, 0));
+    }
+
+    #[test]
+    fn text_window_system_scrolls_within_active_rectangle() {
+        let mut system = TextWindowSystem::new();
+        system.set_window_rect(0, 0, 0, 4, 1);
+
+        for byte in b"abcd" {
+            system.emit_byte(*byte);
+        }
+        assert_eq!(system.active_cursor(), (0, 1));
+        for byte in b"efgh" {
+            system.emit_byte(*byte);
+        }
+
+        let row0: String = (0..4)
+            .map(|x| char::from(system.cell(x, 0).unwrap().byte))
+            .collect();
+        assert_eq!(row0, "efgh");
+        for x in 0..=4 {
+            assert_eq!(system.cell(x, 1), None);
+        }
+        assert_eq!(system.active_cursor(), (0, 1));
+    }
+
+    #[test]
+    fn text_window_wrapped_output_centres_and_formats_numbers() {
+        let mut system = TextWindowSystem::new();
+        system.set_window_rect(0, 0, 0, 10, 2);
+        system.emit_byte(TEXT_CTRL_CENTRE_ON);
+        system.print_wrapped_string("hi");
+
+        assert_eq!(system.cell(4, 0).unwrap().byte, b'h');
+        assert_eq!(system.cell(5, 0).unwrap().byte, b'i');
+        assert_eq!(format_signed_number(42, 5, '0'), "00042");
+        assert_eq!(format_signed_number(-7, 4, '0'), "00-7");
+
+        system.set_active_flags(0);
+        system.set_active_cursor(0, 1);
+        system.print_number(42, 5, b'0');
+        let row1: String = (0..5)
+            .map(|x| char::from(system.cell(x, 1).unwrap().byte))
+            .collect();
+        assert_eq!(row1, "00042");
+    }
+
+    #[test]
+    fn text_window_typed_space_eraser_preserves_cursor_and_gate() {
+        let mut system = TextWindowSystem::new();
+        system.emit_byte(b'A');
+        system.emit_byte(b'B');
+        system.emit_byte(b'C');
+        system.set_active_cursor(1, 0);
+
+        system.erase_typed_spaces(2);
+
+        assert_eq!(system.active_cursor(), (1, 0));
+        assert_eq!(system.cell(0, 0).unwrap().byte, b'A');
+        assert_eq!(system.cell(1, 0).unwrap().byte, b' ');
+        assert_eq!(system.cell(2, 0).unwrap().byte, b' ');
+        system.emit_byte(b'D');
+        assert_eq!(system.cell(1, 0).unwrap().byte, b'D');
+        assert_eq!(system.active_cursor(), (2, 0));
+    }
+
+    #[test]
     fn active_object_slot_role_partitions_table_per_spec() {
         // active-objects.md §4
         assert_eq!(

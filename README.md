@@ -75,6 +75,11 @@ while shops, conversations, and other line-oriented interactions remain modal
 runtime flows rather than bespoke Bevy UI. Modal prompts such as
 conversation keywords, Blackthorn answers, and sage topics collect typed text
 in the status panel, support Backspace, and submit on Enter.
+The runtime also exposes a spec-backed fixed-cell text-window core with four
+independent descriptors, preserved per-window cursors, style control bytes,
+clear/scroll behavior, wrapped output, numeric output, and typed-input erasure;
+frontends can use this as the bridge from current diagnostic panels toward the
+original 40x25 text-window contract.
 
 `--intro --visual` opens a Bevy intro/menu shell backed by the same runtime menu
 dispatcher used by terminal intro mode. Journey Onward loads `SAVED.GAM` and

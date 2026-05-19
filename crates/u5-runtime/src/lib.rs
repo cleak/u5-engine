@@ -487,11 +487,13 @@ pub use text_wrap::{
     TEXT_CTRL_INVERSE_TOGGLE, TEXT_CTRL_RANGE_FIRST, TEXT_CTRL_RANGE_LAST,
     TEXT_CTRL_UNDERLINE_TOGGLE, TEXT_SCREEN_COLUMNS, TEXT_SCREEN_ROWS, TEXT_WINDOW_COUNT,
     TEXT_WINDOW_DEFAULT_ACTIVE_INDEX, TEXT_WINDOW_DEFAULT_BACKGROUND,
-    TEXT_WINDOW_DEFAULT_FOREGROUND, TextControlByte, WRAP_MIN_LINE_BUFFER, WrapByteKind,
-    WrappedLine, paragraph_byte_kind, proportional_renderer_byte_kind, text_color_background,
-    text_color_foreground, text_control_byte, text_emitter_byte_kind,
-    text_window_centred_start_column, text_window_clamp_rectangle, text_window_default_color_byte,
-    text_window_inner_width, wrap_byte_kind, wrap_text,
+    TEXT_WINDOW_DEFAULT_FOREGROUND, TEXT_WINDOW_FLAG_CENTRE, TEXT_WINDOW_FLAG_INVERSE,
+    TEXT_WINDOW_FLAG_UNDERLINE, TextCell, TextControlByte, TextWindowDescriptor, TextWindowSystem,
+    WRAP_MIN_LINE_BUFFER, WrapByteKind, WrappedLine, format_signed_number, paragraph_byte_kind,
+    proportional_renderer_byte_kind, text_color_background, text_color_foreground,
+    text_control_byte, text_emitter_byte_kind, text_window_centred_start_column,
+    text_window_clamp_rectangle, text_window_default_color_byte, text_window_inner_width,
+    wrap_byte_kind, wrap_text,
 };
 pub use tile_classes::{
     TILE_BARRIER_FIRST, TILE_BARRIER_LAST, TILE_DECORATION_FIRST, TILE_DECORATION_LAST,
