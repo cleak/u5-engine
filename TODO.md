@@ -24,13 +24,15 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-19 with 31 scripted route cases covering world/town look and
+  2026-05-19 with 44 scripted route cases covering world/town look and
   save-refusal prompts, surface/town/dungeon View overlays, Peer and X-Ray
   overlays, Underworld startup, debug-entered town return to world,
   Underworld-to-town debug entry, ship X-it/skiff launch, hoisted-sail movement,
   dungeon turn/block movement, dungeon exit confirmation/refusal, a Doom room
-  trigger that enters a combat raster viewport, and combat pass, refusal,
-  View, Yell, X-it, and Search-prompt command routing.
+  trigger that enters a combat raster viewport, dungeon Attack/Search/Get/
+  Jimmy/Open/refusal command routing, and combat pass, Attack, Cast, Get,
+  Jimmy, Open, Push, Klimb, Ready, Z-stats, refusal, View, Yell, X-it, and
+  Search-prompt command routing.
 - `cargo run -p u5-tui -- --save-frame-suite target\codex-frame-suite
   C:\Games\U5-Clean` passed on 2026-05-19 and wrote thirteen nonblank PNGs:
   `britannia` `859a1bdabe5c9b7a`, `britannia-step` `05b13e47da048fe6`,
@@ -82,8 +84,9 @@ Current worktree context when this TODO was refreshed:
   used by live-gate entry; current tests seed that cache directly.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry, and
-  seeded ship/skiff sailing routes; native exact coordinate-table coverage
-  still depends on public gazetteer/sidecar rows.
+  seeded ship/skiff sailing routes, plus broader dungeon and combat command
+  branches; native exact coordinate-table coverage still depends on public
+  gazetteer/sidecar rows.
 - Combat AI now threads party-name faction grouping into live target scans,
   applies wound morale/flee inversion in production turns, honors Doom and
   Shadow Lord suppression-filter bypasses, mutates non-party Sleep Field

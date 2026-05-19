@@ -750,6 +750,26 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "dungeon-turn-and-blocked-step")
     );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "dungeon-attack-direction-route")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "dungeon-search-focus-route")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "dungeon-sjog-underfoot-routes")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "dungeon-refusal-letter-routes")
+    );
     assert!(cases.iter().any(|case| case.name == "dungeon-exit-confirm"));
     assert!(cases.iter().any(|case| case.name == "dungeon-view-overlay"));
     assert!(
@@ -797,6 +817,47 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "doom-combat-w-refusal")
     );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-attack-direction")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-cast-refusal")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-get-direction")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-jimmy-direction")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-open-direction")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-push-direction")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-klimb-direction")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-ready-prompt")
+    );
+    assert!(cases.iter().any(|case| case.name == "doom-combat-z-stats"));
     assert!(
         cases
             .iter()
