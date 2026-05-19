@@ -15,9 +15,8 @@ this file alone.
 Last known verification state:
 
 - `cargo test -p u5-runtime` passed on 2026-05-19, including 2363 tests.
+- `cargo test -p u5-tui` passed on 2026-05-19.
 - `cargo fmt -- --check` passed on 2026-05-19 after the latest Rust changes.
-- `cargo test -p u5-tui cli_binary_help_prints_usage_without_assets -- --exact`
-  passed on 2026-05-18; rerun when CLI/TUI code changes.
 - Representative raster smoke checks with local assets produced nonblank hashes:
   `BRITANNIA` top-down `fd923dc0f87a9f3c`, `BRITANNIA` after movement
   `1eb882f27b1d216c`, `CASTLE:0` top-down `be84488b7b199310`, and
@@ -26,7 +25,7 @@ Last known verification state:
   asset visual checks.
 - `cargo run -- --help` is a supported no-asset usage path.
 - The latest checkpointed engine commit at the time of this refresh was
-  `6d38260 Prompt on underfoot town exits`.
+  `9fb9f5b Wire dungeon deeper transition sidecar`.
 - The spec checkout used for the most recent audit was `5b816cc Complete
   cleanroom specification`.
 
@@ -226,7 +225,6 @@ tables are not yet public or not yet encoded.
   - `shrines.tsv`
   - `dungeon_deeper_transitions.tsv`
   - `dungeon_teleports.tsv`
-  - `dungeon_wind_tiles.tsv`
   - `dungeon_exit_tiles.tsv`
   - `dungeon_doors.tsv`
   - `dungeon_chests.tsv`
@@ -243,6 +241,9 @@ tables are not yet public or not yet encoded.
   - `moongates.tsv`
   - `location_floor_pages.tsv`
   - `location_entry_y.tsv`
+  - `common_words.tsv`
+  - `SAVED.WPS`
+  - `SAVED.BTH`
 
 - For each sidecar:
   - identify whether the public spec now has enough information to implement a
@@ -388,7 +389,8 @@ until combat exists.
     level, and max-HP recomputation.
   - Create Food uses first-playable fixed amount and cap behavior remains open.
   - Rel Hur wind order is deterministic but exact original order remains open.
-  - Blink default range is sidecar-authored.
+  - Blink default range is sidecar-authored outside combat; combat Blink uses
+    the current arena state and legal in-arena landing checks.
   - X-Ray and Peer use first-playable map projections; visual parity remains
     open.
   - Dungeon escape-helper spell split remains open.

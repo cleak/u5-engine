@@ -202,10 +202,11 @@ public space-boundary match rule and applies supported TLK byte-runner side
 effects. Bare Talk opens the interactive conversation keyword loop when raw
 `.TLK` streams are available, and Talk-triggered shopkeepers route into the
 modal shop sessions, including horse-trader purchases that place a nearby
-boardable horse object. If a clean 128-row `common_words.tsv` sidecar is present
-beside the game data, raw `.TLK` dictionary tokens expand through it; otherwise
-the placeholder tokens remain visible. Overworld and dungeon Talk return the
-stock no-response path without spending a turn.
+boardable horse object. Raw `.TLK` dictionary tokens require the clean 128-row
+`common_words.tsv` sidecar beside the game data; tokenized conversations expand
+through that shared dictionary, and tokenized raw conversation data without it
+is rejected instead of surfacing placeholder text. Overworld and dungeon Talk
+return the stock no-response path without spending a turn.
 Dungeon movement and the normal lit render are facing-relative: `W`/`S` step
 forward/back, `A`/`D` turn left/right, blocked cardinal movement reports the
 public `Blocked!` refusal, `K` climbs one-way ladders or prompts on two-way

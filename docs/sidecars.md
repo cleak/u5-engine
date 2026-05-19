@@ -47,13 +47,20 @@ move below level `7`. Missing rows preserve the conservative in-place block.
 | `secret_doors.tsv` | Search-revealed secret doors. |
 | `dungeon_doors.tsv` | Dungeon heavy-door rows. |
 | `dungeon_chests.tsv` | Dungeon chest guard/grant metadata used by tests. |
-| `dungeon_wind_tiles.tsv` | Dungeon wind/gust interaction rows. |
 | `world_waterfalls.tsv` | Current/waterfall sweeps after accepted world movement. |
 | `world_damage_tiles.tsv` | Lava/drowning damage cells and transport gates. |
 | `world_encounters.tsv` | Authored encounter spawn rows. |
 | `shrines.tsv` | Shrine coordinates and virtue binding. |
 | `blink_targets.tsv` | Clean Blink landing rows. |
 | `tile_passability.bin` | Optional 32-byte public tile passability bitmap. |
+
+## Content And Companion Save Files
+
+| File | Purpose |
+|---|---|
+| `common_words.tsv` | Required 128-row clean common-word dictionary for tokenized raw `.TLK` and `SHOPPE.DAT` text. |
+| `SAVED.WPS` | Clean companion save for durable world-progress state whose exact original `SAVED.GAM` offsets are not yet public. |
+| `SAVED.BTH` | Clean companion save for Blackthorn capture/rescue story state whose exact original `SAVED.GAM` offsets are not yet public. |
 
 ## General Rules
 
