@@ -221,6 +221,13 @@ pub fn visual_frame_suite(
         game_dir,
         raster_depth,
     )?);
+    reports.push(write_visual_intro_report_with_title_dismissed(
+        out_dir,
+        "intro-finished-menu",
+        "intro finished menu",
+        game_dir,
+        raster_depth,
+    )?);
     if let Some(records) = load_story_records(game_dir)? {
         reports.push(write_visual_intro_report(
             out_dir,
@@ -844,15 +851,14 @@ fn animate_visual_intro_title_effects(
     let Some(mut intro) = intro else {
         return;
     };
-    if !matches!(intro.panel, VisualIntroPanel::Menu)
-        || !matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle)
-    {
+    if !matches!(intro.panel, VisualIntroPanel::Menu) {
         return;
     }
+    let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
 
     intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
 
-    if !intro.title_signature_complete {
+    if title_phase && !intro.title_signature_complete {
         let Ok(signature) = load_british_pth(&intro.game_dir) else {
             intro.title_signature_complete = true;
             return;
@@ -1681,19 +1687,19 @@ fn format_story_art_line(file: &str, placement: IntroStoryArtPlacement) -> Strin
 }
 
 fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
-    let title_visible = matches!(intro.panel, VisualIntroPanel::Menu)
-        && matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
-    let mut rgba = render_text_panel_rgba(
-        &summarize_intro(intro),
-        INTRO_FRAMEBUFFER_WIDTH as usize,
-        INTRO_FRAMEBUFFER_HEIGHT as usize,
-    )
-    .unwrap_or_else(|_| {
-        vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4]
-    });
-    if title_visible {
-        let signature_progress =
-            (!intro.title_signature_complete).then_some(intro.title_signature_progress);
+    let summary = summarize_intro(intro);
+    let menu_panel = visual_intro_title_surface_visible(intro);
+    let title_phase =
+        menu_panel && matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
+    let mut rgba =
+        vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+    }
+    if menu_panel {
+        let signature_progress = (title_phase && !intro.title_signature_complete)
+            .then_some(intro.title_signature_progress);
+        let mut drew_title = false;
         if let Some(title_rgba) =
             visual_intro_title_art_rgba(&intro.game_dir, signature_progress, intro.title_tick_frame)
         {
@@ -1707,7 +1713,30 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
                 0,
                 0,
             );
+            drew_title = true;
         }
+        if !drew_title {
+            rgba = render_text_panel_rgba(
+                &summary,
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                INTRO_FRAMEBUFFER_HEIGHT as usize,
+            )
+            .unwrap_or(rgba);
+        } else if !title_phase {
+            overlay_nonblack_text_panel_rgba(
+                &mut rgba,
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                INTRO_FRAMEBUFFER_HEIGHT as usize,
+                &summary,
+            );
+        }
+    } else {
+        rgba = render_text_panel_rgba(
+            &summary,
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+        )
+        .unwrap_or(rgba);
     }
     if let VisualIntroPanel::Story { step, .. } = &intro.panel {
         for draw in visual_intro_story_art_draws_rgba(&intro.game_dir, intro.raster_depth, *step) {
@@ -1743,6 +1772,10 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         );
     }
     rgba
+}
+
+fn visual_intro_title_surface_visible(intro: &VisualIntroState) -> bool {
+    matches!(intro.panel, VisualIntroPanel::Menu)
 }
 
 fn visual_intro_title_art_rgba(
@@ -2075,6 +2108,45 @@ fn blit_rgba(
     }
 }
 
+fn overlay_nonblack_text_panel_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    text: &str,
+) {
+    let Ok(text_rgba) = render_text_panel_rgba(text, dst_width, dst_height) else {
+        return;
+    };
+    let text_pixels: Vec<(usize, [u8; 4])> = text_rgba
+        .chunks_exact(4)
+        .enumerate()
+        .filter_map(|(index, pixel)| {
+            (pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
+                .then_some((index, [pixel[0], pixel[1], pixel[2], pixel[3]]))
+        })
+        .collect();
+
+    for (index, _) in &text_pixels {
+        let x = index % dst_width;
+        let y = index / dst_width;
+        let shadow_x = x + 1;
+        let shadow_y = y + 1;
+        if shadow_x < dst_width && shadow_y < dst_height {
+            let offset = (shadow_y * dst_width + shadow_x) * 4;
+            if let Some(pixel) = dst.get_mut(offset..offset + 4) {
+                pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+            }
+        }
+    }
+
+    for (index, pixel) in text_pixels {
+        let offset = index * 4;
+        if let Some(dst_pixel) = dst.get_mut(offset..offset + 4) {
+            dst_pixel.copy_from_slice(&pixel);
+        }
+    }
+}
+
 fn write_visual_play_report(
     out_dir: &Path,
     label: &str,
@@ -2102,6 +2174,44 @@ fn write_visual_intro_report(
     game_dir: &Path,
     raster_depth: TileGraphicsDepth,
 ) -> io::Result<VisualFrameReport> {
+    write_visual_intro_report_inner(
+        out_dir,
+        label,
+        frame_kind,
+        panel,
+        game_dir,
+        raster_depth,
+        false,
+    )
+}
+
+fn write_visual_intro_report_with_title_dismissed(
+    out_dir: &Path,
+    label: &str,
+    frame_kind: &'static str,
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+) -> io::Result<VisualFrameReport> {
+    write_visual_intro_report_inner(
+        out_dir,
+        label,
+        frame_kind,
+        VisualIntroPanel::Menu,
+        game_dir,
+        raster_depth,
+        true,
+    )
+}
+
+fn write_visual_intro_report_inner(
+    out_dir: &Path,
+    label: &str,
+    frame_kind: &'static str,
+    panel: VisualIntroPanel,
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    title_dismissed: bool,
+) -> io::Result<VisualFrameReport> {
     let mut intro = VisualIntroState {
         game_dir: game_dir.to_path_buf(),
         raster_depth,
@@ -2114,6 +2224,9 @@ fn write_visual_intro_report(
         launch_result: Arc::new(Mutex::new(None)),
         image_handle: None,
     };
+    if title_dismissed {
+        intro.dispatch.dismiss_title();
+    }
     let rgba = render_intro_frame(&mut intro);
     write_visual_report(
         out_dir,
@@ -3074,6 +3187,56 @@ mod tests {
     }
 
     #[test]
+    fn finished_intro_menu_keeps_title_surface_and_overlays_menu_text() {
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_signature_progress: 0,
+            title_signature_complete: false,
+            title_tick_frame: 0,
+            message: String::new(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+        assert!(visual_intro_title_surface_visible(&intro));
+        assert!(matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+
+        intro.dispatch.dismiss_title();
+        assert!(visual_intro_title_surface_visible(&intro));
+        assert!(!matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+
+        let mut frame = vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * 16 * 4];
+        for pixel in frame.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[0x22, 0x22, 0x22, 0xff]);
+        }
+        overlay_nonblack_text_panel_rgba(
+            &mut frame,
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            16,
+            "J  Journey Onward",
+        );
+        assert!(frame.chunks_exact(4).any(|pixel| {
+            pixel[3] == 0xff
+                && (pixel[0] != 0x22 || pixel[1] != 0x22 || pixel[2] != 0x22)
+                && (pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
+        }));
+        assert!(
+            frame
+                .chunks_exact(4)
+                .any(|pixel| pixel == [0x22, 0x22, 0x22, 0xff])
+        );
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
     fn intro_title_art_composition_clears_lower_band_then_draws_remaining_slots() {
         let blank = MonochromeBitmap {
             width: 1,
@@ -3278,7 +3441,7 @@ mod tests {
         let reports = visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
         let has_story = game_dir.join(STORY_DAT_FILE).exists();
-        assert_eq!(reports.len(), if has_story { 15 } else { 14 });
+        assert_eq!(reports.len(), if has_story { 16 } else { 15 });
         for report in &reports {
             assert!(report.path.exists());
             assert!(report.nonblack_pixels > 0);
@@ -3305,9 +3468,14 @@ mod tests {
             assert_eq!(report.height, VISUAL_PLAY_FRAME_HEIGHT);
         }
         let intro_labels: &[&str] = if has_story {
-            &["intro-menu", "intro-story-art", "intro-return-to-view"]
+            &[
+                "intro-menu",
+                "intro-finished-menu",
+                "intro-story-art",
+                "intro-return-to-view",
+            ]
         } else {
-            &["intro-menu", "intro-return-to-view"]
+            &["intro-menu", "intro-finished-menu", "intro-return-to-view"]
         };
         for label in intro_labels {
             let report = reports
@@ -3331,6 +3499,7 @@ mod tests {
         assert!(manifest.contains("z-stats-modal"));
         assert!(manifest.contains("endgame-status"));
         assert!(manifest.contains("intro-menu"));
+        assert!(manifest.contains("intro-finished-menu"));
         if has_story {
             assert!(manifest.contains("intro-story-art"));
         }
