@@ -227,8 +227,10 @@ Escape/empty cancellation, and dispatches through the same spell resource and
 scene gates as inline `C1...` casts. Spells that need a follow-up direction,
 party member, combat slot, or Gate Travel moon phase now prompt for that choice
 before any spell charge or mana is spent. Bare `U` opens the Use picker, bare
-`R` opens the Ready picker, bare `M` opens the reagent mixer, bare `N` opens the
-New Order party-slot prompt, and bare `Y` opens the free-text yell prompt.
+`R` opens the Ready picker with carried-stock, ammunition, strength, occupied
+slot, hand-occupancy, ring-vanish, and combat body-armour gates, bare `M` opens
+the reagent mixer, bare `N` opens the New Order party-slot prompt, and bare `Y`
+opens the free-text yell prompt.
 Bare `J` opens the Jimmy party-member picker, and inline forms such as `J1`
 still route in one command. The command uses the first-playable Jimmy/key guard
 instead of the movement helper, with optional town lock and dungeon door

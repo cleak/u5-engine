@@ -1799,6 +1799,42 @@
     }
 
     #[test]
+    fn ready_equipment_locks_body_armour_changes_in_combat_only() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.combat_active = true;
+        state.party_strengths = vec![60];
+        state.party_equipment = default_party_equipment(1);
+        state.party_equipment[0][EQUIP_SLOT_ARMOUR] = 9;
+        state.equipment_stock[9] = 0;
+        state.equipment_stock[10] = 1;
+        state.equipment_stock[16] = 1;
+
+        assert_eq!(
+            state.ready_equipment_from_suffix("1/9"),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.party_equipment[0][EQUIP_SLOT_ARMOUR], 9);
+        assert_eq!(state.equipment_stock[9], 0);
+        assert_eq!(state.message, "Cannot change armour in combat.");
+
+        assert_eq!(
+            state.ready_equipment_from_suffix("1/10"),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.party_equipment[0][EQUIP_SLOT_ARMOUR], 9);
+        assert_eq!(state.equipment_stock[10], 1);
+        assert_eq!(state.message, "Cannot change armour in combat.");
+
+        assert_eq!(
+            state.ready_equipment_from_suffix("1/16"),
+            MoveOutcome::Used
+        );
+        assert_eq!(state.party_equipment[0][EQUIP_SLOT_WEAPON], 16);
+        assert_eq!(state.equipment_stock[16], 0);
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
     fn cast_reveal_clears_combat_hidden_flags_and_marks_redraw() {
         let mut state = test_state(open_grid(), 1, 1);
         state.combat_active = true;

@@ -1919,6 +1919,10 @@ impl PlayState {
 
         let item_id = request.item_id;
         let name = equipment_name(item_id);
+        if self.combat_active && EQUIPMENT_CLASS_TAGS[item_id] == EQUIPMENT_TAG_ARMOUR {
+            self.message = "Cannot change armour in combat.".to_string();
+            return MoveOutcome::Blocked;
+        }
         if let Some(slot) = self.party_equipment[request.party_index]
             .iter()
             .position(|item| *item as usize == item_id)
