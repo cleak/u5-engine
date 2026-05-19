@@ -372,6 +372,23 @@
     }
 
     #[test]
+    fn look_shrine_altar_tiles_append_virtue_context() {
+        let table =
+            parse_look2_dat(&look2_bytes(&[(SHRINE_ALTAR_TILE_FIRST as usize, "an altar")]))
+                .unwrap();
+        let state = test_state(open_grid(), 1, 1);
+
+        assert_eq!(
+            state.look_description(SHRINE_ALTAR_TILE_FIRST, Some(&table)),
+            "an altar (Shrine of Honesty)"
+        );
+        assert_eq!(
+            state.look_description(SHRINE_ALTAR_TILE_LAST, None),
+            "special (Shrine of Humility)"
+        );
+    }
+
+    #[test]
     fn world_look_wraps_and_reports_facing_object_without_spending_turn() {
         let mut state = world_state(open_world_grid(), 255, 0);
         state.player.facing = Direction::East;
@@ -453,6 +470,61 @@
 
         assert!(state.message.contains("a dungeon mouth (Wrong)"));
         assert_eq!(state.turn, 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn world_look_shrine_table_appends_clean_virtue_name() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[(0x80, "a shrine")])).unwrap();
+        fs::write(
+            dir.join(SHRINE_TABLE_FILE),
+            "BRITANNIA 2 1 COMPASSION 0x80\n",
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(2, 1)] = 0x80;
+        let mut state = britannia_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+
+        assert_eq!(
+            state.look_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Observed
+        );
+
+        assert!(state.message.contains("a shrine (Shrine of Compassion)"));
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn world_look_shrine_altar_avoids_duplicate_virtue_context() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(LOOK2_DAT_FILE),
+            look2_bytes(&[(SHRINE_ALTAR_TILE_FIRST as usize, "an altar")]),
+        )
+        .unwrap();
+        fs::write(
+            dir.join(SHRINE_TABLE_FILE),
+            "BRITANNIA 2 1 HONESTY 0x88\n",
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(2, 1)] = SHRINE_ALTAR_TILE_FIRST;
+        let mut state = britannia_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+
+        assert_eq!(
+            state.look_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Observed
+        );
+
+        assert!(state.message.contains("an altar (Shrine of Honesty)"));
+        assert_eq!(state.message.matches("Shrine of Honesty").count(), 1);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
         let _ = fs::remove_dir_all(dir);
     }
 
