@@ -7312,10 +7312,71 @@
             monster_attack.resolution,
             Some(CombatWeaponAttackResolution::Miss {
                 route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 6 },
-                hit_score: 16,
+                hit_score: 0,
             })
         );
         assert_eq!(state.party[0].hp, 20);
+    }
+
+    #[test]
+    fn combat_round_walk_amulet_turning_scatter_can_hit_adjacent_impact_actor() {
+        let mut state = combat_ai_turn_state(8, 5);
+        state.combat_actors[8].owner_target_class = 28;
+        state.combat_actors[8].phase_counter = 1;
+        state.turn = 0;
+        state.party[0].status = b'G';
+        state.party[0].hp = 20;
+        state.party[0].max_hp = 20;
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: 1,
+            status: b'G',
+            climb_stat: 0,
+            mana: 0,
+            hp: 20,
+            max_hp: 20,
+            level: 1,
+        });
+        state.party_equipment = default_party_equipment(2);
+        state.party_equipment[0][EQUIP_SLOT_AMULET] = EQUIPMENT_ID_AMULET_TURNING as u8;
+        state.combat_actors[1] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            1,
+            0,
+            4,
+            4,
+        ]);
+
+        let application = state.apply_combat_round_walk_from_slot(8, 30, false);
+        let monster_attack = application
+            .applications
+            .iter()
+            .find_map(|entry| match entry {
+                CombatActorSlotDispatchApplication::Slot {
+                    slot: 8,
+                    action:
+                        CombatActorDispatchAction::MonsterAi {
+                            ai_turn: Some(ai_turn),
+                        },
+                    ..
+                } => ai_turn.monster_attack,
+                _ => None,
+            })
+            .expect("turnable ranged attack should resolve at the scattered impact cell");
+
+        assert_eq!(monster_attack.target_slot, 1);
+        assert_eq!(
+            monster_attack.resolution,
+            Some(CombatWeaponAttackResolution::Hit {
+                route: CombatWeaponAttackRangeRoute::Ranged { effect_code: 6 },
+                raw_damage: 5,
+            })
+        );
+        assert_eq!(state.party[0].hp, 20);
+        assert_eq!(state.party[1].hp, 15);
     }
 
     fn combat_player_command_state(monster_x: u8, monster_y: u8) -> PlayState {

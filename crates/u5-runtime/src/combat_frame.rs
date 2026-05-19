@@ -80,6 +80,17 @@ pub const COMBAT_DIRECTION_EAST: u8 = 2;
 pub const COMBAT_DIRECTION_NORTH: u8 = 3;
 pub const COMBAT_DIRECTION_SOUTH: u8 = 4;
 
+const AMULET_TURNING_SCATTER_OFFSETS: [(i8, i8); 8] = [
+    (-1, -1),
+    (0, -1),
+    (1, -1),
+    (-1, 0),
+    (1, 0),
+    (-1, 1),
+    (0, 1),
+    (1, 1),
+];
+
 /// `combat.md §11`: translate a step-or-attack direction code into
 /// the `(dx, dy)` unit step the primitive applies. Code zero or any
 /// value outside `1..=4` returns `(0, 0)` so the caller treats it as
@@ -106,6 +117,25 @@ pub const fn combat_restore_active_player_slot(
     match post_combat_status {
         CharacterStatus::Dead | CharacterStatus::Sleeping => None,
         _ => Some(saved_slot),
+    }
+}
+
+pub fn resolve_amulet_turning_scatter_cell(
+    target_x: u8,
+    target_y: u8,
+    attacker_x: u8,
+    attacker_y: u8,
+    roll: u8,
+) -> (i8, i8) {
+    let mut index = usize::from(roll & 7);
+    loop {
+        let (dx, dy) = AMULET_TURNING_SCATTER_OFFSETS[index];
+        let x = target_x as i8 + dx;
+        let y = target_y as i8 + dy;
+        if x != attacker_x as i8 || y != attacker_y as i8 {
+            return (x, y);
+        }
+        index = (index + 1) % AMULET_TURNING_SCATTER_OFFSETS.len();
     }
 }
 
@@ -218,6 +248,7 @@ pub struct CombatMonsterAttackInputs {
     pub poison_gate_accepts: bool,
     pub poison_damage_roll: u8,
     pub forced_hit: Option<bool>,
+    pub amulet_turning_scatter_roll: u8,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -1373,22 +1404,30 @@ impl PlayState {
         ) {
             let monster_attack = target_slot.and_then(|target_slot| {
                 monster_attack_inputs.and_then(|inputs| {
-                    let inputs = CombatMonsterAttackInputs {
-                        forced_hit: inputs.forced_hit.or_else(|| {
-                            self.combat_monster_forced_hit_override(actor_slot, target_slot)
-                        }),
-                        ..inputs
-                    };
-                    self.resolve_and_apply_combat_monster_attack(
-                        actor_slot,
-                        target_slot,
-                        inputs.party_defender_rating,
-                        inputs.hit_roll,
-                        inputs.damage_roll,
-                        inputs.poison_gate_accepts,
-                        inputs.poison_damage_roll,
-                        inputs.forced_hit,
-                    )
+                    if matches!(attack_route, Some(CombatAiAttackRoute::RangedEffect { .. }))
+                        && self
+                            .combat_monster_amulet_turning_scatter_applies(actor_slot, target_slot)
+                    {
+                        self.resolve_and_apply_combat_monster_scattered_attack(
+                            actor_slot,
+                            target_slot,
+                            inputs.party_defender_rating,
+                            inputs.hit_roll,
+                            inputs.damage_roll,
+                            inputs.amulet_turning_scatter_roll,
+                        )
+                    } else {
+                        self.resolve_and_apply_combat_monster_attack(
+                            actor_slot,
+                            target_slot,
+                            inputs.party_defender_rating,
+                            inputs.hit_roll,
+                            inputs.damage_roll,
+                            inputs.poison_gate_accepts,
+                            inputs.poison_damage_roll,
+                            inputs.forced_hit,
+                        )
+                    }
                 })
             });
             return Some(CombatAiTurnApplication {
@@ -2560,6 +2599,142 @@ impl PlayState {
         })
     }
 
+    pub fn combat_monster_amulet_turning_scatter_applies(
+        &self,
+        attacker_slot: usize,
+        target_slot: usize,
+    ) -> bool {
+        if target_slot >= COMBAT_PARTY_ACTOR_SLOTS {
+            return false;
+        }
+        let Some(attacker) = self.combat_actors.get(attacker_slot).copied() else {
+            return false;
+        };
+        let Some(target) = self.party.get(target_slot).copied() else {
+            return false;
+        };
+        let Some(equipment) = self.party_equipment.get(target_slot) else {
+            return false;
+        };
+        let roll = self.combat_monster_amulet_turning_roll(attacker_slot, target_slot);
+        resolve_amulet_turning_scatter_for_party_target(
+            attacker.owner_target_class,
+            target,
+            equipment,
+            roll,
+        )
+        .unwrap_or(false)
+    }
+
+    pub fn combat_actor_at_scatter_impact(&self, x: u8, y: u8) -> Option<usize> {
+        self.combat_actors
+            .iter()
+            .copied()
+            .enumerate()
+            .find(|(_, actor)| {
+                actor.x == x
+                    && actor.y == y
+                    && combat_actor_is_active_not_dead(*actor)
+                    && !actor.is_hidden_or_unrevealed()
+            })
+            .map(|(slot, _)| slot)
+    }
+
+    pub fn resolve_and_apply_combat_monster_scattered_attack(
+        &mut self,
+        attacker_slot: usize,
+        intended_target_slot: usize,
+        party_defender_rating: u8,
+        hit_roll: u8,
+        damage_roll: u8,
+        scatter_roll: u8,
+    ) -> Option<CombatMonsterAttackApplication> {
+        if attacker_slot < COMBAT_PARTY_ACTOR_SLOTS || attacker_slot >= COMBAT_ACTOR_SLOTS {
+            return None;
+        }
+        let attacker = *self.combat_actors.get(attacker_slot)?;
+        let intended = *self.combat_actors.get(intended_target_slot)?;
+        if !combat_actor_is_active_not_dead(attacker) || !combat_actor_is_active_not_dead(intended)
+        {
+            return None;
+        }
+        let attacker_stats = combat_class_stats(attacker.owner_target_class)?;
+        let ranged = combat_ranged_effect_stats(attacker.owner_target_class)?;
+        let (impact_x, impact_y) = resolve_amulet_turning_scatter_cell(
+            intended.x,
+            intended.y,
+            attacker.x,
+            attacker.y,
+            scatter_roll,
+        );
+        let route = CombatWeaponAttackRangeRoute::Ranged {
+            effect_code: ranged.payload,
+        };
+        if !(0..COMBAT_ARENA_SIDE as i8).contains(&impact_x)
+            || !(0..COMBAT_ARENA_SIDE as i8).contains(&impact_y)
+        {
+            return Some(CombatMonsterAttackApplication {
+                attacker_slot,
+                target_slot: intended_target_slot,
+                poison_status_outcome: None,
+                resolution: Some(CombatWeaponAttackResolution::Miss {
+                    route,
+                    hit_score: 0,
+                }),
+                damage_application: None,
+            });
+        }
+
+        let impact_x = impact_x as u8;
+        let impact_y = impact_y as u8;
+        let Some(target_slot) = self.combat_actor_at_scatter_impact(impact_x, impact_y) else {
+            return Some(CombatMonsterAttackApplication {
+                attacker_slot,
+                target_slot: intended_target_slot,
+                poison_status_outcome: None,
+                resolution: Some(CombatWeaponAttackResolution::Miss {
+                    route,
+                    hit_score: 0,
+                }),
+                damage_application: None,
+            });
+        };
+        let defender_rating = if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
+            party_defender_rating
+        } else {
+            combat_class_stats(self.combat_actors[target_slot].owner_target_class)?.defense
+        };
+        let impact_range = combat_arena_range(attacker.x, attacker.y, impact_x, impact_y).max(2);
+        let resolution = resolve_combat_weapon_attack(
+            attacker_stats.attack_cap,
+            impact_range,
+            ranged.range_effect_selector,
+            ranged.payload,
+            attacker_stats.attack_cap,
+            defender_rating,
+            hit_roll,
+            damage_roll,
+            Some(true),
+        );
+        let damage_application = match resolution {
+            CombatWeaponAttackResolution::Hit { raw_damage, .. } => {
+                self.apply_combat_weapon_damage_to_target(None, target_slot, raw_damage, false)
+            }
+            CombatWeaponAttackResolution::OutOfRange { .. }
+            | CombatWeaponAttackResolution::NoOrdinaryDamage { .. }
+            | CombatWeaponAttackResolution::Miss { .. }
+            | CombatWeaponAttackResolution::Special { .. } => None,
+        };
+
+        Some(CombatMonsterAttackApplication {
+            attacker_slot,
+            target_slot,
+            poison_status_outcome: None,
+            resolution: Some(resolution),
+            damage_application,
+        })
+    }
+
     pub fn apply_combat_active_player_digit(
         &mut self,
         key: char,
@@ -3226,6 +3401,8 @@ impl PlayState {
             poison_damage_roll: (self.turn as u8)
                 .wrapping_add((attacker_slot as u8).wrapping_mul(13)),
             forced_hit: None,
+            amulet_turning_scatter_roll: (self.turn as u8)
+                .wrapping_add((attacker_slot as u8).wrapping_mul(23)),
         }
     }
 
@@ -3237,22 +3414,6 @@ impl PlayState {
         (self.turn as u8)
             .wrapping_add((attacker_slot as u8).wrapping_mul(7))
             .wrapping_add((target_slot as u8).wrapping_mul(19))
-    }
-
-    pub fn combat_monster_forced_hit_override(
-        &self,
-        attacker_slot: usize,
-        target_slot: usize,
-    ) -> Option<bool> {
-        if target_slot >= COMBAT_PARTY_ACTOR_SLOTS {
-            return None;
-        }
-        let attacker_class = self.combat_actors.get(attacker_slot)?.owner_target_class;
-        let target = self.party.get(target_slot).copied()?;
-        let equipment = self.party_equipment.get(target_slot)?;
-        let roll = self.combat_monster_amulet_turning_roll(attacker_slot, target_slot);
-        resolve_amulet_turning_scatter_for_party_target(attacker_class, target, equipment, roll)
-            .and_then(|scatter| scatter.then_some(false))
     }
 
     pub fn ensure_pending_combat_player_turn(&mut self) -> Option<CombatRoundWalkApplication> {
