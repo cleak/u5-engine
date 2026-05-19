@@ -321,6 +321,56 @@
     }
 
     #[test]
+    fn from_save_decodes_dungeon_working_buffer_for_dungeon_scene() {
+        let mut bytes = saved_game_seed_bytes(33, 0, 1, 1);
+        bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        let buffer_start = SAVE_DUNGEON_WORKING_BUFFER_OFFSET;
+        let buffer_end = buffer_start + SAVE_DUNGEON_WORKING_BUFFER_LEN;
+        bytes[buffer_start..buffer_end].fill(0x44);
+        bytes[buffer_start + dungeon_cell_index(0, 2, 1)] = 0x68;
+
+        let options = play_options_from_save_bytes(&bytes).unwrap();
+
+        let buffer = options
+            .saved_dungeon_working_buffer
+            .expect("dungeon saves carry the live working buffer");
+        assert_eq!(buffer.len(), SAVE_DUNGEON_WORKING_BUFFER_LEN);
+        assert_eq!(buffer[dungeon_cell_index(0, 2, 1)], 0x68);
+
+        bytes[SAVE_SCENE_OFFSET] = 0;
+        let world_options = play_options_from_save_bytes(&bytes).unwrap();
+        assert_eq!(world_options.saved_dungeon_working_buffer, None);
+    }
+
+    #[test]
+    fn dungeon_save_writes_live_working_buffer() {
+        let dir = debug_game_dir();
+        let mut template = saved_game_seed_bytes(33, 0, 1, 1);
+        template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        template[SAVE_DUNGEON_WORKING_BUFFER_OFFSET..SAVE_DUNGEON_WORKING_BUFFER_OFFSET + SAVE_DUNGEON_WORKING_BUFFER_LEN]
+            .fill(0x7f);
+        fs::write(dir.join("SAVED.GAM"), template).unwrap();
+        fs::write(dir.join("SAVED.OOL"), vec![0; SAVED_OOL_LEN]).unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x68;
+        grid[dungeon_cell_index(0, 3, 1)] = 0x8a;
+        let mut state = dungeon_state(grid.clone(), 0, 1, 1);
+
+        assert_eq!(
+            state.save_game_command(&dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+
+        let saved = fs::read(dir.join("SAVED.GAM")).unwrap();
+        assert_eq!(
+            &saved[SAVE_DUNGEON_WORKING_BUFFER_OFFSET
+                ..SAVE_DUNGEON_WORKING_BUFFER_OFFSET + SAVE_DUNGEON_WORKING_BUFFER_LEN],
+            &grid[..]
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn save_game_command_writes_inn_registry_view() {
         let dir = debug_game_dir();
         let mut template = saved_game_seed_bytes(17, 0, 15, 15);
@@ -1243,6 +1293,7 @@
             fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
             fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
             dungeon_room_clear_bitmap: [0; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
+            saved_dungeon_working_buffer: None,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
             shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
             shrine_ordained_mask: 0,

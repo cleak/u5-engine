@@ -117,6 +117,13 @@ impl PlayState {
         save[SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET
             ..SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET + SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN]
             .copy_from_slice(&self.dungeon_room_clear_bitmap);
+        if matches!(self.area, Area::Dungeon { .. })
+            && self.grid.len() == SAVE_DUNGEON_WORKING_BUFFER_LEN
+        {
+            save[SAVE_DUNGEON_WORKING_BUFFER_OFFSET
+                ..SAVE_DUNGEON_WORKING_BUFFER_OFFSET + SAVE_DUNGEON_WORKING_BUFFER_LEN]
+                .copy_from_slice(&self.grid);
+        }
         save[SAVE_ACTIVE_PLAYER_OFFSET] = encode_active_player_slot(self.active_player);
         save[SAVE_COMBAT_ROUND_COUNTER_OFFSET] = self.combat_round_counter;
         save[SAVE_TRANSPORT_MARKER_OFFSET] = self.player.transport.save_marker();
@@ -465,8 +472,22 @@ impl PlayState {
                 ),
             ));
         }
-        let mut grid = load_dungeon_record(game_dir, scene)?;
-        apply_dungeon_room_clear_bitmap(&mut grid, scene, &options.dungeon_room_clear_bitmap);
+        let grid = if let Some(buffer) = options.saved_dungeon_working_buffer.clone() {
+            if buffer.len() != SAVE_DUNGEON_WORKING_BUFFER_LEN {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "saved dungeon working buffer must be {SAVE_DUNGEON_WORKING_BUFFER_LEN} bytes, got {}",
+                        buffer.len()
+                    ),
+                ));
+            }
+            buffer
+        } else {
+            let mut grid = load_dungeon_record(game_dir, scene)?;
+            apply_dungeon_room_clear_bitmap(&mut grid, scene, &options.dungeon_room_clear_bitmap);
+            grid
+        };
         let passability = load_tile_passability(game_dir)?;
         let moongates = load_moongate_entries(game_dir)?.unwrap_or_default();
         let level = options.floor as u8;

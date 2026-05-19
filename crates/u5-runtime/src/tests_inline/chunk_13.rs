@@ -13781,6 +13781,36 @@
     }
 
     #[test]
+    fn dungeon_load_from_save_uses_working_buffer_without_room_demote_replay() {
+        let dir = debug_game_dir();
+        let scene = DungeonScene::new(33).unwrap();
+        let mut dungeon_dat = vec![0; DUNGEON_DAT_LEN];
+        let record_base = scene.record * DUNGEON_RECORD_LEN;
+        dungeon_dat[record_base + dungeon_cell_index(0, 2, 1)] = 0xf7;
+        fs::write(dir.join(DUNGEON_DAT_FILENAME), dungeon_dat).unwrap();
+        let mut buffer = open_dungeon_record();
+        buffer[dungeon_cell_index(0, 2, 1)] = 0x68;
+        let mut options = PlayOptions {
+            target: PlayTarget::Dungeon(scene),
+            floor: 0,
+            start: Some((1, 1)),
+            saved_dungeon_working_buffer: Some(buffer.clone()),
+            ..PlayOptions::default()
+        };
+        assert!(set_dungeon_room_clear_bit(
+            &mut options.dungeon_room_clear_bitmap,
+            scene,
+            7
+        ));
+
+        let state = PlayState::load_dungeon_scene(&dir, scene, options).unwrap();
+
+        assert_eq!(state.grid, buffer);
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0x68);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn dungeon_room_trigger_loads_selected_dungeon_cbt_record_when_available() {
         let dir = debug_game_dir();
         let scene = DungeonScene::new(35).unwrap();

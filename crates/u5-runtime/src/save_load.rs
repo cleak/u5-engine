@@ -161,6 +161,11 @@ pub fn play_options_from_save_bytes_named(
         &bytes[SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET
             ..SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET + SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
     );
+    let saved_dungeon_working_buffer = (scene_byte > 32).then(|| {
+        bytes[SAVE_DUNGEON_WORKING_BUFFER_OFFSET
+            ..SAVE_DUNGEON_WORKING_BUFFER_OFFSET + SAVE_DUNGEON_WORKING_BUFFER_LEN]
+            .to_vec()
+    });
     let avatar_stats = decode_avatar_stats(bytes);
     let party = decode_save_party(bytes);
     let party_size = party.len();
@@ -208,6 +213,7 @@ pub fn play_options_from_save_bytes_named(
         fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
         fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
         dungeon_room_clear_bitmap,
+        saved_dungeon_working_buffer,
         moonstone_slots,
         shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
         shrine_ordained_mask: bytes[SAVE_SHRINE_ORDAINED_MASK_OFFSET],

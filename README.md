@@ -1070,7 +1070,10 @@ cargo run -- --play --from-save C:\Games\U5-Clean
 
 For overworld saves, the harness also restores the embedded live active-object
 table from `SAVED.GAM` and maps recognized transport-marker families into the
-runtime movement state. It restores the full saved
+runtime movement state. For dungeon saves, it restores the 512-byte dungeon
+working buffer from `SAVED.GAM`, preserving visit-local edits such as opened
+doors, trap rewrites, and dispelled fields instead of replaying only the durable
+room-clear bitmap from static `DUNGEON.DAT`. It restores the full saved
 year/month/day/hour/minute clock. It reads the separate timing/status tag as `Q`
 half-time or `T` no-minute/no-light-counter cleanup; other values are treated as
 normal timing. Exact ship facing/sail marker variants remain an open public-spec
@@ -1086,7 +1089,8 @@ During top-down play, uppercase `Q` opens the public save-and-continue prompt,
 with inline confirmation shortcuts still accepted: enter `QY` to write
 `SAVED.GAM` and canonical `SAVED.OOL`, or `QN` to cancel. The first-playable writer
 intentionally leaves `INIT.GAM`, `INIT.OOL`, `BRIT.OOL`, `UNDER.OOL`, and static
-map assets alone; after `--from-init`, unresolved `SAVED.GAM` bytes are
+map assets alone; dungeon-mode saves write the current 512-byte dungeon working
+buffer into the save image. After `--from-init`, unresolved `SAVED.GAM` bytes are
 templated from `INIT.GAM` instead of any stale saved game.
 
 Use `--from-init` to seed the same harness from `INIT.GAM` without running
