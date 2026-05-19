@@ -578,7 +578,159 @@
         )
         .unwrap();
         assert_eq!(saved_active[0], parked);
+
+        let options = load_play_options_from_save(&dir).unwrap();
+        assert_eq!(options.target, PlayTarget::World(WorldPlane::Underworld));
+        assert_eq!(options.start, Some((5, 5)));
+        assert_eq!(options.transport, TransportState::Foot);
+        assert_eq!(options.saved_active_objects.as_ref().unwrap()[0], parked);
+        let reloaded = PlayState::load_scene(&dir, options).unwrap();
+        assert_eq!(reloaded.player.transport, TransportState::Foot);
+        assert_eq!(reloaded.active_objects[1], parked);
+        assert_eq!(reloaded.world_object_at(5, 5), Some(&parked));
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn exit_ship_fallbacks_save_load_round_trip_vehicle_state() {
+        let skiff_dir = debug_game_dir();
+        write_save_template_and_empty_overlays(&skiff_dir, 0, 0xff, 5, 5);
+        fs::write(
+            skiff_dir.join(UNDER_DAT_FILENAME),
+            vec![BRIT_DEEP_WATER_TILE; UNDER_DAT_LEN],
+        )
+        .unwrap();
+        let mut skiff_state = world_state(vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS], 5, 5);
+        skiff_state.player.transport = TransportState::Ship {
+            type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: false,
+            hull: 77,
+            skiffs: 2,
+        };
+        skiff_state.sync_player_object();
+
+        assert_eq!(skiff_state.exit_vehicle(), MoveOutcome::ExitedVehicle);
+
+        let parked_with_one_less_skiff = ActiveObject {
+            type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            x: 5,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 77,
+            aux3: 1,
+        };
+        assert_eq!(skiff_state.active_objects[1], parked_with_one_less_skiff);
+        assert!(matches!(
+            skiff_state.player.transport,
+            TransportState::Skiff { .. }
+        ));
+
+        assert_eq!(
+            skiff_state
+                .save_game_command(&skiff_dir, Some(true))
+                .unwrap(),
+            MoveOutcome::Saved
+        );
+
+        let skiff_options = load_play_options_from_save(&skiff_dir).unwrap();
+        assert_eq!(skiff_options.target, PlayTarget::World(WorldPlane::Underworld));
+        assert_eq!(
+            skiff_options.saved_active_objects.as_ref().unwrap()[0],
+            parked_with_one_less_skiff
+        );
+        assert_eq!(
+            skiff_options.transport,
+            TransportState::Skiff {
+                type_byte: TRANSPORT_MARKER_SKIFF_FIRST + 2,
+                tile: FIRST_PLAYABLE_SKIFF_TILE + 2,
+            }
+        );
+        let skiff_reloaded = PlayState::load_scene(&skiff_dir, skiff_options).unwrap();
+        assert_eq!(skiff_reloaded.active_objects[1], parked_with_one_less_skiff);
+        assert_eq!(
+            skiff_reloaded.player.transport,
+            TransportState::Skiff {
+                type_byte: TRANSPORT_MARKER_SKIFF_FIRST + 2,
+                tile: FIRST_PLAYABLE_SKIFF_TILE + 2,
+            }
+        );
+        let _ = fs::remove_dir_all(skiff_dir);
+
+        let carpet_dir = debug_game_dir();
+        write_save_template_and_empty_overlays(&carpet_dir, 0, 0xff, 5, 5);
+        let mut carpet_state = world_state(vec![BRIT_DEEP_WATER_TILE; WORLD_CELLS], 5, 5);
+        carpet_state.player.transport = TransportState::Ship {
+            type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: false,
+            hull: 88,
+            skiffs: 0,
+        };
+        carpet_state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 1;
+        carpet_state.sync_player_object();
+
+        assert_eq!(carpet_state.exit_vehicle(), MoveOutcome::ExitedVehicle);
+
+        let parked_before_carpet = ActiveObject {
+            type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            x: 5,
+            y: 5,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 88,
+            aux3: 0,
+        };
+        assert_eq!(carpet_state.active_objects[1], parked_before_carpet);
+        assert_eq!(carpet_state.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX], 0);
+        assert_eq!(
+            carpet_state.player.transport,
+            TransportState::Carpet {
+                type_byte: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+                tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+            }
+        );
+
+        assert_eq!(
+            carpet_state
+                .save_game_command(&carpet_dir, Some(true))
+                .unwrap(),
+            MoveOutcome::Saved
+        );
+
+        let carpet_options = load_play_options_from_save(&carpet_dir).unwrap();
+        assert_eq!(
+            carpet_options.saved_active_objects.as_ref().unwrap()[0],
+            parked_before_carpet
+        );
+        assert_eq!(
+            carpet_options.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX],
+            0
+        );
+        assert_eq!(
+            carpet_options.transport,
+            TransportState::Carpet {
+                type_byte: TRANSPORT_MARKER_MAGIC_CARPET_FIRST,
+                tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+            }
+        );
+        let carpet_reloaded = PlayState::load_scene(&carpet_dir, carpet_options).unwrap();
+        assert_eq!(carpet_reloaded.active_objects[1], parked_before_carpet);
+        assert_eq!(
+            carpet_reloaded.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX],
+            0
+        );
+        assert_eq!(
+            carpet_reloaded.player.transport,
+            TransportState::Carpet {
+                type_byte: TRANSPORT_MARKER_MAGIC_CARPET_FIRST,
+                tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+            }
+        );
+        let _ = fs::remove_dir_all(carpet_dir);
     }
 
     #[test]
@@ -1289,6 +1441,86 @@
         )
         .unwrap();
         assert!(saved_active[0].is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn ship_fire_damage_and_removal_save_load_round_trip_overlay_state() {
+        let dir = debug_game_dir();
+        write_save_template_and_empty_overlays(&dir, 0, 0, 10, 10);
+        write_britannia_world_files(&dir, BRIT_DEEP_WATER_TILE);
+        let mut state = britannia_state(open_world_grid(), 10, 10);
+        state.player.facing = Direction::East;
+        state.player.transport = TransportState::Ship {
+            type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            sails_hoisted: false,
+            hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
+            skiffs: 1,
+        };
+        state.sync_player_object();
+        let durable_target = ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 10,
+            y: 8,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 100,
+            aux3: 0,
+        };
+        let fragile_target = ActiveObject {
+            type_byte: 194,
+            tile: 194,
+            x: 10,
+            y: 12,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+        state.active_objects.push(durable_target);
+        state.active_objects.push(fragile_target);
+
+        assert_eq!(
+            state.fire_ship_broadside(Some(Direction::North)),
+            MoveOutcome::Fired
+        );
+        let damaged_target = state.active_objects[1];
+        assert_eq!(damaged_target.type_byte, durable_target.type_byte);
+        assert!(damaged_target.aux1 < durable_target.aux1);
+        assert_eq!(
+            state.fire_ship_broadside(Some(Direction::South)),
+            MoveOutcome::Fired
+        );
+        assert!(state.active_objects[2].is_empty());
+
+        assert_eq!(
+            state.save_game_command(&dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+
+        let saved_ool = fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap();
+        let britannia = decode_ool_plane_objects(&saved_ool[..OOL_PLANE_LEN]).unwrap();
+        assert_eq!(britannia[0], damaged_target);
+        assert!(britannia[1].is_empty());
+        let saved_gam = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        let saved_active = decode_saved_active_objects(&saved_gam).unwrap();
+        assert_eq!(saved_active[0], damaged_target);
+        assert!(saved_active[1].is_empty());
+
+        let options = load_play_options_from_save(&dir).unwrap();
+        assert_eq!(options.target, PlayTarget::World(WorldPlane::Britannia));
+        assert_eq!(options.transport, state.player.transport);
+        assert_eq!(
+            options.saved_active_objects.as_ref().unwrap()[0],
+            damaged_target
+        );
+        assert!(options.saved_active_objects.as_ref().unwrap()[1].is_empty());
+        let reloaded = PlayState::load_scene(&dir, options).unwrap();
+        assert_eq!(reloaded.active_objects[1], damaged_target);
+        assert!(reloaded.active_objects[2].is_empty());
+        assert_eq!(reloaded.player.transport, state.player.transport);
         let _ = fs::remove_dir_all(dir);
     }
 

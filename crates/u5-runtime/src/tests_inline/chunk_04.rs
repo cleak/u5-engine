@@ -355,6 +355,11 @@
     fn board_vehicle_removed_parked_object_is_included_in_saved_overworld_overlay() {
         let dir = debug_game_dir();
         fs::write(dir.join("INIT.GAM"), saved_game_seed_bytes(0, 0xff, 0, 0)).unwrap();
+        fs::write(
+            dir.join(UNDER_DAT_FILENAME),
+            vec![BRIT_DEEP_WATER_TILE; UNDER_DAT_LEN],
+        )
+        .unwrap();
         let mut state = world_state(open_world_grid(), 0, 0);
         state.player.facing = Direction::East;
         state.active_objects.push(ActiveObject {
@@ -392,6 +397,34 @@
         )
         .unwrap();
         assert!(saved_active[0].is_empty());
+
+        let options = load_play_options_from_save(&dir).unwrap();
+        assert_eq!(options.target, PlayTarget::World(WorldPlane::Underworld));
+        assert_eq!(options.start, Some((0, 0)));
+        assert_eq!(
+            options.transport,
+            TransportState::Ship {
+                type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+                tile: FIRST_PLAYABLE_FRIGATE_TILE,
+                sails_hoisted: false,
+                hull: 77,
+                skiffs: 2,
+            }
+        );
+        assert!(options.saved_active_objects.as_ref().unwrap()[0].is_empty());
+        let reloaded = PlayState::load_scene(&dir, options).unwrap();
+        assert_eq!(
+            reloaded.player.transport,
+            TransportState::Ship {
+                type_byte: TRANSPORT_MARKER_SHIP_FURLED_FIRST,
+                tile: FIRST_PLAYABLE_FRIGATE_TILE,
+                sails_hoisted: false,
+                hull: 77,
+                skiffs: 2,
+            }
+        );
+        assert!(reloaded.active_objects[1].is_empty());
+        assert!(reloaded.world_object_at(1, 0).is_none());
         let _ = fs::remove_dir_all(dir);
     }
 

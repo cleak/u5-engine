@@ -28,6 +28,10 @@ impl PlayState {
             Area::Dungeon { level, .. } => level as i8,
             Area::World { plane } => plane.save_floor(),
         };
+        let (aux1, aux3) = match self.player.transport {
+            TransportState::Ship { hull, skiffs, .. } => (hull, skiffs),
+            _ => (0, 0),
+        };
         let player_object = ActiveObject {
             type_byte: PLAYER_TILE,
             tile: self.player.transport.avatar_tile(),
@@ -35,8 +39,8 @@ impl PlayState {
             y: self.player.y,
             z,
             phase: STEADY_PHASE,
-            aux1: 0,
-            aux3: 0,
+            aux1,
+            aux3,
         };
         if self.active_objects.is_empty() {
             self.active_objects.push(player_object);
@@ -48,6 +52,8 @@ impl PlayState {
             self.active_objects[0].y = player_object.y;
             self.active_objects[0].z = player_object.z;
             self.active_objects[0].tile = player_object.tile;
+            self.active_objects[0].aux1 = player_object.aux1;
+            self.active_objects[0].aux3 = player_object.aux3;
         } else {
             self.active_objects[0] = player_object;
         }

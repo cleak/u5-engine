@@ -1376,8 +1376,8 @@ fn save_after_wind_driven_ship_move_persists_wind_and_ship_marker() {
             type_byte: TRANSPORT_MARKER_SHIP_HOISTED_FIRST + 1,
             tile: FIRST_PLAYABLE_FRIGATE_TILE + 1,
             sails_hoisted: true,
-            hull: 0,
-            skiffs: 0,
+            hull: 77,
+            skiffs: 2,
         }
     );
     let _ = fs::remove_dir_all(dir);

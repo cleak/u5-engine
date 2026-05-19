@@ -372,10 +372,10 @@ first-playable session without losing supported state.
   - Existing work preserves embedded active-object rows and relinks scheduled
     NPCs. Transition-save regressions now cover town floor changes, dungeon
     level teleports with a live working buffer, dungeon exits back to an
-    overworld plane, and both world overlay halves after plane transitions.
+    overworld plane, both world overlay halves after plane transitions, and
+    parked vehicle mutations after board/exit/fire flows.
   - Remaining work:
     - audit all active-object mutations for save inclusion,
-    - verify parked vehicle persistence after board/exit/fire/removal,
     - continue broadening save/load transition coverage when new public
       transition tables are promoted out of sidecars.
 
@@ -397,8 +397,9 @@ first-playable session without losing supported state.
 
 - Vehicles and timing tags.
   - Current tests cover ship/skiff/carpet/horse transport markers, hull/skiff
-    side bytes for parked ships, board/exit/fire active-object overlay writes,
-    and wind-driven hoisted-sail save/load after movement.
+    side bytes for boarded and parked ships, board/exit/fire active-object
+    overlay save/load, skiff/carpet ship-exit fallback save/load, and
+    wind-driven hoisted-sail save/load after movement.
   - Remaining work:
     - continue auditing exact ship facing/sail marker variants against any new
       public marker evidence,
