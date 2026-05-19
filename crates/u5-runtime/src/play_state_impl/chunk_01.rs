@@ -190,7 +190,7 @@ impl PlayState {
             .copy_from_slice(&active_table);
 
         let saved_ool = self.encode_saved_ool(game_dir)?;
-        write_saved_ool_mirrors(game_dir, &saved_ool)?;
+        write_saved_ool_mirrors_for_save(game_dir, &saved_ool, 0)?;
         fs::write(game_dir.join(SAVED_GAM_FILENAME), save)?;
         fs::write(game_dir.join(SAVED_OOL_FILENAME), saved_ool)?;
         Ok(())
@@ -229,7 +229,7 @@ impl PlayState {
         if let Some(objects) = self.world_overlays.get(plane) {
             Ok(objects)
         } else {
-            load_world_overlay_objects(game_dir, plane)
+            load_world_overlay_mirror_objects(game_dir, plane)
         }
     }
 

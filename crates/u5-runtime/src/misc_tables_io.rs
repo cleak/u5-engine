@@ -664,6 +664,22 @@ pub fn load_world_overlay_objects(
     decode_ool_plane_objects(&bytes)
 }
 
+pub fn load_world_overlay_mirror_objects(
+    game_dir: &Path,
+    plane: WorldPlane,
+) -> io::Result<Vec<ActiveObject>> {
+    let plane_file = game_dir.join(match plane {
+        WorldPlane::Britannia => BRIT_OOL_FILENAME,
+        WorldPlane::Underworld => UNDER_OOL_FILENAME,
+    });
+    if plane_file.exists() {
+        let bytes = read(&plane_file)?;
+        return decode_ool_plane_objects(&bytes);
+    }
+
+    load_world_overlay_objects(game_dir, plane)
+}
+
 pub fn load_init_overlay_objects(game_dir: &Path) -> io::Result<Vec<ActiveObject>> {
     let path = game_dir.join(INIT_OOL_FILENAME);
     let bytes = read(&path)?;

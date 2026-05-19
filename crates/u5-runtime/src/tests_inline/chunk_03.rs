@@ -18,7 +18,11 @@
         let mut existing_ool = vec![0; SAVED_OOL_LEN];
         write_ool_object(&mut existing_ool[..OOL_PLANE_LEN], 1, britannia_object);
         fs::write(dir.join("SAVED.OOL"), existing_ool).unwrap();
-        fs::write(dir.join("BRIT.OOL"), vec![0x11; OOL_PLANE_LEN]).unwrap();
+        fs::write(
+            dir.join("BRIT.OOL"),
+            ool_plane_with_object(1, britannia_object),
+        )
+        .unwrap();
         fs::write(dir.join("UNDER.OOL"), vec![0x22; OOL_PLANE_LEN]).unwrap();
         let underworld_object = ActiveObject {
             type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
@@ -250,6 +254,50 @@
             saved_ool[OOL_PLANE_LEN..].to_vec()
         );
         assert!(state.message.contains("Done."));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn save_game_command_stages_inactive_plane_from_per_plane_mirror() {
+        let dir = debug_game_dir();
+        let mut template = saved_game_seed_bytes(0, 0xff, 10, 20);
+        template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        fs::write(dir.join(SAVED_GAM_FILENAME), template).unwrap();
+        let mut stale_saved_ool = vec![0; SAVED_OOL_LEN];
+        stale_saved_ool[OOL_PLANE_LEN + OOL_RECORD_LEN] = 0x33;
+        stale_saved_ool[OOL_PLANE_LEN + OOL_RECORD_LEN + 1] = 0x33;
+        fs::write(dir.join(SAVED_OOL_FILENAME), stale_saved_ool).unwrap();
+        fs::write(dir.join(BRIT_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+        let underworld_object = ActiveObject {
+            type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            x: 12,
+            y: 21,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: FIRST_PLAYABLE_FULL_SHIP_HULL,
+            aux3: 2,
+        };
+        fs::write(
+            dir.join(UNDER_OOL_FILENAME),
+            ool_plane_with_object(1, underworld_object),
+        )
+        .unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        state.active_objects[0].z = WorldPlane::Britannia.save_floor();
+
+        state.save_game_command(&dir, Some(true)).unwrap();
+
+        let saved_ool = fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap();
+        let underworld_overlay = decode_ool_plane_objects(&saved_ool[OOL_PLANE_LEN..]).unwrap();
+        assert_eq!(underworld_overlay[0], underworld_object);
+        assert_eq!(
+            fs::read(dir.join(UNDER_OOL_FILENAME)).unwrap(),
+            saved_ool[OOL_PLANE_LEN..].to_vec()
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
