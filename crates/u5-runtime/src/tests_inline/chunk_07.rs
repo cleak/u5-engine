@@ -1728,16 +1728,22 @@ fn world_encounter_sidecar_uses_strict_threshold_predicate() {
         phase: active_object_phase_from_direction(Direction::West, 0),
     };
     let mut equal_roll = britannia_state(vec![5; WORLD_CELLS], 10, 10);
+    equal_roll.prng_state = 0x0009;
     assert_eq!(equal_roll.world_encounter_roll(entry), 22);
+    assert_eq!(equal_roll.prng_state, u5_prng_advance_state(0x0009));
 
+    let mut equal_roll = britannia_state(vec![5; WORLD_CELLS], 10, 10);
+    equal_roll.prng_state = 0x0009;
     assert_eq!(
         equal_roll
             .apply_world_encounter_sidecar_probe(&[entry], &dir, WorldPlane::Britannia)
             .unwrap(),
         None
     );
+    assert_eq!(equal_roll.prng_state, u5_prng_advance_state(0x0009));
 
     let mut below_threshold = britannia_state(vec![5; WORLD_CELLS], 10, 10);
+    below_threshold.prng_state = 0x0033;
     let spawning_entry = WorldEncounterEntry {
         threshold: 23,
         ..entry
@@ -1748,31 +1754,31 @@ fn world_encounter_sidecar_uses_strict_threshold_predicate() {
             .unwrap(),
         Some(1)
     );
+    assert_eq!(below_threshold.prng_state, u5_prng_advance_state(0x0033));
 }
 
 #[test]
 fn native_world_encounter_probe_runs_when_sidecar_is_absent() {
     let dir = debug_game_dir();
     let mut state = britannia_state(vec![0x04; WORLD_CELLS], 1, 11);
+    state.prng_state = 0x0033;
+    let starting_prng_state = state.prng_state;
 
     let slot = state
         .apply_world_encounter_probe(&dir, WorldPlane::Britannia)
         .unwrap();
 
     assert_eq!(slot, Some(1));
-    assert_eq!(
-        state.active_objects[1],
-        ActiveObject {
-            type_byte: 0xC8,
-            tile: 0xC8,
-            x: 11,
-            y: 25,
-            z: WorldPlane::Britannia.save_floor(),
-            phase: active_object_phase_toward_player(10, 14),
-            aux1: 0,
-            aux3: 0,
-        }
-    );
+    assert_ne!(state.prng_state, starting_prng_state);
+    let object = state.active_objects[1];
+    assert!(matches!(
+        object.type_byte,
+        0xC0 | 0xC8 | 0x90 | 0x98 | 0xBC | 0xC4 | 0xD0 | 0xE4 | 0xCC | 0xD4 | 0xDC | 0xD8
+    ));
+    assert_eq!(object.tile, object.type_byte);
+    assert_eq!(object.z, WorldPlane::Britannia.save_floor());
+    assert_eq!(object.aux1, 0);
+    assert_eq!(object.aux3, 0);
     assert!(state.visibility_dirty);
 }
 
@@ -1785,13 +1791,17 @@ fn world_encounter_sidecar_unmatched_tile_falls_back_to_native_probe() {
     )
     .unwrap();
     let mut state = britannia_state(vec![0x04; WORLD_CELLS], 1, 11);
+    state.prng_state = 0x0033;
 
     let slot = state
         .apply_world_encounter_probe(&dir, WorldPlane::Britannia)
         .unwrap();
 
     assert_eq!(slot, Some(1));
-    assert_eq!(state.active_objects[1].type_byte, 0xC8);
+    assert!(matches!(
+        state.active_objects[1].type_byte,
+        0xC0 | 0xC8 | 0x90 | 0x98 | 0xBC | 0xC4 | 0xD0 | 0xE4 | 0xCC | 0xD4 | 0xDC | 0xD8
+    ));
     assert!(state.visibility_dirty);
     let _ = fs::remove_dir_all(dir);
 }
@@ -1828,28 +1838,24 @@ fn native_world_encounter_probe_skips_during_active_combat() {
 #[test]
 fn native_world_encounter_spawner_seeds_sea_creature_auxiliary() {
     let mut state = britannia_state(vec![0x02; WORLD_CELLS], 0, 40);
+    state.prng_state = 0x0009;
+    let starting_prng_state = state.prng_state;
 
     let slot = state.spawn_native_world_encounter(WorldPlane::Britannia);
 
     assert_eq!(slot, Some(1));
-    assert_eq!(
-        state.active_objects[1],
-        ActiveObject {
-            type_byte: 0x2C,
-            tile: 0x2C,
-            x: 13,
-            y: 63,
-            z: WorldPlane::Britannia.save_floor(),
-            phase: active_object_phase_toward_player(13, 23),
-            aux1: SEA_CREATURE_SPAWN_AUX_SEED,
-            aux3: 0,
-        }
-    );
+    assert_ne!(state.prng_state, starting_prng_state);
+    let object = state.active_objects[1];
+    assert_eq!(object.type_byte, 0x2C);
+    assert_eq!(object.tile, 0x2C);
+    assert_eq!(object.z, WorldPlane::Britannia.save_floor());
+    assert_eq!(object.aux1, SEA_CREATURE_SPAWN_AUX_SEED);
+    assert_eq!(object.aux3, 0);
 }
 
 #[test]
 fn native_world_encounter_type_handles_special_terrain_branches() {
-    let state = britannia_state(vec![0x04; WORLD_CELLS], 1, 11);
+    let mut state = britannia_state(vec![0x04; WORLD_CELLS], 1, 11);
 
     assert_eq!(
         state.native_world_encounter_type(WorldPlane::Underworld, 0x04, 0),

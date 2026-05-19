@@ -289,20 +289,8 @@ impl PlayState {
         format!("party slot {} keeps watch", watcher + 1)
     }
 
-    pub fn lord_british_camp_event_roll(&self) -> u8 {
-        let area = match self.area {
-            Area::World { plane } => plane.save_floor() as u8,
-            Area::Dungeon { scene, level } => scene.byte ^ level,
-            Area::Town { scene, floor } => scene.byte ^ floor as u8,
-        };
-        (self
-            .turn
-            .wrapping_add(u64::from(self.clock.hour) * 3)
-            .wrapping_add(u64::from(self.clock.minute) * 5)
-            .wrapping_add((self.player.x as u64) * 7)
-            .wrapping_add((self.player.y as u64) * 11)
-            .wrapping_add(u64::from(area))
-            % 100) as u8
+    pub fn lord_british_camp_event_roll(&mut self) -> u8 {
+        self.random_range_u8(0, 99)
     }
 
     pub fn resolve_lord_british_camp_event(
@@ -390,11 +378,8 @@ impl PlayState {
         }
     }
 
-    pub fn lord_british_camp_stat_roll(&self, member_index: usize) -> u8 {
-        1 + ((self.turn as u8)
-            .wrapping_add((self.player.x as u8).wrapping_mul(5))
-            .wrapping_add((member_index as u8).wrapping_mul(17))
-            % 3)
+    pub fn lord_british_camp_stat_roll(&mut self, _member_index: usize) -> u8 {
+        self.random_range_u8(1, 3)
     }
 
     pub fn refresh_party_member_class_mana(&mut self, member_index: usize) {
@@ -434,42 +419,17 @@ impl PlayState {
             .unwrap_or_else(|| format!("KARMA.DAT verdict record {record_index} unavailable.")))
     }
 
-    pub fn dangerous_rest_interrupted(&self) -> bool {
+    pub fn dangerous_rest_interrupted(&mut self) -> bool {
         matches!(self.area, Area::World { .. } | Area::Dungeon { .. })
             && sleep_ambush_rest_interrupted(self.dangerous_rest_interrupt_roll())
     }
 
-    pub fn dangerous_rest_interrupt_roll(&self) -> u8 {
-        self.dangerous_rest_interrupt_seed() % 64
+    pub fn dangerous_rest_interrupt_roll(&mut self) -> u8 {
+        self.random_range_u8(0, 63)
     }
 
-    pub fn dangerous_rest_interrupt_seed(&self) -> u8 {
-        let area = match self.area {
-            Area::World { plane } => plane.save_floor() as u8,
-            Area::Dungeon { scene, level } => scene.byte ^ level,
-            Area::Town { scene, floor } => scene.byte ^ floor as u8,
-        };
-        self.turn as u8
-            ^ self.clock.hour.wrapping_mul(3)
-            ^ self.clock.minute.wrapping_mul(5)
-            ^ (self.player.x as u8).wrapping_mul(7)
-            ^ (self.player.y as u8).wrapping_mul(11)
-            ^ area
-    }
-
-    pub fn sleep_ambush_monster_row(&self) -> u8 {
-        let area = match self.area {
-            Area::World { plane } => plane.save_floor() as u8,
-            Area::Dungeon { scene, level } => scene.byte.wrapping_add(level),
-            Area::Town { scene, floor } => scene.byte.wrapping_add(floor as u8),
-        };
-        (self.turn as u8)
-            .wrapping_add(self.clock.hour.wrapping_mul(5))
-            .wrapping_add(self.clock.minute.wrapping_mul(7))
-            .wrapping_add((self.player.x as u8).wrapping_mul(11))
-            .wrapping_add((self.player.y as u8).wrapping_mul(13))
-            .wrapping_add(area)
-            % 8
+    pub fn sleep_ambush_monster_row(&mut self) -> u8 {
+        self.random_range_u8(0, 7)
     }
 
     pub fn restore_sleep_ambush_party_statuses(&mut self, entry_statuses: &[u8]) -> usize {

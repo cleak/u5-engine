@@ -818,6 +818,11 @@
     fn dangerous_rest_interrupts_on_one_in_sixty_four_predicate() {
         let mut state = britannia_state(open_world_grid(), 0, 15);
         state.clock = GameClock::new(0, 0).unwrap();
+        state.prng_state = 0x00f0;
+        let mut expected_prng_state = state.prng_state;
+        for _ in 0..2 {
+            expected_prng_state = u5_prng_advance_state(expected_prng_state);
+        }
         state.party = vec![
             PartyMember {
                 slot: 0,
@@ -857,6 +862,7 @@
         );
 
         assert_eq!(state.turn, 1);
+        assert_eq!(state.prng_state, expected_prng_state);
         assert_eq!(state.clock, GameClock::new(0, 20).unwrap());
         assert!(state.message.contains("Party rested 0 hours 20 minutes"));
         assert!(state.message.contains("Ambushed!"));
@@ -881,6 +887,7 @@
         )
         .unwrap();
         let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.prng_state = 0x0002;
         state.party = vec![PartyMember {
             slot: 0,
             class_byte: b'A',
@@ -919,6 +926,7 @@
         .unwrap();
         let mut state = britannia_state(open_world_grid(), 0, 15);
         state.clock = GameClock::new(0, 0).unwrap();
+        state.prng_state = 0x00f0;
         state.party = vec![PartyMember {
             slot: 0,
             class_byte: b'A',
@@ -948,6 +956,7 @@
     fn rest_with_watch_heals_living_members_and_wakes_initial_sleepers() {
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.clock = GameClock::new(8, 0).unwrap();
+        state.prng_state = 0x0002;
         state.party = vec![
             PartyMember {
                 slot: 0,
@@ -1031,6 +1040,7 @@
     fn rest_with_watch_poisoned_members_keep_status_and_skip_hp_recovery() {
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.clock = GameClock::new(8, 0).unwrap();
+        state.prng_state = 0x0002;
         state.party = vec![PartyMember {
             slot: 0,
             class_byte: b'A',
@@ -1095,9 +1105,14 @@
         state.party_strengths = vec![20, 20];
         state.party_intelligence = vec![18, 24];
         state.moral_standing = 80;
+        let mut expected_prng_state = state.prng_state;
+        for _ in 0..6 {
+            expected_prng_state = u5_prng_advance_state(expected_prng_state);
+        }
 
         assert_eq!(state.hole_up_command(&dir, Some(1)).unwrap(), MoveOutcome::Rested);
 
+        assert_eq!(state.prng_state, expected_prng_state);
         assert_eq!(state.party[0].level, 3);
         assert_eq!(state.party[0].hp, 90);
         assert_eq!(state.party[0].max_hp, 90);
@@ -1108,6 +1123,7 @@
         assert_eq!(state.party[1].hp, 90);
         assert_eq!(state.party[1].max_hp, 90);
         assert_eq!(state.party[1].mana, REST_MANA_CAP);
+        assert_eq!(state.party_strengths[1], 21);
         assert!(state.visibility_dirty);
         assert!(state.message.contains("Lord British-in-disguise camp event."));
         assert!(state.message.contains("P1 reached level 3 from 200 XP"));

@@ -1151,6 +1151,14 @@ impl PlayState {
         u5_prng_range_u16(&mut self.prng_state, u16::from(low), u16::from(high)) as u8
     }
 
+    pub fn random_mod_u8(&mut self, modulus: u8) -> u8 {
+        if modulus == 0 {
+            0
+        } else {
+            self.random_range_u8(0, modulus - 1)
+        }
+    }
+
     pub fn visible_jimmy_unlock_tile(tile: u8) -> Option<u8> {
         if (97..=103).contains(&tile) && tile % 2 == 1 {
             Some(tile - 1)

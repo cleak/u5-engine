@@ -150,12 +150,14 @@ impl PlayState {
         let scroll_base = world_scroll_base(self.player.x, self.player.y);
         for attempt in 0..ENCOUNTER_SPAWNER_RETRY_LIMIT {
             let x = (scroll_base.0
-                + usize::from(self.native_world_encounter_seed(attempt, 0x21))
-                    % OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE)
+                + usize::from(
+                    self.random_range_u8(0, (OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE - 1) as u8),
+                ))
                 % WORLD_SIDE;
             let y = (scroll_base.1
-                + usize::from(self.native_world_encounter_seed(attempt, 0x43))
-                    % OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE)
+                + usize::from(
+                    self.random_range_u8(0, (OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE - 1) as u8),
+                ))
                 % WORLD_SIDE;
             if !encounter_spawner_separation_ok(
                 x as u8,
@@ -199,98 +201,67 @@ impl PlayState {
     }
 
     pub fn native_world_encounter_type(
-        &self,
+        &mut self,
         plane: WorldPlane,
         tile: u8,
-        attempt: u8,
+        _attempt: u8,
     ) -> Option<u8> {
         let underworld = plane == WorldPlane::Underworld;
         match spawn_terrain_branch(tile, underworld) {
             SpawnTerrainBranch::SurfaceTile1WhirlpoolOrAquatic => {
-                if self.native_world_encounter_mod(attempt, 0x61, SPAWN_WHIRLPOOL_DENOMINATOR) == 0
-                {
+                if self.native_world_encounter_mod(0, 0x61, SPAWN_WHIRLPOOL_DENOMINATOR) == 0 {
                     Some(0xEC)
                 } else {
-                    self.native_world_encounter_bucket_pick(&SURFACE_AQUATIC_BUCKET, attempt, 0x62)
+                    self.native_world_encounter_bucket_pick(&SURFACE_AQUATIC_BUCKET, 0, 0x62)
                 }
             }
             SpawnTerrainBranch::SeaSerpentAdjacency => {
-                (self.native_world_encounter_mod(attempt, 0x63, SPAWN_SEA_SERPENT_DENOMINATOR) == 0)
+                (self.native_world_encounter_mod(0, 0x63, SPAWN_SEA_SERPENT_DENOMINATOR) == 0)
                     .then_some(0xE0)
             }
             SpawnTerrainBranch::UnderworldTile4RotWorm => Some(0xF8),
             SpawnTerrainBranch::HardReject | SpawnTerrainBranch::HighTileReject => None,
             SpawnTerrainBranch::LowTileAllowance => {
-                if self.native_world_encounter_mod(
-                    attempt,
-                    0x64,
-                    SPAWN_LOW_TILE_ALLOWANCE_DENOMINATOR,
-                ) != 0
+                if self.native_world_encounter_mod(0, 0x64, SPAWN_LOW_TILE_ALLOWANCE_DENOMINATOR)
+                    != 0
                 {
                     return None;
                 }
                 if underworld {
-                    self.native_world_encounter_bucket_pick(
-                        &UNDERWORLD_AQUATIC_BUCKET,
-                        attempt,
-                        0x65,
-                    )
+                    self.native_world_encounter_bucket_pick(&UNDERWORLD_AQUATIC_BUCKET, 0, 0x65)
                 } else {
-                    self.native_world_encounter_bucket_pick(&SURFACE_AQUATIC_BUCKET, attempt, 0x65)
+                    self.native_world_encounter_bucket_pick(&SURFACE_AQUATIC_BUCKET, 0, 0x65)
                 }
             }
             SpawnTerrainBranch::LandBucket => {
                 if underworld {
-                    self.native_world_encounter_bucket_pick(&UNDERWORLD_LAND_BUCKET, attempt, 0x66)
+                    self.native_world_encounter_bucket_pick(&UNDERWORLD_LAND_BUCKET, 0, 0x66)
                 } else {
-                    self.native_world_encounter_bucket_pick(&SURFACE_LAND_BUCKET, attempt, 0x66)
+                    self.native_world_encounter_bucket_pick(&SURFACE_LAND_BUCKET, 0, 0x66)
                 }
             }
         }
     }
 
     pub fn native_world_encounter_bucket_pick(
-        &self,
+        &mut self,
         bucket: &[(u8, u8)],
-        attempt: u8,
-        salt: u8,
+        _attempt: u8,
+        _salt: u8,
     ) -> Option<u8> {
-        pick_random_spawn_bucket(bucket, self.native_world_encounter_seed(attempt, salt))
+        pick_random_spawn_bucket(bucket, self.random_range_u8(0, u8::MAX))
     }
 
-    pub fn native_world_encounter_roll_1_to_30(&self, salt: u8) -> u8 {
-        1 + self.native_world_encounter_seed(0, salt) % RANDOM_ENCOUNTER_DIE
+    pub fn native_world_encounter_roll_1_to_30(&mut self, _salt: u8) -> u8 {
+        self.random_range_u8(1, RANDOM_ENCOUNTER_DIE)
     }
 
-    pub fn native_world_encounter_mod(&self, attempt: u8, salt: u8, modulus: u8) -> u8 {
-        if modulus == 0 {
-            0
-        } else {
-            self.native_world_encounter_seed(attempt, salt) % modulus
-        }
+    pub fn native_world_encounter_mod(&mut self, _attempt: u8, _salt: u8, modulus: u8) -> u8 {
+        self.random_mod_u8(modulus)
     }
 
-    pub fn native_world_encounter_seed(&self, attempt: u8, salt: u8) -> u8 {
-        self.turn as u8
-            ^ self.clock.hour.wrapping_mul(3)
-            ^ self.clock.minute.wrapping_mul(5)
-            ^ (self.player.x as u8).wrapping_mul(7)
-            ^ (self.player.y as u8).wrapping_mul(11)
-            ^ attempt.wrapping_mul(17)
-            ^ salt
-    }
-
-    pub fn world_encounter_roll(&self, entry: WorldEncounterEntry) -> u8 {
-        let seed = self.turn as u8
-            ^ self.clock.hour.wrapping_mul(3)
-            ^ self.clock.minute.wrapping_mul(5)
-            ^ (self.player.x as u8).wrapping_mul(7)
-            ^ (self.player.y as u8).wrapping_mul(11)
-            ^ entry.tile.wrapping_mul(13)
-            ^ entry.type_byte.wrapping_mul(17)
-            ^ (entry.dx as u8).wrapping_mul(19)
-            ^ (entry.dy as u8).wrapping_mul(23);
-        1 + (seed % RANDOM_ENCOUNTER_DIE)
+    pub fn world_encounter_roll(&mut self, _entry: WorldEncounterEntry) -> u8 {
+        self.random_range_u8(1, RANDOM_ENCOUNTER_DIE)
     }
 
     pub fn apply_world_waterfall_sweep(
