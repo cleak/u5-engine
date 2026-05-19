@@ -243,6 +243,13 @@ pub const BRITANNIA_CHUNK_MAP_COLUMNS: u8 = 22;
 /// `0x59` is a separate verification item.
 pub const BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE: u8 = 0x59;
 
+/// `formats/look2-dat.md §5` command-owned surface/town special
+/// handler range for the LOOKOBJ fountain-style presentation path.
+/// The fountain result itself is presentation-only per `view.md §3`.
+pub const fn surface_town_fountain_look_tile(tile: u8) -> bool {
+    matches!(tile, 0xd8..=0xdb)
+}
+
 /// `view.md §2` V-View command outcome. Dispatcher inputs a single
 /// gem stock and the active scene's combat marker; the helper
 /// reports whether the call should consume a gem and whether the

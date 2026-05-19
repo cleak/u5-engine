@@ -8978,6 +8978,17 @@
     }
 
     #[test]
+    fn surface_town_fountain_look_tile_matches_published_special_handler_range() {
+        // formats/look2-dat.md section 5 publishes the LOOKOBJ-owned
+        // fountain-style command-handler range.
+        for tile in 0xd8..=0xdb {
+            assert!(surface_town_fountain_look_tile(tile));
+        }
+        assert!(!surface_town_fountain_look_tile(0xd7));
+        assert!(!surface_town_fountain_look_tile(0xdc));
+    }
+
+    #[test]
     fn doom_entrance_unlocks_only_when_all_three_slots_vanquished() {
         // catalogs/quest-graph.md §5
         let v = SHADOWLORD_HIDEOUT_VANQUISHED;

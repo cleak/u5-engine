@@ -262,6 +262,86 @@
         assert_eq!(state.clock, GameClock::default());
     }
 
+    #[test]
+    fn town_look_at_surface_fountain_prompts_for_drinker_without_spending_turn() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xd8;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+
+        assert_eq!(state.look_facing(), MoveOutcome::Observed);
+
+        assert_eq!(
+            state.active_direction_prompt.as_ref().map(|session| session.kind),
+            Some(DirectionPromptKind::SurfaceFountainDrink {
+                direction: Direction::East
+            })
+        );
+        assert!(state.message.contains("choose fountain drinker"));
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
+    }
+
+    #[test]
+    fn town_surface_fountain_drink_refreshes_without_mutating_member() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xd9;
+        let mut state = test_state(grid, 1, 1);
+        state.party[0].status = CharacterStatus::PoisonedOrRevived.save_byte();
+        state.party[0].hp = 12;
+        state.party[0].max_hp = 90;
+        let before = state.party[0];
+
+        assert_eq!(
+            state.look_surface_fountain_with_drinker(Direction::East, 0),
+            MoveOutcome::Observed
+        );
+
+        assert!(state.message.contains("feels refreshed"));
+        assert_eq!(state.party[0], before);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
+    }
+
+    #[test]
+    fn town_surface_fountain_drink_refuses_incapacitated_member_without_mutating() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xda;
+        let mut state = test_state(grid, 1, 1);
+        state.party[0].status = CharacterStatus::Sleeping.save_byte();
+        state.party[0].hp = 12;
+        let before = state.party[0];
+
+        assert_eq!(
+            state.look_surface_fountain_with_drinker(Direction::East, 0),
+            MoveOutcome::Observed
+        );
+
+        assert!(state.message.contains("incapacitated"));
+        assert_eq!(state.party[0], before);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
+    }
+
+    #[test]
+    fn town_surface_fountain_prompt_digit_routes_refresh_result() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xdb;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        assert_eq!(state.look_facing(), MoveOutcome::Observed);
+
+        let outcome = state
+            .step_active_direction_prompt('1', "", Path::new(""))
+            .unwrap();
+
+        assert_eq!(outcome, Some(MoveOutcome::Observed));
+        assert!(state.active_direction_prompt.is_none());
+        assert!(state.message.contains("feels refreshed"));
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
+    }
+
     fn signs_dat_bytes_for_test(records: &[(u8, u8, u8, u8, &[u8])]) -> Vec<u8> {
         let mut bytes = vec![0; SIGNS_DAT_SCENE_DIRECTORY_BYTES];
         if let Some((scene, ..)) = records.first() {

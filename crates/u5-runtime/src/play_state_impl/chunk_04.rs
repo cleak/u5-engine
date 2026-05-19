@@ -2136,6 +2136,9 @@ impl PlayState {
                     }
                 }
                 let tile = self.grid[y * 32 + x];
+                if surface_town_fountain_look_tile(tile) {
+                    return Ok(self.start_surface_fountain_drink_prompt(direction));
+                }
                 self.message = format!(
                     "You see: {} at ({x}, {y}).",
                     self.look_description(tile, look_table)
@@ -2175,12 +2178,78 @@ impl PlayState {
                     self.message = sign;
                     return Ok(MoveOutcome::Observed);
                 }
+                if surface_town_fountain_look_tile(tile) {
+                    return Ok(self.start_surface_fountain_drink_prompt(direction));
+                }
                 let description =
                     self.look_description_for_world_tile(tile, look_table, game_dir, plane, x, y)?;
                 self.message =
                     format!("You see: {} at ({x}, {y}) on {}.", description, plane.key());
                 Ok(MoveOutcome::Observed)
             }
+        }
+    }
+
+    pub fn look_surface_fountain_with_drinker(
+        &mut self,
+        direction: Direction,
+        member_index: usize,
+    ) -> MoveOutcome {
+        let Some(tile) = self.surface_look_target_tile(direction) else {
+            self.message = "You see: the location boundary.".to_string();
+            return MoveOutcome::Observed;
+        };
+        if !surface_town_fountain_look_tile(tile) {
+            self.message = "You see: no fountain there.".to_string();
+            return MoveOutcome::Observed;
+        }
+
+        let Some(member) = self.party.get(member_index).copied() else {
+            self.message = format!(
+                "You see: a fountain. Party member {} is unavailable.",
+                member_index + 1
+            );
+            return MoveOutcome::Observed;
+        };
+        let Some(status) = character_status_for_byte(member.status) else {
+            self.message = format!(
+                "You see: a fountain. Party member {} is unavailable.",
+                member_index + 1
+            );
+            return MoveOutcome::Observed;
+        };
+        if town_fountain_drink_accepts(status) {
+            self.message = format!(
+                "You see: a fountain. Party member {} feels refreshed.",
+                member_index + 1
+            );
+        } else {
+            self.message = format!(
+                "You see: a fountain. Party member {} is incapacitated.",
+                member_index + 1
+            );
+        }
+        MoveOutcome::Observed
+    }
+
+    fn surface_look_target_tile(&self, direction: Direction) -> Option<u8> {
+        match self.area {
+            Area::Town { .. } => {
+                let (dx, dy) = direction.delta();
+                let x = self.player.x as isize + dx;
+                let y = self.player.y as isize + dy;
+                if !(0..32).contains(&x) || !(0..32).contains(&y) {
+                    return None;
+                }
+                Some(self.grid[y as usize * 32 + x as usize])
+            }
+            Area::World { .. } => {
+                let (dx, dy) = direction.delta();
+                let x = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
+                let y = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
+                Some(self.grid[world_cell_index(x, y)])
+            }
+            Area::Dungeon { .. } => None,
         }
     }
 

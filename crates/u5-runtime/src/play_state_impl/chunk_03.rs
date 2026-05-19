@@ -745,6 +745,14 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    pub fn start_surface_fountain_drink_prompt(&mut self, direction: Direction) -> MoveOutcome {
+        self.active_direction_prompt = Some(DirectionPromptSession::new(
+            DirectionPromptKind::SurfaceFountainDrink { direction },
+        ));
+        self.message = self.render_active_direction_prompt();
+        MoveOutcome::Observed
+    }
+
     pub fn start_open_direction_prompt(&mut self) -> MoveOutcome {
         self.active_direction_prompt = Some(DirectionPromptSession::new(DirectionPromptKind::Open));
         self.message = self.render_active_direction_prompt();
@@ -816,6 +824,10 @@ impl PlayState {
                     "Look: party member {}. Choose A-head, R-ight, L-eft, or H-ere; Space/Esc cancels.",
                     index + 1
                 ),
+                DirectionPromptKind::SurfaceFountainDrink { .. } => {
+                    let last = self.party.len().max(1);
+                    format!("Look: choose fountain drinker (1-{last}); Space/Esc cancels.")
+                }
                 DirectionPromptKind::DungeonSearch => {
                     "Search: choose A-head, R-ight, L-eft, or H-ere; Space/Esc cancels."
                         .to_string()
@@ -885,6 +897,17 @@ impl PlayState {
                 }
                 continue;
             }
+            if let DirectionPromptKind::SurfaceFountainDrink { direction } = session.kind {
+                if let Some(digit) = ch.to_digit(10) {
+                    let index = digit.saturating_sub(1) as usize;
+                    if index < self.party.len() {
+                        return Ok(Some(
+                            self.look_surface_fountain_with_drinker(direction, index),
+                        ));
+                    }
+                }
+                continue;
+            }
             if matches!(session.kind, DirectionPromptKind::DungeonSearch) {
                 if let Some(focus) = dungeon_look_focus_from_key(ch) {
                     return self
@@ -919,6 +942,9 @@ impl PlayState {
                 }
                 DirectionPromptKind::DungeonLook { .. } => unreachable!(
                     "dungeon look prompt is handled before cardinal direction dispatch"
+                ),
+                DirectionPromptKind::SurfaceFountainDrink { .. } => unreachable!(
+                    "surface fountain look prompt is handled before cardinal direction dispatch"
                 ),
                 DirectionPromptKind::DungeonSearch => unreachable!(
                     "dungeon search prompt is handled before cardinal direction dispatch"

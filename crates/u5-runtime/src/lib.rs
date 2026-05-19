@@ -186,8 +186,8 @@ pub use commands::{
     YELL_INPUT_MAX_LEN, YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_FURLED_MESSAGE,
     YELL_SAILS_HOISTED_MESSAGE, YellInputContext, command_for_letter, local_view_class_for_tile,
     new_order_outcome, new_order_swap_accepted, pushable_facing_index, pushable_oriented_tile,
-    pushable_tile_family, town_cannon_tile_fire_direction, town_fountain_drink_accepts,
-    view_command_outcome, wishing_well_wish_accepted,
+    pushable_tile_family, surface_town_fountain_look_tile, town_cannon_tile_fire_direction,
+    town_fountain_drink_accepts, view_command_outcome, wishing_well_wish_accepted,
 };
 pub use common_words_io::{
     COMMON_WORD_DICTIONARY_FILE, CommonWordDictionary, CommonWordDictionaryError,

@@ -186,6 +186,9 @@ pub enum DirectionPromptKind {
         party_index: Option<usize>,
         drink: Option<bool>,
     },
+    SurfaceFountainDrink {
+        direction: Direction,
+    },
     DungeonSearch,
     Klimb,
     CombatKlimb {
