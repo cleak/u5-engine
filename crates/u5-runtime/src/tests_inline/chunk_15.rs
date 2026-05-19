@@ -1270,6 +1270,77 @@
     }
 
     #[test]
+    fn scheduled_npc_replays_cached_path_queue_after_pathfind() {
+        let mut grid = open_grid();
+        grid[32 + 1] = 0x2C;
+        grid[32 + 3] = 0x2C;
+        grid[2 * 32 + 2] = 0x2C;
+        let mut state = test_state(grid, 10, 10);
+        state.clock = GameClock::new(17, 59).unwrap();
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0,
+                schedule: [0, 0, 0, 0, 2, 4, 1, 1, 1, 0, 0, 0, 8, 12, 18, 22],
+                name: None,
+            },
+        ]);
+
+        state.advance_turn();
+
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (2, 0));
+        assert_eq!(state.npcs[0].state, NPC_STATE_REPLAY_QUEUE);
+        assert!(!state.npcs[0].move_queue.is_empty());
+
+        state.advance_npc_schedules();
+
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (3, 0));
+        assert_eq!(state.npcs[0].state, NPC_STATE_REPLAY_QUEUE);
+    }
+
+    #[test]
+    fn scheduled_npc_stuck_counter_resets_blocked_cached_queue() {
+        let mut state = test_state(open_grid(), 3, 1);
+        state.clock = GameClock::new(17, 59).unwrap();
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0,
+                schedule: [0, 0, 0, 0, 2, 4, 1, 1, 1, 0, 0, 0, 8, 12, 18, 22],
+                name: None,
+            },
+        ]);
+        state.clock = GameClock::new(18, 0).unwrap();
+        state.npcs[0].state = NPC_STATE_REPLAY_QUEUE;
+        state.npcs[0].move_queue = vec![NPC_PATH_DIR_EAST];
+
+        for _ in 0..=NPC_STUCK_REPLAN_THRESHOLD {
+            state.advance_npc_schedules();
+        }
+
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (2, 1));
+        assert_eq!(state.npcs[0].state, NPC_STATE_IDLE);
+        assert!(state.npcs[0].move_queue.is_empty());
+        assert_eq!(state.npcs[0].stuck_counter, 0);
+    }
+
+    #[test]
     fn scheduled_npc_routes_around_player_instead_of_stepping_into_player() {
         let mut state = test_state(open_grid(), 3, 1);
         state.clock = GameClock::new(17, 59).unwrap();

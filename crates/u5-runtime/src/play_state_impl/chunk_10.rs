@@ -714,37 +714,141 @@ impl PlayState {
                 }
             }
             if (self.npcs[index].x, self.npcs[index].y, self.npcs[index].z) == (tx, ty, tz) {
-                self.npcs[index].cached_wp = wp;
+                self.npcs[index].set_settled_at_waypoint(wp);
                 continue;
             }
-            if self.npcs[index].z != floor || tz != floor {
-                if self.advance_npc_floor_transition_step(index, wp, tx, ty, tz, floor) {
-                    moved = true;
+
+            if self.npcs[index].state <= NPC_STATE_IDLE {
+                if !npc_schedule_hour_at_boundary(
+                    self.npcs[index].schedule_time_boundaries(),
+                    self.clock.hour,
+                ) {
+                    continue;
                 }
-                continue;
+                if self.npcs[index].cached_wp == wp {
+                    self.npcs[index].set_idle();
+                    continue;
+                }
+                self.npcs[index].state = schedule_floor_state(self.npcs[index].z, tz, floor);
             }
-            let start = (self.npcs[index].x, self.npcs[index].y);
-            let direct_step = step_toward(start, (tx, ty))
-                .filter(|(nx, ny)| self.npc_can_step_toward(index, *nx, *ny, floor, tx, ty));
-            let Some((nx, ny)) =
-                direct_step.or_else(|| self.npc_path_step(index, start, (tx, ty), floor))
-            else {
-                continue;
-            };
-            if !self.npc_can_step_toward(index, nx, ny, floor, tx, ty) {
-                continue;
+
+            match self.npcs[index].state {
+                NPC_STATE_REPLAY_QUEUE => {
+                    if self.advance_npc_replay_queue_step(index, wp, tx, ty, tz, floor) {
+                        moved = true;
+                    }
+                }
+                NPC_STATE_INPLANE_MOVE => {
+                    if self.advance_npc_in_plane_schedule_step(index, wp, tx, ty, tz, floor) {
+                        moved = true;
+                    }
+                }
+                NPC_STATE_DESCEND_TOWARD_TARGET
+                | NPC_STATE_ASCEND_TOWARD_TARGET
+                | NPC_STATE_CLIMB_UP_OFF_FLOOR
+                | NPC_STATE_CLIMB_DOWN_OFF_FLOOR => {
+                    if self.advance_npc_floor_transition_step(index, wp, tx, ty, tz, floor) {
+                        moved = true;
+                    }
+                }
+                NPC_STATE_PARKED_OFF_FLOOR => {
+                    self.npcs[index].note_failed_progress();
+                }
+                _ => {}
             }
-            self.npcs[index].x = nx;
-            self.npcs[index].y = ny;
-            moved = true;
-            if (nx, ny) == (tx, ty) {
-                self.npcs[index].cached_wp = wp;
-            }
-            self.sync_npc_active_object(index, floor);
         }
         if moved {
             self.mark_visibility_dirty();
         }
+    }
+
+    pub fn advance_npc_in_plane_schedule_step(
+        &mut self,
+        npc_index: usize,
+        waypoint: usize,
+        target_x: usize,
+        target_y: usize,
+        target_z: u8,
+        floor: u8,
+    ) -> bool {
+        let start = (self.npcs[npc_index].x, self.npcs[npc_index].y);
+        let target = (target_x, target_y);
+        let direct_step = step_toward(start, target).filter(|(nx, ny)| {
+            self.npc_can_step_toward(npc_index, *nx, *ny, floor, target_x, target_y)
+        });
+        if let Some((nx, ny)) = direct_step {
+            return self.commit_npc_schedule_position(
+                npc_index, waypoint, target_x, target_y, target_z, floor, nx, ny, target_z,
+            );
+        }
+        let Some(route) = self.npc_path_route(npc_index, start, target, floor) else {
+            self.npcs[npc_index].note_failed_progress();
+            return false;
+        };
+        self.npcs[npc_index].set_move_queue(route);
+        self.advance_npc_replay_queue_step(npc_index, waypoint, target_x, target_y, target_z, floor)
+    }
+
+    pub fn advance_npc_replay_queue_step(
+        &mut self,
+        npc_index: usize,
+        waypoint: usize,
+        target_x: usize,
+        target_y: usize,
+        target_z: u8,
+        floor: u8,
+    ) -> bool {
+        let start = (self.npcs[npc_index].x, self.npcs[npc_index].y);
+        let Some(code) = self.npcs[npc_index].peek_move_queue_direction() else {
+            self.npcs[npc_index].set_idle();
+            return false;
+        };
+        let Some((nx, ny)) = npc_step_from_direction_code(start, code) else {
+            self.npcs[npc_index].note_failed_progress();
+            return false;
+        };
+        if !self.npc_can_step_toward(npc_index, nx, ny, floor, target_x, target_y) {
+            self.npcs[npc_index].note_failed_progress();
+            return false;
+        }
+        self.npcs[npc_index].advance_move_queue_direction();
+        let moved = self.commit_npc_schedule_position(
+            npc_index, waypoint, target_x, target_y, target_z, floor, nx, ny, target_z,
+        );
+        if (nx, ny) != (target_x, target_y) && !self.npcs[npc_index].move_queue.is_empty() {
+            self.npcs[npc_index].state = NPC_STATE_REPLAY_QUEUE;
+        }
+        moved
+    }
+
+    pub fn commit_npc_schedule_position(
+        &mut self,
+        npc_index: usize,
+        waypoint: usize,
+        target_x: usize,
+        target_y: usize,
+        target_z: u8,
+        floor: u8,
+        x: usize,
+        y: usize,
+        z: u8,
+    ) -> bool {
+        let old = (
+            self.npcs[npc_index].x,
+            self.npcs[npc_index].y,
+            self.npcs[npc_index].z,
+        );
+        self.npcs[npc_index].x = x;
+        self.npcs[npc_index].y = y;
+        self.npcs[npc_index].z = z;
+        let linked_changed = self.sync_npc_active_object(npc_index, floor);
+        if (x, y, z) == (target_x, target_y, target_z) {
+            self.npcs[npc_index].set_settled_at_waypoint(waypoint);
+        } else {
+            self.npcs[npc_index].set_idle();
+            self.npcs[npc_index].stuck_counter = 0;
+        }
+        old != (x, y, z) || linked_changed
     }
 
     pub fn town_npc_adjacent_to_player(&self, npc_index: usize) -> bool {
@@ -881,6 +985,20 @@ impl PlayState {
         target: (usize, usize),
         floor: u8,
     ) -> Option<(usize, usize)> {
+        let code = self
+            .npc_path_route(npc_index, start, target, floor)?
+            .into_iter()
+            .next()?;
+        npc_step_from_direction_code(start, code)
+    }
+
+    pub fn npc_path_route(
+        &self,
+        npc_index: usize,
+        start: (usize, usize),
+        target: (usize, usize),
+        floor: u8,
+    ) -> Option<Vec<u8>> {
         if start == target {
             return None;
         }
@@ -900,14 +1018,23 @@ impl PlayState {
                 seen[idx] = true;
                 prev[idx] = Some((x, y));
                 if (nx, ny) == target {
-                    let mut first = (nx, ny);
-                    while let Some(parent) = prev[first.1 * 32 + first.0] {
+                    let mut cells = vec![(nx, ny)];
+                    let mut current = (nx, ny);
+                    while let Some(parent) = prev[current.1 * 32 + current.0] {
                         if parent == start {
-                            return Some(first);
+                            break;
                         }
-                        first = parent;
+                        cells.push(parent);
+                        current = parent;
                     }
-                    return None;
+                    cells.reverse();
+                    let mut route = Vec::with_capacity(cells.len());
+                    let mut from = start;
+                    for to in cells {
+                        route.push(npc_direction_code_between(from, to)?);
+                        from = to;
+                    }
+                    return (!route.is_empty()).then_some(route);
                 }
                 if q.len() < NPC_PATH_QUEUE_LIMIT {
                     q.push_back((nx, ny));
@@ -939,7 +1066,10 @@ impl PlayState {
                 if (self.npcs[npc_index].x, self.npcs[npc_index].y, next_z)
                     == (target_x, target_y, target_z)
                 {
-                    self.npcs[npc_index].cached_wp = waypoint;
+                    self.npcs[npc_index].set_settled_at_waypoint(waypoint);
+                } else {
+                    self.npcs[npc_index].set_idle();
+                    self.npcs[npc_index].stuck_counter = 0;
                 }
                 return self.sync_npc_active_object(npc_index, floor);
             }
@@ -947,28 +1077,37 @@ impl PlayState {
                 self.npcs[npc_index].x = nx;
                 self.npcs[npc_index].y = ny;
                 self.sync_npc_active_object(npc_index, floor);
+                self.npcs[npc_index].set_idle();
+                self.npcs[npc_index].stuck_counter = 0;
                 return true;
             }
+            self.npcs[npc_index].note_failed_progress();
             return false;
         }
 
         if target_z == floor {
             let marker = npc_floor_link_marker_for_delta(npc_z, target_z);
             let Some((x, y)) = self.nearest_npc_floor_link_to(marker, target_x, target_y) else {
+                self.npcs[npc_index].note_failed_progress();
                 return false;
             };
             self.npcs[npc_index].x = x;
             self.npcs[npc_index].y = y;
             self.npcs[npc_index].z = floor;
             if (x, y) == (target_x, target_y) {
-                self.npcs[npc_index].cached_wp = waypoint;
+                self.npcs[npc_index].set_settled_at_waypoint(waypoint);
+            } else {
+                self.npcs[npc_index].set_idle();
+                self.npcs[npc_index].stuck_counter = 0;
             }
             return self.sync_npc_active_object(npc_index, floor);
         }
 
         if (self.npcs[npc_index].x, self.npcs[npc_index].y, npc_z) == (target_x, target_y, target_z)
         {
-            self.npcs[npc_index].cached_wp = waypoint;
+            self.npcs[npc_index].set_settled_at_waypoint(waypoint);
+        } else {
+            self.npcs[npc_index].note_failed_progress();
         }
         false
     }
@@ -1057,6 +1196,26 @@ fn next_floor_toward(from_z: u8, to_z: u8) -> u8 {
     } else {
         from_z
     }
+}
+
+fn npc_direction_code_between(from: (usize, usize), to: (usize, usize)) -> Option<u8> {
+    match (
+        to.0 as isize - from.0 as isize,
+        to.1 as isize - from.1 as isize,
+    ) {
+        (-1, 0) => Some(NPC_PATH_DIR_WEST),
+        (0, 1) => Some(NPC_PATH_DIR_SOUTH),
+        (1, 0) => Some(NPC_PATH_DIR_EAST),
+        (0, -1) => Some(NPC_PATH_DIR_NORTH),
+        _ => None,
+    }
+}
+
+fn npc_step_from_direction_code(start: (usize, usize), code: u8) -> Option<(usize, usize)> {
+    let (dx, dy) = npc_path_direction_offset(code);
+    let nx = start.0 as isize + dx as isize;
+    let ny = start.1 as isize + dy as isize;
+    ((0..32).contains(&nx) && (0..32).contains(&ny)).then_some((nx as usize, ny as usize))
 }
 
 fn town_npc_type_fortifies_on_alarm(type_byte: u8) -> bool {

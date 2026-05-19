@@ -611,10 +611,14 @@ pub struct RuntimeNpc {
     pub type_byte: u8,
     pub dialog_id: u8,
     pub schedule: [u8; 16],
+    pub state: u8,
     pub x: usize,
     pub y: usize,
     pub z: u8,
     pub cached_wp: usize,
+    pub move_queue: Vec<u8>,
+    pub move_queue_pos: usize,
+    pub stuck_counter: u16,
     pub active_object: Option<usize>,
     pub player_phantom: bool,
 }
@@ -627,10 +631,14 @@ impl RuntimeNpc {
             type_byte: slot.type_byte,
             dialog_id: slot.dialog_id,
             schedule: slot.schedule,
+            state: NPC_STATE_IDLE,
             x: slot.schedule[NPC_SCHEDULE_X_OFFSET + wp] as usize,
             y: slot.schedule[NPC_SCHEDULE_Y_OFFSET + wp] as usize,
             z: slot.schedule[NPC_SCHEDULE_Z_OFFSET + wp],
             cached_wp: wp,
+            move_queue: Vec::new(),
+            move_queue_pos: 0,
+            stuck_counter: 0,
             active_object: None,
             player_phantom: false,
         }
@@ -649,10 +657,14 @@ impl RuntimeNpc {
             type_byte: PLAYER_NPC_SENTINEL_TYPE,
             dialog_id: PLAYER_NPC_DIALOG_ID,
             schedule,
+            state: NPC_STATE_IDLE,
             x,
             y,
             z,
             cached_wp,
+            move_queue: Vec::new(),
+            move_queue_pos: 0,
+            stuck_counter: 0,
             active_object: None,
             player_phantom: true,
         }
@@ -668,6 +680,8 @@ impl RuntimeNpc {
             self.schedule[NPC_SCHEDULE_Z_OFFSET + wp] = floor;
         }
         self.cached_wp = waypoint_for_hour(&self.schedule, hour);
+        self.state = NPC_STATE_IDLE;
+        self.reset_move_queue();
     }
 
     pub fn waypoint_position(&self, wp: usize) -> (usize, usize, u8) {
@@ -676,6 +690,71 @@ impl RuntimeNpc {
             self.schedule[NPC_SCHEDULE_Y_OFFSET + wp] as usize,
             self.schedule[NPC_SCHEDULE_Z_OFFSET + wp],
         )
+    }
+
+    pub fn schedule_time_boundaries(&self) -> [u8; NPC_SCHEDULE_TIME_BOUNDARY_COUNT] {
+        [
+            self.schedule[NPC_SCHEDULE_TIME_OFFSET],
+            self.schedule[NPC_SCHEDULE_TIME_OFFSET + 1],
+            self.schedule[NPC_SCHEDULE_TIME_OFFSET + 2],
+            self.schedule[NPC_SCHEDULE_TIME_OFFSET + 3],
+        ]
+    }
+
+    pub fn reset_move_queue(&mut self) {
+        self.move_queue.clear();
+        self.move_queue_pos = 0;
+        self.stuck_counter = 0;
+    }
+
+    pub fn set_idle(&mut self) {
+        self.state = NPC_STATE_IDLE;
+    }
+
+    pub fn set_settled_at_waypoint(&mut self, waypoint: usize) {
+        self.cached_wp = waypoint;
+        self.state = NPC_STATE_IDLE;
+        self.reset_move_queue();
+    }
+
+    pub fn pop_move_queue_direction(&mut self) -> Option<u8> {
+        let code = self.peek_move_queue_direction()?;
+        self.advance_move_queue_direction();
+        Some(code)
+    }
+
+    pub fn peek_move_queue_direction(&self) -> Option<u8> {
+        self.move_queue.get(self.move_queue_pos).copied()
+    }
+
+    pub fn advance_move_queue_direction(&mut self) {
+        if self.move_queue_pos >= self.move_queue.len() {
+            return;
+        }
+        self.move_queue_pos += 1;
+        if self.move_queue_pos >= self.move_queue.len() {
+            self.move_queue.clear();
+            self.move_queue_pos = 0;
+        }
+    }
+
+    pub fn set_move_queue(&mut self, route: Vec<u8>) {
+        self.move_queue = route;
+        self.move_queue_pos = 0;
+        self.state = NPC_STATE_REPLAY_QUEUE;
+        self.stuck_counter = 0;
+    }
+
+    pub fn note_failed_progress(&mut self) {
+        self.stuck_counter = self.stuck_counter.saturating_add(1);
+        if npc_stuck_counter_forces_replan(self.stuck_counter) {
+            self.move_queue.clear();
+            self.move_queue_pos = 0;
+            self.stuck_counter = 0;
+            if self.state == NPC_STATE_REPLAY_QUEUE {
+                self.state = NPC_STATE_IDLE;
+            }
+        }
     }
 }
 
