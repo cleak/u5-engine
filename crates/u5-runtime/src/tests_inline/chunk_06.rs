@@ -503,6 +503,52 @@
     }
 
     #[test]
+    fn town_search_consumes_clean_object_pickup_before_live_tile_scans() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(OBJECT_PICKUP_TABLE_FILE),
+            "CASTLE:0 0 2 1 KEYS 1 210\n",
+        )
+        .unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = 0x4e;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.visibility_dirty = false;
+        state.active_objects.push(ActiveObject {
+            type_byte: 210,
+            tile: 210,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: 0x34,
+            aux1: 0,
+            aux3: 0x78,
+        });
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+
+        assert_eq!(state.active_objects[1].type_byte, 0);
+        assert_eq!(state.active_objects[1].tile, 0);
+        assert_eq!(state.active_objects[1].x, 0);
+        assert_eq!(state.active_objects[1].y, 0);
+        assert_eq!(state.active_objects[1].z, 0);
+        assert_eq!(state.active_objects[1].aux1, 0);
+        assert_eq!(state.active_objects[1].phase, 0x34);
+        assert_eq!(state.active_objects[1].aux3, 0x78);
+        assert_eq!(state.grid[32 + 2], 0x4e);
+        assert_eq!(state.keys, DEFAULT_KEY_STOCK + 1);
+        assert_eq!(state.turn, 1);
+        assert!(state.visibility_dirty);
+        assert!(state.message.contains("Found 1 keys"));
+        assert!(state.message.contains("active-object tile 210"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn world_get_native_object_pickup_uses_visual_filter_and_class_code_without_sidecar() {
         let dir = debug_game_dir();
         let mut state = britannia_state(open_world_grid(), 4, 5);
@@ -1198,6 +1244,39 @@
         assert_eq!(state.turn, 1);
         assert!(state.visibility_dirty);
         assert_eq!(state.message, "Found ring of keys; added 9 keys.");
+    }
+
+    #[test]
+    fn town_search_surface_object_trap_narrates_without_clearing_or_revealing() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0x4e;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.visibility_dirty = false;
+        state.active_objects.push(ActiveObject {
+            type_byte: TILE_FURNITURE_FIRST,
+            tile: TILE_FURNITURE_FIRST,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0x85,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.search_facing_secret(&[], None),
+            MoveOutcome::Searched
+        );
+
+        assert_eq!(state.active_objects[1].type_byte, TILE_FURNITURE_FIRST);
+        assert_eq!(state.active_objects[1].aux1, 0x85);
+        assert_eq!(state.grid[32 + 2], 0x4e);
+        assert_eq!(state.turn, 1);
+        assert_eq!(
+            state.message,
+            "Searched active-object tile 64 at (2, 1); simple trap."
+        );
     }
 
     #[test]

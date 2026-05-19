@@ -1270,6 +1270,90 @@ impl PlayState {
         Ok(Some(MoveOutcome::Got))
     }
 
+    pub fn search_object_pickup_at(
+        &mut self,
+        entries: Option<&[ObjectPickupEntry]>,
+        target: PlayTarget,
+        floor: i8,
+        x: usize,
+        y: usize,
+    ) -> Option<MoveOutcome> {
+        let entries = entries?;
+        let hit = self
+            .active_objects
+            .iter()
+            .copied()
+            .enumerate()
+            .skip(1)
+            .find_map(|(slot, object)| {
+                if !self.object_occupies(object, x, y) {
+                    return None;
+                }
+                let entry = entries
+                    .iter()
+                    .copied()
+                    .find(|entry| object_pickup_matches(*entry, target, floor, x, y, object))?;
+                Some((slot, object.tile, entry))
+            });
+        let (slot, tile, entry) = hit?;
+
+        self.clear_consumed_active_object_slot(slot);
+        self.apply_object_pickup(entry.kind, entry.amount);
+        self.cache_current_world_overlay();
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = format!(
+            "Found {} {} from active-object tile {tile} at ({x}, {y}) in {} floor {}.",
+            entry.amount,
+            entry.kind.label(),
+            target.key(),
+            floor
+        );
+        Some(MoveOutcome::Searched)
+    }
+
+    pub fn search_surface_object_trap_at(&mut self, x: usize, y: usize) -> Option<MoveOutcome> {
+        let (slot, object) = self.surface_object_chest_slot_at(x, y)?;
+        let stat = Self::surface_object_chest_stat(object)?;
+        let member_index = self
+            .party
+            .iter()
+            .position(|member| member.living())
+            .unwrap_or_default();
+        let member_trap_detection = self
+            .party
+            .get(member_index)
+            .map(|member| member.class_byte)
+            .unwrap_or_default();
+        let trappable = stat & 0x80 != 0;
+        let difficulty = stat & 0x7f;
+        let threshold =
+            search_trap_detection_threshold(trappable, difficulty, member_trap_detection);
+        let roll = self.surface_object_search_trap_roll(slot, x, y, stat, member_index);
+        let detection_bit = roll >= threshold;
+        let visibility = search_trap_visibility(trappable, difficulty, detection_bit);
+
+        self.advance_turn();
+        self.message = format!(
+            "Searched active-object tile {} at ({x}, {y}); {}.",
+            object.tile,
+            surface_search_trap_visibility_label(visibility)
+        );
+        Some(MoveOutcome::Searched)
+    }
+
+    pub fn surface_object_search_trap_roll(
+        &self,
+        slot: usize,
+        x: usize,
+        y: usize,
+        stat: u8,
+        member_index: usize,
+    ) -> u8 {
+        1 + (self.surface_object_chest_seed(slot, x, y, stat, member_index, 2)
+            % JIMMY_OBJECT_DIE_HIGH)
+    }
+
     pub fn get_native_object_pickup_at(&mut self, x: usize, y: usize) -> Option<MoveOutcome> {
         let (slot, object) = self
             .active_objects
@@ -1624,7 +1708,13 @@ impl PlayState {
     ) -> io::Result<MoveOutcome> {
         let entries = load_secret_door_entries(game_dir)?.unwrap_or_default();
         let chest_entries = load_dungeon_chest_content_entries(game_dir)?;
-        Ok(self.search_direction_secret(direction, &entries, chest_entries.as_deref()))
+        let object_pickup_entries = load_object_pickup_entries(game_dir)?;
+        Ok(self.search_direction_secret_with_object_pickups(
+            direction,
+            &entries,
+            chest_entries.as_deref(),
+            object_pickup_entries.as_deref(),
+        ))
     }
 
     pub fn search_facing_secret(
@@ -1641,14 +1731,32 @@ impl PlayState {
         entries: &[SecretDoorEntry],
         chest_entries: Option<&[DungeonChestContentEntry]>,
     ) -> MoveOutcome {
+        self.search_direction_secret_with_object_pickups(direction, entries, chest_entries, None)
+    }
+
+    pub fn search_direction_secret_with_object_pickups(
+        &mut self,
+        direction: Direction,
+        entries: &[SecretDoorEntry],
+        chest_entries: Option<&[DungeonChestContentEntry]>,
+        object_pickup_entries: Option<&[ObjectPickupEntry]>,
+    ) -> MoveOutcome {
         match self.area {
-            Area::Town { scene, floor } => {
-                self.search_town_secret_direction(entries, scene, floor, direction)
-            }
+            Area::Town { scene, floor } => self.search_town_secret_direction_with_object_pickups(
+                entries,
+                scene,
+                floor,
+                direction,
+                object_pickup_entries,
+            ),
             Area::Dungeon { scene, level } => {
                 self.search_dungeon_secret(entries, chest_entries, scene, level)
             }
-            Area::World { plane } => self.search_world_moonstone_direction(plane, direction),
+            Area::World { plane } => self.search_world_moonstone_direction_with_object_pickups(
+                plane,
+                direction,
+                object_pickup_entries,
+            ),
         }
     }
 
@@ -1661,10 +1769,31 @@ impl PlayState {
         plane: WorldPlane,
         direction: Direction,
     ) -> MoveOutcome {
+        self.search_world_moonstone_direction_with_object_pickups(plane, direction, None)
+    }
+
+    pub fn search_world_moonstone_direction_with_object_pickups(
+        &mut self,
+        plane: WorldPlane,
+        direction: Direction,
+        object_pickup_entries: Option<&[ObjectPickupEntry]>,
+    ) -> MoveOutcome {
         let (dx, dy) = direction.delta();
         let tx = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
         let ty = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
+        if let Some(outcome) = self.search_object_pickup_at(
+            object_pickup_entries,
+            PlayTarget::World(plane),
+            plane.save_floor(),
+            tx,
+            ty,
+        ) {
+            return outcome;
+        }
         if let Some(outcome) = self.search_active_object_treasure_marker_at(tx, ty) {
+            return outcome;
+        }
+        if let Some(outcome) = self.search_surface_object_trap_at(tx, ty) {
             return outcome;
         }
         let target_tile = self.grid.get(ty * WORLD_SIDE + tx).copied();
@@ -1712,6 +1841,19 @@ impl PlayState {
         floor: i8,
         direction: Direction,
     ) -> MoveOutcome {
+        self.search_town_secret_direction_with_object_pickups(
+            entries, scene, floor, direction, None,
+        )
+    }
+
+    pub fn search_town_secret_direction_with_object_pickups(
+        &mut self,
+        entries: &[SecretDoorEntry],
+        scene: Scene,
+        floor: i8,
+        direction: Direction,
+        object_pickup_entries: Option<&[ObjectPickupEntry]>,
+    ) -> MoveOutcome {
         let (dx, dy) = direction.delta();
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
@@ -1723,7 +1865,19 @@ impl PlayState {
         let ty = ty as usize;
         let idx = ty * 32 + tx;
         let tile = self.grid[idx];
+        if let Some(outcome) = self.search_object_pickup_at(
+            object_pickup_entries,
+            PlayTarget::Town(scene),
+            floor,
+            tx,
+            ty,
+        ) {
+            return outcome;
+        }
         if let Some(outcome) = self.search_active_object_treasure_marker_at(tx, ty) {
+            return outcome;
+        }
+        if let Some(outcome) = self.search_surface_object_trap_at(tx, ty) {
             return outcome;
         }
         let reveal_tile = entries.iter().find_map(|entry| match *entry {
@@ -2495,6 +2649,15 @@ fn native_object_pickup_grant(object: ActiveObject) -> Option<ObjectPickupGrant>
         },
     };
     Some(grant)
+}
+
+fn surface_search_trap_visibility_label(visibility: SearchTrapVisibility) -> &'static str {
+    match visibility {
+        SearchTrapVisibility::NoTrap => "no trap",
+        SearchTrapVisibility::SimpleTrap => "simple trap",
+        SearchTrapVisibility::ComplexTrap => "complex trap",
+        SearchTrapVisibility::GenericTrap => "trap",
+    }
 }
 
 #[derive(Clone, Copy)]

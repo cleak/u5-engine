@@ -4,13 +4,13 @@ This matrix summarizes current implementation status against the active
 full-game goal. It is intentionally evidence-oriented: passing tests are useful
 only for the behavior they actually cover.
 
-Last refreshed on 2026-05-19 during the combat AI parity work.
+Last refreshed on 2026-05-19 during the container Search parity work.
 
 | Area | Current status | Evidence | Remaining risk |
 |---|---|---|---|
 | Intro/menu | Terminal and Bevy intro shells use the runtime menu dispatcher; Journey Onward, Create Character, and U4 transfer have runtime flows. | `intro_menu`, `menu_dispatch`, `chargen`, and `u4_transfer` tests. | Visual polish and full flow screenshot coverage. |
 | World mode | Movement, vehicles, hazards, waterfalls, moongates, plane transitions, encounters, active objects, save/load, and many commands are implemented. | `cargo test -p u5-runtime`, world tests across chunks 03, 06, 10, 12, 15, 17, 23. | Exact public coordinate tables remain intentionally absent from the gazetteer; sidecars/debug entry cover those paths. |
-| Town mode | Movement, NPC schedules, stairs, trap doors, exits, doors, pickups, rest beds, talk, shops, Blackthorn paths, alarms, and save/load are implemented. | Town tests in chunks 04, 06, 10, 11, 19, 21, 23. | Exact cataloguing of every authored cell and richer visual presentation. |
+| Town mode | Movement, NPC schedules, stairs, trap doors, exits, doors, pickups, rest beds, talk, shops, Blackthorn paths, alarms, Search object-table pickups, Search trap narration, and save/load are implemented. | Town tests in chunks 04, 06, 10, 11, 19, 21, 23 plus focused `town_search` and `object_pickup` filters. | Exact cataloguing of every authored cell and richer visual presentation. |
 | Dungeon mode | Facing-relative movement, fields, traps, room combat handoff, doors, chests, teleports, exits, ladders, light-gated raster, and save/load are implemented. | Dungeon tests in chunks 05, 12, 13, 18, 20, 23. | Exact visual parity and any coordinate rows not public in spec. |
 | Combat | Combat frame setup/restore, player commands, monster AI, spell paths, fields, damage/status/death, victory/defeat restoration, and special handoffs have broad tests. Recent AI work covers wound morale/flee movement, Saduj/name faction grouping, Doom/Shadow Lord suppression bypasses, non-party Sleep Field disable state, summon-daemon direction preference, and blocked-arena-cell dispatch skips. | Combat-heavy tests in chunk 23 plus focused `combat_ai`, `combat_actor_slot_dispatch`, `arena_field_contact`, `directed_spell_status`, and `cause_fear` filters. | Full parity audit still needed for every arena and monster class behavior. |
 | Magic | All 48 parser rows route through implemented, scene-gated, or correct-refusal paths; major combat spell families are implemented. | `magic.rs` metadata tests and cast tests in chunks 16, 17, 18, 23. | Some non-load-bearing visuals are first-playable overlays rather than exact presentation. |

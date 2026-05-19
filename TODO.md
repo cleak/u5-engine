@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-19, including 2409 tests.
+- `cargo test -p u5-runtime` passed on 2026-05-19, including 2411 tests.
 - `cargo test -p u5-tui` passed on 2026-05-19.
 - `cargo test -p u5-bevy` passed on 2026-05-19, including 31 tests.
 - `cargo fmt -- --check` passed on 2026-05-19 after the latest Rust changes.
@@ -63,7 +63,7 @@ Last known verification state:
   asset visual checks.
 - `cargo run -- --help` is a supported no-asset usage path.
 - The latest checkpointed engine commit at the time of this refresh included
-  combat AI target/flee/status parity work.
+  container Search object-table and trap-narration parity work.
 - The spec checkout used for the most recent audit was `5b816cc Complete
   cleanroom specification`.
 
@@ -89,6 +89,9 @@ Current worktree context when this TODO was refreshed:
   Shadow Lord suppression-filter bypasses, mutates non-party Sleep Field
   disable state, prefers summon-daemon placement near the current step
   direction, and skips actors standing on loaded blocked arena terrain.
+- Search now runs clean object-pickup table matches before live-tile scans,
+  keeps active treasure-marker priority ahead of trap narration, and narrates
+  surface/town object trap metadata without clearing the object slot.
 
 Before starting a major slice, inspect `git status --short` and preserve user
 changes. Do not revert unrelated work.
