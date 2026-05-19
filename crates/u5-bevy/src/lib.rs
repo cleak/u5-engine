@@ -18,12 +18,14 @@ use image::{ImageBuffer, Rgba};
 use u5_runtime::{
     COMBAT_ARENA_SIDE, ChargenSession, ChargenSessionResult, ChargenSessionStep, DungeonScene,
     FixedCellFont, INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, IntroStoryArtPlacement,
-    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
-    MISCMAPS_RTV_STRIP_SECTION_OFFSET, PLAY_MUSIC_TOGGLE_KEY, PlayInputDisposition, PlayOptions,
-    PlayState, PlayTarget, RTV_COMMAND_STREAM_BYTES, Scene, StoryRecords,
-    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TileAtlas,
-    TileGraphicsDepth, U4TransferOverrides, U4TransferSource, WorldPlane, commit_chargen_save,
-    commit_u4_transfer_save, handle_play_key_input, hash_bytes,
+    MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
+    MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, PLAY_MUSIC_TOGGLE_KEY,
+    PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
+    RTV_COMMAND_STREAM_BYTES, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
+    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, StoryRecords, TEXT_SCREEN_ROWS,
+    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TextWindowSystem,
+    TileAtlas, TileGraphicsDepth, U4TransferOverrides, U4TransferSource, WorldPlane,
+    commit_chargen_save, commit_u4_transfer_save, handle_play_key_input, hash_bytes,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -31,6 +33,7 @@ use u5_runtime::{
     load_play_options_from_save, load_question_records, load_return_to_view_assets,
     load_story_records, load_tile_atlas,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
+    paint_message_text_window, paint_prompt_text_window, paint_stats_panel_text_window,
     read_u4_transfer_source_from_party_sav, render_play_text_window_system,
     render_return_to_view_preview_viewport, render_text_panel_rgba, render_text_window_rgba,
     shop_runtime::{GuildShopState, ReagentShopState, SageState, TavernState},
@@ -44,8 +47,6 @@ const VIEWPORT_RADIUS: usize = 5;
 const VIEWPORT_CELLS: usize = VIEWPORT_RADIUS * 2 + 1;
 const VIEWPORT_SIZE_PX: u32 = (VIEWPORT_CELLS * TILE_ATLAS_SIDE) as u32;
 const DISPLAY_SCALE: f32 = 3.0;
-const STATUS_PANEL_HEIGHT: f32 = 260.0;
-const STATUS_PANEL_PADDING: f32 = 8.0;
 
 const READY_HINT: &str =
     "WASD/arrows: move. Shift+A attacks, Shift+S searches. Ctrl+S music. Esc quit.";
@@ -68,8 +69,8 @@ pub fn run_visual_loop(
         text_font,
     };
 
-    let display_w = VIEWPORT_SIZE_PX as f32 * DISPLAY_SCALE;
-    let display_h = display_w + STATUS_PANEL_HEIGHT;
+    let display_w = VISUAL_PLAY_FRAME_WIDTH as f32 * DISPLAY_SCALE;
+    let display_h = VISUAL_PLAY_FRAME_HEIGHT as f32 * DISPLAY_SCALE;
 
     // Headless screenshot driver: when U5_BEVY_SCREENSHOT is set, the harness
     // waits a few frames (so the swapchain has a real image), takes a
@@ -505,15 +506,10 @@ fn screenshot_system(
             }
             // Re-render the framebuffer to reflect the new state.
             let v: &mut VisualState = visual.as_mut();
-            let rgba = render_framebuffer(&mut v.state, &v.atlas);
+            let rgba =
+                render_visual_play_frame_with_input(&mut v.state, &v.atlas, &v.text_font, "", "");
             if let Some(image) = images.get_mut(&v.image_handle) {
                 image.data = Some(rgba);
-            }
-            let input_line = v.input_line.clone();
-            let text_font = v.text_font.clone();
-            let status_rgba = render_status_framebuffer(&mut v.state, &input_line, "", &text_font);
-            if let Some(image) = images.get_mut(&v.status_image_handle) {
-                image.data = Some(status_rgba);
             }
             state.preset_keys_applied = true;
         } else if let Some(mut intro) = intro {
@@ -564,7 +560,6 @@ struct VisualState {
     state: PlayState,
     atlas: TileAtlas,
     image_handle: Handle<Image>,
-    status_image_handle: Handle<Image>,
     text_font: FixedCellFont,
     input_line: String,
 }
@@ -655,15 +650,11 @@ fn animate_static_tiles(
         return;
     }
     let v: &mut VisualState = visual.as_mut();
-    let rgba = render_framebuffer(&mut v.state, &v.atlas);
+    let input_line = v.input_line.clone();
+    let rgba =
+        render_visual_play_frame_with_input(&mut v.state, &v.atlas, &v.text_font, &input_line, "");
     if let Some(image) = images.get_mut(&v.image_handle) {
         image.data = Some(rgba);
-    }
-    let input_line = v.input_line.clone();
-    let text_font = v.text_font.clone();
-    let status_rgba = render_status_framebuffer(&mut v.state, &input_line, "", &text_font);
-    if let Some(image) = images.get_mut(&v.status_image_handle) {
-        image.data = Some(status_rgba);
     }
 }
 
@@ -685,11 +676,11 @@ fn setup(
         text_font,
     } = bootstrap;
 
-    let rgba = render_framebuffer(&mut state, &atlas);
+    let rgba = render_visual_play_frame_with_input(&mut state, &atlas, &text_font, "", READY_HINT);
     let mut image = Image::new(
         Extent3d {
-            width: VIEWPORT_SIZE_PX,
-            height: VIEWPORT_SIZE_PX,
+            width: VISUAL_PLAY_FRAME_WIDTH,
+            height: VISUAL_PLAY_FRAME_HEIGHT,
             depth_or_array_layers: 1,
         },
         TextureDimension::D2,
@@ -699,45 +690,17 @@ fn setup(
     );
     image.sampler = ImageSampler::nearest();
     let image_handle = images.add(image);
-    let status_rgba = render_status_framebuffer(&mut state, "", READY_HINT, &text_font);
-    let mut status_image = Image::new(
-        Extent3d {
-            width: TEXT_WINDOW_RENDER_WIDTH as u32,
-            height: TEXT_WINDOW_RENDER_HEIGHT as u32,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        status_rgba,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::default(),
-    );
-    status_image.sampler = ImageSampler::nearest();
-    let status_image_handle = images.add(status_image);
-
-    let display_size = VIEWPORT_SIZE_PX as f32 * DISPLAY_SCALE;
-    let status_panel_inner_height = STATUS_PANEL_HEIGHT - STATUS_PANEL_PADDING * 2.0;
-    let status_panel_inner_width = status_panel_inner_height
-        * (TEXT_WINDOW_RENDER_WIDTH as f32 / TEXT_WINDOW_RENDER_HEIGHT as f32);
+    let display_width = VISUAL_PLAY_FRAME_WIDTH as f32 * DISPLAY_SCALE;
+    let display_height = VISUAL_PLAY_FRAME_HEIGHT as f32 * DISPLAY_SCALE;
 
     commands.spawn(Camera2d);
     commands.spawn((
         Sprite {
             image: image_handle.clone(),
-            custom_size: Some(Vec2::splat(display_size)),
+            custom_size: Some(Vec2::new(display_width, display_height)),
             ..default()
         },
-        Transform::from_xyz(0.0, STATUS_PANEL_HEIGHT * 0.5, 0.0),
-    ));
-    commands.spawn((
-        Sprite {
-            image: status_image_handle.clone(),
-            custom_size: Some(Vec2::new(
-                status_panel_inner_width,
-                status_panel_inner_height,
-            )),
-            ..default()
-        },
-        Transform::from_xyz(0.0, -display_size * 0.5 + STATUS_PANEL_HEIGHT * 0.5, 0.0),
+        Transform::from_xyz(0.0, 0.0, 0.0),
     ));
 
     commands.insert_resource(VisualState {
@@ -745,7 +708,6 @@ fn setup(
         state,
         atlas,
         image_handle,
-        status_image_handle,
         text_font,
         input_line: String::new(),
     });
@@ -1372,15 +1334,11 @@ fn drive_visual(
     }
 
     let v: &mut VisualState = visual.as_mut();
-    let rgba = render_framebuffer(&mut v.state, &v.atlas);
+    let input_line = v.input_line.clone();
+    let rgba =
+        render_visual_play_frame_with_input(&mut v.state, &v.atlas, &v.text_font, &input_line, "");
     if let Some(image) = images.get_mut(&v.image_handle) {
         image.data = Some(rgba);
-    }
-    let input_line = v.input_line.clone();
-    let text_font = v.text_font.clone();
-    let status_rgba = render_status_framebuffer(&mut v.state, &input_line, "", &text_font);
-    if let Some(image) = images.get_mut(&v.status_image_handle) {
-        image.data = Some(status_rgba);
     }
 }
 
@@ -1733,22 +1691,30 @@ fn write_visual_intro_report(
 }
 
 const VISUAL_PLAY_FRAME_WIDTH: u32 = TEXT_WINDOW_RENDER_WIDTH as u32;
-const VISUAL_PLAY_FRAME_HEIGHT: u32 = VIEWPORT_SIZE_PX + TEXT_WINDOW_RENDER_HEIGHT as u32;
+const VISUAL_PLAY_FRAME_HEIGHT: u32 = TEXT_WINDOW_RENDER_HEIGHT as u32;
+const VISUAL_MAIN_TEXT_TOP: u8 = 22;
+const VISUAL_MAIN_TEXT_RIGHT: u8 = 22;
 
 fn render_visual_play_frame(
     state: &mut PlayState,
     atlas: &TileAtlas,
     font: &FixedCellFont,
 ) -> Vec<u8> {
+    render_visual_play_frame_with_input(state, atlas, font, "", READY_HINT)
+}
+
+fn render_visual_play_frame_with_input(
+    state: &mut PlayState,
+    atlas: &TileAtlas,
+    font: &FixedCellFont,
+    input_line: &str,
+    fallback: &str,
+) -> Vec<u8> {
     let width = VISUAL_PLAY_FRAME_WIDTH as usize;
     let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
-    let mut rgba = vec![0; width * height * 4];
-    for pixel in rgba.chunks_exact_mut(4) {
-        pixel[3] = 0xff;
-    }
+    let mut rgba = render_integrated_status_framebuffer(state, input_line, fallback, font);
 
     let viewport = render_framebuffer(state, atlas);
-    let viewport_x = width.saturating_sub(VIEWPORT_SIZE_PX as usize) / 2;
     blit_rgba(
         &mut rgba,
         width,
@@ -1756,20 +1722,8 @@ fn render_visual_play_frame(
         &viewport,
         VIEWPORT_SIZE_PX as usize,
         VIEWPORT_SIZE_PX as usize,
-        viewport_x,
         0,
-    );
-
-    let status = render_status_framebuffer(state, "", READY_HINT, font);
-    blit_rgba(
-        &mut rgba,
-        width,
-        height,
-        &status,
-        TEXT_WINDOW_RENDER_WIDTH,
-        TEXT_WINDOW_RENDER_HEIGHT,
         0,
-        VIEWPORT_SIZE_PX as usize,
     );
     rgba
 }
@@ -1977,6 +1931,7 @@ fn center_rgba_on_viewport(src: Vec<u8>, src_width: usize, src_height: usize) ->
     dst
 }
 
+#[allow(dead_code)]
 fn render_status_framebuffer(
     state: &mut PlayState,
     input_line: &str,
@@ -1990,6 +1945,54 @@ fn render_status_framebuffer(
     }
     let input_echo = visual_line_prompt_active(&display_state).then_some(input_line);
     let system = render_play_text_window_system(&display_state, active_cursor, input_echo);
+    if stats_panel_active_cursor_visible(state, active_cursor) {
+        state.active_player = None;
+    }
+    render_text_window_rgba(&system, font)
+        .unwrap_or_else(|_| vec![0; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4])
+}
+
+fn render_integrated_status_framebuffer(
+    state: &mut PlayState,
+    input_line: &str,
+    fallback: &str,
+    font: &FixedCellFont,
+) -> Vec<u8> {
+    let active_cursor = state.active_player;
+    let mut display_state = state.clone();
+    if display_state.message.is_empty() {
+        display_state.message = fallback.to_string();
+    }
+    let input_echo = visual_line_prompt_active(&display_state).then_some(input_line);
+    let mut system = TextWindowSystem::new();
+    system.set_window_rect(
+        MAIN_TEXT_WINDOW_INDEX,
+        0,
+        VISUAL_MAIN_TEXT_TOP,
+        VISUAL_MAIN_TEXT_RIGHT,
+        TEXT_SCREEN_ROWS - 1,
+    );
+    system.set_window_rect(
+        STATS_PANEL_TEXT_WINDOW_INDEX,
+        STATS_PANEL_TEXT_LEFT,
+        0,
+        STATS_PANEL_TEXT_RIGHT,
+        STATS_PANEL_TEXT_BOTTOM,
+    );
+    system.set_window_rect(
+        PROMPT_TEXT_WINDOW_INDEX,
+        0,
+        TEXT_SCREEN_ROWS - 2,
+        VISUAL_MAIN_TEXT_RIGHT,
+        TEXT_SCREEN_ROWS - 1,
+    );
+    system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
+    paint_message_text_window(&mut system, &display_state.message);
+    paint_stats_panel_text_window(&mut system, &display_state, active_cursor);
+    if let Some(input_echo) = input_echo {
+        paint_prompt_text_window(&mut system, input_echo);
+    }
+    system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
     if stats_panel_active_cursor_visible(state, active_cursor) {
         state.active_player = None;
     }
