@@ -2459,7 +2459,7 @@ impl PlayState {
             "Whirlpool! Sucked into the underworld at ({}, {}). {}",
             entry.to_x,
             entry.to_y,
-            self.wind.status_message()
+            self.wind_status_message()
         );
         Ok(Some(AreaTransition::ChangedWorldPlane {
             from: plane,

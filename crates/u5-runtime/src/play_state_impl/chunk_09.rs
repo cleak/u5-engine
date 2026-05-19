@@ -369,13 +369,13 @@ impl PlayState {
                 fall_damage_report
                     .map(|report| format!("; {report}"))
                     .unwrap_or_default(),
-                self.wind.status_message()
+                self.wind_status_message()
             ),
             (WorldPlane::Underworld, WorldPlane::Britannia) => format!(
                 "Ascended from the underworld to Britannia at ({}, {}). {}.",
                 entry.to_x,
                 entry.to_y,
-                self.wind.status_message()
+                self.wind_status_message()
             ),
             _ => format!(
                 "Changed world plane from {} to {} at ({}, {}). {}.",
@@ -383,7 +383,7 @@ impl PlayState {
                 entry.to_plane.key(),
                 entry.to_x,
                 entry.to_y,
-                self.wind.status_message()
+                self.wind_status_message()
             ),
         };
         Ok(())

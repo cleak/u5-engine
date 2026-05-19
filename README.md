@@ -491,7 +491,8 @@ the saved `T` tag skipping minute/light-counter writes while suppressing that
 world object epilogue. The play harness exposes semantic `--wind`,
 `--grapple`/`--climbing-gear`, `--transport`, and `--pending-vehicle` startup hooks for focused testing;
 world load and overworld entry messages report `Calm/North/South/East/West
-Winds` without claiming byte-perfect save mappings. Mode entry and cross-area
+Winds`, or the directionless `Winds` suffix for preserved out-of-range save
+bytes, without claiming byte-perfect save mappings. Mode entry and cross-area
 transitions run a zero-minute cleanup that refreshes the cached ambient
 daylight/visibility-dirty state without spending a turn. Consumed turn cleanup
 also reasserts slot zero as the canonical player/avatar active object before

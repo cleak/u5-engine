@@ -70,7 +70,7 @@ impl WindState {
         }
     }
 
-    pub fn status_message(self) -> &'static str {
+    pub const fn status_message(self) -> &'static str {
         match self {
             Self::Calm => "Calm Winds",
             Self::North => "North Winds",
@@ -204,6 +204,35 @@ impl WindState {
             Direction::West => Some(Self::North),
             _ => None,
         }
+    }
+}
+
+/// `weather.md §2`: surface wind presentation for the saved/runtime
+/// wind byte. Public values print a direction label plus the shared
+/// suffix; preserved out-of-range values print only the suffix.
+pub const fn wind_status_message_from_save_byte(byte: u8) -> &'static str {
+    match byte {
+        0 => "Calm Winds",
+        1 => "North Winds",
+        2 => "South Winds",
+        3 => "East Winds",
+        4 => "West Winds",
+        _ => "Winds",
+    }
+}
+
+/// `weather.md §2`: surface wind presentation for live state plus the
+/// preserved save byte. Public in-memory states use the semantic wind
+/// value; an out-of-range saved byte keeps the corrupted-state banner
+/// visibly incomplete until a setter writes a public value.
+pub const fn wind_status_message_from_state_and_save_byte(
+    wind: WindState,
+    byte: u8,
+) -> &'static str {
+    if byte <= 4 {
+        wind.status_message()
+    } else {
+        wind_status_message_from_save_byte(byte)
     }
 }
 

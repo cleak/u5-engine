@@ -1736,7 +1736,7 @@ impl PlayState {
             self.clock.minute,
             self.turn,
             self.player.transport.status_label(),
-            self.wind.status_message(),
+            self.wind_status_message(),
             self.typeahead_status_label(),
             self.music_status_label(),
             self.timing_status.status_label(),

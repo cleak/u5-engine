@@ -965,7 +965,7 @@ impl PlayState {
             entry.to_plane.key(),
             entry.to_x,
             entry.to_y,
-            self.wind.status_message()
+            self.wind_status_message()
         );
         Ok(())
     }
@@ -1073,7 +1073,7 @@ impl PlayState {
             to_plane.key(),
             entry.destination_x,
             entry.destination_y,
-            self.wind.status_message()
+            self.wind_status_message()
         );
         Ok(MoveOutcome::Transition(
             AreaTransition::MoongateTeleported {

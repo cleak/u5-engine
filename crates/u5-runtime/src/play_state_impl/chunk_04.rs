@@ -38,15 +38,15 @@ impl PlayState {
             return MoveOutcome::Cast;
         }
 
-        let previous = self.wind;
+        let previous = self.wind.status_message();
         let next = WindState::rel_hur_target(direction.expect("direction checked above"))
             .expect("inline Rel Hur parser returns cardinal directions only");
         self.apply_wind_state(next);
         self.advance_turn();
         self.message = format!(
             "Wind change! {} -> {}.",
-            previous.status_message(),
-            self.wind.status_message()
+            previous,
+            self.wind_status_message()
         );
         MoveOutcome::Cast
     }
@@ -61,6 +61,10 @@ impl PlayState {
         self.sail_cadence = 0;
         self.sail_stall_pending = false;
         changed
+    }
+
+    pub fn wind_status_message(&self) -> &'static str {
+        wind_status_message_from_state_and_save_byte(self.wind, self.wind_save_byte)
     }
 
     pub fn cast_gate_travel(
@@ -1010,15 +1014,15 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let previous = self.wind;
+        let previous = self.wind.status_message();
         let next = WindState::rel_hur_target(direction)
             .expect("inline wind scroll parser returns cardinal directions only");
         self.apply_wind_state(next);
         self.advance_turn();
         self.message = format!(
             "Wind change! {} -> {}.",
-            previous.status_message(),
-            self.wind.status_message()
+            previous,
+            self.wind_status_message()
         );
         MoveOutcome::Used
     }

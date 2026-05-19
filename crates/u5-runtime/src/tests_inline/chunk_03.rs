@@ -557,6 +557,9 @@
         assert_eq!(options.wind_save_byte, 0x7a);
 
         let mut state = PlayState::load_world_scene(&dir, WorldPlane::Underworld, options).unwrap();
+        assert_eq!(state.wind_status_message(), "Winds");
+        assert!(state.message.ends_with("Winds."));
+        assert!(state.z_stats_message().contains("wind Winds;"));
 
         assert_eq!(
             state.save_game_command(&dir, Some(true)).unwrap(),

@@ -607,6 +607,7 @@ pub use wind::{
     PLAYER_SAIL_WAIT_TICKS_INTO_WIND, PLAYER_SAIL_WAIT_TICKS_PERPENDICULAR,
     PLAYER_SAIL_WAIT_TICKS_WITH_WIND, WIND_DRIFT_CALM_ACCEPT_MIN, WIND_DRIFT_CANDIDATE_MODULUS,
     WIND_DRIFT_OUTER_ROLL_MASK, WindSetterOutcome, WindState, wind_setter_outcome,
+    wind_status_message_from_save_byte, wind_status_message_from_state_and_save_byte,
 };
 pub use world_progress::{
     WORLD_PROGRESS_STATE_FILE, WORLD_PROGRESS_STATE_LEN, WORLD_PROGRESS_STATE_MAGIC,

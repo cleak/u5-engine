@@ -814,7 +814,7 @@ impl PlayState {
             message: format!(
                 "Entered {} at ({x}, {y}). {}.",
                 plane.key(),
-                options.wind.status_message()
+                wind_status_message_from_state_and_save_byte(options.wind, options.wind_save_byte)
             ),
             debug_enter: options.debug_enter,
             return_world: None,

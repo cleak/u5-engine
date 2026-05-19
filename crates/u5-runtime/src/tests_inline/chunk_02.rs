@@ -75,6 +75,20 @@
         assert_eq!(WindState::South.status_message(), "South Winds");
         assert_eq!(WindState::East.status_message(), "East Winds");
         assert_eq!(WindState::West.status_message(), "West Winds");
+        assert_eq!(wind_status_message_from_save_byte(0), "Calm Winds");
+        assert_eq!(wind_status_message_from_save_byte(1), "North Winds");
+        assert_eq!(wind_status_message_from_save_byte(2), "South Winds");
+        assert_eq!(wind_status_message_from_save_byte(3), "East Winds");
+        assert_eq!(wind_status_message_from_save_byte(4), "West Winds");
+        assert_eq!(wind_status_message_from_save_byte(0x7a), "Winds");
+        assert_eq!(
+            wind_status_message_from_state_and_save_byte(WindState::West, 0),
+            "West Winds"
+        );
+        assert_eq!(
+            wind_status_message_from_state_and_save_byte(WindState::West, 0x7a),
+            "Winds"
+        );
     }
 
     #[test]
