@@ -11353,6 +11353,35 @@
     #[test]
     fn random_spawn_bucket_picker_matches_spec_weights() {
         // encounters.md §4
+        assert_eq!(
+            SURFACE_AQUATIC_BUCKET
+                .iter()
+                .map(|(weight, _)| u16::from(*weight))
+                .sum::<u16>(),
+            256
+        );
+        assert_eq!(
+            UNDERWORLD_AQUATIC_BUCKET
+                .iter()
+                .map(|(weight, _)| u16::from(*weight))
+                .sum::<u16>(),
+            256
+        );
+        assert_eq!(
+            SURFACE_LAND_BUCKET
+                .iter()
+                .map(|(weight, _)| u16::from(*weight))
+                .sum::<u16>(),
+            256
+        );
+        assert_eq!(
+            UNDERWORLD_LAND_BUCKET
+                .iter()
+                .map(|(weight, _)| u16::from(*weight))
+                .sum::<u16>(),
+            256
+        );
+
         // Surface aquatic bucket: cumulative weights are
         // 72, 144, 184, 222, 256.
         assert_eq!(pick_random_spawn_bucket(&SURFACE_AQUATIC_BUCKET, 0), Some(0x8C));
@@ -11377,11 +11406,48 @@
         // Underworld land bucket counts.
         assert_eq!(UNDERWORLD_LAND_BUCKET.len(), 7);
 
-        // Surface land first entry (Orc, weight 60).
+        // Surface land bucket: cumulative weights are
+        // 60, 110, 150, 180, 200, 215, 230, 240, 250, 253, 255, 256.
         assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 0), Some(0xC0));
         assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 59), Some(0xC0));
-        // Last surface-land entry (Daemon, weight 1, cumulative 256).
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 60), Some(0xC8));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 109), Some(0xC8));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 110), Some(0x90));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 149), Some(0x90));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 150), Some(0x98));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 179), Some(0x98));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 180), Some(0xBC));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 199), Some(0xBC));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 200), Some(0xC4));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 214), Some(0xC4));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 215), Some(0xD0));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 229), Some(0xD0));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 230), Some(0xE4));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 239), Some(0xE4));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 240), Some(0xCC));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 249), Some(0xCC));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 250), Some(0xD4));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 252), Some(0xD4));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 253), Some(0xDC));
+        assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 254), Some(0xDC));
         assert_eq!(pick_random_spawn_bucket(&SURFACE_LAND_BUCKET, 255), Some(0xD8));
+
+        // Underworld land bucket: cumulative weights are
+        // 64, 120, 176, 208, 240, 248, 256.
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_LAND_BUCKET, 0), Some(0x94));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_LAND_BUCKET, 63), Some(0x94));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_LAND_BUCKET, 64), Some(0x90));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_LAND_BUCKET, 119), Some(0x90));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_LAND_BUCKET, 120), Some(0x98));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_LAND_BUCKET, 175), Some(0x98));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_LAND_BUCKET, 176), Some(0xF0));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_LAND_BUCKET, 207), Some(0xF0));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_LAND_BUCKET, 208), Some(0xF4));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_LAND_BUCKET, 239), Some(0xF4));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_LAND_BUCKET, 240), Some(0xD8));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_LAND_BUCKET, 247), Some(0xD8));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_LAND_BUCKET, 248), Some(0xDC));
+        assert_eq!(pick_random_spawn_bucket(&UNDERWORLD_LAND_BUCKET, 255), Some(0xDC));
 
         // Empty bucket -> None.
         assert_eq!(pick_random_spawn_bucket(&[], 0), None);

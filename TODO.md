@@ -575,12 +575,16 @@ Goal: turn diagnostic interactions into game-like content.
     - NPC memory flags such as thanked/picked/quest state.
 
 - Encounters.
-  - Current world encounters can spawn via sidecar after consumed turns.
+  - Current world encounters can spawn either from clean sidecar rows or from
+    the native public threshold/terrain-bucket spawner after eligible consumed
+    overworld turns. Sleep ambushes, fortunes-of-war count rerolls, dungeon room
+    encounters, and terrain combat setup are implemented.
   - Remaining work:
-    - exact terrain threshold and monster tables,
-    - encounter suppression/eligibility rules,
-    - ambush checks during rest,
-    - transition into combat or debug resolution.
+    - continue auditing authored scripted encounter cells and combat arena
+      presentation against public data,
+    - keep native weighted spawn-bucket tests aligned with `encounters.md`,
+    - preserve the town-hostility boundary: ordinary town attacks stay in
+      town/NPC alarm paths unless future public evidence adds a framer caller.
 
 ## Milestone 7: Data And Asset Coverage
 
