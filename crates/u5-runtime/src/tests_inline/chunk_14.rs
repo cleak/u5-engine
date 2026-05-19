@@ -931,6 +931,36 @@
     }
 
     #[test]
+    fn town_visibility_uses_local_light_mask_beyond_player_radius() {
+        let mut unlit = test_state(open_grid(), 5, 5);
+        unlit.ambient_light = DAWN_DUSK_LIGHT[1];
+
+        let unlit_view = unlit.render_text_view(5);
+        assert_eq!(unlit_view.lines().nth(10).unwrap().chars().nth(5), Some(' '));
+
+        let mut lit_grid = open_grid();
+        lit_grid[8 * TOWN_GRID_SIDE + 5] = 0xDC;
+        let mut lit = test_state(lit_grid, 5, 5);
+        lit.ambient_light = DAWN_DUSK_LIGHT[1];
+
+        let lit_view = lit.render_text_view(5);
+        assert_ne!(lit_view.lines().nth(10).unwrap().chars().nth(5), Some(' '));
+        assert!(lit.town_cell_visible_with_light_radius(5, 5, 5, 9, 5, 1));
+    }
+
+    #[test]
+    fn town_local_light_mask_respects_visibility_blockers() {
+        let mut grid = open_grid();
+        for x in 0..=10 {
+            grid[7 * TOWN_GRID_SIDE + x] = 24;
+        }
+        grid[8 * TOWN_GRID_SIDE + 5] = 0xDC;
+        let state = test_state(grid, 5, 5);
+
+        assert!(!state.town_cell_visible_with_light_radius(5, 5, 5, 9, 5, 1));
+    }
+
+    #[test]
     fn render_text_frame_clears_visibility_dirty_after_redraw() {
         let mut state = test_state(open_grid(), 1, 1);
         state.visibility_dirty = true;

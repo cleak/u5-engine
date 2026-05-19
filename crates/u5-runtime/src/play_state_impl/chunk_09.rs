@@ -907,7 +907,7 @@ impl PlayState {
                     return None;
                 }
                 let visible_radius = self.surface_visibility_radius(radius);
-                if !self.town_cell_visible(px, py, x, y, visible_radius) {
+                if !self.town_cell_visible_with_light_radius(px, py, x, y, radius, visible_radius) {
                     return None;
                 }
                 let xu = x as usize;
@@ -917,7 +917,8 @@ impl PlayState {
             }
             TopDownRenderArea::World(_) => {
                 let visible_radius = self.world_visibility_radius(radius);
-                if !self.world_cell_visible(px, py, x, y, visible_radius) {
+                if !self.world_cell_visible_with_light_radius(px, py, x, y, radius, visible_radius)
+                {
                     return None;
                 }
                 let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
@@ -1250,10 +1251,23 @@ impl PlayState {
         y: isize,
         visible_radius: usize,
     ) -> bool {
-        let Some(index) = visibility_view_index(px, py, x, y, visible_radius) else {
+        self.town_cell_visible_with_light_radius(px, py, x, y, visible_radius, visible_radius)
+    }
+
+    pub fn town_cell_visible_with_light_radius(
+        &self,
+        px: isize,
+        py: isize,
+        x: isize,
+        y: isize,
+        view_radius: usize,
+        light_radius: usize,
+    ) -> bool {
+        let Some(index) = visibility_view_index(px, py, x, y, view_radius) else {
             return false;
         };
-        self.surface_visibility_carve(px, py, visible_radius, false)[index]
+        self.surface_visibility_carve_with_light_radius(px, py, view_radius, light_radius, false)
+            [index]
     }
 
     pub fn town_cell_blocks_sight(&self, x: usize, y: usize) -> bool {
@@ -1269,10 +1283,23 @@ impl PlayState {
         y: isize,
         visible_radius: usize,
     ) -> bool {
-        let Some(index) = visibility_view_index(px, py, x, y, visible_radius) else {
+        self.world_cell_visible_with_light_radius(px, py, x, y, visible_radius, visible_radius)
+    }
+
+    pub fn world_cell_visible_with_light_radius(
+        &self,
+        px: isize,
+        py: isize,
+        x: isize,
+        y: isize,
+        view_radius: usize,
+        light_radius: usize,
+    ) -> bool {
+        let Some(index) = visibility_view_index(px, py, x, y, view_radius) else {
             return false;
         };
-        self.surface_visibility_carve(px, py, visible_radius, true)[index]
+        self.surface_visibility_carve_with_light_radius(px, py, view_radius, light_radius, true)
+            [index]
     }
 
     pub fn world_cell_blocks_sight(&self, x: usize, y: usize) -> bool {
@@ -1287,25 +1314,39 @@ impl PlayState {
         radius: usize,
         wrap_world: bool,
     ) -> Vec<bool> {
-        let side = radius.saturating_mul(2).saturating_add(1);
+        self.surface_visibility_carve_with_light_radius(px, py, radius, radius, wrap_world)
+    }
+
+    pub fn surface_visibility_carve_with_light_radius(
+        &self,
+        px: isize,
+        py: isize,
+        view_radius: usize,
+        light_radius: usize,
+        wrap_world: bool,
+    ) -> Vec<bool> {
+        let side = view_radius.saturating_mul(2).saturating_add(1);
         let cell_count = side.saturating_mul(side);
         let mut visible = vec![false; cell_count];
         if cell_count == 0 {
             return visible;
         }
 
-        let center = radius * side + radius;
+        let center = view_radius * side + view_radius;
         visible[center] = true;
         let mut considered = vec![false; cell_count];
         considered[center] = true;
         let mut queue = std::collections::VecDeque::from([(px, py)]);
-        let light_threshold = (radius as u32).saturating_mul(radius as u32);
+        let light_threshold = (light_radius as u32).saturating_mul(light_radius as u32);
+        let local_light_mask = self.surface_local_light_mask(px, py, wrap_world);
+        let (local_light_origin_x, local_light_origin_y) =
+            surface_local_light_mask_origin(px, py, wrap_world);
 
         while let Some((cx, cy)) = queue.pop_front() {
             for (dx, dy) in VISIBILITY_CARVE_NEIGHBOR_ORDER {
                 let x = cx + isize::from(dx);
                 let y = cy + isize::from(dy);
-                let Some(index) = visibility_view_index(px, py, x, y, radius) else {
+                let Some(index) = visibility_view_index(px, py, x, y, view_radius) else {
                     continue;
                 };
                 if considered[index] {
@@ -1317,11 +1358,137 @@ impl PlayState {
                     continue;
                 };
                 let squared_distance = visibility_squared_distance(px, py, x, y);
+                let propagates = if wrap_world {
+                    surface_tile_propagates_visibility(tile, squared_distance)
+                } else {
+                    town_tile_propagates_visibility(tile, squared_distance)
+                };
+                let in_player_light = visibility_in_radius(squared_distance, light_threshold);
+                if in_player_light {
+                    visible[index] = true;
+                } else {
+                    let locally_lit = Self::surface_local_light_mask_is_lit(
+                        &local_light_mask,
+                        local_light_origin_x,
+                        local_light_origin_y,
+                        x,
+                        y,
+                        wrap_world,
+                    );
+                    let parent_lit = Self::surface_local_light_mask_is_lit(
+                        &local_light_mask,
+                        local_light_origin_x,
+                        local_light_origin_y,
+                        cx,
+                        cy,
+                        wrap_world,
+                    );
+                    if locally_lit && (propagates || parent_lit) {
+                        visible[index] = true;
+                    }
+                }
+                if propagates
+                    && (in_player_light
+                        || Self::surface_local_light_mask_is_lit(
+                            &local_light_mask,
+                            local_light_origin_x,
+                            local_light_origin_y,
+                            x,
+                            y,
+                            wrap_world,
+                        ))
+                {
+                    queue.push_back((x, y));
+                }
+            }
+        }
+
+        visible
+    }
+
+    fn surface_local_light_mask(&self, px: isize, py: isize, wrap_world: bool) -> Vec<bool> {
+        let mut mask = vec![false; TOWN_GRID_BYTES];
+        let (origin_x, origin_y) = surface_local_light_mask_origin(px, py, wrap_world);
+
+        for local_y in 0..TOWN_GRID_SIDE {
+            for local_x in 0..TOWN_GRID_SIDE {
+                let x = origin_x + local_x as isize;
+                let y = origin_y + local_y as isize;
+                if self
+                    .surface_visibility_tile(x, y, wrap_world)
+                    .is_some_and(is_local_light_source_tile)
+                {
+                    self.carve_surface_local_light_source(
+                        x, y, origin_x, origin_y, wrap_world, &mut mask,
+                    );
+                }
+            }
+        }
+
+        let Some(floor) = self.current_floor() else {
+            return mask;
+        };
+        for object in &self.active_objects {
+            if object.is_empty() || object.z != floor || !is_local_light_source_tile(object.tile) {
+                continue;
+            }
+            let x = object.x as isize;
+            let y = object.y as isize;
+            if surface_local_light_mask_index(origin_x, origin_y, x, y, wrap_world).is_some() {
+                self.carve_surface_local_light_source(
+                    x, y, origin_x, origin_y, wrap_world, &mut mask,
+                );
+            }
+        }
+
+        mask
+    }
+
+    fn carve_surface_local_light_source(
+        &self,
+        source_x: isize,
+        source_y: isize,
+        origin_x: isize,
+        origin_y: isize,
+        wrap_world: bool,
+        mask: &mut [bool],
+    ) {
+        let Some(center) =
+            surface_local_light_mask_index(origin_x, origin_y, source_x, source_y, wrap_world)
+        else {
+            return;
+        };
+        let mut considered = vec![false; TOWN_GRID_BYTES];
+        considered[center] = true;
+        mask[center] = true;
+        let mut queue = std::collections::VecDeque::from([(source_x, source_y)]);
+        let light_threshold =
+            (LOCAL_LIGHT_SOURCE_RADIUS as u32).saturating_mul(LOCAL_LIGHT_SOURCE_RADIUS as u32);
+
+        while let Some((cx, cy)) = queue.pop_front() {
+            for (dx, dy) in VISIBILITY_CARVE_NEIGHBOR_ORDER {
+                let x = cx + isize::from(dx);
+                let y = cy + isize::from(dy);
+                let Some(index) =
+                    surface_local_light_mask_index(origin_x, origin_y, x, y, wrap_world)
+                else {
+                    continue;
+                };
+                if considered[index] {
+                    continue;
+                }
+                considered[index] = true;
+
+                let Some(tile) = self.surface_visibility_tile(x, y, wrap_world) else {
+                    continue;
+                };
+                let squared_distance =
+                    surface_local_light_squared_distance(source_x, source_y, x, y, wrap_world);
                 if !visibility_in_radius(squared_distance, light_threshold) {
                     continue;
                 }
 
-                visible[index] = true;
+                mask[index] = true;
                 let propagates = if wrap_world {
                     surface_tile_propagates_visibility(tile, squared_distance)
                 } else {
@@ -1332,8 +1499,20 @@ impl PlayState {
                 }
             }
         }
+    }
 
-        visible
+    fn surface_local_light_mask_is_lit(
+        mask: &[bool],
+        origin_x: isize,
+        origin_y: isize,
+        x: isize,
+        y: isize,
+        wrap_world: bool,
+    ) -> bool {
+        surface_local_light_mask_index(origin_x, origin_y, x, y, wrap_world)
+            .and_then(|index| mask.get(index))
+            .copied()
+            .unwrap_or(false)
     }
 
     fn surface_visibility_tile(&self, x: isize, y: isize, wrap_world: bool) -> Option<u8> {
@@ -2804,6 +2983,57 @@ pub fn visibility_view_index(
 pub fn visibility_squared_distance(px: isize, py: isize, x: isize, y: isize) -> u32 {
     let dx = (x - px).unsigned_abs() as u32;
     let dy = (y - py).unsigned_abs() as u32;
+    dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
+}
+
+fn surface_local_light_mask_origin(px: isize, py: isize, wrap_world: bool) -> (isize, isize) {
+    if wrap_world {
+        let half = (LOCAL_LIGHT_MASK_SIDE / 2) as isize;
+        (px - half, py - half)
+    } else {
+        (0, 0)
+    }
+}
+
+fn surface_local_light_mask_index(
+    origin_x: isize,
+    origin_y: isize,
+    x: isize,
+    y: isize,
+    wrap_world: bool,
+) -> Option<usize> {
+    let (col, row) = if wrap_world {
+        (
+            (x - origin_x).rem_euclid(WORLD_SIDE as isize),
+            (y - origin_y).rem_euclid(WORLD_SIDE as isize),
+        )
+    } else {
+        (x - origin_x, y - origin_y)
+    };
+    if !(0..LOCAL_LIGHT_MASK_SIDE as isize).contains(&col)
+        || !(0..LOCAL_LIGHT_MASK_SIDE as isize).contains(&row)
+    {
+        return None;
+    }
+    Some(row as usize * LOCAL_LIGHT_MASK_SIDE + col as usize)
+}
+
+fn surface_local_light_squared_distance(
+    source_x: isize,
+    source_y: isize,
+    x: isize,
+    y: isize,
+    wrap_world: bool,
+) -> u32 {
+    if !wrap_world {
+        return visibility_squared_distance(source_x, source_y, x, y);
+    }
+    let sx = source_x.rem_euclid(WORLD_SIDE as isize) as usize;
+    let sy = source_y.rem_euclid(WORLD_SIDE as isize) as usize;
+    let tx = x.rem_euclid(WORLD_SIDE as isize) as usize;
+    let ty = y.rem_euclid(WORLD_SIDE as isize) as usize;
+    let dx = i32::from(wrapped_world_axis_delta(sx, tx)).unsigned_abs();
+    let dy = i32::from(wrapped_world_axis_delta(sy, ty)).unsigned_abs();
     dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
 }
 

@@ -83,6 +83,11 @@ pub const fn visibility_marker(byte: u8) -> VisibilityMarker {
 /// mask and the active map window share one source of truth.
 pub const LOCAL_LIGHT_MASK_SIDE: usize = crate::TOWN_GRID_SIDE;
 
+/// `visibility.md §12`: source carves use an eleven-by-eleven visited
+/// grid, so the fixed local-light radius is five cells around the
+/// source.
+pub const LOCAL_LIGHT_SOURCE_RADIUS: usize = VIEWPORT_CENTER as usize;
+
 /// `visibility.md §12`: returns `true` for tile ids the resident
 /// local-light refresh recognises as local-light source candidates.
 /// The shipped lookup is `0xB0..=0xB3`, `0xBC..=0xBF`, `0xDC`, and
