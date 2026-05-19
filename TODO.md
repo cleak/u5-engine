@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-19, including 2363 tests.
+- `cargo test -p u5-runtime` passed on 2026-05-19, including 2365 tests.
 - `cargo test -p u5-tui` passed on 2026-05-19.
 - `cargo fmt -- --check` passed on 2026-05-19 after the latest Rust changes.
 - Representative raster smoke checks with local assets produced nonblank hashes:
@@ -306,7 +306,8 @@ experience.
   RGBA framebuffer of the current viewport into one `Image`, and routes
   keyboard input through the same handlers used by the terminal play loop.
   Town/world scenes use the tile-atlas top-down view; dungeon scenes use a
-  clean first-person raster with the public light gate and wall/feature cues.
+  clean first-person raster with the public light gate, wall/feature cues, and
+  active dungeon object overlays.
 
 - Establish a Bevy app shell. (visual slice landed)
   - Game state resource wraps or adapts the existing `PlayState`. (done)
@@ -337,9 +338,10 @@ experience.
   - Verify with screenshots or pixel hashes where practical.
 
 - Build a dungeon renderer.
-  - Replace current text proxy with public first-person wireframe rendering.
-  - Implement distance bands, side-wall mirroring, door/wall variants, and
-    darkness gate.
+  - Continue replacing the terminal text proxy with the public first-person
+    raster where frontends can consume pixels directly.
+  - Current raster covers distance bands, side-wall mirroring, door/wall
+    variants, darkness gate, field/feature cues, and active object overlays.
   - Keep a diagnostic text view for tests.
 
 - UI and input.

@@ -228,8 +228,10 @@ bomb-trap, or field bytes run the same post-action underfoot tile-effect pass,
 without spending a second turn.
 Dungeon exploration keeps the top-down active-object table out of its
 turn and idle visual animators because the first-person dungeon renderer owns
-its own position state; shared static animation still ticks. Dungeon render and
-`L`ook obey the public personal-light gate; optional
+its own position state; shared static animation still ticks. The dungeon raster
+projects same-level active dungeon objects into the visible first-person depth
+bands, while stale objects from other dungeon levels are ignored. Dungeon render
+and `L`ook obey the public personal-light gate; optional
 `dungeon_teleports.tsv` rows model scripted level-to-level cells, and optional
 `dungeon_exit_tiles.tsv` rows model immediate exit-dungeon cells while their
 exact encoding remains open. Runtime

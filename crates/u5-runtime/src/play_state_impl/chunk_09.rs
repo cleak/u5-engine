@@ -711,6 +711,7 @@ impl PlayState {
         let bright = dungeon_palette_index(viewport.depth, 15);
         let dim = dungeon_palette_index(viewport.depth, 7);
         let feature = dungeon_palette_index(viewport.depth, 14);
+        let sprite = dungeon_palette_index(viewport.depth, 13);
         let wall_fill = dungeon_palette_index(viewport.depth, 8);
 
         let (fdx, fdy) = self.player.facing.delta();
@@ -725,6 +726,7 @@ impl PlayState {
 
         draw_rect_outline(viewport, depth_rects[0], dim);
         let mut visible_bands = Vec::with_capacity(DUNGEON_VIEW_DEPTH);
+        let mut visible_objects = Vec::with_capacity(DUNGEON_VIEW_DEPTH * 3);
         for band in 1..=DUNGEON_VIEW_DEPTH {
             let band_offset = band as isize;
             let current = depth_rects[band - 1];
@@ -771,6 +773,35 @@ impl PlayState {
             let right_tile =
                 self.dungeon_renderer_offset_cell(level, ahead_dx + rdx, ahead_dy + rdy);
             let ahead_tile = self.dungeon_renderer_offset_cell(level, ahead_dx, ahead_dy);
+            if let Some(object) = self.dungeon_renderer_offset_object(level, ahead_dx, ahead_dy) {
+                visible_objects.push(DungeonVisibleObject {
+                    rect: next,
+                    side: None,
+                    object,
+                });
+            }
+            if !dungeon_first_person_blocks(left_tile) {
+                if let Some(object) =
+                    self.dungeon_renderer_offset_object(level, ahead_dx + ldx, ahead_dy + ldy)
+                {
+                    visible_objects.push(DungeonVisibleObject {
+                        rect: next,
+                        side: Some(DungeonViewSide::Left),
+                        object,
+                    });
+                }
+            }
+            if !dungeon_first_person_blocks(right_tile) {
+                if let Some(object) =
+                    self.dungeon_renderer_offset_object(level, ahead_dx + rdx, ahead_dy + rdy)
+                {
+                    visible_objects.push(DungeonVisibleObject {
+                        rect: next,
+                        side: Some(DungeonViewSide::Right),
+                        object,
+                    });
+                }
+            }
             draw_dungeon_side_cell(
                 viewport,
                 current,
@@ -804,12 +835,37 @@ impl PlayState {
         for band in visible_bands.into_iter().rev() {
             draw_dungeon_front_cell(viewport, band.rect, band.tile, bright, feature, wall_fill);
         }
+        for visible in visible_objects.into_iter().rev() {
+            draw_dungeon_object_marker(
+                viewport,
+                visible.rect,
+                visible.side,
+                visible.object,
+                sprite,
+            );
+        }
     }
 
     fn dungeon_renderer_offset_cell(&self, level: u8, dx: isize, dy: isize) -> u8 {
         let x = dungeon_floor_wrap_coord(self.player.x as i16 + dx as i16) as usize;
         let y = dungeon_floor_wrap_coord(self.player.y as i16 + dy as i16) as usize;
         dungeon_renderer_cell_byte(self.dungeon_cell(level, x, y))
+    }
+
+    fn dungeon_renderer_offset_object(
+        &self,
+        level: u8,
+        dx: isize,
+        dy: isize,
+    ) -> Option<ActiveObject> {
+        let x = dungeon_floor_wrap_coord(self.player.x as i16 + dx as i16) as usize;
+        let y = dungeon_floor_wrap_coord(self.player.y as i16 + dy as i16) as usize;
+        self.active_objects.iter().copied().skip(1).find(|object| {
+            !object.is_empty()
+                && object.z == level as i8
+                && self.object_occupies(*object, x, y)
+                && active_object_frame_tile(object.type_byte, object.phase).is_some()
+        })
     }
 
     fn prepare_top_down_render_grid(
@@ -2082,6 +2138,13 @@ struct DungeonVisibleBand {
 }
 
 #[derive(Clone, Copy)]
+struct DungeonVisibleObject {
+    rect: DungeonRect,
+    side: Option<DungeonViewSide>,
+    object: ActiveObject,
+}
+
+#[derive(Clone, Copy)]
 enum DungeonViewSide {
     Left,
     Right,
@@ -2606,6 +2669,45 @@ fn draw_feature_marker(viewport: &mut TileViewport, rect: DungeonRect, colour: u
         center_y + size,
         colour,
     );
+}
+
+fn draw_dungeon_object_marker(
+    viewport: &mut TileViewport,
+    rect: DungeonRect,
+    side: Option<DungeonViewSide>,
+    object: ActiveObject,
+    colour: u8,
+) {
+    let frame_tile =
+        active_object_frame_tile(object.type_byte, object.phase).unwrap_or(object.tile);
+    let frame_phase = i32::from(frame_tile & 0x03);
+    let (center_x, center_y, size) = match side {
+        Some(DungeonViewSide::Left) => {
+            let x = rect.left + (rect.right - rect.left) / 4;
+            let y = (rect.top + rect.bottom) / 2;
+            let size = ((rect.right - rect.left).min(rect.bottom - rect.top) / 8).max(2);
+            (x, y, size)
+        }
+        Some(DungeonViewSide::Right) => {
+            let x = rect.right - (rect.right - rect.left) / 4;
+            let y = (rect.top + rect.bottom) / 2;
+            let size = ((rect.right - rect.left).min(rect.bottom - rect.top) / 8).max(2);
+            (x, y, size)
+        }
+        None => {
+            let x = (rect.left + rect.right) / 2;
+            let y = (rect.top + rect.bottom) / 2;
+            let size = ((rect.right - rect.left).min(rect.bottom - rect.top) / 6).max(2);
+            (x, y, size)
+        }
+    };
+    let bob = frame_phase - 1;
+    let y = center_y + bob;
+    draw_line(viewport, center_x, y - size, center_x + size, y, colour);
+    draw_line(viewport, center_x + size, y, center_x, y + size, colour);
+    draw_line(viewport, center_x, y + size, center_x - size, y, colour);
+    draw_line(viewport, center_x - size, y, center_x, y - size, colour);
+    put_viewport_pixel(viewport, center_x, y, colour);
 }
 
 fn side_marker_center(

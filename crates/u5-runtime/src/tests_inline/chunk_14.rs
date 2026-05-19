@@ -283,6 +283,50 @@
     }
 
     #[test]
+    fn dungeon_raster_draws_active_monster_overlay_at_visible_depth() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.player.facing = Direction::East;
+        state.torch_counter = 9;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xc0,
+            tile: 0xc0,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+
+        assert!(viewport.pixels.iter().any(|&pixel| pixel == 13));
+    }
+
+    #[test]
+    fn dungeon_raster_ignores_active_monster_from_other_level() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.player.facing = Direction::East;
+        state.torch_counter = 9;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xc0,
+            tile: 0xc0,
+            x: 2,
+            y: 1,
+            z: 1,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let viewport = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+
+        assert!(!viewport.pixels.iter().any(|&pixel| pixel == 13));
+    }
+
+    #[test]
     fn dungeon_look_uses_tile_description_when_lit() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 2, 1)] = 0x40;
