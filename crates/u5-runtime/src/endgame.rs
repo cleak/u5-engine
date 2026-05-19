@@ -298,6 +298,11 @@ impl EndgameState {
                 .and_then(|messages| messages.rite_messages().get(index as usize))
                 .cloned()
                 .unwrap_or_else(|| self.cinematic.banner_label().to_string()),
+            crate::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(index) => self
+                .final_narrative
+                .as_ref()
+                .and_then(|narrative| narrative.window_by_number(index.saturating_add(1)))
+                .unwrap_or_else(|| self.cinematic.banner_label().to_string()),
             crate::endgame_cinematic::EndgameCinematicStep::Certificate
             | crate::endgame_cinematic::EndgameCinematicStep::Finished => self
                 .certificate

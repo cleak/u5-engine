@@ -12,9 +12,16 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+use crate::parse_u8_literal;
+
 /// `formats/end-dat.md §2` published filename for the final-narrative
 /// text file.
 pub const END_DAT_FILE: &str = "END.DAT";
+/// Optional clean sidecar for the six caller-selected `END.DAT` seek windows.
+/// The public spec names the six semantic windows but does not publish their
+/// byte ranges, so this table lets the runtime render cleanly provided ranges
+/// without inferring them from layout markers.
+pub const END_NARRATIVE_WINDOW_TABLE_FILE: &str = "end_narrative_windows.tsv";
 
 /// `formats/end-dat.md §2`: shipped DOS file size in bytes.
 pub const END_DAT_LEN: usize = 3_698;
@@ -112,12 +119,36 @@ pub const fn end_narrative_window(number: u8) -> Option<EndNarrativeWindow> {
     })
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EndNarrativeWindowRange {
+    /// One-based window number, `1..=6`.
+    pub window: u8,
+    /// File-relative start byte, inclusive.
+    pub start: usize,
+    /// File-relative end byte, exclusive.
+    pub end: usize,
+}
+
+impl EndNarrativeWindowRange {
+    pub const fn index(self) -> usize {
+        (self.window - 1) as usize
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EndNarrative {
     pub raw: Vec<u8>,
+    pub window_ranges: [Option<EndNarrativeWindowRange>; END_DAT_WINDOW_COUNT],
 }
 
 impl EndNarrative {
+    pub fn new(raw: Vec<u8>) -> Self {
+        Self {
+            raw,
+            window_ranges: [None; END_DAT_WINDOW_COUNT],
+        }
+    }
+
     pub fn full_text(&self) -> String {
         decode_end_window(&self.raw)
     }
@@ -128,6 +159,20 @@ impl EndNarrative {
         }
         let text = decode_end_window(&self.raw[start..end]);
         if text.is_empty() { None } else { Some(text) }
+    }
+
+    pub fn window_by_number(&self, number: u8) -> Option<String> {
+        let window = end_narrative_window(number)?;
+        let range = self.window_ranges[window.number() as usize - 1]?;
+        self.window(range.start, range.end)
+    }
+
+    pub fn with_window_ranges(
+        mut self,
+        ranges: [Option<EndNarrativeWindowRange>; END_DAT_WINDOW_COUNT],
+    ) -> Self {
+        self.window_ranges = ranges;
+        self
     }
 }
 
@@ -143,7 +188,11 @@ pub fn load_end_narrative(game_dir: &Path) -> io::Result<Option<EndNarrative>> {
             ));
         }
     };
-    parse_end_narrative(&bytes).map(Some)
+    let mut narrative = parse_end_narrative(&bytes)?;
+    if let Some(ranges) = load_end_narrative_window_ranges(game_dir)? {
+        narrative = narrative.with_window_ranges(ranges);
+    }
+    Ok(Some(narrative))
 }
 
 pub fn require_end_narrative(game_dir: &Path) -> io::Result<EndNarrative> {
@@ -184,9 +233,125 @@ pub fn parse_end_narrative(bytes: &[u8]) -> io::Result<EndNarrative> {
             format!("{END_DAT_FILE}: no renderable narrative text"),
         ));
     }
-    Ok(EndNarrative {
-        raw: bytes.to_vec(),
-    })
+    Ok(EndNarrative::new(bytes.to_vec()))
+}
+
+pub fn load_end_narrative_window_ranges(
+    game_dir: &Path,
+) -> io::Result<Option<[Option<EndNarrativeWindowRange>; END_DAT_WINDOW_COUNT]>> {
+    let path = game_dir.join(END_NARRATIVE_WINDOW_TABLE_FILE);
+    let text = match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => {
+            return Err(io::Error::new(
+                err.kind(),
+                format!("{}: {err}", path.display()),
+            ));
+        }
+    };
+    parse_end_narrative_window_ranges(&text).map(Some)
+}
+
+pub fn parse_end_narrative_window_ranges(
+    text: &str,
+) -> io::Result<[Option<EndNarrativeWindowRange>; END_DAT_WINDOW_COUNT]> {
+    let mut ranges = [None; END_DAT_WINDOW_COUNT];
+    for (line_index, line) in text.lines().enumerate() {
+        let line_number = line_index + 1;
+        let line = line
+            .split_once('#')
+            .map_or(line, |(prefix, _)| prefix)
+            .trim();
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<_> = line
+            .split(|ch: char| ch == ',' || ch == '\t' || ch.is_whitespace())
+            .filter(|part| !part.is_empty())
+            .collect();
+        if parts.len() != 3 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{END_NARRATIVE_WINDOW_TABLE_FILE} line {line_number} must be: WINDOW START END"
+                ),
+            ));
+        }
+        let window = parse_u8_literal(parts[0]).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!(
+                    "{END_NARRATIVE_WINDOW_TABLE_FILE} line {line_number} has invalid window `{}`: {err}",
+                    parts[0]
+                ),
+            )
+        })?;
+        if end_narrative_window(window).is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{END_NARRATIVE_WINDOW_TABLE_FILE} line {line_number} window must be 1..={END_DAT_WINDOW_COUNT}, got {window}"
+                ),
+            ));
+        }
+        let start = parse_usize_literal(parts[1]).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!(
+                    "{END_NARRATIVE_WINDOW_TABLE_FILE} line {line_number} has invalid start `{}`: {err}",
+                    parts[1]
+                ),
+            )
+        })?;
+        let end = parse_usize_literal(parts[2]).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!(
+                    "{END_NARRATIVE_WINDOW_TABLE_FILE} line {line_number} has invalid end `{}`: {err}",
+                    parts[2]
+                ),
+            )
+        })?;
+        if start >= end {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{END_NARRATIVE_WINDOW_TABLE_FILE} line {line_number} start must be before end, got {start}..{end}"
+                ),
+            ));
+        }
+        if end > END_DAT_LEN {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{END_NARRATIVE_WINDOW_TABLE_FILE} line {line_number} end {end} exceeds {END_DAT_FILE} length {END_DAT_LEN}"
+                ),
+            ));
+        }
+        let range = EndNarrativeWindowRange { window, start, end };
+        let slot = range.index();
+        if ranges[slot].is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{END_NARRATIVE_WINDOW_TABLE_FILE} line {line_number} duplicates window {window}"
+                ),
+            ));
+        }
+        ranges[slot] = Some(range);
+    }
+    Ok(ranges)
+}
+
+fn parse_usize_literal(text: &str) -> io::Result<usize> {
+    let value = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X"));
+    if let Some(hex) = value {
+        usize::from_str_radix(hex, 16)
+    } else {
+        text.parse::<usize>()
+    }
+    .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
 pub fn decode_end_window(bytes: &[u8]) -> String {

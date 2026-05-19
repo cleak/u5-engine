@@ -60,6 +60,7 @@ move below level `7`. Missing rows preserve the conservative in-place block.
 | File | Purpose |
 |---|---|
 | `common_words.tsv` | Required 128-row clean common-word dictionary for tokenized raw `.TLK` and `SHOPPE.DAT` text. |
+| `end_narrative_windows.tsv` | Optional six-row clean seek-window table for final `END.DAT` endgame narrative pages. |
 | `SAVED.WPS` | Clean companion save for durable world-progress state whose exact original `SAVED.GAM` offsets are not yet public. |
 | `SAVED.BTH` | Clean companion save for Blackthorn capture/rescue story state whose exact original `SAVED.GAM` offsets are not yet public. |
 

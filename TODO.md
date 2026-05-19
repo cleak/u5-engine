@@ -260,6 +260,7 @@ tables are not yet public or not yet encoded.
   - `location_floor_pages.tsv`
   - `location_entry_y.tsv`
   - `common_words.tsv`
+  - `end_narrative_windows.tsv`
   - `SAVED.WPS`
   - `SAVED.BTH`
 

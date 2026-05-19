@@ -18131,12 +18131,66 @@
     #[test]
     fn end_narrative_window_returns_decoded_subslice() {
         let raw = b"{Hello\nWorld\0".to_vec();
-        let narrative = EndNarrative { raw };
+        let narrative = EndNarrative::new(raw);
         assert_eq!(narrative.full_text(), "Hello\nWorld");
         assert_eq!(narrative.window(1, 6).as_deref(), Some("Hello"));
         // Out-of-range window returns None per spec §5.
         assert!(narrative.window(0, 999).is_none());
         assert!(narrative.window(12, 13).is_none());
+    }
+
+    #[test]
+    fn end_narrative_window_ranges_select_pages_for_cinematic() {
+        let labels = [
+            "Window one",
+            "Window two",
+            "Window three",
+            "Window four",
+            "Window five",
+            "Window six",
+        ];
+        let mut raw = Vec::new();
+        let mut table = String::new();
+        for (index, label) in labels.iter().enumerate() {
+            let start = raw.len();
+            raw.push(b'{');
+            raw.extend_from_slice(label.as_bytes());
+            raw.push(0);
+            let end = raw.len();
+            table.push_str(&format!("{} {start} {end}\n", index + 1));
+        }
+        let ranges = parse_end_narrative_window_ranges(&table).unwrap();
+        let narrative = EndNarrative::new(raw).with_window_ranges(ranges);
+
+        assert_eq!(narrative.window_by_number(1).as_deref(), Some("Window one"));
+        assert_eq!(narrative.window_by_number(6).as_deref(), Some("Window six"));
+        assert_eq!(narrative.window_by_number(0), None);
+        assert_eq!(narrative.window_by_number(7), None);
+
+        let mut endgame = EndgameState::terminal(
+            true,
+            true,
+            true,
+            "Certificate text".to_string(),
+            None,
+            Some(narrative),
+        );
+        assert_eq!(endgame.current_cinematic_text(), "Throne-room tableau");
+        endgame.advance_cinematic();
+        assert_eq!(endgame.current_cinematic_text(), "Window one");
+        endgame.advance_cinematic();
+        assert_eq!(endgame.current_cinematic_text(), "Window two");
+    }
+
+    #[test]
+    fn end_narrative_window_range_parser_rejects_bad_rows() {
+        assert!(parse_end_narrative_window_ranges("0 0 1\n").is_err());
+        assert!(parse_end_narrative_window_ranges("7 0 1\n").is_err());
+        assert!(parse_end_narrative_window_ranges("1 4 4\n").is_err());
+        assert!(parse_end_narrative_window_ranges("1 0 1\n1 1 2\n").is_err());
+        assert!(
+            parse_end_narrative_window_ranges(&format!("1 0 {}\n", END_DAT_LEN + 1)).is_err()
+        );
     }
 
     #[test]
