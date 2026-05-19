@@ -1926,7 +1926,7 @@ impl PlayState {
         self.mark_visibility_dirty();
     }
 
-    fn combat_actor_slot_at(&self, x: u8, y: u8, except_slot: usize) -> Option<usize> {
+    pub fn combat_actor_slot_at(&self, x: u8, y: u8, except_slot: usize) -> Option<usize> {
         self.combat_actors
             .iter()
             .copied()
@@ -1937,7 +1937,7 @@ impl PlayState {
             })
     }
 
-    fn combat_loose_object_slot_at(
+    pub fn combat_loose_object_slot_at(
         &self,
         x: usize,
         y: usize,

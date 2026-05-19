@@ -2073,11 +2073,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
         if self.combat_active {
-            return self.cast_unmodeled_combat_utility_spell(
-                caster_index,
-                VANISH_SPELL_INDEX,
-                VANISH_COST,
-            );
+            return self.cast_combat_vanish(caster_index, Some(direction));
         }
         let Area::Town { .. } = self.area else {
             self.message = "Not here!".to_string();
@@ -2151,6 +2147,80 @@ impl PlayState {
         self.advance_turn();
         self.message = "Failed!".to_string();
         MoveOutcome::Blocked
+    }
+
+    pub fn cast_combat_vanish(
+        &mut self,
+        caster_index: usize,
+        direction: Option<Direction>,
+    ) -> MoveOutcome {
+        if !self.combat_active || !self.spell_allowed_in_current_cast_context(VANISH_SPELL_INDEX) {
+            self.message = "Not here!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let Some(direction) = direction else {
+            self.message = "Direction? Use C1AY8/C1AY6/C1AY2/C1AY4.".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !direction.is_cardinal() {
+            self.message = "Vanish requires a cardinal direction.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let Some(caster_actor) = self.combat_actors.get(caster_index).copied() else {
+            self.message = "Who casts?".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !combat_actor_is_active_not_dead(caster_actor) {
+            self.message = "Who casts?".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if let Some(outcome) =
+            self.cast_spell_resource_gate(caster_index, VANISH_SPELL_INDEX, VANISH_COST)
+        {
+            return outcome;
+        }
+
+        let (dx, dy) = direction.delta();
+        let target_x = caster_actor.x as isize + dx;
+        let target_y = caster_actor.y as isize + dy;
+        let success = if (0..COMBAT_ARENA_SIDE as isize).contains(&target_x)
+            && (0..COMBAT_ARENA_SIDE as isize).contains(&target_y)
+            && self
+                .combat_actor_slot_at(target_x as u8, target_y as u8, caster_index)
+                .is_none()
+        {
+            let target_x = target_x as u8;
+            let target_y = target_y as u8;
+            if let Some(application) = self.apply_combat_arena_field_removal(target_x, target_y) {
+                Some(format!(
+                    "Vanished {} field at ({target_x}, {target_y}).",
+                    application.field.label()
+                ))
+            } else if let Some((object_slot, object)) = self.combat_loose_object_slot_at(
+                target_x as usize,
+                target_y as usize,
+                caster_actor.active_object_slot as usize,
+            ) {
+                self.free_active_object_slot(object_slot);
+                self.mark_visibility_dirty();
+                Some(format!(
+                    "Vanished combat object tile {} at ({target_x}, {target_y}).",
+                    object.tile
+                ))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        self.advance_turn();
+        self.message = success.unwrap_or_else(|| "Failed!".to_string());
+        if self.message == "Failed!" {
+            MoveOutcome::Blocked
+        } else {
+            MoveOutcome::Cast
+        }
     }
 
     pub fn cast_active_effect_spell(
@@ -2611,11 +2681,7 @@ impl PlayState {
         _game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
         if self.combat_active {
-            return Ok(self.cast_unmodeled_combat_utility_spell(
-                caster_index,
-                OPEN_SPELL_INDEX,
-                OPEN_SPELL_COST,
-            ));
+            return Ok(self.cast_combat_open_spell(caster_index, direction));
         }
         if !matches!(self.area, Area::Dungeon { .. }) {
             let Some(direction) = direction else {
@@ -2654,6 +2720,42 @@ impl PlayState {
             scene.key()
         );
         Ok(MoveOutcome::ContainerOpened)
+    }
+
+    pub fn cast_combat_open_spell(
+        &mut self,
+        caster_index: usize,
+        direction: Option<Direction>,
+    ) -> MoveOutcome {
+        if !self.combat_active || !self.spell_allowed_in_current_cast_context(OPEN_SPELL_INDEX) {
+            self.message = "Not here!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let Some(direction) = direction else {
+            self.message = "Direction? Use C1AS8/C1AS6/C1AS2/C1AS4.".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !direction.is_cardinal() {
+            self.message = "Open requires a cardinal direction.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let Some(caster_actor) = self.combat_actors.get(caster_index).copied() else {
+            self.message = "Who casts?".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !combat_actor_is_active_not_dead(caster_actor) {
+            self.message = "Who casts?".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if let Some(outcome) =
+            self.cast_spell_resource_gate(caster_index, OPEN_SPELL_INDEX, OPEN_SPELL_COST)
+        {
+            return outcome;
+        }
+
+        let outcome = self.open_combat_actor_direction(caster_index, direction);
+        self.advance_turn();
+        outcome
     }
 
     pub fn cast_open_ordinary_surface_door(&mut self, direction: Option<Direction>) -> MoveOutcome {

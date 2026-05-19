@@ -2587,27 +2587,163 @@
     }
 
     #[test]
-    fn combat_allowed_open_reaches_resource_gate_without_rewriting_underlying_map() {
+    fn combat_allowed_open_reaches_resource_gate_and_opens_arena_door() {
         let mut grid = open_world_grid();
         grid[world_cell_index(6, 5)] = 0x97;
         let mut state = britannia_state(grid, 5, 5);
         state.combat_active = true;
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        state.combat_terrain[5][6] = 97;
         state.spell_charges[OPEN_SPELL_INDEX] = 1;
         state.party[0].mana = OPEN_SPELL_COST;
         state.party[0].level = OPEN_SPELL_COST;
+        state.visibility_dirty = false;
 
         assert_eq!(
             state
                 .cast_spell_from_suffix("1AS6", Path::new(""))
                 .unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::DoorOpened
         );
 
         assert_eq!(state.grid[world_cell_index(6, 5)], 0x97);
+        assert_eq!(state.combat_terrain[5][6], 16);
         assert_eq!(state.spell_charges[OPEN_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
+        assert!(state.visibility_dirty);
+        assert_eq!(state.message, "Opened combat tile 97 at (6, 5).");
+    }
+
+    #[test]
+    fn combat_vanish_removes_loose_object_or_field_after_resource_gate() {
+        let mut object_state = test_state(open_grid(), 5, 5);
+        object_state.combat_active = true;
+        object_state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        object_state.active_objects.resize(3, ActiveObject::empty());
+        object_state.active_objects[1] = ActiveObject {
+            type_byte: 0x50,
+            tile: 0x50,
+            x: 6,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+        object_state.spell_charges[VANISH_SPELL_INDEX] = 1;
+        object_state.party[0].mana = VANISH_COST;
+        object_state.party[0].level = VANISH_COST;
+        object_state.visibility_dirty = false;
+
+        assert_eq!(
+            object_state
+                .cast_spell_from_suffix("1AY6", Path::new(""))
+                .unwrap(),
+            MoveOutcome::Cast
+        );
+
+        assert!(object_state.active_objects[1].is_empty());
+        assert_eq!(object_state.spell_charges[VANISH_SPELL_INDEX], 0);
+        assert_eq!(object_state.party[0].mana, 0);
+        assert_eq!(object_state.turn, 1);
+        assert!(object_state.visibility_dirty);
+        assert_eq!(
+            object_state.message,
+            "Vanished combat object tile 80 at (6, 5)."
+        );
+
+        let mut field_state = test_state(open_grid(), 5, 5);
+        field_state.combat_active = true;
+        field_state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        field_state.active_objects.resize(3, ActiveObject::empty());
+        field_state.active_objects[2] = ActiveObject {
+            type_byte: COMBAT_FIELD_KIND_FIRE,
+            tile: COMBAT_FIELD_KIND_FIRE,
+            x: 6,
+            y: 5,
+            ..ActiveObject::empty()
+        };
+        field_state.spell_charges[VANISH_SPELL_INDEX] = 1;
+        field_state.party[0].mana = VANISH_COST;
+        field_state.party[0].level = VANISH_COST;
+
+        assert_eq!(
+            field_state
+                .cast_spell_from_suffix("1AY6", Path::new(""))
+                .unwrap(),
+            MoveOutcome::Cast
+        );
+
+        assert!(field_state.active_objects[2].is_empty());
+        assert_eq!(field_state.message, "Vanished Fire field at (6, 5).");
+    }
+
+    #[test]
+    fn combat_vanish_failure_spends_resources_without_removing_actor() {
+        let mut state = test_state(open_grid(), 5, 5);
+        state.combat_active = true;
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        state.combat_actors[1] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            1,
+            0,
+            6,
+            5,
+        ]);
+        state.spell_charges[VANISH_SPELL_INDEX] = 1;
+        state.party[0].mana = VANISH_COST;
+        state.party[0].level = VANISH_COST;
+        let target_before = state.combat_actors[1];
+
+        assert_eq!(
+            state
+                .cast_spell_from_suffix("1AY6", Path::new(""))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.combat_actors[1], target_before);
+        assert_eq!(state.spell_charges[VANISH_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Failed!");
     }
 

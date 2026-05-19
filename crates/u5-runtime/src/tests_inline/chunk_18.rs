@@ -304,7 +304,7 @@
     }
 
     #[test]
-    fn combat_allowed_vanish_reaches_resource_gate_before_unmodeled_failure() {
+    fn combat_vanish_without_live_actor_refuses_before_resources() {
         let mut state = britannia_state(open_world_grid(), 5, 5);
         state.combat_active = true;
         state.spell_charges[VANISH_SPELL_INDEX] = 1;
@@ -318,11 +318,11 @@
             MoveOutcome::Blocked
         );
 
-        assert_eq!(state.spell_charges[VANISH_SPELL_INDEX], 0);
-        assert_eq!(state.party[0].mana, 0);
-        assert_eq!(state.turn, 1);
-        assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-        assert_eq!(state.message, "Failed!");
+        assert_eq!(state.spell_charges[VANISH_SPELL_INDEX], 1);
+        assert_eq!(state.party[0].mana, VANISH_COST);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::new(12, 0).unwrap());
+        assert_eq!(state.message, "Who casts?");
     }
 
     #[test]
