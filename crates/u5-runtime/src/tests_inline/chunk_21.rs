@@ -1663,6 +1663,57 @@
     }
 
     #[test]
+    fn town_talk_high_non_shop_dialog_id_uses_funny_look_stub() {
+        let dialogue = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0xFF,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue(&dialogue),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.message, "They give thee a funny look.");
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn town_raw_tlk_high_non_shop_dialog_id_uses_funny_look_stub() {
+        let dialogue = HashMap::new();
+        let raw = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0xFF,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.message, "They give thee a funny look.");
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
     fn town_raw_tlk_no_keyword_opens_runner_backed_conversation_session() {
         let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
         dialogue.insert(

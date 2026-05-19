@@ -2562,7 +2562,10 @@ impl PlayState {
                 return MoveOutcome::Talked;
             }
         }
-        if dialog_id == 0 {
+        if matches!(
+            npc_dialog_id_kind(dialog_id),
+            NpcDialogIdKind::NoDialogue | NpcDialogIdKind::HighSpecial
+        ) {
             self.message = "They give thee a funny look.".to_string();
             return MoveOutcome::Blocked;
         }
@@ -2616,8 +2619,8 @@ impl PlayState {
     /// blob bytes when they are available, falling back to the existing
     /// string-based path otherwise. The richer renderer expands engine
     /// control bytes (printable text, action dispatch, IF/ELSE, GOTO
-    /// labels) per `systems/conversation.md` §7 and updates active-scene
-    /// branch flags so subsequent visits see the same set-flag state.
+    /// labels) per `systems/conversation.md` §7 and merges active-scene
+    /// branch-flag effects emitted by the stream.
     pub fn talk_facing_with_dialogue_and_keyword_raw(
         &mut self,
         dialogue: &HashMap<u16, Vec<String>>,
@@ -2673,7 +2676,10 @@ impl PlayState {
                 return MoveOutcome::Talked;
             }
         }
-        if dialog_id == 0 {
+        if matches!(
+            npc_dialog_id_kind(dialog_id),
+            NpcDialogIdKind::NoDialogue | NpcDialogIdKind::HighSpecial
+        ) {
             self.message = "They give thee a funny look.".to_string();
             return MoveOutcome::Blocked;
         }
