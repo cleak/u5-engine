@@ -393,6 +393,7 @@ impl PlayState {
             sail_stall_pending: false,
             turn: 0,
             message: format!("Entered {} at ({x}, {y}).", scene.key()),
+            pending_hourly_status_message: None,
             debug_enter: options.debug_enter,
             return_world: None,
             world_overlays,
@@ -604,6 +605,7 @@ impl PlayState {
                 scene.key(),
                 scene.name()
             ),
+            pending_hourly_status_message: None,
             debug_enter: options.debug_enter,
             return_world: None,
             world_overlays,
@@ -816,6 +818,7 @@ impl PlayState {
                 plane.key(),
                 wind_status_message_from_state_and_save_byte(options.wind, options.wind_save_byte)
             ),
+            pending_hourly_status_message: None,
             debug_enter: options.debug_enter,
             return_world: None,
             world_overlays,

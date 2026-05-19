@@ -2357,6 +2357,7 @@ impl PlayState {
             }
         } else {
             self.queue_current_moongate_prompt();
+            self.append_pending_hourly_status_message();
         }
         Ok(MoveOutcome::Passed)
     }
@@ -2385,7 +2386,7 @@ impl PlayState {
         if self.turn == turn_before {
             return Ok(None);
         }
-        match self.area {
+        let outcome = match self.area {
             Area::World { .. } => {
                 self.apply_world_post_turn_effects_after_turn(turn_before, game_dir)
             }
@@ -2395,7 +2396,11 @@ impl PlayState {
             Area::Dungeon { .. } => {
                 self.apply_dungeon_post_turn_effects_after_turn(turn_before, game_dir)
             }
+        }?;
+        if outcome.is_none() {
+            self.append_pending_hourly_status_message();
         }
+        Ok(outcome)
     }
 
     pub fn apply_post_turn_effects_after_outcome(

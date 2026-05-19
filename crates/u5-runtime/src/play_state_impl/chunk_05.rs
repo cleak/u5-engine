@@ -1017,6 +1017,7 @@ impl PlayState {
             self.append_world_damage_tile_message(game_dir, plane)?;
             self.append_world_status_tile_message(plane);
         }
+        self.append_pending_hourly_status_message();
         Ok(MoveOutcome::Moved)
     }
 }

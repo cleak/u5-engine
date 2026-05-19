@@ -76,6 +76,7 @@ pub struct PlayState {
     pub sail_stall_pending: bool,
     pub turn: u64,
     pub message: String,
+    pub pending_hourly_status_message: Option<String>,
     pub debug_enter: Option<PlayTarget>,
     pub return_world: Option<WorldReturn>,
     pub world_overlays: WorldOverlayCache,

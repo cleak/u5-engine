@@ -1408,6 +1408,76 @@
     }
 
     #[test]
+    fn hourly_starvation_tick_damages_living_members_when_food_is_zero() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.clock = GameClock::with_date(139, 4, 5, 8, 59).unwrap();
+        state.food = 0;
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: 30,
+                mana: 8,
+                hp: 2,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'F',
+                status: b'S',
+                climb_stat: 30,
+                mana: 8,
+                hp: 2,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 2,
+                class_byte: b'M',
+                status: b'D',
+                climb_stat: 30,
+                mana: 8,
+                hp: 0,
+                max_hp: 20,
+                level: 8,
+            },
+        ];
+
+        state.advance_turn_with_minutes(1);
+
+        assert_eq!(state.clock.hour, 9);
+        assert_eq!(state.food, 0);
+        assert_eq!(state.party[0].hp, 1);
+        assert_eq!(state.party[0].status, b'G');
+        assert_eq!(state.party[1].hp, 1);
+        assert_eq!(state.party[1].status, b'S');
+        assert_eq!(state.party[2].hp, 0);
+        assert_eq!(state.party[2].status, b'D');
+        assert!(state
+            .pending_hourly_status_message
+            .as_deref()
+            .is_some_and(|message| message.contains("Starving!")));
+    }
+
+    #[test]
+    fn starvation_warning_appends_after_pass_turn_hour_crossing() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.clock = GameClock::with_date(139, 4, 5, 8, 58).unwrap();
+        state.food = 0;
+        state.party[0].hp = 2;
+
+        assert_eq!(state.pass_turn(), MoveOutcome::Passed);
+
+        assert_eq!(state.clock.hour, 9);
+        assert_eq!(state.party[0].hp, 1);
+        assert!(state.message.contains("Passed."));
+        assert!(state.message.contains("Starving!"));
+        assert!(state.pending_hourly_status_message.is_none());
+    }
+
+    #[test]
     fn validate_start_rejects_blocked_tiles() {
         let mut grid = open_grid();
         grid[3 * 32 + 4] = 24;

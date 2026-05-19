@@ -252,6 +252,7 @@ impl PlayState {
                 " Underfoot world status triggered {world_status_ticks} tick(s); last {report}."
             ));
         }
+        self.append_pending_hourly_status_message();
         if !interrupted
             && matches!(self.area, Area::World { .. })
             && lord_british_camp_event_triggered(self.lord_british_camp_event_roll())

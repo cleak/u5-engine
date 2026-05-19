@@ -1154,7 +1154,9 @@ Create Food updates the food counter. Hour-crossing cleanup now applies the
 public provision cadence, subtracting active eaters at 06:00, 12:00, and 18:00
 with Dead, Ashes, and Sleeping members excluded. Poisoned living members still
 count as provision consumers and take a first-playable one-HP poison tick on
-each hourly status/provision pass. The harness does not require character
+each hourly status/provision pass. If food is already zero at an hour crossing,
+the starvation branch appends a warning and applies first-playable one-HP
+starvation damage to living members. The harness does not require character
 creation first, so clean test saves with a
 blank Avatar name can still seed the playable slice:
 

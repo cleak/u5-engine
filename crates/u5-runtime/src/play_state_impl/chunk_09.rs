@@ -1534,7 +1534,9 @@ impl PlayState {
     pub fn apply_hourly_status_provision_pass(&mut self) -> u16 {
         let consumers = self.hourly_provision_consumer_count();
         self.apply_hourly_poison_tick();
-        if self.food != 0 && is_provision_decrement_hour(self.clock.hour) {
+        if self.food == 0 {
+            self.pending_hourly_status_message = self.apply_hourly_starvation_tick();
+        } else if is_provision_decrement_hour(self.clock.hour) {
             self.food = self.food.saturating_sub(consumers);
         }
         consumers
@@ -1550,6 +1552,42 @@ impl PlayState {
             damaged += 1;
         }
         damaged
+    }
+
+    pub fn apply_hourly_starvation_tick(&mut self) -> Option<String> {
+        let mut reports = Vec::new();
+        for member in &mut self.party {
+            if !member.living() {
+                continue;
+            }
+            let slot = member.slot;
+            let applied = member.apply_damage(FIRST_PLAYABLE_HOURLY_STARVATION_DAMAGE);
+            reports.push(format!(
+                "party slot {slot} took {applied} HP ({} HP left)",
+                member.hp
+            ));
+        }
+
+        if reports.is_empty() {
+            Some("Starving! starvation damage skipped for 0 living member(s)".to_string())
+        } else {
+            Some(format!(
+                "Starving! starvation damage: {}",
+                reports.join("; ")
+            ))
+        }
+    }
+
+    pub fn append_pending_hourly_status_message(&mut self) {
+        let Some(report) = self.pending_hourly_status_message.take() else {
+            return;
+        };
+        if self.message.is_empty() {
+            self.message = report;
+        } else {
+            self.message.push(' ');
+            self.message.push_str(&report);
+        }
     }
 
     pub fn mode_zero_cleanup(&mut self) {

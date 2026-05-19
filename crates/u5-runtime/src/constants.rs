@@ -1342,6 +1342,7 @@ pub const BRIT_WATER_SENTINEL: u8 = 0xff;
 pub const BRIT_DEEP_WATER_TILE: u8 = 1;
 pub const BRIT_SWAMP_TILE: u8 = 4;
 pub const FIRST_PLAYABLE_HOURLY_POISON_DAMAGE: u8 = 1;
+pub const FIRST_PLAYABLE_HOURLY_STARVATION_DAMAGE: u8 = 1;
 /// `npc-schedules.md §8.4` BFS queue capacity used by the NPC
 /// pathfinder. Anchored to the canonical
 /// [`crate::NPC_PATHFIND_QUEUE_CAPACITY`] so the two parallel
