@@ -94,6 +94,11 @@ Current worktree context when this TODO was refreshed:
 - Create Food's numeric grant is blocked on clean spec clarification in
   `cleak/u5-spec#49`; the current 100-food grant remains a documented local
   policy until the public amount is published.
+- TLK `0x85` gold payments debit accepted affordable payments. The
+  toll-style moral-standing milestone remains blocked on clean spec
+  clarification in `cleak/u5-spec#27` because the public spec does not yet
+  publish the toll-progress counter, milestone predicate, reset/increment
+  rules, or qualifying payment contexts.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry, and
   seeded ship/skiff sailing routes, plus broader dungeon and combat command
@@ -555,6 +560,8 @@ Goal: turn diagnostic interactions into game-like content.
     - conversation side-effect audit beyond the currently known action letters,
     - TLK `0x87` semantics pending public spec clarification
       (cleak/u5-spec#46),
+    - TLK `0x85` toll milestone karma pending public toll-progress counter
+      clarification (cleak/u5-spec#27),
     - shop/service conversations,
     - NPC memory flags such as thanked/picked/quest state.
 

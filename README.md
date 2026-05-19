@@ -230,8 +230,14 @@ modal shop sessions, including horse-trader purchases that place a nearby
 boardable horse object. Raw `.TLK` dictionary tokens require the clean 128-row
 `common_words.tsv` sidecar beside the game data; tokenized conversations expand
 through that shared dictionary, and tokenized raw conversation data without it
-is rejected instead of surfacing placeholder text. Overworld and dungeon Talk
-return the stock no-response path without spending a turn.
+is rejected instead of surfacing placeholder text. TLK `0x85` gold-payment
+prompts decode the three public digit bytes, yield for yes/no input, refuse
+unaffordable payments, and debit accepted affordable payments. The toll-style
+moral-standing milestone described by the public karma spec is intentionally
+not wired into production conversation cleanup yet: `cleak/u5-spec#27` still
+needs to publish the toll-progress counter, milestone predicate,
+reset/increment rules, and qualifying payment contexts. Overworld and dungeon
+Talk return the stock no-response path without spending a turn.
 Dungeon movement and the normal lit render are facing-relative: `W`/`S` step
 forward/back, `A`/`D` turn left/right, blocked cardinal movement reports the
 public `Blocked!` refusal, `K` climbs one-way ladders or prompts on two-way

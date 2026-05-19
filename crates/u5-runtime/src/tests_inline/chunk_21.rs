@@ -2288,6 +2288,7 @@
         let mut state = test_state(open_grid(), 1, 1);
         state.player.facing = Direction::East;
         state.gold = 30;
+        state.moral_standing = 40;
         state.load_scheduled_npcs(&[
             NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
             NpcSlot {
@@ -2314,9 +2315,13 @@
         assert_eq!(text, "Paid");
         assert!(!ended);
         assert_eq!(state.gold, 5);
+        // cleak/u5-spec#27: toll milestone karma is not applied until the
+        // public toll-progress counter and qualifying contexts are specified.
+        assert_eq!(state.moral_standing, 40);
 
         let mut poor_state = state.clone();
         poor_state.gold = 10;
+        poor_state.moral_standing = 40;
         poor_state.open_conversation_session(&dialogue, &raw);
         let (text, ended) = poor_state.submit_active_conversation_keyword("pay");
         assert_eq!(text, "");
@@ -2326,6 +2331,7 @@
         assert_eq!(text, "Too poor");
         assert!(!ended);
         assert_eq!(poor_state.gold, 10);
+        assert_eq!(poor_state.moral_standing, 40);
     }
 
     #[test]
