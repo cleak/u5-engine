@@ -19205,10 +19205,12 @@
     fn dungeon_command_letters_do_not_fall_through_to_diagonal_movement_refusal() {
         for (key, expected) in [
             ('C', "Spell name:"),
+            ('D', "What?"),
             ('M', MMIX_SPELL_PROMPT_MESSAGE),
             ('N', "New order:"),
             ('R', "Ready:"),
             ('U', "No usable items."),
+            ('W', "What?"),
             ('Y', "Yell what?"),
             ('Z', "Z-stats:"),
         ] {
@@ -19234,3 +19236,26 @@
         }
     }
 
+    #[test]
+    fn dungeon_lowercase_wasd_remains_facing_relative_movement() {
+        for (key, expected_position, expected_facing) in [
+            ('w', (1, 0), Direction::North),
+            ('s', (1, 2), Direction::North),
+            ('a', (1, 1), Direction::West),
+            ('d', (1, 1), Direction::East),
+        ] {
+            let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+            state.player.facing = Direction::North;
+
+            assert!(state.handle_dungeon_key(key, Path::new("")).unwrap());
+
+            assert_eq!(
+                (state.player.x, state.player.y),
+                expected_position,
+                "{key} routed to `{}`",
+                state.message
+            );
+            assert_eq!(state.player.facing, expected_facing);
+            assert_eq!(state.turn, 1);
+        }
+    }

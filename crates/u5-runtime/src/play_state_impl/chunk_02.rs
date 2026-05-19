@@ -69,6 +69,10 @@ impl PlayState {
         if key == 'A' {
             handled!(self.attack_command_with_game_dir(None, Some(game_dir))?);
         }
+        if matches!(key, 'D' | 'W') {
+            self.message = "What?".to_string();
+            handled!();
+        }
         match key.to_ascii_lowercase() {
             '8' | 'w' | '.' | '\r' | '\n' => {
                 handled!(self.step_with_game_dir(self.player.facing, Some(game_dir))?);
