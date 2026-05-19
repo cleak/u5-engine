@@ -179,6 +179,8 @@ impl PlayState {
         let mut recovered_mana = 0;
         let mut world_damage_ticks = 0;
         let mut last_world_damage = None;
+        let mut world_status_ticks = 0;
+        let mut last_world_status = None;
         let mut interrupted = false;
         let mut ambush_monster = None;
         let mut rest_ticks = 0u64;
@@ -195,6 +197,10 @@ impl PlayState {
                     {
                         world_damage_ticks += 1;
                         last_world_damage = Some(report);
+                    }
+                    if let Some(report) = self.apply_world_underfoot_status_tick(plane) {
+                        world_status_ticks += 1;
+                        last_world_status = Some(report);
                     }
                 }
                 if self.dangerous_rest_interrupted() {
@@ -239,6 +245,11 @@ impl PlayState {
         if let Some(report) = last_world_damage {
             self.message.push_str(&format!(
                 " Underfoot world damage triggered {world_damage_ticks} tick(s); last {report}."
+            ));
+        }
+        if let Some(report) = last_world_status {
+            self.message.push_str(&format!(
+                " Underfoot world status triggered {world_status_ticks} tick(s); last {report}."
             ));
         }
         if !interrupted
@@ -1601,6 +1612,52 @@ impl PlayState {
             self.message.push_str(&format!(" {report}."));
         }
         Ok(())
+    }
+
+    pub fn append_world_status_tile_message(&mut self, plane: WorldPlane) {
+        if let Some(report) = self.apply_world_underfoot_status_tick(plane) {
+            self.message.push_str(&format!(" {report}."));
+        }
+    }
+
+    pub fn apply_world_underfoot_status_tick(&mut self, _plane: WorldPlane) -> Option<String> {
+        if !self.player.transport.is_foot() {
+            return None;
+        }
+        let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
+        if tile != BRIT_SWAMP_TILE {
+            return None;
+        }
+
+        let mut poisoned = Vec::new();
+        let mut checked = 0;
+        for member in &mut self.party {
+            if !member.living() {
+                continue;
+            }
+            checked += 1;
+            if member.status == b'P' {
+                continue;
+            }
+            member.status = b'P';
+            poisoned.push(member.slot);
+        }
+
+        if poisoned.is_empty() {
+            Some(format!(
+                "swamp poison skipped for {checked} living member(s)"
+            ))
+        } else {
+            Some(format!(
+                "swamp poison: set party slot{} {} to poisoned",
+                if poisoned.len() == 1 { "" } else { "s" },
+                poisoned
+                    .iter()
+                    .map(|slot| slot.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+        }
     }
 
     pub fn apply_world_underfoot_damage(

@@ -826,6 +826,9 @@ while mounted horses and watercraft are blocked. Additional authored damage
 cells can be supplied as a clean-room sidecar while the exact water/current
 damage split and original damage formula remain open:
 
+Overworld swamp tile `0x04` runs the public per-turn status helper for on-foot
+travel, poisoning living party members that are not already poisoned.
+
 ```text
 # PLANE X Y EFFECT [TILE]
 UNDERWORLD 40 50 LAVA 14

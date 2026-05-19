@@ -970,6 +970,7 @@ impl PlayState {
                 WorldWaterfallSweep::Settled { steps } => {
                     self.message = sweep_prefix(steps, self.player.x, self.player.y);
                     self.append_world_damage_tile_message(Some(game_dir), plane)?;
+                    self.append_world_status_tile_message(plane);
                 }
                 WorldWaterfallSweep::PlaneTransition {
                     steps,
@@ -1014,6 +1015,7 @@ impl PlayState {
             );
             self.apply_fixed_narrative_gate_branch(plane);
             self.append_world_damage_tile_message(game_dir, plane)?;
+            self.append_world_status_tile_message(plane);
         }
         Ok(MoveOutcome::Moved)
     }

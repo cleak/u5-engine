@@ -1340,6 +1340,7 @@ pub const OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE: usize = OVERWORLD_CHUNK_BUFFER_GRI
 pub const OVERWORLD_CHUNK_BUFFER_BYTES: usize = OVERWORLD_CHUNK_BUFFER_CHUNKS * CHUNK_BYTES;
 pub const BRIT_WATER_SENTINEL: u8 = 0xff;
 pub const BRIT_DEEP_WATER_TILE: u8 = 1;
+pub const BRIT_SWAMP_TILE: u8 = 4;
 /// `npc-schedules.md §8.4` BFS queue capacity used by the NPC
 /// pathfinder. Anchored to the canonical
 /// [`crate::NPC_PATHFIND_QUEUE_CAPACITY`] so the two parallel
