@@ -389,6 +389,12 @@
     fn debug_enter_dungeon_surface_reset_restores_return_world_transport() {
         let dir = debug_game_dir();
         let scene = DungeonScene::new(40).unwrap();
+        write_save_template_and_empty_overlays(&dir, 0, 0xff, 10, 20);
+        fs::write(
+            dir.join(UNDER_DAT_FILENAME),
+            vec![BRIT_DEEP_WATER_TILE; UNDER_DAT_LEN],
+        )
+        .unwrap();
         let mut state = world_state(open_world_grid(), 10, 20);
         let transport = TransportState::Ship {
             type_byte: 168,
@@ -437,6 +443,43 @@
         assert_eq!(state.sail_cadence, 1);
         assert!(state.sail_stall_pending);
         assert_eq!(state.active_objects[0].tile, 168);
+
+        assert_eq!(
+            state.save_game_command(&dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+        let options = load_play_options_from_save(&dir).unwrap();
+        assert_eq!(options.target, PlayTarget::World(WorldPlane::Underworld));
+        assert_eq!(options.start, Some((10, 20)));
+        assert_eq!(
+            options.transport,
+            TransportState::Ship {
+                type_byte: TRANSPORT_MARKER_SHIP_HOISTED_FIRST,
+                tile: FIRST_PLAYABLE_FRIGATE_TILE,
+                sails_hoisted: true,
+                hull: 0,
+                skiffs: 0,
+            }
+        );
+        let reloaded = PlayState::load_scene(&dir, options).unwrap();
+        assert_eq!(
+            reloaded.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!((reloaded.player.x, reloaded.player.y), (10, 20));
+        assert_eq!(
+            reloaded.player.transport,
+            TransportState::Ship {
+                type_byte: TRANSPORT_MARKER_SHIP_HOISTED_FIRST,
+                tile: FIRST_PLAYABLE_FRIGATE_TILE,
+                sails_hoisted: true,
+                hull: 0,
+                skiffs: 0,
+            }
+        );
+        assert!(reloaded.return_world.is_none());
         let _ = fs::remove_dir_all(dir);
     }
 

@@ -399,14 +399,13 @@ first-playable session without losing supported state.
   - Current tests cover ship/skiff/carpet/horse transport markers, hull/skiff
     side bytes for boarded and parked ships, board/exit/fire active-object
     overlay save/load, skiff/carpet ship-exit fallback save/load, and
-    wind-driven hoisted-sail save/load after movement.
+    save/load after town and dungeon vehicle-adjacent return-world transitions.
   - Remaining work:
     - continue auditing exact ship facing/sail marker variants against any new
       public marker evidence,
     - continue auditing hull/skiff persistence across shop delivery and exotic
       transition paths,
-    - all timing/status tags beyond currently recognized `Q` and `T`,
-    - save/load after town/dungeon vehicle-adjacent transitions.
+    - all timing/status tags beyond currently recognized `Q` and `T`.
 
 ## Milestone 3: Rendering And Presentation
 

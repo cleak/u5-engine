@@ -324,6 +324,7 @@
     fn town_step_onto_clean_exit_tile_restores_return_world_transport() {
         let dir = debug_game_dir();
         let scene = Scene::new(17).unwrap();
+        write_save_template_and_empty_overlays(&dir, 0, 0xff, 10, 20);
         fs::write(dir.join(TOWN_EXIT_TILE_TABLE_FILE), "CASTLE:0 0 1 0 55\n").unwrap();
         let mut grid = open_grid();
         grid[1] = 55;
@@ -405,6 +406,42 @@
         assert!(state.visibility_dirty);
         assert!(state.message.contains("town exit tile"));
         assert!(state.message.contains("debug return point"));
+
+        assert_eq!(
+            state.save_game_command(&dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+        let options = load_play_options_from_save(&dir).unwrap();
+        assert_eq!(options.target, PlayTarget::World(WorldPlane::Underworld));
+        assert_eq!(options.start, Some((10, 20)));
+        assert_eq!(
+            options.transport,
+            TransportState::Carpet {
+                type_byte: TRANSPORT_MARKER_MAGIC_CARPET_FIRST,
+                tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+            }
+        );
+        assert_eq!(
+            options.saved_active_objects.as_ref().unwrap()[0],
+            world_object
+        );
+        let reloaded = PlayState::load_scene(&dir, options).unwrap();
+        assert_eq!(
+            reloaded.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!((reloaded.player.x, reloaded.player.y), (10, 20));
+        assert_eq!(
+            reloaded.player.transport,
+            TransportState::Carpet {
+                type_byte: TRANSPORT_MARKER_MAGIC_CARPET_FIRST,
+                tile: FIRST_PLAYABLE_MAGIC_CARPET_TILE,
+            }
+        );
+        assert_eq!(reloaded.active_objects[1], world_object);
+        assert!(reloaded.return_world.is_none());
         let _ = fs::remove_dir_all(dir);
     }
 
