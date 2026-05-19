@@ -686,6 +686,15 @@ pub const SCEPTRE_BARRIER_DISSOLVED_TILE: u8 = 0x44;
 /// take the no-noticeable-effect branch instead.
 pub const POTION_WHITE_SWEEP_FRAMES: u8 = 20;
 pub const POTION_WHITE_SWEEP_RADIUS: u8 = 32;
+/// `catalogs/item-list.md §7.2` combat Orange potion sleep presentation is
+/// persistent presentation state tied to the selected combat party actor until
+/// a matching wake effect clears it.
+pub const COMBAT_POTION_SLEEP_PRESENTATION_FRAMES: u8 = u8::MAX;
+/// `catalogs/item-list.md §7.2` Purple potion "Poof" is a temporary combat
+/// presentation mark on the selected combat party actor's linked display
+/// record. Keep the gameplay model transient: one frontend frame is enough for
+/// tests and renderers to observe the effect without altering save state.
+pub const COMBAT_POTION_POOF_PRESENTATION_FRAMES: u8 = 1;
 /// `endgame.md §2` total Shadow Lord count. The three named
 /// indices span FALSEHOOD (0) through COWARDICE (2); anchor the
 /// count to [`SHADOWLORD_COWARDICE_INDEX`] + 1 so adding or

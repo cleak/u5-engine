@@ -377,7 +377,8 @@ pub use party::{
 };
 pub use play_options::*;
 pub use play_state_struct::{
-    PlayState, ViewOverlay, ViewOverlayKind, WorldOverlayCache, WorldReturn,
+    CombatPotionPresentation, CombatPotionPresentationKind, PlayState, ViewOverlay,
+    ViewOverlayKind, WhitePotionSweep, WorldOverlayCache, WorldReturn,
 };
 pub use predicates::*;
 pub use prng::*;

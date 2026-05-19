@@ -1680,6 +1680,7 @@ impl PlayState {
         self.pending_combat_actor_slot = None;
         self.pending_combat_terrain_trigger_slot = None;
         self.next_combat_actor_slot = 0;
+        self.combat_potion_presentation = None;
         Ok(snapshot)
     }
 
@@ -1704,6 +1705,7 @@ impl PlayState {
         self.combat_frame_snapshot = None;
         self.pending_combat_actor_slot = None;
         self.next_combat_actor_slot = 0;
+        self.combat_potion_presentation = None;
         if let Some(slot) = pending_terrain_trigger {
             reconcile_post_combat_terrain_trigger_slot(
                 &mut self.active_objects,
@@ -1733,6 +1735,7 @@ impl PlayState {
         } else {
             self.combat_active = false;
             self.pending_combat_actor_slot = None;
+            self.combat_potion_presentation = None;
             if let Some(slot) = self.pending_combat_terrain_trigger_slot.take() {
                 reconcile_post_combat_terrain_trigger_slot(
                     &mut self.active_objects,

@@ -638,13 +638,13 @@ impl PlayState {
 
         let dissolved = self.dissolve_sceptre_barriers_near_party();
         if dissolved == 0 {
-            self.message = "Sceptre: No effect.".to_string();
+            self.message = "Wielded Sceptre: No effect.".to_string();
             return MoveOutcome::Blocked;
         }
 
         self.mark_visibility_dirty();
         self.advance_turn();
-        self.message = format!("Sceptre dissolved {dissolved} barrier cell(s).");
+        self.message = format!("Wielded Sceptre: dissolved {dissolved} barrier cell(s).");
         MoveOutcome::Used
     }
 
@@ -1038,7 +1038,9 @@ impl PlayState {
             POTION_BLUE_INDEX => {
                 if self.party[target_index].status == b'S' && self.party[target_index].hp > 0 {
                     self.party[target_index].status = b'G';
-                    self.clear_combat_party_sleep_presentation(target_index);
+                    if self.clear_combat_party_sleep_presentation(target_index) {
+                        self.mark_visibility_dirty();
+                    }
                     self.advance_turn();
                     self.message = format!("{prefix}: Awakened party member {}.", target_index + 1);
                     MoveOutcome::Used
@@ -1092,7 +1094,13 @@ impl PlayState {
             POTION_ORANGE_INDEX => {
                 if self.party[target_index].status == b'G' && self.party[target_index].hp > 0 {
                     if self.combat_active {
-                        let _ = apply_combat_sleep_to_party_target(&mut self.party[target_index]);
+                        if matches!(
+                            apply_combat_sleep_to_party_target(&mut self.party[target_index]),
+                            CombatPartySleepOutcome::SleptPartyMember { .. }
+                        ) && self.apply_combat_party_sleep_presentation(target_index)
+                        {
+                            self.mark_visibility_dirty();
+                        }
                     } else {
                         self.party[target_index].status = b'S';
                     }
@@ -1106,13 +1114,22 @@ impl PlayState {
                 }
             }
             POTION_PURPLE_INDEX => {
+                if !self.combat_active {
+                    self.advance_turn();
+                    self.message = format!("{prefix}: No noticeable effect.");
+                    return MoveOutcome::Blocked;
+                }
+                let applied = self.apply_combat_potion_poof_presentation(target_index);
+                if applied {
+                    self.mark_visibility_dirty();
+                }
                 self.advance_turn();
-                self.message = if self.combat_active {
+                self.message = if applied {
                     format!("{prefix}: Poof!")
                 } else {
-                    format!("{prefix}: No noticeable effect.")
+                    format!("{prefix}: No effect.")
                 };
-                if self.combat_active {
+                if applied {
                     MoveOutcome::Used
                 } else {
                     MoveOutcome::Blocked
@@ -1143,7 +1160,7 @@ impl PlayState {
                     self.message = format!("{prefix}: No noticeable effect.");
                     return MoveOutcome::Blocked;
                 }
-                self.mark_visibility_dirty();
+                self.start_white_potion_sweep();
                 self.advance_turn();
                 self.message = format!("{prefix}: Visibility sweep.");
                 MoveOutcome::Observed
@@ -1188,7 +1205,71 @@ impl PlayState {
         if !self.combat_active || target_index >= COMBAT_PARTY_ACTOR_SLOTS {
             return false;
         }
-        false
+        let Some(presentation) = self.combat_potion_presentation else {
+            return false;
+        };
+        if presentation.kind == CombatPotionPresentationKind::Sleep
+            && presentation.actor_slot == target_index
+        {
+            self.combat_potion_presentation = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn apply_combat_party_sleep_presentation(&mut self, target_index: usize) -> bool {
+        self.set_combat_potion_presentation(
+            target_index,
+            CombatPotionPresentationKind::Sleep,
+            COMBAT_POTION_SLEEP_PRESENTATION_FRAMES,
+        )
+    }
+
+    pub fn apply_combat_potion_poof_presentation(&mut self, target_index: usize) -> bool {
+        self.set_combat_potion_presentation(
+            target_index,
+            CombatPotionPresentationKind::Poof,
+            COMBAT_POTION_POOF_PRESENTATION_FRAMES,
+        )
+    }
+
+    fn set_combat_potion_presentation(
+        &mut self,
+        target_index: usize,
+        kind: CombatPotionPresentationKind,
+        frames_remaining: u8,
+    ) -> bool {
+        if !self.combat_active || target_index >= COMBAT_PARTY_ACTOR_SLOTS {
+            return false;
+        }
+        let Some(actor) = self.combat_actors.get(target_index).copied() else {
+            return false;
+        };
+        if !combat_actor_is_active_not_dead(actor) {
+            return false;
+        }
+        let active_object_slot = usize::from(actor.active_object_slot);
+        if active_object_slot >= self.active_objects.len() {
+            return false;
+        }
+        self.combat_potion_presentation = Some(CombatPotionPresentation {
+            kind,
+            actor_slot: target_index,
+            active_object_slot,
+            frames_remaining,
+        });
+        true
+    }
+
+    pub fn start_white_potion_sweep(&mut self) {
+        self.white_potion_sweep = Some(WhitePotionSweep {
+            frames_remaining: POTION_WHITE_SWEEP_FRAMES,
+            radius: POTION_WHITE_SWEEP_RADIUS,
+            center_x: self.player.x,
+            center_y: self.player.y,
+        });
+        self.mark_visibility_dirty();
     }
 
     pub fn apply_combat_party_invisibility_potion(&mut self, target_index: usize) -> bool {

@@ -376,6 +376,15 @@ fn potion_combat_and_white_visibility_effects_use_scene_gates() {
     );
     assert_eq!(world.potion_stock[POTION_WHITE_INDEX], 0);
     assert!(world.visibility_dirty);
+    assert_eq!(
+        world.white_potion_sweep,
+        Some(WhitePotionSweep {
+            frames_remaining: POTION_WHITE_SWEEP_FRAMES,
+            radius: POTION_WHITE_SWEEP_RADIUS,
+            center_x: 2,
+            center_y: 1,
+        })
+    );
     assert_eq!(world.turn, 1);
     assert_eq!(world.message, "white potion: Visibility sweep.");
 
@@ -411,6 +420,64 @@ fn potion_combat_and_white_visibility_effects_use_scene_gates() {
         COMBAT_HIDDEN_ACTIVE_OBJECT_TILE
     );
     assert_eq!(combat.message, "black potion: Invisible party member 1.");
+}
+
+#[test]
+fn combat_potions_mark_and_clear_linked_presentation_state() {
+    let mut combat = test_state(open_grid(), 1, 1);
+    combat.combat_active = true;
+    combat.visibility_dirty = false;
+    combat.active_objects.push(ActiveObject {
+        type_byte: 0x81,
+        tile: 0x81,
+        x: 5,
+        y: 5,
+        ..ActiveObject::empty()
+    });
+    combat.combat_actors[0] =
+        CombatActorDescriptor::from_row([20, 0, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 1, 1, 5, 5]);
+
+    assert_eq!(
+        combat.use_potion_with_effect(POTION_ORANGE_INDEX, 0, POTION_ORANGE_INDEX),
+        MoveOutcome::Used
+    );
+    assert_eq!(combat.party[0].status, b'S');
+    assert_eq!(
+        combat.combat_potion_presentation,
+        Some(CombatPotionPresentation {
+            kind: CombatPotionPresentationKind::Sleep,
+            actor_slot: 0,
+            active_object_slot: 1,
+            frames_remaining: COMBAT_POTION_SLEEP_PRESENTATION_FRAMES,
+        })
+    );
+    assert!(combat.visibility_dirty);
+
+    combat.visibility_dirty = false;
+    assert_eq!(
+        combat.use_potion_with_effect(POTION_BLUE_INDEX, 0, POTION_BLUE_INDEX),
+        MoveOutcome::Used
+    );
+    assert_eq!(combat.party[0].status, b'G');
+    assert_eq!(combat.combat_potion_presentation, None);
+    assert!(combat.visibility_dirty);
+
+    combat.visibility_dirty = false;
+    assert_eq!(
+        combat.use_potion_with_effect(POTION_PURPLE_INDEX, 0, POTION_PURPLE_INDEX),
+        MoveOutcome::Used
+    );
+    assert_eq!(
+        combat.combat_potion_presentation,
+        Some(CombatPotionPresentation {
+            kind: CombatPotionPresentationKind::Poof,
+            actor_slot: 0,
+            active_object_slot: 1,
+            frames_remaining: COMBAT_POTION_POOF_PRESENTATION_FRAMES,
+        })
+    );
+    assert!(combat.visibility_dirty);
+    assert_eq!(combat.message, "purple potion: Poof!");
 }
 
 #[test]
@@ -455,7 +522,10 @@ fn use_command_routes_sceptre_to_top_down_barrier_dissolve() {
     assert_eq!(town.grid[2 * 32 + 2], 0x80);
     assert_eq!(town.turn, 1);
     assert!(town.visibility_dirty);
-    assert_eq!(town.message, "Sceptre dissolved 2 barrier cell(s).");
+    assert_eq!(
+        town.message,
+        "Wielded Sceptre: dissolved 2 barrier cell(s)."
+    );
 }
 
 #[test]
@@ -480,7 +550,7 @@ fn sceptre_requires_item_non_dungeon_and_matching_nearby_barriers() {
     );
     assert_eq!(no_barrier.turn, 0);
     assert!(!no_barrier.visibility_dirty);
-    assert_eq!(no_barrier.message, "Sceptre: No effect.");
+    assert_eq!(no_barrier.message, "Wielded Sceptre: No effect.");
 }
 
 #[test]

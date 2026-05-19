@@ -100,6 +100,8 @@ pub struct PlayState {
     pub active_new_order: Option<crate::z_stats::NewOrderSession>,
     pub active_yell: Option<crate::z_stats::YellSession>,
     pub active_view_overlay: Option<ViewOverlay>,
+    pub white_potion_sweep: Option<WhitePotionSweep>,
+    pub combat_potion_presentation: Option<CombatPotionPresentation>,
     pub active_direction_prompt: Option<crate::z_stats::DirectionPromptSession>,
     pub active_yes_no_prompt: Option<crate::z_stats::YesNoPromptSession>,
     pub pickpocketed_npcs: Vec<(u8, i8, usize)>,
@@ -124,6 +126,28 @@ pub struct ViewOverlay {
 pub enum ViewOverlayKind {
     Surface,
     Dungeon { level: u8 },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WhitePotionSweep {
+    pub frames_remaining: u8,
+    pub radius: u8,
+    pub center_x: usize,
+    pub center_y: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatPotionPresentation {
+    pub kind: CombatPotionPresentationKind,
+    pub actor_slot: usize,
+    pub active_object_slot: usize,
+    pub frames_remaining: u8,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatPotionPresentationKind {
+    Sleep,
+    Poof,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
