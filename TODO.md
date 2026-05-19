@@ -543,7 +543,8 @@ Goal: turn diagnostic interactions into game-like content.
     carpets, regalia, shards, HMS Cape plans, and the Sandalwood Box through
     the shared inventory-add path.
   - Remaining work:
-    - audit every public `hidden-treasures.md` row against the runtime table,
+    - preserve the public `hidden-treasures.md` table fingerprint/count
+      regression when editing fixed Search treasure rows,
     - continue validating authored object-table/item-code coverage with local
       assets without committing raw asset dumps,
     - preserve consumed-object persistence tests as new durable save fields are

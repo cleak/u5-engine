@@ -2105,6 +2105,49 @@ impl PlayState {
             .all(|(record, entry)| entry.record == record)
     }
 
+    #[cfg(test)]
+    pub fn fixed_hidden_treasure_table_fingerprint() -> u64 {
+        const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+        const FNV_PRIME: u64 = 0x100000001b3;
+
+        let mut hash = FNV_OFFSET;
+        for entry in FIXED_HIDDEN_TREASURES {
+            for value in [
+                entry.record as u64,
+                fixed_hidden_treasure_target_code(entry.target),
+                fixed_hidden_treasure_floor_code(entry.floor),
+                entry.x as u64,
+                entry.y as u64,
+                fixed_hidden_treasure_pickup_code(entry.pickup),
+                entry.state as u64,
+                fixed_hidden_treasure_rule_code(entry.rule),
+            ] {
+                hash ^= value;
+                hash = hash.wrapping_mul(FNV_PRIME);
+            }
+        }
+        hash
+    }
+
+    #[cfg(test)]
+    pub fn fixed_hidden_treasure_table_pickup_counts() -> [usize; HIDDEN_TREASURE_PICKUP_CLASS_COUNT]
+    {
+        let mut counts = [0usize; HIDDEN_TREASURE_PICKUP_CLASS_COUNT];
+        for entry in FIXED_HIDDEN_TREASURES {
+            counts[fixed_hidden_treasure_pickup_code(entry.pickup) as usize] += 1;
+        }
+        counts
+    }
+
+    #[cfg(test)]
+    pub fn fixed_hidden_treasure_table_rule_counts() -> [usize; HIDDEN_TREASURE_RULE_COUNT] {
+        let mut counts = [0usize; HIDDEN_TREASURE_RULE_COUNT];
+        for entry in FIXED_HIDDEN_TREASURES {
+            counts[fixed_hidden_treasure_rule_code(entry.rule) as usize] += 1;
+        }
+        counts
+    }
+
     pub fn fixed_hidden_treasure_rule_allows(
         &self,
         entry: FixedHiddenTreasureEntry,
@@ -2693,6 +2736,28 @@ pub enum HiddenTreasurePickup {
     RottingBody,
 }
 
+#[cfg(test)]
+const HIDDEN_TREASURE_PICKUP_CLASS_COUNT: usize = 13;
+
+#[cfg(test)]
+fn fixed_hidden_treasure_pickup_code(pickup: HiddenTreasurePickup) -> u64 {
+    match pickup {
+        HiddenTreasurePickup::Armour => 0,
+        HiddenTreasurePickup::Weapon => 1,
+        HiddenTreasurePickup::Scroll => 2,
+        HiddenTreasurePickup::Potion => 3,
+        HiddenTreasurePickup::Gem => 4,
+        HiddenTreasurePickup::Food => 5,
+        HiddenTreasurePickup::Torches => 6,
+        HiddenTreasurePickup::Ring => 7,
+        HiddenTreasurePickup::Amulet => 8,
+        HiddenTreasurePickup::RingOfKeys => 9,
+        HiddenTreasurePickup::SackOfGold => 10,
+        HiddenTreasurePickup::MoldyCorpse => 11,
+        HiddenTreasurePickup::RottingBody => 12,
+    }
+}
+
 impl HiddenTreasurePickup {
     pub fn label(self) -> &'static str {
         match self {
@@ -2719,6 +2784,33 @@ pub enum HiddenTreasureRule {
     KeyNpcGated,
     Daily,
     SingleUseNpcGated,
+}
+
+#[cfg(test)]
+const HIDDEN_TREASURE_RULE_COUNT: usize = 4;
+
+#[cfg(test)]
+fn fixed_hidden_treasure_rule_code(rule: HiddenTreasureRule) -> u64 {
+    match rule {
+        HiddenTreasureRule::OneShot => 0,
+        HiddenTreasureRule::KeyNpcGated => 1,
+        HiddenTreasureRule::Daily => 2,
+        HiddenTreasureRule::SingleUseNpcGated => 3,
+    }
+}
+
+#[cfg(test)]
+fn fixed_hidden_treasure_target_code(target: HiddenTreasureTarget) -> u64 {
+    match target {
+        HiddenTreasureTarget::World(WorldPlane::Britannia) => 0,
+        HiddenTreasureTarget::World(WorldPlane::Underworld) => 255,
+        HiddenTreasureTarget::Town(scene) => 1000 + u64::from(scene),
+    }
+}
+
+#[cfg(test)]
+fn fixed_hidden_treasure_floor_code(floor: i8) -> u64 {
+    if floor == -1 { 255 } else { floor as u8 as u64 }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

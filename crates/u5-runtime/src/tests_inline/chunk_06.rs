@@ -1532,6 +1532,18 @@
             FIXED_HIDDEN_TREASURE_COUNT
         );
         assert!(PlayState::fixed_hidden_treasure_table_records_are_sequential());
+        assert_eq!(
+            PlayState::fixed_hidden_treasure_table_fingerprint(),
+            0x648e_8949_bb4a_78f1
+        );
+        assert_eq!(
+            PlayState::fixed_hidden_treasure_table_pickup_counts(),
+            [12, 16, 21, 19, 4, 7, 3, 7, 5, 7, 2, 2, 8]
+        );
+        assert_eq!(
+            PlayState::fixed_hidden_treasure_table_rule_counts(),
+            [110, 1, 1, 1]
+        );
     }
 
     #[test]
