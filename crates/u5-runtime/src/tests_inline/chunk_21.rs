@@ -3297,6 +3297,8 @@
             floor: 0,
         };
         state.gold = 100;
+        state.prng_state = 0;
+        let expected_prng_state = u5_prng_advance_state(state.prng_state);
         state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(
             Tavern::TheHonestMeal,
         )));
@@ -3304,9 +3306,10 @@
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
         handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap();
 
-        assert!(state.gold < 97);
+        assert_eq!(state.gold, 78);
+        assert_eq!(state.prng_state, expected_prng_state);
         assert!(state.message.contains("served a round for 3 gold"));
-        assert!(state.message.contains("Surcharge"));
+        assert!(state.message.contains("Surcharge 19 gold"));
     }
 
     #[test]
@@ -3316,6 +3319,7 @@
 
         let mut state = test_state(open_grid(), 1, 1);
         state.gold = 100;
+        state.prng_state = 0x1234;
         state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(
             Tavern::TheHonestMeal,
         )));
@@ -3324,6 +3328,7 @@
         handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap();
 
         assert_eq!(state.gold, 97);
+        assert_eq!(state.prng_state, 0x1234);
         assert!(state.message.contains("served a round for 3 gold"));
         assert!(!state.message.contains("Surcharge"));
     }

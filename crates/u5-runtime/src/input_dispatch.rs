@@ -575,7 +575,7 @@ fn handle_active_shop_key_input(
                         Ok(outcome) => {
                             let surcharge =
                                 if matches!(outcome.quote.fee, HealerTreatmentFee::Price(_)) {
-                                    apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_HEALER)
+                                    apply_active_shop_surcharge(state)
                                 } else {
                                     None
                                 };
@@ -690,8 +690,7 @@ fn handle_active_shop_key_input(
                     match result {
                         Ok(outcome) => {
                             let message = apply_paid_inn_rest(state, outcome.quote.total_price);
-                            let surcharge =
-                                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_INN_REST);
+                            let surcharge = apply_active_shop_surcharge(state);
                             append_active_shop_surcharge(message, surcharge)
                         }
                         Err(err) => format_inn_error(err),
@@ -733,8 +732,7 @@ fn handle_active_shop_key_input(
                                 outcome.party_index + 1,
                                 outcome.deposit
                             );
-                            let surcharge =
-                                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_INN_GUEST);
+                            let surcharge = apply_active_shop_surcharge(state);
                             append_active_shop_surcharge(message, surcharge)
                         }
                         Err(err) => format_inn_error(err),
@@ -808,8 +806,7 @@ fn handle_active_shop_key_input(
                                 outcome.party_index + 1,
                                 outcome.bill
                             );
-                            let surcharge =
-                                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_INN_GUEST);
+                            let surcharge = apply_active_shop_surcharge(state);
                             append_active_shop_surcharge(message, surcharge)
                         }
                         Ok(outcome) => {
@@ -818,8 +815,7 @@ fn handle_active_shop_key_input(
                                 outcome.party_index + 1,
                                 outcome.bill
                             );
-                            let surcharge =
-                                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_INN_GUEST);
+                            let surcharge = apply_active_shop_surcharge(state);
                             append_active_shop_surcharge(message, surcharge)
                         }
                         Err(err) => format_inn_error(err),
@@ -878,7 +874,7 @@ fn handle_active_shop_key_input(
                     | TavernOutcome::BlueBoarDrinkServed { .. }
                     | TavernOutcome::ProvisionsPurchased { paid: 1.., .. }
             ) {
-                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_TAVERN)
+                apply_active_shop_surcharge(state)
             } else {
                 None
             };
@@ -899,7 +895,7 @@ fn handle_active_shop_key_input(
                 _ => SageOutcome::InvalidInput,
             };
             let surcharge = if matches!(outcome, SageOutcome::RumourPurchased { .. }) {
-                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_SAGE)
+                apply_active_shop_surcharge(state)
             } else {
                 None
             };
@@ -972,7 +968,7 @@ fn handle_active_shop_key_input(
                 _ => HorseTraderOutcome::InvalidInput,
             };
             let surcharge = if matches!(outcome, HorseTraderOutcome::Purchased { .. }) {
-                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_HORSE)
+                apply_active_shop_surcharge(state)
             } else {
                 None
             };
@@ -1022,7 +1018,7 @@ fn handle_active_shop_key_input(
                             | crate::shops::ShipwrightPurchaseStatus::AddedSkiffToPendingFrigate
                     )
             ) {
-                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_SHIP)
+                apply_active_shop_surcharge(state)
             } else {
                 None
             };
@@ -1097,7 +1093,7 @@ fn handle_active_shop_key_input(
                 state.mark_visibility_dirty();
             }
             let surcharge = if matches!(outcome, StationaryDisplayOutcome::Purchased { .. }) {
-                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_STATIONARY_DISPLAY)
+                apply_active_shop_surcharge(state)
             } else {
                 None
             };
@@ -1168,37 +1164,17 @@ fn active_inn_scene_marker(state: &PlayState) -> u8 {
     }
 }
 
-const ACTIVE_SHOP_SURCHARGE_ARMS: u8 = 0x11;
-const ACTIVE_SHOP_SURCHARGE_HEALER: u8 = 0x23;
-const ACTIVE_SHOP_SURCHARGE_INN_REST: u8 = 0x35;
-const ACTIVE_SHOP_SURCHARGE_INN_GUEST: u8 = 0x47;
-const ACTIVE_SHOP_SURCHARGE_TAVERN: u8 = 0x59;
-const ACTIVE_SHOP_SURCHARGE_SAGE: u8 = 0x6B;
-const ACTIVE_SHOP_SURCHARGE_HORSE: u8 = 0x7D;
-const ACTIVE_SHOP_SURCHARGE_SHIP: u8 = 0x8F;
-const ACTIVE_SHOP_SURCHARGE_STATIONARY_DISPLAY: u8 = 0xA1;
 fn active_shop_surcharge_sentinel(state: &PlayState) -> u8 {
     state.shared_town_conversation_sentinel()
 }
 
-fn active_shop_surcharge_roll_seed(state: &PlayState, family_salt: u8) -> u8 {
-    (state.turn as u8).wrapping_mul(37)
-        ^ state.clock.month.wrapping_mul(3)
-        ^ state.clock.day.wrapping_mul(5)
-        ^ state.clock.hour.wrapping_mul(7)
-        ^ state.clock.minute.wrapping_mul(11)
-        ^ (state.player.x as u8).wrapping_mul(13)
-        ^ (state.player.y as u8).wrapping_mul(17)
-        ^ (state.gold as u8).wrapping_mul(19)
-        ^ family_salt
-}
-
-fn apply_active_shop_surcharge(
-    state: &mut PlayState,
-    family_salt: u8,
-) -> Option<ShopSurchargeOutcome> {
+fn apply_active_shop_surcharge(state: &mut PlayState) -> Option<ShopSurchargeOutcome> {
     let sentinel = active_shop_surcharge_sentinel(state);
-    let roll_seed = active_shop_surcharge_roll_seed(state, family_salt);
+    let roll_seed = if sentinel == SHOP_SURCHARGE_SENTINEL_ENABLES {
+        state.random_range_u8(1, SHOP_SURCHARGE_GOLD_MAX as u8) - 1
+    } else {
+        0
+    };
     let outcome = apply_shop_surcharge(&mut state.gold, sentinel, roll_seed);
     outcome.applied.then_some(outcome)
 }
@@ -1312,7 +1288,7 @@ fn handle_arms_shop_key_input(
     };
     state.equipment_stock = stock;
     let surcharge = if matches!(outcome, ArmsShopOutcome::Bought { .. }) {
-        apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_ARMS)
+        apply_active_shop_surcharge(state)
     } else {
         None
     };
