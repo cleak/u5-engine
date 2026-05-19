@@ -502,6 +502,177 @@
         let _ = fs::remove_dir_all(dir);
     }
 
+    fn write_save_template_and_empty_overlays(dir: &Path, scene: u8, z: u8, x: u8, y: u8) {
+        let mut template = saved_game_seed_bytes(scene, z, x, y);
+        template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        fs::write(dir.join(SAVED_GAM_FILENAME), template).unwrap();
+        fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+        fs::write(dir.join(BRIT_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+        fs::write(dir.join(UNDER_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+    }
+
+    #[test]
+    fn town_floor_transition_save_load_round_trips_floor_and_active_table() {
+        let dir = debug_game_dir();
+        write_castle_trap_door_fixture(&dir);
+        write_save_template_and_empty_overlays(&dir, 17, 0, 1, 1);
+        let scene = Scene::new(17).unwrap();
+        let mut state = town_trap_door_origin_state();
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+            MoveOutcome::Transition(AreaTransition::ChangedFloor { scene, floor: -1 })
+        );
+        let floor_object = ActiveObject {
+            type_byte: 0x77,
+            tile: 0x77,
+            x: 3,
+            y: 1,
+            z: -1,
+            phase: STEADY_PHASE,
+            aux1: 0x22,
+            aux3: 0x33,
+        };
+        state.active_objects.push(floor_object);
+
+        assert_eq!(
+            state.save_game_command(&dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+
+        let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        assert_eq!(saved[SAVE_SCENE_OFFSET], scene.byte);
+        assert_eq!(saved[SAVE_Z_OFFSET], 0xff);
+        assert_eq!(saved[SAVE_X_OFFSET], 1);
+        assert_eq!(saved[SAVE_Y_OFFSET], 1);
+        let options = load_play_options_from_save(&dir).unwrap();
+        assert_eq!(options.target, PlayTarget::Town(scene));
+        assert_eq!(options.floor, -1);
+        assert_eq!(options.start, Some((1, 1)));
+        assert_eq!(
+            options.saved_active_objects.as_ref().unwrap()[0],
+            floor_object
+        );
+
+        let reloaded = PlayState::load_scene(&dir, options).unwrap();
+        assert_eq!(reloaded.area, Area::Town { scene, floor: -1 });
+        assert_eq!((reloaded.player.x, reloaded.player.y), (1, 1));
+        assert_eq!(reloaded.active_objects[0].z, -1);
+        assert_eq!(reloaded.active_objects[1], floor_object);
+        assert_eq!(reloaded.grid[32 + 1], 4);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dungeon_teleport_save_load_round_trips_level_and_working_buffer() {
+        let dir = debug_game_dir();
+        write_save_template_and_empty_overlays(&dir, 33, 0, 1, 1);
+        let scene = DungeonScene::new(33).unwrap();
+        fs::write(
+            dir.join(DUNGEON_TELEPORT_TABLE_FILE),
+            "DUNGEON:0 0 2 1 3 4 5 0x70\n",
+        )
+        .unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x70;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Transition(AreaTransition::ChangedDungeonLevel { scene, level: 3 })
+        );
+        let patched_cell = dungeon_cell_index(3, 5, 5);
+        state.grid[patched_cell] = 0x68;
+
+        assert_eq!(
+            state.save_game_command(&dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+
+        let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        assert_eq!(saved[SAVE_SCENE_OFFSET], scene.byte);
+        assert_eq!(saved[SAVE_Z_OFFSET], 3);
+        assert_eq!(saved[SAVE_X_OFFSET], 4);
+        assert_eq!(saved[SAVE_Y_OFFSET], 5);
+        assert_eq!(
+            saved[SAVE_DUNGEON_WORKING_BUFFER_OFFSET + patched_cell],
+            0x68
+        );
+        let options = load_play_options_from_save(&dir).unwrap();
+        assert_eq!(options.target, PlayTarget::Dungeon(scene));
+        assert_eq!(options.floor, 3);
+        assert_eq!(options.start, Some((4, 5)));
+        assert_eq!(
+            options.saved_dungeon_working_buffer.as_ref().unwrap()[patched_cell],
+            0x68
+        );
+
+        let reloaded = PlayState::load_scene(&dir, options).unwrap();
+        assert_eq!(reloaded.area, Area::Dungeon { scene, level: 3 });
+        assert_eq!((reloaded.player.x, reloaded.player.y), (4, 5));
+        assert_eq!(reloaded.active_objects[0].z, 3);
+        assert_eq!(reloaded.grid[patched_cell], 0x68);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn dungeon_exit_save_load_round_trips_returned_underworld_state() {
+        let dir = debug_game_dir();
+        write_save_template_and_empty_overlays(&dir, 33, 0, 1, 1);
+        let scene = DungeonScene::new(33).unwrap();
+        fs::write(
+            dir.join(DUNGEON_EXIT_TILE_TABLE_FILE),
+            "DUNGEON:0 0 2 1 0x70\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "UNDERWORLD 10 20 DUNGEON:0\n",
+        )
+        .unwrap();
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x70;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Transition(AreaTransition::ExitedDungeon(scene))
+        );
+        assert_eq!(
+            state.save_game_command(&dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+
+        let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        assert_eq!(saved[SAVE_SCENE_OFFSET], 0);
+        assert_eq!(saved[SAVE_Z_OFFSET], 0xff);
+        assert_eq!(saved[SAVE_X_OFFSET], 10);
+        assert_eq!(saved[SAVE_Y_OFFSET], 20);
+        let options = load_play_options_from_save(&dir).unwrap();
+        assert_eq!(options.target, PlayTarget::World(WorldPlane::Underworld));
+        assert_eq!(options.start, Some((10, 20)));
+        assert_eq!(options.saved_dungeon_working_buffer, None);
+
+        let reloaded = PlayState::load_scene(&dir, options).unwrap();
+        assert_eq!(
+            reloaded.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!((reloaded.player.x, reloaded.player.y), (10, 20));
+        assert_eq!(
+            reloaded.active_objects[0].z,
+            WorldPlane::Underworld.save_floor()
+        );
+        assert_eq!(reloaded.grid[world_cell_index(10, 20)], 5);
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn save_game_command_writes_inn_registry_view() {
         let dir = debug_game_dir();
