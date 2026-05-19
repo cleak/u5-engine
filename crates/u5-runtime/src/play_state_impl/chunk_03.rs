@@ -3128,14 +3128,11 @@ impl PlayState {
     pub fn cast_magic_lock(
         &mut self,
         caster_index: usize,
+        direction: Option<Direction>,
         game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
         if self.combat_active {
-            return Ok(self.cast_unmodeled_combat_utility_spell(
-                caster_index,
-                MAGIC_LOCK_SPELL_INDEX,
-                MAGIC_LOCK_COST,
-            ));
+            return Ok(self.cast_combat_magic_lock(caster_index, direction));
         }
         let Area::Town { scene, floor } = self.area else {
             self.message = "Not here!".to_string();
@@ -3174,17 +3171,74 @@ impl PlayState {
         Ok(MoveOutcome::Cast)
     }
 
+    pub fn cast_combat_magic_lock(
+        &mut self,
+        caster_index: usize,
+        direction: Option<Direction>,
+    ) -> MoveOutcome {
+        if !self.combat_active
+            || !self.spell_allowed_in_current_cast_context(MAGIC_LOCK_SPELL_INDEX)
+        {
+            self.message = "Not here!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let Some(direction) = direction else {
+            self.message = "Direction? Use C1AEP8/C1AEP6/C1AEP2/C1AEP4.".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !direction.is_cardinal() {
+            self.message = "Magic Lock requires a cardinal direction.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if self
+            .combat_sjog_target_coordinate(caster_index, direction, "No lock!")
+            .is_none()
+        {
+            if self.message == "No active combatant." {
+                self.message = "Who casts?".to_string();
+            }
+            return MoveOutcome::Blocked;
+        }
+        if let Some(outcome) =
+            self.cast_spell_resource_gate(caster_index, MAGIC_LOCK_SPELL_INDEX, MAGIC_LOCK_COST)
+        {
+            return outcome;
+        }
+
+        let Some((_, x, y)) =
+            self.combat_sjog_target_coordinate(caster_index, direction, "No lock!")
+        else {
+            self.advance_turn();
+            self.message = "Failed!".to_string();
+            return MoveOutcome::Blocked;
+        };
+        let tile = self.combat_terrain[y][x];
+        if self
+            .combat_actor_slot_at(x as u8, y as u8, caster_index)
+            .is_some()
+            || !(97..=103).contains(&tile)
+            || tile % 2 == 0
+        {
+            self.advance_turn();
+            self.message = "Failed!".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        self.combat_terrain[y][x] = tile - 1;
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = format!("Magic locked combat tile {tile} at ({x}, {y}).");
+        MoveOutcome::Cast
+    }
+
     pub fn cast_unlock_magic(
         &mut self,
         caster_index: usize,
+        direction: Option<Direction>,
         game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
         if self.combat_active {
-            return Ok(self.cast_unmodeled_combat_utility_spell(
-                caster_index,
-                UNLOCK_MAGIC_SPELL_INDEX,
-                UNLOCK_MAGIC_COST,
-            ));
+            return Ok(self.cast_combat_unlock_magic(caster_index, direction));
         }
         let Area::Town { scene, floor } = self.area else {
             self.message = "Not here!".to_string();
@@ -3224,6 +3278,66 @@ impl PlayState {
         self.advance_turn();
         self.message = "Unlocked!".to_string();
         Ok(MoveOutcome::Cast)
+    }
+
+    pub fn cast_combat_unlock_magic(
+        &mut self,
+        caster_index: usize,
+        direction: Option<Direction>,
+    ) -> MoveOutcome {
+        if !self.combat_active
+            || !self.spell_allowed_in_current_cast_context(UNLOCK_MAGIC_SPELL_INDEX)
+        {
+            self.message = "Not here!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let Some(direction) = direction else {
+            self.message = "Direction? Use C1EIP8/C1EIP6/C1EIP2/C1EIP4.".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !direction.is_cardinal() {
+            self.message = "Unlock Magic requires a cardinal direction.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if self
+            .combat_sjog_target_coordinate(caster_index, direction, "No lock!")
+            .is_none()
+        {
+            if self.message == "No active combatant." {
+                self.message = "Who casts?".to_string();
+            }
+            return MoveOutcome::Blocked;
+        }
+        if let Some(outcome) =
+            self.cast_spell_resource_gate(caster_index, UNLOCK_MAGIC_SPELL_INDEX, UNLOCK_MAGIC_COST)
+        {
+            return outcome;
+        }
+
+        let Some((_, x, y)) =
+            self.combat_sjog_target_coordinate(caster_index, direction, "No lock!")
+        else {
+            self.advance_turn();
+            self.message = "Failed!".to_string();
+            return MoveOutcome::Blocked;
+        };
+        let tile = self.combat_terrain[y][x];
+        if self
+            .combat_actor_slot_at(x as u8, y as u8, caster_index)
+            .is_some()
+            || !(96..=102).contains(&tile)
+            || tile % 2 != 0
+        {
+            self.advance_turn();
+            self.message = "Failed!".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        self.combat_terrain[y][x] = tile + 1;
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = format!("Unlocked combat magic tile {tile} at ({x}, {y}).");
+        MoveOutcome::Cast
     }
 }
 

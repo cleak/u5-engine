@@ -150,7 +150,7 @@ impl PlayState {
         MoveOutcome::LockTried
     }
 
-    fn combat_sjog_target_coordinate(
+    pub fn combat_sjog_target_coordinate(
         &mut self,
         actor_slot: usize,
         direction: Direction,

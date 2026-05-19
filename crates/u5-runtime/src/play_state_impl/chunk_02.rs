@@ -506,7 +506,11 @@ impl PlayState {
                     self.message = "Who casts? Use C1AEP for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
-                self.cast_magic_lock(caster_index, game_dir)
+                self.cast_magic_lock(
+                    caster_index,
+                    parse_inline_cardinal_direction(suffix),
+                    game_dir,
+                )
             }
             "AN" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
@@ -954,7 +958,11 @@ impl PlayState {
                     self.message = "Who casts? Use C1EIP for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
-                self.cast_unlock_magic(caster_index, game_dir)
+                self.cast_unlock_magic(
+                    caster_index,
+                    parse_inline_cardinal_direction(suffix),
+                    game_dir,
+                )
             }
             "CIM" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
