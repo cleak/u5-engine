@@ -100,12 +100,10 @@ pub fn blit_tile_id_to_viewport(
     Ok(())
 }
 
-#[cfg(test)]
 pub fn tile_graphics_file_name(stem: &str, depth: TileGraphicsDepth) -> String {
     format!("{stem}.{}", depth.file_suffix())
 }
 
-#[cfg(test)]
 pub fn load_graphic_image_directory(
     game_dir: &Path,
     stem: &str,
@@ -115,7 +113,6 @@ pub fn load_graphic_image_directory(
     parse_graphic_image_directory(&read(&game_dir.join(&file_name))?, depth, &file_name)
 }
 
-#[cfg(test)]
 pub fn parse_graphic_image_directory(
     bytes: &[u8],
     depth: TileGraphicsDepth,
@@ -125,7 +122,6 @@ pub fn parse_graphic_image_directory(
     parse_graphic_image_directory_body(&body, depth, resource_name)
 }
 
-#[cfg(test)]
 pub fn parse_graphic_image_directory_body(
     body: &[u8],
     depth: TileGraphicsDepth,
@@ -299,7 +295,6 @@ pub fn parse_graphic_sprite_sheet_body(
     Ok(GraphicSpriteSheet { depth, sprites })
 }
 
-#[cfg(test)]
 pub fn parse_graphic_image_block(
     body: &[u8],
     offset: usize,
@@ -421,7 +416,6 @@ pub fn parse_graphic_mask_block(
     Ok(mask)
 }
 
-#[cfg(test)]
 pub fn graphic_image_row_stride(width: usize, depth: TileGraphicsDepth) -> io::Result<usize> {
     match depth {
         TileGraphicsDepth::Ega16 => width
@@ -435,7 +429,6 @@ pub fn graphic_image_row_stride(width: usize, depth: TileGraphicsDepth) -> io::R
     }
 }
 
-#[cfg(test)]
 pub fn unpack_graphic_pixels(
     rows: &[u8],
     width: usize,

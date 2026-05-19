@@ -44,17 +44,19 @@ Last known verification state:
   `bf7a428a4b00ad2b`, `z-stats-modal` `61b033bfa2488b46`, and
   `endgame-status` `532cb7f1bdd03ffd`.
 - `cargo run -p u5-tui --features visual -- --visual-frame-suite
-  target\codex-visual-frame-suite C:\Games\U5-Clean` passed on 2026-05-19
-  and wrote fourteen nonblank Bevy-owned PNGs plus a sanitized manifest:
-  `world-play` `1535c318c10abdc2`, `world-after-step`
-  `c1f56dabe15a1dd6`, `town-play` `8a69be65d1a66571`,
-  `dungeon-play` `ae3f6604682fe64a`, `dungeon-dark`
-  `8ff1e92197ad1dcc`, `combat-play` `312c8b84f28ebe45`,
-  `surface-view-overlay` `aa2935d96f053162`, `dungeon-view-overlay`
-  `6b23b973ed2d353a`, `peer-view-overlay` `824cdc88bfb533bc`,
-  `x-ray-view-overlay` `824cdc88bfb533bc`, `z-stats-modal`
-  `24f3f0eefd9ccd80`, `endgame-status` `1b4483ca77ac52f9`,
-  `intro-menu` `87ca7353c7391e06`, and `intro-return-to-view`
+  target\codex-intro-story-art-suite C:\Games\U5-Clean` passed on
+  2026-05-19 and wrote fifteen nonblank Bevy-owned PNGs plus a sanitized
+  manifest:
+  `world-play` `f68b906acde0bd4a`, `world-after-step`
+  `b9720ab18affa566`, `town-play` `2beb3b7734800e11`,
+  `dungeon-play` `67e7e116d8be67aa`, `dungeon-dark`
+  `29289813c0f0397c`, `combat-play` `9b1937b3e807ba05`,
+  `surface-view-overlay` `c82bbd585b1d8f6b`, `dungeon-view-overlay`
+  `e995f913cb07aca2`, `peer-view-overlay` `34e217c3c9fdc23c`,
+  `x-ray-view-overlay` `34e217c3c9fdc23c`, `z-stats-modal`
+  `bee4e11801862ad1`, `endgame-status` `a2362c168f42d288`,
+  `intro-menu` `87ca7353c7391e06`, `intro-story-art`
+  `bbbfae4be4c4f2b0`, and `intro-return-to-view`
   `a52f8c3db8e33102`.
 - Bevy visual screenshot smoke with local assets produced a nonblank
   `792x1182` PNG at `target\codex-fixed-font-status-smoke.png`.

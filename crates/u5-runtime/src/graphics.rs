@@ -43,7 +43,6 @@ impl TileGraphicsDepth {
         }
     }
 
-    #[cfg(test)]
     pub fn file_suffix(self) -> &'static str {
         match self {
             Self::Ega16 => "16",
@@ -422,7 +421,6 @@ pub enum TopDownRenderArea {
     World(WorldPlane),
 }
 
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GraphicImage {
     pub width: usize,
@@ -430,7 +428,6 @@ pub struct GraphicImage {
     pub pixels: Vec<u8>,
 }
 
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GraphicImageDirectory {
     pub depth: TileGraphicsDepth,

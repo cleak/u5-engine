@@ -16,22 +16,23 @@ use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use image::{ImageBuffer, Rgba};
 
 use u5_runtime::{
-    COMBAT_ARENA_SIDE, ChargenSession, ChargenSessionResult, ChargenSessionStep, DungeonScene,
-    FixedCellFont, INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, IntroStoryArtPlacement,
-    MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
-    MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, PLAY_MUSIC_TOGGLE_KEY,
-    PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
-    RTV_COMMAND_STREAM_BYTES, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
-    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, StoryRecords, TEXT_SCREEN_ROWS,
+    CGA_PALETTE_RGB, COMBAT_ARENA_SIDE, ChargenSession, ChargenSessionResult, ChargenSessionStep,
+    DungeonScene, EGA_PALETTE_RGB, FixedCellFont, GraphicImage, INTRO_INLINE_DOORWAY_STEP,
+    INTRO_STORY_STEP_COUNT, IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
+    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    MISCMAPS_RTV_STRIP_SECTION_OFFSET, PLAY_MUSIC_TOGGLE_KEY, PROMPT_TEXT_WINDOW_INDEX,
+    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, RTV_COMMAND_STREAM_BYTES,
+    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
+    STATS_PANEL_TEXT_WINDOW_INDEX, Scene, StoryRecords, TEXT_SCREEN_ROWS,
     TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TextWindowSystem,
     TileAtlas, TileGraphicsDepth, U4TransferOverrides, U4TransferSource, WorldPlane,
     commit_chargen_save, commit_u4_transfer_save, handle_play_key_input, hash_bytes,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
-    intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_ibm_ch_font,
-    load_play_options_from_save, load_question_records, load_return_to_view_assets,
-    load_story_records, load_tile_atlas,
+    intro_story_step_waits_for_input, intro_story6_secondary_subimage,
+    load_graphic_image_directory, load_ibm_ch_font, load_play_options_from_save,
+    load_question_records, load_return_to_view_assets, load_story_records, load_tile_atlas,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_message_text_window, paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
     read_u4_transfer_source_from_party_sav, render_play_text_window_system,
@@ -213,6 +214,16 @@ pub fn visual_frame_suite(
         game_dir,
         raster_depth,
     )?);
+    if let Some(records) = load_story_records(game_dir)? {
+        reports.push(write_visual_intro_report(
+            out_dir,
+            "intro-story-art",
+            "intro story art",
+            VisualIntroPanel::Story { records, step: 7 },
+            game_dir,
+            raster_depth,
+        )?);
+    }
     let (summary, preview_rgba, preview_width, preview_height) =
         visual_return_to_view_summary(game_dir, raster_depth);
     reports.push(write_visual_intro_report(
@@ -1611,6 +1622,22 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     .unwrap_or_else(|_| {
         vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4]
     });
+    if let VisualIntroPanel::Story { step, .. } = &intro.panel {
+        if let Some((art_rgba, art_width, art_height, dst_x, dst_y)) =
+            visual_intro_story_art_rgba(&intro.game_dir, intro.raster_depth, *step)
+        {
+            blit_rgba(
+                &mut rgba,
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                INTRO_FRAMEBUFFER_HEIGHT as usize,
+                &art_rgba,
+                art_width,
+                art_height,
+                dst_x,
+                dst_y,
+            );
+        }
+    }
     if let VisualIntroPanel::ReturnToView {
         preview_rgba: Some(preview_rgba),
         preview_width,
@@ -1629,6 +1656,45 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
             x,
             18,
         );
+    }
+    rgba
+}
+
+fn visual_intro_story_art_rgba(
+    game_dir: &Path,
+    depth: TileGraphicsDepth,
+    step: usize,
+) -> Option<(Vec<u8>, usize, usize, usize, usize)> {
+    let file = intro_story_art_file_for_step(step)?;
+    let placement = intro_story_art_placement_for_step(step)?;
+    let directory = load_graphic_image_directory(game_dir, story_art_stem(file), depth).ok()?;
+    let image = directory
+        .images
+        .get(usize::from(placement.subimage))?
+        .as_ref()?;
+    Some((
+        graphic_image_to_rgba(image, depth),
+        image.width,
+        image.height,
+        usize::from(placement.top_left_x),
+        usize::from(placement.top_left_y),
+    ))
+}
+
+fn story_art_stem(file: &str) -> &str {
+    file.split_once('.').map_or(file, |(stem, _)| stem)
+}
+
+fn graphic_image_to_rgba(image: &GraphicImage, depth: TileGraphicsDepth) -> Vec<u8> {
+    let palette: &[[u8; 3]] = match depth {
+        TileGraphicsDepth::Ega16 => &EGA_PALETTE_RGB,
+        TileGraphicsDepth::Cga4 => &CGA_PALETTE_RGB,
+    };
+    let limit = palette.len();
+    let mut rgba = Vec::with_capacity(image.pixels.len() * 4);
+    for pixel in &image.pixels {
+        let rgb = palette[usize::from(*pixel) % limit];
+        rgba.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
     }
     rgba
 }
@@ -2397,7 +2463,7 @@ mod tests {
         OOL_PLANE_LEN, REAGENT_COUNT, REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET,
         SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN,
         SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
-        SHRINE_TABLE_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern,
+        SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern,
         TileGraphicsDepth, U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane,
         dungeon_cell_index, parse_ch_font, world_cell_index, wrap_text_panel_lines,
     };
@@ -2654,7 +2720,8 @@ mod tests {
         let dir = temp_output_dir("suite");
         let reports = visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 14);
+        let has_story = game_dir.join(STORY_DAT_FILE).exists();
+        assert_eq!(reports.len(), if has_story { 15 } else { 14 });
         for report in &reports {
             assert!(report.path.exists());
             assert!(report.nonblack_pixels > 0);
@@ -2680,10 +2747,15 @@ mod tests {
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
             assert_eq!(report.height, VISUAL_PLAY_FRAME_HEIGHT);
         }
-        for label in ["intro-menu", "intro-return-to-view"] {
+        let intro_labels: &[&str] = if has_story {
+            &["intro-menu", "intro-story-art", "intro-return-to-view"]
+        } else {
+            &["intro-menu", "intro-return-to-view"]
+        };
+        for label in intro_labels {
             let report = reports
                 .iter()
-                .find(|report| report.label == label)
+                .find(|report| report.label == *label)
                 .expect("expected visual intro report");
             assert_eq!(report.width, INTRO_FRAMEBUFFER_WIDTH);
             assert_eq!(report.height, INTRO_FRAMEBUFFER_HEIGHT);
@@ -2702,6 +2774,9 @@ mod tests {
         assert!(manifest.contains("z-stats-modal"));
         assert!(manifest.contains("endgame-status"));
         assert!(manifest.contains("intro-menu"));
+        if has_story {
+            assert!(manifest.contains("intro-story-art"));
+        }
         assert!(manifest.contains("intro-return-to-view"));
         assert!(!manifest.contains("Avatar"));
         let _ = fs::remove_dir_all(dir);
@@ -3217,6 +3292,22 @@ mod tests {
         assert!(summary.contains("Transition strips"));
         assert!(summary.contains("Story record 6"));
         assert!(summary.contains("Press any key"));
+    }
+
+    #[test]
+    fn visual_intro_story_art_helpers_use_spec_file_stem_and_palette() {
+        assert_eq!(story_art_stem("STORY3.16"), "STORY3");
+        assert_eq!(story_art_stem("STORY3"), "STORY3");
+        let image = GraphicImage {
+            width: 2,
+            height: 1,
+            pixels: vec![0, 15],
+        };
+
+        let rgba = graphic_image_to_rgba(&image, TileGraphicsDepth::Ega16);
+
+        assert_eq!(&rgba[..4], &[0x00, 0x00, 0x00, 0xff]);
+        assert_eq!(&rgba[4..8], &[0xff, 0xff, 0xff, 0xff]);
     }
 
     #[test]

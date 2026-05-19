@@ -1489,7 +1489,6 @@ pub fn u16_at(bytes: &[u8], off: usize) -> u16 {
     u16::from_le_bytes([bytes[off], bytes[off + 1]])
 }
 
-#[cfg(test)]
 pub fn u32_at(bytes: &[u8], off: usize) -> u32 {
     u32::from_le_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]])
 }
