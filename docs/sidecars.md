@@ -24,6 +24,15 @@ from decompiled code.
 | `town_exit_tiles.tsv` | Town exit threshold rows. |
 | `moongates.tsv` | Authored moongate origin/destination rows. |
 
+`dungeon_deeper_transitions.tsv` rows use:
+
+```text
+DUNGEON LEVEL X Y TO_PLANE TO_X TO_Y
+```
+
+They only apply to bottom-level dungeon ladder descents that would otherwise
+move below level `7`. Missing rows preserve the conservative in-place block.
+
 ## Interaction Tables
 
 | File | Purpose |

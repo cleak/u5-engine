@@ -837,6 +837,24 @@ impl PlayState {
             return Ok(MoveOutcome::Blocked);
         };
         let next_level = level as i8 + delta;
+        if next_level > (DUNGEON_SIDE - 1) as i8 {
+            if let Some(entry) = self.dungeon_deeper_transition_at(
+                game_dir,
+                scene,
+                level,
+                self.player.x,
+                self.player.y,
+            )? {
+                self.advance_turn();
+                self.apply_dungeon_deeper_transition(game_dir, entry)?;
+                return Ok(MoveOutcome::Transition(
+                    AreaTransition::ExitedDungeonToWorldPlane {
+                        scene,
+                        plane: entry.to_plane,
+                    },
+                ));
+            }
+        }
         if !(0..=7).contains(&next_level) {
             self.message = "Blocked!".to_string();
             return Ok(MoveOutcome::Blocked);

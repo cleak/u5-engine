@@ -549,9 +549,17 @@ Dungeon records use the public `DUNGEON:n` record key:
 cargo run -- --play --scene DUNGEON:0 --floor 0 C:\Games\U5-Clean
 ```
 
-Ordinary dungeon ladders are level-to-level only. The runtime does not load a
-bottom-level descent sidecar or turn a deepest-level `K` command into an
-Underworld plane transition; attempts beyond level `7` fail in place.
+Ordinary dungeon ladders are level-to-level only unless a clean
+`dungeon_deeper_transitions.tsv` row is present for the deepest-level down
+ladder cell. Without a matching sidecar row, a deepest-level `K` command still
+fails in place. With a row, the harness spends one dungeon turn, exits dungeon
+mode, reloads the destination world plane, and places the party at the scripted
+world coordinate:
+
+```text
+# DUNGEON LEVEL X Y TO_PLANE TO_X TO_Y
+DUNGEON:6 7 1 1 UNDERWORLD 30 40
+```
 
 Scripted dungeon level teleports can be supplied as `dungeon_teleports.tsv`
 while the exact cell identities remain open in the public spec:

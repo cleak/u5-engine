@@ -393,7 +393,7 @@
     }
 
     #[test]
-    fn dungeon_bottom_ladder_ignores_clean_deeper_transition_table() {
+    fn dungeon_bottom_ladder_uses_clean_deeper_transition_table() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(DUNGEON_DEEPER_TRANSITION_TABLE_FILE),
@@ -410,21 +410,28 @@
 
         assert_eq!(
             state.climb(&dir, ClimbIntent::Down).unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Transition(AreaTransition::ExitedDungeonToWorldPlane {
+                scene,
+                plane: WorldPlane::Underworld,
+            })
         );
 
         assert_eq!(
             state.area,
-            Area::Dungeon { scene, level: 7 }
+            Area::World {
+                plane: WorldPlane::Underworld,
+            }
         );
-        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!((state.player.x, state.player.y), (30, 40));
         assert_eq!(state.player.transport, TransportState::Foot);
-        assert_eq!(state.timing_status, TimingStatusTag::HalfTime);
-        assert_eq!(state.sail_cadence, 1);
-        assert!(state.sail_stall_pending);
-        assert_eq!(state.active_objects[0].z, 7);
-        assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Blocked!");
+        assert_eq!(state.timing_status, TimingStatusTag::Normal);
+        assert_eq!(state.sail_cadence, 0);
+        assert!(!state.sail_stall_pending);
+        assert_eq!(state.active_objects[0].z, WorldPlane::Underworld.save_floor());
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains(
+            "Descended from DUNGEON:0 (Deceit) through a scripted deeper transition to UNDERWORLD at (30, 40)."
+        ));
         let _ = fs::remove_dir_all(dir);
     }
 
