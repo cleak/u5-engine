@@ -1498,6 +1498,51 @@
         assert!(render_text_panel_rgba("x", usize::MAX / 2 + 1, 3).is_err());
     }
 
+    #[test]
+    fn fixed_cell_font_renderer_paints_text_window_glyphs_with_palette() {
+        let mut font_bytes = vec![0; CH_FONT_LEN];
+        font_bytes[usize::from(b'A') * CH_CELL_SIDE] = 0b1000_0000;
+        let font = parse_ch_font(&font_bytes, IBM_CH_FILE).unwrap();
+        let mut system = TextWindowSystem::new();
+        system.emit_byte(b'A');
+
+        let rgba = render_text_window_rgba(&system, &font).unwrap();
+
+        assert_eq!(
+            rgba.len(),
+            TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4
+        );
+        assert_eq!(&rgba[0..4], &[0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(&rgba[4..8], &[0x00, 0x00, 0x00, 0xff]);
+    }
+
+    #[test]
+    fn fixed_cell_font_renderer_applies_inverse_and_underline_style() {
+        let mut font_bytes = vec![0; CH_FONT_LEN];
+        font_bytes[usize::from(b'X') * CH_CELL_SIDE] = 0b1000_0000;
+        let font = parse_ch_font(&font_bytes, IBM_CH_FILE).unwrap();
+        let mut system = TextWindowSystem::new();
+        system.set_active_flags(TEXT_WINDOW_FLAG_INVERSE | TEXT_WINDOW_FLAG_UNDERLINE);
+        system.emit_byte(b'X');
+
+        let rgba = render_text_window_rgba(&system, &font).unwrap();
+
+        assert_eq!(&rgba[0..4], &[0x00, 0x00, 0x00, 0xff]);
+        assert_eq!(&rgba[4..8], &[0xff, 0xff, 0xff, 0xff]);
+        let underline_offset =
+            ((CH_CELL_SIDE - 1) * TEXT_WINDOW_RENDER_WIDTH + (CH_CELL_SIDE - 1)) * 4;
+        assert_eq!(
+            &rgba[underline_offset..underline_offset + 4],
+            &[0x00, 0x00, 0x00, 0xff]
+        );
+    }
+
+    #[test]
+    fn fixed_cell_font_rejects_wrong_length_assets() {
+        assert!(parse_ch_font(&vec![0; CH_FONT_LEN - 1], IBM_CH_FILE).is_err());
+        assert!(parse_ch_font(&vec![0; CH_FONT_LEN + 1], IBM_CH_FILE).is_err());
+    }
+
 
 
 

@@ -12,28 +12,28 @@ use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
-use bevy::sprite::Anchor;
-use bevy::text::TextBounds;
 
 use u5_runtime::{
-    Area, ChargenSession, ChargenSessionResult, ChargenSessionStep, Direction,
+    ChargenSession, ChargenSessionResult, ChargenSessionStep, FixedCellFont,
     INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, IntroStoryArtPlacement, MISCMAPS_DAT_FILE,
     MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, PLAY_MUSIC_TOGGLE_KEY, PlayInputDisposition, PlayOptions,
-    PlayState, RTV_COMMAND_STREAM_BYTES, StoryRecords, TILE_ATLAS_SIDE, TileAtlas,
-    TileGraphicsDepth, U4TransferOverrides, U4TransferSource, commit_chargen_save,
-    commit_u4_transfer_save, handle_play_key_input,
+    PlayState, RTV_COMMAND_STREAM_BYTES, StoryRecords, TEXT_WINDOW_RENDER_HEIGHT,
+    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TileAtlas, TileGraphicsDepth, U4TransferOverrides,
+    U4TransferSource, commit_chargen_save, commit_u4_transfer_save, handle_play_key_input,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
-    intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_play_options_from_save,
-    load_question_records, load_return_to_view_assets, load_story_records, load_tile_atlas,
+    intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_ibm_ch_font,
+    load_play_options_from_save, load_question_records, load_return_to_view_assets,
+    load_story_records, load_tile_atlas,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
-    read_u4_transfer_source_from_party_sav, render_return_to_view_preview_viewport,
-    render_text_panel_rgba,
+    read_u4_transfer_source_from_party_sav, render_play_text_window_system,
+    render_return_to_view_preview_viewport, render_text_panel_rgba, render_text_window_rgba,
     shop_runtime::{GuildShopState, ReagentShopState, SageState, TavernState},
     shop_session::ActiveShopSession,
-    summarize_return_to_view_preview, summarize_return_to_view_script,
+    stats_panel_active_cursor_visible, summarize_return_to_view_preview,
+    summarize_return_to_view_script,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
 };
 
@@ -43,7 +43,6 @@ const VIEWPORT_SIZE_PX: u32 = (VIEWPORT_CELLS * TILE_ATLAS_SIDE) as u32;
 const DISPLAY_SCALE: f32 = 3.0;
 const STATUS_PANEL_HEIGHT: f32 = 260.0;
 const STATUS_PANEL_PADDING: f32 = 8.0;
-const STATUS_FONT_SIZE: f32 = 9.0;
 
 const READY_HINT: &str =
     "WASD/arrows: move. Shift+A attacks, Shift+S searches. Ctrl+S music. Esc quit.";
@@ -58,10 +57,12 @@ pub fn run_visual_loop(
 ) -> std::io::Result<()> {
     let state = PlayState::load_scene(game_dir, options)?;
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
+    let text_font = load_ibm_ch_font(game_dir)?;
     let bootstrap = Bootstrap {
         game_dir: game_dir.to_path_buf(),
         state,
         atlas,
+        text_font,
     };
 
     let display_w = VIEWPORT_SIZE_PX as f32 * DISPLAY_SCALE;
@@ -198,7 +199,6 @@ fn screenshot_system(
     visual: Option<ResMut<VisualState>>,
     intro: Option<ResMut<VisualIntroState>>,
     mut images: ResMut<Assets<Image>>,
-    mut text_query: Query<&mut Text2d, With<StatusText>>,
     mut exit: EventWriter<AppExit>,
 ) {
     let Some(path) = config.path.clone() else {
@@ -220,8 +220,11 @@ fn screenshot_system(
             if let Some(image) = images.get_mut(&v.image_handle) {
                 image.data = Some(rgba);
             }
-            if let Ok(mut text) = text_query.single_mut() {
-                text.0 = summarize(&mut v.state, "", &v.input_line);
+            let input_line = v.input_line.clone();
+            let text_font = v.text_font.clone();
+            let status_rgba = render_status_framebuffer(&mut v.state, &input_line, "", &text_font);
+            if let Some(image) = images.get_mut(&v.status_image_handle) {
+                image.data = Some(status_rgba);
             }
             state.preset_keys_applied = true;
         } else if let Some(mut intro) = intro {
@@ -260,6 +263,7 @@ struct Bootstrap {
     game_dir: PathBuf,
     state: PlayState,
     atlas: TileAtlas,
+    text_font: FixedCellFont,
 }
 
 #[derive(Resource)]
@@ -271,11 +275,10 @@ struct VisualState {
     state: PlayState,
     atlas: TileAtlas,
     image_handle: Handle<Image>,
+    status_image_handle: Handle<Image>,
+    text_font: FixedCellFont,
     input_line: String,
 }
-
-#[derive(Component)]
-struct StatusText;
 
 #[derive(Resource)]
 struct VisualIntroState {
@@ -388,6 +391,7 @@ fn setup(
         game_dir,
         mut state,
         atlas,
+        text_font,
     } = bootstrap;
 
     let rgba = render_framebuffer(&mut state, &atlas);
@@ -404,8 +408,25 @@ fn setup(
     );
     image.sampler = ImageSampler::nearest();
     let image_handle = images.add(image);
+    let status_rgba = render_status_framebuffer(&mut state, "", READY_HINT, &text_font);
+    let mut status_image = Image::new(
+        Extent3d {
+            width: TEXT_WINDOW_RENDER_WIDTH as u32,
+            height: TEXT_WINDOW_RENDER_HEIGHT as u32,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        status_rgba,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    );
+    status_image.sampler = ImageSampler::nearest();
+    let status_image_handle = images.add(status_image);
 
     let display_size = VIEWPORT_SIZE_PX as f32 * DISPLAY_SCALE;
+    let status_panel_inner_height = STATUS_PANEL_HEIGHT - STATUS_PANEL_PADDING * 2.0;
+    let status_panel_inner_width = status_panel_inner_height
+        * (TEXT_WINDOW_RENDER_WIDTH as f32 / TEXT_WINDOW_RENDER_HEIGHT as f32);
 
     commands.spawn(Camera2d);
     commands.spawn((
@@ -417,24 +438,15 @@ fn setup(
         Transform::from_xyz(0.0, STATUS_PANEL_HEIGHT * 0.5, 0.0),
     ));
     commands.spawn((
-        Text2d::new(summarize(&mut state, READY_HINT, "")),
-        TextFont {
-            font_size: STATUS_FONT_SIZE,
+        Sprite {
+            image: status_image_handle.clone(),
+            custom_size: Some(Vec2::new(
+                status_panel_inner_width,
+                status_panel_inner_height,
+            )),
             ..default()
         },
-        TextColor(Color::WHITE),
-        TextLayout::new_with_justify(JustifyText::Center),
-        TextBounds::new(
-            display_size - STATUS_PANEL_PADDING * 2.0,
-            STATUS_PANEL_HEIGHT - STATUS_PANEL_PADDING * 2.0,
-        ),
-        Anchor::TopCenter,
-        Transform::from_xyz(
-            0.0,
-            -display_size * 0.5 + STATUS_PANEL_HEIGHT * 0.5 - STATUS_PANEL_PADDING,
-            0.0,
-        ),
-        StatusText,
+        Transform::from_xyz(0.0, -display_size * 0.5 + STATUS_PANEL_HEIGHT * 0.5, 0.0),
     ));
 
     commands.insert_resource(VisualState {
@@ -442,6 +454,8 @@ fn setup(
         state,
         atlas,
         image_handle,
+        status_image_handle,
+        text_font,
         input_line: String::new(),
     });
     commands.remove_resource::<PendingBootstrap>();
@@ -1003,7 +1017,6 @@ fn drive_visual(
     keyboard: Res<ButtonInput<KeyCode>>,
     visual: Option<ResMut<VisualState>>,
     mut images: ResMut<Assets<Image>>,
-    mut text_query: Query<&mut Text2d, With<StatusText>>,
     mut exit: EventWriter<AppExit>,
 ) {
     let Some(mut visual) = visual else {
@@ -1072,9 +1085,11 @@ fn drive_visual(
     if let Some(image) = images.get_mut(&v.image_handle) {
         image.data = Some(rgba);
     }
-    if let Ok(mut text) = text_query.single_mut() {
-        let summary = summarize(&mut v.state, "", &v.input_line);
-        text.0 = summary;
+    let input_line = v.input_line.clone();
+    let text_font = v.text_font.clone();
+    let status_rgba = render_status_framebuffer(&mut v.state, &input_line, "", &text_font);
+    if let Some(image) = images.get_mut(&v.status_image_handle) {
+        image.data = Some(status_rgba);
     }
 }
 
@@ -1480,8 +1495,29 @@ fn render_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
     }
 }
 
+fn render_status_framebuffer(
+    state: &mut PlayState,
+    input_line: &str,
+    fallback: &str,
+    font: &FixedCellFont,
+) -> Vec<u8> {
+    let active_cursor = state.active_player;
+    let mut display_state = state.clone();
+    if display_state.message.is_empty() {
+        display_state.message = fallback.to_string();
+    }
+    let input_echo = visual_line_prompt_active(&display_state).then_some(input_line);
+    let system = render_play_text_window_system(&display_state, active_cursor, input_echo);
+    if stats_panel_active_cursor_visible(state, active_cursor) {
+        state.active_player = None;
+    }
+    render_text_window_rgba(&system, font)
+        .unwrap_or_else(|_| vec![0; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4])
+}
+
+#[cfg(test)]
 fn summarize(state: &mut PlayState, fallback: &str, input_line: &str) -> String {
-    let dungeon_note = if matches!(state.area, Area::Dungeon { .. }) {
+    let dungeon_note = if matches!(state.area, u5_runtime::Area::Dungeon { .. }) {
         " [Dungeon first-person panel]"
     } else {
         ""
@@ -1496,7 +1532,7 @@ fn summarize(state: &mut PlayState, fallback: &str, input_line: &str) -> String 
         state.current_area_label(),
         state.player.x,
         state.player.y,
-        Direction::name(state.player.facing),
+        u5_runtime::Direction::name(state.player.facing),
         state.turn,
         if state.music_enabled { "on" } else { "off" },
         dungeon_note,
@@ -1811,13 +1847,14 @@ mod tests {
     };
     use u5_runtime::tlk_control_codes::TLK_TEXT_XOR_MASK;
     use u5_runtime::{
-        Area, BRIT_OOL_FILENAME, Direction, EGA_PALETTE_RGB, GuildShop, Herbalist,
-        INIT_GAM_FILENAME, INIT_OOL_FILENAME, OOL_PLANE_LEN, REAGENT_COUNT, REAGENT_SPIDER_SILK,
-        SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET,
-        SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME,
-        SAVED_OOL_FILENAME, SHRINE_TABLE_FILE, ShrineVirtue, SurfaceChestVerb, Tavern,
-        TileGraphicsDepth, U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane,
-        dungeon_cell_index, world_cell_index, wrap_text_panel_lines,
+        Area, BRIT_OOL_FILENAME, CH_FONT_LEN, Direction, EGA_PALETTE_RGB, GuildShop, Herbalist,
+        IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME, OOL_PLANE_LEN, REAGENT_COUNT,
+        REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET,
+        SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET,
+        SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SHRINE_TABLE_FILE,
+        ShrineVirtue, SurfaceChestVerb, Tavern, TileGraphicsDepth,
+        U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane, dungeon_cell_index,
+        parse_ch_font, world_cell_index, wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
@@ -1902,6 +1939,25 @@ mod tests {
         assert_eq!(lines[1], "LEVEL 0");
         assert!(lines.iter().any(|line| line == "A VERY LONG"));
         assert!(lines.iter().any(|line| line == "DUNGEON"));
+    }
+
+    #[test]
+    fn status_framebuffer_uses_fixed_cell_text_surface() {
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_player = Some(0);
+
+        let rgba = render_status_framebuffer(&mut state, "", READY_HINT, &font);
+
+        assert_eq!(
+            rgba.len(),
+            TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4
+        );
+        assert!(
+            rgba.chunks_exact(4)
+                .any(|pixel| pixel == [0xff, 0xff, 0xff, 0xff])
+        );
+        assert_eq!(state.active_player, None);
     }
 
     #[test]

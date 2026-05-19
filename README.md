@@ -79,7 +79,9 @@ The runtime also exposes a spec-backed fixed-cell text-window core with four
 independent descriptors, preserved per-window cursors, style control bytes,
 clear/scroll behavior, wrapped output, numeric output, and typed-input erasure;
 TUI and Bevy status/modal summaries now share a 40x25 text-window surface for
-message, prompt echo, and the fixed sixteen-column stats panel.
+message, prompt echo, and the fixed sixteen-column stats panel. The Bevy
+gameplay panel renders that surface through the runtime-loaded `IBM.CH`
+fixed-cell font into a nearest-sampled texture instead of generic UI text.
 
 `--intro --visual` opens a Bevy intro/menu shell backed by the same runtime menu
 dispatcher used by terminal intro mode. Journey Onward loads `SAVED.GAM` and

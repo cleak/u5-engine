@@ -140,6 +140,106 @@ const TEXT_GLYPH_WIDTH: usize = 3;
 const TEXT_GLYPH_HEIGHT: usize = 5;
 const TEXT_GLYPH_ADVANCE: usize = 4;
 const TEXT_LINE_HEIGHT: usize = 6;
+pub const TEXT_WINDOW_RENDER_WIDTH: usize = TEXT_SCREEN_COLUMNS as usize * CH_CELL_SIDE;
+pub const TEXT_WINDOW_RENDER_HEIGHT: usize = TEXT_SCREEN_ROWS as usize * CH_CELL_SIDE;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FixedCellFont {
+    bytes: Vec<u8>,
+}
+
+impl FixedCellFont {
+    pub fn glyph_row(&self, code: u8, row: usize) -> Option<u8> {
+        if usize::from(code) >= CH_GLYPH_COUNT || row >= CH_CELL_SIDE {
+            return None;
+        }
+        self.bytes
+            .get(usize::from(code) * CH_CELL_SIDE + row)
+            .copied()
+    }
+}
+
+pub fn load_ibm_ch_font(game_dir: &std::path::Path) -> io::Result<FixedCellFont> {
+    parse_ch_font(&std::fs::read(game_dir.join(IBM_CH_FILE))?, IBM_CH_FILE)
+}
+
+pub fn parse_ch_font(bytes: &[u8], resource_name: &str) -> io::Result<FixedCellFont> {
+    if bytes.len() != CH_FONT_LEN {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{resource_name} fixed font must be {CH_FONT_LEN} bytes, got {}",
+                bytes.len()
+            ),
+        ));
+    }
+    Ok(FixedCellFont {
+        bytes: bytes.to_vec(),
+    })
+}
+
+pub fn render_text_window_rgba(
+    system: &TextWindowSystem,
+    font: &FixedCellFont,
+) -> io::Result<Vec<u8>> {
+    let pixel_count = TEXT_WINDOW_RENDER_WIDTH
+        .checked_mul(TEXT_WINDOW_RENDER_HEIGHT)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "text-window pixel count overflows",
+            )
+        })?;
+    let byte_count = pixel_count.checked_mul(4).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "text-window byte count overflows",
+        )
+    })?;
+    let mut rgba = vec![0; byte_count];
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&TEXT_PANEL_BG_RGBA);
+    }
+
+    for cell_y in 0..TEXT_SCREEN_ROWS {
+        for cell_x in 0..TEXT_SCREEN_COLUMNS {
+            let Some(cell) = system.cell(cell_x, cell_y) else {
+                continue;
+            };
+            let foreground = EGA_PALETTE_RGB[usize::from(text_color_foreground(cell.color))];
+            let background = EGA_PALETTE_RGB[usize::from(text_color_background(cell.color))];
+            for glyph_y in 0..CH_CELL_SIDE {
+                let mut row_bits = font.glyph_row(cell.byte & 0x7f, glyph_y).ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "fixed font glyph {} is missing row {glyph_y}",
+                            cell.byte & 0x7f
+                        ),
+                    )
+                })?;
+                if cell.underline && glyph_y + 1 == CH_CELL_SIDE {
+                    row_bits = 0xff;
+                }
+                if cell.inverse {
+                    row_bits = !row_bits;
+                }
+                for glyph_x in 0..CH_CELL_SIDE {
+                    let color = if row_bits & (1 << (7 - glyph_x)) != 0 {
+                        foreground
+                    } else {
+                        background
+                    };
+                    let px = usize::from(cell_x) * CH_CELL_SIDE + glyph_x;
+                    let py = usize::from(cell_y) * CH_CELL_SIDE + glyph_y;
+                    let offset = (py * TEXT_WINDOW_RENDER_WIDTH + px) * 4;
+                    rgba[offset..offset + 4].copy_from_slice(&[color[0], color[1], color[2], 0xff]);
+                }
+            }
+        }
+    }
+    Ok(rgba)
+}
 
 pub fn render_text_panel_rgba(text: &str, width: usize, height: usize) -> io::Result<Vec<u8>> {
     let pixel_count = width.checked_mul(height).ok_or_else(|| {

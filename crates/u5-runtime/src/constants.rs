@@ -148,7 +148,6 @@ pub const TITLE_BIT_FILE: &str = "TITLE.BIT";
 pub const BRITISH_BIT_FILE: &str = "BRITISH.BIT";
 #[cfg(test)]
 pub const WD_BIT_FILE: &str = "WD.BIT";
-#[cfg(test)]
 pub const IBM_CH_FILE: &str = "IBM.CH";
 #[cfg(test)]
 pub const RUNES_CH_FILE: &str = "RUNES.CH";
