@@ -324,8 +324,26 @@
         assert!(state.message.starts_with("Britannia overview from Look"));
         assert_eq!(state.message.lines().skip(1).count(), BRITANNIA_CHUNK_MAP_ROWS as usize);
         assert!(!state.message.contains("map trigger"));
+        assert_eq!(
+            state.active_view_overlay.as_ref().map(|overlay| overlay.kind),
+            Some(ViewOverlayKind::BritanniaChunkMap)
+        );
+        let viewport = state
+            .render_active_view_overlay(TileGraphicsDepth::Ega16)
+            .expect("look-triggered Britannia overview should install a renderable overlay");
+        assert_eq!(viewport.cells_wide, BRITANNIA_CHUNK_MAP_COLUMNS as usize);
+        assert_eq!(viewport.cells_high, BRITANNIA_CHUNK_MAP_ROWS as usize);
+        assert!(viewport.pixels.iter().any(|pixel| *pixel != 0));
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::default());
+
+        assert_eq!(
+            handle_play_key_input(&mut state, ' ', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_view_overlay.is_none());
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "View closed.");
         let _ = fs::remove_dir_all(dir);
     }
 

@@ -885,7 +885,12 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let title = "Spyglass: Looking at the stars over Britannia".to_string();
+        self.activate_britannia_chunk_map_overlay("Spyglass: Looking at the stars over Britannia");
+        MoveOutcome::Observed
+    }
+
+    pub fn activate_britannia_chunk_map_overlay(&mut self, title: impl Into<String>) {
+        let title = title.into();
         let text_map = self.britannia_chunk_overview_map();
         self.active_view_overlay = Some(ViewOverlay {
             title: title.clone(),
@@ -893,7 +898,6 @@ impl PlayState {
             kind: ViewOverlayKind::BritanniaChunkMap,
         });
         self.message = format!("{title}:\n{text_map}");
-        MoveOutcome::Observed
     }
 
     pub fn britannia_chunk_overview_map(&self) -> String {
@@ -2151,11 +2155,10 @@ impl PlayState {
                 }
                 let tile = self.grid[world_cell_index(x, y)];
                 if tile == BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE {
-                    self.message = format!(
-                        "Britannia overview from Look at ({x}, {y}) on {}:\n{}",
-                        plane.key(),
-                        self.britannia_chunk_overview_map()
-                    );
+                    self.activate_britannia_chunk_map_overlay(format!(
+                        "Britannia overview from Look at ({x}, {y}) on {}",
+                        plane.key()
+                    ));
                     return Ok(MoveOutcome::Observed);
                 }
                 if let Some(sign) = self.sign_message_at(
