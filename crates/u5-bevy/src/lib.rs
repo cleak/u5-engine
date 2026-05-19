@@ -2188,7 +2188,7 @@ mod tests {
 
         assert_eq!(input_line, "ahm");
         assert!(state.active_blackthorn.is_some());
-        assert!(!state.blackthorn_jailed_party_slots.contains(&0));
+        assert!(!state.blackthorn_story.is_party_slot_jailed(0));
 
         handle_visual_line_key(
             &mut state,
@@ -2202,7 +2202,7 @@ mod tests {
 
         assert!(input_line.is_empty());
         assert!(state.active_blackthorn.is_none());
-        assert!(state.blackthorn_jailed_party_slots.contains(&0));
+        assert!(state.blackthorn_story.is_party_slot_jailed(0));
         assert!(
             state
                 .message
