@@ -66,6 +66,7 @@ pub enum ShoppeDatError {
     TrailingBytes { offset: usize, len: usize },
     MissingRecord { id: usize, slots: usize },
     EmptyRecord { id: usize },
+    MissingCommonWordDictionary { id: usize },
 }
 
 impl fmt::Display for ShoppeDatError {
@@ -100,6 +101,10 @@ impl fmt::Display for ShoppeDatError {
                 )
             }
             Self::EmptyRecord { id } => write!(f, "SHOPPE.DAT record {id} is empty"),
+            Self::MissingCommonWordDictionary { id } => write!(
+                f,
+                "SHOPPE.DAT record {id} requires common_words.tsv for phrase-token expansion"
+            ),
         }
     }
 }
@@ -249,9 +254,11 @@ pub fn render_shoppe_record(
     id: usize,
     ctx: &ShoppeBarkContext,
 ) -> Result<String, ShoppeDatError> {
-    records
-        .required_record(id)
-        .map(|record| render_shoppe_bark(record, ctx))
+    let record = records.required_record(id)?;
+    if ctx.dictionary.is_none() && crate::shoppe_bark_uses_common_word_dictionary(record) {
+        return Err(ShoppeDatError::MissingCommonWordDictionary { id });
+    }
+    Ok(render_shoppe_bark(record, ctx))
 }
 
 #[cfg(test)]
@@ -427,6 +434,31 @@ mod tests {
         let rendered = render_shoppe_bark(&bytes, &ctx);
         assert!(rendered.contains("buy"));
         assert!(rendered.contains("swords"));
+    }
+
+    #[test]
+    fn render_shoppe_record_requires_dictionary_for_tokenized_record() {
+        let records = ShoppeRecords {
+            records: vec![vec![b'b', b'u', b'y', b' ', 0x80]],
+        };
+
+        assert_eq!(
+            render_shoppe_record(&records, 0, &ShoppeBarkContext::default()).unwrap_err(),
+            ShoppeDatError::MissingCommonWordDictionary { id: 0 }
+        );
+
+        let mut dict: [&str; COMMON_WORD_DICTIONARY_ENTRIES] = [""; COMMON_WORD_DICTIONARY_ENTRIES];
+        dict[0] = "the";
+        let rendered = render_shoppe_record(
+            &records,
+            0,
+            &ShoppeBarkContext {
+                dictionary: Some(&dict),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(rendered, "buy the");
     }
 
     #[test]

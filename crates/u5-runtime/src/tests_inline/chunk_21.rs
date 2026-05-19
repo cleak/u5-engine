@@ -2317,6 +2317,120 @@
         assert!(!state.message.contains("[w00]"));
     }
 
+    fn tokenized_tlk_bytes_for_test() -> Vec<u8> {
+        fn push_text(bytes: &mut Vec<u8>, text: &str) {
+            for byte in text.bytes() {
+                bytes.push(byte | 0x80);
+            }
+            bytes.push(0);
+        }
+
+        let mut bytes = vec![0; 8];
+        bytes[0..2].copy_from_slice(&2u16.to_le_bytes());
+        bytes[2..4].copy_from_slice(&1u16.to_le_bytes());
+        bytes[4..6].copy_from_slice(&8u16.to_le_bytes());
+        bytes[6..8].copy_from_slice(&2u16.to_le_bytes());
+        push_text(&mut bytes, "Ada");
+        push_text(&mut bytes, "a test speaker");
+        bytes.push(0x01);
+        bytes.push(0);
+        push_text(&mut bytes, "I speak");
+        push_text(&mut bytes, "Bye");
+        bytes
+    }
+
+    fn complete_common_word_dictionary_text(first_word: &str) -> String {
+        (0..COMMON_WORD_DICTIONARY_ENTRIES)
+            .map(|index| {
+                let word = if index == 0 {
+                    first_word.to_string()
+                } else {
+                    format!("word{index}")
+                };
+                format!("{index}\t{word}\n")
+            })
+            .collect()
+    }
+
+    #[test]
+    fn game_dir_talk_requires_dictionary_for_tokenized_raw_tlk() {
+        let dir = debug_game_dir();
+        fs::write(dir.join("CASTLE.TLK"), tokenized_tlk_bytes_for_test()).unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 2,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        let err = state.talk_facing_with_game_dir(&dir).unwrap_err();
+
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains(COMMON_WORD_DICTIONARY_FILE));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn game_dir_talk_expands_loaded_dictionary_token_without_placeholder() {
+        let dir = debug_game_dir();
+        fs::write(dir.join("CASTLE.TLK"), tokenized_tlk_bytes_for_test()).unwrap();
+        fs::write(
+            dir.join(COMMON_WORD_DICTIONARY_FILE),
+            complete_common_word_dictionary_text("the"),
+        )
+        .unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 2,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Talked
+        );
+
+        assert!(state.message.contains("the"));
+        assert!(!state.message.contains("[w01]"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn tlk_and_shoppe_tokens_share_dictionary_entry_zero() {
+        let mut dict: [&str; COMMON_WORD_DICTIONARY_ENTRIES] = [""; COMMON_WORD_DICTIONARY_ENTRIES];
+        dict[0] = "the";
+        let tlk = crate::tlk_runner::run_tlk_stream(
+            &[0x01],
+            &crate::tlk_runner::TlkRunInputs {
+                dictionary: Some(&dict),
+                ..Default::default()
+            },
+        );
+        let shoppe = crate::shoppe_bark::render_shoppe_bark(
+            &[0x80],
+            &crate::shoppe_bark::ShoppeBarkContext {
+                dictionary: Some(&dict),
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(tlk.text, "the");
+        assert_eq!(shoppe, "the");
+    }
+
     #[test]
     fn submit_conversation_keyword_returns_job_response() {
         let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();

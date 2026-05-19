@@ -2289,6 +2289,16 @@ impl PlayState {
         let raw_blob = parse_tlk_raw(&game_dir.join(format!("{}.TLK", scene.family.stem())))
             .unwrap_or_default();
         self.common_word_dictionary = load_common_word_dictionary_optional(game_dir)?;
+        if self.common_word_dictionary.is_none() {
+            if let Some((dialog_id, _, _)) = self.talk_target_in_direction(direction) {
+                if raw_blob
+                    .get(&(dialog_id as u16))
+                    .is_some_and(|fields| tlk_fields_use_common_word_dictionary(fields))
+                {
+                    return Err(missing_common_word_dictionary_error(".TLK conversation"));
+                }
+            }
+        }
         Ok(self
             .talk_direction_with_dialogue_and_keyword_raw(direction, &dialogue, &raw_blob, keyword))
     }

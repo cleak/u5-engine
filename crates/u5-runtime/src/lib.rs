@@ -187,7 +187,9 @@ pub use commands::{
 pub use common_words_io::{
     COMMON_WORD_DICTIONARY_FILE, CommonWordDictionary, CommonWordDictionaryError,
     common_word_dictionary_refs, load_common_word_dictionary_optional,
-    parse_common_word_dictionary,
+    missing_common_word_dictionary_error, parse_common_word_dictionary,
+    shoppe_bark_uses_common_word_dictionary, tlk_fields_use_common_word_dictionary,
+    tlk_stream_uses_common_word_dictionary,
 };
 pub use constants::*;
 pub use containers::{

@@ -9,6 +9,7 @@ use std::path::Path;
 use std::{array, fs, io};
 
 use crate::COMMON_WORD_DICTIONARY_ENTRIES;
+use crate::tlk_control_codes::{shoppe_dictionary_index, tlk_dictionary_index};
 
 pub const COMMON_WORD_DICTIONARY_FILE: &str = "common_words.tsv";
 
@@ -128,6 +129,34 @@ pub fn load_common_word_dictionary_optional(
     }
 }
 
+pub fn missing_common_word_dictionary_error(context: &str) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!("{COMMON_WORD_DICTIONARY_FILE} is required to render tokenized {context} text"),
+    )
+}
+
+pub fn tlk_stream_uses_common_word_dictionary(bytes: &[u8]) -> bool {
+    bytes
+        .iter()
+        .copied()
+        .any(|byte| tlk_dictionary_index(byte).is_some())
+}
+
+pub fn tlk_fields_use_common_word_dictionary(fields: &[Vec<u8>]) -> bool {
+    fields
+        .iter()
+        .any(|field| tlk_stream_uses_common_word_dictionary(field))
+}
+
+pub fn shoppe_bark_uses_common_word_dictionary(bytes: &[u8]) -> bool {
+    bytes
+        .iter()
+        .copied()
+        .take_while(|byte| *byte != 0)
+        .any(|byte| shoppe_dictionary_index(byte).is_some())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,5 +204,23 @@ mod tests {
             parse_common_word_dictionary(&out_of_range).unwrap_err(),
             CommonWordDictionaryError::IndexOutOfRange { index: 128, .. }
         ));
+    }
+
+    #[test]
+    fn detects_dictionary_tokens_in_tlk_and_shoppe_streams() {
+        assert!(tlk_stream_uses_common_word_dictionary(&[0x01]));
+        assert!(!tlk_stream_uses_common_word_dictionary(&[
+            0x00,
+            0x80,
+            b'A' | 0x80
+        ]));
+        assert!(tlk_fields_use_common_word_dictionary(&[
+            vec![b'A' | 0x80],
+            vec![0x7f]
+        ]));
+
+        assert!(shoppe_bark_uses_common_word_dictionary(&[0x80]));
+        assert!(shoppe_bark_uses_common_word_dictionary(&[b'A', 0xff, 0]));
+        assert!(!shoppe_bark_uses_common_word_dictionary(&[b'A', 0, 0x80]));
     }
 }
