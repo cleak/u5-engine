@@ -18,11 +18,14 @@ use image::{ImageBuffer, Rgba};
 use u5_runtime::{
     BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB, COMBAT_ARENA_SIDE, ChargenSession,
     ChargenSessionResult, ChargenSessionStep, DungeonScene, EGA_PALETTE_RGB, FixedCellFont,
-    GraphicImage, INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, IntroStoryArtPlacement,
-    MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
-    MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap,
-    PLAY_MUSIC_TOGGLE_KEY, PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition, PlayOptions, PlayState,
-    PlayTarget, RTV_COMMAND_STREAM_BYTES, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
+    GraphicImage, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
+    INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y,
+    INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA,
+    IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
+    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, PLAY_MUSIC_TOGGLE_KEY,
+    PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
+    RTV_COMMAND_STREAM_BYTES, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
     STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, StoryRecords, TEXT_SCREEN_ROWS,
     TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
@@ -1707,18 +1710,16 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         }
     }
     if let VisualIntroPanel::Story { step, .. } = &intro.panel {
-        if let Some((art_rgba, art_width, art_height, dst_x, dst_y)) =
-            visual_intro_story_art_rgba(&intro.game_dir, intro.raster_depth, *step)
-        {
+        for draw in visual_intro_story_art_draws_rgba(&intro.game_dir, intro.raster_depth, *step) {
             blit_rgba(
                 &mut rgba,
                 INTRO_FRAMEBUFFER_WIDTH as usize,
                 INTRO_FRAMEBUFFER_HEIGHT as usize,
-                &art_rgba,
-                art_width,
-                art_height,
-                dst_x,
-                dst_y,
+                &draw.rgba,
+                draw.width,
+                draw.height,
+                usize::from(draw.top_left_x),
+                usize::from(draw.top_left_y),
             );
         }
     }
@@ -1925,29 +1926,111 @@ fn paint_signature_pixel_rgba(dst: &mut [u8], dst_width: usize, dst_height: usiz
     dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
 }
 
-fn visual_intro_story_art_rgba(
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct IntroStoryDrawSpec {
+    stem: &'static str,
+    subimage: u8,
+    top_left_x: u16,
+    top_left_y: u16,
+}
+
+struct IntroStoryDrawRgba {
+    rgba: Vec<u8>,
+    width: usize,
+    height: usize,
+    top_left_x: u16,
+    top_left_y: u16,
+}
+
+fn visual_intro_story_draw_specs(step: usize) -> Vec<IntroStoryDrawSpec> {
+    let mut specs = Vec::new();
+    if let Some(strips) = intro_step_transition_strips(step) {
+        for (subimage, top_left_x, top_left_y) in strips {
+            specs.push(IntroStoryDrawSpec {
+                stem: "TEXT",
+                subimage,
+                top_left_x,
+                top_left_y,
+            });
+        }
+    }
+
+    if let Some(file) = intro_story_art_file_for_step(step) {
+        if let Some(placement) = intro_story_art_placement_for_step(step) {
+            specs.push(IntroStoryDrawSpec {
+                stem: intro_story_stem(file),
+                subimage: placement.subimage,
+                top_left_x: placement.top_left_x,
+                top_left_y: placement.top_left_y,
+            });
+        }
+    }
+
+    match step {
+        1 => specs.push(IntroStoryDrawSpec {
+            stem: "STORY1",
+            subimage: INTRO_STEP_1_EXTRA_SUBIMAGE,
+            top_left_x: INTRO_STEP_1_EXTRA_ART_X,
+            top_left_y: INTRO_STEP_1_EXTRA_ART_Y,
+        }),
+        INTRO_INLINE_DOORWAY_STEP => specs.push(IntroStoryDrawSpec {
+            stem: "STORY2",
+            subimage: INTRO_STEP_6_EXTRA_SUBIMAGE,
+            top_left_x: INTRO_STEP_6_EXTRA_ART_X,
+            top_left_y: INTRO_STEP_6_EXTRA_ART_Y,
+        }),
+        _ => {
+            if intro_step_has_story6_secondary_pass(step) {
+                if let Some(primary) = intro_story_art_placement_for_step(step) {
+                    if let Some(subimage) = intro_story6_secondary_subimage(step) {
+                        specs.push(IntroStoryDrawSpec {
+                            stem: "STORY6",
+                            subimage,
+                            top_left_x: primary.top_left_x,
+                            top_left_y: primary
+                                .top_left_y
+                                .saturating_add(INTRO_STORY6_SECONDARY_Y_DELTA),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    specs
+}
+
+fn visual_intro_story_art_draws_rgba(
     game_dir: &Path,
     depth: TileGraphicsDepth,
     step: usize,
-) -> Option<(Vec<u8>, usize, usize, usize, usize)> {
-    let file = intro_story_art_file_for_step(step)?;
-    let placement = intro_story_art_placement_for_step(step)?;
-    let directory = load_graphic_image_directory(game_dir, story_art_stem(file), depth).ok()?;
-    let image = directory
-        .images
-        .get(usize::from(placement.subimage))?
-        .as_ref()?;
-    Some((
-        graphic_image_to_rgba(image, depth),
-        image.width,
-        image.height,
-        usize::from(placement.top_left_x),
-        usize::from(placement.top_left_y),
-    ))
+) -> Vec<IntroStoryDrawRgba> {
+    visual_intro_story_draw_specs(step)
+        .into_iter()
+        .filter_map(|spec| {
+            let directory = load_graphic_image_directory(game_dir, spec.stem, depth).ok()?;
+            let image = directory.images.get(usize::from(spec.subimage))?.as_ref()?;
+            Some(IntroStoryDrawRgba {
+                rgba: graphic_image_to_rgba(image, depth),
+                width: image.width,
+                height: image.height,
+                top_left_x: spec.top_left_x,
+                top_left_y: spec.top_left_y,
+            })
+        })
+        .collect()
 }
 
-fn story_art_stem(file: &str) -> &str {
-    file.split_once('.').map_or(file, |(stem, _)| stem)
+fn intro_story_stem(file: &'static str) -> &'static str {
+    match file {
+        "STORY1.16" => "STORY1",
+        "STORY2.16" => "STORY2",
+        "STORY3.16" => "STORY3",
+        "STORY4.16" => "STORY4",
+        "STORY5.16" => "STORY5",
+        "STORY6.16" => "STORY6",
+        other => other,
+    }
 }
 
 fn graphic_image_to_rgba(image: &GraphicImage, depth: TileGraphicsDepth) -> Vec<u8> {
@@ -2937,6 +3020,60 @@ mod tests {
     }
 
     #[test]
+    fn intro_story_draw_specs_include_transition_and_secondary_art() {
+        assert_eq!(
+            visual_intro_story_draw_specs(7),
+            vec![
+                IntroStoryDrawSpec {
+                    stem: "TEXT",
+                    subimage: 0,
+                    top_left_x: 232,
+                    top_left_y: 26,
+                },
+                IntroStoryDrawSpec {
+                    stem: "TEXT",
+                    subimage: 2,
+                    top_left_x: 200,
+                    top_left_y: 54,
+                },
+                IntroStoryDrawSpec {
+                    stem: "STORY3",
+                    subimage: 0,
+                    top_left_x: 0,
+                    top_left_y: 0,
+                },
+            ]
+        );
+
+        assert!(
+            visual_intro_story_draw_specs(1).contains(&IntroStoryDrawSpec {
+                stem: "STORY1",
+                subimage: INTRO_STEP_1_EXTRA_SUBIMAGE,
+                top_left_x: INTRO_STEP_1_EXTRA_ART_X,
+                top_left_y: INTRO_STEP_1_EXTRA_ART_Y,
+            })
+        );
+        assert!(
+            visual_intro_story_draw_specs(INTRO_INLINE_DOORWAY_STEP).contains(
+                &IntroStoryDrawSpec {
+                    stem: "STORY2",
+                    subimage: INTRO_STEP_6_EXTRA_SUBIMAGE,
+                    top_left_x: INTRO_STEP_6_EXTRA_ART_X,
+                    top_left_y: INTRO_STEP_6_EXTRA_ART_Y,
+                }
+            )
+        );
+        assert!(
+            visual_intro_story_draw_specs(15).contains(&IntroStoryDrawSpec {
+                stem: "STORY6",
+                subimage: 3,
+                top_left_x: 176,
+                top_left_y: 55,
+            })
+        );
+    }
+
+    #[test]
     fn intro_title_art_composition_clears_lower_band_then_draws_remaining_slots() {
         let blank = MonochromeBitmap {
             width: 1,
@@ -3719,8 +3856,8 @@ mod tests {
 
     #[test]
     fn visual_intro_story_art_helpers_use_spec_file_stem_and_palette() {
-        assert_eq!(story_art_stem("STORY3.16"), "STORY3");
-        assert_eq!(story_art_stem("STORY3"), "STORY3");
+        assert_eq!(intro_story_stem("STORY3.16"), "STORY3");
+        assert_eq!(intro_story_stem("STORY3"), "STORY3");
         let image = GraphicImage {
             width: 2,
             height: 1,

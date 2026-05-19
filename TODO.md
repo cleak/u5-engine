@@ -16,7 +16,7 @@ Last known verification state:
 
 - `cargo test -p u5-runtime` passed on 2026-05-19, including 2447 tests.
 - `cargo test -p u5-tui --features visual` passed on 2026-05-19.
-- `cargo test -p u5-bevy` passed on 2026-05-19, including 42 tests.
+- `cargo test -p u5-bevy` passed on 2026-05-19, including 43 tests.
 - `cargo fmt -- --check` passed on 2026-05-19 after the latest Rust changes.
 - Representative raster smoke checks with local assets produced nonblank hashes:
   `BRITANNIA` top-down `fd923dc0f87a9f3c`, `BRITANNIA` after movement
@@ -44,7 +44,7 @@ Last known verification state:
   `bf7a428a4b00ad2b`, `z-stats-modal` `61b033bfa2488b46`, and
   `endgame-status` `532cb7f1bdd03ffd`.
 - `cargo run -p u5-tui --features visual -- --visual-frame-suite
-  target\codex-intro-title-tick-suite C:\Games\U5-Clean` passed on
+  target\codex-intro-story-composite-suite C:\Games\U5-Clean` passed on
   2026-05-19 and wrote fifteen nonblank Bevy-owned PNGs plus a sanitized
   manifest:
   `world-play` `f68b906acde0bd4a`, `world-after-step`
@@ -56,7 +56,7 @@ Last known verification state:
   `x-ray-view-overlay` `34e217c3c9fdc23c`, `z-stats-modal`
   `bee4e11801862ad1`, `endgame-status` `a2362c168f42d288`,
   `intro-menu` `74547d4e4d487e9c`, `intro-story-art`
-  `bbbfae4be4c4f2b0`, and `intro-return-to-view`
+  `34dfde7e247537f4`, and `intro-return-to-view`
   `a52f8c3db8e33102`.
 - Bevy visual screenshot smoke with local assets produced a nonblank
   `792x1182` PNG at `target\codex-fixed-font-status-smoke.png`.
@@ -64,8 +64,9 @@ Last known verification state:
   `1240x930` PNG at `target\codex-intro-title-tick-smoke.png`, capturing an
   early `BRITISH.PTH` signature-animation frame plus the title-tick overlay.
 - Bevy unit framebuffer coverage includes world, town, dungeon, combat, intro
-  title art, signature path rendering, title-tick strip bounds, status,
-  endgame modal surfaces, and the deterministic visual frame-suite compositor.
+  title art, signature path rendering, title-tick strip bounds, spec-ordered
+  intro story transition/secondary art draws, status, endgame modal surfaces,
+  and the deterministic visual frame-suite compositor.
 - `--save-frame <PATH>` is the current headless PNG capture path for local
   asset visual checks.
 - `cargo run -- --help` is a supported no-asset usage path.
