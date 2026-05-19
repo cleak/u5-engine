@@ -596,122 +596,57 @@ impl PlayState {
         }
     }
 
-    pub fn active_target_combat_spell_raw_roll(
-        &self,
-        caster_index: usize,
-        target_slot: usize,
-        spell_index: usize,
-    ) -> u8 {
-        (self.turn as u8)
-            .wrapping_add(caster_index as u8)
-            .wrapping_add(target_slot as u8)
-            .wrapping_add(spell_index as u8)
-    }
-
-    pub fn active_target_combat_spell_defense_roll(
-        &self,
-        caster_index: usize,
-        target_slot: usize,
-        spell_index: usize,
-    ) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((caster_index as u8).wrapping_mul(3))
-            .wrapping_add((target_slot as u8).wrapping_mul(5))
-            .wrapping_add(spell_index as u8)
-            & 0x07
-    }
-
-    pub fn tremor_combat_spell_damage_roll(
-        &self,
-        caster_index: usize,
-        target_slot: usize,
-        spell_index: usize,
-    ) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((caster_index as u8).wrapping_mul(11))
-            .wrapping_add((target_slot as u8).wrapping_mul(7))
-            .wrapping_add(spell_index as u8)
-    }
-
-    pub fn directed_combat_spell_roll(
-        &self,
-        caster_index: usize,
-        target_slot: usize,
-        spell_index: usize,
-        target_index: usize,
-    ) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((caster_index as u8).wrapping_mul(17))
-            .wrapping_add((target_slot as u8).wrapping_mul(7))
-            .wrapping_add((target_index as u8).wrapping_mul(3))
-            .wrapping_add(spell_index as u8)
-    }
-
     pub fn combat_arena_field_placement_callback_accepts(
-        &self,
+        &mut self,
         caster_index: usize,
         target_slot: usize,
         spell_index: usize,
     ) -> bool {
-        (self.turn as usize + caster_index + target_slot + spell_index) & 1 == 0
+        let _ = (caster_index, target_slot, spell_index);
+        self.random_mod_u8(2) == 0
     }
 
-    pub fn combat_arena_field_poison_damage_roll(
-        &self,
-        caster_index: usize,
-        target_slot: usize,
-        spell_index: usize,
-    ) -> u8 {
-        self.directed_combat_spell_roll(caster_index, target_slot, spell_index, 0)
+    pub fn combat_spell_damage_roll_for_kind(&mut self, kind: CombatSpellDamageKind) -> u8 {
+        let max = match kind {
+            CombatSpellDamageKind::MagicMissile => COMBAT_MAGIC_MISSILE_DAMAGE_ROLL_MAX,
+            CombatSpellDamageKind::Fireball => COMBAT_FIREBALL_DAMAGE_ROLL_MAX,
+            CombatSpellDamageKind::Tremor => COMBAT_TREMOR_DAMAGE_ROLL_MAX,
+            CombatSpellDamageKind::FlameWind => COMBAT_FLAME_WIND_DAMAGE_ROLL_MAX,
+            CombatSpellDamageKind::Kill | CombatSpellDamageKind::DeathWind => 0,
+        };
+        self.random_mod_u8(max)
     }
 
-    pub fn combat_arena_field_fire_damage_roll(
-        &self,
-        caster_index: usize,
-        target_slot: usize,
-        spell_index: usize,
-    ) -> u8 {
-        self.active_target_combat_spell_raw_roll(caster_index, target_slot, spell_index)
+    pub fn combat_spell_target_defense_value(&self, target_slot: usize) -> u8 {
+        if target_slot < COMBAT_PARTY_ACTOR_SLOTS {
+            resolve_protection_defense_bonus(
+                CHARACTER_DEFENSE_FACTORY_SEED,
+                self.active_effect_tag,
+                self.active_effect_counter,
+            )
+        } else {
+            self.combat_actors
+                .get(target_slot)
+                .and_then(|actor| combat_class_stats(actor.owner_target_class))
+                .map(|stats| stats.defense)
+                .unwrap_or_default()
+        }
     }
 
-    pub fn combat_arena_field_defense_roll(
-        &self,
-        caster_index: usize,
-        target_slot: usize,
-        spell_index: usize,
-    ) -> u8 {
-        self.active_target_combat_spell_defense_roll(caster_index, target_slot, spell_index)
+    pub fn combat_spell_target_defense_roll(&mut self, target_slot: usize) -> u8 {
+        self.random_range_u8(0, self.combat_spell_target_defense_value(target_slot))
     }
 
-    pub fn combat_arena_field_post_step_poison_damage_roll(
-        &self,
-        actor_slot: usize,
-        field: CombatArenaFieldKind,
-    ) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((actor_slot as u8).wrapping_mul(5))
-            .wrapping_add(field.kind_byte())
+    pub fn combat_arena_field_poison_damage_roll(&mut self) -> u8 {
+        self.random_mod_u8(20)
     }
 
-    pub fn combat_arena_field_post_step_fire_damage_roll(
-        &self,
-        actor_slot: usize,
-        field: CombatArenaFieldKind,
-    ) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((actor_slot as u8).wrapping_mul(7))
-            .wrapping_add(field.kind_byte())
+    pub fn combat_arena_field_fire_damage_roll(&mut self) -> u8 {
+        self.random_mod_u8(21)
     }
 
-    pub fn combat_arena_field_post_step_defense_roll(
-        &self,
-        actor_slot: usize,
-        field: CombatArenaFieldKind,
-    ) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((actor_slot as u8).wrapping_mul(3))
-            .wrapping_add(field.kind_byte())
-            & 0x07
+    pub fn combat_arena_field_defense_roll(&mut self, target_slot: usize) -> u8 {
+        self.combat_spell_target_defense_roll(target_slot)
     }
 
     pub fn apply_combat_arena_field_placement(
@@ -817,21 +752,9 @@ impl PlayState {
         let applied =
             self.apply_combat_arena_field_placement(field, target_x, target_y, callback_accepts);
         if let Some(placement) = applied {
-            let poison_damage_roll = self.combat_arena_field_poison_damage_roll(
-                caster_index,
-                placement.target_slot,
-                spell_index,
-            );
-            let fire_damage_roll = self.combat_arena_field_fire_damage_roll(
-                caster_index,
-                placement.target_slot,
-                spell_index,
-            );
-            let defense_roll = self.combat_arena_field_defense_roll(
-                caster_index,
-                placement.target_slot,
-                spell_index,
-            );
+            let poison_damage_roll = self.combat_arena_field_poison_damage_roll();
+            let fire_damage_roll = self.combat_arena_field_fire_damage_roll();
+            let defense_roll = self.combat_arena_field_defense_roll(placement.target_slot);
             let _ = self.apply_combat_arena_field_contact(
                 field,
                 caster_index,
@@ -1116,22 +1039,16 @@ impl PlayState {
         self.apply_combat_clone_to_coordinate(target_slot, x, y)
     }
 
-    pub fn combat_clone_placement_seed(
-        &self,
-        caster_index: usize,
-        target_slot: usize,
-        spell_index: usize,
-    ) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((caster_index as u8).wrapping_mul(13))
-            .wrapping_add((target_slot as u8).wrapping_mul(17))
-            .wrapping_add(spell_index as u8)
+    pub fn combat_arena_placement_seed(&mut self) -> u8 {
+        self.random_range_u8(0, (COMBAT_ARENA_SIDE * COMBAT_ARENA_SIDE - 1) as u8)
     }
 
-    pub fn combat_summon_placement_seed(&self, caster_index: usize, spell_index: usize) -> u8 {
-        (self.turn as u8)
-            .wrapping_add((caster_index as u8).wrapping_mul(19))
-            .wrapping_add(spell_index as u8)
+    pub fn combat_neighbor_placement_seed(&mut self) -> u8 {
+        self.random_mod_u8(8)
+    }
+
+    pub fn combat_conjure_class_selector(&mut self) -> u8 {
+        self.random_range_u8(0, CONJURE_ANIMAL_OUTCOME_COUNT - 1)
     }
 
     pub fn combat_actor_z(&self, slot: usize) -> i8 {
@@ -1616,9 +1533,10 @@ impl PlayState {
             return outcome;
         }
 
-        let seed = self.combat_summon_placement_seed(caster_index, spell_index);
-        let class = resolve_conjure_spell_class(seed);
-        let applied = self.apply_combat_summon_class_around_slot(class, caster_index, seed);
+        let placement_seed = self.combat_neighbor_placement_seed();
+        let class = resolve_conjure_spell_class(self.combat_conjure_class_selector());
+        let applied =
+            self.apply_combat_summon_class_around_slot(class, caster_index, placement_seed);
         self.advance_turn();
         self.message = if applied.is_some() {
             "Success!".to_string()
@@ -1647,7 +1565,7 @@ impl PlayState {
             return outcome;
         }
 
-        let seed = self.combat_summon_placement_seed(caster_index, spell_index);
+        let seed = self.combat_arena_placement_seed();
         let legal_cells = self.combat_legal_cell_mask();
         let candidates = combat_clone_candidate_coordinates(seed);
         let applied = self.apply_combat_swarm_with_legal_mask(
@@ -1683,7 +1601,7 @@ impl PlayState {
             return outcome;
         }
 
-        let seed = self.combat_summon_placement_seed(caster_index, spell_index);
+        let seed = self.combat_neighbor_placement_seed();
         let applied =
             self.apply_combat_summon_class_around_slot(COMBAT_CLASS_DAEMON, caster_index, seed);
         self.advance_turn();
@@ -1728,11 +1646,7 @@ impl PlayState {
         }
 
         let legal_cells = self.combat_legal_cell_mask();
-        let candidates = combat_clone_candidate_coordinates(self.combat_clone_placement_seed(
-            caster_index,
-            target_slot,
-            spell_index,
-        ));
+        let candidates = combat_clone_candidate_coordinates(self.combat_arena_placement_seed());
         let applied =
             self.apply_combat_clone_with_legal_mask(target_slot, &legal_cells, &candidates);
         self.advance_turn();
@@ -1997,10 +1911,16 @@ impl PlayState {
             return outcome;
         }
 
-        let raw_roll =
-            self.active_target_combat_spell_raw_roll(caster_index, target_slot, spell_index);
-        let defense_roll =
-            self.active_target_combat_spell_defense_roll(caster_index, target_slot, spell_index);
+        let raw_roll = self.combat_spell_damage_roll_for_kind(kind);
+        let defense_roll = match kind {
+            CombatSpellDamageKind::MagicMissile | CombatSpellDamageKind::Fireball => {
+                self.combat_spell_target_defense_roll(target_slot)
+            }
+            CombatSpellDamageKind::Kill => 0,
+            CombatSpellDamageKind::Tremor
+            | CombatSpellDamageKind::DeathWind
+            | CombatSpellDamageKind::FlameWind => 0,
+        };
         let applied = self.apply_active_target_combat_spell_damage(
             Some(caster_index),
             target_slot,
@@ -2074,7 +1994,7 @@ impl PlayState {
         let damage_rolls = target_slots
             .iter()
             .copied()
-            .map(|slot| self.tremor_combat_spell_damage_roll(caster_index, slot, spell_index))
+            .map(|_| self.combat_spell_damage_roll_for_kind(CombatSpellDamageKind::Tremor))
             .collect::<Vec<_>>();
         let applied =
             self.apply_tremor_combat_spell_damage(Some(caster_index), &gate_accepts, &damage_rolls);
@@ -2314,40 +2234,37 @@ impl PlayState {
                 .apply_directed_combat_spell_status(effect, &target_cells, &[], &[])
                 .map(|application| !application.applications.is_empty()),
             CombatDirectedSpellEffect::PoisonWind => {
-                let gate_accepts = target_slots
+                let poison_rolls = target_slots
                     .iter()
                     .copied()
-                    .enumerate()
-                    .map(|(index, slot)| {
-                        self.directed_combat_spell_roll(caster_index, slot, spell_index, index) & 1
-                            == 0
-                    })
+                    .map(|_| self.combat_arena_field_poison_damage_roll())
                     .collect::<Vec<_>>();
-                let damage_rolls = target_slots
+                let gate_accepts = poison_rolls
                     .iter()
                     .copied()
-                    .enumerate()
-                    .map(|(index, slot)| {
-                        self.directed_combat_spell_roll(caster_index, slot, spell_index, index)
-                    })
+                    .map(|roll| roll & 1 == 0)
                     .collect::<Vec<_>>();
                 self.apply_directed_combat_spell_status(
                     effect,
                     &target_cells,
                     &gate_accepts,
-                    &damage_rolls,
+                    &poison_rolls,
                 )
                 .map(|application| !application.applications.is_empty())
             }
             CombatDirectedSpellEffect::DeathWind | CombatDirectedSpellEffect::FlameWind => {
-                let damage_rolls = target_slots
-                    .iter()
-                    .copied()
-                    .enumerate()
-                    .map(|(index, slot)| {
-                        self.directed_combat_spell_roll(caster_index, slot, spell_index, index)
-                    })
-                    .collect::<Vec<_>>();
+                let damage_rolls = match effect {
+                    CombatDirectedSpellEffect::FlameWind => target_slots
+                        .iter()
+                        .map(|_| {
+                            self.combat_spell_damage_roll_for_kind(CombatSpellDamageKind::FlameWind)
+                        })
+                        .collect::<Vec<_>>(),
+                    CombatDirectedSpellEffect::DeathWind => Vec::new(),
+                    CombatDirectedSpellEffect::Sleep | CombatDirectedSpellEffect::PoisonWind => {
+                        Vec::new()
+                    }
+                };
                 self.apply_directed_combat_spell_damage(
                     Some(caster_index),
                     effect,
@@ -2512,11 +2429,9 @@ impl PlayState {
             return None;
         }
         let (_, field) = self.find_combat_arena_field_marker(actor.x, actor.y)?;
-        let poison_damage_roll =
-            self.combat_arena_field_post_step_poison_damage_roll(actor_slot, field);
-        let fire_damage_roll =
-            self.combat_arena_field_post_step_fire_damage_roll(actor_slot, field);
-        let defense_roll = self.combat_arena_field_post_step_defense_roll(actor_slot, field);
+        let poison_damage_roll = self.combat_arena_field_poison_damage_roll();
+        let fire_damage_roll = self.combat_arena_field_fire_damage_roll();
+        let defense_roll = self.combat_arena_field_defense_roll(actor_slot);
         let application = self.apply_combat_arena_field_contact(
             field,
             COMBAT_FIELD_CONTACT_NO_ACTIVE_SKIP_SLOT,

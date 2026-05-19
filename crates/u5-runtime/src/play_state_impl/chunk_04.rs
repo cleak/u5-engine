@@ -980,7 +980,7 @@ impl PlayState {
                     self.message = "Not here!".to_string();
                     return MoveOutcome::Blocked;
                 }
-                let seed = self.combat_summon_placement_seed(0, SUMMON_DAEMON_SPELL_INDEX);
+                let seed = self.combat_neighbor_placement_seed();
                 let applied =
                     self.apply_combat_summon_class_around_slot(COMBAT_CLASS_DAEMON, 0, seed);
                 self.advance_turn();

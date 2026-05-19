@@ -6060,6 +6060,7 @@
             max_hp: 30,
             level: 7,
         }];
+        state.prng_state = 0;
         let spell_index = spell_index_from_code("IQX").unwrap();
         state.spell_charges[spell_index] = 1;
         state.combat_actors[0] = CombatActorDescriptor::from_row([
@@ -6093,6 +6094,12 @@
             aux3: 0x44,
         };
         state.visibility_dirty = false;
+        let mut expected_prng = state.prng_state;
+        let _placement_seed = u5_prng_range_u16(
+            &mut expected_prng,
+            0,
+            (COMBAT_ARENA_SIDE * COMBAT_ARENA_SIDE - 1) as u16,
+        );
 
         assert_eq!(
             state
@@ -6106,6 +6113,7 @@
         assert_eq!(state.spell_charges[spell_index], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
+        assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.message, "Clone!");
         assert_eq!(
             state.combat_actors[cloned_actor_slot],
@@ -6311,6 +6319,7 @@
             max_hp: 30,
             level: 2,
         }];
+        state.prng_state = 0;
         let spell_index = spell_index_from_code("KX").unwrap();
         state.spell_charges[spell_index] = 1;
         state.combat_actors[0] = CombatActorDescriptor::from_row([
@@ -6333,6 +6342,13 @@
             aux1: 0,
             aux3: 0,
         };
+        let mut expected_prng = state.prng_state;
+        let _placement_seed = u5_prng_range_u16(&mut expected_prng, 0, 7);
+        let _class_selector = u5_prng_range_u16(
+            &mut expected_prng,
+            0,
+            u16::from(CONJURE_ANIMAL_OUTCOME_COUNT - 1),
+        );
 
         assert_eq!(
             state
@@ -6344,6 +6360,7 @@
         assert_eq!(state.spell_charges[spell_index], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
+        assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.message, "Success!");
         assert_eq!(
             state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS],
@@ -6381,6 +6398,7 @@
             max_hp: 30,
             level: 5,
         }];
+        state.prng_state = 0;
         let spell_index = spell_index_from_code("BIX").unwrap();
         state.spell_charges[spell_index] = 1;
         state.combat_actors[0] = CombatActorDescriptor::from_row([
@@ -6403,6 +6421,12 @@
             aux1: 0,
             aux3: 0,
         };
+        let mut expected_prng = state.prng_state;
+        let _placement_seed = u5_prng_range_u16(
+            &mut expected_prng,
+            0,
+            (COMBAT_ARENA_SIDE * COMBAT_ARENA_SIDE - 1) as u16,
+        );
 
         assert_eq!(
             state
@@ -6414,6 +6438,7 @@
         assert_eq!(state.spell_charges[spell_index], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
+        assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.message, "Success!");
         assert_eq!(
             state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS],
@@ -6464,6 +6489,7 @@
             max_hp: 30,
             level: 8,
         }];
+        state.prng_state = 0;
         let spell_index = spell_index_from_code("CKX").unwrap();
         state.spell_charges[spell_index] = 1;
         state.combat_actors[0] = CombatActorDescriptor::from_row([
@@ -6486,6 +6512,8 @@
             aux1: 0,
             aux3: 0,
         };
+        let mut expected_prng = state.prng_state;
+        let _placement_seed = u5_prng_range_u16(&mut expected_prng, 0, 7);
 
         assert_eq!(
             state
@@ -6497,6 +6525,7 @@
         assert_eq!(state.spell_charges[spell_index], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
+        assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.message, "Summon Daemon!");
         assert_eq!(
             state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS],
@@ -10328,6 +10357,7 @@
             level: 1,
         }];
         state.party_experience = vec![10];
+        state.prng_state = 0x1234;
         let spell_index = spell_index_from_code("GP").unwrap();
         state.spell_charges[spell_index] = 1;
         let stats = combat_class_stats(32).unwrap();
@@ -10341,11 +10371,20 @@
             0,
         );
 
-        let raw_roll = state.active_target_combat_spell_raw_roll(0, target_slot, spell_index);
-        let defense_roll = state.active_target_combat_spell_defense_roll(0, target_slot, spell_index);
-        let expected_damage =
-            resolve_active_target_spell_damage(CombatSpellDamageKind::MagicMissile, raw_roll, defense_roll)
-                .unwrap();
+        let mut expected_prng = state.prng_state;
+        let raw_roll = u5_prng_range_u16(
+            &mut expected_prng,
+            0,
+            u16::from(COMBAT_MAGIC_MISSILE_DAMAGE_ROLL_MAX - 1),
+        ) as u8;
+        let defense_roll =
+            u5_prng_range_u16(&mut expected_prng, 0, u16::from(stats.defense)) as u8;
+        let expected_damage = resolve_active_target_spell_damage(
+            CombatSpellDamageKind::MagicMissile,
+            raw_roll,
+            defense_roll,
+        )
+        .unwrap();
 
         assert_eq!(
             state
@@ -10357,6 +10396,7 @@
         assert_eq!(state.spell_charges[spell_index], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
+        assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.message, "Magic Missile!");
         assert_eq!(
             i16::from(stats.max_hp) - i16::from(state.combat_actors[target_slot].hp_or_wound),
@@ -10948,6 +10988,7 @@
             level: 6,
         }];
         state.party_experience = vec![10];
+        state.prng_state = 0x1234;
         let spell_index = spell_index_from_code("IPVY").unwrap();
         state.spell_charges[spell_index] = 1;
         state.combat_actors[0] = CombatActorDescriptor::from_row([1, 1, 0, 0, 0, 0, 3, 3]);
@@ -10962,18 +11003,19 @@
             0,
         );
 
-        let party_damage =
-            resolve_tremor_spell_raw_damage(state.tremor_combat_spell_damage_roll(
-                0,
-                0,
-                spell_index,
-            ));
-        let monster_damage =
-            resolve_tremor_spell_raw_damage(state.tremor_combat_spell_damage_roll(
-                0,
-                target_slot,
-                spell_index,
-            ));
+        let mut expected_prng = state.prng_state;
+        let party_roll = u5_prng_range_u16(
+            &mut expected_prng,
+            0,
+            u16::from(COMBAT_TREMOR_DAMAGE_ROLL_MAX - 1),
+        ) as u8;
+        let monster_roll = u5_prng_range_u16(
+            &mut expected_prng,
+            0,
+            u16::from(COMBAT_TREMOR_DAMAGE_ROLL_MAX - 1),
+        ) as u8;
+        let party_damage = resolve_tremor_spell_raw_damage(party_roll);
+        let monster_damage = resolve_tremor_spell_raw_damage(monster_roll);
         let monster_reward = if monster_damage as u8 >= stats.max_hp {
             stats.reward_unit()
         } else {
@@ -10990,6 +11032,7 @@
         assert_eq!(state.spell_charges[spell_index], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
+        assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.message, "Tremor!");
         assert_eq!(state.party[0].hp, 30 - party_damage as u16);
         assert_eq!(
@@ -12131,13 +12174,25 @@
             aux1: 0,
             aux3: 0,
         };
+        let mut expected_prng = state.prng_state;
+        let _poison_roll = u5_prng_range_u16(&mut expected_prng, 0, 19);
+        let fire_roll = u5_prng_range_u16(&mut expected_prng, 0, 20) as u8;
+        let defense_roll =
+            u5_prng_range_u16(&mut expected_prng, 0, CHARACTER_DEFENSE_FACTORY_SEED.into())
+                as u8;
+        let expected_damage = resolve_spell_damage_after_defense(
+            combat_field_fire_raw_damage(fire_roll) as i16,
+            defense_roll,
+        )
+        .max(0) as u16;
 
         let outcome = state.apply_combat_step_or_attack_primitive(0, 1, COMBAT_DIRECTION_EAST, true);
 
         assert!(outcome.committed_movement());
         assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (4, 3));
         assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (4, 3));
-        assert_eq!(state.party[0].hp, 13);
+        assert_eq!(state.party[0].hp, 20 - expected_damage);
+        assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.party[0].status, b'G');
         assert_eq!(
             state.active_objects[1],
