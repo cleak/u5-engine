@@ -6435,6 +6435,16 @@
     }
 
     #[test]
+    fn shrine_altar_tiles_map_to_standard_virtue_order() {
+        for (index, virtue) in ShrineVirtue::ALL.into_iter().enumerate() {
+            let tile = SHRINE_ALTAR_TILE_FIRST + u8::try_from(index).unwrap();
+            assert_eq!(shrine_virtue_for_altar_tile(tile), Some(virtue));
+        }
+        assert_eq!(shrine_virtue_for_altar_tile(SHRINE_ALTAR_TILE_FIRST - 1), None);
+        assert_eq!(shrine_virtue_for_altar_tile(SHRINE_ALTAR_TILE_LAST + 1), None);
+    }
+
+    #[test]
     fn story_text_marker_classifies_published_renderer_bytes() {
         // formats/story-dat.md §3: the renderer recognises `{` as a
         // paragraph/page-start, `_` as a soft hyphen / syllable
@@ -13287,13 +13297,8 @@
     }
 
     #[test]
-    fn no_turn_dungeon_action_on_wind_tile_skips_underfoot_wind() {
+    fn no_turn_dungeon_action_on_gust_art_keeps_torch_unchanged() {
         let dir = debug_game_dir();
-        fs::write(
-            dir.join(DUNGEON_WIND_TILE_TABLE_FILE),
-            "DUNGEON:0 0 1 1 0x70\n",
-        )
-        .unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 1, 1)] = 0x70;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -13310,13 +13315,8 @@
     }
 
     #[test]
-    fn pass_turn_on_dungeon_wind_tile_extinguishes_underfoot_torch_after_turn() {
+    fn pass_turn_on_gust_art_only_decays_existing_light_counters() {
         let dir = debug_game_dir();
-        fs::write(
-            dir.join(DUNGEON_WIND_TILE_TABLE_FILE),
-            "DUNGEON:0 0 1 1 0x70\n",
-        )
-        .unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 1, 1)] = 0x70;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -13330,22 +13330,17 @@
         );
 
         assert_eq!(state.turn, 1);
-        assert_eq!(state.torch_counter, 0);
+        assert_eq!(state.torch_counter, 4);
         assert_eq!(state.light_spell_counter, 4);
         assert!(state.visibility_dirty);
         assert!(state.message.starts_with("Passed."));
-        assert!(state.message.contains("breeze blows out the torch"));
+        assert!(!state.message.contains("breeze blows out the torch"));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn dungeon_wind_tile_sidecar_extinguishes_torch_but_not_light_spell() {
+    fn dungeon_gust_art_does_not_extinguish_torch_on_contact() {
         let dir = debug_game_dir();
-        fs::write(
-            dir.join(DUNGEON_WIND_TILE_TABLE_FILE),
-            "DUNGEON:0 0 2 1 0x70\n",
-        )
-        .unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 2, 1)] = 0x70;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -13361,20 +13356,15 @@
 
         assert_eq!((state.player.x, state.player.y), (2, 1));
         assert_eq!(state.turn, 1);
-        assert_eq!(state.torch_counter, 0);
+        assert_eq!(state.torch_counter, 4);
         assert_eq!(state.light_spell_counter, 4);
-        assert!(state.message.contains("breeze blows out the torch"));
+        assert!(!state.message.contains("breeze blows out the torch"));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn dungeon_wind_tile_cell_guard_mismatch_does_not_extinguish_torch() {
+    fn ordinary_dungeon_gust_art_uses_underfoot_description() {
         let dir = debug_game_dir();
-        fs::write(
-            dir.join(DUNGEON_WIND_TILE_TABLE_FILE),
-            "DUNGEON:0 0 2 1 0x71\n",
-        )
-        .unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 2, 1)] = 0x70;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -13389,6 +13379,7 @@
 
         assert_eq!(state.torch_counter, 4);
         assert!(!state.message.contains("breeze blows out the torch"));
+        assert!(state.message.contains("underfoot"));
         let _ = fs::remove_dir_all(dir);
     }
 

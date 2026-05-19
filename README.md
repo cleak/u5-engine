@@ -198,16 +198,14 @@ public dungeon cell classes narrate without triggering movement tile effects.
 Consumed non-movement dungeon commands and pass/empty waits already standing on
 clean `dungeon_teleports.tsv` or `dungeon_exit_tiles.tsv` cells, public pit,
 bomb-trap, or field bytes run the same post-action underfoot tile-effect pass,
-without spending a second turn; clean `dungeon_wind_tiles.tsv` rows participate
-in that pass for torch-extinguish contact while leaving spell light alone.
+without spending a second turn.
 Dungeon exploration keeps the top-down active-object table out of its
 turn and idle visual animators because the first-person dungeon renderer owns
 its own position state; shared static animation still ticks. Dungeon render and
 `L`ook obey the public personal-light gate; optional
-`dungeon_teleports.tsv` rows model scripted level-to-level cells, optional
-`dungeon_wind_tiles.tsv` rows extinguish lit torches on contact while leaving
-light-spell duration alone, and optional `dungeon_exit_tiles.tsv` rows model
-immediate exit-dungeon cells while their exact encoding remains open. Runtime
+`dungeon_teleports.tsv` rows model scripted level-to-level cells, and optional
+`dungeon_exit_tiles.tsv` rows model immediate exit-dungeon cells while their
+exact encoding remains open. Runtime
 `0xA?` room-helper state fires before the next dungeon key just like room
 triggers while keeping its low-nibble arena slot. Optional `dungeon_doors.tsv`
 rows split heavy or revealed secret doors from room-trigger cells and provide

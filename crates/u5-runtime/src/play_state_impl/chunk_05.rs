@@ -97,16 +97,6 @@ impl PlayState {
         if is_dungeon_room_helper_state(tile) {
             return self.resolve_dungeon_room_trigger(game_dir, scene, level, nx, ny, tile);
         }
-        if self.dungeon_wind_tile_extinguishes_torch(game_dir, scene, level, nx, ny, tile)? {
-            self.torch_counter = 0;
-            self.advance_turn();
-            self.message = format!(
-                "Moved {} to ({nx}, {ny}) on {} level {level}; a breeze blows out the torch.",
-                direction.name(),
-                scene.key()
-            );
-            return Ok(MoveOutcome::Moved);
-        }
         self.advance_turn();
         self.message = format!(
             "Moved {} to ({nx}, {ny}) on {} level {level}; underfoot {}.",
@@ -201,27 +191,6 @@ impl PlayState {
             scene,
             level: entry.to_level,
         })
-    }
-
-    pub fn dungeon_wind_tile_extinguishes_torch(
-        &self,
-        game_dir: Option<&Path>,
-        scene: DungeonScene,
-        level: u8,
-        x: usize,
-        y: usize,
-        cell: u8,
-    ) -> io::Result<bool> {
-        let Some(game_dir) = game_dir else {
-            return Ok(false);
-        };
-        if self.torch_counter == 0 {
-            return Ok(false);
-        }
-        Ok(load_dungeon_wind_tile_entries(game_dir)?
-            .unwrap_or_default()
-            .into_iter()
-            .any(|entry| dungeon_wind_tile_matches(entry, scene, level, x, y, cell)))
     }
 
     pub fn dungeon_exit_tile_at(

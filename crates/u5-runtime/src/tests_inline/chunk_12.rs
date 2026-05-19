@@ -1041,13 +1041,8 @@
     }
 
     #[test]
-    fn consumed_dungeon_turn_on_wind_tile_extinguishes_underfoot_torch_after_turn() {
+    fn consumed_dungeon_turn_on_gust_art_does_not_extinguish_underfoot_torch() {
         let dir = debug_game_dir();
-        fs::write(
-            dir.join(DUNGEON_WIND_TILE_TABLE_FILE),
-            "DUNGEON:0 0 1 1 0x70\n",
-        )
-        .unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 1, 1)] = 0x70;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -1058,11 +1053,11 @@
         assert!(state.handle_dungeon_key('a', &dir).unwrap());
 
         assert_eq!(state.turn, 1);
-        assert_eq!(state.torch_counter, 0);
+        assert_eq!(state.torch_counter, 4);
         assert_eq!(state.light_spell_counter, 4);
         assert!(state.visibility_dirty);
         assert!(state.message.contains("Turned to face"));
-        assert!(state.message.contains("breeze blows out the torch"));
+        assert!(!state.message.contains("breeze blows out the torch"));
         let _ = fs::remove_dir_all(dir);
     }
 

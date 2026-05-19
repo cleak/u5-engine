@@ -1093,23 +1093,6 @@ pub fn town_fire_source_tile_matches(entry: TownFireSourceEntry, tile: u8) -> bo
         .map_or(true, |expected_tile| expected_tile == tile)
 }
 
-pub fn dungeon_wind_tile_matches(
-    entry: DungeonWindTileEntry,
-    scene: DungeonScene,
-    level: u8,
-    x: usize,
-    y: usize,
-    cell: u8,
-) -> bool {
-    entry.scene == scene
-        && entry.level == level
-        && entry.x == x
-        && entry.y == y
-        && entry
-            .expected_cell
-            .map_or(true, |expected| expected == cell)
-}
-
 pub fn dungeon_teleport_matches(
     entry: DungeonTeleportEntry,
     scene: DungeonScene,

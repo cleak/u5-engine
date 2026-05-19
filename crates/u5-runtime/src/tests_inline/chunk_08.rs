@@ -602,42 +602,6 @@
     }
 
     #[test]
-    fn dungeon_wind_tile_table_accepts_optional_cell_guard() {
-        let entries =
-            parse_dungeon_wind_tile_entries("DUNGEON:0 0 2 1 0x70\nDUNGEON:1 7 3 4\n").unwrap();
-
-        assert_eq!(
-            entries,
-            vec![
-                DungeonWindTileEntry {
-                    scene: DungeonScene::from_record(0).unwrap(),
-                    level: 0,
-                    x: 2,
-                    y: 1,
-                    expected_cell: Some(0x70),
-                },
-                DungeonWindTileEntry {
-                    scene: DungeonScene::from_record(1).unwrap(),
-                    level: 7,
-                    x: 3,
-                    y: 4,
-                    expected_cell: None,
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn dungeon_wind_tile_table_rejects_invalid_or_duplicate_rows() {
-        assert!(parse_dungeon_wind_tile_entries("CASTLE:0 0 2 1\n").is_err());
-        assert!(parse_dungeon_wind_tile_entries("DUNGEON:0 8 2 1\n").is_err());
-        assert!(parse_dungeon_wind_tile_entries("DUNGEON:0 0 8 1\n").is_err());
-        assert!(
-            parse_dungeon_wind_tile_entries("DUNGEON:0 0 2 1\nDUNGEON:0 0 2 1 0x70\n").is_err()
-        );
-    }
-
-    #[test]
     fn dungeon_exit_tile_table_accepts_optional_cell_guard() {
         let entries =
             parse_dungeon_exit_tile_entries("DUNGEON:0 0 2 1 0x70\nDUNGEON:1 7 3 4\n").unwrap();

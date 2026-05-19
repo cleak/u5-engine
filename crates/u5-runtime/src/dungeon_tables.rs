@@ -1,4 +1,4 @@
-//! Data structures for the dungeon TSV tables (deeper transitions, teleports, chests, wind, exits, doors, secret doors).
+//! Data structures for the dungeon TSV tables (deeper transitions, teleports, chests, exits, doors, secret doors).
 
 use crate::*;
 
@@ -33,15 +33,6 @@ pub struct DungeonChestContentEntry {
     pub y: usize,
     pub expected_cell: Option<u8>,
     pub grants: Vec<ObjectPickupGrant>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct DungeonWindTileEntry {
-    pub scene: DungeonScene,
-    pub level: u8,
-    pub x: usize,
-    pub y: usize,
-    pub expected_cell: Option<u8>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

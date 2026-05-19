@@ -3003,16 +3003,6 @@ impl PlayState {
             };
             return Ok(None);
         }
-        if self.dungeon_wind_tile_extinguishes_torch(Some(game_dir), scene, level, x, y, tile)? {
-            self.torch_counter = 0;
-            self.mark_visibility_dirty();
-            let wind_message = "A breeze blows out the torch.".to_string();
-            self.message = if self.message.is_empty() {
-                wind_message
-            } else {
-                format!("{} {wind_message}", self.message)
-            };
-        }
         if let Some(outcome) = self.apply_dungeon_active_monster_step(scene, level)? {
             return Ok(Some(outcome));
         }

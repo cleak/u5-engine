@@ -121,10 +121,10 @@ pub fn handle_play_key_input(
     }
     if key == 'M' && !suffix.is_empty() {
         if state
-            .meditate_shrine_from_suffix(suffix, game_dir)?
+            .read_codex_urn_at_current_position(game_dir)?
             .is_none()
             && state
-                .read_codex_urn_at_current_position(game_dir)?
+                .meditate_shrine_from_suffix(suffix, game_dir)?
                 .is_none()
         {
             state.mix_reagents_from_suffix(suffix);

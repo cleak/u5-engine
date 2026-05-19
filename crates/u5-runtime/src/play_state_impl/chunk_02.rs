@@ -1632,18 +1632,28 @@ impl PlayState {
         if plane != WorldPlane::Britannia {
             return Ok(None);
         }
-        let Some(entries) = load_shrine_entries(game_dir)? else {
-            return Ok(None);
-        };
         let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
-        Ok(entries.into_iter().find(|entry| {
-            entry.plane == plane
-                && entry.x == self.player.x
-                && entry.y == self.player.y
-                && entry
-                    .expected_tile
-                    .map_or(true, |expected| expected == tile)
-        }))
+        if let Some(entries) = load_shrine_entries(game_dir)? {
+            if let Some(entry) = entries.into_iter().find(|entry| {
+                entry.plane == plane
+                    && entry.x == self.player.x
+                    && entry.y == self.player.y
+                    && entry
+                        .expected_tile
+                        .map_or(true, |expected| expected == tile)
+            }) {
+                return Ok(Some(entry));
+            }
+        }
+        Ok(
+            shrine_virtue_for_altar_tile(tile).map(|virtue| ShrineEntry {
+                plane,
+                x: self.player.x,
+                y: self.player.y,
+                virtue,
+                expected_tile: Some(tile),
+            }),
+        )
     }
 
     pub fn add_shrine_standing(&mut self, virtue: ShrineVirtue, amount: u8) -> u8 {

@@ -31,7 +31,7 @@ impl ShrineVirtue {
         }
     }
 
-    pub fn from_index(index: usize) -> Option<Self> {
+    pub const fn from_index(index: usize) -> Option<Self> {
         Some(match index {
             0 => Self::Honesty,
             1 => Self::Compassion,
@@ -177,6 +177,18 @@ impl ShrineVirtue {
             Self::Humility => ("Katrina", "Shepherd"),
         }
     }
+}
+
+/// `tile-catalog.md`: shrine altar tiles 136..=143 map to the eight virtues in
+/// the standard virtue order.
+pub const SHRINE_ALTAR_TILE_FIRST: u8 = 136;
+pub const SHRINE_ALTAR_TILE_LAST: u8 = 143;
+
+pub const fn shrine_virtue_for_altar_tile(tile: u8) -> Option<ShrineVirtue> {
+    if tile < SHRINE_ALTAR_TILE_FIRST || tile > SHRINE_ALTAR_TILE_LAST {
+        return None;
+    }
+    ShrineVirtue::from_index((tile - SHRINE_ALTAR_TILE_FIRST) as usize)
 }
 
 /// `karma.md §10` per-virtue shrine quest state encoded by the

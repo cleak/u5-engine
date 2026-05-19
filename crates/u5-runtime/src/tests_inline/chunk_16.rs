@@ -1324,6 +1324,98 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
     }
 
     #[test]
+    fn shrine_meditation_sets_ordained_bit_from_native_altar_tile_without_sidecar() {
+        let dir = debug_game_dir();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = SHRINE_ALTAR_TILE_FIRST;
+        let mut state = britannia_state(grid, 10, 20);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "Ahm", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Honesty.bit());
+        assert_eq!(state.shrine_codex_mask, 0);
+        assert_eq!(state.turn, 0);
+        assert!(state.message.contains("Shrine of Honesty"));
+        assert!(state.message.contains("ordained"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn active_shrine_prompt_uses_native_humility_altar_tile_without_sidecar() {
+        let dir = debug_game_dir();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = SHRINE_ALTAR_TILE_LAST;
+        let mut state = britannia_state(grid, 10, 20);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert!(state.active_shrine.is_some());
+        assert!(state.active_mix.is_none());
+        assert!(state.message.contains("Shrine of Humility mantra?"));
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'L', "um\r", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert!(state.active_shrine.is_none());
+        assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Humility.bit());
+        assert_eq!(state.shrine_codex_mask, 0);
+        assert!(state.message.contains("Shrine of Humility"));
+        assert!(state.message.contains("ordained"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn shrine_sidecar_takes_precedence_over_native_altar_tile() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HUMILITY 136\n").unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = SHRINE_ALTAR_TILE_FIRST;
+        let mut state = britannia_state(grid, 10, 20);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "Lum", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.shrine_ordained_mask, ShrineVirtue::Humility.bit());
+        assert_eq!(
+            state.shrine_ordained_mask & ShrineVirtue::Honesty.bit(),
+            0
+        );
+        assert!(state.message.contains("Shrine of Humility"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn native_shrine_altar_tiles_are_britannia_only() {
+        let dir = debug_game_dir();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(10, 20)] = SHRINE_ALTAR_TILE_FIRST;
+        let mut state = britannia_state(grid, 10, 20);
+        state.area = Area::World {
+            plane: WorldPlane::Underworld,
+        };
+        state.active_objects[0].z = WorldPlane::Underworld.save_floor();
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'M', "Ahm", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.shrine_ordained_mask, 0);
+        assert!(state.active_shrine.is_none());
+        assert!(!state.message.contains("Shrine of Honesty"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn active_shrine_prompt_collects_mantra_and_ordains() {
         let dir = debug_game_dir();
         fs::write(dir.join(SHRINE_TABLE_FILE), "BRITANNIA 10 20 HONESTY 136\n").unwrap();

@@ -14,7 +14,6 @@ pub const SHRINE_TABLE_FILE: &str = "shrines.tsv";
 pub const CODEX_URN_TABLE_FILE: &str = "codex_urns.tsv";
 pub const DUNGEON_DEEPER_TRANSITION_TABLE_FILE: &str = "dungeon_deeper_transitions.tsv";
 pub const DUNGEON_TELEPORT_TABLE_FILE: &str = "dungeon_teleports.tsv";
-pub const DUNGEON_WIND_TILE_TABLE_FILE: &str = "dungeon_wind_tiles.tsv";
 pub const DUNGEON_EXIT_TILE_TABLE_FILE: &str = "dungeon_exit_tiles.tsv";
 pub const DUNGEON_DOOR_TABLE_FILE: &str = "dungeon_doors.tsv";
 pub const DUNGEON_CHEST_TABLE_FILE: &str = "dungeon_chests.tsv";

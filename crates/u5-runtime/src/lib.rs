@@ -426,8 +426,9 @@ pub use ship_broadside::{
 };
 pub use shops::*;
 pub use shrine_virtue::{
-    CodexUrnReadOutcome, ShrineMeditationOutcome, ShrineQuestState, ShrineVirtue,
-    all_virtues_complete, read_codex_urn, shrine_meditation_outcome,
+    CodexUrnReadOutcome, SHRINE_ALTAR_TILE_FIRST, SHRINE_ALTAR_TILE_LAST, ShrineMeditationOutcome,
+    ShrineQuestState, ShrineVirtue, all_virtues_complete, read_codex_urn,
+    shrine_meditation_outcome, shrine_virtue_for_altar_tile,
 };
 pub use signs_io::{
     SIGN_BODY_CHARACTER_MASK, SIGN_BODY_END_OF_RECORD, SIGN_BODY_MACRO_FIRST, SIGN_BODY_MACRO_LAST,
