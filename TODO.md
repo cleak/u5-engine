@@ -520,8 +520,10 @@ as public details become available.
   - Continue auditing player movement and targeting parity.
   - Continue auditing monster AI parity.
   - Continue auditing combat field placement and contact parity.
-  - Continue auditing damage, defense, status, death, rewards, loot, and escape
-    parity.
+  - Default monster death/drop markers and vanish-on-death actor clearing are
+    implemented in the temporary combat active-object table; continue auditing
+    Gazer/Gargoyle special-death presentation, damage, defense, status,
+    rewards, loot, and escape parity.
   - Monster combat-AI runner instruction set and class effect map are still
     called out as remaining public-spec parity work.
 
