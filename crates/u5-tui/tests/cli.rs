@@ -368,6 +368,27 @@ fn cli_parser_accepts_save_frame_suite_mode() {
 }
 
 #[test]
+fn cli_parser_accepts_visual_frame_suite_mode() {
+    let args = parse_cli_args([
+        "--visual-frame-suite",
+        "target/visual-frame-suite",
+        "--raster-depth",
+        "cga",
+        r"C:\Games\U5-Clean",
+    ])
+    .unwrap();
+
+    assert!(!args.play);
+    assert!(!args.visual);
+    assert_eq!(
+        args.visual_frame_suite,
+        Some(PathBuf::from("target/visual-frame-suite"))
+    );
+    assert_eq!(args.raster_depth, TileGraphicsDepth::Cga4);
+    assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
+}
+
+#[test]
 fn cli_save_frame_suite_rejects_other_play_modes_and_overrides() {
     assert!(parse_cli_args(["--save-frame-suite", "out", "--play"]).is_err());
     assert!(parse_cli_args(["--save-frame-suite", "out", "--visual"]).is_err());
@@ -375,6 +396,26 @@ fn cli_save_frame_suite_rejects_other_play_modes_and_overrides() {
     assert!(parse_cli_args(["--save-frame-suite", "out", "--route-smoke"]).is_err());
     assert!(parse_cli_args(["--save-frame-suite", "out", "--scene", "BRITANNIA"]).is_err());
     assert!(parse_cli_args(["--save-frame-suite", "out", "--play-script", "q"]).is_err());
+    assert!(parse_cli_args(["--save-frame-suite", "out", "--visual-frame-suite", "vis"]).is_err());
+}
+
+#[test]
+fn cli_visual_frame_suite_rejects_other_play_modes_and_overrides() {
+    assert!(parse_cli_args(["--visual-frame-suite", "out", "--play"]).is_err());
+    assert!(parse_cli_args(["--visual-frame-suite", "out", "--visual"]).is_err());
+    assert!(parse_cli_args(["--visual-frame-suite", "out", "--save-frame", "frame.png"]).is_err());
+    assert!(
+        parse_cli_args([
+            "--visual-frame-suite",
+            "out",
+            "--save-frame-suite",
+            "frames"
+        ])
+        .is_err()
+    );
+    assert!(parse_cli_args(["--visual-frame-suite", "out", "--route-smoke"]).is_err());
+    assert!(parse_cli_args(["--visual-frame-suite", "out", "--scene", "BRITANNIA"]).is_err());
+    assert!(parse_cli_args(["--visual-frame-suite", "out", "--play-script", "q"]).is_err());
 }
 
 // from chunk_02
@@ -388,6 +429,7 @@ fn cli_parser_rejects_missing_or_duplicate_play_script() {
 fn cli_parser_rejects_missing_save_frame_path() {
     assert!(parse_cli_args(["--save-frame"]).is_err());
     assert!(parse_cli_args(["--save-frame-suite"]).is_err());
+    assert!(parse_cli_args(["--visual-frame-suite"]).is_err());
 }
 
 // from chunk_02
@@ -639,6 +681,7 @@ fn cli_usage_lists_documented_smoke_commands() {
     assert!(CLI_USAGE.contains("--play-script"));
     assert!(CLI_USAGE.contains("--route-smoke"));
     assert!(CLI_USAGE.contains("--save-frame-suite"));
+    assert!(CLI_USAGE.contains("--visual-frame-suite"));
     assert!(CLI_USAGE.contains("--scene"));
     assert!(CLI_USAGE.contains("--floor"));
     assert!(CLI_USAGE.contains("--create-character"));

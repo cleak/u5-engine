@@ -50,6 +50,7 @@ conversation, or save rules.
 | Scripted play smoke | `cargo run -- --play-script "d;empty;q" C:\Games\U5-Clean` |
 | Raster hash smoke | `cargo run -- --play-script "idle:1;q" --raster-diagnostics C:\Games\U5-Clean` |
 | Headless frame capture | `cargo run -- --save-frame screenshots\britannia.png --scene BRITANNIA C:\Games\U5-Clean` |
+| Bevy frame suite | `cargo run --features visual -- --visual-frame-suite target\visual-frame-suite C:\Games\U5-Clean` |
 | Bevy visual smoke | `cargo run --features visual -- --visual --scene BRITANNIA C:\Games\U5-Clean` |
 
 When changing shared gameplay behavior, prefer focused runtime tests first and

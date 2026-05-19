@@ -43,6 +43,9 @@ pub struct CliArgs {
     /// If set, write representative headless PNG frames and a sanitized
     /// manifest into the supplied directory.
     pub save_frame_suite: Option<PathBuf>,
+    /// If set, write representative Bevy-owned PNG frames and a sanitized
+    /// manifest into the supplied directory without opening a window.
+    pub visual_frame_suite: Option<PathBuf>,
     pub create_character: Option<CreateCharacterCommand>,
     pub create_character_interactive: bool,
 }
@@ -79,6 +82,7 @@ where
     let mut help = false;
     let mut save_frame: Option<PathBuf> = None;
     let mut save_frame_suite: Option<PathBuf> = None;
+    let mut visual_frame_suite: Option<PathBuf> = None;
     let mut create_character_name: Option<Vec<u8>> = None;
     let mut create_character_male: Option<bool> = None;
     let mut create_character_winners: Option<Vec<ShrineVirtue>> = None;
@@ -108,6 +112,15 @@ where
                     )
                 })?;
                 save_frame_suite = Some(PathBuf::from(value));
+            }
+            "--visual-frame-suite" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--visual-frame-suite requires an output directory",
+                    )
+                })?;
+                visual_frame_suite = Some(PathBuf::from(value));
             }
             "--play-script" => {
                 play = true;
@@ -285,6 +298,7 @@ where
             help: true,
             save_frame: None,
             save_frame_suite: None,
+            visual_frame_suite: None,
             create_character: None,
             create_character_interactive: false,
         });
@@ -300,6 +314,7 @@ where
             || visual
             || save_frame.is_some()
             || save_frame_suite.is_some()
+            || visual_frame_suite.is_some()
             || from_save
             || from_init
             || options != PlayOptions::default()
@@ -310,13 +325,14 @@ where
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--route-smoke runs its own scripted scenes; it cannot be combined with play, visual, save-frame, from-save, from-init, scene, start, or gameplay overrides",
+            "--route-smoke runs its own scripted scenes; it cannot be combined with play, visual, save-frame, visual-frame-suite, from-save, from-init, scene, start, or gameplay overrides",
         ));
     }
     if save_frame_suite.is_some()
         && (play
             || visual
             || save_frame.is_some()
+            || visual_frame_suite.is_some()
             || route_smoke
             || from_save
             || from_init
@@ -329,20 +345,41 @@ where
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--save-frame-suite runs its own scenes; it cannot be combined with play, visual, route-smoke, save-frame, from-save, from-init, play-script, scene, start, or gameplay overrides",
+            "--save-frame-suite runs its own scenes; it cannot be combined with play, visual, route-smoke, save-frame, visual-frame-suite, from-save, from-init, play-script, scene, start, or gameplay overrides",
+        ));
+    }
+    if visual_frame_suite.is_some()
+        && (play
+            || visual
+            || save_frame.is_some()
+            || save_frame_suite.is_some()
+            || route_smoke
+            || from_save
+            || from_init
+            || play_script.is_some()
+            || options != PlayOptions::default()
+            || wind_override.is_some()
+            || climbing_gear_override.is_some()
+            || pending_vehicle_override.is_some()
+            || transport_override.is_some())
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--visual-frame-suite runs its own Bevy scenes; it cannot be combined with play, visual, route-smoke, save-frame, save-frame-suite, from-save, from-init, play-script, scene, start, or gameplay overrides",
         ));
     }
     if intro
         && (play
             || save_frame.is_some()
             || save_frame_suite.is_some()
+            || visual_frame_suite.is_some()
             || route_smoke
             || from_save
             || from_init)
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--intro owns the title/menu flow; it cannot be combined with play, route-smoke, save-frame, save-frame-suite, from-save, or from-init",
+            "--intro owns the title/menu flow; it cannot be combined with play, route-smoke, save-frame, save-frame-suite, visual-frame-suite, from-save, or from-init",
         ));
     }
     if create_character_interactive
@@ -351,13 +388,14 @@ where
             || visual
             || save_frame.is_some()
             || save_frame_suite.is_some()
+            || visual_frame_suite.is_some()
             || route_smoke
             || from_save
             || from_init)
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--create-character-interactive writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, route-smoke, save-frame, save-frame-suite, from-save, or from-init",
+            "--create-character-interactive writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, route-smoke, save-frame, save-frame-suite, visual-frame-suite, from-save, or from-init",
         ));
     }
     if create_character_interactive && create_character_name.is_some() {
@@ -373,13 +411,14 @@ where
             || visual
             || save_frame.is_some()
             || save_frame_suite.is_some()
+            || visual_frame_suite.is_some()
             || route_smoke
             || from_save
             || from_init
         {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "--create-character writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, route-smoke, save-frame, save-frame-suite, from-save, or from-init",
+                "--create-character writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, route-smoke, save-frame, save-frame-suite, visual-frame-suite, from-save, or from-init",
             ));
         }
         let male = create_character_male.ok_or_else(|| {
@@ -445,6 +484,7 @@ where
         help: false,
         save_frame,
         save_frame_suite,
+        visual_frame_suite,
         create_character,
         create_character_interactive,
     })
@@ -491,6 +531,10 @@ OPTIONS:
         --save-frame-suite <DIR>
                               Write representative headless PNG frames plus a
                               sanitized manifest into DIR and exit.
+        --visual-frame-suite <DIR>
+                              Write representative Bevy-owned PNG frames plus
+                              a sanitized manifest into DIR and exit.
+                              Requires building with `--features visual`.
 
 SMOKE COMMANDS:
     cargo run -- C:\\Games\\U5-Clean
@@ -501,6 +545,7 @@ SMOKE COMMANDS:
     cargo run -- --play --scene DUNGEON:0 --floor 0 C:\\Games\\U5-Clean
     cargo run -- --create-character Avatar --gender male --chargen-winners Honesty,Compassion,Valor,Justice,Sacrifice,Honor,Spirituality C:\\Games\\U5-Clean
     cargo run --features visual -- --visual --scene BRITANNIA C:\\Games\\U5-Clean
+    cargo run --features visual -- --visual-frame-suite target\\visual-frame-suite C:\\Games\\U5-Clean
     cargo run --features visual -- --visual --scene CASTLE:0 --floor 0 C:\\Games\\U5-Clean
     cargo run --features visual -- --intro --visual C:\\Games\\U5-Clean
 ";

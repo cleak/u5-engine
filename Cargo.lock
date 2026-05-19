@@ -4346,6 +4346,7 @@ name = "u5-bevy"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "image",
  "u5-runtime",
 ]
 

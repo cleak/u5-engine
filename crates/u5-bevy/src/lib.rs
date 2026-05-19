@@ -4,6 +4,7 @@
 //! movement, doors, transitions, and other supported behavior come along for
 //! free.
 
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -12,15 +13,17 @@ use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
+use image::{ImageBuffer, Rgba};
 
 use u5_runtime::{
-    ChargenSession, ChargenSessionResult, ChargenSessionStep, FixedCellFont,
-    INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, IntroStoryArtPlacement, MISCMAPS_DAT_FILE,
-    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    COMBAT_ARENA_SIDE, ChargenSession, ChargenSessionResult, ChargenSessionStep, DungeonScene,
+    FixedCellFont, INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, IntroStoryArtPlacement,
+    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, PLAY_MUSIC_TOGGLE_KEY, PlayInputDisposition, PlayOptions,
-    PlayState, RTV_COMMAND_STREAM_BYTES, StoryRecords, TEXT_WINDOW_RENDER_HEIGHT,
-    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TileAtlas, TileGraphicsDepth, U4TransferOverrides,
-    U4TransferSource, commit_chargen_save, commit_u4_transfer_save, handle_play_key_input,
+    PlayState, PlayTarget, RTV_COMMAND_STREAM_BYTES, Scene, StoryRecords,
+    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TileAtlas,
+    TileGraphicsDepth, U4TransferOverrides, U4TransferSource, WorldPlane, commit_chargen_save,
+    commit_u4_transfer_save, handle_play_key_input, hash_bytes,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -128,6 +131,234 @@ pub fn run_visual_intro_loop(
         run_visual_loop(game_dir, options, raster_depth)?;
     }
     Ok(())
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VisualFrameReport {
+    pub label: String,
+    pub path: PathBuf,
+    pub width: u32,
+    pub height: u32,
+    pub frame_kind: &'static str,
+    pub byte_hash: u64,
+    pub nonblack_pixels: usize,
+}
+
+pub fn run_visual_frame_suite(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    out_dir: &Path,
+) -> io::Result<()> {
+    let reports = visual_frame_suite(game_dir, raster_depth, out_dir)?;
+    for report in &reports {
+        println!(
+            "visual-suite {}: {}x{} {} hash {:016x} nonblack {} -> {}",
+            report.label,
+            report.width,
+            report.height,
+            report.frame_kind,
+            report.byte_hash,
+            report.nonblack_pixels,
+            report.path.display()
+        );
+    }
+    println!(
+        "Saved Bevy visual frame suite: {} PNG(s) plus manifest at {}.",
+        reports.len(),
+        out_dir.join("manifest.txt").display()
+    );
+    Ok(())
+}
+
+pub fn visual_frame_suite(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    out_dir: &Path,
+) -> io::Result<Vec<VisualFrameReport>> {
+    std::fs::create_dir_all(out_dir)?;
+    let atlas = load_tile_atlas(game_dir, raster_depth)?;
+    let font = load_ibm_ch_font(game_dir)?;
+    let mut reports = Vec::new();
+
+    for case in visual_gameplay_frame_cases() {
+        let mut state = PlayState::load_scene(game_dir, case.options)?;
+        if let Some(inputs) = case.inputs {
+            for (key, suffix) in inputs {
+                handle_play_key_input(&mut state, *key, suffix, game_dir)?;
+            }
+        }
+        if case.synthetic_combat {
+            seed_visual_suite_combat(&mut state);
+        }
+        if let Some(configure) = case.configure {
+            configure(&mut state);
+        }
+        reports.push(write_visual_play_report(
+            out_dir,
+            case.label,
+            case.frame_kind,
+            &mut state,
+            &atlas,
+            &font,
+        )?);
+    }
+
+    reports.push(write_visual_intro_report(
+        out_dir,
+        "intro-menu",
+        "intro menu",
+        VisualIntroPanel::Menu,
+        game_dir,
+        raster_depth,
+    )?);
+    let (summary, preview_rgba, preview_width, preview_height) =
+        visual_return_to_view_summary(game_dir, raster_depth);
+    reports.push(write_visual_intro_report(
+        out_dir,
+        "intro-return-to-view",
+        "intro return-to-view",
+        VisualIntroPanel::ReturnToView {
+            summary,
+            preview_rgba,
+            preview_width,
+            preview_height,
+        },
+        game_dir,
+        raster_depth,
+    )?);
+
+    for report in &reports {
+        if report.nonblack_pixels == 0 {
+            return Err(io::Error::other(format!(
+                "visual frame suite `{}` produced an all-black PNG",
+                report.label
+            )));
+        }
+    }
+    write_visual_frame_suite_manifest(out_dir, &reports)?;
+    Ok(reports)
+}
+
+struct VisualGameplayFrameCase {
+    label: &'static str,
+    frame_kind: &'static str,
+    options: PlayOptions,
+    inputs: Option<&'static [(char, &'static str)]>,
+    configure: Option<fn(&mut PlayState)>,
+    synthetic_combat: bool,
+}
+
+fn visual_gameplay_frame_cases() -> Vec<VisualGameplayFrameCase> {
+    vec![
+        VisualGameplayFrameCase {
+            label: "world-play",
+            frame_kind: "visual world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            inputs: None,
+            configure: None,
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "world-after-step",
+            frame_kind: "visual world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                ..PlayOptions::default()
+            },
+            inputs: Some(&[('d', ""), (' ', "")]),
+            configure: None,
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "town-play",
+            frame_kind: "visual town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(Scene::new(0x11).expect("castle scene is valid")),
+                ..PlayOptions::default()
+            },
+            inputs: None,
+            configure: None,
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "dungeon-play",
+            frame_kind: "visual dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(
+                    DungeonScene::new(0x21).expect("dungeon scene is valid"),
+                ),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            inputs: None,
+            configure: None,
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "dungeon-dark",
+            frame_kind: "visual dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(
+                    DungeonScene::new(0x21).expect("dungeon scene is valid"),
+                ),
+                floor: 0,
+                torch_counter: 0,
+                light_spell_counter: 0,
+                ..PlayOptions::default()
+            },
+            inputs: None,
+            configure: None,
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "combat-play",
+            frame_kind: "visual combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                ..PlayOptions::default()
+            },
+            inputs: None,
+            configure: None,
+            synthetic_combat: true,
+        },
+        VisualGameplayFrameCase {
+            label: "z-stats-modal",
+            frame_kind: "visual status modal frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(Scene::new(0x11).expect("castle scene is valid")),
+                ..PlayOptions::default()
+            },
+            inputs: None,
+            configure: Some(|state| {
+                state.z_stats();
+            }),
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "endgame-status",
+            frame_kind: "visual endgame status frame",
+            options: PlayOptions::default(),
+            inputs: None,
+            configure: Some(|state| {
+                state.enter_endgame();
+            }),
+            synthetic_combat: false,
+        },
+    ]
+}
+
+fn seed_visual_suite_combat(state: &mut PlayState) {
+    state.combat_active = true;
+    state.combat_terrain = [[5; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+    state.combat_terrain[0][0] = 12;
+    state.combat_terrain[5][5] = 4;
+    state.combat_terrain[6][5] = 1;
 }
 
 fn run_visual_intro_menu_app(
@@ -1394,6 +1625,161 @@ fn blit_rgba(
     }
 }
 
+fn write_visual_play_report(
+    out_dir: &Path,
+    label: &str,
+    frame_kind: &'static str,
+    state: &mut PlayState,
+    atlas: &TileAtlas,
+    font: &FixedCellFont,
+) -> io::Result<VisualFrameReport> {
+    let rgba = render_visual_play_frame(state, atlas, font);
+    write_visual_report(
+        out_dir,
+        label,
+        VISUAL_PLAY_FRAME_WIDTH,
+        VISUAL_PLAY_FRAME_HEIGHT,
+        frame_kind,
+        rgba,
+    )
+}
+
+fn write_visual_intro_report(
+    out_dir: &Path,
+    label: &str,
+    frame_kind: &'static str,
+    panel: VisualIntroPanel,
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+) -> io::Result<VisualFrameReport> {
+    let mut intro = VisualIntroState {
+        game_dir: game_dir.to_path_buf(),
+        raster_depth,
+        dispatch: UnifiedMenuDispatch::new(),
+        message: String::new(),
+        panel,
+        launch_result: Arc::new(Mutex::new(None)),
+        image_handle: None,
+    };
+    let rgba = render_intro_frame(&mut intro);
+    write_visual_report(
+        out_dir,
+        label,
+        INTRO_FRAMEBUFFER_WIDTH,
+        INTRO_FRAMEBUFFER_HEIGHT,
+        frame_kind,
+        rgba,
+    )
+}
+
+const VISUAL_PLAY_FRAME_WIDTH: u32 = TEXT_WINDOW_RENDER_WIDTH as u32;
+const VISUAL_PLAY_FRAME_HEIGHT: u32 = VIEWPORT_SIZE_PX + TEXT_WINDOW_RENDER_HEIGHT as u32;
+
+fn render_visual_play_frame(
+    state: &mut PlayState,
+    atlas: &TileAtlas,
+    font: &FixedCellFont,
+) -> Vec<u8> {
+    let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+    let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
+    let mut rgba = vec![0; width * height * 4];
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel[3] = 0xff;
+    }
+
+    let viewport = render_framebuffer(state, atlas);
+    let viewport_x = width.saturating_sub(VIEWPORT_SIZE_PX as usize) / 2;
+    blit_rgba(
+        &mut rgba,
+        width,
+        height,
+        &viewport,
+        VIEWPORT_SIZE_PX as usize,
+        VIEWPORT_SIZE_PX as usize,
+        viewport_x,
+        0,
+    );
+
+    let status = render_status_framebuffer(state, "", READY_HINT, font);
+    blit_rgba(
+        &mut rgba,
+        width,
+        height,
+        &status,
+        TEXT_WINDOW_RENDER_WIDTH,
+        TEXT_WINDOW_RENDER_HEIGHT,
+        0,
+        VIEWPORT_SIZE_PX as usize,
+    );
+    rgba
+}
+
+fn write_visual_report(
+    out_dir: &Path,
+    label: &str,
+    width: u32,
+    height: u32,
+    frame_kind: &'static str,
+    rgba: Vec<u8>,
+) -> io::Result<VisualFrameReport> {
+    let byte_hash = hash_bytes(&rgba);
+    let nonblack_pixels = rgba
+        .chunks_exact(4)
+        .filter(|pixel| pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
+        .count();
+    let path = out_dir.join(format!("{label}.png"));
+    write_rgba_png(&path, width, height, rgba)?;
+    Ok(VisualFrameReport {
+        label: label.to_string(),
+        path,
+        width,
+        height,
+        frame_kind,
+        byte_hash,
+        nonblack_pixels,
+    })
+}
+
+fn write_visual_frame_suite_manifest(
+    out_dir: &Path,
+    reports: &[VisualFrameReport],
+) -> io::Result<()> {
+    let mut manifest = String::new();
+    manifest.push_str("# Ultima V Bevy visual frame suite manifest\n");
+    manifest.push_str("# Sanitized: contains dimensions, frame kind, and hashes only.\n");
+    for report in reports {
+        manifest.push_str(&format!(
+            "{}\t{}x{}\t{}\thash {:016x}\tnonblack {}\n",
+            report.label,
+            report.width,
+            report.height,
+            report.frame_kind,
+            report.byte_hash,
+            report.nonblack_pixels
+        ));
+    }
+    std::fs::write(out_dir.join("manifest.txt"), manifest)
+}
+
+fn write_rgba_png(out: &Path, width: u32, height: u32, rgba: Vec<u8>) -> io::Result<()> {
+    let image: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::from_raw(width, height, rgba)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "framebuffer size did not match visual frame dimensions",
+            )
+        })?;
+    if let Some(parent) = out.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+    image
+        .save(out)
+        .map_err(|err| io::Error::other(format!("failed to save {}: {err}", out.display())))?;
+    Ok(())
+}
+
 fn visual_return_to_view_summary(
     game_dir: &Path,
     raster_depth: TileGraphicsDepth,
@@ -1852,18 +2238,26 @@ mod tests {
     };
     use u5_runtime::tlk_control_codes::TLK_TEXT_XOR_MASK;
     use u5_runtime::{
-        Area, BRIT_OOL_FILENAME, CH_FONT_LEN, COMBAT_ARENA_SIDE, Direction, EGA_PALETTE_RGB,
-        GuildShop, Herbalist, IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME, OOL_PLANE_LEN,
-        REAGENT_COUNT, REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET,
+        Area, BRIT_OOL_FILENAME, CH_FONT_LEN, COMBAT_ARENA_SIDE, DEFAULT_GAME_DIR, Direction,
+        EGA_PALETTE_RGB, GuildShop, Herbalist, IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME,
+        OOL_PLANE_LEN, REAGENT_COUNT, REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET,
         SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN,
         SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
-        SHRINE_TABLE_FILE, ShrineVirtue, SurfaceChestVerb, Tavern, TileGraphicsDepth,
-        U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane, dungeon_cell_index,
-        parse_ch_font, world_cell_index, wrap_text_panel_lines,
+        SHRINE_TABLE_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern,
+        TileGraphicsDepth, U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane,
+        dungeon_cell_index, parse_ch_font, world_cell_index, wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
         text.bytes().map(|b| b ^ TLK_TEXT_XOR_MASK).collect()
+    }
+
+    fn temp_output_dir(name: &str) -> PathBuf {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("u5-bevy-frame-suite-{name}-{nonce}"))
     }
 
     fn install_test_conversation(state: &mut PlayState) {
@@ -2055,6 +2449,80 @@ mod tests {
         );
         assert_nonblack_rgba(&rgba);
         assert!(state.endgame.is_some());
+    }
+
+    #[test]
+    fn visual_play_frame_composes_viewport_and_status_surface() {
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+
+        assert_eq!(
+            rgba.len(),
+            (VISUAL_PLAY_FRAME_WIDTH as usize) * (VISUAL_PLAY_FRAME_HEIGHT as usize) * 4
+        );
+        assert!(rgba.chunks_exact(4).all(|pixel| pixel[3] == 0xff));
+        assert_nonblack_rgba(&rgba);
+    }
+
+    #[test]
+    fn visual_frame_suite_local_clean_writes_pngs_and_manifest_when_present() {
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join("CASTLE.DAT").exists()
+            || !game_dir.join(TILES_EGA_FILE).exists()
+            || !game_dir.join(IBM_CH_FILE).exists()
+        {
+            return;
+        }
+
+        let dir = temp_output_dir("suite");
+        let reports = visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
+
+        assert_eq!(reports.len(), 10);
+        for report in &reports {
+            assert!(report.path.exists());
+            assert!(report.nonblack_pixels > 0);
+        }
+        for label in [
+            "world-play",
+            "world-after-step",
+            "town-play",
+            "dungeon-play",
+            "dungeon-dark",
+            "combat-play",
+            "z-stats-modal",
+            "endgame-status",
+        ] {
+            let report = reports
+                .iter()
+                .find(|report| report.label == label)
+                .expect("expected visual gameplay report");
+            assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
+            assert_eq!(report.height, VISUAL_PLAY_FRAME_HEIGHT);
+        }
+        for label in ["intro-menu", "intro-return-to-view"] {
+            let report = reports
+                .iter()
+                .find(|report| report.label == label)
+                .expect("expected visual intro report");
+            assert_eq!(report.width, INTRO_FRAMEBUFFER_WIDTH);
+            assert_eq!(report.height, INTRO_FRAMEBUFFER_HEIGHT);
+        }
+        let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
+        assert!(manifest.contains("world-play"));
+        assert!(manifest.contains("world-after-step"));
+        assert!(manifest.contains("town-play"));
+        assert!(manifest.contains("dungeon-play"));
+        assert!(manifest.contains("dungeon-dark"));
+        assert!(manifest.contains("combat-play"));
+        assert!(manifest.contains("z-stats-modal"));
+        assert!(manifest.contains("endgame-status"));
+        assert!(manifest.contains("intro-menu"));
+        assert!(manifest.contains("intro-return-to-view"));
+        assert!(!manifest.contains("Avatar"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -4,7 +4,7 @@ This matrix summarizes current implementation status against the active
 full-game goal. It is intentionally evidence-oriented: passing tests are useful
 only for the behavior they actually cover.
 
-Last refreshed on 2026-05-19 during the TUI route-smoke coverage work.
+Last refreshed on 2026-05-19 during the Bevy visual frame-suite work.
 
 | Area | Current status | Evidence | Remaining risk |
 |---|---|---|---|
@@ -17,7 +17,7 @@ Last refreshed on 2026-05-19 during the TUI route-smoke coverage work.
 | Shops | Arms, healers, inns, taverns, sages, reagent sellers, guilds, shipwrights, horse traders, and companion flows are modeled. | `shop_runtime` tests and end-to-end talk/shop tests in chunk 21. | Exact bark layout/pacing and every shop content edge should continue to be audited. |
 | Conversations | TLK runner, keyword loop, scoped prompts, action dispatch, shop routing, and dictionary expansion are implemented without committing transcripts. | `conversation_session`, `tlk_runner`, and chunk 21 tests. | Content-specific side effects and NPC memory flags need continuing audit. |
 | Save/load | Known save fields, active objects, spell/reagent stock, transport markers, overlays, dungeon working buffer, and mirror files are covered. | Save/load tests in chunks 03, 12, 23. | Unknown byte preservation must be kept when adding new durable fields. |
-| Rendering | TUI text/raster diagnostics, headless `--save-frame` PNG capture, `--save-frame-suite` PNG batches, Bevy atlas-backed views, route-smoke scripted hashes, and a fixed-cell text-window runtime surface exist for world, town, dungeon, combat, intro, status, and modal panels. The frame suite now writes nonblank world, town, dungeon, combat, intro-menu, status-window, Z-stats-modal, and endgame-status PNGs. The route-smoke suite now runs eighteen asset-backed world/town/dungeon/combat cases including save prompts, look/pass flows, Underworld startup, debug-enter return, seeded ship/skiff routes, dungeon exit prompts, and a Doom room combat trigger. Bevy gameplay status renders the shared text-window surface through the runtime-loaded `IBM.CH` font into a texture. | Raster hash and save-frame-suite notes in `TODO.md`; text-window and fixed-font renderer tests in chunks 13 and 14; `u5-tui` save-frame/play-loop/route-smoke tests; Bevy framebuffer tests for world, town, dungeon, combat, intro, status, and endgame modal surfaces. | Representative Bevy screenshot baselines across all modes are incomplete; exact original modal rectangles and full UI composition parity remain presentation work. |
+| Rendering | TUI text/raster diagnostics, headless `--save-frame` PNG capture, `--save-frame-suite` PNG batches, Bevy atlas-backed views, route-smoke scripted hashes, Bevy `--visual-frame-suite` PNG batches, and a fixed-cell text-window runtime surface exist for world, town, dungeon, combat, intro, status, and modal panels. The TUI frame suite writes nonblank world, town, dungeon, combat, intro-menu, status-window, Z-stats-modal, and endgame-status PNGs. The Bevy visual frame suite writes ten nonblank composed PNGs for initial/stepped world, town, lit and dark dungeon, synthetic combat, Z-stats modal, endgame status, intro menu, and Return-to-View preview. The route-smoke suite now runs eighteen asset-backed world/town/dungeon/combat cases including save prompts, look/pass flows, Underworld startup, debug-enter return, seeded ship/skiff routes, dungeon exit prompts, and a Doom room combat trigger. Bevy gameplay status renders the shared text-window surface through the runtime-loaded `IBM.CH` font into a texture. | Raster hash, save-frame-suite, visual-frame-suite, and route-smoke notes in `TODO.md`; text-window and fixed-font renderer tests in chunks 13 and 14; `u5-tui` save-frame/play-loop/route-smoke tests; Bevy framebuffer and visual frame-suite tests for world, town, dungeon, combat, intro, status, and endgame modal surfaces. | Exact original modal rectangles, full UI composition parity, and a human-reviewed frontend screenshot gallery remain presentation work. |
 | Clean-room hygiene | Runtime reads local assets; repo excludes game assets and generated raw dumps. | `.gitignore`, report policy, parser tests, clean status checks. | Continue reviewing any new reports or fixtures before commit. |
 
 ## Current Verification Baseline
@@ -38,6 +38,7 @@ scene launch with local assets:
 cargo run -- --route-smoke C:\Games\U5-Clean
 cargo run -- --save-frame-suite target\frame-suite C:\Games\U5-Clean
 cargo run -- --save-frame screenshots\britannia.png --scene BRITANNIA C:\Games\U5-Clean
+cargo run --features visual -- --visual-frame-suite target\visual-frame-suite C:\Games\U5-Clean
 cargo run --features visual -- --visual --scene BRITANNIA C:\Games\U5-Clean
 ```
 

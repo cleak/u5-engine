@@ -37,10 +37,21 @@ Last known verification state:
   `7bf01c36de552e16`, `status-window` `bf7a428a4b00ad2b`,
   `z-stats-modal` `61b033bfa2488b46`, and `endgame-status`
   `532cb7f1bdd03ffd`.
+- `cargo run -p u5-tui --features visual -- --visual-frame-suite
+  target\codex-visual-frame-suite C:\Games\U5-Clean` passed on 2026-05-19
+  and wrote ten nonblank Bevy-owned PNGs plus a sanitized manifest:
+  `world-play` `1535c318c10abdc2`, `world-after-step`
+  `c1f56dabe15a1dd6`, `town-play` `8a69be65d1a66571`,
+  `dungeon-play` `ae3f6604682fe64a`, `dungeon-dark`
+  `8ff1e92197ad1dcc`, `combat-play` `312c8b84f28ebe45`,
+  `z-stats-modal` `24f3f0eefd9ccd80`, `endgame-status`
+  `1b4483ca77ac52f9`, `intro-menu` `87ca7353c7391e06`, and
+  `intro-return-to-view` `a52f8c3db8e33102`.
 - Bevy visual screenshot smoke with local assets produced a nonblank
   `792x1182` PNG at `target\codex-fixed-font-status-smoke.png`.
 - Bevy unit framebuffer coverage includes world, town, dungeon, combat, intro,
-  status, and endgame modal surfaces.
+  status, endgame modal surfaces, and the deterministic visual frame-suite
+  compositor.
 - `--save-frame <PATH>` is the current headless PNG capture path for local
   asset visual checks.
 - `cargo run -- --help` is a supported no-asset usage path.
