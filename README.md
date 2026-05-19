@@ -544,16 +544,9 @@ keeps the active dungeon scene, changes to the destination level, and places the
 party at the destination coordinate. The optional cell guard prevents stale
 coordinates from firing after the local dungeon image changes.
 
-Dungeon wind-tile coordinates can be supplied as a clean-room sidecar while the
-exact tile byte remains open in the public spec:
-
-```text
-# DUNGEON LEVEL X Y [CELL]
-DUNGEON:0 0 2 1 0x70
-```
-
-The optional cell guard prevents stale coordinates from firing after the local
-dungeon image changes. Matching rows only act when a torch is currently lit.
+Dungeon gust artwork is treated as ordinary dungeon terrain for torch handling.
+The runtime does not load a wind-tile sidecar or extinguish torches on gust
+contact; torch duration advances through the normal dungeon turn counter.
 
 Immediate dungeon-exit cells use the same clean-room coordinate pattern:
 
@@ -589,8 +582,8 @@ stale row from rewriting an unexpected packed cell, and `OPEN_CELL` can be an
 0xF open-door variant that the sidecar marks as walkable and prevents from
 firing as a room trigger before the command handler runs.
 
-Authored dungeon chest grants can be supplied while the original random
-content/trap table remains open:
+Authored dungeon chest grants can be supplied as deterministic overrides for
+fixtures and clean-room scenarios:
 
 ```text
 # DUNGEON LEVEL X Y CELL|* ITEM AMOUNT [ITEM AMOUNT ...]
@@ -600,8 +593,9 @@ DUNGEON:0 0 1 1 0x4c GOLD 12 GEMS 1
 Matching `dungeon_chests.tsv` rows are consumed by dungeon `O`, `G`, `S`, and
 the narrow `C1AS` An Sanct/Open spell chest interactions before the visit-local
 cell is marked as opened. The cell guard prevents stale authored contents from
-applying after the local dungeon image changes; `*` skips that guard. Supported
-first-playable grant families are food, gold, keys, gems, and torches.
+applying after the local dungeon image changes; `*` skips that guard. If no
+row matches, the runtime uses the published dungeon chest reward generator.
+Supported authored grant families are food, gold, keys, gems, and torches.
 
 Town stair direction can be supplied as clean-room sidecar metadata while the
 exact surface stair subtype table remains open:
