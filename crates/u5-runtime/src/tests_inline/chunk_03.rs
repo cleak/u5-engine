@@ -18,6 +18,8 @@
         let mut existing_ool = vec![0; SAVED_OOL_LEN];
         write_ool_object(&mut existing_ool[..OOL_PLANE_LEN], 1, britannia_object);
         fs::write(dir.join("SAVED.OOL"), existing_ool).unwrap();
+        fs::write(dir.join("BRIT.OOL"), vec![0x11; OOL_PLANE_LEN]).unwrap();
+        fs::write(dir.join("UNDER.OOL"), vec![0x22; OOL_PLANE_LEN]).unwrap();
         let underworld_object = ActiveObject {
             type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
             tile: FIRST_PLAYABLE_FRIGATE_TILE,
@@ -239,6 +241,14 @@
         let underworld_overlay = decode_ool_plane_objects(&saved_ool[OOL_PLANE_LEN..]).unwrap();
         assert_eq!(britannia_overlay[0], britannia_object);
         assert_eq!(underworld_overlay[0], underworld_object);
+        assert_eq!(
+            fs::read(dir.join("BRIT.OOL")).unwrap(),
+            saved_ool[..OOL_PLANE_LEN].to_vec()
+        );
+        assert_eq!(
+            fs::read(dir.join("UNDER.OOL")).unwrap(),
+            saved_ool[OOL_PLANE_LEN..].to_vec()
+        );
         assert!(state.message.contains("Done."));
         let _ = fs::remove_dir_all(dir);
     }

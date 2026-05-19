@@ -190,8 +190,9 @@ impl PlayState {
             .copy_from_slice(&active_table);
 
         let saved_ool = self.encode_saved_ool(game_dir)?;
-        fs::write(game_dir.join("SAVED.GAM"), save)?;
-        fs::write(game_dir.join("SAVED.OOL"), saved_ool)?;
+        write_saved_ool_mirrors(game_dir, &saved_ool)?;
+        fs::write(game_dir.join(SAVED_GAM_FILENAME), save)?;
+        fs::write(game_dir.join(SAVED_OOL_FILENAME), saved_ool)?;
         Ok(())
     }
 

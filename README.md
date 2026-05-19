@@ -1087,11 +1087,12 @@ the public load-time mirror contract before gameplay starts.
 
 During top-down play, uppercase `Q` opens the public save-and-continue prompt,
 with inline confirmation shortcuts still accepted: enter `QY` to write
-`SAVED.GAM` and canonical `SAVED.OOL`, or `QN` to cancel. The first-playable writer
-intentionally leaves `INIT.GAM`, `INIT.OOL`, `BRIT.OOL`, `UNDER.OOL`, and static
-map assets alone; dungeon-mode saves write the current 512-byte dungeon working
-buffer into the save image. After `--from-init`, unresolved `SAVED.GAM` bytes are
-templated from `INIT.GAM` instead of any stale saved game.
+`SAVED.GAM`, canonical `SAVED.OOL`, and refreshed `BRIT.OOL` / `UNDER.OOL`
+per-plane mirrors, or `QN` to cancel. The first-playable writer intentionally
+leaves `INIT.GAM`, `INIT.OOL`, and static map assets alone; dungeon-mode saves
+write the current 512-byte dungeon working buffer into the save image. After
+`--from-init`, unresolved `SAVED.GAM` bytes are templated from `INIT.GAM` instead
+of any stale saved game.
 
 Use `--from-init` to seed the same harness from `INIT.GAM` without running
 character creation:

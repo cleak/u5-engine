@@ -398,6 +398,19 @@ pub const fn active_object_eviction_phase(byte0: u8, off_screen: bool) -> Option
 
 pub fn refresh_saved_ool_mirrors_for_load(game_dir: &Path) -> io::Result<()> {
     let bytes = read_saved_ool_bytes(game_dir)?;
+    write_saved_ool_mirrors(game_dir, &bytes)
+}
+
+pub fn write_saved_ool_mirrors(game_dir: &Path, bytes: &[u8]) -> io::Result<()> {
+    if bytes.len() != SAVED_OOL_LEN {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "SAVED.OOL mirror payload must be {SAVED_OOL_LEN} bytes, got {}",
+                bytes.len()
+            ),
+        ));
+    }
     fs::write(game_dir.join(BRIT_OOL_FILENAME), &bytes[..OOL_PLANE_LEN])?;
     fs::write(game_dir.join(UNDER_OOL_FILENAME), &bytes[OOL_PLANE_LEN..])?;
     Ok(())
