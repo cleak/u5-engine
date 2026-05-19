@@ -707,6 +707,111 @@
     }
 
     #[test]
+    fn world_plane_transition_save_load_round_trips_both_plane_overlays() {
+        let dir = debug_game_dir();
+        write_save_template_and_empty_overlays(&dir, 0, 0, 10, 20);
+        let britannia_object = ActiveObject {
+            type_byte: 168,
+            tile: 168,
+            x: 11,
+            y: 20,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 7,
+            aux3: 1,
+        };
+        let underworld_object = ActiveObject {
+            type_byte: 194,
+            tile: 194,
+            x: 31,
+            y: 40,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0x22,
+            aux1: 0,
+            aux3: 0,
+        };
+        let updated_underworld_object = ActiveObject {
+            type_byte: 194,
+            tile: 195,
+            x: 32,
+            y: 41,
+            z: WorldPlane::Underworld.save_floor(),
+            phase: 0x33,
+            aux1: 4,
+            aux3: 5,
+        };
+        let mut state = britannia_state(open_world_grid(), 10, 20);
+        state.active_objects.push(britannia_object);
+        let mut cached_underworld = vec![ActiveObject::empty(); OOL_SLOTS - 1];
+        cached_underworld[0] = underworld_object;
+        state
+            .world_overlays
+            .set(WorldPlane::Underworld, cached_underworld);
+
+        state
+            .apply_world_plane_transition(
+                &dir,
+                WorldPlaneTransitionEntry {
+                    from_plane: WorldPlane::Britannia,
+                    x: 11,
+                    y: 20,
+                    to_plane: WorldPlane::Underworld,
+                    to_x: 30,
+                    to_y: 40,
+                    expected_tile: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(state.active_objects[1], underworld_object);
+        state.active_objects[1] = updated_underworld_object;
+
+        assert_eq!(
+            state.save_game_command(&dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+
+        let saved_gam = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+        assert_eq!(saved_gam[SAVE_SCENE_OFFSET], 0);
+        assert_eq!(saved_gam[SAVE_Z_OFFSET], 0xff);
+        assert_eq!(saved_gam[SAVE_X_OFFSET], 30);
+        assert_eq!(saved_gam[SAVE_Y_OFFSET], 40);
+        let active_table = decode_saved_active_objects(&saved_gam).unwrap();
+        assert_eq!(active_table[0], updated_underworld_object);
+
+        let saved_ool = fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap();
+        let britannia_overlay = decode_ool_plane_objects(&saved_ool[..OOL_PLANE_LEN]).unwrap();
+        let underworld_overlay = decode_ool_plane_objects(&saved_ool[OOL_PLANE_LEN..]).unwrap();
+        assert_eq!(britannia_overlay[0], britannia_object);
+        assert_eq!(underworld_overlay[0], updated_underworld_object);
+        assert_eq!(
+            fs::read(dir.join(BRIT_OOL_FILENAME)).unwrap(),
+            saved_ool[..OOL_PLANE_LEN].to_vec()
+        );
+        assert_eq!(
+            fs::read(dir.join(UNDER_OOL_FILENAME)).unwrap(),
+            saved_ool[OOL_PLANE_LEN..].to_vec()
+        );
+
+        let options = load_play_options_from_save(&dir).unwrap();
+        assert_eq!(options.target, PlayTarget::World(WorldPlane::Underworld));
+        assert_eq!(options.start, Some((30, 40)));
+        assert_eq!(
+            options.saved_active_objects.as_ref().unwrap()[0],
+            updated_underworld_object
+        );
+        let reloaded = PlayState::load_scene(&dir, options).unwrap();
+        assert_eq!(
+            reloaded.area,
+            Area::World {
+                plane: WorldPlane::Underworld
+            }
+        );
+        assert_eq!((reloaded.player.x, reloaded.player.y), (30, 40));
+        assert_eq!(reloaded.active_objects[1], updated_underworld_object);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn ool_decoder_keeps_non_player_slot_shape_and_skips_slot_zero() {
         let mut bytes = vec![0; OOL_PLANE_LEN];
         bytes[0] = 0xaa;

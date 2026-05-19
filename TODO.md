@@ -371,11 +371,10 @@ first-playable session without losing supported state.
 - Active objects.
   - Existing work preserves embedded active-object rows and relinks scheduled
     NPCs. Transition-save regressions now cover town floor changes, dungeon
-    level teleports with a live working buffer, and dungeon exits back to an
-    overworld plane.
+    level teleports with a live working buffer, dungeon exits back to an
+    overworld plane, and both world overlay halves after plane transitions.
   - Remaining work:
     - audit all active-object mutations for save inclusion,
-    - verify world overlay cache behavior across plane transitions,
     - verify parked vehicle persistence after board/exit/fire/removal,
     - continue broadening save/load transition coverage when new public
       transition tables are promoted out of sidecars.
