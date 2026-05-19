@@ -8,11 +8,12 @@ use std::path::Path;
 
 use u5_runtime::{
     Area, DungeonScene, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, GameClock,
-    PEER_COST, PEER_SPELL_INDEX, PlayOptions, PlayState, PlayTarget,
+    PEER_COST, PEER_SPELL_INDEX, PlayOptions, PlayState, PlayTarget, SCENE_JHELOM, SCENE_MOONGLOW,
+    SCENE_STONEGATE, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
     SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
-    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX,
-    SPECIAL_ITEM_WOODEN_BOX_INDEX, Scene, TileGraphicsDepth, TransportState, WindState, WorldPlane,
-    X_RAY_COST, X_RAY_SPELL_INDEX, load_tile_atlas,
+    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX,
+    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, Scene, TileGraphicsDepth,
+    TransportState, WindState, WorldPlane, X_RAY_COST, X_RAY_SPELL_INDEX, load_tile_atlas,
 };
 
 use crate::{
@@ -67,6 +68,8 @@ pub struct RouteSmokeReport {
 
 pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
     let castle = Scene::new(0x11).expect("castle scene is valid");
+    let shadowlord_town = Scene::new(SCENE_MOONGLOW).expect("Shadowlord hideout town is valid");
+    let stonegate = Scene::new(SCENE_STONEGATE).expect("Stonegate scene is valid");
     let dungeon = DungeonScene::new(0x21).expect("dungeon scene is valid");
     let doom = DungeonScene::new(0x28).expect("doom dungeon scene is valid");
 
@@ -158,6 +161,27 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
 
     let mut wooden_box = PlayOptions::default();
     wooden_box.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+
+    let mut shadowlord_town_entry = PlayOptions {
+        target: PlayTarget::Town(shadowlord_town),
+        ..PlayOptions::default()
+    };
+    shadowlord_town_entry.shadowlord_hideouts = [
+        SCENE_MOONGLOW,
+        SHADOWLORD_HIDEOUT_VANQUISHED,
+        SHADOWLORD_HIDEOUT_VANQUISHED,
+    ];
+
+    let mut shadowlord_town_yell = shadowlord_town_entry.clone();
+    shadowlord_town_yell.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = SCENE_MOONGLOW;
+
+    let mut stonegate_entry = PlayOptions {
+        target: PlayTarget::Town(stonegate),
+        ..PlayOptions::default()
+    };
+    stonegate_entry.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    stonegate_entry.shadowlord_hideouts =
+        [SCENE_MOONGLOW, SHADOWLORD_HIDEOUT_VANQUISHED, SCENE_JHELOM];
 
     let mut castle_view = PlayOptions::default();
     castle_view.gems = 1;
@@ -275,6 +299,30 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: wooden_box,
             script: &["UB"],
             expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "virtue-town-shadowlord-entry",
+            options: shadowlord_town_entry,
+            script: &[],
+            expected: RouteSmokeExpectation::Town(shadowlord_town),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "virtue-town-shadowlord-yell",
+            options: shadowlord_town_yell,
+            script: &["YFAULINEI"],
+            expected: RouteSmokeExpectation::Town(shadowlord_town),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "stonegate-shadowlord-entry",
+            options: stonegate_entry,
+            script: &[],
+            expected: RouteSmokeExpectation::Town(stonegate),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
         },

@@ -24,12 +24,15 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-19 with 50 scripted route cases covering world/town look and
+  2026-05-19 with 53 scripted route cases covering world/town look and
   save-refusal prompts, surface/town/dungeon View overlays, Spyglass
   Britannia chunk-map overlay (`2ea15622716e09aa`), Peer and X-Ray overlays,
   U-Use utility items including Pocket Watch/Sextant/Magic Carpet
   (`c2f7ff2c1000c8fd`), HMS Cape plans (`8c425fda6007db98`), and Wooden Box
   (`d5684b90a48f2d73`),
+  Shadowlord town entry (`1e04222a325a2f67`), Shadowlord-name Yell
+  (`abad79297a559cd2`), Stonegate Shadowlord entry presentation
+  (`c7190c94f55a2af2`),
   H-Hole-up rest in Britannia (`8d7e6e0336279317`) and a dungeon
   (`22ccb05a46f3140e`), Underworld startup, debug-entered town return to world,
   Underworld-to-town debug entry, ship X-it/skiff launch, hoisted-sail movement,

@@ -767,6 +767,21 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "castle-wooden-box-use")
     );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "virtue-town-shadowlord-entry")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "virtue-town-shadowlord-yell")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "stonegate-shadowlord-entry")
+    );
     assert!(cases.iter().any(|case| case.name == "castle-view-overlay"));
     assert!(cases.iter().any(|case| case.name == "castle-peer-overlay"));
     assert!(cases.iter().any(|case| case.name == "castle-x-ray-overlay"));
