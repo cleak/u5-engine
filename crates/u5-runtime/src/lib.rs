@@ -20,6 +20,7 @@ pub mod combat_scenario;
 pub mod combat_setup;
 pub mod combat_stats;
 pub mod commands;
+pub mod common_words_io;
 pub mod constants;
 pub mod containers;
 pub mod conversation_session;
@@ -182,6 +183,11 @@ pub use commands::{
     local_view_class_for_tile, new_order_outcome, new_order_swap_accepted, pushable_facing_index,
     pushable_oriented_tile, pushable_tile_family, town_fountain_drink_accepts,
     view_command_outcome, wishing_well_wish_accepted,
+};
+pub use common_words_io::{
+    COMMON_WORD_DICTIONARY_FILE, CommonWordDictionary, CommonWordDictionaryError,
+    common_word_dictionary_refs, load_common_word_dictionary_optional,
+    parse_common_word_dictionary,
 };
 pub use constants::*;
 pub use containers::{

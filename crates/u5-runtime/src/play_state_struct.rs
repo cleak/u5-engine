@@ -88,6 +88,7 @@ pub struct PlayState {
     pub blackthorn_audience_map: Option<MiscmapsCutsceneMap>,
     pub blackthorn_jailed_party_slots: Vec<u8>,
     pub active_shop: Option<crate::shop_session::ActiveShopSession>,
+    pub common_word_dictionary: Option<crate::common_words_io::CommonWordDictionary>,
     pub active_conversation: Option<Box<crate::conversation_session::ConversationSession>>,
     pub active_z_stats: Option<crate::z_stats::ZStatsSession>,
     pub active_ready: Option<crate::z_stats::ReadySession>,

@@ -2121,6 +2121,63 @@
     }
 
     #[test]
+    fn raw_conversation_session_expands_loaded_common_word_dictionary() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Maris".to_string(),
+                "a quiet sage".to_string(),
+                "fallback greeting".to_string(),
+                "fallback job".to_string(),
+                "Farewell".to_string(),
+            ],
+        );
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Maris"),
+                enc("a quiet sage"),
+                vec![0x01],
+                enc("I read books"),
+                enc("Farewell"),
+            ],
+        );
+
+        let mut dictionary = std::array::from_fn(|_| String::new());
+        dictionary[0] = "Greetings".to_string();
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.common_word_dictionary = Some(dictionary);
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+            MoveOutcome::Talked
+        );
+        assert!(state.message.contains("Greetings"));
+        assert!(!state.message.contains("[w00]"));
+    }
+
+    #[test]
     fn submit_conversation_keyword_returns_job_response() {
         let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
         dialogue.insert(

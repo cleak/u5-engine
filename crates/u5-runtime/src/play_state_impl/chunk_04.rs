@@ -2287,6 +2287,7 @@ impl PlayState {
         let dialogue = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let raw_blob = parse_tlk_raw(&game_dir.join(format!("{}.TLK", scene.family.stem())))
             .unwrap_or_default();
+        self.common_word_dictionary = load_common_word_dictionary_optional(game_dir)?;
         Ok(self
             .talk_direction_with_dialogue_and_keyword_raw(direction, &dialogue, &raw_blob, keyword))
     }
@@ -2557,11 +2558,13 @@ impl PlayState {
         let branch_flags = scene_for_flags
             .map(|scene| self.talk_branch_slot_for_scene(scene))
             .unwrap_or(0);
+        let dictionary_owned = self.common_word_dictionary.clone();
+        let dictionary_refs = dictionary_owned.as_ref().map(common_word_dictionary_refs);
         let inputs = crate::tlk_runner::TlkRunInputs {
             avatar_name: &avatar_name,
             branch_flags,
             moral_standing: self.moral_standing,
-            dictionary: None,
+            dictionary: dictionary_refs.as_ref(),
             curse_seen: false,
             gold_payment_accepted: true,
             gold_available: Some(self.gold),
@@ -2767,11 +2770,13 @@ impl PlayState {
             Area::Town { scene, .. } => self.talk_branch_slot_for_scene(scene),
             _ => 0,
         };
+        let dictionary_owned = self.common_word_dictionary.clone();
+        let dictionary_refs = dictionary_owned.as_ref().map(common_word_dictionary_refs);
         let inputs = crate::tlk_runner::TlkRunInputs {
             avatar_name: &avatar_name,
             branch_flags,
             moral_standing: self.moral_standing,
-            dictionary: None,
+            dictionary: dictionary_refs.as_ref(),
             curse_seen: false,
             gold_payment_accepted: true,
             gold_available: Some(self.gold),
@@ -2858,11 +2863,13 @@ impl PlayState {
             .map(|name| name.iter().take_while(|b| **b != 0).copied().collect())
             .collect();
         let party_member_names: Vec<&[u8]> = party_name_bytes.iter().map(Vec::as_slice).collect();
+        let dictionary_owned = self.common_word_dictionary.clone();
+        let dictionary_refs = dictionary_owned.as_ref().map(common_word_dictionary_refs);
         let ctx = crate::conversation_session::ConversationContext {
             avatar_name: &avatar_name,
             branch_flags,
             moral_standing: self.moral_standing,
-            dictionary: None,
+            dictionary: dictionary_refs.as_ref(),
             gold_payment_accepted: true,
             gold_available: Some(self.gold),
             party_member_names: &party_member_names,
@@ -2905,11 +2912,13 @@ impl PlayState {
             .map(|name| name.iter().take_while(|b| **b != 0).copied().collect())
             .collect();
         let party_member_names: Vec<&[u8]> = party_name_bytes.iter().map(Vec::as_slice).collect();
+        let dictionary_owned = self.common_word_dictionary.clone();
+        let dictionary_refs = dictionary_owned.as_ref().map(common_word_dictionary_refs);
         let ctx = crate::conversation_session::ConversationContext {
             avatar_name: &avatar_name,
             branch_flags,
             moral_standing: self.moral_standing,
-            dictionary: None,
+            dictionary: dictionary_refs.as_ref(),
             gold_payment_accepted: true,
             gold_available: Some(self.gold),
             party_member_names: &party_member_names,
