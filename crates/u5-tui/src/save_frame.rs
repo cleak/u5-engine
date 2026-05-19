@@ -108,6 +108,9 @@ pub fn save_frame_suite(
     }
     for report in [
         save_frame_suite_combat(game_dir, raster_depth, &out_dir.join("combat.png"))?,
+        save_frame_suite_intro_menu(&out_dir.join("intro-menu.png"))?,
+        save_frame_suite_status_window(game_dir, &out_dir.join("status-window.png"))?,
+        save_frame_suite_z_stats(game_dir, &out_dir.join("z-stats-modal.png"))?,
         save_frame_suite_endgame(game_dir, &out_dir.join("endgame-status.png"))?,
     ] {
         if report.nonblack_pixels == 0 {
@@ -264,14 +267,58 @@ fn save_frame_suite_combat(
     save_frame_capture_state(state, &atlas, out)
 }
 
+fn save_frame_suite_intro_menu(out: &Path) -> io::Result<SavedFrameReport> {
+    let text = [
+        "Ultima V",
+        "",
+        "Intro Menu",
+        "  J  Journey Onward",
+        "  C  Create New Character",
+        "  T  Transfer from Ultima IV",
+        "  U  Ultima V Introduction",
+        "  A  Acknowledgements",
+        "  R  Return to View",
+        "",
+        "Selection:",
+    ]
+    .join("\n");
+    save_text_window_report(out, "intro text window", &text, None)
+}
+
+fn save_frame_suite_status_window(game_dir: &Path, out: &Path) -> io::Result<SavedFrameReport> {
+    let mut state = PlayState::load_scene(game_dir, PlayOptions::default())?;
+    state.message = "Status frame suite checkpoint.".to_string();
+    let text = state.render_text_window_frame(None);
+    save_text_window_report(out, "text window", &text, Some(&state))
+}
+
+fn save_frame_suite_z_stats(game_dir: &Path, out: &Path) -> io::Result<SavedFrameReport> {
+    let mut state = PlayState::load_scene(
+        game_dir,
+        PlayOptions {
+            target: PlayTarget::Town(Scene::new(0x11).expect("castle scene is valid")),
+            ..PlayOptions::default()
+        },
+    )?;
+    state.z_stats();
+    let text = state.render_text_window_frame(None);
+    save_text_window_report(out, "z-stats text window", &text, Some(&state))
+}
+
 fn save_frame_suite_endgame(game_dir: &Path, out: &Path) -> io::Result<SavedFrameReport> {
     let mut state = PlayState::load_scene(game_dir, PlayOptions::default())?;
     state.enter_endgame();
-    let rgba = render_text_panel_rgba(
-        &state.render_text_window_frame(None),
-        TEXT_WINDOW_RENDER_WIDTH,
-        TEXT_WINDOW_RENDER_HEIGHT,
-    )?;
+    let text = state.render_text_window_frame(None);
+    save_text_window_report(out, "text window", &text, Some(&state))
+}
+
+fn save_text_window_report(
+    out: &Path,
+    frame_kind: &'static str,
+    text: &str,
+    state: Option<&PlayState>,
+) -> io::Result<SavedFrameReport> {
+    let rgba = render_text_panel_rgba(text, TEXT_WINDOW_RENDER_WIDTH, TEXT_WINDOW_RENDER_HEIGHT)?;
     let byte_hash = hash_bytes(&rgba);
     let nonblack_pixels = rgba
         .chunks_exact(4)
@@ -292,11 +339,13 @@ fn save_frame_suite_endgame(game_dir: &Path, out: &Path) -> io::Result<SavedFram
         path: out.to_path_buf(),
         width: TEXT_WINDOW_RENDER_WIDTH as u32,
         height: TEXT_WINDOW_RENDER_HEIGHT as u32,
-        frame_kind: "text window",
-        player_x: state.player.x,
-        player_y: state.player.y,
-        facing: u5_runtime::Direction::name(state.player.facing),
-        turn: state.turn,
+        frame_kind,
+        player_x: state.map_or(0, |state| state.player.x),
+        player_y: state.map_or(0, |state| state.player.y),
+        facing: state.map_or("-", |state| {
+            u5_runtime::Direction::name(state.player.facing)
+        }),
+        turn: state.map_or(0, |state| state.turn),
         byte_hash,
         nonblack_pixels,
     })
@@ -395,7 +444,7 @@ mod tests {
         let dir = temp_output_dir("suite");
         let reports = save_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 6);
+        assert_eq!(reports.len(), 9);
         for report in &reports {
             assert!(report.path.exists());
             assert!(report.nonblack_pixels > 0);
@@ -414,11 +463,22 @@ mod tests {
             .expect("expected endgame text-window report");
         assert_eq!(endgame.width, TEXT_WINDOW_RENDER_WIDTH as u32);
         assert_eq!(endgame.height, TEXT_WINDOW_RENDER_HEIGHT as u32);
+        for label in ["intro-menu", "status-window", "z-stats-modal"] {
+            let report = reports
+                .iter()
+                .find(|report| report.label == label)
+                .expect("expected text-window report");
+            assert_eq!(report.width, TEXT_WINDOW_RENDER_WIDTH as u32);
+            assert_eq!(report.height, TEXT_WINDOW_RENDER_HEIGHT as u32);
+        }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
         assert!(manifest.contains("britannia"));
         assert!(manifest.contains("castle"));
         assert!(manifest.contains("dungeon"));
         assert!(manifest.contains("combat"));
+        assert!(manifest.contains("intro-menu"));
+        assert!(manifest.contains("status-window"));
+        assert!(manifest.contains("z-stats-modal"));
         assert!(manifest.contains("endgame-status"));
         assert!(!manifest.contains("Avatar"));
         let _ = fs::remove_dir_all(dir);

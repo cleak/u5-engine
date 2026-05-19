@@ -26,10 +26,12 @@ Last known verification state:
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
   2026-05-19 with six scripted route cases.
 - `cargo run -p u5-tui -- --save-frame-suite target\codex-frame-suite
-  C:\Games\U5-Clean` passed on 2026-05-19 and wrote six nonblank PNGs:
+  C:\Games\U5-Clean` passed on 2026-05-19 and wrote nine nonblank PNGs:
   `britannia` `859a1bdabe5c9b7a`, `britannia-step` `05b13e47da048fe6`,
   `castle` `bda625019405af09`, lit `dungeon` `91ea22aa5e09c692`,
-  synthetic `combat` `b4cbe49dac94affd`, and `endgame-status`
+  synthetic `combat` `b4cbe49dac94affd`, `intro-menu`
+  `7bf01c36de552e16`, `status-window` `bf7a428a4b00ad2b`,
+  `z-stats-modal` `61b033bfa2488b46`, and `endgame-status`
   `532cb7f1bdd03ffd`.
 - Bevy visual screenshot smoke with local assets produced a nonblank
   `792x1182` PNG at `target\codex-fixed-font-status-smoke.png`.
