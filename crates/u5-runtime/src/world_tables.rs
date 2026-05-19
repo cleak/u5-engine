@@ -61,6 +61,7 @@ pub enum ObjectPickupKind {
     Potion(usize),
     Scroll(usize),
     Equipment(usize),
+    Moonstone(usize),
     MagicCarpet,
     HmsCapePlans,
     SandalwoodBox,
@@ -86,6 +87,9 @@ impl ObjectPickupKind {
         }
         if let Some(index) = parse_indexed_pickup_key(&key, "shard", SHADOWLORD_COUNT) {
             return Some(Self::ShadowlordShard(index));
+        }
+        if let Some(index) = parse_indexed_pickup_key(&key, "moonstone", MOONSTONE_SLOT_COUNT) {
+            return Some(Self::Moonstone(index));
         }
         match key.as_str() {
             "food" | "ration" | "rations" => Some(Self::Food),
@@ -126,6 +130,7 @@ impl ObjectPickupKind {
                 SCROLL_SPELL_LABELS.get(index).copied().unwrap_or("unknown")
             ),
             Self::Equipment(index) => equipment_name(index).to_string(),
+            Self::Moonstone(index) => format!("Moonstone phase {}", index + 1),
             Self::MagicCarpet => "magic carpet".to_string(),
             Self::HmsCapePlans => "HMS Cape plans".to_string(),
             Self::SandalwoodBox => "sandalwood box".to_string(),

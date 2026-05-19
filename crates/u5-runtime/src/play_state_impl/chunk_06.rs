@@ -1270,6 +1270,39 @@ impl PlayState {
         Ok(Some(MoveOutcome::Got))
     }
 
+    pub fn get_native_object_pickup_at(&mut self, x: usize, y: usize) -> Option<MoveOutcome> {
+        let (slot, object) = self
+            .active_objects
+            .iter()
+            .copied()
+            .enumerate()
+            .skip(1)
+            .find(|(_, object)| {
+                self.object_occupies(*object, x, y) && gettable_object_visual(object.tile)
+            })?;
+
+        let Some(grant) = native_object_pickup_grant(object) else {
+            self.message = match inventory_add_class(object.type_byte) {
+                InventoryAddClass::MustOpenFirst => "Must open it first.".to_string(),
+                _ => "Nothing to get here.".to_string(),
+            };
+            return Some(MoveOutcome::Blocked);
+        };
+
+        self.free_active_object_slot(slot);
+        self.apply_object_pickup(grant.kind, grant.amount);
+        self.cache_current_world_overlay();
+        self.mark_visibility_dirty();
+        self.advance_turn();
+        self.message = format!(
+            "Got {} {} from active-object tile {} at ({x}, {y}).",
+            grant.amount,
+            grant.kind.label(),
+            object.tile
+        );
+        Some(MoveOutcome::Got)
+    }
+
     pub fn apply_object_pickup(&mut self, kind: ObjectPickupKind, amount: u8) {
         match kind {
             ObjectPickupKind::Food => {
@@ -1314,6 +1347,11 @@ impl PlayState {
                 if let Some(stock) = self.equipment_stock.get_mut(index) {
                     let units = inventory_add_equipment_units(index).saturating_mul(amount);
                     *stock = stock.saturating_add(units).min(PARTY_BYTE_STOCK_CAP);
+                }
+            }
+            ObjectPickupKind::Moonstone(index) => {
+                if index < MOONSTONE_SLOT_COUNT {
+                    self.moonstone_slots[index] = MoonstoneGateSlot::invalid();
                 }
             }
             ObjectPickupKind::MagicCarpet => {
@@ -1417,6 +1455,9 @@ impl PlayState {
         )? {
             return Ok(outcome);
         }
+        if let Some(outcome) = self.get_native_object_pickup_at(tx, ty) {
+            return Ok(outcome);
+        }
         if self.surface_object_chest_slot_at(tx, ty).is_some() {
             return Ok(self.start_surface_object_chest_prompt(tx, ty, SurfaceChestVerb::Get));
         }
@@ -1488,6 +1529,9 @@ impl PlayState {
         if let Some(outcome) =
             self.get_object_pickup_at(game_dir, PlayTarget::Town(scene), floor, tx, ty)?
         {
+            return Ok(outcome);
+        }
+        if let Some(outcome) = self.get_native_object_pickup_at(tx, ty) {
             return Ok(outcome);
         }
         if self.surface_object_chest_slot_at(tx, ty).is_some() {
@@ -2304,6 +2348,92 @@ impl PlayState {
         );
         MoveOutcome::Searched
     }
+}
+
+fn native_object_pickup_grant(object: ActiveObject) -> Option<ObjectPickupGrant> {
+    let subtype = object.aux1;
+    let grant = match inventory_add_class(object.type_byte) {
+        InventoryAddClass::MustOpenFirst | InventoryAddClass::NothingToGet => return None,
+        InventoryAddClass::Gold => ObjectPickupGrant {
+            kind: ObjectPickupKind::Gold,
+            amount: subtype,
+        },
+        InventoryAddClass::Potion => ObjectPickupGrant {
+            kind: ObjectPickupKind::Potion((subtype & SCROLL_GRANT_LABEL_MASK) as usize),
+            amount: 1,
+        },
+        InventoryAddClass::ScrollOrPlans => {
+            if subtype & !SCROLL_GRANT_LABEL_MASK != 0 {
+                ObjectPickupGrant {
+                    kind: ObjectPickupKind::HmsCapePlans,
+                    amount: 1,
+                }
+            } else {
+                ObjectPickupGrant {
+                    kind: ObjectPickupKind::Scroll(scroll_grant_label_id(subtype) as usize),
+                    amount: 1,
+                }
+            }
+        }
+        InventoryAddClass::Equipment => ObjectPickupGrant {
+            kind: ObjectPickupKind::Equipment(subtype as usize),
+            amount: 1,
+        },
+        InventoryAddClass::Key => {
+            if subtype & 0x80 != 0 {
+                ObjectPickupGrant {
+                    kind: ObjectPickupKind::SkullKeys,
+                    amount: subtype & 0x7f,
+                }
+            } else {
+                ObjectPickupGrant {
+                    kind: ObjectPickupKind::Keys,
+                    amount: subtype,
+                }
+            }
+        }
+        InventoryAddClass::Gem => ObjectPickupGrant {
+            kind: ObjectPickupKind::Gems,
+            amount: subtype,
+        },
+        InventoryAddClass::Torch => ObjectPickupGrant {
+            kind: ObjectPickupKind::Torches,
+            amount: subtype,
+        },
+        InventoryAddClass::SandalwoodBox => ObjectPickupGrant {
+            kind: ObjectPickupKind::SandalwoodBox,
+            amount: 1,
+        },
+        InventoryAddClass::Food => ObjectPickupGrant {
+            kind: ObjectPickupKind::Food,
+            amount: subtype,
+        },
+        InventoryAddClass::Moonstone => ObjectPickupGrant {
+            kind: ObjectPickupKind::Moonstone(subtype as usize),
+            amount: 1,
+        },
+        InventoryAddClass::MagicCarpet => ObjectPickupGrant {
+            kind: ObjectPickupKind::MagicCarpet,
+            amount: 1,
+        },
+        InventoryAddClass::ShadowlordShard => ObjectPickupGrant {
+            kind: ObjectPickupKind::ShadowlordShard(subtype as usize),
+            amount: 1,
+        },
+        InventoryAddClass::CrownOfLordBritish => ObjectPickupGrant {
+            kind: ObjectPickupKind::CrownOfLordBritish,
+            amount: 1,
+        },
+        InventoryAddClass::SceptreOfLordBritish => ObjectPickupGrant {
+            kind: ObjectPickupKind::SceptreOfLordBritish,
+            amount: 1,
+        },
+        InventoryAddClass::AmuletOfLordBritish => ObjectPickupGrant {
+            kind: ObjectPickupKind::AmuletOfLordBritish,
+            amount: 1,
+        },
+    };
+    Some(grant)
 }
 
 #[derive(Clone, Copy)]

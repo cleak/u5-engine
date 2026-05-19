@@ -216,6 +216,26 @@ pub const fn inventory_add_class(class_code: u8) -> InventoryAddClass {
     }
 }
 
+/// `containers.md §3`: active-object pickups use a visual filter
+/// before the separate inventory-add class byte is decoded. The
+/// loose item-art band occupies the item sprite window after tile-bank
+/// folding, and a few low-byte special markers are accepted by their
+/// owning pickup paths.
+pub const GETTABLE_LOOSE_OBJECT_VISUAL_FIRST: u8 = 0x80;
+pub const GETTABLE_LOOSE_OBJECT_VISUAL_LAST: u8 = 0xbf;
+pub const GETTABLE_MAGIC_CARPET_VISUAL: u8 = 0x1b;
+
+/// `containers.md §3`: returns true when an active-object tile is
+/// accepted by `G` Get's native object-table scan. The returned value
+/// says only that the visual is pickup-shaped; inventory identity is
+/// decoded from the object's separate class/subtype bytes.
+pub const fn gettable_object_visual(tile: u8) -> bool {
+    tile == crate::FIRST_PLAYABLE_MOONSTONE_PICKUP_TILE
+        || tile == crate::FIXED_HIDDEN_TREASURE_OBJECT_TILE
+        || tile == GETTABLE_MAGIC_CARPET_VISUAL
+        || (tile >= GETTABLE_LOOSE_OBJECT_VISUAL_FIRST && tile <= GETTABLE_LOOSE_OBJECT_VISUAL_LAST)
+}
+
 /// `containers.md §8`: counter cap the inventory-add dispatcher
 /// applies for each result family. Returns `None` for flag/event-only
 /// or refusal-only families. Gold and food use the party caps of

@@ -503,6 +503,135 @@
     }
 
     #[test]
+    fn world_get_native_object_pickup_uses_visual_filter_and_class_code_without_sidecar() {
+        let dir = debug_game_dir();
+        let mut state = britannia_state(open_world_grid(), 4, 5);
+        state.player.facing = Direction::East;
+        state.visibility_dirty = false;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x08,
+            tile: GETTABLE_LOOSE_OBJECT_VISUAL_FIRST + 2,
+            x: 5,
+            y: 5,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 4,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+
+        assert!(state.active_objects[1].is_empty());
+        assert_eq!(state.gems, DEFAULT_GEM_STOCK + 4);
+        assert_eq!(state.turn, 1);
+        assert!(state.visibility_dirty);
+        assert!(state.message.contains("Got 4 gems"));
+        assert!(state.message.contains("active-object tile 130"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_get_native_pickup_skips_non_gettable_object_at_same_cell() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xc0,
+            tile: 0xc0,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x02,
+            tile: GETTABLE_LOOSE_OBJECT_VISUAL_FIRST,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 7,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+
+        assert!(!state.active_objects[1].is_empty());
+        assert!(state.active_objects[2].is_empty());
+        assert_eq!(state.gold, DEFAULT_GOLD_STOCK + 7);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("Got 7 gold"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn native_object_pickup_rejects_unknown_inventory_class_without_clearing_slot() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xff,
+            tile: GETTABLE_LOOSE_OBJECT_VISUAL_FIRST,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert!(!state.active_objects[1].is_empty());
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Nothing to get here.");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn native_object_pickup_sets_sandalwood_box_story_flag() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 0;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x0e,
+            tile: GETTABLE_LOOSE_OBJECT_VISUAL_FIRST,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+
+        assert!(state.active_objects[1].is_empty());
+        assert_eq!(
+            state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX],
+            SPECIAL_ITEM_OWNED_VALUE
+        );
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("sandalwood box"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn town_get_table_food_uses_directional_rewrite_without_sidecar() {
         let dir = debug_game_dir();
         let mut grid = open_grid();
