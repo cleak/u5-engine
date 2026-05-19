@@ -177,7 +177,7 @@
     }
 
     #[test]
-    fn cast_magic_lock_rewrites_facing_unlocked_magic_lock_sidecar() {
+    fn cast_magic_lock_rewrites_direction_unlocked_magic_lock_sidecar() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(TOWN_LOCK_TABLE_FILE),
@@ -187,14 +187,14 @@
         let mut grid = open_grid();
         grid[32 + 2] = 97;
         let mut state = test_state(grid, 1, 1);
-        state.player.facing = Direction::East;
+        state.player.facing = Direction::North;
         state.visibility_dirty = false;
         state.spell_charges[MAGIC_LOCK_SPELL_INDEX] = 1;
         state.party[0].mana = 5;
         state.party[0].level = 5;
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'C', "1AEP", &dir).unwrap(),
+            handle_play_key_input(&mut state, 'C', "1AEP6", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -206,6 +206,7 @@
         assert!(state.visibility_dirty);
         assert_eq!(state.message, "Magic lock!");
 
+        state.player.facing = Direction::East;
         assert_eq!(
             state.jimmy_facing_with_game_dir(Some(&dir)).unwrap(),
             MoveOutcome::Blocked
@@ -237,7 +238,50 @@
     }
 
     #[test]
-    fn combat_lock_utility_spells_require_direction_before_resources() {
+    fn lock_utility_spells_require_direction_before_resources() {
+        let mut town_magic_lock = test_state(open_grid(), 5, 5);
+        town_magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX] = 1;
+        town_magic_lock.party[0].mana = MAGIC_LOCK_COST;
+        town_magic_lock.party[0].level = MAGIC_LOCK_COST;
+
+        assert_eq!(
+            town_magic_lock
+                .cast_spell_from_suffix("1AEP", Path::new(""))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(town_magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX], 1);
+        assert_eq!(town_magic_lock.party[0].mana, MAGIC_LOCK_COST);
+        assert_eq!(town_magic_lock.turn, 0);
+        assert_eq!(
+            town_magic_lock.message,
+            "Direction? Use C1AEP8/C1AEP6/C1AEP2/C1AEP4."
+        );
+
+        let mut town_unlock_magic = test_state(open_grid(), 5, 5);
+        town_unlock_magic.spell_charges[UNLOCK_MAGIC_SPELL_INDEX] = 1;
+        town_unlock_magic.party[0].mana = UNLOCK_MAGIC_COST;
+        town_unlock_magic.party[0].level = UNLOCK_MAGIC_COST;
+
+        assert_eq!(
+            town_unlock_magic
+                .cast_spell_from_suffix("1EIP", Path::new(""))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(
+            town_unlock_magic.spell_charges[UNLOCK_MAGIC_SPELL_INDEX],
+            1
+        );
+        assert_eq!(town_unlock_magic.party[0].mana, UNLOCK_MAGIC_COST);
+        assert_eq!(town_unlock_magic.turn, 0);
+        assert_eq!(
+            town_unlock_magic.message,
+            "Direction? Use C1EIP8/C1EIP6/C1EIP2/C1EIP4."
+        );
+
         let mut magic_lock = britannia_state(open_world_grid(), 5, 5);
         magic_lock.combat_active = true;
         magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX] = 1;
@@ -363,13 +407,13 @@
         let mut grid = open_grid();
         grid[32 + 2] = 96;
         let mut state = test_state(grid, 1, 1);
-        state.player.facing = Direction::East;
+        state.player.facing = Direction::North;
         state.spell_charges[MAGIC_LOCK_SPELL_INDEX] = 1;
         state.party[0].mana = 5;
         state.party[0].level = 5;
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'C', "1AEP", &dir).unwrap(),
+            handle_play_key_input(&mut state, 'C', "1AEP6", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -405,7 +449,7 @@
     }
 
     #[test]
-    fn cast_unlock_magic_rewrites_facing_magic_lock_sidecar() {
+    fn cast_unlock_magic_rewrites_direction_magic_lock_sidecar() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(TOWN_LOCK_TABLE_FILE),
@@ -415,14 +459,14 @@
         let mut grid = open_grid();
         grid[32 + 2] = 96;
         let mut state = test_state(grid, 1, 1);
-        state.player.facing = Direction::East;
+        state.player.facing = Direction::North;
         state.visibility_dirty = false;
         state.spell_charges[UNLOCK_MAGIC_SPELL_INDEX] = 1;
         state.party[0].mana = 5;
         state.party[0].level = 5;
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'C', "1EIP", &dir).unwrap(),
+            handle_play_key_input(&mut state, 'C', "1EIP6", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -434,6 +478,7 @@
         assert!(state.visibility_dirty);
         assert_eq!(state.message, "Unlocked!");
 
+        state.player.facing = Direction::East;
         assert_eq!(
             state.open_facing_with_game_dir(Some(&dir)).unwrap(),
             MoveOutcome::DoorOpened
@@ -479,13 +524,13 @@
         let mut grid = open_grid();
         grid[32 + 2] = 97;
         let mut state = test_state(grid, 1, 1);
-        state.player.facing = Direction::East;
+        state.player.facing = Direction::North;
         state.spell_charges[UNLOCK_MAGIC_SPELL_INDEX] = 1;
         state.party[0].mana = 5;
         state.party[0].level = 5;
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'C', "1EIP", &dir).unwrap(),
+            handle_play_key_input(&mut state, 'C', "1EIP6", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 

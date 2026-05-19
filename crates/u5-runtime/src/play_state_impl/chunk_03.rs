@@ -3338,13 +3338,21 @@ impl PlayState {
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
         };
+        let Some(direction) = direction else {
+            self.message = "Direction? Use C1AEP8/C1AEP6/C1AEP2/C1AEP4.".to_string();
+            return Ok(MoveOutcome::Blocked);
+        };
+        if !direction.is_cardinal() {
+            self.message = "Magic Lock requires a cardinal direction.".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, MAGIC_LOCK_SPELL_INDEX, MAGIC_LOCK_COST)
         {
             return Ok(outcome);
         }
 
-        let (dx, dy) = self.player.facing.delta();
+        let (dx, dy) = direction.delta();
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
         if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
@@ -3444,13 +3452,21 @@ impl PlayState {
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
         };
+        let Some(direction) = direction else {
+            self.message = "Direction? Use C1EIP8/C1EIP6/C1EIP2/C1EIP4.".to_string();
+            return Ok(MoveOutcome::Blocked);
+        };
+        if !direction.is_cardinal() {
+            self.message = "Unlock Magic requires a cardinal direction.".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, UNLOCK_MAGIC_SPELL_INDEX, UNLOCK_MAGIC_COST)
         {
             return Ok(outcome);
         }
 
-        let (dx, dy) = self.player.facing.delta();
+        let (dx, dy) = direction.delta();
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
         if !(0..32).contains(&tx) || !(0..32).contains(&ty) {
