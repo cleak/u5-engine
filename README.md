@@ -118,6 +118,16 @@ cargo run -- --play --raster-diagnostics C:\Games\U5-Clean
 cargo run -- --play --raster-diagnostics --raster-depth cga C:\Games\U5-Clean
 ```
 
+Use `--save-frame <PATH>` for a headless PNG capture of the current 11x11
+viewport. It loads the same `PlayState`, optionally replays a script first, and
+then writes the atlas-backed top-down, combat, dungeon first-person, or fallback
+text-panel frame:
+
+```powershell
+cargo run -- --save-frame screenshots\britannia.png --scene BRITANNIA C:\Games\U5-Clean
+cargo run -- --save-frame screenshots\dungeon.png --scene DUNGEON:0 --play-script "idle:1" C:\Games\U5-Clean
+```
+
 For repeatable smoke checks, `--play-script` runs a semicolon-separated command
 list through the same first-playable input handlers and then exits. Script mode
 prints compact state summaries and optional raster hashes instead of rendered

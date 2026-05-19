@@ -22,6 +22,8 @@ Last known verification state:
   `BRITANNIA` top-down `fd923dc0f87a9f3c`, `BRITANNIA` after movement
   `1eb882f27b1d216c`, `CASTLE:0` top-down `be84488b7b199310`, and
   `DUNGEON:0` first-person `161ad48dd2a91725`.
+- `--save-frame <PATH>` is the current headless PNG capture path for local
+  asset visual checks.
 - `cargo run -- --help` is a supported no-asset usage path.
 - The latest checkpointed engine commit at the time of this refresh was
   `6d38260 Prompt on underfoot town exits`.
@@ -560,6 +562,7 @@ Goal: make the project approachable without reading the entire codebase.
   - `cargo run -- C:\Games\U5-Clean`
   - `cargo run -- --play C:\Games\U5-Clean`
   - `cargo run -- --play-script "z;q" C:\Games\U5-Clean`
+  - `cargo run -- --save-frame screenshots\britannia.png --scene BRITANNIA C:\Games\U5-Clean`
   - Note that `RUSTC_WRAPPER` may need clearing if it points to missing
     `sccache`:
     ```powershell

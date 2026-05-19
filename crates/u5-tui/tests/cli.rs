@@ -289,11 +289,48 @@ fn cli_parser_accepts_play_script_and_implies_play_mode() {
     assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
 }
 
+#[test]
+fn cli_parser_accepts_save_frame_with_script_and_scene_options() {
+    let args = parse_cli_args([
+        "--save-frame",
+        "screenshots/world.png",
+        "--scene",
+        "BRITANNIA",
+        "--play-script",
+        "idle:2;q",
+        "--raster-depth",
+        "cga",
+        r"C:\Games\U5-Clean",
+    ])
+    .unwrap();
+
+    assert!(args.play);
+    assert_eq!(
+        args.save_frame,
+        Some(PathBuf::from("screenshots/world.png"))
+    );
+    assert_eq!(args.raster_depth, TileGraphicsDepth::Cga4);
+    assert_eq!(
+        args.play_script,
+        Some(vec!["idle:2".to_string(), "q".to_string()])
+    );
+    assert_eq!(
+        args.play_options.target,
+        PlayTarget::World(WorldPlane::Britannia)
+    );
+    assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
+}
+
 // from chunk_02
 #[test]
 fn cli_parser_rejects_missing_or_duplicate_play_script() {
     assert!(parse_cli_args(["--play-script"]).is_err());
     assert!(parse_cli_args(["--play-script", "d", "--play-script", "q"]).is_err());
+}
+
+#[test]
+fn cli_parser_rejects_missing_save_frame_path() {
+    assert!(parse_cli_args(["--save-frame"]).is_err());
 }
 
 // from chunk_02
