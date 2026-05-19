@@ -135,6 +135,145 @@ pub enum BlackthornCutsceneCommand {
     },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlackthornCutsceneBeat {
+    PerQuestionIntermission,
+    FailedChallengeReaction,
+    AudienceThroneApproach,
+    BlackthornRises,
+    ConditionalThroneCleanup,
+}
+
+pub const BLACKTHORN_CUTSCENE_TEMP_TILE_A: u8 = 0x01;
+pub const BLACKTHORN_CUTSCENE_TEMP_TILE_B: u8 = 0x02;
+pub const BLACKTHORN_CUTSCENE_FORMAT_OUTPUT: u8 = 0x0d;
+
+pub const BLACKTHORN_CUTSCENE_PER_QUESTION_INTERMISSION: [BlackthornCutsceneCommand; 10] = [
+    BlackthornCutsceneCommand::WriteTile {
+        x: 5,
+        y: 5,
+        tile: BLACKTHORN_CUTSCENE_TEMP_TILE_A,
+    },
+    BlackthornCutsceneCommand::SetRepeat(2),
+    BlackthornCutsceneCommand::SetPairedMovement {
+        actor: BlackthornCutsceneActor::Avatar,
+        direction: crate::Direction::North,
+    },
+    BlackthornCutsceneCommand::SetPerStepPause(true),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::Blackthorn,
+        direction: crate::Direction::South,
+    },
+    BlackthornCutsceneCommand::SetRepeat(2),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::Throne,
+        direction: crate::Direction::North,
+    },
+    BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::Throne),
+    BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::Blackthorn),
+    BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::Attendant),
+];
+
+pub const BLACKTHORN_CUTSCENE_FAILED_CHALLENGE_REACTION: [BlackthornCutsceneCommand; 12] = [
+    BlackthornCutsceneCommand::OutputByte(BLACKTHORN_CUTSCENE_FORMAT_OUTPUT),
+    BlackthornCutsceneCommand::SetRepeat(3),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::Blackthorn,
+        direction: crate::Direction::South,
+    },
+    BlackthornCutsceneCommand::SetRepeat(3),
+    BlackthornCutsceneCommand::SetPairedMovement {
+        actor: BlackthornCutsceneActor::SecondPartyMember,
+        direction: crate::Direction::East,
+    },
+    BlackthornCutsceneCommand::SetPerStepPause(true),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::Blackthorn,
+        direction: crate::Direction::East,
+    },
+    BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::SecondPartyMember),
+    BlackthornCutsceneCommand::SetRepeat(3),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::Blackthorn,
+        direction: crate::Direction::West,
+    },
+    BlackthornCutsceneCommand::WriteTile {
+        x: 4,
+        y: 8,
+        tile: BLACKTHORN_CUTSCENE_TEMP_TILE_A,
+    },
+    BlackthornCutsceneCommand::WriteTile {
+        x: 5,
+        y: 8,
+        tile: BLACKTHORN_CUTSCENE_TEMP_TILE_B,
+    },
+];
+
+pub const BLACKTHORN_CUTSCENE_AUDIENCE_THRONE_APPROACH: [BlackthornCutsceneCommand; 8] = [
+    BlackthornCutsceneCommand::TimedPause(2),
+    BlackthornCutsceneCommand::SetRepeat(2),
+    BlackthornCutsceneCommand::SetPairedMovement {
+        actor: BlackthornCutsceneActor::Attendant,
+        direction: crate::Direction::North,
+    },
+    BlackthornCutsceneCommand::SetPerStepPause(true),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::Blackthorn,
+        direction: crate::Direction::North,
+    },
+    BlackthornCutsceneCommand::SetRepeat(2),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::Blackthorn,
+        direction: crate::Direction::West,
+    },
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::Attendant,
+        direction: crate::Direction::East,
+    },
+];
+
+pub const BLACKTHORN_CUTSCENE_BLACKTHORN_RISES: [BlackthornCutsceneCommand; 4] = [
+    BlackthornCutsceneCommand::OutputByte(BLACKTHORN_CUTSCENE_FORMAT_OUTPUT),
+    BlackthornCutsceneCommand::SetPerStepPause(true),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::Blackthorn,
+        direction: crate::Direction::North,
+    },
+    BlackthornCutsceneCommand::End,
+];
+
+pub const BLACKTHORN_CUTSCENE_CONDITIONAL_THRONE_CLEANUP: [BlackthornCutsceneCommand; 6] = [
+    BlackthornCutsceneCommand::OutputByte(BLACKTHORN_CUTSCENE_FORMAT_OUTPUT),
+    BlackthornCutsceneCommand::SetRepeat(3),
+    BlackthornCutsceneCommand::MoveActor {
+        actor: BlackthornCutsceneActor::Throne,
+        direction: crate::Direction::East,
+    },
+    BlackthornCutsceneCommand::ClearActor(BlackthornCutsceneActor::Throne),
+    BlackthornCutsceneCommand::ClearScreen,
+    BlackthornCutsceneCommand::End,
+];
+
+pub const fn blackthorn_cutscene_beat_commands(
+    beat: BlackthornCutsceneBeat,
+) -> &'static [BlackthornCutsceneCommand] {
+    match beat {
+        BlackthornCutsceneBeat::PerQuestionIntermission => {
+            &BLACKTHORN_CUTSCENE_PER_QUESTION_INTERMISSION
+        }
+        BlackthornCutsceneBeat::FailedChallengeReaction => {
+            &BLACKTHORN_CUTSCENE_FAILED_CHALLENGE_REACTION
+        }
+        BlackthornCutsceneBeat::AudienceThroneApproach => {
+            &BLACKTHORN_CUTSCENE_AUDIENCE_THRONE_APPROACH
+        }
+        BlackthornCutsceneBeat::BlackthornRises => &BLACKTHORN_CUTSCENE_BLACKTHORN_RISES,
+        BlackthornCutsceneBeat::ConditionalThroneCleanup => {
+            &BLACKTHORN_CUTSCENE_CONDITIONAL_THRONE_CLEANUP
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlackthornCutsceneVm {
     pub actors: [Option<BlackthornCutsceneActorState>; BLACKTHORN_CUTSCENE_ACTOR_SLOT_COUNT],

@@ -1000,12 +1000,95 @@
         for placement in BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS {
             let slot = placement.actor.slot_index() as usize;
             let object = state.active_objects[slot];
+            let expected_position = match placement.actor {
+                BlackthornCutsceneActor::Blackthorn => (3, 0),
+                BlackthornCutsceneActor::Attendant => (7, 1),
+                _ => (placement.x, placement.y),
+            };
             assert_eq!(object.type_byte, placement.type_byte);
             assert_eq!(object.tile, placement.tile);
-            assert_eq!((object.x, object.y), (placement.x, placement.y));
+            assert_eq!((object.x, object.y), expected_position);
             assert_eq!(object.aux1, placement.actor.slot_index());
             assert_eq!(object.aux3, BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER);
         }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn blackthorn_cutscene_beats_sync_actor_slots_and_map_tiles() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 5, 5);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'F',
+            status: b'G',
+            climb_stat: 10,
+            mana: 0,
+            hp: 30,
+            max_hp: 30,
+            level: 2,
+        });
+
+        state.begin_blackthorn_audience_capture(&dir).unwrap();
+        let vm = state.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::PerQuestionIntermission);
+
+        assert_eq!(
+            state
+                .blackthorn_audience_map
+                .as_ref()
+                .and_then(|map| map.tile(5, 5)),
+            Some(BLACKTHORN_CUTSCENE_TEMP_TILE_A)
+        );
+        assert_eq!(
+            state.active_objects[BlackthornCutsceneActor::Avatar.slot_index() as usize].y,
+            7
+        );
+        for actor in [
+            BlackthornCutsceneActor::Throne,
+            BlackthornCutsceneActor::Blackthorn,
+            BlackthornCutsceneActor::Attendant,
+        ] {
+            assert!(state.active_objects[actor.slot_index() as usize].is_empty());
+        }
+        assert_eq!(vm.pause_ticks, 4);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn blackthorn_failed_challenge_beat_drags_victim_and_writes_scene_tiles() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 5, 5);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'F',
+            status: b'G',
+            climb_stat: 10,
+            mana: 0,
+            hp: 30,
+            max_hp: 30,
+            level: 2,
+        });
+
+        state.begin_blackthorn_audience_capture(&dir).unwrap();
+        let vm = state.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::FailedChallengeReaction);
+
+        assert_eq!(vm.output_bytes, vec![BLACKTHORN_CUTSCENE_FORMAT_OUTPUT]);
+        assert!(state.active_objects[BlackthornCutsceneActor::SecondPartyMember.slot_index() as usize]
+            .is_empty());
+        assert_eq!(
+            state
+                .blackthorn_audience_map
+                .as_ref()
+                .and_then(|map| map.tile(4, 8)),
+            Some(BLACKTHORN_CUTSCENE_TEMP_TILE_A)
+        );
+        assert_eq!(
+            state
+                .blackthorn_audience_map
+                .as_ref()
+                .and_then(|map| map.tile(5, 8)),
+            Some(BLACKTHORN_CUTSCENE_TEMP_TILE_B)
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

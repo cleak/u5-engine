@@ -2702,10 +2702,15 @@ impl PlayState {
         self.blackthorn_audience_map =
             load_miscmaps_cutscene_map(game_dir, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD)?;
         self.install_blackthorn_audience_actors();
+        let approach =
+            self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::AudienceThroneApproach);
+        let rise = self.run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::BlackthornRises);
         self.active_blackthorn = Some(challenge);
         self.message = format!(
-            "Blackthorn audience: {opening}. Party slot {} is challenged for {prompt}.",
-            target_slot + 1
+            "Blackthorn audience: {opening}. Opening cutscene pause {}, output {} byte(s). Party slot {} is challenged for {prompt}.",
+            approach.pause_ticks,
+            rise.output_bytes.len(),
+            target_slot + 1,
         );
         Ok(Some(MoveOutcome::Used))
     }
@@ -2746,6 +2751,76 @@ impl PlayState {
         }
     }
 
+    pub fn blackthorn_cutscene_vm_from_audience_state(&self) -> BlackthornCutsceneVm {
+        let tile_buffer = self
+            .blackthorn_audience_map
+            .as_ref()
+            .map(|map| map.tiles.clone())
+            .unwrap_or_else(|| vec![0; MISCMAPS_CUTSCENE_ROWS * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS]);
+        let mut vm = BlackthornCutsceneVm::new(tile_buffer);
+        for placement in BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS {
+            let slot = placement.actor.slot_index() as usize;
+            let Some(object) = self.active_objects.get(slot).copied() else {
+                continue;
+            };
+            if object.is_empty() || object.aux3 != BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER {
+                continue;
+            }
+            vm.set_actor(
+                placement.actor,
+                BlackthornCutsceneActorState {
+                    x: object.x,
+                    y: object.y,
+                    visible: true,
+                },
+            );
+        }
+        vm
+    }
+
+    pub fn apply_blackthorn_cutscene_vm_to_audience_state(&mut self, vm: &BlackthornCutsceneVm) {
+        if self.active_objects.len() < OOL_SLOTS {
+            self.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        }
+        for placement in BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS {
+            let slot = placement.actor.slot_index() as usize;
+            if let Some(state) = vm.actor(placement.actor) {
+                self.active_objects[slot] = ActiveObject {
+                    type_byte: placement.type_byte,
+                    tile: placement.tile,
+                    x: state.x,
+                    y: state.y,
+                    z: 0,
+                    phase: STEADY_PHASE,
+                    aux1: placement.actor.slot_index(),
+                    aux3: BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER,
+                };
+            } else {
+                self.active_objects[slot] = ActiveObject::empty();
+            }
+        }
+        match self.blackthorn_audience_map.as_mut() {
+            Some(map) => map.tiles = vm.tile_buffer.clone(),
+            None => {
+                self.blackthorn_audience_map = Some(MiscmapsCutsceneMap {
+                    record_index: BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD,
+                    tiles: vm.tile_buffer.clone(),
+                });
+            }
+        }
+        self.mark_visibility_dirty();
+    }
+
+    pub fn run_blackthorn_cutscene_beat(
+        &mut self,
+        beat: BlackthornCutsceneBeat,
+    ) -> BlackthornCutsceneVm {
+        let mut vm = self.blackthorn_cutscene_vm_from_audience_state();
+        vm.run(blackthorn_cutscene_beat_commands(beat));
+        self.apply_blackthorn_cutscene_vm_to_audience_state(&vm);
+        vm
+    }
+
     pub fn submit_blackthorn_audience_answer(
         &mut self,
         typed: &str,
@@ -2765,43 +2840,56 @@ impl PlayState {
         match challenge.submit(&answer) {
             crate::blackthorn_session::BlackthornChallengeOutcome::Correct { ordinal } => {
                 let handled_slot = self.mark_blackthorn_current_target_handled();
+                let vm = self
+                    .run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::PerQuestionIntermission);
                 if self.next_blackthorn_challenge_target_slot().is_none() {
+                    self.run_blackthorn_cutscene_beat(
+                        BlackthornCutsceneBeat::ConditionalThroneCleanup,
+                    );
                     return self.apply_blackthorn_captive_cell_handoff(
                         game_dir,
                         &format!(
-                            "Answered Blackthorn's prompt {} correctly; party slot {} is handled.",
+                            "Answered Blackthorn's prompt {} correctly; party slot {} is handled; cutscene pause {}.",
                             ordinal + 1,
-                            handled_slot.map(|slot| slot + 1).unwrap_or(0)
+                            handled_slot.map(|slot| slot + 1).unwrap_or(0),
+                            vm.pause_ticks
                         ),
                     );
                 }
                 self.active_blackthorn = Some(challenge);
                 self.message = format!(
-                    "Answered Blackthorn's prompt {} correctly; party slot {} is handled. {}",
+                    "Answered Blackthorn's prompt {} correctly; party slot {} is handled; cutscene pause {}. {}",
                     ordinal + 1,
                     handled_slot.map(|slot| slot + 1).unwrap_or(0),
+                    vm.pause_ticks,
                     self.blackthorn_current_prompt_message()
                 );
                 Ok(MoveOutcome::Used)
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::Survived => {
                 let handled_slot = self.mark_blackthorn_current_target_handled();
+                let vm = self
+                    .run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::ConditionalThroneCleanup);
                 self.apply_blackthorn_captive_cell_handoff(
                     game_dir,
                     &format!(
-                        "Survived Blackthorn's challenge; party slot {} is handled.",
-                        handled_slot.map(|slot| slot + 1).unwrap_or(0)
+                        "Survived Blackthorn's challenge; party slot {} is handled; cutscene screen cleared {}.",
+                        handled_slot.map(|slot| slot + 1).unwrap_or(0),
+                        vm.screen_cleared
                     ),
                 )
             }
             crate::blackthorn_session::BlackthornChallengeOutcome::Wrong { ordinal, expected } => {
                 let victim = self.mark_blackthorn_failure_victim_handled();
+                let vm = self
+                    .run_blackthorn_cutscene_beat(BlackthornCutsceneBeat::FailedChallengeReaction);
                 self.apply_blackthorn_captive_cell_handoff(
                     game_dir,
                     &format!(
-                        "Failed Blackthorn's prompt {}; expected {expected}; party slot {} is punished.",
+                        "Failed Blackthorn's prompt {}; expected {expected}; party slot {} is punished; cutscene output {} byte(s).",
                         ordinal + 1,
-                        victim.map(|slot| slot + 1).unwrap_or(0)
+                        victim.map(|slot| slot + 1).unwrap_or(0),
+                        vm.output_bytes.len()
                     ),
                 )
             }
