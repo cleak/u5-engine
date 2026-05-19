@@ -753,6 +753,61 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    pub fn start_wishing_well_prompt(&mut self, direction: Direction) -> MoveOutcome {
+        self.active_wishing_well = Some(WishingWellSession::new(direction));
+        self.message = self.render_active_wishing_well();
+        MoveOutcome::Observed
+    }
+
+    pub fn render_active_wishing_well(&self) -> String {
+        self.active_wishing_well
+            .as_ref()
+            .map(|session| {
+                if session.coin_accepted {
+                    "Wishing well: make a wish.".to_string()
+                } else {
+                    "Wishing well: toss a coin? (Y/N)".to_string()
+                }
+            })
+            .unwrap_or_else(|| "Wishing well.".to_string())
+    }
+
+    pub fn step_active_wishing_well(&mut self, key: char, suffix: &str) -> Option<MoveOutcome> {
+        let Some(mut session) = self.active_wishing_well.take() else {
+            return None;
+        };
+        if !session.coin_accepted {
+            for ch in std::iter::once(key).chain(suffix.chars()) {
+                match ch.to_ascii_uppercase() {
+                    'Y' => {
+                        if self.gold == 0 {
+                            self.message = "Wishing well: no effect.".to_string();
+                            return Some(MoveOutcome::Observed);
+                        }
+                        self.gold = self.gold.saturating_sub(1);
+                        session.coin_accepted = true;
+                        self.active_wishing_well = Some(session);
+                        self.message = self.render_active_wishing_well();
+                        return None;
+                    }
+                    'N' | '\u{1b}' | ' ' => {
+                        self.message = "Wishing well: no effect.".to_string();
+                        return Some(MoveOutcome::Observed);
+                    }
+                    _ => {}
+                }
+            }
+            self.active_wishing_well = Some(session);
+            self.message = self.render_active_wishing_well();
+            return None;
+        }
+
+        let wish = std::iter::once(key)
+            .chain(suffix.chars())
+            .collect::<String>();
+        Some(self.resolve_wishing_well_wish(session.direction, &wish))
+    }
+
     pub fn start_open_direction_prompt(&mut self) -> MoveOutcome {
         self.active_direction_prompt = Some(DirectionPromptSession::new(DirectionPromptKind::Open));
         self.message = self.render_active_direction_prompt();

@@ -54,6 +54,9 @@ pub fn handle_play_key_input(
     if state.active_new_order.is_some() {
         return Ok(handle_active_new_order_key_input(state, key, suffix));
     }
+    if state.active_wishing_well.is_some() {
+        return handle_active_wishing_well_key_input(state, key, suffix, game_dir);
+    }
     if state.active_yell.is_some() {
         return handle_active_yell_key_input(state, key, suffix, game_dir);
     }
@@ -360,6 +363,19 @@ fn handle_active_yell_key_input(
 ) -> io::Result<PlayInputDisposition> {
     let turn_before = state.turn;
     if let Some(outcome) = state.step_active_yell(key, suffix) {
+        state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
+    }
+    Ok(PlayInputDisposition::Continue)
+}
+
+fn handle_active_wishing_well_key_input(
+    state: &mut PlayState,
+    key: char,
+    suffix: &str,
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    let turn_before = state.turn;
+    if let Some(outcome) = state.step_active_wishing_well(key, suffix) {
         state.apply_post_turn_effects_after_outcome(turn_before, game_dir, outcome)?;
     }
     Ok(PlayInputDisposition::Continue)

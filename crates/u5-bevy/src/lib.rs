@@ -1549,6 +1549,10 @@ fn visual_line_prompt_active(state: &PlayState) -> bool {
         || state.active_blackthorn.is_some()
         || state.active_shrine.is_some()
         || state.active_yell.is_some()
+        || state
+            .active_wishing_well
+            .as_ref()
+            .is_some_and(|session| session.coin_accepted)
         || matches!(
             state.active_shop.as_ref(),
             Some(
@@ -1572,6 +1576,7 @@ fn visual_modal_prompt_active(state: &PlayState) -> bool {
         || state.active_surface_chest.is_some()
         || state.active_mix.is_some()
         || state.active_new_order.is_some()
+        || state.active_wishing_well.is_some()
         || state.active_direction_prompt.is_some()
         || state.active_yes_no_prompt.is_some()
         || state.active_shop.is_some()

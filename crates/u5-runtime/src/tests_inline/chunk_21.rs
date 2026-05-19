@@ -283,6 +283,91 @@
     }
 
     #[test]
+    fn town_look_at_surface_wishing_well_prompts_for_coin_without_spending_turn() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xa1;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+
+        assert_eq!(state.look_facing(), MoveOutcome::Observed);
+
+        assert_eq!(
+            state
+                .active_wishing_well
+                .as_ref()
+                .map(|session| (session.direction, session.coin_accepted)),
+            Some((Direction::East, false))
+        );
+        assert_eq!(state.message, "Wishing well: toss a coin? (Y/N)");
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
+    }
+
+    #[test]
+    fn town_surface_wishing_well_decline_or_empty_purse_has_no_effect() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xa1;
+        let mut decline = test_state(grid.clone(), 1, 1);
+        decline.player.facing = Direction::East;
+        decline.gold = 7;
+        assert_eq!(decline.look_facing(), MoveOutcome::Observed);
+
+        assert_eq!(
+            decline.step_active_wishing_well('N', ""),
+            Some(MoveOutcome::Observed)
+        );
+        assert!(decline.active_wishing_well.is_none());
+        assert_eq!(decline.gold, 7);
+        assert_eq!(decline.message, "Wishing well: no effect.");
+        assert_eq!(decline.turn, 0);
+
+        let mut empty = test_state(grid, 1, 1);
+        empty.player.facing = Direction::East;
+        empty.gold = 0;
+        assert_eq!(empty.look_facing(), MoveOutcome::Observed);
+
+        assert_eq!(
+            empty.step_active_wishing_well('Y', ""),
+            Some(MoveOutcome::Observed)
+        );
+        assert!(empty.active_wishing_well.is_none());
+        assert_eq!(empty.gold, 0);
+        assert_eq!(empty.message, "Wishing well: no effect.");
+        assert_eq!(empty.turn, 0);
+    }
+
+    #[test]
+    fn town_surface_wishing_well_coin_then_wish_consumes_coin_without_turn() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xa1;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.gold = 2;
+        assert_eq!(state.look_facing(), MoveOutcome::Observed);
+
+        assert_eq!(state.step_active_wishing_well('Y', ""), None);
+        assert_eq!(state.gold, 1);
+        assert_eq!(
+            state
+                .active_wishing_well
+                .as_ref()
+                .map(|session| (session.direction, session.coin_accepted)),
+            Some((Direction::East, true))
+        );
+        assert_eq!(state.message, "Wishing well: make a wish.");
+
+        assert_eq!(
+            state.step_active_wishing_well('H', "orse"),
+            Some(MoveOutcome::Observed)
+        );
+        assert!(state.active_wishing_well.is_none());
+        assert_eq!(state.gold, 1);
+        assert_eq!(state.message, "Wishing well: no effect.");
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
+    }
+
+    #[test]
     fn town_surface_fountain_drink_refreshes_without_mutating_member() {
         let mut grid = open_grid();
         grid[32 + 2] = 0xd9;

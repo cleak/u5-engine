@@ -250,6 +250,12 @@ pub const fn surface_town_fountain_look_tile(tile: u8) -> bool {
     matches!(tile, 0xd8..=0xdb)
 }
 
+/// `formats/look2-dat.md §5` / `view.md §3` command-owned
+/// surface/town wishing-well LOOKOBJ special handler.
+pub const fn surface_wishing_well_look_tile(tile: u8) -> bool {
+    tile == 0xa1
+}
+
 /// `view.md §2` V-View command outcome. Dispatcher inputs a single
 /// gem stock and the active scene's combat marker; the helper
 /// reports whether the call should consume a gem and whether the

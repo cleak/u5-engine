@@ -8989,6 +8989,15 @@
     }
 
     #[test]
+    fn surface_wishing_well_look_tile_matches_published_special_handler() {
+        // formats/look2-dat.md section 5 publishes 0xA1 as the
+        // LOOKOBJ-owned wishing-well command handler.
+        assert!(surface_wishing_well_look_tile(0xa1));
+        assert!(!surface_wishing_well_look_tile(0xa0));
+        assert!(!surface_wishing_well_look_tile(0xa2));
+    }
+
+    #[test]
     fn doom_entrance_unlocks_only_when_all_three_slots_vanquished() {
         // catalogs/quest-graph.md §5
         let v = SHADOWLORD_HIDEOUT_VANQUISHED;

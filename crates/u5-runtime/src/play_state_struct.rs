@@ -105,6 +105,7 @@ pub struct PlayState {
     pub active_mix: Option<crate::z_stats::MixSession>,
     pub active_new_order: Option<crate::z_stats::NewOrderSession>,
     pub active_yell: Option<crate::z_stats::YellSession>,
+    pub active_wishing_well: Option<crate::z_stats::WishingWellSession>,
     pub active_view_overlay: Option<ViewOverlay>,
     pub white_potion_sweep: Option<WhitePotionSweep>,
     pub combat_potion_presentation: Option<CombatPotionPresentation>,

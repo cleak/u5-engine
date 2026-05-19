@@ -2136,6 +2136,9 @@ impl PlayState {
                     }
                 }
                 let tile = self.grid[y * 32 + x];
+                if surface_wishing_well_look_tile(tile) {
+                    return Ok(self.start_wishing_well_prompt(direction));
+                }
                 if surface_town_fountain_look_tile(tile) {
                     return Ok(self.start_surface_fountain_drink_prompt(direction));
                 }
@@ -2177,6 +2180,9 @@ impl PlayState {
                 )? {
                     self.message = sign;
                     return Ok(MoveOutcome::Observed);
+                }
+                if surface_wishing_well_look_tile(tile) {
+                    return Ok(self.start_wishing_well_prompt(direction));
                 }
                 if surface_town_fountain_look_tile(tile) {
                     return Ok(self.start_surface_fountain_drink_prompt(direction));
@@ -2229,6 +2235,28 @@ impl PlayState {
                 member_index + 1
             );
         }
+        MoveOutcome::Observed
+    }
+
+    pub fn resolve_wishing_well_wish(
+        &mut self,
+        direction: Direction,
+        typed_wish: &str,
+    ) -> MoveOutcome {
+        let Some(tile) = self.surface_look_target_tile(direction) else {
+            self.message = "Wishing well: no effect.".to_string();
+            return MoveOutcome::Observed;
+        };
+        if !surface_wishing_well_look_tile(tile) {
+            self.message = "Wishing well: no effect.".to_string();
+            return MoveOutcome::Observed;
+        }
+        if !wishing_well_wish_accepted(typed_wish) {
+            self.message = "Wishing well: no effect.".to_string();
+            return MoveOutcome::Observed;
+        }
+
+        self.message = "Wishing well: no effect.".to_string();
         MoveOutcome::Observed
     }
 

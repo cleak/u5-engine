@@ -174,6 +174,12 @@ pub struct YellSession {
     pub buffer: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WishingWellSession {
+    pub direction: Direction,
+    pub coin_accepted: bool,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DirectionPromptSession {
     pub kind: DirectionPromptKind,
@@ -456,6 +462,15 @@ impl YellSession {
     pub fn new() -> Self {
         Self {
             buffer: String::new(),
+        }
+    }
+}
+
+impl WishingWellSession {
+    pub const fn new(direction: Direction) -> Self {
+        Self {
+            direction,
+            coin_accepted: false,
         }
     }
 }
