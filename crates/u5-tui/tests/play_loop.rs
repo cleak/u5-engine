@@ -700,6 +700,10 @@ fn route_smoke_cases_cover_representative_modes() {
         case.expected,
         RouteSmokeExpectation::World(WorldPlane::Britannia)
     )));
+    assert!(cases.iter().any(|case| matches!(
+        case.expected,
+        RouteSmokeExpectation::World(WorldPlane::Underworld)
+    )));
     assert!(
         cases
             .iter()
@@ -711,7 +715,44 @@ fn route_smoke_cases_cover_representative_modes() {
             .any(|case| matches!(case.expected, RouteSmokeExpectation::Dungeon(_)))
     );
     assert!(cases.iter().any(|case| case.name == "debug-enter-castle"));
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "debug-enter-castle-return-world")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "debug-enter-castle-from-underworld")
+    );
     assert!(cases.iter().any(|case| case.name == "debug-enter-dungeon"));
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "britannia-save-refusal")
+    );
+    assert!(cases.iter().any(|case| case.name == "castle-save-refusal"));
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "dungeon-turn-and-blocked-step")
+    );
+    assert!(cases.iter().any(|case| case.name == "dungeon-exit-confirm"));
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "underworld-pass-and-idle")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "ship-xit-launches-skiff")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "ship-hoist-and-sail-east")
+    );
 }
 
 #[test]

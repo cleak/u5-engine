@@ -7,7 +7,8 @@ use std::io;
 use std::path::Path;
 
 use u5_runtime::{
-    Area, DungeonScene, PlayOptions, PlayState, PlayTarget, Scene, TileGraphicsDepth, WorldPlane,
+    Area, DungeonScene, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, PlayOptions,
+    PlayState, PlayTarget, Scene, TileGraphicsDepth, TransportState, WindState, WorldPlane,
     load_tile_atlas,
 };
 
@@ -65,6 +66,16 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
     let castle = Scene::new(0x11).expect("castle scene is valid");
     let dungeon = DungeonScene::new(0x21).expect("dungeon scene is valid");
 
+    let world = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        ..PlayOptions::default()
+    };
+
+    let underworld = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Underworld),
+        ..PlayOptions::default()
+    };
+
     let mut world_move = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
         ..PlayOptions::default()
@@ -80,6 +91,32 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
     let world_to_dungeon = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
         debug_enter: Some(PlayTarget::Dungeon(dungeon)),
+        ..PlayOptions::default()
+    };
+
+    let underworld_to_castle = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Underworld),
+        debug_enter: Some(PlayTarget::Town(castle)),
+        ..PlayOptions::default()
+    };
+
+    let ship_transport = TransportState::Ship {
+        type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted: false,
+        hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
+        skiffs: 2,
+    };
+    let ship_xit = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        transport: ship_transport,
+        ..PlayOptions::default()
+    };
+    let ship_sail = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        transport: ship_transport,
+        wind: WindState::East,
+        wind_save_byte: WindState::East.save_byte(),
         ..PlayOptions::default()
     };
 
@@ -107,6 +144,30 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "britannia-look-pass",
+            options: world.clone(),
+            script: &["l6", "empty"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "britannia-save-refusal",
+            options: world,
+            script: &["Q", "N"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "underworld-pass-and-idle",
+            options: underworld,
+            script: &["empty", "idle:1"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "castle-z-stats-modal",
             options: PlayOptions::default(),
             script: &["Z", "empty"],
@@ -115,11 +176,59 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "castle-look-pass",
+            options: PlayOptions::default(),
+            script: &["l6", "empty"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-save-refusal",
+            options: PlayOptions::default(),
+            script: &["Q", "N"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "debug-enter-castle",
-            options: world_to_castle,
+            options: world_to_castle.clone(),
             script: &["e", "empty", "idle:1"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "debug-enter-castle-return-world",
+            options: world_to_castle,
+            script: &["e", "w", "idle:1"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "debug-enter-castle-from-underworld",
+            options: underworld_to_castle,
+            script: &["e", "empty"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "ship-xit-launches-skiff",
+            options: ship_xit,
+            script: &["X", "empty"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 2,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "ship-hoist-and-sail-east",
+            options: ship_sail,
+            script: &["Y", "d", "empty"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 3,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
@@ -132,8 +241,24 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         },
         RouteSmokeCase {
             name: "dungeon-exit-refusal",
-            options: dungeon_options,
+            options: dungeon_options.clone(),
             script: &["Q", "N", "idle:1"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 0,
+            expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
+            name: "dungeon-turn-and-blocked-step",
+            options: dungeon_options.clone(),
+            script: &["w", "a", "d", "s"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 2,
+            expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
+            name: "dungeon-exit-confirm",
+            options: dungeon_options,
+            script: &["Q", "Y"],
             expected: RouteSmokeExpectation::Dungeon(dungeon),
             min_turn: 0,
             expected_frame_kind: "dungeon first-person viewport",
