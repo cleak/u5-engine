@@ -85,6 +85,15 @@ Current worktree context when this TODO was refreshed:
   tracked in `cleak/u5-spec#38`; a 2026-05-19 public-source check confirmed
   the high-level destination order but not the DOS glyph table, byte-to-slot
   mapping, or cache refresh timing needed for implementation.
+- Rest/camp HP/MP recovery amounts are blocked on clean spec clarification in
+  `cleak/u5-spec#47`; the engine's prompt flow, time cadence, ambush predicate,
+  status restoration, and Lord British camp event are spec-backed.
+- Non-combat Blink default target selection is blocked on clean spec
+  clarification in `cleak/u5-spec#48`; the engine keeps sidecar-authored
+  destinations rather than inventing a range/search rule.
+- Create Food's numeric grant is blocked on clean spec clarification in
+  `cleak/u5-spec#49`; the current 100-food grant remains a documented local
+  policy until the public amount is published.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry, and
   seeded ship/skiff sailing routes, plus broader dungeon and combat command
@@ -455,13 +464,18 @@ until combat exists.
   - Great Heal and Resurrect now apply spec-backed core record mutations,
     including dungeon combat-active refusal and resurrection experience, mana,
     level, and max-HP recomputation.
-  - Create Food uses first-playable fixed amount and cap behavior remains open.
-  - Rel Hur wind order is deterministic but exact original order remains open.
+  - Create Food uses first-playable fixed amount and cap behavior remains
+    blocked on `cleak/u5-spec#49`.
+  - Rel Hur uses the public `weather.md` prompt-to-wind mapping and is covered
+    by cast/resource-order tests.
   - Blink default range is sidecar-authored outside combat; combat Blink uses
-    the current arena state and legal in-arena landing checks.
+    the current arena state and legal in-arena landing checks. Non-combat
+    default target selection remains blocked on `cleak/u5-spec#48`.
   - X-Ray and Peer use first-playable map projections; visual parity remains
     open.
-  - Dungeon escape-helper spell split remains open.
+  - Dungeon Up/Down spells implement the public one-level movement hook inside
+    level bounds; the command-overlay dungeon escape helper remains separate
+    and does not currently imply a spell-dispatch gap.
   - Combat-side active-effect consumers are implemented broadly, but parity
     still needs audit coverage.
 

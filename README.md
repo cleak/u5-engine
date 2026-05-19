@@ -342,6 +342,8 @@ wind, and time
 after the saved charge/MP/level gates succeed. `C1IMX` casts the narrow Create
 Food hook, adding 100 units to the save-backed food counter after the saved
 charge/MP/level gates succeed and clamping at the shared 9999 party food cap.
+The exact Create Food grant remains blocked on clean spec issue
+`cleak/u5-spec#49`.
 `C1AS` casts the narrow An Sanct
 Open hook from party slot 1, safely consuming an underfoot dungeon chest through
 the visit-local chest rewrite after the saved charge/MP/level gates succeed;
@@ -351,8 +353,9 @@ and level gates, takes an inline cardinal direction (`C1HR8/6/2/4`) or
 `C1HR<space>` for the no-effect Pass branch, and routes the direction through
 the public `weather.md` §3 mapping (N→W, E→E, S→S, W→N). `C1PU` and `C1DP` cast the
 narrow dungeon Up/Down hooks from party slot 1, moving one dungeon level inside
-public level bounds and failing in place at boundaries without inventing the
-still-open escape-helper split. `C1FGI6`, `C1GIN6`, `C1GIZ6`, and `C1GIS6` cast the
+public level bounds and failing in place at boundaries. The command-overlay
+dungeon escape helper is tracked separately from the spell-dispatch hook.
+`C1FGI6`, `C1GIN6`, `C1GIZ6`, and `C1GIS6` cast the
 public dungeon field-placement hooks one cell east from party slot 1; replace
 the trailing cardinal numpad digit with `8`, `6`, `2`, or `4` to choose the
 target cell. The live dungeon image accepts only passage bytes `0x00` and
@@ -365,7 +368,8 @@ passage while preserving the visit marker bit.
 scene/floor/source/direction and then applying the saved charge/MP/level gates
 before teleporting to a legal foot landing cell. This keeps magic-lock bypasses
 authored by clean metadata without inventing the unresolved default Blink range
-or reconciling the current public scene-mask conflict.
+or reconciling the current public scene-mask conflict. The default range/search
+rule remains blocked on clean spec issue `cleak/u5-spec#48`.
 `C1AEP` and `C1EIP` cast narrow indoor Magic Lock and
 Unlock Magic hooks from party slot 1, rewriting facing magic-lock rows supplied
 by the clean `town_locks.tsv` sidecar. `C1IQW` casts the narrow Peer hook in
@@ -1054,7 +1058,9 @@ member can participate, and inline input also accepts a watcher slot such as
 `h8/2`. A matching bed row advances one in-world hour per iteration, decays personal light
 counters, applies the existing dawn/dusk cleanup, and runs one NPC schedule tick
 per hour. Town bed rest also applies deterministic first-playable HP recovery to
-living party members plus byte-capped first-playable MP recovery. Encounter
+living party members plus byte-capped first-playable MP recovery. The exact
+HP/MP recovery amounts remain blocked on clean spec issue `cleak/u5-spec#47`.
+Encounter
 interruption is owned by the overworld/dungeon rest-with-watch path rather than
 town beds.
 In overworld and dungeon modes the same `h8` input runs the first-playable
@@ -1067,7 +1073,8 @@ and hands the selected ambush monster to the combat frame when it fires. The
 watch path also applies
 deterministic first-playable HP recovery to
 living party members, byte-capped first-playable MP recovery, and wakes members
-who were asleep when rest began.
+who were asleep when rest began; the numeric recovery amounts share the same
+`cleak/u5-spec#47` blocker.
 
 Town trap-door cells are also clean-room sidecar metadata while the exact
 interior tile encoding remains open:
