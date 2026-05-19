@@ -5715,6 +5715,261 @@
     }
 
     #[test]
+    fn guild_unit_prices_match_published_shop_matrix() {
+        // shops.md section 8.2 stock guild price rows.
+        let cases = [
+            (GuildShop::TheDen, GuildCommodity::Keys, 190u16),
+            (GuildShop::TheDen, GuildCommodity::Gems, 255),
+            (GuildShop::TheDen, GuildCommodity::Torches, 12),
+            (GuildShop::TheGuild, GuildCommodity::Keys, 160),
+            (GuildShop::TheGuild, GuildCommodity::Gems, 200),
+            (GuildShop::TheGuild, GuildCommodity::Torches, 11),
+            (GuildShop::TheNemesis, GuildCommodity::Keys, 185),
+            (GuildShop::TheNemesis, GuildCommodity::Gems, 225),
+            (GuildShop::TheNemesis, GuildCommodity::Torches, 25),
+        ];
+        for (shop, commodity, expected) in cases {
+            assert_eq!(
+                guild_unit_price(shop, commodity),
+                expected,
+                "{shop:?} {commodity:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn herbalist_reagent_prices_match_published_matrix() {
+        // shops.md section 6 reagent stock/price matrix. None means
+        // the herbalist does not stock that reagent.
+        use Herbalist::*;
+        use Reagent::*;
+
+        let cases = [
+            (
+                TheHerbalist,
+                [
+                    None,
+                    Some(20),
+                    Some(18),
+                    Some(12),
+                    None,
+                    None,
+                    Some(12),
+                    Some(13),
+                ],
+            ),
+            (
+                HealersHerbs,
+                [
+                    Some(12),
+                    Some(16),
+                    Some(16),
+                    Some(8),
+                    Some(20),
+                    None,
+                    None,
+                    None,
+                ],
+            ),
+            (
+                TheAlchemist,
+                [
+                    Some(14),
+                    Some(16),
+                    None,
+                    None,
+                    Some(30),
+                    Some(18),
+                    None,
+                    None,
+                ],
+            ),
+            (
+                Mysticism,
+                [
+                    None,
+                    None,
+                    None,
+                    Some(6),
+                    Some(8),
+                    Some(8),
+                    Some(10),
+                    Some(15),
+                ],
+            ),
+            (
+                TheSharperMage,
+                [
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(50),
+                    None,
+                    Some(30),
+                    Some(40),
+                ],
+            ),
+        ];
+        let reagents = [
+            SulfurAsh, Ginseng, Garlic, SpiderSilk, BloodMoss, BlackPearl, Nightshade, Mandrake,
+        ];
+
+        for (herbalist, expected_prices) in cases {
+            for (reagent, expected) in reagents.into_iter().zip(expected_prices) {
+                assert_eq!(
+                    herbalist_reagent_price(herbalist, reagent),
+                    expected,
+                    "{herbalist:?} {reagent:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn tavern_food_and_drink_prices_match_published_tables() {
+        // shops.md section 6 stock tavern provision and drink rows.
+        let cases = [
+            (Tavern::TheHonestMeal, 10u16, 'M', 3u16),
+            (Tavern::TheWayfarerTavern, 15, 'M', 4),
+            (Tavern::TheSwordAndKeg, 20, 'M', 5),
+            (Tavern::TheSlaughteredLamb, 25, 'B', 3),
+            (Tavern::TheHumblePalate, 30, 'F', 2),
+            (Tavern::TheBlueBoarTavern, 25, 'C', 5),
+            (Tavern::TheCatsLair, 20, 'M', 3),
+            (Tavern::TheFallenVirgin, 25, 'B', 4),
+            (Tavern::TheFolleyTap, 30, 'M', 5),
+        ];
+        for (tavern, provision_price, drink_letter, drink_price) in cases {
+            assert_eq!(
+                tavern_provision_unit_price(tavern),
+                provision_price,
+                "{tavern:?}"
+            );
+            assert_eq!(
+                tavern_round_drink_menu_letter(tavern),
+                drink_letter,
+                "{tavern:?}"
+            );
+            assert_eq!(
+                tavern_round_drink_unit_price(tavern),
+                drink_price,
+                "{tavern:?}"
+            );
+        }
+
+        let blue_boar = [
+            (BlueBoarDrinkChoice::A, 18u16),
+            (BlueBoarDrinkChoice::B, 192),
+            (BlueBoarDrinkChoice::C, 79),
+            (BlueBoarDrinkChoice::D, 30),
+            (BlueBoarDrinkChoice::E, 275),
+            (BlueBoarDrinkChoice::F, 98),
+        ];
+        for (choice, price) in blue_boar {
+            assert_eq!(blue_boar_drink_price(choice), price, "{choice:?}");
+        }
+    }
+
+    #[test]
+    fn vehicle_shop_prices_match_published_tables() {
+        // shops.md sections 3 and 8.7 stock horse and ship prices.
+        let stable_cases = [
+            (Stable::HorseAndRider, 100u16),
+            (Stable::TheStablehouse, 130),
+            (Stable::WishingWellHorses, 160),
+        ];
+        for (stable, price) in stable_cases {
+            assert_eq!(stable_horse_price(stable), price, "{stable:?}");
+        }
+
+        let shipwright_cases = [
+            (Shipwright::IslandShipwrights, 600u16, 200u16),
+            (Shipwright::TheCrowsNest, 753, 175),
+            (Shipwright::TheOakenOar, 650, 125),
+            (Shipwright::TheRustyBucket, 700, 100),
+        ];
+        for (shipwright, frigate_price, skiff_price) in shipwright_cases {
+            assert_eq!(
+                shipwright_price(shipwright, ShipwrightPurchaseKind::Frigate),
+                frigate_price,
+                "{shipwright:?} frigate"
+            );
+            assert_eq!(
+                shipwright_price(shipwright, ShipwrightPurchaseKind::Skiff),
+                skiff_price,
+                "{shipwright:?} skiff"
+            );
+        }
+    }
+
+    #[test]
+    fn healer_treatment_fees_match_published_table() {
+        // shops.md section 8.3 stock healer headline fees.
+        let cases = [
+            (
+                Healer::TheHealersMission,
+                HealerTreatmentFee::Bypass,
+                HealerTreatmentFee::Bypass,
+                200u16,
+            ),
+            (
+                Healer::WoundsOfHonour,
+                HealerTreatmentFee::Price(25),
+                HealerTreatmentFee::Price(40),
+                215,
+            ),
+            (
+                Healer::TheSpiritHealers,
+                HealerTreatmentFee::Price(30),
+                HealerTreatmentFee::Price(45),
+                225,
+            ),
+            (
+                Healer::HealersSanctum,
+                HealerTreatmentFee::Price(35),
+                HealerTreatmentFee::Price(50),
+                237,
+            ),
+            (
+                Healer::Sanctuary,
+                HealerTreatmentFee::Price(40),
+                HealerTreatmentFee::Price(55),
+                247,
+            ),
+            (
+                Healer::TheShieldOfTruth,
+                HealerTreatmentFee::Price(15),
+                HealerTreatmentFee::Price(60),
+                249,
+            ),
+            (
+                Healer::TheEmpath,
+                HealerTreatmentFee::Price(10),
+                HealerTreatmentFee::Price(65),
+                262,
+            ),
+        ];
+        for (healer, cure, heal, resurrect) in cases {
+            assert_eq!(
+                healer_treatment_fee(healer, HealerTreatment::Cure),
+                cure,
+                "{healer:?} cure"
+            );
+            assert_eq!(
+                healer_treatment_fee(healer, HealerTreatment::Heal),
+                heal,
+                "{healer:?} heal"
+            );
+            assert_eq!(
+                healer_treatment_fee(healer, HealerTreatment::Resurrect),
+                HealerTreatmentFee::Price(resurrect),
+                "{healer:?} resurrect"
+            );
+        }
+    }
+
+    #[test]
     fn frigate_initial_starting_state_matches_published_table() {
         // vehicles.md §4: a shipwright-purchased Frigate starts at
         // hull condition 100 with two skiffs aboard when it is
