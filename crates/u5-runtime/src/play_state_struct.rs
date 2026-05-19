@@ -49,7 +49,6 @@ pub struct PlayState {
     pub shadowlord_hideouts: [u8; SHADOWLORD_COUNT],
     pub shrine_ordained_mask: u8,
     pub shrine_codex_mask: u8,
-    pub shrine_standing: [u8; VIRTUE_COUNT],
     pub moral_standing: u8,
     pub avatar_stats: AvatarStats,
     pub torches: u8,

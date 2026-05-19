@@ -1097,7 +1097,6 @@
         let mut story = BlackthornStoryState {
             jailed_slots_mask: 0,
             captive_cell_counter: 3,
-            rescue_progression: 75,
             capture_context: 2,
         };
         assert!(story.mark_party_slot_jailed(0));
@@ -1108,6 +1107,10 @@
 
         assert_eq!(decoded, story);
         assert_eq!(decoded.jailed_party_slots(), vec![0, 15]);
+        let mut legacy = story.encoded().to_vec();
+        legacy.insert(7, 75);
+        assert_eq!(legacy.len(), BLACKTHORN_STORY_STATE_LEGACY_RESCUE_PROGRESS_LEN);
+        assert_eq!(BlackthornStoryState::decode(&legacy).unwrap(), story);
         assert!(BlackthornStoryState::decode(&[0; BLACKTHORN_STORY_STATE_LEN]).is_err());
     }
 
@@ -1121,7 +1124,6 @@
         let mut story = BlackthornStoryState {
             jailed_slots_mask: 0,
             captive_cell_counter: 2,
-            rescue_progression: 7,
             capture_context: 3,
         };
         assert!(story.mark_party_slot_jailed(2));
@@ -1358,10 +1360,6 @@
         assert_eq!(state.moral_standing, BLACKTHORN_RESCUE_STANDING_FLOOR);
         assert!(state.blackthorn_story.jailed_party_slots().is_empty());
         assert_eq!(state.blackthorn_story.captive_cell_counter, 1);
-        assert_eq!(
-            state.blackthorn_story.rescue_progression,
-            BLACKTHORN_RESCUE_STANDING_FLOOR
-        );
         assert_eq!(state.party[1].status, b'G');
         assert_eq!(state.party[1].hp, 42);
         assert_eq!(

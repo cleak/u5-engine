@@ -1232,7 +1232,6 @@ impl PlayState {
             shadowlord_hideouts: self.shadowlord_hideouts,
             shrine_ordained_mask: self.shrine_ordained_mask,
             shrine_codex_mask: self.shrine_codex_mask,
-            shrine_standing: self.shrine_standing,
             moral_standing: self.moral_standing,
             avatar_stats: self.avatar_stats,
             torches: self.torches,

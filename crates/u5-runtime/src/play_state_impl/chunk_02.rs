@@ -1514,28 +1514,15 @@ impl PlayState {
             }
             (true, true) => {
                 self.shrine_ordained_mask &= !bit;
-                let gained = self.add_shrine_standing(
-                    entry.virtue,
-                    ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE,
-                );
                 // karma.md §3-4: shared moral-standing selector +3 on Codex
                 // turn-in, with Humility receiving an additional +3.
-                let moral_gained =
+                let mut moral_gained =
                     self.add_moral_standing(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE);
-                let mut stat_notes = self.apply_shrine_stat_reward(entry.virtue);
+                let stat_notes = self.apply_shrine_stat_reward(entry.virtue);
                 if entry.virtue == ShrineVirtue::Humility {
-                    let humility_gain = self.add_shrine_standing(
-                        entry.virtue,
-                        ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE,
-                    );
-                    if humility_gain > 0 {
-                        stat_notes.push(format!("standing +{humility_gain}"));
-                    }
                     let humility_moral =
                         self.add_moral_standing(ShrineVirtue::SHRINE_CODEX_TURN_IN_MORAL_INCREASE);
-                    if humility_moral > 0 {
-                        stat_notes.push(format!("moral +{humility_moral}"));
-                    }
+                    moral_gained = moral_gained.saturating_add(humility_moral);
                 }
                 let stat_note = if stat_notes.is_empty() {
                     "no stat reward".to_string()
@@ -1543,10 +1530,8 @@ impl PlayState {
                     stat_notes.join(", ")
                 };
                 self.message = format!(
-                    "Completed the Shrine of {}; standing +{} to {}; moral +{} to {}; {}.",
+                    "Completed the Shrine of {}; moral +{} to {}; {}.",
                     entry.virtue.name(),
-                    gained,
-                    self.shrine_standing[entry.virtue.index()],
                     moral_gained,
                     self.moral_standing,
                     stat_note
@@ -1573,15 +1558,12 @@ impl PlayState {
                     return Ok(Some(MoveOutcome::Blocked));
                 }
                 self.gold -= cost;
-                let gained = self.add_shrine_standing(entry.virtue, offering);
                 // karma.md §3-4: completed-shrine gold offering adds the
                 // offered digit to the shared moral-standing selector.
                 let moral_gained = self.add_moral_standing(offering);
                 self.message = format!(
-                    "Offered {cost} gold at the Shrine of {}; standing +{} to {}; moral +{} to {}.",
+                    "Offered {cost} gold at the Shrine of {}; moral +{} to {}.",
                     entry.virtue.name(),
-                    gained,
-                    self.shrine_standing[entry.virtue.index()],
                     moral_gained,
                     self.moral_standing
                 );
@@ -1677,13 +1659,6 @@ impl PlayState {
                 expected_tile: Some(tile),
             }),
         )
-    }
-
-    pub fn add_shrine_standing(&mut self, virtue: ShrineVirtue, amount: u8) -> u8 {
-        let standing = &mut self.shrine_standing[virtue.index()];
-        let before = *standing;
-        *standing = (*standing).saturating_add(amount).min(SHRINE_STANDING_MAX);
-        (*standing).saturating_sub(before)
     }
 
     pub fn apply_shrine_stat_reward(&mut self, virtue: ShrineVirtue) -> Vec<String> {

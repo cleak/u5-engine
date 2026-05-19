@@ -11,7 +11,8 @@ use std::path::Path;
 /// `systems/blackthorn.md` section 8.
 pub const BLACKTHORN_STORY_STATE_FILE: &str = "SAVED.BTH";
 pub const BLACKTHORN_STORY_STATE_MAGIC: [u8; 4] = *b"BTH1";
-pub const BLACKTHORN_STORY_STATE_LEN: usize = 9;
+pub const BLACKTHORN_STORY_STATE_LEN: usize = 8;
+pub const BLACKTHORN_STORY_STATE_LEGACY_RESCUE_PROGRESS_LEN: usize = 9;
 pub const BLACKTHORN_CAPTURE_CONTEXT_NONE: u8 = 0;
 
 /// `blackthorn.md` section 8 durable capture/rescue state. Jailed or handled
@@ -22,7 +23,6 @@ pub const BLACKTHORN_CAPTURE_CONTEXT_NONE: u8 = 0;
 pub struct BlackthornStoryState {
     pub jailed_slots_mask: u16,
     pub captive_cell_counter: u8,
-    pub rescue_progression: u8,
     pub capture_context: u8,
 }
 
@@ -60,13 +60,14 @@ impl BlackthornStoryState {
         bytes[0..4].copy_from_slice(&BLACKTHORN_STORY_STATE_MAGIC);
         bytes[4..6].copy_from_slice(&self.jailed_slots_mask.to_le_bytes());
         bytes[6] = self.captive_cell_counter;
-        bytes[7] = self.rescue_progression;
-        bytes[8] = self.capture_context;
+        bytes[7] = self.capture_context;
         bytes
     }
 
     pub fn decode(bytes: &[u8]) -> io::Result<Self> {
-        if bytes.len() != BLACKTHORN_STORY_STATE_LEN {
+        if bytes.len() != BLACKTHORN_STORY_STATE_LEN
+            && bytes.len() != BLACKTHORN_STORY_STATE_LEGACY_RESCUE_PROGRESS_LEN
+        {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
@@ -84,8 +85,11 @@ impl BlackthornStoryState {
         Ok(Self {
             jailed_slots_mask: u16::from_le_bytes([bytes[4], bytes[5]]),
             captive_cell_counter: bytes[6],
-            rescue_progression: bytes[7],
-            capture_context: bytes[8],
+            capture_context: if bytes.len() == BLACKTHORN_STORY_STATE_LEN {
+                bytes[7]
+            } else {
+                bytes[8]
+            },
         })
     }
 }

@@ -70,7 +70,6 @@
         state.fixed_hidden_treasure_found[FIXED_HIDDEN_TREASURE_FOUND_BYTES - 1] = 0x80;
         state.fixed_hidden_treasure_daily_day = 6;
         state.shadowlord_hideouts = [8, SHADOWLORD_VANQUISHED, 4];
-        state.shrine_standing = [1, 2, 3, 4, 5, 6, 7, 8];
         state.shrine_ordained_mask = 0b0000_1010;
         state.shrine_codex_mask = 0b0100_0001;
         state.moral_standing = 42;
@@ -408,11 +407,14 @@
         progress.fixed_hidden_treasure_found[FIXED_HIDDEN_TREASURE_FOUND_BYTES - 1] = 0x40;
         progress.fixed_hidden_treasure_daily_day = 12;
         progress.shadowlord_hideouts = [SHADOWLORD_VANQUISHED, 3, 6];
-        progress.shrine_standing = [10, 20, 30, 40, 50, 60, 70, 80];
 
         let encoded = progress.encoded();
         assert_eq!(encoded.len(), WORLD_PROGRESS_STATE_LEN);
         assert_eq!(WorldProgressState::decode(&encoded).unwrap(), progress);
+        let mut legacy = encoded.to_vec();
+        legacy.extend_from_slice(&[10, 20, 30, 40, 50, 60, 70, 80]);
+        assert_eq!(legacy.len(), WORLD_PROGRESS_STATE_LEGACY_SHRINE_STANDING_LEN);
+        assert_eq!(WorldProgressState::decode(&legacy).unwrap(), progress);
         assert!(WorldProgressState::decode(&[0; WORLD_PROGRESS_STATE_LEN]).is_err());
         assert!(WorldProgressState::decode(&encoded[..WORLD_PROGRESS_STATE_LEN - 1]).is_err());
     }
@@ -1570,7 +1572,6 @@
             shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
             shrine_ordained_mask: 0,
             shrine_codex_mask: 0,
-            shrine_standing: [0; VIRTUE_COUNT],
             moral_standing: 0,
             avatar_stats: AvatarStats::default(),
             torches: DEFAULT_TORCH_STOCK,

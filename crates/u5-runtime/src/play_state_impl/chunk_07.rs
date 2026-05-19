@@ -3141,10 +3141,6 @@ impl PlayState {
         let verdict_message = self.blackthorn_rescue_verdict_message(game_dir, verdict as usize)?;
         let previous_standing = self.moral_standing;
         self.moral_standing = blackthorn_rescue_post_print_standing(self.moral_standing);
-        self.blackthorn_story.rescue_progression = self
-            .blackthorn_story
-            .rescue_progression
-            .max(self.moral_standing);
         for member in &mut self.party {
             member.status = b'G';
             member.hp = member.max_hp.max(1);

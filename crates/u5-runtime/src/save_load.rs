@@ -224,7 +224,6 @@ pub fn play_options_from_save_bytes_named(
         shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
         shrine_ordained_mask: bytes[SAVE_SHRINE_ORDAINED_MASK_OFFSET],
         shrine_codex_mask: bytes[SAVE_SHRINE_CODEX_MASK_OFFSET],
-        shrine_standing: [0; VIRTUE_COUNT],
         moral_standing: bytes[SAVE_MORAL_STANDING_OFFSET],
         avatar_stats,
         torches: bytes[SAVE_TORCH_STOCK_OFFSET],

@@ -11,12 +11,10 @@ use crate::*;
 /// remains byte-preserving for unknown fields.
 pub const WORLD_PROGRESS_STATE_FILE: &str = "SAVED.WPS";
 pub const WORLD_PROGRESS_STATE_MAGIC: [u8; 4] = *b"WPS1";
-pub const WORLD_PROGRESS_STATE_LEN: usize = 4
-    + RARE_REAGENT_HARVEST_POINT_COUNT
-    + FIXED_HIDDEN_TREASURE_FOUND_BYTES
-    + 1
-    + SHADOWLORD_COUNT
-    + VIRTUE_COUNT;
+pub const WORLD_PROGRESS_STATE_LEN: usize =
+    4 + RARE_REAGENT_HARVEST_POINT_COUNT + FIXED_HIDDEN_TREASURE_FOUND_BYTES + 1 + SHADOWLORD_COUNT;
+pub const WORLD_PROGRESS_STATE_LEGACY_SHRINE_STANDING_LEN: usize =
+    WORLD_PROGRESS_STATE_LEN + VIRTUE_COUNT;
 
 const RARE_REAGENT_DAYS_OFFSET: usize = 4;
 const FIXED_HIDDEN_FOUND_OFFSET: usize =
@@ -24,7 +22,6 @@ const FIXED_HIDDEN_FOUND_OFFSET: usize =
 const FIXED_HIDDEN_DAILY_DAY_OFFSET: usize =
     FIXED_HIDDEN_FOUND_OFFSET + FIXED_HIDDEN_TREASURE_FOUND_BYTES;
 const SHADOWLORD_HIDEOUTS_OFFSET: usize = FIXED_HIDDEN_DAILY_DAY_OFFSET + 1;
-const SHRINE_STANDING_OFFSET: usize = SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorldProgressState {
@@ -32,7 +29,6 @@ pub struct WorldProgressState {
     pub fixed_hidden_treasure_found: [u8; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
     pub fixed_hidden_treasure_daily_day: u8,
     pub shadowlord_hideouts: [u8; SHADOWLORD_COUNT],
-    pub shrine_standing: [u8; VIRTUE_COUNT],
 }
 
 impl Default for WorldProgressState {
@@ -43,7 +39,6 @@ impl Default for WorldProgressState {
             fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
             fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
             shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
-            shrine_standing: [0; VIRTUE_COUNT],
         }
     }
 }
@@ -55,7 +50,6 @@ impl WorldProgressState {
             fixed_hidden_treasure_found: options.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: options.fixed_hidden_treasure_daily_day,
             shadowlord_hideouts: options.shadowlord_hideouts,
-            shrine_standing: options.shrine_standing,
         }
     }
 
@@ -65,7 +59,6 @@ impl WorldProgressState {
             fixed_hidden_treasure_found: state.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: state.fixed_hidden_treasure_daily_day,
             shadowlord_hideouts: state.shadowlord_hideouts,
-            shrine_standing: state.shrine_standing,
         }
     }
 
@@ -74,7 +67,6 @@ impl WorldProgressState {
         options.fixed_hidden_treasure_found = self.fixed_hidden_treasure_found;
         options.fixed_hidden_treasure_daily_day = self.fixed_hidden_treasure_daily_day;
         options.shadowlord_hideouts = self.shadowlord_hideouts;
-        options.shrine_standing = self.shrine_standing;
     }
 
     pub fn encoded(self) -> [u8; WORLD_PROGRESS_STATE_LEN] {
@@ -89,13 +81,13 @@ impl WorldProgressState {
         bytes[FIXED_HIDDEN_DAILY_DAY_OFFSET] = self.fixed_hidden_treasure_daily_day;
         bytes[SHADOWLORD_HIDEOUTS_OFFSET..SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
             .copy_from_slice(&self.shadowlord_hideouts);
-        bytes[SHRINE_STANDING_OFFSET..SHRINE_STANDING_OFFSET + VIRTUE_COUNT]
-            .copy_from_slice(&self.shrine_standing);
         bytes
     }
 
     pub fn decode(bytes: &[u8]) -> io::Result<Self> {
-        if bytes.len() != WORLD_PROGRESS_STATE_LEN {
+        if bytes.len() != WORLD_PROGRESS_STATE_LEN
+            && bytes.len() != WORLD_PROGRESS_STATE_LEGACY_SHRINE_STANDING_LEN
+        {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
@@ -125,16 +117,12 @@ impl WorldProgressState {
         shadowlord_hideouts.copy_from_slice(
             &bytes[SHADOWLORD_HIDEOUTS_OFFSET..SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT],
         );
-        let mut shrine_standing = [0; VIRTUE_COUNT];
-        shrine_standing
-            .copy_from_slice(&bytes[SHRINE_STANDING_OFFSET..SHRINE_STANDING_OFFSET + VIRTUE_COUNT]);
 
         Ok(Self {
             rare_reagent_harvest_days,
             fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: bytes[FIXED_HIDDEN_DAILY_DAY_OFFSET],
             shadowlord_hideouts,
-            shrine_standing,
         })
     }
 }

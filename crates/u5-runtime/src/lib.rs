@@ -122,7 +122,8 @@ pub use blackthorn::{
     BLACKTHORN_CUTSCENE_TEMP_TILE_A, BLACKTHORN_CUTSCENE_TEMP_TILE_B,
     BLACKTHORN_CUTSCENE_THRONE_TYPE, BLACKTHORN_FAILURE_VICTIM_SLOT,
     BLACKTHORN_RESCUE_HANDOFF_SCENE, BLACKTHORN_RESCUE_HANDOFF_X, BLACKTHORN_RESCUE_HANDOFF_Y,
-    BLACKTHORN_RESCUE_STANDING_FLOOR, BLACKTHORN_STORY_STATE_FILE, BLACKTHORN_STORY_STATE_LEN,
+    BLACKTHORN_RESCUE_STANDING_FLOOR, BLACKTHORN_STORY_STATE_FILE,
+    BLACKTHORN_STORY_STATE_LEGACY_RESCUE_PROGRESS_LEN, BLACKTHORN_STORY_STATE_LEN,
     BLACKTHORN_STORY_STATE_MAGIC, BlackthornCutsceneActor, BlackthornCutsceneActorPlacement,
     BlackthornCutsceneActorState, BlackthornCutsceneBeat, BlackthornCutsceneCommand,
     BlackthornCutsceneVm, BlackthornEntryFamily, BlackthornStoryState, KARMA_DAT_BAND_WIDTH,
@@ -614,8 +615,9 @@ pub use wind::{
     wind_status_message_from_save_byte, wind_status_message_from_state_and_save_byte,
 };
 pub use world_progress::{
-    WORLD_PROGRESS_STATE_FILE, WORLD_PROGRESS_STATE_LEN, WORLD_PROGRESS_STATE_MAGIC,
-    WorldProgressState, load_world_progress_state, write_world_progress_state,
+    WORLD_PROGRESS_STATE_FILE, WORLD_PROGRESS_STATE_LEGACY_SHRINE_STANDING_LEN,
+    WORLD_PROGRESS_STATE_LEN, WORLD_PROGRESS_STATE_MAGIC, WorldProgressState,
+    load_world_progress_state, write_world_progress_state,
 };
 pub use world_tables::*;
 pub use world_tables_io::*;
