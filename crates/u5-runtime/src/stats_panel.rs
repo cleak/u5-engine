@@ -4,6 +4,13 @@ use crate::*;
 
 pub const STATS_PANEL_WIDTH: usize = 16;
 pub const STATS_PANEL_PARTY_ROWS: usize = SAVE_PARTY_SIZE_MAX as usize;
+pub const STATS_PANEL_COMBAT_ROW_MARKER: char = '*';
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StatsPanelCombatRowOverlay {
+    pub highlighted: bool,
+    pub status_override: Option<u8>,
+}
 
 pub fn render_stats_panel(state: &PlayState, active_cursor: Option<usize>) -> String {
     let mut lines = Vec::with_capacity(STATS_PANEL_PARTY_ROWS + 5);
@@ -43,16 +50,57 @@ fn render_stats_panel_party_row(
         .and_then(|name| party_name_to_string(name))
         .unwrap_or_else(|| format!("Party {}", index + 1));
     let name = truncate_ascii_chars(&name, 10);
+    let overlay = stats_panel_combat_row_overlay(state, index);
     let cursor = if active_cursor == Some(index) && !matches!(member.status, b'D' | b'S') {
         '>'
+    } else if overlay.highlighted {
+        STATS_PANEL_COMBAT_ROW_MARKER
     } else {
         ' '
     };
+    let status = overlay.status_override.unwrap_or(member.status);
     fixed_panel_line(&format!(
         "{name:<10}{cursor}{:>4}{}",
         member.hp.min(9999),
-        char::from(member.status)
+        char::from(status)
     ))
+}
+
+pub fn stats_panel_combat_row_overlay(
+    state: &PlayState,
+    index: usize,
+) -> StatsPanelCombatRowOverlay {
+    if !state.combat_active || index >= STATS_PANEL_PARTY_ROWS {
+        return StatsPanelCombatRowOverlay::default();
+    }
+
+    let highlighted = state
+        .pending_combat_actor_slot
+        .filter(|slot| *slot == index && *slot < COMBAT_PARTY_ACTOR_SLOTS)
+        .and_then(|slot| state.combat_actors.get(slot).copied())
+        .is_some_and(combat_actor_is_active_not_dead);
+
+    let status_override = stats_panel_combat_cast_status_override(state, index);
+    StatsPanelCombatRowOverlay {
+        highlighted,
+        status_override,
+    }
+}
+
+fn stats_panel_combat_cast_status_override(state: &PlayState, index: usize) -> Option<u8> {
+    if state
+        .active_cast
+        .as_ref()
+        .is_some_and(|session| session.combat_actor_slot == Some(index))
+        || state
+            .active_cast_followup
+            .as_ref()
+            .is_some_and(|session| session.combat_actor_slot == Some(index))
+    {
+        Some(b'C')
+    } else {
+        None
+    }
 }
 
 fn render_stats_panel_food_row(food: u16) -> String {

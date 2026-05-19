@@ -972,6 +972,73 @@
     }
 
     #[test]
+    fn stats_panel_derives_combat_row_overlay_from_live_combat_state() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.combat_active = true;
+        state.pending_combat_actor_slot = Some(0);
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+
+        let overlay = stats_panel_combat_row_overlay(&state, 0);
+        assert_eq!(
+            overlay,
+            StatsPanelCombatRowOverlay {
+                highlighted: true,
+                status_override: None,
+            }
+        );
+        assert!(state
+            .render_stats_panel_view()
+            .lines()
+            .nth(1)
+            .unwrap()
+            .contains(STATS_PANEL_COMBAT_ROW_MARKER));
+
+        state.active_cast = Some(CastSession::for_combat_actor(0, true));
+        let casting_overlay = stats_panel_combat_row_overlay(&state, 0);
+
+        assert_eq!(casting_overlay.status_override, Some(b'C'));
+        assert!(state
+            .render_stats_panel_view()
+            .lines()
+            .nth(1)
+            .unwrap()
+            .ends_with('C'));
+    }
+
+    #[test]
+    fn stats_panel_combat_overlay_preserves_active_player_cursor_priority() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.combat_active = true;
+        state.active_player = Some(0);
+        state.pending_combat_actor_slot = Some(0);
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+
+        let panel = state.render_stats_panel_view();
+        let row = panel.lines().nth(1).unwrap();
+
+        assert!(row.contains('>'));
+        assert!(!row.contains(STATS_PANEL_COMBAT_ROW_MARKER));
+    }
+
+    #[test]
     fn stats_panel_ship_marker_middle_counter_renders_hull_instead_of_gold() {
         let mut state = test_state(open_grid(), 1, 1);
         state.gold = 999;

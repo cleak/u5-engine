@@ -463,8 +463,9 @@ pub use signs_io::{
 pub use start_validation::*;
 pub use stat_arithmetic::{capped_add_u8, capped_add_word, floor_sub_u8, floor_sub_word};
 pub use stats_panel::{
-    STATS_PANEL_PARTY_ROWS, STATS_PANEL_WIDTH, render_stats_panel,
-    stats_panel_active_cursor_visible,
+    STATS_PANEL_COMBAT_ROW_MARKER, STATS_PANEL_PARTY_ROWS, STATS_PANEL_WIDTH,
+    StatsPanelCombatRowOverlay, render_stats_panel, stats_panel_active_cursor_visible,
+    stats_panel_combat_row_overlay,
 };
 pub use story_io::{
     INTRO_AUTO_OPENING_STEP, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_0_TRANSITION_STRIPS,
