@@ -292,11 +292,15 @@ slot, hand-occupancy, ring-vanish, and combat body-armour gates, bare `M` opens
 the reagent mixer, bare `N` opens the New Order party-slot prompt, and bare `Y`
 opens the free-text yell prompt.
 Bare `J` opens the Jimmy party-member picker, and inline forms such as `J1`
-still route in one command. The command uses the first-playable Jimmy/key guard
-instead of the movement helper, with optional town lock and dungeon door
-metadata able to unlock authored door cells. Numeric diagonals still refuse as
-unsupported dungeon movement, and dungeon `Q` routes to the public mode-loop
-`Exit to DOS?` prompt instead of the resident save writer.
+still route in one command. The command follows the public lockpick rules:
+non-dungeon doors, chests, and NPC pockets use the selected member's class byte
+against the `1..29` strict-greater roll, object and dungeon chests use their
+published threshold formulas, failures break keys where specified, and magic
+locks refuse without consuming a key. Clean town-lock and dungeon-door rows
+still provide authored coordinate bindings where native exact cells are not
+public. Numeric diagonals still refuse as unsupported dungeon movement, and
+dungeon `Q` routes to the public mode-loop `Exit to DOS?` prompt instead of
+the resident save writer.
 Top-down uppercase `L` opens the Look direction prompt, while inline forms such
 as `L6` and lowercase quick-look continue to route in one command without
 turning the party or spending a turn.
@@ -1107,7 +1111,7 @@ Stepping onto a matching row, or completing any turn-consuming top-down command
 while already standing on one, runs the town underfoot poison-gas branch against
 eligible Good living party members. The public spec identifies the roll branch
 but not its exact odds, so this remains a deterministic first-playable roll
-until a clean row/odds contract is published.
+until a clean row/odds contract is published in `cleak/u5-spec#51`.
 
 Town boundary exits use the native public threshold tile `0x59`. Additional
 authored exit cells can be supplied as clean-room sidecar metadata:

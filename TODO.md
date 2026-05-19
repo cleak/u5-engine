@@ -102,6 +102,9 @@ Current worktree context when this TODO was refreshed:
 - Hourly poison and starvation damage use a one-HP first-playable policy while
   the exact public damage amount/range and per-member roll semantics are
   blocked on clean spec clarification in `cleak/u5-spec#50`.
+- Town poison-gas doorway cells are implemented through clean sidecar metadata,
+  but the exact public roll odds and per-member semantics are blocked on clean
+  spec clarification in `cleak/u5-spec#51`.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry, and
   seeded ship/skiff sailing routes, plus broader dungeon and combat command
@@ -535,21 +538,22 @@ Goal: turn diagnostic interactions into game-like content.
     - preserve focused tests for each shop type and branch.
 
 - Containers and pickups.
-  - Current sidecars can grant food, gold, keys, gems, and torches.
+  - Current object-table, tile, Search, and dungeon chest paths can grant food,
+    gold, keys, gems, torches, scrolls, potions, equipment, Moonstones, magic
+    carpets, regalia, shards, HMS Cape plans, and the Sandalwood Box through
+    the shared inventory-add path.
   - Remaining work:
-    - original tile-object item-code mapping,
-    - chest content/trap generator,
-    - dungeon chest trap effects,
-    - object pickup semantics for all relevant active-object families,
-    - persistence rules after pickup.
+    - audit every public `hidden-treasures.md` row against the runtime table,
+    - continue validating authored object-table/item-code coverage with local
+      assets without committing raw asset dumps,
+    - preserve consumed-object persistence tests as new durable save fields are
+      added.
 
 - Doors, locks, and secrets.
   - Current sidecars cover town locks, dungeon doors, and secret doors.
   - Remaining work:
     - exact surface lock-state byte pairs,
     - exact dungeon low-nibble split,
-    - lockpick formulas and key-break rules,
-    - NPC pickpocket rewards and failure consequences,
     - cannon/fire durability details.
 
 - NPC schedules and conversations.

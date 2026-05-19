@@ -1,6 +1,7 @@
-//! Helpers for container/Get behaviour per `containers.md`. Currently
-//! covers the dungeon-chest reward generator (§6) and the directional
-//! table-food consumption rule (§7).
+//! Helpers for container/Get behaviour per `containers.md`, including
+//! surface/town chest pools, dungeon-chest generation, Search trap
+//! classification, inventory-add classification, rare reagent harvest
+//! helpers, and directional table-food consumption.
 
 /// `containers.md §4` surface/town chest content roll die. Both the
 /// primary-pool per-row gate and the secondary-pool per-attempt gate
