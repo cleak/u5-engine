@@ -14,16 +14,18 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed with 2357 tests on 2026-05-19.
+- `cargo test` passed on 2026-05-19, including 2362 `u5-runtime` tests.
 - `cargo fmt -- --check` had passed in the prior checkpoint; rerun before any
   code commit that changes Rust files.
 - `cargo test -p u5-tui cli_binary_help_prints_usage_without_assets -- --exact`
   passed on 2026-05-18; rerun when CLI/TUI code changes.
-- `cargo run -- --play-script "z;q" C:\Games\U5-Clean` ran successfully in the
-  prior checkpoint; rerun for gameplay-loop changes.
+- Representative raster smoke checks with local assets produced nonblank hashes:
+  `BRITANNIA` top-down `fd923dc0f87a9f3c`, `BRITANNIA` after movement
+  `1eb882f27b1d216c`, `CASTLE:0` top-down `be84488b7b199310`, and
+  `DUNGEON:0` first-person `161ad48dd2a91725`.
 - `cargo run -- --help` is a supported no-asset usage path.
 - The latest checkpointed engine commit at the time of this refresh was
-  `553d33d Honor dungeon D and W command fallbacks`.
+  `02dbe07 Preserve conversation BYE and no-match envelopes`.
 - The spec checkout used for the most recent audit was `5b816cc Complete
   cleanroom specification`.
 
@@ -41,7 +43,7 @@ changes. Do not revert unrelated work.
 
 - Use only:
   - this repository,
-  - the public spec at `C:\Projects\Rust\u5-spec`,
+  - the public spec at `C:\Projects\Rust\u5-clean\u5-spec`,
   - local clean asset files at `C:\Games\U5-Clean`,
   - user-authored clean-room descriptions or tests.
 - Do not inspect decompiled or disassembled source.
@@ -135,21 +137,26 @@ non-combat-first version before moving into Bevy.
     - keep tests for no target, adjacent target, alarm, and combat routing.
 
 - Talk (`T`).
-  - Current town talk reaches NPC envelopes and one-shot keyword lookup.
+  - Current town talk reaches NPC envelopes, scoped prompts, reserved words,
+    repeated keyword lookup, action dispatch `A` through `K`, and runtime shop
+    routing.
   - Remaining work:
-    - full keyword loop,
-    - conversation side effects,
-    - shop trigger routing,
-    - richer refusal paths for non-NPC targets.
+    - audit exact sleeping/no-response status-tile mapping when public spec
+      issue #44 is answered,
+    - audit richer refusal paths for non-NPC targets,
+    - keep side effects and shop routing covered as new clean spec details are
+      published.
   - Keep decoded `.TLK` content runtime-only; do not commit transcripts.
 
 - Use (`U`).
-  - Current first-playable supports torch, gem, key, and Moonstones.
+  - Current behavior covers the public inventory families: torches, gems, keys,
+    scrolls, potions, Moonstones, regalia, Shards, magic carpet, skull keys,
+    spyglass, HMS plans, sextant, pocket watch, and wooden box.
   - Remaining work:
-    - audit all usable inventory items in the public spec,
-    - add safe refusals for unsupported items,
-    - add tests for inventory mutation and turn rules,
-    - map more item effects only when public clean-room behavior is available.
+    - audit exact refusal text and presentation parity,
+    - keep tests for inventory mutation, turn rules, and mode gates current,
+    - map further edge-case effects only when public clean-room behavior is
+      available.
 
 ### Movement And Transitions
 
@@ -361,7 +368,8 @@ until combat exists.
     - failed cast turn rules.
 
 - Implement remaining non-combat effects.
-  - Audit all 48 spells against `C:\Projects\Rust\u5-spec\systems\magic.md`.
+  - Audit all 48 spells against
+    `C:\Projects\Rust\u5-clean\u5-spec\systems\magic.md`.
   - For each spell, classify:
     - already implemented,
     - implemented as first-playable approximation,
@@ -370,14 +378,18 @@ until combat exists.
     - out-of-scene refusal.
 
 - Known approximations/gaps.
-  - Heal uses fixed first-playable HP amount.
-  - Great Heal and Resurrect use max HP until exact math is needed.
+  - Heal now uses the public halved-roll formula with a minimum of 1 HP.
+  - Great Heal and Resurrect now apply spec-backed core record mutations,
+    including dungeon combat-active refusal and resurrection experience, mana,
+    level, and max-HP recomputation.
   - Create Food uses first-playable fixed amount and cap behavior remains open.
   - Rel Hur wind order is deterministic but exact original order remains open.
   - Blink default range is sidecar-authored.
-  - X-Ray and Peer use first-playable map projections.
+  - X-Ray and Peer use first-playable map projections; visual parity remains
+    open.
   - Dungeon escape-helper spell split remains open.
-  - Combat-side active-effect consumers remain out of scope.
+  - Combat-side active-effect consumers are implemented broadly, but parity
+    still needs audit coverage.
 
 - Gate Travel.
   - Recently fixed to report a transition outcome so destination underfoot
