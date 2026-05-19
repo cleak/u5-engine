@@ -15,13 +15,15 @@ Last known verification state:
   passed on 2026-05-18.
 - `cargo run -- --play-script "z;q" C:\Games\U5-Clean` ran successfully.
 - `cargo run -- --help` is a supported no-asset usage path.
+- The latest checkpointed engine commit at the time of this refresh was
+  `5380801 Run Blackthorn cutscene beats`.
 
-Current worktree context when this TODO was written:
+Current worktree context when this TODO was refreshed:
 
-- `README.md` modified.
-- `reports/lb-throne-room-slice.txt` modified.
-- `src/main.rs` modified.
-- `AGENTS.md` untracked.
+- `git status --short` was clean in `u5-engine`.
+- `git status --short` was clean in `u5-spec`.
+- `journal/capture/notes.py` was not present in the workspace, engine, or spec
+  repository.
 
 Before starting a major slice, inspect `git status --short` and preserve user
 changes. Do not revert unrelated work.
@@ -47,36 +49,31 @@ changes. Do not revert unrelated work.
 
 These are the safest next slices for a new contributor.
 
-1. Review and checkpoint the current worktree.
-   - Run `git status --short`.
-   - Review `git diff -- src/main.rs README.md reports/lb-throne-room-slice.txt`.
-   - Separate intentional engine changes from generated report changes.
-   - Decide whether `AGENTS.md` should be committed or left local.
-   - Re-run `cargo test` with `RUSTC_WRAPPER` cleared:
+1. Review and checkpoint the current worktree before editing.
+   - Run `git status --short` in both `u5-engine` and `u5-spec`.
+   - Preserve unrelated local changes.
+   - Re-run the relevant tests with `RUSTC_WRAPPER` cleared:
      ```powershell
      $env:RUSTC_WRAPPER=''; cargo test
      ```
 
-2. Clean up naming around dungeon climb.
-   - `src/main.rs` still has `climb_dungeon_or_placeholder`.
-   - The function now implements real dungeon ladder behavior plus safe refusal
-     for missing clean return metadata.
-   - Rename it to something like `climb_dungeon`.
-   - Update any tests or comments that still imply it is only a placeholder.
-   - Add no behavior changes in the rename slice.
-
-3. Keep the CLI usage path covered.
+2. Keep the CLI usage path covered.
    - `--help` and `-h` are supported no-asset paths.
    - Parser tests cover both flags, and a binary-level regression verifies
      `u5-engine --help` prints usage without touching local game assets.
 
-4. Make one small command-placeholder improvement.
-   - Current explicit placeholders include Ready, Yell, Attack, shop flow, and
-     some combat handoffs.
-   - Pick one command family and move it from "out of scope" to a clean,
-     deterministic first-playable implementation.
-   - Add focused tests for turn consumption, messages, state mutation, and
-     mode-specific routing.
+3. Work from current code/spec gaps, not this file alone.
+   - Ready, Yell, Attack, shops, and combat handoff have moved beyond their
+     early placeholder status.
+   - Before implementing a remaining item below, confirm it is still absent with
+     `rg`, read the matching clean spec section, and add focused tests for turn
+     consumption, messages, state mutation, and mode-specific routing.
+
+4. Do not invent exact transition coordinates.
+   - The current clean spec still omits several exact overworld, moongate,
+     dungeon-return, and special-transition coordinates.
+   - Leave the safe "missing clean return-coordinate metadata" behavior in place
+     until those coordinates are published through the spec.
 
 ## Milestone 1: Terminal First-Playable Completion
 
@@ -97,26 +94,28 @@ non-combat-first version before moving into Bevy.
   - Ensure command letters do not accidentally fall through to movement.
 
 - Ready (`R`).
-  - Current behavior reports out of scope.
-  - Decide first-playable target:
-    - no-op with inventory/equipment summary, or
-    - minimal equip-slot mutation if public save layout is sufficient.
-  - Add tests for town, world, and dungeon routing.
-  - Confirm no turn is spent unless public spec says otherwise.
+  - Current behavior opens the Ready picker with carried-stock, ammunition,
+    strength, occupied-slot, hand-occupancy, ring-vanish, and combat
+    body-armour gates.
+  - Remaining work:
+    - audit any item-specific equipment rules newly published in the spec,
+    - keep town, world, dungeon, and combat routing covered by tests,
+    - confirm turn-spend behavior when parity details are published.
 
 - Yell (`Y`).
-  - Current behavior reports out of scope in some modes and sails in ship mode.
-  - Separate ship sail toggle from generic Yell behavior.
-  - Implement generic mode-appropriate response if public spec supports it.
-  - Add tests that ship `Y` still toggles sails and non-ship `Y` does not.
+  - Current behavior separates ship sail toggles from generic Yell input and
+    supports dungeon words and Shadowlord names.
+  - Remaining work:
+    - audit any newly specified mode-specific Yell effects,
+    - keep tests proving ship `Y` toggles sails and non-ship `Y` does not.
 
 - Attack (`A`).
-  - Current top-down path reports out of scope.
-  - For the non-combat first-playable milestone, decide whether Attack should:
-    - refuse cleanly without turn when no target is present,
-    - report target contact when an active object is adjacent,
-    - or route to a future combat handoff placeholder.
-  - Add tests for no target, adjacent target, and mode-specific behavior.
+  - Current top-down paths prompt for direction, handle misses, report adjacent
+    target contact, raise town alarms where appropriate, and can enter
+    terrain-combat handoff for combat-class world objects.
+  - Remaining work:
+    - audit parity for non-hostile and special story-object attacks,
+    - keep tests for no target, adjacent target, alarm, and combat routing.
 
 - Talk (`T`).
   - Current town talk reaches NPC envelopes and one-shot keyword lookup.
@@ -161,12 +160,10 @@ non-combat-first version before moving into Bevy.
 - Dungeon movement.
   - Already supports facing-relative movement, turning, ladders, fall traps,
     bomb traps, fields, wind tiles, scripted teleports, exit tiles, heavy doors,
-    room-trigger diagnostics, and text proxy view.
+    room combat handoff, and text proxy view.
   - Remaining work:
-    - rename `climb_dungeon_or_placeholder`,
     - complete exact dungeon exit-cell identities when public data is available,
     - replace sidecar-heavy-door rows with public low-nibble rules when safe,
-    - implement room combat handoff or a stronger non-combat room outcome,
     - verify dungeon view/flood map edge cases against public spec.
 
 - Area transition invariants.
@@ -378,31 +375,24 @@ until combat exists.
 
 ## Milestone 5: Combat Handoff And Combat
 
-Goal: decide whether to keep combat out of scope for first-playable or implement
-a minimal combat loop.
+Goal: continue replacing first-playable combat coverage with spec-backed parity
+as public details become available.
 
-- Current combat placeholders.
-  - Hostile world object contact reports combat out of scope.
-  - Dungeon room triggers report arena diagnostics and mark room-helper state.
-  - Dungeon room-helper state fires before the next key but does not enter
-    combat.
-  - Some spells are parsed but only meaningful once combat actors exist.
-
-- Minimal combat handoff.
-  - Load arena metadata safely from local assets at runtime.
-  - Snapshot current active-object table.
-  - Switch to combat scene/state.
-  - Place party and enemy actors.
-  - Provide an immediate debug resolution path for first-playable testing.
-  - Restore prior world/town/dungeon state on exit.
-  - Add tests for active-object save/restore and coordinate preservation.
+- Current combat handoff.
+  - Hostile world-object contact, Attack against combat-class objects, dungeon
+    rooms, rest ambushes, and outdoor encounters can enter a combat frame.
+  - Combat-frame entry snapshots the previous mode state, loads clean runtime
+    arena data, places actors, and restores the suspended state on exit.
+  - Tests cover active-object preservation, trigger-slot reconciliation, actor
+    setup, room/ambush routes, and several spell/effect paths.
 
 - Full combat loop.
-  - Actor initiative/phase model.
-  - Player movement and targeting.
-  - Monster AI.
-  - Combat field placement and contact.
-  - Damage, defense, status, death, rewards, loot, and escape.
+  - Continue auditing actor initiative/phase parity.
+  - Continue auditing player movement and targeting parity.
+  - Continue auditing monster AI parity.
+  - Continue auditing combat field placement and contact parity.
+  - Continue auditing damage, defense, status, death, rewards, loot, and escape
+    parity.
   - Monster combat-AI runner instruction set and class effect map are still
     called out as remaining public-spec parity work.
 
@@ -411,14 +401,12 @@ a minimal combat loop.
 Goal: turn diagnostic interactions into game-like content.
 
 - Shops.
-  - Current talk can identify shop triggers but shop UI is out of scope.
-  - Implement:
-    - shop type detection,
-    - buy/sell menus,
-    - price tables,
-    - inventory updates,
-    - gold validation,
-    - clean refusal/cancel paths.
+  - Current talk can identify shop triggers and route into runtime shop flows
+    with menus, pricing, inventory/gold updates, and clean cancel/refusal paths.
+  - Remaining work:
+    - audit every service against newly published spec details,
+    - keep runtime `.DAT` reads out of committed generated content,
+    - preserve focused tests for each shop type and branch.
 
 - Containers and pickups.
   - Current sidecars can grant food, gold, keys, gems, and torches.
