@@ -40,7 +40,7 @@ move below level `7`. Missing rows preserve the conservative in-place block.
 | `world_get_tiles.tsv` | World tile pickups and replacements. |
 | `object_pickups.tsv` | Location-local object-table grants. |
 | `town_get_tiles.tsv` | Town tile pickups and replacements. |
-| `town_fire_sources.tsv` | Fire sources and related town interaction rows. |
+| `town_fire_sources.tsv` | Optional town fire-source overrides; native static cannons use `0xB4..=0xB7` without a row. |
 | `town_pushables.tsv` | Town pushable furniture/object rows. |
 | `town_rest_beds.tsv` | Town bed/rest surfaces accepted by H-Hole-up. |
 | `town_locks.tsv` | Town lock rows for Jimmy/Open/Use-key handling. |

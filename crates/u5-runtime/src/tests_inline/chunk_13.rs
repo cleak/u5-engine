@@ -6688,6 +6688,24 @@
     }
 
     #[test]
+    fn town_cannon_tile_fire_direction_uses_low_two_facing_bits() {
+        // commands.md §8 names 0xB4..=0xB7 as the four-facing cannon
+        // family; vehicles.md §8 lets F-Fire use an adjacent
+        // cannon-facing tile as the local source direction.
+        assert_eq!(TOWN_CANNON_TILE_FIRST, 0xB4);
+        assert_eq!(TOWN_CANNON_TILE_LAST, 0xB7);
+        assert_eq!(
+            town_cannon_tile_fire_direction(TOWN_CANNON_TILE_FIRST),
+            Some(Direction::North)
+        );
+        assert_eq!(town_cannon_tile_fire_direction(0xB5), Some(Direction::East));
+        assert_eq!(town_cannon_tile_fire_direction(0xB6), Some(Direction::South));
+        assert_eq!(town_cannon_tile_fire_direction(0xB7), Some(Direction::West));
+        assert_eq!(town_cannon_tile_fire_direction(0xB3), None);
+        assert_eq!(town_cannon_tile_fire_direction(0xB8), None);
+    }
+
+    #[test]
     fn new_order_outcome_resolves_cancellation_refusal_and_swap() {
         // commands.md §6: cancelling either selector prompt aborts
         // without consuming a turn; a leader-slot selection refuses

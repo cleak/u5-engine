@@ -1505,26 +1505,13 @@ impl PlayState {
         scene: Scene,
         floor: i8,
     ) -> io::Result<MoveOutcome> {
-        let Some(entries) = load_town_fire_source_entries(game_dir)? else {
-            self.message = "What?".to_string();
-            return Ok(MoveOutcome::Blocked);
-        };
-        let Some(source) = entries
-            .iter()
-            .find(|entry| {
-                let entry = **entry;
-                entry.scene == scene
-                    && entry.floor == floor
-                    && town_fire_source_is_adjacent(entry, self.player.x, self.player.y)
-                    && town_fire_source_tile_matches(entry, self.grid[entry.y * 32 + entry.x])
-            })
-            .copied()
-        else {
+        let entries = load_town_fire_source_entries(game_dir)?;
+        self.tick_door_tracker();
+        let Some(source) = self.town_fire_source(scene, floor, entries.as_deref()) else {
             self.message = "What?".to_string();
             return Ok(MoveOutcome::Blocked);
         };
 
-        self.tick_door_tracker();
         let target = self.town_fire_target(source);
         match target {
             TownFireTarget::Object { slot, object } => {
@@ -1550,7 +1537,7 @@ impl PlayState {
                 self.mark_visibility_dirty();
                 self.advance_turn_without_door_tick();
                 self.message = format!(
-                    "BOOOM! Town fire source at ({}, {}) fired {} and destroyed door tile {} at ({x}, {y}).",
+                    "BOOOM! Door destroyed! Town fire source at ({}, {}) fired {} and destroyed door tile {} at ({x}, {y}).",
                     source.x,
                     source.y,
                     source.direction.name(),
@@ -1578,6 +1565,64 @@ impl PlayState {
             }
         }
         Ok(MoveOutcome::Fired)
+    }
+
+    pub fn town_fire_source(
+        &self,
+        scene: Scene,
+        floor: i8,
+        sidecar_entries: Option<&[TownFireSourceEntry]>,
+    ) -> Option<TownFireSourceEntry> {
+        if let Some(entry) = sidecar_entries.and_then(|entries| {
+            entries
+                .iter()
+                .find(|entry| {
+                    let entry = **entry;
+                    entry.scene == scene
+                        && entry.floor == floor
+                        && town_fire_source_is_adjacent(entry, self.player.x, self.player.y)
+                        && town_fire_source_tile_matches(entry, self.grid[entry.y * 32 + entry.x])
+                })
+                .copied()
+        }) {
+            return Some(entry);
+        }
+
+        self.adjacent_town_cannon_fire_source(scene, floor)
+    }
+
+    pub fn adjacent_town_cannon_fire_source(
+        &self,
+        scene: Scene,
+        floor: i8,
+    ) -> Option<TownFireSourceEntry> {
+        for dy in -1isize..=1 {
+            for dx in -1isize..=1 {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+                let x = self.player.x as isize + dx;
+                let y = self.player.y as isize + dy;
+                if !(0..32).contains(&x) || !(0..32).contains(&y) {
+                    continue;
+                }
+                let x = x as usize;
+                let y = y as usize;
+                let tile = self.grid[y * 32 + x];
+                let Some(direction) = town_cannon_tile_fire_direction(tile) else {
+                    continue;
+                };
+                return Some(TownFireSourceEntry {
+                    scene,
+                    floor,
+                    x,
+                    y,
+                    direction,
+                    expected_tile: Some(tile),
+                });
+            }
+        }
+        None
     }
 
     pub fn town_fire_target(&self, source: TownFireSourceEntry) -> TownFireTarget {

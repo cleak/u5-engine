@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-19, including 2376 tests.
+- `cargo test -p u5-runtime` passed on 2026-05-19, including 2379 tests.
 - `cargo test -p u5-tui` passed on 2026-05-19.
 - `cargo test -p u5-bevy` passed on 2026-05-19, including 31 tests.
 - `cargo fmt -- --check` passed on 2026-05-19 after the latest Rust changes.
@@ -247,7 +247,7 @@ tables are not yet public or not yet encoded.
   - `dungeon_doors.tsv`
   - `dungeon_chests.tsv`
   - `secret_doors.tsv`
-  - `town_fire_sources.tsv`
+  - `town_fire_sources.tsv` (now an override for native `0xB4..=0xB7` cannons)
   - `town_pushables.tsv`
   - `town_get_tiles.tsv`
   - `town_rest_beds.tsv`

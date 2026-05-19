@@ -1374,7 +1374,7 @@
     }
 
     #[test]
-    fn town_fire_source_tile_guard_mismatch_refuses_without_door_tick() {
+    fn town_fire_source_tile_guard_mismatch_refuses_after_pre_search_door_tick() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(TOWN_FIRE_SOURCE_TABLE_FILE),
@@ -1400,15 +1400,47 @@
         assert_eq!(state.message, "What?");
         assert_eq!(state.turn, 0);
         assert_eq!(state.grid[32 + 3], 96);
-        assert_eq!(
-            state.door_tracker,
-            Some(DoorTracker {
-                previous_tile: 96,
-                x: 3,
-                y: 1,
-                turns_remaining: 1,
-            })
-        );
+        assert_eq!(state.door_tracker, None);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_fire_uses_adjacent_static_cannon_without_sidecar() {
+        let dir = debug_game_dir();
+        let mut grid = open_grid();
+        grid[32 + 1] = TOWN_CANNON_TILE_FIRST + 1;
+        grid[32 + 3] = 96;
+        let mut state = test_state(grid, 0, 1);
+
+        assert_eq!(state.fire_command(None, &dir).unwrap(), MoveOutcome::Fired);
+
+        assert_eq!(state.grid[32 + 3], 16);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("BOOOM! Door destroyed!"));
+        assert!(state.message.contains("fired East"));
+        assert!(state.message.contains("destroyed door tile 96"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_fire_sidecar_source_takes_priority_over_adjacent_static_cannon() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(TOWN_FIRE_SOURCE_TABLE_FILE),
+            "CASTLE:0 0 1 0 EAST\n",
+        )
+        .unwrap();
+        let mut grid = open_grid();
+        grid[32] = TOWN_CANNON_TILE_FIRST + 1;
+        grid[3] = 96;
+        grid[32 + 3] = 96;
+        let mut state = test_state(grid, 1, 1);
+
+        assert_eq!(state.fire_command(None, &dir).unwrap(), MoveOutcome::Fired);
+
+        assert_eq!(state.grid[3], 16);
+        assert_eq!(state.grid[32 + 3], 96);
+        assert!(state.message.contains("fired East"));
         let _ = fs::remove_dir_all(dir);
     }
 

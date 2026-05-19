@@ -182,10 +182,11 @@ pub use commands::{
     BRITANNIA_CHUNK_MAP_COLUMNS, BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE, BRITANNIA_CHUNK_MAP_ROWS,
     Command, LOCAL_VIEW_CELL_PIXEL_SCALE, LOCAL_VIEW_OVERLAY_SIDE, LocalViewClass, NewOrderOutcome,
     PUSHABLE_CANNON_FLOOR_STAMP, PUSHABLE_GENERIC_FLOOR_STAMP, PushableTileFamily,
-    ViewCommandOutcome, WISHING_WELL_WISH_KEYWORDS, YELL_INPUT_MAX_LEN, YELL_NOTHING_SAID_MESSAGE,
-    YELL_SAILS_FURLED_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, YellInputContext, command_for_letter,
-    local_view_class_for_tile, new_order_outcome, new_order_swap_accepted, pushable_facing_index,
-    pushable_oriented_tile, pushable_tile_family, town_fountain_drink_accepts,
+    TOWN_CANNON_TILE_FIRST, TOWN_CANNON_TILE_LAST, ViewCommandOutcome, WISHING_WELL_WISH_KEYWORDS,
+    YELL_INPUT_MAX_LEN, YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_FURLED_MESSAGE,
+    YELL_SAILS_HOISTED_MESSAGE, YellInputContext, command_for_letter, local_view_class_for_tile,
+    new_order_outcome, new_order_swap_accepted, pushable_facing_index, pushable_oriented_tile,
+    pushable_tile_family, town_cannon_tile_fire_direction, town_fountain_drink_accepts,
     view_command_outcome, wishing_well_wish_accepted,
 };
 pub use common_words_io::{

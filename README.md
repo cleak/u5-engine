@@ -419,12 +419,13 @@ bow/stern shots refuse, legal broadsides trace up to three cells, and the first
 target object hit has its active-object `+5` depletion byte reduced by a
 `1..=20` roll. Targets remain active on low results and clear their active
 object slot when the subtraction enters the high-bit range. In town mode,
-`F`/`f` can fire an adjacent clean-room authored fire-source row from
-`town_fire_sources.tsv`, running the public door auto-close pass before tracing
-up to three cells from the source direction and destroying the first door or
-zeroing the first object target slot. Town object hits also reduce moral
-standing by 5 and do not use ship-broadside depletion. Destroying a door also
-clears the active door auto-close tracker.
+`F`/`f` first runs the public door auto-close pass, then fires an adjacent
+static cannon tile in the public `0xB4..=0xB7` four-facing family, with
+`town_fire_sources.tsv` still available as a clean sidecar override for
+authored fire sources. The projectile traces up to three cells from the source
+direction and destroys the first door or zeroes the first object target slot.
+Town object hits also reduce moral standing by 5 and do not use ship-broadside
+depletion. Destroying a door also clears the active door auto-close tracker.
 
 In top-down scenes, bare `Q` opens the save prompt, `QY` writes a
 first-playable save-and-continue snapshot to `SAVED.GAM` and `SAVED.OOL`, and
@@ -935,22 +936,24 @@ revealing, keeping stale coordinates from rewriting unrelated cells. Town
 misses do not spend a turn; dungeon misses continue through the ordinary
 dungeon Search feature/chest/trap path.
 
-Town-family fire sources are also externalized while the original cannon/source
-tile table and orientation encodings remain open. Place rows next to the game
-data as `town_fire_sources.tsv`:
+Town-family fire sources use adjacent static cannon tiles from the public
+`0xB4..=0xB7` four-facing family by default. The low two bits choose North,
+East, South, or West. Clean-room authored fire-source rows can still be placed
+next to the game data as `town_fire_sources.tsv`; matching sidecar rows take
+priority over native cannon detection:
 
 ```text
 # SCENE FLOOR SOURCE_X SOURCE_Y DIRECTION [TILE]
 CASTLE:0 0 1 1 EAST 80
 ```
 
-When the party is adjacent to a matching source, `F`/`f` consumes a turn,
-first runs the public door auto-close pass, traces from the source in the
-supplied cardinal direction for up to three cells, zeroes the first
-active-object slot hit, or rewrites a door tile in `96..103` to the current
-open-door placeholder and clears the active auto-close tracker. Missing rows
-or rows whose optional source-tile guard does not match refuse without spending
-a turn or ticking the door auto-close tracker.
+`F`/`f` runs the public door auto-close pass before source detection. When the
+party is adjacent to a matching sidecar source or native cannon, the command
+consumes a turn, traces from the source in the supplied or tile-derived
+cardinal direction for up to three cells, zeroes the first active-object slot
+hit, or rewrites a door tile in `96..103` to the current open-door placeholder
+and clears the active auto-close tracker. Missing sources or rows whose
+optional source-tile guard does not match refuse without spending a turn.
 
 Town and overworld Get tile consumables can be supplied as clean-room sidecar
 metadata for authored crop, borrowed-object, and scenario fixture cells. Public

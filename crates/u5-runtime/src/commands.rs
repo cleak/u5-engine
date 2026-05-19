@@ -363,6 +363,25 @@ pub const PUSHABLE_GENERIC_FLOOR_STAMP: u8 = 0x44;
 /// for the cannon family-matching rule.
 pub const PUSHABLE_CANNON_FLOOR_STAMP: u8 = 0x45;
 
+/// `commands.md §8` / `vehicles.md §8`: static town cannon tiles are
+/// a four-facing family. F-Fire can use an adjacent cannon as a local
+/// fire source without a sidecar row; the low two bits select the
+/// projectile direction with the public cardinal facing convention.
+pub const TOWN_CANNON_TILE_FIRST: u8 = 0xB4;
+pub const TOWN_CANNON_TILE_LAST: u8 = 0xB7;
+
+pub const fn town_cannon_tile_fire_direction(tile: u8) -> Option<Direction> {
+    match tile {
+        TOWN_CANNON_TILE_FIRST..=TOWN_CANNON_TILE_LAST => match tile & 0x03 {
+            0 => Some(Direction::North),
+            1 => Some(Direction::East),
+            2 => Some(Direction::South),
+            _ => Some(Direction::West),
+        },
+        _ => None,
+    }
+}
+
 /// `commands.md §8`: classify a static tile byte into its pushable
 /// family for the P-Push command. Returns `None` when the static
 /// tile is not in the pushable set; the caller still accepts a
