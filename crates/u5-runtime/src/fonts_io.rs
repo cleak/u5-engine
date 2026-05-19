@@ -428,6 +428,53 @@ pub fn parse_proportional_font(bytes: &[u8]) -> io::Result<ProportionalFont> {
 }
 
 #[cfg(test)]
+pub fn load_proportional_font_resource(game_dir: &Path) -> io::Result<ProportionalFontResource> {
+    parse_proportional_font_resource(&read(&game_dir.join(PROPORT_PCS_FILE))?)
+}
+
+#[cfg(test)]
+pub fn parse_proportional_font_resource(bytes: &[u8]) -> io::Result<ProportionalFontResource> {
+    parse_sparse_proportional_font_resource(bytes).or_else(|sparse_err| {
+        let body = decode_lzw_envelope(bytes, PROPORT_PCS_FILE).map_err(|lzw_err| {
+            io::Error::new(
+                lzw_err.kind(),
+                format!(
+                    "{PROPORT_PCS_FILE} is neither a sparse strip resource ({sparse_err}) nor a legacy LZW-wrapped proportional font ({lzw_err})"
+                ),
+            )
+        })?;
+        parse_sparse_proportional_font_resource(&body).or_else(|body_sparse_err| {
+            parse_proportional_font_body(&body, PROPORT_PCS_FILE)
+                .map(legacy_proportional_font_as_resource)
+                .map_err(|legacy_err| {
+                    io::Error::new(
+                        legacy_err.kind(),
+                        format!(
+                            "{PROPORT_PCS_FILE} decoded body is neither a sparse strip resource ({body_sparse_err}) nor the legacy glyph-directory shape ({legacy_err})"
+                        ),
+                    )
+                })
+        })
+    })
+}
+
+#[cfg(test)]
+pub fn parse_sparse_proportional_font_resource(
+    bytes: &[u8],
+) -> io::Result<ProportionalFontResource> {
+    Ok(ProportionalFontResource {
+        strips: parse_sparse_strip_resource(bytes, PROPORT_PCS_FILE)?,
+    })
+}
+
+#[cfg(test)]
+fn legacy_proportional_font_as_resource(font: ProportionalFont) -> ProportionalFontResource {
+    ProportionalFontResource {
+        strips: font.glyphs.into_iter().map(|glyph| glyph.bitmap).collect(),
+    }
+}
+
+#[cfg(test)]
 pub fn parse_proportional_font_body(
     body: &[u8],
     resource_name: &str,

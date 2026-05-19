@@ -506,6 +506,19 @@ pub struct ProportionalGlyph {
 
 #[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProportionalFontResource {
+    pub strips: Vec<MonochromeBitmap>,
+}
+
+#[cfg(test)]
+impl ProportionalFontResource {
+    pub fn strip(&self, slot: usize) -> Option<&MonochromeBitmap> {
+        self.strips.get(slot)
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProportionalFont {
     pub first_code: u8,
     pub glyphs: Vec<ProportionalGlyph>,

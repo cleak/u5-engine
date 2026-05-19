@@ -733,6 +733,32 @@
     }
 
     #[test]
+    fn font_graphics_parses_sparse_proportional_font_resource() {
+        let mut body = Vec::new();
+        body.extend_from_slice(&3u16.to_le_bytes());
+        body.extend_from_slice(&0u16.to_le_bytes());
+        body.extend_from_slice(&0xaaaa_u16.to_le_bytes());
+        body.extend_from_slice(&14u16.to_le_bytes());
+        body.extend_from_slice(&0xbbbb_u16.to_le_bytes());
+        body.extend_from_slice(&19u16.to_le_bytes());
+        body.extend_from_slice(&0xcccc_u16.to_le_bytes());
+        body.extend_from_slice(&4u16.to_le_bytes());
+        body.extend_from_slice(&2u16.to_le_bytes());
+        body.push(0b1011_0011);
+        body.extend_from_slice(&2u16.to_le_bytes());
+        body.extend_from_slice(&1u16.to_le_bytes());
+        body.push(0b1000_0000);
+
+        let resource = parse_sparse_proportional_font_resource(&body).unwrap();
+
+        assert_eq!(resource.strips.len(), 2);
+        assert_eq!(resource.strip(0).map(|strip| (strip.width, strip.height)), Some((4, 2)));
+        assert_eq!(resource.strip(0).unwrap().pixels, vec![1, 0, 1, 1, 0, 0, 1, 1]);
+        assert_eq!(resource.strip(1).map(|strip| (strip.width, strip.height)), Some((2, 1)));
+        assert_eq!(resource.strip(2), None);
+    }
+
+    #[test]
     fn font_graphics_rejects_bad_lengths_offsets_and_widths() {
         assert!(
             parse_fixed_font_body(&[0], "fixture.ch", CH_FONT_CELL_WIDTH, CH_FONT_CELL_HEIGHT)
@@ -787,11 +813,19 @@
         }
         if game_dir.join(PROPORT_PCS_FILE).exists() {
             let font = load_proportional_font(game_dir).unwrap();
+            let resource = load_proportional_font_resource(game_dir).unwrap();
             assert_eq!(font.first_code, PCS_FIRST_CODE);
             assert_eq!(font.glyphs.len(), 91);
             assert!(font.glyph_for_code(0x7a).is_some());
             assert!(font.glyph_for_code(0x7b).is_none());
             assert!(measure_proportional_text(&font, b"Ultima").is_ok());
+            assert!(!resource.strips.is_empty());
+            assert!(resource.strips.iter().all(|strip| {
+                strip.width > 0
+                    && strip.height > 0
+                    && strip.pixels.len() == strip.width * strip.height
+                    && strip.pixels.iter().all(|pixel| *pixel <= 1)
+            }));
             assert!(font.glyphs.iter().all(|glyph| {
                 glyph.advance_width as usize <= PCS_GLYPH_BITMAP_WIDTH
                     && glyph.bitmap.width == PCS_GLYPH_BITMAP_WIDTH
