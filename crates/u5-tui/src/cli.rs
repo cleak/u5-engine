@@ -40,6 +40,9 @@ pub struct CliArgs {
     /// write it to this path as a PNG. Bypasses the interactive play loop
     /// and the Bevy harness; useful for verifying movement without a desktop.
     pub save_frame: Option<PathBuf>,
+    /// If set, write representative headless PNG frames and a sanitized
+    /// manifest into the supplied directory.
+    pub save_frame_suite: Option<PathBuf>,
     pub create_character: Option<CreateCharacterCommand>,
     pub create_character_interactive: bool,
 }
@@ -75,6 +78,7 @@ where
     let mut transport_override = None;
     let mut help = false;
     let mut save_frame: Option<PathBuf> = None;
+    let mut save_frame_suite: Option<PathBuf> = None;
     let mut create_character_name: Option<Vec<u8>> = None;
     let mut create_character_male: Option<bool> = None;
     let mut create_character_winners: Option<Vec<ShrineVirtue>> = None;
@@ -95,6 +99,15 @@ where
                 })?;
                 save_frame = Some(PathBuf::from(value));
                 play = true;
+            }
+            "--save-frame-suite" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--save-frame-suite requires an output directory",
+                    )
+                })?;
+                save_frame_suite = Some(PathBuf::from(value));
             }
             "--play-script" => {
                 play = true;
@@ -271,6 +284,7 @@ where
             play_options: PlayOptions::default(),
             help: true,
             save_frame: None,
+            save_frame_suite: None,
             create_character: None,
             create_character_interactive: false,
         });
@@ -285,6 +299,7 @@ where
         && (play
             || visual
             || save_frame.is_some()
+            || save_frame_suite.is_some()
             || from_save
             || from_init
             || options != PlayOptions::default()
@@ -298,10 +313,36 @@ where
             "--route-smoke runs its own scripted scenes; it cannot be combined with play, visual, save-frame, from-save, from-init, scene, start, or gameplay overrides",
         ));
     }
-    if intro && (play || save_frame.is_some() || route_smoke || from_save || from_init) {
+    if save_frame_suite.is_some()
+        && (play
+            || visual
+            || save_frame.is_some()
+            || route_smoke
+            || from_save
+            || from_init
+            || play_script.is_some()
+            || options != PlayOptions::default()
+            || wind_override.is_some()
+            || climbing_gear_override.is_some()
+            || pending_vehicle_override.is_some()
+            || transport_override.is_some())
+    {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--intro owns the title/menu flow; it cannot be combined with play, route-smoke, save-frame, from-save, or from-init",
+            "--save-frame-suite runs its own scenes; it cannot be combined with play, visual, route-smoke, save-frame, from-save, from-init, play-script, scene, start, or gameplay overrides",
+        ));
+    }
+    if intro
+        && (play
+            || save_frame.is_some()
+            || save_frame_suite.is_some()
+            || route_smoke
+            || from_save
+            || from_init)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--intro owns the title/menu flow; it cannot be combined with play, route-smoke, save-frame, save-frame-suite, from-save, or from-init",
         ));
     }
     if create_character_interactive
@@ -309,13 +350,14 @@ where
             || play
             || visual
             || save_frame.is_some()
+            || save_frame_suite.is_some()
             || route_smoke
             || from_save
             || from_init)
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--create-character-interactive writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, route-smoke, save-frame, from-save, or from-init",
+            "--create-character-interactive writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, route-smoke, save-frame, save-frame-suite, from-save, or from-init",
         ));
     }
     if create_character_interactive && create_character_name.is_some() {
@@ -326,11 +368,18 @@ where
     }
 
     let create_character = if let Some(name) = create_character_name {
-        if intro || play || visual || save_frame.is_some() || route_smoke || from_save || from_init
+        if intro
+            || play
+            || visual
+            || save_frame.is_some()
+            || save_frame_suite.is_some()
+            || route_smoke
+            || from_save
+            || from_init
         {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "--create-character writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, route-smoke, save-frame, from-save, or from-init",
+                "--create-character writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, route-smoke, save-frame, save-frame-suite, from-save, or from-init",
             ));
         }
         let male = create_character_male.ok_or_else(|| {
@@ -395,6 +444,7 @@ where
         play_options: options,
         help: false,
         save_frame,
+        save_frame_suite,
         create_character,
         create_character_interactive,
     })
@@ -438,12 +488,16 @@ OPTIONS:
         --save-frame <PATH>   Render the current viewport (after running
                               --play-script if given) to a PNG and exit.
                               Useful for verifying movement without a desktop.
+        --save-frame-suite <DIR>
+                              Write representative headless PNG frames plus a
+                              sanitized manifest into DIR and exit.
 
 SMOKE COMMANDS:
     cargo run -- C:\\Games\\U5-Clean
     cargo run -- --play C:\\Games\\U5-Clean
     cargo run -- --play-script \"z;q\" C:\\Games\\U5-Clean
     cargo run -- --route-smoke C:\\Games\\U5-Clean
+    cargo run -- --save-frame-suite target\\frame-suite C:\\Games\\U5-Clean
     cargo run -- --play --scene DUNGEON:0 --floor 0 C:\\Games\\U5-Clean
     cargo run -- --create-character Avatar --gender male --chargen-winners Honesty,Compassion,Valor,Justice,Sacrifice,Honor,Spirituality C:\\Games\\U5-Clean
     cargo run --features visual -- --visual --scene BRITANNIA C:\\Games\\U5-Clean

@@ -29,4 +29,4 @@ pub use route_smoke::{
     RouteSmokeCase, RouteSmokeExpectation, RouteSmokeReport, route_smoke_cases, run_route_smoke,
     run_route_smoke_case,
 };
-pub use save_frame::run_save_frame;
+pub use save_frame::{SavedFrameReport, run_save_frame, run_save_frame_suite, save_frame_suite};

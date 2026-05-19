@@ -135,6 +135,14 @@ cargo run -- --save-frame screenshots\britannia.png --scene BRITANNIA C:\Games\U
 cargo run -- --save-frame screenshots\dungeon.png --scene DUNGEON:0 --play-script "idle:1" C:\Games\U5-Clean
 ```
 
+`--save-frame-suite <DIR>` writes representative local-asset viewport PNGs for
+Britannia, a moved Britannia frame, Castle:0, and a lit Dungeon:0 frame, plus a
+sanitized manifest with dimensions, frame kinds, positions, and hashes:
+
+```powershell
+cargo run -- --save-frame-suite target\frame-suite C:\Games\U5-Clean
+```
+
 For repeatable smoke checks, `--play-script` runs a semicolon-separated command
 list through the same first-playable input handlers and then exits. Script mode
 prints compact state summaries and optional raster hashes instead of rendered
