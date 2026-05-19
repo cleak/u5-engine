@@ -820,7 +820,9 @@
         state.clock = GameClock::new(0, 0).unwrap();
         state.prng_state = 0x00f0;
         let mut expected_prng_state = state.prng_state;
-        for _ in 0..2 {
+        // The rest interruption, ambush-monster row, and combat setup count
+        // each consume one resident PRNG advance before combat starts.
+        for _ in 0..3 {
             expected_prng_state = u5_prng_advance_state(expected_prng_state);
         }
         state.party = vec![

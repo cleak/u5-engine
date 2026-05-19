@@ -484,12 +484,8 @@ impl PlayState {
         let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
         self.populate_terrain_combat_party(&mut active_objects, &mut actors, z);
 
-        let requested_count = self.resolve_terrain_combat_setup_count(
-            stats.default_spawn_count,
-            self.sleep_ambush_setup_seed(tile, 0x13),
-            self.sleep_ambush_setup_seed(tile, 0x2b),
-            false,
-        );
+        let requested_count =
+            self.roll_terrain_combat_setup_count(stats.default_spawn_count, false);
         let placement_count = requested_count
             .min((OOL_SLOTS - COMBAT_PARTY_ACTOR_SLOTS) as u8)
             .min((COMBAT_ACTOR_SLOTS - COMBAT_PARTY_ACTOR_SLOTS) as u8);
@@ -557,15 +553,10 @@ impl PlayState {
                 ),
             )
         })?;
-        let requested_count = self.resolve_terrain_combat_setup_count(
-            base_class.default_spawn_count,
-            self.terrain_combat_trigger_seed(object_slot, object, 0x11),
-            self.terrain_combat_trigger_seed(object_slot, object, 0x29),
-            false,
-        );
-        let replacement_roll_seeds = (0..requested_count)
-            .map(|spawn| self.terrain_combat_trigger_seed(object_slot, object, 0x40 ^ spawn))
-            .collect::<Vec<_>>();
+        let requested_count =
+            self.roll_terrain_combat_setup_count(base_class.default_spawn_count, false);
+        let replacement_roll_seeds =
+            self.terrain_combat_replacement_roll_seeds(requested_count, None);
         let mut instance = terrain_combat_instance_from_setup(
             &setup,
             requested_count,
@@ -589,31 +580,6 @@ impl PlayState {
             "entered terrain combat using BRIT.CBT arena {arena_index}; spawned {} of {} requested {} combatant(s)",
             placed_count, requested_count, base_class.name
         ))
-    }
-
-    pub fn terrain_combat_trigger_seed(
-        &self,
-        object_slot: usize,
-        object: ActiveObject,
-        salt: u8,
-    ) -> u8 {
-        self.turn as u8
-            ^ (self.player.x as u8).wrapping_mul(3)
-            ^ (self.player.y as u8).wrapping_mul(5)
-            ^ (object_slot as u8).wrapping_mul(7)
-            ^ object.type_byte.wrapping_mul(11)
-            ^ object.tile.wrapping_mul(13)
-            ^ salt
-    }
-
-    pub fn sleep_ambush_setup_seed(&self, tile: u8, salt: u8) -> u8 {
-        self.turn as u8
-            ^ self.clock.hour.wrapping_mul(3)
-            ^ self.clock.minute.wrapping_mul(5)
-            ^ (self.player.x as u8).wrapping_mul(7)
-            ^ (self.player.y as u8).wrapping_mul(11)
-            ^ tile.wrapping_mul(13)
-            ^ salt
     }
 
     pub fn populate_terrain_combat_party(
@@ -664,5 +630,44 @@ impl PlayState {
             fortunes_roll_seed,
             town_style_override,
         )
+    }
+
+    pub fn roll_terrain_combat_setup_count(
+        &mut self,
+        base_count: u8,
+        town_style_override: bool,
+    ) -> u8 {
+        if town_style_override {
+            return 1;
+        }
+        let count = match base_count {
+            0 => 0,
+            1 | 8 | 16 => base_count,
+            max => {
+                let mut rolled = self.random_range_u8(1, max);
+                if self.fortunes_of_war != 0 {
+                    rolled = self.random_range_u8(1, max);
+                }
+                rolled
+            }
+        };
+        count.min(COMBAT_SPAWN_COUNT_CAP)
+    }
+
+    pub fn terrain_combat_replacement_roll_seeds(
+        &mut self,
+        requested_count: u8,
+        replacement_tile: Option<u8>,
+    ) -> Vec<u8> {
+        let threshold = terrain_combat_replacement_threshold(requested_count);
+        (0..requested_count)
+            .map(|spawn| {
+                if replacement_tile.is_some() && spawn != 0 && spawn < threshold {
+                    self.random_mod_u8(TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR)
+                } else {
+                    1
+                }
+            })
+            .collect()
     }
 }

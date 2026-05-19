@@ -12469,6 +12469,65 @@
     }
 
     #[test]
+    fn terrain_combat_setup_count_rolls_from_resident_prng() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.prng_state = 0x1234;
+        let mut expected_prng = state.prng_state;
+        let expected_count = u5_prng_range_u16(&mut expected_prng, 1, 10) as u8;
+
+        assert_eq!(
+            state.roll_terrain_combat_setup_count(10, false),
+            expected_count
+        );
+        assert_eq!(state.prng_state, expected_prng);
+
+        state.fortunes_of_war = 1;
+        let mut expected_prng = state.prng_state;
+        let _first_roll = u5_prng_range_u16(&mut expected_prng, 1, 10);
+        let expected_count = u5_prng_range_u16(&mut expected_prng, 1, 10) as u8;
+
+        assert_eq!(
+            state.roll_terrain_combat_setup_count(10, false),
+            expected_count
+        );
+        assert_eq!(state.prng_state, expected_prng);
+
+        let unchanged_prng = state.prng_state;
+        assert_eq!(state.roll_terrain_combat_setup_count(16, false), 16);
+        assert_eq!(state.roll_terrain_combat_setup_count(10, true), 1);
+        assert_eq!(state.prng_state, unchanged_prng);
+    }
+
+    #[test]
+    fn terrain_combat_replacement_rolls_only_for_eligible_followers() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.prng_state = 0x1234;
+        let mut expected_prng = state.prng_state;
+        let expected_first =
+            u5_prng_range_u16(&mut expected_prng, 0, u16::from(TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR - 1))
+                as u8;
+        let expected_second =
+            u5_prng_range_u16(&mut expected_prng, 0, u16::from(TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR - 1))
+                as u8;
+
+        let rolls = state.terrain_combat_replacement_roll_seeds(8, Some(0xa4));
+
+        assert_eq!(rolls.len(), 8);
+        assert_eq!(rolls[0], 1);
+        assert_eq!(rolls[1], expected_first);
+        assert_eq!(rolls[2], expected_second);
+        assert!(rolls[3..].iter().all(|roll| *roll == 1));
+        assert_eq!(state.prng_state, expected_prng);
+
+        let unchanged_prng = state.prng_state;
+        assert_eq!(
+            state.terrain_combat_replacement_roll_seeds(8, None),
+            vec![1; 8]
+        );
+        assert_eq!(state.prng_state, unchanged_prng);
+    }
+
+    #[test]
     fn terrain_combat_tile_replacement_only_applies_to_eligible_followers() {
         assert_eq!(terrain_combat_replacement_threshold(1), 1);
         assert_eq!(terrain_combat_replacement_threshold(8), 3);
