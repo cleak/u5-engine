@@ -943,6 +943,7 @@
         state.food = PARTY_FOOD_CAP - 1;
         state.gold = PARTY_GOLD_CAP - 1;
         state.keys = PARTY_BYTE_STOCK_CAP - 1;
+        state.gems = PARTY_BYTE_STOCK_CAP - 1;
         state.torches = PARTY_BYTE_STOCK_CAP - 1;
         state.potion_stock[3] = PARTY_BYTE_STOCK_CAP - 1;
         state.scroll_stock[4] = PARTY_BYTE_STOCK_CAP - 1;
@@ -969,7 +970,7 @@
         assert_eq!(state.food, PARTY_FOOD_CAP);
         assert_eq!(state.gold, PARTY_GOLD_CAP);
         assert_eq!(state.keys, PARTY_BYTE_STOCK_CAP);
-        assert_eq!(state.gems, DEFAULT_GEM_STOCK.saturating_add(5));
+        assert_eq!(state.gems, PARTY_BYTE_STOCK_CAP);
         assert_eq!(state.torches, PARTY_BYTE_STOCK_CAP);
         assert_eq!(state.potion_stock[3], PARTY_BYTE_STOCK_CAP);
         assert_eq!(state.scroll_stock[4], PARTY_BYTE_STOCK_CAP);

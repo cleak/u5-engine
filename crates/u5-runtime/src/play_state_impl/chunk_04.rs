@@ -889,7 +889,8 @@ impl PlayState {
                     return MoveOutcome::Blocked;
                 }
                 self.advance_turn();
-                self.message = format!("View!\n{}", self.peer_view_message());
+                let view_message = self.activate_peer_view_overlay();
+                self.message = format!("View!\n{view_message}");
                 MoveOutcome::Observed
             }
             SCROLL_SUMMON_DAEMON_INDEX => {

@@ -1200,7 +1200,9 @@ impl PlayState {
             ObjectPickupKind::Keys => {
                 self.keys = self.keys.saturating_add(amount).min(PARTY_BYTE_STOCK_CAP)
             }
-            ObjectPickupKind::Gems => self.gems = self.gems.saturating_add(amount),
+            ObjectPickupKind::Gems => {
+                self.gems = self.gems.saturating_add(amount).min(PARTY_BYTE_STOCK_CAP)
+            }
             ObjectPickupKind::Torches => {
                 self.torches = self
                     .torches

@@ -238,10 +238,10 @@ unsupported dungeon movement, and dungeon `Q` routes to the public mode-loop
 Unhandled dungeon keys run the public sleep/idle polling path as a no-turn
 `Zzzzzz...` visual tick instead of using the top-down generic unhandled-command
 message.
-`V`iew consumes a gem and prints a top-down map: an 11-by-11 town/world view,
-or a centered dungeon flood map that wraps the 8-by-8 level and stops expansion
-at wall-like cells while exact dungeon glyph/floodability edge cases remain out
-of scope.
+`V`iew consumes a gem and opens a modal top-down map: a 32-by-32 town/world
+class overlay, or a centered dungeon flood map that wraps the 8-by-8 level and
+stops expansion at wall-like cells while exact dungeon glyph/floodability edge
+cases remain out of scope.
 In town and overworld mode, `B` boards a current or facing parked vehicle
 active object, including magic carpets, and town horse boarding refuses occupied
 horse cells with the public `Nay!` line. `X`/`x` exits the current vehicle,
@@ -311,10 +311,11 @@ or reconciling the current public scene-mask conflict.
 Unlock Magic hooks from party slot 1, rewriting facing magic-lock rows supplied
 by the clean `town_locks.tsv` sidecar. `C1IQW` casts the narrow Peer hook in
 dungeon, indoor, or overworld mode, spending spell resources for the same
-first-playable map projection as gem view without requiring or consuming a gem.
+first-playable modal map overlay as gem view without requiring or consuming a
+gem.
 `C1AWY` casts the narrow X-Ray hook in indoor or overworld mode, using the
-same first-playable 11x11 surface projection after the saved charge/MP/level
-gates succeed while the exact remote-view panel remains open.
+same first-playable modal surface map overlay after the saved charge/MP/level
+gates succeed.
 `C1PRV2` casts the narrow Gate Travel hook from party slot 1 to saved Moonstone
 phase 2 in dungeon, indoor, and overworld play states; it refuses shipboard
 casting before spending resources, consumes the saved spell charge/MP/level

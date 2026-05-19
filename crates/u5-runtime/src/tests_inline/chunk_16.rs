@@ -948,6 +948,18 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         assert!(state.message.contains("Peer view of CASTLE:0 floor 0"));
         assert!(state.message.contains("spell; 32x32 class map"));
         assert!(state.message.contains('@'));
+        let overlay = state.active_view_overlay.as_ref().unwrap();
+        assert_eq!(
+            overlay.title,
+            "Peer view of CASTLE:0 floor 0 (spell; 32x32 class map)"
+        );
+        assert_eq!(overlay.kind, ViewOverlayKind::Surface);
+        assert!(overlay.text_map.contains('@'));
+        let viewport = state
+            .render_active_view_overlay(TileGraphicsDepth::Ega16)
+            .unwrap();
+        assert_eq!(viewport.cells_wide, LOCAL_VIEW_OVERLAY_SIDE);
+        assert_eq!(viewport.cells_high, LOCAL_VIEW_OVERLAY_SIDE);
     }
 
     #[test]
@@ -965,6 +977,7 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         assert_eq!(state.gems, 0);
         assert_eq!(state.turn, 0);
         assert_eq!(state.message, "None mixed!");
+        assert!(state.active_view_overlay.is_none());
     }
 
     #[test]
@@ -988,6 +1001,13 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         assert!(state.message.contains("X-Ray view of CASTLE:0 floor 0"));
         assert!(state.message.contains("spell; 32x32 class map"));
         assert!(state.message.contains('@'));
+        let overlay = state.active_view_overlay.as_ref().unwrap();
+        assert_eq!(
+            overlay.title,
+            "X-Ray view of CASTLE:0 floor 0 (spell; 32x32 class map)"
+        );
+        assert_eq!(overlay.kind, ViewOverlayKind::Surface);
+        assert!(overlay.text_map.contains('@'));
     }
 
     #[test]
@@ -1006,6 +1026,7 @@ DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
         assert_eq!(state.party[0].mana, X_RAY_COST);
         assert_eq!(state.turn, 0);
         assert_eq!(state.message, "Not here!");
+        assert!(state.active_view_overlay.is_none());
     }
 
     #[test]

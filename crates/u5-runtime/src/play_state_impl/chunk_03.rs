@@ -2477,7 +2477,7 @@ impl PlayState {
         }
 
         self.advance_turn();
-        self.message = self.peer_view_message();
+        self.message = self.activate_peer_view_overlay();
         MoveOutcome::Observed
     }
 
@@ -2493,7 +2493,7 @@ impl PlayState {
         }
 
         self.advance_turn();
-        self.message = self.x_ray_view_message();
+        self.message = self.activate_x_ray_view_overlay();
         MoveOutcome::Observed
     }
 
@@ -2516,46 +2516,91 @@ impl PlayState {
     }
 
     pub fn peer_view_message(&self) -> String {
+        let overlay = self.peer_view_overlay();
+        format!("{}:\n{}", overlay.title, overlay.text_map)
+    }
+
+    pub fn activate_peer_view_overlay(&mut self) -> String {
+        let overlay = self.peer_view_overlay();
+        let message = format!("{}:\n{}", overlay.title, overlay.text_map);
+        self.active_view_overlay = Some(overlay);
+        message
+    }
+
+    pub fn peer_view_overlay(&self) -> ViewOverlay {
         match self.area {
-            Area::Dungeon { scene, level } => format!(
-                "Peer view of {} ({}) level {} (spell; centered flood map):\n{}",
-                scene.key(),
-                scene.name(),
-                level,
-                self.dungeon_vision_map(level)
-            ),
-            Area::Town { scene, floor } => format!(
-                "Peer view of {} floor {} (spell; 32x32 class map):\n{}",
-                scene.key(),
-                floor,
-                self.surface_view_map()
-            ),
-            Area::World { plane } => format!(
-                "Peer view of {} at ({}, {}) (spell; 32x32 class map):\n{}",
-                plane.key(),
-                self.player.x,
-                self.player.y,
-                self.surface_view_map()
-            ),
+            Area::Dungeon { scene, level } => ViewOverlay {
+                title: format!(
+                    "Peer view of {} ({}) level {} (spell; centered flood map)",
+                    scene.key(),
+                    scene.name(),
+                    level
+                ),
+                text_map: self.dungeon_vision_map(level),
+                kind: ViewOverlayKind::Dungeon { level },
+            },
+            Area::Town { scene, floor } => ViewOverlay {
+                title: format!(
+                    "Peer view of {} floor {} (spell; 32x32 class map)",
+                    scene.key(),
+                    floor
+                ),
+                text_map: self.surface_view_map(),
+                kind: ViewOverlayKind::Surface,
+            },
+            Area::World { plane } => ViewOverlay {
+                title: format!(
+                    "Peer view of {} at ({}, {}) (spell; 32x32 class map)",
+                    plane.key(),
+                    self.player.x,
+                    self.player.y
+                ),
+                text_map: self.surface_view_map(),
+                kind: ViewOverlayKind::Surface,
+            },
         }
     }
 
     pub fn x_ray_view_message(&self) -> String {
+        if matches!(self.area, Area::Dungeon { .. }) {
+            return "Not here!".to_string();
+        }
+        let overlay = self.x_ray_view_overlay();
+        format!("{}:\n{}", overlay.title, overlay.text_map)
+    }
+
+    pub fn activate_x_ray_view_overlay(&mut self) -> String {
+        if matches!(self.area, Area::Dungeon { .. }) {
+            return "Not here!".to_string();
+        }
+        let overlay = self.x_ray_view_overlay();
+        let message = format!("{}:\n{}", overlay.title, overlay.text_map);
+        self.active_view_overlay = Some(overlay);
+        message
+    }
+
+    pub fn x_ray_view_overlay(&self) -> ViewOverlay {
         match self.area {
-            Area::Town { scene, floor } => format!(
-                "X-Ray view of {} floor {} (spell; 32x32 class map):\n{}",
-                scene.key(),
-                floor,
-                self.surface_view_map()
-            ),
-            Area::World { plane } => format!(
-                "X-Ray view of {} at ({}, {}) (spell; 32x32 class map):\n{}",
-                plane.key(),
-                self.player.x,
-                self.player.y,
-                self.surface_view_map()
-            ),
-            Area::Dungeon { .. } => "Not here!".to_string(),
+            Area::Town { scene, floor } => ViewOverlay {
+                title: format!(
+                    "X-Ray view of {} floor {} (spell; 32x32 class map)",
+                    scene.key(),
+                    floor
+                ),
+                text_map: self.surface_view_map(),
+                kind: ViewOverlayKind::Surface,
+            },
+            Area::World { plane } => ViewOverlay {
+                title: format!(
+                    "X-Ray view of {} at ({}, {}) (spell; 32x32 class map)",
+                    plane.key(),
+                    self.player.x,
+                    self.player.y
+                ),
+                text_map: self.surface_view_map(),
+                kind: ViewOverlayKind::Surface,
+            },
+            Area::Dungeon { .. } => unreachable!("X-Ray view is not available in dungeons"),
         }
     }
 

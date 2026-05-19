@@ -148,7 +148,7 @@ pub enum InventoryAddClass {
     /// `0x07` — key (cap 99). Marked odd-key subtypes route to the
     /// special-key counter.
     Key,
-    /// `0x08` — gem.
+    /// `0x08` — gem (cap 99).
     Gem,
     /// `0x0D` — torch (cap 99).
     Torch,
@@ -217,22 +217,19 @@ pub const fn inventory_add_class(class_code: u8) -> InventoryAddClass {
 }
 
 /// `containers.md §8`: counter cap the inventory-add dispatcher
-/// applies for each result family. Returns `None` for families that
-/// are flag/event-only (no quantity counter), refusal-only families,
-/// or families the spec leaves uncapped (gems and food: §8 lists no
-/// cap). Gold uses the party gold cap of 9999; per-counter quantity
-/// families (potion, scroll, equipment, key, torch) cap at 99.
+/// applies for each result family. Returns `None` for flag/event-only
+/// or refusal-only families. Gold and food use the party caps of
+/// 9999; per-counter byte-stock families cap at 99.
 pub const fn inventory_add_class_cap(class: InventoryAddClass) -> Option<u16> {
     match class {
-        InventoryAddClass::Gold => Some(9999),
+        InventoryAddClass::Gold | InventoryAddClass::Food => Some(9999),
         InventoryAddClass::Potion
         | InventoryAddClass::ScrollOrPlans
         | InventoryAddClass::Equipment
         | InventoryAddClass::Key
+        | InventoryAddClass::Gem
         | InventoryAddClass::Torch => Some(99),
-        InventoryAddClass::Gem
-        | InventoryAddClass::Food
-        | InventoryAddClass::MustOpenFirst
+        InventoryAddClass::MustOpenFirst
         | InventoryAddClass::SandalwoodBox
         | InventoryAddClass::Moonstone
         | InventoryAddClass::MagicCarpet

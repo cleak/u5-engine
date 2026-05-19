@@ -12729,10 +12729,9 @@
             Some(99)
         );
         assert_eq!(inventory_add_class_cap(InventoryAddClass::Key), Some(99));
+        assert_eq!(inventory_add_class_cap(InventoryAddClass::Gem), Some(99));
         assert_eq!(inventory_add_class_cap(InventoryAddClass::Torch), Some(99));
-        // Uncapped quantity families.
-        assert_eq!(inventory_add_class_cap(InventoryAddClass::Gem), None);
-        assert_eq!(inventory_add_class_cap(InventoryAddClass::Food), None);
+        assert_eq!(inventory_add_class_cap(InventoryAddClass::Food), Some(9999));
         // Flag-only / refusal families have no quantity counter.
         assert_eq!(
             inventory_add_class_cap(InventoryAddClass::SandalwoodBox),

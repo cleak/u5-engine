@@ -182,6 +182,15 @@ fn use_command_routes_scrolls_to_item_effects_without_spell_resources() {
     assert_eq!(town.scroll_stock[SCROLL_VIEW_INDEX], 0);
     assert_eq!(town.turn, 4);
     assert!(town.message.starts_with("View!\nPeer view of CASTLE:0"));
+    assert!(town.active_view_overlay.is_some());
+
+    assert_eq!(
+        handle_play_key_input(&mut town, ' ', "", Path::new("")).unwrap(),
+        PlayInputDisposition::Continue
+    );
+    assert!(town.active_view_overlay.is_none());
+    assert_eq!(town.turn, 4);
+    assert_eq!(town.message, "View closed.");
 
     assert_eq!(
         handle_play_key_input(&mut town, 'U', "AT", Path::new("")).unwrap(),
