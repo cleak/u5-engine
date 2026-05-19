@@ -10,10 +10,11 @@ tests.
 Last known verification state:
 
 - `cargo fmt -- --check` passed.
-- `cargo test` passed with 628 tests.
+- `cargo test -p u5-runtime` passed with 2297 tests on 2026-05-18.
+- `cargo test -p u5-tui cli_binary_help_prints_usage_without_assets -- --exact`
+  passed on 2026-05-18.
 - `cargo run -- --play-script "z;q" C:\Games\U5-Clean` ran successfully.
-- `cargo run -- --help` is not a supported CLI path and returns `unknown option
-  --help` after building successfully.
+- `cargo run -- --help` is a supported no-asset usage path.
 
 Current worktree context when this TODO was written:
 
@@ -64,15 +65,10 @@ These are the safest next slices for a new contributor.
    - Update any tests or comments that still imply it is only a placeholder.
    - Add no behavior changes in the rename slice.
 
-3. Add a short CLI usage path.
-   - `--help` currently returns an error.
-   - Add a minimal usage print that lists documented smoke commands:
-     - `cargo run -- C:\Games\U5-Clean`
-     - `cargo run -- --play C:\Games\U5-Clean`
-     - `cargo run -- --play-script "z;q" C:\Games\U5-Clean`
-     - `cargo run -- --play --scene DUNGEON:0 --floor 0 C:\Games\U5-Clean`
-   - Add parser tests for `--help` and `-h`.
-   - Keep this as a no-asset path so it can run anywhere.
+3. Keep the CLI usage path covered.
+   - `--help` and `-h` are supported no-asset paths.
+   - Parser tests cover both flags, and a binary-level regression verifies
+     `u5-engine --help` prints usage without touching local game assets.
 
 4. Make one small command-placeholder improvement.
    - Current explicit placeholders include Ready, Yell, Attack, shop flow, and

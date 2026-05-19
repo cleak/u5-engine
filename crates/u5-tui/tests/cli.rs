@@ -4,6 +4,7 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 use u5_runtime::test_fixtures::*;
 use u5_runtime::*;
@@ -309,6 +310,21 @@ fn cli_parser_recognizes_help_long_flag() {
 fn cli_parser_recognizes_help_short_flag() {
     let args = parse_cli_args(["-h"]).unwrap();
     assert!(args.help);
+}
+
+#[test]
+fn cli_binary_help_prints_usage_without_assets() {
+    let output = Command::new(env!("CARGO_BIN_EXE_u5-engine"))
+        .arg("--help")
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("USAGE:"));
+    assert!(stdout.contains("SMOKE COMMANDS:"));
+    assert!(stdout.contains("cargo run -- --play C:\\Games\\U5-Clean"));
+    assert!(String::from_utf8(output.stderr).unwrap().is_empty());
 }
 
 #[test]
