@@ -24,7 +24,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-19 with 55 scripted route cases covering world/town look and
+  2026-05-19 with 59 scripted route cases covering world/town look and
   save-refusal prompts, surface/town/dungeon View overlays, Spyglass
   Britannia chunk-map overlay (`2ea15622716e09aa`), Peer and X-Ray overlays,
   U-Use utility items including Pocket Watch/Sextant/Magic Carpet
@@ -40,7 +40,10 @@ Last known verification state:
   trigger that enters a combat raster viewport, dungeon Attack/Search/Get/
   Jimmy/Open/refusal command routing, and combat pass, Attack, Cast, Get,
   Jimmy, Open, Push, Klimb, Ready, Z-stats, refusal, View, Yell, X-it, and
-  Search-prompt command routing, plus terminal endgame missing-box
+  Search-prompt command routing, plus combat Look label-only routing
+  (`25343578fe3b2a4d`), world dispatcher refusals (`2936fb4c6ff7e3ef`),
+  town dispatcher refusals (`3126df0494b5870b`), town party overlay routes
+  (`26d7ef40b57084af`), and terminal endgame missing-box
   confirmation (`ff6287fbb741bd85`) and Wooden Box victory confirmation
   (`0cf64339ccad08e1`).
 - `cargo run -p u5-tui -- --save-frame-suite target\codex-frame-suite

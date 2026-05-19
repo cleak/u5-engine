@@ -765,6 +765,21 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "britannia-dispatcher-refusals")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "castle-dispatcher-refusals")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "castle-party-overlay-routes")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "castle-wooden-box-use")
     );
     assert!(
@@ -847,6 +862,11 @@ fn route_smoke_cases_cover_representative_modes() {
         cases
             .iter()
             .any(|case| case.name == "doom-combat-view-label-only")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-look-label-only")
     );
     assert!(
         cases
