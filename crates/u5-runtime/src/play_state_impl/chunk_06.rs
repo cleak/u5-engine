@@ -1350,6 +1350,21 @@ impl PlayState {
         }
     }
 
+    pub fn apply_get_tile_grant(&mut self, grant: ObjectPickupGrant) {
+        self.apply_object_pickup(grant.kind, grant.amount);
+        if matches!(grant.kind, ObjectPickupKind::Food) {
+            self.debit_crop_or_table_food_moral();
+        }
+    }
+
+    pub fn debit_crop_or_table_food_moral(&mut self) -> u8 {
+        let before = self.moral_standing;
+        self.moral_standing = self
+            .moral_standing
+            .saturating_sub(KARMA_CROP_OR_TABLE_FOOD_DEBIT);
+        before - self.moral_standing
+    }
+
     pub fn get_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
         self.get_direction_with_game_dir(self.player.facing, game_dir)
     }
@@ -1427,7 +1442,7 @@ impl PlayState {
 
         self.grid[idx] = entry.replacement_tile;
         if let Some(grant) = entry.grant {
-            self.apply_object_pickup(grant.kind, grant.amount);
+            self.apply_get_tile_grant(grant);
         }
         self.mark_visibility_dirty();
         self.advance_turn();
@@ -1503,7 +1518,7 @@ impl PlayState {
 
         self.grid[idx] = entry.replacement_tile;
         if let Some(grant) = entry.grant {
-            self.apply_object_pickup(grant.kind, grant.amount);
+            self.apply_get_tile_grant(grant);
         }
         if self
             .door_tracker
@@ -1545,9 +1560,7 @@ impl PlayState {
 
         self.grid[idx] = replacement;
         self.food = self.food.saturating_add(1).min(PARTY_FOOD_CAP);
-        self.moral_standing = self
-            .moral_standing
-            .saturating_sub(KARMA_CROP_OR_TABLE_FOOD_DEBIT);
+        self.debit_crop_or_table_food_moral();
         self.mark_visibility_dirty();
         self.advance_turn();
         self.message = format!(

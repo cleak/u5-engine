@@ -750,6 +750,34 @@
     }
 
     #[test]
+    fn world_get_food_tile_sidecar_applies_crop_moral_debit() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(WORLD_GET_TILE_TABLE_FILE),
+            "UNDERWORLD 0 0 5 55 FOOD 4\n",
+        )
+        .unwrap();
+        let mut grid = open_world_grid();
+        grid[world_cell_index(0, 0)] = 55;
+        let mut state = world_state(grid, 255, 0);
+        state.player.facing = Direction::East;
+        state.food = 12;
+        state.moral_standing = 3;
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+
+        assert_eq!(state.grid[world_cell_index(0, 0)], 5);
+        assert_eq!(state.food, 16);
+        assert_eq!(state.moral_standing, 2);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("added 4 food"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn world_get_refuses_missing_or_mismatched_sidecar_without_turn() {
         let dir = debug_game_dir();
         let mut grid = open_world_grid();
@@ -888,6 +916,34 @@
         assert!(state.visibility_dirty);
         assert!(state.message.contains("Got tile 55"));
         assert!(state.message.contains("added 2 keys"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_get_food_tile_sidecar_applies_crop_moral_debit() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(TOWN_GET_TILE_TABLE_FILE),
+            "CASTLE:0 0 2 1 16 55 FOOD 1\n",
+        )
+        .unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = 55;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.food = PARTY_FOOD_CAP;
+        state.moral_standing = 1;
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+
+        assert_eq!(state.grid[32 + 2], 16);
+        assert_eq!(state.food, PARTY_FOOD_CAP);
+        assert_eq!(state.moral_standing, 0);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("added 1 food"));
         let _ = fs::remove_dir_all(dir);
     }
 
