@@ -100,6 +100,15 @@ impl ActiveObject {
         self.type_byte = 0;
     }
 
+    pub fn clear_consumed_record_fields(&mut self) {
+        self.type_byte = 0;
+        self.tile = 0;
+        self.x = 0;
+        self.y = 0;
+        self.z = 0;
+        self.aux1 = 0;
+    }
+
     pub fn tick_phase(&mut self) -> PhaseTick {
         let low = self.phase & 0x0f;
         if low == STEADY_PHASE {

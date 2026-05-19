@@ -807,7 +807,7 @@ impl PlayState {
             self.apply_shared_trap_effect_to_slot(target)
         });
         let content_note = self.generate_surface_object_chest_content(slot, x, y, chest_class);
-        self.free_active_object_slot(slot);
+        self.clear_consumed_active_object_slot(slot);
         self.rewrite_surface_object_chest_cell(x, y);
         if matches!(self.area, Area::Town { .. }) {
             self.moral_standing = town_chest_open_standing(self.moral_standing);
@@ -1255,7 +1255,7 @@ impl PlayState {
             return Ok(None);
         };
 
-        self.free_active_object_slot(slot);
+        self.clear_consumed_active_object_slot(slot);
         self.apply_object_pickup(entry.kind, entry.amount);
         self.cache_current_world_overlay();
         self.mark_visibility_dirty();
@@ -1289,7 +1289,7 @@ impl PlayState {
             return Some(MoveOutcome::Blocked);
         };
 
-        self.free_active_object_slot(slot);
+        self.clear_consumed_active_object_slot(slot);
         self.apply_object_pickup(grant.kind, grant.amount);
         self.cache_current_world_overlay();
         self.mark_visibility_dirty();
@@ -1667,10 +1667,14 @@ impl PlayState {
         if let Some(outcome) = self.search_active_object_treasure_marker_at(tx, ty) {
             return outcome;
         }
-        if let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
-            moonstone_slot_matches_world(slot, plane, tx, ty)
-        }) {
-            return outcome;
+        let target_tile = self.grid.get(ty * WORLD_SIDE + tx).copied();
+        let skip_moonstone_scan = target_tile == Some(0xdc);
+        if !skip_moonstone_scan {
+            if let Some(outcome) = self.search_moonstone_pickup_at(tx, ty, |slot| {
+                moonstone_slot_matches_world(slot, plane, tx, ty)
+            }) {
+                return outcome;
+            }
         }
         if let Some(outcome) = self.search_rare_reagent_at(plane, tx, ty) {
             return outcome;
@@ -1682,6 +1686,11 @@ impl PlayState {
             ty,
         ) {
             return outcome;
+        }
+        if skip_moonstone_scan {
+            self.message =
+                "Searched a generic find marker; no Moonstone scan was attempted.".to_string();
+            return MoveOutcome::Blocked;
         }
         self.message = "Nothing to search here.".to_string();
         MoveOutcome::Blocked
@@ -2078,7 +2087,7 @@ impl PlayState {
             return Some(MoveOutcome::Blocked);
         };
 
-        self.free_active_object_slot(object_slot);
+        self.clear_consumed_active_object_slot(object_slot);
         let grant = self.apply_fixed_hidden_treasure_pickup(entry.pickup, entry.state);
         self.mark_visibility_dirty();
         self.advance_turn();
@@ -2100,7 +2109,7 @@ impl PlayState {
             self.message = "Unknown hidden treasure pickup.".to_string();
             return Some(MoveOutcome::Blocked);
         };
-        self.free_active_object_slot(object_slot);
+        self.clear_consumed_active_object_slot(object_slot);
         let grant = self.apply_fixed_hidden_treasure_pickup(entry.pickup, entry.state);
         self.mark_visibility_dirty();
         self.advance_turn();

@@ -1289,6 +1289,49 @@
     }
 
     #[test]
+    fn world_search_generic_find_marker_skips_moonstone_but_keeps_later_scans() {
+        let dir = debug_game_dir();
+        let mut grid = open_world_grid();
+        grid[5 * WORLD_SIDE + 5] = 0xdc;
+        let mut state = britannia_state(grid, 4, 5);
+        state.player.facing = Direction::East;
+        state.moonstone_slots[0] = MoonstoneGateSlot {
+            scene: 0,
+            x: 5,
+            y: 5,
+            z: 0,
+        };
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.active_objects.len(), 1);
+        assert_eq!(
+            state.message,
+            "Searched a generic find marker; no Moonstone scan was attempted."
+        );
+
+        state.player.x = 181;
+        state.player.y = 54;
+        state.clock = GameClock::with_date(139, 4, 5, 0, 17).unwrap();
+        state.reagents[REAGENT_MANDRAKE] = 0;
+        state.rare_reagent_harvest_days[0] = 0;
+        state.grid[54 * WORLD_SIDE + 182] = 0xdc;
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+
+        assert!(state.message.contains("sprigs of Mandrake Root"));
+        assert_eq!(state.rare_reagent_harvest_days[0], 5);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn search_world_rare_reagent_harvest_requires_midnight_and_daily_cookie() {
         let dir = debug_game_dir();
         let mut state = britannia_state(open_world_grid(), 181, 54);

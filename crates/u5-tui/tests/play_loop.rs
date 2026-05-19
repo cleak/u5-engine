@@ -777,6 +777,41 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "doom-combat-view-label-only")
     );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-pass-round")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-use-refusal")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-d-refusal")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-w-refusal")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-yell-word")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-xit-foes-remain")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-search-prompt")
+    );
 }
 
 #[test]

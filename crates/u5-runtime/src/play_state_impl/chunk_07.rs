@@ -617,6 +617,15 @@ impl PlayState {
         }
     }
 
+    pub fn clear_consumed_active_object_slot(&mut self, slot: usize) {
+        if slot == 0 {
+            return;
+        }
+        if let Some(object) = self.active_objects.get_mut(slot) {
+            object.clear_consumed_record_fields();
+        }
+    }
+
     pub fn clear_non_player_active_objects(&mut self) {
         self.sync_player_object();
         for object in self.active_objects.iter_mut().skip(1) {
@@ -659,7 +668,7 @@ impl PlayState {
 
     pub fn get_moonstone_pickup_at(&mut self, x: usize, y: usize) -> Option<MoveOutcome> {
         let (object_slot, slot_index) = self.moonstone_pickup_at(x, y)?;
-        self.free_active_object_slot(object_slot);
+        self.clear_consumed_active_object_slot(object_slot);
         self.moonstone_slots[slot_index] = MoonstoneGateSlot::invalid();
         self.mark_visibility_dirty();
         self.advance_turn();

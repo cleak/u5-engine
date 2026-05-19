@@ -2488,6 +2488,47 @@
     }
 
     #[test]
+    fn active_object_consumed_clear_clears_first_six_encoded_fields_only() {
+        // containers.md §9: the shared consumed-slot helper clears
+        // the first six active-object record fields and leaves the
+        // final two caller-owned scratch bytes intact.
+        let mut object = ActiveObject {
+            type_byte: 0x44,
+            tile: 0x45,
+            x: 12,
+            y: 34,
+            z: -1,
+            phase: 0xab,
+            aux1: 0x66,
+            aux3: 0x77,
+        };
+
+        object.clear_consumed_record_fields();
+
+        assert!(object.is_empty());
+        assert_eq!(object.type_byte, 0);
+        assert_eq!(object.tile, 0);
+        assert_eq!(object.x, 0);
+        assert_eq!(object.y, 0);
+        assert_eq!(object.z, 0);
+        assert_eq!(object.aux1, 0);
+        assert_eq!(object.phase, 0xab);
+        assert_eq!(object.aux3, 0x77);
+
+        let mut bytes = vec![0xff; OOL_PLANE_LEN];
+        write_active_object_record(&mut bytes, 1, object).unwrap();
+        let offset = OOL_RECORD_LEN;
+        assert_eq!(bytes[offset + ACTIVE_OBJECT_FIELD_TYPE], 0);
+        assert_eq!(bytes[offset + ACTIVE_OBJECT_FIELD_TILE], 0);
+        assert_eq!(bytes[offset + ACTIVE_OBJECT_FIELD_X], 0);
+        assert_eq!(bytes[offset + ACTIVE_OBJECT_FIELD_Y], 0);
+        assert_eq!(bytes[offset + ACTIVE_OBJECT_FIELD_Z], 0);
+        assert_eq!(bytes[offset + ACTIVE_OBJECT_FIELD_DEP1], 0);
+        assert_eq!(bytes[offset + ACTIVE_OBJECT_FIELD_PHASE], 0xab);
+        assert_eq!(bytes[offset + ACTIVE_OBJECT_FIELD_DEP3], 0x77);
+    }
+
+    #[test]
     fn save_dungeon_working_buffer_len_anchors_to_dungeon_record_len() {
         // formats/saved-gam.md §8.2: the dungeon/map-cell working
         // buffer is 512 bytes — the same per-dungeon stride
