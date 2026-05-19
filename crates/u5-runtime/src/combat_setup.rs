@@ -412,7 +412,6 @@ impl PlayState {
         if enter_endgame_after_successful_absorbable_combat && has_absorbable_field {
             let endgame_messages = require_endgame_messages(game_dir)?;
             if let Some(snapshot) = &mut self.combat_frame_snapshot {
-                snapshot.enter_endgame_after_successful_combat = true;
                 snapshot.endgame_messages = Some(endgame_messages);
             }
         }

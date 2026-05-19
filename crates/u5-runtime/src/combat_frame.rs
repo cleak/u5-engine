@@ -329,6 +329,15 @@ pub struct CombatArenaFieldContactApplication {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatAbsorbableFieldApplication {
+    pub actor_slot: usize,
+    pub active_object_slot: usize,
+    pub x: u8,
+    pub y: u8,
+    pub armed_endgame_result: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CombatArenaFieldPlacementApplication {
     pub field: CombatArenaFieldKind,
     pub target_slot: usize,
@@ -794,6 +803,48 @@ impl PlayState {
                 }
                 CombatArenaFieldKind::from_kind_byte(object.type_byte).map(|field| (slot, field))
             })
+    }
+
+    pub fn find_combat_absorbable_field_marker(&self, target_x: u8, target_y: u8) -> Option<usize> {
+        self.active_objects
+            .iter()
+            .enumerate()
+            .find_map(|(slot, object)| {
+                if object.x != usize::from(target_x) || object.y != usize::from(target_y) {
+                    return None;
+                }
+                (dungeon_room_absorbable_field_family(object.type_byte)
+                    || dungeon_room_absorbable_field_family(object.tile))
+                .then_some(slot)
+            })
+    }
+
+    pub fn apply_combat_absorbable_field_contact_for_actor_position(
+        &mut self,
+        actor_slot: usize,
+    ) -> Option<CombatAbsorbableFieldApplication> {
+        let actor = self.combat_actors.get(actor_slot).copied()?;
+        if !combat_actor_is_active_not_dead(actor) {
+            return None;
+        }
+        let active_object_slot = self.find_combat_absorbable_field_marker(actor.x, actor.y)?;
+        self.active_player = None;
+        let armed_endgame_result = self.combat_frame_snapshot.as_mut().is_some_and(|snapshot| {
+            let armed = snapshot.endgame_messages.is_some();
+            if armed {
+                snapshot.enter_endgame_after_successful_combat = true;
+            }
+            armed
+        });
+        self.message = "Absorbed!".to_string();
+        self.mark_visibility_dirty();
+        Some(CombatAbsorbableFieldApplication {
+            actor_slot,
+            active_object_slot,
+            x: actor.x,
+            y: actor.y,
+            armed_endgame_result,
+        })
     }
 
     pub fn apply_combat_arena_field_removal(
@@ -1466,6 +1517,7 @@ impl PlayState {
         );
         if movement_commit.is_some() {
             self.mark_visibility_dirty();
+            let _ = self.apply_combat_absorbable_field_contact_for_actor_position(actor_slot);
             let _ = self.apply_combat_arena_field_contact_for_actor_position(actor_slot);
         }
         let movement_direction_code = match movement {
@@ -3582,6 +3634,7 @@ impl PlayState {
         );
         if outcome.committed_movement() {
             self.mark_visibility_dirty();
+            let _ = self.apply_combat_absorbable_field_contact_for_actor_position(moving_slot);
             let _ = self.apply_combat_arena_field_contact_for_actor_position(moving_slot);
         }
         outcome

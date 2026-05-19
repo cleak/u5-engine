@@ -14822,10 +14822,47 @@
                 .combat_frame_snapshot
                 .as_ref()
                 .map(|snapshot| snapshot.enter_endgame_after_successful_combat),
+            Some(false)
+        );
+        assert!(
+            state
+                .combat_frame_snapshot
+                .as_ref()
+                .and_then(|snapshot| snapshot.endgame_messages.as_ref())
+                .is_some()
+        );
+        let mut no_absorption = state.clone();
+        no_absorption.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+        let no_absorption_application =
+            no_absorption.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
+        assert_eq!(
+            no_absorption_application.result_code,
+            COMBAT_ROUND_RESULT_SUCCESS
+        );
+        assert!(no_absorption_application.restored_snapshot);
+        assert_eq!(no_absorption.endgame, None);
+
+        let (marker_x, marker_y) = state
+            .active_objects
+            .iter()
+            .find(|object| object.type_byte == DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE)
+            .map(|object| (object.x as u8, object.y as u8))
+            .expect("Doom final room should place the absorbable marker");
+        state.combat_actors[0].x = marker_x;
+        state.combat_actors[0].y = marker_y;
+        let absorption = state
+            .apply_combat_absorbable_field_contact_for_actor_position(0)
+            .expect("actor on Doom marker should set absorption result");
+        assert!(absorption.armed_endgame_result);
+        assert_eq!(
+            state
+                .combat_frame_snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.enter_endgame_after_successful_combat),
             Some(true)
         );
-        state.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
 
+        state.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
         let application = state.apply_combat_round_loop_exit(CombatRoundLoopExit::LeaveCombat);
 
         assert_eq!(application.result_code, COMBAT_ROUND_RESULT_SUCCESS);

@@ -95,6 +95,10 @@
                 },
             ]
         );
+        assert!(dungeon_room_absorbable_field_family(0x3c));
+        assert!(dungeon_room_absorbable_field_family(0x3f));
+        assert!(!dungeon_room_absorbable_field_family(0x38));
+        assert!(!dungeon_room_absorbable_field_family(0x40));
     }
 
     #[test]
@@ -129,6 +133,13 @@
                 },
             ]
         );
+
+        let instance = dungeon_room_combat_instance_from_setup(&setup, 7);
+        assert_eq!(instance.active_objects[7].type_byte, DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE);
+        assert_eq!(instance.active_objects[7].tile, DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE);
+        assert!(instance.actors[7].is_empty());
+        assert_eq!(instance.active_objects[8].tile, 0xc4);
+        assert!(!instance.actors[8].is_empty());
     }
 
     #[test]
@@ -3891,6 +3902,130 @@
         assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (6, 5));
         assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (6, 5));
         assert!(state.visibility_dirty);
+    }
+
+    #[test]
+    fn combat_post_step_absorbable_field_contact_sets_armed_result_marker() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.visibility_dirty = false;
+        state.active_player = Some(0);
+        state.active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+        state.active_objects[0] = ActiveObject {
+            type_byte: 0x5c,
+            tile: 0x5c,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+        state.active_objects[7] = ActiveObject {
+            type_byte: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
+            tile: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
+            x: 6,
+            y: 5,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            7,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        state.combat_frame_snapshot = Some(CombatFrameSnapshot {
+            area: Area::Dungeon {
+                scene: DungeonScene::new(DUNGEON_DOOM_SCENE_BYTE).unwrap(),
+                level: DOOM_FINAL_ROOM_LEVEL,
+            },
+            player: state.player,
+            active_objects: state.active_objects.clone(),
+            active_player: state.active_player,
+            combat_terrain: state.combat_terrain,
+            enter_endgame_after_successful_combat: false,
+            endgame_messages: Some(EndgameMessages {
+                records: vec!["Welcome back".to_string()],
+            }),
+        });
+
+        let outcome = state.apply_combat_step_or_attack_primitive(
+            0,
+            COMBAT_TARGET_GROUP_PARTY,
+            COMBAT_DIRECTION_EAST,
+            true,
+        );
+
+        assert!(outcome.committed_movement());
+        assert_eq!(state.active_player, None);
+        assert_eq!(state.message, "Absorbed!");
+        assert!(state.visibility_dirty);
+        assert_eq!(
+            state
+                .combat_frame_snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.enter_endgame_after_successful_combat),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn combat_absorbable_field_contact_without_armed_snapshot_does_not_set_result_marker() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.active_player = Some(0);
+        state.active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+        state.active_objects[7] = ActiveObject {
+            type_byte: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
+            tile: DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            7,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        state.combat_frame_snapshot = Some(CombatFrameSnapshot {
+            area: Area::World {
+                plane: WorldPlane::Britannia,
+            },
+            player: state.player,
+            active_objects: state.active_objects.clone(),
+            active_player: state.active_player,
+            combat_terrain: state.combat_terrain,
+            enter_endgame_after_successful_combat: false,
+            endgame_messages: None,
+        });
+
+        let application = state
+            .apply_combat_absorbable_field_contact_for_actor_position(0)
+            .unwrap();
+
+        assert!(!application.armed_endgame_result);
+        assert_eq!(state.active_player, None);
+        assert_eq!(
+            state
+                .combat_frame_snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.enter_endgame_after_successful_combat),
+            Some(false)
+        );
     }
 
     #[test]

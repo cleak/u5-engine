@@ -45,6 +45,7 @@ pub const DUNGEON_ROOM_SOURCE_COLUMN: usize = COMBAT_ARENA_METADATA_START;
 /// table. Anchored through to that shared slot count.
 pub const DUNGEON_ROOM_SOURCE_COUNT: usize = crate::DUNGEON_ROOM_SLOTS_PER_BANK;
 pub const DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE: u8 = 0x3c;
+pub const DUNGEON_ROOM_ABSORBABLE_FIELD_CLASS_MASK: u8 = 0xfc;
 
 /// `formats/cbt.md §5` outdoor metadata band slices. Per-arena setup
 /// tables A and B sit on row 3 at columns 11..=16 and 17..=22; the
@@ -217,6 +218,10 @@ impl DungeonRoomSetupSourceKind {
             Self::SpecialPlacement
         }
     }
+}
+
+pub const fn dungeon_room_absorbable_field_family(byte: u8) -> bool {
+    byte & DUNGEON_ROOM_ABSORBABLE_FIELD_CLASS_MASK == DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
