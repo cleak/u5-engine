@@ -1325,22 +1325,26 @@ impl PlayState {
         light_radius: usize,
         wrap_world: bool,
     ) -> Vec<bool> {
+        let mut visible =
+            self.surface_visibility_player_carve(px, py, view_radius, light_radius, wrap_world);
+        let local_light_mask = self.surface_local_light_mask(px, py, wrap_world);
+        if !local_light_mask.iter().any(|lit| *lit) {
+            return visible;
+        }
+        let (local_light_origin_x, local_light_origin_y) =
+            surface_local_light_mask_origin(px, py, wrap_world);
+
         let side = view_radius.saturating_mul(2).saturating_add(1);
         let cell_count = side.saturating_mul(side);
-        let mut visible = vec![false; cell_count];
         if cell_count == 0 {
             return visible;
         }
 
         let center = view_radius * side + view_radius;
-        visible[center] = true;
         let mut considered = vec![false; cell_count];
         considered[center] = true;
         let mut queue = std::collections::VecDeque::from([(px, py)]);
         let light_threshold = (light_radius as u32).saturating_mul(light_radius as u32);
-        let local_light_mask = self.surface_local_light_mask(px, py, wrap_world);
-        let (local_light_origin_x, local_light_origin_y) =
-            surface_local_light_mask_origin(px, py, wrap_world);
 
         while let Some((cx, cy)) = queue.pop_front() {
             for (dx, dy) in VISIBILITY_CARVE_NEIGHBOR_ORDER {
@@ -1364,9 +1368,7 @@ impl PlayState {
                     town_tile_propagates_visibility(tile, squared_distance)
                 };
                 let in_player_light = visibility_in_radius(squared_distance, light_threshold);
-                if in_player_light {
-                    visible[index] = true;
-                } else {
+                if !in_player_light {
                     let locally_lit = Self::surface_local_light_mask_is_lit(
                         &local_light_mask,
                         local_light_origin_x,
@@ -1387,17 +1389,64 @@ impl PlayState {
                         visible[index] = true;
                     }
                 }
-                if propagates
-                    && (in_player_light
-                        || Self::surface_local_light_mask_is_lit(
-                            &local_light_mask,
-                            local_light_origin_x,
-                            local_light_origin_y,
-                            x,
-                            y,
-                            wrap_world,
-                        ))
-                {
+                if propagates {
+                    queue.push_back((x, y));
+                }
+            }
+        }
+
+        visible
+    }
+
+    fn surface_visibility_player_carve(
+        &self,
+        px: isize,
+        py: isize,
+        view_radius: usize,
+        light_radius: usize,
+        wrap_world: bool,
+    ) -> Vec<bool> {
+        let side = view_radius.saturating_mul(2).saturating_add(1);
+        let cell_count = side.saturating_mul(side);
+        let mut visible = vec![false; cell_count];
+        if cell_count == 0 {
+            return visible;
+        }
+
+        let center = view_radius * side + view_radius;
+        visible[center] = true;
+        let mut considered = vec![false; cell_count];
+        considered[center] = true;
+        let mut queue = std::collections::VecDeque::from([(px, py)]);
+        let light_threshold = (light_radius as u32).saturating_mul(light_radius as u32);
+
+        while let Some((cx, cy)) = queue.pop_front() {
+            for (dx, dy) in VISIBILITY_CARVE_NEIGHBOR_ORDER {
+                let x = cx + isize::from(dx);
+                let y = cy + isize::from(dy);
+                let Some(index) = visibility_view_index(px, py, x, y, view_radius) else {
+                    continue;
+                };
+                if considered[index] {
+                    continue;
+                }
+                considered[index] = true;
+
+                let Some(tile) = self.surface_visibility_tile(x, y, wrap_world) else {
+                    continue;
+                };
+                let squared_distance = visibility_squared_distance(px, py, x, y);
+                if !visibility_in_radius(squared_distance, light_threshold) {
+                    continue;
+                }
+
+                visible[index] = true;
+                let propagates = if wrap_world {
+                    surface_tile_propagates_visibility(tile, squared_distance)
+                } else {
+                    town_tile_propagates_visibility(tile, squared_distance)
+                };
+                if propagates {
                     queue.push_back((x, y));
                 }
             }

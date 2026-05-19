@@ -961,6 +961,74 @@
     }
 
     #[test]
+    fn town_local_light_can_be_reached_through_open_dark_space() {
+        let mut grid = open_grid();
+        grid[18 * TOWN_GRID_SIDE + 10] = 0xDC;
+        let mut state = test_state(grid, 10, 10);
+        state.ambient_light = DAWN_DUSK_LIGHT[1];
+
+        assert!(state.town_cell_visible_with_light_radius(10, 10, 10, 18, 10, 1));
+        assert_eq!(
+            state
+                .render_text_view(10)
+                .lines()
+                .nth(19)
+                .unwrap()
+                .chars()
+                .nth(10),
+            Some('^')
+        );
+    }
+
+    #[test]
+    fn active_object_local_light_sources_contribute_to_surface_visibility() {
+        let mut state = test_state(open_grid(), 10, 10);
+        state.ambient_light = DAWN_DUSK_LIGHT[1];
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xDC,
+            tile: 0xDC,
+            x: 10,
+            y: 18,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert!(state.town_cell_visible_with_light_radius(10, 10, 10, 18, 10, 1));
+        assert_eq!(
+            state
+                .render_text_view(10)
+                .lines()
+                .nth(19)
+                .unwrap()
+                .chars()
+                .nth(10),
+            Some('^')
+        );
+    }
+
+    #[test]
+    fn world_local_light_mask_wraps_around_britannia_edges() {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(250, 0)] = 0xDC;
+        let mut state = britannia_state(grid, 0, 0);
+        state.ambient_light = DAWN_DUSK_LIGHT[1];
+
+        assert!(state.world_cell_visible_with_light_radius(0, 0, -6, 0, 10, 1));
+        assert_eq!(
+            state
+                .render_text_view(10)
+                .lines()
+                .nth(11)
+                .unwrap()
+                .chars()
+                .nth(4),
+            Some('^')
+        );
+    }
+
+    #[test]
     fn render_text_frame_clears_visibility_dirty_after_redraw() {
         let mut state = test_state(open_grid(), 1, 1);
         state.visibility_dirty = true;
