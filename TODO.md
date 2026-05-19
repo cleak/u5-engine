@@ -535,10 +535,10 @@ Goal: keep the project easy to change safely.
 Goal: make the project approachable without reading the entire codebase.
 
 - Split the README.
-  - Keep quick start at the top.
-  - Move sidecar reference into `docs/sidecars.md`.
-  - Move command reference into `docs/commands.md`.
-  - Move architecture notes into `docs/architecture.md`.
+  - Quick-start and compatibility notes remain in the README.
+  - Sidecar reference is now summarized in `docs/sidecars.md`.
+  - Command routing reference is now summarized in `docs/commands.md`.
+  - Architecture notes are now summarized in `docs/architecture.md`.
 
 - Add a first-playable status matrix.
   - Rows: each command/system.
@@ -551,6 +551,8 @@ Goal: make the project approachable without reading the entire codebase.
     - sidecar required,
     - tests,
     - public-spec gap.
+  - Initial matrix lives in `docs/status-matrix.md`; refresh it when major
+    gameplay or frontend coverage changes.
 
 - Document common dev commands.
   - `cargo fmt -- --check`

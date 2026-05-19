@@ -1,10 +1,11 @@
 # u5-engine
 
-Verification harness for the Ultima V cleanroom specs.
+Verification harness and in-progress clean-room engine for the Ultima V specs.
 
-This is not a full replacement engine yet. The first executable is a narrow
-Lord British castle/throne-room slice that reads the user's local Ultima V data
-at runtime and checks the current public specs against real files:
+This is not a full replacement engine yet, but the executable has grown beyond
+the original Lord British castle/throne-room slice. It reads the user's local
+Ultima V data at runtime, verifies public specs against real files, and exposes
+terminal plus Bevy play loops backed by the same runtime state:
 
 - town-mode scene partitioning;
 - per-class `*.DAT`, `*.NPC`, and `*.TLK` joins;
@@ -29,6 +30,19 @@ cargo run -- C:\Games\U5-Clean
 The run writes an aggregate report to
 `reports/lb-throne-room-slice.txt`. The report intentionally avoids raw map
 dumps, dialogue transcripts, and binary offsets.
+
+## Documentation map
+
+The README keeps quick-start and compatibility notes. Focused handoff docs live
+under `docs/`:
+
+- `docs/architecture.md` - crate layout, runtime boundaries, and clean-room
+  data rules.
+- `docs/commands.md` - current A-Z command routing by mode, with representative
+  test evidence.
+- `docs/sidecars.md` - clean-room TSV/binary sidecar files accepted at runtime.
+- `docs/status-matrix.md` - implementation status matrix and verification
+  commands for the current first-playable engine.
 
 There is also an early first-playable terminal slice that drops the player into
 the Lord British castle binding verified by the report:
