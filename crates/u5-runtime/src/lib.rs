@@ -102,6 +102,7 @@ pub mod u4_transfer_session;
 pub mod view_classes;
 pub mod visibility;
 pub mod wind;
+pub mod world_progress;
 pub mod world_tables;
 pub mod world_tables_io;
 pub mod world_tables_io_get_pickup;
@@ -599,6 +600,10 @@ pub use wind::{
     PLAYER_SAIL_WAIT_TICKS_INTO_WIND, PLAYER_SAIL_WAIT_TICKS_PERPENDICULAR,
     PLAYER_SAIL_WAIT_TICKS_WITH_WIND, WIND_DRIFT_CALM_ACCEPT_MIN, WIND_DRIFT_CANDIDATE_MODULUS,
     WIND_DRIFT_OUTER_ROLL_MASK, WindSetterOutcome, WindState, wind_setter_outcome,
+};
+pub use world_progress::{
+    WORLD_PROGRESS_STATE_FILE, WORLD_PROGRESS_STATE_LEN, WORLD_PROGRESS_STATE_MAGIC,
+    WorldProgressState, load_world_progress_state, write_world_progress_state,
 };
 pub use world_tables::*;
 pub use world_tables_io::*;

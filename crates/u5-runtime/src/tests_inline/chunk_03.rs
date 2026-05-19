@@ -65,6 +65,12 @@
             y: 88,
             z: 0,
         };
+        state.rare_reagent_harvest_days = [3, 4, 5];
+        state.fixed_hidden_treasure_found[0] = 0x21;
+        state.fixed_hidden_treasure_found[FIXED_HIDDEN_TREASURE_FOUND_BYTES - 1] = 0x80;
+        state.fixed_hidden_treasure_daily_day = 6;
+        state.shadowlord_hideouts = [8, SHADOWLORD_VANQUISHED, 4];
+        state.shrine_standing = [1, 2, 3, 4, 5, 6, 7, 8];
         state.shrine_ordained_mask = 0b0000_1010;
         state.shrine_codex_mask = 0b0100_0001;
         state.moral_standing = 42;
@@ -253,6 +259,13 @@
             fs::read(dir.join("UNDER.OOL")).unwrap(),
             saved_ool[OOL_PLANE_LEN..].to_vec()
         );
+        let world_progress = load_world_progress_state(&dir).unwrap();
+        assert_eq!(world_progress, WorldProgressState::from_play_state(&state));
+        let reloaded_options = load_play_options_from_save(&dir).unwrap();
+        assert_eq!(
+            WorldProgressState::from_play_options(&reloaded_options),
+            world_progress
+        );
         assert!(state.message.contains("Done."));
         let _ = fs::remove_dir_all(dir);
     }
@@ -383,6 +396,41 @@
 
         assert_eq!(state.white_potion_sweep, None);
         assert_eq!(state.combat_potion_presentation, None);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn world_progress_state_codec_round_trips() {
+        let mut progress = WorldProgressState::default();
+        progress.rare_reagent_harvest_days = [7, 8, 9];
+        progress.fixed_hidden_treasure_found[0] = 0x01;
+        progress.fixed_hidden_treasure_found[7] = 0xa5;
+        progress.fixed_hidden_treasure_found[FIXED_HIDDEN_TREASURE_FOUND_BYTES - 1] = 0x40;
+        progress.fixed_hidden_treasure_daily_day = 12;
+        progress.shadowlord_hideouts = [SHADOWLORD_VANQUISHED, 3, 6];
+        progress.shrine_standing = [10, 20, 30, 40, 50, 60, 70, 80];
+
+        let encoded = progress.encoded();
+        assert_eq!(encoded.len(), WORLD_PROGRESS_STATE_LEN);
+        assert_eq!(WorldProgressState::decode(&encoded).unwrap(), progress);
+        assert!(WorldProgressState::decode(&[0; WORLD_PROGRESS_STATE_LEN]).is_err());
+        assert!(WorldProgressState::decode(&encoded[..WORLD_PROGRESS_STATE_LEN - 1]).is_err());
+    }
+
+    #[test]
+    fn missing_world_progress_sidecar_loads_default_state() {
+        let dir = debug_game_dir();
+        let mut save = saved_game_seed_bytes(0, 0xff, 10, 20);
+        save[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        fs::write(dir.join(SAVED_GAM_FILENAME), save).unwrap();
+        fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+
+        let options = load_play_options_from_save(&dir).unwrap();
+
+        assert_eq!(
+            WorldProgressState::from_play_options(&options),
+            WorldProgressState::default()
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

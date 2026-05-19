@@ -9,6 +9,7 @@ pub fn load_play_options_from_save(game_dir: &Path) -> io::Result<PlayOptions> {
     let mut options =
         load_play_options_from_save_file(game_dir, SAVED_GAM_FILENAME, "--from-save", true)?;
     refresh_saved_ool_mirrors_for_load(game_dir)?;
+    load_world_progress_state(game_dir)?.apply_to_play_options(&mut options);
     options.blackthorn_story = load_blackthorn_story_state(game_dir)?;
     options.save_template_source = SaveTemplateSource::SavedGame;
     Ok(options)

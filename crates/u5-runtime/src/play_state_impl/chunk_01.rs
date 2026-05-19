@@ -188,6 +188,7 @@ impl PlayState {
         fs::write(game_dir.join(SAVED_GAM_FILENAME), save)?;
         fs::write(game_dir.join(SAVED_OOL_FILENAME), saved_ool)?;
         write_blackthorn_story_state(game_dir, self.blackthorn_story)?;
+        write_world_progress_state(game_dir, WorldProgressState::from_play_state(self))?;
         Ok(())
     }
 
