@@ -30,23 +30,28 @@ Last known verification state:
   dungeon turn/block movement, dungeon exit confirmation/refusal, and a
   Doom room trigger that enters a combat raster viewport.
 - `cargo run -p u5-tui -- --save-frame-suite target\codex-frame-suite
-  C:\Games\U5-Clean` passed on 2026-05-19 and wrote nine nonblank PNGs:
+  C:\Games\U5-Clean` passed on 2026-05-19 and wrote thirteen nonblank PNGs:
   `britannia` `859a1bdabe5c9b7a`, `britannia-step` `05b13e47da048fe6`,
   `castle` `bda625019405af09`, lit `dungeon` `91ea22aa5e09c692`,
-  synthetic `combat` `b4cbe49dac94affd`, `intro-menu`
-  `7bf01c36de552e16`, `status-window` `bf7a428a4b00ad2b`,
-  `z-stats-modal` `61b033bfa2488b46`, and `endgame-status`
-  `532cb7f1bdd03ffd`.
+  synthetic `combat` `b4cbe49dac94affd`, `surface-view`
+  `68717971b9dc1fbf`, `dungeon-view` `e43eb41821c7a3b2`,
+  `peer-view` `bd4c5606fd27c054`, `x-ray-view` `bd4c5606fd27c054`,
+  `intro-menu` `7bf01c36de552e16`, `status-window`
+  `bf7a428a4b00ad2b`, `z-stats-modal` `61b033bfa2488b46`, and
+  `endgame-status` `532cb7f1bdd03ffd`.
 - `cargo run -p u5-tui --features visual -- --visual-frame-suite
   target\codex-visual-frame-suite C:\Games\U5-Clean` passed on 2026-05-19
-  and wrote ten nonblank Bevy-owned PNGs plus a sanitized manifest:
+  and wrote fourteen nonblank Bevy-owned PNGs plus a sanitized manifest:
   `world-play` `1535c318c10abdc2`, `world-after-step`
   `c1f56dabe15a1dd6`, `town-play` `8a69be65d1a66571`,
   `dungeon-play` `ae3f6604682fe64a`, `dungeon-dark`
   `8ff1e92197ad1dcc`, `combat-play` `312c8b84f28ebe45`,
-  `z-stats-modal` `24f3f0eefd9ccd80`, `endgame-status`
-  `1b4483ca77ac52f9`, `intro-menu` `87ca7353c7391e06`, and
-  `intro-return-to-view` `a52f8c3db8e33102`.
+  `surface-view-overlay` `aa2935d96f053162`, `dungeon-view-overlay`
+  `6b23b973ed2d353a`, `peer-view-overlay` `824cdc88bfb533bc`,
+  `x-ray-view-overlay` `824cdc88bfb533bc`, `z-stats-modal`
+  `24f3f0eefd9ccd80`, `endgame-status` `1b4483ca77ac52f9`,
+  `intro-menu` `87ca7353c7391e06`, and `intro-return-to-view`
+  `a52f8c3db8e33102`.
 - Bevy visual screenshot smoke with local assets produced a nonblank
   `792x1182` PNG at `target\codex-fixed-font-status-smoke.png`.
 - Bevy unit framebuffer coverage includes world, town, dungeon, combat, intro,

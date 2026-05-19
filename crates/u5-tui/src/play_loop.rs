@@ -166,7 +166,9 @@ pub fn raster_diagnostic_line(
 }
 
 pub fn raster_frame_kind(state: &PlayState) -> &'static str {
-    if state.combat_active {
+    if state.active_view_overlay.is_some() {
+        "view overlay"
+    } else if state.combat_active {
         "combat viewport"
     } else if matches!(state.area, Area::Dungeon { .. }) {
         "dungeon first-person viewport"

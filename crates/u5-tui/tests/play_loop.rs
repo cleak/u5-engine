@@ -77,6 +77,11 @@ fn raster_frame_kind_names_dungeon_combat_and_tile_modes() {
     let mut combat = test_state(open_grid(), 1, 1);
     combat.combat_active = true;
     assert_eq!(raster_frame_kind(&combat), "combat viewport");
+
+    let mut overlay = test_state(open_grid(), 1, 1);
+    overlay.gems = 1;
+    overlay.view_gem();
+    assert_eq!(raster_frame_kind(&overlay), "view overlay");
 }
 
 // from chunk_16

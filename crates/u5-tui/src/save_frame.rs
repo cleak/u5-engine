@@ -108,6 +108,10 @@ pub fn save_frame_suite(
     }
     for report in [
         save_frame_suite_combat(game_dir, raster_depth, &out_dir.join("combat.png"))?,
+        save_frame_suite_surface_view(game_dir, raster_depth, &out_dir.join("surface-view.png"))?,
+        save_frame_suite_dungeon_view(game_dir, raster_depth, &out_dir.join("dungeon-view.png"))?,
+        save_frame_suite_peer_view(game_dir, raster_depth, &out_dir.join("peer-view.png"))?,
+        save_frame_suite_x_ray_view(game_dir, raster_depth, &out_dir.join("x-ray-view.png"))?,
         save_frame_suite_intro_menu(&out_dir.join("intro-menu.png"))?,
         save_frame_suite_status_window(game_dir, &out_dir.join("status-window.png"))?,
         save_frame_suite_z_stats(game_dir, &out_dir.join("z-stats-modal.png"))?,
@@ -263,6 +267,78 @@ fn save_frame_suite_combat(
     state.combat_terrain[0][0] = 12;
     state.combat_terrain[5][5] = 4;
     state.combat_terrain[6][5] = 1;
+    let atlas = load_tile_atlas(game_dir, raster_depth)?;
+    save_frame_capture_state(state, &atlas, out)
+}
+
+fn save_frame_suite_surface_view(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    out: &Path,
+) -> io::Result<SavedFrameReport> {
+    let mut state = PlayState::load_scene(
+        game_dir,
+        PlayOptions {
+            target: PlayTarget::World(WorldPlane::Britannia),
+            ..PlayOptions::default()
+        },
+    )?;
+    state.gems = 1;
+    state.view_gem();
+    let atlas = load_tile_atlas(game_dir, raster_depth)?;
+    save_frame_capture_state(state, &atlas, out)
+}
+
+fn save_frame_suite_dungeon_view(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    out: &Path,
+) -> io::Result<SavedFrameReport> {
+    let mut state = PlayState::load_scene(
+        game_dir,
+        PlayOptions {
+            target: PlayTarget::Dungeon(DungeonScene::new(0x21).expect("dungeon scene is valid")),
+            floor: 0,
+            torch_counter: 9,
+            ..PlayOptions::default()
+        },
+    )?;
+    state.gems = 1;
+    state.view_gem();
+    let atlas = load_tile_atlas(game_dir, raster_depth)?;
+    save_frame_capture_state(state, &atlas, out)
+}
+
+fn save_frame_suite_peer_view(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    out: &Path,
+) -> io::Result<SavedFrameReport> {
+    let mut state = PlayState::load_scene(
+        game_dir,
+        PlayOptions {
+            target: PlayTarget::Town(Scene::new(0x11).expect("castle scene is valid")),
+            ..PlayOptions::default()
+        },
+    )?;
+    state.activate_peer_view_overlay();
+    let atlas = load_tile_atlas(game_dir, raster_depth)?;
+    save_frame_capture_state(state, &atlas, out)
+}
+
+fn save_frame_suite_x_ray_view(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    out: &Path,
+) -> io::Result<SavedFrameReport> {
+    let mut state = PlayState::load_scene(
+        game_dir,
+        PlayOptions {
+            target: PlayTarget::Town(Scene::new(0x11).expect("castle scene is valid")),
+            ..PlayOptions::default()
+        },
+    )?;
+    state.activate_x_ray_view_overlay();
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     save_frame_capture_state(state, &atlas, out)
 }
@@ -444,7 +520,7 @@ mod tests {
         let dir = temp_output_dir("suite");
         let reports = save_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 9);
+        assert_eq!(reports.len(), 13);
         for report in &reports {
             assert!(report.path.exists());
             assert!(report.nonblack_pixels > 0);
@@ -457,6 +533,34 @@ mod tests {
             assert_eq!(report.width, 176);
             assert_eq!(report.height, 176);
         }
+        for label in ["surface-view", "peer-view", "x-ray-view"] {
+            let report = reports
+                .iter()
+                .find(|report| report.label == label)
+                .expect("expected surface view overlay report");
+            assert_eq!(
+                report.width,
+                32 * u5_runtime::LOCAL_VIEW_CELL_PIXEL_SCALE as u32
+            );
+            assert_eq!(
+                report.height,
+                32 * u5_runtime::LOCAL_VIEW_CELL_PIXEL_SCALE as u32
+            );
+            assert_eq!(report.frame_kind, "view overlay");
+        }
+        let dungeon_view = reports
+            .iter()
+            .find(|report| report.label == "dungeon-view")
+            .expect("expected dungeon view overlay report");
+        assert_eq!(
+            dungeon_view.width,
+            11 * u5_runtime::LOCAL_VIEW_CELL_PIXEL_SCALE as u32
+        );
+        assert_eq!(
+            dungeon_view.height,
+            11 * u5_runtime::LOCAL_VIEW_CELL_PIXEL_SCALE as u32
+        );
+        assert_eq!(dungeon_view.frame_kind, "view overlay");
         let endgame = reports
             .iter()
             .find(|report| report.label == "endgame-status")
@@ -476,6 +580,10 @@ mod tests {
         assert!(manifest.contains("castle"));
         assert!(manifest.contains("dungeon"));
         assert!(manifest.contains("combat"));
+        assert!(manifest.contains("surface-view"));
+        assert!(manifest.contains("dungeon-view"));
+        assert!(manifest.contains("peer-view"));
+        assert!(manifest.contains("x-ray-view"));
         assert!(manifest.contains("intro-menu"));
         assert!(manifest.contains("status-window"));
         assert!(manifest.contains("z-stats-modal"));

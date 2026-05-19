@@ -328,6 +328,64 @@ fn visual_gameplay_frame_cases() -> Vec<VisualGameplayFrameCase> {
             synthetic_combat: true,
         },
         VisualGameplayFrameCase {
+            label: "surface-view-overlay",
+            frame_kind: "visual view overlay frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            inputs: None,
+            configure: Some(|state| {
+                state.gems = 1;
+                state.view_gem();
+            }),
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "dungeon-view-overlay",
+            frame_kind: "visual view overlay frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(
+                    DungeonScene::new(0x21).expect("dungeon scene is valid"),
+                ),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            inputs: None,
+            configure: Some(|state| {
+                state.gems = 1;
+                state.view_gem();
+            }),
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "peer-view-overlay",
+            frame_kind: "visual view overlay frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(Scene::new(0x11).expect("castle scene is valid")),
+                ..PlayOptions::default()
+            },
+            inputs: None,
+            configure: Some(|state| {
+                state.activate_peer_view_overlay();
+            }),
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "x-ray-view-overlay",
+            frame_kind: "visual view overlay frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(Scene::new(0x11).expect("castle scene is valid")),
+                ..PlayOptions::default()
+            },
+            inputs: None,
+            configure: Some(|state| {
+                state.activate_x_ray_view_overlay();
+            }),
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
             label: "z-stats-modal",
             frame_kind: "visual status modal frame",
             options: PlayOptions {
@@ -1871,7 +1929,16 @@ fn display_name_bytes(name: &[u8]) -> String {
 
 fn render_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
     match state.render_top_down_frame(VIEWPORT_RADIUS, atlas) {
-        Ok(Some(viewport)) => viewport.to_rgba(),
+        Ok(Some(viewport)) => {
+            let rgba = viewport.to_rgba();
+            if viewport.width as u32 == VIEWPORT_SIZE_PX
+                && viewport.height as u32 == VIEWPORT_SIZE_PX
+            {
+                rgba
+            } else {
+                center_rgba_on_viewport(rgba, viewport.width, viewport.height)
+            }
+        }
         _ => render_text_panel_rgba(
             &state.render_text_view(VIEWPORT_RADIUS),
             VIEWPORT_SIZE_PX as usize,
@@ -1879,6 +1946,33 @@ fn render_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
         )
         .unwrap_or_else(|_| vec![0; (VIEWPORT_SIZE_PX as usize) * (VIEWPORT_SIZE_PX as usize) * 4]),
     }
+}
+
+fn center_rgba_on_viewport(src: Vec<u8>, src_width: usize, src_height: usize) -> Vec<u8> {
+    let dst_width = VIEWPORT_SIZE_PX as usize;
+    let dst_height = VIEWPORT_SIZE_PX as usize;
+    let mut dst = vec![0; dst_width * dst_height * 4];
+    for pixel in dst.chunks_exact_mut(4) {
+        pixel[3] = 0xff;
+    }
+    let copy_width = src_width.min(dst_width);
+    let copy_height = src_height.min(dst_height);
+    let src_x = src_width.saturating_sub(copy_width) / 2;
+    let src_y = src_height.saturating_sub(copy_height) / 2;
+    let dst_x = dst_width.saturating_sub(copy_width) / 2;
+    let dst_y = dst_height.saturating_sub(copy_height) / 2;
+    for row in 0..copy_height {
+        let src_row = ((src_y + row) * src_width + src_x) * 4;
+        let dst_row = ((dst_y + row) * dst_width + dst_x) * 4;
+        let bytes = copy_width * 4;
+        if let (Some(src_slice), Some(dst_slice)) = (
+            src.get(src_row..src_row + bytes),
+            dst.get_mut(dst_row..dst_row + bytes),
+        ) {
+            dst_slice.copy_from_slice(src_slice);
+        }
+    }
+    dst
 }
 
 fn render_status_framebuffer(
@@ -2468,6 +2562,26 @@ mod tests {
     }
 
     #[test]
+    fn centered_overlay_framebuffer_preserves_fixed_bevy_texture_size() {
+        let mut src = vec![0; 2 * 2 * 4];
+        for pixel in src.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[0xaa, 0xbb, 0xcc, 0xff]);
+        }
+
+        let rgba = center_rgba_on_viewport(src, 2, 2);
+
+        assert_eq!(
+            rgba.len(),
+            (VIEWPORT_SIZE_PX as usize) * (VIEWPORT_SIZE_PX as usize) * 4
+        );
+        assert!(rgba.chunks_exact(4).all(|pixel| pixel[3] == 0xff));
+        assert!(
+            rgba.chunks_exact(4)
+                .any(|pixel| pixel == [0xaa, 0xbb, 0xcc, 0xff])
+        );
+    }
+
+    #[test]
     fn visual_frame_suite_local_clean_writes_pngs_and_manifest_when_present() {
         let game_dir = Path::new(DEFAULT_GAME_DIR);
         if !game_dir.join("CASTLE.DAT").exists()
@@ -2480,7 +2594,7 @@ mod tests {
         let dir = temp_output_dir("suite");
         let reports = visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 10);
+        assert_eq!(reports.len(), 14);
         for report in &reports {
             assert!(report.path.exists());
             assert!(report.nonblack_pixels > 0);
@@ -2492,6 +2606,10 @@ mod tests {
             "dungeon-play",
             "dungeon-dark",
             "combat-play",
+            "surface-view-overlay",
+            "dungeon-view-overlay",
+            "peer-view-overlay",
+            "x-ray-view-overlay",
             "z-stats-modal",
             "endgame-status",
         ] {
@@ -2517,6 +2635,10 @@ mod tests {
         assert!(manifest.contains("dungeon-play"));
         assert!(manifest.contains("dungeon-dark"));
         assert!(manifest.contains("combat-play"));
+        assert!(manifest.contains("surface-view-overlay"));
+        assert!(manifest.contains("dungeon-view-overlay"));
+        assert!(manifest.contains("peer-view-overlay"));
+        assert!(manifest.contains("x-ray-view-overlay"));
         assert!(manifest.contains("z-stats-modal"));
         assert!(manifest.contains("endgame-status"));
         assert!(manifest.contains("intro-menu"));
