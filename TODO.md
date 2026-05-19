@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-19, including 2379 tests.
+- `cargo test -p u5-runtime` passed on 2026-05-19, including 2380 tests.
 - `cargo test -p u5-tui` passed on 2026-05-19.
 - `cargo test -p u5-bevy` passed on 2026-05-19, including 31 tests.
 - `cargo fmt -- --check` passed on 2026-05-19 after the latest Rust changes.
@@ -239,7 +239,7 @@ tables are not yet public or not yet encoded.
   - `object_pickups.tsv`
   - `world_waterfalls.tsv`
   - `world_damage_tiles.tsv`
-  - `world_encounters.tsv`
+  - `world_encounters.tsv` (now overrides matching terrain before native fallback)
   - `shrines.tsv`
   - `dungeon_deeper_transitions.tsv`
   - `dungeon_teleports.tsv`

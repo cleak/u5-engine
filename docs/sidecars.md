@@ -49,7 +49,7 @@ move below level `7`. Missing rows preserve the conservative in-place block.
 | `dungeon_chests.tsv` | Dungeon chest guard/grant metadata used by tests. |
 | `world_waterfalls.tsv` | Current/waterfall sweeps after accepted world movement. |
 | `world_damage_tiles.tsv` | Lava/drowning damage cells and transport gates. |
-| `world_encounters.tsv` | Authored encounter spawn rows. |
+| `world_encounters.tsv` | Optional encounter spawn overrides; unmatched terrain uses the native public selector. |
 | `shrines.tsv` | Shrine coordinates and virtue binding. |
 | `blink_targets.tsv` | Clean Blink landing rows. |
 | `tile_passability.bin` | Optional 32-byte public tile passability bitmap. |

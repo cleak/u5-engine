@@ -1777,6 +1777,26 @@ fn native_world_encounter_probe_runs_when_sidecar_is_absent() {
 }
 
 #[test]
+fn world_encounter_sidecar_unmatched_tile_falls_back_to_native_probe() {
+    let dir = debug_game_dir();
+    fs::write(
+        dir.join(WORLD_ENCOUNTER_TABLE_FILE),
+        "BRITANNIA 5 0 192 2 0\n",
+    )
+    .unwrap();
+    let mut state = britannia_state(vec![0x04; WORLD_CELLS], 1, 11);
+
+    let slot = state
+        .apply_world_encounter_probe(&dir, WorldPlane::Britannia)
+        .unwrap();
+
+    assert_eq!(slot, Some(1));
+    assert_eq!(state.active_objects[1].type_byte, 0xC8);
+    assert!(state.visibility_dirty);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn native_world_encounter_probe_respects_zero_threshold() {
     let dir = debug_game_dir();
     let mut state = britannia_state(vec![0x20; WORLD_CELLS], 1, 11);

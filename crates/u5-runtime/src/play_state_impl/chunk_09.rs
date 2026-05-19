@@ -70,7 +70,24 @@ impl PlayState {
         let Some(entries) = load_world_encounter_entries(game_dir)? else {
             return Ok(self.apply_native_world_encounter_probe(plane));
         };
-        self.apply_world_encounter_sidecar_probe(&entries, game_dir, plane)
+        if let Some(slot) = self.apply_world_encounter_sidecar_probe(&entries, game_dir, plane)? {
+            return Ok(Some(slot));
+        }
+        if self.world_encounter_sidecar_matches_underfoot(&entries, plane) {
+            return Ok(None);
+        }
+        Ok(self.apply_native_world_encounter_probe(plane))
+    }
+
+    pub fn world_encounter_sidecar_matches_underfoot(
+        &self,
+        entries: &[WorldEncounterEntry],
+        plane: WorldPlane,
+    ) -> bool {
+        let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
+        entries
+            .iter()
+            .any(|entry| entry.plane == plane && entry.tile == tile)
     }
 
     pub fn apply_world_encounter_sidecar_probe(

@@ -848,10 +848,10 @@ movement.
 The optional tile guard keeps stale coordinates from firing after local map
 edits.
 
-Random overworld encounter spawning now uses the public terrain threshold,
-retry, branch, and weighted bucket tables when no clean sidecar is present.
-For deterministic focused tests or clean-room scenario authoring, place rows
-next to the game data as `world_encounters.tsv`:
+Random overworld encounter spawning uses the public terrain threshold, retry,
+branch, and weighted bucket tables. For deterministic focused tests or
+clean-room scenario authoring, place override rows next to the game data as
+`world_encounters.tsv`:
 
 ```text
 # PLANE TILE THRESHOLD TYPE DX DY [PHASE]
@@ -862,11 +862,11 @@ UNDERWORLD 14 12 255 -8 4 0x12
 Native encounters roll a deterministic clean-room value in `1..30` and spawn
 when the public threshold strictly exceeds that roll. The saved `Q` timing tag
 checks the encounter probe only on alternate turns, while `T` suppresses it.
-If `world_encounters.tsv` is present, sidecar mode is used: matching rows spawn
-through the authored sidecar path, and unmatched tiles do not fall back to the
-native selector. `TYPE` must be a monster/NPC active-object byte in
-`192..255`. `DX`/`DY` place the new object relative to the party with
-wrapping world coordinates and must stay within the active-object neighborhood radius.
+If `world_encounters.tsv` is present, matching rows spawn through the authored
+sidecar path; unmatched tiles fall back to the native public selector. `TYPE`
+must be a monster/NPC active-object byte in `192..255`. `DX`/`DY` place the new
+object relative to the party with wrapping world coordinates and must stay
+within the active-object neighborhood radius.
 If `PHASE` is omitted, the spawned actor starts facing back toward the party;
 an explicit phase may supply a direction nibble with a non-steady animation
 nibble. Spawning uses the normal first-empty active-object slot and is skipped
