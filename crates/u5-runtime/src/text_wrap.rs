@@ -360,6 +360,15 @@ impl TextWindowSystem {
         self.set_active_cursor(saved.0, saved.1);
     }
 
+    pub fn paint_cursor_glyph(&mut self, glyph: u8) {
+        let saved = self.active_cursor();
+        let old_gate = self.cursor_advance_enabled;
+        self.cursor_advance_enabled = false;
+        self.emit_glyph(glyph);
+        self.cursor_advance_enabled = old_gate;
+        self.set_active_cursor(saved.0, saved.1);
+    }
+
     fn emit_glyph(&mut self, glyph: u8) {
         let window = self.active_window();
         if let Some((x, y)) = window.absolute_cursor() {

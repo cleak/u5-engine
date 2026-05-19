@@ -33,7 +33,7 @@ use u5_runtime::{
     load_play_options_from_save, load_question_records, load_return_to_view_assets,
     load_story_records, load_tile_atlas,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
-    paint_message_text_window, paint_prompt_text_window, paint_stats_panel_text_window,
+    paint_message_text_window, paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
     read_u4_transfer_source_from_party_sav, render_play_text_window_system,
     render_return_to_view_preview_viewport, render_text_panel_rgba, render_text_window_rgba,
     shop_runtime::{GuildShopState, ReagentShopState, SageState, TavernState},
@@ -53,6 +53,7 @@ const READY_HINT: &str =
 const INTRO_FRAMEBUFFER_WIDTH: u32 = 320;
 const INTRO_FRAMEBUFFER_HEIGHT: u32 = 220;
 const INTRO_DISPLAY_SCALE: f32 = 2.5;
+const PROMPT_CURSOR_GLYPH: u8 = 4;
 
 pub fn run_visual_loop(
     game_dir: &Path,
@@ -562,6 +563,7 @@ struct VisualState {
     image_handle: Handle<Image>,
     text_font: FixedCellFont,
     input_line: String,
+    prompt_cursor_visible: bool,
 }
 
 #[derive(Resource)]
@@ -644,15 +646,23 @@ fn animate_static_tiles(
     let mut advanced = false;
     while pump.accumulator >= pump.interval {
         pump.accumulator -= pump.interval;
-        advanced |= visual_idle_tick(&mut visual.state);
+        let mut prompt_cursor_visible = visual.prompt_cursor_visible;
+        advanced |= advance_visual_wait_frame(&mut visual.state, &mut prompt_cursor_visible);
+        visual.prompt_cursor_visible = prompt_cursor_visible;
     }
     if !advanced {
         return;
     }
     let v: &mut VisualState = visual.as_mut();
     let input_line = v.input_line.clone();
-    let rgba =
-        render_visual_play_frame_with_input(&mut v.state, &v.atlas, &v.text_font, &input_line, "");
+    let rgba = render_visual_play_frame_with_input_and_cursor(
+        &mut v.state,
+        &v.atlas,
+        &v.text_font,
+        &input_line,
+        "",
+        v.prompt_cursor_visible,
+    );
     if let Some(image) = images.get_mut(&v.image_handle) {
         image.data = Some(rgba);
     }
@@ -710,6 +720,7 @@ fn setup(
         image_handle,
         text_font,
         input_line: String::new(),
+        prompt_cursor_visible: false,
     });
     commands.remove_resource::<PendingBootstrap>();
 }
@@ -1334,9 +1345,16 @@ fn drive_visual(
     }
 
     let v: &mut VisualState = visual.as_mut();
+    v.prompt_cursor_visible = visual_line_prompt_active(&v.state);
     let input_line = v.input_line.clone();
-    let rgba =
-        render_visual_play_frame_with_input(&mut v.state, &v.atlas, &v.text_font, &input_line, "");
+    let rgba = render_visual_play_frame_with_input_and_cursor(
+        &mut v.state,
+        &v.atlas,
+        &v.text_font,
+        &input_line,
+        "",
+        v.prompt_cursor_visible,
+    );
     if let Some(image) = images.get_mut(&v.image_handle) {
         image.data = Some(rgba);
     }
@@ -1710,9 +1728,26 @@ fn render_visual_play_frame_with_input(
     input_line: &str,
     fallback: &str,
 ) -> Vec<u8> {
+    render_visual_play_frame_with_input_and_cursor(state, atlas, font, input_line, fallback, false)
+}
+
+fn render_visual_play_frame_with_input_and_cursor(
+    state: &mut PlayState,
+    atlas: &TileAtlas,
+    font: &FixedCellFont,
+    input_line: &str,
+    fallback: &str,
+    prompt_cursor_visible: bool,
+) -> Vec<u8> {
     let width = VISUAL_PLAY_FRAME_WIDTH as usize;
     let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
-    let mut rgba = render_integrated_status_framebuffer(state, input_line, fallback, font);
+    let mut rgba = render_integrated_status_framebuffer(
+        state,
+        input_line,
+        fallback,
+        font,
+        prompt_cursor_visible,
+    );
 
     let viewport = render_framebuffer(state, atlas);
     blit_rgba(
@@ -1957,6 +1992,7 @@ fn render_integrated_status_framebuffer(
     input_line: &str,
     fallback: &str,
     font: &FixedCellFont,
+    prompt_cursor_visible: bool,
 ) -> Vec<u8> {
     let active_cursor = state.active_player;
     let mut display_state = state.clone();
@@ -1990,7 +2026,8 @@ fn render_integrated_status_framebuffer(
     paint_message_text_window(&mut system, &display_state.message);
     paint_stats_panel_text_window(&mut system, &display_state, active_cursor);
     if let Some(input_echo) = input_echo {
-        paint_prompt_text_window(&mut system, input_echo);
+        let cursor_glyph = prompt_cursor_visible.then_some(PROMPT_CURSOR_GLYPH);
+        paint_prompt_text_window_with_cursor(&mut system, input_echo, cursor_glyph);
     }
     system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
     if stats_panel_active_cursor_visible(state, active_cursor) {
@@ -2076,6 +2113,16 @@ fn visual_idle_tick(state: &mut PlayState) -> bool {
     }
     let _ = state.idle_tick();
     true
+}
+
+fn advance_visual_wait_frame(state: &mut PlayState, prompt_cursor_visible: &mut bool) -> bool {
+    if visual_line_prompt_active(state) {
+        *prompt_cursor_visible = !*prompt_cursor_visible;
+        true
+    } else {
+        *prompt_cursor_visible = false;
+        visual_idle_tick(state)
+    }
 }
 
 fn should_escape_quit_visual(state: &PlayState) -> bool {
@@ -2757,6 +2804,44 @@ mod tests {
         assert_eq!(state.clock, clock_before);
         assert_eq!(state.animation.frame, 0);
         assert_eq!(state.message, "Wishing well: toss a coin? (Y/N)");
+    }
+
+    #[test]
+    fn visual_wait_frame_blinks_line_prompt_without_world_tick() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        install_test_conversation(&mut state);
+        let clock_before = state.clock;
+        let mut prompt_cursor_visible = false;
+
+        assert!(advance_visual_wait_frame(
+            &mut state,
+            &mut prompt_cursor_visible
+        ));
+        assert!(prompt_cursor_visible);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, clock_before);
+        assert_eq!(state.animation.frame, 0);
+
+        assert!(advance_visual_wait_frame(
+            &mut state,
+            &mut prompt_cursor_visible
+        ));
+        assert!(!prompt_cursor_visible);
+        assert_eq!(state.animation.frame, 0);
+    }
+
+    #[test]
+    fn visual_prompt_cursor_changes_fixed_cell_frame_only_when_visible() {
+        let mut state = test_state(open_grid(), 1, 1);
+        install_test_conversation(&mut state);
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+
+        let hidden =
+            render_integrated_status_framebuffer(&mut state.clone(), "job", "", &font, false);
+        let visible =
+            render_integrated_status_framebuffer(&mut state.clone(), "job", "", &font, true);
+
+        assert_ne!(hash_bytes(&hidden), hash_bytes(&visible));
     }
 
     #[test]

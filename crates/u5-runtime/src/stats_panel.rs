@@ -107,12 +107,23 @@ pub fn paint_stats_panel_text_window(
 }
 
 pub fn paint_prompt_text_window(system: &mut TextWindowSystem, input_echo: &str) {
+    paint_prompt_text_window_with_cursor(system, input_echo, None);
+}
+
+pub fn paint_prompt_text_window_with_cursor(
+    system: &mut TextWindowSystem,
+    input_echo: &str,
+    cursor_glyph: Option<u8>,
+) {
     system.set_active_window(PROMPT_TEXT_WINDOW_INDEX);
     system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
     system.set_active_cursor(0, 0);
     system.emit_byte(b'>');
     system.emit_byte(b' ');
     system.print_wrapped_string(input_echo);
+    if let Some(cursor_glyph) = cursor_glyph {
+        system.paint_cursor_glyph(cursor_glyph);
+    }
 }
 
 pub fn stats_panel_active_cursor_visible(state: &PlayState, active_cursor: Option<usize>) -> bool {

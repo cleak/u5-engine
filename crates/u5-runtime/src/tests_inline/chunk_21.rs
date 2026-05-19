@@ -246,6 +246,39 @@
     }
 
     #[test]
+    fn town_look_visibility_gate_hides_dark_unlit_target() {
+        let table = parse_look2_dat(&look2_bytes(&[(16, "east road")])).unwrap();
+        let mut grid = open_grid();
+        grid[32 + 2] = 16;
+        let mut hidden = test_state(grid.clone(), 1, 1);
+        hidden.player.facing = Direction::East;
+        hidden.ambient_light = FULL_DARKNESS;
+        hidden.message = "previous".to_string();
+
+        assert_eq!(
+            hidden.look_direction_with_table(Direction::East, Some(&table)),
+            MoveOutcome::Observed
+        );
+
+        assert!(hidden.message.is_empty());
+        assert_eq!(hidden.turn, 0);
+
+        let mut lit = test_state(grid, 1, 1);
+        lit.player.facing = Direction::East;
+        lit.ambient_light = FULL_DARKNESS;
+        lit.torch_counter = 1;
+        lit.recompute_daylight();
+
+        assert_eq!(
+            lit.look_direction_with_table(Direction::East, Some(&table)),
+            MoveOutcome::Observed
+        );
+
+        assert!(lit.message.contains("east road at (2, 1)"));
+        assert_eq!(lit.turn, 0);
+    }
+
+    #[test]
     fn town_look_uses_look2_description_when_available() {
         let dir = debug_game_dir();
         fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[(16, "stone path")])).unwrap();
@@ -301,6 +334,36 @@
         assert_eq!(state.message, "Wishing well: toss a coin? (Y/N)");
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::default());
+    }
+
+    #[test]
+    fn town_look_visibility_gate_precedes_special_surface_prompts() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xa1;
+        let mut hidden = test_state(grid.clone(), 1, 1);
+        hidden.player.facing = Direction::East;
+        hidden.ambient_light = FULL_DARKNESS;
+        hidden.gold = 1;
+
+        assert_eq!(hidden.look_facing(), MoveOutcome::Observed);
+
+        assert!(hidden.message.is_empty());
+        assert!(hidden.active_wishing_well.is_none());
+
+        let mut lit = test_state(grid, 1, 1);
+        lit.player.facing = Direction::East;
+        lit.ambient_light = FULL_DARKNESS;
+        lit.torch_counter = 1;
+        lit.recompute_daylight();
+
+        assert_eq!(lit.look_facing(), MoveOutcome::Observed);
+
+        assert_eq!(
+            lit.active_wishing_well
+                .as_ref()
+                .map(|session| (session.direction, session.coin_accepted)),
+            Some((Direction::East, false))
+        );
     }
 
     #[test]
@@ -640,6 +703,50 @@
         assert!(state.message.contains("object tile 170"));
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::default());
+    }
+
+    #[test]
+    fn world_look_visibility_gate_hides_dark_unlit_wrapped_object() {
+        let mut hidden = world_state(open_world_grid(), 255, 0);
+        hidden.player.facing = Direction::East;
+        hidden.ambient_light = FULL_DARKNESS;
+        hidden.message = "previous".to_string();
+        hidden.active_objects.push(ActiveObject {
+            type_byte: 170,
+            tile: 170,
+            x: 0,
+            y: 0,
+            z: -1,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(hidden.look_facing(), MoveOutcome::Observed);
+
+        assert!(hidden.message.is_empty());
+        assert_eq!(hidden.turn, 0);
+
+        let mut lit = world_state(open_world_grid(), 255, 0);
+        lit.player.facing = Direction::East;
+        lit.ambient_light = FULL_DARKNESS;
+        lit.torch_counter = 1;
+        lit.recompute_daylight();
+        lit.active_objects.push(ActiveObject {
+            type_byte: 170,
+            tile: 170,
+            x: 0,
+            y: 0,
+            z: -1,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(lit.look_facing(), MoveOutcome::Observed);
+
+        assert!(lit.message.contains("object tile 170"));
+        assert_eq!(lit.turn, 0);
     }
 
     #[test]

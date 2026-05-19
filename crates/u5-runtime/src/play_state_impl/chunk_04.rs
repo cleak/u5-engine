@@ -4,6 +4,8 @@ use std::path::Path;
 
 use crate::*;
 
+const SURFACE_LOOK_VISIBILITY_RADIUS: usize = 5;
+
 #[derive(Clone, Debug)]
 struct UseItemPickerRow {
     label: String,
@@ -2113,6 +2115,10 @@ impl PlayState {
                     self.message = "You see: the location boundary.".to_string();
                     return Ok(MoveOutcome::Observed);
                 }
+                if !self.surface_look_target_visible(x, y) {
+                    self.message.clear();
+                    return Ok(MoveOutcome::Observed);
+                }
                 let x = x as usize;
                 let y = y as usize;
                 if let Some(object) = self.blocking_object_at(x, y) {
@@ -2149,8 +2155,14 @@ impl PlayState {
             }
             Area::World { plane } => {
                 let (dx, dy) = direction.delta();
-                let x = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
-                let y = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
+                let raw_x = self.player.x as isize + dx;
+                let raw_y = self.player.y as isize + dy;
+                if !self.surface_look_target_visible(raw_x, raw_y) {
+                    self.message.clear();
+                    return Ok(MoveOutcome::Observed);
+                }
+                let x = raw_x.rem_euclid(WORLD_SIDE as isize) as usize;
+                let y = raw_y.rem_euclid(WORLD_SIDE as isize) as usize;
                 if let Some(object) = self.world_object_at(x, y) {
                     self.message = if look_table.is_some() {
                         format!(
@@ -2292,6 +2304,36 @@ impl PlayState {
                 Some((x, y))
             }
             Area::Dungeon { .. } => None,
+        }
+    }
+
+    fn surface_look_target_visible(&self, x: isize, y: isize) -> bool {
+        let px = self.player.x as isize;
+        let py = self.player.y as isize;
+        match self.area {
+            Area::Town { .. } => {
+                let visible_radius = self.surface_visibility_radius(SURFACE_LOOK_VISIBILITY_RADIUS);
+                self.town_cell_visible_with_light_radius(
+                    px,
+                    py,
+                    x,
+                    y,
+                    SURFACE_LOOK_VISIBILITY_RADIUS,
+                    visible_radius,
+                )
+            }
+            Area::World { .. } => {
+                let visible_radius = self.world_visibility_radius(SURFACE_LOOK_VISIBILITY_RADIUS);
+                self.world_cell_visible_with_light_radius(
+                    px,
+                    py,
+                    x,
+                    y,
+                    SURFACE_LOOK_VISIBILITY_RADIUS,
+                    visible_radius,
+                )
+            }
+            Area::Dungeon { .. } => false,
         }
     }
 

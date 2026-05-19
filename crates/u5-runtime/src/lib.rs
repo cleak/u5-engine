@@ -472,9 +472,9 @@ pub use stats_panel::{
     STATS_PANEL_COMBAT_ROW_MARKER, STATS_PANEL_PARTY_ROWS, STATS_PANEL_TEXT_BOTTOM,
     STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX,
     STATS_PANEL_WIDTH, StatsPanelCombatRowOverlay, configure_play_text_windows,
-    paint_message_text_window, paint_prompt_text_window, paint_stats_panel_text_window,
-    render_play_text_window_ascii, render_play_text_window_system, render_stats_panel,
-    stats_panel_active_cursor_visible, stats_panel_combat_row_overlay,
+    paint_message_text_window, paint_prompt_text_window, paint_prompt_text_window_with_cursor,
+    paint_stats_panel_text_window, render_play_text_window_ascii, render_play_text_window_system,
+    render_stats_panel, stats_panel_active_cursor_visible, stats_panel_combat_row_overlay,
 };
 pub use story_io::{
     INTRO_AUTO_OPENING_STEP, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_0_TRANSITION_STRIPS,

@@ -1156,6 +1156,25 @@
     }
 
     #[test]
+    fn prompt_text_window_cursor_glyph_paints_in_place() {
+        let mut system = TextWindowSystem::new();
+        configure_play_text_windows(&mut system);
+
+        paint_prompt_text_window_with_cursor(&mut system, "job", Some(4));
+
+        assert_eq!(system.active_window_index(), PROMPT_TEXT_WINDOW_INDEX);
+        assert_eq!(system.cell(0, TEXT_SCREEN_ROWS - 2).unwrap().byte, b'>');
+        assert_eq!(system.cell(2, TEXT_SCREEN_ROWS - 2).unwrap().byte, b'j');
+        assert_eq!(system.cell(5, TEXT_SCREEN_ROWS - 2).unwrap().byte, 4);
+        assert_eq!(system.active_cursor(), (5, 0));
+
+        paint_prompt_text_window_with_cursor(&mut system, "job", None);
+
+        assert!(system.cell(5, TEXT_SCREEN_ROWS - 2).is_none());
+        assert_eq!(system.active_cursor(), (5, 0));
+    }
+
+    #[test]
     fn play_text_window_frame_consumes_active_cursor_like_stats_panel() {
         let mut state = test_state(open_grid(), 1, 1);
         state.active_player = Some(0);
