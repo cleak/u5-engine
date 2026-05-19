@@ -215,9 +215,12 @@ impl PlayState {
                 let (dx, dy) = direction.delta();
                 let tx = (self.player.x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
                 let ty = (self.player.y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
-                if let Some(outcome) = self.consume_surface_object_chest_at(tx, ty, None, "Opened")
-                {
-                    return Ok(outcome);
+                if self.surface_object_chest_slot_at(tx, ty).is_some() {
+                    return Ok(self.start_surface_object_chest_prompt(
+                        tx,
+                        ty,
+                        SurfaceChestVerb::Open,
+                    ));
                 }
                 self.message = "Nothing to open here.".to_string();
                 return Ok(MoveOutcome::Blocked);
@@ -250,8 +253,8 @@ impl PlayState {
             self.message = "Locked!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
-        if let Some(outcome) = self.consume_surface_object_chest_at(tx, ty, None, "Opened") {
-            return Ok(outcome);
+        if self.surface_object_chest_slot_at(tx, ty).is_some() {
+            return Ok(self.start_surface_object_chest_prompt(tx, ty, SurfaceChestVerb::Open));
         }
         if !(96..=103).contains(&tile) {
             self.message = "Nothing to open!".to_string();
@@ -376,6 +379,73 @@ impl PlayState {
         self.active_jimmy = Some(session);
         self.message = self.render_active_jimmy();
         Ok(None)
+    }
+
+    pub fn start_surface_object_chest_prompt(
+        &mut self,
+        x: usize,
+        y: usize,
+        verb: SurfaceChestVerb,
+    ) -> MoveOutcome {
+        self.active_surface_chest = Some(SurfaceChestSession::new(x, y, verb));
+        self.message = self.render_active_surface_chest();
+        MoveOutcome::Observed
+    }
+
+    pub fn render_active_surface_chest(&self) -> String {
+        let last = self.party.len().min(6);
+        format!("Who opens? _\nChoose party member 1-{last}; Space/Esc cancels.")
+    }
+
+    pub fn step_active_surface_chest(
+        &mut self,
+        key: char,
+        suffix: &str,
+    ) -> io::Result<Option<MoveOutcome>> {
+        let Some(session) = self.active_surface_chest.take() else {
+            return Ok(None);
+        };
+        for ch in std::iter::once(key).chain(suffix.chars()) {
+            if matches!(ch, '\u{1b}' | ' ' | '0' | '\r' | '\n') {
+                self.message = "None!".to_string();
+                return Ok(Some(MoveOutcome::PromptDeclined));
+            }
+            let Some(digit) = ch
+                .to_digit(10)
+                .and_then(|digit| usize::try_from(digit).ok())
+            else {
+                continue;
+            };
+            if !(1..=self.party.len().min(6)).contains(&digit) {
+                continue;
+            }
+            let member_index = digit - 1;
+            if !self.surface_chest_member_available(member_index) {
+                self.message = party_member_unavailable_message(member_index);
+                return Ok(Some(MoveOutcome::PromptDeclined));
+            }
+            let outcome = self
+                .consume_surface_object_chest_at(
+                    session.x,
+                    session.y,
+                    Some(member_index),
+                    session.verb.label(),
+                )
+                .unwrap_or_else(|| {
+                    self.message = "Nothing to open!".to_string();
+                    MoveOutcome::Blocked
+                });
+            return Ok(Some(outcome));
+        }
+        self.active_surface_chest = Some(session);
+        self.message = self.render_active_surface_chest();
+        Ok(None)
+    }
+
+    pub fn surface_chest_member_available(&self, member_index: usize) -> bool {
+        self.party
+            .get(member_index)
+            .is_some_and(|member| member.conscious())
     }
 
     #[cfg(test)]
@@ -738,6 +808,7 @@ impl PlayState {
         });
         let content_note = self.generate_surface_object_chest_content(slot, x, y, chest_class);
         self.free_active_object_slot(slot);
+        self.rewrite_surface_object_chest_cell(x, y);
         if matches!(self.area, Area::Town { .. }) {
             self.moral_standing = town_chest_open_standing(self.moral_standing);
         } else if matches!(self.area, Area::World { .. }) {
@@ -752,6 +823,22 @@ impl PlayState {
             None => format!("{verb} object chest at ({x}, {y}); {content_note}."),
         };
         Some(MoveOutcome::ContainerOpened)
+    }
+
+    pub fn rewrite_surface_object_chest_cell(&mut self, x: usize, y: usize) {
+        match self.area {
+            Area::Town { .. } => {
+                if x < 32 && y < 32 {
+                    self.grid[y * 32 + x] = LOCATION_MARKER_CLEANUP_TILE;
+                }
+            }
+            Area::World { .. } => {
+                if x < WORLD_SIDE && y < WORLD_SIDE {
+                    self.grid[world_cell_index(x, y)] = LOCATION_MARKER_CLEANUP_TILE;
+                }
+            }
+            Area::Dungeon { .. } => {}
+        }
     }
 
     pub fn generate_surface_object_chest_content(
@@ -1315,8 +1402,8 @@ impl PlayState {
         )? {
             return Ok(outcome);
         }
-        if let Some(outcome) = self.consume_surface_object_chest_at(tx, ty, None, "Got") {
-            return Ok(outcome);
+        if self.surface_object_chest_slot_at(tx, ty).is_some() {
+            return Ok(self.start_surface_object_chest_prompt(tx, ty, SurfaceChestVerb::Get));
         }
         if self.world_object_at(tx, ty).is_some() {
             self.message = "Nothing to get there.".to_string();
@@ -1388,8 +1475,8 @@ impl PlayState {
         {
             return Ok(outcome);
         }
-        if let Some(outcome) = self.consume_surface_object_chest_at(tx, ty, None, "Got") {
-            return Ok(outcome);
+        if self.surface_object_chest_slot_at(tx, ty).is_some() {
+            return Ok(self.start_surface_object_chest_prompt(tx, ty, SurfaceChestVerb::Get));
         }
         if self.blocking_object_at(tx, ty).is_some() {
             self.message = "Nothing to get there.".to_string();

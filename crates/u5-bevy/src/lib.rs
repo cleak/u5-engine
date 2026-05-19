@@ -1536,6 +1536,7 @@ fn visual_modal_prompt_active(state: &PlayState) -> bool {
         || state.active_cast_followup.is_some()
         || state.active_rest.is_some()
         || state.active_jimmy.is_some()
+        || state.active_surface_chest.is_some()
         || state.active_mix.is_some()
         || state.active_new_order.is_some()
         || state.active_direction_prompt.is_some()
@@ -1817,9 +1818,9 @@ mod tests {
         INIT_GAM_FILENAME, INIT_OOL_FILENAME, OOL_PLANE_LEN, REAGENT_COUNT, REAGENT_SPIDER_SILK,
         SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET,
         SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME,
-        SAVED_OOL_FILENAME, SHRINE_TABLE_FILE, ShrineVirtue, Tavern, TileGraphicsDepth,
-        U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane, dungeon_cell_index,
-        world_cell_index, wrap_text_panel_lines,
+        SAVED_OOL_FILENAME, SHRINE_TABLE_FILE, ShrineVirtue, SurfaceChestVerb, Tavern,
+        TileGraphicsDepth, U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane,
+        dungeon_cell_index, world_cell_index, wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
@@ -1971,6 +1972,11 @@ mod tests {
         state.start_cast_spell_prompt();
         assert!(state.active_cast.is_some());
         assert!(!should_escape_quit_visual(&state));
+
+        let mut chest = test_state(open_grid(), 1, 1);
+        chest.start_surface_object_chest_prompt(2, 1, SurfaceChestVerb::Open);
+        assert!(chest.active_surface_chest.is_some());
+        assert!(!should_escape_quit_visual(&chest));
     }
 
     #[test]

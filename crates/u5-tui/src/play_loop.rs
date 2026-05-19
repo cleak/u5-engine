@@ -362,6 +362,7 @@ pub fn play_state_accepts_typeahead(state: &PlayState) -> bool {
         && state.active_cast_followup.is_none()
         && state.active_rest.is_none()
         && state.active_jimmy.is_none()
+        && state.active_surface_chest.is_none()
         && state.active_shrine.is_none()
         && state.active_mix.is_none()
         && state.active_new_order.is_none()

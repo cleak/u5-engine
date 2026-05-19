@@ -554,8 +554,20 @@
 
     #[test]
     fn town_open_object_chest_consumes_slot_trap_and_public_reward_pools() {
-        let mut state = test_state(open_grid(), 1, 1);
+        let mut grid = open_grid();
+        grid[32 + 2] = 0x4f;
+        let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'G',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 8,
+            hp: DEFAULT_PARTY_HP,
+            max_hp: DEFAULT_PARTY_MAX_HP,
+            level: 8,
+        });
         state.moral_standing = 8;
         state.visibility_dirty = false;
         state.active_objects.push(ActiveObject {
@@ -569,21 +581,34 @@
             aux3: 0,
         });
 
-        assert_eq!(state.open_facing(), MoveOutcome::ContainerOpened);
+        assert_eq!(state.open_facing(), MoveOutcome::Observed);
+        assert!(state.active_surface_chest.is_some());
+        assert_eq!(
+            state.step_active_surface_chest('2', "").unwrap(),
+            Some(MoveOutcome::ContainerOpened)
+        );
 
         assert!(state.active_objects[1].is_empty());
+        assert_eq!(state.grid[32 + 2], 16);
         assert_eq!(state.moral_standing, 6);
         assert!(state.visibility_dirty);
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("Opened object chest at (2, 1)"));
-        assert!(state.message.contains("trap"));
+        assert!(
+            state
+                .message
+                .contains("Acid trap hit party member 2 for 12 HP.")
+        );
+        assert_eq!(state.party[1].hp, DEFAULT_PARTY_HP - 12);
         assert!(state.message.contains("chest grants"));
         assert!(state.food > DEFAULT_FOOD_STOCK || state.gold > DEFAULT_GOLD_STOCK);
     }
 
     #[test]
     fn town_get_object_chest_uses_chest_helper_before_blocking_object_refusal() {
-        let mut state = test_state(open_grid(), 1, 1);
+        let mut grid = open_grid();
+        grid[32 + 2] = 0x4f;
+        let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
         state.active_objects.push(ActiveObject {
             type_byte: 0x4f,
@@ -598,13 +623,46 @@
 
         assert_eq!(
             state.get_town_facing(Path::new(""), Scene::new(0x11).unwrap(), 0).unwrap(),
-            MoveOutcome::ContainerOpened
+            MoveOutcome::Observed
+        );
+        assert!(state.active_surface_chest.is_some());
+        assert_eq!(
+            state.step_active_surface_chest('1', "").unwrap(),
+            Some(MoveOutcome::ContainerOpened)
         );
 
         assert!(state.active_objects[1].is_empty());
+        assert_eq!(state.grid[32 + 2], 16);
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("Got object chest at (2, 1)"));
         assert!(state.message.contains("chest grants"));
+    }
+
+    #[test]
+    fn town_object_chest_member_prompt_can_cancel_without_consuming() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x4f,
+            tile: 0x4f,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0x7f,
+            aux3: 0,
+        });
+
+        assert_eq!(state.open_facing(), MoveOutcome::Observed);
+        assert_eq!(
+            state.step_active_surface_chest(' ', "").unwrap(),
+            Some(MoveOutcome::PromptDeclined)
+        );
+
+        assert!(state.active_surface_chest.is_none());
+        assert!(!state.active_objects[1].is_empty());
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "None!");
     }
 
     #[test]

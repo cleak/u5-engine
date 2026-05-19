@@ -121,6 +121,19 @@ pub struct JimmySession {
     pub direction: Direction,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SurfaceChestSession {
+    pub x: usize,
+    pub y: usize,
+    pub verb: SurfaceChestVerb,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SurfaceChestVerb {
+    Get,
+    Open,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ShrineSession {
     pub virtue: ShrineVirtue,
@@ -384,6 +397,21 @@ impl RestSession {
 impl JimmySession {
     pub const fn new(direction: Direction) -> Self {
         Self { direction }
+    }
+}
+
+impl SurfaceChestSession {
+    pub const fn new(x: usize, y: usize, verb: SurfaceChestVerb) -> Self {
+        Self { x, y, verb }
+    }
+}
+
+impl SurfaceChestVerb {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Get => "Got",
+            Self::Open => "Opened",
+        }
     }
 }
 
