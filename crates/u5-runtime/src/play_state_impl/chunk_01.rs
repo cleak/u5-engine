@@ -945,11 +945,22 @@ impl PlayState {
         y: usize,
         tile: u8,
     ) -> io::Result<Option<TownExitTileEntry>> {
-        Ok(load_town_exit_tile_entries(game_dir)?.and_then(|entries| {
+        if let Some(entry) = load_town_exit_tile_entries(game_dir)?.and_then(|entries| {
             entries
                 .into_iter()
                 .find(|entry| town_exit_tile_matches(*entry, scene, floor, x, y, tile))
-        }))
+        }) {
+            return Ok(Some(entry));
+        }
+        Ok(
+            (tile == TOWN_EXIT_THRESHOLD_TILE).then_some(TownExitTileEntry {
+                scene,
+                floor,
+                x,
+                y,
+                expected_tile: Some(TOWN_EXIT_THRESHOLD_TILE),
+            }),
+        )
     }
 
     pub fn town_lock_at(

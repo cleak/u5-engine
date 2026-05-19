@@ -517,19 +517,9 @@ Dungeon records use the public `DUNGEON:n` record key:
 cargo run -- --play --scene DUNGEON:0 --floor 0 C:\Games\U5-Clean
 ```
 
-Scripted bottom-level dungeon descents can be supplied as
-`dungeon_deeper_transitions.tsv` without hardcoding unresolved Hythloth bytes or
-coordinates:
-
-```text
-# DUNGEON LEVEL X Y TO_PLANE TO_X TO_Y
-DUNGEON:6 7 1 1 UNDERWORLD 30 40
-```
-
-When `K` descends from a matching bottom-level ladder, the harness exits
-dungeon mode, loads the destination world plane, and places the party at the
-clean destination coordinate. Rows must use bottom level `7`; higher levels
-remain ordinary dungeon level-to-level movement.
+Ordinary dungeon ladders are level-to-level only. The runtime does not load a
+bottom-level descent sidecar or turn a deepest-level `K` command into an
+Underworld plane transition; attempts beyond level `7` fail in place.
 
 Scripted dungeon level teleports can be supplied as `dungeon_teleports.tsv`
 while the exact cell identities remain open in the public spec:
@@ -590,15 +580,19 @@ fixtures and clean-room scenarios:
 DUNGEON:0 0 1 1 0x4c GOLD 12 GEMS 1
 ```
 
-Matching `dungeon_chests.tsv` rows are consumed by dungeon `O`, `G`, `S`, and
-the narrow `C1AS` An Sanct/Open spell chest interactions before the visit-local
-cell is marked as opened. The cell guard prevents stale authored contents from
-applying after the local dungeon image changes; `*` skips that guard. If no
-row matches, the runtime uses the published dungeon chest reward generator.
-Supported authored grant families are food, gold, keys, gems, and torches.
+Matching `dungeon_chests.tsv` rows are consumed when `G` gets an opened dungeon
+chest cell. Opening and searching own trap/detail handling and leave content
+generation to the later Get. The cell guard prevents stale authored contents
+from applying after the local dungeon image changes; `*` skips that guard. If
+no row matches, the runtime uses the published dungeon chest reward generator.
+Supported authored grant families are food, gold, keys, gems, torches, potions,
+and scrolls.
 
-Town stair direction can be supplied as clean-room sidecar metadata while the
-exact surface stair subtype table remains open:
+Town walk-on stairs use the public `0xC4..0xC7` facing-sensitive tile family:
+entering along the tile's encoded facing moves up one floor, entering from the
+opposite facing moves down one floor, and side crossings stay on the current
+floor. Underfoot `K` ladder/trapdoor direction can still be supplied as
+clean-room sidecar metadata:
 
 ```text
 # SCENE FLOOR X Y UP|DOWN|BOTH [TILE]
@@ -606,12 +600,12 @@ CASTLE:0 0 12 8 UP 80
 CASTLE:0 1 12 8 DOWN
 ```
 
-Matching `town_stairs.tsv` rows make `K` and walk-onto-stair transitions use the
-authored one-way or two-way direction instead of inferring both directions from
-floor availability. `<` and `>` are refused when they contradict a one-way row.
-Vehicle X-it landing selection also treats matching rows as transition cells to
-avoid dismounting onto an immediate floor-change square. The optional tile guard
-prevents stale metadata from affecting a changed visit cell.
+Matching `town_stairs.tsv` rows make `K` use the authored one-way or two-way
+direction instead of inferring both directions from floor availability. `<` and
+`>` are refused when they contradict a one-way row. Vehicle X-it landing
+selection also treats matching rows and native walk-on stair tiles as transition
+cells to avoid dismounting onto an immediate floor-change square. The optional
+tile guard prevents stale metadata from affecting a changed visit cell.
 
 Town lock states can be supplied as clean-room sidecar metadata while the exact
 surface door lock-state byte pairs remain open:
@@ -889,9 +883,11 @@ open-door placeholder and clears the active auto-close tracker. Missing rows
 or rows whose optional source-tile guard does not match refuse without spending
 a turn or ticking the door auto-close tracker.
 
-Town and overworld Get tile consumables are externalized while the public spec
-keeps the complete table-object/crop/food encoding and inventory-add mapping
-open. Place town rows next to the game data as `town_get_tiles.tsv`:
+Town and overworld Get tile consumables can be supplied as clean-room sidecar
+metadata for authored crop, borrowed-object, and scenario fixture cells. Public
+table-food tiles `0x9B` and `0x9C` are handled natively with their directional
+rewrite rules. Place additional town rows next to the game data as
+`town_get_tiles.tsv`:
 
 ```text
 # SCENE FLOOR X Y REPLACEMENT_TILE [TILE] [ITEM AMOUNT]
@@ -907,15 +903,16 @@ Overworld rows use the same replacement-and-guard shape in
 UNDERWORLD 40 12 5 44 GEMS 1
 ```
 
-`G`/`g` checks the facing town cell or wrapped overworld cell for a matching
-row, optionally verifies the current tile id, rewrites the live tile to
-`REPLACEMENT_TILE`, optionally adds `FOOD`, `GOLD`, `KEYS`, `GEMS`, or
-`TORCHES`, marks the map dirty, and consumes one turn. Missing or mismatched
-rows do not spend a turn. These authored grants are clean sidecar metadata; the
-original tile-object item-code table remains open.
+`G`/`g` first checks native table-food handling, then checks the facing town
+cell or wrapped overworld cell for a matching sidecar row. A matched row
+optionally verifies the current tile id, rewrites the live tile to
+`REPLACEMENT_TILE`, optionally applies the shared pickup grant family, marks the
+map dirty, and consumes one turn. Missing or mismatched rows do not spend a
+turn.
 
 Visible active-object pickups can be opted in separately with
-`object_pickups.tsv` while the original object item-code mapping remains open:
+`object_pickups.tsv` while the active-record quantity/subtype byte ownership is
+being wired to the public inventory-add dispatcher:
 
 ```text
 # TARGET FLOOR X Y ITEM AMOUNT [TILE]
@@ -924,12 +921,13 @@ BRITANNIA 0 11 20 GOLD 9
 CASTLE:0 0 2 1 KEYS 1 210
 ```
 
-Supported items are `FOOD`, `GOLD`, `KEYS`, `GEMS`, and `TORCHES`. The optional
-guard checks the active-object tile id, not the map tile. A matching row frees
-the active object slot, adds the amount to the matching counter, marks
-visibility dirty, and consumes one turn. Missing rows, mismatched
-floor/coordinate data, or a mismatched optional tile guard leave the object in
-place and fall through to the normal active-object refusal.
+Supported items include ordinary counters, potions, scrolls, equipment, skull
+keys, HMS Cape plans, the Sandalwood Box, magic carpet stock, regalia, and
+Shadowlord shards. The optional guard checks the active-object tile id, not the
+map tile. A matching row frees the active object slot, applies the matching
+shared inventory effect, marks visibility dirty, and consumes one turn. Missing
+rows, mismatched floor/coordinate data, or a mismatched optional tile guard
+leave the object in place and fall through to the normal active-object refusal.
 
 Town Push is externalized for the same clean-room reason: the public spec
 defines the swap behavior, but not the complete movable-tile table. Place rows
@@ -991,22 +989,22 @@ top-down commands while already standing on a matching row apply the same
 underfoot trap-door transition after turn cleanup without spending a second
 turn. Missing or mismatched rows behave like ordinary movement.
 
-Town boundary exit cells can be supplied as clean-room sidecar metadata while
-the exact boundary tile values remain open:
+Town boundary exits use the native public threshold tile `0x59`. Additional
+authored exit cells can be supplied as clean-room sidecar metadata:
 
 ```text
 # SCENE FLOOR X Y [TILE]
 CASTLE:0 0 15 31 55
 ```
 
-Stepping onto a matching `town_exit_tiles.tsv` row consumes one indoor turn and
-returns to the saved debug world snapshot, or to the matching
-`world_locations.tsv` row when no snapshot is available. If the exit row
+Stepping onto native `0x59` or a matching `town_exit_tiles.tsv` row consumes one
+indoor turn and returns to the saved debug world snapshot, or to the matching
+`world_locations.tsv` row when no snapshot is available. If the exit trigger
 matches but no clean return coordinate exists, the party stays in location mode
-with a diagnostic. Consumed top-down commands and pass/empty waits while
-already standing on a matching row apply the same underfoot exit transition
-after turn cleanup without spending a second turn. Missing or mismatched exit
-rows behave like ordinary movement.
+with a diagnostic. Consumed top-down commands and pass/empty waits while already
+standing on a matching exit trigger apply the same underfoot exit transition
+after turn cleanup without spending a second turn. Missing or mismatched
+sidecar rows behave like ordinary movement.
 
 The town entry-Y table can also be supplied separately as
 `location_entry_y.tsv`, which is useful for direct `--scene` starts and for

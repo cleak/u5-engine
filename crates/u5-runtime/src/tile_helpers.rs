@@ -214,8 +214,8 @@ pub fn stair_delta(tile: u8, intent: ClimbIntent) -> Option<i8> {
     if !(80..=87).contains(&tile) {
         return None;
     }
-    // The public spec identifies the stair/ladder family but leaves the exact
-    // subtype table open, so this first-playable hook follows the request.
+    // Underfoot K-ladder tiles share the floor-change helper; the public
+    // facing-sensitive walk-on stair family is handled separately below.
     Some(town_climb_delta(intent))
 }
 

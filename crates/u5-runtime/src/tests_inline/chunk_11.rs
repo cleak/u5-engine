@@ -435,6 +435,39 @@
     }
 
     #[test]
+    fn town_native_exit_threshold_tile_uses_location_table_without_sidecar() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 CASTLE:0\n",
+        )
+        .unwrap();
+        let mut grid = open_grid();
+        grid[1] = TOWN_EXIT_THRESHOLD_TILE;
+        let mut state = test_state(grid, 0, 0);
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+        );
+
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Britannia
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("town exit tile"));
+        assert!(state.message.contains("world-location table point"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn consumed_top_down_action_on_clean_town_exit_tile_applies_underfoot_exit() {
         let dir = debug_game_dir();
         write_castle_exit_tile_fixture(&dir);
@@ -516,6 +549,37 @@
         assert!(state.message.starts_with("Passed."));
         assert!(state.message.contains("town exit tile"));
         assert!(state.message.contains("world-location table point"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn pass_turn_on_native_town_exit_threshold_tile_applies_underfoot_exit() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        fs::write(
+            dir.join(WORLD_LOCATION_TABLE_FILE),
+            "BRITANNIA 10 20 CASTLE:0\n",
+        )
+        .unwrap();
+        let mut grid = open_grid();
+        grid[32 + 1] = TOWN_EXIT_THRESHOLD_TILE;
+        let mut state = test_state(grid, 1, 1);
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+            MoveOutcome::Transition(AreaTransition::ExitedLocation(scene))
+        );
+
+        assert_eq!(
+            state.area,
+            Area::World {
+                plane: WorldPlane::Britannia
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (10, 20));
+        assert_eq!(state.turn, 1);
+        assert!(state.message.starts_with("Passed."));
+        assert!(state.message.contains("town exit tile"));
         let _ = fs::remove_dir_all(dir);
     }
 
