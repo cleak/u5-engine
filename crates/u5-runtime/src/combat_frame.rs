@@ -540,6 +540,33 @@ impl PlayState {
         (self.turn as usize + caster_index + target_slot + spell_index) & 1 == 0
     }
 
+    pub fn combat_arena_field_poison_damage_roll(
+        &self,
+        caster_index: usize,
+        target_slot: usize,
+        spell_index: usize,
+    ) -> u8 {
+        self.directed_combat_spell_roll(caster_index, target_slot, spell_index, 0)
+    }
+
+    pub fn combat_arena_field_fire_damage_roll(
+        &self,
+        caster_index: usize,
+        target_slot: usize,
+        spell_index: usize,
+    ) -> u8 {
+        self.active_target_combat_spell_raw_roll(caster_index, target_slot, spell_index)
+    }
+
+    pub fn combat_arena_field_defense_roll(
+        &self,
+        caster_index: usize,
+        target_slot: usize,
+        spell_index: usize,
+    ) -> u8 {
+        self.active_target_combat_spell_defense_roll(caster_index, target_slot, spell_index)
+    }
+
     pub fn apply_combat_arena_field_placement(
         &mut self,
         field: CombatArenaFieldKind,
@@ -642,6 +669,31 @@ impl PlayState {
         });
         let applied =
             self.apply_combat_arena_field_placement(field, target_x, target_y, callback_accepts);
+        if let Some(placement) = applied {
+            let poison_damage_roll = self.combat_arena_field_poison_damage_roll(
+                caster_index,
+                placement.target_slot,
+                spell_index,
+            );
+            let fire_damage_roll = self.combat_arena_field_fire_damage_roll(
+                caster_index,
+                placement.target_slot,
+                spell_index,
+            );
+            let defense_roll = self.combat_arena_field_defense_roll(
+                caster_index,
+                placement.target_slot,
+                spell_index,
+            );
+            let _ = self.apply_combat_arena_field_contact(
+                field,
+                caster_index,
+                placement.target_slot,
+                poison_damage_roll,
+                fire_damage_roll,
+                defense_roll,
+            );
+        }
 
         self.advance_turn();
         self.message = if applied.is_some() {

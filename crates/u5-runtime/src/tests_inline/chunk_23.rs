@@ -10931,6 +10931,93 @@
     }
 
     #[test]
+    fn combat_cast_field_spell_applies_contact_after_accepted_placement() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: 1,
+            status: b'G',
+            climb_stat: 0,
+            mana: 3,
+            hp: 30,
+            max_hp: 30,
+            level: 3,
+        }];
+        state.party_experience = vec![123];
+        let spell_index = spell_index_from_code("FGI").unwrap();
+        state.spell_charges[spell_index] = 1;
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            30,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            3,
+            3,
+        ]);
+        state.active_objects[0] = ActiveObject {
+            type_byte: PLAYER_TILE,
+            tile: PLAYER_TILE,
+            x: 3,
+            y: 3,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+        let target_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        let stats = combat_class_stats(32).unwrap();
+        state.combat_actors[target_slot] = CombatActorDescriptor::for_monster_placement(
+            stats,
+            target_slot as u8,
+            4,
+            3,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+        );
+        state.active_objects[target_slot] = ActiveObject {
+            type_byte: 0x70,
+            tile: 0x70,
+            x: 4,
+            y: 3,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+
+        assert_eq!(
+            state
+                .cast_spell_from_suffix("1FGI6", std::path::Path::new(""))
+                .unwrap(),
+            MoveOutcome::Cast
+        );
+
+        assert_eq!(state.spell_charges[spell_index], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Fire field placed.");
+        assert_eq!(state.party_experience, vec![123]);
+        assert!(state.combat_actors[target_slot].is_marked_dead());
+        assert_eq!(
+            state.active_objects[1],
+            ActiveObject {
+                type_byte: COMBAT_FIELD_KIND_FIRE,
+                tile: COMBAT_FIELD_KIND_FIRE,
+                x: 4,
+                y: 3,
+                z: 0,
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            }
+        );
+    }
+
+    #[test]
     fn combat_cast_field_spell_requires_target_lookup_and_keeps_marker_table_unchanged() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
