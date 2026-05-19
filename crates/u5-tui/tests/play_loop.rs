@@ -749,9 +749,24 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "britannia-utility-use-items")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "ship-hms-cape-plans-use")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "britannia-hole-up-rest")
     );
     assert!(cases.iter().any(|case| case.name == "castle-save-refusal"));
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "castle-wooden-box-use")
+    );
     assert!(cases.iter().any(|case| case.name == "castle-view-overlay"));
     assert!(cases.iter().any(|case| case.name == "castle-peer-overlay"));
     assert!(cases.iter().any(|case| case.name == "castle-x-ray-overlay"));

@@ -24,9 +24,12 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-19 with 47 scripted route cases covering world/town look and
+  2026-05-19 with 50 scripted route cases covering world/town look and
   save-refusal prompts, surface/town/dungeon View overlays, Spyglass
   Britannia chunk-map overlay (`2ea15622716e09aa`), Peer and X-Ray overlays,
+  U-Use utility items including Pocket Watch/Sextant/Magic Carpet
+  (`c2f7ff2c1000c8fd`), HMS Cape plans (`8c425fda6007db98`), and Wooden Box
+  (`d5684b90a48f2d73`),
   H-Hole-up rest in Britannia (`8d7e6e0336279317`) and a dungeon
   (`22ccb05a46f3140e`), Underworld startup, debug-entered town return to world,
   Underworld-to-town debug entry, ship X-it/skiff launch, hoisted-sail movement,
@@ -119,9 +122,10 @@ Current worktree context when this TODO was refreshed:
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry,
   seeded ship/skiff sailing routes, a Spyglass-triggered Britannia chunk-map
-  overlay, and world/dungeon H-Hole-up rest routes, plus broader dungeon and
-  combat command branches; native exact coordinate-table coverage still
-  depends on public gazetteer/sidecar rows.
+  overlay, world/dungeon H-Hole-up rest routes, and direct U-Use routes for
+  key utility items, plus broader dungeon and combat command branches; native
+  exact coordinate-table coverage still depends on public gazetteer/sidecar
+  rows.
 - Combat AI now threads party-name faction grouping into live target scans,
   applies wound morale/flee inversion in production turns, honors Doom and
   Shadow Lord suppression-filter bypasses, mutates non-party Sleep Field

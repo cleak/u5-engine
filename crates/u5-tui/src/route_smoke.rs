@@ -8,8 +8,10 @@ use std::path::Path;
 
 use u5_runtime::{
     Area, DungeonScene, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, GameClock,
-    PEER_COST, PEER_SPELL_INDEX, PlayOptions, PlayState, PlayTarget, SPECIAL_ITEM_OWNED_VALUE,
-    SPECIAL_ITEM_SPYGLASS_INDEX, Scene, TileGraphicsDepth, TransportState, WindState, WorldPlane,
+    PEER_COST, PEER_SPELL_INDEX, PlayOptions, PlayState, PlayTarget,
+    SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
+    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX,
+    SPECIAL_ITEM_WOODEN_BOX_INDEX, Scene, TileGraphicsDepth, TransportState, WindState, WorldPlane,
     X_RAY_COST, X_RAY_SPELL_INDEX, load_tile_atlas,
 };
 
@@ -138,6 +140,25 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
     };
     britannia_spyglass.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
 
+    let mut britannia_utility_use = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        clock: GameClock::new(20, 0).expect("20:00 is a valid game-clock time"),
+        ..PlayOptions::default()
+    };
+    britannia_utility_use.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    britannia_utility_use.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    britannia_utility_use.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 1;
+
+    let mut hms_cape_plans = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        transport: ship_transport,
+        ..PlayOptions::default()
+    };
+    hms_cape_plans.special_items[SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+
+    let mut wooden_box = PlayOptions::default();
+    wooden_box.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+
     let mut castle_view = PlayOptions::default();
     castle_view.gems = 1;
 
@@ -202,6 +223,22 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "view overlay",
         },
         RouteSmokeCase {
+            name: "britannia-utility-use-items",
+            options: britannia_utility_use,
+            script: &["UW", "US", "UC"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 3,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "ship-hms-cape-plans-use",
+            options: hms_cape_plans,
+            script: &["UP"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "britannia-hole-up-rest",
             options: world.clone(),
             script: &["H1"],
@@ -229,6 +266,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             name: "castle-z-stats-modal",
             options: PlayOptions::default(),
             script: &["Z", "empty"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-wooden-box-use",
+            options: wooden_box,
+            script: &["UB"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
