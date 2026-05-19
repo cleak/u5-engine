@@ -401,7 +401,7 @@ pub const TLK_EMPTY_INPUT_BYE_MESSAGE: &str = "BYE\n\n";
 /// again. The trailing `\n\n` is part of the spec's published
 /// envelope; callers may strip the spacing in display layers that
 /// own their own line breaks.
-pub const TLK_NO_KEYWORD_MATCH_MESSAGE: &str = "I cannot help thee with that.";
+pub const TLK_NO_KEYWORD_MATCH_MESSAGE: &str = "I cannot help thee with that.\n\n";
 
 /// `conversation.md §7` top-level byte-runner dispatcher class. Each
 /// byte read from any text stream (the five leading entries, every

@@ -1650,6 +1650,8 @@ fn handle_active_conversation_key_input(
                 text
             } else if text.is_empty() {
                 prompt.to_string()
+            } else if text.ends_with('\n') {
+                format!("{text}{prompt}")
             } else {
                 format!("{text}\n{prompt}")
             };

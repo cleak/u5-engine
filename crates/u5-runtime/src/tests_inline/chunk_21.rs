@@ -1240,6 +1240,17 @@
         assert_eq!(state.message, "I mend gear\nYour interest?\n:");
         assert!(state.active_conversation.is_some());
         assert_eq!(state.turn, 1);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'X', "YZZY", &dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+        assert_eq!(
+            state.message,
+            format!("{TLK_NO_KEYWORD_MATCH_MESSAGE}{TLK_KEYWORD_PROMPT}")
+        );
+        assert!(state.active_conversation.is_some());
+        assert_eq!(state.turn, 1);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1282,8 +1293,7 @@
             PlayInputDisposition::Continue
         );
 
-        assert!(state.message.starts_with(TLK_EMPTY_INPUT_BYE_MESSAGE));
-        assert!(state.message.contains("Farewell"));
+        assert_eq!(state.message, format!("{TLK_EMPTY_INPUT_BYE_MESSAGE}Farewell"));
         assert!(state.active_conversation.is_none());
         assert_eq!(state.turn, 1);
         let _ = fs::remove_dir_all(dir);
@@ -2022,7 +2032,7 @@
         assert_eq!(state.conversation_signal_flags[5], 0);
         assert_eq!(
             text,
-            "Farewell Stolen-action warning. Conversation signal 5 reconciled."
+            "BYE\n\nFarewell Stolen-action warning. Conversation signal 5 reconciled."
         );
     }
 
@@ -2604,6 +2614,7 @@
         ]);
         state.open_conversation_session(&dialogue, &raw);
         let (text, ended) = state.submit_active_conversation_keyword("bye");
+        assert!(text.starts_with(TLK_EMPTY_INPUT_BYE_MESSAGE));
         assert!(text.contains("Farewell"));
         assert!(ended);
         assert!(state.active_conversation.is_none());

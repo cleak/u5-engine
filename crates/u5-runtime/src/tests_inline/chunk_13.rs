@@ -7356,7 +7356,7 @@
         // conversation.md §6
         assert_eq!(
             TLK_NO_KEYWORD_MATCH_MESSAGE,
-            "I cannot help thee with that."
+            "I cannot help thee with that.\n\n"
         );
     }
 

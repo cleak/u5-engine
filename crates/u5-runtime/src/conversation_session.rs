@@ -200,7 +200,11 @@ impl ConversationSession {
             out.text = TLK_NO_KEYWORD_MATCH_MESSAGE.to_string();
             return out;
         }
-        if matches!(kind, TlkPlayerInputKind::EmptyByeShortcut) {
+        if matches!(
+            kind,
+            TlkPlayerInputKind::EmptyByeShortcut
+                | TlkPlayerInputKind::Reserved(ReservedKeywordEffect::ByePath),
+        ) {
             out.text.push_str(TLK_EMPTY_INPUT_BYE_MESSAGE);
         }
         let response = self.run_field_from(field_idx, 0, ctx, 0, 0);
@@ -867,6 +871,7 @@ mod tests {
         let mut s = baseline_session();
         s.present_greeting(&ctx());
         let out = s.submit_keyword("bye", &ctx());
+        assert!(out.text.starts_with(TLK_EMPTY_INPUT_BYE_MESSAGE));
         assert!(out.text.contains("Farewell"));
         assert!(out.ended);
         assert_eq!(s.phase, ConversationSessionPhase::PresentingBye);
@@ -976,6 +981,7 @@ mod tests {
         s.present_greeting(&ctx());
         let out = s.submit_keyword("xyzzy", &ctx());
         assert_eq!(out.text, TLK_NO_KEYWORD_MATCH_MESSAGE);
+        assert!(out.text.ends_with("\n\n"));
     }
 
     #[test]
