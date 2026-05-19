@@ -1198,10 +1198,18 @@
         let mut state = world_state(open_world_grid(), 5, 5);
         state.clock = GameClock::with_date(139, 4, 5, 23, 59).unwrap();
         state.shadowlord_hideouts = [1, SHADOWLORD_VANQUISHED, 2];
+        state.prng_state = 0x1234;
+        let (expected_hideouts, expected_prng_state) = expected_shadowlord_prng_reroll(
+            state.shadowlord_hideouts,
+            state.prng_state,
+            state.current_shadowlord_hideout_id(),
+        );
 
         state.advance_turn_with_minutes(1);
 
         assert_eq!(state.clock.day, 6);
+        assert_eq!(state.shadowlord_hideouts, expected_hideouts);
+        assert_eq!(state.prng_state, expected_prng_state);
         assert_eq!(
             state.shadowlord_hideouts[SHADOWLORD_HATRED_INDEX],
             SHADOWLORD_VANQUISHED
@@ -1222,9 +1230,14 @@
     fn shadowlord_reroll_rejects_current_hideout_id() {
         let mut state = world_state(open_world_grid(), 5, 5);
         state.shadowlord_hideouts = [1, 2, SHADOWLORD_VANQUISHED];
+        state.prng_state = 0x0002;
+        let (expected_hideouts, expected_prng_state) =
+            expected_shadowlord_prng_reroll(state.shadowlord_hideouts, state.prng_state, Some(3));
 
         assert_eq!(state.reroll_shadowlord_hideouts_excluding(Some(3)), 2);
 
+        assert_eq!(state.shadowlord_hideouts, expected_hideouts);
+        assert_eq!(state.prng_state, expected_prng_state);
         assert_ne!(state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX], 3);
         assert_ne!(state.shadowlord_hideouts[SHADOWLORD_HATRED_INDEX], 3);
         assert_ne!(
@@ -1265,6 +1278,36 @@
         assert_eq!(state.current_shadowlord_hideout_id(), None);
     }
 
+    fn expected_shadowlord_prng_reroll(
+        previous: [u8; SHADOWLORD_COUNT],
+        mut prng_state: u16,
+        current: Option<u8>,
+    ) -> ([u8; SHADOWLORD_COUNT], u16) {
+        let mut hideouts = previous;
+        let mut assigned = [0u8; SHADOWLORD_COUNT];
+        let mut assigned_len = 0usize;
+        for slot in 0..SHADOWLORD_COUNT {
+            if !PlayState::shadowlord_slot_is_living(previous[slot]) {
+                continue;
+            }
+            let selected = loop {
+                let candidate = u5_prng_range_u16(
+                    &mut prng_state,
+                    u16::from(SHADOWLORD_HIDEOUT_MIN),
+                    u16::from(SHADOWLORD_HIDEOUT_MAX),
+                ) as u8;
+                if current == Some(candidate) || assigned[..assigned_len].contains(&candidate) {
+                    continue;
+                }
+                break candidate;
+            };
+            hideouts[slot] = selected;
+            assigned[assigned_len] = selected;
+            assigned_len += 1;
+        }
+        (hideouts, prng_state)
+    }
+
     #[test]
     fn shadowlord_midnight_reroll_excludes_current_virtue_town() {
         let mut state = test_state(open_grid(), 1, 1);
@@ -1274,9 +1317,17 @@
         };
         state.clock = GameClock::with_date(139, 4, 5, 23, 59).unwrap();
         state.shadowlord_hideouts = [1, 2, SHADOWLORD_VANQUISHED];
+        state.prng_state = 0x3456;
+        let (expected_hideouts, expected_prng_state) = expected_shadowlord_prng_reroll(
+            state.shadowlord_hideouts,
+            state.prng_state,
+            state.current_shadowlord_hideout_id(),
+        );
 
         state.advance_turn_with_minutes(1);
 
+        assert_eq!(state.shadowlord_hideouts, expected_hideouts);
+        assert_eq!(state.prng_state, expected_prng_state);
         assert_ne!(state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX], 1);
         assert_ne!(state.shadowlord_hideouts[SHADOWLORD_HATRED_INDEX], 1);
         assert_ne!(

@@ -1157,50 +1157,22 @@ impl PlayState {
                 continue;
             }
 
-            let mut selected = None;
-            for attempt in 0..16 {
-                let candidate = Self::shadowlord_hideout_candidate_from_seed(
-                    self.shadowlord_hideout_roll_seed(slot, attempt),
-                );
+            let selected = loop {
+                let candidate =
+                    self.random_range_u8(SHADOWLORD_HIDEOUT_MIN, SHADOWLORD_HIDEOUT_MAX);
                 if current == Some(candidate) || assigned[..assigned_len].contains(&candidate) {
                     continue;
                 }
-                selected = Some(candidate);
-                break;
-            }
+                break candidate;
+            };
 
-            if selected.is_none() {
-                selected = (SHADOWLORD_HIDEOUT_MIN..=SHADOWLORD_HIDEOUT_MAX).find(|candidate| {
-                    current != Some(*candidate) && !assigned[..assigned_len].contains(candidate)
-                });
-            }
-
-            if let Some(candidate) = selected {
-                self.shadowlord_hideouts[slot] = candidate;
-                assigned[assigned_len] = candidate;
-                assigned_len += 1;
-                rerolled += 1;
-            }
+            self.shadowlord_hideouts[slot] = selected;
+            assigned[assigned_len] = selected;
+            assigned_len += 1;
+            rerolled += 1;
         }
 
         rerolled
-    }
-
-    pub fn shadowlord_hideout_candidate_from_seed(seed: u8) -> u8 {
-        SHADOWLORD_HIDEOUT_MIN + (seed % (SHADOWLORD_HIDEOUT_MAX - SHADOWLORD_HIDEOUT_MIN + 1))
-    }
-
-    pub fn shadowlord_hideout_roll_seed(&self, slot: usize, attempt: u8) -> u8 {
-        (self.turn as u8).wrapping_mul(37)
-            ^ self.clock.year as u8
-            ^ self.clock.month.wrapping_mul(3)
-            ^ self.clock.day.wrapping_mul(5)
-            ^ self.clock.hour.wrapping_mul(7)
-            ^ self.clock.minute.wrapping_mul(11)
-            ^ (self.player.x as u8).wrapping_mul(13)
-            ^ (self.player.y as u8).wrapping_mul(17)
-            ^ (slot as u8).wrapping_mul(19)
-            ^ attempt.wrapping_mul(23)
     }
 
     pub fn terrain_encounter_note(
