@@ -530,9 +530,14 @@ Goal: turn diagnostic interactions into game-like content.
   - Current schedules link and move NPCs in town-family scenes, preserve
     cached-waypoint movement state until a transition settles, and route
     floor changes through the `0xC8`/`0xC9` floor-link marker BFS.
+  - Conversation sessions cover ASK-PARTY-NAME, ASK-WHO, non-`JOIN`
+    recruitment prompts for roster companions, and non-roster name prompts
+    without accidental joins.
   - Remaining work:
     - exact audit of every authored schedule/AI edge,
-    - conversation keyword loops and side effects,
+    - conversation side-effect audit beyond the currently known action letters,
+    - TLK `0x87` semantics pending public spec clarification
+      (cleak/u5-spec#46),
     - shop/service conversations,
     - NPC memory flags such as thanked/picked/quest state.
 

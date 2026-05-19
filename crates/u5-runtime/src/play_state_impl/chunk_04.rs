@@ -3112,11 +3112,13 @@ impl PlayState {
         let mut text = String::new();
         let mut ended = false;
         let mut asked_party_name = None;
+        let mut ask_party_name_prompted = false;
         if let Some(session) = self.active_conversation.as_mut() {
             let output = session.submit_keyword(line, &ctx);
             text = output.text.clone();
             ended = output.ended;
             asked_party_name = output.asked_party_name;
+            ask_party_name_prompted = session.awaiting_ask_party_name();
             self.apply_tlk_action_grants(&output.action_grants);
             self.apply_tlk_gold_payments(&output.gold_payments);
             self.record_tlk_signal_flags(&output.signal_flags);
@@ -3124,7 +3126,11 @@ impl PlayState {
                 self.merge_talk_branch_flags(scene, output.branch_flags_set);
             }
         }
-        if join_keyword {
+        let join_prompted_for_roster_companion = ask_party_name_prompted
+            && join_candidate
+                .as_deref()
+                .is_some_and(|candidate| self.conversation_join_candidate_available(candidate));
+        if join_keyword || join_prompted_for_roster_companion {
             self.active_conversation_join_candidate = join_candidate;
         }
         if let Some(answer_slot) = asked_party_name {
@@ -3138,7 +3144,7 @@ impl PlayState {
                     text.push_str(&join_text);
                 }
             }
-        } else if !join_keyword {
+        } else if !join_keyword && !join_prompted_for_roster_companion {
             self.active_conversation_join_candidate = None;
         }
         if ended {
@@ -3333,6 +3339,12 @@ impl PlayState {
         }
         self.sync_active_party_from_roster_len(active_len);
         Some(format!("{joined_name} joined; {leaving_name} left."))
+    }
+
+    pub fn conversation_join_candidate_available(&self, candidate_name: &str) -> bool {
+        self.party_roster
+            .iter()
+            .any(|record| party_roster_name_matches(record, candidate_name))
     }
 
     /// Return the active scene's shared conversation cleanup sentinel.

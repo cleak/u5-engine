@@ -1853,6 +1853,77 @@
         assert!(state.active_conversation.is_some());
     }
 
+    #[test]
+    fn active_conversation_ask_who_consumes_next_line_as_answer() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Maris".to_string(),
+                "a quiet sage".to_string(),
+                "Greetings".to_string(),
+                "I read books".to_string(),
+                "Farewell".to_string(),
+                "WHO".to_string(),
+                "Name the keeper.".to_string(),
+            ],
+        );
+
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        let mut who_response = enc("Name the keeper.");
+        who_response.push(TLK_CODE_ASK_WHO);
+        who_response.extend(enc(" Accepted."));
+        who_response.push(TLK_CODE_END_OF_RESPONSE);
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Maris"),
+                enc("a quiet sage"),
+                enc("Greetings"),
+                enc("I read books"),
+                enc("Farewell"),
+                enc("WHO"),
+                who_response,
+            ],
+        );
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'G',
+            climb_stat: 10,
+            mana: 0,
+            hp: 20,
+            max_hp: 20,
+            level: 1,
+        });
+        state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0"];
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        assert_eq!(
+            state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+            MoveOutcome::Talked
+        );
+
+        handle_play_key_input(&mut state, 'W', "HO", Path::new("")).unwrap();
+        assert_eq!(state.message, "Name the keeper.\nWho?");
+        handle_play_key_input(&mut state, 'i', "olo", Path::new("")).unwrap();
+        assert_eq!(state.message, " Accepted.\nYour interest?\n:");
+        assert!(state.active_conversation.is_some());
+        assert_eq!(state.active_conversation_join_candidate, None);
+    }
+
     fn conversation_test_roster_record(
         slot: u8,
         name: &[u8; SAVE_CHARACTER_NAME_LEN],
@@ -1948,6 +2019,137 @@
         assert!(!ended);
         assert_eq!(state.party.len(), 2);
         assert_eq!(state.party_names[1], *b"GWENNO\0\0\0");
+    }
+
+    #[test]
+    fn conversation_join_can_be_driven_by_non_join_keyword_ask_prompt() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Gwenno".to_string(),
+                "a bard".to_string(),
+                "Greetings".to_string(),
+                "I sing".to_string(),
+                "Farewell".to_string(),
+                "HELP".to_string(),
+                "Name thy companion.".to_string(),
+            ],
+        );
+
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        let mut help_response = enc("Name thy companion.");
+        help_response.push(TLK_CODE_ASK_PARTY_NAME);
+        help_response.extend(enc(" Accepted."));
+        help_response.push(TLK_CODE_END_OF_RESPONSE);
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Gwenno"),
+                enc("a bard"),
+                enc("Greetings"),
+                enc("I sing"),
+                enc("Farewell"),
+                enc("HELP"),
+                help_response,
+            ],
+        );
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_roster = vec![
+            conversation_test_roster_record(0, b"AVATAR\0\0\0", b'A'),
+            conversation_test_roster_record(1, b"GWENNO\0\0\0", b'B'),
+        ];
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
+
+        let (prompt, ended) = state.submit_active_conversation_keyword("help");
+        assert_eq!(prompt, "Name thy companion.");
+        assert!(!ended);
+        assert_eq!(
+            state.active_conversation_join_candidate.as_deref(),
+            Some("Gwenno")
+        );
+        let (text, ended) = state.submit_active_conversation_keyword("Avatar");
+
+        assert!(text.contains("Accepted."));
+        assert!(text.contains("joined."));
+        assert!(!ended);
+        assert_eq!(state.party.len(), 2);
+        assert_eq!(state.party_names[1], *b"GWENNO\0\0\0");
+    }
+
+    #[test]
+    fn conversation_ask_party_name_for_non_roster_npc_does_not_seed_join() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Maris".to_string(),
+                "a sage".to_string(),
+                "Greetings".to_string(),
+                "I teach".to_string(),
+                "Farewell".to_string(),
+                "HELP".to_string(),
+                "Name thy companion.".to_string(),
+            ],
+        );
+
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        let mut help_response = enc("Name thy companion.");
+        help_response.push(TLK_CODE_ASK_PARTY_NAME);
+        help_response.extend(enc(" Accepted."));
+        help_response.push(TLK_CODE_END_OF_RESPONSE);
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Maris"),
+                enc("a sage"),
+                enc("Greetings"),
+                enc("I teach"),
+                enc("Farewell"),
+                enc("HELP"),
+                help_response,
+            ],
+        );
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_roster = vec![conversation_test_roster_record(0, b"AVATAR\0\0\0", b'A')];
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None);
+
+        let (prompt, ended) = state.submit_active_conversation_keyword("help");
+        assert_eq!(prompt, "Name thy companion.");
+        assert!(!ended);
+        assert_eq!(state.active_conversation_join_candidate, None);
+        let (text, ended) = state.submit_active_conversation_keyword("Avatar");
+
+        assert_eq!(text, " Accepted.");
+        assert!(!ended);
+        assert_eq!(state.party.len(), 1);
+        assert_eq!(state.active_conversation_join_candidate, None);
     }
 
     #[test]
