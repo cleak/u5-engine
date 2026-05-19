@@ -34,6 +34,7 @@ pub const TOWN_GET_TILE_TABLE_FILE: &str = "town_get_tiles.tsv";
 pub const TOWN_REST_BED_TABLE_FILE: &str = "town_rest_beds.tsv";
 pub const TOWN_STAIR_TABLE_FILE: &str = "town_stairs.tsv";
 pub const TOWN_TRAP_DOOR_TABLE_FILE: &str = "town_trap_doors.tsv";
+pub const TOWN_POISON_GAS_TABLE_FILE: &str = "town_poison_gas.tsv";
 pub const TOWN_EXIT_TILE_TABLE_FILE: &str = "town_exit_tiles.tsv";
 pub const TOWN_LOCK_TABLE_FILE: &str = "town_locks.tsv";
 pub const BLINK_TARGET_TABLE_FILE: &str = "blink_targets.tsv";

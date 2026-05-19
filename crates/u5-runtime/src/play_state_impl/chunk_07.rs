@@ -2550,6 +2550,7 @@ impl PlayState {
         let Some(entry) =
             self.town_trap_door_at(game_dir, scene, floor, self.player.x, self.player.y, tile)?
         else {
+            self.append_town_poison_gas_message(game_dir, scene, floor)?;
             return Ok(None);
         };
 
@@ -2562,6 +2563,82 @@ impl PlayState {
             format!("{pre_effect_message} {transition_message}")
         };
         Ok(Some(outcome))
+    }
+
+    pub fn town_poison_gas_at(
+        &self,
+        game_dir: &Path,
+        scene: Scene,
+        floor: i8,
+        x: usize,
+        y: usize,
+        tile: u8,
+    ) -> io::Result<Option<TownPoisonGasEntry>> {
+        Ok(load_town_poison_gas_entries(game_dir)?.and_then(|entries| {
+            entries
+                .into_iter()
+                .find(|entry| town_poison_gas_matches(*entry, scene, floor, x, y, tile))
+        }))
+    }
+
+    pub fn append_town_poison_gas_message(
+        &mut self,
+        game_dir: &Path,
+        scene: Scene,
+        floor: i8,
+    ) -> io::Result<()> {
+        let tile = self.grid[self.player.y * 32 + self.player.x];
+        let Some(entry) =
+            self.town_poison_gas_at(game_dir, scene, floor, self.player.x, self.player.y, tile)?
+        else {
+            return Ok(());
+        };
+        let report = self.apply_town_poison_gas(entry);
+        self.message.push_str(&format!(" {report}."));
+        Ok(())
+    }
+
+    pub fn apply_town_poison_gas(&mut self, entry: TownPoisonGasEntry) -> String {
+        let rolls: Vec<u8> = (0..self.party.len())
+            .map(|index| self.town_poison_gas_roll(index, entry))
+            .collect();
+        let mut checked = 0usize;
+        let mut poisoned = Vec::new();
+        for (index, member) in self.party.iter_mut().enumerate() {
+            if !(member.status == b'G' && member.living()) {
+                continue;
+            }
+            checked += 1;
+            if rolls[index] == 0 {
+                member.status = b'P';
+                poisoned.push(member.slot);
+            }
+        }
+        if poisoned.is_empty() {
+            format!("poison gas doorway checked {checked} eligible member(s); no poison")
+        } else {
+            format!(
+                "poison gas doorway: poisoned party slot{} {}",
+                if poisoned.len() == 1 { "" } else { "s" },
+                poisoned
+                    .iter()
+                    .map(|slot| slot.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        }
+    }
+
+    pub fn town_poison_gas_roll(&self, member_index: usize, entry: TownPoisonGasEntry) -> u8 {
+        // The clean spec publishes the roll branch but not its exact odds.
+        // Keep this deterministic until the public table is promoted.
+        (self.turn as u8
+            ^ self.clock.hour
+            ^ self.clock.minute
+            ^ (entry.x as u8).wrapping_mul(3)
+            ^ (entry.y as u8).wrapping_mul(5)
+            ^ (member_index as u8).wrapping_mul(17))
+            & 1
     }
 
     pub fn apply_town_npc_contact_event(

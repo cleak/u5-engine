@@ -1083,6 +1083,19 @@ top-down commands while already standing on a matching row apply the same
 underfoot trap-door transition after turn cleanup without spending a second
 turn. Missing or mismatched rows behave like ordinary movement.
 
+Town poison-gas doorway cells can be supplied as clean-room sidecar metadata:
+
+```text
+# SCENE FLOOR X Y [TILE]
+CASTLE:0 0 12 9 55
+```
+
+Stepping onto a matching row, or completing any turn-consuming top-down command
+while already standing on one, runs the town underfoot poison-gas branch against
+eligible Good living party members. The public spec identifies the roll branch
+but not its exact odds, so this remains a deterministic first-playable roll
+until a clean row/odds contract is published.
+
 Town boundary exits use the native public threshold tile `0x59`. Additional
 authored exit cells can be supplied as clean-room sidecar metadata:
 

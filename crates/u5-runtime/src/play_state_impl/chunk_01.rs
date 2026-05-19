@@ -971,6 +971,9 @@ impl PlayState {
             self.mark_visibility_dirty();
             self.advance_turn();
             self.message = format!("Moved to ({nx}, {ny}).");
+            if let Some(game_dir) = game_dir {
+                self.append_town_poison_gas_message(game_dir, scene, floor)?;
+            }
             Ok(MoveOutcome::Moved)
         } else {
             self.message = format!("Blocked by {} at ({nx}, {ny}).", tile_class(tile));

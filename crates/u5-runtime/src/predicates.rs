@@ -1317,6 +1317,23 @@ pub fn town_trap_door_matches(
             .map_or(true, |expected| expected == tile)
 }
 
+pub fn town_poison_gas_matches(
+    entry: TownPoisonGasEntry,
+    scene: Scene,
+    floor: i8,
+    x: usize,
+    y: usize,
+    tile: u8,
+) -> bool {
+    entry.scene == scene
+        && entry.floor == floor
+        && entry.x == x
+        && entry.y == y
+        && entry
+            .expected_tile
+            .map_or(true, |expected| expected == tile)
+}
+
 pub fn town_exit_tile_matches(
     entry: TownExitTileEntry,
     scene: Scene,

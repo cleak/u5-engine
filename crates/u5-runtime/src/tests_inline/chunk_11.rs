@@ -852,6 +852,51 @@
     }
 
     #[test]
+    fn town_movement_onto_clean_poison_gas_sidecar_poisons_eligible_member() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_POISON_GAS_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
+        let mut grid = open_grid();
+        grid[32 + 1] = 55;
+        let mut state = test_state(grid, 0, 1);
+        state.player.facing = Direction::East;
+        state.party[0].status = b'G';
+        state.party[0].hp = 10;
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Moved
+        );
+
+        assert_eq!(state.party[0].status, b'P');
+        assert!(state.message.contains("poison gas doorway"));
+        assert_eq!(state.turn, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn pass_turn_on_clean_poison_gas_sidecar_runs_after_consumed_town_turn() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_POISON_GAS_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
+        let mut grid = open_grid();
+        grid[32 + 1] = 55;
+        let mut state = test_state(grid, 1, 1);
+        state.party[0].status = b'G';
+        state.party[0].hp = 10;
+
+        assert_eq!(
+            state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
+            MoveOutcome::Passed
+        );
+
+        assert_eq!(state.party[0].status, b'P');
+        assert!(state.message.contains("Passed."));
+        assert!(state.message.contains("poison gas doorway"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn town_k_prompts_when_both_floor_directions_are_connected() {
         let dir = debug_game_dir();
         fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();

@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-19, including 2387 tests.
+- `cargo test -p u5-runtime` passed on 2026-05-19, including 2390 tests.
 - `cargo test -p u5-tui` passed on 2026-05-19.
 - `cargo test -p u5-bevy` passed on 2026-05-19, including 31 tests.
 - `cargo fmt -- --check` passed on 2026-05-19 after the latest Rust changes.

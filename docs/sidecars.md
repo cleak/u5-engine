@@ -21,6 +21,7 @@ from decompiled code.
 | `dungeon_exit_tiles.tsv` | Dungeon exit cells that return to overworld metadata. |
 | `town_stairs.tsv` | Clean stair rows for town floor changes. |
 | `town_trap_doors.tsv` | Town trap-door/chute rows. |
+| `town_poison_gas.tsv` | Town poison-gas doorway rows. |
 | `town_exit_tiles.tsv` | Town exit threshold rows. |
 | `moongates.tsv` | Authored moongate origin/destination rows. |
 

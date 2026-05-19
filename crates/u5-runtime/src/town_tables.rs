@@ -86,6 +86,15 @@ pub struct TownTrapDoorEntry {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TownPoisonGasEntry {
+    pub scene: Scene,
+    pub floor: i8,
+    pub x: usize,
+    pub y: usize,
+    pub expected_tile: Option<u8>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TownExitTileEntry {
     pub scene: Scene,
     pub floor: i8,
