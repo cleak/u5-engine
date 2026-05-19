@@ -47,6 +47,63 @@ impl BlackthornCutsceneActor {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BlackthornCutsceneActorPlacement {
+    pub actor: BlackthornCutsceneActor,
+    pub type_byte: u8,
+    pub tile: u8,
+    pub x: usize,
+    pub y: usize,
+}
+
+pub const BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER: u8 = 0xb7;
+pub const BLACKTHORN_CUTSCENE_SECOND_PARTY_TYPE: u8 = 0xf1;
+pub const BLACKTHORN_CUTSCENE_BLACKTHORN_TYPE: u8 = 0xf2;
+pub const BLACKTHORN_CUTSCENE_ATTENDANT_TYPE: u8 = 0xf3;
+pub const BLACKTHORN_CUTSCENE_THRONE_TYPE: u8 = 0xf4;
+
+/// `blackthorn.md §6`: clean semantic placements for the named
+/// cutscene-VM actor slots. Exact tile art and byte-script pixel
+/// parity remain visual work, so non-Avatar roles use hidden tiles
+/// with distinct nonzero type tags instead of claiming final art ids.
+pub const BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS: [BlackthornCutsceneActorPlacement; 5] = [
+    BlackthornCutsceneActorPlacement {
+        actor: BlackthornCutsceneActor::Avatar,
+        type_byte: crate::PLAYER_TILE,
+        tile: crate::PLAYER_TILE,
+        x: 5,
+        y: 9,
+    },
+    BlackthornCutsceneActorPlacement {
+        actor: BlackthornCutsceneActor::SecondPartyMember,
+        type_byte: BLACKTHORN_CUTSCENE_SECOND_PARTY_TYPE,
+        tile: crate::NPC_HIDDEN_SPRITE_TILE,
+        x: 6,
+        y: 9,
+    },
+    BlackthornCutsceneActorPlacement {
+        actor: BlackthornCutsceneActor::Blackthorn,
+        type_byte: BLACKTHORN_CUTSCENE_BLACKTHORN_TYPE,
+        tile: crate::NPC_HIDDEN_SPRITE_TILE,
+        x: 5,
+        y: 3,
+    },
+    BlackthornCutsceneActorPlacement {
+        actor: BlackthornCutsceneActor::Attendant,
+        type_byte: BLACKTHORN_CUTSCENE_ATTENDANT_TYPE,
+        tile: crate::NPC_HIDDEN_SPRITE_TILE,
+        x: 6,
+        y: 3,
+    },
+    BlackthornCutsceneActorPlacement {
+        actor: BlackthornCutsceneActor::Throne,
+        type_byte: BLACKTHORN_CUTSCENE_THRONE_TYPE,
+        tile: crate::NPC_HIDDEN_SPRITE_TILE,
+        x: 5,
+        y: 2,
+    },
+];
+
 /// `blackthorn.md §6`: classify a cutscene-VM actor slot byte.
 /// Returns `None` for indices outside the published role table; the
 /// script VM treats those as caller-private temporaries rather than

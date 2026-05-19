@@ -978,6 +978,38 @@
     }
 
     #[test]
+    fn blackthorn_audience_installs_temporary_actor_slots() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 5, 5);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'F',
+            status: b'G',
+            climb_stat: 10,
+            mana: 0,
+            hp: 30,
+            max_hp: 30,
+            level: 2,
+        });
+
+        assert_eq!(
+            state.begin_blackthorn_audience_capture(&dir).unwrap(),
+            Some(MoveOutcome::Used)
+        );
+
+        for placement in BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS {
+            let slot = placement.actor.slot_index() as usize;
+            let object = state.active_objects[slot];
+            assert_eq!(object.type_byte, placement.type_byte);
+            assert_eq!(object.tile, placement.tile);
+            assert_eq!((object.x, object.y), (placement.x, placement.y));
+            assert_eq!(object.aux1, placement.actor.slot_index());
+            assert_eq!(object.aux3, BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER);
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn blackthorn_rescue_restores_party_and_clamps_standing() {
         let dir = debug_game_dir();
         fs::write(

@@ -2676,7 +2676,6 @@ impl PlayState {
         self.pending_moongate = None;
         self.blackthorn_audience_map = None;
         self.clear_non_player_active_objects();
-        self.sync_player_object();
         self.mark_visibility_dirty();
 
         let Some(target_slot) = self.next_blackthorn_challenge_target_slot() else {
@@ -2702,6 +2701,7 @@ impl PlayState {
             });
         self.blackthorn_audience_map =
             load_miscmaps_cutscene_map(game_dir, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD)?;
+        self.install_blackthorn_audience_actors();
         self.active_blackthorn = Some(challenge);
         self.message = format!(
             "Blackthorn audience: {opening}. Party slot {} is challenged for {prompt}.",
@@ -2720,6 +2720,30 @@ impl PlayState {
             .map(|record| record.trim())
             .find(|record| !record.is_empty())
             .map(str::to_string))
+    }
+
+    pub fn install_blackthorn_audience_actors(&mut self) {
+        if self.active_objects.len() < OOL_SLOTS {
+            self.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        }
+        for placement in BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS {
+            if placement.actor == BlackthornCutsceneActor::SecondPartyMember
+                && self.party.len() <= BLACKTHORN_FAILURE_VICTIM_SLOT
+            {
+                continue;
+            }
+            let slot = placement.actor.slot_index() as usize;
+            self.active_objects[slot] = ActiveObject {
+                type_byte: placement.type_byte,
+                tile: placement.tile,
+                x: placement.x,
+                y: placement.y,
+                z: 0,
+                phase: STEADY_PHASE,
+                aux1: placement.actor.slot_index(),
+                aux3: BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER,
+            };
+        }
     }
 
     pub fn submit_blackthorn_audience_answer(

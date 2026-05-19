@@ -9627,6 +9627,38 @@
     }
 
     #[test]
+    fn blackthorn_audience_actor_placements_cover_named_roles() {
+        let roles: Vec<_> = BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS
+            .iter()
+            .map(|placement| placement.actor)
+            .collect();
+
+        assert_eq!(BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER, 0xb7);
+        assert_eq!(
+            roles,
+            vec![
+                BlackthornCutsceneActor::Avatar,
+                BlackthornCutsceneActor::SecondPartyMember,
+                BlackthornCutsceneActor::Blackthorn,
+                BlackthornCutsceneActor::Attendant,
+                BlackthornCutsceneActor::Throne,
+            ]
+        );
+        assert_eq!(
+            BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS[2].actor.slot_index(),
+            6
+        );
+        assert_eq!(
+            BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS[3].actor.slot_index(),
+            7
+        );
+        assert_eq!(
+            BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS[4].actor.slot_index(),
+            8
+        );
+    }
+
+    #[test]
     fn blackthorn_captive_cell_handoff_matches_spec_coordinates() {
         // blackthorn.md §3
         assert_eq!(BLACKTHORN_CAPTIVE_CELL_SCENE, 18);

@@ -110,15 +110,18 @@ pub mod z_stats;
 pub use active_object_io::*;
 pub use animation::{ActiveObject, ActiveShipWind, AnimationClock, PhaseTick};
 pub use blackthorn::{
-    BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD, BLACKTHORN_CAPTIVE_CELL_SCENE,
-    BLACKTHORN_CAPTIVE_CELL_X, BLACKTHORN_CAPTIVE_CELL_Y, BLACKTHORN_CHALLENGE_INPUT_LIMIT,
-    BLACKTHORN_CHALLENGE_PROMPT_COUNT, BLACKTHORN_CHALLENGE_PROMPT_TABLE,
+    BLACKTHORN_AUDIENCE_ACTOR_PLACEMENTS, BLACKTHORN_AUDIENCE_CUTSCENE_MAP_RECORD,
+    BLACKTHORN_CAPTIVE_CELL_SCENE, BLACKTHORN_CAPTIVE_CELL_X, BLACKTHORN_CAPTIVE_CELL_Y,
+    BLACKTHORN_CHALLENGE_INPUT_LIMIT, BLACKTHORN_CHALLENGE_PROMPT_COUNT,
+    BLACKTHORN_CHALLENGE_PROMPT_TABLE, BLACKTHORN_CUTSCENE_ATTENDANT_TYPE,
+    BLACKTHORN_CUTSCENE_AUX3_ROLE_MARKER, BLACKTHORN_CUTSCENE_BLACKTHORN_TYPE,
+    BLACKTHORN_CUTSCENE_SECOND_PARTY_TYPE, BLACKTHORN_CUTSCENE_THRONE_TYPE,
     BLACKTHORN_FAILURE_VICTIM_SLOT, BLACKTHORN_RESCUE_HANDOFF_SCENE, BLACKTHORN_RESCUE_HANDOFF_X,
     BLACKTHORN_RESCUE_HANDOFF_Y, BLACKTHORN_RESCUE_STANDING_FLOOR, BlackthornCutsceneActor,
-    BlackthornEntryFamily, KARMA_DAT_BAND_WIDTH, KarmaDatTier, blackthorn_challenge_answer_matches,
-    blackthorn_challenge_limited_input, blackthorn_challenge_prompt, blackthorn_cutscene_actor,
-    blackthorn_rescue_post_print_standing, blackthorn_rescue_verdict_record, karma_dat_tier,
-    lord_british_camp_verdict_record,
+    BlackthornCutsceneActorPlacement, BlackthornEntryFamily, KARMA_DAT_BAND_WIDTH, KarmaDatTier,
+    blackthorn_challenge_answer_matches, blackthorn_challenge_limited_input,
+    blackthorn_challenge_prompt, blackthorn_cutscene_actor, blackthorn_rescue_post_print_standing,
+    blackthorn_rescue_verdict_record, karma_dat_tier, lord_british_camp_verdict_record,
 };
 pub use boot::{
     DATA_OVL_FILENAME, DRIVER_SELECTOR_CGA, DRIVER_SELECTOR_EGA, DRIVER_SELECTOR_HERCULES,
