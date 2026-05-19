@@ -16,7 +16,7 @@ Last known verification state:
 
 - `cargo test -p u5-runtime` passed on 2026-05-19, including 2375 tests.
 - `cargo test -p u5-tui` passed on 2026-05-19.
-- `cargo test -p u5-bevy` passed on 2026-05-19.
+- `cargo test -p u5-bevy` passed on 2026-05-19, including 31 tests.
 - `cargo fmt -- --check` passed on 2026-05-19 after the latest Rust changes.
 - Representative raster smoke checks with local assets produced nonblank hashes:
   `BRITANNIA` top-down `fd923dc0f87a9f3c`, `BRITANNIA` after movement
@@ -27,6 +27,8 @@ Last known verification state:
   2026-05-19 with six scripted route cases.
 - Bevy visual screenshot smoke with local assets produced a nonblank
   `792x1182` PNG at `target\codex-fixed-font-status-smoke.png`.
+- Bevy unit framebuffer coverage includes world, town, dungeon, combat, intro,
+  status, and endgame modal surfaces.
 - `--save-frame <PATH>` is the current headless PNG capture path for local
   asset visual checks.
 - `cargo run -- --help` is a supported no-asset usage path.

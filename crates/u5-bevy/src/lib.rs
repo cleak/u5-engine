@@ -1847,12 +1847,12 @@ mod tests {
     };
     use u5_runtime::tlk_control_codes::TLK_TEXT_XOR_MASK;
     use u5_runtime::{
-        Area, BRIT_OOL_FILENAME, CH_FONT_LEN, Direction, EGA_PALETTE_RGB, GuildShop, Herbalist,
-        IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME, OOL_PLANE_LEN, REAGENT_COUNT,
-        REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET,
-        SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET,
-        SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SHRINE_TABLE_FILE,
-        ShrineVirtue, SurfaceChestVerb, Tavern, TileGraphicsDepth,
+        Area, BRIT_OOL_FILENAME, CH_FONT_LEN, COMBAT_ARENA_SIDE, Direction, EGA_PALETTE_RGB,
+        GuildShop, Herbalist, IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME, OOL_PLANE_LEN,
+        REAGENT_COUNT, REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET,
+        SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN,
+        SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
+        SHRINE_TABLE_FILE, ShrineVirtue, SurfaceChestVerb, Tavern, TileGraphicsDepth,
         U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane, dungeon_cell_index,
         parse_ch_font, world_cell_index, wrap_text_panel_lines,
     };
@@ -1878,6 +1878,59 @@ mod tests {
         ];
         state.active_conversation = Some(Box::new(ConversationSession::new(raw, decoded)));
         state.advance_active_conversation_greeting();
+    }
+
+    fn assert_viewport_rgba_frame(rgba: &[u8]) {
+        assert_eq!(
+            rgba.len(),
+            (VIEWPORT_SIZE_PX as usize) * (VIEWPORT_SIZE_PX as usize) * 4
+        );
+        assert!(rgba.chunks_exact(4).all(|pixel| pixel[3] == 0xff));
+    }
+
+    fn assert_nonblack_rgba(rgba: &[u8]) {
+        assert!(
+            rgba.chunks_exact(4)
+                .any(|pixel| pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
+        );
+    }
+
+    #[test]
+    fn world_framebuffer_renders_top_down_rgba() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let rgba = render_framebuffer(&mut state, &atlas);
+
+        assert_viewport_rgba_frame(&rgba);
+        assert_nonblack_rgba(&rgba);
+    }
+
+    #[test]
+    fn town_framebuffer_renders_top_down_rgba() {
+        let mut grid = open_grid();
+        grid[5 * 32 + 5] = 5;
+        let mut state = test_state(grid, 5, 5);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let rgba = render_framebuffer(&mut state, &atlas);
+
+        assert_viewport_rgba_frame(&rgba);
+        assert_nonblack_rgba(&rgba);
+    }
+
+    #[test]
+    fn combat_framebuffer_renders_arena_rgba() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.combat_terrain = [[5; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        state.combat_terrain[0][0] = 12;
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let rgba = render_framebuffer(&mut state, &atlas);
+
+        assert_viewport_rgba_frame(&rgba);
+        assert_nonblack_rgba(&rgba);
     }
 
     #[test]
@@ -1958,6 +2011,45 @@ mod tests {
                 .any(|pixel| pixel == [0xff, 0xff, 0xff, 0xff])
         );
         assert_eq!(state.active_player, None);
+    }
+
+    #[test]
+    fn intro_menu_frame_renders_nonblank_rgba() {
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            message: "Intro menu smoke".to_string(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        let frame = render_intro_frame(&mut intro);
+
+        assert_eq!(
+            frame.len(),
+            (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4
+        );
+        assert!(frame.chunks_exact(4).all(|pixel| pixel[3] == 0xff));
+        assert_nonblack_rgba(&frame);
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn endgame_status_framebuffer_renders_modal_surface() {
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.enter_endgame();
+
+        let rgba = render_status_framebuffer(&mut state, "", "", &font);
+
+        assert_eq!(
+            rgba.len(),
+            TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4
+        );
+        assert_nonblack_rgba(&rgba);
+        assert!(state.endgame.is_some());
     }
 
     #[test]
