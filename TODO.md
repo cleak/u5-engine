@@ -1,22 +1,31 @@
-# Ultima V First-Playable TODO
+# Ultima V Implementation TODO
 
-This repository is currently a clean-room Rust verification and terminal
-first-playable harness for Ultima V. It is not yet the final Bevy game. The
-current harness reads local clean asset files at runtime, keeps copyrighted game
-data out of the repo, and implements a substantial amount of movement,
-animation, save/load, command routing, and transition behavior behind focused
-tests.
+This repository is the clean-room Rust implementation of Ultima V. It reads
+local clean asset files at runtime, keeps copyrighted game data out of the repo,
+and now includes broad runtime coverage for command routing, movement,
+animation, save/load, combat, shops, conversation, character creation, intro
+flows, magic, rest/camp, Blackthorn/Codex paths, and the terminal endgame.
+
+This file is a working handoff checklist, not an authoritative status database.
+Many older milestone bullets below were written during the first-playable phase.
+Before treating any item as missing, verify current code with `rg`, read the
+matching public spec section, and check focused tests. Do not implement from
+this file alone.
 
 Last known verification state:
 
-- `cargo fmt -- --check` passed.
-- `cargo test -p u5-runtime` passed with 2297 tests on 2026-05-18.
+- `cargo test -p u5-runtime` passed with 2357 tests on 2026-05-19.
+- `cargo fmt -- --check` had passed in the prior checkpoint; rerun before any
+  code commit that changes Rust files.
 - `cargo test -p u5-tui cli_binary_help_prints_usage_without_assets -- --exact`
-  passed on 2026-05-18.
-- `cargo run -- --play-script "z;q" C:\Games\U5-Clean` ran successfully.
+  passed on 2026-05-18; rerun when CLI/TUI code changes.
+- `cargo run -- --play-script "z;q" C:\Games\U5-Clean` ran successfully in the
+  prior checkpoint; rerun for gameplay-loop changes.
 - `cargo run -- --help` is a supported no-asset usage path.
 - The latest checkpointed engine commit at the time of this refresh was
-  `5380801 Run Blackthorn cutscene beats`.
+  `553d33d Honor dungeon D and W command fallbacks`.
+- The spec checkout used for the most recent audit was `5b816cc Complete
+  cleanroom specification`.
 
 Current worktree context when this TODO was refreshed:
 
@@ -63,8 +72,9 @@ These are the safest next slices for a new contributor.
      `u5-engine --help` prints usage without touching local game assets.
 
 3. Work from current code/spec gaps, not this file alone.
-   - Ready, Yell, Attack, shops, and combat handoff have moved beyond their
-     early placeholder status.
+   - Ready, Yell, Attack, Use, Talk, shops, magic, rest/camp, combat handoff,
+     Blackthorn/Codex progression, intro/chargen, and endgame have all moved
+     beyond their early placeholder status.
    - Before implementing a remaining item below, confirm it is still absent with
      `rg`, read the matching clean spec section, and add focused tests for turn
      consumption, messages, state mutation, and mode-specific routing.
@@ -74,6 +84,13 @@ These are the safest next slices for a new contributor.
      dungeon-return, and special-transition coordinates.
    - Leave the safe "missing clean return-coordinate metadata" behavior in place
      until those coordinates are published through the spec.
+
+5. Prefer completion-audit work over broad rewrites.
+   - Map one explicit public spec behavior to current engine evidence.
+   - If behavior is implemented, update or delete stale TODOs only when they
+     would otherwise mislead the next implementation pass.
+   - If behavior is missing and public enough to implement, add a focused test
+     first or in the same patch.
 
 ## Milestone 1: Terminal First-Playable Completion
 
@@ -540,30 +557,36 @@ Goal: make the project approachable without reading the entire codebase.
   - Every exactness gap should say whether it is blocked on public spec,
     intentional v1 deferral, or Bevy presentation work.
 
-## Completion Criteria For The Original Goal
+## Completion Criteria For The Active Goal
 
-The active project goal is not complete until these are true:
+The active project goal is full-game completion, not just first-playable
+movement. Do not mark the goal complete just because tests pass. Run a
+completion audit against the criteria below and verify each item with code,
+tests, command output, screenshots, or a real scripted/playable session.
 
-- A user can start a new testing session without intro or character creation.
-- The player is dropped directly into gameplay.
-- World, town, and dungeon movement are playable through the intended frontend.
-- Animation ticks are visible and integrated with movement/idle timing.
-- Area transitions work across:
-  - world to town,
-  - town to world,
-  - world to dungeon,
-  - dungeon to world,
-  - town floor changes,
-  - dungeon level changes,
-  - Britannia/Underworld plane changes,
-  - moongate or Gate Travel teleport paths.
-- Save/load can preserve the supported first-playable session state.
-- Combat, intro, and character creation may remain absent or stubbed, but their
-  absence must not break movement and transition play.
-- The project builds and runs from documented commands.
-- Tests cover all critical movement, animation, and transition paths.
-- The implementation remains clean-room safe.
-
-Do not mark the goal complete just because tests pass. Run a completion audit
-against the criteria above and verify each item with code, tests, command
-output, or a real scripted/playable session.
+- The intro, Journey Onward, character creation, and Ultima IV transfer flows
+  are playable through the intended frontend.
+- World, town, dungeon, combat, shop, conversation, Blackthorn, Codex, shrine,
+  and endgame modes are reachable through normal gameplay paths.
+- Every A-Z/Space command routes by mode according to `u5-spec`, with turn
+  costs, prompts, refusals, state mutation, and post-turn effects verified.
+- Area transitions work across world/town, town/world, world/dungeon,
+  dungeon/world, town floors, dungeon levels, Britannia/Underworld plane
+  changes, moongates, waterfalls/chasm paths, and Gate Travel.
+- Save/load preserves all supported durable state, including sidecars used for
+  clean-room semantic state whose exact original save offsets are not public.
+- Combat setup, player commands, monster turns, victory/defeat, loot,
+  post-combat reconciliation, special arena triggers, and the Doom endgame
+  handoff match the public specs.
+- Magic, inventory use, equipment, shops, rest/camp, conversation side effects,
+  quest flags, Shadowlord/shard progress, shrine/Codex progress, Blackthorn
+  story state, and final endgame state have focused runtime tests.
+- Runtime asset reads stay clean-room safe: no committed original assets, raw
+  dumps, dialogue transcripts, private offsets, decompiled source, or
+  disassembly-derived implementation artifacts.
+- The TUI/CLI and Bevy frontend build and run from documented commands.
+- Screenshots or frame captures verify representative world, town, dungeon,
+  combat, intro, and endgame scenes without blank frames or overlapping UI.
+- A final completion audit maps each public spec deliverable to concrete engine
+  evidence and calls out any remaining public-spec gaps instead of assuming
+  parity from proxy signals.
