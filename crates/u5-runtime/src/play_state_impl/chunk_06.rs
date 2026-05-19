@@ -765,7 +765,7 @@ impl PlayState {
             self.message = "Key broke!".to_string();
             return Some(MoveOutcome::LockTried);
         };
-        let roll = self.surface_object_chest_jimmy_roll(slot, x, y, member_index, stat);
+        let roll = self.surface_object_chest_jimmy_roll();
         if object_chest_jimmy_succeeds(threshold, roll) {
             self.keys = self.keys.saturating_sub(1);
             self.advance_turn();
@@ -780,16 +780,8 @@ impl PlayState {
         Some(MoveOutcome::LockTried)
     }
 
-    pub fn surface_object_chest_jimmy_roll(
-        &self,
-        slot: usize,
-        x: usize,
-        y: usize,
-        member_index: usize,
-        stat: u8,
-    ) -> u8 {
-        1 + (self.surface_object_chest_seed(slot, x, y, stat & 0x7f, member_index, 0)
-            % JIMMY_OBJECT_DIE_HIGH)
+    pub fn surface_object_chest_jimmy_roll(&mut self) -> u8 {
+        self.random_range_u8(JIMMY_OBJECT_DIE_LOW, JIMMY_OBJECT_DIE_HIGH)
     }
 
     pub fn consume_surface_object_chest_at(
@@ -1077,8 +1069,7 @@ impl PlayState {
                     .map(|member| member.class_byte)
                     .unwrap_or_default();
                 let threshold = Self::dungeon_chest_pick_threshold(level, class_byte);
-                let roll =
-                    self.dungeon_chest_trap_roll(level, self.player.x, self.player.y, tile, 0, 30);
+                let roll = self.random_range_u8(JIMMY_OBJECT_DIE_LOW, JIMMY_OBJECT_DIE_HIGH);
                 if roll > threshold {
                     self.keys = self.keys.saturating_sub(1);
                     self.advance_turn();
@@ -1142,26 +1133,22 @@ impl PlayState {
         })
     }
 
-    pub fn jimmy_lock_pick_succeeds(&self, member_index: usize) -> bool {
+    pub fn jimmy_lock_pick_succeeds(&mut self, member_index: usize) -> bool {
         let class_byte = self
             .party
             .get(member_index)
             .map(|member| member.class_byte)
             .unwrap_or_default();
-        class_byte > self.jimmy_lock_pick_roll(member_index)
+        let roll = self.jimmy_lock_pick_roll();
+        jimmy_door_succeeds(class_byte, roll)
     }
 
-    pub fn jimmy_lock_pick_roll(&self, member_index: usize) -> u8 {
-        1 + (self.jimmy_lock_pick_seed(member_index) % 29)
+    pub fn jimmy_lock_pick_roll(&mut self) -> u8 {
+        self.random_range_u8(JIMMY_DOOR_DIE_LOW, JIMMY_DOOR_DIE_HIGH)
     }
 
-    pub fn jimmy_lock_pick_seed(&self, member_index: usize) -> u8 {
-        self.turn as u8
-            ^ self.clock.hour.wrapping_mul(5)
-            ^ self.clock.minute.wrapping_mul(7)
-            ^ (self.player.x as u8).wrapping_mul(11)
-            ^ (self.player.y as u8).wrapping_mul(13)
-            ^ (member_index as u8).wrapping_mul(17)
+    pub fn random_range_u8(&mut self, low: u8, high: u8) -> u8 {
+        u5_prng_range_u16(&mut self.prng_state, u16::from(low), u16::from(high)) as u8
     }
 
     pub fn visible_jimmy_unlock_tile(tile: u8) -> Option<u8> {

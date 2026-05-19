@@ -3232,6 +3232,33 @@
     }
 
     #[test]
+    fn end_to_end_healer_mission_cure_bypasses_shadowlord_surcharge() {
+        use crate::shop_runtime::HealerShopState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[0]).unwrap(),
+            floor: 0,
+        };
+        state.gold = 50;
+        state.party[0].status = b'P';
+        state.active_shop = Some(ActiveShopSession::Healer(
+            HealerShopState::Greeting,
+            Healer::TheHealersMission,
+        ));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'C', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, '1', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 50);
+        assert_eq!(state.party[0].status, b'G');
+        assert_eq!(state.message, "Cured party member 1.");
+        assert!(!state.message.contains("Surcharge"));
+    }
+
+    #[test]
     fn end_to_end_paid_healer_uses_local_fee_and_play_state_treatment() {
         use crate::shop_runtime::HealerShopState;
         use crate::shop_session::ActiveShopSession;

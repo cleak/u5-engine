@@ -98,12 +98,16 @@
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.keys = 2;
         state.visibility_dirty = false;
+        state.party[0].class_byte = 0;
+        state.prng_state = 0x1234;
+        let expected_prng_state = u5_prng_advance_state(state.prng_state);
 
         assert_eq!(
             state.jimmy_facing_with_game_dir_and_member(None, Some(0)).unwrap(),
             MoveOutcome::LockTried
         );
 
+        assert_eq!(state.prng_state, expected_prng_state);
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x7b);
         assert_eq!(state.keys, 2);
         assert_eq!(state.turn, 1);
@@ -118,12 +122,15 @@
         let mut state = dungeon_state(grid, 0, 1, 1);
         state.keys = 2;
         state.party[0].class_byte = 30;
+        state.prng_state = 0x1234;
+        let expected_prng_state = u5_prng_advance_state(state.prng_state);
 
         assert_eq!(
             state.jimmy_facing_with_game_dir_and_member(None, Some(0)).unwrap(),
             MoveOutcome::LockTried
         );
 
+        assert_eq!(state.prng_state, expected_prng_state);
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x4b);
         assert_eq!(state.keys, 1);
         assert_eq!(state.turn, 1);
@@ -137,9 +144,11 @@
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
         state.keys = 0;
+        state.prng_state = 0x1234;
 
         assert_eq!(state.jimmy_facing(), MoveOutcome::Blocked);
 
+        assert_eq!(state.prng_state, 0x1234);
         assert_eq!(state.message, "No keys!");
         assert_eq!(state.turn, 0);
         assert_eq!(state.grid[32 + 2], 96);

@@ -14,6 +14,11 @@ pub const PRNG_STATE_FINAL_BIAS: u16 = 0x0011;
 /// the range reduction always sees a non-negative value, matching
 /// the original signed-arithmetic safety.
 pub const PRNG_NON_NEGATIVE_MASK: u16 = 0x7FFF;
+/// Clean default for newly constructed runtime states. The public
+/// PRNG contract defines the recurrence but not yet the saved-state
+/// offset that seeds restored games, so constructors use the zero
+/// state until a loaded save supplies a more exact resident value.
+pub const DEFAULT_PRNG_STATE: u16 = 0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct U5Prng {

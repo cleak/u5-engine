@@ -188,9 +188,12 @@
         grid[32 + 2] = 97;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
+        state.prng_state = 0x1234;
+        let expected_prng_state = u5_prng_advance_state(state.prng_state);
 
         assert_eq!(state.jimmy_facing(), MoveOutcome::LockTried);
 
+        assert_eq!(state.prng_state, expected_prng_state);
         assert_eq!(state.turn, 1);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
         assert_eq!(state.grid[32 + 2], 96);
@@ -205,9 +208,12 @@
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
         state.party[0].class_byte = 1;
+        state.prng_state = 0x1234;
+        let expected_prng_state = u5_prng_advance_state(state.prng_state);
 
         assert_eq!(state.jimmy_facing(), MoveOutcome::LockTried);
 
+        assert_eq!(state.prng_state, expected_prng_state);
         assert_eq!(state.turn, 1);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK - 1);
         assert_eq!(state.grid[32 + 2], 97);
@@ -218,9 +224,11 @@
     fn jimmy_wrong_tile_reports_no_lock_without_turn() {
         let mut state = test_state(open_grid(), 1, 1);
         state.player.facing = Direction::East;
+        state.prng_state = 0x1234;
 
         assert_eq!(state.jimmy_facing(), MoveOutcome::Blocked);
 
+        assert_eq!(state.prng_state, 0x1234);
         assert_eq!(state.message, "No lock!");
         assert_eq!(state.turn, 0);
     }
@@ -363,12 +371,15 @@
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
         state.visibility_dirty = false;
+        state.prng_state = 0x1234;
+        let expected_prng_state = u5_prng_advance_state(state.prng_state);
 
         assert_eq!(
             state.jimmy_facing_with_game_dir(Some(&dir)).unwrap(),
             MoveOutcome::LockTried
         );
 
+        assert_eq!(state.prng_state, expected_prng_state);
         assert_eq!(state.message, "Unlocked!");
         assert_eq!(state.grid[32 + 2], 96);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
@@ -404,12 +415,15 @@
         state.player.facing = Direction::East;
         state.party[0].class_byte = 1;
         state.visibility_dirty = false;
+        state.prng_state = 0x1234;
+        let expected_prng_state = u5_prng_advance_state(state.prng_state);
 
         assert_eq!(
             state.jimmy_facing_with_game_dir(Some(&dir)).unwrap(),
             MoveOutcome::LockTried
         );
 
+        assert_eq!(state.prng_state, expected_prng_state);
         assert_eq!(state.message, "Key broke!");
         assert_eq!(state.grid[32 + 2], 97);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK - 1);
@@ -670,6 +684,8 @@
         let mut success = test_state(open_grid(), 1, 1);
         success.player.facing = Direction::East;
         success.party[0].class_byte = 1;
+        success.prng_state = 0x1234;
+        let expected_success_prng_state = u5_prng_advance_state(success.prng_state);
         success.active_objects.push(ActiveObject {
             type_byte: 0x4f,
             tile: 0x4f,
@@ -682,6 +698,7 @@
         });
 
         assert_eq!(success.jimmy_facing(), MoveOutcome::LockTried);
+        assert_eq!(success.prng_state, expected_success_prng_state);
         assert_eq!(success.keys, DEFAULT_KEY_STOCK - 1);
         assert_eq!(success.active_objects[1].aux1, 0x90);
         assert_eq!(success.turn, 1);
@@ -690,6 +707,8 @@
         let mut failure = test_state(open_grid(), 1, 1);
         failure.player.facing = Direction::East;
         failure.party[0].class_byte = 60;
+        failure.prng_state = 0x1234;
+        let expected_failure_prng_state = u5_prng_advance_state(failure.prng_state);
         failure.active_objects.push(ActiveObject {
             type_byte: 0x4f,
             tile: 0x4f,
@@ -702,6 +721,7 @@
         });
 
         assert_eq!(failure.jimmy_facing(), MoveOutcome::LockTried);
+        assert_eq!(failure.prng_state, expected_failure_prng_state);
         assert_eq!(failure.keys, DEFAULT_KEY_STOCK);
         assert_eq!(failure.active_objects[1].aux1, 0x01);
         assert_eq!(failure.turn, 1);
@@ -795,12 +815,14 @@
         grid[32 + 2] = 96;
         let mut state = test_state(grid, 1, 1);
         state.player.facing = Direction::East;
+        state.prng_state = 0x1234;
 
         assert_eq!(
             state.jimmy_facing_with_game_dir(Some(&dir)).unwrap(),
             MoveOutcome::Blocked
         );
 
+        assert_eq!(state.prng_state, 0x1234);
         assert_eq!(state.message, "Magic lock!");
         assert_eq!(state.grid[32 + 2], 96);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);

@@ -574,7 +574,11 @@ fn handle_active_shop_key_input(
                     match state.buy_healer_treatment(*healer, treatment, usize::from(slot)) {
                         Ok(outcome) => {
                             let surcharge =
-                                apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_HEALER);
+                                if matches!(outcome.quote.fee, HealerTreatmentFee::Price(_)) {
+                                    apply_active_shop_surcharge(state, ACTIVE_SHOP_SURCHARGE_HEALER)
+                                } else {
+                                    None
+                                };
                             append_active_shop_surcharge(
                                 format_healer_treatment_outcome(outcome),
                                 surcharge,

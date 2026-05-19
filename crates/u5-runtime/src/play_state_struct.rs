@@ -17,6 +17,7 @@ pub struct PlayState {
     pub moongates: Vec<MoongateEntry>,
     pub grid: Vec<u8>,
     pub clock: GameClock,
+    pub prng_state: u16,
     pub animation: AnimationClock,
     pub natural_moongate_counter: u8,
     pub natural_moongate_live_cells: Vec<usize>,
