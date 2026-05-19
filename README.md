@@ -78,8 +78,8 @@ in the status panel, support Backspace, and submit on Enter.
 The runtime also exposes a spec-backed fixed-cell text-window core with four
 independent descriptors, preserved per-window cursors, style control bytes,
 clear/scroll behavior, wrapped output, numeric output, and typed-input erasure;
-frontends can use this as the bridge from current diagnostic panels toward the
-original 40x25 text-window contract.
+TUI and Bevy status/modal summaries now share a 40x25 text-window surface for
+message, prompt echo, and the fixed sixteen-column stats panel.
 
 `--intro --visual` opens a Bevy intro/menu shell backed by the same runtime menu
 dispatcher used by terminal intro mode. Journey Onward loads `SAVED.GAM` and

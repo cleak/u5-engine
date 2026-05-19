@@ -14,13 +14,15 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-19, including 2370 tests.
+- `cargo test -p u5-runtime` passed on 2026-05-19, including 2372 tests.
 - `cargo test -p u5-tui` passed on 2026-05-19.
 - `cargo fmt -- --check` passed on 2026-05-19 after the latest Rust changes.
 - Representative raster smoke checks with local assets produced nonblank hashes:
   `BRITANNIA` top-down `fd923dc0f87a9f3c`, `BRITANNIA` after movement
   `1eb882f27b1d216c`, `CASTLE:0` top-down `be84488b7b199310`, and
   `DUNGEON:0` first-person `161ad48dd2a91725`.
+- Bevy visual screenshot smoke with local assets produced a nonblank
+  `792x1182` PNG at `target\codex-text-window-smoke.png`.
 - `--save-frame <PATH>` is the current headless PNG capture path for local
   asset visual checks.
 - `cargo run -- --help` is a supported no-asset usage path.
@@ -337,8 +339,8 @@ experience.
   - Show status/message panels.
   - A spec-backed fixed-cell text-window core now covers four descriptors,
     cursor preservation, style controls, clear/scroll, wrapped strings,
-    numeric output, and typed-input erasure; frontends still need to replace
-    ad hoc modal summaries with this surface.
+    numeric output, typed-input erasure, and a shared message/prompt/stats
+    screen surface used by TUI and Bevy status/modal summaries.
   - Verify with screenshots or pixel hashes where practical.
 
 - Build a dungeon renderer.

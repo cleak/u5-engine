@@ -43,7 +43,7 @@ const VIEWPORT_SIZE_PX: u32 = (VIEWPORT_CELLS * TILE_ATLAS_SIDE) as u32;
 const DISPLAY_SCALE: f32 = 3.0;
 const STATUS_PANEL_HEIGHT: f32 = 260.0;
 const STATUS_PANEL_PADDING: f32 = 8.0;
-const STATUS_FONT_SIZE: f32 = 14.0;
+const STATUS_FONT_SIZE: f32 = 9.0;
 
 const READY_HINT: &str =
     "WASD/arrows: move. Shift+A attacks, Shift+S searches. Ctrl+S music. Esc quit.";
@@ -1503,11 +1503,8 @@ fn summarize(state: &mut PlayState, fallback: &str, input_line: &str) -> String 
         msg
     );
     summary.push('\n');
-    summary.push_str(&state.render_stats_panel_frame());
-    if visual_line_prompt_active(state) {
-        summary.push_str("\n> ");
-        summary.push_str(input_line);
-    }
+    let input_echo = visual_line_prompt_active(state).then_some(input_line);
+    summary.push_str(&state.render_text_window_frame(input_echo));
     summary
 }
 
@@ -2091,7 +2088,7 @@ mod tests {
 
         assert_eq!(input_line, "j");
         let summary = summarize(&mut state, "", &input_line);
-        assert!(summary.ends_with("\n> j"));
+        assert!(summary.contains("\n> j"));
     }
 
     #[test]

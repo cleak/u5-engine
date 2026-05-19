@@ -1087,6 +1087,19 @@ impl PlayState {
         panel
     }
 
+    pub fn render_text_window_view(&self, input_echo: Option<&str>) -> String {
+        render_play_text_window_ascii(self, self.active_player, input_echo)
+    }
+
+    pub fn render_text_window_frame(&mut self, input_echo: Option<&str>) -> String {
+        let active_cursor = self.active_player;
+        let frame = render_play_text_window_ascii(self, active_cursor, input_echo);
+        if stats_panel_active_cursor_visible(self, active_cursor) {
+            self.active_player = None;
+        }
+        frame
+    }
+
     pub fn render_z_stats_session(&self, session: &ZStatsSession) -> String {
         let mut lines = vec![format!(
             "Z-stats: {} page, party member {} of {}.",

@@ -5,6 +5,13 @@ use crate::*;
 pub const STATS_PANEL_WIDTH: usize = 16;
 pub const STATS_PANEL_PARTY_ROWS: usize = SAVE_PARTY_SIZE_MAX as usize;
 pub const STATS_PANEL_COMBAT_ROW_MARKER: char = '*';
+pub const MAIN_TEXT_WINDOW_INDEX: usize = 0;
+pub const STATS_PANEL_TEXT_WINDOW_INDEX: usize = 1;
+pub const PROMPT_TEXT_WINDOW_INDEX: usize = 2;
+pub const MESSAGE_TEXT_WINDOW_RIGHT: u8 = 23;
+pub const STATS_PANEL_TEXT_LEFT: u8 = 23;
+pub const STATS_PANEL_TEXT_RIGHT: u8 = TEXT_SCREEN_COLUMNS - 1;
+pub const STATS_PANEL_TEXT_BOTTOM: u8 = TEXT_SCREEN_ROWS - 1;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct StatsPanelCombatRowOverlay {
@@ -23,6 +30,89 @@ pub fn render_stats_panel(state: &PlayState, active_cursor: Option<usize>) -> St
     lines.push(render_stats_panel_date_row(&state.clock));
     lines.push(render_stats_panel_sky_status_row(state));
     lines.join("\n")
+}
+
+pub fn configure_play_text_windows(system: &mut TextWindowSystem) {
+    system.set_window_rect(
+        MAIN_TEXT_WINDOW_INDEX,
+        0,
+        0,
+        MESSAGE_TEXT_WINDOW_RIGHT,
+        TEXT_SCREEN_ROWS - 1,
+    );
+    system.set_window_rect(
+        STATS_PANEL_TEXT_WINDOW_INDEX,
+        STATS_PANEL_TEXT_LEFT,
+        0,
+        STATS_PANEL_TEXT_RIGHT,
+        STATS_PANEL_TEXT_BOTTOM,
+    );
+    system.set_window_rect(
+        PROMPT_TEXT_WINDOW_INDEX,
+        0,
+        TEXT_SCREEN_ROWS - 2,
+        MESSAGE_TEXT_WINDOW_RIGHT,
+        TEXT_SCREEN_ROWS - 1,
+    );
+    system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
+}
+
+pub fn render_play_text_window_system(
+    state: &PlayState,
+    active_cursor: Option<usize>,
+    input_echo: Option<&str>,
+) -> TextWindowSystem {
+    let mut system = TextWindowSystem::new();
+    configure_play_text_windows(&mut system);
+    paint_message_text_window(&mut system, &state.message);
+    paint_stats_panel_text_window(&mut system, state, active_cursor);
+    if let Some(input_echo) = input_echo {
+        paint_prompt_text_window(&mut system, input_echo);
+    }
+    system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
+    system
+}
+
+pub fn render_play_text_window_ascii(
+    state: &PlayState,
+    active_cursor: Option<usize>,
+    input_echo: Option<&str>,
+) -> String {
+    render_play_text_window_system(state, active_cursor, input_echo)
+        .screen_rows(b' ')
+        .join("\n")
+}
+
+pub fn paint_message_text_window(system: &mut TextWindowSystem, message: &str) {
+    system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
+    system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
+    system.set_active_cursor(0, 0);
+    system.print_wrapped_string(message);
+}
+
+pub fn paint_stats_panel_text_window(
+    system: &mut TextWindowSystem,
+    state: &PlayState,
+    active_cursor: Option<usize>,
+) {
+    system.set_active_window(STATS_PANEL_TEXT_WINDOW_INDEX);
+    system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
+    for (row, line) in render_stats_panel(state, active_cursor).lines().enumerate() {
+        if row >= usize::from(TEXT_SCREEN_ROWS) {
+            break;
+        }
+        system.set_active_cursor(0, row.min(u8::MAX as usize) as u8);
+        system.print_wrapped_string(line.trim_end());
+    }
+}
+
+pub fn paint_prompt_text_window(system: &mut TextWindowSystem, input_echo: &str) {
+    system.set_active_window(PROMPT_TEXT_WINDOW_INDEX);
+    system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
+    system.set_active_cursor(0, 0);
+    system.emit_byte(b'>');
+    system.emit_byte(b' ');
+    system.print_wrapped_string(input_echo);
 }
 
 pub fn stats_panel_active_cursor_visible(state: &PlayState, active_cursor: Option<usize>) -> bool {

@@ -286,6 +286,25 @@ impl TextWindowSystem {
         self.cells[usize::from(y) * TEXT_SCREEN_COLUMNS as usize + usize::from(x)]
     }
 
+    pub fn screen_rows(&self, fill: u8) -> Vec<String> {
+        self.region_rows(0, 0, TEXT_SCREEN_COLUMNS - 1, TEXT_SCREEN_ROWS - 1, fill)
+    }
+
+    pub fn region_rows(&self, x1: u8, y1: u8, x2: u8, y2: u8, fill: u8) -> Vec<String> {
+        let (left, top, right, bottom) = text_window_clamp_rectangle(x1, y1, x2, y2);
+        let mut rows = Vec::with_capacity(usize::from(bottom - top + 1));
+        for y in top..=bottom {
+            let mut row = String::with_capacity(usize::from(right - left + 1));
+            for x in left..=right {
+                row.push(char::from(
+                    self.cell(x, y).map(|cell| cell.byte).unwrap_or(fill),
+                ));
+            }
+            rows.push(row);
+        }
+        rows
+    }
+
     pub fn emit_byte(&mut self, byte: u8) {
         match text_emitter_byte_kind(byte) {
             EmitterByteKind::Glyph(glyph) => self.emit_glyph(glyph),

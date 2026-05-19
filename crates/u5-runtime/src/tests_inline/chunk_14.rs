@@ -1016,6 +1016,54 @@
     }
 
     #[test]
+    fn play_text_window_system_paints_message_stats_and_prompt_windows() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.message = "Hello Britannia".to_string();
+        state.active_player = Some(0);
+
+        let system = render_play_text_window_system(&state, state.active_player, Some("job"));
+
+        assert_eq!(system.active_window_index(), MAIN_TEXT_WINDOW_INDEX);
+        assert_eq!(system.cell(0, 0).unwrap().byte, b'H');
+        assert_eq!(
+            system
+                .region_rows(
+                    STATS_PANEL_TEXT_LEFT,
+                    0,
+                    STATS_PANEL_TEXT_RIGHT,
+                    0,
+                    b' '
+                )
+                .first()
+                .unwrap()
+                .trim_end(),
+            "STATS"
+        );
+        assert_eq!(system.cell(STATS_PANEL_TEXT_LEFT, 1).unwrap().byte, b'A');
+        assert_eq!(system.cell(0, TEXT_SCREEN_ROWS - 2).unwrap().byte, b'>');
+        assert_eq!(system.cell(1, TEXT_SCREEN_ROWS - 2).unwrap().byte, b' ');
+        assert_eq!(system.cell(2, TEXT_SCREEN_ROWS - 2).unwrap().byte, b'j');
+    }
+
+    #[test]
+    fn play_text_window_frame_consumes_active_cursor_like_stats_panel() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_player = Some(0);
+
+        let visible_frame = state.render_text_window_frame(None);
+
+        assert!(visible_frame.lines().nth(1).unwrap().contains(">"));
+        assert_eq!(state.active_player, None);
+
+        state.active_player = Some(0);
+        state.party[0].status = b'S';
+        let sleeping_frame = state.render_text_window_frame(None);
+
+        assert!(!sleeping_frame.lines().nth(1).unwrap().contains(">"));
+        assert_eq!(state.active_player, Some(0));
+    }
+
+    #[test]
     fn stats_panel_derives_combat_row_overlay_from_live_combat_state() {
         let mut state = test_state(open_grid(), 1, 1);
         state.combat_active = true;
