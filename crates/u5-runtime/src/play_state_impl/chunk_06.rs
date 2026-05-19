@@ -122,7 +122,7 @@ impl PlayState {
             return Some(MoveOutcome::Blocked);
         }
 
-        let Some(wind_direction) = self.wind.direction() else {
+        let Some(wait_ticks) = self.wind.player_sail_wait_ticks(direction) else {
             self.sail_cadence = 0;
             self.sail_stall_pending = true;
             self.advance_sailing_wait_turn();
@@ -130,21 +130,13 @@ impl PlayState {
             return Some(MoveOutcome::SailStalled);
         };
 
-        if direction == wind_direction {
+        if self.sail_cadence >= wait_ticks {
             self.sail_cadence = 0;
             self.sail_stall_pending = false;
             return None;
         }
-        if direction.opposite_cardinal() == Some(wind_direction) {
-            self.sail_cadence = self.sail_cadence.wrapping_add(1) & 1;
-            if self.sail_cadence == 0 {
-                self.sail_stall_pending = false;
-                return None;
-            }
-        } else {
-            self.sail_cadence = 0;
-        }
 
+        self.sail_cadence = self.sail_cadence.saturating_add(1);
         self.advance_sailing_wait_turn();
         self.sail_stall_pending = true;
         self.message = format!(

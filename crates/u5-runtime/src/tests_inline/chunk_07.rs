@@ -1264,9 +1264,9 @@ fn pass_reports_and_clears_sail_stall_feedback() {
 }
 
 #[test]
-fn hoisted_ship_advances_with_matching_wind() {
+fn hoisted_ship_advances_immediately_with_perpendicular_wind() {
     let mut state = world_state(vec![1; WORLD_CELLS], 10, 10);
-    state.wind = WindState::East;
+    state.wind = WindState::North;
     state.player.transport = TransportState::Ship {
         type_byte: 168,
         tile: 168,
@@ -1284,7 +1284,7 @@ fn hoisted_ship_advances_with_matching_wind() {
 }
 
 #[test]
-fn hoisted_ship_against_wind_uses_slow_cadence() {
+fn hoisted_ship_with_wind_uses_one_wait_tick() {
     let mut state = world_state(vec![1; WORLD_CELLS], 10, 10);
     state.wind = WindState::East;
     state.player.transport = TransportState::Ship {
@@ -1304,6 +1304,83 @@ fn hoisted_ship_against_wind_uses_slow_cadence() {
     assert_eq!((state.player.x, state.player.y), (9, 10));
     assert_eq!(state.turn, 2);
     assert_eq!(state.clock, GameClock::new(12, 4).unwrap());
+}
+
+#[test]
+fn hoisted_ship_into_wind_uses_two_wait_ticks() {
+    let mut state = world_state(vec![1; WORLD_CELLS], 10, 10);
+    state.wind = WindState::East;
+    state.player.transport = TransportState::Ship {
+        type_byte: 168,
+        tile: 168,
+        sails_hoisted: true,
+        hull: 0,
+        skiffs: 0,
+    };
+    state.sync_player_object();
+
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
+    assert_eq!((state.player.x, state.player.y), (10, 10));
+    assert_eq!(state.sail_cadence, 1);
+    assert_eq!(state.turn, 1);
+
+    assert_eq!(state.step(Direction::East), MoveOutcome::SailStalled);
+    assert_eq!((state.player.x, state.player.y), (10, 10));
+    assert_eq!(state.sail_cadence, 2);
+    assert_eq!(state.turn, 2);
+
+    assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+    assert_eq!((state.player.x, state.player.y), (11, 10));
+    assert_eq!(state.sail_cadence, 0);
+    assert_eq!(state.turn, 3);
+    assert_eq!(state.clock, GameClock::new(12, 6).unwrap());
+}
+
+#[test]
+fn save_after_wind_driven_ship_move_persists_wind_and_ship_marker() {
+    let dir = debug_game_dir();
+    fs::write(dir.join("INIT.GAM"), saved_game_seed_bytes(0, 0xff, 11, 10)).unwrap();
+    fs::write(dir.join(BRIT_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+    fs::write(dir.join(UNDER_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+    let mut state = world_state(vec![1; WORLD_CELLS], 10, 10);
+    state.wind = WindState::North;
+    state.wind_save_byte = WindState::North.save_byte();
+    state.player.transport = TransportState::Ship {
+        type_byte: TRANSPORT_MARKER_SHIP_HOISTED_FIRST + 1,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE + 1,
+        sails_hoisted: true,
+        hull: 77,
+        skiffs: 2,
+    };
+    state.sync_player_object();
+
+    assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+    assert_eq!(
+        state.save_game_command(&dir, Some(true)).unwrap(),
+        MoveOutcome::Saved
+    );
+
+    let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+    assert_eq!(saved[SAVE_WIND_OFFSET], WindState::North.save_byte());
+    assert_eq!(
+        saved[SAVE_TRANSPORT_MARKER_OFFSET],
+        TRANSPORT_MARKER_SHIP_HOISTED_FIRST + 1
+    );
+    assert_eq!(saved[SAVE_X_OFFSET], 11);
+    assert_eq!(saved[SAVE_Y_OFFSET], 10);
+    let reloaded = load_play_options_from_save(&dir).unwrap();
+    assert_eq!(reloaded.wind, WindState::North);
+    assert_eq!(
+        reloaded.transport,
+        TransportState::Ship {
+            type_byte: TRANSPORT_MARKER_SHIP_HOISTED_FIRST + 1,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE + 1,
+            sails_hoisted: true,
+            hull: 0,
+            skiffs: 0,
+        }
+    );
+    let _ = fs::remove_dir_all(dir);
 }
 
 #[test]

@@ -394,11 +394,16 @@ first-playable session without losing supported state.
     - save/load tests for shrine completion and Codex turn-in.
 
 - Vehicles and timing tags.
+  - Current tests cover ship/skiff/carpet/horse transport markers, hull/skiff
+    side bytes for parked ships, board/exit/fire active-object overlay writes,
+    and wind-driven hoisted-sail save/load after movement.
   - Remaining work:
-    - exact ship facing/sail marker variants,
-    - exact hull/skiff persistence,
+    - continue auditing exact ship facing/sail marker variants against any new
+      public marker evidence,
+    - continue auditing hull/skiff persistence across shop delivery and exotic
+      transition paths,
     - all timing/status tags beyond currently recognized `Q` and `T`,
-    - save/load after wind-driven movement and vehicle transitions.
+    - save/load after town/dungeon vehicle-adjacent transitions.
 
 ## Milestone 3: Rendering And Presentation
 
