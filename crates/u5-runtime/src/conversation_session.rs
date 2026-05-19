@@ -252,6 +252,32 @@ impl ConversationSession {
         matches!(self.phase, ConversationSessionPhase::Closed)
     }
 
+    pub fn npc_name(&self) -> Option<String> {
+        self.decoded_fields
+            .first()
+            .map(String::as_str)
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                let raw = self.fields.first()?;
+                let text: String = raw
+                    .iter()
+                    .take_while(|byte| **byte != 0)
+                    .map(|byte| (byte & 0x7F) as char)
+                    .collect();
+                let text = text.trim().to_string();
+                (!text.is_empty()).then_some(text)
+            })
+    }
+
+    pub fn awaiting_ask_party_name(&self) -> bool {
+        matches!(
+            self.phase,
+            ConversationSessionPhase::AwaitingAskPartyName { .. }
+        )
+    }
+
     fn find_ordinary_keyword_response_index(&self, input_upper: &[u8]) -> Option<usize> {
         // Pairs start at field index 5: (keyword, response, keyword,
         // response, ...). Scan keyword positions; the response is the

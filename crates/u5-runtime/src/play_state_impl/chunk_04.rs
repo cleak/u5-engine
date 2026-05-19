@@ -1469,6 +1469,7 @@ impl PlayState {
             party_strengths: self.party_strengths.clone(),
             party_intelligence: self.party_intelligence.clone(),
             party_equipment: self.party_equipment.clone(),
+            party_roster: self.synced_party_roster(),
             equipment_stock: self.equipment_stock,
             spell_charges: self.spell_charges,
             scroll_stock: self.scroll_stock,
@@ -2893,6 +2894,11 @@ impl PlayState {
     /// Returns the rendered response text and a flag indicating
     /// whether the session has ended.
     pub fn submit_active_conversation_keyword(&mut self, line: &str) -> (String, bool) {
+        let join_keyword = line.trim().eq_ignore_ascii_case("join");
+        let join_candidate = self
+            .active_conversation
+            .as_ref()
+            .and_then(|session| session.npc_name());
         let avatar_name = self
             .party_names
             .first()
@@ -2925,16 +2931,35 @@ impl PlayState {
         };
         let mut text = String::new();
         let mut ended = false;
+        let mut asked_party_name = None;
         if let Some(session) = self.active_conversation.as_mut() {
             let output = session.submit_keyword(line, &ctx);
             text = output.text.clone();
             ended = output.ended;
+            asked_party_name = output.asked_party_name;
             self.apply_tlk_action_grants(&output.action_grants);
             self.apply_tlk_gold_payments(&output.gold_payments);
             self.record_tlk_signal_flags(&output.signal_flags);
             if let Area::Town { scene, .. } = self.area {
                 self.merge_talk_branch_flags(scene, output.branch_flags_set);
             }
+        }
+        if join_keyword {
+            self.active_conversation_join_candidate = join_candidate;
+        }
+        if let Some(answer_slot) = asked_party_name {
+            if let Some(candidate) = self.active_conversation_join_candidate.take() {
+                if let Some(join_text) =
+                    self.apply_conversation_join_candidate(&candidate, answer_slot)
+                {
+                    if !text.is_empty() {
+                        text.push(' ');
+                    }
+                    text.push_str(&join_text);
+                }
+            }
+        } else if !join_keyword {
+            self.active_conversation_join_candidate = None;
         }
         if ended {
             if let Some(session) = self.active_conversation.as_mut() {
@@ -2952,11 +2977,185 @@ impl PlayState {
         (text, ended)
     }
 
-    /// Shared town/conversation sentinel per `quest-flags.md §5` and
-    /// `shops.md §6.2`. Town setup exposes either a tracked
-    /// Shadowlord slot index (`0..=2`) for the active scene or the
-    /// no-slot marker. Cleanup and shop surcharge readers only use
-    /// the zero-versus-nonzero predicate.
+    /// Return a save-roster view with the live active-party prefix
+    /// overlaid onto the preserved inactive records.
+    pub fn synced_party_roster(&self) -> Vec<PartyRosterRecord> {
+        let mut roster = if self.party_roster.is_empty() {
+            party_roster_from_active(
+                &self.party,
+                &self.party_names,
+                &self.party_experience,
+                &self.party_stay_counters,
+                &self.party_strengths,
+                &self.party_intelligence,
+                &self.party_equipment,
+            )
+        } else {
+            self.party_roster.clone()
+        };
+
+        if roster.len() < self.party.len() {
+            roster.resize_with(self.party.len(), || PartyRosterRecord {
+                member: PartyMember {
+                    slot: 0,
+                    class_byte: b'A',
+                    status: b'G',
+                    climb_stat: DEFAULT_CLIMB_STAT,
+                    mana: 0,
+                    hp: DEFAULT_PARTY_HP,
+                    max_hp: DEFAULT_PARTY_MAX_HP,
+                    level: 1,
+                },
+                name: [0; SAVE_CHARACTER_NAME_LEN],
+                experience: 0,
+                stay_counter: 0,
+                strength: AVATAR_STAT_MAX,
+                intelligence: AVATAR_STAT_MAX,
+                equipment: [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT],
+            });
+        }
+
+        for index in 0..self.party.len() {
+            if self.party_names.get(index).is_none() && roster.get(index).is_some() {
+                continue;
+            }
+            let mut member = self.party[index];
+            member.slot = index as u8;
+            let previous = roster.get(index).cloned();
+            roster[index] = PartyRosterRecord {
+                member,
+                name: self
+                    .party_names
+                    .get(index)
+                    .copied()
+                    .or_else(|| previous.as_ref().map(|record| record.name))
+                    .unwrap_or([0; SAVE_CHARACTER_NAME_LEN]),
+                experience: self
+                    .party_experience
+                    .get(index)
+                    .copied()
+                    .or_else(|| previous.as_ref().map(|record| record.experience))
+                    .unwrap_or(0),
+                stay_counter: self
+                    .party_stay_counters
+                    .get(index)
+                    .copied()
+                    .or_else(|| previous.as_ref().map(|record| record.stay_counter))
+                    .unwrap_or(0),
+                strength: self
+                    .party_strengths
+                    .get(index)
+                    .copied()
+                    .or_else(|| previous.as_ref().map(|record| record.strength))
+                    .unwrap_or_else(|| {
+                        if index == 0 {
+                            self.avatar_stats.strength
+                        } else {
+                            AVATAR_STAT_MAX
+                        }
+                    }),
+                intelligence: self
+                    .party_intelligence
+                    .get(index)
+                    .copied()
+                    .or_else(|| previous.as_ref().map(|record| record.intelligence))
+                    .unwrap_or_else(|| {
+                        if index == 0 {
+                            self.avatar_stats.intelligence
+                        } else {
+                            AVATAR_STAT_MAX
+                        }
+                    }),
+                equipment: self
+                    .party_equipment
+                    .get(index)
+                    .copied()
+                    .or_else(|| previous.as_ref().map(|record| record.equipment))
+                    .unwrap_or([EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT]),
+            };
+        }
+        roster
+    }
+
+    pub fn sync_active_party_from_roster_len(&mut self, active_len: usize) {
+        let active_len = active_len
+            .min(SAVE_PARTY_SIZE_MAX as usize)
+            .min(self.party_roster.len());
+        self.party.clear();
+        self.party_names.clear();
+        self.party_experience.clear();
+        self.party_stay_counters.clear();
+        self.party_strengths.clear();
+        self.party_intelligence.clear();
+        self.party_equipment.clear();
+
+        for (index, record) in self.party_roster.iter().take(active_len).enumerate() {
+            let mut member = record.member;
+            member.slot = index as u8;
+            self.party.push(member);
+            self.party_names.push(record.name);
+            self.party_experience.push(record.experience);
+            self.party_stay_counters.push(record.stay_counter);
+            self.party_strengths.push(record.strength);
+            self.party_intelligence.push(record.intelligence);
+            self.party_equipment.push(record.equipment);
+        }
+
+        if let Some(avatar) = self.party_roster.first() {
+            self.avatar_stats = AvatarStats {
+                strength: avatar.strength,
+                dexterity: avatar.member.climb_stat,
+                intelligence: avatar.intelligence,
+            };
+        }
+        if self.active_player.is_some_and(|index| index >= active_len) {
+            self.active_player = None;
+        }
+    }
+
+    pub fn apply_conversation_join_candidate(
+        &mut self,
+        candidate_name: &str,
+        asked_party_name: u8,
+    ) -> Option<String> {
+        let active_len = self.party.len().min(SAVE_PARTY_SIZE_MAX as usize);
+        self.party_roster = self.synced_party_roster();
+        let target_index = self
+            .party_roster
+            .iter()
+            .position(|record| party_roster_name_matches(record, candidate_name))?;
+        if target_index < active_len {
+            return None;
+        }
+
+        let joined_name = party_name_to_string(&self.party_roster[target_index].name)
+            .unwrap_or_else(|| candidate_name.trim().to_string());
+        if active_len < SAVE_PARTY_SIZE_MAX as usize {
+            let joining = self.party_roster.remove(target_index);
+            self.party_roster.insert(active_len, joining);
+            self.sync_active_party_from_roster_len(active_len + 1);
+            return Some(format!("{joined_name} joined."));
+        }
+
+        let replace_index = usize::from(asked_party_name).checked_sub(1)?;
+        if replace_index == 0 || replace_index >= active_len {
+            return None;
+        }
+
+        let joining = self.party_roster.remove(target_index);
+        let leaving = self.party_roster.remove(replace_index);
+        let leaving_name = party_name_to_string(&leaving.name)
+            .unwrap_or_else(|| format!("party member {}", replace_index.saturating_add(1)));
+        self.party_roster.insert(replace_index, joining);
+        self.party_roster.insert(active_len, leaving);
+        if self.active_player == Some(replace_index) {
+            self.active_player = None;
+        }
+        self.sync_active_party_from_roster_len(active_len);
+        Some(format!("{joined_name} joined; {leaving_name} left."))
+    }
+
+    /// Return the active scene's shared conversation cleanup sentinel.
     pub fn shared_town_conversation_sentinel(&self) -> u8 {
         let Area::Town { scene, .. } = self.area else {
             return CONVERSATION_SHARED_NO_SLOT_SENTINEL;
@@ -3093,6 +3292,13 @@ impl PlayState {
         };
         self.set_talk_branch_flag_for_scene(scene, bit_index)
     }
+}
+
+fn party_roster_name_matches(record: &PartyRosterRecord, needle: &str) -> bool {
+    let Some(name) = party_name_to_string(&record.name) else {
+        return false;
+    };
+    name.eq_ignore_ascii_case(needle.trim())
 }
 
 pub fn decrement_signal_high_to_low(signals: &mut [u8]) -> Option<usize> {

@@ -67,6 +67,17 @@ impl PartyMember {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PartyRosterRecord {
+    pub member: PartyMember,
+    pub name: [u8; SAVE_CHARACTER_NAME_LEN],
+    pub experience: u16,
+    pub stay_counter: u8,
+    pub strength: u8,
+    pub intelligence: u8,
+    pub equipment: [u8; EQUIPMENT_SLOT_COUNT],
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MoonstoneGateSlot {
     pub scene: u8,
@@ -145,6 +156,56 @@ pub fn default_party() -> Vec<PartyMember> {
         max_hp: DEFAULT_PARTY_MAX_HP,
         level: 8,
     }]
+}
+
+pub fn party_roster_from_active(
+    party: &[PartyMember],
+    names: &[[u8; SAVE_CHARACTER_NAME_LEN]],
+    experience: &[u16],
+    stay_counters: &[u8],
+    strengths: &[u8],
+    intelligence: &[u8],
+    equipment: &[[u8; EQUIPMENT_SLOT_COUNT]],
+) -> Vec<PartyRosterRecord> {
+    party
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(index, member)| PartyRosterRecord {
+            member,
+            name: names
+                .get(index)
+                .copied()
+                .unwrap_or([0; SAVE_CHARACTER_NAME_LEN]),
+            experience: experience.get(index).copied().unwrap_or(0),
+            stay_counter: stay_counters.get(index).copied().unwrap_or(0),
+            strength: strengths.get(index).copied().unwrap_or(AVATAR_STAT_MAX),
+            intelligence: intelligence.get(index).copied().unwrap_or(AVATAR_STAT_MAX),
+            equipment: equipment
+                .get(index)
+                .copied()
+                .unwrap_or([EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT]),
+        })
+        .collect()
+}
+
+pub fn default_party_roster(party_len: usize) -> Vec<PartyRosterRecord> {
+    let party = default_party();
+    let names = default_party_names(party_len);
+    let experience = default_party_experience(party_len);
+    let stay_counters = default_party_stay_counters(party_len);
+    let strengths = default_party_strengths(party_len);
+    let intelligence = default_party_intelligence(party_len);
+    let equipment = default_party_equipment(party_len);
+    party_roster_from_active(
+        &party,
+        &names,
+        &experience,
+        &stay_counters,
+        &strengths,
+        &intelligence,
+        &equipment,
+    )
 }
 
 pub fn default_party_names(party_len: usize) -> Vec<[u8; SAVE_CHARACTER_NAME_LEN]> {

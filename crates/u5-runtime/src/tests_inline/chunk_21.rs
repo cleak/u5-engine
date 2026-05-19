@@ -1588,6 +1588,146 @@
         assert!(state.active_conversation.is_some());
     }
 
+    fn conversation_test_roster_record(
+        slot: u8,
+        name: &[u8; SAVE_CHARACTER_NAME_LEN],
+        class_byte: u8,
+    ) -> PartyRosterRecord {
+        PartyRosterRecord {
+            member: PartyMember {
+                slot,
+                class_byte,
+                status: b'G',
+                climb_stat: 10 + slot,
+                mana: slot,
+                hp: 20 + u16::from(slot),
+                max_hp: 30 + u16::from(slot),
+                level: 1 + slot,
+            },
+            name: *name,
+            experience: u16::from(slot) * 100,
+            stay_counter: slot,
+            strength: 15 + slot,
+            intelligence: 18 + slot,
+            equipment: [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT],
+        }
+    }
+
+    #[test]
+    fn conversation_join_adds_inactive_roster_companion() {
+        let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
+        dialogue.insert(
+            0x10,
+            vec![
+                "Gwenno".to_string(),
+                "a bard".to_string(),
+                "Greetings".to_string(),
+                "I sing".to_string(),
+                "Farewell".to_string(),
+                "JOIN".to_string(),
+                "Name thy companion.".to_string(),
+            ],
+        );
+
+        let enc = |s: &str| s.bytes().map(|b| b ^ 0x80).collect::<Vec<u8>>();
+        let mut join_response = enc("Name thy companion.");
+        join_response.push(TLK_CODE_ASK_PARTY_NAME);
+        join_response.extend(enc(" Accepted."));
+        join_response.push(TLK_CODE_END_OF_RESPONSE);
+        let mut raw: HashMap<u16, Vec<Vec<u8>>> = HashMap::new();
+        raw.insert(
+            0x10,
+            vec![
+                enc("Gwenno"),
+                enc("a bard"),
+                enc("Greetings"),
+                enc("I sing"),
+                enc("Farewell"),
+                enc("JOIN"),
+                join_response,
+            ],
+        );
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party_roster = vec![
+            conversation_test_roster_record(0, b"AVATAR\0\0\0", b'A'),
+            conversation_test_roster_record(1, b"GWENNO\0\0\0", b'B'),
+        ];
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x10,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        assert_eq!(
+            state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+            MoveOutcome::Talked
+        );
+
+        let (prompt, ended) = state.submit_active_conversation_keyword("JOIN");
+        assert_eq!(prompt, "Name thy companion.");
+        assert!(!ended);
+        assert_eq!(
+            state.active_conversation_join_candidate.as_deref(),
+            Some("Gwenno")
+        );
+        let (text, ended) = state.submit_active_conversation_keyword("Avatar");
+
+        assert!(text.contains("Accepted."));
+        assert!(text.contains("joined."));
+        assert!(!ended);
+        assert_eq!(state.party.len(), 2);
+        assert_eq!(state.party_names[1], *b"GWENNO\0\0\0");
+    }
+
+    #[test]
+    fn conversation_join_full_party_replaces_answered_companion() {
+        let names: [[u8; SAVE_CHARACTER_NAME_LEN]; SAVE_PARTY_SIZE_MAX as usize] = [
+            *b"AVATAR\0\0\0",
+            *b"IOLO\0\0\0\0\0",
+            *b"SHAMINO\0\0",
+            *b"MARIAH\0\0\0",
+            *b"JULIA\0\0\0\0",
+            *b"GEOFFREY\0",
+        ];
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party = (0..SAVE_PARTY_SIZE_MAX)
+            .map(|slot| conversation_test_roster_record(slot, &names[slot as usize], b'B').member)
+            .collect();
+        state.party_names = names.to_vec();
+        state.party_experience = (0..SAVE_PARTY_SIZE_MAX)
+            .map(|slot| u16::from(slot) * 100)
+            .collect();
+        state.party_stay_counters = (0..SAVE_PARTY_SIZE_MAX).collect();
+        state.party_strengths = (0..SAVE_PARTY_SIZE_MAX).map(|slot| 15 + slot).collect();
+        state.party_intelligence = (0..SAVE_PARTY_SIZE_MAX).map(|slot| 18 + slot).collect();
+        state.party_equipment = default_party_equipment(SAVE_PARTY_SIZE_MAX as usize);
+        state.party_roster = (0..SAVE_PARTY_SIZE_MAX)
+            .map(|slot| conversation_test_roster_record(slot, &names[slot as usize], b'B'))
+            .collect();
+        state.party_roster.push(conversation_test_roster_record(
+            SAVE_PARTY_SIZE_MAX,
+            b"GWENNO\0\0\0",
+            b'D',
+        ));
+        state.active_player = Some(1);
+
+        let text = state
+            .apply_conversation_join_candidate("Gwenno", 2)
+            .unwrap();
+
+        assert_eq!(text, "GWENNO joined; IOLO left.");
+        assert_eq!(state.party.len(), SAVE_PARTY_SIZE_MAX as usize);
+        assert_eq!(state.party_names[1], *b"GWENNO\0\0\0");
+        assert_eq!(state.party_roster[SAVE_PARTY_SIZE_MAX as usize].name, *b"IOLO\0\0\0\0\0");
+        assert_eq!(state.active_player, None);
+    }
+
     #[test]
     fn town_raw_tlk_gold_payment_debits_only_affordable_accepted_payment() {
         let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();

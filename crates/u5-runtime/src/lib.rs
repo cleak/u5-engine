@@ -383,11 +383,12 @@ pub use npc_runtime::{
 pub use party::{
     Area, AvatarStats, LEVEL_FROM_EXPERIENCE_BASE_DIVISOR, LEVEL_FROM_EXPERIENCE_HALVING_STEP,
     MoonstoneGateSlot, POTION_VARIATION_FORCED_ORANGE_ROLL, POTION_VARIATION_RANDOM_INDEX_MASK,
-    POTION_VARIATION_ROLL_MASK, POTION_VARIATION_SELECTED_THRESHOLD, PartyMember, Player,
-    RESURRECTION_MAX_HP_PER_LEVEL, RESURRECTION_REBUILT_CURRENT_HP, class_refreshed_mana,
-    default_party, default_party_experience, default_party_intelligence, default_party_names,
-    default_party_stay_counters, heal_spell_amount_from_raw_roll, increase_capped_stat,
-    party_member_unavailable_message, party_name_to_string, party_status_name,
+    POTION_VARIATION_ROLL_MASK, POTION_VARIATION_SELECTED_THRESHOLD, PartyMember,
+    PartyRosterRecord, Player, RESURRECTION_MAX_HP_PER_LEVEL, RESURRECTION_REBUILT_CURRENT_HP,
+    class_refreshed_mana, default_party, default_party_experience, default_party_intelligence,
+    default_party_names, default_party_roster, default_party_stay_counters,
+    heal_spell_amount_from_raw_roll, increase_capped_stat, party_member_unavailable_message,
+    party_name_to_string, party_roster_from_active, party_status_name,
     potion_effect_index_after_variation, potion_label, recompute_level_from_experience,
     resurrection_adjusted_experience, resurrection_max_hp_for_level,
 };

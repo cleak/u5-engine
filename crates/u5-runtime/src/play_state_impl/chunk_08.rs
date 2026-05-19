@@ -1227,6 +1227,7 @@ impl PlayState {
             party_strengths: self.party_strengths.clone(),
             party_intelligence: self.party_intelligence.clone(),
             party_equipment: self.party_equipment.clone(),
+            party_roster: self.synced_party_roster(),
             equipment_stock: self.equipment_stock,
             spell_charges: self.spell_charges,
             scroll_stock: self.scroll_stock,

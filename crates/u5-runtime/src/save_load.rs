@@ -175,6 +175,7 @@ pub fn play_options_from_save_bytes_named(
     let party_strengths = decode_party_strengths(bytes, party.len());
     let party_intelligence = decode_party_intelligence(bytes, party.len());
     let party_equipment = decode_party_equipment(bytes, party.len());
+    let party_roster = decode_party_roster(bytes);
     let equipment_stock = decode_equipment_stock(bytes);
     let special_items = decode_special_items(bytes);
     let inn_registry = decode_inn_registry(bytes);
@@ -205,6 +206,7 @@ pub fn play_options_from_save_bytes_named(
         party_strengths,
         party_intelligence,
         party_equipment,
+        party_roster,
         equipment_stock,
         spell_charges,
         scroll_stock,
@@ -312,6 +314,43 @@ pub fn decode_party_equipment(bytes: &[u8], party_size: usize) -> Vec<[u8; EQUIP
                     ..record + SAVE_CHARACTER_EQUIPMENT_OFFSET + EQUIPMENT_SLOT_COUNT],
             );
             equipment
+        })
+        .collect()
+}
+
+pub fn decode_party_roster(bytes: &[u8]) -> Vec<PartyRosterRecord> {
+    (0..SAVE_ROSTER_SLOT_COUNT)
+        .map(|slot| {
+            let record = SAVE_ROSTER_OFFSET + slot * SAVE_CHARACTER_RECORD_LEN;
+            let class_byte = match bytes[record + SAVE_CHARACTER_CLASS_OFFSET] {
+                0 => b'A',
+                value => value,
+            };
+            let mut name = [0; SAVE_CHARACTER_NAME_LEN];
+            name.copy_from_slice(&bytes[record..record + SAVE_CHARACTER_NAME_LEN]);
+            let mut equipment = [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT];
+            equipment.copy_from_slice(
+                &bytes[record + SAVE_CHARACTER_EQUIPMENT_OFFSET
+                    ..record + SAVE_CHARACTER_EQUIPMENT_OFFSET + EQUIPMENT_SLOT_COUNT],
+            );
+            PartyRosterRecord {
+                member: PartyMember {
+                    slot: slot as u8,
+                    class_byte,
+                    status: bytes[record + SAVE_CHARACTER_STATUS_OFFSET],
+                    climb_stat: bytes[record + SAVE_CHARACTER_DEX_OFFSET],
+                    mana: bytes[record + SAVE_CHARACTER_MANA_OFFSET],
+                    hp: u16_at(bytes, record + SAVE_CHARACTER_HP_OFFSET),
+                    max_hp: u16_at(bytes, record + SAVE_CHARACTER_MAX_HP_OFFSET),
+                    level: bytes[record + SAVE_CHARACTER_LEVEL_OFFSET],
+                },
+                name,
+                experience: u16_at(bytes, record + SAVE_CHARACTER_EXPERIENCE_OFFSET),
+                stay_counter: bytes[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET],
+                strength: bytes[record + SAVE_CHARACTER_STR_OFFSET],
+                intelligence: bytes[record + SAVE_CHARACTER_INT_OFFSET],
+                equipment,
+            }
         })
         .collect()
 }

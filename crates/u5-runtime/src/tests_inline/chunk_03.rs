@@ -741,6 +741,19 @@
         write_u16_at(&mut bytes, second + SAVE_CHARACTER_EXPERIENCE_OFFSET, 750);
         bytes[second + SAVE_CHARACTER_STAY_COUNTER_OFFSET] = 4;
         bytes[second + SAVE_CHARACTER_LEVEL_OFFSET] = 1;
+        let third = SAVE_ROSTER_OFFSET + SAVE_CHARACTER_RECORD_LEN * 2;
+        bytes[third..third + SAVE_CHARACTER_NAME_LEN].copy_from_slice(b"GWENNO\0\0\0");
+        bytes[third + SAVE_CHARACTER_CLASS_OFFSET] = b'D';
+        bytes[third + SAVE_CHARACTER_STATUS_OFFSET] = b'G';
+        bytes[third + SAVE_CHARACTER_STR_OFFSET] = 12;
+        bytes[third + SAVE_CHARACTER_DEX_OFFSET] = 14;
+        bytes[third + SAVE_CHARACTER_INT_OFFSET] = 16;
+        bytes[third + SAVE_CHARACTER_MANA_OFFSET] = 5;
+        bytes[third + SAVE_CHARACTER_HP_OFFSET] = 40;
+        bytes[third + SAVE_CHARACTER_MAX_HP_OFFSET] = 80;
+        write_u16_at(&mut bytes, third + SAVE_CHARACTER_EXPERIENCE_OFFSET, 900);
+        bytes[third + SAVE_CHARACTER_STAY_COUNTER_OFFSET] = 7;
+        bytes[third + SAVE_CHARACTER_LEVEL_OFFSET] = 4;
 
         let options = play_options_from_save_bytes(&bytes).unwrap();
 
@@ -799,6 +812,10 @@
                 },
             ]
         );
+        assert_eq!(options.party_roster.len(), SAVE_ROSTER_SLOT_COUNT);
+        assert_eq!(options.party_roster[2].name, *b"GWENNO\0\0\0");
+        assert_eq!(options.party_roster[2].experience, 900);
+        assert_eq!(options.party_roster[2].stay_counter, 7);
     }
 
     #[test]
@@ -1374,6 +1391,7 @@
             party_strengths: default_party_strengths(1),
             party_intelligence: default_party_intelligence(1),
             party_equipment: default_party_equipment(1),
+            party_roster: default_party_roster(1),
             equipment_stock: [0; EQUIPMENT_COUNT],
             spell_charges: [0; SPELL_COUNT],
             scroll_stock: [0; SCROLL_COUNT],

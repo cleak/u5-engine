@@ -134,37 +134,32 @@ impl PlayState {
             self.player.transport.save_marker()
         };
         save[SAVE_WIND_OFFSET] = self.wind_save_byte;
+        let roster = self.synced_party_roster();
         save[SAVE_PARTY_SIZE_OFFSET] = self.party.len().min(SAVE_PARTY_SIZE_MAX as usize) as u8;
-        let avatar_record = SAVE_ROSTER_OFFSET;
-        save[avatar_record + SAVE_CHARACTER_STR_OFFSET] = self.avatar_stats.strength;
-        save[avatar_record + SAVE_CHARACTER_DEX_OFFSET] = self.avatar_stats.dexterity;
-        save[avatar_record + SAVE_CHARACTER_INT_OFFSET] = self.avatar_stats.intelligence;
-        for (party_index, member) in self
-            .party
-            .iter()
-            .take(SAVE_PARTY_SIZE_MAX as usize)
-            .enumerate()
-        {
+        for (party_index, roster_record) in roster.iter().take(SAVE_ROSTER_SLOT_COUNT).enumerate() {
+            let member = roster_record.member;
             let record = SAVE_ROSTER_OFFSET + party_index * SAVE_CHARACTER_RECORD_LEN;
             if record + SAVE_CHARACTER_MAX_HP_OFFSET + 1 >= save.len() {
                 continue;
             }
-            if party_index != 0 {
-                if let Some(strength) = self.party_strengths.get(party_index).copied() {
-                    save[record + SAVE_CHARACTER_STR_OFFSET] = strength;
-                }
-            }
+            save[record..record + SAVE_CHARACTER_NAME_LEN].copy_from_slice(&roster_record.name);
+            save[record + SAVE_CHARACTER_STR_OFFSET] = if party_index == 0 {
+                self.avatar_stats.strength
+            } else {
+                roster_record.strength
+            };
+            save[record + SAVE_CHARACTER_DEX_OFFSET] = if party_index == 0 {
+                self.avatar_stats.dexterity
+            } else {
+                member.climb_stat
+            };
+            save[record + SAVE_CHARACTER_INT_OFFSET] = if party_index == 0 {
+                self.avatar_stats.intelligence
+            } else {
+                roster_record.intelligence
+            };
             save[record + SAVE_CHARACTER_CLASS_OFFSET] = member.class_byte;
-            if let Some(name) = self.party_names.get(party_index) {
-                save[record..record + SAVE_CHARACTER_NAME_LEN].copy_from_slice(name);
-            }
             save[record + SAVE_CHARACTER_STATUS_OFFSET] = member.status;
-            if party_index != 0 {
-                if let Some(intelligence) = self.party_intelligence.get(party_index).copied() {
-                    save[record + SAVE_CHARACTER_INT_OFFSET] = intelligence;
-                }
-                save[record + SAVE_CHARACTER_DEX_OFFSET] = member.climb_stat;
-            }
             save[record + SAVE_CHARACTER_MANA_OFFSET] = member.mana;
             write_u16_at(&mut save, record + SAVE_CHARACTER_HP_OFFSET, member.hp);
             write_u16_at(
@@ -172,23 +167,16 @@ impl PlayState {
                 record + SAVE_CHARACTER_MAX_HP_OFFSET,
                 member.max_hp,
             );
-            let experience = self.party_experience.get(party_index).copied().unwrap_or(0);
             write_u16_at(
                 &mut save,
                 record + SAVE_CHARACTER_EXPERIENCE_OFFSET,
-                experience,
+                roster_record.experience,
             );
-            save[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET] = self
-                .party_stay_counters
-                .get(party_index)
-                .copied()
-                .unwrap_or(0)
-                .min(INN_STAY_COUNTER_CAP);
+            save[record + SAVE_CHARACTER_STAY_COUNTER_OFFSET] =
+                roster_record.stay_counter.min(INN_STAY_COUNTER_CAP);
             save[record + SAVE_CHARACTER_LEVEL_OFFSET] = member.level;
-            if let Some(equipment) = self.party_equipment.get(party_index) {
-                let start = record + SAVE_CHARACTER_EQUIPMENT_OFFSET;
-                save[start..start + EQUIPMENT_SLOT_COUNT].copy_from_slice(equipment);
-            }
+            let start = record + SAVE_CHARACTER_EQUIPMENT_OFFSET;
+            save[start..start + EQUIPMENT_SLOT_COUNT].copy_from_slice(&roster_record.equipment);
         }
         encode_inn_registry(&mut save, &self.inn_registry);
         let active_table = encode_active_object_table(&self.active_objects)?;
@@ -361,6 +349,7 @@ impl PlayState {
             party_strengths: options.party_strengths,
             party_intelligence: options.party_intelligence,
             party_equipment: options.party_equipment,
+            party_roster: options.party_roster,
             equipment_stock: options.equipment_stock,
             spell_charges: options.spell_charges,
             scroll_stock: options.scroll_stock,
@@ -417,6 +406,7 @@ impl PlayState {
             active_shop: None,
             common_word_dictionary: None,
             active_conversation: None,
+            active_conversation_join_candidate: None,
             active_z_stats: None,
             active_ready: None,
             active_use: None,
@@ -566,6 +556,7 @@ impl PlayState {
             party_strengths: options.party_strengths,
             party_intelligence: options.party_intelligence,
             party_equipment: options.party_equipment,
+            party_roster: options.party_roster,
             equipment_stock: options.equipment_stock,
             spell_charges: options.spell_charges,
             scroll_stock: options.scroll_stock,
@@ -626,6 +617,7 @@ impl PlayState {
             active_shop: None,
             common_word_dictionary: None,
             active_conversation: None,
+            active_conversation_join_candidate: None,
             active_z_stats: None,
             active_ready: None,
             active_use: None,
@@ -776,6 +768,7 @@ impl PlayState {
             party_strengths: options.party_strengths,
             party_intelligence: options.party_intelligence,
             party_equipment: options.party_equipment,
+            party_roster: options.party_roster,
             equipment_stock: options.equipment_stock,
             spell_charges: options.spell_charges,
             scroll_stock: options.scroll_stock,
@@ -836,6 +829,7 @@ impl PlayState {
             active_shop: None,
             common_word_dictionary: None,
             active_conversation: None,
+            active_conversation_join_candidate: None,
             active_z_stats: None,
             active_ready: None,
             active_use: None,
