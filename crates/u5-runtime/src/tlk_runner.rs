@@ -74,10 +74,10 @@ pub struct TlkRunInputs<'a> {
 pub enum TlkRunStop {
     /// Hit `0xFF` end-of-response (normal end of a keyword response).
     EndOfResponse,
-    /// Hit `0x82` end-of-stream (e.g. NPC walked off, conversation ended).
+    /// Hit `0x82` end-of-stream for the current fixed entry.
     EndOfStream,
-    /// Hit a NUL byte before any explicit terminator. Treated as an
-    /// implicit blob-end.
+    /// Hit a NUL byte before any explicit terminator. Treated as the
+    /// current field terminator.
     NulTerminator,
     /// Exhausted the input slice without finding an explicit terminator.
     Exhausted,

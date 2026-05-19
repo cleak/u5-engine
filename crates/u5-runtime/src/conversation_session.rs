@@ -351,12 +351,7 @@ impl ConversationSession {
                     self.phase = ConversationSessionPhase::AwaitingScopedKeyword { label };
                 }
             }
-            TlkRunStop::EndOfStream | TlkRunStop::NulTerminator => {
-                // End-of-stream forces a hard close; the keyword loop must
-                // not continue prompting after that.
-                self.phase = ConversationSessionPhase::PresentingBye;
-                out.ended = true;
-            }
+            TlkRunStop::EndOfStream | TlkRunStop::NulTerminator => {}
             _ => {}
         }
     }
@@ -461,10 +456,7 @@ impl ConversationSession {
             TlkRunStop::LabelTransfer(label) if self.has_scoped_label_records(label) => {
                 self.phase = ConversationSessionPhase::AwaitingScopedKeyword { label };
             }
-            TlkRunStop::EndOfStream | TlkRunStop::NulTerminator => {
-                self.phase = ConversationSessionPhase::PresentingBye;
-                out.ended = true;
-            }
+            TlkRunStop::EndOfStream | TlkRunStop::NulTerminator => {}
             _ => {}
         }
     }
@@ -567,6 +559,12 @@ mod tests {
 
     fn enc(text: &str) -> Vec<u8> {
         text.bytes().map(|b| b ^ TLK_TEXT_XOR_MASK).collect()
+    }
+
+    fn enc_with_stop(text: &str, stop: u8) -> Vec<u8> {
+        let mut bytes = enc(text);
+        bytes.push(stop);
+        bytes
     }
 
     fn ctx() -> ConversationContext<'static> {
@@ -862,6 +860,44 @@ mod tests {
         s.present_greeting(&ctx());
         let out = s.submit_keyword("grandpa", &ctx());
         assert!(out.text.contains("Long"));
+    }
+
+    #[test]
+    fn end_stream_and_nul_terminate_current_entry_without_closing_conversation() {
+        let raw = vec![
+            enc_with_stop("Ada", TLK_CODE_END_STREAM),
+            enc_with_stop("a quiet smith", TLK_CODE_END_STREAM),
+            enc_with_stop("Greetings.", TLK_CODE_END_STREAM),
+            enc_with_stop("I mend gear.", TLK_CODE_END_STREAM),
+            enc_with_stop("Farewell.", TLK_CODE_END_STREAM),
+            enc("TRADE"),
+            enc_with_stop("Bring iron.", 0),
+        ];
+        let decoded = vec![
+            "Ada".to_string(),
+            "a quiet smith".to_string(),
+            "Greetings.".to_string(),
+            "I mend gear.".to_string(),
+            "Farewell.".to_string(),
+            "TRADE".to_string(),
+            "Bring iron.".to_string(),
+        ];
+        let mut s = ConversationSession::new(raw, decoded);
+
+        let greeting = s.present_greeting(&ctx());
+        assert!(greeting.text.contains("Greetings."));
+        assert!(!greeting.ended);
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+
+        let job = s.submit_keyword("job", &ctx());
+        assert!(job.text.contains("I mend gear."));
+        assert!(!job.ended);
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
+
+        let ordinary = s.submit_keyword("trade", &ctx());
+        assert!(ordinary.text.contains("Bring iron."));
+        assert!(!ordinary.ended);
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
 
     #[test]
