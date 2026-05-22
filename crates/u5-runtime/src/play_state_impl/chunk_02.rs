@@ -73,6 +73,42 @@ impl PlayState {
             self.message = "What?".to_string();
             handled!();
         }
+        if let Some(direction) = high_byte_direction_from_key(key) {
+            match direction {
+                Direction::North => {
+                    handled!(self.step_with_game_dir(self.player.facing, Some(game_dir))?);
+                }
+                Direction::South => {
+                    let facing = self.player.facing;
+                    let outcome = if let Some(direction) = facing.opposite_cardinal() {
+                        let outcome = self.step_with_game_dir(direction, Some(game_dir))?;
+                        if matches!(self.area, Area::Dungeon { .. }) {
+                            self.player.facing = facing;
+                        }
+                        outcome
+                    } else {
+                        self.message =
+                            "Dungeon back-step requires a cardinal facing direction.".to_string();
+                        MoveOutcome::Blocked
+                    };
+                    handled!(outcome);
+                }
+                Direction::West => {
+                    handled!(self.turn_dungeon(false));
+                }
+                Direction::East => {
+                    handled!(self.turn_dungeon(true));
+                }
+                Direction::NorthWest
+                | Direction::NorthEast
+                | Direction::SouthWest
+                | Direction::SouthEast => {
+                    self.message =
+                        "Dungeon movement supports forward, back, and turns only.".to_string();
+                    handled!();
+                }
+            }
+        }
         match key.to_ascii_lowercase() {
             '8' | 'w' | '.' | '\r' | '\n' => {
                 handled!(self.step_with_game_dir(self.player.facing, Some(game_dir))?);
@@ -1712,5 +1748,22 @@ impl PlayState {
         if let Some(member) = self.party.iter_mut().find(|member| member.slot == 0) {
             member.climb_stat = self.avatar_stats.dexterity;
         }
+    }
+}
+
+fn high_byte_direction_from_key(key: char) -> Option<Direction> {
+    let scalar = key as u32;
+    if scalar > u8::MAX as u32 {
+        return None;
+    }
+    match input_code_direction(scalar as u8)? {
+        InputDirection::North => Some(Direction::North),
+        InputDirection::South => Some(Direction::South),
+        InputDirection::East => Some(Direction::East),
+        InputDirection::West => Some(Direction::West),
+        InputDirection::Northwest => Some(Direction::NorthWest),
+        InputDirection::Northeast => Some(Direction::NorthEast),
+        InputDirection::Southwest => Some(Direction::SouthWest),
+        InputDirection::Southeast => Some(Direction::SouthEast),
     }
 }

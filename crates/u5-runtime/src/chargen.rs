@@ -1,6 +1,5 @@
 //! Character-creation save producer.
 
-use std::fs;
 use std::io;
 use std::path::Path;
 
@@ -735,8 +734,8 @@ pub fn commit_chargen_save(
 
     let mut saved_ool = vec![0; SAVED_OOL_LEN];
     saved_ool[OOL_PLANE_LEN..].copy_from_slice(&init_ool);
-    fs::write(game_dir.join("SAVED.OOL"), saved_ool)?;
-    fs::write(game_dir.join("SAVED.GAM"), save)?;
+    write_disk_file(&game_dir.join("SAVED.OOL"), saved_ool)?;
+    write_disk_file(&game_dir.join("SAVED.GAM"), save)?;
 
     Ok(avatar)
 }
@@ -980,7 +979,7 @@ mod tests {
 }
 
 fn read_init_ool_plane(game_dir: &Path) -> io::Result<Vec<u8>> {
-    let bytes = fs::read(game_dir.join(INIT_OOL_FILENAME))?;
+    let bytes = read_disk_file(&game_dir.join(INIT_OOL_FILENAME))?;
     if bytes.len() != OOL_PLANE_LEN {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,

@@ -166,15 +166,8 @@ pub fn parse_blink_target_entries(text: &str) -> io::Result<Vec<BlinkTargetEntry
 
 pub fn load_karma_records(game_dir: &Path) -> io::Result<Option<Vec<String>>> {
     let path = game_dir.join(KARMA_DAT_FILE);
-    let bytes = match fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => {
-            return Err(io::Error::new(
-                err.kind(),
-                format!("{}: {err}", path.display()),
-            ));
-        }
+    let Some(bytes) = read_optional_disk_file(&path)? else {
+        return Ok(None);
     };
     parse_karma_dat(&bytes).map(Some)
 }

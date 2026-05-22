@@ -27,6 +27,20 @@ impl Direction {
     }
 
     pub fn from_play_key(key: char) -> Option<Self> {
+        if let Some(byte) = input_byte_from_char(key) {
+            if let Some(direction) = crate::input_code_direction(byte) {
+                match direction {
+                    crate::InputDirection::North => return Some(Self::North),
+                    crate::InputDirection::South => return Some(Self::South),
+                    crate::InputDirection::East => return Some(Self::East),
+                    crate::InputDirection::West => return Some(Self::West),
+                    crate::InputDirection::Northwest => return Some(Self::NorthWest),
+                    crate::InputDirection::Northeast => return Some(Self::NorthEast),
+                    crate::InputDirection::Southwest => return Some(Self::SouthWest),
+                    crate::InputDirection::Southeast => return Some(Self::SouthEast),
+                }
+            }
+        }
         match key.to_ascii_lowercase() {
             '7' | 'y' => Some(Self::NorthWest),
             '8' | 'w' => Some(Self::North),
@@ -95,5 +109,14 @@ impl Direction {
             Self::South => "South",
             Self::SouthEast => "Southeast",
         }
+    }
+}
+
+const fn input_byte_from_char(key: char) -> Option<u8> {
+    let scalar = key as u32;
+    if scalar <= u8::MAX as u32 {
+        Some(scalar as u8)
+    } else {
+        None
     }
 }

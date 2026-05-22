@@ -15,7 +15,6 @@ pub const CODEX_URN_TABLE_FILE: &str = "codex_urns.tsv";
 pub const DUNGEON_DEEPER_TRANSITION_TABLE_FILE: &str = "dungeon_deeper_transitions.tsv";
 pub const DUNGEON_TELEPORT_TABLE_FILE: &str = "dungeon_teleports.tsv";
 pub const DUNGEON_EXIT_TILE_TABLE_FILE: &str = "dungeon_exit_tiles.tsv";
-pub const DUNGEON_DOOR_TABLE_FILE: &str = "dungeon_doors.tsv";
 pub const DUNGEON_CHEST_TABLE_FILE: &str = "dungeon_chests.tsv";
 pub const SECRET_DOOR_TABLE_FILE: &str = "secret_doors.tsv";
 pub const TOWN_FIRE_SOURCE_TABLE_FILE: &str = "town_fire_sources.tsv";
@@ -35,9 +34,11 @@ pub const TOWN_REST_BED_TABLE_FILE: &str = "town_rest_beds.tsv";
 pub const TOWN_STAIR_TABLE_FILE: &str = "town_stairs.tsv";
 pub const TOWN_TRAP_DOOR_TABLE_FILE: &str = "town_trap_doors.tsv";
 pub const TOWN_POISON_GAS_TABLE_FILE: &str = "town_poison_gas.tsv";
+pub const TOWN_TILE_ATTRIBUTES_TABLE_FILE: &str = "town_tile_attributes.tsv";
 pub const TOWN_EXIT_TILE_TABLE_FILE: &str = "town_exit_tiles.tsv";
 pub const TOWN_LOCK_TABLE_FILE: &str = "town_locks.tsv";
 pub const BLINK_TARGET_TABLE_FILE: &str = "blink_targets.tsv";
+pub const STATIONARY_DISPLAY_TABLE_FILE: &str = "stationary_displays.tsv";
 pub const ETERNAL_FLAME_TABLE_FILE: &str = "eternal_flames.tsv";
 pub const MOONGATE_TABLE_FILE: &str = "moongates.tsv";
 pub const LOCATION_FLOOR_TABLE_FILE: &str = "location_floor_pages.tsv";
@@ -394,6 +395,11 @@ pub const SAVE_DAY_MAX: u8 = crate::DAYS_PER_MONTH;
 pub const SAVE_HOUR_MAX: u8 = crate::HOURS_PER_DAY - 1;
 pub const SAVE_MINUTE_MAX: u8 = crate::MINUTES_PER_HOUR - 1;
 pub const SAVE_MORAL_STANDING_OFFSET: usize = 0x02e2;
+/// `formats/saved-gam.md §10`: toll-progress counter byte adjacent to
+/// the moral-standing selector. Increments per successful three-digit
+/// `0x85` conversation gold payment; resets to zero and bumps the
+/// selector on the [`TOLL_PROGRESS_MILESTONE`] roll-over.
+pub const SAVE_TOLL_PROGRESS_OFFSET: usize = 0x02e5;
 pub const SAVE_WIND_OFFSET: usize = 0x02ec;
 /// `formats/saved-gam.md §5`: "The five bytes after wind form the
 /// persisted location cluster" — scene byte sits immediately
@@ -475,6 +481,10 @@ pub const SAVE_EQUIPMENT_INVENTORY_OFFSET: usize = 0x021A;
 pub const SAVE_SPELL_CHARGE_BLOCK_OFFSET: usize = 0x024A;
 pub const SAVE_SCROLL_COUNTERS_OFFSET: usize = 0x027A;
 pub const SAVE_POTION_COUNTERS_OFFSET: usize = 0x0282;
+pub const SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET: usize = 0x020C;
+pub const SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET: usize = 0x0241;
+pub const SAVE_SHADOWLORD_HIDEOUTS_OFFSET: usize = 0x0246;
+pub const SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET: usize = 0x02B6;
 /// `formats/saved-gam.md §6` location-cluster scratch offsets.
 pub const SAVE_SAVED_SCENE_SCRATCH_OFFSET: usize = 0x02EE;
 pub const SAVE_PARTY_Z_OFFSET: usize = 0x02EF;
@@ -704,7 +714,7 @@ pub const SHADOWLORD_COWARDICE_INDEX: usize = SHADOWLORD_HATRED_INDEX + 1;
 pub const SHADOWLORD_HIDEOUT_MIN: u8 = 1;
 pub const SHADOWLORD_HIDEOUT_MAX: u8 = 8;
 pub const SHADOWLORD_VANQUISHED: u8 = 0xff;
-pub const DEFAULT_SHADOWLORD_HIDEOUTS: [u8; SHADOWLORD_COUNT] = [1, 2, 3];
+pub const DEFAULT_SHADOWLORD_HIDEOUTS: [u8; SHADOWLORD_COUNT] = [4, 7, 8];
 pub const SHADOWLORD_OBJECT_TILE_BASE: u8 = 0xfd;
 /// `inventory.md §7` U-Use scroll dispatch order. The eight scroll
 /// indices occupy 0..=7 in sequence. Anchor each successor to
@@ -751,6 +761,10 @@ pub const SPECIAL_ITEM_SEXTANT_INDEX: usize = 0x0c;
 pub const SPECIAL_ITEM_POCKET_WATCH_INDEX: usize = 0x0d;
 pub const SPECIAL_ITEM_BLACK_BADGE_INDEX: usize = 0x0e;
 pub const SPECIAL_ITEM_WOODEN_BOX_INDEX: usize = 0x0f;
+/// `conversation.md §7.6`: TLK `0x86` action letters H/I/J set
+/// Sextant, Spyglass, and Black Badge carried-item flags directly to
+/// the resident sentinel byte.
+pub const SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE: u8 = 0xFF;
 pub const SPECIAL_ITEM_OWNED_VALUE: u8 = 1;
 pub const SPECIAL_ITEM_WORN_VALUE: u8 = 2;
 pub const LORD_BLACKTHORN_CASTLE_SCENE_BYTE: u8 = 18;
@@ -836,6 +850,23 @@ pub const VIRTUE_COUNT: usize = 8;
 /// `karma.md §3`: the moral-standing selector caps at ninety-nine
 /// across all add paths (NPC thank-you, toll milestone, etc.).
 pub const MORAL_STANDING_MAX: u8 = 99;
+
+/// `karma.md §4` and `formats/saved-gam.md §10`: every successful
+/// three-digit `0x85` conversation gold payment bumps the saved
+/// toll-progress counter by one. When the counter reaches this
+/// milestone value, the gold-payment helper resets the counter to
+/// zero and applies the [`crate::KarmaAction::TollMilestone`] bump
+/// to the moral-standing selector.
+pub const TOLL_PROGRESS_MILESTONE: u8 = 100;
+
+/// `formats/saved-gam.md §10`: durable byte offset of the
+/// toll-progress counter inside the `SAVED.GAM` per-turn cluster.
+/// Adjacent to [`MORAL_STANDING_SAVED_GAM_OFFSET`] (`0x02E2`).
+pub const TOLL_PROGRESS_SAVED_GAM_OFFSET: usize = 0x02E5;
+
+/// `formats/saved-gam.md §10`: durable byte offset of the
+/// moral-standing selector inside `SAVED.GAM`.
+pub const MORAL_STANDING_SAVED_GAM_OFFSET: usize = 0x02E2;
 pub const AVATAR_STAT_MAX: u8 = 30;
 /// `catalogs/spell-list.md §3` reagent enumeration order. The
 /// eight reagent indices occupy 0..=7 in sequence (Sulfur Ash,
@@ -859,7 +890,8 @@ pub const FIXED_HIDDEN_TREASURE_COUNT: usize = 113;
 /// `ceil(FIXED_HIDDEN_TREASURE_COUNT / 8)` = 15 so the
 /// found-bitmap byte count tracks the treasure count.
 pub const FIXED_HIDDEN_TREASURE_FOUND_BYTES: usize = FIXED_HIDDEN_TREASURE_COUNT.div_ceil(8);
-pub const FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY: u8 = 0;
+pub const FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY: u8 = 0xFF;
+pub const FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR: u8 = 0;
 pub const FIXED_HIDDEN_TREASURE_OBJECT_TILE: u8 = 0x1f;
 pub const FIXED_HIDDEN_TREASURE_OBJECT_AUX3: u8 = 0xa5;
 /// `catalogs/spell-list.md §3` per-reagent recipe-mask bit. The mix
@@ -925,7 +957,15 @@ pub const IN_WIS_SPELL_INDEX: usize = 9;
 pub const IN_WIS_COST: u8 = (IN_WIS_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const CREATE_FOOD_SPELL_INDEX: usize = 11;
 pub const CREATE_FOOD_COST: u8 = (CREATE_FOOD_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
-pub const CREATE_FOOD_AMOUNT: u16 = 100;
+/// `catalogs/spell-list.md` row 11 / `cleak/u5-spec#49`: maximum
+/// per-cast `In Xen Mani` (Create Food) grant. The spec answer to
+/// issue #49 confirms the handler rolls `rand() mod 3` per cast,
+/// yielding a uniform `0..=2` food increment that is then
+/// saturating-added against the [`PARTY_FOOD_CAP`]. The cast still
+/// consumes its MP and reagent costs even when the roll is zero.
+pub const CREATE_FOOD_MAX_GRANT: u16 = 2;
+/// Minimum per-cast Create Food grant (uniform PRNG lower bound).
+pub const CREATE_FOOD_MIN_GRANT: u16 = 0;
 pub const VAS_LOR_SPELL_INDEX: usize = 12;
 pub const VAS_LOR_COST: u8 = (VAS_LOR_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const VAS_LOR_LIGHT_DURATION: u8 = 255;
@@ -1332,8 +1372,30 @@ pub const OVERWORLD_CHUNK_BUFFER_BYTES: usize = OVERWORLD_CHUNK_BUFFER_CHUNKS * 
 pub const BRIT_WATER_SENTINEL: u8 = 0xff;
 pub const BRIT_DEEP_WATER_TILE: u8 = 1;
 pub const BRIT_SWAMP_TILE: u8 = 4;
+/// `systems/time.md` / `cleak/u5-spec#50`: hourly poison damage per
+/// Poisoned living party member. The corrected spec answer confirms
+/// the poison tick is a deterministic `-1 HP` per Poisoned member
+/// (no PRNG); only starvation rolls. The `FIRST_PLAYABLE_` prefix is
+/// retained for callers that already reference the symbol, but the
+/// value is now spec-confirmed rather than a placeholder.
 pub const FIRST_PLAYABLE_HOURLY_POISON_DAMAGE: u8 = 1;
-pub const FIRST_PLAYABLE_HOURLY_STARVATION_DAMAGE: u8 = 1;
+
+/// `systems/time.md` / `cleak/u5-spec#50`: minimum hourly starvation
+/// damage per non-dead party slot when shared food has reached zero.
+/// The corrected spec answer pins the byte-traced range to
+/// `prng_range(1, 8)`.
+pub const HOURLY_STARVATION_DAMAGE_MIN: u16 = 1;
+/// Maximum hourly starvation damage per non-dead party slot (inclusive
+/// upper bound of the PRNG roll).
+pub const HOURLY_STARVATION_DAMAGE_MAX: u16 = 8;
+
+/// `systems/town-mode.md` / `cleak/u5-spec#51`: town poison-gas
+/// doorway per-member acceptance gate is `prng_range(0, 28) == 0`,
+/// i.e. an inclusive `0..=28` roll with a hit on exact zero. This
+/// constant names the inclusive upper bound; probability is `1/29`.
+pub const TOWN_GAS_DOORWAY_RANGE_MAX: u16 = 28;
+pub const TOWN_POISON_GAS_TILE_CLASS: u8 = 4;
+pub const TOWN_POISON_GAS_VEHICLE_BYTE: u8 = 0x1C;
 /// `npc-schedules.md §8.4` BFS queue capacity used by the NPC
 /// pathfinder. Anchored to the canonical
 /// [`crate::NPC_PATHFIND_QUEUE_CAPACITY`] so the two parallel

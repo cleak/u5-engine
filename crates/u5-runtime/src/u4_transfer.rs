@@ -1,6 +1,5 @@
 //! Ultima IV transfer helpers for producing a fresh U5 saved game.
 
-use std::fs;
 use std::io;
 use std::path::Path;
 
@@ -21,6 +20,19 @@ pub const U4_TRANSFER_U5_SEED_GAM_FILENAME: &str = "BRIT.GAM";
 /// alias and the canonical filename stay one value.
 pub const U4_TRANSFER_U5_SEED_OOL_FILENAME: &str = crate::BRIT_OOL_FILENAME;
 pub const U4_TRANSFER_U4_SOURCE_FILENAME: &str = "PARTY.SAV";
+pub const U4_PARTY_SAV_LEN: usize = 532;
+pub const U4_PARTY_SAV_MOVE_COUNTER_OFFSET: usize = 0x0000;
+pub const U4_PARTY_SAV_VIRTUE_STANDING_OFFSET: usize = 0x0002;
+pub const U4_PARTY_SAV_MOON_COUNTER_OFFSET: usize = 0x0006;
+pub const U4_PARTY_SAV_DUNGEON_COUNTER_OFFSET: usize = 0x0007;
+pub const U4_PARTY_SAV_GOLD_OFFSET: usize = 0x0008;
+pub const U4_PARTY_SAV_FOOD_OFFSET: usize = 0x000A;
+pub const U4_PARTY_SAV_KEYS_OFFSET: usize = 0x000D;
+pub const U4_PARTY_SAV_TORCHES_OFFSET: usize = 0x000E;
+pub const U4_PARTY_SAV_GEMS_OFFSET: usize = 0x000F;
+pub const U4_PARTY_SAV_SEXTANTS_OFFSET: usize = 0x0011;
+pub const U4_PARTY_SAV_LEADING_CHARACTER_CLASS_OFFSET: usize = 0x0019;
+pub const U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET: usize = 0x001A;
 pub const U4_PARTY_SAV_PLAYER0_OFFSET: usize = 0x08;
 pub const U4_PARTY_SAV_CHARACTER_RECORD_LEN: usize = 39;
 pub const U4_PARTY_SAV_CHARACTER_XP_OFFSET: usize = 0x04;
@@ -32,12 +44,7 @@ pub const U4_PARTY_SAV_CHARACTER_NAME_LEN: usize = 16;
 pub const U4_PARTY_SAV_CHARACTER_SEX_OFFSET: usize = 0x24;
 pub const U4_PARTY_SAV_CHARACTER_CLASS_OFFSET: usize = 0x25;
 pub const U4_PARTY_SAV_MALE_BYTE: u8 = 0x0B;
-pub const U4_PARTY_SAV_FOOD_OFFSET: usize = 0x140;
-pub const U4_PARTY_SAV_GOLD_OFFSET: usize = 0x144;
-pub const U4_PARTY_SAV_KARMA_OFFSET: usize = 0x146;
-pub const U4_PARTY_SAV_KARMA_LEN: usize = U4_TRANSFER_VIRTUE_STANDING_COUNT * 2;
-pub const U4_PARTY_SAV_GEMS_OFFSET: usize = 0x158;
-pub const U4_PARTY_SAV_REQUIRED_LEN: usize = U4_PARTY_SAV_GEMS_OFFSET + 2;
+pub const U4_PARTY_SAV_REQUIRED_LEN: usize = U4_PARTY_SAV_LEN;
 
 /// `u4-transfer.md §5` accepted source-side counter ranges. The
 /// transfer rejects the entire attempt before writing the
@@ -156,11 +163,11 @@ impl std::fmt::Display for U4TransferError {
 
 impl std::error::Error for U4TransferError {}
 
-/// `u4-transfer.md §5` virtue-standing word count tested by the
+/// `u4-transfer.md §5` virtue-standing byte count tested by the
 /// "no transferable data" guard. The transfer reads the eight
-/// consecutive virtue/karma standing words for Honesty, Compassion,
+/// consecutive virtue/karma standing bytes for Honesty, Compassion,
 /// Valor, Justice, Sacrifice, Honor, Spirituality, and Humility —
-/// one word per published virtue. Anchored to
+/// one byte per published virtue. Anchored to
 /// [`crate::VIRTUE_COUNT`] so the transfer-guard word count and
 /// the published virtue count share one source of truth.
 pub const U4_TRANSFER_VIRTUE_STANDING_COUNT: usize = crate::VIRTUE_COUNT;
@@ -168,10 +175,10 @@ pub const U4_TRANSFER_VIRTUE_STANDING_COUNT: usize = crate::VIRTUE_COUNT;
 /// `u4-transfer.md §5`: returns `true` when the transfer guard
 /// should present the "no transferable data" branch instead of the
 /// normal preview. The guard fires only when every virtue-standing
-/// word in the supplied buffer is zero. Any nonzero word allows
+/// byte in the supplied buffer is zero. Any nonzero byte allows
 /// the normal transfer preview to proceed.
-pub fn u4_transfer_no_transferable_data(virtue_standings: &[u16]) -> bool {
-    virtue_standings.iter().all(|&word| word == 0)
+pub fn u4_transfer_no_transferable_data(virtue_standings: &[u8]) -> bool {
+    virtue_standings.iter().all(|&byte| byte == 0)
 }
 
 pub fn u4_transfer_class_byte(class_index: u8) -> Option<u8> {
@@ -238,14 +245,14 @@ pub fn u4_transfer_experience_to_u5(value: u32) -> u16 {
 }
 
 pub fn read_u4_transfer_source_from_party_sav(game_dir: &Path) -> io::Result<U4TransferSource> {
-    let bytes = fs::read(game_dir.join(U4_TRANSFER_U4_SOURCE_FILENAME))?;
+    let bytes = read_disk_file(&game_dir.join(U4_TRANSFER_U4_SOURCE_FILENAME))?;
     parse_u4_transfer_source_from_party_sav(&bytes)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
 /// `u4-transfer.md §5,§7` source reader for the public DOS
 /// `PARTY.SAV` layout. It imports only the first U4 character record
-/// and validates the party-wide counters/virtue words that gate the
+/// and validates the party-wide counters/virtue bytes that gate the
 /// transfer preview; campaign state remains owned by the U5 seed.
 pub fn parse_u4_transfer_source_from_party_sav(
     bytes: &[u8],
@@ -254,25 +261,66 @@ pub fn parse_u4_transfer_source_from_party_sav(
         return Err(U4TransferError::PartySaveTooShort(bytes.len()));
     }
 
-    validate_u4_source_counter("food", u32_at(bytes, U4_PARTY_SAV_FOOD_OFFSET))?;
-    validate_u4_source_counter("gold", u32::from(u16_at(bytes, U4_PARTY_SAV_GOLD_OFFSET)))?;
-    validate_u4_source_counter("gems", u32::from(u16_at(bytes, U4_PARTY_SAV_GEMS_OFFSET)))?;
+    validate_u4_source_counter(
+        "move",
+        u32::from(u16_at(bytes, U4_PARTY_SAV_MOVE_COUNTER_OFFSET)),
+        u32::from(U4_TRANSFER_MOVE_MOON_DUNGEON_MAX),
+    )?;
+    validate_u4_source_counter(
+        "moon",
+        u32::from(bytes[U4_PARTY_SAV_MOON_COUNTER_OFFSET]),
+        u32::from(U4_TRANSFER_MOVE_MOON_DUNGEON_MAX),
+    )?;
+    validate_u4_source_counter(
+        "dungeon",
+        u32::from(bytes[U4_PARTY_SAV_DUNGEON_COUNTER_OFFSET]),
+        u32::from(U4_TRANSFER_MOVE_MOON_DUNGEON_MAX),
+    )?;
+    validate_u4_source_counter(
+        "food",
+        u32::from(u16_at(bytes, U4_PARTY_SAV_FOOD_OFFSET)),
+        u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
+    )?;
+    validate_u4_source_counter(
+        "gold",
+        u32::from(u16_at(bytes, U4_PARTY_SAV_GOLD_OFFSET)),
+        u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
+    )?;
+    validate_u4_source_counter(
+        "gems",
+        u32::from(bytes[U4_PARTY_SAV_GEMS_OFFSET]),
+        u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
+    )?;
+    validate_u4_source_counter(
+        "torches",
+        u32::from(bytes[U4_PARTY_SAV_TORCHES_OFFSET]),
+        u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
+    )?;
+    validate_u4_source_counter(
+        "keys",
+        u32::from(bytes[U4_PARTY_SAV_KEYS_OFFSET]),
+        u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
+    )?;
+    validate_u4_source_counter(
+        "sextants",
+        u32::from(bytes[U4_PARTY_SAV_SEXTANTS_OFFSET]),
+        u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
+    )?;
 
-    let karma_words = (0..U4_TRANSFER_VIRTUE_STANDING_COUNT)
-        .map(|index| u16_at(bytes, U4_PARTY_SAV_KARMA_OFFSET + index * 2))
-        .collect::<Vec<_>>();
-    if u4_transfer_no_transferable_data(&karma_words) {
+    let virtue_bytes = &bytes[U4_PARTY_SAV_VIRTUE_STANDING_OFFSET
+        ..U4_PARTY_SAV_VIRTUE_STANDING_OFFSET + U4_TRANSFER_VIRTUE_STANDING_COUNT];
+    if u4_transfer_no_transferable_data(virtue_bytes) {
         return Err(U4TransferError::NoTransferableData);
     }
 
     let record = U4_PARTY_SAV_PLAYER0_OFFSET;
-    let class_index = bytes[record + U4_PARTY_SAV_CHARACTER_CLASS_OFFSET];
+    let class_index = bytes[U4_PARTY_SAV_LEADING_CHARACTER_CLASS_OFFSET];
     if !u4_transfer_class_index_in_range(class_index) {
         return Err(U4TransferError::InvalidClassIndex(class_index));
     }
 
-    let name = bytes[record + U4_PARTY_SAV_CHARACTER_NAME_OFFSET
-        ..record + U4_PARTY_SAV_CHARACTER_NAME_OFFSET + U4_PARTY_SAV_CHARACTER_NAME_LEN]
+    let name = bytes[U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET
+        ..U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET + U4_PARTY_SAV_CHARACTER_NAME_LEN]
         .to_vec();
     for &byte in &name {
         if !u4_transfer_name_byte_accepted(byte) {
@@ -362,8 +410,8 @@ pub fn commit_u4_transfer_save(
 
     let mut saved_ool = vec![0; SAVED_OOL_LEN];
     saved_ool[OOL_PLANE_LEN..].copy_from_slice(&brit_ool);
-    fs::write(game_dir.join("SAVED.OOL"), saved_ool)?;
-    fs::write(game_dir.join("SAVED.GAM"), save)?;
+    write_disk_file(&game_dir.join("SAVED.OOL"), saved_ool)?;
+    write_disk_file(&game_dir.join("SAVED.GAM"), save)?;
 
     Ok(avatar)
 }
@@ -402,15 +450,15 @@ fn normalize_u4_transfer_name(
     Ok(name)
 }
 
-fn validate_u4_source_counter(field: &'static str, value: u32) -> Result<(), U4TransferError> {
-    if value <= u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX) {
+fn validate_u4_source_counter(
+    field: &'static str,
+    value: u32,
+    max: u32,
+) -> Result<(), U4TransferError> {
+    if value <= max {
         Ok(())
     } else {
-        Err(U4TransferError::SourceCounterOutOfRange {
-            field,
-            value,
-            max: u32::from(U4_TRANSFER_GOLD_GEM_FOOD_MAX),
-        })
+        Err(U4TransferError::SourceCounterOutOfRange { field, value, max })
     }
 }
 
@@ -418,17 +466,8 @@ fn u16_at(bytes: &[u8], offset: usize) -> u16 {
     u16::from_le_bytes([bytes[offset], bytes[offset + 1]])
 }
 
-fn u32_at(bytes: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes([
-        bytes[offset],
-        bytes[offset + 1],
-        bytes[offset + 2],
-        bytes[offset + 3],
-    ])
-}
-
 fn read_brit_ool_plane(game_dir: &Path) -> io::Result<Vec<u8>> {
-    let bytes = fs::read(game_dir.join(U4_TRANSFER_U5_SEED_OOL_FILENAME))?;
+    let bytes = read_disk_file(&game_dir.join(U4_TRANSFER_U5_SEED_OOL_FILENAME))?;
     if bytes.len() != OOL_PLANE_LEN {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,

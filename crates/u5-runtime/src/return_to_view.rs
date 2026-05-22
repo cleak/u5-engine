@@ -5,15 +5,14 @@
 //! stream shape and exposes command summaries for frontends that do not yet
 //! render the full cinematic.
 
-use std::fs;
 use std::io;
 use std::path::Path;
 
 use crate::{
     MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_ROW_STRIDE,
-    MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, RTV_COMMAND_COUNT,
-    RTV_COMMAND_STREAM_BYTES, RTV_STRIP_COUNT, TILE_ATLAS_SIDE, TileAtlas, TileViewport,
-    blit_tile_to_viewport,
+    MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, MOONGATE_ANIMATION_FRAMES,
+    MOONGATE_TILE_BASE, RTV_COMMAND_COUNT, RTV_COMMAND_STREAM_BYTES, RTV_STRIP_COUNT,
+    TILE_ATLAS_SIDE, TileAtlas, TileViewport, blit_tile_to_viewport, read_optional_disk_file,
 };
 
 pub const RTV_PREVIEW_SIDE: usize = 32;
@@ -27,6 +26,48 @@ pub const RTV_EFFECT_SENTINEL_TILE: u8 = 0xfe;
 pub const RTV_OPEN_EFFECT_FINAL_TILE: u8 = 0xdc;
 pub const RTV_CLOSE_EFFECT_FINAL_TILE: u8 = 0x05;
 pub const RTV_TEMPORARY_ACTOR_TILE: u8 = 0x16;
+pub const RTV_ACTOR_TRANSPARENT_PIXEL: u8 = 0;
+pub const RTV_CELL_EFFECT_STEPS: u8 = 15;
+pub const RTV_CELL_EFFECT_FINAL_TICKS: u8 = 2;
+pub const RTV_FIXED_WIPE_STEPS: u8 = 5;
+pub const RTV_FIXED_WIPE_TRAILING_TICKS: u8 = 3;
+
+/// `cleak/u5-spec#54` published Return-to-View wait duration. Per
+/// the spec answer, the helper's `WAIT` beat inserts an eight-title-tick
+/// fixed pause (~1.1 seconds at 30 fps) during which animated tiles
+/// continue cycling at the global title-tick cadence. The
+/// [`ReturnToViewCommand::RunPreviewTick`] opcode (`0x03`) carries
+/// the per-call tick count in the shipped byte stream; verify that
+/// `MISCMAPS.DAT` uses this exact argument when emitting a `WAIT`.
+pub const RTV_WAIT_FIXED_TICKS: u8 = 8;
+pub const RTV_FIXED_WIPE_TOTAL_TICKS: u8 =
+    RTV_FIXED_WIPE_STEPS + RTV_WAIT_FIXED_TICKS + RTV_FIXED_WIPE_TRAILING_TICKS;
+
+/// `cleak/u5-spec#54`: the Return-to-View preview is a non-interruptible
+/// cinematic — keystrokes during a [`RunPreviewTick`](ReturnToViewCommand)
+/// beat do not cancel the wait. The cinematic exits only when the
+/// command stream completes or the surrounding ESC handler fires
+/// after the current command finishes.
+pub const RTV_WAIT_IS_NON_INTERRUPTIBLE: bool = true;
+
+/// Resolve a Return-to-View map-cell tile through the title-screen
+/// animation selector published in `cleak/u5-spec#54`.
+///
+/// This is intentionally narrower than the gameplay static-tile
+/// animator. Return-to-View uses its own title-loop cadence and includes
+/// special cinematic/effect tiles that are not ordinary overworld water
+/// animation classes.
+pub const fn return_to_view_tile_for_title_tick(tile: u8, title_tick: u32) -> u8 {
+    let phase4 = (title_tick % 4) as u8;
+    match tile {
+        0x80..=0x87 => (tile & 0xfc) + phase4,
+        0xD8..=0xDB => 0xD8 + phase4,
+        0xDC if MOONGATE_ANIMATION_FRAMES > 1 => {
+            MOONGATE_TILE_BASE + ((title_tick % MOONGATE_ANIMATION_FRAMES as u32) as u8)
+        }
+        _ => tile,
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReturnToViewAssets {
@@ -148,6 +189,9 @@ pub struct ReturnToViewPreviewState {
     pub total_ticks: u32,
     pub temporary_actor_draws: u32,
     pub fixed_wipes: u32,
+    pub cell_effect_steps: u32,
+    pub fixed_wipe_rectangle_steps: u32,
+    pub fixed_wait_ticks: u32,
 }
 
 impl Default for ReturnToViewPreviewState {
@@ -163,6 +207,9 @@ impl Default for ReturnToViewPreviewState {
             total_ticks: 0,
             temporary_actor_draws: 0,
             fixed_wipes: 0,
+            cell_effect_steps: 0,
+            fixed_wipe_rectangle_steps: 0,
+            fixed_wait_ticks: 0,
         }
     }
 }
@@ -220,7 +267,12 @@ impl ReturnToViewPreviewState {
                 self.backing[index] = RTV_EFFECT_SENTINEL_TILE;
                 self.visible[index] = RTV_CLOSE_EFFECT_FINAL_TILE;
                 self.backing[index] = RTV_CLOSE_EFFECT_FINAL_TILE;
-                self.total_ticks = self.total_ticks.saturating_add(17);
+                self.cell_effect_steps = self
+                    .cell_effect_steps
+                    .saturating_add(u32::from(RTV_CELL_EFFECT_STEPS));
+                self.total_ticks = self.total_ticks.saturating_add(u32::from(
+                    RTV_CELL_EFFECT_STEPS + RTV_CELL_EFFECT_FINAL_TICKS,
+                ));
             }
             ReturnToViewCommand::LoadMapStrip { strip } => {
                 self.load_map_strip(strips, strip)?;
@@ -245,7 +297,15 @@ impl ReturnToViewPreviewState {
                 let actor = self.actors[slot];
                 let _ = preview_cell_index_checked(actor.x, actor.y)?;
                 self.fixed_wipes = self.fixed_wipes.saturating_add(1);
-                self.total_ticks = self.total_ticks.saturating_add(8);
+                self.fixed_wipe_rectangle_steps = self
+                    .fixed_wipe_rectangle_steps
+                    .saturating_add(u32::from(RTV_FIXED_WIPE_STEPS));
+                self.fixed_wait_ticks = self
+                    .fixed_wait_ticks
+                    .saturating_add(u32::from(RTV_WAIT_FIXED_TICKS));
+                self.total_ticks = self
+                    .total_ticks
+                    .saturating_add(u32::from(RTV_FIXED_WIPE_TOTAL_TICKS));
             }
             ReturnToViewCommand::ClearActors => {
                 self.actors = [ReturnToViewActor::default(); RTV_ACTOR_SLOTS];
@@ -322,7 +382,12 @@ impl ReturnToViewPreviewState {
         self.backing[index] = RTV_EFFECT_SENTINEL_TILE;
         self.visible[index] = RTV_OPEN_EFFECT_FINAL_TILE;
         self.backing[index] = RTV_OPEN_EFFECT_FINAL_TILE;
-        self.total_ticks = self.total_ticks.saturating_add(17);
+        self.cell_effect_steps = self
+            .cell_effect_steps
+            .saturating_add(u32::from(RTV_CELL_EFFECT_STEPS));
+        self.total_ticks = self.total_ticks.saturating_add(u32::from(
+            RTV_CELL_EFFECT_STEPS + RTV_CELL_EFFECT_FINAL_TICKS,
+        ));
         Ok(())
     }
 }
@@ -344,6 +409,9 @@ pub struct ReturnToViewPreviewReport {
     pub total_ticks: u32,
     pub temporary_actor_draws: u32,
     pub fixed_wipes: u32,
+    pub cell_effect_steps: u32,
+    pub fixed_wipe_rectangle_steps: u32,
+    pub fixed_wait_ticks: u32,
     pub cached_effect_cell: Option<(u8, u8)>,
 }
 
@@ -351,6 +419,33 @@ pub struct ReturnToViewPreviewReport {
 pub struct ReturnToViewPreviewRun {
     pub state: ReturnToViewPreviewState,
     pub report: ReturnToViewPreviewReport,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReturnToViewFrameKind {
+    PreviewTick,
+    CellEffectStep { step: u8 },
+    CellEffectFinalTick { tick: u8 },
+    TemporaryActorDraw,
+    TemporaryActorDrawOverBacking,
+    FixedWipeRectangle { step: u8 },
+    FixedWait { tick: u8 },
+    FixedWipeTrailingTick { tick: u8 },
+    MoveActorTick,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReturnToViewPlaybackFrame {
+    pub command_index: usize,
+    pub elapsed_title_ticks: u32,
+    pub kind: ReturnToViewFrameKind,
+    pub state: ReturnToViewPreviewState,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReturnToViewPlayback {
+    pub frames: Vec<ReturnToViewPlaybackFrame>,
+    pub run: ReturnToViewPreviewRun,
 }
 
 impl ReturnToViewCommand {
@@ -379,30 +474,16 @@ impl ReturnToViewCommand {
 
 pub fn load_return_to_view_script(game_dir: &Path) -> io::Result<Option<ReturnToViewScript>> {
     let path = game_dir.join(MISCMAPS_DAT_FILE);
-    let bytes = match fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => {
-            return Err(io::Error::new(
-                err.kind(),
-                format!("{}: {err}", path.display()),
-            ));
-        }
+    let Some(bytes) = read_optional_disk_file(&path)? else {
+        return Ok(None);
     };
     parse_return_to_view_script_file(&bytes).map(Some)
 }
 
 pub fn load_return_to_view_assets(game_dir: &Path) -> io::Result<Option<ReturnToViewAssets>> {
     let path = game_dir.join(MISCMAPS_DAT_FILE);
-    let bytes = match fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => {
-            return Err(io::Error::new(
-                err.kind(),
-                format!("{}: {err}", path.display()),
-            ));
-        }
+    let Some(bytes) = read_optional_disk_file(&path)? else {
+        return Ok(None);
     };
     Ok(Some(ReturnToViewAssets {
         strips: parse_return_to_view_map_strips_file(&bytes)?,
@@ -414,15 +495,8 @@ pub fn load_return_to_view_map_strips(
     game_dir: &Path,
 ) -> io::Result<Option<ReturnToViewMapStrips>> {
     let path = game_dir.join(MISCMAPS_DAT_FILE);
-    let bytes = match fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => {
-            return Err(io::Error::new(
-                err.kind(),
-                format!("{}: {err}", path.display()),
-            ));
-        }
+    let Some(bytes) = read_optional_disk_file(&path)? else {
+        return Ok(None);
     };
     parse_return_to_view_map_strips_file(&bytes).map(Some)
 }
@@ -702,16 +776,202 @@ pub fn run_return_to_view_preview_state_until_restart(
         total_ticks: state.total_ticks,
         temporary_actor_draws: state.temporary_actor_draws,
         fixed_wipes: state.fixed_wipes,
+        cell_effect_steps: state.cell_effect_steps,
+        fixed_wipe_rectangle_steps: state.fixed_wipe_rectangle_steps,
+        fixed_wait_ticks: state.fixed_wait_ticks,
         cached_effect_cell: state.cached_effect_cell,
     };
     Ok(ReturnToViewPreviewRun { state, report })
+}
+
+pub fn run_return_to_view_playback_until_restart(
+    strips: &ReturnToViewMapStrips,
+    script: &ReturnToViewScript,
+    max_commands: usize,
+) -> io::Result<ReturnToViewPlayback> {
+    let mut state = ReturnToViewPreviewState::default();
+    let mut frames = Vec::new();
+    let mut applied_commands = 0usize;
+    let mut pc = 0usize;
+    let mut restart_seen = false;
+    while pc < script.commands.len() && applied_commands < max_commands {
+        let command_index = pc;
+        let command = script.commands[pc];
+        let before_ticks = state.total_ticks;
+        match state.apply_command(strips, command_index, command)? {
+            ReturnToViewControl::Continue => pc += 1,
+            ReturnToViewControl::JumpTo(target) => {
+                if target >= script.commands.len() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("Return-to-View loop target command {target} is out of range"),
+                    ));
+                }
+                pc = target;
+            }
+            ReturnToViewControl::Restart => {
+                restart_seen = true;
+                applied_commands += 1;
+                break;
+            }
+        }
+        append_return_to_view_playback_frames(
+            &mut frames,
+            command_index,
+            command,
+            before_ticks,
+            &state,
+        );
+        applied_commands += 1;
+    }
+    let report = ReturnToViewPreviewReport {
+        applied_commands,
+        restart_seen,
+        max_commands_reached: !restart_seen
+            && pc < script.commands.len()
+            && applied_commands >= max_commands,
+        current_strip: state.current_strip,
+        drawable_actor_count: state.drawable_actor_count(),
+        total_ticks: state.total_ticks,
+        temporary_actor_draws: state.temporary_actor_draws,
+        fixed_wipes: state.fixed_wipes,
+        cell_effect_steps: state.cell_effect_steps,
+        fixed_wipe_rectangle_steps: state.fixed_wipe_rectangle_steps,
+        fixed_wait_ticks: state.fixed_wait_ticks,
+        cached_effect_cell: state.cached_effect_cell,
+    };
+    Ok(ReturnToViewPlayback {
+        frames,
+        run: ReturnToViewPreviewRun { state, report },
+    })
+}
+
+fn append_return_to_view_playback_frames(
+    frames: &mut Vec<ReturnToViewPlaybackFrame>,
+    command_index: usize,
+    command: ReturnToViewCommand,
+    before_ticks: u32,
+    state: &ReturnToViewPreviewState,
+) {
+    match command {
+        ReturnToViewCommand::RunPreviewTick { ticks } => {
+            for tick in 1..=ticks {
+                push_return_to_view_frame(
+                    frames,
+                    command_index,
+                    before_ticks + u32::from(tick),
+                    ReturnToViewFrameKind::PreviewTick,
+                    state,
+                );
+            }
+        }
+        ReturnToViewCommand::OpenCellEffect { .. } | ReturnToViewCommand::CloseCellEffect => {
+            for step in 0..RTV_CELL_EFFECT_STEPS {
+                push_return_to_view_frame(
+                    frames,
+                    command_index,
+                    before_ticks + u32::from(step) + 1,
+                    ReturnToViewFrameKind::CellEffectStep { step },
+                    state,
+                );
+            }
+            for tick in 0..RTV_CELL_EFFECT_FINAL_TICKS {
+                push_return_to_view_frame(
+                    frames,
+                    command_index,
+                    before_ticks + u32::from(RTV_CELL_EFFECT_STEPS) + u32::from(tick) + 1,
+                    ReturnToViewFrameKind::CellEffectFinalTick { tick },
+                    state,
+                );
+            }
+        }
+        ReturnToViewCommand::TemporaryActorDraw { .. } => {
+            push_return_to_view_frame(
+                frames,
+                command_index,
+                before_ticks,
+                ReturnToViewFrameKind::TemporaryActorDraw,
+                state,
+            );
+        }
+        ReturnToViewCommand::TemporaryActorDrawOverBacking { .. } => {
+            push_return_to_view_frame(
+                frames,
+                command_index,
+                before_ticks,
+                ReturnToViewFrameKind::TemporaryActorDrawOverBacking,
+                state,
+            );
+        }
+        ReturnToViewCommand::FixedWipeAndActorDraw { .. } => {
+            let mut elapsed = before_ticks;
+            for step in 0..RTV_FIXED_WIPE_STEPS {
+                elapsed += 1;
+                push_return_to_view_frame(
+                    frames,
+                    command_index,
+                    elapsed,
+                    ReturnToViewFrameKind::FixedWipeRectangle { step },
+                    state,
+                );
+            }
+            for tick in 0..RTV_WAIT_FIXED_TICKS {
+                elapsed += 1;
+                push_return_to_view_frame(
+                    frames,
+                    command_index,
+                    elapsed,
+                    ReturnToViewFrameKind::FixedWait { tick },
+                    state,
+                );
+            }
+            for tick in 0..RTV_FIXED_WIPE_TRAILING_TICKS {
+                elapsed += 1;
+                push_return_to_view_frame(
+                    frames,
+                    command_index,
+                    elapsed,
+                    ReturnToViewFrameKind::FixedWipeTrailingTick { tick },
+                    state,
+                );
+            }
+        }
+        ReturnToViewCommand::MoveActorAndTick { .. } => {
+            push_return_to_view_frame(
+                frames,
+                command_index,
+                before_ticks + 1,
+                ReturnToViewFrameKind::MoveActorTick,
+                state,
+            );
+        }
+        _ => {}
+    }
+}
+
+fn push_return_to_view_frame(
+    frames: &mut Vec<ReturnToViewPlaybackFrame>,
+    command_index: usize,
+    elapsed_title_ticks: u32,
+    kind: ReturnToViewFrameKind,
+    state: &ReturnToViewPreviewState,
+) {
+    let mut state = state.clone();
+    state.total_ticks = elapsed_title_ticks;
+    frames.push(ReturnToViewPlaybackFrame {
+        command_index,
+        elapsed_title_ticks,
+        kind,
+        state,
+    });
 }
 
 pub fn summarize_return_to_view_preview(
     strips: &ReturnToViewMapStrips,
     script: &ReturnToViewScript,
 ) -> io::Result<String> {
-    let report = run_return_to_view_preview_until_restart(strips, script, 4096)?;
+    let playback = run_return_to_view_playback_until_restart(strips, script, 4096)?;
+    let report = playback.run.report;
     let end = if report.restart_seen {
         "reaches the stream restart"
     } else if report.max_commands_reached {
@@ -720,13 +980,17 @@ pub fn summarize_return_to_view_preview(
         "reaches end of stream"
     };
     Ok(format!(
-        "Dry run {end} after {} applied command(s); current strip {:?}, {} drawable actor(s), {} scheduled tick(s), {} temporary draw(s), {} fixed wipe(s).",
+        "Dry run {end} after {} applied command(s); emits {} playback frame(s); current strip {:?}, {} drawable actor(s), {} scheduled tick(s), {} cell-effect step(s), {} temporary draw(s), {} fixed wipe(s), {} fixed-wipe rectangle step(s), {} fixed-wait tick(s).",
         report.applied_commands,
+        playback.frames.len(),
         report.current_strip,
         report.drawable_actor_count,
         report.total_ticks,
+        report.cell_effect_steps,
         report.temporary_actor_draws,
-        report.fixed_wipes
+        report.fixed_wipes,
+        report.fixed_wipe_rectangle_steps,
+        report.fixed_wait_ticks
     ))
 }
 
@@ -735,7 +999,41 @@ pub fn render_return_to_view_preview_viewport(
     script: &ReturnToViewScript,
     atlas: &TileAtlas,
 ) -> io::Result<(TileViewport, ReturnToViewPreviewReport)> {
+    render_return_to_view_preview_viewport_at_title_tick(strips, script, atlas, 0)
+}
+
+pub fn render_return_to_view_preview_viewport_at_title_tick(
+    strips: &ReturnToViewMapStrips,
+    script: &ReturnToViewScript,
+    atlas: &TileAtlas,
+    starting_title_tick: u32,
+) -> io::Result<(TileViewport, ReturnToViewPreviewReport)> {
     let run = run_return_to_view_preview_state_until_restart(strips, script, 4096)?;
+    let viewport = render_return_to_view_state_viewport(
+        &run.state,
+        atlas,
+        starting_title_tick.wrapping_add(run.report.total_ticks),
+    )?;
+    Ok((viewport, run.report))
+}
+
+pub fn render_return_to_view_playback_frame_viewport(
+    frame: &ReturnToViewPlaybackFrame,
+    atlas: &TileAtlas,
+    starting_title_tick: u32,
+) -> io::Result<TileViewport> {
+    render_return_to_view_state_viewport(
+        &frame.state,
+        atlas,
+        starting_title_tick.wrapping_add(frame.elapsed_title_ticks),
+    )
+}
+
+fn render_return_to_view_state_viewport(
+    state: &ReturnToViewPreviewState,
+    atlas: &TileAtlas,
+    render_title_tick: u32,
+) -> io::Result<TileViewport> {
     let width = RTV_STRIP_VISIBLE_COLUMNS
         .checked_mul(TILE_ATLAS_SIDE)
         .ok_or_else(|| {
@@ -762,18 +1060,60 @@ pub fn render_return_to_view_preview_viewport(
     };
     for cell_y in 0..RTV_STRIP_VISIBLE_ROWS {
         for cell_x in 0..RTV_STRIP_VISIBLE_COLUMNS {
-            let tile = run.state.visible[cell_y * RTV_PREVIEW_SIDE + cell_x];
+            let tile = state.visible[cell_y * RTV_PREVIEW_SIDE + cell_x];
+            let tile = return_to_view_tile_for_title_tick(tile, render_title_tick);
             blit_tile_to_viewport(&mut viewport, atlas, tile, cell_x, cell_y)?;
         }
     }
-    for actor in run.state.actors.iter().filter(|actor| actor.drawable) {
+    for actor in state.actors.iter().filter(|actor| actor.drawable) {
         let x = usize::from(actor.x);
         let y = usize::from(actor.y);
         if x < RTV_STRIP_VISIBLE_COLUMNS && y < RTV_STRIP_VISIBLE_ROWS {
-            blit_tile_to_viewport(&mut viewport, atlas, actor.tile0, x, y)?;
+            blit_return_to_view_actor_to_viewport(&mut viewport, atlas, actor.tile0, x, y)?;
         }
     }
-    Ok((viewport, run.report))
+    Ok(viewport)
+}
+
+pub const fn return_to_view_fixed_wipe_rectangles(
+    step: u8,
+) -> Option<[((u16, u16), (u16, u16)); 2]> {
+    if step >= RTV_FIXED_WIPE_STEPS {
+        return None;
+    }
+    let x0 = 128 + 9 * step as u16;
+    let y0 = 152 + 3 * step as u16;
+    let x1 = 137 + 9 * step as u16;
+    let y1 = 155 + 3 * step as u16;
+    Some([((x0, y0), (x1, y1)), ((x0, y0 + 1), (x1, y1 + 1))])
+}
+
+fn blit_return_to_view_actor_to_viewport(
+    viewport: &mut TileViewport,
+    atlas: &TileAtlas,
+    tile: u8,
+    cell_x: usize,
+    cell_y: usize,
+) -> io::Result<()> {
+    let tile_pixels = atlas.tile_pixels(tile as usize).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("tile atlas is missing tile {tile}"),
+        )
+    })?;
+    let dst_x = cell_x * TILE_ATLAS_SIDE;
+    let dst_y = cell_y * TILE_ATLAS_SIDE;
+    for row in 0..TILE_ATLAS_SIDE {
+        let dst_start = (dst_y + row) * viewport.width + dst_x;
+        let src_start = row * TILE_ATLAS_SIDE;
+        for col in 0..TILE_ATLAS_SIDE {
+            let pixel = tile_pixels[src_start + col];
+            if pixel != RTV_ACTOR_TRANSPARENT_PIXEL {
+                viewport.pixels[dst_start + col] = pixel;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn rtv_slot_index(slot: u8) -> io::Result<usize> {
@@ -978,6 +1318,8 @@ mod tests {
         assert_eq!(state.actors[3].tile0, 0x44);
         assert_eq!(state.cell(4, 2), Some(RTV_CLOSE_EFFECT_FINAL_TILE));
         assert_eq!(state.total_ticks, 34);
+        assert_eq!(state.cell_effect_steps, 30);
+        assert_eq!(state.fixed_wait_ticks, 0);
     }
 
     #[test]
@@ -1003,6 +1345,52 @@ mod tests {
         assert_eq!(report.current_strip, Some(0));
         assert_eq!(report.total_ticks, 6);
         assert!(!report.max_commands_reached);
+    }
+
+    #[test]
+    fn fixed_wipe_schedule_matches_public_return_to_view_helper() {
+        let strips = ReturnToViewMapStrips {
+            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
+        };
+        let mut state = ReturnToViewPreviewState::default();
+        state
+            .apply_command(
+                &strips,
+                0,
+                ReturnToViewCommand::SetActor {
+                    slot: 2,
+                    tile: 0x44,
+                    x: 1,
+                    y: 1,
+                },
+            )
+            .unwrap();
+        state
+            .apply_command(
+                &strips,
+                1,
+                ReturnToViewCommand::FixedWipeAndActorDraw {
+                    reserved0: 0,
+                    reserved1: 0,
+                    slot: 2,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(RTV_FIXED_WIPE_TOTAL_TICKS, 16);
+        assert_eq!(state.fixed_wipes, 1);
+        assert_eq!(state.fixed_wipe_rectangle_steps, 5);
+        assert_eq!(state.fixed_wait_ticks, 8);
+        assert_eq!(state.total_ticks, 16);
+        assert_eq!(
+            return_to_view_fixed_wipe_rectangles(0),
+            Some([((128, 152), (137, 155)), ((128, 153), (137, 156))])
+        );
+        assert_eq!(
+            return_to_view_fixed_wipe_rectangles(4),
+            Some([((164, 164), (173, 167)), ((164, 165), (173, 168))])
+        );
+        assert_eq!(return_to_view_fixed_wipe_rectangles(5), None);
     }
 
     #[test]
@@ -1050,6 +1438,165 @@ mod tests {
     }
 
     #[test]
+    fn return_to_view_tile_animation_uses_title_tick_families() {
+        assert_eq!(return_to_view_tile_for_title_tick(0x80, 0), 0x80);
+        assert_eq!(return_to_view_tile_for_title_tick(0x80, 3), 0x83);
+        assert_eq!(return_to_view_tile_for_title_tick(0x84, 2), 0x86);
+        assert_eq!(return_to_view_tile_for_title_tick(0xD8, 5), 0xD9);
+        assert_eq!(return_to_view_tile_for_title_tick(0xDC, 9), 0xDC);
+        assert_eq!(return_to_view_tile_for_title_tick(0x05, 9), 0x05);
+    }
+
+    #[test]
+    fn return_to_view_playback_expands_timed_commands_into_title_tick_frames() {
+        let strips = ReturnToViewMapStrips {
+            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
+        };
+        let script = ReturnToViewScript {
+            commands: vec![
+                ReturnToViewCommand::LoadMapStrip { strip: 0 },
+                ReturnToViewCommand::RunPreviewTick { ticks: 2 },
+                ReturnToViewCommand::SetActor {
+                    slot: 0,
+                    tile: 3,
+                    x: 1,
+                    y: 1,
+                },
+                ReturnToViewCommand::TemporaryActorDraw { slot: 0 },
+                ReturnToViewCommand::FixedWipeAndActorDraw {
+                    reserved0: 0,
+                    reserved1: 0,
+                    slot: 0,
+                },
+                ReturnToViewCommand::OpenCellEffect { x: 4, y: 2 },
+                ReturnToViewCommand::MoveActorAndTick {
+                    slot: 0,
+                    direction: 1,
+                },
+                ReturnToViewCommand::RestartStream,
+            ],
+        };
+
+        let playback = run_return_to_view_playback_until_restart(&strips, &script, 64).unwrap();
+
+        assert!(playback.run.report.restart_seen);
+        assert_eq!(playback.run.report.total_ticks, 36);
+        assert_eq!(
+            playback
+                .frames
+                .iter()
+                .filter(|frame| frame.kind == ReturnToViewFrameKind::PreviewTick)
+                .count(),
+            2
+        );
+        assert_eq!(
+            playback
+                .frames
+                .iter()
+                .filter(|frame| matches!(
+                    frame.kind,
+                    ReturnToViewFrameKind::FixedWipeRectangle { .. }
+                ))
+                .count(),
+            RTV_FIXED_WIPE_STEPS as usize
+        );
+        assert_eq!(
+            playback
+                .frames
+                .iter()
+                .filter(|frame| matches!(frame.kind, ReturnToViewFrameKind::FixedWait { .. }))
+                .count(),
+            RTV_WAIT_FIXED_TICKS as usize
+        );
+        assert_eq!(
+            playback
+                .frames
+                .iter()
+                .filter(|frame| matches!(frame.kind, ReturnToViewFrameKind::CellEffectStep { .. }))
+                .count(),
+            RTV_CELL_EFFECT_STEPS as usize
+        );
+        assert_eq!(
+            playback
+                .frames
+                .last()
+                .map(|frame| frame.elapsed_title_ticks),
+            Some(36)
+        );
+        assert_eq!(playback.run.state.actors[0].x, 2);
+    }
+
+    #[test]
+    fn render_return_to_view_preview_resolves_map_cells_at_elapsed_title_tick() {
+        let mut strips = ReturnToViewMapStrips {
+            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
+        };
+        strips.strips[0][0] = 0xD8;
+        let script = ReturnToViewScript {
+            commands: vec![
+                ReturnToViewCommand::LoadMapStrip { strip: 0 },
+                ReturnToViewCommand::RunPreviewTick { ticks: 2 },
+                ReturnToViewCommand::RestartStream,
+            ],
+        };
+        let mut pixels = Vec::new();
+        for tile in 0..=0xDBusize {
+            pixels.extend(std::iter::repeat_n(
+                (tile % 16) as u8,
+                TILE_ATLAS_SIDE * TILE_ATLAS_SIDE,
+            ));
+        }
+        let atlas = TileAtlas {
+            depth: crate::TileGraphicsDepth::Ega16,
+            pixels,
+        };
+
+        let (viewport, report) =
+            render_return_to_view_preview_viewport_at_title_tick(&strips, &script, &atlas, 1)
+                .unwrap();
+
+        assert_eq!(report.total_ticks, 2);
+        assert_eq!(viewport.pixel(0, 0), Some(0xDB % 16));
+    }
+
+    #[test]
+    fn render_return_to_view_playback_frame_uses_frame_title_tick() {
+        let mut strips = ReturnToViewMapStrips {
+            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
+        };
+        strips.strips[0][0] = 0xD8;
+        let script = ReturnToViewScript {
+            commands: vec![
+                ReturnToViewCommand::LoadMapStrip { strip: 0 },
+                ReturnToViewCommand::RunPreviewTick { ticks: 2 },
+                ReturnToViewCommand::RestartStream,
+            ],
+        };
+        let mut pixels = Vec::new();
+        for tile in 0..=0xDBusize {
+            pixels.extend(std::iter::repeat_n(
+                (tile % 16) as u8,
+                TILE_ATLAS_SIDE * TILE_ATLAS_SIDE,
+            ));
+        }
+        let atlas = TileAtlas {
+            depth: crate::TileGraphicsDepth::Ega16,
+            pixels,
+        };
+
+        let playback = run_return_to_view_playback_until_restart(&strips, &script, 16).unwrap();
+        let first =
+            render_return_to_view_playback_frame_viewport(&playback.frames[0], &atlas, 0).unwrap();
+        let second =
+            render_return_to_view_playback_frame_viewport(&playback.frames[1], &atlas, 0).unwrap();
+
+        assert_eq!(playback.frames[0].elapsed_title_ticks, 1);
+        assert_eq!(first.pixel(0, 0), Some(0xD9 % 16));
+        assert_eq!(playback.frames[1].elapsed_title_ticks, 2);
+        assert_eq!(second.pixel(0, 0), Some(0xDA % 16));
+    }
+
+    #[test]
     fn render_return_to_view_preview_viewport_blits_visible_strip_and_actor() {
         let mut strips = ReturnToViewMapStrips {
             strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
@@ -1086,5 +1633,42 @@ mod tests {
         assert_eq!(viewport.pixel(TILE_ATLAS_SIDE, 0), Some(3));
         assert_eq!(report.drawable_actor_count, 1);
         assert!(report.restart_seen);
+    }
+
+    #[test]
+    fn render_return_to_view_preview_actor_zero_pixels_leave_map_visible() {
+        let mut strips = ReturnToViewMapStrips {
+            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
+        };
+        strips.strips[0][0] = 1;
+        let script = ReturnToViewScript {
+            commands: vec![
+                ReturnToViewCommand::LoadMapStrip { strip: 0 },
+                ReturnToViewCommand::SetActor {
+                    slot: 0,
+                    tile: 3,
+                    x: 0,
+                    y: 0,
+                },
+                ReturnToViewCommand::RestartStream,
+            ],
+        };
+        let mut pixels = Vec::new();
+        pixels.extend(std::iter::repeat_n(0, TILE_ATLAS_SIDE * TILE_ATLAS_SIDE));
+        pixels.extend(std::iter::repeat_n(5, TILE_ATLAS_SIDE * TILE_ATLAS_SIDE));
+        pixels.extend(std::iter::repeat_n(2, TILE_ATLAS_SIDE * TILE_ATLAS_SIDE));
+        let mut actor = vec![RTV_ACTOR_TRANSPARENT_PIXEL; TILE_ATLAS_SIDE * TILE_ATLAS_SIDE];
+        actor[0] = 7;
+        pixels.extend(actor);
+        let atlas = TileAtlas {
+            depth: crate::TileGraphicsDepth::Ega16,
+            pixels,
+        };
+
+        let (viewport, _report) =
+            render_return_to_view_preview_viewport(&strips, &script, &atlas).unwrap();
+
+        assert_eq!(viewport.pixel(0, 0), Some(7));
+        assert_eq!(viewport.pixel(1, 0), Some(5));
     }
 }

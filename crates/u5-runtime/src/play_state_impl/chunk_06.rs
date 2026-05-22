@@ -262,7 +262,7 @@ impl PlayState {
 
     pub fn open_dungeon_underfoot(
         &mut self,
-        game_dir: Option<&Path>,
+        _game_dir: Option<&Path>,
         scene: DungeonScene,
         level: u8,
     ) -> io::Result<MoveOutcome> {
@@ -280,39 +280,11 @@ impl PlayState {
             )),
             0x7 => {
                 self.advance_turn();
-                self.message = "It's open!".to_string();
+                self.message = "Chest opened".to_string();
                 Ok(MoveOutcome::ContainerOpened)
             }
-            0xF => {
-                let Some(entry) = self.dungeon_door_entry_at(
-                    game_dir,
-                    scene,
-                    level,
-                    self.player.x,
-                    self.player.y,
-                )?
-                else {
-                    self.message = "Nothing to open here.".to_string();
-                    return Ok(MoveOutcome::Blocked);
-                };
-                if entry.open_cell == tile {
-                    self.advance_turn();
-                    self.message = "It's open!".to_string();
-                    return Ok(MoveOutcome::DoorOpened);
-                }
-                if !dungeon_closed_door_matches(entry, tile) {
-                    self.message =
-                        "Dungeon door sidecar did not match the current cell byte.".to_string();
-                    return Ok(MoveOutcome::Blocked);
-                }
-                self.grid[idx] = entry.open_cell;
-                self.mark_visibility_dirty();
-                self.advance_turn();
-                self.message = "Opened!".to_string();
-                Ok(MoveOutcome::DoorOpened)
-            }
             _ => {
-                self.message = "Nothing to open here.".to_string();
+                self.message = "What?".to_string();
                 Ok(MoveOutcome::Blocked)
             }
         }
@@ -1026,8 +998,8 @@ impl PlayState {
 
     pub fn jimmy_dungeon_underfoot(
         &mut self,
-        game_dir: Option<&Path>,
-        scene: DungeonScene,
+        _game_dir: Option<&Path>,
+        _scene: DungeonScene,
         level: u8,
         member_index: usize,
     ) -> io::Result<MoveOutcome> {
@@ -1069,44 +1041,6 @@ impl PlayState {
             0x7 => {
                 self.advance_turn();
                 self.message = "It's open!".to_string();
-                MoveOutcome::LockTried
-            }
-            0xF => {
-                let Some(entry) = self.dungeon_door_entry_at(
-                    game_dir,
-                    scene,
-                    level,
-                    self.player.x,
-                    self.player.y,
-                )?
-                else {
-                    self.message = "No lock!".to_string();
-                    return Ok(MoveOutcome::Blocked);
-                };
-                if entry.open_cell == tile {
-                    self.advance_turn();
-                    self.message = "It's open!".to_string();
-                    return Ok(MoveOutcome::LockTried);
-                }
-                if self.keys == 0 {
-                    self.message = "No keys!".to_string();
-                    return Ok(MoveOutcome::Blocked);
-                }
-                if !dungeon_closed_door_matches(entry, tile) {
-                    self.message =
-                        "Dungeon door sidecar did not match the current cell byte.".to_string();
-                    return Ok(MoveOutcome::Blocked);
-                }
-                if !self.jimmy_lock_pick_succeeds(member_index) {
-                    self.keys = self.keys.saturating_sub(1);
-                    self.advance_turn();
-                    self.message = "Key broke!".to_string();
-                    return Ok(MoveOutcome::LockTried);
-                }
-                self.grid[idx] = entry.open_cell;
-                self.mark_visibility_dirty();
-                self.advance_turn();
-                self.message = "Unlocked!".to_string();
                 MoveOutcome::LockTried
             }
             _ => {
@@ -1191,10 +1125,6 @@ impl PlayState {
                 tile,
                 "Got",
             ),
-            0xF => {
-                self.message = "Must open it first.".to_string();
-                MoveOutcome::Blocked
-            }
             _ => {
                 self.message = "Nothing to get here.".to_string();
                 MoveOutcome::Blocked
@@ -2151,12 +2081,13 @@ impl PlayState {
             HiddenTreasureRule::KeyNpcGated => {
                 self.keys != 0
                     && !self.fixed_hidden_treasure_found(entry.record)
-                    && !self.fixed_hidden_treasure_target_occupied(x, y)
+                    && !self.fixed_hidden_treasure_target_has_npc(x, y)
             }
             HiddenTreasureRule::Daily => self.fixed_hidden_treasure_daily_day != self.clock.day,
             HiddenTreasureRule::SingleUseNpcGated => {
-                !self.fixed_hidden_treasure_found(entry.record)
-                    && !self.fixed_hidden_treasure_target_occupied(x, y)
+                self.fixed_hidden_treasure_single_use_cookie
+                    == FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR
+                    && !self.fixed_hidden_treasure_target_has_npc(x, y)
             }
         }
     }
@@ -2164,6 +2095,7 @@ impl PlayState {
     pub fn mark_fixed_hidden_treasure_found(&mut self, entry: FixedHiddenTreasureEntry) {
         match entry.rule {
             HiddenTreasureRule::Daily => self.fixed_hidden_treasure_daily_day = self.clock.day,
+            HiddenTreasureRule::SingleUseNpcGated => {}
             _ => self.set_fixed_hidden_treasure_found(entry.record),
         }
     }
@@ -2184,13 +2116,13 @@ impl PlayState {
         }
     }
 
-    pub fn fixed_hidden_treasure_target_occupied(&self, x: usize, y: usize) -> bool {
-        self.active_objects.iter().skip(1).any(|object| {
-            self.object_occupies(*object, x, y)
-                && !object.is_empty()
-                && object.fixed_hidden_treasure_record().is_none()
-                && object.moonstone_slot_index().is_none()
-        })
+    pub fn fixed_hidden_treasure_target_has_npc(&self, x: usize, y: usize) -> bool {
+        let Some(floor) = self.current_floor() else {
+            return false;
+        };
+        self.npcs
+            .iter()
+            .any(|npc| !npc.is_player_phantom() && npc.x == x && npc.y == y && npc.z == floor as u8)
     }
 
     pub fn fixed_hidden_treasure_pickup_exists(&self, record: usize) -> bool {

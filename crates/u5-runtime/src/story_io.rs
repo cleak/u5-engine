@@ -1,9 +1,10 @@
 //! Parser for `STORY.DAT`: twenty NUL-terminated text records driving the
 //! intro story sequence. Spec: `formats/story-dat.md` §2-§3.
 
-use std::fs;
 use std::io;
 use std::path::Path;
+
+use crate::read_optional_disk_file;
 
 /// `formats/story-dat.md §2` published filename for the intro
 /// story sequence's 11,679-byte text file.
@@ -144,11 +145,93 @@ pub const INTRO_STEP_1_EXTRA_ART_Y: u16 = 86;
 pub const INTRO_STEP_1_EXTRA_SUBIMAGE: u8 = 2;
 pub const INTRO_STEP_1_RECT_TRANSITION: (u16, u16, u16, u16) = (40, 86, 75, 120);
 
+/// `cleak/u5-spec#53` published wipe contract for the step-1
+/// rectangle transition: a left-to-right column sweep at one pixel
+/// column per title tick, abrupt at each column boundary. The same
+/// helper is reused by the step-2 rectangle, story-page transitions,
+/// and endgame page-in transitions.
+pub const INTRO_RECT_TRANSITION_COLUMNS_PER_TICK: u16 = 1;
+
+/// `cleak/u5-spec#53`: total ticks needed to reveal an inclusive
+/// rectangle through the published column-sweep helper. Width is
+/// `(x1 - x0 + 1)`; total ticks equals the width when the sweep is
+/// one column per title tick.
+pub const fn intro_rect_transition_tick_count(rect: (u16, u16, u16, u16)) -> u16 {
+    let (x0, _y0, x1, _y1) = rect;
+    if x1 < x0 {
+        return 0;
+    }
+    let width = x1.saturating_sub(x0).saturating_add(1);
+    width / INTRO_RECT_TRANSITION_COLUMNS_PER_TICK
+}
+
+/// `cleak/u5-spec#53`: returns the inclusive X-column range
+/// `[start_x, end_x]` revealed by the column sweep at the given
+/// zero-based `tick` over the published rectangle. Each tick adds
+/// [`INTRO_RECT_TRANSITION_COLUMNS_PER_TICK`] columns; once the
+/// sweep finishes, every subsequent tick keeps the full rectangle
+/// revealed. Returns `None` before the first tick (`tick == 0`
+/// reveals column `x0`).
+pub fn intro_rect_transition_revealed_columns(
+    rect: (u16, u16, u16, u16),
+    tick: u16,
+) -> Option<(u16, u16)> {
+    let (x0, _y0, x1, _y1) = rect;
+    if x1 < x0 {
+        return None;
+    }
+    let last_tick = intro_rect_transition_tick_count(rect);
+    if last_tick == 0 {
+        return None;
+    }
+    let clamped_tick = if tick + 1 > last_tick {
+        last_tick - 1
+    } else {
+        tick
+    };
+    let added = clamped_tick.saturating_mul(INTRO_RECT_TRANSITION_COLUMNS_PER_TICK);
+    let end_x = x0.saturating_add(added).min(x1);
+    Some((x0, end_x))
+}
+
 /// `intro.md §10` step 6 extra `STORY2.16` doorway-transition art
 /// draw. Step 6 also replaces the usual `STORY.DAT` record with two
 /// inline doorway-transition text lines; the strings are owned by
 /// the intro code itself and are not part of the published spec
 /// text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RectColumnSweepTransition {
+    pub rect: (u16, u16, u16, u16),
+    pub tick: u16,
+}
+
+impl RectColumnSweepTransition {
+    pub const fn new(rect: (u16, u16, u16, u16)) -> Self {
+        Self { rect, tick: 0 }
+    }
+
+    pub const fn total_ticks(self) -> u16 {
+        intro_rect_transition_tick_count(self.rect)
+    }
+
+    pub fn revealed_columns(self) -> Option<(u16, u16)> {
+        intro_rect_transition_revealed_columns(self.rect, self.tick)
+    }
+
+    pub fn advance_title_tick(&mut self) -> bool {
+        let total_ticks = self.total_ticks();
+        if total_ticks == 0 {
+            return true;
+        }
+        if self.tick.saturating_add(1) < total_ticks {
+            self.tick = self.tick.saturating_add(1);
+            false
+        } else {
+            true
+        }
+    }
+}
+
 pub const INTRO_STEP_6_EXTRA_ART_X: u16 = 96;
 pub const INTRO_STEP_6_EXTRA_ART_Y: u16 = 39;
 pub const INTRO_STEP_6_EXTRA_SUBIMAGE: u8 = 3;
@@ -317,15 +400,8 @@ impl StoryRecords {
 
 pub fn load_story_records(game_dir: &Path) -> io::Result<Option<StoryRecords>> {
     let path = game_dir.join(STORY_DAT_FILE);
-    let bytes = match fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => {
-            return Err(io::Error::new(
-                err.kind(),
-                format!("{}: {err}", path.display()),
-            ));
-        }
+    let Some(bytes) = read_optional_disk_file(&path)? else {
+        return Ok(None);
     };
     parse_story_records(&bytes).map(Some)
 }

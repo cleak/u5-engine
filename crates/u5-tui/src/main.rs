@@ -51,6 +51,9 @@ fn main() -> io::Result<()> {
     if let Some(out_dir) = args.visual_frame_suite.as_deref() {
         return run_visual_frame_suite(&args, out_dir);
     }
+    if let Some(out_dir) = args.visual_route_suite.as_deref() {
+        return run_visual_route_suite(&args, out_dir);
+    }
     if args.route_smoke {
         return run_route_smoke(&args.game_dir, args.raster_depth);
     }
@@ -84,6 +87,11 @@ fn run_visual_frame_suite(args: &CliArgs, out_dir: &std::path::Path) -> io::Resu
     u5_bevy::run_visual_frame_suite(&args.game_dir, args.raster_depth, out_dir)
 }
 
+#[cfg(feature = "visual")]
+fn run_visual_route_suite(args: &CliArgs, out_dir: &std::path::Path) -> io::Result<()> {
+    u5_bevy::run_visual_route_suite(&args.game_dir, args.raster_depth, out_dir)
+}
+
 #[cfg(not(feature = "visual"))]
 fn run_visual(_args: CliArgs) -> io::Result<()> {
     Err(io::Error::new(
@@ -108,5 +116,14 @@ fn run_visual_frame_suite(_args: &CliArgs, _out_dir: &std::path::Path) -> io::Re
         io::ErrorKind::Unsupported,
         "--visual-frame-suite requires building with --features visual (e.g. \
          `cargo run --features visual -- --visual-frame-suite <DIR> <GAME_DIR>`).",
+    ))
+}
+
+#[cfg(not(feature = "visual"))]
+fn run_visual_route_suite(_args: &CliArgs, _out_dir: &std::path::Path) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "--visual-route-suite requires building with --features visual (e.g. \
+         `cargo run --features visual -- --visual-route-suite <DIR> <GAME_DIR>`).",
     ))
 }

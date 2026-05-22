@@ -1,6 +1,6 @@
 //! Outer-dispatch routing per `main-loop.md` §3-§4.
 
-use crate::InputDirection;
+use crate::{InputDirection, WorldPlane};
 
 /// `main-loop.md §11` Q-save scene-byte normalisation. Combat is not
 /// saved; if the active scene byte is the temporary combat marker
@@ -215,6 +215,96 @@ pub fn dungeon_scene_for_word_of_power(word: &str) -> Option<u8> {
     } else {
         None
     }
+}
+
+/// Public issue #32: one Word-of-Power seal predicate row. Coordinates are
+/// absolute plane coordinates; the live tile must match `closed_tile` before
+/// the seal opens via `tile ^ 0xDF`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WordOfPowerSeal {
+    pub word: &'static str,
+    pub dungeon: &'static str,
+    pub plane: WorldPlane,
+    pub x: usize,
+    pub y: usize,
+    pub closed_tile: u8,
+}
+
+pub const WORD_OF_POWER_SEAL_XOR: u8 = 0xDF;
+
+/// Public issue #32 byte-level Word-of-Power coordinate and category tables.
+pub const WORD_OF_POWER_SEALS: [WordOfPowerSeal; 8] = [
+    WordOfPowerSeal {
+        word: "FALLAX",
+        dungeon: "Deceit",
+        plane: WorldPlane::Britannia,
+        x: 240,
+        y: 73,
+        closed_tile: 0x16,
+    },
+    WordOfPowerSeal {
+        word: "VILIS",
+        dungeon: "Despise",
+        plane: WorldPlane::Britannia,
+        x: 91,
+        y: 67,
+        closed_tile: 0x16,
+    },
+    WordOfPowerSeal {
+        word: "INOPIA",
+        dungeon: "Destard",
+        plane: WorldPlane::Britannia,
+        x: 72,
+        y: 168,
+        closed_tile: 0x16,
+    },
+    WordOfPowerSeal {
+        word: "MALUM",
+        dungeon: "Wrong",
+        plane: WorldPlane::Britannia,
+        x: 126,
+        y: 20,
+        closed_tile: 0x18,
+    },
+    WordOfPowerSeal {
+        word: "AVIDUS",
+        dungeon: "Covetous",
+        plane: WorldPlane::Britannia,
+        x: 156,
+        y: 27,
+        closed_tile: 0x18,
+    },
+    WordOfPowerSeal {
+        word: "INFAMA",
+        dungeon: "Shame",
+        plane: WorldPlane::Britannia,
+        x: 58,
+        y: 102,
+        closed_tile: 0x17,
+    },
+    WordOfPowerSeal {
+        word: "IGNAVUS",
+        dungeon: "Hythloth",
+        plane: WorldPlane::Britannia,
+        x: 239,
+        y: 240,
+        closed_tile: 0x17,
+    },
+    WordOfPowerSeal {
+        word: "VERAMOCOR",
+        dungeon: "Doom",
+        plane: WorldPlane::Underworld,
+        x: 128,
+        y: 128,
+        closed_tile: 0x16,
+    },
+];
+
+pub fn word_of_power_seal_for_word(word: &str) -> Option<WordOfPowerSeal> {
+    WORD_OF_POWER_SEALS
+        .iter()
+        .copied()
+        .find(|seal| seal.word.eq_ignore_ascii_case(word))
 }
 
 /// `catalogs/gazetteer.md §6` resident name for one of the eight

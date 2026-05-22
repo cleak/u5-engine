@@ -1649,6 +1649,145 @@
     }
 
     #[test]
+    fn search_fixed_hidden_daily_cache_ignores_found_bitmap_bit() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 1, 2);
+        state.area = Area::Town {
+            scene: Scene::new(5).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.clock = GameClock::with_date(139, 4, 5, 12, 0).unwrap();
+        state.fixed_hidden_treasure_daily_day = FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY;
+        state.set_fixed_hidden_treasure_found(14);
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert!(state.fixed_hidden_treasure_found(14));
+        assert_eq!(state.fixed_hidden_treasure_daily_day, 5);
+        assert_eq!(
+            state.active_objects[1].fixed_hidden_treasure_record(),
+            Some(14)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn search_fixed_hidden_record_15_uses_cookie_not_found_bitmap() {
+        let dir = debug_game_dir();
+        let mut state = world_state(open_world_grid(), 79, 64);
+        state.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        state.player.facing = Direction::East;
+        state.fixed_hidden_treasure_single_use_cookie =
+            FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR;
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert!(!state.fixed_hidden_treasure_found(15));
+        assert_eq!(
+            state.active_objects[1].fixed_hidden_treasure_record(),
+            Some(15)
+        );
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert!(!state.fixed_hidden_treasure_found(15));
+
+        assert_eq!(
+            state.get_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Got
+        );
+        state.fixed_hidden_treasure_single_use_cookie = 1;
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert!(!state.fixed_hidden_treasure_found(15));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn fixed_hidden_special_records_ignore_non_npc_active_object_on_target() {
+        let dir = debug_game_dir();
+        let mut state = world_state(open_world_grid(), 79, 64);
+        state.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        state.player.facing = Direction::East;
+        state.fixed_hidden_treasure_single_use_cookie =
+            FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x10,
+            tile: 0x10,
+            x: 80,
+            y: 64,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert_eq!(
+            state.active_objects[2].fixed_hidden_treasure_record(),
+            Some(15)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn fixed_hidden_special_records_block_on_town_npc_at_target() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 5, 8);
+        state.area = Area::Town {
+            scene: Scene::new(18).unwrap(),
+            floor: -1,
+        };
+        state.player.facing = Direction::East;
+        state.keys = 1;
+        state.npcs.push(RuntimeNpc {
+            slot: 1,
+            type_byte: 1,
+            dialog_id: 0,
+            schedule: [0; NPC_SCHEDULE_RECORD_LEN],
+            state: NPC_STATE_IDLE,
+            x: 6,
+            y: 8,
+            z: 0xff,
+            cached_wp: 0,
+            move_queue: Vec::new(),
+            move_queue_pos: 0,
+            stuck_counter: 0,
+            active_object: Some(1),
+            player_phantom: false,
+        });
+        state.active_objects.push(npc_active_object(1, 6, 8, 0xff));
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert!(!state.fixed_hidden_treasure_found(13));
+        assert_eq!(state.message, "No secret door found.");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn fixed_hidden_treasure_food_clamps_to_party_food_cap() {
         let dir = debug_game_dir();
         let mut state = test_state(open_grid(), 18, 24);
@@ -1982,12 +2121,16 @@
     }
 
     #[test]
-    fn natural_moongate_entry_clears_tile_and_reports_missing_glyph_cache() {
+    fn natural_moongate_entry_treats_felucca_hour_19_as_off_horizon() {
+        // Public issue #38 corrected Felucca hour 19 to the high-bit
+        // off-horizon sentinel. A live natural-moongate cell clears,
+        // but there is no Moonstone slot to route through.
         let origin_idx = world_cell_index(5, 5);
         let mut grid = open_world_grid();
         grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
         let mut state = britannia_state(grid, 5, 5);
-        state.clock = GameClock::new(11, 58).unwrap();
+        state.clock = GameClock::new(19, 0).unwrap();
+        state.refresh_cached_moon_glyphs();
         state.natural_moongate_live_cells.push(origin_idx);
 
         assert_eq!(
@@ -2003,6 +2146,83 @@
         assert_eq!(
             state.message,
             "Natural moongate moon-glyph cache is unavailable."
+        );
+    }
+
+    #[test]
+    fn natural_moongate_entry_uses_published_hour_table_for_empty_slot() {
+        // `moons.md §2`: hour 11 Trammel resolves to Moonstone slot 6
+        // through the published hour table. With no destination wired
+        // into slot 6, the gate hook still clears the tile and reports
+        // the published "phase N is not set" message — confirming the
+        // cached byte rather than recomputing the hour table at entry.
+        let origin_idx = world_cell_index(5, 5);
+        let mut grid = open_world_grid();
+        grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+        let mut state = britannia_state(grid, 5, 5);
+        state.clock = GameClock::new(11, 58).unwrap();
+        state.set_cached_moon_glyph_bytes(
+            TRAMMEL_OFF_HORIZON_SENTINEL,
+            FELUCCA_OFF_HORIZON_SENTINEL,
+        );
+        state.refresh_cached_moon_glyphs();
+        state.natural_moongate_live_cells.push(origin_idx);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'q', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!((state.player.x, state.player.y), (5, 5));
+        assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
+        assert_eq!(state.message, "Natural moongate phase 7 is not set.");
+    }
+
+    #[test]
+    fn natural_moongate_entry_uses_cached_byte_not_current_hour_table() {
+        let origin_idx = world_cell_index(5, 5);
+        let mut grid = open_world_grid();
+        grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
+        let mut state = britannia_state(grid, 5, 5);
+        state.clock = GameClock::new(11, 58).unwrap();
+        state.set_cached_moon_glyph_bytes(b'1', FELUCCA_OFF_HORIZON_SENTINEL);
+        state.natural_moongate_live_cells.push(origin_idx);
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'q', "", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(state.message, "Natural moongate phase 2 is not set.");
+    }
+
+    #[test]
+    fn moon_glyph_cache_refreshes_on_hour_change_and_status_redraw() {
+        let mut state = britannia_state(open_world_grid(), 5, 5);
+        state.clock = GameClock::new(10, 58).unwrap();
+        state.set_cached_moon_glyph_bytes(
+            TRAMMEL_OFF_HORIZON_SENTINEL,
+            FELUCCA_OFF_HORIZON_SENTINEL,
+        );
+
+        state.advance_turn_with_minutes(2);
+
+        assert_eq!(state.clock.hour, 11);
+        assert_eq!(
+            state.cached_moon_glyph_bytes,
+            cached_moon_glyph_bytes_for_hour(11)
+        );
+
+        state.clock = GameClock::new(12, 0).unwrap();
+        state.set_cached_moon_glyph_bytes(
+            TRAMMEL_OFF_HORIZON_SENTINEL,
+            FELUCCA_OFF_HORIZON_SENTINEL,
+        );
+        let _ = state.render_text_window_frame(None);
+
+        assert_eq!(
+            state.cached_moon_glyph_bytes,
+            cached_moon_glyph_bytes_for_hour(12)
         );
     }
 

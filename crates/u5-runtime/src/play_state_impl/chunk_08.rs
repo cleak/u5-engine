@@ -454,44 +454,48 @@ impl PlayState {
     }
 
     pub fn apply_rest_recovery_tick(&mut self) -> (u16, u16) {
-        // commands.md §10: poisoned and dead members are not treated like
-        // healthy sleepers, so they do not receive the bed-rest HP gain.
-        // Mana recovery still ticks for living members regardless of status,
-        // matching the rest-with-watch contract.
-        let mut recovered_hp = 0;
-        let mut recovered_mana = 0;
-        for index in 0..self.party.len() {
-            if !self.party[index].living() {
-                continue;
-            }
-            if self.party[index].status != b'P' {
-                let hp_recovery = self.rest_hp_recovery_roll(index);
-                recovered_hp += self.party[index].heal_by(u16::from(hp_recovery));
-            }
-            let mana_recovery = self.rest_mana_recovery_roll(index);
-            recovered_mana += u16::from(self.party[index].recover_mana_by(mana_recovery));
-        }
-        (recovered_hp, recovered_mana)
+        // `cleak/u5-spec#47`: ordinary rest advances time only. The
+        // hourly clock path has already applied provisions, poison,
+        // starvation, schedules, and ambient effects.
+        (0, 0)
     }
 
     pub fn apply_rest_with_watch_recovery_tick(&mut self) -> (u16, u16) {
-        let mut recovered_hp = 0;
-        let mut recovered_mana = 0;
-        for index in 0..self.party.len() {
-            let Some(status) = character_status_for_byte(self.party[index].status) else {
-                continue;
-            };
-            if !rest_with_watch_participates(status) || !self.party[index].living() {
+        // Watch participation affects prompts, interruption setup, and
+        // cleanup status transitions, not direct HP/MP restoration.
+        (0, 0)
+    }
+
+    pub fn apply_inn_rest_night_recovery(&mut self) -> (u16, u16, usize) {
+        let mut recovered_hp = 0u16;
+        let mut recovered_mana = 0u16;
+        let mut cured = 0usize;
+        for (index, member) in self.party.iter_mut().enumerate() {
+            if !member.living() {
                 continue;
             }
-            if rest_with_watch_recovers_hp(status) {
-                let hp_recovery = self.rest_hp_recovery_roll(index);
-                recovered_hp += self.party[index].heal_by(u16::from(hp_recovery));
+            if member.status == b'P' {
+                member.status = b'G';
+                cured += 1;
             }
-            let mana_recovery = self.rest_mana_recovery_roll(index);
-            recovered_mana += u16::from(self.party[index].recover_mana_by(mana_recovery));
+            if !matches!(member.status, b'G' | b'S') {
+                continue;
+            }
+
+            let hp_target = inn_rest_hp_target(member.class_byte, member.max_hp);
+            if member.hp < hp_target {
+                recovered_hp += hp_target - member.hp;
+                member.hp = hp_target;
+            }
+
+            let intelligence = self.party_intelligence.get(index).copied().unwrap_or(0);
+            let mana_target = inn_rest_mana_target(member.class_byte, intelligence);
+            if member.mana < mana_target {
+                recovered_mana += u16::from(mana_target - member.mana);
+                member.mana = mana_target;
+            }
         }
-        (recovered_hp, recovered_mana)
+        (recovered_hp, recovered_mana, cured)
     }
 
     pub fn mark_town_rest_sleepers(&mut self) -> usize {
@@ -520,23 +524,6 @@ impl PlayState {
             }
         }
         woke
-    }
-
-    pub fn rest_hp_recovery_roll(&self, member_index: usize) -> u8 {
-        1 + (self.rest_hp_recovery_seed(member_index) % 4)
-    }
-
-    pub fn rest_mana_recovery_roll(&self, member_index: usize) -> u8 {
-        1 + ((self.rest_hp_recovery_seed(member_index) ^ 0x5a) % 2)
-    }
-
-    pub fn rest_hp_recovery_seed(&self, member_index: usize) -> u8 {
-        self.turn as u8
-            ^ self.clock.hour.wrapping_mul(3)
-            ^ self.clock.minute.wrapping_mul(5)
-            ^ (self.player.x as u8).wrapping_mul(7)
-            ^ (self.player.y as u8).wrapping_mul(11)
-            ^ (member_index as u8).wrapping_mul(13)
     }
 
     pub fn wake_initial_rest_sleepers(&mut self, asleep_at_start: &[u8]) -> usize {
@@ -952,25 +939,28 @@ impl PlayState {
             return self.enter_moongate(game_dir, plane, entry);
         }
 
-        if let Some(entries) = load_world_location_entries(game_dir)? {
-            let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
-            if let Some(entry) = entries.iter().find(|entry| {
-                entry.plane == plane
-                    && entry.x == self.player.x
-                    && entry.y == self.player.y
-                    && match entry.expected_tile {
-                        Some(expected) => expected == tile,
-                        None => true,
-                    }
-            }) {
-                return self.enter_world_target(
-                    game_dir,
-                    plane,
-                    entry.target,
-                    entry.town_entry_y,
-                    false,
-                );
-            }
+        let (entries, has_sidecar) =
+            effective_world_location_entries_with_sidecar_status(game_dir)?;
+        let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
+        if let Some(entry) = entries.iter().find(|entry| {
+            entry.plane == plane
+                && entry.x == self.player.x
+                && entry.y == self.player.y
+                && match entry.expected_tile {
+                    Some(expected) => expected == tile,
+                    None => true,
+                }
+        }) {
+            return self.enter_world_target(
+                game_dir,
+                plane,
+                entry.target,
+                entry.town_entry_y,
+                false,
+            );
+        }
+
+        if has_sidecar {
             self.message = format!(
                 "No entry in {WORLD_LOCATION_TABLE_FILE} for {} at ({}, {}).",
                 plane.key(),
@@ -982,7 +972,7 @@ impl PlayState {
 
         let Some(target) = self.debug_enter else {
             self.message = format!(
-                "No clean-room entrance coordinate table is available for {} at ({}, {}).",
+                "No entry in {WORLD_LOCATION_TABLE_FILE} for {} at ({}, {}).",
                 plane.key(),
                 self.player.x,
                 self.player.y
@@ -1086,14 +1076,27 @@ impl PlayState {
         }
     }
 
+    pub fn refresh_cached_moon_glyphs(&mut self) {
+        self.cached_moon_glyph_bytes = cached_moon_glyph_bytes_for_hour(self.clock.hour);
+    }
+
+    pub fn set_cached_moon_glyph_bytes(&mut self, trammel: u8, felucca: u8) {
+        self.cached_moon_glyph_bytes = [trammel, felucca];
+    }
+
     pub fn set_cached_moon_glyph_slots(
         &mut self,
         trammel_slot: Option<usize>,
         felucca_slot: Option<usize>,
     ) {
-        self.cached_moon_glyph_slots = [
-            trammel_slot.filter(|slot| *slot < MOONSTONE_SLOT_COUNT),
-            felucca_slot.filter(|slot| *slot < MOONSTONE_SLOT_COUNT),
+        let encode = |slot: Option<usize>, sentinel: u8| {
+            slot.filter(|slot| *slot < MOONSTONE_SLOT_COUNT)
+                .map(|slot| b'0' + slot as u8)
+                .unwrap_or(sentinel)
+        };
+        self.cached_moon_glyph_bytes = [
+            encode(trammel_slot, TRAMMEL_OFF_HORIZON_SENTINEL),
+            encode(felucca_slot, FELUCCA_OFF_HORIZON_SENTINEL),
         ];
     }
 
@@ -1155,7 +1158,8 @@ impl PlayState {
 
     pub fn cached_natural_moongate_slot_index(&self) -> Option<usize> {
         let moon = natural_moongate_cached_glyph_slot(self.clock.hour) as usize;
-        self.cached_moon_glyph_slots[moon].filter(|slot| *slot < MOONSTONE_SLOT_COUNT)
+        moonstone_slot_from_glyph_byte(self.cached_moon_glyph_bytes[moon])
+            .filter(|slot| *slot < MOONSTONE_SLOT_COUNT)
     }
 
     pub fn current_live_natural_moongate_cell_index(&self) -> Option<usize> {
@@ -1226,6 +1230,7 @@ impl PlayState {
             rare_reagent_harvest_days: self.rare_reagent_harvest_days,
             fixed_hidden_treasure_found: self.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: self.fixed_hidden_treasure_daily_day,
+            fixed_hidden_treasure_single_use_cookie: self.fixed_hidden_treasure_single_use_cookie,
             dungeon_room_clear_bitmap: self.dungeon_room_clear_bitmap,
             saved_dungeon_working_buffer: None,
             moonstone_slots: self.moonstone_slots,
@@ -1233,6 +1238,7 @@ impl PlayState {
             shrine_ordained_mask: self.shrine_ordained_mask,
             shrine_codex_mask: self.shrine_codex_mask,
             moral_standing: self.moral_standing,
+            toll_progress: self.toll_progress,
             avatar_stats: self.avatar_stats,
             torches: self.torches,
             torch_counter: self.torch_counter,
@@ -1369,9 +1375,7 @@ impl PlayState {
         game_dir: &Path,
         target: PlayTarget,
     ) -> io::Result<bool> {
-        let Some(entries) = load_world_location_entries(game_dir)? else {
-            return Ok(false);
-        };
+        let entries = effective_world_location_entries(game_dir)?;
         let matches: Vec<_> = entries
             .iter()
             .copied()

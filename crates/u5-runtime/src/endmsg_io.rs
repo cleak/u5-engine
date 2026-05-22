@@ -2,9 +2,10 @@
 //! the endgame Lord British box-delivery sequence and the refusal/missing-box
 //! branch. Spec: `formats/endmsg-dat.md` §2-§4.
 
-use std::fs;
 use std::io;
 use std::path::Path;
+
+use crate::read_optional_disk_file;
 
 const ENDMSG_DAT_FILE: &str = "ENDMSG.DAT";
 const EXPECTED_RECORD_COUNT: usize = 11;
@@ -46,15 +47,8 @@ impl EndgameMessages {
 
 pub fn load_endgame_messages(game_dir: &Path) -> io::Result<Option<EndgameMessages>> {
     let path = game_dir.join(ENDMSG_DAT_FILE);
-    let bytes = match fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => {
-            return Err(io::Error::new(
-                err.kind(),
-                format!("{}: {err}", path.display()),
-            ));
-        }
+    let Some(bytes) = read_optional_disk_file(&path)? else {
+        return Ok(None);
     };
     parse_endgame_messages(&bytes).map(Some)
 }

@@ -26,6 +26,7 @@ pub mod containers;
 pub mod conversation_session;
 pub mod directed_step;
 pub mod direction;
+pub mod disk_io;
 pub mod dungeon_tables;
 pub mod dungeon_tables_io;
 pub mod dungeon_tables_io_movement;
@@ -181,19 +182,22 @@ pub use combat_setup::*;
 pub use combat_stats::*;
 pub use commands::{
     BRITANNIA_CHUNK_MAP_COLUMNS, BRITANNIA_CHUNK_MAP_LOOK_TRIGGER_TILE, BRITANNIA_CHUNK_MAP_ROWS,
-    Command, LOCAL_VIEW_CELL_PIXEL_SCALE, LOCAL_VIEW_OVERLAY_SIDE, LocalViewClass, NewOrderOutcome,
+    Command, DEATH_VISION_OBJECT_CLASS, DEATH_VISION_ROLL_HIGH, DEATH_VISION_ROLL_LOW,
+    LOCAL_VIEW_CELL_PIXEL_SCALE, LOCAL_VIEW_OVERLAY_SIDE, LocalViewClass, NewOrderOutcome,
     PUSHABLE_CANNON_FLOOR_STAMP, PUSHABLE_GENERIC_FLOOR_STAMP, PushableTileFamily,
     TOWN_CANNON_TILE_FIRST, TOWN_CANNON_TILE_LAST, ViewCommandOutcome, WISHING_WELL_WISH_KEYWORDS,
-    YELL_INPUT_MAX_LEN, YELL_NOTHING_SAID_MESSAGE, YELL_SAILS_FURLED_MESSAGE,
-    YELL_SAILS_HOISTED_MESSAGE, YellInputContext, command_for_letter, local_view_class_for_tile,
-    new_order_outcome, new_order_swap_accepted, pushable_facing_index, pushable_oriented_tile,
-    pushable_tile_family, surface_town_fountain_look_tile, surface_wishing_well_look_tile,
-    town_cannon_tile_fire_direction, town_fountain_drink_accepts, view_command_outcome,
-    wishing_well_wish_accepted,
+    WISHING_WELL_WISH_MAX_CHARS, WishingWellWish, YELL_INPUT_MAX_LEN, YELL_NOTHING_SAID_MESSAGE,
+    YELL_SAILS_FURLED_MESSAGE, YELL_SAILS_HOISTED_MESSAGE, YellInputContext, command_for_letter,
+    death_vision_object_class, local_view_class_for_tile, new_order_outcome,
+    new_order_swap_accepted, pushable_facing_index, pushable_oriented_tile, pushable_tile_family,
+    sign_or_wanted_poster_object_class, surface_town_fountain_look_tile,
+    surface_wishing_well_look_tile, town_cannon_tile_fire_direction, town_fountain_drink_accepts,
+    view_command_outcome, wishing_well_grant_scene, wishing_well_wish, wishing_well_wish_accepted,
 };
 pub use common_words_io::{
     COMMON_WORD_DICTIONARY_FILE, CommonWordDictionary, CommonWordDictionaryError,
-    common_word_dictionary_refs, load_common_word_dictionary_optional,
+    PUBLISHED_COMMON_WORD_DICTIONARY, common_word_dictionary_refs,
+    common_word_dictionary_refs_or_published, load_common_word_dictionary_optional,
     missing_common_word_dictionary_error, parse_common_word_dictionary,
     shoppe_bark_uses_common_word_dictionary, tlk_fields_use_common_word_dictionary,
     tlk_stream_uses_common_word_dictionary,
@@ -225,11 +229,13 @@ pub use directed_step::{
     type_bypasses_terrain_chance_gate,
 };
 pub use direction::Direction;
+pub use disk_io::*;
 pub use dungeon_tables::*;
 pub use dungeon_tables_io::*;
 pub use dungeon_tables_io_movement::*;
 pub use end_io::{
-    END_DAT_FILE, END_DAT_LEN, END_DAT_WINDOW_COUNT, END_NARRATIVE_WINDOW_TABLE_FILE,
+    END_DAT_FILE, END_DAT_LEN, END_DAT_PUBLISHED_WINDOW_RANGE_OPTIONS,
+    END_DAT_PUBLISHED_WINDOW_RANGES, END_DAT_WINDOW_COUNT, END_NARRATIVE_WINDOW_TABLE_FILE,
     END_PARAGRAPH_START_MARKER, END_SOFT_BREAK_MARKER, EndNarrative, EndNarrativeGroup,
     EndNarrativeWindow, EndNarrativeWindowRange, decode_end_window, end_narrative_window,
     load_end_narrative, load_end_narrative_window_ranges, parse_end_narrative,
@@ -266,24 +272,25 @@ pub use input_codes::{
     INPUT_CODE_WEST, InputByteClass, InputDirection, NumericPromptAction,
     PartyTargetSelectorAction, PartyTargetSelectorResult, SPELL_DIRECTION_PROMPT_PREFIX,
     cardinal_direction_prompt_action, direction_prompt_label, free_text_input_action,
-    input_byte_class, input_case_fold, input_code_direction, input_function_key_index,
+    input_byte_class, input_case_fold, input_code_direction, input_direction_code,
+    input_function_key_code, input_function_key_index, input_keypad_digit_direction_code,
     input_prompt_mode_active, numeric_prompt_action, numeric_prompt_apply,
     party_target_selector_action, party_target_selector_result,
 };
 pub use input_dispatch::{PlayInputDisposition, handle_play_key_input};
 pub use intro::{
-    BRITISH_PTH_PEN_ORIGINS, IntroMenuAction, MISCMAPS_CUTSCENE_RECORD_BYTES,
-    MISCMAPS_CUTSCENE_RECORD_COUNT, MISCMAPS_CUTSCENE_ROW_STRIDE, MISCMAPS_CUTSCENE_ROWS,
-    MISCMAPS_CUTSCENE_SECTION_BYTES, MISCMAPS_CUTSCENE_SECTION_OFFSET,
+    ACKNOWLEDGEMENTS_LINES, BRITISH_PTH_PEN_ORIGINS, IntroMenuAction,
+    MISCMAPS_CUTSCENE_RECORD_BYTES, MISCMAPS_CUTSCENE_RECORD_COUNT, MISCMAPS_CUTSCENE_ROW_STRIDE,
+    MISCMAPS_CUTSCENE_ROWS, MISCMAPS_CUTSCENE_SECTION_BYTES, MISCMAPS_CUTSCENE_SECTION_OFFSET,
     MISCMAPS_CUTSCENE_VISIBLE_COLUMNS, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
     MISCMAPS_RTV_STRIP_ROW_STRIDE, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MiscmapsCutsceneMap, RTV_COMMAND_COUNT,
     RTV_COMMAND_STREAM_BYTES, RTV_STRIP_COLUMNS, RTV_STRIP_COUNT, RTV_STRIP_ROWS,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
     TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_COUNT, TITLE_TICK_FRAME_HEIGHT,
-    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TitleBitAsset,
-    TitleBitPlacement, intro_menu_action, load_miscmaps_cutscene_map,
-    parse_miscmaps_cutscene_map_file, title_tick_next_frame,
+    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TITLE_TICK_PALETTE_CYCLE,
+    TitleBitAsset, TitleBitPlacement, intro_menu_action, load_miscmaps_cutscene_map,
+    parse_miscmaps_cutscene_map_file, title_tick_next_frame, title_tick_palette_indices,
 };
 pub use jimmy::{
     DOOR_AUTO_CLOSE_TURNS, DoorAutoCloseTick, JIMMY_CHEST_THRESHOLD_BIAS,
@@ -346,12 +353,13 @@ pub use main_loop::{
     DungeonMovementAction, OuterLoopFlags, SCENE_COMBAT_TEMPORARY, SCENE_DUNGEON_FAMILY_FIRST,
     SCENE_DUNGEON_FAMILY_LAST, SCENE_DUNGEON_NAMED_FIRST, SCENE_DUNGEON_NAMED_LAST,
     SCENE_INTRO_FIRST, SCENE_INTRO_LAST, SCENE_OVERWORLD, SCENE_TOWN_FAMILY_FIRST,
-    SCENE_TOWN_FAMILY_LAST, SceneRoute, WorldTickPath, dungeon_entry_seed,
-    dungeon_facing_back_delta, dungeon_facing_forward_delta, dungeon_facing_left_delta,
-    dungeon_facing_right_delta, dungeon_facing_turn_around, dungeon_facing_turn_left,
-    dungeon_facing_turn_right, dungeon_movement_action, dungeon_record_index,
-    dungeon_resident_name, dungeon_scene_for_word_of_power, dungeon_word_of_power,
-    mode_minute_increment, save_scene_byte_normalised, scene_route, world_tick_path,
+    SCENE_TOWN_FAMILY_LAST, SceneRoute, WORD_OF_POWER_SEAL_XOR, WORD_OF_POWER_SEALS,
+    WordOfPowerSeal, WorldTickPath, dungeon_entry_seed, dungeon_facing_back_delta,
+    dungeon_facing_forward_delta, dungeon_facing_left_delta, dungeon_facing_right_delta,
+    dungeon_facing_turn_around, dungeon_facing_turn_left, dungeon_facing_turn_right,
+    dungeon_movement_action, dungeon_record_index, dungeon_resident_name,
+    dungeon_scene_for_word_of_power, dungeon_word_of_power, mode_minute_increment,
+    save_scene_byte_normalised, scene_route, word_of_power_seal_for_word, world_tick_path,
 };
 pub use map_decoders::*;
 pub use map_io::*;
@@ -363,13 +371,16 @@ pub use miscmsg_io::{
     render_miscmsg_tile_glyph_text, tile_glyph_digraph,
 };
 pub use moongate::{
-    MOONSTONE_BURIAL_BAND_FIRST, MOONSTONE_BURIAL_BAND_LAST, MOONSTONE_BURIAL_TILE_EXTRA_A,
-    MOONSTONE_BURIAL_TILE_EXTRA_B, MOONSTONE_GATE_INVALID_SCENE, NARRATIVE_GATE_X,
-    NARRATIVE_GATE_Y, NATURAL_MOONGATE_LIVE_TILE, NATURAL_MOONGATE_UNDERLYING_TILE,
-    NaturalMoongateCounterStep, SURFACE_CHASM_X, SURFACE_CHASM_Y, WORLD_PLANE_FALL_DAMAGE_MAX,
-    is_surface_chasm_cell, moonstone_burial_tile_accepted, natural_moongate_advance_counter,
-    natural_moongate_cached_glyph_slot, natural_moongate_counter_step,
-    natural_moongate_dispatches_meditate, natural_moongate_slot_eligible,
+    FELUCCA_GLYPH_BY_HOUR, FELUCCA_OFF_HORIZON_SENTINEL, MOONSTONE_BURIAL_BAND_FIRST,
+    MOONSTONE_BURIAL_BAND_LAST, MOONSTONE_BURIAL_TILE_EXTRA_A, MOONSTONE_BURIAL_TILE_EXTRA_B,
+    MOONSTONE_GATE_INVALID_SCENE, NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_LIVE_TILE,
+    NATURAL_MOONGATE_UNDERLYING_TILE, NaturalMoongateCounterStep, SURFACE_CHASM_X, SURFACE_CHASM_Y,
+    TRAMMEL_GLYPH_BY_HOUR, TRAMMEL_OFF_HORIZON_SENTINEL, WORLD_PLANE_FALL_DAMAGE_MAX,
+    cached_moon_glyph_bytes_for_hour, felucca_moonstone_slot_for_hour, is_surface_chasm_cell,
+    moonstone_burial_tile_accepted, moonstone_slot_from_glyph_byte,
+    natural_moongate_advance_counter, natural_moongate_cached_glyph_slot,
+    natural_moongate_counter_step, natural_moongate_dispatches_meditate,
+    natural_moongate_slot_eligible, trammel_moonstone_slot_for_hour,
 };
 pub use npc_runtime::{
     DoorTracker, LocationMarkers, NPC_DIALOG_ID_HIGH_FALLBACK, NPC_DIALOG_ID_HIGH_FIRST,
@@ -397,15 +408,16 @@ pub use party::{
     PartyRosterRecord, Player, RESURRECTION_MAX_HP_PER_LEVEL, RESURRECTION_REBUILT_CURRENT_HP,
     class_refreshed_mana, default_party, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters,
-    heal_spell_amount_from_raw_roll, increase_capped_stat, party_member_unavailable_message,
-    party_name_to_string, party_roster_from_active, party_status_name,
-    potion_effect_index_after_variation, potion_label, recompute_level_from_experience,
-    resurrection_adjusted_experience, resurrection_max_hp_for_level,
+    heal_spell_amount_from_raw_roll, increase_capped_stat, inn_rest_hp_target,
+    inn_rest_mana_target, party_member_unavailable_message, party_name_to_string,
+    party_roster_from_active, party_status_name, potion_effect_index_after_variation, potion_label,
+    recompute_level_from_experience, resurrection_adjusted_experience,
+    resurrection_max_hp_for_level,
 };
 pub use play_options::*;
 pub use play_state_struct::{
     CombatPotionPresentation, CombatPotionPresentationKind, PlayState, ViewOverlay,
-    ViewOverlayKind, WhitePotionSweep, WorldOverlayCache, WorldReturn,
+    ViewOverlayKind, ViewOverlayMode, WhitePotionSweep, WorldOverlayCache, WorldReturn,
 };
 pub use predicates::*;
 pub use prng::*;
@@ -430,16 +442,22 @@ pub use question_io::{
 };
 pub use report::run_report;
 pub use return_to_view::{
-    RTV_ACTOR_SLOTS, RTV_CLOSE_EFFECT_FINAL_TILE, RTV_EFFECT_SENTINEL_TILE,
+    RTV_ACTOR_SLOTS, RTV_ACTOR_TRANSPARENT_PIXEL, RTV_CELL_EFFECT_FINAL_TICKS,
+    RTV_CELL_EFFECT_STEPS, RTV_CLOSE_EFFECT_FINAL_TILE, RTV_EFFECT_SENTINEL_TILE,
+    RTV_FIXED_WIPE_STEPS, RTV_FIXED_WIPE_TOTAL_TICKS, RTV_FIXED_WIPE_TRAILING_TICKS,
     RTV_OPEN_EFFECT_FINAL_TILE, RTV_PREVIEW_CELLS, RTV_PREVIEW_SIDE, RTV_STRIP_RECORD_BYTES,
     RTV_STRIP_TILE_COUNT, RTV_STRIP_VISIBLE_COLUMNS, RTV_STRIP_VISIBLE_ROWS,
-    RTV_TEMPORARY_ACTOR_TILE, ReturnToViewActor, ReturnToViewAssets, ReturnToViewCommand,
-    ReturnToViewControl, ReturnToViewMapStrips, ReturnToViewPreviewReport, ReturnToViewPreviewRun,
-    ReturnToViewPreviewState, ReturnToViewScript, load_return_to_view_assets,
-    load_return_to_view_map_strips, load_return_to_view_script, parse_return_to_view_commands,
-    parse_return_to_view_map_strips, parse_return_to_view_map_strips_file,
-    parse_return_to_view_script_file, render_return_to_view_preview_viewport,
-    return_to_view_command_histogram, return_to_view_command_name,
+    RTV_TEMPORARY_ACTOR_TILE, RTV_WAIT_FIXED_TICKS, RTV_WAIT_IS_NON_INTERRUPTIBLE,
+    ReturnToViewActor, ReturnToViewAssets, ReturnToViewCommand, ReturnToViewControl,
+    ReturnToViewFrameKind, ReturnToViewMapStrips, ReturnToViewPlayback, ReturnToViewPlaybackFrame,
+    ReturnToViewPreviewReport, ReturnToViewPreviewRun, ReturnToViewPreviewState,
+    ReturnToViewScript, load_return_to_view_assets, load_return_to_view_map_strips,
+    load_return_to_view_script, parse_return_to_view_commands, parse_return_to_view_map_strips,
+    parse_return_to_view_map_strips_file, parse_return_to_view_script_file,
+    render_return_to_view_playback_frame_viewport, render_return_to_view_preview_viewport,
+    render_return_to_view_preview_viewport_at_title_tick, return_to_view_command_histogram,
+    return_to_view_command_name, return_to_view_fixed_wipe_rectangles,
+    return_to_view_tile_for_title_tick, run_return_to_view_playback_until_restart,
     run_return_to_view_preview_state_until_restart, run_return_to_view_preview_until_restart,
     summarize_return_to_view_preview, summarize_return_to_view_script,
 };
@@ -477,16 +495,17 @@ pub use stats_panel::{
     render_stats_panel, stats_panel_active_cursor_visible, stats_panel_combat_row_overlay,
 };
 pub use story_io::{
-    INTRO_AUTO_OPENING_STEP, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_0_TRANSITION_STRIPS,
-    INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE,
-    INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y,
-    INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STEP_7_TRANSITION_STRIPS, INTRO_STEP_14_TRANSITION_STRIPS,
-    INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_PASS_STEPS, INTRO_STORY6_SECONDARY_Y_DELTA,
-    INTRO_TRANSITION_STRIP_STEPS, IntroStoryArtPlacement, STORY_DAT_FILE, STORY_DAT_LEN,
-    STORY_DAT_RECORDS, STORY_HARD_NEWLINE_MARKER, STORY_PARAGRAPH_START_MARKER,
-    STORY_RECORD_END_MARKER, STORY_SOFT_BREAK_MARKER, StoryRecords, StoryTextMarker,
-    intro_step_has_story6_secondary_pass, intro_step_has_transition_strip,
-    intro_step_transition_strips, intro_story_art_file_for_step,
+    INTRO_AUTO_OPENING_STEP, INTRO_INLINE_DOORWAY_STEP, INTRO_RECT_TRANSITION_COLUMNS_PER_TICK,
+    INTRO_STEP_0_TRANSITION_STRIPS, INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
+    INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X,
+    INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STEP_7_TRANSITION_STRIPS,
+    INTRO_STEP_14_TRANSITION_STRIPS, INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_PASS_STEPS,
+    INTRO_STORY6_SECONDARY_Y_DELTA, INTRO_TRANSITION_STRIP_STEPS, IntroStoryArtPlacement,
+    RectColumnSweepTransition, STORY_DAT_FILE, STORY_DAT_LEN, STORY_DAT_RECORDS,
+    STORY_HARD_NEWLINE_MARKER, STORY_PARAGRAPH_START_MARKER, STORY_RECORD_END_MARKER,
+    STORY_SOFT_BREAK_MARKER, StoryRecords, StoryTextMarker, intro_rect_transition_revealed_columns,
+    intro_rect_transition_tick_count, intro_step_has_story6_secondary_pass,
+    intro_step_has_transition_strip, intro_step_transition_strips, intro_story_art_file_for_step,
     intro_story_art_placement_for_step, intro_story_step_waits_for_input,
     intro_story6_secondary_subimage, load_story_records, parse_story_records, story_text_marker,
 };
@@ -522,14 +541,15 @@ pub use tlk_control_codes::{
     QUEST_PASSWORD_OPPRESSION, QUEST_PASSWORD_RESISTANCE, RESERVED_KEYWORD_FUNCTIONAL_COUNT,
     RESERVED_KEYWORD_REBUKE_COUNT, RESERVED_KEYWORD_TABLE_ENTRIES, ReservedKeywordEffect,
     SHOPPE_PHRASE_TOKEN_FIRST, SHOPPE_PHRASE_TOKEN_LAST, TALK_NO_RESPONSE_MESSAGE,
-    TALK_NOBODY_HERE_MESSAGE, TALK_SLEEPING_MESSAGE, TLK_BLOB_FIXED_WINDOW,
-    TLK_CODE_ACTION_DISPATCH, TLK_CODE_ASK_PARTY_NAME, TLK_CODE_ASK_WHO, TLK_CODE_CURSE_CHECK,
-    TLK_CODE_END_OF_RESPONSE, TLK_CODE_END_STREAM, TLK_CODE_GOLD_PAYMENT,
-    TLK_CODE_GOTO_LABEL_FIRST, TLK_CODE_GOTO_LABEL_LAST, TLK_CODE_IF_ELSE, TLK_CODE_IF_ELSE_ALT,
-    TLK_CODE_LABEL_RECORD, TLK_CODE_LITERAL_NEWLINE, TLK_CODE_PANEL_NEWLINE, TLK_CODE_PAUSE,
-    TLK_CODE_PRINT_AVATAR_NAME, TLK_CODE_PROTECT_RUN, TLK_CODE_SET_FLAG, TLK_CODE_WAIT_KEY,
-    TLK_CONTROL_CODE_FIRST, TLK_CONTROL_CODE_LAST, TLK_DICTIONARY_TOKEN_FIRST,
-    TLK_DICTIONARY_TOKEN_LAST, TLK_DOUBLE_QUOTE_ENCODED, TLK_EMPTY_INPUT_BYE_MESSAGE,
+    TALK_NOBODY_HERE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
+    TALK_STATUS_TILE_SLEEPING, TLK_BLOB_FIXED_WINDOW, TLK_CODE_ACTION_DISPATCH,
+    TLK_CODE_ASK_PARTY_NAME, TLK_CODE_ASK_WHO, TLK_CODE_CURSE_CHECK, TLK_CODE_END_OF_RESPONSE,
+    TLK_CODE_END_STREAM, TLK_CODE_GOLD_PAYMENT, TLK_CODE_GOTO_LABEL_FIRST,
+    TLK_CODE_GOTO_LABEL_LAST, TLK_CODE_IF_ELSE, TLK_CODE_IF_ELSE_ALT, TLK_CODE_LABEL_RECORD,
+    TLK_CODE_LITERAL_NEWLINE, TLK_CODE_PANEL_NEWLINE, TLK_CODE_PAUSE, TLK_CODE_PRINT_AVATAR_NAME,
+    TLK_CODE_PROTECT_RUN, TLK_CODE_SET_FLAG, TLK_CODE_WAIT_KEY, TLK_CONTROL_CODE_FIRST,
+    TLK_CONTROL_CODE_LAST, TLK_DICTIONARY_TOKEN_FIRST, TLK_DICTIONARY_TOKEN_LAST,
+    TLK_DOUBLE_QUOTE_ENCODED, TLK_EMPTY_INPUT_BYE_MESSAGE, TLK_GENERIC_SIGNAL_CAP,
     TLK_GENERIC_SIGNAL_COUNT, TLK_GOLD_PAYMENT_ARGUMENT_BYTES, TLK_HEADER_ENTRY_LEN,
     TLK_HEADER_FIXED_READ, TLK_IF_ELSE_ALT_ARGUMENT_BYTES, TLK_INPUT_MAX_LEN, TLK_KEYWORD_PROMPT,
     TLK_LABEL_BYTE_COUNT, TLK_LABEL_FIRST, TLK_LABEL_LAST, TLK_LEADING_ENTRY_COUNT,
@@ -539,10 +559,10 @@ pub use tlk_control_codes::{
     TlkByteKind, TlkByteRunnerClass, TlkFileClass, TlkLeadingEntry, TlkPlayerInputKind,
     TlkPrintMaskState, classify_tlk_byte, conversation_cleanup_gold_debit_from_seed,
     is_tlk_label_byte, reserved_keyword_effect, shoppe_dictionary_index, talk_liveness_refusal,
-    tlk_action_dispatch_is_signal_flag, tlk_action_dispatch_verb, tlk_ask_party_name_match,
-    tlk_byte_runner_class, tlk_class_for_scene, tlk_dictionary_index, tlk_gold_payment_amount,
-    tlk_if_else_alt_branches, tlk_introducer_argument_count, tlk_keyword_matches, tlk_label_index,
-    tlk_leading_entry_index, tlk_player_input_kind,
+    talk_status_tile_refusal, tlk_action_dispatch_is_signal_flag, tlk_action_dispatch_verb,
+    tlk_ask_party_name_match, tlk_byte_runner_class, tlk_class_for_scene, tlk_dictionary_index,
+    tlk_gold_payment_amount, tlk_if_else_alt_branches, tlk_introducer_argument_count,
+    tlk_keyword_matches, tlk_label_index, tlk_leading_entry_index, tlk_player_input_kind,
 };
 pub use town_mode::{
     CASTLE_NPC_FILENAME, CASTLE_TLK_FILENAME, DWELLING_NPC_FILENAME, DWELLING_TLK_FILENAME,
@@ -596,16 +616,17 @@ pub use u4_transfer::*;
 pub use view_classes::{fc_sprite_proximity_mask_hits, tile_view_class};
 pub use visibility::{
     ActiveObjectCompositeResult, ActiveObjectCompositorBranch, FOG_REFINE_SQUARED_THRESHOLD,
-    LOCAL_LIGHT_MASK_SIDE, LOCAL_LIGHT_SOURCE_RADIUS, LightRadiusBranch, TERRAIN_BAND_ROW_STRIDE,
-    VEHICLE_AVATAR_UNDERLAY_MARKER, VIEWPORT_CENTER, VIEWPORT_MAX_INDEX, VIEWPORT_PLAYER_COL,
-    VIEWPORT_PLAYER_ROW, VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE, VISIBILITY_ALREADY_RENDERED,
-    VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR, VISIBILITY_DIM_PERIPHERY, VISIBILITY_HIDDEN,
-    VISIBILITY_USE_COMPANION, VisibilityMarker, active_object_composite,
-    active_object_compositor_branch, active_object_compositor_variant,
-    active_object_default_composite, active_object_default_tile_is_terrain_aware,
-    fog_refine_folded_coord, fog_refine_inside_clear_core, fog_refine_squared_distance,
-    is_local_light_source_tile, light_radius_branch, visibility_cheap_path_needs_refill,
-    visibility_in_radius, visibility_marker,
+    LOCAL_LIGHT_MASK_SIDE, LOCAL_LIGHT_SOURCE_RADIUS, LightRadiusBranch, TERRAIN_BAND_LEN,
+    TERRAIN_BAND_ROW_STRIDE, VEHICLE_AVATAR_UNDERLAY_MARKER, VIEWPORT_CENTER, VIEWPORT_MAX_INDEX,
+    VIEWPORT_PLAYER_COL, VIEWPORT_PLAYER_ROW, VIEWPORT_ROW_STRIDE, VIEWPORT_SIDE,
+    VISIBILITY_ALREADY_RENDERED, VISIBILITY_CARVE_NEIGHBOR_ORDER, VISIBILITY_CLEAR,
+    VISIBILITY_DIM_PERIPHERY, VISIBILITY_GRID_LEN, VISIBILITY_HIDDEN, VISIBILITY_USE_COMPANION,
+    VisibilityMarker, active_object_composite, active_object_compositor_branch,
+    active_object_compositor_variant, active_object_default_composite,
+    active_object_default_tile_is_terrain_aware, fog_refine_folded_coord,
+    fog_refine_inside_clear_core, fog_refine_squared_distance, is_local_light_source_tile,
+    light_radius_branch, terrain_band_active_index, visibility_cheap_path_needs_refill,
+    visibility_grid_active_index, visibility_in_radius, visibility_marker,
 };
 pub use wind::{
     ACTIVE_SHIP_CADENCE_EVERY_TURN, ACTIVE_SHIP_CADENCE_INTO_WIND, ACTIVE_SHIP_CADENCE_WITH_WIND,

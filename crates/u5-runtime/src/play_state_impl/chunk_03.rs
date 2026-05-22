@@ -753,6 +753,14 @@ impl PlayState {
         MoveOutcome::Observed
     }
 
+    pub fn start_surface_death_vision_prompt(&mut self, x: usize, y: usize) -> MoveOutcome {
+        self.active_direction_prompt = Some(DirectionPromptSession::new(
+            DirectionPromptKind::SurfaceDeathVision { x, y },
+        ));
+        self.message = self.render_active_direction_prompt();
+        MoveOutcome::Observed
+    }
+
     pub fn start_wishing_well_prompt(&mut self, direction: Direction) -> MoveOutcome {
         self.active_wishing_well = Some(WishingWellSession::new(direction));
         self.message = self.render_active_wishing_well();
@@ -804,6 +812,7 @@ impl PlayState {
 
         let wish = std::iter::once(key)
             .chain(suffix.chars())
+            .take(WISHING_WELL_WISH_MAX_CHARS)
             .collect::<String>();
         Some(self.resolve_wishing_well_wish(session.direction, &wish))
     }
@@ -882,6 +891,10 @@ impl PlayState {
                 DirectionPromptKind::SurfaceFountainDrink { .. } => {
                     let last = self.party.len().max(1);
                     format!("Look: choose fountain drinker (1-{last}); Space/Esc cancels.")
+                }
+                DirectionPromptKind::SurfaceDeathVision { .. } => {
+                    let last = self.party.len().max(1);
+                    format!("Look: choose death-vision member (1-{last}); Space/Esc cancels.")
                 }
                 DirectionPromptKind::DungeonSearch => {
                     "Search: choose A-head, R-ight, L-eft, or H-ere; Space/Esc cancels."
@@ -963,6 +976,15 @@ impl PlayState {
                 }
                 continue;
             }
+            if let DirectionPromptKind::SurfaceDeathVision { x, y } = session.kind {
+                if let Some(digit) = ch.to_digit(10) {
+                    let index = digit.saturating_sub(1) as usize;
+                    if index < self.party.len() {
+                        return Ok(Some(self.apply_death_vision_look_for_member(x, y, index)));
+                    }
+                }
+                continue;
+            }
             if matches!(session.kind, DirectionPromptKind::DungeonSearch) {
                 if let Some(focus) = dungeon_look_focus_from_key(ch) {
                     return self
@@ -1000,6 +1022,9 @@ impl PlayState {
                 ),
                 DirectionPromptKind::SurfaceFountainDrink { .. } => unreachable!(
                     "surface fountain look prompt is handled before cardinal direction dispatch"
+                ),
+                DirectionPromptKind::SurfaceDeathVision { .. } => unreachable!(
+                    "surface death-vision look prompt is handled before cardinal direction dispatch"
                 ),
                 DirectionPromptKind::DungeonSearch => unreachable!(
                     "dungeon search prompt is handled before cardinal direction dispatch"
@@ -1161,6 +1186,7 @@ impl PlayState {
 
     pub fn render_stats_panel_frame(&mut self) -> String {
         let active_cursor = self.active_player;
+        self.refresh_cached_moon_glyphs();
         let panel = render_stats_panel(self, active_cursor);
         if stats_panel_active_cursor_visible(self, active_cursor) {
             self.active_player = None;
@@ -1174,6 +1200,7 @@ impl PlayState {
 
     pub fn render_text_window_frame(&mut self, input_echo: Option<&str>) -> String {
         let active_cursor = self.active_player;
+        self.refresh_cached_moon_glyphs();
         let frame = render_play_text_window_ascii(self, active_cursor, input_echo);
         if stats_panel_active_cursor_visible(self, active_cursor) {
             self.active_player = None;
@@ -2201,6 +2228,9 @@ impl PlayState {
         caster_index: usize,
         direction: Option<Direction>,
     ) -> MoveOutcome {
+        if self.combat_active {
+            return self.cast_combat_vanish(caster_index);
+        }
         let Some(direction) = direction else {
             self.message = "Direction? Use C1AY8/C1AY6/C1AY2/C1AY4.".to_string();
             return MoveOutcome::Blocked;
@@ -2208,9 +2238,6 @@ impl PlayState {
         if !direction.is_cardinal() {
             self.message = "Vanish requires a cardinal direction.".to_string();
             return MoveOutcome::Blocked;
-        }
-        if self.combat_active {
-            return self.cast_combat_vanish(caster_index, Some(direction));
         }
         let Area::Town { .. } = self.area else {
             self.message = "Not here!".to_string();
@@ -2277,30 +2304,8 @@ impl PlayState {
         spell_index: usize,
         mana_cost: u8,
     ) -> MoveOutcome {
-        if let Some(outcome) = self.cast_spell_resource_gate(caster_index, spell_index, mana_cost) {
-            return outcome;
-        }
-
-        self.advance_turn();
-        self.message = "Failed!".to_string();
-        MoveOutcome::Blocked
-    }
-
-    pub fn cast_combat_vanish(
-        &mut self,
-        caster_index: usize,
-        direction: Option<Direction>,
-    ) -> MoveOutcome {
-        if !self.combat_active || !self.spell_allowed_in_current_cast_context(VANISH_SPELL_INDEX) {
+        if !self.combat_active || !self.spell_allowed_in_current_cast_context(spell_index) {
             self.message = "Not here!".to_string();
-            return MoveOutcome::Blocked;
-        }
-        let Some(direction) = direction else {
-            self.message = "Direction? Use C1AY8/C1AY6/C1AY2/C1AY4.".to_string();
-            return MoveOutcome::Blocked;
-        };
-        if !direction.is_cardinal() {
-            self.message = "Vanish requires a cardinal direction.".to_string();
             return MoveOutcome::Blocked;
         }
         let Some(caster_actor) = self.combat_actors.get(caster_index).copied() else {
@@ -2311,53 +2316,17 @@ impl PlayState {
             self.message = "Who casts?".to_string();
             return MoveOutcome::Blocked;
         }
-        if let Some(outcome) =
-            self.cast_spell_resource_gate(caster_index, VANISH_SPELL_INDEX, VANISH_COST)
-        {
+        if let Some(outcome) = self.cast_spell_resource_gate(caster_index, spell_index, mana_cost) {
             return outcome;
         }
 
-        let (dx, dy) = direction.delta();
-        let target_x = caster_actor.x as isize + dx;
-        let target_y = caster_actor.y as isize + dy;
-        let success = if (0..COMBAT_ARENA_SIDE as isize).contains(&target_x)
-            && (0..COMBAT_ARENA_SIDE as isize).contains(&target_y)
-            && self
-                .combat_actor_slot_at(target_x as u8, target_y as u8, caster_index)
-                .is_none()
-        {
-            let target_x = target_x as u8;
-            let target_y = target_y as u8;
-            if let Some(application) = self.apply_combat_arena_field_removal(target_x, target_y) {
-                Some(format!(
-                    "Vanished {} field at ({target_x}, {target_y}).",
-                    application.field.label()
-                ))
-            } else if let Some((object_slot, object)) = self.combat_loose_object_slot_at(
-                target_x as usize,
-                target_y as usize,
-                caster_actor.active_object_slot as usize,
-            ) {
-                self.free_active_object_slot(object_slot);
-                self.mark_visibility_dirty();
-                Some(format!(
-                    "Vanished combat object tile {} at ({target_x}, {target_y}).",
-                    object.tile
-                ))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
         self.advance_turn();
-        self.message = success.unwrap_or_else(|| "Failed!".to_string());
-        if self.message == "Failed!" {
-            MoveOutcome::Blocked
-        } else {
-            MoveOutcome::Cast
-        }
+        self.message = "Failed!".to_string();
+        MoveOutcome::Blocked
+    }
+
+    pub fn cast_combat_vanish(&mut self, caster_index: usize) -> MoveOutcome {
+        self.cast_unmodeled_combat_utility_spell(caster_index, VANISH_SPELL_INDEX, VANISH_COST)
     }
 
     pub fn cast_active_effect_spell(
@@ -2535,7 +2504,7 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let amount = self.heal_spell_amount(caster_index, target_index);
+        let amount = self.heal_spell_amount();
         let healed = self.party[target_index].heal_by(amount);
         let hp = self.party[target_index].hp;
         let max_hp = self.party[target_index].max_hp;
@@ -2547,17 +2516,12 @@ impl PlayState {
         MoveOutcome::Cast
     }
 
-    pub fn heal_spell_raw_roll(&self, caster_index: usize, target_index: usize) -> u8 {
-        self.turn
-            .wrapping_add((caster_index as u64).wrapping_mul(17))
-            .wrapping_add((target_index as u64).wrapping_mul(14))
-            .wrapping_add((self.player.x as u64).wrapping_mul(3))
-            .wrapping_add((self.player.y as u64).wrapping_mul(5))
-            .wrapping_rem(u64::from(HEAL_RAW_ROLL_MAX) + 1) as u8
+    pub fn heal_spell_raw_roll(&mut self) -> u8 {
+        self.random_range_u8(0, HEAL_RAW_ROLL_MAX)
     }
 
-    pub fn heal_spell_amount(&self, caster_index: usize, target_index: usize) -> u16 {
-        heal_spell_amount_from_raw_roll(self.heal_spell_raw_roll(caster_index, target_index))
+    pub fn heal_spell_amount(&mut self) -> u16 {
+        heal_spell_amount_from_raw_roll(self.heal_spell_raw_roll())
     }
 
     pub fn resurrect_party_member_to_hp(
@@ -2712,10 +2676,14 @@ impl PlayState {
         }
 
         let before = self.food;
-        self.food = self
-            .food
-            .saturating_add(CREATE_FOOD_AMOUNT)
-            .min(PARTY_FOOD_CAP);
+        // `cleak/u5-spec#49`: per-cast grant is `rand() mod 3` —
+        // uniform `0..=2` — capped at [`PARTY_FOOD_CAP`].
+        let grant = u5_prng_range_u16(
+            &mut self.prng_state,
+            CREATE_FOOD_MIN_GRANT,
+            CREATE_FOOD_MAX_GRANT,
+        );
+        self.food = self.food.saturating_add(grant).min(PARTY_FOOD_CAP);
         let created = self.food.saturating_sub(before);
         self.advance_turn();
         self.message = format!("Created {created} food; stock is {}.", self.food);
@@ -2745,6 +2713,7 @@ impl PlayState {
                 ),
                 text_map: self.dungeon_vision_map(level),
                 kind: ViewOverlayKind::Dungeon { level },
+                mode: ViewOverlayMode::PeerSpell,
             },
             Area::Town { scene, floor } => ViewOverlay {
                 title: format!(
@@ -2754,6 +2723,7 @@ impl PlayState {
                 ),
                 text_map: self.surface_view_map(),
                 kind: ViewOverlayKind::Surface,
+                mode: ViewOverlayMode::PeerSpell,
             },
             Area::World { plane } => ViewOverlay {
                 title: format!(
@@ -2764,6 +2734,7 @@ impl PlayState {
                 ),
                 text_map: self.surface_view_map(),
                 kind: ViewOverlayKind::Surface,
+                mode: ViewOverlayMode::PeerSpell,
             },
         }
     }
@@ -2796,6 +2767,7 @@ impl PlayState {
                 ),
                 text_map: self.surface_view_map(),
                 kind: ViewOverlayKind::Surface,
+                mode: ViewOverlayMode::XRaySpell,
             },
             Area::World { plane } => ViewOverlay {
                 title: format!(
@@ -2806,6 +2778,7 @@ impl PlayState {
                 ),
                 text_map: self.surface_view_map(),
                 kind: ViewOverlayKind::Surface,
+                mode: ViewOverlayMode::XRaySpell,
             },
             Area::Dungeon { .. } => unreachable!("X-Ray view is not available in dungeons"),
         }
@@ -2862,37 +2835,9 @@ impl PlayState {
     pub fn cast_combat_open_spell(
         &mut self,
         caster_index: usize,
-        direction: Option<Direction>,
+        _direction: Option<Direction>,
     ) -> MoveOutcome {
-        if !self.combat_active || !self.spell_allowed_in_current_cast_context(OPEN_SPELL_INDEX) {
-            self.message = "Not here!".to_string();
-            return MoveOutcome::Blocked;
-        }
-        let Some(direction) = direction else {
-            self.message = "Direction? Use C1AS8/C1AS6/C1AS2/C1AS4.".to_string();
-            return MoveOutcome::Blocked;
-        };
-        if !direction.is_cardinal() {
-            self.message = "Open requires a cardinal direction.".to_string();
-            return MoveOutcome::Blocked;
-        }
-        let Some(caster_actor) = self.combat_actors.get(caster_index).copied() else {
-            self.message = "Who casts?".to_string();
-            return MoveOutcome::Blocked;
-        };
-        if !combat_actor_is_active_not_dead(caster_actor) {
-            self.message = "Who casts?".to_string();
-            return MoveOutcome::Blocked;
-        }
-        if let Some(outcome) =
-            self.cast_spell_resource_gate(caster_index, OPEN_SPELL_INDEX, OPEN_SPELL_COST)
-        {
-            return outcome;
-        }
-
-        let outcome = self.open_combat_actor_direction(caster_index, direction);
-        self.advance_turn();
-        outcome
+        self.cast_unmodeled_combat_utility_spell(caster_index, OPEN_SPELL_INDEX, OPEN_SPELL_COST)
     }
 
     pub fn cast_open_ordinary_surface_door(&mut self, direction: Option<Direction>) -> MoveOutcome {
@@ -3292,27 +3237,9 @@ impl PlayState {
             Area::World { .. } | Area::Town { .. } => {
                 self.player_can_land_on_foot(Some(game_dir), entry.to_x, entry.to_y)
             }
-            Area::Dungeon { scene, level } => {
+            Area::Dungeon { level, .. } => {
                 let cell = self.dungeon_cell(level, entry.to_x, entry.to_y);
-                if self.dungeon_closed_door_at(
-                    Some(game_dir),
-                    scene,
-                    level,
-                    entry.to_x,
-                    entry.to_y,
-                    cell,
-                )? {
-                    return Ok(false);
-                }
-                Ok(is_dungeon_walkable(cell)
-                    || self.dungeon_open_door_at(
-                        Some(game_dir),
-                        scene,
-                        level,
-                        entry.to_x,
-                        entry.to_y,
-                        cell,
-                    )?)
+                Ok(is_dungeon_walkable(cell))
             }
         }
     }
@@ -3382,61 +3309,13 @@ impl PlayState {
     pub fn cast_combat_magic_lock(
         &mut self,
         caster_index: usize,
-        direction: Option<Direction>,
+        _direction: Option<Direction>,
     ) -> MoveOutcome {
-        if !self.combat_active
-            || !self.spell_allowed_in_current_cast_context(MAGIC_LOCK_SPELL_INDEX)
-        {
-            self.message = "Not here!".to_string();
-            return MoveOutcome::Blocked;
-        }
-        let Some(direction) = direction else {
-            self.message = "Direction? Use C1AEP8/C1AEP6/C1AEP2/C1AEP4.".to_string();
-            return MoveOutcome::Blocked;
-        };
-        if !direction.is_cardinal() {
-            self.message = "Magic Lock requires a cardinal direction.".to_string();
-            return MoveOutcome::Blocked;
-        }
-        if self
-            .combat_sjog_target_coordinate(caster_index, direction, "No lock!")
-            .is_none()
-        {
-            if self.message == "No active combatant." {
-                self.message = "Who casts?".to_string();
-            }
-            return MoveOutcome::Blocked;
-        }
-        if let Some(outcome) =
-            self.cast_spell_resource_gate(caster_index, MAGIC_LOCK_SPELL_INDEX, MAGIC_LOCK_COST)
-        {
-            return outcome;
-        }
-
-        let Some((_, x, y)) =
-            self.combat_sjog_target_coordinate(caster_index, direction, "No lock!")
-        else {
-            self.advance_turn();
-            self.message = "Failed!".to_string();
-            return MoveOutcome::Blocked;
-        };
-        let tile = self.combat_terrain[y][x];
-        if self
-            .combat_actor_slot_at(x as u8, y as u8, caster_index)
-            .is_some()
-            || !(97..=103).contains(&tile)
-            || tile % 2 == 0
-        {
-            self.advance_turn();
-            self.message = "Failed!".to_string();
-            return MoveOutcome::Blocked;
-        }
-
-        self.combat_terrain[y][x] = tile - 1;
-        self.mark_visibility_dirty();
-        self.advance_turn();
-        self.message = format!("Magic locked combat tile {tile} at ({x}, {y}).");
-        MoveOutcome::Cast
+        self.cast_unmodeled_combat_utility_spell(
+            caster_index,
+            MAGIC_LOCK_SPELL_INDEX,
+            MAGIC_LOCK_COST,
+        )
     }
 
     pub fn cast_unlock_magic(
@@ -3499,61 +3378,13 @@ impl PlayState {
     pub fn cast_combat_unlock_magic(
         &mut self,
         caster_index: usize,
-        direction: Option<Direction>,
+        _direction: Option<Direction>,
     ) -> MoveOutcome {
-        if !self.combat_active
-            || !self.spell_allowed_in_current_cast_context(UNLOCK_MAGIC_SPELL_INDEX)
-        {
-            self.message = "Not here!".to_string();
-            return MoveOutcome::Blocked;
-        }
-        let Some(direction) = direction else {
-            self.message = "Direction? Use C1EIP8/C1EIP6/C1EIP2/C1EIP4.".to_string();
-            return MoveOutcome::Blocked;
-        };
-        if !direction.is_cardinal() {
-            self.message = "Unlock Magic requires a cardinal direction.".to_string();
-            return MoveOutcome::Blocked;
-        }
-        if self
-            .combat_sjog_target_coordinate(caster_index, direction, "No lock!")
-            .is_none()
-        {
-            if self.message == "No active combatant." {
-                self.message = "Who casts?".to_string();
-            }
-            return MoveOutcome::Blocked;
-        }
-        if let Some(outcome) =
-            self.cast_spell_resource_gate(caster_index, UNLOCK_MAGIC_SPELL_INDEX, UNLOCK_MAGIC_COST)
-        {
-            return outcome;
-        }
-
-        let Some((_, x, y)) =
-            self.combat_sjog_target_coordinate(caster_index, direction, "No lock!")
-        else {
-            self.advance_turn();
-            self.message = "Failed!".to_string();
-            return MoveOutcome::Blocked;
-        };
-        let tile = self.combat_terrain[y][x];
-        if self
-            .combat_actor_slot_at(x as u8, y as u8, caster_index)
-            .is_some()
-            || !(96..=102).contains(&tile)
-            || tile % 2 != 0
-        {
-            self.advance_turn();
-            self.message = "Failed!".to_string();
-            return MoveOutcome::Blocked;
-        }
-
-        self.combat_terrain[y][x] = tile + 1;
-        self.mark_visibility_dirty();
-        self.advance_turn();
-        self.message = format!("Unlocked combat magic tile {tile} at ({x}, {y}).");
-        MoveOutcome::Cast
+        self.cast_unmodeled_combat_utility_spell(
+            caster_index,
+            UNLOCK_MAGIC_SPELL_INDEX,
+            UNLOCK_MAGIC_COST,
+        )
     }
 }
 

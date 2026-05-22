@@ -2,9 +2,45 @@ use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::path::Path;
 
+use crate::shop_runtime::StationaryDisplayState;
+use crate::shop_session::ActiveShopSession;
 use crate::*;
 
 const SURFACE_LOOK_VISIBILITY_RADIUS: usize = 5;
+const STATIONARY_DISPLAY_MARKER_WEST_ENTRANCE: u8 = 0x44;
+const STATIONARY_DISPLAY_MARKER_EAST_ENTRANCE: u8 = 0x45;
+const STATIONARY_DISPLAY_MARKER_STOCK: u8 = 0x05;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct StationaryDisplayCandidate {
+    x: usize,
+    y: usize,
+    marker_tile: u8,
+    marker_ordinal: usize,
+    object_slot: Option<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum StationaryDisplayTalkResolution {
+    NoCandidate,
+    MissingPublishedRow,
+    Session(ActiveShopSession),
+}
+
+const fn stationary_display_marker_tile(tile: u8) -> bool {
+    matches!(
+        tile,
+        STATIONARY_DISPLAY_MARKER_WEST_ENTRANCE
+            | STATIONARY_DISPLAY_MARKER_EAST_ENTRANCE
+            | STATIONARY_DISPLAY_MARKER_STOCK
+    )
+}
+
+fn stationary_display_adjacent(px: usize, py: usize, x: usize, y: usize) -> bool {
+    let dx = px.abs_diff(x);
+    let dy = py.abs_diff(y);
+    (dx != 0 || dy != 0) && dx <= 1 && dy <= 1
+}
 
 #[derive(Clone, Debug)]
 struct UseItemPickerRow {
@@ -595,10 +631,6 @@ impl PlayState {
             self.message = format!("{name}: matching Shadowlord is already vanquished.");
             return Ok(MoveOutcome::Blocked);
         }
-        if !self.shadowlord_name_encounter_present(index) {
-            self.message = format!("{name}: no matching Shadowlord is nearby.");
-            return Ok(MoveOutcome::Blocked);
-        }
 
         let required_flame = eternal_flame_for_shadowlord(index).expect("valid shard index");
         let flame_entry = if let Some(game_dir) = game_dir {
@@ -645,13 +677,15 @@ impl PlayState {
 
     pub fn eternal_flame_entry_matches(&self, entry: EternalFlameEntry) -> bool {
         let (target, floor, x, y) = self.current_blink_context();
+        let flame_tile = self.current_area_tile(entry.x, entry.y);
         entry.target == target
             && entry.floor == floor
-            && entry.x == x
-            && entry.y == y
-            && entry.expected_tile.map_or(true, |expected| {
-                expected == self.current_area_tile(entry.x, entry.y)
-            })
+            && entry.x.abs_diff(x) + entry.y.abs_diff(y) <= 1
+            && entry
+                .expected_tile
+                .map_or(matches!(flame_tile, 0x76..=0x77), |expected| {
+                    expected == flame_tile
+                })
     }
 
     pub fn clear_shadowlord_name_encounters(&mut self, index: usize) -> usize {
@@ -902,6 +936,7 @@ impl PlayState {
             title: title.clone(),
             text_map: text_map.clone(),
             kind: ViewOverlayKind::BritanniaChunkMap,
+            mode: ViewOverlayMode::BritanniaOverview,
         });
         self.message = format!("{title}:\n{text_map}");
     }
@@ -1492,6 +1527,7 @@ impl PlayState {
             rare_reagent_harvest_days: self.rare_reagent_harvest_days,
             fixed_hidden_treasure_found: self.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: self.fixed_hidden_treasure_daily_day,
+            fixed_hidden_treasure_single_use_cookie: self.fixed_hidden_treasure_single_use_cookie,
             dungeon_room_clear_bitmap: self.dungeon_room_clear_bitmap,
             saved_dungeon_working_buffer: None,
             moonstone_slots: self.moonstone_slots,
@@ -1499,6 +1535,7 @@ impl PlayState {
             shrine_ordained_mask: self.shrine_ordained_mask,
             shrine_codex_mask: self.shrine_codex_mask,
             moral_standing: self.moral_standing,
+            toll_progress: self.toll_progress,
             avatar_stats: self.avatar_stats,
             torches: self.torches,
             torch_counter: self.torch_counter,
@@ -1710,6 +1747,7 @@ impl PlayState {
                     title: title.clone(),
                     text_map: text_map.clone(),
                     kind: ViewOverlayKind::Dungeon { level },
+                    mode: ViewOverlayMode::GemView,
                 });
                 self.message = format!("{title}:\n{text_map}");
                 MoveOutcome::Observed
@@ -1727,6 +1765,7 @@ impl PlayState {
                     title: title.clone(),
                     text_map: text_map.clone(),
                     kind: ViewOverlayKind::Surface,
+                    mode: ViewOverlayMode::GemView,
                 });
                 self.message = format!("{title}:\n{text_map}");
                 MoveOutcome::Observed
@@ -1745,6 +1784,7 @@ impl PlayState {
                     title: title.clone(),
                     text_map: text_map.clone(),
                     kind: ViewOverlayKind::Surface,
+                    mode: ViewOverlayMode::GemView,
                 });
                 self.message = format!("{title}:\n{text_map}");
                 MoveOutcome::Observed
@@ -1758,18 +1798,29 @@ impl PlayState {
     }
 
     pub fn render_active_view_overlay(&self, depth: TileGraphicsDepth) -> Option<TileViewport> {
-        match self.active_view_overlay.as_ref()?.kind {
-            ViewOverlayKind::Surface => Some(self.render_surface_view_overlay(depth)),
+        let overlay = self.active_view_overlay.as_ref()?;
+        match overlay.kind {
+            ViewOverlayKind::Surface => {
+                Some(self.render_surface_view_overlay_for_mode(depth, overlay.mode))
+            }
             ViewOverlayKind::BritanniaChunkMap => {
                 Some(self.render_britannia_chunk_map_overlay(depth))
             }
             ViewOverlayKind::Dungeon { level } => {
-                Some(self.render_dungeon_view_overlay(level, depth))
+                Some(self.render_dungeon_view_overlay_for_mode(level, depth, overlay.mode))
             }
         }
     }
 
     pub fn render_surface_view_overlay(&self, depth: TileGraphicsDepth) -> TileViewport {
+        self.render_surface_view_overlay_for_mode(depth, ViewOverlayMode::GemView)
+    }
+
+    pub fn render_surface_view_overlay_for_mode(
+        &self,
+        depth: TileGraphicsDepth,
+        mode: ViewOverlayMode,
+    ) -> TileViewport {
         let cells = LOCAL_VIEW_OVERLAY_SIDE;
         let scale = LOCAL_VIEW_CELL_PIXEL_SCALE;
         let width = cells * scale;
@@ -1785,10 +1836,19 @@ impl PlayState {
             for cell_x in 0..cells {
                 let tile = self.surface_view_tile_at(cell_x, cell_y);
                 let class = surface_view_class(tile);
-                draw_surface_view_cell(&mut viewport, cell_x, cell_y, scale, class, tile, false);
+                draw_surface_view_cell(
+                    &mut viewport,
+                    cell_x,
+                    cell_y,
+                    scale,
+                    class,
+                    tile,
+                    false,
+                    mode,
+                );
             }
         }
-        draw_surface_view_cell(&mut viewport, cells / 2, cells / 2, scale, 0, 0, true);
+        draw_surface_view_cell(&mut viewport, cells / 2, cells / 2, scale, 0, 0, true, mode);
         viewport
     }
 
@@ -1827,6 +1887,15 @@ impl PlayState {
     }
 
     pub fn render_dungeon_view_overlay(&self, level: u8, depth: TileGraphicsDepth) -> TileViewport {
+        self.render_dungeon_view_overlay_for_mode(level, depth, ViewOverlayMode::GemView)
+    }
+
+    pub fn render_dungeon_view_overlay_for_mode(
+        &self,
+        level: u8,
+        depth: TileGraphicsDepth,
+        mode: ViewOverlayMode,
+    ) -> TileViewport {
         let radius = DUNGEON_GEM_VIEW_RADIUS;
         let cells = (radius * 2 + 1) as usize;
         let scale = LOCAL_VIEW_CELL_PIXEL_SCALE;
@@ -1842,7 +1911,7 @@ impl PlayState {
         let map = self.dungeon_vision_map(level);
         for (cell_y, row) in map.lines().enumerate() {
             for (cell_x, glyph) in row.chars().enumerate() {
-                draw_dungeon_view_cell(&mut viewport, cell_x, cell_y, scale, glyph);
+                draw_dungeon_view_cell(&mut viewport, cell_x, cell_y, scale, glyph, mode);
             }
         }
         viewport
@@ -1865,7 +1934,14 @@ impl PlayState {
         };
         for (cell_y, row) in text_map.lines().enumerate() {
             for (cell_x, glyph) in row.chars().enumerate() {
-                draw_dungeon_view_cell(&mut viewport, cell_x, cell_y, scale, glyph);
+                draw_dungeon_view_cell(
+                    &mut viewport,
+                    cell_x,
+                    cell_y,
+                    scale,
+                    glyph,
+                    ViewOverlayMode::BritanniaOverview,
+                );
             }
         }
         viewport
@@ -2122,6 +2198,15 @@ impl PlayState {
                 let x = x as usize;
                 let y = y as usize;
                 if let Some(object) = self.blocking_object_at(x, y) {
+                    if death_vision_object_class(object.type_byte) {
+                        return Ok(self.start_surface_death_vision_prompt(x, y));
+                    }
+                    if sign_or_wanted_poster_object_class(object.type_byte) {
+                        self.message = self
+                            .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
+                            .unwrap_or_else(|| "Sign:\n".to_string());
+                        return Ok(MoveOutcome::Observed);
+                    }
                     self.message = if look_table.is_some() {
                         format!(
                             "You see: {} at ({x}, {y}).",
@@ -2164,6 +2249,15 @@ impl PlayState {
                 let x = raw_x.rem_euclid(WORLD_SIDE as isize) as usize;
                 let y = raw_y.rem_euclid(WORLD_SIDE as isize) as usize;
                 if let Some(object) = self.world_object_at(x, y) {
+                    if death_vision_object_class(object.type_byte) {
+                        return Ok(self.start_surface_death_vision_prompt(x, y));
+                    }
+                    if sign_or_wanted_poster_object_class(object.type_byte) {
+                        self.message = self
+                            .sign_message_at_for_current_area(game_dir, y as u8, x as u8)?
+                            .unwrap_or_else(|| "Sign:\n".to_string());
+                        return Ok(MoveOutcome::Observed);
+                    }
                     self.message = if look_table.is_some() {
                         format!(
                             "You see: {} at ({x}, {y}).",
@@ -2263,7 +2357,19 @@ impl PlayState {
             self.message = "Wishing well: no effect.".to_string();
             return MoveOutcome::Observed;
         }
-        if !wishing_well_wish_accepted(typed_wish) {
+        let Some(wish) = wishing_well_wish(typed_wish) else {
+            self.message = "Wishing well: no effect.".to_string();
+            return MoveOutcome::Observed;
+        };
+        let grant_scene = match self.area {
+            Area::Town { scene, .. } => wishing_well_grant_scene(scene.byte),
+            _ => false,
+        };
+        if !grant_scene {
+            self.message = "Wishing well: no effect.".to_string();
+            return MoveOutcome::Observed;
+        }
+        if !wish.has_native_grant() {
             self.message = "Wishing well: no effect.".to_string();
             return MoveOutcome::Observed;
         }
@@ -2286,6 +2392,51 @@ impl PlayState {
 
         self.mark_visibility_dirty();
         self.message = "Wishing well: a horse appears.".to_string();
+        MoveOutcome::Observed
+    }
+
+    pub fn apply_death_vision_look_for_member(
+        &mut self,
+        x: usize,
+        y: usize,
+        member_index: usize,
+    ) -> MoveOutcome {
+        let Some(member) = self.party.get(member_index).copied() else {
+            self.message = "Thou seest nothing.".to_string();
+            return MoveOutcome::Observed;
+        };
+        if !member.living() {
+            self.message = "Thou seest nothing.".to_string();
+            return MoveOutcome::Observed;
+        }
+        let intelligence = if member_index == 0 {
+            self.party_intelligence
+                .first()
+                .copied()
+                .unwrap_or(self.avatar_stats.intelligence)
+        } else {
+            self.party_intelligence
+                .get(member_index)
+                .copied()
+                .unwrap_or(self.avatar_stats.intelligence)
+        };
+        let roll = self.random_range_u8(DEATH_VISION_ROLL_LOW, DEATH_VISION_ROLL_HIGH);
+        if roll <= intelligence {
+            self.message = format!(
+                "Death vision: party member {} beholds a distant fate at ({x}, {y}).",
+                member_index + 1
+            );
+        } else {
+            let title = format!("Death vision at ({x}, {y})");
+            let text_map = self.surface_view_map();
+            self.active_view_overlay = Some(ViewOverlay {
+                title: title.clone(),
+                text_map: text_map.clone(),
+                kind: ViewOverlayKind::Surface,
+                mode: ViewOverlayMode::SurfaceLook,
+            });
+            self.message = format!("Thou seest nothing.\n{text_map}");
+        }
         MoveOutcome::Observed
     }
 
@@ -2403,6 +2554,23 @@ impl PlayState {
         Ok(Some(format!("Sign:\n{}", bodies.join("\n"))))
     }
 
+    pub fn sign_message_at_for_current_area(
+        &self,
+        game_dir: Option<&Path>,
+        y: u8,
+        x: u8,
+    ) -> io::Result<Option<String>> {
+        match self.area {
+            Area::Town { scene, floor } => {
+                self.sign_message_at(game_dir, scene.byte, floor as u8, y, x)
+            }
+            Area::World { plane } => {
+                self.sign_message_at(game_dir, SCENE_OVERWORLD, plane.save_floor() as u8, y, x)
+            }
+            Area::Dungeon { .. } => Ok(None),
+        }
+    }
+
     pub fn look_description_for_world_tile(
         &self,
         tile: u8,
@@ -2468,8 +2636,9 @@ impl PlayState {
         let Some(game_dir) = game_dir else {
             return Ok(None);
         };
-        Ok(load_world_location_entries(game_dir)?.and_then(|entries| {
-            entries.into_iter().find_map(|entry| {
+        Ok(effective_world_location_entries(game_dir)?
+            .into_iter()
+            .find_map(|entry| {
                 if entry.plane == plane
                     && entry.x == x
                     && entry.y == y
@@ -2484,8 +2653,7 @@ impl PlayState {
                 } else {
                     None
                 }
-            })
-        }))
+            }))
     }
 
     pub fn talk_facing_with_game_dir(&mut self, game_dir: &Path) -> io::Result<MoveOutcome> {
@@ -2524,19 +2692,17 @@ impl PlayState {
         let dialogue = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let raw_blob = parse_tlk_raw(&game_dir.join(format!("{}.TLK", scene.family.stem())))
             .unwrap_or_default();
+        let stationary_displays = load_stationary_display_entries(game_dir)?;
         self.common_word_dictionary = load_common_word_dictionary_optional(game_dir)?;
-        if self.common_word_dictionary.is_none() {
-            if let Some((dialog_id, _, _)) = self.talk_target_in_direction(direction) {
-                if raw_blob
-                    .get(&(dialog_id as u16))
-                    .is_some_and(|fields| tlk_fields_use_common_word_dictionary(fields))
-                {
-                    return Err(missing_common_word_dictionary_error(".TLK conversation"));
-                }
-            }
-        }
-        Ok(self
-            .talk_direction_with_dialogue_and_keyword_raw(direction, &dialogue, &raw_blob, keyword))
+        Ok(
+            self.talk_direction_with_dialogue_and_keyword_raw_and_stationary_displays(
+                direction,
+                &dialogue,
+                &raw_blob,
+                keyword,
+                stationary_displays.as_deref(),
+            ),
+        )
     }
 
     pub fn facing_talk_target(&self) -> Option<(u8, usize, usize)> {
@@ -2593,6 +2759,18 @@ impl PlayState {
         dialogue: &HashMap<u16, Vec<String>>,
         keyword: Option<&str>,
     ) -> MoveOutcome {
+        self.talk_direction_with_dialogue_and_keyword_and_stationary_displays(
+            direction, dialogue, keyword, None,
+        )
+    }
+
+    pub fn talk_direction_with_dialogue_and_keyword_and_stationary_displays(
+        &mut self,
+        direction: Direction,
+        dialogue: &HashMap<u16, Vec<String>>,
+        keyword: Option<&str>,
+        stationary_displays: Option<&[StationaryDisplayEntry]>,
+    ) -> MoveOutcome {
         if !matches!(self.area, Area::Town { .. }) {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;
@@ -2601,10 +2779,21 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let Some((dialog_id, _, _)) = self.talk_target_in_direction(direction) else {
+        let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction) else {
             self.message = TALK_NOBODY_HERE_MESSAGE.to_string();
             return MoveOutcome::Blocked;
         };
+
+        // `conversation.md §2` status-tile filter (`cleak/u5-spec#44`):
+        // a candidate NPC whose live tile byte is the published sleeping
+        // (`0xAB`) or praying (`0x9D`) form aborts before shop or dialog
+        // dispatch with the matching refusal message.
+        if let Some(tile) = self.npc_live_tile_at(target_x, target_y) {
+            if let Some(refusal) = talk_status_tile_refusal(tile) {
+                self.message = refusal.to_string();
+                return MoveOutcome::Blocked;
+            }
+        }
 
         if let Some((role, _family)) = talk_shop_trigger(dialog_id) {
             if self.player.transport.is_horse() && dialog_id != 0x83 {
@@ -2616,6 +2805,21 @@ impl PlayState {
                 Area::Town { scene, .. } => Some(scene.byte),
                 _ => None,
             };
+            match self.stationary_display_talk_resolution(stationary_displays) {
+                StationaryDisplayTalkResolution::Session(session) => {
+                    self.advance_turn();
+                    let label = session.shop_label().to_string();
+                    let prompt = session.opening_prompt().to_string();
+                    self.active_shop = Some(session);
+                    self.message = format!("{label} is now open. {prompt}");
+                    return MoveOutcome::Talked;
+                }
+                StationaryDisplayTalkResolution::MissingPublishedRow => {
+                    self.message = "No shop here.".to_string();
+                    return MoveOutcome::Blocked;
+                }
+                StationaryDisplayTalkResolution::NoCandidate => {}
+            }
             if let Some(session) =
                 crate::shop_session::shop_session_for_talk_context(dialog_id, scene_byte)
             {
@@ -2707,6 +2911,19 @@ impl PlayState {
         raw_blob: &HashMap<u16, Vec<Vec<u8>>>,
         keyword: Option<&str>,
     ) -> MoveOutcome {
+        self.talk_direction_with_dialogue_and_keyword_raw_and_stationary_displays(
+            direction, dialogue, raw_blob, keyword, None,
+        )
+    }
+
+    pub fn talk_direction_with_dialogue_and_keyword_raw_and_stationary_displays(
+        &mut self,
+        direction: Direction,
+        dialogue: &HashMap<u16, Vec<String>>,
+        raw_blob: &HashMap<u16, Vec<Vec<u8>>>,
+        keyword: Option<&str>,
+        stationary_displays: Option<&[StationaryDisplayEntry]>,
+    ) -> MoveOutcome {
         if !matches!(self.area, Area::Town { .. }) {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;
@@ -2715,10 +2932,17 @@ impl PlayState {
             return MoveOutcome::Blocked;
         }
 
-        let Some((dialog_id, _, _)) = self.talk_target_in_direction(direction) else {
+        let Some((dialog_id, target_x, target_y)) = self.talk_target_in_direction(direction) else {
             self.message = TALK_NOBODY_HERE_MESSAGE.to_string();
             return MoveOutcome::Blocked;
         };
+
+        if let Some(tile) = self.npc_live_tile_at(target_x, target_y) {
+            if let Some(refusal) = talk_status_tile_refusal(tile) {
+                self.message = refusal.to_string();
+                return MoveOutcome::Blocked;
+            }
+        }
 
         if let Some((role, family)) = talk_shop_trigger(dialog_id) {
             if self.player.transport.is_horse() && dialog_id != 0x83 {
@@ -2730,6 +2954,22 @@ impl PlayState {
                 Area::Town { scene, .. } => Some(scene.byte),
                 _ => None,
             };
+            match self.stationary_display_talk_resolution(stationary_displays) {
+                StationaryDisplayTalkResolution::Session(session) => {
+                    self.advance_turn();
+                    let label = session.shop_label().to_string();
+                    let prompt = session.opening_prompt().to_string();
+                    self.active_shop = Some(session);
+                    self.message =
+                        format!("{label} is now open. {prompt} Dispatch family: {family}.");
+                    return MoveOutcome::Talked;
+                }
+                StationaryDisplayTalkResolution::MissingPublishedRow => {
+                    self.message = "No shop here.".to_string();
+                    return MoveOutcome::Blocked;
+                }
+                StationaryDisplayTalkResolution::NoCandidate => {}
+            }
             if let Some(session) =
                 crate::shop_session::shop_session_for_talk_context(dialog_id, scene_byte)
             {
@@ -2807,12 +3047,12 @@ impl PlayState {
             .map(|scene| self.talk_branch_slot_for_scene(scene))
             .unwrap_or(0);
         let dictionary_owned = self.common_word_dictionary.clone();
-        let dictionary_refs = dictionary_owned.as_ref().map(common_word_dictionary_refs);
+        let dictionary_refs = common_word_dictionary_refs_or_published(dictionary_owned.as_ref());
         let inputs = crate::tlk_runner::TlkRunInputs {
             avatar_name: &avatar_name,
             branch_flags,
             moral_standing: self.moral_standing,
-            dictionary: dictionary_refs.as_ref(),
+            dictionary: Some(&dictionary_refs),
             curse_seen: false,
             gold_payment_accepted: true,
             gold_available: Some(self.gold),
@@ -2918,6 +3158,126 @@ impl PlayState {
         MoveOutcome::Talked
     }
 
+    fn stationary_display_talk_resolution(
+        &self,
+        entries: Option<&[StationaryDisplayEntry]>,
+    ) -> StationaryDisplayTalkResolution {
+        let Some(entries) = entries else {
+            return StationaryDisplayTalkResolution::NoCandidate;
+        };
+        let candidates = self.stationary_display_candidates_adjacent_to_player();
+        if candidates.is_empty() {
+            return StationaryDisplayTalkResolution::NoCandidate;
+        }
+        let Area::Town { scene, floor } = self.area else {
+            return StationaryDisplayTalkResolution::NoCandidate;
+        };
+        let Some((candidate, entry)) = candidates.iter().find_map(|candidate| {
+            entries
+                .iter()
+                .find(|entry| {
+                    entry.scene == scene
+                        && entry.floor == floor
+                        && entry.x.map_or(true, |x| x == candidate.x)
+                        && entry.y.map_or(true, |y| y == candidate.y)
+                        && entry
+                            .marker_tile
+                            .map_or(true, |tile| tile == candidate.marker_tile)
+                        && entry
+                            .marker_ordinal
+                            .map_or(true, |ordinal| ordinal == candidate.marker_ordinal)
+                        && entry
+                            .expected_tile
+                            .map_or(true, |tile| tile == candidate.marker_tile)
+                })
+                .map(|entry| (*candidate, entry))
+        }) else {
+            return StationaryDisplayTalkResolution::MissingPublishedRow;
+        };
+        StationaryDisplayTalkResolution::Session(ActiveShopSession::StationaryDisplay(
+            StationaryDisplayState::with_grant(
+                entry.grant,
+                entry.price,
+                self.active_player.unwrap_or(0),
+                candidate.object_slot,
+            ),
+        ))
+    }
+
+    fn stationary_display_candidates_adjacent_to_player(&self) -> Vec<StationaryDisplayCandidate> {
+        let Some(floor) = self.current_floor() else {
+            return Vec::new();
+        };
+        let mut candidates = Vec::new();
+        let mut marker_ordinal = 0usize;
+        let mut seen_marker_cells = Vec::new();
+        for (slot, object) in self.active_objects.iter().copied().enumerate().skip(1) {
+            if object.is_empty() || object.is_player_phantom() || object.z != floor {
+                continue;
+            }
+            let surface_tile = self.surface_tile_at(object.x, object.y);
+            let marker_tile = if stationary_display_marker_tile(surface_tile) {
+                surface_tile
+            } else if stationary_display_marker_tile(object.tile) {
+                object.tile
+            } else {
+                continue;
+            };
+            if stationary_display_adjacent(self.player.x, self.player.y, object.x, object.y)
+                && self.npc_at_current_floor(object.x, object.y).is_none()
+            {
+                candidates.push(StationaryDisplayCandidate {
+                    x: object.x,
+                    y: object.y,
+                    marker_tile,
+                    marker_ordinal,
+                    object_slot: Some(slot),
+                });
+            }
+            seen_marker_cells.push((object.x, object.y));
+            marker_ordinal += 1;
+        }
+
+        for y in 0..32 {
+            for x in 0..32 {
+                if candidates
+                    .iter()
+                    .any(|candidate| candidate.x == x && candidate.y == y)
+                    || seen_marker_cells.iter().any(|cell| *cell == (x, y))
+                {
+                    continue;
+                }
+                let marker_tile = self.surface_tile_at(x, y);
+                if !stationary_display_marker_tile(marker_tile) {
+                    continue;
+                }
+                let object_slot =
+                    self.object_slot_at_current_floor(x, y)
+                        .and_then(|(slot, object)| {
+                            stationary_display_marker_tile(object.tile).then_some(slot)
+                        });
+                if self.object_slot_at_current_floor(x, y).is_some() && object_slot.is_none() {
+                    marker_ordinal += 1;
+                    continue;
+                }
+                if (x != self.player.x || y != self.player.y)
+                    && stationary_display_adjacent(self.player.x, self.player.y, x, y)
+                    && self.npc_at_current_floor(x, y).is_none()
+                {
+                    candidates.push(StationaryDisplayCandidate {
+                        x,
+                        y,
+                        marker_tile,
+                        marker_ordinal,
+                        object_slot,
+                    });
+                }
+                marker_ordinal += 1;
+            }
+        }
+        candidates
+    }
+
     /// Apply the byte-runner's recorded [`TlkActionDispatchVerb`] grants
     /// to the live runtime counters per `conversation.md §7.6`.
     pub fn apply_tlk_action_grants(
@@ -2950,13 +3310,16 @@ impl PlayState {
                     *slot = (*slot).saturating_add(1).min(PARTY_BYTE_STOCK_CAP);
                 }
                 TlkActionDispatchVerb::SetSextantCarried => {
-                    self.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1;
+                    self.special_items[SPECIAL_ITEM_SEXTANT_INDEX] =
+                        SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE;
                 }
                 TlkActionDispatchVerb::SetSpyglassCarried => {
-                    self.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = 1;
+                    self.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] =
+                        SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE;
                 }
                 TlkActionDispatchVerb::SetBlackBadgeCarried => {
-                    self.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX] = 1;
+                    self.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX] =
+                        SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE;
                 }
                 TlkActionDispatchVerb::RaiseSkullKeys => {
                     let slot = &mut self.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX];
@@ -2967,13 +3330,32 @@ impl PlayState {
     }
 
     /// Apply accepted conversation gold payments emitted by TLK `0x85`.
+    ///
+    /// Per `karma.md §4` and `formats/saved-gam.md §10`: every successful
+    /// three-digit payment debits the party gold, then increments the
+    /// toll-progress counter by one. When the counter reaches
+    /// [`TOLL_PROGRESS_MILESTONE`], the helper resets it to zero and
+    /// applies the [`KarmaAction::TollMilestone`] bump to
+    /// [`Self::moral_standing`]; if the post-debit gold word is also
+    /// zero, the milestone karma includes the zero-gold bonus.
     pub fn apply_tlk_gold_payments(
         &mut self,
         payments: &[crate::conversation_session::ConversationGoldPayment],
     ) {
         for payment in payments {
-            if payment.accepted && self.gold >= payment.amount {
-                self.gold -= payment.amount;
+            if !payment.accepted || self.gold < payment.amount {
+                continue;
+            }
+            self.gold -= payment.amount;
+            self.toll_progress = self.toll_progress.saturating_add(1);
+            if self.toll_progress >= TOLL_PROGRESS_MILESTONE {
+                self.toll_progress = 0;
+                self.moral_standing = apply_karma_action(
+                    self.moral_standing,
+                    KarmaAction::TollMilestone {
+                        left_party_with_zero_gold: self.gold == 0,
+                    },
+                );
             }
         }
     }
@@ -3019,12 +3401,12 @@ impl PlayState {
             _ => 0,
         };
         let dictionary_owned = self.common_word_dictionary.clone();
-        let dictionary_refs = dictionary_owned.as_ref().map(common_word_dictionary_refs);
+        let dictionary_refs = common_word_dictionary_refs_or_published(dictionary_owned.as_ref());
         let inputs = crate::tlk_runner::TlkRunInputs {
             avatar_name: &avatar_name,
             branch_flags,
             moral_standing: self.moral_standing,
-            dictionary: dictionary_refs.as_ref(),
+            dictionary: Some(&dictionary_refs),
             curse_seen: false,
             gold_payment_accepted: true,
             gold_available: Some(self.gold),
@@ -3115,12 +3497,12 @@ impl PlayState {
             .collect();
         let party_member_names: Vec<&[u8]> = party_name_bytes.iter().map(Vec::as_slice).collect();
         let dictionary_owned = self.common_word_dictionary.clone();
-        let dictionary_refs = dictionary_owned.as_ref().map(common_word_dictionary_refs);
+        let dictionary_refs = common_word_dictionary_refs_or_published(dictionary_owned.as_ref());
         let ctx = crate::conversation_session::ConversationContext {
             avatar_name: &avatar_name,
             branch_flags,
             moral_standing: self.moral_standing,
-            dictionary: dictionary_refs.as_ref(),
+            dictionary: Some(&dictionary_refs),
             gold_payment_accepted: true,
             gold_available: Some(self.gold),
             party_member_names: &party_member_names,
@@ -3169,12 +3551,12 @@ impl PlayState {
             .collect();
         let party_member_names: Vec<&[u8]> = party_name_bytes.iter().map(Vec::as_slice).collect();
         let dictionary_owned = self.common_word_dictionary.clone();
-        let dictionary_refs = dictionary_owned.as_ref().map(common_word_dictionary_refs);
+        let dictionary_refs = common_word_dictionary_refs_or_published(dictionary_owned.as_ref());
         let ctx = crate::conversation_session::ConversationContext {
             avatar_name: &avatar_name,
             branch_flags,
             moral_standing: self.moral_standing,
-            dictionary: dictionary_refs.as_ref(),
+            dictionary: Some(&dictionary_refs),
             gold_payment_accepted: true,
             gold_available: Some(self.gold),
             party_member_names: &party_member_names,
@@ -3430,14 +3812,14 @@ impl PlayState {
             .unwrap_or(CONVERSATION_SHARED_NO_SLOT_SENTINEL)
     }
 
-    /// Record numeric TLK `0x86` action-dispatch arguments into the
-    /// generic one-conversation signal band. The public contract says
-    /// these writes use a nonzero marker rather than a durable bit.
+    /// Apply numeric TLK `0x86` action-dispatch arguments to the generic
+    /// one-conversation signal band. The public contract increments each
+    /// selected slot by one through the capped byte helper.
     pub fn record_tlk_signal_flags(&mut self, flags: &[u8]) {
         for flag in flags {
             let index = usize::from(*flag);
             if let Some(slot) = self.conversation_signal_flags.get_mut(index) {
-                *slot = 1;
+                *slot = slot.saturating_add(1).min(TLK_GENERIC_SIGNAL_CAP);
             }
         }
     }
@@ -3500,9 +3882,18 @@ impl PlayState {
         for action in actions {
             match *action {
                 'F' => self.climbing_gear = 1,
-                'H' => self.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = 1,
-                'I' => self.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = 1,
-                'J' => self.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX] = 1,
+                'H' => {
+                    self.special_items[SPECIAL_ITEM_SEXTANT_INDEX] =
+                        SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE
+                }
+                'I' => {
+                    self.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] =
+                        SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE
+                }
+                'J' => {
+                    self.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX] =
+                        SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE
+                }
                 _ => {}
             }
         }
@@ -3653,6 +4044,7 @@ fn draw_surface_view_cell(
     class: u8,
     tile: u8,
     player_marker: bool,
+    mode: ViewOverlayMode,
 ) {
     if player_marker {
         for offset in 0..scale {
@@ -3662,7 +4054,7 @@ fn draw_surface_view_cell(
         return;
     }
 
-    let color = surface_view_class_color(class);
+    let color = surface_view_class_color(class, mode);
     match class {
         0x00 | 0x0C => {}
         0x01 => {
@@ -3728,13 +4120,24 @@ fn draw_dungeon_view_cell(
     cell_y: usize,
     scale: usize,
     glyph: char,
+    mode: ViewOverlayMode,
 ) {
+    let door_color = if mode.uses_alternate_view_bank() {
+        14
+    } else {
+        11
+    };
+    let wall_color = if mode.uses_alternate_view_bank() {
+        13
+    } else {
+        8
+    };
     match glyph {
-        '@' => draw_surface_view_cell(viewport, cell_x, cell_y, scale, 0, 0, true),
-        '#' => draw_view_overlay_box(viewport, cell_x, cell_y, scale, 8),
+        '@' => draw_surface_view_cell(viewport, cell_x, cell_y, scale, 0, 0, true, mode),
+        '#' => draw_view_overlay_box(viewport, cell_x, cell_y, scale, wall_color),
         '>' | '<' => draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, 14),
         '$' => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, 6),
-        '+' => draw_view_overlay_diagonals(viewport, cell_x, cell_y, scale, 11),
+        '+' => draw_view_overlay_diagonals(viewport, cell_x, cell_y, scale, door_color),
         '~' => draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 1.min(scale - 1), 9),
         '*' => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, 12),
         ' ' => {}
@@ -3742,7 +4145,15 @@ fn draw_dungeon_view_cell(
     }
 }
 
-fn surface_view_class_color(class: u8) -> u8 {
+fn surface_view_class_color(class: u8, mode: ViewOverlayMode) -> u8 {
+    if mode.uses_alternate_view_bank() {
+        match class {
+            0x0A => return 3,
+            0x0B => return 11,
+            0x0F => return 14,
+            _ => {}
+        }
+    }
     match class {
         0x01 => 7,
         0x02 => 2,

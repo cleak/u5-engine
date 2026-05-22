@@ -238,7 +238,7 @@
     }
 
     #[test]
-    fn lock_utility_spells_require_direction_before_resources() {
+    fn lock_utility_spells_require_direction_before_resources_outside_combat() {
         let mut town_magic_lock = test_state(open_grid(), 5, 5);
         town_magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX] = 1;
         town_magic_lock.party[0].mana = MAGIC_LOCK_COST;
@@ -282,51 +282,10 @@
             "Direction? Use C1EIP8/C1EIP6/C1EIP2/C1EIP4."
         );
 
-        let mut magic_lock = britannia_state(open_world_grid(), 5, 5);
-        magic_lock.combat_active = true;
-        magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX] = 1;
-        magic_lock.party[0].mana = MAGIC_LOCK_COST;
-        magic_lock.party[0].level = MAGIC_LOCK_COST;
-
-        assert_eq!(
-            magic_lock
-                .cast_spell_from_suffix("1AEP", Path::new(""))
-                .unwrap(),
-            MoveOutcome::Blocked
-        );
-
-        assert_eq!(magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX], 1);
-        assert_eq!(magic_lock.party[0].mana, MAGIC_LOCK_COST);
-        assert_eq!(magic_lock.turn, 0);
-        assert_eq!(
-            magic_lock.message,
-            "Direction? Use C1AEP8/C1AEP6/C1AEP2/C1AEP4."
-        );
-
-        let mut unlock_magic = britannia_state(open_world_grid(), 5, 5);
-        unlock_magic.combat_active = true;
-        unlock_magic.spell_charges[UNLOCK_MAGIC_SPELL_INDEX] = 1;
-        unlock_magic.party[0].mana = UNLOCK_MAGIC_COST;
-        unlock_magic.party[0].level = UNLOCK_MAGIC_COST;
-
-        assert_eq!(
-            unlock_magic
-                .cast_spell_from_suffix("1EIP", Path::new(""))
-                .unwrap(),
-            MoveOutcome::Blocked
-        );
-
-        assert_eq!(unlock_magic.spell_charges[UNLOCK_MAGIC_SPELL_INDEX], 1);
-        assert_eq!(unlock_magic.party[0].mana, UNLOCK_MAGIC_COST);
-        assert_eq!(unlock_magic.turn, 0);
-        assert_eq!(
-            unlock_magic.message,
-            "Direction? Use C1EIP8/C1EIP6/C1EIP2/C1EIP4."
-        );
     }
 
     #[test]
-    fn combat_lock_utility_spells_mutate_arena_door_family() {
+    fn combat_lock_utility_spells_fail_without_arena_mutation_or_target_prompt() {
         let mut magic_lock = britannia_state(open_world_grid(), 5, 5);
         magic_lock.combat_active = true;
         magic_lock.combat_actors[0] = CombatActorDescriptor::from_row([
@@ -347,21 +306,17 @@
 
         assert_eq!(
             magic_lock
-                .cast_spell_from_suffix("1AEP6", Path::new(""))
+                .cast_spell_from_suffix("1AEP", Path::new(""))
                 .unwrap(),
-            MoveOutcome::Cast
+            MoveOutcome::Blocked
         );
 
-        assert_eq!(magic_lock.combat_terrain[5][6], 96);
+        assert_eq!(magic_lock.combat_terrain[5][6], 97);
         assert_eq!(magic_lock.spell_charges[MAGIC_LOCK_SPELL_INDEX], 0);
         assert_eq!(magic_lock.party[0].mana, 0);
         assert_eq!(magic_lock.turn, 1);
         assert_eq!(magic_lock.clock, GameClock::new(12, 2).unwrap());
-        assert!(magic_lock.visibility_dirty);
-        assert_eq!(
-            magic_lock.message,
-            "Magic locked combat tile 97 at (6, 5)."
-        );
+        assert_eq!(magic_lock.message, "Failed!");
 
         let mut unlock_magic = britannia_state(open_world_grid(), 5, 5);
         unlock_magic.combat_active = true;
@@ -383,21 +338,17 @@
 
         assert_eq!(
             unlock_magic
-                .cast_spell_from_suffix("1EIP6", Path::new(""))
+                .cast_spell_from_suffix("1EIP", Path::new(""))
                 .unwrap(),
-            MoveOutcome::Cast
+            MoveOutcome::Blocked
         );
 
-        assert_eq!(unlock_magic.combat_terrain[5][6], 97);
+        assert_eq!(unlock_magic.combat_terrain[5][6], 96);
         assert_eq!(unlock_magic.spell_charges[UNLOCK_MAGIC_SPELL_INDEX], 0);
         assert_eq!(unlock_magic.party[0].mana, 0);
         assert_eq!(unlock_magic.turn, 1);
         assert_eq!(unlock_magic.clock, GameClock::new(12, 2).unwrap());
-        assert!(unlock_magic.visibility_dirty);
-        assert_eq!(
-            unlock_magic.message,
-            "Unlocked combat magic tile 96 at (6, 5)."
-        );
+        assert_eq!(unlock_magic.message, "Failed!");
     }
 
     #[test]

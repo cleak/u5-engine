@@ -77,6 +77,48 @@ pub struct CombatPlacementSlot {
 pub const TERRAIN_COMBAT_PARTY_POSITIONS: [(u8, u8); COMBAT_PARTY_ACTOR_SLOTS] =
     [(5, 5), (4, 5), (6, 5), (5, 4), (5, 6), (4, 6)];
 
+/// Public issue #3 resident terrain-combat arena rows. Byte zero is
+/// the spawn-count seed; bytes one through seven are retained as the
+/// published raw row until their per-byte consumers are promoted.
+pub const TERRAIN_COMBAT_ARENA_ROWS: [[u8; 8]; OUTDOOR_ARENA_COUNT] = [
+    [0x03, 0x14, 0x0f, 0x14, 0x0a, 0x04, 0x0c, 0x0f],
+    [0x09, 0x0a, 0x14, 0x0f, 0x0a, 0x08, 0x0f, 0x14],
+    [0x06, 0x0f, 0x19, 0x19, 0x19, 0x07, 0x1e, 0x14],
+    [0x01, 0x19, 0x0c, 0x0c, 0x0c, 0x00, 0x06, 0x08],
+    [0x01, 0x0a, 0x0c, 0x0c, 0x12, 0x00, 0x06, 0x08],
+    [0x01, 0x0a, 0x0c, 0x12, 0x0c, 0x00, 0x06, 0x08],
+    [0x01, 0x0a, 0x0c, 0x10, 0x0e, 0x00, 0x06, 0x08],
+    [0x01, 0x0a, 0x0c, 0x0c, 0x0c, 0x00, 0x00, 0x05],
+    [0x01, 0x00, 0x0c, 0x0c, 0x0c, 0x00, 0x00, 0x05],
+    [0x01, 0x00, 0x08, 0x08, 0x08, 0x00, 0x00, 0x05],
+    [0x01, 0x00, 0x08, 0x08, 0x08, 0x00, 0x00, 0x05],
+    [0x01, 0x00, 0x16, 0x1e, 0x0a, 0x06, 0x1e, 0x63],
+    [0x08, 0x05, 0x1e, 0x1e, 0x1e, 0x1e, 0x63, 0x63],
+    [0x01, 0x00, 0x1e, 0x1e, 0x1e, 0x1e, 0x1e, 0x63],
+    [0x01, 0x00, 0x1e, 0x1e, 0x1e, 0x1e, 0x63, 0x63],
+    [0x01, 0x00, 0x11, 0x14, 0x14, 0x02, 0x0a, 0x1e],
+];
+
+pub const TERRAIN_COMBAT_REPLACEMENT_TILES_RAW: [u8; OUTDOOR_ARENA_COUNT] = [
+    0x21, 0x01, 0x01, 0x03, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0a, 0x04, 0x0c, 0x0d, 0x0e, 0x0f,
+];
+
+pub const fn terrain_combat_spawn_count_for_arena(arena_index: usize) -> Option<u8> {
+    if arena_index < OUTDOOR_ARENA_COUNT {
+        Some(TERRAIN_COMBAT_ARENA_ROWS[arena_index][0])
+    } else {
+        None
+    }
+}
+
+pub const fn terrain_combat_raw_replacement_tile_for_arena(arena_index: usize) -> Option<u8> {
+    if arena_index < OUTDOOR_ARENA_COUNT {
+        Some(TERRAIN_COMBAT_REPLACEMENT_TILES_RAW[arena_index])
+    } else {
+        None
+    }
+}
+
 pub fn terrain_combat_setup_from_record(
     plane: WorldPlane,
     trigger: ActiveObject,
@@ -91,14 +133,7 @@ pub fn terrain_combat_setup_from_record(
             ),
         )
     })?;
-    let placement_x = record.outdoor_placement_x();
-    let placement_y = record.outdoor_placement_y();
-    let placement_slots = placement_x
-        .into_iter()
-        .zip(placement_y)
-        .enumerate()
-        .map(|(slot, (x, y))| CombatPlacementSlot { slot, x, y })
-        .collect();
+    let placement_slots = combat_placement_slots_from_record(record);
 
     Ok(TerrainCombatSetup {
         arena_index,
@@ -116,26 +151,28 @@ pub fn dungeon_room_combat_setup_from_record(
     arena_index: usize,
     record: &CombatArenaRecord,
 ) -> DungeonRoomCombatSetup {
-    let placement_x = record.outdoor_placement_x();
-    let placement_y = record.outdoor_placement_y();
-    let placement_slots = placement_x
-        .into_iter()
-        .zip(placement_y)
-        .enumerate()
-        .map(|(slot, (x, y))| CombatPlacementSlot { slot, x, y })
-        .collect();
-
     DungeonRoomCombatSetup {
         arena_index,
         terrain: record.terrain_grid(),
-        placement_slots,
+        placement_slots: combat_placement_slots_from_record(record),
         setup_sources: record.dungeon_room_setup_sources(),
     }
 }
 
+pub fn combat_placement_slots_from_record(record: &CombatArenaRecord) -> Vec<CombatPlacementSlot> {
+    let placement_x = record.outdoor_placement_x();
+    let placement_y = record.outdoor_placement_y();
+    placement_x
+        .into_iter()
+        .zip(placement_y)
+        .enumerate()
+        .map(|(slot, (x, y))| CombatPlacementSlot { slot, x, y })
+        .collect()
+}
+
 pub fn dungeon_room_source_sprite(source: u8) -> Option<u8> {
     match DungeonRoomSetupSourceKind::from_source(source) {
-        DungeonRoomSetupSourceKind::OrdinaryCombatant => Some(source | 0x80),
+        DungeonRoomSetupSourceKind::OrdinaryCombatant => Some((source & 0x7f) | 0x80),
         _ => None,
     }
 }
@@ -146,25 +183,29 @@ pub fn dungeon_room_combat_instance_from_setup(
 ) -> TerrainCombatInstance {
     let mut active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
     let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    let ordinary_source_count = setup
+        .setup_sources
+        .iter()
+        .filter(|source| source.kind == DungeonRoomSetupSourceKind::OrdinaryCombatant)
+        .count();
     let mut placed_count = 0u8;
+    let mut marker_count = 0usize;
 
     for source in &setup.setup_sources {
-        let active_object_slot = COMBAT_PARTY_ACTOR_SLOTS + source.slot;
-        if active_object_slot >= OOL_SLOTS || active_object_slot >= COMBAT_ACTOR_SLOTS {
-            continue;
-        }
-        let placement =
-            setup
-                .placement_slots
-                .get(source.slot)
-                .copied()
-                .unwrap_or(CombatPlacementSlot {
-                    slot: source.slot,
-                    x: (source.slot % COMBAT_ARENA_SIDE) as u8,
-                    y: (source.slot / COMBAT_ARENA_SIDE) as u8,
-                });
         match source.kind {
             DungeonRoomSetupSourceKind::OrdinaryCombatant => {
+                let spawn_index = usize::from(placed_count);
+                let active_object_slot = COMBAT_PARTY_ACTOR_SLOTS + spawn_index;
+                if active_object_slot >= OOL_SLOTS || active_object_slot >= COMBAT_ACTOR_SLOTS {
+                    continue;
+                }
+                let placement = setup.placement_slots.get(spawn_index).copied().unwrap_or(
+                    CombatPlacementSlot {
+                        slot: spawn_index,
+                        x: (spawn_index % COMBAT_ARENA_SIDE) as u8,
+                        y: (spawn_index / COMBAT_ARENA_SIDE) as u8,
+                    },
+                );
                 let Some(tile) = dungeon_room_source_sprite(source.source) else {
                     continue;
                 };
@@ -191,9 +232,19 @@ pub fn dungeon_room_combat_instance_from_setup(
                 );
                 placed_count = placed_count.saturating_add(1);
             }
-            DungeonRoomSetupSourceKind::AbsorbableField
-            | DungeonRoomSetupSourceKind::SpecialPlacement => {
-                active_objects[active_object_slot] = ActiveObject {
+            DungeonRoomSetupSourceKind::AbsorbableField => {
+                let marker_slot = COMBAT_PARTY_ACTOR_SLOTS + ordinary_source_count + marker_count;
+                if marker_slot >= OOL_SLOTS {
+                    continue;
+                }
+                let placement = setup.placement_slots.get(source.slot).copied().unwrap_or(
+                    CombatPlacementSlot {
+                        slot: source.slot,
+                        x: (source.slot % COMBAT_ARENA_SIDE) as u8,
+                        y: (source.slot / COMBAT_ARENA_SIDE) as u8,
+                    },
+                );
+                active_objects[marker_slot] = ActiveObject {
                     type_byte: source.source,
                     tile: source.source,
                     x: usize::from(placement.x),
@@ -203,7 +254,9 @@ pub fn dungeon_room_combat_instance_from_setup(
                     aux1: 0,
                     aux3: 0,
                 };
+                marker_count += 1;
             }
+            DungeonRoomSetupSourceKind::SpecialPlacement => {}
         }
     }
 
@@ -381,6 +434,7 @@ impl PlayState {
         game_dir: &std::path::Path,
         scene: DungeonScene,
         level: u8,
+        room_slot: u8,
         arena_index: usize,
         enter_endgame_after_successful_absorbable_combat: bool,
     ) -> io::Result<String> {
@@ -397,10 +451,12 @@ impl PlayState {
             .iter()
             .any(|source| source.kind == DungeonRoomSetupSourceKind::AbsorbableField);
         let mut instance = dungeon_room_combat_instance_from_setup(&setup, level as i8);
-        self.populate_terrain_combat_party(
+        self.populate_combat_party_at_placement_slots(
             &mut instance.active_objects,
             &mut instance.actors,
             level as i8,
+            &setup.placement_slots,
+            usize::from(instance.placed_count),
         );
         let placed_count = instance.placed_count;
         let requested_count = instance.requested_count;
@@ -409,6 +465,12 @@ impl PlayState {
             instance.actors,
             setup.terrain,
         )?;
+        if !enter_endgame_after_successful_absorbable_combat {
+            if let Some(snapshot) = &mut self.combat_frame_snapshot {
+                snapshot.dungeon_room_clear_on_success =
+                    Some(PendingDungeonRoomClear { scene, room_slot });
+            }
+        }
         if enter_endgame_after_successful_absorbable_combat && has_absorbable_field {
             let endgame_messages = require_endgame_messages(game_dir)?;
             if let Some(snapshot) = &mut self.combat_frame_snapshot {
@@ -460,7 +522,7 @@ impl PlayState {
             COMBAT_ACTOR_FLAG_SELECTABLE_80,
             0,
         );
-        self.enter_combat_frame(active_objects, actors)?;
+        self.enter_combat_frame_with_terrain(active_objects, actors, DUNGEON_AMBUSH_ARENA_TERRAIN)?;
         Ok(format!(
             "entered dungeon combat against {} from active monster tile {}",
             stats.name, object.tile
@@ -552,20 +614,24 @@ impl PlayState {
                 ),
             )
         })?;
-        let requested_count =
-            self.roll_terrain_combat_setup_count(base_class.default_spawn_count, false);
+        let base_count = terrain_combat_spawn_count_for_arena(arena_index)
+            .unwrap_or(base_class.default_spawn_count);
+        let requested_count = self.roll_terrain_combat_setup_count(base_count, false);
+        let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(arena_index);
         let replacement_roll_seeds =
-            self.terrain_combat_replacement_roll_seeds(requested_count, None);
+            self.terrain_combat_replacement_roll_seeds(requested_count, replacement_tile);
         let mut instance = terrain_combat_instance_from_setup(
             &setup,
             requested_count,
-            None,
+            replacement_tile,
             &replacement_roll_seeds,
         )?;
-        self.populate_terrain_combat_party(
+        self.populate_combat_party_at_placement_slots(
             &mut instance.active_objects,
             &mut instance.actors,
             object.z,
+            &setup.placement_slots,
+            usize::from(instance.placed_count),
         );
         let placed_count = instance.placed_count;
         let requested_count = instance.requested_count;
@@ -587,11 +653,46 @@ impl PlayState {
         actors: &mut [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
         z: i8,
     ) {
+        self.populate_combat_party_with_positions(
+            active_objects,
+            actors,
+            z,
+            &TERRAIN_COMBAT_PARTY_POSITIONS,
+        );
+    }
+
+    pub fn populate_combat_party_at_placement_slots(
+        &self,
+        active_objects: &mut [ActiveObject],
+        actors: &mut [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
+        z: i8,
+        placement_slots: &[CombatPlacementSlot],
+        start_index: usize,
+    ) {
+        let mut positions = TERRAIN_COMBAT_PARTY_POSITIONS;
+        for (slot, position) in positions.iter_mut().enumerate() {
+            if let Some(placement) = placement_slots.get(start_index + slot) {
+                *position = (placement.x, placement.y);
+            }
+        }
+        self.populate_combat_party_with_positions(active_objects, actors, z, &positions);
+    }
+
+    fn populate_combat_party_with_positions(
+        &self,
+        active_objects: &mut [ActiveObject],
+        actors: &mut [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
+        z: i8,
+        positions: &[(u8, u8); COMBAT_PARTY_ACTOR_SLOTS],
+    ) {
         for (slot, member) in self.party.iter().take(COMBAT_PARTY_ACTOR_SLOTS).enumerate() {
-            if !member.living() {
+            if !member.conscious() {
                 continue;
             }
-            let (x, y) = TERRAIN_COMBAT_PARTY_POSITIONS[slot];
+            let (x, y) = positions[slot];
+            let base_step = combat_class_stats(member.class_byte)
+                .map(|stats| stats.speed_seed)
+                .unwrap_or(1);
             active_objects[slot] = ActiveObject {
                 type_byte: PLAYER_TILE,
                 tile: PLAYER_TILE,
@@ -604,7 +705,7 @@ impl PlayState {
             };
             actors[slot] = CombatActorDescriptor::from_row([
                 member.hp.min(u16::from(u8::MAX)) as u8,
-                1,
+                base_step,
                 COMBAT_ACTOR_FLAG_SELECTABLE_80,
                 member.class_byte,
                 slot as u8,

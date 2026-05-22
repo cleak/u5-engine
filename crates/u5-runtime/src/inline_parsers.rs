@@ -22,6 +22,24 @@ pub fn parse_u8_literal(value: &str) -> io::Result<u8> {
     })
 }
 
+pub fn parse_u16_literal(value: &str) -> io::Result<u16> {
+    let trimmed = value.trim();
+    let parsed = if let Some(hex) = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+    {
+        u16::from_str_radix(hex, 16)
+    } else {
+        trimmed.parse::<u16>()
+    };
+    parsed.map_err(|err| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid word literal `{value}`: {err}"),
+        )
+    })
+}
+
 pub fn parse_i8_literal(value: &str) -> io::Result<i8> {
     value.trim().parse::<i8>().map_err(|err| {
         io::Error::new(

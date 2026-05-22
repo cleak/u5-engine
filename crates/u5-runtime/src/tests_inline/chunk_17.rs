@@ -963,7 +963,7 @@
         assert_eq!(state.turn, 0);
         assert_eq!(
             state.message,
-            "Shard of Falsehood: no matching Shadowlord is nearby."
+            "Shard of Falsehood: no matching Eternal Flame is here."
         );
     }
 
@@ -973,17 +973,17 @@
             (
                 "Falsehood",
                 SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
-                "Shard of Falsehood: no matching Shadowlord is nearby.",
+                "Shard of Falsehood: no matching Eternal Flame is here.",
             ),
             (
                 "Shard Hatred",
                 SPECIAL_ITEM_SHARD_HATRED_INDEX,
-                "Shard of Hatred: no matching Shadowlord is nearby.",
+                "Shard of Hatred: no matching Eternal Flame is here.",
             ),
             (
                 "CW",
                 SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
-                "Shard of Cowardice: no matching Shadowlord is nearby.",
+                "Shard of Cowardice: no matching Eternal Flame is here.",
             ),
         ];
 
@@ -1090,6 +1090,90 @@
     }
 
     #[test]
+    fn use_shadowlord_shard_accepts_cardinal_adjacent_flame_tile() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(ETERNAL_FLAME_TABLE_FILE), "CASTLE:0 0 5 5 TRUTH\n").unwrap();
+        let mut grid = open_grid();
+        grid[5 * 32 + 5] = 0x76;
+        let mut state = test_state(grid, 5, 4);
+        state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
+        state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
+        let z = state.current_floor().unwrap();
+        state.active_objects.push(
+            state
+                .shadowlord_name_encounter_object(SHADOWLORD_FALSEHOOD_INDEX, 6, 4, z)
+                .unwrap(),
+        );
+
+        assert_eq!(
+            state
+                .use_shadowlord_shard(SHADOWLORD_FALSEHOOD_INDEX, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Used
+        );
+
+        assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 0);
+        assert!(state.shadowlord_vanquished(SHADOWLORD_FALSEHOOD_INDEX));
+    }
+
+    #[test]
+    fn use_shadowlord_shard_matching_flame_does_not_require_live_encounter() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(ETERNAL_FLAME_TABLE_FILE), "CASTLE:0 0 5 5 TRUTH\n").unwrap();
+        let mut grid = open_grid();
+        grid[5 * 32 + 5] = 0x76;
+        let mut state = test_state(grid, 5, 5);
+        state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
+        state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
+
+        assert_eq!(
+            state
+                .use_shadowlord_shard(SHADOWLORD_FALSEHOOD_INDEX, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Used
+        );
+
+        assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 0);
+        assert!(state.shadowlord_vanquished(SHADOWLORD_FALSEHOOD_INDEX));
+        assert_eq!(state.turn, 1);
+        assert_eq!(
+            state.message,
+            "Shard of Falsehood: cast into Flame of Truth; Falsehood vanquished; cleared 0 encounter(s)."
+        );
+    }
+
+    #[test]
+    fn use_shadowlord_shard_rejects_diagonal_flame_tile() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(ETERNAL_FLAME_TABLE_FILE), "CASTLE:0 0 5 5 TRUTH\n").unwrap();
+        let mut grid = open_grid();
+        grid[5 * 32 + 5] = 0x76;
+        let mut state = test_state(grid, 4, 4);
+        state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
+        state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
+        let z = state.current_floor().unwrap();
+        state.active_objects.push(
+            state
+                .shadowlord_name_encounter_object(SHADOWLORD_FALSEHOOD_INDEX, 5, 4, z)
+                .unwrap(),
+        );
+
+        assert_eq!(
+            state
+                .use_shadowlord_shard(SHADOWLORD_FALSEHOOD_INDEX, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
+        assert!(state.shadowlord_alive(SHADOWLORD_FALSEHOOD_INDEX));
+        assert_eq!(
+            state.message,
+            "Shard of Falsehood: no matching Eternal Flame is here."
+        );
+    }
+
+    #[test]
     fn use_shadowlord_shard_rejects_wrong_flame_without_consuming() {
         let dir = debug_game_dir();
         fs::write(dir.join(ETERNAL_FLAME_TABLE_FILE), "CASTLE:0 0 5 5 LOVE 16\n").unwrap();
@@ -1175,6 +1259,16 @@
         ];
         state.party_names = vec![*b"AVATAR\0\0\0", *b"MARIA\0\0\0\0"];
         state.combat_active = true;
+        state.combat_actors[1] = CombatActorDescriptor::from_row([
+            10,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            32,
+            1,
+            0,
+            5,
+            5,
+        ]);
         state.pending_combat_actor_slot = Some(1);
 
         assert_eq!(
@@ -1194,7 +1288,7 @@
     }
 
     #[test]
-    fn shadowlord_midnight_reroll_skips_vanquished_and_keeps_living_distinct() {
+    fn shadowlord_midnight_reroll_skips_vanquished_and_samples_living_slots() {
         let mut state = world_state(open_world_grid(), 5, 5);
         state.clock = GameClock::with_date(139, 4, 5, 23, 59).unwrap();
         state.shadowlord_hideouts = [1, SHADOWLORD_VANQUISHED, 2];
@@ -1220,14 +1314,10 @@
         assert!(PlayState::shadowlord_slot_is_living(
             state.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX]
         ));
-        assert_ne!(
-            state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX],
-            state.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX]
-        );
     }
 
     #[test]
-    fn shadowlord_reroll_rejects_current_hideout_id() {
+    fn shadowlord_reroll_uses_plain_uniform_slots_without_current_rejection() {
         let mut state = world_state(open_world_grid(), 5, 5);
         state.shadowlord_hideouts = [1, 2, SHADOWLORD_VANQUISHED];
         state.prng_state = 0x0002;
@@ -1238,12 +1328,6 @@
 
         assert_eq!(state.shadowlord_hideouts, expected_hideouts);
         assert_eq!(state.prng_state, expected_prng_state);
-        assert_ne!(state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX], 3);
-        assert_ne!(state.shadowlord_hideouts[SHADOWLORD_HATRED_INDEX], 3);
-        assert_ne!(
-            state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX],
-            state.shadowlord_hideouts[SHADOWLORD_HATRED_INDEX]
-        );
         assert_eq!(
             state.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX],
             SHADOWLORD_VANQUISHED
@@ -1281,35 +1365,24 @@
     fn expected_shadowlord_prng_reroll(
         previous: [u8; SHADOWLORD_COUNT],
         mut prng_state: u16,
-        current: Option<u8>,
+        _current: Option<u8>,
     ) -> ([u8; SHADOWLORD_COUNT], u16) {
         let mut hideouts = previous;
-        let mut assigned = [0u8; SHADOWLORD_COUNT];
-        let mut assigned_len = 0usize;
         for slot in 0..SHADOWLORD_COUNT {
             if !PlayState::shadowlord_slot_is_living(previous[slot]) {
                 continue;
             }
-            let selected = loop {
-                let candidate = u5_prng_range_u16(
-                    &mut prng_state,
-                    u16::from(SHADOWLORD_HIDEOUT_MIN),
-                    u16::from(SHADOWLORD_HIDEOUT_MAX),
-                ) as u8;
-                if current == Some(candidate) || assigned[..assigned_len].contains(&candidate) {
-                    continue;
-                }
-                break candidate;
-            };
-            hideouts[slot] = selected;
-            assigned[assigned_len] = selected;
-            assigned_len += 1;
+            hideouts[slot] = u5_prng_range_u16(
+                &mut prng_state,
+                u16::from(SHADOWLORD_HIDEOUT_MIN),
+                u16::from(SHADOWLORD_HIDEOUT_MAX),
+            ) as u8;
         }
         (hideouts, prng_state)
     }
 
     #[test]
-    fn shadowlord_midnight_reroll_excludes_current_virtue_town() {
+    fn shadowlord_midnight_reroll_samples_each_living_slot_uniformly() {
         let mut state = test_state(open_grid(), 1, 1);
         state.area = Area::Town {
             scene: Scene::new(1).unwrap(),
@@ -1328,12 +1401,6 @@
 
         assert_eq!(state.shadowlord_hideouts, expected_hideouts);
         assert_eq!(state.prng_state, expected_prng_state);
-        assert_ne!(state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX], 1);
-        assert_ne!(state.shadowlord_hideouts[SHADOWLORD_HATRED_INDEX], 1);
-        assert_ne!(
-            state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX],
-            state.shadowlord_hideouts[SHADOWLORD_HATRED_INDEX]
-        );
         assert_eq!(
             state.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX],
             SHADOWLORD_VANQUISHED
@@ -2302,19 +2369,28 @@
         heal.party[1].hp = 8;
         heal.party[1].max_hp = 25;
         heal.spell_charges[HEAL_SPELL_INDEX] = 1;
-        let expected_heal = heal.heal_spell_amount(0, 1);
+        let mut expected_prng = heal.prng_state;
+        let expected_raw_roll =
+            u5_prng_range_u16(&mut expected_prng, 0, u16::from(HEAL_RAW_ROLL_MAX)) as u8;
+        let expected_heal = heal_spell_amount_from_raw_roll(expected_raw_roll);
 
         assert_eq!(
             handle_play_key_input(&mut heal, 'C', "1M2", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(expected_heal, 11);
         assert_eq!(heal.party[1].hp, 8 + expected_heal);
+        assert_eq!(heal.prng_state, expected_prng);
         assert_eq!(heal.spell_charges[HEAL_SPELL_INDEX], 0);
         assert_eq!(heal.party[0].mana, 2);
         assert_eq!(heal.turn, 1);
-        assert_eq!(heal.message, "Healed party member 2 for 11 HP (19/25).");
+        assert_eq!(
+            heal.message,
+            format!(
+                "Healed party member 2 for {expected_heal} HP ({}/25).",
+                8 + expected_heal
+            )
+        );
 
         let mut great_heal = dungeon_state(open_dungeon_record(), 0, 1, 1);
         great_heal.party = heal.party.clone();
@@ -2440,7 +2516,12 @@
             },
         ];
         heal.spell_charges[HEAL_SPELL_INDEX] = 1;
-        let expected_heal = heal.heal_spell_amount(0, 1);
+        let mut expected_prng = heal.prng_state;
+        let expected_heal = heal_spell_amount_from_raw_roll(u5_prng_range_u16(
+            &mut expected_prng,
+            0,
+            u16::from(HEAL_RAW_ROLL_MAX),
+        ) as u8);
 
         assert_eq!(
             handle_play_key_input(&mut heal, 'C', "1M2", Path::new("")).unwrap(),
@@ -2449,6 +2530,7 @@
 
         assert_eq!(heal.party[1].status, b'A');
         assert_eq!(heal.party[1].hp, expected_heal);
+        assert_eq!(heal.prng_state, expected_prng);
         assert_eq!(heal.spell_charges[HEAL_SPELL_INDEX], 0);
         assert_eq!(heal.party[0].mana, 0);
         assert_eq!(heal.turn, 1);
@@ -2484,10 +2566,20 @@
         assert_eq!(heal_spell_amount_from_raw_roll(60), 30);
 
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.prng_state = 0x1234;
+        let mut expected_prng = state.prng_state;
+        let expected_roll =
+            u5_prng_range_u16(&mut expected_prng, 0, u16::from(HEAL_RAW_ROLL_MAX)) as u8;
+        assert_eq!(
+            state.heal_spell_amount(),
+            heal_spell_amount_from_raw_roll(expected_roll)
+        );
+        assert_eq!(state.prng_state, expected_prng);
+
         let mut seen = [false; 31];
-        for turn in 0..=60 {
-            state.turn = turn;
-            let amount = state.heal_spell_amount(0, 0);
+        for seed in 0..=4096 {
+            state.prng_state = seed;
+            let amount = state.heal_spell_amount();
             assert!((1..=30).contains(&amount));
             seen[amount as usize] = true;
         }
@@ -2836,7 +2928,7 @@
     }
 
     #[test]
-    fn combat_allowed_open_reaches_resource_gate_and_opens_arena_door() {
+    fn combat_allowed_open_uses_failed_utility_fallback_without_target_prompt() {
         let mut grid = open_world_grid();
         grid[world_cell_index(6, 5)] = 0x97;
         let mut state = britannia_state(grid, 5, 5);
@@ -2859,23 +2951,22 @@
 
         assert_eq!(
             state
-                .cast_spell_from_suffix("1AS6", Path::new(""))
+                .cast_spell_from_suffix("1AS", Path::new(""))
                 .unwrap(),
-            MoveOutcome::DoorOpened
+            MoveOutcome::Blocked
         );
 
         assert_eq!(state.grid[world_cell_index(6, 5)], 0x97);
-        assert_eq!(state.combat_terrain[5][6], 16);
+        assert_eq!(state.combat_terrain[5][6], 97);
         assert_eq!(state.spell_charges[OPEN_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
-        assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Opened combat tile 97 at (6, 5).");
+        assert_eq!(state.message, "Failed!");
     }
 
     #[test]
-    fn combat_vanish_removes_loose_object_or_field_after_resource_gate() {
+    fn combat_vanish_uses_failed_utility_fallback_without_arena_mutation() {
         let mut object_state = test_state(open_grid(), 5, 5);
         object_state.combat_active = true;
         object_state.combat_actors[0] = CombatActorDescriptor::from_row([
@@ -2903,20 +2994,16 @@
 
         assert_eq!(
             object_state
-                .cast_spell_from_suffix("1AY6", Path::new(""))
+                .cast_spell_from_suffix("1AY", Path::new(""))
                 .unwrap(),
-            MoveOutcome::Cast
+            MoveOutcome::Blocked
         );
 
-        assert!(object_state.active_objects[1].is_empty());
+        assert_eq!(object_state.active_objects[1].tile, 0x50);
         assert_eq!(object_state.spell_charges[VANISH_SPELL_INDEX], 0);
         assert_eq!(object_state.party[0].mana, 0);
         assert_eq!(object_state.turn, 1);
-        assert!(object_state.visibility_dirty);
-        assert_eq!(
-            object_state.message,
-            "Vanished combat object tile 80 at (6, 5)."
-        );
+        assert_eq!(object_state.message, "Failed!");
 
         let mut field_state = test_state(open_grid(), 5, 5);
         field_state.combat_active = true;
@@ -2944,13 +3031,13 @@
 
         assert_eq!(
             field_state
-                .cast_spell_from_suffix("1AY6", Path::new(""))
+                .cast_spell_from_suffix("1AY", Path::new(""))
                 .unwrap(),
-            MoveOutcome::Cast
+            MoveOutcome::Blocked
         );
 
-        assert!(field_state.active_objects[2].is_empty());
-        assert_eq!(field_state.message, "Vanished Fire field at (6, 5).");
+        assert_eq!(field_state.active_objects[2].tile, COMBAT_FIELD_KIND_FIRE);
+        assert_eq!(field_state.message, "Failed!");
     }
 
     #[test]

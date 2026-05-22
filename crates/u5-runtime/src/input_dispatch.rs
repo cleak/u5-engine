@@ -18,6 +18,12 @@ pub fn handle_play_key_input(
     suffix: &str,
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
+    if let Some(byte) = input_byte_from_char(key) {
+        if matches!(input_byte_class(byte), InputByteClass::FunctionKey) {
+            state.message = "Function key ignored.".to_string();
+            return Ok(PlayInputDisposition::Continue);
+        }
+    }
     if state.endgame.is_some() {
         return handle_endgame_key_input(state, key, suffix, game_dir);
     }
@@ -74,7 +80,7 @@ pub fn handle_play_key_input(
         return Ok(handle_active_z_stats_key_input(state, key, suffix));
     }
     if state.active_shop.is_some() {
-        return Ok(handle_active_shop_key_input(state, key, suffix));
+        return Ok(handle_active_shop_key_input(state, key, suffix, game_dir));
     }
     if state.active_conversation.is_some() {
         return Ok(handle_active_conversation_key_input(state, key, suffix));
@@ -215,6 +221,15 @@ pub fn handle_play_key_input(
     }
     state.message = format!("Unhandled command `{key}`.");
     Ok(PlayInputDisposition::Continue)
+}
+
+const fn input_byte_from_char(key: char) -> Option<u8> {
+    let scalar = key as u32;
+    if scalar <= u8::MAX as u32 {
+        Some(scalar as u8)
+    } else {
+        None
+    }
 }
 
 fn handle_active_z_stats_key_input(
@@ -437,6 +452,7 @@ fn handle_active_shop_key_input(
     state: &mut PlayState,
     key: char,
     suffix: &str,
+    game_dir: &Path,
 ) -> PlayInputDisposition {
     use crate::shop_runtime::*;
     use crate::shop_session::ActiveShopSession;
@@ -468,6 +484,9 @@ fn handle_active_shop_key_input(
 
     let message = match &mut session {
         ActiveShopSession::Arms(s) => {
+            handle_arms_shop_key_input(state, s, None, ctx, key_byte, inline_digit, yes, no)
+        }
+        ActiveShopSession::ArmsLocal(s, _) => {
             handle_arms_shop_key_input(state, s, None, ctx, key_byte, inline_digit, yes, no)
         }
         ActiveShopSession::ArmsStocked(s, stock_table) => handle_arms_shop_key_input(
@@ -605,14 +624,17 @@ fn handle_active_shop_key_input(
             match (*s, yes, no, inline_digit) {
                 (InnkeeperState::Greeting { inn }, _, _, _) => match inn_main_action(key_byte) {
                     InnMainAction::Rest => {
-                        let adjusted_room_rate = inn_base_room_rate(inn);
-                        let total_price =
-                            quote_inn_rest(inn, state.party.len(), adjusted_room_rate)
-                                .map(|quote| quote.total_price)
-                                .unwrap_or(0);
+                        let base_room_rate = inn_base_room_rate(inn);
+                        let total_price = quote_inn_rest_for_speaker(
+                            inn,
+                            state.party.len(),
+                            ctx.speaker_intelligence,
+                        )
+                        .map(|quote| quote.total_price)
+                        .unwrap_or(0);
                         *s = InnkeeperState::ConfirmRest {
                             inn,
-                            adjusted_room_rate,
+                            base_room_rate,
                             total_price,
                         };
                         format!(
@@ -621,13 +643,13 @@ fn handle_active_shop_key_input(
                         )
                     }
                     InnMainAction::LeaveCompanion => {
-                        let deposit = inn_leave_companion_deposit(inn_base_room_rate(inn));
+                        let deposit =
+                            inn_leave_companion_deposit_for_speaker(inn, ctx.speaker_intelligence);
                         *s = InnkeeperState::PickLeaveCompanion { inn, deposit };
                         format!("Leave which companion? Deposit is {deposit} gold. (1-6)")
                     }
                     InnMainAction::PickUpCompanion => {
-                        let adjusted_lodging_charge =
-                            inn_leave_companion_deposit(inn_base_room_rate(inn));
+                        let base_room_rate = inn_base_room_rate(inn);
                         let guests = inn_guest_indices_for_scene(&state.inn_registry, scene_marker);
                         if guests.is_empty() {
                             *s = InnkeeperState::Greeting { inn };
@@ -638,13 +660,17 @@ fn handle_active_shop_key_input(
                                 .inn_registry
                                 .get(registry_index)
                                 .map(|guest| {
-                                    inn_pickup_bill(adjusted_lodging_charge, guest.stay_counter)
+                                    inn_pickup_bill_for_speaker(
+                                        inn,
+                                        guest.stay_counter,
+                                        ctx.speaker_intelligence,
+                                    )
                                 })
                                 .unwrap_or(0);
                             *s = InnkeeperState::ConfirmPickUpCompanion {
                                 inn,
                                 registry_index,
-                                adjusted_lodging_charge,
+                                base_lodging_charge: base_room_rate,
                                 bill,
                             };
                             format!("Pickup bill is {bill} gold. (Y/N)")
@@ -660,7 +686,7 @@ fn handle_active_shop_key_input(
                                 inn,
                                 guest_indices,
                                 guest_count,
-                                adjusted_lodging_charge,
+                                base_lodging_charge: base_room_rate,
                             };
                             format!(
                                 "Guest register has {guest_count} companion(s). Pick 1-{guest_count}."
@@ -677,15 +703,13 @@ fn handle_active_shop_key_input(
                 },
                 (
                     InnkeeperState::ConfirmRest {
-                        inn,
-                        adjusted_room_rate,
-                        ..
+                        inn, total_price, ..
                     },
                     true,
                     _,
                     _,
                 ) => {
-                    let result = state.pay_inn_rest(inn, adjusted_room_rate);
+                    let result = state.pay_inn_rest_total(inn, total_price);
                     *s = InnkeeperState::Greeting { inn };
                     match result {
                         Ok(outcome) => {
@@ -747,13 +771,13 @@ fn handle_active_shop_key_input(
                         inn,
                         guest_indices,
                         guest_count,
-                        adjusted_lodging_charge,
+                        base_lodging_charge,
                     },
                     _,
                     true,
                     _,
                 ) => {
-                    let _ = (guest_indices, guest_count, adjusted_lodging_charge);
+                    let _ = (guest_indices, guest_count, base_lodging_charge);
                     *s = InnkeeperState::Greeting { inn };
                     "As you wish.".to_string()
                 }
@@ -762,7 +786,7 @@ fn handle_active_shop_key_input(
                         inn,
                         guest_indices,
                         guest_count,
-                        adjusted_lodging_charge,
+                        base_lodging_charge,
                     },
                     _,
                     _,
@@ -772,12 +796,19 @@ fn handle_active_shop_key_input(
                     let bill = state
                         .inn_registry
                         .get(registry_index)
-                        .map(|guest| inn_pickup_bill(adjusted_lodging_charge, guest.stay_counter))
+                        .map(|guest| {
+                            let _ = base_lodging_charge;
+                            inn_pickup_bill_for_speaker(
+                                inn,
+                                guest.stay_counter,
+                                ctx.speaker_intelligence,
+                            )
+                        })
                         .unwrap_or(0);
                     *s = InnkeeperState::ConfirmPickUpCompanion {
                         inn,
                         registry_index,
-                        adjusted_lodging_charge,
+                        base_lodging_charge,
                         bill,
                     };
                     format!("Pickup bill is {bill} gold. (Y/N)")
@@ -786,18 +817,16 @@ fn handle_active_shop_key_input(
                     InnkeeperState::ConfirmPickUpCompanion {
                         inn,
                         registry_index,
-                        adjusted_lodging_charge,
+                        base_lodging_charge: _,
+                        bill,
                         ..
                     },
                     true,
                     _,
                     _,
                 ) => {
-                    let result = state.pickup_inn_guest(
-                        scene_marker,
-                        registry_index,
-                        adjusted_lodging_charge,
-                    );
+                    let result =
+                        state.pickup_inn_guest_with_bill(scene_marker, registry_index, bill);
                     *s = InnkeeperState::Greeting { inn };
                     match result {
                         Ok(outcome) if outcome.returned_dead_from_poison => {
@@ -882,24 +911,11 @@ fn handle_active_shop_key_input(
         }
         ActiveShopSession::Sage(s) => {
             let line = active_shop_text_line(key, suffix);
-            let outcome = match (*s, yes, no) {
-                (SageState::Prompt { .. }, _, _) => {
-                    step_sage(s, SageInput::Topic(&line), &mut state.gold)
-                }
-                (SageState::Confirm { .. }, true, _) => {
-                    step_sage(s, SageInput::Confirm(true), &mut state.gold)
-                }
-                (SageState::Confirm { .. }, _, true) => {
-                    step_sage(s, SageInput::Confirm(false), &mut state.gold)
-                }
-                _ => SageOutcome::InvalidInput,
+            let outcome = match *s {
+                SageState::Prompt { .. } => step_sage(s, SageInput::Keyword(&line)),
+                SageState::Exited => SageOutcome::Exited,
             };
-            let surcharge = if matches!(outcome, SageOutcome::RumourPurchased { .. }) {
-                apply_active_shop_surcharge(state)
-            } else {
-                None
-            };
-            append_active_shop_surcharge(format_sage_outcome(outcome), surcharge)
+            format_sage_outcome(render_active_sage_outcome_with_shoppe(outcome, game_dir))
         }
         ActiveShopSession::Reagent(s) => {
             let mut stock = state.reagents;
@@ -1085,12 +1101,16 @@ fn handle_active_shop_key_input(
             };
             state.equipment_stock = stock;
             if let StationaryDisplayOutcome::Purchased {
+                grant,
                 object_slot: Some(slot),
                 ..
             } = outcome
             {
+                state.apply_object_pickup(grant.kind, grant.amount);
                 state.free_active_object_slot(slot);
                 state.mark_visibility_dirty();
+            } else if let StationaryDisplayOutcome::Purchased { grant, .. } = outcome {
+                state.apply_object_pickup(grant.kind, grant.amount);
             }
             let surcharge = if matches!(outcome, StationaryDisplayOutcome::Purchased { .. }) {
                 apply_active_shop_surcharge(state)
@@ -1192,17 +1212,13 @@ fn append_active_shop_surcharge(
 fn apply_paid_inn_rest(state: &mut PlayState, cost: u16) -> String {
     const INN_REST_HOURS: u8 = 8;
     state.mark_town_rest_sleepers();
-    let mut recovered_hp = 0;
-    let mut recovered_mana = 0;
     for _ in 0..INN_REST_HOURS {
         state.advance_turn_with_minutes(MINUTES_PER_HOUR);
-        let (hp, mana) = state.apply_rest_recovery_tick();
-        recovered_hp += hp;
-        recovered_mana += mana;
     }
     let woke = state.wake_town_rest_sleepers();
+    let (recovered_hp, recovered_mana, cured) = state.apply_inn_rest_night_recovery();
     format!(
-        "Rested {INN_REST_HOURS} hours at the inn for {cost} gold; recovered {recovered_hp} HP and {recovered_mana} MP; woke {woke} asleep member(s)."
+        "Rested {INN_REST_HOURS} hours at the inn for {cost} gold; recovered {recovered_hp} HP and {recovered_mana} MP; cured {cured} poisoned member(s); woke {woke} asleep member(s)."
     )
 }
 
@@ -1453,18 +1469,35 @@ fn format_tavern_outcome(outcome: crate::shop_runtime::TavernOutcome) -> String 
 fn format_sage_outcome(outcome: crate::shop_runtime::SageOutcome) -> String {
     use crate::shop_runtime::SageOutcome::*;
     match outcome {
-        QuotedRumour { quote } => format!(
-            "{} costs {} gold. (Y/N)",
-            quote.topic.subject, quote.topic.fee
-        ),
-        RumourPurchased { rendered, .. } => rendered,
-        RefusedShortFunds { required, .. } => format!("Thou lackest the {required} gold."),
+        RumourFound { rendered, .. } => rendered,
         InputTooLong { limit, .. } => format!("Ask in {limit} characters or fewer."),
         NoTopicMatch => "That, I cannot help thee with.".to_string(),
-        Declined => "As you wish.".to_string(),
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),
     }
+}
+
+fn render_active_sage_outcome_with_shoppe(
+    outcome: crate::shop_runtime::SageOutcome,
+    game_dir: &Path,
+) -> crate::shop_runtime::SageOutcome {
+    let crate::shop_runtime::SageOutcome::RumourFound { outcome, .. } = outcome else {
+        return outcome;
+    };
+    let rendered = crate::shoppe_bark::load_shoppe_records(&game_dir.join("SHOPPE.DAT"))
+        .ok()
+        .and_then(|records| {
+            crate::shoppe_bark::render_sage_rumour_shoppe_record(
+                &records,
+                outcome.quote.entry.record_id,
+                outcome.quote.entry.subject,
+                outcome.quote.entry.destination,
+                None,
+            )
+            .ok()
+        })
+        .unwrap_or_else(|| outcome.rendered.clone());
+    crate::shop_runtime::SageOutcome::RumourFound { outcome, rendered }
 }
 
 fn format_reagent_outcome(outcome: crate::shop_runtime::ReagentShopOutcome) -> String {
@@ -1598,21 +1631,16 @@ fn format_stationary_display_outcome(
 ) -> String {
     use crate::shop_runtime::StationaryDisplayOutcome::*;
     match outcome {
-        Offered { item, price } => {
-            format!(
-                "{} costs {price} gold. (Y/N)",
-                equipment_name(item as usize)
-            )
-        }
+        Offered { grant, price } => format!("{} costs {price} gold. (Y/N)", grant.kind.label()),
         Purchased {
-            item,
+            grant,
             price,
             party_index,
             ..
         } => format!(
             "Party member {} bought {} for {price} gold.",
             party_index + 1,
-            equipment_name(item as usize)
+            grant.kind.label()
         ),
         RefusedShortFunds { price, .. } => format!("Thou lackest the {price} gold."),
         RefusedStockCap { .. } => "Thou canst carry no more of those.".to_string(),
@@ -1715,6 +1743,15 @@ fn combat_has_active_non_party_actor(state: &PlayState) -> bool {
         .any(combat_actor_is_active_not_dead)
 }
 
+fn combat_pending_party_actor_is_active(state: &PlayState, actor_slot: usize) -> bool {
+    actor_slot < COMBAT_PARTY_ACTOR_SLOTS
+        && state
+            .combat_actors
+            .get(actor_slot)
+            .copied()
+            .is_some_and(combat_actor_is_active_not_dead)
+}
+
 fn handle_combat_cast_key_input(
     state: &mut PlayState,
     suffix: &str,
@@ -1725,6 +1762,10 @@ fn handle_combat_cast_key_input(
         state.message = "No active combatant.".to_string();
         return Ok(PlayInputDisposition::Continue);
     };
+    if !combat_pending_party_actor_is_active(state, actor_slot) {
+        state.message = "No active combatant.".to_string();
+        return Ok(PlayInputDisposition::Continue);
+    }
 
     let quickness_roll = state.combat_quickness_dispatch_roll(actor_slot);
     if resolve_quickness_dispatch_consumed(
@@ -1768,23 +1809,15 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         state.message = "No active combatant.".to_string();
         return PlayInputDisposition::Continue;
     };
+    if !combat_pending_party_actor_is_active(state, actor_slot) {
+        state.message = "No active combatant.".to_string();
+        return PlayInputDisposition::Continue;
+    }
     let input = combat_player_command_input_from_key_suffix(key, suffix);
     let quickness_roll = state.combat_quickness_dispatch_roll(actor_slot);
     let Some(application) =
         state.apply_combat_player_command_with_inputs(actor_slot, input, quickness_roll)
     else {
-        if key.eq_ignore_ascii_case(&'Z')
-            && actor_slot < COMBAT_PARTY_ACTOR_SLOTS
-            && state
-                .party
-                .get(actor_slot)
-                .copied()
-                .is_some_and(PartyMember::living)
-        {
-            state.z_stats_for_party(actor_slot);
-            state.pending_combat_actor_slot = Some(actor_slot);
-            return PlayInputDisposition::Continue;
-        }
         state.message = "No active combatant.".to_string();
         return PlayInputDisposition::Continue;
     };
@@ -2254,9 +2287,7 @@ fn ready_player_slot_from_input_round_walk(
         let CombatActorSlotDispatchApplication::Slot { slot, action, .. } = entry else {
             return None;
         };
-        if *slot < COMBAT_PARTY_ACTOR_SLOTS
-            && matches!(action, CombatActorDispatchAction::PlayerReady)
-        {
+        if matches!(action, CombatActorDispatchAction::PlayerReady) {
             Some(*slot)
         } else {
             None

@@ -195,6 +195,10 @@ pub enum DirectionPromptKind {
     SurfaceFountainDrink {
         direction: Direction,
     },
+    SurfaceDeathVision {
+        x: usize,
+        y: usize,
+    },
     DungeonSearch,
     Klimb,
     CombatKlimb {

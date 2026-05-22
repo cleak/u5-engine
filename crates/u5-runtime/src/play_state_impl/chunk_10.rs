@@ -352,6 +352,28 @@ impl PlayState {
             .find(|npc| npc.x == x && npc.y == y && npc.z == floor)
     }
 
+    /// `conversation.md §2` Talk status-tile filter feed
+    /// (`cleak/u5-spec#44`): live tile byte the Talk command compares
+    /// against the published sleeping/praying status-tile constants.
+    /// Resolves the candidate NPC at `(x, y)` on the current floor,
+    /// then reads its linked active-object frame byte through the
+    /// shared [`active_object_frame_tile`] helper. Returns `None` when
+    /// no NPC is at the cell.
+    pub fn npc_live_tile_at(&self, x: usize, y: usize) -> Option<u8> {
+        let npc = self.npc_at_current_floor(x, y)?;
+        if let Some(slot) = npc.active_object {
+            if let Some(object) = self.active_objects.get(slot) {
+                return Some(
+                    active_object_frame_tile(object.type_byte, object.phase).unwrap_or(object.tile),
+                );
+            }
+        }
+        // No linked active-object slot: fall back to the NPC's
+        // type-byte mapped walking-pose tile via the same frame
+        // helper, which is the renderer's idle pose for that NPC class.
+        Some(active_object_frame_tile(npc.type_byte, 0).unwrap_or(npc.type_byte))
+    }
+
     pub fn world_object_at(&self, x: usize, y: usize) -> Option<&ActiveObject> {
         self.world_object_slot_at(x, y).map(|(_, object)| object)
     }

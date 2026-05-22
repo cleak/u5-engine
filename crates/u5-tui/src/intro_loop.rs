@@ -142,10 +142,9 @@ fn drive_intro_subflow(
             prompt_continue()?;
         }
         IntroSubflow::Acknowledgements => {
-            println!("Acknowledgements");
-            println!(
-                "The clean specification identifies this as a self-contained menu screen; exact text pagination is not transcribed in the engine."
-            );
+            for line in u5_runtime::ACKNOWLEDGEMENTS_LINES {
+                println!("{line}");
+            }
             dispatch.complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
             prompt_continue()?;
         }

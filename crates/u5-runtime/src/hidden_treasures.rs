@@ -1,5 +1,5 @@
-//! Special-rule classifier for the three gated `LOOK2.DAT` hidden
-//! treasure records per `hidden-treasures.md` §2.
+//! Special-rule classifier for the three gated fixed hidden-treasure
+//! records per `hidden-treasures.md` §2.
 
 /// `hidden-treasures.md §2` record indices that have special staging
 /// rules beyond the ordinary one-shot found-bitmap protection.
@@ -17,7 +17,7 @@ pub const fn hidden_treasure_record_13_accepts(keys: u8, npc_present: bool) -> b
 /// `hidden-treasures.md §2` record 14 daily-cooldown gate. Search
 /// stages the record at most once per in-game day; the saved
 /// cooldown cookie holds the last day the record fired (or
-/// `FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY` = 0 when never staged).
+/// `FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY` = 0xFF when never staged).
 /// A successful stage stores the current day; subsequent searches
 /// the same day are rejected.
 pub const fn hidden_treasure_record_14_ready(stored_day: u8, current_day: u8) -> bool {
@@ -27,8 +27,8 @@ pub const fn hidden_treasure_record_14_ready(stored_day: u8, current_day: u8) ->
 /// `hidden-treasures.md §2` record 15 stage-acceptance gate. Search
 /// stages this record only when its single-use flag is still clear
 /// and the searched cell is not occupied by an NPC.
-pub const fn hidden_treasure_record_15_accepts(single_use_flag: bool, npc_present: bool) -> bool {
-    !single_use_flag && !npc_present
+pub const fn hidden_treasure_record_15_accepts(single_use_cookie: u8, npc_present: bool) -> bool {
+    single_use_cookie == crate::FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR && !npc_present
 }
 
 /// `hidden-treasures.md §3` distinct pickup classes that appear in
@@ -128,12 +128,15 @@ pub const fn hidden_treasure_can_stage(
     tile_has_npc: bool,
     cooldown_day_cookie: u8,
     current_day: u8,
-    single_use_flag_clear: bool,
+    single_use_cookie: u8,
 ) -> bool {
     match hidden_treasure_rule(record_index) {
         HiddenTreasureRule::OneShot => true,
         HiddenTreasureRule::KeyAndNpcAbsence => keys >= 1 && !tile_has_npc,
         HiddenTreasureRule::DailyCache => cooldown_day_cookie != current_day,
-        HiddenTreasureRule::SingleUseAndNpcAbsence => single_use_flag_clear && !tile_has_npc,
+        HiddenTreasureRule::SingleUseAndNpcAbsence => {
+            single_use_cookie == crate::FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR
+                && !tile_has_npc
+        }
     }
 }

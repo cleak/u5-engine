@@ -95,6 +95,13 @@ pub struct TownPoisonGasEntry {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TownTileAttributeEntry {
+    pub tile: u8,
+    pub tile_class: u8,
+    pub vehicle_byte: u8,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TownExitTileEntry {
     pub scene: Scene,
     pub floor: i8,
@@ -118,4 +125,17 @@ pub struct TownLockEntry {
     pub locked_tile: u8,
     pub unlocked_tile: u8,
     pub kind: TownLockKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StationaryDisplayEntry {
+    pub scene: Scene,
+    pub floor: i8,
+    pub x: Option<usize>,
+    pub y: Option<usize>,
+    pub marker_tile: Option<u8>,
+    pub marker_ordinal: Option<usize>,
+    pub grant: ObjectPickupGrant,
+    pub price: u16,
+    pub expected_tile: Option<u8>,
 }

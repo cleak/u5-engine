@@ -1,15 +1,15 @@
 //! Rest / camp helper per `systems/rest-and-camp.md`.
 //!
-//! The party's H-Hole-up + rest path lets a sleeping party recover HP
-//! and MP across multiple in-world hours, with the public sleep-ambush
-//! interruption predicate able to stop the rest.
+//! The party's H-Hole-up + rest path advances in-world time, with the
+//! public sleep-ambush interruption predicate able to stop the rest.
 
 use crate::{SLEEP_AMBUSH_INTERRUPT_DENOMINATOR, sleep_ambush_rest_interrupted};
 
 /// Outcome of one rest tick.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RestTickOutcome {
-    /// Hour passed without an encounter; HP / MP recovered.
+    /// Hour passed without an encounter; ordinary rest has no direct
+    /// HP / MP recovery.
     Slept {
         hp_per_member: u16,
         mp_per_member: u8,
@@ -19,11 +19,12 @@ pub enum RestTickOutcome {
     InterruptedByAmbush,
 }
 
-/// Per-tick rest contribution constants. The exact original recovery
-/// amounts are local first-playable policy; the interruption predicate
-/// below follows the public rest/camp contract.
-pub const REST_HP_PER_HOUR: u16 = 4;
-pub const REST_MP_PER_HOUR: u8 = 1;
+/// `cleak/u5-spec#47`: ordinary rest is time advancement; no explicit
+/// HP or MP recovery is applied by the rest helper itself. Hourly
+/// poison, starvation, provisions, and ambient time effects still run
+/// through the normal clock path.
+pub const REST_HP_PER_HOUR: u16 = 0;
+pub const REST_MP_PER_HOUR: u8 = 0;
 pub const REST_INTERRUPT_DENOMINATOR: u8 = SLEEP_AMBUSH_INTERRUPT_DENOMINATOR;
 
 /// Inputs the rest tick needs.
@@ -106,7 +107,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn high_roll_uneventful_watch_recovers_hp_and_mp() {
+    fn high_roll_uneventful_watch_advances_without_direct_recovery() {
         let outcome = resolve_rest_tick(RestTickInputs {
             interrupt_roll: 200,
             keeping_watch: true,
@@ -144,11 +145,12 @@ mod tests {
     }
 
     #[test]
-    fn full_session_with_high_rolls_recovers_total_amount() {
+    fn full_session_with_high_rolls_has_no_direct_recovery_total() {
         let rolls = [200u8; 8];
         let result = run_rest_session(8, &rolls, true);
         assert_eq!(result.completed_hours, 8);
-        assert_eq!(result.total_hp_per_member, 8 * REST_HP_PER_HOUR);
+        assert_eq!(result.total_hp_per_member, 0);
+        assert_eq!(result.total_mp_per_member, 0);
         assert!(!result.interrupted);
     }
 
@@ -168,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn unwatched_safe_outcome_still_recovers_hp() {
+    fn unwatched_safe_outcome_has_no_direct_recovery() {
         let outcome = resolve_rest_tick(RestTickInputs {
             interrupt_roll: 200,
             keeping_watch: false,

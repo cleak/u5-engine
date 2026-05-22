@@ -1,8 +1,8 @@
-//! Optional clean common-word dictionary sidecar for TLK and SHOPPE text.
+//! Clean common-word dictionary for TLK and SHOPPE text.
 //!
-//! The public specs define the shared 128-entry dictionary mechanics, but the
-//! resident vocabulary is data content. This loader accepts a clean published
-//! table without embedding the words in the engine.
+//! The public specs define the shared 128-entry dictionary mechanics and public
+//! issue #33/#40 publishes the shipped table. The optional sidecar loader remains
+//! available for custom assets and focused tests.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -14,6 +14,140 @@ use crate::tlk_control_codes::{shoppe_dictionary_index, tlk_dictionary_index};
 pub const COMMON_WORD_DICTIONARY_FILE: &str = "common_words.tsv";
 
 pub type CommonWordDictionary = [String; COMMON_WORD_DICTIONARY_ENTRIES];
+
+/// Public issue #33/#40 common-word table. Array index 0 corresponds to TLK
+/// token `0x01` and SHOPPE phrase token `0x80`; empty strings are the NUL
+/// pointer sentinels that set the leading-space flag.
+pub const PUBLISHED_COMMON_WORD_DICTIONARY: [&str; COMMON_WORD_DICTIONARY_ENTRIES] = [
+    "the",
+    "thou",
+    "of",
+    "to",
+    "and",
+    "that",
+    "for",
+    "",
+    "in",
+    "is",
+    "have",
+    "with",
+    "thee",
+    "this",
+    "not",
+    "my",
+    "it",
+    "me",
+    "but",
+    "dost",
+    "know",
+    "be",
+    "was",
+    "Blackthorn",
+    "from",
+    "thy",
+    "one",
+    "",
+    "are",
+    "here",
+    "many",
+    "Lord",
+    "am",
+    "we",
+    "they",
+    "he",
+    "would",
+    "art",
+    "on",
+    "young",
+    "what",
+    "see",
+    "like",
+    "only",
+    "by",
+    "there",
+    "Blackthorn's",
+    "good",
+    "been",
+    "",
+    "must",
+    "his",
+    "British",
+    "fine",
+    "an",
+    "great",
+    "thee,",
+    "our",
+    "who",
+    "name",
+    "heard",
+    "as",
+    "at",
+    "has",
+    "",
+    "through",
+    "",
+    "once",
+    "can",
+    "",
+    "him",
+    "",
+    "",
+    "",
+    "",
+    "ye",
+    "Shadowlords",
+    "tell",
+    "some",
+    "believe",
+    "all",
+    "their",
+    "upon",
+    "even",
+    "'tis",
+    "find",
+    "if",
+    "about",
+    "don't",
+    "before",
+    "these",
+    "just",
+    "make",
+    "will",
+    "when",
+    "three",
+    "Great",
+    "might",
+    "those",
+    "old",
+    "hast",
+    "ask",
+    "unto",
+    "wish",
+    "man",
+    "so",
+    "knows",
+    "still",
+    "Mantra",
+    "out",
+    "help",
+    "well",
+    "shall",
+    "think",
+    "where",
+    "named",
+    "talking",
+    "more",
+    "such",
+    "very",
+    "may",
+    "lives",
+    "canst",
+    "which",
+    "since",
+    "need",
+    "I've",
+    "work",
+];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CommonWordDictionaryError {
@@ -116,6 +250,15 @@ pub fn common_word_dictionary_refs(
     array::from_fn(|index| dictionary[index].as_str())
 }
 
+pub fn common_word_dictionary_refs_or_published<'a>(
+    dictionary: Option<&'a CommonWordDictionary>,
+) -> [&'a str; COMMON_WORD_DICTIONARY_ENTRIES] {
+    match dictionary {
+        Some(dictionary) => common_word_dictionary_refs(dictionary),
+        None => PUBLISHED_COMMON_WORD_DICTIONARY,
+    }
+}
+
 pub fn load_common_word_dictionary_optional(
     game_dir: &Path,
 ) -> io::Result<Option<CommonWordDictionary>> {
@@ -132,7 +275,7 @@ pub fn load_common_word_dictionary_optional(
 pub fn missing_common_word_dictionary_error(context: &str) -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,
-        format!("{COMMON_WORD_DICTIONARY_FILE} is required to render tokenized {context} text"),
+        format!("{COMMON_WORD_DICTIONARY_FILE} override is invalid for tokenized {context} text"),
     )
 }
 
@@ -182,6 +325,24 @@ mod tests {
         assert_eq!(dictionary[127], "word127");
         let refs = common_word_dictionary_refs(&dictionary);
         assert_eq!(refs[127], "word127");
+    }
+
+    #[test]
+    fn published_dictionary_matches_public_issue_rows() {
+        assert_eq!(
+            PUBLISHED_COMMON_WORD_DICTIONARY.len(),
+            COMMON_WORD_DICTIONARY_ENTRIES
+        );
+        assert_eq!(PUBLISHED_COMMON_WORD_DICTIONARY[0], "the");
+        assert_eq!(PUBLISHED_COMMON_WORD_DICTIONARY[0x17], "Blackthorn");
+        assert_eq!(PUBLISHED_COMMON_WORD_DICTIONARY[0x34], "British");
+        assert_eq!(PUBLISHED_COMMON_WORD_DICTIONARY[0x4c], "Shadowlords");
+        assert_eq!(PUBLISHED_COMMON_WORD_DICTIONARY[0x6c], "Mantra");
+        assert_eq!(PUBLISHED_COMMON_WORD_DICTIONARY[0x7e], "I've");
+        assert_eq!(PUBLISHED_COMMON_WORD_DICTIONARY[0x7f], "work");
+        for index in [0x07, 0x1b, 0x31, 0x40, 0x42, 0x45, 0x47, 0x48, 0x49, 0x4a] {
+            assert_eq!(PUBLISHED_COMMON_WORD_DICTIONARY[index], "");
+        }
     }
 
     #[test]

@@ -6,9 +6,10 @@
 //! (paints at the new position) only when both nibble magnitudes are
 //! `0..=2`; otherwise the byte is a pen-up move.
 
-use std::fs::read;
 use std::io;
 use std::path::Path;
+
+use crate::read_disk_file;
 
 /// `formats/pth.md §1`: shipped DOS file name.
 pub const BRITISH_PTH_FILE: &str = "BRITISH.PTH";
@@ -85,7 +86,7 @@ pub const fn pth_decode_byte(byte: u8) -> Option<PenStroke> {
 }
 
 pub fn load_british_pth(game_dir: &Path) -> io::Result<BritishPth> {
-    parse_british_pth(&read(game_dir.join(BRITISH_PTH_FILE))?)
+    parse_british_pth(&read_disk_file(&game_dir.join(BRITISH_PTH_FILE))?)
 }
 
 pub fn parse_british_pth(bytes: &[u8]) -> io::Result<BritishPth> {

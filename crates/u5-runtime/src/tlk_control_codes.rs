@@ -61,6 +61,31 @@ pub const TALK_NOBODY_HERE_MESSAGE: &str = "Nobody's here!";
 pub const TALK_SLEEPING_MESSAGE: &str = "Zzzzzz...";
 pub const TALK_NO_RESPONSE_MESSAGE: &str = "No response!";
 
+/// `conversation.md §2` Talk status-tile filter — sleeping NPC tile.
+/// The Talk command compares the candidate NPC's renderer active-object
+/// frame byte against this constant; on match it emits
+/// [`TALK_SLEEPING_MESSAGE`] and aborts before any shop-trigger or
+/// dialog-index dispatch runs.
+pub const TALK_STATUS_TILE_SLEEPING: u8 = 0xAB;
+
+/// `conversation.md §2` Talk status-tile filter — praying / meditating
+/// NPC tile. On match the Talk command emits
+/// [`TALK_NO_RESPONSE_MESSAGE`] and aborts.
+pub const TALK_STATUS_TILE_PRAYING: u8 = 0x9D;
+
+/// `conversation.md §2`: route a candidate NPC's live tile byte to the
+/// matching entry-time refusal message, or `None` when the NPC is
+/// available for the normal conversation entry. Per `cleak/u5-spec#44`
+/// only the two published status-tile constants gate the refusal; all
+/// other tile values fall through.
+pub const fn talk_status_tile_refusal(live_tile: u8) -> Option<&'static str> {
+    match live_tile {
+        TALK_STATUS_TILE_SLEEPING => Some(TALK_SLEEPING_MESSAGE),
+        TALK_STATUS_TILE_PRAYING => Some(TALK_NO_RESPONSE_MESSAGE),
+        _ => None,
+    }
+}
+
 pub const RESERVED_KEYWORD_TABLE_ENTRIES: usize = 34;
 
 /// `conversation.md §5` count of functional-word entries in the
@@ -264,10 +289,9 @@ pub fn tlk_ask_party_name_match(typed: &[u8], party_member_names: &[&[u8]]) -> u
     0
 }
 
-/// `shops.md §4.2` shared common-word dictionary NUL-sentinel count.
-/// Eleven of the 128 dictionary entries are NUL pointers; the text
-/// consumers treat them as word-boundary sentinels rather than as
-/// word substitutions.
+/// `shops.md §4.2` shared common-word NUL-sentinel count, including
+/// token `0x00` plus the published empty dictionary rows. Text consumers
+/// treat these as word-boundary sentinels rather than as word substitutions.
 pub const COMMON_WORD_DICTIONARY_NUL_SENTINELS: usize = 11;
 
 /// `shops.md §4.2` SHOPPE.DAT phrase-token byte range. Bytes
@@ -550,6 +574,9 @@ pub const fn tlk_action_dispatch_is_signal_flag(arg: u8) -> bool {
 /// Values are post-mask (`0x00..=0x40`), so the array needs exactly
 /// `b'A'` slots.
 pub const TLK_GENERIC_SIGNAL_COUNT: usize = b'A' as usize;
+/// `conversation.md §7.6`: numeric `0x86` action-dispatch signal
+/// slots increment through the shared capped byte helper.
+pub const TLK_GENERIC_SIGNAL_CAP: u8 = 99;
 
 /// `quest-flags.md §5`: final conversation cleanup first checks a
 /// three-slot resource/special transient band before scanning generic

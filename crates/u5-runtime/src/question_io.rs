@@ -10,9 +10,10 @@
 //! soft-hyphen syllable-break marker (`_`) per §3, so the returned records
 //! are display-ready prose.
 
-use std::fs;
 use std::io;
 use std::path::Path;
+
+use crate::read_optional_disk_file;
 
 /// `formats/question-dat.md §2` published filename. Chargen reads
 /// virtue-pair dilemma paragraphs out of this file.
@@ -103,15 +104,8 @@ impl QuestionRecords {
 
 pub fn load_question_records(game_dir: &Path) -> io::Result<Option<QuestionRecords>> {
     let path = game_dir.join(QUESTION_DAT_FILE);
-    let bytes = match fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => {
-            return Err(io::Error::new(
-                err.kind(),
-                format!("{}: {err}", path.display()),
-            ));
-        }
+    let Some(bytes) = read_optional_disk_file(&path)? else {
+        return Ok(None);
     };
     parse_question_records(&bytes).map(Some)
 }

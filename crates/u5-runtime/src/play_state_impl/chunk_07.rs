@@ -900,13 +900,16 @@ impl PlayState {
         }
 
         self.advance_turn();
-        if let Some(dungeon) = Self::word_of_power_dungeon(&word) {
-            let context = match self.area {
-                Area::Dungeon { .. } => "No matching Word-of-Power seal is present.",
-                _ => "This is not a dungeon Word-of-Power seal.",
+        if let Some(seal) = word_of_power_seal_for_word(&word) {
+            let opened = self.open_word_of_power_seal(seal);
+            let context = if opened {
+                "The seal opens."
+            } else {
+                "No matching Word-of-Power seal is present."
             };
             self.message = format!(
-                "Yelled {word}, the Word of Power for {dungeon}. {} {context}",
+                "Yelled {word}, the Word of Power for {}. A word of power is uttered. {} {context}",
+                seal.dungeon,
                 Self::word_of_power_presentation_message()
             );
             return MoveOutcome::Used;
@@ -954,6 +957,22 @@ impl PlayState {
 
     pub const fn word_of_power_presentation_message() -> &'static str {
         "A low rumble and full-viewport flash answer the word."
+    }
+
+    pub fn open_word_of_power_seal(&mut self, seal: WordOfPowerSeal) -> bool {
+        let Area::World { plane } = self.area else {
+            return false;
+        };
+        if plane != seal.plane || self.player.x != seal.x || self.player.y != seal.y {
+            return false;
+        }
+        let idx = world_cell_index(seal.x, seal.y);
+        if self.grid.get(idx).copied() != Some(seal.closed_tile) {
+            return false;
+        }
+        self.grid[idx] ^= WORD_OF_POWER_SEAL_XOR;
+        self.mark_visibility_dirty();
+        true
     }
 
     pub fn shadowlord_name(word: &str) -> Option<&'static str> {
@@ -1146,10 +1165,8 @@ impl PlayState {
         self.reroll_shadowlord_hideouts_excluding(self.current_shadowlord_hideout_id())
     }
 
-    pub fn reroll_shadowlord_hideouts_excluding(&mut self, current: Option<u8>) -> usize {
+    pub fn reroll_shadowlord_hideouts_excluding(&mut self, _current: Option<u8>) -> usize {
         let previous = self.shadowlord_hideouts;
-        let mut assigned = [0u8; SHADOWLORD_COUNT];
-        let mut assigned_len = 0usize;
         let mut rerolled = 0usize;
 
         for slot in 0..SHADOWLORD_COUNT {
@@ -1157,18 +1174,8 @@ impl PlayState {
                 continue;
             }
 
-            let selected = loop {
-                let candidate =
-                    self.random_range_u8(SHADOWLORD_HIDEOUT_MIN, SHADOWLORD_HIDEOUT_MAX);
-                if current == Some(candidate) || assigned[..assigned_len].contains(&candidate) {
-                    continue;
-                }
-                break candidate;
-            };
-
-            self.shadowlord_hideouts[slot] = selected;
-            assigned[assigned_len] = selected;
-            assigned_len += 1;
+            self.shadowlord_hideouts[slot] =
+                self.random_range_u8(SHADOWLORD_HIDEOUT_MIN, SHADOWLORD_HIDEOUT_MAX);
             rerolled += 1;
         }
 
@@ -2041,7 +2048,7 @@ impl PlayState {
         object: ActiveObject,
     ) -> MoveOutcome {
         if self.blocking_object_at(px, py).is_some() {
-            self.advance_turn();
+            self.advance_turn_without_door_tick();
             self.message = format!("Push blocked by actor at ({px}, {py}).");
             return MoveOutcome::Blocked;
         }
@@ -2098,6 +2105,7 @@ impl PlayState {
             self.message = "Push requires a cardinal facing direction.".to_string();
             return Ok(MoveOutcome::Blocked);
         }
+        self.tick_door_tracker();
         let (dx, dy) = direction.delta();
         let tx = self.player.x as isize + dx;
         let ty = self.player.y as isize + dy;
@@ -2159,7 +2167,7 @@ impl PlayState {
         let target_tile = self.grid[target_idx];
         let dest_tile = self.grid[dest_idx];
         if !self.tile_walkable(dest_tile) {
-            self.advance_turn();
+            self.advance_turn_without_door_tick();
             self.message = format!("Push blocked by {} at ({px}, {py}).", tile_class(dest_tile));
             return MoveOutcome::Blocked;
         }
@@ -2217,7 +2225,7 @@ impl PlayState {
             return MoveOutcome::Pushed;
         }
 
-        self.advance_turn();
+        self.advance_turn_without_door_tick();
         self.message = "Push blocked; it won't budge.".to_string();
         MoveOutcome::Blocked
     }
@@ -2233,13 +2241,13 @@ impl PlayState {
         object: ActiveObject,
     ) -> MoveOutcome {
         if self.blocking_object_at(px, py).is_some() {
-            self.advance_turn();
+            self.advance_turn_without_door_tick();
             self.message = format!("Push blocked by actor at ({px}, {py}).");
             return MoveOutcome::Blocked;
         }
         let dest_idx = py * 32 + px;
         if !self.tile_walkable(self.grid[dest_idx]) {
-            self.advance_turn();
+            self.advance_turn_without_door_tick();
             self.message = format!(
                 "Push blocked by {} at ({px}, {py}).",
                 tile_class(self.grid[dest_idx])
@@ -2257,7 +2265,7 @@ impl PlayState {
         self.player.y = ty;
         self.sync_player_object();
         self.mark_visibility_dirty();
-        self.advance_turn();
+        self.advance_turn_without_door_tick();
         self.message = format!(
             "Pushed object tile {} {} from ({tx}, {ty}) to ({px}, {py}).",
             object.tile,
@@ -2288,7 +2296,7 @@ impl PlayState {
         self.player.y = ty;
         self.sync_player_object();
         self.mark_visibility_dirty();
-        self.advance_turn();
+        self.advance_turn_without_door_tick();
     }
 
     #[cfg(test)]
@@ -2507,7 +2515,6 @@ impl PlayState {
         let Some(entry) =
             self.town_trap_door_at(game_dir, scene, floor, self.player.x, self.player.y, tile)?
         else {
-            self.append_town_poison_gas_message(game_dir, scene, floor)?;
             return Ok(None);
         };
 
@@ -2531,6 +2538,17 @@ impl PlayState {
         y: usize,
         tile: u8,
     ) -> io::Result<Option<TownPoisonGasEntry>> {
+        if load_town_tile_attribute_entries(game_dir)?
+            .is_some_and(|entries| town_poison_gas_tile_matches_attributes(&entries, tile))
+        {
+            return Ok(Some(TownPoisonGasEntry {
+                scene,
+                floor,
+                x,
+                y,
+                expected_tile: Some(tile),
+            }));
+        }
         Ok(load_town_poison_gas_entries(game_dir)?.and_then(|entries| {
             entries
                 .into_iter()
@@ -2555,18 +2573,16 @@ impl PlayState {
         Ok(())
     }
 
-    pub fn apply_town_poison_gas(&mut self, entry: TownPoisonGasEntry) -> String {
-        let rolls: Vec<u8> = (0..self.party.len())
-            .map(|index| self.town_poison_gas_roll(index, entry))
-            .collect();
+    pub fn apply_town_poison_gas(&mut self, _entry: TownPoisonGasEntry) -> String {
         let mut checked = 0usize;
         let mut poisoned = Vec::new();
-        for (index, member) in self.party.iter_mut().enumerate() {
-            if !(member.status == b'G' && member.living()) {
+        for member in &mut self.party {
+            if member.status == b'P' {
                 continue;
             }
             checked += 1;
-            if rolls[index] == 0 {
+            let roll = u5_prng_range_u16(&mut self.prng_state, 0, TOWN_GAS_DOORWAY_RANGE_MAX);
+            if roll == 0 {
                 member.status = b'P';
                 poisoned.push(member.slot);
             }
@@ -2584,18 +2600,6 @@ impl PlayState {
                     .join(", ")
             )
         }
-    }
-
-    pub fn town_poison_gas_roll(&self, member_index: usize, entry: TownPoisonGasEntry) -> u8 {
-        // The clean spec publishes the roll branch but not its exact odds.
-        // Keep this deterministic until the public table is promoted.
-        (self.turn as u8
-            ^ self.clock.hour
-            ^ self.clock.minute
-            ^ (entry.x as u8).wrapping_mul(3)
-            ^ (entry.y as u8).wrapping_mul(5)
-            ^ (member_index as u8).wrapping_mul(17))
-            & 1
     }
 
     pub fn apply_town_npc_contact_event(

@@ -8,9 +8,10 @@
 //! through the appropriate renderer (the sign-style tile-glyph path) versus
 //! the ordinary prose printer.
 
-use std::fs;
 use std::io;
 use std::path::Path;
+
+use crate::read_optional_disk_file;
 
 /// `formats/miscmsg-dat.md §2` published filename. The Blackthorn
 /// audience overlay, shrine/virtue presentation, and Codex/urn
@@ -163,15 +164,8 @@ fn slice_range<'a>(records: &'a [String], range: &std::ops::RangeInclusive<usize
 
 pub fn load_misc_messages(game_dir: &Path) -> io::Result<Option<MiscMessages>> {
     let path = game_dir.join(MISCMSG_DAT_FILE);
-    let bytes = match fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => {
-            return Err(io::Error::new(
-                err.kind(),
-                format!("{}: {err}", path.display()),
-            ));
-        }
+    let Some(bytes) = read_optional_disk_file(&path)? else {
+        return Ok(None);
     };
     parse_misc_messages(&bytes).map(Some)
 }

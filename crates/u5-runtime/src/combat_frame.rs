@@ -11,8 +11,15 @@ pub struct CombatFrameSnapshot {
     pub active_objects: Vec<ActiveObject>,
     pub active_player: Option<usize>,
     pub combat_terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    pub dungeon_room_clear_on_success: Option<PendingDungeonRoomClear>,
     pub enter_endgame_after_successful_combat: bool,
     pub endgame_messages: Option<EndgameMessages>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PendingDungeonRoomClear {
+    pub scene: DungeonScene,
+    pub room_slot: u8,
 }
 
 /// `combat.md §5` ambush / camp-attack reveal-slot capacity.
@@ -23,6 +30,53 @@ pub struct CombatFrameSnapshot {
 /// inside the eleven-by-eleven arena. Coordinates outside the
 /// arena are sentinels for "no stamp" rather than map cells.
 pub const COMBAT_AMBUSH_REVEAL_SLOTS_MAX: u8 = 8;
+pub const COMBAT_AMBUSH_REVEAL_SLOT_COUNT: usize = COMBAT_AMBUSH_REVEAL_SLOTS_MAX as usize;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatAmbushRevealRecord {
+    pub trigger_x: u8,
+    pub trigger_y: u8,
+    pub reveal_tile: u8,
+    pub target_a_x: u8,
+    pub target_a_y: u8,
+    pub target_b_x: u8,
+    pub target_b_y: u8,
+}
+
+impl CombatAmbushRevealRecord {
+    pub const fn new(
+        trigger_x: u8,
+        trigger_y: u8,
+        reveal_tile: u8,
+        target_a_x: u8,
+        target_a_y: u8,
+        target_b_x: u8,
+        target_b_y: u8,
+    ) -> Self {
+        Self {
+            trigger_x,
+            trigger_y,
+            reveal_tile,
+            target_a_x,
+            target_a_y,
+            target_b_x,
+            target_b_y,
+        }
+    }
+
+    pub const fn trigger_matches(self, x: u8, y: u8) -> bool {
+        self.trigger_x == x && self.trigger_y == y
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatAmbushRevealApplication {
+    pub slot: usize,
+    pub trigger_x: u8,
+    pub trigger_y: u8,
+    pub reveal_tile: u8,
+    pub stamped_cells: u8,
+}
 
 /// `combat.md §14` round-loop exit outcomes. The framer's restore
 /// phase runs identically for all three; only the result code the
@@ -52,11 +106,34 @@ impl CombatExitOutcome {
     }
 }
 
-/// `combat.md §12` split-on-damage placement-attempt cap. When a
-/// monster with the split-on-damage class flag is damaged but not
-/// killed, combat scans the actor table for an empty slot to copy
-/// the parent's class byte into. Up to this many attempts are made
-/// before the divide is dropped silently.
+/// `combat.md Section 7` row-major post-round maintenance dispatch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatPostRoundCellDispatchKind {
+    MagicEffectByte { effect: u8 },
+    TerrainEffectByte { terrain: u8 },
+    MagicTimerTick { before: u8, after: u8 },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatPostRoundCellDispatch {
+    pub x: u8,
+    pub y: u8,
+    pub kind: CombatPostRoundCellDispatchKind,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CombatPostRoundMaintenanceReport {
+    pub cell_dispatches: Vec<CombatPostRoundCellDispatch>,
+    pub cursor_blink_visible: bool,
+    pub cursor_draw_cell: Option<(u8, u8)>,
+    pub secondary_marker_cell: Option<(u8, u8)>,
+}
+
+/// `combat.md Section 12` split-on-damage placement-attempt cap.
+/// When a monster with the split-on-damage class flag is damaged but
+/// not killed, combat scans the actor table for an empty slot to copy
+/// the parent's class byte into. Up to this many attempts are made before
+/// the divide is dropped silently.
 pub const COMBAT_SPLIT_PLACEMENT_ATTEMPTS: u8 = 8;
 
 /// `combat.md §12` factory-seed cached combat-defense byte at
@@ -515,6 +592,41 @@ pub struct CombatRoundLoopExitApplication {
 }
 
 impl PlayState {
+    pub fn clear_combat_sleep_durations(&mut self) {
+        self.combat_sleep_durations = [0; COMBAT_SLEEP_DURATION_SLOTS];
+    }
+
+    pub fn set_combat_actor_status_disabled(&mut self, slot: usize, duration: u8) -> bool {
+        let Some(actor) = self.combat_actors.get_mut(slot) else {
+            return false;
+        };
+        actor.set_status_disabled();
+        if let Some(counter) = self.combat_sleep_durations.get_mut(slot) {
+            *counter = duration;
+        }
+        true
+    }
+
+    pub fn apply_combat_sleep_duration_round_tick(&mut self) -> usize {
+        let mut cleared = 0;
+        for slot in 0..COMBAT_ACTOR_SLOTS.min(COMBAT_SLEEP_DURATION_SLOTS) {
+            let counter = self.combat_sleep_durations[slot];
+            if counter == 0 {
+                continue;
+            }
+            let next_counter = counter.saturating_sub(1);
+            self.combat_sleep_durations[slot] = next_counter;
+            if next_counter == 0 {
+                let actor = &mut self.combat_actors[slot];
+                if actor.is_status_disabled() {
+                    actor.clear_status_disabled();
+                    cleared += 1;
+                }
+            }
+        }
+        cleared
+    }
+
     pub(crate) fn combat_party_name_for_slot(&self, slot: usize) -> Option<&[u8]> {
         (slot < COMBAT_PARTY_ACTOR_SLOTS)
             .then(|| self.party_names.get(slot).map(|name| name.as_slice()))
@@ -614,7 +726,15 @@ impl PlayState {
         spell_index: usize,
     ) -> bool {
         let _ = (caster_index, target_slot, spell_index);
-        self.random_mod_u8(2) == 0
+        match spell_combat_field_kind(spell_index).and_then(CombatArenaFieldKind::from_kind_byte) {
+            Some(CombatArenaFieldKind::Poison) => true,
+            Some(
+                CombatArenaFieldKind::Fire
+                | CombatArenaFieldKind::Sleep
+                | CombatArenaFieldKind::Energy,
+            ) => self.random_mod_u8(COMBAT_ARENA_FIELD_RANDOM_GATE_DENOMINATOR) == 0,
+            None => false,
+        }
     }
 
     pub fn combat_spell_damage_roll_for_kind(&mut self, kind: CombatSpellDamageKind) -> u8 {
@@ -762,19 +882,6 @@ impl PlayState {
         });
         let applied =
             self.apply_combat_arena_field_placement(field, target_x, target_y, callback_accepts);
-        if let Some(placement) = applied {
-            let poison_damage_roll = self.combat_arena_field_poison_damage_roll();
-            let fire_damage_roll = self.combat_arena_field_fire_damage_roll();
-            let defense_roll = self.combat_arena_field_defense_roll(placement.target_slot);
-            let _ = self.apply_combat_arena_field_contact(
-                field,
-                caster_index,
-                placement.target_slot,
-                poison_damage_roll,
-                fire_damage_roll,
-                defense_roll,
-            );
-        }
 
         self.advance_turn();
         self.message = if applied.is_some() {
@@ -1126,7 +1233,7 @@ impl PlayState {
             allocation.active_object_slot as u8,
             x,
             y,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            COMBAT_SUMMONED_ACTOR_FLAGS,
             0,
         )?;
         let active_object =
@@ -1147,6 +1254,24 @@ impl PlayState {
         })
     }
 
+    pub fn apply_combat_conjure_class_with_random_attempts(
+        &mut self,
+        class: u8,
+        z: i8,
+        legal_cells: &[[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    ) -> Option<CombatSummonApplication> {
+        for _ in 0..8 {
+            let x = self.random_range_u8(0, (COMBAT_ARENA_SIDE - 1) as u8);
+            let y = self.random_range_u8(0, (COMBAT_ARENA_SIDE - 1) as u8);
+            if let Some(application) =
+                self.apply_combat_summon_class_with_legal_mask(class, z, legal_cells, &[(x, y)])
+            {
+                return Some(application);
+            }
+        }
+        None
+    }
+
     pub fn apply_combat_summon_class_around_slot(
         &mut self,
         class: u8,
@@ -1159,6 +1284,25 @@ impl PlayState {
         }
         let legal_cells = self.combat_legal_cell_mask();
         let candidates = combat_neighbor_candidate_coordinates(center.x, center.y, seed);
+        self.apply_combat_summon_class_with_legal_mask(
+            class,
+            self.combat_actor_z(center_slot),
+            &legal_cells,
+            &candidates,
+        )
+    }
+
+    pub fn apply_combat_summon_class_in_ring_around_slot(
+        &mut self,
+        class: u8,
+        center_slot: usize,
+    ) -> Option<CombatSummonApplication> {
+        let center = self.combat_actors.get(center_slot).copied()?;
+        if !combat_actor_is_active_not_dead(center) {
+            return None;
+        }
+        let legal_cells = self.combat_legal_cell_mask();
+        let candidates = combat_ring_candidate_coordinates(center.x, center.y);
         self.apply_combat_summon_class_with_legal_mask(
             class,
             self.combat_actor_z(center_slot),
@@ -1517,6 +1661,7 @@ impl PlayState {
         );
         if movement_commit.is_some() {
             self.mark_visibility_dirty();
+            let _ = self.apply_combat_ambush_reveal_for_actor_position(actor_slot);
             let _ = self.apply_combat_absorbable_field_contact_for_actor_position(actor_slot);
             let _ = self.apply_combat_arena_field_contact_for_actor_position(actor_slot);
         }
@@ -1587,10 +1732,13 @@ impl PlayState {
             return outcome;
         }
 
-        let placement_seed = self.combat_neighbor_placement_seed();
         let class = resolve_conjure_spell_class(self.combat_conjure_class_selector());
-        let applied =
-            self.apply_combat_summon_class_around_slot(class, caster_index, placement_seed);
+        let legal_cells = self.combat_legal_cell_mask();
+        let applied = self.apply_combat_conjure_class_with_random_attempts(
+            class,
+            self.combat_actor_z(caster_index),
+            &legal_cells,
+        );
         self.advance_turn();
         self.message = if applied.is_some() {
             "Success!".to_string()
@@ -1619,9 +1767,11 @@ impl PlayState {
             return outcome;
         }
 
-        let seed = self.combat_arena_placement_seed();
         let legal_cells = self.combat_legal_cell_mask();
-        let candidates = combat_clone_candidate_coordinates(seed);
+        let caster = self.combat_actors.get(caster_index).copied();
+        let candidates = caster
+            .map(|actor| combat_ring_candidate_coordinates(actor.x, actor.y))
+            .unwrap_or_default();
         let applied = self.apply_combat_swarm_with_legal_mask(
             self.combat_actor_z(caster_index),
             &legal_cells,
@@ -1655,9 +1805,8 @@ impl PlayState {
             return outcome;
         }
 
-        let seed = self.combat_neighbor_placement_seed();
         let applied =
-            self.apply_combat_summon_class_around_slot(COMBAT_CLASS_DAEMON, caster_index, seed);
+            self.apply_combat_summon_class_in_ring_around_slot(COMBAT_CLASS_DAEMON, caster_index);
         self.advance_turn();
         self.message = if applied.is_some() {
             "Summon Daemon!".to_string()
@@ -1738,6 +1887,21 @@ impl PlayState {
         actors: [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
         terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
     ) -> io::Result<CombatFrameSnapshot> {
+        self.enter_combat_frame_with_terrain_and_reveals(
+            active_objects,
+            actors,
+            terrain,
+            [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
+        )
+    }
+
+    pub fn enter_combat_frame_with_terrain_and_reveals(
+        &mut self,
+        active_objects: Vec<ActiveObject>,
+        actors: [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
+        terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+        reveals: [Option<CombatAmbushRevealRecord>; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
+    ) -> io::Result<CombatFrameSnapshot> {
         if active_objects.len() != OOL_SLOTS {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -1754,12 +1918,19 @@ impl PlayState {
             active_objects: self.active_objects.clone(),
             active_player: self.active_player,
             combat_terrain: self.combat_terrain,
+            dungeon_room_clear_on_success: None,
             enter_endgame_after_successful_combat: false,
             endgame_messages: None,
         };
         self.active_objects = active_objects;
         self.combat_actors = actors;
+        self.clear_combat_sleep_durations();
         self.combat_terrain = terrain;
+        self.combat_magic_effects = [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        self.combat_magic_effect_timer = 0;
+        self.combat_cursor_blink = false;
+        self.combat_secondary_marker = None;
+        self.combat_ambush_reveals = reveals;
         self.combat_active = true;
         self.combat_frame_snapshot = Some(snapshot.clone());
         self.pending_combat_actor_slot = None;
@@ -1785,7 +1956,13 @@ impl PlayState {
         self.active_player =
             resolve_post_combat_active_player_restore(snapshot.active_player, &self.party);
         self.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+        self.clear_combat_sleep_durations();
         self.combat_terrain = snapshot.combat_terrain;
+        self.combat_magic_effects = [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        self.combat_magic_effect_timer = 0;
+        self.combat_cursor_blink = false;
+        self.combat_secondary_marker = None;
+        self.combat_ambush_reveals = [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT];
         self.combat_active = false;
         self.combat_frame_snapshot = None;
         self.pending_combat_actor_slot = None;
@@ -1812,7 +1989,18 @@ impl PlayState {
             let enter_endgame_after_restore =
                 snapshot.enter_endgame_after_successful_combat && body_retrieval_exit;
             let endgame_messages = snapshot.endgame_messages.clone();
+            let dungeon_room_clear_on_success = snapshot.dungeon_room_clear_on_success;
             self.restore_combat_frame_with_trigger_reconcile(snapshot, body_retrieval_exit);
+            if result_code != COMBAT_ROUND_RESULT_DEFEAT {
+                if let Some(clear) = dungeon_room_clear_on_success {
+                    set_dungeon_room_clear_bit(
+                        &mut self.dungeon_room_clear_bitmap,
+                        clear.scene,
+                        clear.room_slot,
+                    );
+                    self.mark_visibility_dirty();
+                }
+            }
             if enter_endgame_after_restore {
                 self.enter_endgame_with_messages(endgame_messages);
             }
@@ -1830,6 +2018,8 @@ impl PlayState {
             }
             self.next_combat_actor_slot = 0;
             self.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+            self.clear_combat_sleep_durations();
+            self.combat_ambush_reveals = [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT];
             self.mark_visibility_dirty();
             false
         };
@@ -1862,8 +2052,20 @@ impl PlayState {
         raw_damage: i16,
     ) -> Option<CombatPartyDamageOutcome> {
         let outcome = apply_combat_party_damage(self.party.get_mut(slot)?, raw_damage);
-        if outcome.killed && self.active_player == Some(slot) {
-            self.active_player = None;
+        if outcome.killed {
+            if self.active_player == Some(slot) {
+                self.active_player = None;
+            }
+            if let Some(actor) = self.combat_actors.get(slot) {
+                if let Some(object) = self
+                    .active_objects
+                    .get_mut(actor.active_object_slot as usize)
+                {
+                    object.type_byte = COMBAT_PARTY_CORPSE_TILE;
+                    object.tile = COMBAT_PARTY_CORPSE_TILE;
+                    object.phase = STEADY_PHASE;
+                }
+            }
         }
         Some(outcome)
     }
@@ -1902,8 +2104,8 @@ impl PlayState {
         match death_path {
             CombatMonsterDeathPath::Vanish => {
                 if let Some(object) = self.active_objects.get_mut(active_object_slot) {
-                    object.type_byte = COMBAT_DEFAULT_DEATH_NO_DROP_TILE;
-                    object.tile = COMBAT_DEFAULT_DEATH_NO_DROP_TILE;
+                    object.type_byte = COMBAT_VANISH_DEATH_MARKER_TILE;
+                    object.tile = COMBAT_VANISH_DEATH_MARKER_TILE;
                     object.phase = STEADY_PHASE;
                     object.aux1 = 0;
                 }
@@ -1911,6 +2113,50 @@ impl PlayState {
                 changed = true;
             }
             CombatMonsterDeathPath::DefaultDropCheck => {
+                let Some(stats) = combat_class_stats(damage.class) else {
+                    return changed;
+                };
+                let drop_cap = stats.default_drop_cap;
+                let first_roll = self.random_range_u8(0, COMBAT_DEFAULT_DEATH_DROP_ROLL_MAX);
+                let second_roll = self.random_range_u8(0, COMBAT_DEFAULT_DEATH_DROP_ROLL_MAX);
+                let marker = resolve_default_monster_death_marker(
+                    drop_cap,
+                    combat_default_death_drop_gate_accepts(drop_cap, first_roll),
+                    combat_default_death_drop_gate_accepts(drop_cap, second_roll),
+                );
+                if let Some(object) = self.active_objects.get_mut(active_object_slot) {
+                    match marker {
+                        CombatDefaultDeathMarker::Drop { loot_byte } => {
+                            object.type_byte = COMBAT_DEFAULT_DEATH_DROP_TILE;
+                            object.tile = COMBAT_DEFAULT_DEATH_DROP_TILE;
+                            object.aux1 = loot_byte;
+                        }
+                        CombatDefaultDeathMarker::NoDrop => {
+                            object.type_byte = COMBAT_DEFAULT_DEATH_NO_DROP_TILE;
+                            object.tile = COMBAT_DEFAULT_DEATH_NO_DROP_TILE;
+                            object.aux1 = 0;
+                        }
+                    }
+                    object.phase = STEADY_PHASE;
+                    changed = true;
+                }
+            }
+            CombatMonsterDeathPath::SpecialTileTransition if damage.class == 28 => {
+                if let Some(object) = self.active_objects.get_mut(active_object_slot) {
+                    object.type_byte = COMBAT_GAZER_DEATH_MARKER_TILE;
+                    object.tile = COMBAT_GAZER_DEATH_MARKER_TILE;
+                    object.phase = STEADY_PHASE;
+                    object.aux1 = 0;
+                    changed = true;
+                }
+            }
+            CombatMonsterDeathPath::SpecialTileTransition if damage.class == 30 => {
+                let actor_x = usize::from(actor.x);
+                let actor_y = usize::from(actor.y);
+                if actor_y < COMBAT_ARENA_SIDE && actor_x < COMBAT_ARENA_SIDE {
+                    self.combat_terrain[actor_y][actor_x] = COMBAT_GARGOYLE_DEATH_TERRAIN_TILE;
+                    changed = true;
+                }
                 let Some(stats) = combat_class_stats(damage.class) else {
                     return changed;
                 };
@@ -2203,9 +2449,10 @@ impl PlayState {
                     }
                 }
                 CombatDirectedSpellEffect::Sleep => {
-                    if let Some(actor) = self.combat_actors.get_mut(slot) {
-                        actor.set_status_disabled();
-                    }
+                    self.set_combat_actor_status_disabled(
+                        slot,
+                        COMBAT_SLEEP_DISABLED_DURATION_DEFAULT,
+                    );
                     CombatDirectedSpellSlotStatusApplication::NonPartySleepDisabled {
                         target_slot: slot,
                     }
@@ -2269,17 +2516,13 @@ impl PlayState {
         &self,
         caster_index: usize,
         target_slot: usize,
-        effect: CombatDirectedSpellEffect,
+        _effect: CombatDirectedSpellEffect,
     ) -> Option<Vec<(u8, u8)>> {
         let caster = self.combat_actors.get(caster_index).copied()?;
         let target = self.combat_actors.get(target_slot).copied()?;
         if !combat_actor_is_active_not_dead(caster) || !directed_spell_actor_is_eligible(target) {
             return None;
         }
-        if matches!(effect, CombatDirectedSpellEffect::Sleep) {
-            return Some(vec![(target.x, target.y)]);
-        }
-
         let delta_x = target.x as i16 - caster.x as i16;
         let delta_y = target.y as i16 - caster.y as i16;
         let (forward_x, forward_y) = if delta_x.abs() >= delta_y.abs() {
@@ -2491,9 +2734,10 @@ impl PlayState {
             contact_outcome,
             CombatArenaFieldContactOutcome::SleepDisabledNonParty
         ) {
-            if let Some(actor) = self.combat_actors.get_mut(target_slot) {
-                actor.set_status_disabled();
-            }
+            self.set_combat_actor_status_disabled(
+                target_slot,
+                COMBAT_SLEEP_DISABLED_DURATION_DEFAULT,
+            );
         }
 
         let damage_application = match contact_outcome {
@@ -2558,6 +2802,24 @@ impl PlayState {
             poison_damage_roll,
             fire_damage_roll,
             defense_roll,
+        )?;
+        self.mark_visibility_dirty();
+        Some(application)
+    }
+
+    pub fn apply_combat_ambush_reveal_for_actor_position(
+        &mut self,
+        actor_slot: usize,
+    ) -> Option<CombatAmbushRevealApplication> {
+        let actor = self.combat_actors.get(actor_slot).copied()?;
+        if !combat_actor_is_active_not_dead(actor) {
+            return None;
+        }
+        let application = apply_combat_ambush_reveal_records(
+            &mut self.combat_ambush_reveals,
+            &mut self.combat_terrain,
+            actor.x,
+            actor.y,
         )?;
         self.mark_visibility_dirty();
         Some(application)
@@ -3253,7 +3515,7 @@ impl PlayState {
             };
         }
 
-        let action = if slot < COMBAT_PARTY_ACTOR_SLOTS {
+        let action = if slot < COMBAT_PARTY_ACTOR_SLOTS || actor.is_controlled() {
             CombatActorDispatchAction::PlayerReady
         } else {
             let monster_attack_inputs = monster_attack_inputs_by_slot
@@ -3302,6 +3564,7 @@ impl PlayState {
         let actor = self.combat_actors[slot];
         let generate_ai_inputs = slot >= COMBAT_PARTY_ACTOR_SLOTS
             && combat_actor_is_active_not_dead(actor)
+            && !actor.is_controlled()
             && self.combat_actor_stands_on_walkable_arena_cell(actor)
             && actor.phase_counter <= 1;
         let traits = generate_ai_inputs
@@ -3388,6 +3651,73 @@ impl PlayState {
     }
 
     #[allow(clippy::too_many_arguments)]
+    pub fn apply_combat_post_round_maintenance(&mut self) -> CombatPostRoundMaintenanceReport {
+        let mut report = CombatPostRoundMaintenanceReport::default();
+
+        for y in 0..COMBAT_ARENA_SIDE {
+            for x in 0..COMBAT_ARENA_SIDE {
+                let terrain = self.combat_terrain[y][x];
+                if terrain == COMBAT_POST_ROUND_TERRAIN_EFFECT_DISPATCH_BYTE {
+                    let effect = self.combat_magic_effects[y][x];
+                    if effect != COMBAT_POST_ROUND_NO_EFFECT_SENTINEL {
+                        report.cell_dispatches.push(CombatPostRoundCellDispatch {
+                            x: x as u8,
+                            y: y as u8,
+                            kind: CombatPostRoundCellDispatchKind::MagicEffectByte { effect },
+                        });
+                    }
+                } else if terrain == COMBAT_POST_ROUND_MAGIC_TIMER_TILE {
+                    if combat_post_round_magic_effect_timer_ticks(self.combat_magic_effect_timer) {
+                        let before = self.combat_magic_effect_timer;
+                        self.combat_magic_effect_timer =
+                            self.combat_magic_effect_timer.saturating_add(1);
+                        report.cell_dispatches.push(CombatPostRoundCellDispatch {
+                            x: x as u8,
+                            y: y as u8,
+                            kind: CombatPostRoundCellDispatchKind::MagicTimerTick {
+                                before,
+                                after: self.combat_magic_effect_timer,
+                            },
+                        });
+                    }
+                } else {
+                    report.cell_dispatches.push(CombatPostRoundCellDispatch {
+                        x: x as u8,
+                        y: y as u8,
+                        kind: CombatPostRoundCellDispatchKind::TerrainEffectByte { terrain },
+                    });
+                }
+            }
+        }
+
+        if self.combat_active {
+            self.combat_cursor_blink = !self.combat_cursor_blink;
+            report.cursor_blink_visible = self.combat_cursor_blink;
+            if self.combat_cursor_blink {
+                report.cursor_draw_cell = self.combat_cursor_actor_cell();
+            }
+            report.secondary_marker_cell = self.combat_secondary_marker.and_then(|(x, y)| {
+                (usize::from(x) < COMBAT_ARENA_SIDE && usize::from(y) < COMBAT_ARENA_SIDE)
+                    .then_some((x, y))
+            });
+        }
+
+        report
+    }
+
+    fn combat_cursor_actor_cell(&self) -> Option<(u8, u8)> {
+        let slot = self.active_player.or_else(|| {
+            self.combat_actors
+                .iter()
+                .take(COMBAT_PARTY_ACTOR_SLOTS)
+                .position(|actor| combat_actor_is_active_not_dead(*actor))
+        })?;
+        let actor = *self.combat_actors.get(slot)?;
+        let x = usize::from(actor.x);
+        let y = usize::from(actor.y);
+        (x < COMBAT_ARENA_SIDE && y < COMBAT_ARENA_SIDE).then_some((actor.x, actor.y))
+    }
+
     pub fn apply_combat_round_walk_from_slot_with_inputs(
         &mut self,
         start_slot: usize,
@@ -3431,6 +3761,8 @@ impl PlayState {
 
             match &application {
                 CombatActorSlotDispatchApplication::EndOfRound { .. } => {
+                    self.apply_combat_sleep_duration_round_tick();
+                    self.apply_combat_post_round_maintenance();
                     applications.push(application);
                     return CombatRoundWalkApplication {
                         start_slot,
@@ -3481,6 +3813,8 @@ impl PlayState {
 
             match &application {
                 CombatActorSlotDispatchApplication::EndOfRound { .. } => {
+                    self.apply_combat_sleep_duration_round_tick();
+                    self.apply_combat_post_round_maintenance();
                     applications.push(application);
                     return CombatRoundWalkApplication {
                         start_slot,
@@ -3699,6 +4033,7 @@ impl PlayState {
         );
         if outcome.committed_movement() {
             self.mark_visibility_dirty();
+            let _ = self.apply_combat_ambush_reveal_for_actor_position(moving_slot);
             let _ = self.apply_combat_absorbable_field_contact_for_actor_position(moving_slot);
             let _ = self.apply_combat_arena_field_contact_for_actor_position(moving_slot);
         }
@@ -3778,7 +4113,55 @@ impl PlayState {
         if tick.redraw_tiles {
             self.mark_visibility_dirty();
         }
+        if tick.advance_time_minutes != 0 {
+            self.advance_turn_with_minutes(tick.advance_time_minutes);
+        }
         tick
+    }
+}
+
+pub fn apply_combat_ambush_reveal_records(
+    records: &mut [Option<CombatAmbushRevealRecord>; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
+    terrain: &mut [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    trigger_x: u8,
+    trigger_y: u8,
+) -> Option<CombatAmbushRevealApplication> {
+    for (slot, entry) in records.iter_mut().enumerate() {
+        let Some(record) = *entry else {
+            continue;
+        };
+        if !record.trigger_matches(trigger_x, trigger_y) {
+            continue;
+        }
+
+        *entry = None;
+        let mut stamped_cells = 0;
+        for (x, y) in [
+            (record.target_a_x, record.target_a_y),
+            (record.target_b_x, record.target_b_y),
+        ] {
+            if let Some((x, y)) = combat_reveal_target_cell(x, y) {
+                terrain[y][x] = record.reveal_tile;
+                stamped_cells += 1;
+            }
+        }
+
+        return Some(CombatAmbushRevealApplication {
+            slot,
+            trigger_x,
+            trigger_y,
+            reveal_tile: record.reveal_tile,
+            stamped_cells,
+        });
+    }
+    None
+}
+
+pub const fn combat_reveal_target_cell(x: u8, y: u8) -> Option<(usize, usize)> {
+    if (x as usize) < COMBAT_ARENA_SIDE && (y as usize) < COMBAT_ARENA_SIDE {
+        Some((x as usize, y as usize))
+    } else {
+        None
     }
 }
 

@@ -429,6 +429,94 @@ pub fn parse_town_poison_gas_entries(text: &str) -> io::Result<Vec<TownPoisonGas
     Ok(entries)
 }
 
+pub fn load_town_tile_attribute_entries(
+    game_dir: &Path,
+) -> io::Result<Option<Vec<TownTileAttributeEntry>>> {
+    let path = game_dir.join(TOWN_TILE_ATTRIBUTES_TABLE_FILE);
+    let text = match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => {
+            return Err(io::Error::new(
+                err.kind(),
+                format!("{}: {err}", path.display()),
+            ));
+        }
+    };
+    parse_town_tile_attribute_entries(&text).map(Some)
+}
+
+pub fn parse_town_tile_attribute_entries(text: &str) -> io::Result<Vec<TownTileAttributeEntry>> {
+    let mut entries = Vec::new();
+    for (line_index, line) in text.lines().enumerate() {
+        let line_number = line_index + 1;
+        let line = line
+            .split_once('#')
+            .map_or(line, |(prefix, _)| prefix)
+            .trim();
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<_> = line
+            .split(|ch: char| ch == ',' || ch == '\t' || ch.is_whitespace())
+            .filter(|part| !part.is_empty())
+            .collect();
+        if parts.len() != 3 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{TOWN_TILE_ATTRIBUTES_TABLE_FILE} line {line_number} must be: TILE TILE_CLASS VEHICLE_BYTE"
+                ),
+            ));
+        }
+
+        let tile = parse_u8_literal(parts[0]).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!(
+                    "{TOWN_TILE_ATTRIBUTES_TABLE_FILE} line {line_number} has invalid tile `{}`: {err}",
+                    parts[0]
+                ),
+            )
+        })?;
+        let tile_class = parse_u8_literal(parts[1]).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!(
+                    "{TOWN_TILE_ATTRIBUTES_TABLE_FILE} line {line_number} has invalid tile class `{}`: {err}",
+                    parts[1]
+                ),
+            )
+        })?;
+        let vehicle_byte = parse_u8_literal(parts[2]).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!(
+                    "{TOWN_TILE_ATTRIBUTES_TABLE_FILE} line {line_number} has invalid vehicle byte `{}`: {err}",
+                    parts[2]
+                ),
+            )
+        })?;
+        if entries
+            .iter()
+            .any(|entry: &TownTileAttributeEntry| entry.tile == tile)
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{TOWN_TILE_ATTRIBUTES_TABLE_FILE} line {line_number} duplicates tile {tile}"
+                ),
+            ));
+        }
+        entries.push(TownTileAttributeEntry {
+            tile,
+            tile_class,
+            vehicle_byte,
+        });
+    }
+    Ok(entries)
+}
+
 pub fn load_town_exit_tile_entries(game_dir: &Path) -> io::Result<Option<Vec<TownExitTileEntry>>> {
     let path = game_dir.join(TOWN_EXIT_TILE_TABLE_FILE);
     let text = match fs::read_to_string(&path) {

@@ -236,6 +236,52 @@
     }
 
     #[test]
+    fn terrain_combat_main_path_applies_public_replacement_tile() {
+        let dir = debug_game_dir();
+        let record = synthetic_combat_arena_record();
+        fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
+        let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(12).unwrap();
+        let replacement_seed = (0..=u16::MAX)
+            .find(|seed| {
+                let mut prng = *seed;
+                u5_prng_range_u16(
+                    &mut prng,
+                    0,
+                    u16::from(TERRAIN_COMBAT_REPLACEMENT_DENOMINATOR - 1),
+                ) == 0
+            })
+            .unwrap();
+        let mut state = world_state(open_world_grid(), 5, 5);
+        state.prng_state = replacement_seed;
+        let object = ActiveObject {
+            type_byte: 0x70,
+            tile: 0xc0,
+            x: 6,
+            y: 5,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+
+        let message = state
+            .enter_terrain_combat_from_world_object(&dir, WorldPlane::Britannia, 1, object)
+            .unwrap();
+
+        assert!(message.contains("BRIT.CBT arena 12"));
+        assert_eq!(state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile, 0xc0);
+        assert_eq!(
+            state.active_objects[COMBAT_PARTY_ACTOR_SLOTS + 1].tile,
+            replacement_tile
+        );
+        assert_eq!(
+            state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].active_object_slot,
+            (COMBAT_PARTY_ACTOR_SLOTS + 1) as u8
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn overworld_prunes_far_non_vehicle_objects_but_keeps_vehicles() {
         let mut state = world_state(open_world_grid(), 0, 0);
         state.active_objects.push(ActiveObject {

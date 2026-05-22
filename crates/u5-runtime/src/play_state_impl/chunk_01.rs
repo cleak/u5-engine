@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fs;
 use std::io;
 use std::path::Path;
 
@@ -112,8 +111,17 @@ impl PlayState {
         save[SAVE_SHRINE_ORDAINED_MASK_OFFSET] = self.shrine_ordained_mask;
         save[SAVE_SHRINE_CODEX_MASK_OFFSET] = self.shrine_codex_mask;
         save[SAVE_MORAL_STANDING_OFFSET] = self.moral_standing;
+        save[SAVE_TOLL_PROGRESS_OFFSET] = self.toll_progress;
         save[SAVE_TIMING_STATUS_TAG_OFFSET] = self.timing_status.save_byte();
         save[SAVE_FORTUNES_OF_WAR_OFFSET] = self.fortunes_of_war;
+        save[SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET
+            ..SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET + FIXED_HIDDEN_TREASURE_FOUND_BYTES]
+            .copy_from_slice(&self.fixed_hidden_treasure_found);
+        save[SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET] = self.fixed_hidden_treasure_daily_day;
+        save[SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET] =
+            self.fixed_hidden_treasure_single_use_cookie;
+        save[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
+            .copy_from_slice(&self.shadowlord_hideouts);
         save[SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET
             ..SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET + SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN]
             .copy_from_slice(&self.dungeon_room_clear_bitmap);
@@ -185,8 +193,8 @@ impl PlayState {
 
         let saved_ool = self.encode_saved_ool(game_dir)?;
         write_saved_ool_mirrors_for_save(game_dir, &saved_ool, 0)?;
-        fs::write(game_dir.join(SAVED_GAM_FILENAME), save)?;
-        fs::write(game_dir.join(SAVED_OOL_FILENAME), saved_ool)?;
+        write_disk_file(&game_dir.join(SAVED_GAM_FILENAME), save)?;
+        write_disk_file(&game_dir.join(SAVED_OOL_FILENAME), saved_ool)?;
         write_blackthorn_story_state(game_dir, self.blackthorn_story)?;
         write_world_progress_state(game_dir, WorldProgressState::from_play_state(self))?;
         Ok(())
@@ -338,7 +346,7 @@ impl PlayState {
             animation: AnimationClock::default(),
             natural_moongate_counter: 0,
             natural_moongate_live_cells: Vec::new(),
-            cached_moon_glyph_slots: [None, None],
+            cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(options.clock.hour),
             food: options.food,
             gold: options.gold,
             keys: options.keys,
@@ -361,18 +369,24 @@ impl PlayState {
             rare_reagent_harvest_days: options.rare_reagent_harvest_days,
             fixed_hidden_treasure_found: options.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: options.fixed_hidden_treasure_daily_day,
+            fixed_hidden_treasure_single_use_cookie: options
+                .fixed_hidden_treasure_single_use_cookie,
             dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
             moral_standing: options.moral_standing,
+            toll_progress: options.toll_progress,
             avatar_stats: options.avatar_stats,
             torches: options.torches,
             torch_counter: options.torch_counter,
             light_spell_counter: options.light_spell_counter,
             ambient_light: 0,
             visibility_dirty: false,
+            visibility_grid: [0; VISIBILITY_GRID_LEN],
+            terrain_band: [0; TERRAIN_BAND_LEN],
+            visibility_buffers_ready: false,
             wind: options.wind,
             wind_save_byte: options.wind_save_byte,
             timing_status: options.timing_status,
@@ -388,7 +402,13 @@ impl PlayState {
             pending_combat_terrain_trigger_slot: None,
             next_combat_actor_slot: 0,
             combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
+            combat_magic_effects: [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+            combat_magic_effect_timer: 0,
+            combat_cursor_blink: false,
+            combat_secondary_marker: None,
+            combat_ambush_reveals: [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
+            combat_sleep_durations: [0; COMBAT_SLEEP_DURATION_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
             turn: 0,
@@ -547,7 +567,7 @@ impl PlayState {
             animation: AnimationClock::default(),
             natural_moongate_counter: 0,
             natural_moongate_live_cells: Vec::new(),
-            cached_moon_glyph_slots: [None, None],
+            cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(options.clock.hour),
             food: options.food,
             gold: options.gold,
             keys: options.keys,
@@ -570,18 +590,24 @@ impl PlayState {
             rare_reagent_harvest_days: options.rare_reagent_harvest_days,
             fixed_hidden_treasure_found: options.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: options.fixed_hidden_treasure_daily_day,
+            fixed_hidden_treasure_single_use_cookie: options
+                .fixed_hidden_treasure_single_use_cookie,
             dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
             moral_standing: options.moral_standing,
+            toll_progress: options.toll_progress,
             avatar_stats: options.avatar_stats,
             torches: options.torches,
             torch_counter: options.torch_counter,
             light_spell_counter: options.light_spell_counter,
             ambient_light: 0,
             visibility_dirty: false,
+            visibility_grid: [0; VISIBILITY_GRID_LEN],
+            terrain_band: [0; TERRAIN_BAND_LEN],
+            visibility_buffers_ready: false,
             wind: options.wind,
             wind_save_byte: options.wind_save_byte,
             timing_status: options.timing_status,
@@ -597,7 +623,13 @@ impl PlayState {
             pending_combat_terrain_trigger_slot: None,
             next_combat_actor_slot: 0,
             combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
+            combat_magic_effects: [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+            combat_magic_effect_timer: 0,
+            combat_cursor_blink: false,
+            combat_secondary_marker: None,
+            combat_ambush_reveals: [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
+            combat_sleep_durations: [0; COMBAT_SLEEP_DURATION_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
             turn: 0,
@@ -761,7 +793,7 @@ impl PlayState {
             animation: AnimationClock::default(),
             natural_moongate_counter: 0,
             natural_moongate_live_cells: Vec::new(),
-            cached_moon_glyph_slots: [None, None],
+            cached_moon_glyph_bytes: cached_moon_glyph_bytes_for_hour(options.clock.hour),
             food: options.food,
             gold: options.gold,
             keys: options.keys,
@@ -784,18 +816,24 @@ impl PlayState {
             rare_reagent_harvest_days: options.rare_reagent_harvest_days,
             fixed_hidden_treasure_found: options.fixed_hidden_treasure_found,
             fixed_hidden_treasure_daily_day: options.fixed_hidden_treasure_daily_day,
+            fixed_hidden_treasure_single_use_cookie: options
+                .fixed_hidden_treasure_single_use_cookie,
             dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
             moral_standing: options.moral_standing,
+            toll_progress: options.toll_progress,
             avatar_stats: options.avatar_stats,
             torches: options.torches,
             torch_counter: options.torch_counter,
             light_spell_counter: options.light_spell_counter,
             ambient_light: 0,
             visibility_dirty: false,
+            visibility_grid: [0; VISIBILITY_GRID_LEN],
+            terrain_band: [0; TERRAIN_BAND_LEN],
+            visibility_buffers_ready: false,
             wind: options.wind,
             wind_save_byte: options.wind_save_byte,
             timing_status: options.timing_status,
@@ -811,7 +849,13 @@ impl PlayState {
             pending_combat_terrain_trigger_slot: None,
             next_combat_actor_slot: 0,
             combat_terrain: DEFAULT_COMBAT_ARENA_TERRAIN,
+            combat_magic_effects: [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+            combat_magic_effect_timer: 0,
+            combat_cursor_blink: false,
+            combat_secondary_marker: None,
+            combat_ambush_reveals: [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
             combat_actors: [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS],
+            combat_sleep_durations: [0; COMBAT_SLEEP_DURATION_SLOTS],
             sail_cadence: 0,
             sail_stall_pending: false,
             turn: 0,
@@ -972,11 +1016,11 @@ impl PlayState {
             self.player.y = ny;
             self.sync_player_object();
             self.mark_visibility_dirty();
-            self.advance_turn();
             self.message = format!("Moved to ({nx}, {ny}).");
             if let Some(game_dir) = game_dir {
                 self.append_town_poison_gas_message(game_dir, scene, floor)?;
             }
+            self.advance_turn();
             Ok(MoveOutcome::Moved)
         } else {
             self.message = format!("Blocked by {} at ({nx}, {ny}).", tile_class(tile));

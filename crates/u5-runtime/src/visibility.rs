@@ -16,6 +16,11 @@ pub const VIEWPORT_SIDE: usize = 11;
 pub const VIEWPORT_ROW_STRIDE: usize = crate::COMBAT_ARENA_ROW_STRIDE;
 /// `visibility.md §2`: row stride of the terrain band in bytes.
 pub const TERRAIN_BAND_ROW_STRIDE: usize = 16;
+/// `visibility.md §2`: total visibility-grid backing bytes. Each row has
+/// eleven active viewport bytes and trailing scratch bytes.
+pub const VISIBILITY_GRID_LEN: usize = VIEWPORT_ROW_STRIDE * VIEWPORT_SIDE;
+/// `visibility.md §2`: total companion terrain-band bytes.
+pub const TERRAIN_BAND_LEN: usize = TERRAIN_BAND_ROW_STRIDE * VIEWPORT_SIDE;
 /// `visibility.md §2`: zero-based player position inside the active
 /// window (centre row, centre column). Anchored to
 /// `(VIEWPORT_SIDE - 1) / 2` so the centre position derives from
@@ -35,6 +40,26 @@ pub const VISIBILITY_USE_COMPANION: u8 = 0x00;
 pub const VISIBILITY_CLEAR: u8 = 0xDD;
 pub const VISIBILITY_DIM_PERIPHERY: u8 = 0x1C;
 pub const VISIBILITY_ALREADY_RENDERED: u8 = 0x87;
+
+/// `visibility.md §2`: index into the active eleven-cell portion of the
+/// 32-byte-stride visibility grid.
+pub const fn visibility_grid_active_index(row: usize, col: usize) -> Option<usize> {
+    if row < VIEWPORT_SIDE && col < VIEWPORT_SIDE {
+        Some(row * VIEWPORT_ROW_STRIDE + col)
+    } else {
+        None
+    }
+}
+
+/// `visibility.md §2`: index into the active eleven-cell portion of the
+/// 16-byte-stride terrain companion band.
+pub const fn terrain_band_active_index(row: usize, col: usize) -> Option<usize> {
+    if row < VIEWPORT_SIDE && col < VIEWPORT_SIDE {
+        Some(row * TERRAIN_BAND_ROW_STRIDE + col)
+    } else {
+        None
+    }
+}
 
 /// `visibility.md §10` cheap-path lazy-refill predicate. On a clean
 /// frame, the redraw orchestrator walks the 11x11 active window and
@@ -83,10 +108,10 @@ pub const fn visibility_marker(byte: u8) -> VisibilityMarker {
 /// mask and the active map window share one source of truth.
 pub const LOCAL_LIGHT_MASK_SIDE: usize = crate::TOWN_GRID_SIDE;
 
-/// `visibility.md §12`: source carves use an eleven-by-eleven visited
-/// grid, so the fixed local-light radius is five cells around the
-/// source.
-pub const LOCAL_LIGHT_SOURCE_RADIUS: usize = VIEWPORT_CENTER as usize;
+/// `visibility.md §12`: fixed local-light source radius in Chebyshev
+/// distance. Each source can light a 7x7 square, subject to the normal
+/// visibility-propagation blockers.
+pub const LOCAL_LIGHT_SOURCE_RADIUS: usize = 3;
 
 /// `visibility.md §12`: returns `true` for tile ids the resident
 /// local-light refresh recognises as local-light source candidates.

@@ -14,9 +14,10 @@
 //! - `0x26` and `0x27` divider bytes both become `'-'`;
 //! - other bytes are emitted as their low-seven-bit character.
 
-use std::fs;
 use std::io;
 use std::path::Path;
+
+use crate::read_optional_disk_file;
 
 const SCENE_DIRECTORY_SLOTS: usize = 33;
 const SCENE_DIRECTORY_BYTES: usize = SCENE_DIRECTORY_SLOTS * 2;
@@ -132,15 +133,8 @@ struct RawSignRecord {
 
 pub fn load_sign_records(game_dir: &Path) -> io::Result<Option<Vec<SignRecord>>> {
     let path = game_dir.join(SIGNS_DAT_FILE);
-    let bytes = match fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => {
-            return Err(io::Error::new(
-                err.kind(),
-                format!("{}: {err}", path.display()),
-            ));
-        }
+    let Some(bytes) = read_optional_disk_file(&path)? else {
+        return Ok(None);
     };
     parse_sign_records(&bytes).map(Some)
 }

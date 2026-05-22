@@ -27,23 +27,6 @@ impl PlayState {
         }
 
         let tile = self.dungeon_cell(level, nx, ny);
-        if self.dungeon_open_door_at(game_dir, scene, level, nx, ny, tile)? {
-            self.player.x = nx;
-            self.player.y = ny;
-            self.sync_player_object();
-            self.mark_visibility_dirty();
-            self.advance_turn();
-            self.message = format!(
-                "Moved {} to ({nx}, {ny}) on {} level {level}; passed through open dungeon door.",
-                direction.name(),
-                scene.key()
-            );
-            return Ok(MoveOutcome::Moved);
-        }
-        if self.dungeon_closed_door_at(game_dir, scene, level, nx, ny, tile)? {
-            self.message = "Blocked!".to_string();
-            return Ok(MoveOutcome::Blocked);
-        }
         if is_dungeon_room_trigger(tile) {
             self.player.x = nx;
             self.player.y = ny;
@@ -348,52 +331,6 @@ impl PlayState {
         MoveOutcome::Blocked
     }
 
-    pub fn dungeon_door_entry_at(
-        &self,
-        game_dir: Option<&Path>,
-        scene: DungeonScene,
-        level: u8,
-        x: usize,
-        y: usize,
-    ) -> io::Result<Option<DungeonDoorEntry>> {
-        let Some(game_dir) = game_dir else {
-            return Ok(None);
-        };
-        Ok(load_dungeon_door_entries(game_dir)?.and_then(|entries| {
-            entries.into_iter().find(|entry| {
-                entry.scene == scene && entry.level == level && entry.x == x && entry.y == y
-            })
-        }))
-    }
-
-    pub fn dungeon_closed_door_at(
-        &self,
-        game_dir: Option<&Path>,
-        scene: DungeonScene,
-        level: u8,
-        x: usize,
-        y: usize,
-        cell: u8,
-    ) -> io::Result<bool> {
-        Ok(self
-            .dungeon_door_entry_at(game_dir, scene, level, x, y)?
-            .is_some_and(|entry| dungeon_closed_door_matches(entry, cell)))
-    }
-
-    pub fn dungeon_open_door_at(
-        &self,
-        game_dir: Option<&Path>,
-        scene: DungeonScene,
-        level: u8,
-        x: usize,
-        y: usize,
-        cell: u8,
-    ) -> io::Result<bool> {
-        Ok(self
-            .dungeon_door_entry_at(game_dir, scene, level, x, y)?
-            .is_some_and(|entry| entry.open_cell == cell))
-    }
-
     pub fn resolve_current_dungeon_room_trigger(
         &mut self,
         game_dir: Option<&Path>,
@@ -402,15 +339,6 @@ impl PlayState {
             return Ok(None);
         };
         let tile = self.dungeon_cell(level, self.player.x, self.player.y);
-        if is_dungeon_room_trigger(tile)
-            && self
-                .dungeon_door_entry_at(game_dir, scene, level, self.player.x, self.player.y)?
-                .is_some_and(|entry| {
-                    entry.open_cell == tile || dungeon_closed_door_matches(entry, tile)
-                })
-        {
-            return Ok(None);
-        }
         Ok(
             if is_dungeon_room_trigger(tile) || is_dungeon_room_helper_state(tile) {
                 Some(self.resolve_dungeon_room_trigger(
@@ -451,7 +379,6 @@ impl PlayState {
         let marked_helper = !helper_state && !doom_final_room;
         if marked_helper {
             self.grid[dungeon_cell_index(level, x, y)] = 0xa0 | slot;
-            set_dungeon_room_clear_bit(&mut self.dungeon_room_clear_bitmap, scene, slot);
         }
         self.mark_visibility_dirty();
         self.advance_turn();
@@ -469,8 +396,14 @@ impl PlayState {
         };
         if dungeon_cbt_available {
             let game_dir = game_dir.expect("availability checked from game_dir");
-            let combat_note =
-                self.enter_dungeon_room_combat(game_dir, scene, level, arena, doom_final_room)?;
+            let combat_note = self.enter_dungeon_room_combat(
+                game_dir,
+                scene,
+                level,
+                slot,
+                arena,
+                doom_final_room,
+            )?;
             self.message = format!(
                 "Entered dungeon {trigger_kind} slot {slot} at ({x}, {y}) on {} level {level}; {combat_note}; {state_note}.",
                 scene.key()
@@ -754,13 +687,7 @@ impl PlayState {
         }
 
         if let Some(game_dir) = game_dir {
-            let Some(entries) = load_world_location_entries(game_dir)? else {
-                return Ok(self.block_missing_dungeon_return(
-                    scene,
-                    level,
-                    format!("Fell out of {} ({})", scene.key(), scene.name()),
-                ));
-            };
+            let entries = effective_world_location_entries(game_dir)?;
             let matches: Vec<_> = entries
                 .iter()
                 .copied()

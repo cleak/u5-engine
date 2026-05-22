@@ -14,17 +14,38 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-19, including 2447 tests.
-- `cargo test -p u5-tui --features visual` passed on 2026-05-19.
-- `cargo test -p u5-bevy` passed on 2026-05-19, including 44 tests.
-- `cargo fmt -- --check` passed on 2026-05-19 after the latest Rust changes.
+- `cargo test -p u5-runtime` passed on 2026-05-21, including 2558 tests
+  (latest verification includes combat command-flow regressions for pending
+  Z-stats/Cast actor liveness, public `cleak/u5-spec#41` arms-shop scene-row
+  coverage, public issue #3 terrain-combat replacement-tile main path, and
+  public issue #21 dungeon active-monster ambush setup, combat round
+  maintenance, combat-local ambush/camp reveal-slot helper coverage, and disk
+  I/O retry wrapper coverage).
+- `cargo test -p u5-tui` passed on 2026-05-21, including 78 tests.
+- `cargo test -p u5-tui --features visual` passed on 2026-05-21.
+- `cargo test -p u5-bevy` passed on 2026-05-21, including 55 tests.
+- `cargo fmt -- --check` passed on 2026-05-21 after the latest Rust changes.
+- `git diff --check` passed on 2026-05-21; the only output was existing
+  CRLF-normalization warnings.
 - Representative raster smoke checks with local assets produced nonblank hashes:
   `BRITANNIA` top-down `fd923dc0f87a9f3c`, `BRITANNIA` after movement
   `1eb882f27b1d216c`, route-smoke Britannia movement `bef4c9fc1eecf9fb`,
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-19 with 59 scripted route cases covering world/town look and
+  2026-05-21 with 123 scripted route cases (including eleven active-shop/modal
+  routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
+  guild, stationary display, and sage flows, plus four extended-session
+  cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
+  walk-and-rest, 9-step dungeon turn-and-search, 5-round Doom combat pass, and
+  focused Create Food, fountain Look, Horse/non-horse wishing-well branches,
+  death-vision Look, public
+  #44 sleeping/praying Talk refusals, light-decay, dungeon ladder-chain,
+  dungeon-to-world return, hourly provision/poison/starvation passes, public
+  #32 Britannia/Doom Word-of-Power seal opening routes, public #15 accepted
+  inn-rest pricing, and public #21
+  active-monster attack/contact ambush routes)
+  covering world/town look and
   save-refusal prompts, surface/town/dungeon View overlays, Spyglass
   Britannia chunk-map overlay (`2ea15622716e09aa`), Peer and X-Ray overlays,
   U-Use utility items including Pocket Watch/Sextant/Magic Carpet
@@ -38,14 +59,37 @@ Last known verification state:
   Underworld-to-town debug entry, ship X-it/skiff launch, hoisted-sail movement,
   dungeon turn/block movement, dungeon exit confirmation/refusal, a Doom room
   trigger that enters a combat raster viewport, dungeon Attack/Search/Get/
-  Jimmy/Open/refusal command routing, and combat pass, Attack, Cast, Get,
-  Jimmy, Open, Push, Klimb, Ready, Z-stats, refusal, View, Yell, X-it, and
-  Search-prompt command routing, plus combat Look label-only routing
-  (`25343578fe3b2a4d`), world dispatcher refusals (`2936fb4c6ff7e3ef`),
+  Jimmy/Open/refusal command routing, and combat pass, active-player digit
+  selection/clear, raw Escape abort (`54a47033c570623a`), Ctrl-S music toggle
+  (`74636efa99055e5d`), lowercase direct movement, Attack, Board, Cast, Down,
+  Enter, Fire, Get, Hole-up, Ignite, Jimmy, Klimb, Mix, New Order, Open, Push,
+  Ready, Talk, Up, View, West, X-it, Yell, Z-stats, refusal, and Search-prompt
+  command routing, plus combat Look label-only routing (`25343578fe3b2a4d`),
+  world dispatcher refusals (`2936fb4c6ff7e3ef`),
+  fixed hidden-treasure single-use, daily-cache, and stacked Underworld search
+  routes (`669a8d5524328039`, `d2b7835b9994c5d8`, `e7b98faee10c7445`),
+  PRV Gate Travel success/refusal routes (`8989fd97ff26da04`,
+  `483b27d450a54309`, `d4a86e6efb5c8978`, `b862359d883858c9`),
+  saved-slot natural moongate live-entry routes (`8989fd97ff26da04`,
+  `0242f19174914479`), public Britannia chasm fall route
+  (`3f4fdf2e53e4e269`), public #51 poison-gas doorway step
+  (`836b6cd5af06c44e`), and public #47 dungeon no-direct-recovery rest
+  (`161ad48dd2a91725`), plus ship broadside fire
+  (`a7f1e8c1d62d7388`), horse boarding (`c346e297d616e667`),
+  dungeon torch ignition (`06a7a60a0f84fb96`), and a combined Mix/Ready/New
+  Order command workflow (`93018f522ce292ec`),
   town dispatcher refusals (`3126df0494b5870b`), town party overlay routes
   (`26d7ef40b57084af`), and terminal endgame missing-box
   confirmation (`ff6287fbb741bd85`) and Wooden Box victory confirmation
-  (`0cf64339ccad08e1`).
+  (`0cf64339ccad08e1`), plus Blackthorn audience correct-password
+  (`338605b812db4ced`), wrong-password (`b700db952bc67bbf`), and
+  rescue-refuge (`3c4488f67ab70cb5`) paths.
+- The TUI binary integration tests include temp-directory startup and save
+  smoke for Journey Onward's empty-save return-to-menu path, deterministic
+  Create Character followed by `--from-save --play-script`, intro-driven U4
+  transfer commit from `PARTY.SAV`, and a confirmed `QY` save/reload
+  round trip. These tests mutate only per-test temporary asset directories,
+  never `C:\Games\U5-Clean`.
 - `cargo run -p u5-tui -- --save-frame-suite target\codex-frame-suite
   C:\Games\U5-Clean` passed on 2026-05-19 and wrote thirteen nonblank PNGs:
   `britannia` `859a1bdabe5c9b7a`, `britannia-step` `05b13e47da048fe6`,
@@ -73,6 +117,56 @@ Last known verification state:
   `fc0e64c23363f715`, `intro-story-art` `34dfde7e247537f4`, and
   `intro-return-to-view`
   `a52f8c3db8e33102`.
+- `cargo run -p u5-tui --features visual -- --visual-route-suite
+  target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-21 and
+  wrote 47 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
+  `route-world-movement-01-d` `ec7c5878d044dda6`,
+  `route-world-movement-02-idle` `949d4d0fb006d273`,
+  `route-town-status-modal-00-initial` `2beb3b7734800e11`,
+  `route-town-status-modal-01-z` `bee4e11801862ad1`,
+  `route-town-view-overlay-00-initial` `2beb3b7734800e11`,
+  `route-town-view-overlay-01-v` `3dac257b8d2986d5`,
+  `route-town-view-overlay-02-idle` `5d5af54c5d7eb0f0`,
+  `route-britannia-look-00-initial` `f68b906acde0bd4a`,
+  `route-britannia-look-01-l6` `da5ca5200c222d0f`,
+  `route-britannia-spyglass-chunk-map-00-initial` `304fa9974e1dc665`,
+  `route-britannia-spyglass-chunk-map-01-usp` `a65a4a22456dc25a`,
+  `route-castle-save-refusal-00-initial` `2beb3b7734800e11`,
+  `route-castle-save-refusal-01-q` `c58e3249e4d12730`,
+  `route-castle-save-refusal-02-n` `6465878cfb486dd1`,
+  `route-world-board-horse-00-initial` `dad599d00fa00a6a`,
+  `route-world-board-horse-01-b` `402223dd79b07b77`,
+  `route-ship-broadside-fire-00-initial` `8b7440c1476c5f31`,
+  `route-ship-broadside-fire-01-f6` `edd09405aa4bbd41`,
+  `route-dungeon-movement-search-00-initial` `67e7e116d8be67aa`,
+  `route-dungeon-movement-search-01-w` `5be54e4dfc5e923f`,
+  `route-dungeon-movement-search-02-a` `55d65ca1a5c74e9f`, and
+  `route-dungeon-movement-search-03-s6` `fbcbfb63d205e997`,
+  `route-dungeon-ignite-torch-00-initial` `29289813c0f0397c`, and
+  `route-dungeon-ignite-torch-01-i` `462ca23693fa9e2a`,
+  `route-dungeon-exit-refusal-00-initial` `67e7e116d8be67aa`,
+  `route-dungeon-exit-refusal-01-q` `50baeabcaa6d8347`,
+  `route-dungeon-exit-refusal-02-n` `bbceaa4d74f5a7ea`,
+  `route-shop-sage-topic-miss-00-initial` `eafb6cf3478f4c49`,
+  `route-shop-sage-topic-miss-01-mantra` `67cfc176459efad8`,
+  `route-doom-combat-trigger-00-initial` `6fdbd1b19453bbea`,
+  `route-doom-combat-trigger-01-empty` `a2619c7eb20c407d`,
+  `route-doom-combat-pass-00-initial` `6fdbd1b19453bbea`,
+  `route-doom-combat-pass-01-empty` `a2619c7eb20c407d`,
+  `route-doom-combat-pass-02-empty` `3cf0bc15e87d80a5`,
+  `route-doom-combat-attack-00-initial` `6fdbd1b19453bbea`,
+  `route-doom-combat-attack-01-empty` `a2619c7eb20c407d`,
+  `route-doom-combat-attack-02-a6` `3cf0bc15e87d80a5`,
+  `route-doom-combat-board-refusal-00-initial` `6fdbd1b19453bbea`,
+  `route-doom-combat-board-refusal-01-empty` `a2619c7eb20c407d`,
+  `route-doom-combat-board-refusal-02-b` `3cf0bc15e87d80a5`,
+  `route-doom-combat-z-stats-00-initial` `6fdbd1b19453bbea`,
+  `route-doom-combat-z-stats-01-empty` `a2619c7eb20c407d`,
+  `route-doom-combat-z-stats-02-z` `3cf0bc15e87d80a5`,
+  `route-doom-combat-search-prompt-00-initial` `6fdbd1b19453bbea`,
+  `route-doom-combat-search-prompt-01-empty` `a2619c7eb20c407d`, and
+  `route-doom-combat-search-prompt-02-s` `3cf0bc15e87d80a5`.
 - Bevy visual screenshot smoke with local assets produced a nonblank
   `792x1182` PNG at `target\codex-fixed-font-status-smoke.png`.
 - Bevy intro screenshot smoke with local assets produced a nonblank
@@ -82,51 +176,110 @@ Last known verification state:
   title art, signature path rendering, title-tick strip bounds, finished-menu
   title-surface overlay, spec-ordered intro story transition/secondary art
   draws, status, endgame modal surfaces, and the deterministic visual
-  frame-suite compositor.
+  frame-suite compositor. Visual route-suite tests cover per-step route case
+  definitions, nonblank local-clean route PNG output, sanitized manifests, and
+  unchanged-frame rejection for scripted transitions.
 - `--save-frame <PATH>` is the current headless PNG capture path for local
   asset visual checks.
 - `cargo run -- --help` is a supported no-asset usage path.
 - The latest checkpointed engine commit at the time of this refresh included
   container Search object-table and trap-narration parity work.
+- Clean spec refresh on 2026-05-21 still found `cleak/u5-spec` at `e34af6b`
+  with no newer public push visible from this workspace. A GitHub follow-up was
+  posted on `cleak/u5-spec#15` because checked-in `systems/shops.md` still
+  mentions Intelligence-adjusted inn pricing while the latest public issue
+  answer says the clean engine should use fixed base-rate inn pricing with no
+  Intelligence discount.
 - The spec checkout used for the most recent audit was `5b816cc Complete
   cleanroom specification`.
 
 Current worktree context when this TODO was refreshed:
 
-- `git status --short` was clean in `u5-engine`.
-- `git status --short` was clean in `u5-spec`.
+- `git status --short` in `u5-engine` already contained broad local edits from
+  the ongoing implementation/audit pass; preserve unrelated user changes.
+- `git status --short` was clean in `u5-spec` at `e34af6b`.
 - `journal/capture/notes.py` was not present in the workspace, engine, or spec
   repository.
 - Town-family exit thresholds now prompt both when stepped onto and when
   observed underfoot after a consumed turn; accepting exits through clean
   return metadata, refusing leaves town mode active.
 - Natural moongate live-tile refresh now keeps mode-zero scene/light cleanup
-  from advancing the shared gate-presence counter. The remaining exact gap is
-  the public moon-glyph phase table that feeds the cached Trammel/Felucca slot
-  used by live-gate entry; current tests seed that cache directly. This is
-  tracked in `cleak/u5-spec#38`; a 2026-05-19 public-source check confirmed
-  the high-level destination order but not the DOS glyph table, byte-to-slot
-  mapping, or cache refresh timing needed for implementation.
-- Rest/camp HP/MP recovery amounts are blocked on clean spec clarification in
-  `cleak/u5-spec#47`; the engine's prompt flow, time cadence, ambush predicate,
-  status restoration, and Lord British camp event are spec-backed.
+  from advancing the shared gate-presence counter. The cached Trammel/Felucca
+  glyph bytes now refresh from the public hour-indexed tables on construction,
+  hour changes, and status redraw, and live-gate entry decodes only the cached
+  byte instead of recomputing the table at entry time. The engine now follows
+  public `cleak/u5-spec#38` for Felucca hours 10/11/19/20: they are high-bit
+  off-horizon sentinels, so natural-gate entry does not route them through
+  Moonstone slot 0.
+- Bevy title-tick rendering now follows public issue #52 at cleanroom
+  replacement depth: a four-frame palette-cycled procedural flame stripe using
+  the published EGA bright/dim color pairs. Exact historical driver-resident
+  silhouette pixels remain out of scope.
+- Inn rest, leave, and pickup charges now follow the latest public
+  `cleak/u5-spec#15` guidance: fixed base-rate arithmetic with no speaker
+  Intelligence discount. Paid inn rest advances eight hours, wakes sleepers,
+  cures poison, and applies class-based night restoration: full HP/MP targets
+  for Avatar/Mage-style classes and half targets for Bards.
+- U4 transfer source validation now follows public `cleak/u5-spec#16`:
+  fixed 532-byte `PARTY.SAV`, public offsets for move/moon/dungeon counters,
+  gold/food/keys/torches/gems/sextants counters, leading class/name, and the
+  eight-byte no-transferable-data virtue gate.
+- Rest/camp ordinary HP/MP recovery follows the latest public guidance in
+  `cleak/u5-spec#47`: rest advances time without a separate direct recovery
+  grant. Exact original random-jolt/camp recovery details remain unresolved.
 - Non-combat Blink default target selection is blocked on clean spec
   clarification in `cleak/u5-spec#48`; the engine keeps sidecar-authored
   destinations rather than inventing a range/search rule.
-- Create Food's numeric grant is blocked on clean spec clarification in
-  `cleak/u5-spec#49`; the current 100-food grant remains a documented local
-  policy until the public amount is published.
-- TLK `0x85` gold payments debit accepted affordable payments. The
-  toll-style moral-standing milestone remains blocked on clean spec
-  clarification in `cleak/u5-spec#27` because the public spec does not yet
-  publish the toll-progress counter, milestone predicate, reset/increment
-  rules, or qualifying payment contexts.
-- Hourly poison and starvation damage use a one-HP first-playable policy while
-  the exact public damage amount/range and per-member roll semantics are
-  blocked on clean spec clarification in `cleak/u5-spec#50`.
-- Town poison-gas doorway cells are implemented through clean sidecar metadata,
-  but the exact public roll odds and per-member semantics are blocked on clean
-  spec clarification in `cleak/u5-spec#51`.
+- Create Food follows the latest public `cleak/u5-spec#49` guidance with a
+  tiny `0..=2` food PRNG grant capped at the party food cap.
+- TLK `0x85` accepted toll payments debit gold, increment the toll-progress
+  counter, and apply the published milestone karma behavior from
+  `cleak/u5-spec#27`.
+- Hourly poison and starvation follow the latest public `cleak/u5-spec#50`
+  guidance: poison is fixed `-1 HP` per poisoned living member, and starvation
+  rolls `1..=8` independently for each non-dead slot.
+- Town poison-gas doorway cells use the latest public `cleak/u5-spec#51`
+  predicate when clean tile attributes are available (`tile_class == 4` and
+  `vehicle_byte == 0x1C`), with 1-in-29 per-non-poisoned-slot roll semantics
+  after committed movement steps and before turn-clock advancement. Coordinate
+  sidecar rows remain as fallback until the full resident tile-attribute table
+  is published.
+- Talk-triggered arms shops now use the public `cleak/u5-spec#41`
+  scene-to-row identity table for all nine published shop rows and display
+  the scene-local shop name. The exact `a..h` stock arrays are still missing
+  from the clean spec, so the buy path keeps the legacy broad equipment menu
+  until those row bytes are published.
+- Stationary-display purchases now match public `cleak/u5-spec#28` marker-order
+  semantics for clean rows: marker ordinals count the scene/floor display-marker
+  list, not just the adjacent candidate subset.
+- Shadowlord shard U-Use now follows the latest public `cleak/u5-spec#31`
+  predicate shape for clean Eternal Flame metadata: the flame coordinate/tile
+  family plus shard/flame pairing is sufficient, and a separate live
+  Shadowlord-name encounter is not required. Exact native Eternal Flame
+  coordinates remain blocked until published, so `eternal_flames.tsv` is still
+  the clean metadata path.
+- The 2026-05-21 clean-engine audit found no broad newly answered engine slice
+  left unimplemented in the pulled spec. Follow-up questions were posted for
+  the largest blockers: #13 sage rows, #41 arms `a..h` stock arrays, #43 exact
+  Look-special outcomes, #47 random-jolt/camp recovery, #51 native tile
+  attributes, and #54 Return-to-View captions/effect rasters. Existing
+  #1/#3/#18 contradiction questions remain open.
+- Shop session regression tests now lock the corrected public scene-byte rows
+  for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
+  arms-shop identities, including old wrong-scene negative cases from the
+  public issue corrections.
+- Public `cleak/u5-spec#43` Look specials now cover top-down fountain drink
+  prompts with presentation-only refresh, wishing-well coin and 12-character
+  wish input with scene gates, structured accepted keyword matching, a native
+  Horse grant, no-effect handling for accepted car keywords until their exact
+  grant table is public, death-vision active-object dispatch with member
+  selection, and sign/poster active-object class routing. Exact death-vision
+  stat/text, wished-object mapping, and wanted-poster fixed-coordinate/resource
+  details remain pending public clarification.
+- Return-to-View now expands the MISCMAPS command stream into a per-title-tick
+  playback timeline for preview ticks, cell-effect timing, fixed-wipe
+  rectangles, eight-title-tick waits, trailing ticks, and one-shot actor draws.
+  Caption source/opcode/text remains blocked by the public #54 spec conflict.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry,
   seeded ship/skiff sailing routes, a Spyglass-triggered Britannia chunk-map
@@ -189,10 +342,12 @@ These are the safest next slices for a new contributor.
      consumption, messages, state mutation, and mode-specific routing.
 
 4. Do not invent exact transition coordinates.
-   - The current clean spec still omits several exact overworld, moongate,
-     dungeon-return, and special-transition coordinates.
-   - Leave the safe "missing clean return-coordinate metadata" behavior in place
-     until those coordinates are published through the spec.
+   - Stock town/dungeon entry and return coordinates are published in the
+     gazetteer and implemented as native defaults.
+   - The current clean spec still omits several exact moongate, plane-transition,
+     and special-transition coordinates.
+   - Leave safe missing-metadata behavior in place for coordinate families that
+     are not yet published through the spec.
 
 5. Prefer completion-audit work over broad rewrites.
    - Map one explicit public spec behavior to current engine evidence.
@@ -230,9 +385,11 @@ non-combat-first version before moving into Bevy.
 
 - Yell (`Y`).
   - Current behavior separates ship sail toggles from generic Yell input and
-    supports dungeon words and Shadowlord names.
+    supports Shadowlord names and public issue #32 Word-of-Power seal opening:
+    matching words at their published coordinates flip the closed seal tile
+    with `^ 0xDF` and dirty visibility.
   - Remaining work:
-    - audit any newly specified mode-specific Yell effects,
+    - audit any newly specified mode-specific Yell presentation effects,
     - keep tests proving ship `Y` toggles sails and non-ship `Y` does not.
 
 - Attack (`A`).
@@ -246,10 +403,9 @@ non-combat-first version before moving into Bevy.
 - Talk (`T`).
   - Current town talk reaches NPC envelopes, scoped prompts, reserved words,
     repeated keyword lookup, action dispatch `A` through `K`, and runtime shop
-    routing.
+    routing. Route-smoke covers the public #44 sleeping/praying status-tile
+    refusals before shop/dialog dispatch.
   - Remaining work:
-    - audit exact sleeping/no-response status-tile mapping when public spec
-      issue #44 is answered,
     - audit richer refusal paths for non-NPC targets,
     - keep side effects and shop routing covered as new clean spec details are
       published.
@@ -330,7 +486,6 @@ tables are not yet public or not yet encoded.
   - `dungeon_deeper_transitions.tsv`
   - `dungeon_teleports.tsv`
   - `dungeon_exit_tiles.tsv`
-  - `dungeon_doors.tsv`
   - `dungeon_chests.tsv`
   - `secret_doors.tsv`
   - `town_fire_sources.tsv` (now an override for native `0xB4..=0xB7` cannons)
@@ -345,8 +500,10 @@ tables are not yet public or not yet encoded.
   - `moongates.tsv`
   - `location_floor_pages.tsv`
   - `location_entry_y.tsv`
-  - `common_words.tsv`
-  - `end_narrative_windows.tsv`
+  - `common_words.tsv` (now an override for the public issue #33/#40 built-in
+    common-word dictionary)
+  - `end_narrative_windows.tsv` (now an override for public END.DAT
+    final-narrative byte windows)
   - `SAVED.WPS`
   - `SAVED.BTH`
 
@@ -365,6 +522,14 @@ first-playable session without losing supported state.
 
 - Preserve unknown bytes.
   - Keep round-tripping unmapped `SAVED.GAM` and `SAVED.OOL` bytes.
+  - Save/load, chargen, and U4 transfer save-pair reads/writes now route
+    through the shared `disk_io` wrapper; tests cover zero-byte retry,
+    nonzero short-read/short-write success, write-handler phase restoration,
+    and fast failure in the modern single-directory path.
+  - Original binary content/resource loaders for CBT, END/ENDMSG, MISCMAPS,
+    MISCMSG, QUESTION, SIGNS, STORY, SHOPPE, fonts, PTH, and KARMAS now use
+    the same disk I/O wrapper; optional clean TSV sidecars remain direct
+    filesystem reads.
   - Add regression tests whenever a new save field is written.
   - Prefer patching known fields over reserializing an invented save image.
 
@@ -446,7 +611,14 @@ experience.
 - Build a top-down renderer.
   - Render world and town tiles from decoded tile sheets.
   - Render active objects with phase animation.
-  - Respect line-of-sight and light radius.
+  - Respect line-of-sight, light radius, and public issue #42 local-light
+    source masks: radius-three Chebyshev sources, source-to-target blocker
+    carving, active-object flame sources, and multiple-source union.
+  - Top-down radius-5 raster rendering now drives the public `visibility.md`
+    persistent scratch model: an 11-active-cell, 32-byte-stride visibility
+    grid plus 16-byte-stride terrain companion band, full rebuild on dirty
+    frames, lazy refill on clean frames, fog marker refinement, active-object
+    companion stamps, and scratch-byte preservation.
   - Show status/message panels.
   - A spec-backed fixed-cell text-window core now covers four descriptors,
     cursor preservation, style controls, clear/scroll, wrapped strings,
@@ -454,6 +626,10 @@ experience.
     screen surface used by TUI and Bevy status/modal summaries. Bevy gameplay
     status now renders the shared surface through `IBM.CH` into a texture.
   - Verify with screenshots or pixel hashes where practical.
+  - `--visual-route-suite <DIR>` replays representative world, town modal,
+    town View-overlay, and dungeon movement/search routes through the Bevy
+    full-frame compositor, writes per-step PNGs plus a sanitized manifest, and
+    fails if a scripted route step leaves the frame unchanged.
 
 - Build a dungeon renderer.
   - Continue replacing the terminal text proxy with the public first-person
@@ -471,9 +647,12 @@ experience.
 ### Exact Visual Parity Deferrals
 
 - Public spec still calls out optional exactness gaps:
-  - story step-1 rectangle transition helper timing,
-  - Return-to-View raster/pacing internals,
-  - broader `EGA.DRV` behavior,
+  - wider story/endgame rectangle transition helper rates beyond the
+    published step-1 one-column-per-title-tick wipe,
+  - Return-to-View caption opcode/text and exact effect rasters (the public
+    #54 scheduler timing is now modeled in runtime state),
+  - broader `EGA.DRV` behavior beyond the canonical EGA/Tandy-equivalent path,
+  - exact historical title-tick silhouette pixels,
   - exact remote-view panel for X-Ray/Peer,
   - exact dungeon minimap glyph/floodability edge cases.
 - These are not required for a first playable, but should be tracked if visual
@@ -503,19 +682,22 @@ until combat exists.
     - out-of-scene refusal.
 
 - Known approximations/gaps.
-  - Heal now uses the public halved-roll formula with a minimum of 1 HP.
+  - Heal now uses the public shared-PRNG `0..=60` roll, halved formula,
+    minimum of 1 HP, Dead-only refusal, and max-HP clamp.
   - Great Heal and Resurrect now apply spec-backed core record mutations,
     including dungeon combat-active refusal and resurrection experience, mana,
     level, and max-HP recomputation.
-  - Create Food uses first-playable fixed amount and cap behavior remains
-    blocked on `cleak/u5-spec#49`.
+  - Create Food uses the latest public `cleak/u5-spec#49` tiny PRNG grant
+    (`0..=2`) and cap behavior.
   - Rel Hur uses the public `weather.md` prompt-to-wind mapping and is covered
     by cast/resource-order tests.
   - Blink default range is sidecar-authored outside combat; combat Blink uses
     the current arena state and legal in-arena landing checks. Non-combat
     default target selection remains blocked on `cleak/u5-spec#48`.
-  - X-Ray and Peer use first-playable map projections; visual parity remains
-    open.
+  - View, Peer, and X-Ray overlays now carry explicit runtime modes, and the
+    surface/dungeon overlay rasters apply the public peer/gem alternate
+    bank/tint branch for affected cell classes. Exact remote-view panel pixels
+    remain presentation parity work.
   - Dungeon Up/Down spells implement the public one-level movement hook inside
     level bounds; the command-overlay dungeon escape helper remains separate
     and does not currently imply a spell-dispatch gap.
@@ -541,6 +723,26 @@ as public details become available.
 - Current combat handoff.
   - Hostile world-object contact, Attack against combat-class objects, dungeon
     rooms, rest ambushes, and outdoor encounters can enter a combat frame.
+  - Dungeon-room combat now uses the public issue #12/#19 source rules for
+    high-bit-masked ordinary monsters, compact source-order placement, skipped
+    low special markers except Doom's absorbable field, and party positions
+    after the placed ordinary monsters.
+  - Dungeon active-monster combat now follows public issue #21: it uses the
+    ambush framer path, builds a stock-floor 11-by-11 arena without loading
+    `DUNGEON.CBT`, and creates exactly one initial monster at the central-front
+    placement.
+- Dungeon `0xF?` cells now follow the latest public issue #1 correction as
+    room triggers; dungeon Open and Jimmy no longer mutate `0xF?` trigger cells
+    or `0xE?` visual wall cells, stale `dungeon_doors.tsv` files are ignored,
+    and dungeon Open now uses the public underfoot `0x7?` "Chest opened" /
+    default "What?" messages.
+  - Terrain combat now uses the public issue #3 resident per-arena spawn-count
+    table plus `BRIT.CBT` record placement metadata, clamps requested counts
+    above the slot table instead of reproducing the original out-of-bounds edge,
+    places the party after the monster slots, and applies the public
+    one-in-nine early-spawn replacement-tile roll through the main
+    terrain-combat path. Exact visual review of every replacement byte remains
+    combat parity/audit work.
   - Combat-frame entry snapshots the previous mode state, loads clean runtime
     arena data, places actors, and restores the suspended state on exit.
   - Tests cover active-object preservation, trigger-slot reconciliation, actor
@@ -550,11 +752,32 @@ as public details become available.
   - Continue auditing actor initiative/phase parity.
   - Continue auditing player movement and targeting parity.
   - Continue auditing monster AI parity.
-  - Continue auditing combat field placement and contact parity.
-  - Default monster death/drop markers and vanish-on-death actor clearing are
-    implemented in the temporary combat active-object table; continue auditing
-    Gazer/Gargoyle special-death presentation, damage, defense, status,
-    rewards, loot, and escape parity.
+  - Combat descriptor byte-2 flags now use the public issue #6/#7 controlled
+    and flee bits. Charmed/possessed and summoned non-party actors route through
+    the player-command path, Conjure uses fresh random arena-coordinate attempts,
+    Swarm uses the caster ring, and player Summon uses fixed north-clockwise
+    ring order. Issue #8 non-party sleep now has the published per-slot
+    countdown/targetability behavior, but exact per-effect starting durations
+    and descriptor-byte table wording still need a public spec clarification
+    before claiming exact monster sleep wakeup parity.
+  - Combat field placement now separates marker materialization from post-step
+    contact, uses Poison's unconditional placement path, and gates Fire/Sleep/
+    Energy with the public issue #10 one-in-eight clean-engine default.
+  - Combat-local ambush/camp reveal records now follow the public helper shape:
+    up to eight trigger coordinates, consume-on-fire, one or two in-range
+    terrain stamps, out-of-range target sentinels, ordinary-combat clearing, and
+    post-committed-movement dispatch for player and AI movement paths.
+  - Combat round-counter wrap now applies the one-minute combat-safe clock
+    advance, and post-round maintenance sweeps terrain/effect dispatch bytes,
+    the magic-effect timer, and transient cursor/secondary-marker visuals
+    without aging field active objects.
+  - Combat Vanish, Magic Lock, Unlock Magic, and Open use the public issue
+    #37/#39 utility fallback: no target prompt, no arena mutation, resources
+    consumed after gates, turn advanced, and `Failed!` reported.
+  - Default monster death/drop markers, party corpses, vanish-on-death actor
+    clearing, Gazer eye-burst, and Gargoyle lava-then-default-death transitions
+    are implemented in the temporary combat active-object table; continue
+    auditing damage, defense, status, rewards, loot, and escape parity.
   - Monster combat-AI runner instruction set and class effect map are still
     called out as remaining public-spec parity work.
 
@@ -600,10 +823,6 @@ Goal: turn diagnostic interactions into game-like content.
   - Remaining work:
     - exact audit of every authored schedule/AI edge,
     - conversation side-effect audit beyond the currently known action letters,
-    - TLK `0x87` semantics pending public spec clarification
-      (cleak/u5-spec#46),
-    - TLK `0x85` toll milestone karma pending public toll-progress counter
-      clarification (cleak/u5-spec#27),
     - shop/service conversations,
     - NPC memory flags such as thanked/picked/quest state.
 
@@ -725,6 +944,13 @@ The active project goal is full-game completion, not just first-playable
 movement. Do not mark the goal complete just because tests pass. Run a
 completion audit against the criteria below and verify each item with code,
 tests, command output, screenshots, or a real scripted/playable session.
+
+A first pass of that audit is published in `docs/completion-audit.md`. It maps
+every public-spec system, format, and catalog to engine evidence and
+test/route-smoke/frame-suite coverage, separates gameplay gaps from visual
+polish, and enumerates the outstanding `cleak/u5-spec` issues that gate
+exact-parity claims. Refresh that document whenever behavior moves between
+safe-placeholder and spec-backed implementation.
 
 - The intro, Journey Onward, character creation, and Ultima IV transfer flows
   are playable through the intended frontend.

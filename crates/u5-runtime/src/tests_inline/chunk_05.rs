@@ -911,6 +911,62 @@
     }
 
     #[test]
+    fn y_yell_word_of_power_opens_matching_surface_seal_only_at_target() {
+        let mut world = world_state(open_world_grid(), 240, 73);
+        world.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        let idx = world_cell_index(240, 73);
+        world.grid[idx] = 0x16;
+
+        assert_eq!(
+            handle_play_key_input(&mut world, 'Y', "fallax", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(world.turn, 1);
+        assert_eq!(world.grid[idx], 0x16 ^ WORD_OF_POWER_SEAL_XOR);
+        assert!(world.visibility_dirty);
+        assert!(world.message.contains("A word of power is uttered"));
+        assert!(world.message.contains("The seal opens."));
+
+        let mut wrong_place = world_state(open_world_grid(), 5, 5);
+        wrong_place.area = Area::World {
+            plane: WorldPlane::Britannia,
+        };
+        wrong_place.grid[idx] = 0x16;
+        assert_eq!(
+            handle_play_key_input(&mut wrong_place, 'Y', "fallax", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(wrong_place.grid[idx], 0x16);
+        assert!(wrong_place.message.contains("A word of power is uttered"));
+        assert!(wrong_place
+            .message
+            .contains("No matching Word-of-Power seal is present."));
+    }
+
+    #[test]
+    fn y_yell_veramocor_opens_underworld_doom_seal() {
+        let mut world = world_state(open_world_grid(), 128, 128);
+        world.area = Area::World {
+            plane: WorldPlane::Underworld,
+        };
+        let idx = world_cell_index(128, 128);
+        world.grid[idx] = 0x16;
+
+        assert_eq!(
+            handle_play_key_input(&mut world, 'Y', "veramocor", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!(world.grid[idx], 0x16 ^ WORD_OF_POWER_SEAL_XOR);
+        assert!(world.message.contains("Word of Power for Doom"));
+        assert!(world.message.contains("The seal opens."));
+    }
+
+    #[test]
     fn y_yell_shadowlord_name_observes_vanquished_state() {
         let mut world = world_state(open_world_grid(), 5, 5);
         world.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = SHADOWLORD_VANQUISHED;
@@ -929,7 +985,7 @@
     fn y_yell_shadowlord_name_spawns_only_in_matching_virtue_town() {
         let mut town = test_state(open_grid(), 5, 5);
         town.area = Area::Town {
-            scene: Scene::new(1).unwrap(),
+            scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[SHADOWLORD_FALSEHOOD_INDEX]).unwrap(),
             floor: 0,
         };
         town.visibility_dirty = false;
@@ -952,7 +1008,7 @@
                 z: 0,
                 phase: active_object_phase_from_direction(Direction::North, 0),
                 aux1: SHADOWLORD_FALSEHOOD_INDEX as u8,
-                aux3: 1,
+                aux3: DEFAULT_SHADOWLORD_HIDEOUTS[SHADOWLORD_FALSEHOOD_INDEX],
             }
         );
         assert!(town.visibility_dirty);
@@ -976,7 +1032,7 @@
     fn y_yell_shadowlord_name_requires_free_active_object_slot() {
         let mut town = test_state(open_grid(), 5, 5);
         town.area = Area::Town {
-            scene: Scene::new(1).unwrap(),
+            scene: Scene::new(DEFAULT_SHADOWLORD_HIDEOUTS[SHADOWLORD_FALSEHOOD_INDEX]).unwrap(),
             floor: 0,
         };
         town.active_objects.resize(
@@ -1267,7 +1323,10 @@
         assert!(state.message.contains("BRIT.CBT arena 1"));
         assert!(state.message.contains("Orc"));
         assert_eq!(state.active_objects[6].tile, 0xc0);
-        assert_eq!((state.active_objects[6].x, state.active_objects[6].y), (0, 15));
+        assert_eq!(
+            (state.active_objects[6].x, state.active_objects[6].y),
+            (0, 15)
+        );
         assert!(!state.message.contains("pending"));
         assert!(!state.message.contains("out of scope"));
         let _ = fs::remove_dir_all(dir);

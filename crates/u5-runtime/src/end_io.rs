@@ -12,15 +12,14 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use crate::parse_u8_literal;
+use crate::{parse_u8_literal, read_optional_disk_file};
 
 /// `formats/end-dat.md §2` published filename for the final-narrative
 /// text file.
 pub const END_DAT_FILE: &str = "END.DAT";
-/// Optional clean sidecar for the six caller-selected `END.DAT` seek windows.
-/// The public spec names the six semantic windows but does not publish their
-/// byte ranges, so this table lets the runtime render cleanly provided ranges
-/// without inferring them from layout markers.
+/// Optional clean sidecar override for the six caller-selected `END.DAT` seek
+/// windows. The shipped ranges are published below; this table remains useful
+/// for custom assets and focused tests.
 pub const END_NARRATIVE_WINDOW_TABLE_FILE: &str = "end_narrative_windows.tsv";
 
 /// `formats/end-dat.md §2`: shipped DOS file size in bytes.
@@ -135,6 +134,51 @@ impl EndNarrativeWindowRange {
     }
 }
 
+/// `formats/end-dat.md §4`: byte-traced shipped `END.DAT` final narrative
+/// windows. Ranges are file-relative, start-inclusive and end-exclusive.
+pub const END_DAT_PUBLISHED_WINDOW_RANGES: [EndNarrativeWindowRange; END_DAT_WINDOW_COUNT] = [
+    EndNarrativeWindowRange {
+        window: 1,
+        start: 0,
+        end: 423,
+    },
+    EndNarrativeWindowRange {
+        window: 2,
+        start: 424,
+        end: 955,
+    },
+    EndNarrativeWindowRange {
+        window: 3,
+        start: 956,
+        end: 1529,
+    },
+    EndNarrativeWindowRange {
+        window: 4,
+        start: 1530,
+        end: 2279,
+    },
+    EndNarrativeWindowRange {
+        window: 5,
+        start: 2280,
+        end: 2931,
+    },
+    EndNarrativeWindowRange {
+        window: 6,
+        start: 2932,
+        end: 3696,
+    },
+];
+
+pub const END_DAT_PUBLISHED_WINDOW_RANGE_OPTIONS: [Option<EndNarrativeWindowRange>;
+    END_DAT_WINDOW_COUNT] = [
+    Some(END_DAT_PUBLISHED_WINDOW_RANGES[0]),
+    Some(END_DAT_PUBLISHED_WINDOW_RANGES[1]),
+    Some(END_DAT_PUBLISHED_WINDOW_RANGES[2]),
+    Some(END_DAT_PUBLISHED_WINDOW_RANGES[3]),
+    Some(END_DAT_PUBLISHED_WINDOW_RANGES[4]),
+    Some(END_DAT_PUBLISHED_WINDOW_RANGES[5]),
+];
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EndNarrative {
     pub raw: Vec<u8>,
@@ -145,7 +189,7 @@ impl EndNarrative {
     pub fn new(raw: Vec<u8>) -> Self {
         Self {
             raw,
-            window_ranges: [None; END_DAT_WINDOW_COUNT],
+            window_ranges: END_DAT_PUBLISHED_WINDOW_RANGE_OPTIONS,
         }
     }
 
@@ -178,15 +222,8 @@ impl EndNarrative {
 
 pub fn load_end_narrative(game_dir: &Path) -> io::Result<Option<EndNarrative>> {
     let path = game_dir.join(END_DAT_FILE);
-    let bytes = match fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => {
-            return Err(io::Error::new(
-                err.kind(),
-                format!("{}: {err}", path.display()),
-            ));
-        }
+    let Some(bytes) = read_optional_disk_file(&path)? else {
+        return Ok(None);
     };
     let mut narrative = parse_end_narrative(&bytes)?;
     if let Some(ranges) = load_end_narrative_window_ranges(game_dir)? {

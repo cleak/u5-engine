@@ -24,6 +24,39 @@ pub const ARMS_SHOP_SELL_MIN_OFFER_BIAS: u32 = 1;
 /// helpers operate on the decoded non-sentinel prefix length.
 pub const ARMS_SHOP_STOCK_TABLE_LEN: usize = 8;
 
+/// `shops.md §7` / public issue #41 scene-local arms-shop rows. The
+/// stock byte arrays are not yet public, so Talk-triggered sessions
+/// use this identity for names and scene gating while preserving the
+/// legacy broad equipment menu.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArmsShop {
+    IolosBows,
+    NaughtyNomaans,
+    ArmsOfJustice,
+    DarkwatchArmoury,
+    ThePaladinsProtectorate,
+    NorthStarArmoury,
+    BuccaneersBooty,
+    TheShatteredShield,
+    SiegeCrafters,
+}
+
+impl ArmsShop {
+    pub const fn display_name(self) -> &'static str {
+        match self {
+            Self::IolosBows => "Iolo's Bows",
+            Self::NaughtyNomaans => "Naughty Nomaan's",
+            Self::ArmsOfJustice => "Arms of Justice",
+            Self::DarkwatchArmoury => "Darkwatch Armoury",
+            Self::ThePaladinsProtectorate => "The Paladin's Protectorate!",
+            Self::NorthStarArmoury => "North Star Armoury",
+            Self::BuccaneersBooty => "Buccaneers Booty",
+            Self::TheShatteredShield => "The Shattered Shield",
+            Self::SiegeCrafters => "Siege Crafters",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ArmsStockTable {
     pub item_ids: [u8; ARMS_SHOP_STOCK_TABLE_LEN],
@@ -988,24 +1021,37 @@ pub const INN_STAY_COUNTER_CAP: u8 = crate::CHARACTER_MONTH_COUNTER_CAP;
 
 /// `shops.md §8.4` Leave-companion deposit unit count. The deposit
 /// debited when the player leaves a companion at an inn is the local
-/// adjusted room-rate multiplied by this many units.
+/// base room rate multiplied by this many units.
 pub const INN_LEAVE_DEPOSIT_ROOM_RATE_UNITS: u8 = 10;
 
 /// `shops.md §8.4`: Leave-companion deposit calculated from the
-/// inn's adjusted room rate (already with Intelligence adjustment
-/// applied). Returns the gold amount to debit before the registry
-/// transfer completes.
-pub const fn inn_leave_companion_deposit(adjusted_room_rate: u16) -> u16 {
-    adjusted_room_rate * INN_LEAVE_DEPOSIT_ROOM_RATE_UNITS as u16
+/// inn's base room rate. Returns the gold amount to debit before the
+/// registry transfer completes.
+pub const fn inn_leave_companion_deposit(base_room_rate: u16) -> u16 {
+    base_room_rate * INN_LEAVE_DEPOSIT_ROOM_RATE_UNITS as u16
 }
 
-/// `shops.md §8.4`: Pickup bill calculated from the adjusted local
+/// `shops.md §8.4`: Pickup bill calculated from the base local
 /// lodging charge and the guest's stored stay counter, treating zero
 /// as one billable unit (so a same-day pickup still costs one
 /// lodging charge).
-pub const fn inn_pickup_bill(adjusted_lodging_charge: u16, stay_counter: u8) -> u16 {
+pub const fn inn_pickup_bill(base_lodging_charge: u16, stay_counter: u8) -> u16 {
     let units = if stay_counter == 0 { 1 } else { stay_counter };
-    adjusted_lodging_charge * units as u16
+    base_lodging_charge * units as u16
+}
+
+pub const fn inn_leave_companion_deposit_for_speaker(inn: Inn, speaker_intelligence: u8) -> u16 {
+    let _ = speaker_intelligence;
+    inn_leave_companion_deposit(inn_base_room_rate(inn))
+}
+
+pub const fn inn_pickup_bill_for_speaker(
+    inn: Inn,
+    stay_counter: u8,
+    speaker_intelligence: u8,
+) -> u16 {
+    let _ = speaker_intelligence;
+    inn_pickup_bill(inn_base_room_rate(inn), stay_counter)
 }
 
 /// `shops.md §8.4` morbid pickup conversion. A guest left at the
@@ -1047,10 +1093,10 @@ impl Inn {
         }
     }
 
-    /// `shops.md §8.4` per-inn base room rate before the speaking
-    /// member's Intelligence adjustment. The rest quote is
-    /// `base_rate * party_size` then Intelligence-scaled; the leave
-    /// deposit uses `INN_LEAVE_DEPOSIT_ROOM_RATE_UNITS * adjusted_rate`.
+    /// `shops.md §8.4` per-inn base room rate. Public issue #15
+    /// corrected the inn flow to fixed
+    /// base-rate arithmetic with no speaking-member Intelligence
+    /// discount.
     pub const fn base_room_rate(self) -> u16 {
         match self {
             Self::TheWayfarerInn => 2,
@@ -1122,7 +1168,7 @@ pub struct InnGuestRecord {
 pub struct InnRestQuote {
     pub inn: Inn,
     pub party_size: usize,
-    pub adjusted_room_rate: u16,
+    pub base_room_rate: u16,
     pub minimum_gold: u16,
     pub total_price: u16,
 }
@@ -1189,11 +1235,6 @@ pub enum InnError {
 /// `shops.md §8.8` sage free-text input character cap.
 pub const SAGE_TOPIC_INPUT_LIMIT: usize = 15;
 
-/// `shops.md §8.8` shipped resident sage rumour-topic count. The
-/// fixed resident topic list contains twenty-six rumour topics; the
-/// sage matches typed input case-insensitively against this list
-/// with a strict topic-boundary check (the next input character must
-/// be end-of-input or a space).
 /// `shops.md §2` horse-trader Talk dialog id. Ordinary shops refuse
 /// to open their menu when the party is mounted on a horse; only
 /// the horse-trader vehicle-sale arm (`0x83`) remains available.
@@ -1256,12 +1297,72 @@ pub const UPMARKET_INN_AFFORDABILITY_REFUSAL_BARK: &str = "Highwaymen!";
 /// callers compose the trailing quantity at format time.
 pub const VEHICLE_BROKER_PARTIAL_AFFORD_PREFIX: &str = "Thou canst afford only ";
 
-pub const SAGE_RUMOUR_TOPIC_COUNT: usize = 26;
+/// Public issue `cleak/u5-spec#13`: each sage owns a fixed table of
+/// sixteen keyword rows. The real per-sage rows remain unpublished in
+/// the clean spec; runtime tests use synthetic rows only.
+pub const SAGE_RUMOUR_ENTRIES_PER_SAGE: usize = 16;
 
-/// `shops.md §8.8` sage rumour-keyword input cap. The sage's
-/// keyword prompt accepts up to fifteen characters; longer input is
-/// rejected at the input pipeline.
+/// Public issue `cleak/u5-spec#13`: the sage banner table contains
+/// one of these four label letters for each sage instance.
+pub const SAGE_LABEL_LETTERS: [char; 4] = ['C', 'T', 'H', 'A'];
+
+/// Public issue `cleak/u5-spec#13`: decoded people/name strings that
+/// sages can know about. The per-sage row assignment is not public
+/// yet, so this is a content whitelist rather than a dispatch table.
+pub const SAGE_KNOWN_PEOPLE: [&str; 21] = [
+    "Greyson",
+    "Trian",
+    "Jeremy",
+    "Drew",
+    "Gruman",
+    "Paul",
+    "Chirita",
+    "Malifora",
+    "Cannon",
+    "Felespar",
+    "the mother of Rew",
+    "Sindar",
+    "Saiko",
+    "Terrance",
+    "Greymarch",
+    "Simon and Tessa",
+    "Shalineth",
+    "a daemon",
+    "Lord Malone",
+    "Zachariah",
+    "Tactus",
+];
+
+/// Public issue `cleak/u5-spec#13`: decoded place strings used by
+/// sage rumour substitution. The exact per-sage row mapping remains
+/// unpublished.
+pub const SAGE_KNOWN_PLACES: [&str; 14] = [
+    "Cotham",
+    "Moonglow",
+    "Britain",
+    "Jhelom",
+    "Drew",
+    "Minoc",
+    "Trinsic",
+    "Skara Brae",
+    "New Magincia",
+    "the lighthouse south of Britain",
+    "a hidden mountain keep",
+    "the desert",
+    "the Lycaeum",
+    "Serpent's Hold",
+];
+
+/// Public issue `cleak/u5-spec#13` sage rumour-keyword input cap.
+/// The input pipeline accepts at most fifteen characters for the
+/// sage's free-text keyword. Runtime helpers therefore match only
+/// the first fifteen characters instead of treating longer test
+/// harness strings as a separate paid-shop error path.
 pub const SAGE_KEYWORD_INPUT_LIMIT: usize = 15;
+
+pub const fn sage_rumour_record_id_accepted(record_id: usize) -> bool {
+    record_id >= SHOPPE_RECORDS_SAGE_FIRST && record_id <= SHOPPE_RECORDS_SAGE_LAST
+}
 
 /// `shops.md §8.8`: returns `true` when `typed` matches `topic` per
 /// the sage's strict topic-boundary rule: case-insensitive prefix
@@ -1292,30 +1393,27 @@ pub fn sage_topic_matches(typed: &str, topic: &str) -> bool {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SageTopic {
-    pub topic: &'static str,
+pub struct SageRumourEntry {
+    pub keyword: &'static str,
     pub subject: &'static str,
     pub destination: &'static str,
-    pub fee: u16,
-    pub template: SageRumourTemplate,
+    pub record_id: usize,
+    pub record_template: &'static str,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SageRumourTemplate {
-    SeekSubjectInDestination,
-}
+pub type SageRumourTable = [Option<SageRumourEntry>; SAGE_RUMOUR_ENTRIES_PER_SAGE];
+
+pub const EMPTY_SAGE_RUMOUR_TABLE: SageRumourTable = [None; SAGE_RUMOUR_ENTRIES_PER_SAGE];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SageRumourQuote {
-    pub topic: SageTopic,
+    pub entry: SageRumourEntry,
     pub input_len: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SageRumourOutcome {
     pub quote: SageRumourQuote,
-    pub gold_before: u16,
-    pub gold_after: u16,
     pub rendered: String,
 }
 
@@ -1324,7 +1422,6 @@ pub enum SageRumourError {
     EmptyInput,
     InputTooLong { limit: usize, actual: usize },
     NoTopicMatch,
-    InsufficientGold { available: u16, required: u16 },
 }
 
 pub fn quote_arms_purchase(
@@ -1627,15 +1724,15 @@ pub const fn tavern_provision_unit_price(tavern: Tavern) -> u16 {
 
 pub const fn tavern_round_drink_menu_letter(tavern: Tavern) -> char {
     match tavern {
-        Tavern::TheHonestMeal => 'M',
-        Tavern::TheWayfarerTavern => 'M',
-        Tavern::TheSwordAndKeg => 'M',
-        Tavern::TheSlaughteredLamb => 'B',
-        Tavern::TheHumblePalate => 'F',
-        Tavern::TheBlueBoarTavern => 'C',
-        Tavern::TheCatsLair => 'M',
-        Tavern::TheFallenVirgin => 'B',
-        Tavern::TheFolleyTap => 'M',
+        Tavern::TheHonestMeal
+        | Tavern::TheWayfarerTavern
+        | Tavern::TheSwordAndKeg
+        | Tavern::TheSlaughteredLamb
+        | Tavern::TheHumblePalate
+        | Tavern::TheBlueBoarTavern
+        | Tavern::TheCatsLair
+        | Tavern::TheFallenVirgin
+        | Tavern::TheFolleyTap => 'A',
     }
 }
 
@@ -1846,7 +1943,7 @@ pub fn age_stay_counters_month(stay_counters: &mut [u8]) -> usize {
 pub fn quote_inn_rest(
     inn: Inn,
     party_size: usize,
-    adjusted_room_rate: u16,
+    base_room_rate: u16,
 ) -> Result<InnRestQuote, InnError> {
     if party_size == 0 {
         return Err(InnError::EmptyParty);
@@ -1854,9 +1951,28 @@ pub fn quote_inn_rest(
     Ok(InnRestQuote {
         inn,
         party_size,
-        adjusted_room_rate,
+        base_room_rate,
         minimum_gold: inn_minimum_gold(inn),
-        total_price: adjusted_room_rate * party_size as u16,
+        total_price: base_room_rate * party_size as u16,
+    })
+}
+
+pub fn quote_inn_rest_for_speaker(
+    inn: Inn,
+    party_size: usize,
+    speaker_intelligence: u8,
+) -> Result<InnRestQuote, InnError> {
+    let _ = speaker_intelligence;
+    if party_size == 0 {
+        return Err(InnError::EmptyParty);
+    }
+    let base_room_rate = inn_base_room_rate(inn);
+    Ok(InnRestQuote {
+        inn,
+        party_size,
+        base_room_rate,
+        minimum_gold: inn_minimum_gold(inn),
+        total_price: base_room_rate * party_size as u16,
     })
 }
 
@@ -1864,9 +1980,9 @@ pub fn apply_inn_rest_payment(
     gold: &mut u16,
     inn: Inn,
     party_size: usize,
-    adjusted_room_rate: u16,
+    base_room_rate: u16,
 ) -> Result<InnRestOutcome, InnError> {
-    let quote = quote_inn_rest(inn, party_size, adjusted_room_rate)?;
+    let quote = quote_inn_rest(inn, party_size, base_room_rate)?;
     if *gold < quote.minimum_gold {
         return Err(InnError::BelowMinimumGold {
             available: *gold,
@@ -1889,6 +2005,44 @@ pub fn apply_inn_rest_payment(
     })
 }
 
+pub fn apply_inn_rest_total_payment(
+    gold: &mut u16,
+    inn: Inn,
+    party_size: usize,
+    total_price: u16,
+) -> Result<InnRestOutcome, InnError> {
+    if party_size == 0 {
+        return Err(InnError::EmptyParty);
+    }
+    let minimum_gold = inn_minimum_gold(inn);
+    if *gold < minimum_gold {
+        return Err(InnError::BelowMinimumGold {
+            available: *gold,
+            minimum: minimum_gold,
+        });
+    }
+    if *gold < total_price {
+        return Err(InnError::InsufficientGold {
+            available: *gold,
+            required: total_price,
+        });
+    }
+
+    let gold_before = *gold;
+    *gold -= total_price;
+    Ok(InnRestOutcome {
+        quote: InnRestQuote {
+            inn,
+            party_size,
+            base_room_rate: inn_base_room_rate(inn),
+            minimum_gold,
+            total_price,
+        },
+        gold_before,
+        gold_after: *gold,
+    })
+}
+
 pub fn apply_inn_leave_guest(
     gold: &mut u16,
     registry: &mut Vec<InnGuestRecord>,
@@ -1901,7 +2055,7 @@ pub fn apply_inn_leave_guest(
     party_experience: &mut Vec<u16>,
     party_equipment: &mut Vec<[u8; EQUIPMENT_SLOT_COUNT]>,
     party_index: usize,
-    adjusted_lodging_charge: u16,
+    base_lodging_charge: u16,
 ) -> Result<InnLeaveOutcome, InnError> {
     if party.len() <= 1 {
         return Err(InnError::PartyTooSmallToLeave);
@@ -1915,10 +2069,10 @@ pub fn apply_inn_leave_guest(
     if registry.len() >= INN_REGISTRY_CAP {
         return Err(InnError::RegistryFull);
     }
-    if *gold < adjusted_lodging_charge {
+    if *gold < base_lodging_charge {
         return Err(InnError::InsufficientGold {
             available: *gold,
-            required: adjusted_lodging_charge,
+            required: base_lodging_charge,
         });
     }
 
@@ -1946,13 +2100,13 @@ pub fn apply_inn_leave_guest(
         stay_counter: 0,
     };
     let gold_before = *gold;
-    *gold -= adjusted_lodging_charge;
+    *gold -= base_lodging_charge;
     registry.push(guest);
     Ok(InnLeaveOutcome {
         scene_marker,
         party_index,
         registry_index: registry.len() - 1,
-        deposit: adjusted_lodging_charge,
+        deposit: base_lodging_charge,
         gold_before,
         gold_after: *gold,
         guest,
@@ -1971,7 +2125,45 @@ pub fn apply_inn_pickup_guest(
     party_experience: &mut Vec<u16>,
     party_equipment: &mut Vec<[u8; EQUIPMENT_SLOT_COUNT]>,
     registry_index: usize,
-    adjusted_lodging_charge: u16,
+    base_lodging_charge: u16,
+) -> Result<InnPickupOutcome, InnError> {
+    let Some(guest) = registry.get(registry_index).copied() else {
+        return Err(InnError::InvalidGuestIndex {
+            registry_len: registry.len(),
+            requested: registry_index,
+        });
+    };
+    let billable_stay_units = inn_billable_stay_units(guest.stay_counter);
+    let bill = base_lodging_charge * u16::from(billable_stay_units);
+    apply_inn_pickup_guest_with_bill(
+        gold,
+        registry,
+        scene_marker,
+        party,
+        party_names,
+        party_stay_counters,
+        party_strengths,
+        party_intelligence,
+        party_experience,
+        party_equipment,
+        registry_index,
+        bill,
+    )
+}
+
+pub fn apply_inn_pickup_guest_with_bill(
+    gold: &mut u16,
+    registry: &mut Vec<InnGuestRecord>,
+    scene_marker: u8,
+    party: &mut Vec<PartyMember>,
+    party_names: &mut Vec<[u8; SAVE_CHARACTER_NAME_LEN]>,
+    party_stay_counters: &mut Vec<u8>,
+    party_strengths: &mut Vec<u8>,
+    party_intelligence: &mut Vec<u8>,
+    party_experience: &mut Vec<u16>,
+    party_equipment: &mut Vec<[u8; EQUIPMENT_SLOT_COUNT]>,
+    registry_index: usize,
+    bill: u16,
 ) -> Result<InnPickupOutcome, InnError> {
     if party.len() >= INN_PARTY_CAP {
         return Err(InnError::PartyFull);
@@ -1990,7 +2182,6 @@ pub fn apply_inn_pickup_guest(
     }
 
     let billable_stay_units = inn_billable_stay_units(guest.stay_counter);
-    let bill = adjusted_lodging_charge * u16::from(billable_stay_units);
     if *gold < bill {
         return Err(InnError::InsufficientGold {
             available: *gold,
@@ -2059,60 +2250,53 @@ pub fn sage_topic_matches_input(topic: &str, input: &str) -> bool {
     matches!(input.as_bytes().get(topic.len()), None | Some(b' '))
 }
 
+pub fn sage_keyword_input_prefix(input: &str) -> &str {
+    let trimmed = input.trim_start();
+    let mut end = trimmed.len();
+    for (count, (idx, _)) in trimmed.char_indices().enumerate() {
+        if count == SAGE_KEYWORD_INPUT_LIMIT {
+            end = idx;
+            break;
+        }
+    }
+    trimmed[..end].trim_end()
+}
+
 pub fn find_sage_topic(
-    topics: &[SageTopic],
+    table: &SageRumourTable,
     input: &str,
 ) -> Result<SageRumourQuote, SageRumourError> {
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
+    let capped = sage_keyword_input_prefix(input);
+    if capped.is_empty() {
         return Err(SageRumourError::EmptyInput);
     }
-    if trimmed.len() > SAGE_TOPIC_INPUT_LIMIT {
-        return Err(SageRumourError::InputTooLong {
-            limit: SAGE_TOPIC_INPUT_LIMIT,
-            actual: trimmed.len(),
-        });
-    }
 
-    topics
+    table
         .iter()
-        .copied()
-        .find(|topic| sage_topic_matches_input(topic.topic, trimmed))
-        .map(|topic| SageRumourQuote {
-            topic,
-            input_len: trimmed.len(),
+        .filter_map(|entry| *entry)
+        .find(|entry| sage_topic_matches_input(entry.keyword, capped))
+        .map(|entry| SageRumourQuote {
+            entry,
+            input_len: capped.len(),
         })
         .ok_or(SageRumourError::NoTopicMatch)
 }
 
-pub fn render_sage_rumour(topic: SageTopic) -> String {
-    match topic.template {
-        SageRumourTemplate::SeekSubjectInDestination => {
-            format!("Seek ye {} in {}!", topic.subject, topic.destination)
-        }
-    }
+pub fn render_sage_rumour(entry: SageRumourEntry) -> String {
+    entry
+        .record_template
+        .replace('&', entry.subject)
+        .replace('*', entry.destination)
 }
 
-pub fn apply_sage_rumour_purchase(
-    gold: &mut u16,
-    topics: &[SageTopic],
+pub fn apply_sage_rumour_lookup(
+    table: &SageRumourTable,
     input: &str,
 ) -> Result<SageRumourOutcome, SageRumourError> {
-    let quote = find_sage_topic(topics, input)?;
-    if *gold < quote.topic.fee {
-        return Err(SageRumourError::InsufficientGold {
-            available: *gold,
-            required: quote.topic.fee,
-        });
-    }
-
-    let gold_before = *gold;
-    *gold -= quote.topic.fee;
+    let quote = find_sage_topic(table, input)?;
     Ok(SageRumourOutcome {
         quote,
-        gold_before,
-        gold_after: *gold,
-        rendered: render_sage_rumour(quote.topic),
+        rendered: render_sage_rumour(quote.entry),
     })
 }
 
@@ -2602,27 +2786,35 @@ impl PlayState {
         apply_provision_purchase(&mut self.gold, &mut self.food, tavern, quantity)
     }
 
-    pub fn buy_sage_rumour(
+    pub fn consult_sage_rumour(
         &mut self,
-        topics: &[SageTopic],
+        table: &SageRumourTable,
         input: &str,
     ) -> Result<SageRumourOutcome, SageRumourError> {
-        apply_sage_rumour_purchase(&mut self.gold, topics, input)
+        apply_sage_rumour_lookup(table, input)
     }
 
     pub fn pay_inn_rest(
         &mut self,
         inn: Inn,
-        adjusted_room_rate: u16,
+        base_room_rate: u16,
     ) -> Result<InnRestOutcome, InnError> {
-        apply_inn_rest_payment(&mut self.gold, inn, self.party.len(), adjusted_room_rate)
+        apply_inn_rest_payment(&mut self.gold, inn, self.party.len(), base_room_rate)
+    }
+
+    pub fn pay_inn_rest_total(
+        &mut self,
+        inn: Inn,
+        total_price: u16,
+    ) -> Result<InnRestOutcome, InnError> {
+        apply_inn_rest_total_payment(&mut self.gold, inn, self.party.len(), total_price)
     }
 
     pub fn leave_inn_companion(
         &mut self,
         scene_marker: u8,
         party_index: usize,
-        adjusted_lodging_charge: u16,
+        base_lodging_charge: u16,
     ) -> Result<InnLeaveOutcome, InnError> {
         apply_inn_leave_guest(
             &mut self.gold,
@@ -2636,7 +2828,7 @@ impl PlayState {
             &mut self.party_experience,
             &mut self.party_equipment,
             party_index,
-            adjusted_lodging_charge,
+            base_lodging_charge,
         )
     }
 
@@ -2644,7 +2836,7 @@ impl PlayState {
         &mut self,
         scene_marker: u8,
         registry_index: usize,
-        adjusted_lodging_charge: u16,
+        base_lodging_charge: u16,
     ) -> Result<InnPickupOutcome, InnError> {
         apply_inn_pickup_guest(
             &mut self.gold,
@@ -2658,7 +2850,29 @@ impl PlayState {
             &mut self.party_experience,
             &mut self.party_equipment,
             registry_index,
-            adjusted_lodging_charge,
+            base_lodging_charge,
+        )
+    }
+
+    pub fn pickup_inn_guest_with_bill(
+        &mut self,
+        scene_marker: u8,
+        registry_index: usize,
+        bill: u16,
+    ) -> Result<InnPickupOutcome, InnError> {
+        apply_inn_pickup_guest_with_bill(
+            &mut self.gold,
+            &mut self.inn_registry,
+            scene_marker,
+            &mut self.party,
+            &mut self.party_names,
+            &mut self.party_stay_counters,
+            &mut self.party_strengths,
+            &mut self.party_intelligence,
+            &mut self.party_experience,
+            &mut self.party_equipment,
+            registry_index,
+            bill,
         )
     }
 }

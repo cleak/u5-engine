@@ -788,6 +788,29 @@
     }
 
     #[test]
+    fn surface_view_overlay_modes_apply_peer_gem_alternate_bank() {
+        let mut grid = open_grid();
+        grid[5 * 32 + 6] = 0xDC;
+        let state = test_state(grid, 5, 5);
+
+        let gem = state.render_surface_view_overlay_for_mode(
+            TileGraphicsDepth::Ega16,
+            ViewOverlayMode::GemView,
+        );
+        let x_ray = state.render_surface_view_overlay_for_mode(
+            TileGraphicsDepth::Ega16,
+            ViewOverlayMode::XRaySpell,
+        );
+        let cell_x = LOCAL_VIEW_OVERLAY_SIDE / 2 + 1;
+        let cell_y = LOCAL_VIEW_OVERLAY_SIDE / 2;
+        let px = cell_x * LOCAL_VIEW_CELL_PIXEL_SCALE;
+        let py = cell_y * LOCAL_VIEW_CELL_PIXEL_SCALE;
+
+        assert_eq!(x_ray.pixel(px, py), Some(4));
+        assert_eq!(gem.pixel(px, py), Some(14));
+    }
+
+    #[test]
     fn ignite_torch_consumes_stock_and_lights_dungeon() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.torches = 2;
@@ -961,6 +984,45 @@
     }
 
     #[test]
+    fn town_local_light_uses_source_to_target_carves_not_flood_fill() {
+        let mut grid = open_grid();
+        grid[8 * TOWN_GRID_SIDE + 8] = 0xDC;
+        grid[7 * TOWN_GRID_SIDE + 8] = 24;
+        let state = test_state(grid, 8, 3);
+
+        assert!(!state.town_cell_visible_with_light_radius(8, 3, 8, 6, 6, 0));
+        assert!(state.town_cell_visible_with_light_radius(8, 3, 7, 6, 6, 0));
+    }
+
+    #[test]
+    fn town_local_light_all_public_terrain_source_ids_emit_light() {
+        for source_tile in [
+            0xB0u8, 0xB1, 0xB2, 0xB3, 0xBC, 0xBD, 0xBE, 0xBF, 0xDC, 0xDE,
+        ] {
+            let mut grid = open_grid();
+            grid[8 * TOWN_GRID_SIDE + 8] = source_tile;
+            let state = test_state(grid, 8, 3);
+
+            assert!(
+                state.town_cell_visible_with_light_radius(8, 3, 8, 6, 6, 0),
+                "source tile {source_tile:#04x} should light within radius"
+            );
+        }
+    }
+
+    #[test]
+    fn town_local_light_masks_union_multiple_sources() {
+        let mut grid = open_grid();
+        grid[8 * TOWN_GRID_SIDE + 5] = 0xDC;
+        grid[8 * TOWN_GRID_SIDE + 11] = 0xDE;
+        let state = test_state(grid, 8, 3);
+
+        assert!(state.town_cell_visible_with_light_radius(8, 3, 5, 6, 6, 0));
+        assert!(state.town_cell_visible_with_light_radius(8, 3, 11, 6, 6, 0));
+        assert!(!state.town_cell_visible_with_light_radius(8, 3, 11, 4, 6, 0));
+    }
+
+    #[test]
     fn town_local_light_can_be_reached_through_open_dark_space() {
         let mut grid = open_grid();
         grid[18 * TOWN_GRID_SIDE + 10] = 0xDC;
@@ -978,6 +1040,16 @@
                 .nth(10),
             Some('^')
         );
+    }
+
+    #[test]
+    fn town_local_light_uses_chebyshev_radius_three() {
+        let mut grid = open_grid();
+        grid[8 * TOWN_GRID_SIDE + 8] = 0xDC;
+        let state = test_state(grid, 5, 5);
+
+        assert!(state.town_cell_visible_with_light_radius(5, 5, 11, 11, 8, 0));
+        assert!(!state.town_cell_visible_with_light_radius(5, 5, 12, 8, 8, 0));
     }
 
     #[test]
@@ -1006,6 +1078,23 @@
                 .nth(10),
             Some('^')
         );
+    }
+
+    #[test]
+    fn active_object_flame_local_light_source_contributes_to_surface_visibility() {
+        let mut state = test_state(open_grid(), 8, 3);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xDE,
+            tile: 0xDE,
+            x: 8,
+            y: 8,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert!(state.town_cell_visible_with_light_radius(8, 3, 8, 6, 6, 0));
     }
 
     #[test]

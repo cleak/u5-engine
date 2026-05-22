@@ -37,6 +37,7 @@
                 RARE_REAGENT_HARVEST_POINT_COUNT],
             fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
             fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
+            fixed_hidden_treasure_single_use_cookie: FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR,
             dungeon_room_clear_bitmap: [0; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
             saved_dungeon_working_buffer: None,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
@@ -44,6 +45,7 @@
             shrine_ordained_mask: 0,
             shrine_codex_mask: 0,
             moral_standing: 0,
+            toll_progress: 0,
             avatar_stats: AvatarStats::default(),
             torches: DEFAULT_TORCH_STOCK,
             torch_counter: 0,
@@ -401,7 +403,7 @@
     }
 
     #[test]
-    fn world_enter_reports_missing_clean_coordinate_table() {
+    fn world_enter_reports_no_matching_coordinate() {
         let mut state = world_state(open_world_grid(), 10, 20);
 
         assert_eq!(
@@ -409,12 +411,57 @@
             MoveOutcome::Blocked
         );
 
-        assert!(
-            state
-                .message
-                .contains("No clean-room entrance coordinate table")
-        );
+        assert!(state.message.contains("No entry in world_locations.tsv"));
         assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn published_world_location_table_matches_gazetteer_return_rows() {
+        let entries = published_world_location_entries();
+
+        assert_eq!(entries.len(), 40);
+        assert!(entries.iter().any(|entry| {
+            entry.target == PlayTarget::Town(Scene::new(1).unwrap())
+                && entry.plane == WorldPlane::Britannia
+                && (entry.x, entry.y) == (232, 135)
+                && entry.town_entry_y.is_none()
+                && entry.expected_tile.is_none()
+        }));
+        assert!(entries.iter().any(|entry| {
+            entry.target == PlayTarget::Town(Scene::new(32).unwrap())
+                && entry.plane == WorldPlane::Britannia
+                && (entry.x, entry.y) == (146, 241)
+        }));
+        assert!(entries.iter().any(|entry| {
+            entry.target == PlayTarget::Dungeon(DungeonScene::new(33).unwrap())
+                && entry.plane == WorldPlane::Britannia
+                && (entry.x, entry.y) == (240, 73)
+        }));
+        assert!(entries.iter().any(|entry| {
+            entry.target == PlayTarget::Dungeon(DungeonScene::new(40).unwrap())
+                && entry.plane == WorldPlane::Underworld
+                && (entry.x, entry.y) == (128, 128)
+        }));
+    }
+
+    #[test]
+    fn world_enter_uses_published_location_table_without_sidecar() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(17).unwrap();
+        let mut state = britannia_state(open_world_grid(), 86, 107);
+
+        assert_eq!(
+            state.enter_current_location(&dir).unwrap(),
+            MoveOutcome::Transition(AreaTransition::EnteredLocation(scene))
+        );
+
+        assert_eq!(state.area, Area::Town { scene, floor: 0 });
+        assert_eq!(
+            state.return_world.as_ref().map(|ret| (ret.x, ret.y)),
+            Some((86, 107))
+        );
+        assert!(state.message.contains("Entered CASTLE:0 from BRITANNIA"));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -819,6 +866,7 @@ CASTLE:0 6
                 RARE_REAGENT_HARVEST_POINT_COUNT],
             fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
             fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
+            fixed_hidden_treasure_single_use_cookie: FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR,
             dungeon_room_clear_bitmap: [0; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
             saved_dungeon_working_buffer: None,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
@@ -826,6 +874,7 @@ CASTLE:0 6
             shrine_ordained_mask: 0,
             shrine_codex_mask: 0,
             moral_standing: 0,
+            toll_progress: 0,
             avatar_stats: AvatarStats::default(),
             torches: DEFAULT_TORCH_STOCK,
             torch_counter: 0,

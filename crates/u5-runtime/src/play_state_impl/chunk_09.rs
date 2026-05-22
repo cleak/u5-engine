@@ -11,10 +11,12 @@ struct PreparedTopDownCell {
 
 impl PreparedTopDownCell {
     fn tile(self) -> u8 {
-        if self.grid == VISIBILITY_USE_COMPANION {
-            self.terrain
-        } else {
-            self.grid
+        match visibility_marker(self.grid) {
+            VisibilityMarker::UseCompanion
+            | VisibilityMarker::ClearVisible
+            | VisibilityMarker::DimPeriphery => self.terrain,
+            VisibilityMarker::Hidden | VisibilityMarker::AlreadyRendered => VISIBILITY_HIDDEN,
+            VisibilityMarker::DirectTile(tile) => tile,
         }
     }
 }
@@ -435,7 +437,7 @@ impl PlayState {
     }
 
     pub fn render_top_down_viewport(
-        &self,
+        &mut self,
         radius: usize,
         atlas: &TileAtlas,
     ) -> io::Result<Option<TileViewport>> {
@@ -475,13 +477,21 @@ impl PlayState {
         let _ = isize::try_from(radius).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidInput, "viewport radius is too large")
         })?;
-        let prepared = self.prepare_top_down_render_grid(area, radius);
+        let prepared = if radius == VIEWPORT_PLAYER_ROW {
+            self.refresh_top_down_visibility_buffers(area, radius);
+            self.prepared_top_down_grid_from_visibility_buffers()
+        } else {
+            self.prepare_top_down_render_grid(area, radius)
+        };
         for cell_y in 0..cells {
             for cell_x in 0..cells {
                 let Some(cell) = prepared[cell_y * cells + cell_x] else {
                     continue;
                 };
                 let tile = cell.tile();
+                if tile == VISIBILITY_HIDDEN {
+                    continue;
+                }
                 let tile_id = if tile == PLAYER_TILE {
                     // PLAYER_TILE is a sentinel; 0xFC is "a bellows" in the
                     // lower-half tile space. Resolve to the real upper-half
@@ -826,6 +836,232 @@ impl PlayState {
                 && self.object_occupies(*object, x, y)
                 && active_object_frame_tile(object.type_byte, object.phase).is_some()
         })
+    }
+
+    pub fn refresh_top_down_visibility_buffers(&mut self, area: TopDownRenderArea, radius: usize) {
+        if radius != VIEWPORT_PLAYER_ROW {
+            return;
+        }
+        let scene_byte = self.world_tick_scene_byte();
+        let path = if self.visibility_buffers_ready {
+            world_tick_path(scene_byte, self.visibility_dirty)
+        } else {
+            WorldTickPath::ProducerFullRebuild
+        };
+        match path {
+            WorldTickPath::CombatBlatCopy => self.copy_combat_terrain_to_visibility_buffers(),
+            WorldTickPath::ProducerFullRebuild => {
+                self.rebuild_top_down_visibility_buffers(area, radius);
+                self.visibility_dirty = false;
+                self.visibility_buffers_ready = true;
+            }
+            WorldTickPath::LazyRefill => {
+                self.lazy_refill_top_down_visibility_buffers(area, radius);
+            }
+        }
+    }
+
+    fn world_tick_scene_byte(&self) -> u8 {
+        if self.combat_active {
+            return SCENE_COMBAT_TEMPORARY;
+        }
+        match self.area {
+            Area::World { .. } => SCENE_OVERWORLD,
+            Area::Town { scene, .. } => scene.byte,
+            Area::Dungeon { scene, .. } => scene.byte,
+        }
+    }
+
+    fn reset_visibility_buffer_active_cells(&mut self) {
+        for row in 0..VIEWPORT_SIDE {
+            for col in 0..VIEWPORT_SIDE {
+                let grid_index = visibility_grid_active_index(row, col).unwrap();
+                let terrain_index = terrain_band_active_index(row, col).unwrap();
+                self.visibility_grid[grid_index] = VISIBILITY_HIDDEN;
+                self.terrain_band[terrain_index] = 0;
+            }
+        }
+    }
+
+    fn rebuild_top_down_visibility_buffers(&mut self, area: TopDownRenderArea, radius: usize) {
+        self.reset_visibility_buffer_active_cells();
+        let px = self.player.x as isize;
+        let py = self.player.y as isize;
+        let r = radius as isize;
+        for row in 0..VIEWPORT_SIDE {
+            for col in 0..VIEWPORT_SIDE {
+                let world_x = px + col as isize - r;
+                let world_y = py + row as isize - r;
+                let Some((terrain, _)) =
+                    self.top_down_render_cell_base(area, px, py, world_x, world_y, radius)
+                else {
+                    continue;
+                };
+                let terrain = self.top_down_visibility_base_tile(area, world_x, world_y, terrain);
+                let grid_index = visibility_grid_active_index(row, col).unwrap();
+                let terrain_index = terrain_band_active_index(row, col).unwrap();
+                self.terrain_band[terrain_index] = terrain;
+                self.visibility_grid[grid_index] = visibility_marker_for_viewport_cell(col, row);
+            }
+        }
+        self.composite_active_objects_into_visibility_buffers(area, radius);
+    }
+
+    fn lazy_refill_top_down_visibility_buffers(&mut self, area: TopDownRenderArea, radius: usize) {
+        let px = self.player.x as isize;
+        let py = self.player.y as isize;
+        let r = radius as isize;
+        for row in 0..VIEWPORT_SIDE {
+            for col in 0..VIEWPORT_SIDE {
+                let grid_index = visibility_grid_active_index(row, col).unwrap();
+                if !visibility_cheap_path_needs_refill(self.visibility_grid[grid_index]) {
+                    continue;
+                }
+                let world_x = px + col as isize - r;
+                let world_y = py + row as isize - r;
+                let Some((terrain, _)) =
+                    self.top_down_render_cell_base(area, px, py, world_x, world_y, radius)
+                else {
+                    continue;
+                };
+                let terrain = self.top_down_visibility_base_tile(area, world_x, world_y, terrain);
+                let terrain_index = terrain_band_active_index(row, col).unwrap();
+                self.terrain_band[terrain_index] = terrain;
+            }
+        }
+        self.composite_active_objects_into_visibility_buffers(area, radius);
+    }
+
+    fn top_down_visibility_base_tile(
+        &self,
+        area: TopDownRenderArea,
+        world_x: isize,
+        world_y: isize,
+        terrain: u8,
+    ) -> u8 {
+        if let TopDownRenderArea::World(plane) = area {
+            let wx = world_x.rem_euclid(WORLD_SIDE as isize) as usize;
+            let wy = world_y.rem_euclid(WORLD_SIDE as isize) as usize;
+            if self.visible_moongate_at(plane, wx, wy) {
+                return self.animation.resolve_moongate_tile();
+            }
+        }
+        terrain
+    }
+
+    fn copy_combat_terrain_to_visibility_buffers(&mut self) {
+        self.reset_visibility_buffer_active_cells();
+        for row in 0..VIEWPORT_SIDE {
+            for col in 0..VIEWPORT_SIDE {
+                let grid_index = visibility_grid_active_index(row, col).unwrap();
+                let terrain_index = terrain_band_active_index(row, col).unwrap();
+                self.terrain_band[terrain_index] = self
+                    .animation
+                    .resolve_static_tile(self.combat_terrain[row][col]);
+                self.visibility_grid[grid_index] = visibility_marker_for_viewport_cell(col, row);
+            }
+        }
+        self.visibility_dirty = false;
+        self.visibility_buffers_ready = true;
+    }
+
+    fn prepared_top_down_grid_from_visibility_buffers(&self) -> Vec<Option<PreparedTopDownCell>> {
+        let mut prepared = vec![None; VIEWPORT_SIDE * VIEWPORT_SIDE];
+        for row in 0..VIEWPORT_SIDE {
+            for col in 0..VIEWPORT_SIDE {
+                let grid = self.visibility_grid[visibility_grid_active_index(row, col).unwrap()];
+                if grid == VISIBILITY_HIDDEN {
+                    continue;
+                }
+                let terrain = self.terrain_band[terrain_band_active_index(row, col).unwrap()];
+                prepared[row * VIEWPORT_SIDE + col] = Some(PreparedTopDownCell { terrain, grid });
+            }
+        }
+        prepared
+    }
+
+    fn composite_active_objects_into_visibility_buffers(
+        &mut self,
+        area: TopDownRenderArea,
+        radius: usize,
+    ) {
+        for slot in (1..self.active_objects.len()).rev() {
+            let object = self.active_objects[slot];
+            self.composite_top_down_object_into_visibility_buffers(area, radius, object);
+        }
+        if let Some(z) = self.current_floor() {
+            let player = ActiveObject {
+                type_byte: PLAYER_TILE,
+                tile: PLAYER_TILE,
+                x: self.player.x,
+                y: self.player.y,
+                z,
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            };
+            self.composite_top_down_object_into_visibility_buffers(area, radius, player);
+        }
+    }
+
+    fn composite_top_down_object_into_visibility_buffers(
+        &mut self,
+        area: TopDownRenderArea,
+        radius: usize,
+        object: ActiveObject,
+    ) {
+        if object.is_empty() || object.is_player_phantom() {
+            return;
+        }
+        let Some((col, row)) = self.top_down_object_viewport_cell(area, radius, object) else {
+            return;
+        };
+        if col >= VIEWPORT_SIDE || row >= VIEWPORT_SIDE {
+            return;
+        }
+        let grid_index = visibility_grid_active_index(row, col).unwrap();
+        let terrain_index = terrain_band_active_index(row, col).unwrap();
+        let current_grid_byte = self.visibility_grid[grid_index];
+        let current_terrain = self.terrain_band[terrain_index];
+        let previous_row_terrain = (row > 0).then(|| {
+            let index = terrain_band_active_index(row - 1, col).unwrap();
+            self.terrain_band[index]
+        });
+        let next_row_terrain = (row + 1 < VIEWPORT_SIDE).then(|| {
+            let index = terrain_band_active_index(row + 1, col).unwrap();
+            self.terrain_band[index]
+        });
+        let variant = self.active_object_render_variant(col, row, object);
+        match active_object_composite(
+            object.type_byte,
+            object.tile,
+            current_grid_byte,
+            current_terrain,
+            previous_row_terrain,
+            next_row_terrain,
+            row,
+            variant,
+        ) {
+            ActiveObjectCompositeResult::Suppress => {}
+            ActiveObjectCompositeResult::Companion(tile) => {
+                self.terrain_band[terrain_index] = tile;
+                self.visibility_grid[grid_index] = VISIBILITY_USE_COMPANION;
+            }
+            ActiveObjectCompositeResult::Direct(tile) => {
+                self.visibility_grid[grid_index] = tile;
+            }
+            ActiveObjectCompositeResult::PreviousRowDirectAndCompanion {
+                previous_marker,
+                tile,
+            } => {
+                if row > 0 {
+                    let previous_grid_index = visibility_grid_active_index(row - 1, col).unwrap();
+                    self.visibility_grid[previous_grid_index] = previous_marker;
+                }
+                self.terrain_band[terrain_index] = tile;
+                self.visibility_grid[grid_index] = VISIBILITY_USE_COMPANION;
+            }
+        }
     }
 
     fn prepare_top_down_render_grid(
@@ -1507,45 +1743,66 @@ impl PlayState {
         else {
             return;
         };
-        let mut considered = vec![false; TOWN_GRID_BYTES];
-        considered[center] = true;
         mask[center] = true;
-        let mut queue = std::collections::VecDeque::from([(source_x, source_y)]);
-        let light_threshold =
-            (LOCAL_LIGHT_SOURCE_RADIUS as u32).saturating_mul(LOCAL_LIGHT_SOURCE_RADIUS as u32);
 
-        while let Some((cx, cy)) = queue.pop_front() {
-            for (dx, dy) in VISIBILITY_CARVE_NEIGHBOR_ORDER {
-                let x = cx + isize::from(dx);
-                let y = cy + isize::from(dy);
-                let Some(index) =
-                    surface_local_light_mask_index(origin_x, origin_y, x, y, wrap_world)
-                else {
-                    continue;
-                };
-                if considered[index] {
+        let radius = LOCAL_LIGHT_SOURCE_RADIUS as isize;
+        for target_y in (source_y - radius)..=(source_y + radius) {
+            for target_x in (source_x - radius)..=(source_x + radius) {
+                if target_x == source_x && target_y == source_y {
                     continue;
                 }
-                considered[index] = true;
-
-                let Some(tile) = self.surface_visibility_tile(x, y, wrap_world) else {
-                    continue;
-                };
-                let squared_distance =
-                    surface_local_light_squared_distance(source_x, source_y, x, y, wrap_world);
-                if !visibility_in_radius(squared_distance, light_threshold) {
+                if surface_local_light_chebyshev_distance(
+                    source_x, source_y, target_x, target_y, wrap_world,
+                ) > LOCAL_LIGHT_SOURCE_RADIUS
+                {
                     continue;
                 }
+                self.carve_surface_local_light_line(
+                    source_x, source_y, target_x, target_y, origin_x, origin_y, wrap_world, mask,
+                );
+            }
+        }
+    }
 
-                mask[index] = true;
-                let propagates = if wrap_world {
-                    surface_tile_propagates_visibility(tile, squared_distance)
-                } else {
-                    town_tile_propagates_visibility(tile, squared_distance)
-                };
-                if propagates {
-                    queue.push_back((x, y));
-                }
+    fn carve_surface_local_light_line(
+        &self,
+        source_x: isize,
+        source_y: isize,
+        target_x: isize,
+        target_y: isize,
+        origin_x: isize,
+        origin_y: isize,
+        wrap_world: bool,
+        mask: &mut [bool],
+    ) {
+        let dx = target_x - source_x;
+        let dy = target_y - source_y;
+        let steps = dx.unsigned_abs().max(dy.unsigned_abs()) as isize;
+        if steps == 0 {
+            return;
+        }
+
+        for step in 1..=steps {
+            let x = source_x + rounded_div(dx * step, steps);
+            let y = source_y + rounded_div(dy * step, steps);
+            let Some(index) = surface_local_light_mask_index(origin_x, origin_y, x, y, wrap_world)
+            else {
+                return;
+            };
+            let Some(tile) = self.surface_visibility_tile(x, y, wrap_world) else {
+                return;
+            };
+
+            mask[index] = true;
+            let squared_distance =
+                surface_local_light_squared_distance(source_x, source_y, x, y, wrap_world);
+            let propagates = if wrap_world {
+                surface_tile_propagates_visibility(tile, squared_distance)
+            } else {
+                town_tile_propagates_visibility(tile, squared_distance)
+            };
+            if !propagates {
+                return;
             }
         }
     }
@@ -1633,6 +1890,7 @@ impl PlayState {
             age_inn_registry_month(&mut self.inn_registry);
         }
         if self.clock.hour != previous_hour {
+            self.refresh_cached_moon_glyphs();
             self.apply_hourly_status_provision_pass();
         }
         self.decay_light_counters(effective_minutes);
@@ -1651,7 +1909,7 @@ impl PlayState {
         self.sync_player_object();
         if self.time_stop_counter != 0 {
             self.time_stop_counter = self.time_stop_counter.saturating_sub(1);
-        } else if !negate_time_active {
+        } else if !negate_time_active && !self.combat_active {
             self.advance_npc_schedules();
             let world_object_epilogue_runs = !matches!(self.area, Area::World { .. })
                 || self.timing_status.world_object_epilogue_runs(turn_before);
@@ -1660,7 +1918,7 @@ impl PlayState {
             }
         }
         self.age_active_effect();
-        if tick_doors {
+        if tick_doors && !self.combat_active {
             self.tick_door_tracker();
         }
         self.advance_animation_clock();
@@ -1727,12 +1985,21 @@ impl PlayState {
 
     pub fn apply_hourly_starvation_tick(&mut self) -> Option<String> {
         let mut reports = Vec::new();
+        // `cleak/u5-spec#50`: per-slot starvation damage is the PRNG
+        // roll `prng_range(1, 8)`. Roll independently for each
+        // eligible slot in iteration order so the corrected spec's
+        // "independent per slot" rule holds.
         for member in &mut self.party {
             if !member.living() {
                 continue;
             }
             let slot = member.slot;
-            let applied = member.apply_damage(FIRST_PLAYABLE_HOURLY_STARVATION_DAMAGE);
+            let roll = u5_prng_range_u16(
+                &mut self.prng_state,
+                HOURLY_STARVATION_DAMAGE_MIN,
+                HOURLY_STARVATION_DAMAGE_MAX,
+            ) as u8;
+            let applied = member.apply_damage(roll);
             reports.push(format!(
                 "party slot {slot} took {applied} HP ({} HP left)",
                 member.hp
@@ -2421,9 +2688,7 @@ fn dungeon_palette_index(depth: TileGraphicsDepth, ega_index: u8) -> u8 {
 fn dungeon_first_person_blocks(tile: u8) -> bool {
     matches!(
         dungeon_cell_class_of(tile),
-        DungeonCellClass::RoomHelperState
-            | DungeonCellClass::Wall
-            | DungeonCellClass::HeavyDoorOrRoomTrigger
+        DungeonCellClass::RoomHelperState | DungeonCellClass::Wall | DungeonCellClass::RoomTrigger
     )
 }
 
@@ -2436,7 +2701,7 @@ fn dungeon_first_person_feature_colour(tile: u8) -> Option<u8> {
         DungeonCellClass::Fountain => 11,
         DungeonCellClass::PitTrap => 8,
         DungeonCellClass::EnergyField | DungeonCellClass::EnergyFieldSecondary => 12,
-        DungeonCellClass::RoomHelperState | DungeonCellClass::HeavyDoorOrRoomTrigger => 14,
+        DungeonCellClass::RoomHelperState | DungeonCellClass::RoomTrigger => 14,
         DungeonCellClass::Passage | DungeonCellClass::PassageVariant | DungeonCellClass::Wall => {
             return None;
         }
@@ -2488,7 +2753,7 @@ fn draw_dungeon_side_cell(
         DungeonCellClass::Passage | DungeonCellClass::PassageVariant => {
             draw_side_flat_marker(viewport, outer, inner, side, dim);
         }
-        DungeonCellClass::RoomHelperState | DungeonCellClass::HeavyDoorOrRoomTrigger => {
+        DungeonCellClass::RoomHelperState | DungeonCellClass::RoomTrigger => {
             draw_side_wall(viewport, outer, inner, side, wall_fill, bright);
             draw_side_door_marker(viewport, outer, inner, side, bright);
         }
@@ -3029,6 +3294,14 @@ pub fn visibility_view_index(
     Some(row as usize * side as usize + col as usize)
 }
 
+pub fn visibility_marker_for_viewport_cell(col: usize, row: usize) -> u8 {
+    if fog_refine_inside_clear_core(col as u8, row as u8) {
+        VISIBILITY_CLEAR
+    } else {
+        VISIBILITY_DIM_PERIPHERY
+    }
+}
+
 pub fn visibility_squared_distance(px: isize, py: isize, x: isize, y: isize) -> u32 {
     let dx = (x - px).unsigned_abs() as u32;
     let dy = (y - py).unsigned_abs() as u32;
@@ -3084,6 +3357,27 @@ fn surface_local_light_squared_distance(
     let dx = i32::from(wrapped_world_axis_delta(sx, tx)).unsigned_abs();
     let dy = i32::from(wrapped_world_axis_delta(sy, ty)).unsigned_abs();
     dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
+}
+
+fn surface_local_light_chebyshev_distance(
+    source_x: isize,
+    source_y: isize,
+    x: isize,
+    y: isize,
+    wrap_world: bool,
+) -> usize {
+    if !wrap_world {
+        let dx = (x - source_x).unsigned_abs();
+        let dy = (y - source_y).unsigned_abs();
+        return dx.max(dy);
+    }
+    let sx = source_x.rem_euclid(WORLD_SIDE as isize) as usize;
+    let sy = source_y.rem_euclid(WORLD_SIDE as isize) as usize;
+    let tx = x.rem_euclid(WORLD_SIDE as isize) as usize;
+    let ty = y.rem_euclid(WORLD_SIDE as isize) as usize;
+    let dx = i32::from(wrapped_world_axis_delta(sx, tx)).unsigned_abs() as usize;
+    let dy = i32::from(wrapped_world_axis_delta(sy, ty)).unsigned_abs() as usize;
+    dx.max(dy)
 }
 
 pub fn surface_tile_propagates_visibility(tile: u8, squared_distance: u32) -> bool {

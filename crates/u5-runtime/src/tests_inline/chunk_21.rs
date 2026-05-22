@@ -1,15 +1,22 @@
     #[test]
-    fn dungeon_get_refuses_door_or_unrelated_cell_without_turn() {
+    fn dungeon_get_refuses_chest_room_trigger_or_unrelated_cell_without_turn() {
         let scene = DungeonScene::new(33).unwrap();
         let mut grid = open_dungeon_record();
-        grid[dungeon_cell_index(0, 1, 1)] = 0xf2;
+        grid[dungeon_cell_index(0, 1, 1)] = 0x42;
         let mut state = dungeon_state(grid, 0, 1, 1);
 
         assert_eq!(state.get_dungeon_underfoot(scene, 0), MoveOutcome::Blocked);
 
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xf2);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x42);
         assert_eq!(state.turn, 0);
         assert_eq!(state.message, "Must open it first.");
+
+        state.grid[dungeon_cell_index(0, 1, 1)] = 0xf2;
+        assert_eq!(state.get_dungeon_underfoot(scene, 0), MoveOutcome::Blocked);
+
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xf2);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Nothing to get here.");
 
         state.grid[dungeon_cell_index(0, 1, 1)] = 0x00;
         assert_eq!(state.get_dungeon_underfoot(scene, 0), MoveOutcome::Blocked);
@@ -40,11 +47,11 @@
 
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x00);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Nothing to open here.");
+        assert_eq!(state.message, "What?");
     }
 
     #[test]
-    fn dungeon_open_preserves_unresolved_heavy_door_subtype() {
+    fn dungeon_open_preserves_room_trigger_without_turn() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 1, 1)] = 0xf2;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -53,11 +60,24 @@
 
         assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xf2);
         assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Nothing to open here.");
+        assert_eq!(state.message, "What?");
     }
 
     #[test]
-    fn dungeon_jimmy_preserves_unresolved_heavy_door_subtype_without_turn() {
+    fn dungeon_open_underfoot_passage_chest_variant_reports_chest_opened() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 1, 1)] = 0x70;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+
+        assert_eq!(state.open_facing(), MoveOutcome::ContainerOpened);
+
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x70);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Chest opened");
+    }
+
+    #[test]
+    fn dungeon_jimmy_preserves_room_trigger_without_turn() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 1, 1)] = 0xf2;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -76,13 +96,44 @@
     }
 
     #[test]
-    fn dungeon_door_sidecar_blocks_closed_door_without_room_trigger() {
+    fn dungeon_e_cells_are_visual_walls_not_openable_doors() {
+        let mut open_grid = open_dungeon_record();
+        open_grid[dungeon_cell_index(0, 1, 1)] = 0xe2;
+        let mut open_state = dungeon_state(open_grid, 0, 1, 1);
+
+        assert_eq!(open_state.open_facing(), MoveOutcome::Blocked);
+        assert_eq!(open_state.grid[dungeon_cell_index(0, 1, 1)], 0xe2);
+        assert_eq!(open_state.turn, 0);
+        assert_eq!(open_state.message, "What?");
+
+        let mut jimmy_grid = open_dungeon_record();
+        jimmy_grid[dungeon_cell_index(0, 1, 1)] = 0xe2;
+        let mut jimmy_state = dungeon_state(jimmy_grid, 0, 1, 1);
+        assert_eq!(
+            jimmy_state
+                .jimmy_facing_with_game_dir_and_member(None, Some(0))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(jimmy_state.grid[dungeon_cell_index(0, 1, 1)], 0xe2);
+        assert_eq!(jimmy_state.turn, 0);
+        assert_eq!(jimmy_state.keys, DEFAULT_KEY_STOCK);
+        assert_eq!(jimmy_state.message, "No lock!");
+
+        let mut step_grid = open_dungeon_record();
+        step_grid[dungeon_cell_index(0, 2, 1)] = 0xe2;
+        let mut step_state = dungeon_state(step_grid, 0, 1, 1);
+        assert_eq!(step_state.step(Direction::East), MoveOutcome::Blocked);
+        assert_eq!((step_state.player.x, step_state.player.y), (1, 1));
+        assert_eq!(step_state.turn, 0);
+        assert_eq!(step_state.message, "Blocked!");
+    }
+
+    #[test]
+    fn stale_dungeon_door_sidecar_file_does_not_block_f_room_trigger() {
         let dir = debug_game_dir();
-        fs::write(
-            dir.join(DUNGEON_DOOR_TABLE_FILE),
-            "DUNGEON:0 0 2 1 0x70 0xF2\n",
-        )
-        .unwrap();
+        fs::write(dir.join("dungeon_doors.tsv"), "DUNGEON:0 0 2 1 0x70 0xF2\n")
+            .unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 2, 1)] = 0xF2;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -91,24 +142,22 @@
             state
                 .step_with_game_dir(Direction::East, Some(&dir))
                 .unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Moved
         );
 
-        assert_eq!((state.player.x, state.player.y), (1, 1));
-        assert_eq!(state.turn, 0);
-        assert_eq!(state.message, "Blocked!");
+        assert_eq!((state.player.x, state.player.y), (2, 1));
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xA2);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("room trigger slot 2"));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn dungeon_open_uses_sidecar_to_toggle_heavy_door_without_autoclose() {
+    fn dungeon_open_ignores_stale_f_room_trigger_sidecar_without_turn() {
         let dir = debug_game_dir();
         let scene = DungeonScene::new(33).unwrap();
-        fs::write(
-            dir.join(DUNGEON_DOOR_TABLE_FILE),
-            "DUNGEON:0 0 1 1 0x70 0xF2\n",
-        )
-        .unwrap();
+        fs::write(dir.join("dungeon_doors.tsv"), "DUNGEON:0 0 1 1 0x70 0xF2\n")
+            .unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 1, 1)] = 0xF2;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -116,27 +165,24 @@
 
         assert_eq!(
             state.open_facing_with_game_dir(Some(&dir)).unwrap(),
-            MoveOutcome::DoorOpened
+            MoveOutcome::Blocked
         );
 
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x70);
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xF2);
+        assert_eq!(state.turn, 0);
         assert_eq!(state.door_tracker, None);
-        assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Opened!");
+        assert!(!state.visibility_dirty);
+        assert_eq!(state.message, "What?");
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn dungeon_jimmy_uses_sidecar_to_toggle_heavy_door_without_autoclose() {
+    fn dungeon_jimmy_key_on_f_room_trigger_ignores_stale_sidecar() {
         let dir = debug_game_dir();
         let scene = DungeonScene::new(33).unwrap();
-        fs::write(
-            dir.join(DUNGEON_DOOR_TABLE_FILE),
-            "DUNGEON:0 0 1 1 0x70 0xF2\n",
-        )
-        .unwrap();
+        fs::write(dir.join("dungeon_doors.tsv"), "DUNGEON:0 0 1 1 0x70 0xF2\n")
+            .unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 1, 1)] = 0xF2;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -144,24 +190,21 @@
 
         assert!(state.handle_dungeon_key('J', &dir).unwrap());
 
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0x70);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xA2);
         assert_eq!(state.turn, 1);
         assert_eq!(state.keys, DEFAULT_KEY_STOCK);
         assert_eq!(state.door_tracker, None);
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Unlocked!");
+        assert!(state.message.contains("room trigger slot 2"));
         assert_eq!(state.area, Area::Dungeon { scene, level: 0 });
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn dungeon_sidecar_open_door_cell_can_receive_commands_without_room_trigger() {
+    fn stale_sidecar_open_f_cell_key_runs_underfoot_trigger_first() {
         let dir = debug_game_dir();
-        fs::write(
-            dir.join(DUNGEON_DOOR_TABLE_FILE),
-            "DUNGEON:0 0 1 1 0xF1 0xF2\n",
-        )
-        .unwrap();
+        fs::write(dir.join("dungeon_doors.tsv"), "DUNGEON:0 0 1 1 0xF1 0xF2\n")
+            .unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 1, 1)] = 0xF1;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -169,21 +212,17 @@
 
         assert!(state.handle_dungeon_key('J', &dir).unwrap());
 
-        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xF1);
+        assert_eq!(state.grid[dungeon_cell_index(0, 1, 1)], 0xA1);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "It's open!");
-        assert!(!state.message.contains("room trigger"));
+        assert!(state.message.contains("room trigger slot 1"));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn dungeon_sidecar_open_door_cell_is_walkable_even_with_f_nibble() {
+    fn stale_sidecar_open_f_cell_still_enters_room_trigger() {
         let dir = debug_game_dir();
-        fs::write(
-            dir.join(DUNGEON_DOOR_TABLE_FILE),
-            "DUNGEON:0 0 2 1 0xF1 0xF2\n",
-        )
-        .unwrap();
+        fs::write(dir.join("dungeon_doors.tsv"), "DUNGEON:0 0 2 1 0xF1 0xF2\n")
+            .unwrap();
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 2, 1)] = 0xF1;
         let mut state = dungeon_state(grid, 0, 1, 1);
@@ -196,8 +235,9 @@
         );
 
         assert_eq!((state.player.x, state.player.y), (2, 1));
+        assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xA1);
         assert_eq!(state.turn, 1);
-        assert!(state.message.contains("open dungeon door"));
+        assert!(state.message.contains("room trigger slot 1"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -221,6 +261,75 @@
         assert!(state.message.contains("actor tile 192"));
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::default());
+    }
+
+    #[test]
+    fn town_look_routes_sign_object_classes_through_sign_records() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(LOOK2_DAT_FILE), look2_bytes(&[])).unwrap();
+        fs::write(
+            dir.join(SIGNS_DAT_FILE),
+            signs_dat_bytes_for_test(&[(17, 0, 1, 2, b"Posted notice")]),
+        )
+        .unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xa0,
+            tile: 0xa0,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.look_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Observed
+        );
+
+        assert_eq!(state.message, "Sign:\nPosted notice");
+        assert_eq!(state.turn, 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_look_routes_death_vision_object_before_generic_object_description() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.party_intelligence[0] = 30;
+        state.active_objects.push(ActiveObject {
+            type_byte: DEATH_VISION_OBJECT_CLASS,
+            tile: DEATH_VISION_OBJECT_CLASS,
+            x: 2,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(state.look_facing(), MoveOutcome::Observed);
+
+        assert_eq!(
+            state.active_direction_prompt.as_ref().map(|session| session.kind),
+            Some(DirectionPromptKind::SurfaceDeathVision { x: 2, y: 1 })
+        );
+        assert!(state.message.contains("death-vision member"));
+        assert!(!state.message.contains("actor tile"));
+        assert_eq!(state.turn, 0);
+
+        let outcome = state
+            .step_active_direction_prompt('1', "", Path::new(""))
+            .unwrap();
+
+        assert_eq!(outcome, Some(MoveOutcome::Observed));
+        assert!(state.active_direction_prompt.is_none());
+        assert!(state.message.contains("Death vision"));
+        assert!(!state.message.contains("actor tile"));
+        assert_eq!(state.turn, 0);
     }
 
     #[test]
@@ -404,6 +513,10 @@
         let mut grid = open_grid();
         grid[32 + 2] = 0xa1;
         let mut state = test_state(grid, 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(0x16).unwrap(),
+            floor: 0,
+        };
         state.player.facing = Direction::East;
         state.gold = 2;
         assert_eq!(state.look_facing(), MoveOutcome::Observed);
@@ -473,10 +586,35 @@
     }
 
     #[test]
-    fn town_surface_wishing_well_car_wish_spawns_boardable_horse() {
+    fn town_surface_wishing_well_rejects_accepted_wish_outside_grant_scenes() {
         let mut grid = open_grid();
         grid[32 + 2] = 0xa1;
         let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        state.gold = 2;
+        assert_eq!(state.look_facing(), MoveOutcome::Observed);
+        assert_eq!(state.step_active_wishing_well('Y', ""), None);
+
+        assert_eq!(
+            state.step_active_wishing_well('H', "orse"),
+            Some(MoveOutcome::Observed)
+        );
+
+        assert_eq!(state.gold, 1);
+        assert_eq!(state.message, "Wishing well: no effect.");
+        assert!(state.boardable_vehicle_slot_at(2, 1).is_none());
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn town_surface_wishing_well_car_wish_has_no_native_grant_until_published() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xa1;
+        let mut state = test_state(grid, 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(0x1f).unwrap(),
+            floor: 0,
+        };
         state.player.facing = Direction::East;
         state.gold = 2;
         assert_eq!(state.look_facing(), MoveOutcome::Observed);
@@ -487,18 +625,12 @@
             Some(MoveOutcome::Observed)
         );
 
-        assert_eq!(state.message, "Wishing well: a horse appears.");
-        assert_eq!(
-            state.boardable_vehicle_slot_at(2, 1).map(|candidate| candidate.transport),
-            Some(TransportState::Horse {
-                type_byte: HORSE_MOUNTED_FIRST,
-                tile: FIRST_PLAYABLE_HORSE_TILE,
-            })
-        );
+        assert_eq!(state.message, "Wishing well: no effect.");
+        assert!(state.boardable_vehicle_slot_at(2, 1).is_none());
     }
 
     #[test]
-    fn town_surface_fountain_drink_refreshes_without_mutating_member() {
+    fn town_surface_fountain_drink_refreshes_living_member_without_mutating() {
         let mut grid = open_grid();
         grid[32 + 2] = 0xd9;
         let mut state = test_state(grid, 1, 1);
@@ -1314,9 +1446,18 @@
         );
 
         assert_eq!(state.climbing_gear, 1);
-        assert_eq!(state.special_items[SPECIAL_ITEM_SEXTANT_INDEX], 1);
-        assert_eq!(state.special_items[SPECIAL_ITEM_SPYGLASS_INDEX], 1);
-        assert_eq!(state.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX], 1);
+        assert_eq!(
+            state.special_items[SPECIAL_ITEM_SEXTANT_INDEX],
+            SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE
+        );
+        assert_eq!(
+            state.special_items[SPECIAL_ITEM_SPYGLASS_INDEX],
+            SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE
+        );
+        assert_eq!(
+            state.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX],
+            SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE
+        );
         assert_eq!(state.message, "Talked to Ada: Take this");
     }
 
@@ -1363,9 +1504,18 @@
             state.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX],
             PARTY_BYTE_STOCK_CAP
         );
-        assert_eq!(state.special_items[SPECIAL_ITEM_SEXTANT_INDEX], 1);
-        assert_eq!(state.special_items[SPECIAL_ITEM_SPYGLASS_INDEX], 1);
-        assert_eq!(state.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX], 1);
+        assert_eq!(
+            state.special_items[SPECIAL_ITEM_SEXTANT_INDEX],
+            SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE
+        );
+        assert_eq!(
+            state.special_items[SPECIAL_ITEM_SPYGLASS_INDEX],
+            SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE
+        );
+        assert_eq!(
+            state.special_items[SPECIAL_ITEM_BLACK_BADGE_INDEX],
+            SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE
+        );
     }
 
     #[test]
@@ -1735,6 +1885,10 @@
     fn town_talk_reports_public_shop_trigger_dispatch_family() {
         let dialogue = HashMap::new();
         let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(21).unwrap(),
+            floor: 0,
+        };
         state.player.facing = Direction::East;
         state.load_scheduled_npcs(&[
             NpcSlot {
@@ -1758,7 +1912,7 @@
             MoveOutcome::Talked
         );
 
-        assert!(state.message.contains("Shipwright"));
+        assert!(state.message.contains("The Oaken Oar"));
         assert!(state.active_shop.is_some());
         assert!(!state.message.contains("out of scope"));
         assert_eq!(state.turn, 1);
@@ -1769,6 +1923,10 @@
         let dialogue = HashMap::new();
         let raw = HashMap::new();
         let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(21).unwrap(),
+            floor: 0,
+        };
         state.player.facing = Direction::East;
         state.load_scheduled_npcs(&[
             NpcSlot {
@@ -1796,6 +1954,49 @@
         assert!(state.message.contains("now open"));
         assert!(state.active_shop.is_some());
         assert_eq!(state.turn, 1);
+    }
+
+    #[test]
+    fn town_raw_tlk_status_tile_filter_runs_before_shop_dispatch() {
+        let dialogue = HashMap::new();
+        let raw = HashMap::new();
+
+        for (status_tile, expected) in [
+            (TALK_STATUS_TILE_SLEEPING, TALK_SLEEPING_MESSAGE),
+            (TALK_STATUS_TILE_PRAYING, TALK_NO_RESPONSE_MESSAGE),
+        ] {
+            let mut state = test_state(open_grid(), 1, 1);
+            state.player.facing = Direction::East;
+            state.load_scheduled_npcs(&[
+                NpcSlot {
+                    slot: 0,
+                    type_byte: 0,
+                    dialog_id: 0,
+                    schedule: [0; 16],
+                    name: None,
+                },
+                NpcSlot {
+                    slot: 1,
+                    type_byte: 1,
+                    dialog_id: 0x84,
+                    schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                    name: None,
+                },
+            ]);
+            let object_slot = state.npcs[0]
+                .active_object
+                .expect("scheduled NPC should link an active object");
+            state.active_objects[object_slot].type_byte = 1;
+            state.active_objects[object_slot].tile = status_tile;
+
+            assert_eq!(
+                state.talk_facing_with_dialogue_and_keyword_raw(&dialogue, &raw, None),
+                MoveOutcome::Blocked
+            );
+            assert_eq!(state.message, expected);
+            assert!(state.active_shop.is_none());
+            assert_eq!(state.turn, 0);
+        }
     }
 
     #[test]
@@ -1948,7 +2149,10 @@
         let (text, ended) = state.submit_active_conversation_keyword("gift");
         assert_eq!(text, "Take this gift");
         assert!(!ended);
-        assert_eq!(state.special_items[SPECIAL_ITEM_SEXTANT_INDEX], 1);
+        assert_eq!(
+            state.special_items[SPECIAL_ITEM_SEXTANT_INDEX],
+            SPECIAL_ITEM_TLK_CARRIED_FLAG_VALUE
+        );
     }
 
     #[test]
@@ -2489,8 +2693,8 @@
         assert_eq!(text, "Paid");
         assert!(!ended);
         assert_eq!(state.gold, 5);
-        // cleak/u5-spec#27: toll milestone karma is not applied until the
-        // public toll-progress counter and qualifying contexts are specified.
+        // This fixture does not pre-seed a toll-progress milestone boundary,
+        // so accepted payment debits gold without changing moral standing.
         assert_eq!(state.moral_standing, 40);
 
         let mut poor_state = state.clone();
@@ -2564,6 +2768,18 @@
         assert_eq!(state.message, "Talked to Maris: Marked");
         assert_eq!(state.conversation_signal_flags[5], 1);
         assert!(state.active_conversation.is_none());
+    }
+
+    #[test]
+    fn tlk_numeric_action_dispatch_increments_signal_slots_to_cap() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.conversation_signal_flags[5] = TLK_GENERIC_SIGNAL_CAP - 1;
+        state.conversation_signal_flags[6] = TLK_GENERIC_SIGNAL_CAP;
+
+        state.record_tlk_signal_flags(&[5, 5, 6, 64]);
+
+        assert_eq!(state.conversation_signal_flags[5], TLK_GENERIC_SIGNAL_CAP);
+        assert_eq!(state.conversation_signal_flags[6], TLK_GENERIC_SIGNAL_CAP);
     }
 
     #[test]
@@ -2654,19 +2870,20 @@
             floor: 0,
         };
         state.conversation_resource_signals[1] = 2;
+        state.conversation_signal_flags[12] = 1;
         state.record_tlk_signal_flags(&[3, 12]);
         let gold_before = state.gold;
 
         let first = state.run_final_conversation_cleanup().unwrap();
         assert!(first.contains("resource signal"));
         assert_eq!(state.conversation_resource_signals[1], 1);
-        assert_eq!(state.conversation_signal_flags[12], 1);
+        assert_eq!(state.conversation_signal_flags[12], 2);
         assert_eq!(state.gold, gold_before);
 
         state.conversation_resource_signals = [0; CONVERSATION_CLEANUP_RESOURCE_SIGNAL_COUNT];
         let second = state.run_final_conversation_cleanup().unwrap();
         assert!(second.contains("Conversation signal 12"));
-        assert_eq!(state.conversation_signal_flags[12], 0);
+        assert_eq!(state.conversation_signal_flags[12], 1);
         assert_eq!(state.conversation_signal_flags[3], 1);
         assert_eq!(state.gold, gold_before);
 
@@ -2722,6 +2939,10 @@
         // available while mounted.
         let dialogue = HashMap::new();
         let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(6).unwrap(),
+            floor: 0,
+        };
         state.player.facing = Direction::East;
         state.player.transport = TransportState::Horse {
             type_byte: FIRST_PLAYABLE_HORSE_TILE,
@@ -3051,7 +3272,7 @@
     }
 
     #[test]
-    fn game_dir_talk_requires_dictionary_for_tokenized_raw_tlk() {
+    fn game_dir_talk_uses_published_dictionary_for_tokenized_raw_tlk() {
         let dir = debug_game_dir();
         fs::write(dir.join("CASTLE.TLK"), tokenized_tlk_bytes_for_test()).unwrap();
         let mut state = test_state(open_grid(), 1, 1);
@@ -3067,20 +3288,23 @@
             },
         ]);
 
-        let err = state.talk_facing_with_game_dir(&dir).unwrap_err();
+        assert_eq!(
+            state.talk_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Talked
+        );
 
-        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.to_string().contains(COMMON_WORD_DICTIONARY_FILE));
+        assert!(state.message.contains("the"));
+        assert!(!state.message.contains("[w01]"));
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn game_dir_talk_expands_loaded_dictionary_token_without_placeholder() {
+    fn game_dir_talk_sidecar_dictionary_overrides_published_token() {
         let dir = debug_game_dir();
         fs::write(dir.join("CASTLE.TLK"), tokenized_tlk_bytes_for_test()).unwrap();
         fs::write(
             dir.join(COMMON_WORD_DICTIONARY_FILE),
-            complete_common_word_dictionary_text("the"),
+            complete_common_word_dictionary_text("custom"),
         )
         .unwrap();
         let mut state = test_state(open_grid(), 1, 1);
@@ -3101,7 +3325,7 @@
             MoveOutcome::Talked
         );
 
-        assert!(state.message.contains("the"));
+        assert!(state.message.contains("custom"));
         assert!(!state.message.contains("[w01]"));
         let _ = fs::remove_dir_all(dir);
     }
@@ -3222,6 +3446,10 @@
     fn end_to_end_innkeeper_session_through_input_dispatcher() {
         let dialogue = HashMap::new();
         let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(2).unwrap(),
+            floor: 0,
+        };
         state.player.facing = Direction::East;
         state.gold = 100;
         state.load_scheduled_npcs(&[
@@ -3258,7 +3486,7 @@
         state.active_shop = Some(ActiveShopSession::Innkeeper(
             InnkeeperState::ConfirmRest {
                 inn: Inn::TheWayfarerInn,
-                adjusted_room_rate: 2,
+                base_room_rate: 2,
                 total_price: 2,
             },
         ));
@@ -3358,16 +3586,55 @@
         state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::default()));
 
         handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
-        assert!(state.message.contains("20 gold"));
+        assert!(state.message.contains("2 gold"));
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
-        assert_eq!(state.gold, 80);
+        assert_eq!(state.gold, 98);
         assert!(state.inn_registry.is_empty());
         assert_eq!(state.party.len(), 2);
         assert_eq!(state.party[1].status, b'D');
         assert_eq!(state.party[1].hp, 0);
         assert_eq!(state.party_names[1], *b"IOLO\0\0\0\0\0");
         assert!(state.message.contains("has died"));
+    }
+
+    #[test]
+    fn end_to_end_innkeeper_pickup_bill_uses_stay_units_not_leave_deposit() {
+        use crate::shop_runtime::InnkeeperState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 100;
+        state.party_intelligence[0] = 25;
+        state.inn_registry.push(InnGuestRecord {
+            scene_marker: 0x11,
+            name: *b"IOLO\0\0\0\0\0",
+            member: PartyMember {
+                slot: 4,
+                class_byte: b'B',
+                status: b'G',
+                climb_stat: 7,
+                mana: 3,
+                hp: 12,
+                max_hp: 28,
+                level: 3,
+            },
+            strength: 17,
+            intelligence: 19,
+            experience: 700,
+            equipment: [1, 2, 3, 4, 5, 6],
+            stay_counter: 3,
+        });
+        state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::default()));
+
+        handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
+        assert!(state.message.contains("6 gold"));
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 94);
+        assert!(state.inn_registry.is_empty());
+        assert_eq!(state.party.len(), 2);
+        assert!(state.message.contains("Picked up companion 2 for 6 gold"));
     }
 
     #[test]
@@ -3405,7 +3672,7 @@
         )));
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap();
         assert!(state.message.contains("15 gold each"));
         handle_play_key_input(&mut state, '5', "", Path::new("")).unwrap();
 
@@ -3427,7 +3694,7 @@
         )));
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap();
         handle_play_key_input(&mut state, '1', "2", Path::new("")).unwrap();
 
         assert_eq!(state.gold, 820);
@@ -3535,7 +3802,7 @@
         )));
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
 
         assert_eq!(state.gold, 78);
         assert_eq!(state.prng_state, expected_prng_state);
@@ -3556,7 +3823,7 @@
         )));
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
 
         assert_eq!(state.gold, 97);
         assert_eq!(state.prng_state, 0x1234);
@@ -3644,32 +3911,491 @@
     }
 
     #[test]
-    fn end_to_end_sage_rumour_quotes_confirms_and_debits_gold() {
+    fn stationary_display_sidecar_parser_accepts_clean_scene_rows() {
+        let entries = parse_stationary_display_entries(
+            "CASTLE:0 0 1 2 equipment:26 1 75 0x05\nCASTLE:0 0 2 2 gems 3 12\n",
+        )
+        .unwrap();
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].scene, Scene::new(17).unwrap());
+        assert_eq!(entries[0].floor, 0);
+        assert_eq!((entries[0].x, entries[0].y), (Some(1), Some(2)));
+        assert_eq!(entries[0].marker_tile, None);
+        assert_eq!(entries[0].marker_ordinal, None);
+        assert_eq!(
+            entries[0].grant,
+            ObjectPickupGrant {
+                kind: ObjectPickupKind::Equipment(EQUIPMENT_ID_BOW),
+                amount: 1,
+            }
+        );
+        assert_eq!(entries[0].price, 75);
+        assert_eq!(entries[0].expected_tile, Some(0x05));
+        assert_eq!(
+            entries[1].grant,
+            ObjectPickupGrant {
+                kind: ObjectPickupKind::Gems,
+                amount: 3,
+            }
+        );
+    }
+
+    #[test]
+    fn stationary_display_sidecar_parser_accepts_marker_ordinal_rows() {
+        let entries = parse_stationary_display_entries(
+            "CASTLE:0 0 marker:0x05 1 equipment:26 1 75\n",
+        )
+        .unwrap();
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].scene, Scene::new(17).unwrap());
+        assert_eq!(entries[0].floor, 0);
+        assert_eq!(entries[0].x, None);
+        assert_eq!(entries[0].y, None);
+        assert_eq!(entries[0].marker_tile, Some(0x05));
+        assert_eq!(entries[0].marker_ordinal, Some(1));
+        assert_eq!(
+            entries[0].grant,
+            ObjectPickupGrant {
+                kind: ObjectPickupKind::Equipment(EQUIPMENT_ID_BOW),
+                amount: 1,
+            }
+        );
+        assert_eq!(entries[0].price, 75);
+    }
+
+    #[test]
+    fn talk_stationary_display_entry_opens_from_adjacent_published_marker() {
+        use crate::shop_session::ActiveShopSession;
+
+        let dialogue = HashMap::new();
+        let raw = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(21).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.gold = 100;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x84,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        state.grid[2 * 32 + 1] = 0x05;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x05,
+            tile: 0x05,
+            x: 1,
+            y: 2,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        let display_slot = state.active_objects.len() - 1;
+        let entries = [StationaryDisplayEntry {
+            scene: Scene::new(21).unwrap(),
+            floor: 0,
+            x: Some(1),
+            y: Some(2),
+            marker_tile: None,
+            marker_ordinal: None,
+            grant: ObjectPickupGrant {
+                kind: ObjectPickupKind::Equipment(EQUIPMENT_ID_BOW),
+                amount: 1,
+            },
+            price: 75,
+            expected_tile: Some(0x05),
+        }];
+
+        assert_eq!(
+            state.talk_direction_with_dialogue_and_keyword_raw_and_stationary_displays(
+                Direction::East,
+                &dialogue,
+                &raw,
+                None,
+                Some(&entries),
+            ),
+            MoveOutcome::Talked
+        );
+
+        assert!(matches!(
+            state.active_shop,
+            Some(ActiveShopSession::StationaryDisplay(_))
+        ));
+        assert!(state.message.contains("Shop Display is now open"));
+        assert_eq!(state.turn, 1);
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 25);
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
+        assert!(state.active_objects[display_slot].is_empty());
+        assert!(state.active_shop.is_none());
+    }
+
+    #[test]
+    fn talk_stationary_display_entry_can_select_marker_ordinal_without_coordinates() {
+        use crate::shop_session::ActiveShopSession;
+
+        let dialogue = HashMap::new();
+        let raw = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(21).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.gold = 100;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x84,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x44,
+            tile: 0x44,
+            x: 1,
+            y: 0,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x05,
+            tile: 0x05,
+            x: 1,
+            y: 2,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        let display_slot = state.active_objects.len() - 1;
+        let entries = [StationaryDisplayEntry {
+            scene: Scene::new(21).unwrap(),
+            floor: 0,
+            x: None,
+            y: None,
+            marker_tile: Some(0x05),
+            marker_ordinal: Some(1),
+            grant: ObjectPickupGrant {
+                kind: ObjectPickupKind::Equipment(EQUIPMENT_ID_BOW),
+                amount: 1,
+            },
+            price: 75,
+            expected_tile: None,
+        }];
+
+        assert_eq!(
+            state.talk_direction_with_dialogue_and_keyword_raw_and_stationary_displays(
+                Direction::East,
+                &dialogue,
+                &raw,
+                None,
+                Some(&entries),
+            ),
+            MoveOutcome::Talked
+        );
+
+        assert!(matches!(
+            state.active_shop,
+            Some(ActiveShopSession::StationaryDisplay(_))
+        ));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
+        assert!(state.active_objects[display_slot].is_empty());
+        assert!(!state.active_objects[display_slot - 1].is_empty());
+    }
+
+    #[test]
+    fn talk_stationary_display_marker_ordinal_counts_scene_markers_not_only_adjacent() {
+        use crate::shop_session::ActiveShopSession;
+
+        let dialogue = HashMap::new();
+        let raw = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(21).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.gold = 100;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x84,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x44,
+            tile: 0x44,
+            x: 10,
+            y: 10,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x05,
+            tile: 0x05,
+            x: 1,
+            y: 2,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        let display_slot = state.active_objects.len() - 1;
+        let entries = [StationaryDisplayEntry {
+            scene: Scene::new(21).unwrap(),
+            floor: 0,
+            x: None,
+            y: None,
+            marker_tile: Some(0x05),
+            marker_ordinal: Some(1),
+            grant: ObjectPickupGrant {
+                kind: ObjectPickupKind::Equipment(EQUIPMENT_ID_BOW),
+                amount: 1,
+            },
+            price: 75,
+            expected_tile: None,
+        }];
+
+        assert_eq!(
+            state.talk_direction_with_dialogue_and_keyword_raw_and_stationary_displays(
+                Direction::East,
+                &dialogue,
+                &raw,
+                None,
+                Some(&entries),
+            ),
+            MoveOutcome::Talked
+        );
+
+        assert!(matches!(
+            state.active_shop,
+            Some(ActiveShopSession::StationaryDisplay(_))
+        ));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
+        assert!(state.active_objects[display_slot].is_empty());
+        assert!(!state.active_objects[display_slot - 1].is_empty());
+    }
+
+    #[test]
+    fn talk_stationary_display_marker_without_published_row_blocks_without_turn() {
+        let dialogue = HashMap::new();
+        let raw = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(21).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x84,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+        state.grid[2 * 32 + 1] = 0x05;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x05,
+            tile: 0x05,
+            x: 1,
+            y: 2,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(
+            state.talk_direction_with_dialogue_and_keyword_raw_and_stationary_displays(
+                Direction::East,
+                &dialogue,
+                &raw,
+                None,
+                Some(&[]),
+            ),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.message, "No shop here.");
+        assert_eq!(state.turn, 0);
+        assert!(state.active_shop.is_none());
+    }
+
+    #[test]
+    fn end_to_end_sage_rumour_renders_without_confirm_or_debit() {
         use crate::shop_runtime::SageState;
         use crate::shop_session::ActiveShopSession;
 
-        static TOPICS: [SageTopic; 1] = [SageTopic {
-            topic: "codex",
-            subject: "the Codex",
-            destination: "the Underworld",
-            fee: 17,
-            template: SageRumourTemplate::SeekSubjectInDestination,
-        }];
+        static TOPICS: SageRumourTable = [
+            Some(SageRumourEntry {
+                keyword: "codex",
+                subject: "the Codex",
+                destination: "the Underworld",
+                record_id: SHOPPE_RECORDS_SAGE_FIRST,
+                record_template: "Seek ye & in *!",
+            }),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ];
 
         let mut state = test_state(open_grid(), 1, 1);
         state.gold = 20;
-        state.active_shop = Some(ActiveShopSession::Sage(SageState::for_topics(&TOPICS)));
+        state.active_shop = Some(ActiveShopSession::Sage(SageState::for_table(&TOPICS)));
 
         handle_play_key_input(&mut state, 'C', "ODEX", Path::new("")).unwrap();
         assert_eq!(state.gold, 20);
-        assert!(state.message.contains("17 gold"));
+        assert_eq!(state.message, "Seek ye the Codex in the Underworld!");
         assert!(state.active_shop.is_some());
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
-        assert_eq!(state.gold, 3);
-        assert_eq!(state.message, "Seek ye the Codex in the Underworld!");
+        assert_eq!(state.gold, 20);
+        assert_eq!(state.message, "That, I cannot help thee with.");
         assert!(state.active_shop.is_some());
+    }
+
+    #[test]
+    fn end_to_end_sage_rumour_prefers_shoppe_record_rendering() {
+        use crate::shop_runtime::SageState;
+        use crate::shop_session::ActiveShopSession;
+
+        static TOPICS: SageRumourTable = [
+            Some(SageRumourEntry {
+                keyword: "codex",
+                subject: "the Codex",
+                destination: "the Underworld",
+                record_id: SHOPPE_RECORDS_SAGE_FIRST,
+                record_template: "Fallback & in *!",
+            }),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ];
+
+        let dir = debug_game_dir();
+        let shoppe = shoppe_dat_with_record(
+            SHOPPE_RECORDS_SAGE_FIRST,
+            b"Asset says: seek & below *.",
+        );
+        std::fs::write(dir.join("SHOPPE.DAT"), shoppe).unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 20;
+        state.active_shop = Some(ActiveShopSession::Sage(SageState::for_table(&TOPICS)));
+
+        handle_play_key_input(&mut state, 'C', "ODEX", &dir).unwrap();
+        assert_eq!(state.gold, 20);
+        assert_eq!(
+            state.message,
+            "Asset says: seek the Codex below the Underworld."
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    fn shoppe_dat_with_record(record_id: usize, record: &[u8]) -> Vec<u8> {
+        assert!(record_id < SHOPPE_DAT_NONEMPTY_RECORDS);
+        let filler_record_count = SHOPPE_DAT_NONEMPTY_RECORDS - 2;
+        let record_zero_len =
+            SHOPPE_DAT_LEN - SHOPPE_DAT_RECORD_SLOTS - filler_record_count - record.len();
+        let mut bytes = Vec::with_capacity(SHOPPE_DAT_LEN);
+        bytes.extend(std::iter::repeat_n(b'a', record_zero_len));
+        bytes.push(0);
+        for id in 1..SHOPPE_DAT_NONEMPTY_RECORDS {
+            if id == record_id {
+                bytes.extend_from_slice(record);
+            } else {
+                bytes.push(b'x');
+            }
+            bytes.push(0);
+        }
+        for _ in SHOPPE_DAT_NONEMPTY_RECORDS..SHOPPE_DAT_RECORD_SLOTS {
+            bytes.push(0);
+        }
+        assert_eq!(bytes.len(), SHOPPE_DAT_LEN);
+        bytes
     }
 
     #[test]

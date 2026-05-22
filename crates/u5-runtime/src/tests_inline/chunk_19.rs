@@ -226,6 +226,30 @@
     }
 
     #[test]
+    fn parse_town_tile_attribute_entries_accepts_hex_values() {
+        let entries = parse_town_tile_attribute_entries("0x37 4 0x1C\n56 3 0x1C\n").unwrap();
+
+        assert_eq!(
+            entries,
+            vec![
+                TownTileAttributeEntry {
+                    tile: 0x37,
+                    tile_class: TOWN_POISON_GAS_TILE_CLASS,
+                    vehicle_byte: TOWN_POISON_GAS_VEHICLE_BYTE,
+                },
+                TownTileAttributeEntry {
+                    tile: 56,
+                    tile_class: 3,
+                    vehicle_byte: TOWN_POISON_GAS_VEHICLE_BYTE,
+                },
+            ]
+        );
+        assert!(parse_town_tile_attribute_entries("0x37 4\n").is_err());
+        assert!(parse_town_tile_attribute_entries("0x37 4 0x1C\n56 4 0x1C\n").is_ok());
+        assert!(parse_town_tile_attribute_entries("0x37 4 0x1C\n0x37 5 0x1C\n").is_err());
+    }
+
+    #[test]
     fn parse_town_exit_tile_entries_accepts_optional_tile_guard() {
         let entries = parse_town_exit_tile_entries("CASTLE:0 0 1 1 55\nCASTLE:0 1 2 1\n").unwrap();
 
@@ -286,46 +310,6 @@
         assert!(parse_town_lock_entries("CASTLE:0 0 1 1 95 96\n").is_err());
         assert!(parse_town_lock_entries("CASTLE:0 0 1 1 97 97\n").is_err());
         assert!(parse_town_lock_entries("CASTLE:0 0 1 1 97 96\nCASTLE:0 0 1 1 98 97\n").is_err());
-    }
-
-    #[test]
-    fn dungeon_door_table_accepts_open_cell_and_optional_closed_guard() {
-        let entries =
-            parse_dungeon_door_entries("DUNGEON:0 0 2 1 0x70 0xF2\nDUNGEON:1 7 3 4 0xF1\n")
-                .unwrap();
-
-        assert_eq!(
-            entries,
-            vec![
-                DungeonDoorEntry {
-                    scene: DungeonScene::from_record(0).unwrap(),
-                    level: 0,
-                    x: 2,
-                    y: 1,
-                    open_cell: 0x70,
-                    expected_cell: Some(0xF2),
-                },
-                DungeonDoorEntry {
-                    scene: DungeonScene::from_record(1).unwrap(),
-                    level: 7,
-                    x: 3,
-                    y: 4,
-                    open_cell: 0xF1,
-                    expected_cell: None,
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn dungeon_door_table_rejects_invalid_or_duplicate_rows() {
-        assert!(parse_dungeon_door_entries("CASTLE:0 0 2 1 0x70 0xF2\n").is_err());
-        assert!(parse_dungeon_door_entries("DUNGEON:0 8 2 1 0x70 0xF2\n").is_err());
-        assert!(parse_dungeon_door_entries("DUNGEON:0 0 8 1 0x70 0xF2\n").is_err());
-        assert!(parse_dungeon_door_entries("DUNGEON:0 0 2 1 0x70 0x70\n").is_err());
-        assert!(
-            parse_dungeon_door_entries("DUNGEON:0 0 2 1 0x70\nDUNGEON:0 0 2 1 0x71\n").is_err()
-        );
     }
 
     #[test]
@@ -467,7 +451,7 @@
     }
 
     #[test]
-    fn town_hole_up_heals_living_members_per_rested_hour() {
+    fn town_hole_up_advances_time_without_direct_recovery() {
         let dir = debug_game_dir();
         fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
         let mut grid = open_grid();
@@ -518,16 +502,16 @@
             u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS)
                 + u64::from(TOWN_REST_TICKS_PER_HOUR)
         );
-        assert_eq!(state.party[0].hp, 7);
-        assert_eq!(state.party[0].mana, 2);
+        assert_eq!(state.party[0].hp, 5);
+        assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.party[1].status, b'G');
-        assert_eq!(state.party[1].hp, 4);
-        assert_eq!(state.party[1].mana, 6);
+        assert_eq!(state.party[1].hp, 3);
+        assert_eq!(state.party[1].mana, 5);
         assert_eq!(state.party[2].status, b'D');
         assert_eq!(state.party[2].hp, 0);
         assert_eq!(state.party[2].mana, 0);
-        assert!(state.message.contains("recovered 3 HP"));
-        assert!(state.message.contains("and 3 MP"));
+        assert!(state.message.contains("recovered 0 HP"));
+        assert!(state.message.contains("and 0 MP"));
         assert!(state.message.contains("woke 2 asleep member(s)"));
         let _ = fs::remove_dir_all(dir);
     }
@@ -561,7 +545,7 @@
 
         assert_eq!(state.party[0].status, b'P');
         assert_eq!(state.party[0].hp, 3);
-        assert!(state.party[0].mana >= 90);
+        assert_eq!(state.party[0].mana, 90);
         assert!(state.message.contains("recovered 0 HP"));
         let _ = fs::remove_dir_all(dir);
     }
@@ -955,7 +939,7 @@
     }
 
     #[test]
-    fn rest_with_watch_heals_living_members_and_wakes_initial_sleepers() {
+    fn rest_with_watch_advances_time_and_wakes_initial_sleepers() {
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.clock = GameClock::new(8, 0).unwrap();
         state.prng_state = 0x0002;
@@ -1017,12 +1001,10 @@
             MoveOutcome::Rested
         );
 
-        assert!(state.party[0].hp > 5);
-        assert!(state.party[0].hp <= 10);
-        assert!(state.party[0].mana > 0);
-        assert!(state.party[1].hp > 3);
-        assert!(state.party[1].hp <= 10);
-        assert!(state.party[1].mana > 2);
+        assert_eq!(state.party[0].hp, 5);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.party[1].hp, 3);
+        assert_eq!(state.party[1].mana, 2);
         assert_eq!(state.party[1].status, b'G');
         assert_eq!(state.party[2].status, b'D');
         assert_eq!(state.party[2].hp, 0);
@@ -1032,9 +1014,9 @@
         assert_eq!(state.party[3].mana, 4);
         assert_eq!(state.party[4].status, b'P');
         assert_eq!(state.party[4].hp, 6);
-        assert_eq!(state.party[4].mana, REST_MANA_CAP);
-        assert!(state.message.contains("recovered "));
-        assert!(state.message.contains(" MP"));
+        assert_eq!(state.party[4].mana, 98);
+        assert!(state.message.contains("recovered 0 HP"));
+        assert!(state.message.contains("0 MP"));
         assert!(state.message.contains("woke 1 asleep member"));
     }
 
@@ -1061,7 +1043,7 @@
 
         assert_eq!(state.party[0].status, b'P');
         assert_eq!(state.party[0].hp, 2);
-        assert_eq!(state.party[0].mana, REST_MANA_CAP);
+        assert_eq!(state.party[0].mana, 98);
         assert!(state.message.contains("recovered 0 HP"));
         assert!(state.message.contains("MP"));
     }

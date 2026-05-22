@@ -1,8 +1,9 @@
 # Clean-Room Sidecars
 
 Sidecars are optional clean-room metadata files placed next to the user's local
-game assets. They let tests and local play model public behavior whose exact
-resident coordinates or table bytes are not shipped in this repository.
+game assets. They let tests and local play override published defaults or model
+public behavior whose exact resident coordinates or table bytes are not shipped
+in this repository.
 
 Sidecars must be authored from clean-room-safe sources. Do not commit original
 asset dumps, raw map dumps, dialogue transcripts, private offsets, or data copied
@@ -12,7 +13,7 @@ from decompiled code.
 
 | File | Purpose |
 |---|---|
-| `world_locations.tsv` | Overworld coordinates for entering named towns/dungeons and resolving interior exits when no in-memory return snapshot exists. |
+| `world_locations.tsv` | Optional overrides/extensions for the published stock overworld coordinates used to enter named towns/dungeons and resolve interior exits when no in-memory return snapshot exists. |
 | `location_entry_y.tsv` | Sparse `LocationEntryYTable` overrides for town-family spawn Y values. |
 | `location_floor_pages.tsv` | Sparse `LocationFloorBaseTable` overrides for signed town floor page loading. |
 | `world_plane_transitions.tsv` | Britannia/Underworld chasm and ascent rows. |
@@ -22,6 +23,7 @@ from decompiled code.
 | `town_stairs.tsv` | Clean stair rows for town floor changes. |
 | `town_trap_doors.tsv` | Town trap-door/chute rows. |
 | `town_poison_gas.tsv` | Town poison-gas doorway rows. |
+| `town_tile_attributes.tsv` | Optional clean tile-id attributes (`TILE TILE_CLASS VEHICLE_BYTE`) used by town poison-gas native predicate tests. |
 | `town_exit_tiles.tsv` | Town exit threshold rows. |
 | `moongates.tsv` | Authored moongate origin/destination rows. |
 
@@ -46,22 +48,23 @@ move below level `7`. Missing rows preserve the conservative in-place block.
 | `town_rest_beds.tsv` | Town bed/rest surfaces accepted by H-Hole-up. |
 | `town_locks.tsv` | Town lock rows for Jimmy/Open/Use-key handling. |
 | `secret_doors.tsv` | Search-revealed secret doors. |
-| `dungeon_doors.tsv` | Dungeon heavy-door rows. |
 | `dungeon_chests.tsv` | Dungeon chest guard/grant metadata used by tests. |
 | `world_waterfalls.tsv` | Current/waterfall sweeps after accepted world movement. |
 | `world_damage_tiles.tsv` | Lava/drowning damage cells and transport gates. |
 | `world_encounters.tsv` | Optional encounter spawn overrides; unmatched terrain uses the native public selector. |
 | `shrines.tsv` | Shrine coordinates and virtue binding. |
+| `eternal_flames.tsv` | Clean Eternal Flame coordinates for Shadowlord shard destruction. Matching accepts the flame cell underfoot or cardinal-adjacent; default tile guard is flame family `0x76..=0x77`; public issue #31 makes this flame predicate sufficient without a separate live Shadowlord-name encounter. |
 | `blink_targets.tsv` | Clean Blink landing rows. |
+| `stationary_displays.tsv` | Stationary-display shop rows. Legacy rows use `SCENE FLOOR X Y ITEM AMOUNT PRICE [TILE]`; marker-order rows use `SCENE FLOOR marker:TILE ORDINAL ITEM AMOUNT PRICE [TILE]`, where `ORDINAL` counts the scene/floor display-marker list before adjacency filtering. |
 | `tile_passability.bin` | Optional 32-byte public tile passability bitmap. |
 
 ## Content And Companion Save Files
 
 | File | Purpose |
 |---|---|
-| `common_words.tsv` | Required 128-row clean common-word dictionary for tokenized raw `.TLK` and `SHOPPE.DAT` text. |
-| `end_narrative_windows.tsv` | Optional six-row clean seek-window table for final `END.DAT` endgame narrative pages. |
-| `SAVED.WPS` | Clean companion save for durable world-progress state whose exact original `SAVED.GAM` offsets are not yet public. |
+| `common_words.tsv` | Optional 128-row clean override for the published shared common-word dictionary used by tokenized raw `.TLK` and `SHOPPE.DAT` text. |
+| `end_narrative_windows.tsv` | Optional six-row clean seek-window override for custom final `END.DAT` endgame narrative pages; shipped ranges are built in from the public spec. |
+| `SAVED.WPS` | Clean companion save for durable world-progress state, including compatibility mirrors for public `SAVED.GAM` fields that older clean saves only stored in the sidecar. |
 | `SAVED.BTH` | Clean companion save for Blackthorn capture/rescue story state whose exact original `SAVED.GAM` offsets are not yet public. |
 
 ## General Rules
@@ -72,7 +75,8 @@ move below level `7`. Missing rows preserve the conservative in-place block.
   edits. Use `*` where the parser supports an explicit no-guard marker.
 - Duplicate source rows or duplicate target rows are rejected when ambiguity
   would make exits or transitions unsafe.
-- Missing sidecars should produce conservative no-op/diagnostic behavior, not
-  invented private-derived coordinates.
+- Missing sidecars should use published defaults where available; otherwise they
+  should produce conservative no-op/diagnostic behavior, not invented
+  private-derived coordinates.
 
 See the parser tests in `u5-runtime` for exact row grammar and duplicate checks.

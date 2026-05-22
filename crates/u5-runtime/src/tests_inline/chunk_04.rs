@@ -303,7 +303,10 @@
         assert!(state.message.contains("BRIT.CBT arena 4"));
         assert!(state.message.contains("Orc"));
         assert_eq!(state.active_objects[6].tile, 0xc0);
-        assert_eq!((state.active_objects[6].x, state.active_objects[6].y), (0, 15));
+        assert_eq!(
+            (state.active_objects[6].x, state.active_objects[6].y),
+            (0, 15)
+        );
         assert!(!state.message.contains("out of scope"));
         let _ = fs::remove_dir_all(dir);
     }

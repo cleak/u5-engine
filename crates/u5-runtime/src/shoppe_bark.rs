@@ -14,9 +14,10 @@ use std::{error::Error, fmt, io};
 
 use crate::shops::{
     SHOPPE_DAT_LEN, SHOPPE_DAT_NONEMPTY_RECORDS, SHOPPE_DAT_RECORD_SLOTS, ShopPlaceholderKind,
-    shop_placeholder_kind, shoppe_time_of_day_word,
+    sage_rumour_record_id_accepted, shop_placeholder_kind, shoppe_time_of_day_word,
 };
 use crate::tlk_control_codes::{COMMON_WORD_DICTIONARY_ENTRIES, shoppe_dictionary_index};
+use crate::{PUBLISHED_COMMON_WORD_DICTIONARY, read_disk_file};
 
 /// Per-record sliced view of a loaded SHOPPE.DAT.
 #[derive(Clone, Debug, Default)]
@@ -103,7 +104,7 @@ impl fmt::Display for ShoppeDatError {
             Self::EmptyRecord { id } => write!(f, "SHOPPE.DAT record {id} is empty"),
             Self::MissingCommonWordDictionary { id } => write!(
                 f,
-                "SHOPPE.DAT record {id} requires common_words.tsv for phrase-token expansion"
+                "SHOPPE.DAT record {id} has no common-word dictionary for phrase-token expansion"
             ),
         }
     }
@@ -121,8 +122,8 @@ pub struct ShoppeBarkContext<'a> {
     pub place_name: &'a str,
     pub shop_name: &'a str,
     pub hour: u8,
-    /// Optional common-word dictionary; when present, high-bit phrase
-    /// tokens expand inline. `None` renders them as `[t<n>]`.
+    /// Optional common-word dictionary override; `None` uses the published
+    /// common-word table shared with TLK text.
     pub dictionary: Option<&'a [&'a str; COMMON_WORD_DICTIONARY_ENTRIES]>,
 }
 
@@ -205,7 +206,7 @@ pub fn parse_shoppe_records_checked(bytes: &[u8]) -> Result<ShoppeRecords, Shopp
 
 /// Read SHOPPE.DAT from disk and validate it before exposing records.
 pub fn load_shoppe_records(path: &Path) -> io::Result<ShoppeRecords> {
-    let bytes = std::fs::read(path)?;
+    let bytes = read_disk_file(path)?;
     parse_shoppe_records_checked(&bytes)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
@@ -215,11 +216,17 @@ pub fn load_shoppe_records(path: &Path) -> io::Result<ShoppeRecords> {
 /// indices through the optional dictionary.
 pub fn render_shoppe_bark(bytes: &[u8], ctx: &ShoppeBarkContext) -> String {
     let mut out = String::with_capacity(bytes.len());
+    let dictionary = ctx.dictionary.unwrap_or(&PUBLISHED_COMMON_WORD_DICTIONARY);
+    let mut leading_space_pending = false;
     for &byte in bytes {
         if byte == 0 {
             break;
         }
         if let Some(kind) = shop_placeholder_kind(byte) {
+            if leading_space_pending {
+                out.push(' ');
+                leading_space_pending = false;
+            }
             match kind {
                 ShopPlaceholderKind::Gold => out.push_str(&ctx.gold.to_string()),
                 ShopPlaceholderKind::Quantity => out.push_str(&ctx.quantity.to_string()),
@@ -232,16 +239,23 @@ pub fn render_shoppe_bark(bytes: &[u8], ctx: &ShoppeBarkContext) -> String {
             continue;
         }
         if let Some(idx) = shoppe_dictionary_index(byte) {
-            if let Some(dict) = ctx.dictionary {
-                if let Some(word) = dict.get(idx).filter(|w| !w.is_empty()) {
-                    out.push_str(word);
-                    continue;
-                }
+            let word = dictionary.get(idx).copied().unwrap_or("");
+            if word.is_empty() {
+                leading_space_pending = true;
+                continue;
             }
-            out.push_str(&format!("[t{idx:02X}]"));
+            if leading_space_pending {
+                out.push(' ');
+                leading_space_pending = false;
+            }
+            out.push_str(word);
             continue;
         }
         if (0x20..0x7F).contains(&byte) {
+            if leading_space_pending {
+                out.push(' ');
+                leading_space_pending = false;
+            }
             out.push(byte as char);
         }
     }
@@ -255,10 +269,35 @@ pub fn render_shoppe_record(
     ctx: &ShoppeBarkContext,
 ) -> Result<String, ShoppeDatError> {
     let record = records.required_record(id)?;
-    if ctx.dictionary.is_none() && crate::shoppe_bark_uses_common_word_dictionary(record) {
-        return Err(ShoppeDatError::MissingCommonWordDictionary { id });
-    }
     Ok(render_shoppe_bark(record, ctx))
+}
+
+/// Render a public issue #13 sage rumour record. Sage records live in
+/// SHOPPE.DAT record ids 84-91 and use the ordinary `&` item-name and
+/// `*` place-name placeholders for matched-name and location text.
+pub fn render_sage_rumour_shoppe_record(
+    records: &ShoppeRecords,
+    record_id: usize,
+    matched_name: &str,
+    location: &str,
+    dictionary: Option<&[&str; COMMON_WORD_DICTIONARY_ENTRIES]>,
+) -> Result<String, ShoppeDatError> {
+    if !sage_rumour_record_id_accepted(record_id) {
+        return Err(ShoppeDatError::MissingRecord {
+            id: record_id,
+            slots: records.slot_count(),
+        });
+    }
+    render_shoppe_record(
+        records,
+        record_id,
+        &ShoppeBarkContext {
+            item_name: matched_name,
+            place_name: location,
+            dictionary,
+            ..Default::default()
+        },
+    )
 }
 
 #[cfg(test)]
@@ -390,6 +429,28 @@ mod tests {
     }
 
     #[test]
+    fn render_sage_rumour_shoppe_record_accepts_only_sage_band() {
+        let mut records = ShoppeRecords {
+            records: vec![Vec::new(); 93],
+        };
+        records.records[83] = b"wrong & *".to_vec();
+        records.records[84] = b"Ask & in *".to_vec();
+
+        assert_eq!(
+            render_sage_rumour_shoppe_record(&records, 84, "Greyson", "Cotham", None).unwrap(),
+            "Ask Greyson in Cotham"
+        );
+        assert_eq!(
+            render_sage_rumour_shoppe_record(&records, 83, "Greyson", "Cotham", None),
+            Err(ShoppeDatError::MissingRecord { id: 83, slots: 93 })
+        );
+        assert_eq!(
+            render_sage_rumour_shoppe_record(&records, 91, "Greyson", "Cotham", None),
+            Err(ShoppeDatError::EmptyRecord { id: 91 })
+        );
+    }
+
+    #[test]
     fn render_substitutes_gold_quantity_and_time_of_day() {
         // % gold $ vendor & item @ time-of-day
         let bytes = b"Pay %, %; @ greetings!";
@@ -437,14 +498,14 @@ mod tests {
     }
 
     #[test]
-    fn render_shoppe_record_requires_dictionary_for_tokenized_record() {
+    fn render_shoppe_record_uses_published_dictionary_for_tokenized_record() {
         let records = ShoppeRecords {
             records: vec![vec![b'b', b'u', b'y', b' ', 0x80]],
         };
 
         assert_eq!(
-            render_shoppe_record(&records, 0, &ShoppeBarkContext::default()).unwrap_err(),
-            ShoppeDatError::MissingCommonWordDictionary { id: 0 }
+            render_shoppe_record(&records, 0, &ShoppeBarkContext::default()).unwrap(),
+            "buy the"
         );
 
         let mut dict: [&str; COMMON_WORD_DICTIONARY_ENTRIES] = [""; COMMON_WORD_DICTIONARY_ENTRIES];
@@ -462,10 +523,17 @@ mod tests {
     }
 
     #[test]
-    fn dictionary_token_without_dictionary_uses_placeholder() {
+    fn dictionary_token_without_override_uses_published_table() {
         let bytes = vec![0x82u8];
         let rendered = render_shoppe_bark(&bytes, &ShoppeBarkContext::default());
-        assert!(rendered.contains("[t02]"));
+        assert_eq!(rendered, "of");
+    }
+
+    #[test]
+    fn published_empty_dictionary_slot_sets_leading_space() {
+        let bytes = vec![b'a', 0x87u8, b'b'];
+        let rendered = render_shoppe_bark(&bytes, &ShoppeBarkContext::default());
+        assert_eq!(rendered, "a b");
     }
 
     #[test]

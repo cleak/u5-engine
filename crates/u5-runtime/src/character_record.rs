@@ -164,13 +164,11 @@ pub const fn rest_cleanup_transitions_to_good(status: CharacterStatus) -> bool {
 
 /// `rest-and-camp.md §5`: returns `true` when a rest-with-watch
 /// participant is eligible for ordinary HP recovery during the rest
-/// loop. Good and Sleeping members recover HP (capped at maximum HP);
-/// Poisoned members participate in the watch but do not receive
-/// ordinary rest HP recovery, and Charmed/Dead/Ashes members do not
-/// participate at all. This is the HP-tick eligibility predicate, not
-/// the broader watch-participation predicate.
+/// loop. `cleak/u5-spec#47` currently promotes ordinary rest as time
+/// advancement only, so no status receives a direct HP tick here.
 pub const fn rest_with_watch_recovers_hp(status: CharacterStatus) -> bool {
-    matches!(status, CharacterStatus::Good | CharacterStatus::Sleeping)
+    let _ = status;
+    false
 }
 
 /// `rest-and-camp.md §6` sleep-ambush rest-local status restoration.

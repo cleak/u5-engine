@@ -236,9 +236,10 @@ fn render_stats_panel_sky_status_row(state: &PlayState) -> String {
         Area::World { plane } if plane == WorldPlane::Underworld => {
             fixed_panel_line(&format!("Underworld  {glyph}"))
         }
-        Area::World { .. } | Area::Town { .. } => {
-            fixed_panel_line(&format!("Sky {} {glyph}", sky_strip_text(state.clock.hour)))
-        }
+        Area::World { .. } | Area::Town { .. } => fixed_panel_line(&format!(
+            "Sky {} {glyph}",
+            sky_strip_text(state.clock.hour, state.cached_moon_glyph_bytes)
+        )),
     }
 }
 
@@ -249,16 +250,24 @@ fn current_ship_hull(state: &PlayState) -> Option<u8> {
     }
 }
 
-fn sky_strip_text(hour: u8) -> String {
+fn sky_strip_text(hour: u8, cached_moon_glyph_bytes: [u8; 2]) -> String {
     sky_strip_composed_cells(hour)
         .into_iter()
         .map(|cell| match cell {
             Some(SkyStripMarker::FixedHour) => '|',
-            Some(SkyStripMarker::Trammel) => 'T',
-            Some(SkyStripMarker::Felucca) => 'F',
+            Some(SkyStripMarker::Trammel) => moon_glyph_cell(cached_moon_glyph_bytes[0]),
+            Some(SkyStripMarker::Felucca) => moon_glyph_cell(cached_moon_glyph_bytes[1]),
             None => '.',
         })
         .collect()
+}
+
+fn moon_glyph_cell(byte: u8) -> char {
+    if (b'0'..=b'7').contains(&byte) {
+        char::from(byte)
+    } else {
+        '-'
+    }
 }
 
 fn truncate_ascii_chars(value: &str, max_chars: usize) -> String {

@@ -12,21 +12,23 @@
 
 use crate::constants::{EQUIPMENT_COUNT, EQUIPMENT_STOCK_CAP};
 use crate::shops::{
-    ArmsShopAction, ArmsStockTable, BlueBoarDrinkChoice, GuildCommodity, GuildPurchaseError,
-    GuildShop, GuildShopAction, Herbalist, INN_REGISTRY_CAP, Inn, InnMainAction,
-    ProvisionPurchaseError, Reagent, ReagentPurchaseError, SageRumourError, SageRumourQuote,
-    SageTopic, Shipwright, ShipwrightMenuAction, ShipwrightPurchaseError,
+    ArmsShopAction, ArmsStockTable, BlueBoarDrinkChoice, EMPTY_SAGE_RUMOUR_TABLE, GuildCommodity,
+    GuildPurchaseError, GuildShop, GuildShopAction, Herbalist, INN_REGISTRY_CAP, Inn,
+    InnMainAction, ProvisionPurchaseError, Reagent, ReagentPurchaseError, SageRumourError,
+    SageRumourOutcome, SageRumourTable, Shipwright, ShipwrightMenuAction, ShipwrightPurchaseError,
     ShipwrightPurchaseOutcome, ShipwrightPurchaseQuote, Stable, StationaryDisplayPrompt, Tavern,
     TavernDrinkError, TavernDrinkPrompt, apply_blue_boar_drink, apply_guild_purchase,
-    apply_provision_purchase, apply_reagent_purchase, apply_shipwright_purchase,
-    apply_tavern_round_drink, arms_shop_action, arms_shop_buy_quote, arms_shop_sell_offer,
-    arms_shop_stock_item_for_letter, find_sage_topic, guild_shop_action, guild_unit_price,
-    herbalist_menu_entries, inn_base_room_rate, inn_leave_companion_deposit, inn_main_action,
-    inn_pickup_bill, quote_inn_rest, quote_shipwright_purchase, render_sage_rumour,
-    shipwright_menu_action, stable_horse_price, stationary_display_prompt, tavern_drink_prompt,
-    tavern_provision_unit_price, tavern_round_drink_menu_letter,
+    apply_provision_purchase, apply_reagent_purchase, apply_sage_rumour_lookup,
+    apply_shipwright_purchase, apply_tavern_round_drink, arms_shop_action, arms_shop_buy_quote,
+    arms_shop_sell_offer, arms_shop_stock_item_for_letter, guild_shop_action, guild_unit_price,
+    herbalist_menu_entries, inn_base_room_rate, inn_leave_companion_deposit_for_speaker,
+    inn_main_action, inn_pickup_bill_for_speaker, quote_inn_rest, quote_inn_rest_for_speaker,
+    quote_shipwright_purchase, shipwright_menu_action, stable_horse_price,
+    stationary_display_prompt, tavern_drink_prompt, tavern_provision_unit_price,
 };
 use crate::transport::PendingVehicleAcquisition;
+use crate::world_tables::ObjectPickupGrant;
+use crate::world_tables::ObjectPickupKind;
 
 /// Inputs available to every shop machine. Shop-specific machines
 /// extract the fields they need.
@@ -239,13 +241,13 @@ fn quote_arms_shop_buy_item(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StationaryDisplayState {
     Prompt {
-        item: u8,
+        grant: ObjectPickupGrant,
         price: u16,
         party_index: usize,
         object_slot: Option<usize>,
     },
     Confirm {
-        item: u8,
+        grant: ObjectPickupGrant,
         price: u16,
         party_index: usize,
         object_slot: Option<usize>,
@@ -255,8 +257,25 @@ pub enum StationaryDisplayState {
 
 impl StationaryDisplayState {
     pub const fn new(item: u8, price: u16, party_index: usize, object_slot: Option<usize>) -> Self {
+        Self::with_grant(
+            ObjectPickupGrant {
+                kind: ObjectPickupKind::Equipment(item as usize),
+                amount: 1,
+            },
+            price,
+            party_index,
+            object_slot,
+        )
+    }
+
+    pub const fn with_grant(
+        grant: ObjectPickupGrant,
+        price: u16,
+        party_index: usize,
+        object_slot: Option<usize>,
+    ) -> Self {
         Self::Prompt {
-            item,
+            grant,
             price,
             party_index,
             object_slot,
@@ -275,25 +294,25 @@ pub enum StationaryDisplayInput {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StationaryDisplayOutcome {
     Offered {
-        item: u8,
+        grant: ObjectPickupGrant,
         price: u16,
     },
     Exited,
     Declined {
-        item: u8,
+        grant: ObjectPickupGrant,
     },
     Purchased {
-        item: u8,
+        grant: ObjectPickupGrant,
         price: u16,
         party_index: usize,
         object_slot: Option<usize>,
     },
     RefusedShortFunds {
-        item: u8,
+        grant: ObjectPickupGrant,
         price: u16,
     },
     RefusedStockCap {
-        item: u8,
+        grant: ObjectPickupGrant,
     },
     InvalidInput,
 }
@@ -307,7 +326,7 @@ pub fn step_stationary_display(
     match (*state, input) {
         (
             StationaryDisplayState::Prompt {
-                item,
+                grant,
                 price,
                 party_index,
                 object_slot,
@@ -316,12 +335,12 @@ pub fn step_stationary_display(
         ) => match stationary_display_prompt(byte) {
             StationaryDisplayPrompt::Offer => {
                 *state = StationaryDisplayState::Confirm {
-                    item,
+                    grant,
                     price,
                     party_index,
                     object_slot,
                 };
-                StationaryDisplayOutcome::Offered { item, price }
+                StationaryDisplayOutcome::Offered { grant, price }
             }
             StationaryDisplayPrompt::Exit => {
                 *state = StationaryDisplayState::Exited;
@@ -331,39 +350,39 @@ pub fn step_stationary_display(
         },
         (
             StationaryDisplayState::Confirm {
-                item,
+                grant,
                 price,
                 party_index,
                 object_slot,
             },
             StationaryDisplayInput::Confirm(true),
         ) => {
-            let item_index = item as usize;
-            if item_index >= EQUIPMENT_COUNT {
-                *state = StationaryDisplayState::Exited;
-                return StationaryDisplayOutcome::InvalidInput;
-            }
-            if stock[item_index] >= EQUIPMENT_STOCK_CAP {
-                *state = StationaryDisplayState::Exited;
-                return StationaryDisplayOutcome::RefusedStockCap { item };
+            if let ObjectPickupKind::Equipment(item_index) = grant.kind {
+                if item_index >= EQUIPMENT_COUNT {
+                    *state = StationaryDisplayState::Exited;
+                    return StationaryDisplayOutcome::InvalidInput;
+                }
+                if stock[item_index] >= EQUIPMENT_STOCK_CAP {
+                    *state = StationaryDisplayState::Exited;
+                    return StationaryDisplayOutcome::RefusedStockCap { grant };
+                }
             }
             if *gold < price {
                 *state = StationaryDisplayState::Exited;
-                return StationaryDisplayOutcome::RefusedShortFunds { item, price };
+                return StationaryDisplayOutcome::RefusedShortFunds { grant, price };
             }
             *gold -= price;
-            stock[item_index] = stock[item_index].saturating_add(1);
             *state = StationaryDisplayState::Exited;
             StationaryDisplayOutcome::Purchased {
-                item,
+                grant,
                 price,
                 party_index,
                 object_slot,
             }
         }
-        (StationaryDisplayState::Confirm { item, .. }, StationaryDisplayInput::Confirm(false)) => {
+        (StationaryDisplayState::Confirm { grant, .. }, StationaryDisplayInput::Confirm(false)) => {
             *state = StationaryDisplayState::Exited;
-            StationaryDisplayOutcome::Declined { item }
+            StationaryDisplayOutcome::Declined { grant }
         }
         (StationaryDisplayState::Exited, _) => StationaryDisplayOutcome::Exited,
         _ => StationaryDisplayOutcome::InvalidInput,
@@ -570,7 +589,7 @@ pub enum InnkeeperState {
     },
     ConfirmRest {
         inn: Inn,
-        adjusted_room_rate: u16,
+        base_room_rate: u16,
         total_price: u16,
     },
     PickLeaveCompanion {
@@ -586,12 +605,12 @@ pub enum InnkeeperState {
         inn: Inn,
         guest_indices: [usize; INN_REGISTRY_CAP],
         guest_count: u8,
-        adjusted_lodging_charge: u16,
+        base_lodging_charge: u16,
     },
     ConfirmPickUpCompanion {
         inn: Inn,
         registry_index: usize,
-        adjusted_lodging_charge: u16,
+        base_lodging_charge: u16,
         bill: u16,
     },
     Exited,
@@ -623,12 +642,12 @@ pub enum InnkeeperInput {
 pub enum InnkeeperOutcome {
     QuotedRest {
         inn: Inn,
-        adjusted_room_rate: u16,
+        base_room_rate: u16,
         total_price: u16,
     },
     RestConfirmed {
         inn: Inn,
-        adjusted_room_rate: u16,
+        base_room_rate: u16,
         total_price: u16,
     },
     PickLeaveCompanion {
@@ -664,23 +683,25 @@ pub fn step_innkeeper(
     match (*state, input) {
         (InnkeeperState::Greeting { inn }, InnkeeperInput::Key(b)) => match inn_main_action(b) {
             InnMainAction::Rest => {
-                let adjusted_room_rate = inn_base_room_rate(inn);
-                let total_price = quote_inn_rest(inn, ctx.party_size, adjusted_room_rate)
-                    .map(|quote| quote.total_price)
-                    .unwrap_or(0);
+                let quote =
+                    quote_inn_rest_for_speaker(inn, ctx.party_size, ctx.speaker_intelligence)
+                        .or_else(|_| quote_inn_rest(inn, ctx.party_size, inn_base_room_rate(inn)));
+                let base_room_rate = inn_base_room_rate(inn);
+                let total_price = quote.map(|quote| quote.total_price).unwrap_or(0);
                 *state = InnkeeperState::ConfirmRest {
                     inn,
-                    adjusted_room_rate,
+                    base_room_rate,
                     total_price,
                 };
                 InnkeeperOutcome::QuotedRest {
                     inn,
-                    adjusted_room_rate,
+                    base_room_rate,
                     total_price,
                 }
             }
             InnMainAction::LeaveCompanion => {
-                let deposit = inn_leave_companion_deposit(inn_base_room_rate(inn));
+                let deposit =
+                    inn_leave_companion_deposit_for_speaker(inn, ctx.speaker_intelligence);
                 *state = InnkeeperState::PickLeaveCompanion { inn, deposit };
                 InnkeeperOutcome::PickLeaveCompanion { deposit }
             }
@@ -689,7 +710,7 @@ pub fn step_innkeeper(
                     inn,
                     guest_indices: [0; INN_REGISTRY_CAP],
                     guest_count: 0,
-                    adjusted_lodging_charge: inn_leave_companion_deposit(inn_base_room_rate(inn)),
+                    base_lodging_charge: inn_base_room_rate(inn),
                 };
                 InnkeeperOutcome::PickUpCompanion
             }
@@ -702,7 +723,7 @@ pub fn step_innkeeper(
         (
             InnkeeperState::ConfirmRest {
                 inn,
-                adjusted_room_rate,
+                base_room_rate,
                 total_price,
             },
             InnkeeperInput::Confirm(true),
@@ -710,7 +731,7 @@ pub fn step_innkeeper(
             *state = InnkeeperState::Greeting { inn };
             InnkeeperOutcome::RestConfirmed {
                 inn,
-                adjusted_room_rate,
+                base_room_rate,
                 total_price,
             }
         }
@@ -755,16 +776,17 @@ pub fn step_innkeeper(
                 inn,
                 guest_indices,
                 guest_count,
-                adjusted_lodging_charge,
+                base_lodging_charge,
             },
             InnkeeperInput::GuestChoice(choice),
         ) if choice < guest_count as usize => {
             let registry_index = guest_indices[choice];
-            let bill = inn_pickup_bill(adjusted_lodging_charge, 1);
+            let _ = base_lodging_charge;
+            let bill = inn_pickup_bill_for_speaker(inn, 1, ctx.speaker_intelligence);
             *state = InnkeeperState::ConfirmPickUpCompanion {
                 inn,
                 registry_index,
-                adjusted_lodging_charge,
+                base_lodging_charge,
                 bill,
             };
             InnkeeperOutcome::QuotedPickUpCompanion {
@@ -776,7 +798,7 @@ pub fn step_innkeeper(
             InnkeeperState::ConfirmPickUpCompanion {
                 inn,
                 registry_index,
-                adjusted_lodging_charge: _,
+                base_lodging_charge: _,
                 bill,
             },
             InnkeeperInput::Confirm(true),
@@ -1036,7 +1058,7 @@ pub fn step_tavern(
                 *state = TavernState::Menu { tavern };
                 TavernOutcome::EnteredMenu {
                     tavern,
-                    round_letter: tavern_round_drink_menu_letter(tavern),
+                    round_letter: 'A',
                 }
             }
             TavernDrinkPrompt::Leave => {
@@ -1051,7 +1073,7 @@ pub fn step_tavern(
                 *state = TavernState::Exited;
                 return TavernOutcome::Exited;
             }
-            if upper == tavern_round_drink_menu_letter(tavern) as u8 {
+            if upper == b'A' {
                 let outcome = apply_tavern_round_drink(gold, tavern, ctx.living_party_members);
                 *state = TavernState::Menu { tavern };
                 return match outcome {
@@ -1069,7 +1091,7 @@ pub fn step_tavern(
                 *state = TavernState::BlueBoarDrinkList { tavern };
                 return TavernOutcome::PickBlueBoarDrink;
             }
-            if upper == b'P' {
+            if upper == b'M' {
                 let unit_price = tavern_provision_unit_price(tavern);
                 *state = TavernState::PickProvisionQuantity { tavern, unit_price };
                 return TavernOutcome::PickProvisionQuantity { tavern, unit_price };
@@ -1134,65 +1156,51 @@ pub const fn blue_boar_choice_for_key(byte: u8) -> Option<BlueBoarDrinkChoice> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SageState {
-    Prompt {
-        topics: &'static [SageTopic],
-    },
-    Confirm {
-        topics: &'static [SageTopic],
-        quote: SageRumourQuote,
-    },
+    Prompt { table: &'static SageRumourTable },
     Exited,
 }
 
 impl Default for SageState {
     fn default() -> Self {
-        Self::Prompt { topics: &[] }
+        Self::Prompt {
+            table: &EMPTY_SAGE_RUMOUR_TABLE,
+        }
     }
 }
 
 impl SageState {
-    pub const fn for_topics(topics: &'static [SageTopic]) -> Self {
-        Self::Prompt { topics }
+    pub const fn for_table(table: &'static SageRumourTable) -> Self {
+        Self::Prompt { table }
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SageInput<'a> {
-    Topic(&'a str),
-    Confirm(bool),
+    Keyword(&'a str),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SageOutcome {
-    QuotedRumour {
-        quote: SageRumourQuote,
-    },
-    RumourPurchased {
-        quote: SageRumourQuote,
-        paid: u16,
+    RumourFound {
+        outcome: SageRumourOutcome,
         rendered: String,
-    },
-    RefusedShortFunds {
-        available: u16,
-        required: u16,
     },
     InputTooLong {
         limit: usize,
         actual: usize,
     },
     NoTopicMatch,
-    Declined,
     Exited,
     InvalidInput,
 }
 
-pub fn step_sage(state: &mut SageState, input: SageInput<'_>, gold: &mut u16) -> SageOutcome {
+pub fn step_sage(state: &mut SageState, input: SageInput<'_>) -> SageOutcome {
     match (*state, input) {
-        (SageState::Prompt { topics }, SageInput::Topic(text)) => {
-            match find_sage_topic(topics, text) {
-                Ok(quote) => {
-                    *state = SageState::Confirm { topics, quote };
-                    SageOutcome::QuotedRumour { quote }
+        (SageState::Prompt { table }, SageInput::Keyword(text)) => {
+            match apply_sage_rumour_lookup(table, text) {
+                Ok(outcome) => {
+                    let rendered = outcome.rendered.clone();
+                    SageOutcome::RumourFound { outcome, rendered }
                 }
                 Err(SageRumourError::EmptyInput) => {
                     *state = SageState::Exited;
@@ -1202,30 +1210,9 @@ pub fn step_sage(state: &mut SageState, input: SageInput<'_>, gold: &mut u16) ->
                     SageOutcome::InputTooLong { limit, actual }
                 }
                 Err(SageRumourError::NoTopicMatch) => SageOutcome::NoTopicMatch,
-                Err(SageRumourError::InsufficientGold { .. }) => SageOutcome::InvalidInput,
             }
-        }
-        (SageState::Confirm { topics, quote }, SageInput::Confirm(true)) => {
-            *state = SageState::Prompt { topics };
-            if *gold < quote.topic.fee {
-                return SageOutcome::RefusedShortFunds {
-                    available: *gold,
-                    required: quote.topic.fee,
-                };
-            }
-            *gold -= quote.topic.fee;
-            SageOutcome::RumourPurchased {
-                quote,
-                paid: quote.topic.fee,
-                rendered: render_sage_rumour(quote.topic),
-            }
-        }
-        (SageState::Confirm { topics, .. }, SageInput::Confirm(false)) => {
-            *state = SageState::Prompt { topics };
-            SageOutcome::Declined
         }
         (SageState::Exited, _) => SageOutcome::Exited,
-        _ => SageOutcome::InvalidInput,
     }
 }
 
@@ -1577,22 +1564,37 @@ fn select_guild_menu_entry(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shops::{SHOPPE_RECORDS_SAGE_FIRST, SageRumourEntry, SageRumourQuote};
 
-    static TEST_SAGE_TOPICS: [SageTopic; 2] = [
-        SageTopic {
-            topic: "codex",
+    static TEST_SAGE_TABLE: SageRumourTable = [
+        Some(SageRumourEntry {
+            keyword: "codex",
             subject: "the Codex",
             destination: "the Underworld",
-            fee: 17,
-            template: crate::shops::SageRumourTemplate::SeekSubjectInDestination,
-        },
-        SageTopic {
-            topic: "shard",
+            record_id: SHOPPE_RECORDS_SAGE_FIRST,
+            record_template: "Seek ye & in *!",
+        }),
+        Some(SageRumourEntry {
+            keyword: "shard",
             subject: "the shard",
             destination: "Deceit",
-            fee: 25,
-            template: crate::shops::SageRumourTemplate::SeekSubjectInDestination,
-        },
+            record_id: SHOPPE_RECORDS_SAGE_FIRST,
+            record_template: "Seek ye & in *!",
+        }),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
     ];
 
     fn make_price_table() -> [u16; EQUIPMENT_COUNT] {
@@ -2150,7 +2152,7 @@ mod tests {
             outcome,
             InnkeeperOutcome::QuotedRest {
                 inn: Inn::TheWayfarerInn,
-                adjusted_room_rate: 2,
+                base_room_rate: 2,
                 total_price: 4,
             }
         );
@@ -2189,6 +2191,97 @@ mod tests {
             InnkeeperOutcome::QuotedLeaveCompanion {
                 party_index: 1,
                 deposit: 30,
+            }
+        );
+    }
+
+    #[test]
+    fn innkeeper_quotes_fixed_base_rate_without_intelligence_discount() {
+        let high_int = ShopTransactionContext {
+            party_gold: 100,
+            speaker_intelligence: 75,
+            world_hour: 12,
+            party_size: 4,
+            living_party_members: 4,
+        };
+        let mut rest = InnkeeperState::for_inn(Inn::HotelBrittany);
+        assert_eq!(
+            step_innkeeper(&mut rest, InnkeeperInput::Key(b'R'), high_int),
+            InnkeeperOutcome::QuotedRest {
+                inn: Inn::HotelBrittany,
+                base_room_rate: 3,
+                total_price: 12,
+            }
+        );
+
+        let mut leave = InnkeeperState::for_inn(Inn::HotelBrittany);
+        assert_eq!(
+            step_innkeeper(&mut leave, InnkeeperInput::Key(b'L'), high_int),
+            InnkeeperOutcome::PickLeaveCompanion { deposit: 30 }
+        );
+
+        let mut pickup = InnkeeperState::PickUpCompanion {
+            inn: Inn::HotelBrittany,
+            guest_indices: [0; INN_REGISTRY_CAP],
+            guest_count: 1,
+            base_lodging_charge: 3,
+        };
+        assert_eq!(
+            step_innkeeper(&mut pickup, InnkeeperInput::GuestChoice(0), high_int),
+            InnkeeperOutcome::QuotedPickUpCompanion {
+                registry_index: 0,
+                bill: 3,
+            }
+        );
+    }
+
+    #[test]
+    fn tavern_menu_uses_a_for_round_and_m_for_provisions() {
+        let mut state = TavernState::for_tavern(Tavern::TheWayfarerTavern);
+        let mut gold = 100u16;
+        let mut food = 30u16;
+        let ctx = ShopTransactionContext {
+            party_gold: gold,
+            speaker_intelligence: 0,
+            world_hour: 12,
+            party_size: 1,
+            living_party_members: 1,
+        };
+
+        assert_eq!(
+            step_tavern(
+                &mut state,
+                TavernInput::Key(b'Y'),
+                ctx,
+                &mut gold,
+                &mut food,
+            ),
+            TavernOutcome::EnteredMenu {
+                tavern: Tavern::TheWayfarerTavern,
+                round_letter: 'A',
+            }
+        );
+        assert_eq!(
+            step_tavern(
+                &mut state,
+                TavernInput::Key(b'P'),
+                ctx,
+                &mut gold,
+                &mut food,
+            ),
+            TavernOutcome::InvalidInput
+        );
+        assert_eq!(
+            step_tavern(
+                &mut state,
+                TavernInput::Key(b'M'),
+                ctx,
+                &mut gold,
+                &mut food,
+            ),
+            TavernOutcome::PickProvisionQuantity {
+                tavern: Tavern::TheWayfarerTavern,
+                unit_price: 15,
             }
         );
     }
@@ -2322,12 +2415,12 @@ mod tests {
             entered,
             TavernOutcome::EnteredMenu {
                 tavern: Tavern::TheSwordAndKeg,
-                round_letter: 'M',
+                round_letter: 'A',
             }
         );
         let outcome = step_tavern(
             &mut state,
-            TavernInput::Key(b'M'),
+            TavernInput::Key(b'A'),
             ctx,
             &mut gold,
             &mut food,
@@ -2409,7 +2502,7 @@ mod tests {
         );
         let outcome = step_tavern(
             &mut state,
-            TavernInput::Key(b'M'),
+            TavernInput::Key(b'A'),
             ctx,
             &mut gold,
             &mut food,
@@ -2439,7 +2532,7 @@ mod tests {
         );
         let prompt = step_tavern(
             &mut state,
-            TavernInput::Key(b'P'),
+            TavernInput::Key(b'M'),
             ctx,
             &mut gold,
             &mut food,
@@ -2500,7 +2593,7 @@ mod tests {
         );
         step_tavern(
             &mut state,
-            TavernInput::Key(b'P'),
+            TavernInput::Key(b'M'),
             ctx,
             &mut gold,
             &mut food,
@@ -2525,80 +2618,74 @@ mod tests {
     }
 
     #[test]
-    fn sage_rumour_quotes_then_debits_gold_and_renders_rumour() {
-        let mut state = SageState::for_topics(&TEST_SAGE_TOPICS);
-        let mut gold = 20u16;
+    fn sage_rumour_keyword_match_renders_without_debiting_gold() {
+        let mut state = SageState::for_table(&TEST_SAGE_TABLE);
+        let gold = 20u16;
 
-        let quote = step_sage(&mut state, SageInput::Topic("CODEX"), &mut gold);
-        assert_eq!(
-            quote,
-            SageOutcome::QuotedRumour {
-                quote: SageRumourQuote {
-                    topic: TEST_SAGE_TOPICS[0],
-                    input_len: 5,
-                }
-            }
-        );
-        let outcome = step_sage(&mut state, SageInput::Confirm(true), &mut gold);
+        let outcome = step_sage(&mut state, SageInput::Keyword("CODEX"));
 
-        assert_eq!(gold, 3);
+        assert_eq!(gold, 20);
         assert_eq!(
             outcome,
-            SageOutcome::RumourPurchased {
-                quote: SageRumourQuote {
-                    topic: TEST_SAGE_TOPICS[0],
-                    input_len: 5,
+            SageOutcome::RumourFound {
+                outcome: SageRumourOutcome {
+                    quote: SageRumourQuote {
+                        entry: TEST_SAGE_TABLE[0].unwrap(),
+                        input_len: 5,
+                    },
+                    rendered: "Seek ye the Codex in the Underworld!".to_string(),
                 },
-                paid: 17,
                 rendered: "Seek ye the Codex in the Underworld!".to_string(),
             }
         );
         assert_eq!(
             state,
             SageState::Prompt {
-                topics: &TEST_SAGE_TOPICS
+                table: &TEST_SAGE_TABLE
             }
         );
     }
 
     #[test]
     fn sage_rumour_refusals_and_empty_exit_preserve_gold() {
-        let mut state = SageState::for_topics(&TEST_SAGE_TOPICS);
-        let mut gold = 10u16;
+        let mut state = SageState::for_table(&TEST_SAGE_TABLE);
+        let gold = 10u16;
 
         assert_eq!(
-            step_sage(&mut state, SageInput::Topic("shards"), &mut gold),
+            step_sage(&mut state, SageInput::Keyword("shards")),
             SageOutcome::NoTopicMatch
         );
         assert_eq!(gold, 10);
         assert_eq!(
             state,
             SageState::Prompt {
-                topics: &TEST_SAGE_TOPICS
+                table: &TEST_SAGE_TABLE
             }
         );
 
-        assert!(matches!(
-            step_sage(&mut state, SageInput::Topic("shard"), &mut gold),
-            SageOutcome::QuotedRumour { .. }
-        ));
         assert_eq!(
-            step_sage(&mut state, SageInput::Confirm(true), &mut gold),
-            SageOutcome::RefusedShortFunds {
-                available: 10,
-                required: 25,
+            step_sage(&mut state, SageInput::Keyword("shard")),
+            SageOutcome::RumourFound {
+                outcome: SageRumourOutcome {
+                    quote: SageRumourQuote {
+                        entry: TEST_SAGE_TABLE[1].unwrap(),
+                        input_len: 5,
+                    },
+                    rendered: "Seek ye the shard in Deceit!".to_string(),
+                },
+                rendered: "Seek ye the shard in Deceit!".to_string(),
             }
         );
         assert_eq!(gold, 10);
         assert_eq!(
             state,
             SageState::Prompt {
-                topics: &TEST_SAGE_TOPICS
+                table: &TEST_SAGE_TABLE
             }
         );
 
         assert_eq!(
-            step_sage(&mut state, SageInput::Topic(" "), &mut gold),
+            step_sage(&mut state, SageInput::Keyword(" ")),
             SageOutcome::Exited
         );
         assert_eq!(state, SageState::Exited);
@@ -2857,7 +2944,10 @@ mod tests {
                 &mut stock,
             ),
             StationaryDisplayOutcome::Offered {
-                item: 26,
+                grant: ObjectPickupGrant {
+                    kind: ObjectPickupKind::Equipment(26),
+                    amount: 1,
+                },
                 price: 75
             }
         );
@@ -2873,14 +2963,17 @@ mod tests {
                 &mut stock,
             ),
             StationaryDisplayOutcome::Purchased {
-                item: 26,
+                grant: ObjectPickupGrant {
+                    kind: ObjectPickupKind::Equipment(26),
+                    amount: 1,
+                },
                 price: 75,
                 party_index: 1,
                 object_slot: Some(3),
             }
         );
         assert_eq!(gold, 25);
-        assert_eq!(stock[26], 1);
+        assert_eq!(stock[26], 0);
         assert_eq!(state, StationaryDisplayState::Exited);
     }
 
@@ -2919,7 +3012,10 @@ mod tests {
                 &mut stock,
             ),
             StationaryDisplayOutcome::RefusedShortFunds {
-                item: 30,
+                grant: ObjectPickupGrant {
+                    kind: ObjectPickupKind::Equipment(30),
+                    amount: 1,
+                },
                 price: 70
             }
         );

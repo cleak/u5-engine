@@ -1,11 +1,11 @@
 //! Loaders/parsers for fixed and proportional fonts plus monochrome bitmaps (BIT/CH/HCS/PCS).
 
-use std::{fs::read, io, path::Path};
+use std::{io, path::Path};
 
 use crate::*;
 
 pub fn load_title_bit(game_dir: &Path) -> io::Result<TitleBitImages> {
-    parse_title_bit(&read(&game_dir.join(TITLE_BIT_FILE))?)
+    parse_title_bit(&read_disk_file(&game_dir.join(TITLE_BIT_FILE))?)
 }
 
 pub fn parse_title_bit(bytes: &[u8]) -> io::Result<TitleBitImages> {
@@ -71,7 +71,7 @@ pub fn parse_title_bit_body(body: &[u8], resource_name: &str) -> io::Result<Titl
 }
 
 pub fn load_british_bit(game_dir: &Path) -> io::Result<MonochromeBitmap> {
-    parse_british_bit(&read(&game_dir.join(BRITISH_BIT_FILE))?)
+    parse_british_bit(&read_disk_file(&game_dir.join(BRITISH_BIT_FILE))?)
 }
 
 pub fn parse_british_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
@@ -89,7 +89,7 @@ pub fn parse_british_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
 }
 
 pub fn load_wd_bit(game_dir: &Path) -> io::Result<MonochromeBitmap> {
-    parse_wd_bit(&read(&game_dir.join(WD_BIT_FILE))?)
+    parse_wd_bit(&read_disk_file(&game_dir.join(WD_BIT_FILE))?)
 }
 
 pub fn parse_wd_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
@@ -315,7 +315,7 @@ pub fn unpack_monochrome_bits(bytes: &[u8], pixel_count: usize) -> Vec<u8> {
 #[cfg(test)]
 pub fn load_ch_font(game_dir: &Path, file_name: &str) -> io::Result<FixedFont> {
     parse_fixed_font_body(
-        &read(&game_dir.join(file_name))?,
+        &read_disk_file(&game_dir.join(file_name))?,
         file_name,
         CH_FONT_CELL_WIDTH,
         CH_FONT_CELL_HEIGHT,
@@ -325,7 +325,7 @@ pub fn load_ch_font(game_dir: &Path, file_name: &str) -> io::Result<FixedFont> {
 #[cfg(test)]
 pub fn load_hcs_font(game_dir: &Path, file_name: &str) -> io::Result<FixedFont> {
     parse_fixed_font_body(
-        &read(&game_dir.join(file_name))?,
+        &read_disk_file(&game_dir.join(file_name))?,
         file_name,
         HCS_FONT_CELL_WIDTH,
         HCS_FONT_CELL_HEIGHT,
@@ -400,7 +400,7 @@ pub fn parse_fixed_font_body(
 
 #[cfg(test)]
 pub fn load_proportional_font(game_dir: &Path) -> io::Result<ProportionalFont> {
-    parse_proportional_font(&read(&game_dir.join(PROPORT_PCS_FILE))?)
+    parse_proportional_font(&read_disk_file(&game_dir.join(PROPORT_PCS_FILE))?)
 }
 
 #[cfg(test)]
@@ -411,7 +411,7 @@ pub fn parse_proportional_font(bytes: &[u8]) -> io::Result<ProportionalFont> {
 
 #[cfg(test)]
 pub fn load_proportional_font_resource(game_dir: &Path) -> io::Result<ProportionalFontResource> {
-    parse_proportional_font_resource(&read(&game_dir.join(PROPORT_PCS_FILE))?)
+    parse_proportional_font_resource(&read_disk_file(&game_dir.join(PROPORT_PCS_FILE))?)
 }
 
 #[cfg(test)]

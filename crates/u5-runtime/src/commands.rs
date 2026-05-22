@@ -221,13 +221,53 @@ pub const WISHING_WELL_WISH_KEYWORDS: [&str; 6] = [
     "Horse",
 ];
 
+pub const WISHING_WELL_WISH_MAX_CHARS: usize = 12;
+
 /// `view.md §3`: returns `true` when the typed wish matches one of
 /// the six accepted wishing-well keywords (case-insensitive).
-pub fn wishing_well_wish_accepted(typed: &str) -> bool {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WishingWellWish {
+    Corvette,
+    Ferrari,
+    Lamborghini,
+    Lotus,
+    Porsche,
+    Horse,
+}
+
+impl WishingWellWish {
+    pub const fn keyword(self) -> &'static str {
+        match self {
+            Self::Corvette => "Corvette",
+            Self::Ferrari => "Ferrari",
+            Self::Lamborghini => "Lamborghini",
+            Self::Lotus => "Lotus",
+            Self::Porsche => "Porsche",
+            Self::Horse => "Horse",
+        }
+    }
+
+    pub const fn has_native_grant(self) -> bool {
+        matches!(self, Self::Horse)
+    }
+}
+
+pub fn wishing_well_wish(typed: &str) -> Option<WishingWellWish> {
     let upper = typed.trim().to_ascii_uppercase();
-    WISHING_WELL_WISH_KEYWORDS
-        .iter()
-        .any(|word| word.to_ascii_uppercase() == upper)
+    [
+        WishingWellWish::Corvette,
+        WishingWellWish::Ferrari,
+        WishingWellWish::Lamborghini,
+        WishingWellWish::Lotus,
+        WishingWellWish::Porsche,
+        WishingWellWish::Horse,
+    ]
+    .into_iter()
+    .find(|wish| wish.keyword().to_ascii_uppercase() == upper)
+}
+
+pub fn wishing_well_wish_accepted(typed: &str) -> bool {
+    wishing_well_wish(typed).is_some()
 }
 
 /// `view.md §4` Britannia chunk-map renderer dimensions. The full
@@ -254,6 +294,29 @@ pub const fn surface_town_fountain_look_tile(tile: u8) -> bool {
 /// surface/town wishing-well LOOKOBJ special handler.
 pub const fn surface_wishing_well_look_tile(tile: u8) -> bool {
     tile == 0xa1
+}
+
+/// `view.md §3` / public issue #43: wishing-well object grants are
+/// accepted only in the two published scene contexts after the coin
+/// prompt and wish match.
+pub const fn wishing_well_grant_scene(scene: u8) -> bool {
+    matches!(scene, 0x16 | 0x1f)
+}
+
+/// Public issue #43: active-object class that routes Look to the
+/// death-vision/oracle branch.
+pub const DEATH_VISION_OBJECT_CLASS: u8 = 0x29;
+pub const DEATH_VISION_ROLL_LOW: u8 = 1;
+pub const DEATH_VISION_ROLL_HIGH: u8 = 30;
+
+pub const fn death_vision_object_class(type_byte: u8) -> bool {
+    type_byte == DEATH_VISION_OBJECT_CLASS
+}
+
+/// Public issue #43: active-object classes that share the sign/poster
+/// lookup path before generic object description.
+pub const fn sign_or_wanted_poster_object_class(type_byte: u8) -> bool {
+    matches!(type_byte, 0xa0 | 0xa4 | 0xf8 | 0x89 | 0x8a)
 }
 
 /// `view.md §2` V-View command outcome. Dispatcher inputs a single

@@ -52,7 +52,7 @@ pub fn first_dungeon_walkable(grid: &[u8], level: u8) -> Option<(usize, usize)> 
 }
 
 pub fn is_dungeon_walkable(tile: u8) -> bool {
-    !matches!(tile >> 4, 0x0b..=0x0f)
+    !matches!(tile >> 4, 0x0b..=0x0e)
 }
 
 pub fn dungeon_minimap_expands(tile: u8) -> bool {
@@ -205,7 +205,7 @@ pub fn apply_dungeon_room_clear_bitmap(
         if is_dungeon_room_trigger(*cell)
             && dungeon_room_clear_bit_is_set(bitmap, scene, dungeon_room_slot(*cell))
         {
-            *cell = 0xA0 | dungeon_room_slot(*cell);
+            *cell = 0xE0 | dungeon_room_slot(*cell);
         }
     }
 }
@@ -802,15 +802,10 @@ pub const fn dungeon_fountain_effect(tile: u8) -> Option<DungeonFountainEffect> 
 
 /// `dungeon-mode.md §6` first-person renderer wall-class predicate.
 /// The renderer paints a wall cue when the high nibble identifies a
-/// wall class (`0xB..=0xE`) or one of the closed sub-cases of the
-/// `0xF?` heavy-door / room-trigger family. Open passages and the
-/// other low-nibble classes paint as void/floor instead.
-///
-/// Caller is responsible for picking the closed-door sub-case for
-/// `0xF?` cells; the published table doesn't enumerate the exact
-/// door sub-bytes, so this helper conservatively treats every `0xF?`
-/// cell as a wall-cue paint candidate. Open doors are then rendered
-/// as a passage by the caller's door-state check.
+/// wall class (`0xB..=0xE`) or the `0xF?` room-trigger threshold.
+/// Open passages and the other low-nibble classes paint as void/floor
+/// instead. `0xF?` cells remain walkable gameplay triggers; the wall
+/// cue is a first-person presentation choice, not a movement blocker.
 pub const fn dungeon_renderer_paints_wall_cue(tile: u8) -> bool {
     matches!(tile >> 4, 0xB..=0xE | 0xF)
 }
@@ -985,7 +980,7 @@ pub enum DungeonCellClass {
     EnergyFieldSecondary,
     RoomHelperState,
     Wall,
-    HeavyDoorOrRoomTrigger,
+    RoomTrigger,
 }
 
 /// `dungeon-mode.md §13` Z-axis floor bounds. Dungeon levels are
@@ -1032,9 +1027,9 @@ pub const fn dungeon_klimb_z_step(z: u8, direction: KlimbDirection) -> Option<u8
 /// `dungeon-mode.md §12` V-View minimap flood expansion rule. The
 /// per-cell painter returns "expand" for most classes after painting
 /// the glyph; only the wall presentation classes `0xB?`, `0xC?`, and
-/// `0xD?` stop the flood walker. Door / room-trigger families
-/// (`0xA?`, `0xE?`, `0xF?`) still expand even though they paint a
-/// door glyph.
+/// `0xD?` stop the flood walker. Room-helper / wall-variant /
+/// room-trigger families (`0xA?`, `0xE?`, `0xF?`) still expand even
+/// though they paint a door-like glyph.
 pub const fn dungeon_minimap_flood_expands(tile: u8) -> bool {
     !matches!(tile >> 4, 0xB | 0xC | 0xD)
 }
@@ -1274,7 +1269,7 @@ pub const fn dungeon_cell_class_of(tile: u8) -> DungeonCellClass {
         0xA => DungeonCellClass::RoomHelperState,
         0xB..=0xE => DungeonCellClass::Wall,
         // 0xF and any (impossible) higher value
-        _ => DungeonCellClass::HeavyDoorOrRoomTrigger,
+        _ => DungeonCellClass::RoomTrigger,
     }
 }
 
@@ -1318,7 +1313,7 @@ pub fn dungeon_cell_class(tile: u8) -> &'static str {
         0x8 | 0x9 => "energy field",
         0xA => "room-helper state",
         0xB..=0xE => "wall",
-        0xF => "heavy door/room trigger",
+        0xF => "room trigger",
         _ => "unknown",
     }
 }
@@ -1342,7 +1337,7 @@ pub fn dungeon_look_description(tile: u8) -> &'static str {
             0x8 | 0x9 => "an energy field",
             0xA => "a cleared room trigger",
             0xB..=0xE => "a wall",
-            0xF => "a heavy door or room trigger",
+            0xF => "a room trigger",
             _ => "unknown dungeon cell",
         },
     }
@@ -1363,7 +1358,7 @@ pub fn dungeon_search_description(tile: u8) -> &'static str {
         0x7 => "a passage",
         0xA => "a cleared room trigger",
         0xB..=0xE => "a wall",
-        0xF => "a heavy door or room trigger",
+        0xF => "a room trigger",
         _ => "an unknown dungeon cell",
     }
 }

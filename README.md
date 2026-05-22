@@ -73,7 +73,7 @@ of the box. Dungeon scenes render a light-gated first-person corridor panel;
 combat scenes render the tactical arena through the same atlas-backed viewport,
 while shops, conversations, and other line-oriented interactions remain modal
 runtime flows rather than bespoke Bevy UI. Modal prompts such as
-conversation keywords, Blackthorn answers, and sage topics collect typed text
+conversation keywords, Blackthorn answers, and sage keywords collect typed text
 in the status panel, support Backspace, and submit on Enter.
 The runtime also exposes a spec-backed fixed-cell text-window core with four
 independent descriptors, preserved per-window cursors, style control bytes,
@@ -227,17 +227,15 @@ public space-boundary match rule and applies supported TLK byte-runner side
 effects. Bare Talk opens the interactive conversation keyword loop when raw
 `.TLK` streams are available, and Talk-triggered shopkeepers route into the
 modal shop sessions, including horse-trader purchases that place a nearby
-boardable horse object. Raw `.TLK` dictionary tokens require the clean 128-row
-`common_words.tsv` sidecar beside the game data; tokenized conversations expand
-through that shared dictionary, and tokenized raw conversation data without it
-is rejected instead of surfacing placeholder text. TLK `0x85` gold-payment
+boardable horse object. Raw `.TLK` and `SHOPPE.DAT` dictionary tokens expand
+through the published public issue #33/#40 128-row shared dictionary, with
+`common_words.tsv` still supported as an optional clean override for custom data.
+TLK `0x85` gold-payment
 prompts decode the three public digit bytes, yield for yes/no input, refuse
-unaffordable payments, and debit accepted affordable payments. The toll-style
-moral-standing milestone described by the public karma spec is intentionally
-not wired into production conversation cleanup yet: `cleak/u5-spec#27` still
-needs to publish the toll-progress counter, milestone predicate,
-reset/increment rules, and qualifying payment contexts. Overworld and dungeon
-Talk return the stock no-response path without spending a turn.
+unaffordable payments, debit accepted affordable payments, increment the
+toll-progress counter, and apply the public toll milestone karma behavior.
+Overworld and dungeon Talk return the stock no-response path without spending a
+turn.
 Dungeon movement and the normal lit render are facing-relative: `W`/`S` step
 forward/back, `A`/`D` turn left/right, blocked cardinal movement reports the
 public `Blocked!` refusal, `K` climbs one-way ladders or prompts on two-way
@@ -267,9 +265,12 @@ and `L`ook obey the public personal-light gate; optional
 `dungeon_exit_tiles.tsv` rows model immediate exit-dungeon cells while their
 exact encoding remains open. Runtime
 `0xA?` room-helper state fires before the next dungeon key just like room
-triggers while keeping its low-nibble arena slot. Optional `dungeon_doors.tsv`
-rows split heavy or revealed secret doors from room-trigger cells and provide
-the open-cell rewrite used by `O` and `J`. Stepping into public
+triggers while keeping its low-nibble arena slot; reloaded cleared room triggers
+demote to non-walkable `0xE?` wall variants per the public dungeon-mode spec.
+Public `0xE?` dungeon cells are visual wall/door silhouettes, not interactive
+doors, while `0xF?` cells are walkable room triggers and `0xA?` is visit-local
+room-helper state. No sidecar can redefine those packed classes. Stepping into
+public
 sleep/poison/fire/electric field cells now applies party status or deterministic
 damage; generic `0x84..0x8F` energy-field contact has no status/damage effect,
 and the secondary `0x9?` visual family remains descriptive only. Looking at
@@ -350,10 +351,9 @@ Negate Magic's cast absorption. `C1IW` casts the
 narrow overworld Locate hook, reporting the current plane, coordinate, facing,
 wind, and time
 after the saved charge/MP/level gates succeed. `C1IMX` casts the narrow Create
-Food hook, adding 100 units to the save-backed food counter after the saved
-charge/MP/level gates succeed and clamping at the shared 9999 party food cap.
-The exact Create Food grant remains blocked on clean spec issue
-`cleak/u5-spec#49`.
+Food hook, adding the latest public tiny PRNG grant (`0..=2`) to the save-backed
+food counter after the saved charge/MP/level gates succeed and clamping at the
+shared 9999 party food cap.
 `C1AS` casts the narrow An Sanct
 Open hook from party slot 1, safely consuming an underfoot dungeon chest through
 the visit-local chest rewrite after the saved charge/MP/level gates succeed;
@@ -461,8 +461,9 @@ visit-local town secret-door reveals whose Open path stays open without arming
 the normal auto-close tracker, survives town floor reloads during the visit,
 and clears on full location exit,
 clean-return-checked location exits, clean-room sidecar-backed town and
-overworld Get plus town Push, trap doors, town exit tiles, and Hole-up rest, and
-a clean-room
+overworld Get plus town Push, trap doors, town exit tiles, Hole-up rest, and a
+public #43 Look-special path for top-down fountains, scene-gated wishing wells,
+death-vision active objects, and sign/poster active-object classes, plus a clean-room
 first-playable dungeon text view with public-spec movement and ladder
 transitions plus public pit, bomb trap, and typed energy-field status/damage
 reactions, fountain drink effects, underfoot chest opening, torch/light blackout,
@@ -487,7 +488,9 @@ the Doom underworld-entry exception and trigger-class entry cells. Dungeon
 room, rest-ambush, and outdoor encounter routes can enter the combat frame,
 which loads arena terrain, snapshots caller state, places actors, and routes
 player commands, monster AI, spells, fields, rewards, escape, and victory
-cleanup. Combat-frame exits restore the pre-combat active-object table and
+cleanup. Non-party combat sleep uses the public per-slot countdown path and
+keeps disabled actors present and targetable while their turns are skipped.
+Combat-frame exits restore the pre-combat active-object table and
 reconcile the caller's original terrain trigger slot, including water-creature
 victory rewrites into persistent body/retrieval objects while defeat and
 live-foe escape clear the trigger. It also
@@ -637,24 +640,12 @@ placeholder surface cell. Matching rows fire before fallback packed-cell
 walkability can block the cell, which lets clean metadata model exit tiles whose
 exact class is still open.
 
-Dungeon heavy-door cells use a sidecar for the same clean-room reason: public
-specs identify the packed 0xF family but leave the complete low-nibble split
-between room triggers, heavy doors, and revealed secret doors outside this
-repository. Place rows next to the game data as `dungeon_doors.tsv`:
-
-```text
-# DUNGEON LEVEL X Y OPEN_CELL [CLOSED_CELL]
-DUNGEON:0 0 2 1 0x70 0xF2
-```
-
-Closed matching rows block movement instead of triggering a room. `O` on the
-party's current dungeon cell rewrites that cell to `OPEN_CELL` and consumes a
-turn; `J` with keys uses the same authored row for a deterministic
-first-playable unlock and also rewrites the visit-local cell to `OPEN_CELL`.
-Dungeon doors do not auto-close. The optional closed-cell guard prevents a
-stale row from rewriting an unexpected packed cell, and `OPEN_CELL` can be an
-0xF open-door variant that the sidecar marks as walkable and prevents from
-firing as a room trigger before the command handler runs.
+Dungeon heavy-door silhouettes are now native packed-cell behavior rather than
+sidecar metadata. Public dungeon-mode rules classify `0xE?` cells as
+non-walkable visual wall/door variants, `0xF?` cells as walkable room triggers,
+and `0xA?` cells as visit-local room-helper state. `O` and `J` act only on
+underfoot chest classes (`0x4?` and already-open `0x7?` variants); they do not
+rewrite `0xE?`, `0xF?`, or `0xA?` cells.
 
 Authored dungeon chest grants can be supplied as deterministic overrides for
 fixtures and clean-room scenarios:
@@ -1067,9 +1058,8 @@ whether to set watch when more than one living Good/Poisoned/Sleeping party
 member can participate, and inline input also accepts a watcher slot such as
 `h8/2`. A matching bed row advances one in-world hour per iteration, decays personal light
 counters, applies the existing dawn/dusk cleanup, and runs one NPC schedule tick
-per hour. Town bed rest also applies deterministic first-playable HP recovery to
-living party members plus byte-capped first-playable MP recovery. The exact
-HP/MP recovery amounts remain blocked on clean spec issue `cleak/u5-spec#47`.
+per hour. Town bed rest follows the latest public `cleak/u5-spec#47` guidance:
+ordinary rest advances time without a separate direct HP/MP recovery grant.
 Encounter
 interruption is owned by the overworld/dungeon rest-with-watch path rather than
 town beds.
@@ -1080,11 +1070,8 @@ hooks such as authored overworld damage tiles. A supplied watcher must be a
 living Good-status party member; invalid watcher choices leave no watch set.
 The sleep-ambush predicate follows the public one-in-sixty-four rest/camp rule
 and hands the selected ambush monster to the combat frame when it fires. The
-watch path also applies
-deterministic first-playable HP recovery to
-living party members, byte-capped first-playable MP recovery, and wakes members
-who were asleep when rest began; the numeric recovery amounts share the same
-`cleak/u5-spec#47` blocker.
+watch path wakes members who were asleep when rest began, but ordinary rest has
+no separate direct HP/MP recovery grant.
 
 Town trap-door cells are also clean-room sidecar metadata while the exact
 interior tile encoding remains open:
@@ -1107,11 +1094,19 @@ Town poison-gas doorway cells can be supplied as clean-room sidecar metadata:
 CASTLE:0 0 12 9 55
 ```
 
-Stepping onto a matching row, or completing any turn-consuming top-down command
-while already standing on one, runs the town underfoot poison-gas branch against
-eligible Good living party members. The public spec identifies the roll branch
-but not its exact odds, so this remains a deterministic first-playable roll
-until a clean row/odds contract is published in `cleak/u5-spec#51`.
+The runtime also accepts clean tile attributes:
+
+```text
+# TILE TILE_CLASS VEHICLE_BYTE
+55 4 0x1C
+```
+
+Stepping onto a tile whose attributes match the public `cleak/u5-spec#51`
+predicate (`tile_class == 4` and `vehicle_byte == 0x1C`), or onto a matching
+coordinate row, runs the town underfoot poison-gas branch against non-poisoned
+party slots with the latest public 1-in-29 per-slot roll. The coordinate sidecar
+remains a fallback until the full resident tile-attribute table is published in
+the clean spec.
 
 Town boundary exits use the native public threshold tile `0x59`. Additional
 authored exit cells can be supplied as clean-room sidecar metadata:
@@ -1183,12 +1178,10 @@ gold counters are also read for Z-stats, object pickups, and save export, while
 Create Food updates the food counter. Hour-crossing cleanup now applies the
 public provision cadence, subtracting active eaters at 06:00, 12:00, and 18:00
 with Dead, Ashes, and Sleeping members excluded. Poisoned living members still
-count as provision consumers and take a first-playable one-HP poison tick on
-each hourly status/provision pass. If food is already zero at an hour crossing,
-the starvation branch appends a warning and applies first-playable one-HP
-starvation damage to living members. The exact poison/starvation damage
-amounts and per-member roll semantics remain blocked on clean spec issue
-`cleak/u5-spec#50`. The harness does not require character
+count as provision consumers and take the public one-HP poison tick on each
+hourly status/provision pass. If food is already zero at an hour crossing, the
+starvation branch appends a warning and rolls the public `1..=8` damage
+independently for each non-dead party slot. The harness does not require character
 creation first, so clean test saves with a
 blank Avatar name can still seed the playable slice:
 
@@ -1204,8 +1197,11 @@ doors, trap rewrites, and dispelled fields instead of replaying only the durable
 room-clear bitmap from static `DUNGEON.DAT`. It restores the full saved
 year/month/day/hour/minute clock. It reads the separate timing/status tag as `Q`
 half-time or `T` no-minute/no-light-counter cleanup; other values are treated as
-normal timing. Exact ship facing/sail marker variants remain an open public-spec
-table. `--from-init` keeps the factory bootstrap path by reading `INIT.GAM` plus
+normal timing. Fixed hidden-treasure state and the three Shadowlord hideout slots
+now round-trip through their public `SAVED.GAM` bytes, with `SAVED.WPS` retained
+only as a compatibility mirror for older clean saves. Exact ship facing/sail
+marker variants remain an open public-spec table. `--from-init` keeps the
+factory bootstrap path by reading `INIT.GAM` plus
 the surface `INIT.OOL` overlay seed, so fresh bootstrap does not depend on stale
 `SAVED.OOL` surface objects.
 

@@ -182,12 +182,10 @@ fn ready_player_slot_from_scenario_round_walk(
         let CombatActorSlotDispatchApplication::Slot { slot, action, .. } = entry else {
             return None;
         };
-        if *slot < crate::COMBAT_PARTY_ACTOR_SLOTS
-            && matches!(
-                action,
-                crate::combat_frame::CombatActorDispatchAction::PlayerReady
-            )
-        {
+        if matches!(
+            action,
+            crate::combat_frame::CombatActorDispatchAction::PlayerReady
+        ) {
             Some(*slot)
         } else {
             None

@@ -5,13 +5,16 @@
 //! gold/equipment/party counters.
 
 use crate::shop_runtime::*;
-use crate::shops::{ArmsStockTable, GuildShop, Healer, Herbalist, Inn, Shipwright, Stable, Tavern};
+use crate::shops::{
+    ArmsShop, ArmsStockTable, GuildShop, Healer, Herbalist, Inn, Shipwright, Stable, Tavern,
+};
 
 /// Identifies which of the eight shop kinds is open and owns its
 /// per-shop state machine.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ActiveShopSession {
     Arms(ArmsShopState),
+    ArmsLocal(ArmsShopState, ArmsShop),
     ArmsStocked(ArmsShopState, ArmsStockTable),
     Healer(HealerShopState, Healer),
     Innkeeper(InnkeeperState),
@@ -30,7 +33,9 @@ impl ActiveShopSession {
     /// and return control to the world loop.
     pub fn is_exited(&self) -> bool {
         match self {
-            Self::Arms(s) | Self::ArmsStocked(s, _) => matches!(s, ArmsShopState::Exited),
+            Self::Arms(s) | Self::ArmsLocal(s, _) | Self::ArmsStocked(s, _) => {
+                matches!(s, ArmsShopState::Exited)
+            }
             Self::Healer(s, _) => matches!(s, HealerShopState::Exited),
             Self::Innkeeper(s) => matches!(s, InnkeeperState::Exited),
             Self::Reagent(s) => matches!(s, ReagentShopState::Exited),
@@ -47,6 +52,7 @@ impl ActiveShopSession {
     pub fn shop_label(&self) -> &'static str {
         match self {
             Self::Arms(_) | Self::ArmsStocked(_, _) => "Weaponsmith / Armourer",
+            Self::ArmsLocal(_, shop) => shop.display_name(),
             Self::Healer(_, healer) => healer.display_name(),
             Self::Innkeeper(InnkeeperState::Greeting { inn })
             | Self::Innkeeper(InnkeeperState::ConfirmRest { inn, .. })
@@ -97,7 +103,7 @@ impl ActiveShopSession {
             Self::Reagent(_) => "Choose reagent A-E, or Space.",
             Self::Guild(_) => "Keys (A), Gems (B), Torches (C), or Space.",
             Self::StationaryDisplay(_) => "Buy display item? Yes (Y), No (N), or Space.",
-            Self::ArmsStocked(_, _) => "Buy (B), Sell (S), or Space.",
+            Self::ArmsLocal(_, _) | Self::ArmsStocked(_, _) => "Buy (B), Sell (S), or Space.",
             _ => "Choose Buy / Sell / Yes / No.",
         }
     }
@@ -120,49 +126,59 @@ pub fn shop_session_for_talk_context(
     scene_byte: Option<u8>,
 ) -> Option<ActiveShopSession> {
     Some(match dialog_id {
-        0x81 => ActiveShopSession::Arms(ArmsShopState::Greeting),
-        0x82 => ActiveShopSession::Tavern(
-            scene_byte
-                .and_then(tavern_for_scene)
-                .map(TavernState::for_tavern)
-                .unwrap_or_default(),
-        ),
-        0x83 => ActiveShopSession::HorseTrader(
-            scene_byte
-                .and_then(stable_for_scene)
-                .map(HorseTraderState::for_stable)
-                .unwrap_or_default(),
-        ),
-        0x84 => ActiveShopSession::ShipBroker(
-            scene_byte
-                .and_then(shipwright_for_scene)
-                .map(ShipBrokerState::for_shipwright)
-                .unwrap_or_default(),
-        ),
-        0x85 => ActiveShopSession::Reagent(
-            scene_byte
-                .and_then(herbalist_for_scene)
-                .map(ReagentShopState::for_herbalist)
-                .unwrap_or_default(),
-        ),
-        0x86 => ActiveShopSession::Guild(
-            scene_byte
-                .and_then(guild_shop_for_scene)
-                .map(GuildShopState::for_shop)
-                .unwrap_or_default(),
-        ),
+        0x81 => {
+            if let Some(scene) = scene_byte {
+                ActiveShopSession::ArmsLocal(ArmsShopState::Greeting, arms_shop_for_scene(scene)?)
+            } else {
+                ActiveShopSession::Arms(ArmsShopState::Greeting)
+            }
+        }
+        0x82 => ActiveShopSession::Tavern(match scene_byte {
+            Some(scene) => TavernState::for_tavern(tavern_for_scene(scene)?),
+            None => TavernState::default(),
+        }),
+        0x83 => ActiveShopSession::HorseTrader(match scene_byte {
+            Some(scene) => HorseTraderState::for_stable(stable_for_scene(scene)?),
+            None => HorseTraderState::default(),
+        }),
+        0x84 => ActiveShopSession::ShipBroker(match scene_byte {
+            Some(scene) => ShipBrokerState::for_shipwright(shipwright_for_scene(scene)?),
+            None => ShipBrokerState::default(),
+        }),
+        0x85 => ActiveShopSession::Reagent(match scene_byte {
+            Some(scene) => ReagentShopState::for_herbalist(herbalist_for_scene(scene)?),
+            None => ReagentShopState::default(),
+        }),
+        0x86 => ActiveShopSession::Guild(match scene_byte {
+            Some(scene) => GuildShopState::for_shop(guild_shop_for_scene(scene)?),
+            None => GuildShopState::default(),
+        }),
         0x87 => ActiveShopSession::Healer(
             HealerShopState::Greeting,
-            scene_byte
-                .and_then(healer_for_scene)
-                .unwrap_or(Healer::WoundsOfHonour),
+            match scene_byte {
+                Some(scene) => healer_for_scene(scene)?,
+                None => Healer::WoundsOfHonour,
+            },
         ),
-        0x88 => ActiveShopSession::Innkeeper(
-            scene_byte
-                .and_then(inn_for_scene)
-                .map(InnkeeperState::for_inn)
-                .unwrap_or_default(),
-        ),
+        0x88 => ActiveShopSession::Innkeeper(match scene_byte {
+            Some(scene) => InnkeeperState::for_inn(inn_for_scene(scene)?),
+            None => InnkeeperState::default(),
+        }),
+        _ => return None,
+    })
+}
+
+pub const fn arms_shop_for_scene(scene_byte: u8) -> Option<ArmsShop> {
+    Some(match scene_byte {
+        2 => ArmsShop::IolosBows,
+        3 => ArmsShop::NaughtyNomaans,
+        4 => ArmsShop::ArmsOfJustice,
+        5 => ArmsShop::DarkwatchArmoury,
+        6 => ArmsShop::ThePaladinsProtectorate,
+        17 => ArmsShop::NorthStarArmoury,
+        24 => ArmsShop::BuccaneersBooty,
+        26 => ArmsShop::TheShatteredShield,
+        32 => ArmsShop::SiegeCrafters,
         _ => return None,
     })
 }
@@ -186,7 +202,7 @@ pub const fn stable_for_scene(scene_byte: u8) -> Option<Stable> {
     Some(match scene_byte {
         6 => Stable::HorseAndRider,
         20 => Stable::TheStablehouse,
-        31 => Stable::WishingWellHorses,
+        22 => Stable::WishingWellHorses,
         _ => return None,
     })
 }
@@ -224,6 +240,12 @@ pub const fn guild_shop_for_scene(scene_byte: u8) -> Option<GuildShop> {
 pub const fn healer_for_scene(scene_byte: u8) -> Option<Healer> {
     Some(match scene_byte {
         5 => Healer::TheHealersMission,
+        6 => Healer::WoundsOfHonour,
+        7 => Healer::TheSpiritHealers,
+        21 => Healer::HealersSanctum,
+        23 => Healer::Sanctuary,
+        30 => Healer::TheShieldOfTruth,
+        31 => Healer::TheEmpath,
         _ => return None,
     })
 }
@@ -307,6 +329,13 @@ mod tests {
     #[test]
     fn talk_context_resolves_scene_local_shop_instances() {
         assert!(matches!(
+            shop_session_for_talk_context(0x81, Some(26)),
+            Some(ActiveShopSession::ArmsLocal(
+                _,
+                ArmsShop::TheShatteredShield
+            ))
+        ));
+        assert!(matches!(
             shop_session_for_talk_context(0x86, Some(8)),
             Some(ActiveShopSession::Guild(GuildShopState::Greeting {
                 shop: GuildShop::TheDen
@@ -338,6 +367,10 @@ mod tests {
         ));
         assert!(matches!(
             shop_session_for_talk_context(0x83, Some(31)),
+            None
+        ));
+        assert!(matches!(
+            shop_session_for_talk_context(0x83, Some(22)),
             Some(ActiveShopSession::HorseTrader(HorseTraderState::Greeting {
                 stable: Stable::WishingWellHorses
             }))
@@ -350,6 +383,13 @@ mod tests {
             ))
         ));
         assert!(matches!(
+            shop_session_for_talk_context(0x87, Some(31)),
+            Some(ActiveShopSession::Healer(
+                HealerShopState::Greeting,
+                Healer::TheEmpath
+            ))
+        ));
+        assert!(matches!(
             shop_session_for_talk_context(0x82, Some(19)),
             Some(ActiveShopSession::Tavern(TavernState::Greeting {
                 tavern: Tavern::TheBlueBoarTavern
@@ -358,13 +398,175 @@ mod tests {
     }
 
     #[test]
-    fn unknown_talk_scene_keeps_default_shop_instance() {
-        assert!(matches!(
-            shop_session_for_talk_context(0x86, Some(1)),
-            Some(ActiveShopSession::Guild(GuildShopState::Greeting {
-                shop: GuildShop::TheGuild
-            }))
-        ));
+    fn healer_scene_table_matches_published_rows() {
+        let cases = [
+            (5, Healer::TheHealersMission),
+            (6, Healer::WoundsOfHonour),
+            (7, Healer::TheSpiritHealers),
+            (21, Healer::HealersSanctum),
+            (23, Healer::Sanctuary),
+            (30, Healer::TheShieldOfTruth),
+            (31, Healer::TheEmpath),
+        ];
+        for (scene, healer) in cases {
+            assert_eq!(healer_for_scene(scene), Some(healer), "scene {scene}");
+            assert!(matches!(
+                shop_session_for_talk_context(0x87, Some(scene)),
+                Some(ActiveShopSession::Healer(_, resolved)) if resolved == healer
+            ));
+        }
+        assert_eq!(healer_for_scene(17), None);
+        assert!(shop_session_for_talk_context(0x87, Some(17)).is_none());
+    }
+
+    #[test]
+    fn tavern_scene_table_matches_published_rows() {
+        let cases = [
+            (1, Tavern::TheHonestMeal),
+            (2, Tavern::TheWayfarerTavern),
+            (3, Tavern::TheSwordAndKeg),
+            (4, Tavern::TheSlaughteredLamb),
+            (8, Tavern::TheHumblePalate),
+            (19, Tavern::TheBlueBoarTavern),
+            (22, Tavern::TheCatsLair),
+            (24, Tavern::TheFallenVirgin),
+            (30, Tavern::TheFolleyTap),
+        ];
+        for (scene, tavern) in cases {
+            assert_eq!(tavern_for_scene(scene), Some(tavern), "scene {scene}");
+            assert!(matches!(
+                shop_session_for_talk_context(0x82, Some(scene)),
+                Some(ActiveShopSession::Tavern(TavernState::Greeting { tavern: resolved }))
+                    if resolved == tavern
+            ));
+        }
+        assert_eq!(tavern_for_scene(6), None);
+        assert!(shop_session_for_talk_context(0x82, Some(6)).is_none());
+    }
+
+    #[test]
+    fn shipwright_scene_table_matches_published_rows() {
+        let cases = [
+            (3, Shipwright::IslandShipwrights),
+            (5, Shipwright::TheCrowsNest),
+            (21, Shipwright::TheOakenOar),
+            (24, Shipwright::TheRustyBucket),
+        ];
+        for (scene, shipwright) in cases {
+            assert_eq!(
+                shipwright_for_scene(scene),
+                Some(shipwright),
+                "scene {scene}"
+            );
+            assert!(matches!(
+                shop_session_for_talk_context(0x84, Some(scene)),
+                Some(ActiveShopSession::ShipBroker(ShipBrokerState::Greeting {
+                    shipwright: resolved
+                })) if resolved == shipwright
+            ));
+        }
+        assert_eq!(shipwright_for_scene(11), None);
+        assert!(shop_session_for_talk_context(0x84, Some(11)).is_none());
+    }
+
+    #[test]
+    fn reagent_scene_table_matches_published_rows() {
+        let cases = [
+            (1, Herbalist::TheHerbalist),
+            (4, Herbalist::HealersHerbs),
+            (7, Herbalist::TheAlchemist),
+            (23, Herbalist::Mysticism),
+            (30, Herbalist::TheSharperMage),
+        ];
+        for (scene, herbalist) in cases {
+            assert_eq!(herbalist_for_scene(scene), Some(herbalist), "scene {scene}");
+            assert!(matches!(
+                shop_session_for_talk_context(0x85, Some(scene)),
+                Some(ActiveShopSession::Reagent(ReagentShopState::Greeting {
+                    herbalist: resolved
+                })) if resolved == herbalist
+            ));
+        }
+        assert_eq!(herbalist_for_scene(12), None);
+        assert!(shop_session_for_talk_context(0x85, Some(12)).is_none());
+    }
+
+    #[test]
+    fn guild_scene_table_matches_published_rows() {
+        let cases = [
+            (8, GuildShop::TheDen),
+            (22, GuildShop::TheGuild),
+            (24, GuildShop::TheNemesis),
+        ];
+        for (scene, shop) in cases {
+            assert_eq!(guild_shop_for_scene(scene), Some(shop), "scene {scene}");
+            assert!(matches!(
+                shop_session_for_talk_context(0x86, Some(scene)),
+                Some(ActiveShopSession::Guild(GuildShopState::Greeting { shop: resolved }))
+                    if resolved == shop
+            ));
+        }
+        assert_eq!(guild_shop_for_scene(19), None);
+        assert!(shop_session_for_talk_context(0x86, Some(19)).is_none());
+    }
+
+    #[test]
+    fn inn_scene_table_matches_published_rows() {
+        let cases = [
+            (2, Inn::TheWayfarerInn),
+            (3, Inn::TheWarriorsStead),
+            (7, Inn::TheHauntingInn),
+            (20, Inn::HotelBrittany),
+            (22, Inn::TheSmugglersInn),
+            (24, Inn::TheKingsRansomInn),
+        ];
+        for (scene, inn) in cases {
+            assert_eq!(inn_for_scene(scene), Some(inn), "scene {scene}");
+            assert!(matches!(
+                shop_session_for_talk_context(0x88, Some(scene)),
+                Some(ActiveShopSession::Innkeeper(InnkeeperState::Greeting { inn: resolved }))
+                    if resolved == inn
+            ));
+        }
+        assert_eq!(inn_for_scene(19), None);
+        assert!(shop_session_for_talk_context(0x88, Some(19)).is_none());
+    }
+
+    #[test]
+    fn arms_scene_table_matches_published_rows() {
+        let cases = [
+            (2, ArmsShop::IolosBows, "Iolo's Bows"),
+            (3, ArmsShop::NaughtyNomaans, "Naughty Nomaan's"),
+            (4, ArmsShop::ArmsOfJustice, "Arms of Justice"),
+            (5, ArmsShop::DarkwatchArmoury, "Darkwatch Armoury"),
+            (
+                6,
+                ArmsShop::ThePaladinsProtectorate,
+                "The Paladin's Protectorate!",
+            ),
+            (17, ArmsShop::NorthStarArmoury, "North Star Armoury"),
+            (24, ArmsShop::BuccaneersBooty, "Buccaneers Booty"),
+            (26, ArmsShop::TheShatteredShield, "The Shattered Shield"),
+            (32, ArmsShop::SiegeCrafters, "Siege Crafters"),
+        ];
+        for (scene, shop, name) in cases {
+            assert_eq!(arms_shop_for_scene(scene), Some(shop), "scene {scene}");
+            assert_eq!(shop.display_name(), name);
+            assert!(matches!(
+                shop_session_for_talk_context(0x81, Some(scene)),
+                Some(ActiveShopSession::ArmsLocal(_, resolved)) if resolved == shop
+            ));
+        }
+        assert_eq!(arms_shop_for_scene(1), None);
+        assert!(shop_session_for_talk_context(0x81, Some(1)).is_none());
+    }
+
+    #[test]
+    fn unknown_scene_specific_shop_returns_none_but_none_context_keeps_default() {
+        assert!(shop_session_for_talk_context(0x86, Some(1)).is_none());
+        assert!(shop_session_for_talk_context(0x87, Some(1)).is_none());
+        assert!(shop_session_for_talk_context(0x83, Some(31)).is_none());
+        assert!(shop_session_for_talk_context(0x81, Some(1)).is_none());
         assert!(matches!(
             shop_session_for_talk_context(0x85, None),
             Some(ActiveShopSession::Reagent(ReagentShopState::Greeting {

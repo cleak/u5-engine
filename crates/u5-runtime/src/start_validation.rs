@@ -51,7 +51,8 @@ pub fn validate_dungeon_start(
         ));
     }
     let tile = grid[dungeon_cell_index(level, pos.0, pos.1)];
-    if !is_dungeon_walkable(tile) && !is_public_dungeon_reaction_seed(scene, level, pos, tile) {
+    let public_reaction_seed = is_public_dungeon_reaction_seed(scene, level, pos, tile);
+    if (!is_dungeon_walkable(tile) || matches!(tile >> 4, 0x0f)) && !public_reaction_seed {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             format!(
@@ -127,7 +128,7 @@ pub fn pass_fail(value: bool) -> &'static str {
 }
 
 pub fn read(path: &Path) -> io::Result<Vec<u8>> {
-    fs::read(path).map_err(|err| io::Error::new(err.kind(), format!("{}: {err}", path.display())))
+    read_disk_file(path)
 }
 
 pub fn load_tile_passability(game_dir: &Path) -> io::Result<Option<TilePassability>> {

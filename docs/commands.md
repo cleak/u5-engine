@@ -11,7 +11,7 @@ uncertain, read the spec and the focused runtime tests before editing.
 | `A` Attack | Adjacent active object and combat-class handoff | NPC targets, alarm state, combat handoff | Dungeon attack routing | Combat attack command | `world_attack_adjacent_combat_class_object_selects_brit_cbt_arena`, `a_attack_guard_like_town_npc_raises_alarm_without_death_mask` |
 | `B` Board | Ship, skiff, horse, carpet/vehicle markers | Refusal or mode-appropriate handling | Refusal | Combat command table owns combat behavior | `vehicle_directional_step_refreshes_transport_marker_and_player_tile` |
 | `C` Cast | Shared spell parser, resource gates, allowed spells | Shared spell parser plus indoor absorption gates | Dungeon spells, fields, up/down, Gate Travel | Combat spells, active effects, summons, fields | `active_cast_prompt_collects_selector_and_dispatches_spell`, `combat_cast_active_target_spell_routes_damage_application` |
-| `E` Enter | Fixed-location table or debug entry | Mode-specific refusal/interaction | Dungeon-mode route as specified | Combat scene commands | `world_enter_uses_clean_location_table_for_town`, `world_enter_reports_missing_clean_coordinate_table` |
+| `E` Enter | Published stock location table, optional sidecar override, or debug entry | Mode-specific refusal/interaction | Dungeon-mode route as specified | Combat scene commands | `world_enter_uses_published_location_table_without_sidecar`, `world_enter_reports_no_matching_coordinate` |
 | `F` Fire | Ship cannon broadside | Native static cannons plus optional fire-source sidecars | Mode-specific refusal | Combat fire command | `ship_fire` tests in `chunk_05`; `town_fire_uses_adjacent_static_cannon_without_sidecar` |
 | `G` Get | Pickups, crops, Moonstones, sidecar grants | Pickups, table food, object-table grants | Underfoot dungeon chests | Combat SJOG branch | `world_get_native_object_pickup_uses_visual_filter_and_class_code_without_sidecar`, `dungeon_open_chest_does_not_apply_clean_sidecar_grants` |
 | `H` Hole up | Rest with watch and sleep ambush path | Inn-bed gated town rest | Rest with watch / dungeon ambush path | Combat has separate abort branch | `rest_with_watch_heals_living_members_and_wakes_initial_sleepers`, `town_hole_up_runs_initial_schedule_burst_and_ten_minute_cleanup` |
@@ -39,5 +39,6 @@ uncertain, read the spec and the focused runtime tests before editing.
   underfoot effects do not retrigger during the same input.
 - Refusals that the spec says are prompt/cancel/no-op paths should not consume
   a turn.
-- Several exact coordinate tables are intentionally sidecar-backed because the
-  public gazetteer does not publish raw resident coordinates.
+- Stock town/dungeon entry and return coordinates use the published gazetteer
+  table; other exact transition coordinate families remain sidecar-backed where
+  the public spec has not published rows.

@@ -205,9 +205,18 @@ pub const fn first_monster_ability(class_flags: u16) -> Option<MonsterAbility> {
     }
 }
 
-pub const COMBAT_ACTOR_FLAG_TEAM_TOGGLE: u8 = 0x01;
-pub const COMBAT_ACTOR_FLAG_STATUS_DISABLED: u8 = 0x02;
-pub const COMBAT_ACTOR_FLAG_FLEEING: u8 = 0x08;
+/// `combat.md` §6.1 / public issue #6: controlled/player-command gate.
+pub const COMBAT_ACTOR_FLAG_CONTROLLED: u8 = 0x01;
+/// Back-compatible name for the low controlled/charm bit.
+pub const COMBAT_ACTOR_FLAG_TEAM_TOGGLE: u8 = COMBAT_ACTOR_FLAG_CONTROLLED;
+/// `combat.md` §6.1 / public issue #7: flee-step inversion bit.
+pub const COMBAT_ACTOR_FLAG_FLEEING: u8 = 0x02;
+/// `combat.md` §6.2 / public issue #8: asleep/charmed/disabled skip bit.
+pub const COMBAT_ACTOR_FLAG_STATUS_DISABLED: u8 = 0x08;
+/// Public issue #8: per-slot sleep/charm duration counter block size.
+pub const COMBAT_SLEEP_DURATION_SLOTS: usize = 0x40;
+/// Clean fallback until the exact per-effect sleep durations are promoted.
+pub const COMBAT_SLEEP_DISABLED_DURATION_DEFAULT: u8 = 2;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_80: u8 = 0x80;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_40: u8 = 0x40;
 pub const COMBAT_ACTOR_FLAG_MARKED_DEAD: u8 = 0x20;
@@ -217,12 +226,22 @@ pub const COMBAT_INSTANT_KILL_DAMAGE: i16 = 99;
 /// `combat.md §12`: default monster death drop gates use the
 /// class drop-cap byte as a percentage over a `0..=99` roll.
 pub const COMBAT_DEFAULT_DEATH_DROP_ROLL_MAX: u8 = 99;
-/// `combat.md §12`: LOOK2 object-domain corpse marker used when the
-/// default kill path promotes byte five into a temporary loot marker.
-pub const COMBAT_DEFAULT_DEATH_DROP_TILE: u8 = 0x1E;
-/// `combat.md §12`: alternate corpse marker used for default
-/// no-drop deaths and boss-style vanish deaths.
-pub const COMBAT_DEFAULT_DEATH_NO_DROP_TILE: u8 = 0x1F;
+/// `combat.md` death-marker table: party-member corpse marker.
+pub const COMBAT_PARTY_CORPSE_TILE: u8 = 0x1E;
+/// `combat.md` death-marker table: default monster death/drop marker.
+/// Drop and no-drop outcomes share this tile; byte five records
+/// promoted loot when a drop gate accepts.
+pub const COMBAT_DEFAULT_DEATH_MARKER_TILE: u8 = 0x01;
+/// Back-compatible name for the default monster death/drop marker.
+pub const COMBAT_DEFAULT_DEATH_DROP_TILE: u8 = COMBAT_DEFAULT_DEATH_MARKER_TILE;
+/// Back-compatible name for the default monster death/no-drop marker.
+pub const COMBAT_DEFAULT_DEATH_NO_DROP_TILE: u8 = COMBAT_DEFAULT_DEATH_MARKER_TILE;
+/// `combat.md` death-marker table: vanish-on-death marker.
+pub const COMBAT_VANISH_DEATH_MARKER_TILE: u8 = 0x16;
+/// `combat.md` death-marker table: Gazer eye-burst marker.
+pub const COMBAT_GAZER_DEATH_MARKER_TILE: u8 = 0x1F;
+/// `combat.md` death-marker table: Gargoyle lava terrain tile.
+pub const COMBAT_GARGOYLE_DEATH_TERRAIN_TILE: u8 = 0x4C;
 /// `catalogs/spell-list.md §5` Magic Missile raw damage roll cap.
 /// Anchored to [`crate::MAGIC_MISSILE_RAW_DAMAGE_MAX`] so the
 /// combat-side roll cap and the spell-list-side raw cap stay one
@@ -264,6 +283,8 @@ pub const COMBAT_CLASS_DAEMON: u8 = 38;
 /// (38) consecutively. Anchor DRAGON to DAEMON + 1.
 pub const COMBAT_CLASS_DRAGON: u8 = COMBAT_CLASS_DAEMON + 1;
 pub const COMBAT_CLASS_SHADOW_LORD: u8 = 47;
+pub const COMBAT_SUMMONED_ACTOR_FLAGS: u8 =
+    COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_CONTROLLED;
 /// `magic.md §8` Conjure spell outcome bound — fifteen weighted
 /// outcomes. Same fundamental count as
 /// [`crate::CONJURE_OUTCOME_COUNT`] in magic.rs; anchored
@@ -277,6 +298,10 @@ pub const COMBAT_FIELD_KIND_POISON: u8 = 0x33;
 pub const COMBAT_FIELD_KIND_SLEEP: u8 = COMBAT_FIELD_KIND_POISON + 1;
 pub const COMBAT_FIELD_KIND_FIRE: u8 = COMBAT_FIELD_KIND_SLEEP + 1;
 pub const COMBAT_FIELD_KIND_ENERGY: u8 = COMBAT_FIELD_KIND_FIRE + 1;
+/// Public issue #10 scopes Fire/Sleep/Energy arena-field placement
+/// as a one-in-N callback gate and recommends N=8 until empirical
+/// tracing pins the exact byte-level threshold.
+pub const COMBAT_ARENA_FIELD_RANDOM_GATE_DENOMINATOR: u8 = 8;
 pub const COMBAT_ROUND_RESULT_DEFEAT: u8 = 0;
 pub const COMBAT_ROUND_RESULT_SUCCESS: u8 = COMBAT_ROUND_RESULT_DEFEAT + 1;
 pub const COMBAT_TARGET_GROUP_NEUTRAL: u8 = 0;
@@ -977,6 +1002,10 @@ impl CombatActorDescriptor {
         self.flags & COMBAT_ACTOR_FLAG_TEAM_TOGGLE != 0
     }
 
+    pub const fn is_controlled(self) -> bool {
+        self.flags & COMBAT_ACTOR_FLAG_CONTROLLED != 0
+    }
+
     pub const fn eligible_for_field_coordinate_lookup(self, linked_active_object_tile: u8) -> bool {
         self.has_field_lookup_selectable_bit()
             && !self.is_marked_dead()
@@ -994,6 +1023,10 @@ impl CombatActorDescriptor {
 
     pub fn set_status_disabled(&mut self) {
         self.flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+    }
+
+    pub fn clear_status_disabled(&mut self) {
+        self.flags &= !COMBAT_ACTOR_FLAG_STATUS_DISABLED;
     }
 
     pub fn set_fleeing(&mut self, fleeing: bool) {
@@ -1512,10 +1545,11 @@ pub const fn resolve_active_target_spell_damage(
 }
 
 pub const fn directed_spell_actor_is_eligible(actor: CombatActorDescriptor) -> bool {
-    !actor.is_empty()
-        && !actor.is_marked_dead()
-        && !actor.is_status_disabled()
-        && !actor.is_hidden_or_unrevealed()
+    !actor.is_empty() && !actor.is_marked_dead() && !actor.is_hidden_or_unrevealed()
+}
+
+pub const fn combat_actor_is_present_not_dead(actor: CombatActorDescriptor) -> bool {
+    !actor.is_empty() && !actor.is_marked_dead() && actor.has_field_lookup_selectable_bit()
 }
 
 pub const fn combat_actor_is_active_not_dead(actor: CombatActorDescriptor) -> bool {
@@ -1775,7 +1809,7 @@ pub fn collect_cause_fear_actor_slots(
 
 pub fn combat_has_active_not_dead_non_party_actor(actors: &[CombatActorDescriptor]) -> bool {
     actors.iter().copied().enumerate().any(|(slot, actor)| {
-        slot >= COMBAT_PARTY_ACTOR_SLOTS && combat_actor_is_active_not_dead(actor)
+        slot >= COMBAT_PARTY_ACTOR_SLOTS && combat_actor_is_present_not_dead(actor)
     })
 }
 
@@ -2178,6 +2212,9 @@ pub const fn creature_prompt_target_is_eligible(
 ) -> bool {
     !actor.is_empty()
         && !actor.is_marked_dead()
+        && !actor.is_hidden_or_unrevealed()
+        && !actor.is_status_disabled()
+        && !actor.is_controlled()
         && !protected_or_immune
         && target_group != caster_group
 }
@@ -2396,6 +2433,27 @@ pub fn combat_neighbor_candidate_coordinates(
         .collect()
 }
 
+pub fn combat_ring_candidate_coordinates(center_x: u8, center_y: u8) -> Vec<(u8, u8)> {
+    const OFFSETS: [(i16, i16); 8] = [
+        (0, -1),
+        (1, -1),
+        (1, 0),
+        (1, 1),
+        (0, 1),
+        (-1, 1),
+        (-1, 0),
+        (-1, -1),
+    ];
+    OFFSETS
+        .iter()
+        .filter_map(|(dx, dy)| {
+            let x = i16::from(center_x) + dx;
+            let y = i16::from(center_y) + dy;
+            combat_arena_coordinate_in_bounds(x, y).then_some((x as u8, y as u8))
+        })
+        .collect()
+}
+
 pub fn combat_step_direction_candidate_coordinates(
     center_x: u8,
     center_y: u8,
@@ -2561,6 +2619,8 @@ pub fn combat_possess_candidate_reaches_resistance(
         || candidate.descriptor.is_empty()
         || candidate.descriptor.is_marked_dead()
         || !candidate.descriptor.has_field_lookup_selectable_bit()
+        || candidate.descriptor.is_controlled()
+        || candidate.descriptor.is_status_disabled()
         || candidate.descriptor.is_hidden_or_unrevealed()
         || candidate.suppressed
         || candidate.invisible_or_unrevealed
@@ -2979,7 +3039,6 @@ pub fn find_combat_ai_target(
         let candidate = actors[slot];
         if candidate.descriptor.is_empty()
             || candidate.descriptor.is_marked_dead()
-            || candidate.descriptor.is_status_disabled()
             || candidate.group == acting_group
             || (!bypass_suppression_filter && candidate.suppressed)
             || candidate.invisible_or_unrevealed
@@ -3226,7 +3285,9 @@ pub fn resolve_combat_wound_morale(
     let bucket = combat_wound_score_bucket(current_hp, max_hp);
     let fleeing = match bucket {
         CombatWoundScoreBucket::UnderOneQuarter => true,
-        CombatWoundScoreBucket::OneQuarterToUnderHalf => morale_roll >= 4,
+        CombatWoundScoreBucket::OneQuarterToUnderHalf => {
+            (morale_roll as u16) < WOUND_MORALE_FLEE_THRESHOLD
+        }
         CombatWoundScoreBucket::HalfToUnderThreeQuarters
         | CombatWoundScoreBucket::ThreeQuartersOrMore => false,
     };

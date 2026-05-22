@@ -105,6 +105,16 @@ pub const fn input_function_key_index(byte: u8) -> Option<u8> {
     }
 }
 
+/// `input.md §4`: return the remapped byte for a physical function-key
+/// index. F1 maps to `0xC9`; F10 maps to `0xD2`.
+pub const fn input_function_key_code(index: u8) -> Option<u8> {
+    if index == 0 || index > 10 {
+        None
+    } else {
+        Some(INPUT_CODE_FUNCTION_FIRST + index - 1)
+    }
+}
+
 /// `input.md §3` cursor-blink defaults: glyph code `4` is the first
 /// frame; the blink modulus wraps the phase counter every `4658` poll
 /// iterations. These are mutable resident values; callers that need
@@ -167,6 +177,20 @@ impl InputDirection {
     }
 }
 
+/// `input.md §5`: return the final input-layer byte for a semantic direction.
+pub const fn input_direction_code(direction: InputDirection) -> u8 {
+    match direction {
+        InputDirection::North => INPUT_CODE_NORTH,
+        InputDirection::South => INPUT_CODE_SOUTH,
+        InputDirection::East => INPUT_CODE_EAST,
+        InputDirection::West => INPUT_CODE_WEST,
+        InputDirection::Northwest => INPUT_CODE_NORTHWEST,
+        InputDirection::Northeast => INPUT_CODE_NORTHEAST,
+        InputDirection::Southwest => INPUT_CODE_SOUTHWEST,
+        InputDirection::Southeast => INPUT_CODE_SOUTHEAST,
+    }
+}
+
 /// `input.md §5`: classify a final input-layer byte as a direction.
 /// Returns `None` for any byte outside the eight published direction
 /// codes; non-direction bytes are letters, function keys, or the prompt
@@ -181,6 +205,23 @@ pub const fn input_code_direction(byte: u8) -> Option<InputDirection> {
         INPUT_CODE_NORTHEAST => InputDirection::Northeast,
         INPUT_CODE_SOUTHWEST => InputDirection::Southwest,
         INPUT_CODE_SOUTHEAST => InputDirection::Southeast,
+        _ => return None,
+    })
+}
+
+/// `input.md §5`: keypad-style direction translation for physical digits.
+/// The input layer uses `7/8/9`, `4/6`, and `1/2/3` as the compass grid;
+/// `0` and `5` are not directions.
+pub const fn input_keypad_digit_direction_code(digit: u8) -> Option<u8> {
+    Some(match digit {
+        7 => INPUT_CODE_NORTHWEST,
+        8 => INPUT_CODE_NORTH,
+        9 => INPUT_CODE_NORTHEAST,
+        4 => INPUT_CODE_WEST,
+        6 => INPUT_CODE_EAST,
+        1 => INPUT_CODE_SOUTHWEST,
+        2 => INPUT_CODE_SOUTH,
+        3 => INPUT_CODE_SOUTHEAST,
         _ => return None,
     })
 }

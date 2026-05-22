@@ -13,11 +13,18 @@ pub enum TileGraphicsDepth {
 impl TileGraphicsDepth {
     pub fn from_key(value: &str) -> io::Result<Self> {
         match value.to_ascii_lowercase().as_str() {
-            "e" | "ega" | "ega16" | "16" => Ok(Self::Ega16),
-            "c" | "cga" | "cga4" | "4" => Ok(Self::Cga4),
+            "e" | "ega" | "ega16" | "16" | "t" | "tandy" | "tandy1000" | "t1k" => Ok(Self::Ega16),
+            "c" | "cga" | "cga4" | "4" => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "CGA raster output is outside the v1 clean recreation target",
+            )),
+            "h" | "hercules" | "her" | "herc" => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Hercules raster output is outside the v1 clean recreation target",
+            )),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("raster depth must be ega or cga, got `{value}`"),
+                format!("raster depth must be ega or tandy, got `{value}`"),
             )),
         }
     }
@@ -159,7 +166,7 @@ impl FixedCellFont {
 }
 
 pub fn load_ibm_ch_font(game_dir: &std::path::Path) -> io::Result<FixedCellFont> {
-    parse_ch_font(&std::fs::read(game_dir.join(IBM_CH_FILE))?, IBM_CH_FILE)
+    parse_ch_font(&read_disk_file(&game_dir.join(IBM_CH_FILE))?, IBM_CH_FILE)
 }
 
 pub fn parse_ch_font(bytes: &[u8], resource_name: &str) -> io::Result<FixedCellFont> {

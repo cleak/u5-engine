@@ -1,6 +1,5 @@
 //! Active-object encode/decode for SAVED.OOL mirroring + write helpers.
 
-use std::fs;
 use std::io;
 use std::path::Path;
 
@@ -411,8 +410,8 @@ pub fn write_saved_ool_mirrors(game_dir: &Path, bytes: &[u8]) -> io::Result<()> 
             ),
         ));
     }
-    fs::write(game_dir.join(BRIT_OOL_FILENAME), &bytes[..OOL_PLANE_LEN])?;
-    fs::write(game_dir.join(UNDER_OOL_FILENAME), &bytes[OOL_PLANE_LEN..])?;
+    write_disk_file(&game_dir.join(BRIT_OOL_FILENAME), &bytes[..OOL_PLANE_LEN])?;
+    write_disk_file(&game_dir.join(UNDER_OOL_FILENAME), &bytes[OOL_PLANE_LEN..])?;
     Ok(())
 }
 
@@ -423,7 +422,7 @@ pub fn write_saved_ool_mirrors_for_save(
 ) -> io::Result<()> {
     write_saved_ool_mirrors(game_dir, bytes)?;
     if save_flow_double_writes_underworld(entry_disk_prompt_mode) {
-        fs::write(game_dir.join(UNDER_OOL_FILENAME), &bytes[OOL_PLANE_LEN..])?;
+        write_disk_file(&game_dir.join(UNDER_OOL_FILENAME), &bytes[OOL_PLANE_LEN..])?;
     }
     Ok(())
 }

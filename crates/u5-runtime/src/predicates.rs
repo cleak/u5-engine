@@ -1148,13 +1148,6 @@ pub fn dungeon_exit_tile_matches(
             .map_or(true, |expected| expected == cell)
 }
 
-pub fn dungeon_closed_door_matches(entry: DungeonDoorEntry, cell: u8) -> bool {
-    cell != entry.open_cell
-        && entry
-            .expected_cell
-            .map_or(true, |expected| expected == cell)
-}
-
 pub fn town_pushable_matches(
     entry: TownPushableEntry,
     scene: Scene,
@@ -1332,6 +1325,20 @@ pub fn town_poison_gas_matches(
         && entry
             .expected_tile
             .map_or(true, |expected| expected == tile)
+}
+
+pub const fn town_poison_gas_tile_attribute_matches(tile_class: u8, vehicle_byte: u8) -> bool {
+    tile_class == TOWN_POISON_GAS_TILE_CLASS && vehicle_byte == TOWN_POISON_GAS_VEHICLE_BYTE
+}
+
+pub fn town_poison_gas_tile_matches_attributes(
+    entries: &[TownTileAttributeEntry],
+    tile: u8,
+) -> bool {
+    entries.iter().any(|entry| {
+        entry.tile == tile
+            && town_poison_gas_tile_attribute_matches(entry.tile_class, entry.vehicle_byte)
+    })
 }
 
 pub fn town_exit_tile_matches(

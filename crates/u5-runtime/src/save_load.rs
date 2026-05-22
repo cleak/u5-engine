@@ -9,7 +9,7 @@ pub fn load_play_options_from_save(game_dir: &Path) -> io::Result<PlayOptions> {
     let mut options =
         load_play_options_from_save_file(game_dir, SAVED_GAM_FILENAME, "--from-save", true)?;
     refresh_saved_ool_mirrors_for_load(game_dir)?;
-    load_world_progress_state(game_dir)?.apply_to_play_options(&mut options);
+    load_world_progress_state(game_dir)?.apply_sidecar_only_to_play_options(&mut options);
     options.blackthorn_story = load_blackthorn_story_state(game_dir)?;
     options.save_template_source = SaveTemplateSource::SavedGame;
     Ok(options)
@@ -181,6 +181,15 @@ pub fn play_options_from_save_bytes_named(
     let equipment_stock = decode_equipment_stock(bytes);
     let special_items = decode_special_items(bytes);
     let inn_registry = decode_inn_registry(bytes);
+    let mut fixed_hidden_treasure_found = [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES];
+    fixed_hidden_treasure_found.copy_from_slice(
+        &bytes[SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET
+            ..SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET + FIXED_HIDDEN_TREASURE_FOUND_BYTES],
+    );
+    let mut shadowlord_hideouts = [0; SHADOWLORD_COUNT];
+    shadowlord_hideouts.copy_from_slice(
+        &bytes[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT],
+    );
 
     let transport_marker = bytes[SAVE_TRANSPORT_MARKER_OFFSET];
     let mut transport = transport_from_save_marker(transport_marker);
@@ -226,15 +235,18 @@ pub fn play_options_from_save_bytes_named(
         reagents,
         rare_reagent_harvest_days: [RARE_REAGENT_HARVEST_UNSEEN_DAY;
             RARE_REAGENT_HARVEST_POINT_COUNT],
-        fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
-        fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
+        fixed_hidden_treasure_found,
+        fixed_hidden_treasure_daily_day: bytes[SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET],
+        fixed_hidden_treasure_single_use_cookie: bytes
+            [SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET],
         dungeon_room_clear_bitmap,
         saved_dungeon_working_buffer,
         moonstone_slots,
-        shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
+        shadowlord_hideouts,
         shrine_ordained_mask: bytes[SAVE_SHRINE_ORDAINED_MASK_OFFSET],
         shrine_codex_mask: bytes[SAVE_SHRINE_CODEX_MASK_OFFSET],
         moral_standing: bytes[SAVE_MORAL_STANDING_OFFSET],
+        toll_progress: bytes[SAVE_TOLL_PROGRESS_OFFSET],
         avatar_stats,
         torches: bytes[SAVE_TORCH_STOCK_OFFSET],
         torch_counter: bytes[SAVE_TORCH_COUNTER_OFFSET],

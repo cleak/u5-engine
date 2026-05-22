@@ -1,10 +1,9 @@
 //! Intro-menu key dispatch per `intro.md` §6.
 
-use std::fs;
 use std::io;
 use std::path::Path;
 
-use crate::input_case_fold;
+use crate::{input_case_fold, read_optional_disk_file};
 
 /// `intro.md §3` title-screen surface dimensions. The title flow
 /// places its bitmap slots inside a fixed 320-by-200 pixel coordinate
@@ -160,6 +159,26 @@ pub const fn title_tick_next_frame(current_frame: u8) -> u8 {
     (current_frame + 1) % TITLE_TICK_FRAME_COUNT
 }
 
+/// `cleak/u5-spec#52` published title-tick palette cycle. Each frame
+/// pairs an EGA bright index (drawn on the upper half of the flame
+/// silhouette) with an EGA dim index (drawn on the lower half). The
+/// four-frame loop drives the "wavering flame stripe" perceived
+/// effect over the title-tick rectangle without changing the
+/// underlying silhouette.
+pub const TITLE_TICK_PALETTE_CYCLE: [(u8, u8); TITLE_TICK_FRAME_COUNT as usize] = [
+    (0x0E, 0x06), // frame 0: light yellow over brown
+    (0x0C, 0x04), // frame 1: light red over red
+    (0x0E, 0x04), // frame 2: light yellow over red
+    (0x0C, 0x06), // frame 3: light red over brown
+];
+
+/// `cleak/u5-spec#52`: returns `(bright_index, dim_index)` EGA
+/// palette indices for the given mod-four title-tick frame.
+pub const fn title_tick_palette_indices(frame: u8) -> (u8, u8) {
+    let frame = (frame % TITLE_TICK_FRAME_COUNT) as usize;
+    TITLE_TICK_PALETTE_CYCLE[frame]
+}
+
 /// `intro.md §12`: Return-to-View loads `MISCMAPS.DAT`. The first
 /// four records are 19-by-4 map strips followed by a 655-byte
 /// command stream driving preview actors and animation beats.
@@ -209,15 +228,8 @@ pub fn load_miscmaps_cutscene_map(
     record_index: usize,
 ) -> io::Result<Option<MiscmapsCutsceneMap>> {
     let path = game_dir.join(MISCMAPS_DAT_FILE);
-    let bytes = match fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => {
-            return Err(io::Error::new(
-                err.kind(),
-                format!("{}: {err}", path.display()),
-            ));
-        }
+    let Some(bytes) = read_optional_disk_file(&path)? else {
+        return Ok(None);
     };
     parse_miscmaps_cutscene_map_file(&bytes, record_index).map(Some)
 }
@@ -278,6 +290,29 @@ pub const MISCMAPS_RTV_COMMAND_SECTION_OFFSET: usize =
 /// 16-command preview bytecode, not the gameplay TLK runner.
 pub const RTV_COMMAND_COUNT: usize = 16;
 
+/// `intro.md §11`: lines shown by the Acknowledgements (`A`) submenu.
+///
+/// The public spec calls out acknowledgement-screen content as
+/// clean-room authored: "Its exact text and pagination are left to a
+/// source-free content transcription rather than copied binary text
+/// dumps." This is original prose authored for the clean-room
+/// implementation; it does not transcribe any historical credit text.
+pub const ACKNOWLEDGEMENTS_LINES: &[&str] = &[
+    "Acknowledgements",
+    "",
+    "Ultima V is a trademark of its rights holders.",
+    "This clean-room recreation reads local game data at",
+    "runtime and ships no original game content.",
+    "",
+    "Behavior derived from the published clean-room",
+    "specification in the u5-spec repository, the engine",
+    "implementation in u5-engine, and locally available",
+    "game assets. No private decompilation, disassembly,",
+    "or copyrighted source has been consulted.",
+    "",
+    "Press any key to return to the intro menu.",
+];
+
 /// `intro.md §6`: the six accepted intro-menu actions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IntroMenuAction {
@@ -317,4 +352,60 @@ pub fn intro_menu_action(byte: u8) -> Option<IntroMenuAction> {
         b'\r' | b'\n' => IntroMenuAction::RepeatCachedSelection,
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Locks in the clean-room first-playable defaults that stand in for
+    /// not-yet-published spec values. Each row pairs the engine's
+    /// current intentional clean-room value with the open spec issue
+    /// that gates exact-parity ratification.
+    ///
+    /// If a spec issue is closed and the public spec publishes the
+    /// authoritative value, update the corresponding constant *and*
+    /// this test in the same patch.
+    #[test]
+    fn clean_room_policy_constants_match_documented_defaults() {
+        // `cleak/u5-spec#49` — Create Food grant per cast is the
+        // PRNG roll `rand() mod 3` (uniform `0..=2`); not a flat
+        // constant any more.
+        assert_eq!(crate::CREATE_FOOD_MIN_GRANT, 0);
+        assert_eq!(crate::CREATE_FOOD_MAX_GRANT, 2);
+        // `cleak/u5-spec#50` — Hourly poison damage per Poisoned living
+        // member is a deterministic `-1` (not RNG-rolled).
+        assert_eq!(crate::FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, 1);
+        // `cleak/u5-spec#50` — Hourly starvation damage is now the
+        // PRNG roll `prng_range(1, 8)` per non-dead party slot.
+        assert_eq!(crate::HOURLY_STARVATION_DAMAGE_MIN, 1);
+        assert_eq!(crate::HOURLY_STARVATION_DAMAGE_MAX, 8);
+    }
+
+    #[test]
+    fn acknowledgements_lines_are_clean_room_authored() {
+        let header = ACKNOWLEDGEMENTS_LINES
+            .first()
+            .copied()
+            .expect("acknowledgements has at least a header line");
+        assert_eq!(header, "Acknowledgements");
+        let last = ACKNOWLEDGEMENTS_LINES
+            .last()
+            .copied()
+            .expect("acknowledgements has a closing prompt");
+        assert!(
+            last.contains("return to the intro menu"),
+            "closing line should prompt return to the intro menu, got `{last}`"
+        );
+        assert!(
+            ACKNOWLEDGEMENTS_LINES
+                .iter()
+                .any(|line| line.contains("clean-room")),
+            "acknowledgements text should describe its clean-room provenance"
+        );
+        assert!(
+            ACKNOWLEDGEMENTS_LINES.iter().all(|line| line.len() <= 60),
+            "every acknowledgement line must fit a 60-column 320x200 layout"
+        );
+    }
 }

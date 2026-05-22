@@ -9,9 +9,12 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use u5_runtime::{
-    Area, Direction, PLAY_IGNORED_INPUT_KEY, PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS,
+    Area, Direction, INPUT_CODE_EAST, INPUT_CODE_NORTH, INPUT_CODE_NORTHEAST, INPUT_CODE_NORTHWEST,
+    INPUT_CODE_SOUTH, INPUT_CODE_SOUTHEAST, INPUT_CODE_SOUTHWEST, INPUT_CODE_WEST,
+    PLAY_IGNORED_INPUT_KEY, PLAY_MUSIC_TOGGLE_KEY, PLAY_SCRIPT_MAX_IDLE_TICKS,
     PLAY_TYPEAHEAD_TOGGLE_KEY, PlayInputDisposition, PlayOptions, PlayState, TileAtlas,
-    TileGraphicsDepth, handle_play_key_input, hash_bytes, hash_palette_indices, load_tile_atlas,
+    TileGraphicsDepth, handle_play_key_input, hash_bytes, hash_palette_indices,
+    input_function_key_code, load_tile_atlas,
 };
 
 pub fn run_play_loop(
@@ -31,7 +34,7 @@ pub fn run_play_loop(
     };
     println!("Ultima V playable harness");
     println!(
-        "Scene {} floor/level {}. Town/world move: numpad 1-9 or lowercase wasd/yubn. Dungeon: W/S forward/back, A/D turn. Attack: A prompts or A+dir. Enter: e. Open: O prompts in town or o+dir. Get/Search: G/S prompt or +dir. Push: P prompts in town or p+dir. Hole up: h+hours. Look: l+dir; fountain and wishing-well prompts continue after Look. View: v. Use: U opens picker or UT/UG/UK/U1-U8. Stats: Z. Ignite: i. Talk: T prompts or TKEYWORD. Climb: k/< />. Board/Xit/Yell sails: B/X/x/Y. Fire: F prompts on ships or f+dir. Cast: C opens spell-name and follow-up prompts, or inline C1IL/C1AZ2/C1AN2/C1M2/C1MV2/C1CIM2/C1IS/C1RT/C1AI/C1IW/C1IMX/C1AS/C1LV/C1HR/C1IP6/C1IQW/C1AWY/C1PU/C1DP/C1AG6/C1GIN6/C1GIS6/C1AEP/C1EIP/C1PRV2/C1AT. Mix: M opens mixer or MIL/0x80/1. Order: N opens prompt or N12. Yell: Y opens prompt or YWORD. Top-down save: Q prompts or QY/QN. Dungeon exit prompt: Q prompts or QY/QN. Buffer/typeahead: buffer. Combat music toggle: music. Idle animation: . Optional startup wind/Grapple/transport/raster diagnostics: --wind, --grapple, --climbing-gear, --transport, --raster-diagnostics, --raster-depth ega|cga. Pass: Space/Enter. Harness quit: q.",
+        "Scene {} floor/level {}. Town/world move: arrow keys, Home/Page/End, numpad 1-9, or legacy lowercase wasd/yubn. Dungeon: W/S forward/back, A/D turn. Attack: A prompts or A+dir. Enter: e. Open: O prompts in town or o+dir. Get/Search: G/S prompt or +dir. Push: P prompts in town or p+dir. Hole up: h+hours. Look: l+dir; fountain and wishing-well prompts continue after Look. View: v. Use: U opens picker or UT/UG/UK/U1-U8. Stats: Z. Ignite: i. Talk: T prompts or TKEYWORD. Climb: k/< />. Board/Xit/Yell sails: B/X/x/Y. Fire: F prompts on ships or f+dir. Cast: C opens spell-name and follow-up prompts, or inline C1IL/C1AZ2/C1AN2/C1M2/C1MV2/C1CIM2/C1IS/C1RT/C1AI/C1IW/C1IMX/C1AS/C1LV/C1HR/C1IP6/C1IQW/C1AWY/C1PU/C1DP/C1AG6/C1GIN6/C1GIS6/C1AEP/C1EIP/C1PRV2/C1AT. Mix: M opens mixer or MIL/0x80/1. Order: N opens prompt or N12. Yell: Y opens prompt or YWORD. Top-down save: Q prompts or QY/QN. Dungeon exit prompt: Q prompts or QY/QN. Buffer/typeahead: buffer. Combat music toggle: music. Idle animation: . Optional startup wind/Grapple/transport/raster diagnostics: --wind, --grapple, --climbing-gear, --transport, --raster-diagnostics, --raster-depth ega|tandy. Pass: Space/Enter. Harness quit: q.",
         intro_target.key(),
         intro_floor
     );
@@ -210,8 +213,8 @@ pub fn play_input_key_and_suffix(input: &str) -> Option<(char, String)> {
     if let Some(key) = ansi_navigation_key(input) {
         return Some((key, String::new()));
     }
-    if ansi_function_key(input).is_some() {
-        return Some((PLAY_IGNORED_INPUT_KEY, "function".to_string()));
+    if let Some(key) = ansi_function_key(input).and_then(input_function_key_code) {
+        return Some((char::from(key), String::new()));
     }
     if unclassified_escape_sequence(input) {
         return Some((PLAY_IGNORED_INPUT_KEY, "escape".to_string()));
@@ -258,15 +261,19 @@ pub fn is_music_toggle_token(input: &str) -> bool {
 }
 
 pub fn ansi_navigation_key(input: &str) -> Option<char> {
+    ansi_navigation_input_byte(input).map(char::from)
+}
+
+pub fn ansi_navigation_input_byte(input: &str) -> Option<u8> {
     match input {
-        "\x1b[A" | "\x1bOA" => Some('8'),
-        "\x1b[B" | "\x1bOB" => Some('2'),
-        "\x1b[D" | "\x1bOD" => Some('4'),
-        "\x1b[C" | "\x1bOC" => Some('6'),
-        "\x1b[H" | "\x1bOH" | "\x1b[1~" | "\x1b[7~" => Some('7'),
-        "\x1b[5~" => Some('9'),
-        "\x1b[F" | "\x1bOF" | "\x1b[4~" | "\x1b[8~" => Some('1'),
-        "\x1b[6~" => Some('3'),
+        "\x1b[A" | "\x1bOA" => Some(INPUT_CODE_NORTH),
+        "\x1b[B" | "\x1bOB" => Some(INPUT_CODE_SOUTH),
+        "\x1b[D" | "\x1bOD" => Some(INPUT_CODE_WEST),
+        "\x1b[C" | "\x1bOC" => Some(INPUT_CODE_EAST),
+        "\x1b[H" | "\x1bOH" | "\x1b[1~" | "\x1b[7~" => Some(INPUT_CODE_NORTHWEST),
+        "\x1b[5~" => Some(INPUT_CODE_NORTHEAST),
+        "\x1b[F" | "\x1bOF" | "\x1b[4~" | "\x1b[8~" => Some(INPUT_CODE_SOUTHWEST),
+        "\x1b[6~" => Some(INPUT_CODE_SOUTHEAST),
         _ => None,
     }
 }

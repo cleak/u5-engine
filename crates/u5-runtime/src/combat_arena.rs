@@ -1,10 +1,9 @@
 //! Combat arena (`*.CBT`) record decoder.
 
-use std::fs;
 use std::io;
 use std::path::Path;
 
-use crate::DUNGEON_ROOM_SLOTS_PER_BANK;
+use crate::{DUNGEON_ROOM_SLOTS_PER_BANK, read_disk_file};
 
 /// `formats/cbt.md §3`: each combat arena is an 11x11 visible
 /// grid — the same dimension as the main-mode active viewport.
@@ -86,6 +85,13 @@ pub const fn combat_arena_row_offset(arena_index: usize, row: usize) -> usize {
 }
 pub const DEFAULT_COMBAT_ARENA_TERRAIN: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] =
     [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+
+/// Public `cleak/u5-spec#21`: dungeon wandering-monster ambush combat
+/// builds an eleven-by-eleven stock dungeon-floor arena in resident state
+/// instead of loading `DUNGEON.CBT`.
+pub const DUNGEON_AMBUSH_ARENA_FLOOR_TILE: u8 = 0x04;
+pub const DUNGEON_AMBUSH_ARENA_TERRAIN: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE] =
+    [[DUNGEON_AMBUSH_ARENA_FLOOR_TILE; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CombatArenaRecord {
@@ -212,7 +218,7 @@ impl DungeonRoomSetupSourceKind {
     pub fn from_source(source: u8) -> Self {
         if source == DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE {
             Self::AbsorbableField
-        } else if (0x40..=0x7f).contains(&source) {
+        } else if (0x40..=0x7f).contains(&(source & 0x7f)) {
             Self::OrdinaryCombatant
         } else {
             Self::SpecialPlacement
@@ -265,14 +271,12 @@ pub fn parse_combat_arena_bank(
 
 pub fn load_brit_cbt(game_dir: &Path) -> io::Result<CombatArenaBank> {
     let path = game_dir.join(BRIT_CBT_FILE);
-    let bytes = fs::read(&path)
-        .map_err(|err| io::Error::new(err.kind(), format!("{}: {err}", path.display())))?;
+    let bytes = read_disk_file(&path)?;
     parse_combat_arena_bank(BRIT_CBT_FILE, &bytes, BRIT_CBT_RECORDS)
 }
 
 pub fn load_dungeon_cbt(game_dir: &Path) -> io::Result<CombatArenaBank> {
     let path = game_dir.join(DUNGEON_CBT_FILE);
-    let bytes = fs::read(&path)
-        .map_err(|err| io::Error::new(err.kind(), format!("{}: {err}", path.display())))?;
+    let bytes = read_disk_file(&path)?;
     parse_combat_arena_bank(DUNGEON_CBT_FILE, &bytes, DUNGEON_CBT_RECORDS)
 }

@@ -93,6 +93,130 @@ pub const fn natural_moongate_cached_glyph_slot(hour: u8) -> u8 {
     if hour < 12 { 0 } else { 1 }
 }
 
+/// `moons.md §2` Trammel below-horizon sentinel. Bytes with the high
+/// bit set in the Trammel hour table mean the moon is below the
+/// horizon for that hour; the natural-moongate entry hook treats
+/// these as "no gate active for this moon" and the status strip
+/// renders an off-horizon glyph.
+pub const TRAMMEL_OFF_HORIZON_SENTINEL: u8 = 0xF0;
+
+/// `moons.md §2` Felucca below-horizon sentinel.
+pub const FELUCCA_OFF_HORIZON_SENTINEL: u8 = 0x80;
+
+/// `moons.md §2`: hour-indexed Trammel glyph byte table extracted
+/// from shipped `DATA.OVL`. Each entry is an ASCII phase digit
+/// `b'0'..=b'7'` (mapping to Moonstone slot index `0..=7`) or the
+/// [`TRAMMEL_OFF_HORIZON_SENTINEL`] byte meaning below-horizon.
+///
+/// Trammel cycles through all eight phases roughly twice per day
+/// (the larger, slower moon). The single off-horizon entry sits
+/// at hour `0` (midnight).
+pub const TRAMMEL_GLYPH_BY_HOUR: [u8; 24] = [
+    TRAMMEL_OFF_HORIZON_SENTINEL,
+    b'0',
+    b'1',
+    b'1',
+    b'2',
+    b'2',
+    b'3',
+    b'3',
+    b'4',
+    b'5',
+    b'5',
+    b'6',
+    b'6',
+    b'7',
+    b'7',
+    b'0',
+    b'1',
+    b'1',
+    b'2',
+    b'2',
+    b'3',
+    b'3',
+    b'4',
+    b'5',
+];
+
+/// `moons.md §2`: hour-indexed Felucca glyph byte table.
+///
+/// Felucca cycles once per day. Public issue `cleak/u5-spec#38`
+/// corrected the off-horizon rows at hours `10`, `11`, `19`, and `20`
+/// to the high-bit sentinel, so natural-gate entry does not route them
+/// through Moonstone slot `0`.
+pub const FELUCCA_GLYPH_BY_HOUR: [u8; 24] = [
+    FELUCCA_OFF_HORIZON_SENTINEL,
+    b'0',
+    b'0',
+    b'1',
+    b'2',
+    b'3',
+    b'4',
+    b'5',
+    b'6',
+    b'7',
+    FELUCCA_OFF_HORIZON_SENTINEL,
+    FELUCCA_OFF_HORIZON_SENTINEL,
+    b'1',
+    b'2',
+    b'3',
+    b'4',
+    b'5',
+    b'6',
+    b'7',
+    FELUCCA_OFF_HORIZON_SENTINEL,
+    FELUCCA_OFF_HORIZON_SENTINEL,
+    b'1',
+    b'2',
+    b'3',
+];
+
+/// `moons.md §2`: raw cached glyph bytes for a status/moon refresh
+/// at the supplied hour. Out-of-range hours use both off-horizon
+/// sentinels rather than indexing outside the published tables.
+pub const fn cached_moon_glyph_bytes_for_hour(hour: u8) -> [u8; 2] {
+    if hour >= 24 {
+        return [TRAMMEL_OFF_HORIZON_SENTINEL, FELUCCA_OFF_HORIZON_SENTINEL];
+    }
+    [
+        TRAMMEL_GLYPH_BY_HOUR[hour as usize],
+        FELUCCA_GLYPH_BY_HOUR[hour as usize],
+    ]
+}
+
+/// `moons.md §2`: decode a published glyph byte into a Moonstone
+/// slot index (`0..=7`). Returns `None` for the high-bit
+/// off-horizon sentinel and for any other unexpected byte. The
+/// natural-moongate entry hook treats `None` as "no gate for this
+/// moon".
+pub const fn moonstone_slot_from_glyph_byte(byte: u8) -> Option<usize> {
+    if byte & 0x80 != 0 {
+        return None;
+    }
+    if byte < b'0' || byte > b'7' {
+        return None;
+    }
+    Some((byte - b'0') as usize)
+}
+
+/// `moons.md §2`: Trammel Moonstone-slot index for an in-range hour
+/// (`0..=23`). Returns `None` for off-horizon hours and for hours
+/// outside the published 24-entry table.
+pub const fn trammel_moonstone_slot_for_hour(hour: u8) -> Option<usize> {
+    if hour >= 24 {
+        return None;
+    }
+    moonstone_slot_from_glyph_byte(TRAMMEL_GLYPH_BY_HOUR[hour as usize])
+}
+
+/// `moons.md §2`: Felucca Moonstone-slot index for an in-range hour.
+pub const fn felucca_moonstone_slot_for_hour(hour: u8) -> Option<usize> {
+    if hour >= 24 {
+        return None;
+    }
+    moonstone_slot_from_glyph_byte(FELUCCA_GLYPH_BY_HOUR[hour as usize])
+}
+
 /// `overworld.md §9` live moon-gate terrain byte. Eligible saved
 /// Moonstone slots are stamped with this tile while the shared
 /// gate-presence counter is nonzero; when the counter wanes to

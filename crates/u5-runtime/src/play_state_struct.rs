@@ -21,7 +21,7 @@ pub struct PlayState {
     pub animation: AnimationClock,
     pub natural_moongate_counter: u8,
     pub natural_moongate_live_cells: Vec<usize>,
-    pub cached_moon_glyph_slots: [Option<usize>; 2],
+    pub cached_moon_glyph_bytes: [u8; 2],
     pub food: u16,
     pub gold: u16,
     pub keys: u8,
@@ -44,18 +44,23 @@ pub struct PlayState {
     pub rare_reagent_harvest_days: [u8; RARE_REAGENT_HARVEST_POINT_COUNT],
     pub fixed_hidden_treasure_found: [u8; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
     pub fixed_hidden_treasure_daily_day: u8,
+    pub fixed_hidden_treasure_single_use_cookie: u8,
     pub dungeon_room_clear_bitmap: [u8; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
     pub moonstone_slots: [MoonstoneGateSlot; MOONSTONE_SLOT_COUNT],
     pub shadowlord_hideouts: [u8; SHADOWLORD_COUNT],
     pub shrine_ordained_mask: u8,
     pub shrine_codex_mask: u8,
     pub moral_standing: u8,
+    pub toll_progress: u8,
     pub avatar_stats: AvatarStats,
     pub torches: u8,
     pub torch_counter: u8,
     pub light_spell_counter: u8,
     pub ambient_light: u8,
     pub visibility_dirty: bool,
+    pub visibility_grid: [u8; VISIBILITY_GRID_LEN],
+    pub terrain_band: [u8; TERRAIN_BAND_LEN],
+    pub visibility_buffers_ready: bool,
     pub wind: WindState,
     pub wind_save_byte: u8,
     pub timing_status: TimingStatusTag,
@@ -71,7 +76,13 @@ pub struct PlayState {
     pub pending_combat_terrain_trigger_slot: Option<usize>,
     pub next_combat_actor_slot: usize,
     pub combat_terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    pub combat_magic_effects: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    pub combat_magic_effect_timer: u8,
+    pub combat_cursor_blink: bool,
+    pub combat_secondary_marker: Option<(u8, u8)>,
+    pub combat_ambush_reveals: [Option<CombatAmbushRevealRecord>; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
     pub combat_actors: [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
+    pub combat_sleep_durations: [u8; COMBAT_SLEEP_DURATION_SLOTS],
     pub sail_cadence: u8,
     pub sail_stall_pending: bool,
     pub turn: u64,
@@ -127,6 +138,7 @@ pub struct ViewOverlay {
     pub title: String,
     pub text_map: String,
     pub kind: ViewOverlayKind,
+    pub mode: ViewOverlayMode,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -134,6 +146,21 @@ pub enum ViewOverlayKind {
     Surface,
     BritanniaChunkMap,
     Dungeon { level: u8 },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ViewOverlayMode {
+    GemView,
+    PeerSpell,
+    XRaySpell,
+    SurfaceLook,
+    BritanniaOverview,
+}
+
+impl ViewOverlayMode {
+    pub const fn uses_alternate_view_bank(self) -> bool {
+        matches!(self, Self::GemView | Self::PeerSpell)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

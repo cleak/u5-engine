@@ -805,14 +805,8 @@ fn use_command_routes_inline_skull_key_requests_to_town_lock_handler() {
 #[test]
 fn skull_key_refuses_dungeon_without_consuming_special_key() {
     let dir = debug_game_dir();
-    fs::write(
-        dir.join(DUNGEON_DOOR_TABLE_FILE),
-        "DUNGEON:0 0 1 1 0x70 0xF2\n",
-    )
-    .unwrap();
-
     let mut dungeon_grid = open_dungeon_record();
-    dungeon_grid[dungeon_cell_index(0, 1, 1)] = 0xF2;
+    dungeon_grid[dungeon_cell_index(0, 1, 1)] = 0x00;
     let mut dungeon = dungeon_state(dungeon_grid, 0, 1, 1);
     dungeon.visibility_dirty = false;
     dungeon.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX] = 1;
@@ -822,7 +816,7 @@ fn skull_key_refuses_dungeon_without_consuming_special_key() {
         PlayInputDisposition::Continue
     );
 
-    assert_eq!(dungeon.grid[dungeon_cell_index(0, 1, 1)], 0xF2);
+    assert_eq!(dungeon.grid[dungeon_cell_index(0, 1, 1)], 0x00);
     assert_eq!(dungeon.turn, 0);
     assert_eq!(dungeon.special_items[SPECIAL_ITEM_SKULL_KEY_INDEX], 1);
     assert!(!dungeon.visibility_dirty);
@@ -887,6 +881,70 @@ fn town_push_static_chair_requires_stamp_rotates_and_advances_avatar() {
     assert_eq!(state.turn, 1);
     assert!(state.visibility_dirty);
     assert!(state.message.contains("Pushed tile 144 East"));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn town_push_runs_door_close_preflight_before_resolving_destination() {
+    let dir = debug_game_dir();
+    let mut grid = open_grid();
+    grid[32 + 2] = 0x90;
+    grid[32 + 3] = 16;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+    state.door_tracker = Some(DoorTracker {
+        previous_tile: PUSHABLE_GENERIC_FLOOR_STAMP,
+        x: 3,
+        y: 1,
+        turns_remaining: 1,
+    });
+
+    assert_eq!(
+        state.push_facing_with_game_dir(&dir).unwrap(),
+        MoveOutcome::Pushed
+    );
+
+    assert_eq!(state.grid[32 + 2], PUSHABLE_GENERIC_FLOOR_STAMP);
+    assert_eq!(state.grid[32 + 3], 0x91);
+    assert_eq!(state.door_tracker, None);
+    assert_eq!((state.player.x, state.player.y), (2, 1));
+    assert_eq!(state.turn, 1);
+    assert!(state.message.contains("Pushed tile 144 East"));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn town_push_ticks_unrelated_open_door_once_on_consumed_turn() {
+    let dir = debug_game_dir();
+    let mut grid = open_grid();
+    grid[32 + 2] = 0x90;
+    grid[32 + 3] = PUSHABLE_GENERIC_FLOOR_STAMP;
+    grid[32 + 5] = 16;
+    let mut state = test_state(grid, 1, 1);
+    state.player.facing = Direction::East;
+    state.door_tracker = Some(DoorTracker {
+        previous_tile: 96,
+        x: 5,
+        y: 1,
+        turns_remaining: 4,
+    });
+
+    assert_eq!(
+        state.push_facing_with_game_dir(&dir).unwrap(),
+        MoveOutcome::Pushed
+    );
+
+    assert_eq!(
+        state.door_tracker,
+        Some(DoorTracker {
+            previous_tile: 96,
+            x: 5,
+            y: 1,
+            turns_remaining: 3,
+        })
+    );
+    assert_eq!(state.grid[32 + 5], 16);
+    assert_eq!(state.turn, 1);
     let _ = fs::remove_dir_all(dir);
 }
 

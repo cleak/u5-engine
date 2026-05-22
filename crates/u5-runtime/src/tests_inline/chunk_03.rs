@@ -69,6 +69,7 @@
         state.fixed_hidden_treasure_found[0] = 0x21;
         state.fixed_hidden_treasure_found[FIXED_HIDDEN_TREASURE_FOUND_BYTES - 1] = 0x80;
         state.fixed_hidden_treasure_daily_day = 6;
+        state.fixed_hidden_treasure_single_use_cookie = 0x77;
         state.shadowlord_hideouts = [8, SHADOWLORD_VANQUISHED, 4];
         state.shrine_ordained_mask = 0b0000_1010;
         state.shrine_codex_mask = 0b0100_0001;
@@ -171,6 +172,21 @@
         assert_eq!(saved[SAVE_SHRINE_CODEX_MASK_OFFSET], 0b0100_0001);
         assert_eq!(saved[SAVE_MORAL_STANDING_OFFSET], 42);
         assert_eq!(saved[SAVE_FORTUNES_OF_WAR_OFFSET], 0x7e);
+        assert_eq!(
+            &saved[SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET
+                ..SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET + FIXED_HIDDEN_TREASURE_FOUND_BYTES],
+            &state.fixed_hidden_treasure_found
+        );
+        assert_eq!(saved[SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET], 6);
+        assert_eq!(
+            saved[SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET],
+            0x77
+        );
+        assert_eq!(
+            &saved[SAVE_SHADOWLORD_HIDEOUTS_OFFSET
+                ..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT],
+            &state.shadowlord_hideouts
+        );
         assert_eq!(
             &saved[SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET
                 ..SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET + SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
@@ -402,10 +418,13 @@
     fn world_progress_state_codec_round_trips() {
         let mut progress = WorldProgressState::default();
         progress.rare_reagent_harvest_days = [7, 8, 9];
+        progress.fixed_hidden_treasure_mirror_present = true;
         progress.fixed_hidden_treasure_found[0] = 0x01;
         progress.fixed_hidden_treasure_found[7] = 0xa5;
         progress.fixed_hidden_treasure_found[FIXED_HIDDEN_TREASURE_FOUND_BYTES - 1] = 0x40;
         progress.fixed_hidden_treasure_daily_day = 12;
+        progress.fixed_hidden_treasure_single_use_cookie = Some(0x55);
+        progress.shadowlord_mirror_present = true;
         progress.shadowlord_hideouts = [SHADOWLORD_VANQUISHED, 3, 6];
 
         let encoded = progress.encoded();
@@ -413,10 +432,16 @@
         assert_eq!(WorldProgressState::decode(&encoded).unwrap(), progress);
         let mut legacy = encoded.to_vec();
         legacy.extend_from_slice(&[10, 20, 30, 40, 50, 60, 70, 80]);
-        assert_eq!(legacy.len(), WORLD_PROGRESS_STATE_LEGACY_SHRINE_STANDING_LEN);
+        assert_eq!(legacy.len(), WORLD_PROGRESS_STATE_LEN + VIRTUE_COUNT);
         assert_eq!(WorldProgressState::decode(&legacy).unwrap(), progress);
+        let mut old = encoded.to_vec();
+        old.remove(WORLD_PROGRESS_STATE_LEN - SHADOWLORD_COUNT - 1);
+        old.truncate(WORLD_PROGRESS_STATE_LEN - 1);
+        let old_decoded = WorldProgressState::decode(&old).unwrap();
+        assert_eq!(old_decoded.fixed_hidden_treasure_single_use_cookie, None);
+        assert_eq!(old_decoded.shadowlord_hideouts, progress.shadowlord_hideouts);
         assert!(WorldProgressState::decode(&[0; WORLD_PROGRESS_STATE_LEN]).is_err());
-        assert!(WorldProgressState::decode(&encoded[..WORLD_PROGRESS_STATE_LEN - 1]).is_err());
+        assert!(WorldProgressState::decode(&encoded[..WORLD_PROGRESS_STATE_LEN - 2]).is_err());
     }
 
     #[test]
@@ -430,10 +455,86 @@
         let options = load_play_options_from_save(&dir).unwrap();
 
         assert_eq!(
-            WorldProgressState::from_play_options(&options),
-            WorldProgressState::default()
+            options.rare_reagent_harvest_days,
+            [RARE_REAGENT_HARVEST_UNSEEN_DAY; RARE_REAGENT_HARVEST_POINT_COUNT]
         );
+        assert_eq!(options.fixed_hidden_treasure_found, [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES]);
+        assert_eq!(
+            options.fixed_hidden_treasure_daily_day,
+            FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY
+        );
+        assert_eq!(
+            options.fixed_hidden_treasure_single_use_cookie,
+            FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR
+        );
+        assert_eq!(options.shadowlord_hideouts, DEFAULT_SHADOWLORD_HIDEOUTS);
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn from_save_decodes_fixed_hidden_treasure_state() {
+        let mut bytes = saved_game_seed_bytes(0, 0xff, 10, 20);
+        bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        bytes[SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET] = 0x05;
+        bytes[SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET + FIXED_HIDDEN_TREASURE_FOUND_BYTES - 1] =
+            0x80;
+        bytes[SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET] = 0x12;
+        bytes[SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET] = 0x34;
+
+        let options = play_options_from_save_bytes(&bytes).unwrap();
+
+        assert_eq!(options.fixed_hidden_treasure_found[0], 0x05);
+        assert_eq!(
+            options.fixed_hidden_treasure_found[FIXED_HIDDEN_TREASURE_FOUND_BYTES - 1],
+            0x80
+        );
+        assert_eq!(options.fixed_hidden_treasure_daily_day, 0x12);
+        assert_eq!(options.fixed_hidden_treasure_single_use_cookie, 0x34);
+    }
+
+    #[test]
+    fn from_save_keeps_native_hidden_treasure_state_over_sidecar_mirror() {
+        let dir = debug_game_dir();
+        let mut save = saved_game_seed_bytes(0, 0xff, 10, 20);
+        save[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        save[SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET] = 0x05;
+        save[SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET] = 0x12;
+        save[SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET] = 0x34;
+        save[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
+            .copy_from_slice(&[8, SHADOWLORD_VANQUISHED, 4]);
+        fs::write(dir.join(SAVED_GAM_FILENAME), save).unwrap();
+        fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+
+        let mut progress = WorldProgressState::default();
+        progress.rare_reagent_harvest_days = [7, 8, 9];
+        progress.fixed_hidden_treasure_mirror_present = true;
+        progress.fixed_hidden_treasure_found[0] = 0xa0;
+        progress.fixed_hidden_treasure_daily_day = 0x56;
+        progress.fixed_hidden_treasure_single_use_cookie = Some(0x78);
+        progress.shadowlord_mirror_present = true;
+        progress.shadowlord_hideouts = [1, 2, 3];
+        write_world_progress_state(&dir, progress).unwrap();
+
+        let options = load_play_options_from_save(&dir).unwrap();
+
+        assert_eq!(options.rare_reagent_harvest_days, [7, 8, 9]);
+        assert_eq!(options.fixed_hidden_treasure_found[0], 0x05);
+        assert_eq!(options.fixed_hidden_treasure_daily_day, 0x12);
+        assert_eq!(options.fixed_hidden_treasure_single_use_cookie, 0x34);
+        assert_eq!(options.shadowlord_hideouts, [8, SHADOWLORD_VANQUISHED, 4]);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn from_save_decodes_shadowlord_hideout_slots() {
+        let mut bytes = saved_game_seed_bytes(0, 0xff, 10, 20);
+        bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        bytes[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
+            .copy_from_slice(&[8, SHADOWLORD_VANQUISHED, 4]);
+
+        let options = play_options_from_save_bytes(&bytes).unwrap();
+
+        assert_eq!(options.shadowlord_hideouts, [8, SHADOWLORD_VANQUISHED, 4]);
     }
 
     #[test]
@@ -1618,14 +1719,25 @@
             },
         ];
 
+        let p0_hp_before = state.party[0].hp;
+        let p1_hp_before = state.party[1].hp;
         state.advance_turn_with_minutes(1);
 
         assert_eq!(state.clock.hour, 9);
         assert_eq!(state.food, 0);
-        assert_eq!(state.party[0].hp, 1);
-        assert_eq!(state.party[0].status, b'G');
-        assert_eq!(state.party[1].hp, 1);
-        assert_eq!(state.party[1].status, b'S');
+        // `cleak/u5-spec#50`: starvation rolls `prng_range(1, 8)` per
+        // non-dead slot. With starting HP = 2, every roll either
+        // partially damages (HP >= 0) or kills (HP = 0). Assert the
+        // spec contract rather than a specific roll.
+        assert!(state.party[0].hp <= p0_hp_before);
+        // Status stays `'G'` while alive; becomes `'D'` only on
+        // exact-zero HP.
+        let p0_expected_status = if state.party[0].hp == 0 { b'D' } else { b'G' };
+        assert_eq!(state.party[0].status, p0_expected_status);
+        assert!(state.party[1].hp <= p1_hp_before);
+        let p1_expected_status = if state.party[1].hp == 0 { b'D' } else { b'S' };
+        assert_eq!(state.party[1].status, p1_expected_status);
+        // Already-dead member must be skipped.
         assert_eq!(state.party[2].hp, 0);
         assert_eq!(state.party[2].status, b'D');
         assert!(state
@@ -1635,18 +1747,91 @@
     }
 
     #[test]
+    fn hourly_status_pass_applies_poison_before_seeded_starvation_rolls() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.clock = GameClock::with_date(139, 4, 5, 8, 59).unwrap();
+        state.food = 0;
+        state.prng_state = 0x3456;
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'P',
+                climb_stat: 30,
+                mana: 8,
+                hp: 20,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'F',
+                status: b'G',
+                climb_stat: 30,
+                mana: 8,
+                hp: 20,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 2,
+                class_byte: b'M',
+                status: b'D',
+                climb_stat: 30,
+                mana: 8,
+                hp: 0,
+                max_hp: 20,
+                level: 8,
+            },
+        ];
+
+        let mut expected_prng = state.prng_state;
+        let poisoned_starvation =
+            u5_prng_range_u16(&mut expected_prng, HOURLY_STARVATION_DAMAGE_MIN, HOURLY_STARVATION_DAMAGE_MAX)
+                as u8;
+        let good_starvation =
+            u5_prng_range_u16(&mut expected_prng, HOURLY_STARVATION_DAMAGE_MIN, HOURLY_STARVATION_DAMAGE_MAX)
+                as u8;
+
+        state.advance_turn_with_minutes(1);
+
+        assert_eq!(state.clock.hour, 9);
+        assert_eq!(
+            state.party[0].hp,
+            20u16
+                - u16::from(FIRST_PLAYABLE_HOURLY_POISON_DAMAGE)
+                - u16::from(poisoned_starvation)
+        );
+        assert_eq!(state.party[0].status, b'P');
+        assert_eq!(state.party[1].hp, 20 - u16::from(good_starvation));
+        assert_eq!(state.party[1].status, b'G');
+        assert_eq!(state.party[2].hp, 0);
+        assert_eq!(state.party[2].status, b'D');
+        assert_eq!(state.prng_state, expected_prng);
+        let report = state.pending_hourly_status_message.as_deref().unwrap();
+        assert!(report.contains(&format!("party slot 0 took {poisoned_starvation} HP")));
+        assert!(report.contains(&format!("party slot 1 took {good_starvation} HP")));
+    }
+
+    #[test]
     fn starvation_warning_appends_after_pass_turn_hour_crossing() {
+        // `cleak/u5-spec#50`: starvation rolls `prng_range(1, 8)` per
+        // non-dead slot. Verify the message bubbles up regardless of
+        // the specific roll value.
         let mut state = world_state(open_world_grid(), 10, 20);
         state.clock = GameClock::with_date(139, 4, 5, 8, 58).unwrap();
         state.food = 0;
-        state.party[0].hp = 2;
+        state.party[0].hp = 10; // headroom so the roll cannot kill
+        let hp_before = state.party[0].hp;
 
         assert_eq!(state.pass_turn(), MoveOutcome::Passed);
 
         assert_eq!(state.clock.hour, 9);
-        assert_eq!(state.party[0].hp, 1);
+        assert!(state.party[0].hp < hp_before);
+        assert!((hp_before - state.party[0].hp) as u16 <= HOURLY_STARVATION_DAMAGE_MAX);
         assert!(state.message.contains("Passed."));
         assert!(state.message.contains("Starving!"));
+        assert_eq!(state.message.matches("Starving!").count(), 1);
         assert!(state.pending_hourly_status_message.is_none());
     }
 
@@ -1737,6 +1922,7 @@
                 RARE_REAGENT_HARVEST_POINT_COUNT],
             fixed_hidden_treasure_found: [0; FIXED_HIDDEN_TREASURE_FOUND_BYTES],
             fixed_hidden_treasure_daily_day: FIXED_HIDDEN_TREASURE_DAILY_UNSEEN_DAY,
+            fixed_hidden_treasure_single_use_cookie: FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR,
             dungeon_room_clear_bitmap: [0; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
             saved_dungeon_working_buffer: None,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
@@ -1744,6 +1930,7 @@
             shrine_ordained_mask: 0,
             shrine_codex_mask: 0,
             moral_standing: 0,
+            toll_progress: 0,
             avatar_stats: AvatarStats::default(),
             torches: DEFAULT_TORCH_STOCK,
             torch_counter: 0,
@@ -1930,4 +2117,3 @@
         assert_eq!(state.animation.frame, 1);
         assert!(state.visibility_dirty);
     }
-

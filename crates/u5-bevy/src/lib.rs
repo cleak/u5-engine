@@ -16,24 +16,28 @@ use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use image::{ImageBuffer, Rgba};
 
 use u5_runtime::{
-    BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB, COMBAT_ARENA_SIDE, ChargenSession,
-    ChargenSessionResult, ChargenSessionStep, DungeonScene, EGA_PALETTE_RGB, FixedCellFont,
-    GameClock, GraphicImage, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X,
-    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_6_EXTRA_ART_X,
-    INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
-    INTRO_STORY6_SECONDARY_Y_DELTA, IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX,
-    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    ActiveObject, BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB, COMBAT_ARENA_SIDE,
+    ChargenSession, ChargenSessionResult, ChargenSessionStep, Direction, DungeonScene,
+    EGA_PALETTE_RGB, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FixedCellFont,
+    GameClock, GraphicImage, HORSE_PARKED_FIRST, INTRO_INLINE_DOORWAY_STEP,
+    INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE,
+    INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y,
+    INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA,
+    IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
+    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, PLAY_MUSIC_TOGGLE_KEY,
     PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
-    RTV_COMMAND_STREAM_BYTES, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX,
-    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
-    STATS_PANEL_TEXT_WINDOW_INDEX, Scene, StoryRecords, TEXT_SCREEN_ROWS,
+    RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition, SPECIAL_ITEM_OWNED_VALUE,
+    SPECIAL_ITEM_SPYGLASS_INDEX, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
+    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, StoryRecords, TEXT_SCREEN_ROWS,
     TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
     TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
     TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TextWindowSystem, TileAtlas, TileGraphicsDepth,
-    TitleBitAsset, TitleBitImages, TitleBitPlacement, U4TransferOverrides, U4TransferSource,
-    WorldPlane, commit_chargen_save, commit_u4_transfer_save, handle_play_key_input, hash_bytes,
+    TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState, U4TransferOverrides,
+    U4TransferSource, WorldPlane, commit_chargen_save, commit_u4_transfer_save,
+    handle_play_key_input, hash_bytes, input_case_fold, input_function_key_code,
+    input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -44,11 +48,12 @@ use u5_runtime::{
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_message_text_window, paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
     read_u4_transfer_source_from_party_sav, render_play_text_window_system,
-    render_return_to_view_preview_viewport, render_text_panel_rgba, render_text_window_rgba,
+    render_return_to_view_playback_frame_viewport, render_text_panel_rgba, render_text_window_rgba,
+    run_return_to_view_playback_until_restart,
     shop_runtime::{GuildShopState, ReagentShopState, SageState, TavernState},
     shop_session::ActiveShopSession,
     stats_panel_active_cursor_visible, summarize_return_to_view_preview,
-    summarize_return_to_view_script, title_tick_next_frame,
+    summarize_return_to_view_script, title_tick_next_frame, title_tick_palette_indices,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
 };
 
@@ -58,7 +63,7 @@ const VIEWPORT_SIZE_PX: u32 = (VIEWPORT_CELLS * TILE_ATLAS_SIDE) as u32;
 const DISPLAY_SCALE: f32 = 3.0;
 
 const READY_HINT: &str =
-    "WASD/arrows: move. Shift+A attacks, Shift+S searches. Ctrl+S music. Esc quit.";
+    "Arrows/keypad: move. Shift+A attacks, Shift+S searches. Ctrl+S music. Esc quit.";
 const INTRO_FRAMEBUFFER_WIDTH: u32 = 320;
 const INTRO_FRAMEBUFFER_HEIGHT: u32 = 220;
 const INTRO_DISPLAY_SCALE: f32 = 2.5;
@@ -181,6 +186,32 @@ pub fn run_visual_frame_suite(
     Ok(())
 }
 
+pub fn run_visual_route_suite(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    out_dir: &Path,
+) -> io::Result<()> {
+    let reports = visual_route_suite(game_dir, raster_depth, out_dir)?;
+    for report in &reports {
+        println!(
+            "visual-route {}: {}x{} {} hash {:016x} nonblack {} -> {}",
+            report.label,
+            report.width,
+            report.height,
+            report.frame_kind,
+            report.byte_hash,
+            report.nonblack_pixels,
+            report.path.display()
+        );
+    }
+    println!(
+        "Saved Bevy visual route suite: {} PNG(s) plus manifest at {}.",
+        reports.len(),
+        out_dir.join("manifest.txt").display()
+    );
+    Ok(())
+}
+
 pub fn visual_frame_suite(
     game_dir: &Path,
     raster_depth: TileGraphicsDepth,
@@ -234,22 +265,26 @@ pub fn visual_frame_suite(
             out_dir,
             "intro-story-art",
             "intro story art",
-            VisualIntroPanel::Story { records, step: 7 },
+            VisualIntroPanel::Story {
+                records,
+                step: 7,
+                transition: None,
+            },
             game_dir,
             raster_depth,
         )?);
     }
-    let (summary, preview_rgba, preview_width, preview_height) =
-        visual_return_to_view_summary(game_dir, raster_depth);
+    let preview = visual_return_to_view_summary(game_dir, raster_depth);
     reports.push(write_visual_intro_report(
         out_dir,
         "intro-return-to-view",
         "intro return-to-view",
         VisualIntroPanel::ReturnToView {
-            summary,
-            preview_rgba,
-            preview_width,
-            preview_height,
+            summary: preview.summary,
+            preview_frames_rgba: preview.frames_rgba,
+            preview_frame_index: 0,
+            preview_width: preview.width,
+            preview_height: preview.height,
         },
         game_dir,
         raster_depth,
@@ -259,6 +294,65 @@ pub fn visual_frame_suite(
         if report.nonblack_pixels == 0 {
             return Err(io::Error::other(format!(
                 "visual frame suite `{}` produced an all-black PNG",
+                report.label
+            )));
+        }
+    }
+    write_visual_frame_suite_manifest(out_dir, &reports)?;
+    Ok(reports)
+}
+
+pub fn visual_route_suite(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    out_dir: &Path,
+) -> io::Result<Vec<VisualFrameReport>> {
+    std::fs::create_dir_all(out_dir)?;
+    let atlas = load_tile_atlas(game_dir, raster_depth)?;
+    let font = load_ibm_ch_font(game_dir)?;
+    let mut reports = Vec::new();
+
+    for case in visual_route_suite_cases() {
+        let mut state = PlayState::load_scene(game_dir, case.options)?;
+        if let Some(configure) = case.configure {
+            configure(&mut state);
+        }
+        let initial = write_visual_play_report(
+            out_dir,
+            &visual_route_step_label(case.label, 0, "initial"),
+            case.frame_kind,
+            &mut state,
+            &atlas,
+            &font,
+        )?;
+        let mut previous_hash = initial.byte_hash;
+        reports.push(initial);
+
+        for (index, command) in case.script.iter().enumerate() {
+            apply_visual_route_command(&mut state, command, game_dir)?;
+            let report = write_visual_play_report(
+                out_dir,
+                &visual_route_step_label(case.label, index + 1, command),
+                case.frame_kind,
+                &mut state,
+                &atlas,
+                &font,
+            )?;
+            if report.byte_hash == previous_hash {
+                return Err(io::Error::other(format!(
+                    "visual route suite `{}` command `{}` did not change the frame",
+                    case.label, command
+                )));
+            }
+            previous_hash = report.byte_hash;
+            reports.push(report);
+        }
+    }
+
+    for report in &reports {
+        if report.nonblack_pixels == 0 {
+            return Err(io::Error::other(format!(
+                "visual route suite `{}` produced an all-black PNG",
                 report.label
             )));
         }
@@ -462,6 +556,288 @@ fn seed_visual_suite_combat(state: &mut PlayState) {
     state.combat_terrain[6][5] = 1;
 }
 
+struct VisualRouteSuiteCase {
+    label: &'static str,
+    frame_kind: &'static str,
+    options: PlayOptions,
+    script: &'static [&'static str],
+    configure: Option<fn(&mut PlayState)>,
+}
+
+fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
+    let castle = Scene::new(0x11).expect("castle scene is valid");
+    let dungeon = DungeonScene::new(0x21).expect("dungeon scene is valid");
+    let doom = DungeonScene::new(0x28).expect("doom dungeon scene is valid");
+    let ship_transport = TransportState::Ship {
+        type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+        tile: FIRST_PLAYABLE_FRIGATE_TILE,
+        sails_hoisted: false,
+        hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
+        skiffs: 2,
+    };
+    vec![
+        VisualRouteSuiteCase {
+            label: "route-world-movement",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                ..PlayOptions::default()
+            },
+            script: &["d", "."],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-town-status-modal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Z"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-town-view-overlay",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["v", "."],
+            configure: Some(|state| {
+                state.gems = 1;
+            }),
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-look",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["l6"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-spyglass-chunk-map",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                clock: GameClock::new(20, 0).expect("20:00 is a valid game-clock time"),
+                ..PlayOptions::default()
+            },
+            script: &["USP"],
+            configure: Some(|state| {
+                state.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+            }),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-save-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Q", "N"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-world-board-horse",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                facing: Some(Direction::East),
+                ..PlayOptions::default()
+            },
+            script: &["B"],
+            configure: Some(seed_visual_route_board_horse),
+        },
+        VisualRouteSuiteCase {
+            label: "route-ship-broadside-fire",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                transport: ship_transport,
+                ..PlayOptions::default()
+            },
+            script: &["F6"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-movement-search",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["w", "a", "S6"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-ignite-torch",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 0,
+                light_spell_counter: 0,
+                ..PlayOptions::default()
+            },
+            script: &["I"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-exit-refusal",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["Q", "N"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-sage-topic-miss",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["MANTRA"],
+            configure: Some(|state| {
+                state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+            }),
+        },
+        VisualRouteSuiteCase {
+            label: "route-doom-combat-trigger",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(doom),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &[""],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-doom-combat-pass",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(doom),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["", ""],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-doom-combat-attack",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(doom),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["", "A6"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-doom-combat-board-refusal",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(doom),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["", "B"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-doom-combat-z-stats",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(doom),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["", "Z"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-doom-combat-search-prompt",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(doom),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["", "S"],
+            configure: None,
+        },
+    ]
+}
+
+fn seed_visual_route_board_horse(state: &mut PlayState) {
+    state.player.x = 62;
+    state.player.y = 124;
+    state.player.facing = Direction::East;
+    state.player.transport = TransportState::Foot;
+    state.sync_player_object();
+    state.active_objects.push(ActiveObject {
+        type_byte: HORSE_PARKED_FIRST,
+        tile: HORSE_PARKED_FIRST,
+        x: 63,
+        y: 124,
+        z: WorldPlane::Britannia.save_floor(),
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
+    state.mark_visibility_dirty();
+}
+
+fn apply_visual_route_command(
+    state: &mut PlayState,
+    command: &str,
+    game_dir: &Path,
+) -> io::Result<PlayInputDisposition> {
+    let command = command.trim();
+    let mut chars = command.chars();
+    let Some(key) = chars.next() else {
+        return handle_play_key_input(state, '\n', "", game_dir);
+    };
+    handle_play_key_input(state, key, chars.as_str(), game_dir)
+}
+
+fn visual_route_step_label(route_label: &str, step: usize, command: &str) -> String {
+    let mut command_label = String::with_capacity(command.len().max(5));
+    for ch in command.chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+            command_label.push(ch.to_ascii_lowercase());
+        } else if ch == '.' {
+            command_label.push_str("idle");
+        } else {
+            command_label.push('_');
+        }
+    }
+    if command_label.is_empty() {
+        command_label.push_str("empty");
+    }
+    format!("{route_label}-{step:02}-{command_label}")
+}
+
 fn run_visual_intro_menu_app(
     game_dir: PathBuf,
     raster_depth: TileGraphicsDepth,
@@ -649,14 +1025,24 @@ enum VisualIntroPanel {
     Story {
         records: StoryRecords,
         step: usize,
+        transition: Option<RectColumnSweepTransition>,
     },
     Acknowledgements,
     ReturnToView {
         summary: String,
-        preview_rgba: Option<Vec<u8>>,
+        preview_frames_rgba: Vec<Vec<u8>>,
+        preview_frame_index: usize,
         preview_width: usize,
         preview_height: usize,
     },
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct VisualReturnToViewPreview {
+    summary: String,
+    frames_rgba: Vec<Vec<u8>>,
+    width: usize,
+    height: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -867,30 +1253,36 @@ fn animate_visual_intro_title_effects(
     let Some(mut intro) = intro else {
         return;
     };
-    if !matches!(intro.panel, VisualIntroPanel::Menu) {
-        return;
-    }
-    let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
 
-    intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
+    if matches!(intro.panel, VisualIntroPanel::Menu) {
+        let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
 
-    if title_phase && !intro.title_signature_complete {
-        let Ok(signature) = load_british_pth(&intro.game_dir) else {
-            intro.title_signature_complete = true;
-            return;
-        };
-        let total_steps = british_signature_step_count(&signature);
-        if total_steps == 0 {
-            intro.title_signature_complete = true;
+        intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
+
+        if title_phase && !intro.title_signature_complete {
+            let Ok(signature) = load_british_pth(&intro.game_dir) else {
+                intro.title_signature_complete = true;
+                return;
+            };
+            let total_steps = british_signature_step_count(&signature);
+            if total_steps == 0 {
+                intro.title_signature_complete = true;
+                return;
+            }
+
+            intro.title_signature_progress =
+                (intro.title_signature_progress + SIGNATURE_STEPS_PER_FRAME).min(total_steps);
+            if intro.title_signature_progress >= total_steps {
+                intro.title_signature_progress = 0;
+                intro.title_signature_complete = true;
+            }
+        }
+    } else {
+        let mut title_tick_frame = intro.title_tick_frame;
+        if !advance_visual_intro_panel_animation(&mut intro.panel, &mut title_tick_frame) {
             return;
         }
-
-        intro.title_signature_progress =
-            (intro.title_signature_progress + SIGNATURE_STEPS_PER_FRAME).min(total_steps);
-        if intro.title_signature_progress >= total_steps {
-            intro.title_signature_progress = 0;
-            intro.title_signature_complete = true;
-        }
+        intro.title_tick_frame = title_tick_frame;
     }
 
     let rgba = render_intro_frame(&mut intro);
@@ -899,6 +1291,60 @@ fn animate_visual_intro_title_effects(
             image.data = Some(rgba);
         }
     }
+}
+
+fn advance_visual_intro_panel_animation(
+    panel: &mut VisualIntroPanel,
+    title_tick_frame: &mut u8,
+) -> bool {
+    advance_visual_intro_story_wipe(panel, title_tick_frame)
+        || advance_visual_intro_return_to_view(panel, title_tick_frame)
+}
+
+fn advance_visual_intro_story_wipe(
+    panel: &mut VisualIntroPanel,
+    title_tick_frame: &mut u8,
+) -> bool {
+    let VisualIntroPanel::Story {
+        step, transition, ..
+    } = panel
+    else {
+        return false;
+    };
+    if *step != 1 {
+        return false;
+    }
+    let Some(active_transition) = transition.as_mut() else {
+        return false;
+    };
+
+    *title_tick_frame = title_tick_next_frame(*title_tick_frame);
+    if active_transition.advance_title_tick() {
+        *step = (*step).saturating_add(1);
+        *transition = None;
+    }
+    true
+}
+
+fn advance_visual_intro_return_to_view(
+    panel: &mut VisualIntroPanel,
+    title_tick_frame: &mut u8,
+) -> bool {
+    let VisualIntroPanel::ReturnToView {
+        preview_frames_rgba,
+        preview_frame_index,
+        ..
+    } = panel
+    else {
+        return false;
+    };
+    let next_index = preview_frame_index.saturating_add(1);
+    if next_index >= preview_frames_rgba.len() {
+        return false;
+    }
+    *preview_frame_index = next_index;
+    *title_tick_frame = title_tick_next_frame(*title_tick_frame);
+    true
 }
 
 fn step_visual_intro(
@@ -973,8 +1419,16 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             input_line,
             ..
         } => step_visual_u4_transfer_panel(source, overrides, stage, input_line, ch),
-        VisualIntroPanel::Story { step, .. } => {
-            if *step + 1 < INTRO_STORY_STEP_COUNT {
+        VisualIntroPanel::Story {
+            step, transition, ..
+        } => {
+            if *step == 1 {
+                if transition.is_none() {
+                    *transition =
+                        Some(RectColumnSweepTransition::new(INTRO_STEP_1_RECT_TRANSITION));
+                }
+                VisualIntroPanelOutcome::Stay
+            } else if *step + 1 < INTRO_STORY_STEP_COUNT {
                 *step += 1;
                 VisualIntroPanelOutcome::Stay
             } else {
@@ -1340,7 +1794,11 @@ fn resolve_visual_intro_subflow(
         }
         IntroSubflow::StorySlides => match load_story_records(&intro.game_dir) {
             Ok(Some(records)) => {
-                intro.panel = VisualIntroPanel::Story { records, step: 0 };
+                intro.panel = VisualIntroPanel::Story {
+                    records,
+                    step: 0,
+                    transition: None,
+                };
                 intro.message.clear();
             }
             Ok(None) => {
@@ -1363,13 +1821,13 @@ fn resolve_visual_intro_subflow(
             intro.message.clear();
         }
         IntroSubflow::ReturnToView => {
-            let (summary, preview_rgba, preview_width, preview_height) =
-                visual_return_to_view_summary(&intro.game_dir, intro.raster_depth);
+            let preview = visual_return_to_view_summary(&intro.game_dir, intro.raster_depth);
             intro.panel = VisualIntroPanel::ReturnToView {
-                summary,
-                preview_rgba,
-                preview_width,
-                preview_height,
+                summary: preview.summary,
+                preview_frames_rgba: preview.frames_rgba,
+                preview_frame_index: 0,
+                preview_width: preview.width,
+                preview_height: preview.height,
             };
             intro.message.clear();
         }
@@ -1478,22 +1936,31 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
         } => {
             return summarize_visual_u4_transfer(source, preview, overrides, *stage, input_line);
         }
-        VisualIntroPanel::Story { records, step } => {
+        VisualIntroPanel::Story { records, step, .. } => {
             return summarize_intro_story(records, *step);
         }
         VisualIntroPanel::Acknowledgements => {
-            return [
-                "Acknowledgements".to_string(),
-                String::new(),
-                "This intro submenu is self-contained and returns to the main menu.".to_string(),
-                "The clean specification does not transcribe the exact acknowledgement text."
-                    .to_string(),
-                String::new(),
-                "Press any key to return to the intro menu.".to_string(),
-            ]
-            .join("\n");
+            return u5_runtime::ACKNOWLEDGEMENTS_LINES
+                .iter()
+                .map(|line| (*line).to_string())
+                .collect::<Vec<_>>()
+                .join("\n");
         }
-        VisualIntroPanel::ReturnToView { summary, .. } => {
+        VisualIntroPanel::ReturnToView {
+            summary,
+            preview_frames_rgba,
+            preview_frame_index,
+            ..
+        } => {
+            let frame_line = if preview_frames_rgba.is_empty() {
+                "No rendered playback frames are available.".to_string()
+            } else {
+                format!(
+                    "Playback frame {} of {}.",
+                    preview_frame_index.saturating_add(1),
+                    preview_frames_rgba.len()
+                )
+            };
             return [
                 "Return to View".to_string(),
                 String::new(),
@@ -1510,7 +1977,7 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
                 String::new(),
                 summary.clone(),
                 String::new(),
-                "The preview above is rendered from the dry-run Return-to-View state.".to_string(),
+                frame_line,
                 "Press any key to return to the intro menu.".to_string(),
             ]
             .join("\n");
@@ -1754,8 +2221,16 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         )
         .unwrap_or(rgba);
     }
-    if let VisualIntroPanel::Story { step, .. } = &intro.panel {
-        for draw in visual_intro_story_art_draws_rgba(&intro.game_dir, intro.raster_depth, *step) {
+    if let VisualIntroPanel::Story {
+        step, transition, ..
+    } = &intro.panel
+    {
+        for draw in visual_intro_story_art_draws_rgba(
+            &intro.game_dir,
+            intro.raster_depth,
+            *step,
+            *transition,
+        ) {
             blit_rgba(
                 &mut rgba,
                 INTRO_FRAMEBUFFER_WIDTH as usize,
@@ -1769,23 +2244,26 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         }
     }
     if let VisualIntroPanel::ReturnToView {
-        preview_rgba: Some(preview_rgba),
+        preview_frames_rgba,
+        preview_frame_index,
         preview_width,
         preview_height,
         ..
     } = &intro.panel
     {
-        let x = ((INTRO_FRAMEBUFFER_WIDTH as usize).saturating_sub(*preview_width)) / 2;
-        blit_rgba(
-            &mut rgba,
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            INTRO_FRAMEBUFFER_HEIGHT as usize,
-            preview_rgba,
-            *preview_width,
-            *preview_height,
-            x,
-            18,
-        );
+        if let Some(preview_rgba) = preview_frames_rgba.get(*preview_frame_index) {
+            let x = ((INTRO_FRAMEBUFFER_WIDTH as usize).saturating_sub(*preview_width)) / 2;
+            blit_rgba(
+                &mut rgba,
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                INTRO_FRAMEBUFFER_HEIGHT as usize,
+                preview_rgba,
+                *preview_width,
+                *preview_height,
+                x,
+                18,
+            );
+        }
     }
     rgba
 }
@@ -1927,7 +2405,12 @@ fn british_signature_step_count(signature: &BritishPth) -> usize {
 }
 
 fn draw_title_tick_overlay_rgba(dst: &mut [u8], dst_width: usize, dst_height: usize, frame: u8) {
-    let frame = usize::from(frame % 4);
+    // `cleak/u5-spec#52`: the published title-tick effect is a
+    // palette-cycled flame stripe over the band. This is an
+    // independently-authored silhouette that follows the public
+    // rectangle, four-frame color cycle, and "three upward-tapering
+    // flames" visual contract without copying the original driver
+    // pixel pattern.
     let start_x = TITLE_TICK_FRAME_X as usize;
     let start_y = TITLE_TICK_FRAME_Y as usize;
     let end_x = start_x
@@ -1945,18 +2428,62 @@ fn draw_title_tick_overlay_rgba(dst: &mut [u8], dst_width: usize, dst_height: us
             if dst[offset] != 0 || dst[offset + 1] != 0 || dst[offset + 2] != 0 {
                 continue;
             }
-            let spark = (local_x + local_y * 3 + frame * 17) % 53 == 0;
-            let ember = local_y % 3 == 0 && ((local_x / 8 + local_y + frame * 7) % 29 == 0);
-            if !spark && !ember {
+            let Some(palette_index) = title_tick_flame_palette_index(local_x, local_y, frame)
+            else {
                 continue;
-            }
-            let rgb = if spark {
-                EGA_PALETTE_RGB[8]
-            } else {
-                EGA_PALETTE_RGB[7]
             };
+            let rgb = EGA_PALETTE_RGB[usize::from(palette_index)];
             dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
         }
+    }
+}
+
+fn title_tick_flame_palette_index(local_x: usize, local_y: usize, frame: u8) -> Option<u8> {
+    let band_width = TITLE_TICK_FRAME_WIDTH as usize;
+    let band_height = TITLE_TICK_FRAME_HEIGHT as usize;
+    if local_x >= band_width || local_y >= band_height {
+        return None;
+    }
+
+    let flame_height = 34usize;
+    let flame_top = band_height.saturating_sub(flame_height);
+    if local_y < flame_top {
+        return None;
+    }
+
+    let from_base = band_height - 1 - local_y;
+    let frame = usize::from(frame % 4);
+    let mut inside = false;
+    for center in [54isize, 160, 266] {
+        let wave = ((local_y * 3 + frame * 5) % 11) as isize - 5;
+        let taper = from_base * 34 / flame_height;
+        let half_width = 42usize.saturating_sub(taper).max(5);
+        let dx = (local_x as isize - (center + wave)).unsigned_abs();
+        if dx <= half_width {
+            inside = true;
+            break;
+        }
+
+        // Add a narrow upper tongue so the stripe reads as flame rather than
+        // as three static wedges.
+        if from_base > 16 {
+            let tongue_center = center + ((frame as isize - 1) * 5);
+            let tongue_width = 10usize.saturating_sub((from_base - 16) / 2).max(3);
+            if (local_x as isize - tongue_center).unsigned_abs() <= tongue_width {
+                inside = true;
+                break;
+            }
+        }
+    }
+    if !inside {
+        return None;
+    }
+
+    let (bright, dim) = title_tick_palette_indices(frame as u8);
+    if local_y < band_height / 2 {
+        Some(bright)
+    } else {
+        Some(dim)
     }
 }
 
@@ -1981,6 +2508,8 @@ struct IntroStoryDrawSpec {
     subimage: u8,
     top_left_x: u16,
     top_left_y: u16,
+    clip_width: Option<u16>,
+    clip_height: Option<u16>,
 }
 
 struct IntroStoryDrawRgba {
@@ -2000,6 +2529,8 @@ fn visual_intro_story_draw_specs(step: usize) -> Vec<IntroStoryDrawSpec> {
                 subimage,
                 top_left_x,
                 top_left_y,
+                clip_width: None,
+                clip_height: None,
             });
         }
     }
@@ -2011,6 +2542,8 @@ fn visual_intro_story_draw_specs(step: usize) -> Vec<IntroStoryDrawSpec> {
                 subimage: placement.subimage,
                 top_left_x: placement.top_left_x,
                 top_left_y: placement.top_left_y,
+                clip_width: None,
+                clip_height: None,
             });
         }
     }
@@ -2021,12 +2554,16 @@ fn visual_intro_story_draw_specs(step: usize) -> Vec<IntroStoryDrawSpec> {
             subimage: INTRO_STEP_1_EXTRA_SUBIMAGE,
             top_left_x: INTRO_STEP_1_EXTRA_ART_X,
             top_left_y: INTRO_STEP_1_EXTRA_ART_Y,
+            clip_width: None,
+            clip_height: None,
         }),
         INTRO_INLINE_DOORWAY_STEP => specs.push(IntroStoryDrawSpec {
             stem: "STORY2",
             subimage: INTRO_STEP_6_EXTRA_SUBIMAGE,
             top_left_x: INTRO_STEP_6_EXTRA_ART_X,
             top_left_y: INTRO_STEP_6_EXTRA_ART_Y,
+            clip_width: None,
+            clip_height: None,
         }),
         _ => {
             if intro_step_has_story6_secondary_pass(step) {
@@ -2039,6 +2576,8 @@ fn visual_intro_story_draw_specs(step: usize) -> Vec<IntroStoryDrawSpec> {
                             top_left_y: primary
                                 .top_left_y
                                 .saturating_add(INTRO_STORY6_SECONDARY_Y_DELTA),
+                            clip_width: None,
+                            clip_height: None,
                         });
                     }
                 }
@@ -2049,20 +2588,73 @@ fn visual_intro_story_draw_specs(step: usize) -> Vec<IntroStoryDrawSpec> {
     specs
 }
 
+fn visual_intro_story_draw_specs_for_active_panel(
+    step: usize,
+    transition: Option<RectColumnSweepTransition>,
+) -> Vec<IntroStoryDrawSpec> {
+    let mut specs = visual_intro_story_draw_specs(step);
+    if step != 1 {
+        return specs;
+    }
+
+    let Some(transition) = transition else {
+        specs.retain(|spec| {
+            !(spec.stem == "STORY1"
+                && spec.subimage == INTRO_STEP_1_EXTRA_SUBIMAGE
+                && spec.top_left_x == INTRO_STEP_1_EXTRA_ART_X
+                && spec.top_left_y == INTRO_STEP_1_EXTRA_ART_Y)
+        });
+        return specs;
+    };
+
+    if let Some((start_x, end_x)) = transition.revealed_columns() {
+        let (_rect_x0, rect_y0, _rect_x1, rect_y1) = transition.rect;
+        let clip_width = end_x.saturating_sub(start_x).saturating_add(1);
+        let clip_height = rect_y1.saturating_sub(rect_y0).saturating_add(1);
+        for spec in &mut specs {
+            if spec.stem == "STORY1"
+                && spec.subimage == INTRO_STEP_1_EXTRA_SUBIMAGE
+                && spec.top_left_x == INTRO_STEP_1_EXTRA_ART_X
+                && spec.top_left_y == INTRO_STEP_1_EXTRA_ART_Y
+            {
+                spec.clip_width = Some(clip_width);
+                spec.clip_height = Some(clip_height);
+            }
+        }
+    }
+    specs
+}
+
 fn visual_intro_story_art_draws_rgba(
     game_dir: &Path,
     depth: TileGraphicsDepth,
     step: usize,
+    transition: Option<RectColumnSweepTransition>,
 ) -> Vec<IntroStoryDrawRgba> {
-    visual_intro_story_draw_specs(step)
+    visual_intro_story_draw_specs_for_active_panel(step, transition)
         .into_iter()
         .filter_map(|spec| {
             let directory = load_graphic_image_directory(game_dir, spec.stem, depth).ok()?;
             let image = directory.images.get(usize::from(spec.subimage))?.as_ref()?;
+            let width = spec
+                .clip_width
+                .map(usize::from)
+                .unwrap_or(image.width)
+                .min(image.width);
+            let height = spec
+                .clip_height
+                .map(usize::from)
+                .unwrap_or(image.height)
+                .min(image.height);
+            let rgba = if spec.clip_width.is_some() || spec.clip_height.is_some() {
+                graphic_image_to_rgba_clipped(image, depth, width, height)
+            } else {
+                graphic_image_to_rgba(image, depth)
+            };
             Some(IntroStoryDrawRgba {
-                rgba: graphic_image_to_rgba(image, depth),
-                width: image.width,
-                height: image.height,
+                rgba,
+                width,
+                height,
                 top_left_x: spec.top_left_x,
                 top_left_y: spec.top_left_y,
             })
@@ -2083,15 +2675,29 @@ fn intro_story_stem(file: &'static str) -> &'static str {
 }
 
 fn graphic_image_to_rgba(image: &GraphicImage, depth: TileGraphicsDepth) -> Vec<u8> {
+    graphic_image_to_rgba_clipped(image, depth, image.width, image.height)
+}
+
+fn graphic_image_to_rgba_clipped(
+    image: &GraphicImage,
+    depth: TileGraphicsDepth,
+    width: usize,
+    height: usize,
+) -> Vec<u8> {
     let palette: &[[u8; 3]] = match depth {
         TileGraphicsDepth::Ega16 => &EGA_PALETTE_RGB,
         TileGraphicsDepth::Cga4 => &CGA_PALETTE_RGB,
     };
     let limit = palette.len();
-    let mut rgba = Vec::with_capacity(image.pixels.len() * 4);
-    for pixel in &image.pixels {
-        let rgb = palette[usize::from(*pixel) % limit];
-        rgba.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
+    let width = width.min(image.width);
+    let height = height.min(image.height);
+    let mut rgba = Vec::with_capacity(width * height * 4);
+    for row in 0..height {
+        let row_start = row * image.width;
+        for pixel in &image.pixels[row_start..row_start + width] {
+            let rgb = palette[usize::from(*pixel) % limit];
+            rgba.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
+        }
     }
     rgba
 }
@@ -2285,6 +2891,10 @@ fn render_visual_play_frame_with_input_and_cursor(
     fallback: &str,
     prompt_cursor_visible: bool,
 ) -> Vec<u8> {
+    if state.endgame.is_some() {
+        return render_status_framebuffer(state, input_line, fallback, font);
+    }
+
     let width = VISUAL_PLAY_FRAME_WIDTH as usize;
     let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
     let mut rgba = render_integrated_status_framebuffer(
@@ -2378,7 +2988,7 @@ fn write_rgba_png(out: &Path, width: u32, height: u32, rgba: Vec<u8>) -> io::Res
 fn visual_return_to_view_summary(
     game_dir: &Path,
     raster_depth: TileGraphicsDepth,
-) -> (String, Option<Vec<u8>>, usize, usize) {
+) -> VisualReturnToViewPreview {
     let path = game_dir.join(MISCMAPS_DAT_FILE);
     match std::fs::metadata(&path) {
         Ok(metadata) => {
@@ -2394,55 +3004,78 @@ fn visual_return_to_view_summary(
             match load_return_to_view_assets(game_dir) {
                 Ok(Some(assets)) => {
                     let script_summary = summarize_return_to_view_script(&assets.script);
-                    let preview = load_tile_atlas(game_dir, raster_depth).and_then(|atlas| {
-                        render_return_to_view_preview_viewport(
-                            &assets.strips,
-                            &assets.script,
-                            &atlas,
-                        )
+                    let playback = run_return_to_view_playback_until_restart(
+                        &assets.strips,
+                        &assets.script,
+                        4096,
+                    );
+                    let frames = load_tile_atlas(game_dir, raster_depth).and_then(|atlas| {
+                        let playback = playback?;
+                        playback
+                            .frames
+                            .iter()
+                            .map(|frame| {
+                                render_return_to_view_playback_frame_viewport(frame, &atlas, 0).map(
+                                    |viewport| {
+                                        (viewport.to_rgba(), viewport.width, viewport.height)
+                                    },
+                                )
+                            })
+                            .collect::<io::Result<Vec<_>>>()
                     });
                     match (
                         summarize_return_to_view_preview(&assets.strips, &assets.script),
-                        preview,
+                        frames,
                     ) {
-                        (Ok(preview_summary), Ok((viewport, _report))) => (
-                            format!("{header} {script_summary} {preview_summary}"),
-                            Some(viewport.to_rgba()),
-                            viewport.width,
-                            viewport.height,
-                        ),
-                        (Ok(preview_summary), Err(err)) => (
-                            format!(
+                        (Ok(preview_summary), Ok(rendered_frames)) => {
+                            let (width, height) = rendered_frames
+                                .first()
+                                .map(|(_, width, height)| (*width, *height))
+                                .unwrap_or((0, 0));
+                            let frames_rgba = rendered_frames
+                                .into_iter()
+                                .map(|(rgba, _, _)| rgba)
+                                .collect::<Vec<_>>();
+                            VisualReturnToViewPreview {
+                                summary: format!(
+                                    "{header} {script_summary} {preview_summary} Rendered {} playback frame(s).",
+                                    frames_rgba.len()
+                                ),
+                                frames_rgba,
+                                width,
+                                height,
+                            }
+                        }
+                        (Ok(preview_summary), Err(err)) => VisualReturnToViewPreview {
+                            summary: format!(
                                 "{header} {script_summary} {preview_summary} Render error: {err}"
                             ),
-                            None,
-                            0,
-                            0,
-                        ),
-                        (Err(err), _) => (
-                            format!("{header} {script_summary} Dry-run error: {err}"),
-                            None,
-                            0,
-                            0,
-                        ),
+                            ..Default::default()
+                        },
+                        (Err(err), _) => VisualReturnToViewPreview {
+                            summary: format!("{header} {script_summary} Dry-run error: {err}"),
+                            ..Default::default()
+                        },
                     }
                 }
-                Ok(None) => (
-                    format!("{MISCMAPS_DAT_FILE} is missing; preview cannot run."),
-                    None,
-                    0,
-                    0,
-                ),
-                Err(err) => (format!("{header} Script error: {err}"), None, 0, 0),
+                Ok(None) => VisualReturnToViewPreview {
+                    summary: format!("{MISCMAPS_DAT_FILE} is missing; preview cannot run."),
+                    ..Default::default()
+                },
+                Err(err) => VisualReturnToViewPreview {
+                    summary: format!("{header} Script error: {err}"),
+                    ..Default::default()
+                },
             }
         }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => (
-            format!("{MISCMAPS_DAT_FILE} is missing; preview cannot run."),
-            None,
-            0,
-            0,
-        ),
-        Err(err) => (format!("Return-to-View preview error: {err}"), None, 0, 0),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => VisualReturnToViewPreview {
+            summary: format!("{MISCMAPS_DAT_FILE} is missing; preview cannot run."),
+            ..Default::default()
+        },
+        Err(err) => VisualReturnToViewPreview {
+            summary: format!("Return-to-View preview error: {err}"),
+            ..Default::default()
+        },
     }
 }
 
@@ -2529,8 +3162,10 @@ fn render_status_framebuffer(
     if stats_panel_active_cursor_visible(state, active_cursor) {
         state.active_player = None;
     }
-    render_text_window_rgba(&system, font)
-        .unwrap_or_else(|_| vec![0; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4])
+    let mut rgba = render_text_window_rgba(&system, font)
+        .unwrap_or_else(|_| vec![0; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4]);
+    apply_endgame_page_transition_mask(&mut rgba, &display_state);
+    rgba
 }
 
 fn render_integrated_status_framebuffer(
@@ -2579,8 +3214,60 @@ fn render_integrated_status_framebuffer(
     if stats_panel_active_cursor_visible(state, active_cursor) {
         state.active_player = None;
     }
-    render_text_window_rgba(&system, font)
-        .unwrap_or_else(|_| vec![0; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4])
+    let mut rgba = render_text_window_rgba(&system, font)
+        .unwrap_or_else(|_| vec![0; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4]);
+    apply_endgame_page_transition_mask(&mut rgba, &display_state);
+    rgba
+}
+
+fn apply_endgame_page_transition_mask(rgba: &mut [u8], state: &PlayState) {
+    let Some(transition) = state
+        .endgame
+        .as_ref()
+        .and_then(|endgame| endgame.cinematic.page_transition)
+    else {
+        return;
+    };
+    apply_rect_column_sweep_mask_rgba(
+        rgba,
+        TEXT_WINDOW_RENDER_WIDTH,
+        TEXT_WINDOW_RENDER_HEIGHT,
+        transition,
+    );
+}
+
+fn apply_rect_column_sweep_mask_rgba(
+    rgba: &mut [u8],
+    width: usize,
+    height: usize,
+    transition: RectColumnSweepTransition,
+) {
+    let Some((start_x, end_x)) = transition.revealed_columns() else {
+        return;
+    };
+    let (rect_x0, rect_y0, rect_x1, rect_y1) = transition.rect;
+    let y0 = usize::from(rect_y0).min(height);
+    let y1 = usize::from(rect_y1).min(height.saturating_sub(1));
+    let x0 = usize::from(rect_x0).min(width);
+    let x1 = usize::from(rect_x1).min(width.saturating_sub(1));
+    let revealed_start = usize::from(start_x).min(width);
+    let revealed_end = usize::from(end_x).min(width.saturating_sub(1));
+
+    if x0 > x1 || y0 > y1 {
+        return;
+    }
+
+    for y in y0..=y1 {
+        for x in x0..=x1 {
+            if x >= revealed_start && x <= revealed_end {
+                continue;
+            }
+            let offset = (y * width + x) * 4;
+            if let Some(pixel) = rgba.get_mut(offset..offset + 4) {
+                pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2665,10 +3352,20 @@ fn advance_visual_wait_frame(state: &mut PlayState, prompt_cursor_visible: &mut 
     if visual_line_prompt_active(state) {
         *prompt_cursor_visible = !*prompt_cursor_visible;
         true
+    } else if advance_visual_endgame_page_transition(state) {
+        *prompt_cursor_visible = false;
+        true
     } else {
         *prompt_cursor_visible = false;
         visual_idle_tick(state)
     }
+}
+
+fn advance_visual_endgame_page_transition(state: &mut PlayState) -> bool {
+    state
+        .endgame
+        .as_mut()
+        .is_some_and(|endgame| endgame.cinematic.advance_page_transition_title_tick())
 }
 
 fn should_escape_quit_visual(state: &PlayState) -> bool {
@@ -2683,16 +3380,15 @@ fn handle_visual_line_key(
     control_pressed: bool,
     game_dir: &Path,
 ) -> std::io::Result<Option<PlayInputDisposition>> {
-    use KeyCode::*;
-    if control_pressed {
+    let Some(byte) = key_code_to_line_input_byte(key, shift_pressed, control_pressed) else {
         return Ok(None);
-    }
-    match key {
-        Escape => {
+    };
+    match u5_runtime::free_text_input_action(byte) {
+        u5_runtime::FreeTextInputAction::Cancel => {
             input_line.clear();
             handle_play_key_input(state, '\u{1b}', "", game_dir).map(Some)
         }
-        Enter | NumpadEnter => {
+        u5_runtime::FreeTextInputAction::Submit => {
             let submitted = std::mem::take(input_line);
             let mut chars = submitted.chars();
             let (key, suffix) = match chars.next() {
@@ -2707,109 +3403,60 @@ fn handle_visual_line_key(
             };
             handle_play_key_input(state, key, &suffix, game_dir).map(Some)
         }
-        Backspace => {
+        u5_runtime::FreeTextInputAction::Backspace => {
             input_line.pop();
             Ok(Some(PlayInputDisposition::Continue))
         }
-        _ => {
-            if let Some(ch) = key_code_to_line_char(key, shift_pressed) {
-                input_line.push(ch);
-                Ok(Some(PlayInputDisposition::Continue))
-            } else {
-                Ok(None)
-            }
+        u5_runtime::FreeTextInputAction::Append(byte) => {
+            input_line.push(char::from(byte));
+            Ok(Some(PlayInputDisposition::Continue))
         }
+        u5_runtime::FreeTextInputAction::Discard => Ok(None),
     }
 }
 
-fn key_code_to_line_char(key: KeyCode, shift_pressed: bool) -> Option<char> {
+fn key_code_to_line_input_byte(
+    key: KeyCode,
+    shift_pressed: bool,
+    control_pressed: bool,
+) -> Option<u8> {
     use KeyCode::*;
-    let ch = match key {
-        KeyA => letter_for_shift('a', shift_pressed),
-        KeyB => letter_for_shift('b', shift_pressed),
-        KeyC => letter_for_shift('c', shift_pressed),
-        KeyD => letter_for_shift('d', shift_pressed),
-        KeyE => letter_for_shift('e', shift_pressed),
-        KeyF => letter_for_shift('f', shift_pressed),
-        KeyG => letter_for_shift('g', shift_pressed),
-        KeyH => letter_for_shift('h', shift_pressed),
-        KeyI => letter_for_shift('i', shift_pressed),
-        KeyJ => letter_for_shift('j', shift_pressed),
-        KeyK => letter_for_shift('k', shift_pressed),
-        KeyL => letter_for_shift('l', shift_pressed),
-        KeyM => letter_for_shift('m', shift_pressed),
-        KeyN => letter_for_shift('n', shift_pressed),
-        KeyO => letter_for_shift('o', shift_pressed),
-        KeyP => letter_for_shift('p', shift_pressed),
-        KeyQ => letter_for_shift('q', shift_pressed),
-        KeyR => letter_for_shift('r', shift_pressed),
-        KeyS => letter_for_shift('s', shift_pressed),
-        KeyT => letter_for_shift('t', shift_pressed),
-        KeyU => letter_for_shift('u', shift_pressed),
-        KeyV => letter_for_shift('v', shift_pressed),
-        KeyW => letter_for_shift('w', shift_pressed),
-        KeyX => letter_for_shift('x', shift_pressed),
-        KeyY => letter_for_shift('y', shift_pressed),
-        KeyZ => letter_for_shift('z', shift_pressed),
-        Digit0 | Numpad0 => '0',
-        Digit1 | Numpad1 => '1',
-        Digit2 | Numpad2 => '2',
-        Digit3 | Numpad3 => '3',
-        Digit4 | Numpad4 => '4',
-        Digit5 | Numpad5 => '5',
-        Digit6 | Numpad6 => '6',
-        Digit7 | Numpad7 => '7',
-        Digit8 | Numpad8 => '8',
-        Digit9 | Numpad9 => '9',
-        Space => ' ',
-        Minus => {
-            if shift_pressed {
-                '_'
-            } else {
-                '-'
-            }
-        }
-        Equal => {
-            if shift_pressed {
-                '+'
-            } else {
-                '='
-            }
-        }
-        BracketLeft => {
-            if shift_pressed {
-                '{'
-            } else {
-                '['
-            }
-        }
-        BracketRight => {
-            if shift_pressed {
-                '}'
-            } else {
-                ']'
-            }
-        }
-        Comma => {
-            if shift_pressed {
-                '<'
-            } else {
-                ','
-            }
-        }
-        Period => {
-            if shift_pressed {
-                '>'
-            } else {
-                '.'
-            }
-        }
-        _ => return None,
+    if control_pressed {
+        return None;
+    }
+    match key {
+        KeyA => return Some(line_letter_for_shift(b'a', shift_pressed)),
+        KeyB => return Some(line_letter_for_shift(b'b', shift_pressed)),
+        KeyC => return Some(line_letter_for_shift(b'c', shift_pressed)),
+        KeyD => return Some(line_letter_for_shift(b'd', shift_pressed)),
+        KeyE => return Some(line_letter_for_shift(b'e', shift_pressed)),
+        KeyF => return Some(line_letter_for_shift(b'f', shift_pressed)),
+        KeyG => return Some(line_letter_for_shift(b'g', shift_pressed)),
+        KeyH => return Some(line_letter_for_shift(b'h', shift_pressed)),
+        KeyI => return Some(line_letter_for_shift(b'i', shift_pressed)),
+        KeyJ => return Some(line_letter_for_shift(b'j', shift_pressed)),
+        KeyK => return Some(line_letter_for_shift(b'k', shift_pressed)),
+        KeyL => return Some(line_letter_for_shift(b'l', shift_pressed)),
+        KeyM => return Some(line_letter_for_shift(b'm', shift_pressed)),
+        KeyN => return Some(line_letter_for_shift(b'n', shift_pressed)),
+        KeyO => return Some(line_letter_for_shift(b'o', shift_pressed)),
+        KeyP => return Some(line_letter_for_shift(b'p', shift_pressed)),
+        KeyQ => return Some(line_letter_for_shift(b'q', shift_pressed)),
+        KeyR => return Some(line_letter_for_shift(b'r', shift_pressed)),
+        KeyS => return Some(line_letter_for_shift(b's', shift_pressed)),
+        KeyT => return Some(line_letter_for_shift(b't', shift_pressed)),
+        KeyU => return Some(line_letter_for_shift(b'u', shift_pressed)),
+        KeyV => return Some(line_letter_for_shift(b'v', shift_pressed)),
+        KeyW => return Some(line_letter_for_shift(b'w', shift_pressed)),
+        KeyX => return Some(line_letter_for_shift(b'x', shift_pressed)),
+        KeyY => return Some(line_letter_for_shift(b'y', shift_pressed)),
+        KeyZ => return Some(line_letter_for_shift(b'z', shift_pressed)),
+        _ => {}
     };
-    Some(ch)
+    key_code_to_input_byte(key, shift_pressed, false)
 }
 
-fn letter_for_shift(lower: char, shift_pressed: bool) -> char {
+fn line_letter_for_shift(lower: u8, shift_pressed: bool) -> u8 {
     if shift_pressed {
         lower.to_ascii_uppercase()
     } else {
@@ -2818,109 +3465,129 @@ fn letter_for_shift(lower: char, shift_pressed: bool) -> char {
 }
 
 fn key_code_to_char(key: KeyCode, shift_pressed: bool, control_pressed: bool) -> Option<char> {
+    key_code_to_input_byte(key, shift_pressed, control_pressed).map(char::from)
+}
+
+fn key_code_to_input_byte(key: KeyCode, shift_pressed: bool, control_pressed: bool) -> Option<u8> {
     use KeyCode::*;
     if control_pressed {
         return match key {
-            KeyS => Some(PLAY_MUSIC_TOGGLE_KEY),
+            KeyS => Some(PLAY_MUSIC_TOGGLE_KEY as u8),
             _ => None,
         };
     }
 
-    if shift_pressed {
-        let ch = match key {
-            KeyA => 'A',
-            KeyB => 'B',
-            KeyC => 'C',
-            KeyD => 'D',
-            KeyE => 'E',
-            KeyF => 'F',
-            KeyG => 'G',
-            KeyH => 'H',
-            KeyI => 'I',
-            KeyJ => 'J',
-            KeyK => 'K',
-            KeyL => 'L',
-            KeyM => 'M',
-            KeyN => 'N',
-            KeyO => 'O',
-            KeyP => 'P',
-            KeyQ => 'Q',
-            KeyR => 'R',
-            KeyS => 'S',
-            KeyT => 'T',
-            KeyU => 'U',
-            KeyV => 'V',
-            KeyW => 'W',
-            KeyX => 'X',
-            KeyY => 'Y',
-            KeyZ => 'Z',
-            BracketLeft => '{',
-            BracketRight => '}',
-            Equal | NumpadAdd => '+',
-            Minus => '_',
-            NumpadSubtract => '-',
-            Comma => '<',
-            Period => '>',
-            _ => return None,
-        };
-        return Some(ch);
-    }
-
-    let ch = match key {
-        Escape => '\u{1b}',
-        Enter | NumpadEnter => '\r',
-        Backspace | NumpadBackspace => '\u{8}',
-        KeyW | ArrowUp | Numpad8 => 'w',
-        KeyA | ArrowLeft | Numpad4 => 'a',
-        KeyS | ArrowDown | Numpad2 => 's',
-        KeyD | ArrowRight | Numpad6 => 'd',
-        Numpad7 => 'y',
-        Numpad9 => 'u',
-        Numpad1 => 'b',
-        Numpad3 => 'n',
-        Digit0 | Numpad0 => '0',
-        Digit1 => '1',
-        Digit2 => '2',
-        Digit3 => '3',
-        Digit4 => '4',
-        Digit5 => '5',
-        Digit6 => '6',
-        Digit7 => '7',
-        Digit8 => '8',
-        Digit9 => '9',
-        BracketLeft => '[',
-        BracketRight => ']',
-        Equal => '=',
-        Minus | NumpadSubtract => '-',
-        NumpadAdd => '+',
-        KeyB => 'B',
-        KeyC => 'C',
-        KeyE => 'E',
-        KeyF => 'F',
-        KeyG => 'G',
-        KeyH => 'H',
-        KeyI => 'I',
-        KeyJ => 'J',
-        KeyK => 'K',
-        KeyL => 'L',
-        KeyM => 'M',
-        KeyN => 'N',
-        KeyO => 'O',
-        KeyP => 'P',
-        KeyQ => 'Q',
-        KeyR => 'R',
-        KeyT => 'T',
-        KeyU => 'U',
-        KeyV => 'V',
-        KeyX => 'X',
-        KeyY => 'Y',
-        KeyZ => 'Z',
-        Space => ' ',
-        Comma => '<',
-        Period => '>',
+    let byte = match key {
+        Escape => 0x1B,
+        Enter | NumpadEnter => 0x0D,
+        Backspace | NumpadBackspace => 0x08,
+        ArrowUp => u5_runtime::INPUT_CODE_NORTH,
+        ArrowDown => u5_runtime::INPUT_CODE_SOUTH,
+        ArrowLeft => u5_runtime::INPUT_CODE_WEST,
+        ArrowRight => u5_runtime::INPUT_CODE_EAST,
+        Home => u5_runtime::INPUT_CODE_NORTHWEST,
+        PageUp => u5_runtime::INPUT_CODE_NORTHEAST,
+        End => u5_runtime::INPUT_CODE_SOUTHWEST,
+        PageDown => u5_runtime::INPUT_CODE_SOUTHEAST,
+        Numpad1 => u5_runtime::INPUT_CODE_SOUTHWEST,
+        Numpad2 => u5_runtime::INPUT_CODE_SOUTH,
+        Numpad3 => u5_runtime::INPUT_CODE_SOUTHEAST,
+        Numpad4 => u5_runtime::INPUT_CODE_WEST,
+        Numpad6 => u5_runtime::INPUT_CODE_EAST,
+        Numpad7 => u5_runtime::INPUT_CODE_NORTHWEST,
+        Numpad8 => u5_runtime::INPUT_CODE_NORTH,
+        Numpad9 => u5_runtime::INPUT_CODE_NORTHEAST,
+        F1 => input_function_key_code(1)?,
+        F2 => input_function_key_code(2)?,
+        F3 => input_function_key_code(3)?,
+        F4 => input_function_key_code(4)?,
+        F5 => input_function_key_code(5)?,
+        F6 => input_function_key_code(6)?,
+        F7 => input_function_key_code(7)?,
+        F8 => input_function_key_code(8)?,
+        F9 => input_function_key_code(9)?,
+        F10 => input_function_key_code(10)?,
+        Digit1 if shift_pressed => input_keypad_digit_direction_code(1)?,
+        Digit2 if shift_pressed => input_keypad_digit_direction_code(2)?,
+        Digit3 if shift_pressed => input_keypad_digit_direction_code(3)?,
+        Digit4 if shift_pressed => input_keypad_digit_direction_code(4)?,
+        Digit6 if shift_pressed => input_keypad_digit_direction_code(6)?,
+        Digit7 if shift_pressed => input_keypad_digit_direction_code(7)?,
+        Digit8 if shift_pressed => input_keypad_digit_direction_code(8)?,
+        Digit9 if shift_pressed => input_keypad_digit_direction_code(9)?,
+        Digit0 | Numpad0 => b'0',
+        Digit1 => b'1',
+        Digit2 => b'2',
+        Digit3 => b'3',
+        Digit4 => b'4',
+        Digit5 | Numpad5 => b'5',
+        Digit6 => b'6',
+        Digit7 => b'7',
+        Digit8 => b'8',
+        Digit9 => b'9',
+        Space => b' ',
+        BracketLeft => {
+            if shift_pressed {
+                b'{'
+            } else {
+                b'['
+            }
+        }
+        BracketRight => {
+            if shift_pressed {
+                b'}'
+            } else {
+                b']'
+            }
+        }
+        Equal | NumpadAdd if shift_pressed => b'+',
+        Equal => b'=',
+        Minus if shift_pressed => b'_',
+        Minus | NumpadSubtract => b'-',
+        NumpadAdd => b'+',
+        Comma => {
+            if shift_pressed {
+                b'<'
+            } else {
+                b','
+            }
+        }
+        Period => {
+            if shift_pressed {
+                b'>'
+            } else {
+                b'.'
+            }
+        }
+        KeyA => b'A',
+        KeyB => b'B',
+        KeyC => b'C',
+        KeyD => b'D',
+        KeyE => b'E',
+        KeyF => b'F',
+        KeyG => b'G',
+        KeyH => b'H',
+        KeyI => b'I',
+        KeyJ => b'J',
+        KeyK => b'K',
+        KeyL => b'L',
+        KeyM => b'M',
+        KeyN => b'N',
+        KeyO => b'O',
+        KeyP => b'P',
+        KeyQ => b'Q',
+        KeyR => b'R',
+        KeyS => b'S',
+        KeyT => b'T',
+        KeyU => b'U',
+        KeyV => b'V',
+        KeyW => b'W',
+        KeyX => b'X',
+        KeyY => b'Y',
+        KeyZ => b'Z',
         _ => return None,
     };
-    Some(ch)
+    Some(input_case_fold(byte))
 }
 
 #[cfg(test)]
@@ -3158,18 +3825,24 @@ mod tests {
                     subimage: 0,
                     top_left_x: 232,
                     top_left_y: 26,
+                    clip_width: None,
+                    clip_height: None,
                 },
                 IntroStoryDrawSpec {
                     stem: "TEXT",
                     subimage: 2,
                     top_left_x: 200,
                     top_left_y: 54,
+                    clip_width: None,
+                    clip_height: None,
                 },
                 IntroStoryDrawSpec {
                     stem: "STORY3",
                     subimage: 0,
                     top_left_x: 0,
                     top_left_y: 0,
+                    clip_width: None,
+                    clip_height: None,
                 },
             ]
         );
@@ -3180,6 +3853,8 @@ mod tests {
                 subimage: INTRO_STEP_1_EXTRA_SUBIMAGE,
                 top_left_x: INTRO_STEP_1_EXTRA_ART_X,
                 top_left_y: INTRO_STEP_1_EXTRA_ART_Y,
+                clip_width: None,
+                clip_height: None,
             })
         );
         assert!(
@@ -3189,6 +3864,8 @@ mod tests {
                     subimage: INTRO_STEP_6_EXTRA_SUBIMAGE,
                     top_left_x: INTRO_STEP_6_EXTRA_ART_X,
                     top_left_y: INTRO_STEP_6_EXTRA_ART_Y,
+                    clip_width: None,
+                    clip_height: None,
                 }
             )
         );
@@ -3198,8 +3875,133 @@ mod tests {
                 subimage: 3,
                 top_left_x: 176,
                 top_left_y: 55,
+                clip_width: None,
+                clip_height: None,
             })
         );
+    }
+
+    #[test]
+    fn intro_story_step_one_extra_art_is_column_wiped_after_keypress() {
+        let hidden = visual_intro_story_draw_specs_for_active_panel(1, None);
+        assert!(!hidden.iter().any(|spec| {
+            spec.stem == "STORY1"
+                && spec.subimage == INTRO_STEP_1_EXTRA_SUBIMAGE
+                && spec.top_left_x == INTRO_STEP_1_EXTRA_ART_X
+                && spec.top_left_y == INTRO_STEP_1_EXTRA_ART_Y
+        }));
+
+        let tick0 = visual_intro_story_draw_specs_for_active_panel(
+            1,
+            Some(RectColumnSweepTransition::new(INTRO_STEP_1_RECT_TRANSITION)),
+        );
+        let extra = tick0
+            .iter()
+            .find(|spec| spec.stem == "STORY1" && spec.subimage == INTRO_STEP_1_EXTRA_SUBIMAGE)
+            .unwrap();
+        assert_eq!(extra.clip_width, Some(1));
+        assert_eq!(extra.clip_height, Some(35));
+
+        let tick35 = visual_intro_story_draw_specs_for_active_panel(
+            1,
+            Some(RectColumnSweepTransition {
+                rect: INTRO_STEP_1_RECT_TRANSITION,
+                tick: 35,
+            }),
+        );
+        let extra = tick35
+            .iter()
+            .find(|spec| spec.stem == "STORY1" && spec.subimage == INTRO_STEP_1_EXTRA_SUBIMAGE)
+            .unwrap();
+        assert_eq!(extra.clip_width, Some(36));
+        assert_eq!(extra.clip_height, Some(35));
+    }
+
+    #[test]
+    fn intro_story_step_one_key_starts_wipe_before_advancing_step() {
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_signature_progress: 0,
+            title_signature_complete: true,
+            title_tick_frame: 0,
+            message: String::new(),
+            panel: VisualIntroPanel::Story {
+                records: StoryRecords {
+                    records: (0..20).map(|i| format!("Story record {i}")).collect(),
+                },
+                step: 1,
+                transition: None,
+            },
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        assert!(step_visual_intro_panel(&mut intro, ' '));
+
+        match &intro.panel {
+            VisualIntroPanel::Story {
+                step, transition, ..
+            } => {
+                assert_eq!(*step, 1);
+                assert_eq!(
+                    *transition,
+                    Some(RectColumnSweepTransition::new(INTRO_STEP_1_RECT_TRANSITION))
+                );
+            }
+            _ => panic!("story panel should remain active"),
+        }
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_story_step_one_wipe_advances_on_title_ticks_then_enters_step_two() {
+        let mut panel = VisualIntroPanel::Story {
+            records: StoryRecords {
+                records: (0..20).map(|i| format!("Story record {i}")).collect(),
+            },
+            step: 1,
+            transition: Some(RectColumnSweepTransition {
+                rect: INTRO_STEP_1_RECT_TRANSITION,
+                tick: 34,
+            }),
+        };
+        let mut title_tick_frame = 0;
+
+        assert!(advance_visual_intro_story_wipe(
+            &mut panel,
+            &mut title_tick_frame
+        ));
+        match &panel {
+            VisualIntroPanel::Story {
+                step, transition, ..
+            } => {
+                assert_eq!(*step, 1);
+                assert_eq!(
+                    *transition,
+                    Some(RectColumnSweepTransition {
+                        rect: INTRO_STEP_1_RECT_TRANSITION,
+                        tick: 35,
+                    })
+                );
+            }
+            _ => panic!("story panel should remain active"),
+        }
+
+        assert!(advance_visual_intro_story_wipe(
+            &mut panel,
+            &mut title_tick_frame
+        ));
+        match panel {
+            VisualIntroPanel::Story {
+                step, transition, ..
+            } => {
+                assert_eq!(step, 2);
+                assert_eq!(transition, None);
+            }
+            _ => panic!("story panel should remain active"),
+        }
     }
 
     #[test]
@@ -3392,6 +4194,56 @@ mod tests {
     }
 
     #[test]
+    fn title_tick_flame_stripe_uses_published_palette_cycle() {
+        // `cleak/u5-spec#52`: the clean replacement is a three-flame
+        // upward-tapering stripe. It uses the published bright/dim
+        // palette pairs while leaving pixels outside the silhouette alone.
+        assert_eq!(title_tick_flame_palette_index(54, 8, 0), None);
+        assert_eq!(title_tick_flame_palette_index(54, 20, 0), Some(0x0E));
+        assert_eq!(title_tick_flame_palette_index(54, 40, 0), Some(0x06));
+        assert_eq!(title_tick_flame_palette_index(160, 20, 1), Some(0x0C));
+        assert_eq!(title_tick_flame_palette_index(160, 40, 1), Some(0x04));
+        assert_eq!(title_tick_flame_palette_index(266, 20, 2), Some(0x0E));
+        assert_eq!(title_tick_flame_palette_index(266, 40, 3), Some(0x06));
+        assert_eq!(title_tick_flame_palette_index(120, 20, 0), None);
+    }
+
+    #[test]
+    fn title_tick_overlay_draws_dense_wavy_flame_band() {
+        let width = TITLE_SURFACE_WIDTH as usize;
+        let height = TITLE_SURFACE_HEIGHT as usize;
+        let mut rgba = vec![0; width * height * 4];
+        for pixel in rgba.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+        }
+
+        draw_title_tick_overlay_rgba(&mut rgba, width, height, 0);
+
+        let lit_in_band = rgba
+            .chunks_exact(4)
+            .enumerate()
+            .filter(|(index, pixel)| {
+                let y = index / width;
+                y >= TITLE_TICK_FRAME_Y as usize
+                    && y < (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT) as usize
+                    && (pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
+            })
+            .count();
+        assert!(
+            lit_in_band > 2_000,
+            "procedural flame stripe should be a dense band, got {lit_in_band} lit pixels"
+        );
+        assert_eq!(
+            rgba_pixel(&rgba, width, 54, TITLE_TICK_FRAME_Y as usize + 20),
+            [0xff, 0xff, 0x55, 0xff]
+        );
+        assert_eq!(
+            rgba_pixel(&rgba, width, 54, TITLE_TICK_FRAME_Y as usize + 40),
+            [0xaa, 0x55, 0x00, 0xff]
+        );
+    }
+
+    #[test]
     fn endgame_status_framebuffer_renders_modal_surface() {
         let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
@@ -3405,6 +4257,78 @@ mod tests {
         );
         assert_nonblack_rgba(&rgba);
         assert!(state.endgame.is_some());
+    }
+
+    #[test]
+    fn endgame_page_transition_mask_reveals_columns_from_left_edge() {
+        let width = 8;
+        let height = 4;
+        let mut rgba = vec![0xff; width * height * 4];
+        let transition = RectColumnSweepTransition {
+            rect: (2, 1, 6, 2),
+            tick: 1,
+        };
+
+        apply_rect_column_sweep_mask_rgba(&mut rgba, width, height, transition);
+
+        assert_eq!(rgba_pixel(&rgba, width, 2, 1), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 3, 2), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 4, 1), [0x00, 0x00, 0x00, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 6, 2), [0x00, 0x00, 0x00, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 7, 1), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 4, 3), [0xff, 0xff, 0xff, 0xff]);
+    }
+
+    #[test]
+    fn visual_wait_frame_advances_endgame_page_transition_during_modal_hold() {
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.endgame = Some(u5_runtime::EndgameState::terminal(
+            true,
+            true,
+            true,
+            "Certificate".to_string(),
+            None,
+            None,
+        ));
+        let endgame = state.endgame.as_mut().unwrap();
+        endgame.cinematic.advance();
+        assert_eq!(
+            endgame
+                .cinematic
+                .page_transition
+                .map(|transition| transition.tick),
+            Some(0)
+        );
+
+        let mut prompt_cursor_visible = true;
+        assert!(advance_visual_wait_frame(
+            &mut state,
+            &mut prompt_cursor_visible
+        ));
+
+        assert!(!prompt_cursor_visible);
+        assert_eq!(
+            state
+                .endgame
+                .as_ref()
+                .and_then(|endgame| endgame.cinematic.page_transition)
+                .map(|transition| transition.tick),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn visual_play_frame_uses_full_endgame_surface_without_viewport_blit() {
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.enter_endgame();
+
+        let mut expected_state = state.clone();
+        let expected = render_status_framebuffer(&mut expected_state, "", READY_HINT, &font);
+        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+
+        assert_eq!(rgba, expected);
     }
 
     #[test]
@@ -3527,11 +4451,165 @@ mod tests {
     }
 
     #[test]
-    fn visual_key_map_keeps_wasd_movement_and_shift_command_conflicts() {
-        assert_eq!(key_code_to_char(KeyCode::KeyW, false, false), Some('w'));
-        assert_eq!(key_code_to_char(KeyCode::KeyA, false, false), Some('a'));
-        assert_eq!(key_code_to_char(KeyCode::KeyS, false, false), Some('s'));
-        assert_eq!(key_code_to_char(KeyCode::KeyD, false, false), Some('d'));
+    fn visual_route_suite_cases_cover_multi_step_play_routes() {
+        let cases = visual_route_suite_cases();
+
+        assert_eq!(cases.len(), 18);
+        assert!(cases.iter().all(|case| !case.script.is_empty()));
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-world-movement")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-town-status-modal")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-town-view-overlay")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-britannia-look")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-britannia-spyglass-chunk-map")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-castle-save-refusal")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-world-board-horse")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-ship-broadside-fire")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-dungeon-movement-search")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-dungeon-ignite-torch")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-dungeon-exit-refusal")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-shop-sage-topic-miss")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-doom-combat-trigger")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-doom-combat-pass")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-doom-combat-attack")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-doom-combat-board-refusal")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-doom-combat-z-stats")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-doom-combat-search-prompt")
+        );
+        assert_eq!(
+            visual_route_step_label("route-world-movement", 2, "."),
+            "route-world-movement-02-idle"
+        );
+        assert_eq!(
+            visual_route_step_label("route-dungeon-movement-search", 3, "S6"),
+            "route-dungeon-movement-search-03-s6"
+        );
+        assert_eq!(
+            visual_route_step_label("route-doom-combat-trigger", 1, ""),
+            "route-doom-combat-trigger-01-empty"
+        );
+    }
+
+    #[test]
+    fn visual_route_suite_local_clean_writes_per_step_pngs_when_present() {
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join("CASTLE.DAT").exists()
+            || !game_dir.join(TILES_EGA_FILE).exists()
+            || !game_dir.join(IBM_CH_FILE).exists()
+        {
+            return;
+        }
+
+        let dir = temp_output_dir("routes");
+        let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
+
+        assert_eq!(reports.len(), 47);
+        for report in &reports {
+            assert!(report.path.exists());
+            assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
+            assert_eq!(report.height, VISUAL_PLAY_FRAME_HEIGHT);
+            assert!(report.nonblack_pixels > 0);
+        }
+        let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
+        assert!(manifest.contains("route-world-movement-00-initial"));
+        assert!(manifest.contains("route-world-movement-01-d"));
+        assert!(manifest.contains("route-town-status-modal-01-z"));
+        assert!(manifest.contains("route-town-view-overlay-01-v"));
+        assert!(manifest.contains("route-britannia-look-01-l6"));
+        assert!(manifest.contains("route-britannia-spyglass-chunk-map-01-usp"));
+        assert!(manifest.contains("route-castle-save-refusal-02-n"));
+        assert!(manifest.contains("route-world-board-horse-01-b"));
+        assert!(manifest.contains("route-ship-broadside-fire-01-f6"));
+        assert!(manifest.contains("route-dungeon-movement-search-03-s6"));
+        assert!(manifest.contains("route-dungeon-ignite-torch-01-i"));
+        assert!(manifest.contains("route-dungeon-exit-refusal-02-n"));
+        assert!(manifest.contains("route-shop-sage-topic-miss-01-mantra"));
+        assert!(manifest.contains("route-doom-combat-trigger-01-empty"));
+        assert!(manifest.contains("route-doom-combat-pass-02-empty"));
+        assert!(manifest.contains("route-doom-combat-attack-02-a6"));
+        assert!(manifest.contains("route-doom-combat-board-refusal-02-b"));
+        assert!(manifest.contains("route-doom-combat-z-stats-02-z"));
+        assert!(manifest.contains("route-doom-combat-search-prompt-02-s"));
+        assert!(!manifest.contains("Avatar"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_key_map_emits_spec_input_bytes_for_commands_and_movement() {
+        assert_eq!(key_code_to_char(KeyCode::KeyW, false, false), Some('W'));
+        assert_eq!(key_code_to_char(KeyCode::KeyA, false, false), Some('A'));
+        assert_eq!(key_code_to_char(KeyCode::KeyS, false, false), Some('S'));
+        assert_eq!(key_code_to_char(KeyCode::KeyD, false, false), Some('D'));
         assert_eq!(key_code_to_char(KeyCode::KeyA, true, false), Some('A'));
         assert_eq!(key_code_to_char(KeyCode::KeyS, true, false), Some('S'));
         assert_eq!(
@@ -3542,6 +4620,38 @@ mod tests {
         assert_eq!(key_code_to_char(KeyCode::KeyQ, false, false), Some('Q'));
         assert_eq!(key_code_to_char(KeyCode::KeyU, false, false), Some('U'));
         assert_eq!(key_code_to_char(KeyCode::Digit2, false, false), Some('2'));
+        assert_eq!(
+            key_code_to_input_byte(KeyCode::ArrowUp, false, false),
+            Some(u5_runtime::INPUT_CODE_NORTH)
+        );
+        assert_eq!(
+            key_code_to_input_byte(KeyCode::Numpad4, false, false),
+            Some(u5_runtime::INPUT_CODE_WEST)
+        );
+        assert_eq!(
+            key_code_to_input_byte(KeyCode::Home, false, false),
+            Some(u5_runtime::INPUT_CODE_NORTHWEST)
+        );
+        assert_eq!(
+            key_code_to_input_byte(KeyCode::PageDown, false, false),
+            Some(u5_runtime::INPUT_CODE_SOUTHEAST)
+        );
+        assert_eq!(
+            key_code_to_input_byte(KeyCode::Digit8, true, false),
+            Some(u5_runtime::INPUT_CODE_NORTH)
+        );
+        assert_eq!(
+            key_code_to_input_byte(KeyCode::Digit1, true, false),
+            Some(u5_runtime::INPUT_CODE_SOUTHWEST)
+        );
+        assert_eq!(
+            key_code_to_input_byte(KeyCode::F1, false, false),
+            Some(u5_runtime::INPUT_CODE_F1)
+        );
+        assert_eq!(
+            key_code_to_input_byte(KeyCode::F10, false, false),
+            Some(u5_runtime::INPUT_CODE_F10)
+        );
     }
 
     #[test]
@@ -3801,6 +4911,35 @@ mod tests {
     }
 
     #[test]
+    fn visual_line_input_discards_direction_and_function_bytes() {
+        let mut state = test_state(open_grid(), 1, 1);
+        install_test_conversation(&mut state);
+        let mut input_line = String::new();
+
+        for key in [
+            KeyCode::ArrowUp,
+            KeyCode::Numpad1,
+            KeyCode::Digit8,
+            KeyCode::F1,
+        ] {
+            let shift = key == KeyCode::Digit8;
+            let result = handle_visual_line_key(
+                &mut state,
+                &mut input_line,
+                key,
+                shift,
+                false,
+                Path::new(""),
+            )
+            .unwrap();
+            assert_eq!(result, None);
+        }
+
+        assert!(input_line.is_empty());
+        assert!(state.active_conversation.is_some());
+    }
+
+    #[test]
     fn visual_line_input_buffers_shop_quantity_until_enter() {
         let mut state = test_state(open_grid(), 1, 1);
         state.gold = 100;
@@ -4014,15 +5153,14 @@ mod tests {
         let dir = debug_game_dir();
         fs::write(dir.join(MISCMAPS_DAT_FILE), vec![0u8; 128]).unwrap();
 
-        let (summary, preview_rgba, preview_width, preview_height) =
-            visual_return_to_view_summary(&dir, TileGraphicsDepth::Ega16);
+        let preview = visual_return_to_view_summary(&dir, TileGraphicsDepth::Ega16);
 
-        assert!(summary.contains(MISCMAPS_DAT_FILE));
-        assert!(summary.contains("128 bytes"));
-        assert!(summary.contains("Return-to-View strips"));
-        assert!(preview_rgba.is_none());
-        assert_eq!(preview_width, 0);
-        assert_eq!(preview_height, 0);
+        assert!(preview.summary.contains(MISCMAPS_DAT_FILE));
+        assert!(preview.summary.contains("128 bytes"));
+        assert!(preview.summary.contains("Return-to-View strips"));
+        assert!(preview.frames_rgba.is_empty());
+        assert_eq!(preview.width, 0);
+        assert_eq!(preview.height, 0);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -4072,6 +5210,7 @@ mod tests {
                     records: (0..20).map(|i| format!("Story record {i}")).collect(),
                 },
                 step: INTRO_STORY_STEP_COUNT - 1,
+                transition: None,
             },
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
@@ -4321,7 +5460,8 @@ mod tests {
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),
-                preview_rgba: Some(preview_rgba),
+                preview_frames_rgba: vec![preview_rgba],
+                preview_frame_index: 0,
                 preview_width: 2,
                 preview_height: 2,
             },
@@ -4335,5 +5475,42 @@ mod tests {
 
         assert_eq!(&frame[offset..offset + 4], &[0xff, 0x00, 0x00, 0xff]);
         let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn return_to_view_intro_animation_advances_preview_frames_until_final() {
+        let mut panel = VisualIntroPanel::ReturnToView {
+            summary: "Preview".to_string(),
+            preview_frames_rgba: vec![vec![0x00, 0x00, 0x00, 0xff], vec![0xff, 0xff, 0xff, 0xff]],
+            preview_frame_index: 0,
+            preview_width: 1,
+            preview_height: 1,
+        };
+        let mut title_tick_frame = 0;
+
+        assert!(advance_visual_intro_panel_animation(
+            &mut panel,
+            &mut title_tick_frame
+        ));
+        assert_eq!(title_tick_frame, title_tick_next_frame(0));
+        assert!(matches!(
+            panel,
+            VisualIntroPanel::ReturnToView {
+                preview_frame_index: 1,
+                ..
+            }
+        ));
+
+        assert!(!advance_visual_intro_panel_animation(
+            &mut panel,
+            &mut title_tick_frame
+        ));
+        assert!(matches!(
+            panel,
+            VisualIntroPanel::ReturnToView {
+                preview_frame_index: 1,
+                ..
+            }
+        ));
     }
 }

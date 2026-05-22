@@ -32,14 +32,14 @@ fn cli_parser_accepts_play_scene_floor_and_start() {
         "0x02",
         "--raster-diagnostics",
         "--raster-depth",
-        "cga",
+        "tandy",
         r"C:\Games\U5-Clean",
     ])
     .unwrap();
 
     assert!(args.play);
     assert!(args.raster_diagnostics);
-    assert_eq!(args.raster_depth, TileGraphicsDepth::Cga4);
+    assert_eq!(args.raster_depth, TileGraphicsDepth::Ega16);
     assert_eq!(args.play_script, None);
     assert_eq!(
         args.play_options.target,
@@ -253,7 +253,30 @@ fn cli_parser_rejects_save_and_init_seed_conflict() {
 // from chunk_02
 #[test]
 fn cli_parser_rejects_bad_raster_depth() {
-    assert!(parse_cli_args(["--play", "--raster-depth", "hercules"]).is_err());
+    assert!(parse_cli_args(["--play", "--raster-depth", "vga"]).is_err());
+}
+
+// from chunk_02
+#[test]
+fn cli_parser_maps_tandy_raster_depth_to_ega_equivalent_path() {
+    let args = parse_cli_args(["--play", "--raster-depth", "tandy", r"C:\Games\U5-Clean"]).unwrap();
+
+    assert_eq!(args.raster_depth, TileGraphicsDepth::Ega16);
+}
+
+// from chunk_02
+#[test]
+fn cli_parser_rejects_hercules_as_out_of_v1_scope() {
+    let err = parse_cli_args(["--play", "--raster-depth", "hercules"]).unwrap_err();
+
+    assert!(err.to_string().contains("outside the v1"));
+}
+
+#[test]
+fn cli_parser_rejects_cga_as_out_of_v1_scope() {
+    let err = parse_cli_args(["--play", "--raster-depth", "cga"]).unwrap_err();
+
+    assert!(err.to_string().contains("outside the v1"));
 }
 
 // from chunk_02
@@ -295,7 +318,7 @@ fn cli_parser_accepts_route_smoke_mode() {
     let args = parse_cli_args([
         "--route-smoke",
         "--raster-depth",
-        "cga",
+        "tandy",
         r"C:\Games\U5-Clean",
     ])
     .unwrap();
@@ -303,7 +326,7 @@ fn cli_parser_accepts_route_smoke_mode() {
     assert!(args.route_smoke);
     assert!(!args.play);
     assert!(!args.visual);
-    assert_eq!(args.raster_depth, TileGraphicsDepth::Cga4);
+    assert_eq!(args.raster_depth, TileGraphicsDepth::Ega16);
     assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
 }
 
@@ -326,7 +349,7 @@ fn cli_parser_accepts_save_frame_with_script_and_scene_options() {
         "--play-script",
         "idle:2;q",
         "--raster-depth",
-        "cga",
+        "tandy",
         r"C:\Games\U5-Clean",
     ])
     .unwrap();
@@ -336,7 +359,7 @@ fn cli_parser_accepts_save_frame_with_script_and_scene_options() {
         args.save_frame,
         Some(PathBuf::from("screenshots/world.png"))
     );
-    assert_eq!(args.raster_depth, TileGraphicsDepth::Cga4);
+    assert_eq!(args.raster_depth, TileGraphicsDepth::Ega16);
     assert_eq!(
         args.play_script,
         Some(vec!["idle:2".to_string(), "q".to_string()])
@@ -354,7 +377,7 @@ fn cli_parser_accepts_save_frame_suite_mode() {
         "--save-frame-suite",
         "target/frame-suite",
         "--raster-depth",
-        "cga",
+        "tandy",
         r"C:\Games\U5-Clean",
     ])
     .unwrap();
@@ -364,7 +387,7 @@ fn cli_parser_accepts_save_frame_suite_mode() {
         args.save_frame_suite,
         Some(PathBuf::from("target/frame-suite"))
     );
-    assert_eq!(args.raster_depth, TileGraphicsDepth::Cga4);
+    assert_eq!(args.raster_depth, TileGraphicsDepth::Ega16);
     assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
 }
 
@@ -374,7 +397,7 @@ fn cli_parser_accepts_visual_frame_suite_mode() {
         "--visual-frame-suite",
         "target/visual-frame-suite",
         "--raster-depth",
-        "cga",
+        "tandy",
         r"C:\Games\U5-Clean",
     ])
     .unwrap();
@@ -385,7 +408,28 @@ fn cli_parser_accepts_visual_frame_suite_mode() {
         args.visual_frame_suite,
         Some(PathBuf::from("target/visual-frame-suite"))
     );
-    assert_eq!(args.raster_depth, TileGraphicsDepth::Cga4);
+    assert_eq!(args.raster_depth, TileGraphicsDepth::Ega16);
+    assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
+}
+
+#[test]
+fn cli_parser_accepts_visual_route_suite_mode() {
+    let args = parse_cli_args([
+        "--visual-route-suite",
+        "target/visual-route-suite",
+        "--raster-depth",
+        "tandy",
+        r"C:\Games\U5-Clean",
+    ])
+    .unwrap();
+
+    assert!(!args.play);
+    assert!(!args.visual);
+    assert_eq!(
+        args.visual_route_suite,
+        Some(PathBuf::from("target/visual-route-suite"))
+    );
+    assert_eq!(args.raster_depth, TileGraphicsDepth::Ega16);
     assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
 }
 
@@ -398,6 +442,7 @@ fn cli_save_frame_suite_rejects_other_play_modes_and_overrides() {
     assert!(parse_cli_args(["--save-frame-suite", "out", "--scene", "BRITANNIA"]).is_err());
     assert!(parse_cli_args(["--save-frame-suite", "out", "--play-script", "q"]).is_err());
     assert!(parse_cli_args(["--save-frame-suite", "out", "--visual-frame-suite", "vis"]).is_err());
+    assert!(parse_cli_args(["--save-frame-suite", "out", "--visual-route-suite", "vis"]).is_err());
 }
 
 #[test]
@@ -417,6 +462,34 @@ fn cli_visual_frame_suite_rejects_other_play_modes_and_overrides() {
     assert!(parse_cli_args(["--visual-frame-suite", "out", "--route-smoke"]).is_err());
     assert!(parse_cli_args(["--visual-frame-suite", "out", "--scene", "BRITANNIA"]).is_err());
     assert!(parse_cli_args(["--visual-frame-suite", "out", "--play-script", "q"]).is_err());
+    assert!(
+        parse_cli_args([
+            "--visual-frame-suite",
+            "out",
+            "--visual-route-suite",
+            "routes"
+        ])
+        .is_err()
+    );
+}
+
+#[test]
+fn cli_visual_route_suite_rejects_other_play_modes_and_overrides() {
+    assert!(parse_cli_args(["--visual-route-suite", "out", "--play"]).is_err());
+    assert!(parse_cli_args(["--visual-route-suite", "out", "--visual"]).is_err());
+    assert!(parse_cli_args(["--visual-route-suite", "out", "--save-frame", "frame.png"]).is_err());
+    assert!(
+        parse_cli_args([
+            "--visual-route-suite",
+            "out",
+            "--save-frame-suite",
+            "frames"
+        ])
+        .is_err()
+    );
+    assert!(parse_cli_args(["--visual-route-suite", "out", "--route-smoke"]).is_err());
+    assert!(parse_cli_args(["--visual-route-suite", "out", "--scene", "BRITANNIA"]).is_err());
+    assert!(parse_cli_args(["--visual-route-suite", "out", "--play-script", "q"]).is_err());
 }
 
 // from chunk_02
@@ -431,6 +504,7 @@ fn cli_parser_rejects_missing_save_frame_path() {
     assert!(parse_cli_args(["--save-frame"]).is_err());
     assert!(parse_cli_args(["--save-frame-suite"]).is_err());
     assert!(parse_cli_args(["--visual-frame-suite"]).is_err());
+    assert!(parse_cli_args(["--visual-route-suite"]).is_err());
 }
 
 // from chunk_02
@@ -470,14 +544,14 @@ fn cli_parser_accepts_intro_menu_mode() {
         "--intro",
         "--raster-diagnostics",
         "--raster-depth",
-        "cga",
+        "tandy",
         r"C:\Games\U5-Clean",
     ])
     .unwrap();
 
     assert!(args.intro);
     assert!(!args.play);
-    assert_eq!(args.raster_depth, TileGraphicsDepth::Cga4);
+    assert_eq!(args.raster_depth, TileGraphicsDepth::Ega16);
     assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
 }
 
@@ -529,6 +603,35 @@ fn cli_intro_ignores_invalid_menu_key_without_explanatory_text() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("Intro Menu"));
     assert!(!stdout.contains("Choose J, C, T, U, A, R"));
+    assert!(String::from_utf8(output.stderr).unwrap().is_empty());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn cli_intro_journey_onward_without_active_save_returns_to_menu() {
+    let dir = debug_game_dir();
+    fs::write(dir.join(SAVED_GAM_FILENAME), vec![0; SAVED_GAM_LEN]).unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_u5-engine"))
+        .arg("--intro")
+        .arg(dir.to_str().unwrap())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(b"J\n\nX\n")
+        .unwrap();
+
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Journey Onward"));
+    assert!(stdout.contains("No active game"));
+    assert!(stdout.contains("Intro Menu"));
     assert!(String::from_utf8(output.stderr).unwrap().is_empty());
     let _ = fs::remove_dir_all(dir);
 }
@@ -668,6 +771,160 @@ fn cli_create_character_command_writes_saved_files_and_returns_without_play() {
     assert_eq!(&saved_ool[..OOL_PLANE_LEN], vec![0; OOL_PLANE_LEN]);
     assert_eq!(&saved_ool[OOL_PLANE_LEN..], vec![0x77; OOL_PLANE_LEN]);
     let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn cli_binary_create_character_save_loads_through_play_script() {
+    let dir = debug_game_dir();
+    fs::write(dir.join("INIT.GAM"), saved_game_seed_bytes(17, 0, 15, 15)).unwrap();
+    fs::write(dir.join("INIT.OOL"), vec![0; OOL_PLANE_LEN]).unwrap();
+
+    let create = Command::new(env!("CARGO_BIN_EXE_u5-engine"))
+        .args([
+            "--create-character",
+            "AVATAR",
+            "--gender",
+            "male",
+            "--chargen-answers",
+            "AAAAAAA",
+        ])
+        .arg(dir.to_str().unwrap())
+        .output()
+        .unwrap();
+    assert!(create.status.success());
+    assert!(String::from_utf8(create.stderr).unwrap().is_empty());
+
+    let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+    assert_eq!(
+        &saved[SAVE_AVATAR_NAME_OFFSET..SAVE_AVATAR_NAME_OFFSET + 6],
+        b"AVATAR"
+    );
+
+    let play = Command::new(env!("CARGO_BIN_EXE_u5-engine"))
+        .args(["--play", "--from-save", "--play-script", "q"])
+        .arg(dir.to_str().unwrap())
+        .output()
+        .unwrap();
+    assert!(play.status.success());
+    let stdout = String::from_utf8(play.stdout).unwrap();
+    assert!(stdout.contains("Ultima V playable harness"));
+    assert!(stdout.contains("Script mode: 1 command(s)."));
+    assert!(stdout.contains("State: CASTLE:0"));
+    assert!(String::from_utf8(play.stderr).unwrap().is_empty());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn cli_binary_play_script_confirmed_save_round_trips_to_temp_save() {
+    let dir = debug_game_dir();
+    let mut save = saved_game_seed_bytes(0, 0, 10, 20);
+    save[SAVE_AVATAR_NAME_OFFSET] = b'A';
+    fs::write(dir.join(SAVED_GAM_FILENAME), save).unwrap();
+    fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_u5-engine"))
+        .args(["--play", "--from-save", "--play-script", "6;QY;q"])
+        .arg(dir.to_str().unwrap())
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Script mode: 3 command(s)."));
+    assert!(stdout.contains("Saving... Done"));
+    assert!(String::from_utf8(output.stderr).unwrap().is_empty());
+
+    let reloaded = load_play_options_from_save(&dir).unwrap();
+    assert_eq!(reloaded.target, PlayTarget::World(WorldPlane::Britannia));
+    assert_eq!(reloaded.start, Some((11, 20)));
+    assert_eq!(reloaded.clock.minute, 37);
+    let saved_ool = fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap();
+    assert_eq!(saved_ool.len(), SAVED_OOL_LEN);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn cli_intro_u4_transfer_commits_temp_save_and_returns_to_menu() {
+    let dir = debug_game_dir();
+    fs::write(dir.join("BRIT.GAM"), saved_game_seed_bytes(0, 0, 22, 33)).unwrap();
+    fs::write(dir.join("BRIT.OOL"), vec![0x44; OOL_PLANE_LEN]).unwrap();
+    fs::write(
+        dir.join(U4_TRANSFER_U4_SOURCE_FILENAME),
+        u4_transfer_party_sav_fixture(),
+    )
+    .unwrap();
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_u5-engine"))
+        .arg("--intro")
+        .arg(dir.to_str().unwrap())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(b"\nT\nY\nY\nY\n\nX\n")
+        .unwrap();
+
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Transfer from Ultima IV"));
+    assert!(stdout.contains("Preview: AVATAR"));
+    assert!(stdout.contains("Transferred AVATAR"));
+    assert!(stdout.contains("Intro Menu"));
+    assert!(String::from_utf8(output.stderr).unwrap().is_empty());
+
+    let saved = fs::read(dir.join(SAVED_GAM_FILENAME)).unwrap();
+    assert_eq!(
+        &saved[SAVE_AVATAR_NAME_OFFSET..SAVE_AVATAR_NAME_OFFSET + 6],
+        b"AVATAR"
+    );
+    assert_eq!(
+        saved[SAVE_ROSTER_OFFSET + SAVE_CHARACTER_CLASS_OFFSET],
+        u4_transfer_class_byte(6).unwrap()
+    );
+    let saved_ool = fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap();
+    assert_eq!(&saved_ool[OOL_PLANE_LEN..], vec![0x44; OOL_PLANE_LEN]);
+    let _ = fs::remove_dir_all(dir);
+}
+
+fn u4_transfer_party_sav_fixture() -> Vec<u8> {
+    let mut bytes = vec![0; U4_PARTY_SAV_REQUIRED_LEN];
+    let record = U4_PARTY_SAV_PLAYER0_OFFSET;
+    bytes[U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET
+        ..U4_PARTY_SAV_LEADING_CHARACTER_NAME_OFFSET + U4_PARTY_SAV_CHARACTER_NAME_LEN]
+        .copy_from_slice(b"AVATAR\0\0\0\0\0\0\0\0\0\0");
+    bytes[record + U4_PARTY_SAV_CHARACTER_SEX_OFFSET] = U4_PARTY_SAV_MALE_BYTE;
+    bytes[U4_PARTY_SAV_LEADING_CHARACTER_CLASS_OFFSET] = 6;
+    bytes[U4_PARTY_SAV_MOVE_COUNTER_OFFSET..U4_PARTY_SAV_MOVE_COUNTER_OFFSET + 2]
+        .copy_from_slice(&70u16.to_le_bytes());
+    bytes[U4_PARTY_SAV_MOON_COUNTER_OFFSET] = 70;
+    bytes[U4_PARTY_SAV_DUNGEON_COUNTER_OFFSET] = 70;
+    bytes[U4_PARTY_SAV_FOOD_OFFSET..U4_PARTY_SAV_FOOD_OFFSET + 2]
+        .copy_from_slice(&9999u16.to_le_bytes());
+    bytes[U4_PARTY_SAV_GOLD_OFFSET..U4_PARTY_SAV_GOLD_OFFSET + 2]
+        .copy_from_slice(&9999u16.to_le_bytes());
+    bytes[U4_PARTY_SAV_GEMS_OFFSET] = 99;
+    bytes[U4_PARTY_SAV_TORCHES_OFFSET] = 99;
+    bytes[U4_PARTY_SAV_KEYS_OFFSET] = 99;
+    bytes[U4_PARTY_SAV_SEXTANTS_OFFSET] = 1;
+    bytes[U4_PARTY_SAV_VIRTUE_STANDING_OFFSET + 2] = 1;
+    bytes[record + U4_PARTY_SAV_CHARACTER_XP_OFFSET..record + U4_PARTY_SAV_CHARACTER_XP_OFFSET + 2]
+        .copy_from_slice(&4321u16.to_le_bytes());
+    bytes[record + U4_PARTY_SAV_CHARACTER_STR_OFFSET
+        ..record + U4_PARTY_SAV_CHARACTER_STR_OFFSET + 2]
+        .copy_from_slice(&29u16.to_le_bytes());
+    bytes[record + U4_PARTY_SAV_CHARACTER_DEX_OFFSET
+        ..record + U4_PARTY_SAV_CHARACTER_DEX_OFFSET + 2]
+        .copy_from_slice(&30u16.to_le_bytes());
+    bytes[record + U4_PARTY_SAV_CHARACTER_INT_OFFSET
+        ..record + U4_PARTY_SAV_CHARACTER_INT_OFFSET + 2]
+        .copy_from_slice(&9u16.to_le_bytes());
+    bytes
 }
 
 #[test]

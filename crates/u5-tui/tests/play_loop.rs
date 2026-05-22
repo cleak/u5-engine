@@ -105,35 +105,35 @@ fn play_input_preserves_space_command_and_suffix() {
 fn play_input_translates_common_ansi_navigation_sequences() {
     assert_eq!(
         play_input_key_and_suffix("\x1b[A\n"),
-        Some(('8', String::new()))
+        Some((char::from(INPUT_CODE_NORTH), String::new()))
     );
     assert_eq!(
         play_input_key_and_suffix("\x1b[B\r\n"),
-        Some(('2', String::new()))
+        Some((char::from(INPUT_CODE_SOUTH), String::new()))
     );
     assert_eq!(
         play_input_key_and_suffix("\x1b[D\n"),
-        Some(('4', String::new()))
+        Some((char::from(INPUT_CODE_WEST), String::new()))
     );
     assert_eq!(
         play_input_key_and_suffix("\x1b[C\n"),
-        Some(('6', String::new()))
+        Some((char::from(INPUT_CODE_EAST), String::new()))
     );
     assert_eq!(
         play_input_key_and_suffix("\x1b[H\n"),
-        Some(('7', String::new()))
+        Some((char::from(INPUT_CODE_NORTHWEST), String::new()))
     );
     assert_eq!(
         play_input_key_and_suffix("\x1b[5~\n"),
-        Some(('9', String::new()))
+        Some((char::from(INPUT_CODE_NORTHEAST), String::new()))
     );
     assert_eq!(
         play_input_key_and_suffix("\x1b[F\n"),
-        Some(('1', String::new()))
+        Some((char::from(INPUT_CODE_SOUTHWEST), String::new()))
     );
     assert_eq!(
         play_input_key_and_suffix("\x1b[6~\n"),
-        Some(('3', String::new()))
+        Some((char::from(INPUT_CODE_SOUTHEAST), String::new()))
     );
 }
 
@@ -306,15 +306,15 @@ fn ansi_function_keys_are_ignored_before_command_dispatch() {
     assert_eq!(ansi_function_key("\x1b[21~"), Some(10));
     assert_eq!(
         play_input_key_and_suffix("\x1bOP\n"),
-        Some((PLAY_IGNORED_INPUT_KEY, "function".to_string()))
+        Some((char::from(INPUT_CODE_F1), String::new()))
     );
     assert_eq!(
         play_input_key_and_suffix("\x1b[21~\n"),
-        Some((PLAY_IGNORED_INPUT_KEY, "function".to_string()))
+        Some((char::from(INPUT_CODE_F10), String::new()))
     );
     assert_eq!(
         play_input_key_and_suffix("\x1b[A\n"),
-        Some(('8', String::new()))
+        Some((char::from(INPUT_CODE_NORTH), String::new()))
     );
 }
 
@@ -754,6 +754,11 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "britannia-create-food-cast")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "ship-hms-cape-plans-use")
     );
     assert!(
@@ -807,9 +812,59 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "stonegate-shadowlord-entry")
     );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "britannia-word-of-power-seal-opens")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "underworld-doom-word-of-power-seal-opens")
+    );
     assert!(cases.iter().any(|case| case.name == "castle-view-overlay"));
     assert!(cases.iter().any(|case| case.name == "castle-peer-overlay"));
     assert!(cases.iter().any(|case| case.name == "castle-x-ray-overlay"));
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "castle-surface-fountain-look")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "buccaneers-den-wishing-well-horse")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "buccaneers-den-wishing-well-car-no-native-grant")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "castle-death-vision-look")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "castle-talk-status-sleeping-refusal")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "castle-talk-status-praying-refusal")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "castle-light-decay-route")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "shop-inn-rest-accept-public-rate")
+    );
     assert!(
         cases
             .iter()
@@ -823,7 +878,27 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "dungeon-active-monster-attack-ambush")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "dungeon-active-monster-contact-ambush")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "dungeon-search-focus-route")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "dungeon-ladder-down-up-route")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "dungeon-surface-exit-return-world")
     );
     assert!(
         cases
@@ -876,6 +951,36 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "doom-combat-select-player-clear")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-select-player-one")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-select-player-six")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-escape-abort")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-music-toggle")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-direct-step-east")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "doom-combat-use-refusal")
     );
     assert!(
@@ -887,6 +992,46 @@ fn route_smoke_cases_cover_representative_modes() {
         cases
             .iter()
             .any(|case| case.name == "doom-combat-w-refusal")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-board-refusal")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-enter-refusal")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-fire-refusal")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-hole-up-refusal")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-ignite-refusal")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-mix-refusal")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-new-order-refusal")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "doom-combat-talk-refusal")
     );
     assert!(
         cases

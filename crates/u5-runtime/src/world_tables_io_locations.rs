@@ -6,6 +6,98 @@ use std::path::Path;
 
 use crate::*;
 
+const PUBLISHED_WORLD_LOCATION_ROWS: &[(u8, WorldPlane, usize, usize)] = &[
+    (1, WorldPlane::Britannia, 232, 135),
+    (2, WorldPlane::Britannia, 81, 106),
+    (3, WorldPlane::Britannia, 36, 222),
+    (4, WorldPlane::Britannia, 58, 43),
+    (5, WorldPlane::Britannia, 159, 20),
+    (6, WorldPlane::Britannia, 106, 184),
+    (7, WorldPlane::Britannia, 22, 128),
+    (8, WorldPlane::Britannia, 187, 169),
+    (9, WorldPlane::Britannia, 88, 120),
+    (10, WorldPlane::Britannia, 152, 24),
+    (11, WorldPlane::Britannia, 104, 216),
+    (12, WorldPlane::Britannia, 216, 120),
+    (13, WorldPlane::Britannia, 45, 62),
+    (14, WorldPlane::Britannia, 176, 208),
+    (15, WorldPlane::Britannia, 201, 59),
+    (16, WorldPlane::Britannia, 153, 91),
+    (17, WorldPlane::Britannia, 86, 107),
+    (18, WorldPlane::Britannia, 196, 245),
+    (19, WorldPlane::Britannia, 84, 106),
+    (20, WorldPlane::Britannia, 86, 105),
+    (21, WorldPlane::Britannia, 88, 106),
+    (22, WorldPlane::Britannia, 98, 145),
+    (23, WorldPlane::Britannia, 136, 90),
+    (24, WorldPlane::Britannia, 136, 158),
+    (25, WorldPlane::Britannia, 49, 58),
+    (26, WorldPlane::Britannia, 15, 160),
+    (27, WorldPlane::Britannia, 64, 240),
+    (28, WorldPlane::Britannia, 248, 8),
+    (29, WorldPlane::Britannia, 148, 74),
+    (30, WorldPlane::Britannia, 218, 107),
+    (31, WorldPlane::Britannia, 28, 50),
+    (32, WorldPlane::Britannia, 146, 241),
+    (33, WorldPlane::Britannia, 240, 73),
+    (34, WorldPlane::Britannia, 91, 67),
+    (35, WorldPlane::Britannia, 72, 168),
+    (36, WorldPlane::Britannia, 126, 20),
+    (37, WorldPlane::Britannia, 156, 27),
+    (38, WorldPlane::Britannia, 58, 102),
+    (39, WorldPlane::Britannia, 239, 240),
+    (40, WorldPlane::Underworld, 128, 128),
+];
+
+pub fn published_world_location_entries() -> Vec<WorldLocationEntry> {
+    PUBLISHED_WORLD_LOCATION_ROWS
+        .iter()
+        .copied()
+        .map(|(scene_byte, plane, x, y)| {
+            let target = if scene_byte <= SCENE_TOWN_FAMILY_LAST {
+                PlayTarget::Town(Scene::new(scene_byte).expect("published town scene is valid"))
+            } else {
+                PlayTarget::Dungeon(
+                    DungeonScene::new(scene_byte).expect("published dungeon scene is valid"),
+                )
+            };
+            WorldLocationEntry {
+                plane,
+                x,
+                y,
+                target,
+                town_entry_y: None,
+                expected_tile: None,
+            }
+        })
+        .collect()
+}
+
+pub fn effective_world_location_entries(game_dir: &Path) -> io::Result<Vec<WorldLocationEntry>> {
+    effective_world_location_entries_with_sidecar_status(game_dir).map(|(entries, _)| entries)
+}
+
+pub fn effective_world_location_entries_with_sidecar_status(
+    game_dir: &Path,
+) -> io::Result<(Vec<WorldLocationEntry>, bool)> {
+    let Some(mut entries) = load_world_location_entries(game_dir)? else {
+        return Ok((published_world_location_entries(), false));
+    };
+    let published: Vec<_> = published_world_location_entries()
+        .into_iter()
+        .filter(|published| {
+            !entries.iter().any(|entry| {
+                entry.target == published.target
+                    || (entry.plane == published.plane
+                        && entry.x == published.x
+                        && entry.y == published.y)
+            })
+        })
+        .collect();
+    entries.extend(published);
+    Ok((entries, true))
+}
+
 pub fn parse_world_location_entries(text: &str) -> io::Result<Vec<WorldLocationEntry>> {
     let mut entries = Vec::new();
     for (line_index, line) in text.lines().enumerate() {
