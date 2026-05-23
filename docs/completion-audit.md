@@ -48,7 +48,7 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#48` | Non-combat Blink directional ray landing rule | Implemented |
 | `cleak/u5-spec#51` | Full resident town tile-attribute table for poison-gas detection | Published tile step behavior implemented; full table question pending |
 | `cleak/u5-spec#54` | Return-to-View strip captions, timing, geometry, and exact effect rasters | Public timing/captions and 4x19 visible geometry implemented; exact effect raster question pending |
-| `cleak/u5-spec#56` | Endgame tableau active-object layout, sprite mapping, and movement timing | Terminal flow and synthetic clean tableau implemented; exact original tableau metadata pending |
+| `cleak/u5-spec#56` | Endgame tableau active-object layout, sprite mapping, and movement timing | Implemented from latest issue answer; active-object slots, class sprites, scene marker, branch movement, and refusal jitter follow the published contract |
 
 Where an audit row references a pending issue, the engine carries a clean
 implementation or conservative placeholder that avoids private-derived guesses
@@ -376,7 +376,7 @@ are kept out of gameplay logic until the public spec publishes exact data.
 | `cleak/u5-spec#47` | Checked-in spec files still contradict the latest public issue answer for non-combat Ring of Regeneration and completed long-camp recovery | Engine implements the latest public issue-comment behavior: hourly 1-in-8 Ring of Regeneration +1 HP and guarded completed long-camp HP/MP recovery |
 | `cleak/u5-spec#51` | Full resident town tile-attribute table | `town_tile_attributes.tsv` can drive the public class `4` + vehicle byte `0x1C` poison-gas trigger predicate; coordinate rows remain as fallback, with focused tests and route-smoke covering the public per-slot roll semantics |
 | `cleak/u5-spec#54` | Return-to-View exact local cell-effect rasters | Parser/scheduler/overlay composition implement the public 19x4 source layout transposed to a 4x19 visible preview, fixed captions from LoadMapStrip, high-opcode no-ops, `(x, y + 7)` effect coordinates, and timing model; exact rasters await final public reconciliation |
-| `cleak/u5-spec#56` | Exact terminal endgame tableau active-object slots, actor roles, coordinates, sprites, cadence, and refusal-branch behavior | Engine has the terminal endgame flow, resource loading, party restoration, confirmation branches, and clean synthetic tableau/jitter model until original tableau metadata is published |
+| `cleak/u5-spec#56` | Exact terminal endgame tableau active-object slots, actor roles, coordinates, sprites, cadence, and refusal-branch behavior | Implemented from the public issue answer; remaining endgame gaps are pixel/display-helper presentation parity, not tableau metadata |
 
 Follow-up questions were current as of the 2026-05-23 issue audit for the
 remaining response-needed items:
@@ -398,9 +398,6 @@ remaining response-needed items:
   predicate or publish the full resident tile-attribute table.
 - `cleak/u5-spec#54`: resolve the strip geometry wording conflict and publish
   or defer exact local cell-effect rasters.
-- `cleak/u5-spec#56`: publish the exact endgame tableau actor layout, sprite
-  mapping, movement timing, refusal-branch behavior, and restored-party
-  eligibility.
 - `cleak/u5-spec#3`: publish the exact skiff/pirate-ship special selector
   byte/range and whether the selector inspects active-object type, tile, or both.
 - `cleak/u5-spec#1`: reconcile any stale `systems/dungeon-mode.md` wording

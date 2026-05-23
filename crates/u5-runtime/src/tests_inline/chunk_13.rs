@@ -16037,11 +16037,23 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
         endgame.cinematic.step,
         crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau,
     ));
+    assert_eq!(
+        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
+        ENDGAME_TABLEAU_LORD_BRITISH_TYPE
+    );
+    assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 5));
 
     // Walk all panels: throne → 6 narrative windows → certificate
     // → origin closer → finished. That's 1 + 6 + 1 + 1 = 9 steps;
     // after which endgame remains active.
-    for _ in 0..9 {
+    state.resolve_endgame_confirmation(true);
+    assert!(
+        (0..state.party.len().min(SAVE_PARTY_SIZE_MAX as usize))
+            .chain([ENDGAME_TABLEAU_LORD_BRITISH_SLOT, ENDGAME_TABLEAU_SCENE_MARKER_SLOT])
+            .all(|slot| state.active_objects[slot].type_byte == 0
+                && state.active_objects[slot].tile == 0)
+    );
+    for _ in 0..8 {
         state.resolve_endgame_confirmation(true);
     }
     let endgame = state.endgame.as_ref().unwrap();
@@ -20222,6 +20234,8 @@ fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
     // and rebuilds it as cinematic party/Lord British tableau state.
     let mut state = test_state(open_grid(), 5, 5);
     state.party = vec![state.party[0]; 3];
+    state.party[1].class_byte = b'M';
+    state.party[2].class_byte = b'B';
     state.active_objects.push(ActiveObject {
         type_byte: 0xaa,
         tile: 0xaa,
@@ -20238,16 +20252,35 @@ fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
     assert_eq!(state.active_objects.len(), OOL_SLOTS);
     assert!(state.endgame_tableau_is_settled());
     assert_eq!(
-        endgame_tableau_role_for_object(state.active_objects[0]),
+        endgame_tableau_role_for_slot(0, state.active_objects[0]),
         Some(EndgameTableauActorRole::PartyMember(0))
     );
     assert_eq!(
-        endgame_tableau_role_for_object(state.active_objects[2]),
+        endgame_tableau_role_for_slot(2, state.active_objects[2]),
         Some(EndgameTableauActorRole::PartyMember(2))
     );
     assert_eq!(
-        endgame_tableau_role_for_object(state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT]),
-        Some(EndgameTableauActorRole::LordBritish)
+        (state.active_objects[0].type_byte, state.active_objects[0].tile),
+        (0x4c, 0x4c)
+    );
+    assert_eq!(
+        (state.active_objects[1].type_byte, state.active_objects[1].tile),
+        (0x40, 0x40)
+    );
+    assert_eq!(
+        (state.active_objects[2].type_byte, state.active_objects[2].tile),
+        (0x44, 0x44)
+    );
+    assert_eq!(
+        endgame_tableau_role_for_slot(
+            ENDGAME_TABLEAU_SCENE_MARKER_SLOT,
+            state.active_objects[ENDGAME_TABLEAU_SCENE_MARKER_SLOT]
+        ),
+        Some(EndgameTableauActorRole::SceneMarker)
+    );
+    assert_eq!(
+        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
+        0
     );
     assert!(!state
         .active_objects
@@ -20263,7 +20296,7 @@ fn endgame_tableau_target_step_moves_active_objects_until_settled() {
     assert!(!state.endgame_tableau_is_settled());
 
     assert!(state.advance_endgame_tableau_toward_targets());
-    assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 9));
+    assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 8));
 
     let steps = state.settle_endgame_tableau_to_targets();
     assert!(steps > 0);
@@ -20292,15 +20325,23 @@ fn missing_box_terminal_input_runs_tableau_jitter_without_leaving_endgame() {
         Some(EndgameOutcome::MissingBoxOrRefused)
     );
     assert_ne!(state.active_objects, before);
-    assert!(state.active_objects.iter().all(|object| {
-        endgame_tableau_role_for_object(*object).is_none()
-            || (object.x < ENDGAME_TABLEAU_WIDTH
-                && object.y < ENDGAME_TABLEAU_HEIGHT
-                && endgame_tableau_cell_walkable(object.x, object.y))
-            || matches!(
-                endgame_tableau_role_for_object(*object),
-                Some(EndgameTableauActorRole::LordBritish)
-            )
+    assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (8, 4));
+    assert_eq!((state.active_objects[2].x, state.active_objects[2].y), (8, 6));
+    assert_eq!(
+        (
+            state.active_objects[ENDGAME_TABLEAU_SCENE_MARKER_SLOT].x,
+            state.active_objects[ENDGAME_TABLEAU_SCENE_MARKER_SLOT].y
+        ),
+        (4, 1)
+    );
+    assert!(ENDGAME_TABLEAU_JITTER_SLOTS.iter().all(|slot| {
+        *slot >= state.party.len()
+            || {
+                let object = state.active_objects[*slot];
+                object.x < ENDGAME_TABLEAU_WIDTH
+                    && object.y < ENDGAME_TABLEAU_HEIGHT
+                    && endgame_tableau_cell_walkable(object.x, object.y)
+            }
     }));
 }
 
