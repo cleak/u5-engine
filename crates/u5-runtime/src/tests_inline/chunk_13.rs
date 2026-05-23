@@ -5895,24 +5895,6 @@ fn shop_refuses_mounted_horse_except_at_horse_trader() {
 }
 
 #[test]
-fn stationary_display_prompt_classifies_y_n_space_and_discards_others() {
-    // shops.md §8.10: the stationary-display purchase Y/N loop
-    // accepts Y (offer), N or Space (exit), and silently
-    // re-prompts on any other byte.
-    use StationaryDisplayPrompt::*;
-    assert_eq!(stationary_display_prompt(b'Y'), Offer);
-    assert_eq!(stationary_display_prompt(b'y'), Offer);
-    assert_eq!(stationary_display_prompt(b'N'), Exit);
-    assert_eq!(stationary_display_prompt(b'n'), Exit);
-    assert_eq!(stationary_display_prompt(b' '), Exit);
-    // Discard everything else (numbers, other letters, controls).
-    assert_eq!(stationary_display_prompt(0), Discard);
-    assert_eq!(stationary_display_prompt(b'\r'), Discard);
-    assert_eq!(stationary_display_prompt(b'A'), Discard);
-    assert_eq!(stationary_display_prompt(b'5'), Discard);
-}
-
-#[test]
 fn common_word_dictionary_nul_sentinel_count_matches_spec() {
     // shops.md §4.2 / public issue #33/#40: token zero plus the
     // published empty dictionary rows act as word-boundary sentinels.

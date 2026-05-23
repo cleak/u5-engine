@@ -2547,7 +2547,7 @@ impl PlayState {
 
     pub fn town_poison_gas_at(
         &self,
-        game_dir: &Path,
+        _game_dir: &Path,
         scene: Scene,
         floor: i8,
         x: usize,
@@ -2555,10 +2555,7 @@ impl PlayState {
         tile: u8,
     ) -> io::Result<Option<TownPoisonGasEntry>> {
         let transport_marker = self.player.transport.save_marker();
-        if town_poison_gas_live_tile_matches(tile, transport_marker)
-            || load_town_tile_attribute_entries(game_dir)?
-                .is_some_and(|entries| town_poison_gas_tile_matches_attributes(&entries, tile))
-        {
+        if town_poison_gas_live_tile_matches(tile, transport_marker) {
             return Ok(Some(TownPoisonGasEntry {
                 scene,
                 floor,
@@ -2567,11 +2564,7 @@ impl PlayState {
                 expected_tile: Some(tile),
             }));
         }
-        Ok(load_town_poison_gas_entries(game_dir)?.and_then(|entries| {
-            entries
-                .into_iter()
-                .find(|entry| town_poison_gas_matches(*entry, scene, floor, x, y, tile))
-        }))
+        Ok(None)
     }
 
     pub fn append_town_poison_gas_message(

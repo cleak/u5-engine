@@ -635,6 +635,9 @@ impl PlayState {
         &self,
         game_dir: &Path,
     ) -> io::Result<Option<EternalFlameEntry>> {
+        if let Some(entry) = self.published_eternal_flame_at_current_position() {
+            return Ok(Some(entry));
+        }
         let Some(entries) = load_eternal_flame_entries(game_dir)? else {
             return Ok(None);
         };
@@ -643,12 +646,58 @@ impl PlayState {
             .find(|entry| self.eternal_flame_entry_matches(*entry)))
     }
 
+    pub fn published_eternal_flame_at_current_position(&self) -> Option<EternalFlameEntry> {
+        let (target, floor, x, y) = self.current_blink_context();
+        const PUBLISHED_FLAMES: [EternalFlameEntry; 3] = [
+            EternalFlameEntry {
+                target: PlayTarget::Town(Scene {
+                    byte: SCENE_THE_LYCAEUM,
+                    family: Family::Keep,
+                    block: 5,
+                }),
+                floor: 2,
+                x: 15,
+                y: 9,
+                flame: EternalFlame::Truth,
+                expected_tile: None,
+            },
+            EternalFlameEntry {
+                target: PlayTarget::Town(Scene {
+                    byte: SCENE_EMPATH_ABBEY,
+                    family: Family::Keep,
+                    block: 6,
+                }),
+                floor: 1,
+                x: 15,
+                y: 3,
+                flame: EternalFlame::Love,
+                expected_tile: None,
+            },
+            EternalFlameEntry {
+                target: PlayTarget::Town(Scene {
+                    byte: SCENE_SERPENTS_HOLD,
+                    family: Family::Keep,
+                    block: 7,
+                }),
+                floor: -1,
+                x: 15,
+                y: 16,
+                flame: EternalFlame::Courage,
+                expected_tile: None,
+            },
+        ];
+        PUBLISHED_FLAMES.into_iter().find(|entry| {
+            entry.target == target && entry.floor == floor && entry.x == x && entry.y == y
+        })
+    }
+
     pub fn eternal_flame_entry_matches(&self, entry: EternalFlameEntry) -> bool {
         let (target, floor, x, y) = self.current_blink_context();
         let flame_tile = self.current_area_tile(entry.x, entry.y);
         entry.target == target
             && entry.floor == floor
-            && entry.x.abs_diff(x) + entry.y.abs_diff(y) <= 1
+            && entry.x == x
+            && entry.y == y
             && entry
                 .expected_tile
                 .map_or(matches!(flame_tile, 0x76..=0x77), |expected| {
@@ -2679,11 +2728,8 @@ impl PlayState {
         let raw_blob = parse_tlk_raw(&game_dir.join(format!("{}.TLK", scene.family.stem())))
             .unwrap_or_default();
         self.common_word_dictionary = load_common_word_dictionary_optional(game_dir)?;
-        Ok(
-            self.talk_direction_with_dialogue_and_keyword_raw_and_stationary_displays(
-                direction, &dialogue, &raw_blob, keyword, None,
-            ),
-        )
+        Ok(self
+            .talk_direction_with_dialogue_and_keyword_raw(direction, &dialogue, &raw_blob, keyword))
     }
 
     pub fn facing_talk_target(&self) -> Option<(u8, usize, usize)> {
@@ -2740,19 +2786,15 @@ impl PlayState {
         dialogue: &HashMap<u16, Vec<String>>,
         keyword: Option<&str>,
     ) -> MoveOutcome {
-        self.talk_direction_with_dialogue_and_keyword_and_stationary_displays(
-            direction, dialogue, keyword, None,
-        )
+        self.talk_direction_with_dialogue_and_keyword_inner(direction, dialogue, keyword)
     }
 
-    pub fn talk_direction_with_dialogue_and_keyword_and_stationary_displays(
+    pub fn talk_direction_with_dialogue_and_keyword_inner(
         &mut self,
         direction: Direction,
         dialogue: &HashMap<u16, Vec<String>>,
         keyword: Option<&str>,
-        stationary_displays: Option<&[StationaryDisplayEntry]>,
     ) -> MoveOutcome {
-        let _ = stationary_displays;
         if !matches!(self.area, Area::Town { .. }) {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;
@@ -2878,20 +2920,6 @@ impl PlayState {
         raw_blob: &HashMap<u16, Vec<Vec<u8>>>,
         keyword: Option<&str>,
     ) -> MoveOutcome {
-        self.talk_direction_with_dialogue_and_keyword_raw_and_stationary_displays(
-            direction, dialogue, raw_blob, keyword, None,
-        )
-    }
-
-    pub fn talk_direction_with_dialogue_and_keyword_raw_and_stationary_displays(
-        &mut self,
-        direction: Direction,
-        dialogue: &HashMap<u16, Vec<String>>,
-        raw_blob: &HashMap<u16, Vec<Vec<u8>>>,
-        keyword: Option<&str>,
-        stationary_displays: Option<&[StationaryDisplayEntry]>,
-    ) -> MoveOutcome {
-        let _ = stationary_displays;
         if !matches!(self.area, Area::Town { .. }) {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;

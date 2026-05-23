@@ -53,9 +53,8 @@ move below level `7`. Missing rows preserve the conservative in-place block.
 | `world_damage_tiles.tsv` | Lava/drowning damage cells and transport gates. |
 | `world_encounters.tsv` | Optional encounter spawn overrides; unmatched terrain uses the native public selector. |
 | `shrines.tsv` | Shrine coordinates and virtue binding. |
-| `eternal_flames.tsv` | Clean Eternal Flame coordinates for Shadowlord shard destruction. Matching accepts the flame cell underfoot or cardinal-adjacent; default tile guard is flame family `0x76..=0x77`; public issue #31 makes this flame predicate sufficient without a separate live Shadowlord-name encounter. |
-| `blink_targets.tsv` | Clean Blink landing rows. |
-| `stationary_displays.tsv` | Stationary-display shop rows. Legacy rows use `SCENE FLOOR X Y ITEM AMOUNT PRICE [TILE]`; marker-order rows use `SCENE FLOOR marker:TILE ORDINAL ITEM AMOUNT PRICE [TILE]`, where `ORDINAL` counts the scene/floor display-marker list before adjacency filtering. |
+| `eternal_flames.tsv` | Optional legacy Eternal Flame coordinate overrides. Native shard destruction uses the three published exact party positions and still requires the matching Shadowlord-name encounter immediately north. |
+| `blink_targets.tsv` | Legacy Blink landing rows retained for old parser coverage; native non-combat Blink uses the published straight-ray farthest-grass rule. |
 | `tile_passability.bin` | Optional 32-byte public tile passability bitmap. |
 
 ## Content And Companion Save Files

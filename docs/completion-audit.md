@@ -212,7 +212,7 @@ through the asset-backed Talk command path.
 | §8.7 Shipwright | shipwright arm; pending vehicle in `play_state_struct.rs` | shipwright tests | Implemented |
 | §8.8 Horse trader | horse arm | horse tests | Implemented |
 | §8.9 Reagent vendor | `shops.rs` per-herbalist matrix | reagent tests | Implemented |
-| §8.10 Stationary display | `play_state_impl/chunk_04.rs` public issue #28 marker discovery, scene/floor marker-order rows, active-object slot clearing; `shop_runtime.rs` purchase flow | stationary-display parser and end-to-end tests in `chunk_21.rs` | Implemented (flow and marker-order semantics; exact row content blocked on `cleak/u5-spec#28`) |
+| §8.10 Horse trader correction | `shop_session.rs` public issue #28 horse-trader scene rows; `input_dispatch.rs` adjacent marker placement and active-object creation | horse-trader route smoke and talk/shop tests in `chunk_21.rs` | Implemented; obsolete stationary-display purchase runtime removed |
 | §9 Karma effects | no karma gating on shop pricing | — | Implemented |
 
 ### `systems/karma.md`

@@ -16,19 +16,17 @@ use crate::shops::{
     GuildShop, GuildShopAction, Herbalist, INN_REGISTRY_CAP, Inn, InnMainAction,
     ProvisionPurchaseError, Reagent, ReagentPurchaseError, SAGE_RUMOUR_TABLE, SageRumourError,
     SageRumourOutcome, SageRumourQuote, SageRumourTable, Shipwright, ShipwrightMenuAction,
-    ShipwrightPurchaseError, ShipwrightPurchaseOutcome, ShipwrightPurchaseQuote, Stable,
-    StationaryDisplayPrompt, Tavern, TavernDrinkError, TavernDrinkPrompt, apply_blue_boar_drink,
-    apply_guild_purchase, apply_provision_purchase, apply_reagent_purchase,
-    apply_shipwright_purchase, apply_tavern_round_drink, arms_shop_action, arms_shop_buy_quote,
-    arms_shop_sell_offer, arms_shop_stock_item_for_letter, guild_shop_action, guild_unit_price,
-    herbalist_menu_entries, inn_base_room_rate, inn_leave_companion_deposit_for_speaker,
-    inn_main_action, inn_pickup_bill_for_speaker, quote_inn_rest, quote_inn_rest_for_speaker,
-    quote_shipwright_purchase, shipwright_menu_action, stable_horse_price,
-    stationary_display_prompt, tavern_drink_prompt, tavern_provision_unit_price,
+    ShipwrightPurchaseError, ShipwrightPurchaseOutcome, ShipwrightPurchaseQuote, Stable, Tavern,
+    TavernDrinkError, TavernDrinkPrompt, apply_blue_boar_drink, apply_guild_purchase,
+    apply_provision_purchase, apply_reagent_purchase, apply_shipwright_purchase,
+    apply_tavern_round_drink, arms_shop_action, arms_shop_buy_quote, arms_shop_sell_offer,
+    arms_shop_stock_item_for_letter, guild_shop_action, guild_unit_price, herbalist_menu_entries,
+    inn_base_room_rate, inn_leave_companion_deposit_for_speaker, inn_main_action,
+    inn_pickup_bill_for_speaker, quote_inn_rest, quote_inn_rest_for_speaker,
+    quote_shipwright_purchase, shipwright_menu_action, stable_horse_price, tavern_drink_prompt,
+    tavern_provision_unit_price,
 };
 use crate::transport::PendingVehicleAcquisition;
-use crate::world_tables::ObjectPickupGrant;
-use crate::world_tables::ObjectPickupKind;
 
 /// Inputs available to every shop machine. Shop-specific machines
 /// extract the fields they need.
@@ -231,162 +229,6 @@ fn quote_arms_shop_buy_item(
         quoted_price: price,
     };
     ArmsShopOutcome::QuotedBuyPrice { item, price }
-}
-
-// ---------- Stationary display purchase ----------
-
-/// `shops.md §8.10` stationary-display purchase flow. The display
-/// marker has already selected an equipment item and price before the
-/// Y/N loop starts.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StationaryDisplayState {
-    Prompt {
-        grant: ObjectPickupGrant,
-        price: u16,
-        party_index: usize,
-        object_slot: Option<usize>,
-    },
-    Confirm {
-        grant: ObjectPickupGrant,
-        price: u16,
-        party_index: usize,
-        object_slot: Option<usize>,
-    },
-    Exited,
-}
-
-impl StationaryDisplayState {
-    pub const fn new(item: u8, price: u16, party_index: usize, object_slot: Option<usize>) -> Self {
-        Self::with_grant(
-            ObjectPickupGrant {
-                kind: ObjectPickupKind::Equipment(item as usize),
-                amount: 1,
-            },
-            price,
-            party_index,
-            object_slot,
-        )
-    }
-
-    pub const fn with_grant(
-        grant: ObjectPickupGrant,
-        price: u16,
-        party_index: usize,
-        object_slot: Option<usize>,
-    ) -> Self {
-        Self::Prompt {
-            grant,
-            price,
-            party_index,
-            object_slot,
-        }
-    }
-}
-
-/// Input to the stationary-display Y/N and confirmation prompts.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StationaryDisplayInput {
-    Key(u8),
-    Confirm(bool),
-}
-
-/// Outcome of one stationary-display transition.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StationaryDisplayOutcome {
-    Offered {
-        grant: ObjectPickupGrant,
-        price: u16,
-    },
-    Exited,
-    Declined {
-        grant: ObjectPickupGrant,
-    },
-    Purchased {
-        grant: ObjectPickupGrant,
-        price: u16,
-        party_index: usize,
-        object_slot: Option<usize>,
-    },
-    RefusedShortFunds {
-        grant: ObjectPickupGrant,
-        price: u16,
-    },
-    RefusedStockCap {
-        grant: ObjectPickupGrant,
-    },
-    InvalidInput,
-}
-
-pub fn step_stationary_display(
-    state: &mut StationaryDisplayState,
-    input: StationaryDisplayInput,
-    gold: &mut u16,
-    stock: &mut EquipmentStock,
-) -> StationaryDisplayOutcome {
-    match (*state, input) {
-        (
-            StationaryDisplayState::Prompt {
-                grant,
-                price,
-                party_index,
-                object_slot,
-            },
-            StationaryDisplayInput::Key(byte),
-        ) => match stationary_display_prompt(byte) {
-            StationaryDisplayPrompt::Offer => {
-                *state = StationaryDisplayState::Confirm {
-                    grant,
-                    price,
-                    party_index,
-                    object_slot,
-                };
-                StationaryDisplayOutcome::Offered { grant, price }
-            }
-            StationaryDisplayPrompt::Exit => {
-                *state = StationaryDisplayState::Exited;
-                StationaryDisplayOutcome::Exited
-            }
-            StationaryDisplayPrompt::Discard => StationaryDisplayOutcome::InvalidInput,
-        },
-        (
-            StationaryDisplayState::Confirm {
-                grant,
-                price,
-                party_index,
-                object_slot,
-            },
-            StationaryDisplayInput::Confirm(true),
-        ) => {
-            if let ObjectPickupKind::Equipment(item_index) = grant.kind {
-                if item_index >= EQUIPMENT_COUNT {
-                    *state = StationaryDisplayState::Exited;
-                    return StationaryDisplayOutcome::InvalidInput;
-                }
-                if stock[item_index] >= EQUIPMENT_STOCK_CAP {
-                    *state = StationaryDisplayState::Exited;
-                    return StationaryDisplayOutcome::RefusedStockCap { grant };
-                }
-            }
-            if *gold < price {
-                *state = StationaryDisplayState::Exited;
-                return StationaryDisplayOutcome::RefusedShortFunds { grant, price };
-            }
-            *gold -= price;
-            *state = StationaryDisplayState::Exited;
-            StationaryDisplayOutcome::Purchased {
-                grant,
-                price,
-                party_index,
-                object_slot,
-            }
-        }
-        (StationaryDisplayState::Confirm { grant, .. }, StationaryDisplayInput::Confirm(false)) => {
-            *state = StationaryDisplayState::Exited;
-            StationaryDisplayOutcome::Declined { grant }
-        }
-        (StationaryDisplayState::Exited, _) => StationaryDisplayOutcome::Exited,
-        _ => StationaryDisplayOutcome::InvalidInput,
-    }
 }
 
 // ---------- Healer ----------
@@ -2984,99 +2826,6 @@ mod tests {
         assert_eq!(outcome, GuildShopOutcome::RefusedShortFunds { cost: 200 });
         assert_eq!(gold, 100);
         assert_eq!(gems, 0);
-    }
-
-    #[test]
-    fn stationary_display_purchase_requires_offer_then_confirmation() {
-        let mut state = StationaryDisplayState::new(26, 75, 1, Some(3));
-        let mut gold = 100u16;
-        let mut stock = [0u8; EQUIPMENT_COUNT];
-
-        assert_eq!(
-            step_stationary_display(
-                &mut state,
-                StationaryDisplayInput::Key(b'Y'),
-                &mut gold,
-                &mut stock,
-            ),
-            StationaryDisplayOutcome::Offered {
-                grant: ObjectPickupGrant {
-                    kind: ObjectPickupKind::Equipment(26),
-                    amount: 1,
-                },
-                price: 75
-            }
-        );
-        assert_eq!(gold, 100);
-        assert_eq!(stock[26], 0);
-        assert!(matches!(state, StationaryDisplayState::Confirm { .. }));
-
-        assert_eq!(
-            step_stationary_display(
-                &mut state,
-                StationaryDisplayInput::Confirm(true),
-                &mut gold,
-                &mut stock,
-            ),
-            StationaryDisplayOutcome::Purchased {
-                grant: ObjectPickupGrant {
-                    kind: ObjectPickupKind::Equipment(26),
-                    amount: 1,
-                },
-                price: 75,
-                party_index: 1,
-                object_slot: Some(3),
-            }
-        );
-        assert_eq!(gold, 25);
-        assert_eq!(stock[26], 0);
-        assert_eq!(state, StationaryDisplayState::Exited);
-    }
-
-    #[test]
-    fn stationary_display_purchase_exits_and_refuses_without_mutation() {
-        let mut exit_state = StationaryDisplayState::new(30, 70, 0, None);
-        let mut gold = 10u16;
-        let mut stock = [0u8; EQUIPMENT_COUNT];
-        assert_eq!(
-            step_stationary_display(
-                &mut exit_state,
-                StationaryDisplayInput::Key(b'N'),
-                &mut gold,
-                &mut stock,
-            ),
-            StationaryDisplayOutcome::Exited
-        );
-        assert_eq!(gold, 10);
-        assert_eq!(stock[30], 0);
-
-        let mut short_state = StationaryDisplayState::new(30, 70, 0, None);
-        assert!(matches!(
-            step_stationary_display(
-                &mut short_state,
-                StationaryDisplayInput::Key(b'Y'),
-                &mut gold,
-                &mut stock,
-            ),
-            StationaryDisplayOutcome::Offered { .. }
-        ));
-        assert_eq!(
-            step_stationary_display(
-                &mut short_state,
-                StationaryDisplayInput::Confirm(true),
-                &mut gold,
-                &mut stock,
-            ),
-            StationaryDisplayOutcome::RefusedShortFunds {
-                grant: ObjectPickupGrant {
-                    kind: ObjectPickupKind::Equipment(30),
-                    amount: 1,
-                },
-                price: 70
-            }
-        );
-        assert_eq!(gold, 10);
-        assert_eq!(stock[30], 0);
     }
 
     #[test]

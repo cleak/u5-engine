@@ -1057,18 +1057,17 @@
     #[test]
     fn use_shadowlord_shard_with_matching_flame_vanquishes_and_consumes() {
         let dir = debug_game_dir();
-        fs::write(
-            dir.join(ETERNAL_FLAME_TABLE_FILE),
-            "CASTLE:0 0 5 5 TRUTH 16\nCASTLE:0 0 4 4 LOVE\n",
-        )
-        .unwrap();
-        let mut state = test_state(open_grid(), 5, 5);
+        let mut state = test_state(open_grid(), 15, 9);
+        state.area = Area::Town {
+            scene: Scene::new(SCENE_THE_LYCAEUM).unwrap(),
+            floor: 2,
+        };
         state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] = 1;
         state.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = 1;
         let z = state.current_floor().unwrap();
         state.active_objects.push(
             state
-                .shadowlord_name_encounter_object(SHADOWLORD_FALSEHOOD_INDEX, 5, 4, z)
+                .shadowlord_name_encounter_object(SHADOWLORD_FALSEHOOD_INDEX, 15, 8, z)
                 .unwrap(),
         );
 
@@ -1090,7 +1089,7 @@
     }
 
     #[test]
-    fn use_shadowlord_shard_accepts_cardinal_adjacent_flame_tile() {
+    fn use_shadowlord_shard_rejects_cardinal_adjacent_flame_tile() {
         let dir = debug_game_dir();
         fs::write(dir.join(ETERNAL_FLAME_TABLE_FILE), "CASTLE:0 0 5 5 TRUTH\n").unwrap();
         let mut grid = open_grid();
@@ -1109,11 +1108,15 @@
             state
                 .use_shadowlord_shard(SHADOWLORD_FALSEHOOD_INDEX, Some(&dir))
                 .unwrap(),
-            MoveOutcome::Used
+            MoveOutcome::Blocked
         );
 
-        assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 0);
-        assert!(state.shadowlord_vanquished(SHADOWLORD_FALSEHOOD_INDEX));
+        assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
+        assert!(state.shadowlord_alive(SHADOWLORD_FALSEHOOD_INDEX));
+        assert_eq!(
+            state.message,
+            "Shard of Falsehood: no matching Eternal Flame is here."
+        );
     }
 
     #[test]

@@ -1014,9 +1014,11 @@
         assert_eq!(inn_rest_hp_target(b'A', 30), 30);
         assert_eq!(inn_rest_hp_target(b'M', 30), 30);
         assert_eq!(inn_rest_hp_target(b'F', 30), 30);
-        assert_eq!(inn_rest_hp_target(b'B', 31), 15);
-        assert_eq!(inn_rest_mana_target(b'A', 24), 24);
-        assert_eq!(inn_rest_mana_target(b'B', 24), 12);
+        assert_eq!(inn_rest_hp_target(b'B', 31), 31);
+        assert_eq!(inn_rest_mana_target(b'A', 24), Some(24));
+        assert_eq!(inn_rest_mana_target(b'M', 24), Some(24));
+        assert_eq!(inn_rest_mana_target(b'B', 24), Some(12));
+        assert_eq!(inn_rest_mana_target(b'F', 24), None);
 
         let mut state = test_state(open_grid(), 1, 1);
         state.party = vec![
@@ -1033,7 +1035,7 @@
             PartyMember {
                 slot: 1,
                 class_byte: b'B',
-                status: b'P',
+                status: b'G',
                 climb_stat: 7,
                 mana: 1,
                 hp: 10,
@@ -1042,6 +1044,16 @@
             },
             PartyMember {
                 slot: 2,
+                class_byte: b'F',
+                status: b'G',
+                climb_stat: 4,
+                mana: 3,
+                hp: 4,
+                max_hp: 24,
+                level: 2,
+            },
+            PartyMember {
+                slot: 3,
                 class_byte: b'M',
                 status: b'D',
                 climb_stat: 4,
@@ -1050,21 +1062,37 @@
                 max_hp: 24,
                 level: 2,
             },
+            PartyMember {
+                slot: 4,
+                class_byte: b'D',
+                status: b'P',
+                climb_stat: 4,
+                mana: 7,
+                hp: 6,
+                max_hp: 28,
+                level: 2,
+            },
         ];
-        state.party_intelligence = vec![24, 25, 30];
+        state.party_intelligence = vec![24, 25, 30, 31, 32];
 
         let (hp, mana, cured) = state.apply_inn_rest_night_recovery();
 
-        assert_eq!((hp, mana, cured), (20, 23, 1));
+        assert_eq!((hp, mana, cured), (61, 34, 1));
         assert_eq!(state.party[0].hp, 30);
         assert_eq!(state.party[0].mana, 24);
         assert_eq!(state.party[0].status, b'G');
-        assert_eq!(state.party[1].hp, 0);
-        assert_eq!(state.party[1].mana, 1);
-        assert_eq!(state.party[1].status, b'D');
-        assert_eq!(state.party[2].hp, 0);
-        assert_eq!(state.party[2].mana, 0);
-        assert_eq!(state.party[2].status, b'D');
+        assert_eq!(state.party[1].hp, 31);
+        assert_eq!(state.party[1].mana, 12);
+        assert_eq!(state.party[1].status, b'G');
+        assert_eq!(state.party[2].hp, 24);
+        assert_eq!(state.party[2].mana, 3);
+        assert_eq!(state.party[2].status, b'G');
+        assert_eq!(state.party[3].hp, 0);
+        assert_eq!(state.party[3].mana, 0);
+        assert_eq!(state.party[3].status, b'D');
+        assert_eq!(state.party[4].hp, 0);
+        assert_eq!(state.party[4].mana, 7);
+        assert_eq!(state.party[4].status, b'D');
     }
 
     #[test]
@@ -13704,21 +13732,7 @@
     }
 
     #[test]
-    fn terrain_combat_public_issue_3_spawn_and_replacement_rows_are_encoded() {
-        assert_eq!(
-            TERRAIN_COMBAT_ARENA_ROWS[0],
-            [0x03, 0x14, 0x0f, 0x14, 0x0a, 0x04, 0x0c, 0x0f]
-        );
-        assert_eq!(
-            TERRAIN_COMBAT_ARENA_ROWS[15],
-            [0x01, 0x00, 0x11, 0x14, 0x14, 0x02, 0x0a, 0x1e]
-        );
-        assert_eq!(
-            (0..OUTDOOR_ARENA_COUNT)
-                .map(|arena| terrain_combat_spawn_count_for_arena(arena).unwrap())
-                .collect::<Vec<_>>(),
-            vec![3, 9, 6, 1, 1, 1, 1, 1, 1, 1, 1, 1, 8, 1, 1, 1]
-        );
+    fn terrain_combat_public_issue_3_replacement_rows_are_encoded() {
         assert_eq!(
             TERRAIN_COMBAT_REPLACEMENT_TILES_RAW,
             [
@@ -13726,7 +13740,6 @@
                 0x0c, 0x0d, 0x0e, 0x0f
             ]
         );
-        assert_eq!(terrain_combat_spawn_count_for_arena(16), None);
         assert_eq!(terrain_combat_raw_replacement_tile_for_arena(16), None);
     }
 

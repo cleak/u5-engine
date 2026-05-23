@@ -25,9 +25,8 @@ pub const ARMS_SHOP_SELL_MIN_OFFER_BIAS: u32 = 1;
 pub const ARMS_SHOP_STOCK_TABLE_LEN: usize = 8;
 
 /// `shops.md §7` / public issue #41 scene-local arms-shop rows. The
-/// stock byte arrays are not yet public, so Talk-triggered sessions
-/// use this identity for names and scene gating while preserving the
-/// legacy broad equipment menu.
+/// stock arrays are the published `a..h` resident menu bytes; `0xFF`
+/// terminates each row while `0x00` remains a valid equipment id.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArmsShop {
     IolosBows,
@@ -1298,32 +1297,6 @@ pub const HORSE_TRADER_DIALOG_ID: u8 = 0x83;
 /// trader is the only shop dialog id allowed while mounted.
 pub const fn shop_refuses_mounted_horse(dialog_id: u8, mounted_on_horse: bool) -> bool {
     mounted_on_horse && dialog_id != HORSE_TRADER_DIALOG_ID
-}
-
-/// `shops.md §8.10` stationary-display purchase prompt outcome.
-/// The Y/N loop accepts `Y` (offer and confirm), `N` or Space
-/// (exit), and silently re-prompts on any other byte.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StationaryDisplayPrompt {
-    /// `Y` (case-insensitive) — print the offer and ask for
-    /// confirmation.
-    Offer,
-    /// `N` (case-insensitive) or Space — exit through the shop
-    /// farewell path without changing party inventory.
-    Exit,
-    /// Any other byte — silently re-prompt the same line.
-    Discard,
-}
-
-/// `shops.md §8.10`: classify one keystroke for the stationary-
-/// display purchase Y/N prompt. Lower-case `y`/`n` accepted for
-/// uppercase-naive callers.
-pub const fn stationary_display_prompt(byte: u8) -> StationaryDisplayPrompt {
-    match byte {
-        b'Y' | b'y' => StationaryDisplayPrompt::Offer,
-        b'N' | b'n' | b' ' => StationaryDisplayPrompt::Exit,
-        _ => StationaryDisplayPrompt::Discard,
-    }
 }
 
 /// `shops.md §8.3` unmatched resident healer cost row. The resident

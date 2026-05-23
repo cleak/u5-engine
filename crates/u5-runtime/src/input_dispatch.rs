@@ -486,8 +486,9 @@ fn handle_active_shop_key_input(
         ActiveShopSession::Arms(s) => {
             handle_arms_shop_key_input(state, s, None, ctx, key_byte, inline_digit, yes, no)
         }
-        ActiveShopSession::ArmsLocal(s, _) => {
-            handle_arms_shop_key_input(state, s, None, ctx, key_byte, inline_digit, yes, no)
+        ActiveShopSession::ArmsLocal(s, shop) => {
+            let table = shop.stock_table();
+            handle_arms_shop_key_input(state, s, Some(table), ctx, key_byte, inline_digit, yes, no)
         }
         ActiveShopSession::ArmsStocked(s, stock_table) => handle_arms_shop_key_input(
             state,
@@ -1117,49 +1118,6 @@ fn handle_active_shop_key_input(
             state.torches = torches;
             format_guild_outcome(outcome)
         }
-        ActiveShopSession::StationaryDisplay(s) => {
-            let mut stock = state.equipment_stock;
-            let outcome = match (*s, yes, no) {
-                (StationaryDisplayState::Prompt { .. }, _, _) => step_stationary_display(
-                    s,
-                    StationaryDisplayInput::Key(key_byte),
-                    &mut state.gold,
-                    &mut stock,
-                ),
-                (StationaryDisplayState::Confirm { .. }, true, _) => step_stationary_display(
-                    s,
-                    StationaryDisplayInput::Confirm(true),
-                    &mut state.gold,
-                    &mut stock,
-                ),
-                (StationaryDisplayState::Confirm { .. }, _, true) => step_stationary_display(
-                    s,
-                    StationaryDisplayInput::Confirm(false),
-                    &mut state.gold,
-                    &mut stock,
-                ),
-                _ => StationaryDisplayOutcome::InvalidInput,
-            };
-            state.equipment_stock = stock;
-            if let StationaryDisplayOutcome::Purchased {
-                grant,
-                object_slot: Some(slot),
-                ..
-            } = outcome
-            {
-                state.apply_object_pickup(grant.kind, grant.amount);
-                state.free_active_object_slot(slot);
-                state.mark_visibility_dirty();
-            } else if let StationaryDisplayOutcome::Purchased { grant, .. } = outcome {
-                state.apply_object_pickup(grant.kind, grant.amount);
-            }
-            let surcharge = if matches!(outcome, StationaryDisplayOutcome::Purchased { .. }) {
-                apply_active_shop_surcharge(state)
-            } else {
-                None
-            };
-            append_active_shop_surcharge(format_stationary_display_outcome(outcome), surcharge)
-        }
     };
     state.message = message;
 
@@ -1662,30 +1620,6 @@ fn format_guild_outcome(outcome: crate::shop_runtime::GuildShopOutcome) -> Strin
         RefusedShortFunds { cost } => format!("Thou lackest the {cost} gold."),
         RefusedStockCap { cap, .. } => format!("Thou canst carry only {cap}."),
         Declined => "As you wish.".to_string(),
-        Exited => "Farewell.".to_string(),
-        InvalidInput => "I do not understand.".to_string(),
-    }
-}
-
-fn format_stationary_display_outcome(
-    outcome: crate::shop_runtime::StationaryDisplayOutcome,
-) -> String {
-    use crate::shop_runtime::StationaryDisplayOutcome::*;
-    match outcome {
-        Offered { grant, price } => format!("{} costs {price} gold. (Y/N)", grant.kind.label()),
-        Purchased {
-            grant,
-            price,
-            party_index,
-            ..
-        } => format!(
-            "Party member {} bought {} for {price} gold.",
-            party_index + 1,
-            grant.kind.label()
-        ),
-        RefusedShortFunds { price, .. } => format!("Thou lackest the {price} gold."),
-        RefusedStockCap { .. } => "Thou canst carry no more of those.".to_string(),
-        Declined { .. } => "As you wish.".to_string(),
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),
     }

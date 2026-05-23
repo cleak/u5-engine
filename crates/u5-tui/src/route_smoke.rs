@@ -25,14 +25,14 @@ use u5_runtime::{
     SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene,
     Shipwright, Stable, TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
     TALK_STATUS_TILE_SLEEPING, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_TABLE_FILE, Tavern, TileGraphicsDepth, TransportState, WORD_OF_POWER_SEAL_XOR,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TransportState, WORD_OF_POWER_SEAL_XOR,
     WORLD_SIDE, WindState, WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_stay_counters, dungeon_cell_index, inn_base_room_rate,
     load_tile_atlas,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
-        ReagentShopState, SageState, ShipBrokerState, StationaryDisplayState, TavernState,
+        ReagentShopState, SageState, ShipBrokerState, TavernState,
     },
     shop_session::ActiveShopSession,
     u5_prng_range_u16, word_of_power_seal_for_word, world_cell_index,
@@ -854,7 +854,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-arms-local-buy-sell-route",
             options: PlayOptions::default(),
-            script: &["B", "1", "N", "S", "1", "N"],
+            script: &["B", "A", "N", "S", "1", "N"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -919,14 +919,6 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             name: "shop-guild-buy-route",
             options: PlayOptions::default(),
             script: &["A", "1", "D"],
-            expected: RouteSmokeExpectation::Town(castle),
-            min_turn: 0,
-            expected_frame_kind: "tile viewport",
-        },
-        RouteSmokeCase {
-            name: "shop-stationary-display-decline-route",
-            options: PlayOptions::default(),
-            script: &["Y", "N"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1522,10 +1514,6 @@ fn prepare_route_smoke_case_game_dir(case_name: &str) -> io::Result<Option<PathB
         std::process::id()
     ));
     fs::create_dir_all(&dir)?;
-    fs::write(
-        dir.join(TOWN_POISON_GAS_TABLE_FILE),
-        "CASTLE:0 0 16 15 55\n",
-    )?;
     Ok(Some(dir))
 }
 
@@ -1723,12 +1711,6 @@ fn apply_route_smoke_case_setup(
                 GuildShop::TheGuild,
             )));
         }
-        "shop-stationary-display-decline-route" => {
-            state.gold = 999;
-            state.active_shop = Some(ActiveShopSession::StationaryDisplay(
-                StationaryDisplayState::new(EQUIPMENT_ID_BOW as u8, 75, 0, Some(1)),
-            ));
-        }
         "shop-sage-topic-miss-route" => {
             state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
         }
@@ -1836,7 +1818,7 @@ fn seed_town_poison_gas_route(state: &mut PlayState) {
     let target_y = state.player.y;
     let target_idx = target_y * TOWN_GRID_SIDE + target_x;
     if let Some(cell) = state.grid.get_mut(target_idx) {
-        *cell = 55;
+        *cell = TOWN_POISON_GAS_LIVE_TILE;
     }
     for object in &mut state.active_objects {
         if !object.is_empty() && object.x == target_x && object.y == target_y && object.z == floor {

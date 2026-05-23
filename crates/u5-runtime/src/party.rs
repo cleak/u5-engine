@@ -274,21 +274,22 @@ pub fn class_refreshed_mana(class_byte: u8, intelligence: u8) -> Option<u8> {
     }
 }
 
-/// Public issue #15 paid inn-night recovery branch. Bard-class members
-/// recover to the half-restoration target; every other published class
-/// uses the full target.
-pub const fn inn_rest_hp_target(class_byte: u8, max_hp: u16) -> u16 {
-    match class_byte {
-        b'B' => max_hp / 2,
-        _ => max_hp,
-    }
+/// Public issue #15 paid inn-night recovery branch. Every non-dead,
+/// non-poison-killed member recovers HP to maximum regardless of
+/// class.
+pub const fn inn_rest_hp_target(_class_byte: u8, max_hp: u16) -> u16 {
+    max_hp
 }
 
-/// Public issue #15 shares the class-restoration split used by the
-/// class mana refresh helper: Bard gets half Intelligence, all other
-/// classes receive the full Intelligence-derived target.
-pub fn inn_rest_mana_target(class_byte: u8, intelligence: u8) -> u8 {
-    class_refreshed_mana(class_byte, intelligence).unwrap_or(intelligence)
+/// Public issue #15 paid inn-night MP recovery. Avatar and Mage set
+/// MP to Intelligence, Bard sets MP to half Intelligence, and other
+/// classes leave MP unchanged.
+pub const fn inn_rest_mana_target(class_byte: u8, intelligence: u8) -> Option<u8> {
+    match class_byte {
+        b'A' | b'M' => Some(intelligence),
+        b'B' => Some(intelligence / 2),
+        _ => None,
+    }
 }
 
 pub const fn heal_spell_amount_from_raw_roll(raw_roll: u8) -> u16 {

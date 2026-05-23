@@ -904,14 +904,13 @@
     }
 
     #[test]
-    fn town_movement_onto_clean_poison_gas_sidecar_poisons_eligible_member() {
+    fn town_movement_onto_native_poison_gas_tile_poisons_eligible_member() {
         // `cleak/u5-spec#51`: every eligible member rolls
         // `prng_range(0, 29)` independently per step; the member is
         // poisoned when the roll is greater than Dexterity.
         let dir = debug_game_dir();
-        fs::write(dir.join(TOWN_POISON_GAS_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
         let mut grid = open_grid();
-        grid[32 + 1] = 55;
+        grid[32 + 1] = TOWN_POISON_GAS_LIVE_TILE;
         let mut state = test_state(grid, 0, 1);
         state.prng_state = poison_gas_first_poison_seed();
         state.player.facing = Direction::East;
@@ -929,18 +928,20 @@
         assert_eq!(state.party[0].status, b'P');
         assert!(state.message.contains("poison gas doorway"));
         assert_eq!(state.turn, 1);
-        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn town_movement_onto_poison_gas_tile_attribute_poisons_eligible_member() {
+    fn town_movement_onto_poison_gas_tile_requires_foot_transport() {
         let dir = debug_game_dir();
-        fs::write(dir.join(TOWN_TILE_ATTRIBUTES_TABLE_FILE), "55 4 0x1C\n").unwrap();
         let mut grid = open_grid();
-        grid[32 + 1] = 55;
+        grid[32 + 1] = TOWN_POISON_GAS_LIVE_TILE;
         let mut state = test_state(grid, 0, 1);
         state.prng_state = poison_gas_first_poison_seed();
         state.player.facing = Direction::East;
+        state.player.transport = TransportState::Horse {
+            type_byte: 0x10,
+            tile: 0x10,
+        };
         state.party[0].status = b'G';
         state.party[0].climb_stat = 0;
         state.party[0].hp = 10;
@@ -952,18 +953,16 @@
             MoveOutcome::Moved
         );
 
-        assert_eq!(state.party[0].status, b'P');
-        assert!(state.message.contains("poison gas doorway"));
+        assert_eq!(state.party[0].status, b'G');
+        assert!(!state.message.contains("poison gas doorway"));
         assert_eq!(state.turn, 1);
-        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn town_poison_gas_rolls_only_non_poisoned_status_slots() {
         let dir = debug_game_dir();
-        fs::write(dir.join(TOWN_POISON_GAS_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
         let mut grid = open_grid();
-        grid[32 + 1] = 55;
+        grid[32 + 1] = TOWN_POISON_GAS_LIVE_TILE;
         let mut state = test_state(grid, 0, 1);
         state.prng_state = poison_gas_first_poison_seed();
         state.player.facing = Direction::East;
@@ -989,7 +988,6 @@
         assert_eq!(state.party[0].status, b'P');
         assert_eq!(state.party[1].status, b'P');
         assert!(state.message.contains("poison gas doorway"));
-        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -1029,9 +1027,8 @@
     #[test]
     fn town_poison_gas_step_rolls_before_turn_clock_tick() {
         let dir = debug_game_dir();
-        fs::write(dir.join(TOWN_POISON_GAS_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
         let mut grid = open_grid();
-        grid[32 + 1] = 55;
+        grid[32 + 1] = TOWN_POISON_GAS_LIVE_TILE;
         let mut state = test_state(grid, 0, 1);
         state.prng_state = poison_gas_first_poison_seed();
         state.clock = GameClock::new(8, 59).unwrap();
@@ -1050,15 +1047,13 @@
         assert_eq!(state.clock.hour, 9);
         assert_eq!(state.party[0].status, b'P');
         assert_eq!(state.party[0].hp, 9);
-        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn pass_turn_on_clean_poison_gas_sidecar_does_not_reroll_underfoot() {
+    fn pass_turn_on_native_poison_gas_tile_does_not_reroll_underfoot() {
         let dir = debug_game_dir();
-        fs::write(dir.join(TOWN_POISON_GAS_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
         let mut grid = open_grid();
-        grid[32 + 1] = 55;
+        grid[32 + 1] = TOWN_POISON_GAS_LIVE_TILE;
         let mut state = test_state(grid, 1, 1);
         state.prng_state = poison_gas_first_poison_seed();
         state.party[0].status = b'G';
@@ -1072,7 +1067,6 @@
         assert_eq!(state.party[0].status, b'G');
         assert_eq!(state.prng_state, poison_gas_first_poison_seed());
         assert_eq!(state.message, "Passed.");
-        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -552,10 +552,11 @@ impl PlayState {
             }
 
             let intelligence = self.party_intelligence.get(index).copied().unwrap_or(0);
-            let mana_target = inn_rest_mana_target(member.class_byte, intelligence);
-            if member.mana < mana_target {
-                recovered_mana += u16::from(mana_target - member.mana);
-                member.mana = mana_target;
+            if let Some(mana_target) = inn_rest_mana_target(member.class_byte, intelligence) {
+                if member.mana < mana_target {
+                    recovered_mana += u16::from(mana_target - member.mana);
+                    member.mana = mana_target;
+                }
             }
         }
         (recovered_hp, recovered_mana, status_changes)
