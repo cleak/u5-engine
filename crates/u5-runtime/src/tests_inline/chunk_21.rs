@@ -4117,6 +4117,37 @@
     }
 
     #[test]
+    fn end_to_end_tavern_menu_lore_letter_reaches_paid_sage_lookup() {
+        use crate::shop_runtime::{SageState, TavernState};
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 200;
+        state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(
+            Tavern::TheWayfarerTavern,
+        )));
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        assert!(state.message.contains("lore"));
+        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
+
+        assert_eq!(state.message, "Of what wouldst thou hear my lore?");
+        assert!(matches!(
+            state.active_shop,
+            Some(ActiveShopSession::Sage(SageState::Prompt { .. }))
+        ));
+
+        handle_play_key_input(&mut state, 'H', "ONE", Path::new("")).unwrap();
+        assert_eq!(state.message, "That will cost 50 gold. Pay? (Y/N)");
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert!(state.gold <= 150);
+        assert!(state.message.contains("Malik"));
+        assert!(state.message.contains("Moonglow"));
+        assert!(state.active_shop.is_none());
+    }
+
+    #[test]
     fn end_to_end_sage_rumour_prefers_shoppe_record_rendering() {
         use crate::shop_runtime::SageState;
         use crate::shop_session::ActiveShopSession;

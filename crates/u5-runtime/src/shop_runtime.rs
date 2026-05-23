@@ -884,6 +884,7 @@ pub enum TavernOutcome {
         tavern: Tavern,
         round_letter: char,
     },
+    EnteredSagePrompt,
     RoundDrinkServed {
         tavern: Tavern,
         cost: u16,
@@ -912,6 +913,15 @@ pub enum TavernOutcome {
     RefusedNoNeed,
     Exited,
     InvalidInput,
+}
+
+/// Public issue `cleak/u5-spec#13`: the shared tavern arm can enter
+/// the global sage lookup through one of the published lore selector
+/// letters. The exact per-scene visibility table is still outside the
+/// checked-in spec, so callers try this after higher-priority tavern
+/// branches have accepted their own letters.
+pub const fn tavern_sage_lore_menu_letter(byte: u8) -> bool {
+    matches!(byte, b'A' | b'C' | b'H' | b'T')
 }
 
 pub fn step_tavern(
@@ -964,6 +974,10 @@ pub fn step_tavern(
                 let unit_price = tavern_provision_unit_price(tavern);
                 *state = TavernState::PickProvisionQuantity { tavern, unit_price };
                 return TavernOutcome::PickProvisionQuantity { tavern, unit_price };
+            }
+            if tavern_sage_lore_menu_letter(upper) {
+                *state = TavernState::Exited;
+                return TavernOutcome::EnteredSagePrompt;
             }
             TavernOutcome::InvalidInput
         }
@@ -2209,7 +2223,7 @@ mod tests {
         assert_eq!(
             step_tavern(
                 &mut state,
-                TavernInput::Key(b'A'),
+                TavernInput::Key(b'Z'),
                 ctx,
                 &mut gold,
                 &mut food,
@@ -2227,6 +2241,62 @@ mod tests {
             TavernOutcome::PickProvisionQuantity {
                 tavern: Tavern::TheWayfarerTavern,
                 unit_price: 15,
+            }
+        );
+    }
+
+    #[test]
+    fn tavern_menu_lore_letters_enter_sage_after_documented_tavern_branches() {
+        let ctx = ShopTransactionContext {
+            party_gold: 100,
+            speaker_intelligence: 0,
+            world_hour: 12,
+            party_size: 1,
+            living_party_members: 1,
+        };
+        let mut gold = 100u16;
+        let mut food = 30u16;
+        let mut state = TavernState::for_tavern(Tavern::TheWayfarerTavern);
+
+        step_tavern(
+            &mut state,
+            TavernInput::Key(b'Y'),
+            ctx,
+            &mut gold,
+            &mut food,
+        );
+
+        assert_eq!(
+            step_tavern(
+                &mut state,
+                TavernInput::Key(b'A'),
+                ctx,
+                &mut gold,
+                &mut food,
+            ),
+            TavernOutcome::EnteredSagePrompt
+        );
+        assert_eq!(state, TavernState::Exited);
+
+        let mut blue_boar = TavernState::for_tavern(Tavern::TheBlueBoarTavern);
+        step_tavern(
+            &mut blue_boar,
+            TavernInput::Key(b'Y'),
+            ctx,
+            &mut gold,
+            &mut food,
+        );
+        assert_eq!(
+            step_tavern(
+                &mut blue_boar,
+                TavernInput::Key(b'C'),
+                ctx,
+                &mut gold,
+                &mut food,
+            ),
+            TavernOutcome::RoundDrinkServed {
+                tavern: Tavern::TheBlueBoarTavern,
+                cost: 5,
             }
         );
     }

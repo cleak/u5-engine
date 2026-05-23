@@ -481,6 +481,7 @@ fn handle_active_shop_key_input(
     let inline_quantity = parse_active_shop_inline_quantity(key, suffix);
     let yes = matches!(key_byte, b'Y' | b'y') || suffix.chars().any(|c| matches!(c, 'Y' | 'y'));
     let no = matches!(key_byte, b'N' | b'n') || suffix.chars().any(|c| matches!(c, 'N' | 'n'));
+    let mut replacement_session: Option<ActiveShopSession> = None;
 
     let message = match &mut session {
         ActiveShopSession::Arms(s) => {
@@ -908,6 +909,9 @@ fn handle_active_shop_key_input(
             } else {
                 None
             };
+            if matches!(outcome, TavernOutcome::EnteredSagePrompt) {
+                replacement_session = Some(ActiveShopSession::Sage(SageState::default()));
+            }
             append_active_shop_surcharge(format_tavern_outcome(outcome), surcharge)
         }
         ActiveShopSession::Sage(s) => {
@@ -1123,7 +1127,9 @@ fn handle_active_shop_key_input(
     };
     state.message = message;
 
-    if !session.is_exited() {
+    if let Some(next_session) = replacement_session {
+        state.active_shop = Some(next_session);
+    } else if !session.is_exited() {
         state.active_shop = Some(session);
     }
     PlayInputDisposition::Continue
@@ -1430,10 +1436,11 @@ fn format_tavern_outcome(outcome: crate::shop_runtime::TavernOutcome) -> String 
             round_letter,
         } => {
             format!(
-                "{}: drink round ({round_letter}), provisions (P), or Space.",
+                "{}: drink round ({round_letter}), lore (A/C/H/T), provisions (P), or Space.",
                 tavern.display_name()
             )
         }
+        EnteredSagePrompt => "Of what wouldst thou hear my lore?".to_string(),
         RoundDrinkServed { tavern, cost } => {
             format!("{} served a round for {cost} gold.", tavern.display_name())
         }
