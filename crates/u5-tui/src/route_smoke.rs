@@ -978,6 +978,33 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "castle-native-stair-up-route",
+            options: PlayOptions::default(),
+            script: &["d"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-native-stair-down-route",
+            options: PlayOptions {
+                floor: 1,
+                ..PlayOptions::default()
+            },
+            script: &["d"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-native-stair-cross-route",
+            options: PlayOptions::default(),
+            script: &["w"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "shop-arms-local-buy-sell-route",
             options: PlayOptions::default(),
             script: &["B", "A", "N", "S", "1", "N"],
@@ -1791,6 +1818,15 @@ fn apply_route_smoke_case_setup(
         "castle-talk-status-praying-refusal" => {
             seed_town_talk_status_tile_route(state, TALK_STATUS_TILE_PRAYING);
         }
+        "castle-native-stair-up-route" => {
+            seed_town_native_stair_route(state, Direction::East, 0xC5);
+        }
+        "castle-native-stair-down-route" => {
+            seed_town_native_stair_route(state, Direction::East, 0xC7);
+        }
+        "castle-native-stair-cross-route" => {
+            seed_town_native_stair_route(state, Direction::North, 0xC5);
+        }
         "britannia-word-of-power-seal-opens" | "underworld-doom-word-of-power-seal-opens" => {
             stamp_word_of_power_seal_route(state, case_name);
         }
@@ -2036,6 +2072,21 @@ fn seed_town_talk_status_tile_route(state: &mut PlayState, status_tile: u8) {
             object.tile = status_tile;
         }
     }
+    state.mark_visibility_dirty();
+}
+
+fn seed_town_native_stair_route(state: &mut PlayState, facing: Direction, stair_tile: u8) {
+    state.player.x = 15;
+    state.player.y = 15;
+    state.player.facing = facing;
+    let (dx, dy) = facing.delta();
+    let target_x = (state.player.x as isize + dx) as usize;
+    let target_y = (state.player.y as isize + dy) as usize;
+    let target_idx = target_y * TOWN_GRID_SIDE + target_x;
+    if let Some(cell) = state.grid.get_mut(target_idx) {
+        *cell = stair_tile;
+    }
+    state.sync_player_object();
     state.mark_visibility_dirty();
 }
 
@@ -2411,6 +2462,39 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             if state.message != TALK_NO_RESPONSE_MESSAGE || state.active_shop.is_some() {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the praying Talk refusal"
+                )));
+            }
+        }
+        "castle-native-stair-up-route" => {
+            if state.current_floor() != Some(1)
+                || state.player.x != 16
+                || state.player.y != 15
+                || !state.message.contains("floor 1")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the native walk-on stair up transition"
+                )));
+            }
+        }
+        "castle-native-stair-down-route" => {
+            if state.current_floor() != Some(0)
+                || state.player.x != 16
+                || state.player.y != 15
+                || !state.message.contains("floor 0")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the native walk-on stair down transition"
+                )));
+            }
+        }
+        "castle-native-stair-cross-route" => {
+            if state.current_floor() != Some(0)
+                || state.player.x != 15
+                || state.player.y != 14
+                || !state.message.contains("Moved to")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not treat side-crossing a native stair as ordinary movement"
                 )));
             }
         }
