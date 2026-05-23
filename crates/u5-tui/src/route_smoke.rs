@@ -18,15 +18,19 @@ use u5_runtime::{
     GuildShop, HORSE_PARKED_FIRST, HOURLY_STARVATION_DAMAGE_MAX, HOURLY_STARVATION_DAMAGE_MIN,
     Healer, Herbalist, IN_LOR_SPELL_INDEX, Inn, MoonstoneGateSlot, NATURAL_MOONGATE_TERRAIN_TILE,
     NpcSlot, PEER_COST, PEER_SPELL_INDEX, PartyMember, PlayOptions, PlayState, PlayTarget,
-    REAGENT_SULFUR_ASH, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_STONEGATE, SHADOWLORD_FALSEHOOD_INDEX,
-    SHADOWLORD_HIDEOUT_VANQUISHED, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
-    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
-    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX,
-    SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene,
-    Shipwright, Stable, TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
-    TALK_STATUS_TILE_SLEEPING, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TransportState, WORD_OF_POWER_SEAL_XOR,
-    WORLD_SIDE, WindState, WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    REAGENT_SULFUR_ASH, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
+    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
+    SHADOWLORD_VANQUISHED, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
+    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
+    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
+    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
+    SURFACE_CHASM_Y, Scene, Shipwright, Stable, TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE,
+    TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK,
+    TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern,
+    TileGraphicsDepth, TransportState, WORD_OF_POWER_SEAL_XOR, WORLD_SIDE, WindState,
+    WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_stay_counters, dungeon_cell_index, inn_base_room_rate,
     load_tile_atlas,
@@ -362,6 +366,32 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
 
     let mut shadowlord_town_yell = shadowlord_town_entry.clone();
     shadowlord_town_yell.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = SCENE_MOONGLOW;
+
+    let mut lycaeum_shard_falsehood = PlayOptions {
+        target: PlayTarget::Town(Scene::new(SCENE_THE_LYCAEUM).expect("Lycaeum scene is valid")),
+        floor: 2,
+        ..PlayOptions::default()
+    };
+    lycaeum_shard_falsehood.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] =
+        SPECIAL_ITEM_OWNED_VALUE;
+    lycaeum_shard_falsehood.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = SCENE_MOONGLOW;
+
+    let mut empath_shard_hatred = PlayOptions {
+        target: PlayTarget::Town(Scene::new(SCENE_EMPATH_ABBEY).expect("Empath Abbey is valid")),
+        floor: 1,
+        ..PlayOptions::default()
+    };
+    empath_shard_hatred.special_items[SPECIAL_ITEM_SHARD_HATRED_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    empath_shard_hatred.shadowlord_hideouts[SHADOWLORD_HATRED_INDEX] = SCENE_MOONGLOW;
+
+    let mut serpents_shard_cowardice = PlayOptions {
+        target: PlayTarget::Town(Scene::new(SCENE_SERPENTS_HOLD).expect("Serpent's Hold is valid")),
+        floor: -1,
+        ..PlayOptions::default()
+    };
+    serpents_shard_cowardice.special_items[SPECIAL_ITEM_SHARD_COWARDICE_INDEX] =
+        SPECIAL_ITEM_OWNED_VALUE;
+    serpents_shard_cowardice.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX] = SCENE_MOONGLOW;
 
     let mut stonegate_entry = PlayOptions {
         target: PlayTarget::Town(stonegate),
@@ -708,6 +738,36 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "lycaeum-shard-falsehood-vanquish",
+            options: lycaeum_shard_falsehood,
+            script: &["UF"],
+            expected: RouteSmokeExpectation::Town(
+                Scene::new(SCENE_THE_LYCAEUM).expect("Lycaeum scene is valid"),
+            ),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "empath-shard-hatred-vanquish",
+            options: empath_shard_hatred,
+            script: &["UH"],
+            expected: RouteSmokeExpectation::Town(
+                Scene::new(SCENE_EMPATH_ABBEY).expect("Empath Abbey is valid"),
+            ),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "serpents-hold-shard-cowardice-vanquish",
+            options: serpents_shard_cowardice,
+            script: &["UCW"],
+            expected: RouteSmokeExpectation::Town(
+                Scene::new(SCENE_SERPENTS_HOLD).expect("Serpent's Hold is valid"),
+            ),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "stonegate-shadowlord-entry",
             options: stonegate_entry,
             script: &[],
@@ -927,6 +987,22 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             name: "shop-sage-topic-miss-route",
             options: PlayOptions::default(),
             script: &["MANTRA", "N"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-sage-topic-paid-success-route",
+            options: PlayOptions::default(),
+            script: &["HONE", "Y"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-sage-topic-short-funds-route",
+            options: PlayOptions::default(),
+            script: &["COMP", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1536,6 +1612,15 @@ fn apply_route_smoke_case_setup(
         "blackthorn-rescue-refuge" => {
             state.apply_blackthorn_rescue_refuge(game_dir)?;
         }
+        "lycaeum-shard-falsehood-vanquish" => {
+            seed_shadowlord_shard_route(state, SHADOWLORD_FALSEHOOD_INDEX, 15, 9);
+        }
+        "empath-shard-hatred-vanquish" => {
+            seed_shadowlord_shard_route(state, SHADOWLORD_HATRED_INDEX, 15, 3);
+        }
+        "serpents-hold-shard-cowardice-vanquish" => {
+            seed_shadowlord_shard_route(state, SHADOWLORD_COWARDICE_INDEX, 15, 16);
+        }
         "underworld-fixed-hidden-stack-search-get-search" => {
             state.player.x = 232;
             state.player.y = 233;
@@ -1714,9 +1799,38 @@ fn apply_route_smoke_case_setup(
         "shop-sage-topic-miss-route" => {
             state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
         }
+        "shop-sage-topic-paid-success-route" => {
+            state.gold = 100;
+            state.prng_state = 0x3456;
+            state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+        }
+        "shop-sage-topic-short-funds-route" => {
+            state.gold = 49;
+            state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+        }
         _ => {}
     }
     Ok(())
+}
+
+fn seed_shadowlord_shard_route(state: &mut PlayState, index: usize, x: usize, y: usize) {
+    state.player.x = x;
+    state.player.y = y;
+    state.player.facing = Direction::South;
+    state.sync_player_object();
+    let tile = SHADOWLORD_OBJECT_TILE_BASE + index as u8;
+    let floor = state.current_floor().unwrap_or(0);
+    state.active_objects.push(ActiveObject {
+        type_byte: tile,
+        tile,
+        x,
+        y: y.saturating_sub(1),
+        z: floor,
+        phase: STEADY_PHASE,
+        aux1: index as u8,
+        aux3: state.shadowlord_hideouts.get(index).copied().unwrap_or(0),
+    });
+    state.mark_visibility_dirty();
 }
 
 fn seed_dungeon_active_monster_route(state: &mut PlayState, phase: u8) {
@@ -2083,6 +2197,33 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                 )));
             }
         }
+        "lycaeum-shard-falsehood-vanquish" => {
+            validate_shadowlord_shard_route(
+                state,
+                case_name,
+                SHADOWLORD_FALSEHOOD_INDEX,
+                SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
+                "Falsehood vanquished",
+            )?;
+        }
+        "empath-shard-hatred-vanquish" => {
+            validate_shadowlord_shard_route(
+                state,
+                case_name,
+                SHADOWLORD_HATRED_INDEX,
+                SPECIAL_ITEM_SHARD_HATRED_INDEX,
+                "Hatred vanquished",
+            )?;
+        }
+        "serpents-hold-shard-cowardice-vanquish" => {
+            validate_shadowlord_shard_route(
+                state,
+                case_name,
+                SHADOWLORD_COWARDICE_INDEX,
+                SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+                "Cowardice vanquished",
+            )?;
+        }
         "shop-inn-rest-accept-public-rate" => {
             let expected_gold =
                 999 - inn_base_room_rate(Inn::TheWayfarerInn) * state.party.len() as u16;
@@ -2096,6 +2237,27 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the public inn-rest outcome"
+                )));
+            }
+        }
+        "shop-sage-topic-paid-success-route" => {
+            if state.gold != 50
+                || state.active_shop.is_some()
+                || !state.message.contains("Malik")
+                || !state.message.contains("Moonglow")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not debit and render the public sage topic"
+                )));
+            }
+        }
+        "shop-sage-topic-short-funds-route" => {
+            if state.gold != 49
+                || state.active_shop.is_none()
+                || state.message != TAVERN_AFFORDABILITY_REFUSAL_BARK
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not preserve gold on sage short funds"
                 )));
             }
         }
@@ -2171,6 +2333,29 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             }
         }
         _ => {}
+    }
+    Ok(())
+}
+
+fn validate_shadowlord_shard_route(
+    state: &PlayState,
+    case_name: &str,
+    shadowlord_index: usize,
+    item_index: usize,
+    message_fragment: &str,
+) -> io::Result<()> {
+    let shadowlord_tile = SHADOWLORD_OBJECT_TILE_BASE + shadowlord_index as u8;
+    if state.shadowlord_hideouts.get(shadowlord_index).copied() != Some(SHADOWLORD_VANQUISHED)
+        || state.special_items.get(item_index).copied() != Some(0)
+        || state
+            .active_objects
+            .iter()
+            .any(|object| object.type_byte == shadowlord_tile && object.tile == shadowlord_tile)
+        || !state.message.contains(message_fragment)
+    {
+        return Err(io::Error::other(format!(
+            "route smoke `{case_name}` did not complete native shard destruction"
+        )));
     }
     Ok(())
 }

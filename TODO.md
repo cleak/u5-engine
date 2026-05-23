@@ -33,9 +33,9 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-21 with 123 scripted route cases (including eleven active-shop/modal
+  2026-05-23 with 127 scripted route cases (including expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
-  guild, stationary display, and sage flows, plus four extended-session
+  guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
   walk-and-rest, 9-step dungeon turn-and-search, 5-round Doom combat pass, and
   focused Create Food, fountain Look, Horse/non-horse wishing-well branches,
@@ -43,7 +43,8 @@ Last known verification state:
   #44 sleeping/praying Talk refusals, light-decay, dungeon ladder-chain,
   dungeon-to-world return, hourly provision/poison/starvation passes, public
   #32 Britannia/Doom Word-of-Power seal opening routes, public #15 accepted
-  inn-rest pricing, and public #21
+  inn-rest pricing, public #13 sage paid-success/short-funds paths, public #31
+  native shard/Eternal Flame destruction routes, and public #21
   active-monster attack/contact ambush routes)
   covering world/town look and
   save-refusal prompts, surface/town/dungeon View overlays, Spyglass

@@ -810,6 +810,21 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "lycaeum-shard-falsehood-vanquish")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "empath-shard-hatred-vanquish")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "serpents-hold-shard-cowardice-vanquish")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "stonegate-shadowlord-entry")
     );
     assert!(
@@ -864,6 +879,16 @@ fn route_smoke_cases_cover_representative_modes() {
         cases
             .iter()
             .any(|case| case.name == "shop-inn-rest-accept-public-rate")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "shop-sage-topic-paid-success-route")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "shop-sage-topic-short-funds-route")
     );
     assert!(
         cases
