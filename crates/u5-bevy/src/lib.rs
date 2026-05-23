@@ -26,19 +26,20 @@ use u5_runtime::{
     INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement,
     MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
     MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap,
-    PLAY_MUSIC_TOGGLE_KEY, PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition, PlayOptions, PlayState,
-    PlayTarget, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition, SPECIAL_ITEM_OWNED_VALUE,
-    SPECIAL_ITEM_SPYGLASS_INDEX, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
-    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, Stable, StoryRecords,
-    TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
+    PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PROMPT_TEXT_WINDOW_INDEX,
+    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, RTV_COMMAND_STREAM_BYTES,
+    RectColumnSweepTransition, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX,
+    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
+    STATS_PANEL_TEXT_WINDOW_INDEX, Scene, Stable, StoryRecords, TEXT_SCREEN_ROWS,
+    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
     TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
     TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
     TOWN_POISON_GAS_LIVE_TILE, TextWindowSystem, TileAtlas, TileGraphicsDepth, TitleBitAsset,
     TitleBitImages, TitleBitPlacement, TransportState, U4TransferOverrides, U4TransferSource,
-    WorldPlane, commit_chargen_save, commit_u4_transfer_save, dungeon_cell_index,
-    handle_play_key_input, hash_bytes, input_case_fold, input_function_key_code,
-    input_keypad_digit_direction_code,
+    WorldPlane, X_RAY_COST, X_RAY_SPELL_INDEX, commit_chargen_save, commit_u4_transfer_save,
+    dungeon_cell_index, handle_play_key_input, hash_bytes, input_case_fold,
+    input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -614,6 +615,52 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             }),
         },
         VisualRouteSuiteCase {
+            label: "route-world-view-overlay",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["v", "."],
+            configure: Some(|state| {
+                state.gems = 1;
+            }),
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-view-overlay",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["v", "."],
+            configure: Some(|state| {
+                state.gems = 1;
+            }),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-peer-overlay",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["C1IQW", "."],
+            configure: Some(seed_visual_route_peer_spell),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-x-ray-overlay",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["C1IMX", "."],
+            configure: Some(seed_visual_route_x_ray_spell),
+        },
+        VisualRouteSuiteCase {
             label: "route-britannia-look",
             frame_kind: "visual route world frame",
             options: PlayOptions {
@@ -956,6 +1003,22 @@ fn seed_visual_route_blink(state: &mut PlayState) {
     }
     state.sync_player_object();
     state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_peer_spell(state: &mut PlayState) {
+    state.spell_charges[PEER_SPELL_INDEX] = 1;
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = PEER_COST + 1;
+        caster.level = PEER_COST;
+    }
+}
+
+fn seed_visual_route_x_ray_spell(state: &mut PlayState) {
+    state.spell_charges[X_RAY_SPELL_INDEX] = 1;
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = X_RAY_COST + 1;
+        caster.level = X_RAY_COST;
+    }
 }
 
 fn seed_visual_route_poison_gas(state: &mut PlayState) {
@@ -4840,7 +4903,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 31);
+        assert_eq!(cases.len(), 35);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -4856,6 +4919,26 @@ mod tests {
             cases
                 .iter()
                 .any(|case| case.label == "route-town-view-overlay")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-world-view-overlay")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-dungeon-view-overlay")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-castle-peer-overlay")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-castle-x-ray-overlay")
         );
         assert!(
             cases
@@ -5032,7 +5115,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 83);
+        assert_eq!(reports.len(), 95);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -5044,6 +5127,15 @@ mod tests {
         assert!(manifest.contains("route-world-movement-01-d"));
         assert!(manifest.contains("route-town-status-modal-01-z"));
         assert!(manifest.contains("route-town-view-overlay-01-v"));
+        assert!(manifest.contains("route-town-view-overlay-02-idle"));
+        assert!(manifest.contains("route-world-view-overlay-01-v"));
+        assert!(manifest.contains("route-world-view-overlay-02-idle"));
+        assert!(manifest.contains("route-dungeon-view-overlay-01-v"));
+        assert!(manifest.contains("route-dungeon-view-overlay-02-idle"));
+        assert!(manifest.contains("route-castle-peer-overlay-01-c1iqw"));
+        assert!(manifest.contains("route-castle-peer-overlay-02-idle"));
+        assert!(manifest.contains("route-castle-x-ray-overlay-01-c1imx"));
+        assert!(manifest.contains("route-castle-x-ray-overlay-02-idle"));
         assert!(manifest.contains("route-britannia-look-01-l6"));
         assert!(manifest.contains("route-britannia-spyglass-chunk-map-01-usp"));
         assert!(manifest.contains("route-castle-save-refusal-02-n"));

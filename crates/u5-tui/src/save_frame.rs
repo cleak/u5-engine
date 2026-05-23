@@ -241,6 +241,30 @@ fn save_frame_capture_state(
             rgba,
             "composed view overlay",
         )
+    } else if state.combat_active {
+        let mut rgba = render_text_panel_rgba(
+            &state.render_text_window_frame(None),
+            TEXT_WINDOW_RENDER_WIDTH,
+            TEXT_WINDOW_RENDER_HEIGHT,
+        )?;
+        if let Some(combat) = state.render_top_down_base_frame(VIEWPORT_RADIUS, atlas)? {
+            blit_rgba(
+                &mut rgba,
+                TEXT_WINDOW_RENDER_WIDTH,
+                TEXT_WINDOW_RENDER_HEIGHT,
+                &combat.to_rgba(),
+                combat.width,
+                combat.height,
+                0,
+                0,
+            );
+        }
+        (
+            TEXT_WINDOW_RENDER_WIDTH as u32,
+            TEXT_WINDOW_RENDER_HEIGHT as u32,
+            rgba,
+            "composed combat frame",
+        )
     } else if let Some(viewport) = state.render_top_down_frame(VIEWPORT_RADIUS, &atlas)? {
         (
             viewport.width as u32,
@@ -590,7 +614,7 @@ mod tests {
             assert!(report.path.exists());
             assert!(report.nonblack_pixels > 0);
         }
-        for label in ["britannia", "britannia-step", "castle", "dungeon", "combat"] {
+        for label in ["britannia", "britannia-step", "castle", "dungeon"] {
             let report = reports
                 .iter()
                 .find(|report| report.label == label)
@@ -598,6 +622,13 @@ mod tests {
             assert_eq!(report.width, 176);
             assert_eq!(report.height, 176);
         }
+        let combat = reports
+            .iter()
+            .find(|report| report.label == "combat")
+            .expect("expected combat frame report");
+        assert_eq!(combat.width, TEXT_WINDOW_RENDER_WIDTH as u32);
+        assert_eq!(combat.height, TEXT_WINDOW_RENDER_HEIGHT as u32);
+        assert_eq!(combat.frame_kind, "composed combat frame");
         for label in ["surface-view", "peer-view", "x-ray-view"] {
             let report = reports
                 .iter()

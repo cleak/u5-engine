@@ -27,7 +27,7 @@ Last known verification state:
   coverage).
 - `cargo test -p u5-tui` passed on 2026-05-23, including 79 tests.
 - `cargo test -p u5-tui --features visual` passed on 2026-05-23.
-- `cargo test -p u5-bevy` passed on 2026-05-23, including 56 tests.
+- `cargo test -p u5-bevy` passed on 2026-05-23, including 57 tests.
 - `cargo fmt -- --check` passed on 2026-05-23 after the latest Rust changes.
 - `git diff --check` passed on 2026-05-23; the only output was existing
   CRLF-normalization warnings.
@@ -99,13 +99,13 @@ Last known verification state:
   transfer commit from `PARTY.SAV`, and a confirmed `QY` save/reload
   round trip. These tests mutate only per-test temporary asset directories,
   never `C:\Games\U5-Clean`.
-- `cargo run -p u5-tui -- --save-frame-suite target\codex-frame-suite
-  C:\Games\U5-Clean` passed on 2026-05-19 and wrote thirteen nonblank PNGs:
+- `cargo run -p u5-tui -- --save-frame-suite target\frame-suite
+  C:\Games\U5-Clean` passed on 2026-05-23 and wrote thirteen nonblank PNGs:
   `britannia` `859a1bdabe5c9b7a`, `britannia-step` `05b13e47da048fe6`,
   `castle` `bda625019405af09`, lit `dungeon` `91ea22aa5e09c692`,
-  synthetic `combat` `b4cbe49dac94affd`, `surface-view`
-  `68717971b9dc1fbf`, `dungeon-view` `e43eb41821c7a3b2`,
-  `peer-view` `bd4c5606fd27c054`, `x-ray-view` `bd4c5606fd27c054`,
+  composed `combat` `49bcd6e0986745fd`, `surface-view`
+  `b8d9ef46cd161b93`, `dungeon-view` `8629ba329e58a747`,
+  `peer-view` `4c9e7bb65a91b568`, `x-ray-view` `4c9e7bb65a91b568`,
   `intro-menu` `7bf01c36de552e16`, `status-window`
   `bf7a428a4b00ad2b`, `z-stats-modal` `61b033bfa2488b46`, and
   `endgame-status` `532cb7f1bdd03ffd`.
@@ -128,19 +128,24 @@ Last known verification state:
   `a52f8c3db8e33102`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-23 and
-  wrote 83 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 95 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
   `route-town-status-modal-00-initial` `2beb3b7734800e11`,
   `route-town-status-modal-01-z` `bee4e11801862ad1`,
   `route-town-view-overlay-00-initial` `2beb3b7734800e11`,
-  `route-town-view-overlay-01-v` `3dac257b8d2986d5`,
+  `route-town-view-overlay-01-v` `37d91ad87aa485e1`,
   `route-town-view-overlay-02-idle` `5d5af54c5d7eb0f0`,
+  full-frame overlay open/close coverage for world View
+  (`route-world-view-overlay-01-v` `2ee1809341456a23`), dungeon View
+  (`route-dungeon-view-overlay-01-v` `450b8690ef5bc292`), Peer
+  (`route-castle-peer-overlay-01-c1iqw` `37d91ad87aa485e1`), and X-Ray
+  (`route-castle-x-ray-overlay-01-c1imx` `703fdeef9d192429`),
   `route-britannia-look-00-initial` `f68b906acde0bd4a`,
   `route-britannia-look-01-l6` `da5ca5200c222d0f`,
   `route-britannia-spyglass-chunk-map-00-initial` `ee035bc3da0ecedd`,
-  `route-britannia-spyglass-chunk-map-01-usp` `4d75505e3140a852`,
+  `route-britannia-spyglass-chunk-map-01-usp` `00e243b8973a3bc5`,
   `route-castle-save-refusal-00-initial` `2beb3b7734800e11`,
   `route-castle-save-refusal-01-q` `c58e3249e4d12730`,
   `route-castle-save-refusal-02-n` `6465878cfb486dd1`,
@@ -185,7 +190,7 @@ Last known verification state:
   `route-shop-inn-rest-accept-02-y` `2591d02e2c602824`, public #13 sage
   paid/short-funds outcomes `3d1bdb8ea9234398` / `c73a1d5ec1594b41`, and
   public #43 fountain, wishing-well, and death-vision Look endings
-  `ce66d6a727da0f4c`, `cb49b5dc01b81ad4`, and `bc9b32161912f71d`. The
+  `ce66d6a727da0f4c`, `cb49b5dc01b81ad4`, and `ac129703cfe1c060`. The
   #28 horse-trader expansion adds accepted Horse & Rider, Stablehouse, and
   Wishing Well routes through visual step `*-02-y`.
 - Bevy visual screenshot smoke with local assets produced a nonblank
