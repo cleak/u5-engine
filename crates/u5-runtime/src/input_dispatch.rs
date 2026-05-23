@@ -980,22 +980,15 @@ fn handle_active_shop_key_input(
             format_reagent_outcome(outcome)
         }
         ActiveShopSession::HorseTrader(s) => {
-            let mut pending = false;
             let outcome = match (*s, yes, no) {
-                (HorseTraderState::Greeting { stable }, _, _)
-                    if matches!(key_byte, b'Y' | b'y' | b'B' | b'b') =>
-                {
-                    let quote = quote_horse_purchase_for_speaker(stable, ctx.speaker_intelligence);
-                    *s = HorseTraderState::ConfirmPurchase {
-                        stable,
-                        price: quote.price,
-                    };
-                    HorseTraderOutcome::QuotedPrice { price: quote.price }
-                }
-                (HorseTraderState::Greeting { .. }, _, _) => {
-                    *s = HorseTraderState::Exited;
-                    HorseTraderOutcome::Exited
-                }
+                (HorseTraderState::Greeting { .. }, _, _) => step_horse_trader(
+                    s,
+                    HorseTraderInput::Key {
+                        key: key_byte,
+                        speaker_intelligence: ctx.speaker_intelligence,
+                    },
+                    &mut state.gold,
+                ),
                 (HorseTraderState::ConfirmPurchase { stable, price }, true, _) => {
                     if state.gold < price {
                         *s = HorseTraderState::Greeting { stable };
@@ -1003,7 +996,6 @@ fn handle_active_shop_key_input(
                     } else if let Some((x, y)) = horse_sale_position(state) {
                         match state.buy_horse_for_price(stable, price, x, y) {
                             Ok(_) => {
-                                pending = true;
                                 *s = HorseTraderState::Exited;
                                 HorseTraderOutcome::Purchased { price }
                             }
@@ -1014,14 +1006,16 @@ fn handle_active_shop_key_input(
                         }
                     } else {
                         *s = HorseTraderState::Greeting { stable };
-                        HorseTraderOutcome::InvalidInput
+                        HorseTraderOutcome::RefusedNoMarker { price }
                     }
                 }
                 (HorseTraderState::ConfirmPurchase { .. }, _, true) => step_horse_trader(
                     s,
-                    HorseTraderInput::Confirm(false),
+                    HorseTraderInput::Confirm {
+                        accepted: false,
+                        can_place_horse: false,
+                    },
                     &mut state.gold,
-                    &mut pending,
                 ),
                 _ => HorseTraderOutcome::InvalidInput,
             };
@@ -1030,7 +1024,7 @@ fn handle_active_shop_key_input(
             } else {
                 None
             };
-            append_active_shop_surcharge(format_horse_trader_outcome(outcome, pending), surcharge)
+            append_active_shop_surcharge(format_horse_trader_outcome(outcome), surcharge)
         }
         ActiveShopSession::ShipBroker(s) => {
             let outcome = if let Some(return_world) = state.return_world.as_mut() {
@@ -1535,18 +1529,13 @@ fn format_reagent_outcome(outcome: crate::shop_runtime::ReagentShopOutcome) -> S
     }
 }
 
-fn format_horse_trader_outcome(
-    outcome: crate::shop_runtime::HorseTraderOutcome,
-    pending: bool,
-) -> String {
+fn format_horse_trader_outcome(outcome: crate::shop_runtime::HorseTraderOutcome) -> String {
     use crate::shop_runtime::HorseTraderOutcome::*;
     match outcome {
         QuotedPrice { price } => format!("A fine steed costs {price} gold. (Y/N)"),
-        Purchased { price } => {
-            let _ = pending;
-            format!("Sold for {price} gold. Thy horse awaits outside.")
-        }
+        Purchased { price } => format!("Sold for {price} gold. Thy horse awaits outside."),
         RefusedShortFunds { price } => format!("Thou lackest the {price} gold."),
+        RefusedNoMarker { .. } => "There is no room for a horse here.".to_string(),
         Declined => "As you wish.".to_string(),
         Exited => "Farewell.".to_string(),
         InvalidInput => "I do not understand.".to_string(),

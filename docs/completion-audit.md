@@ -50,7 +50,7 @@ Runtime, TUI, and route-smoke results refreshed alongside this audit on
 2026-05-23; Bevy and visual-suite evidence remains from the latest display
 audit:
 
-- `cargo test -p u5-runtime` — 2566 tests pass.
+- `cargo test -p u5-runtime` — 2568 tests pass.
 - `cargo test -p u5-tui` — 79 tests pass, including temp-directory binary
   smoke for empty-save Journey Onward, deterministic Create Character followed
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
@@ -218,7 +218,7 @@ through the asset-backed Talk command path.
 | §8.7 Shipwright | shipwright arm; pending vehicle in `play_state_struct.rs` | shipwright tests | Implemented |
 | §8.8 Horse trader | horse arm | horse tests | Implemented |
 | §8.9 Reagent vendor | `shops.rs` per-herbalist matrix | reagent tests | Implemented |
-| §8.10 Horse trader correction | `shop_session.rs` public issue #28 horse-trader scene rows; `input_dispatch.rs` adjacent marker placement and active-object creation | all-stable horse-trader route smoke/visual routes and talk/shop tests in `chunk_21.rs` | Implemented; obsolete stationary-display purchase runtime removed |
+| §8.10 Horse trader correction | `shop_session.rs` public issue #28 horse-trader scene rows; `shop_runtime.rs` Intelligence-adjusted quote/no-marker refusal state machine; `input_dispatch.rs` adjacent marker placement and active-object creation | all-stable horse-trader route smoke/visual routes and talk/shop tests in `chunk_21.rs`, including no-marker refusal | Implemented; obsolete stationary-display purchase runtime removed |
 | §9 Karma effects | no karma gating on shop pricing | — | Implemented |
 
 ### `systems/karma.md`
@@ -366,6 +366,10 @@ remaining response-needed items:
 - `cleak/u5-spec#13`: exact fee/no-credit text or SHOPPE record ids.
 - `cleak/u5-spec#18`: correct the `formats/saved-gam.md` record-15 skip
   predicate wording to match the issue answer.
+- `cleak/u5-spec#31`: publish whether Shadowlord destruction sets a persisted
+  quest-progress bit.
+- `cleak/u5-spec#41`: publish exact arms-shop quote/refusal/success text or
+  SHOPPE record ids.
 - `cleak/u5-spec#43`: exact wanted-poster resident template/text and party-name
   insertion order.
 - `cleak/u5-spec#47`: reconcile checked-in spec prose with the latest public

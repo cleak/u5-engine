@@ -3158,6 +3158,54 @@
     }
 
     #[test]
+    fn horse_trader_purchase_refuses_without_local_marker_and_preserves_gold() {
+        let dialogue = HashMap::new();
+        let mut grid = open_grid();
+        grid[2 * 32 + 1] = 0x01;
+        grid[1] = 0x01;
+        grid[32 + 2] = 0x01;
+        grid[32] = 0x01;
+        let mut state = test_state(grid, 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(20).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.gold = 143;
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x83,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue(&dialogue),
+            MoveOutcome::Talked
+        );
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 143);
+        assert!(state.active_shop.is_some());
+        assert!(state.message.contains("no room for a horse"));
+        assert!(!state
+            .active_objects
+            .iter()
+            .any(|object| object.type_byte == HORSE_PARKED_FIRST));
+    }
+
+    #[test]
     fn town_talk_guild_shop_uses_scene_local_prices() {
         let dialogue = HashMap::new();
         let mut grid = open_grid();

@@ -22,9 +22,9 @@ use crate::shops::{
     apply_tavern_round_drink, arms_shop_action, arms_shop_buy_quote, arms_shop_sell_offer,
     arms_shop_stock_item_for_letter, guild_shop_action, guild_unit_price, herbalist_menu_entries,
     inn_base_room_rate, inn_leave_companion_deposit_for_speaker, inn_main_action,
-    inn_pickup_bill_for_speaker, quote_inn_rest, quote_inn_rest_for_speaker,
-    quote_shipwright_purchase, shipwright_menu_action, stable_horse_price, tavern_drink_prompt,
-    tavern_provision_unit_price,
+    inn_pickup_bill_for_speaker, quote_horse_purchase_for_speaker, quote_inn_rest,
+    quote_inn_rest_for_speaker, quote_shipwright_purchase, shipwright_menu_action,
+    tavern_drink_prompt, tavern_provision_unit_price,
 };
 use crate::transport::PendingVehicleAcquisition;
 
@@ -1159,8 +1159,14 @@ impl HorseTraderState {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HorseTraderInput {
-    Key(u8),
-    Confirm(bool),
+    Key {
+        key: u8,
+        speaker_intelligence: u8,
+    },
+    Confirm {
+        accepted: bool,
+        can_place_horse: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1168,23 +1174,27 @@ pub enum HorseTraderOutcome {
     QuotedPrice { price: u16 },
     Purchased { price: u16 },
     RefusedShortFunds { price: u16 },
+    RefusedNoMarker { price: u16 },
     Declined,
     Exited,
     InvalidInput,
 }
 
-pub const HORSE_TRADER_DEFAULT_PRICE: u16 = stable_horse_price(Stable::HorseAndRider);
-
 pub fn step_horse_trader(
     state: &mut HorseTraderState,
     input: HorseTraderInput,
     gold: &mut u16,
-    horse_delivery_pending: &mut bool,
 ) -> HorseTraderOutcome {
     match (*state, input) {
-        (HorseTraderState::Greeting { stable }, HorseTraderInput::Key(b)) => match b {
+        (
+            HorseTraderState::Greeting { stable },
+            HorseTraderInput::Key {
+                key,
+                speaker_intelligence,
+            },
+        ) => match key {
             b'Y' | b'y' | b'B' | b'b' => {
-                let price = stable_horse_price(stable);
+                let price = quote_horse_purchase_for_speaker(stable, speaker_intelligence).price;
                 *state = HorseTraderState::ConfirmPurchase { stable, price };
                 HorseTraderOutcome::QuotedPrice { price }
             }
@@ -1193,17 +1203,31 @@ pub fn step_horse_trader(
                 HorseTraderOutcome::Exited
             }
         },
-        (HorseTraderState::ConfirmPurchase { stable, price }, HorseTraderInput::Confirm(true)) => {
+        (
+            HorseTraderState::ConfirmPurchase { stable, price },
+            HorseTraderInput::Confirm {
+                accepted: true,
+                can_place_horse,
+            },
+        ) => {
             if *gold < price {
                 *state = HorseTraderState::Greeting { stable };
                 return HorseTraderOutcome::RefusedShortFunds { price };
             }
+            if !can_place_horse {
+                *state = HorseTraderState::Greeting { stable };
+                return HorseTraderOutcome::RefusedNoMarker { price };
+            }
             *gold -= price;
-            *horse_delivery_pending = true;
             *state = HorseTraderState::Exited;
             HorseTraderOutcome::Purchased { price }
         }
-        (HorseTraderState::ConfirmPurchase { stable, .. }, HorseTraderInput::Confirm(false)) => {
+        (
+            HorseTraderState::ConfirmPurchase { stable, .. },
+            HorseTraderInput::Confirm {
+                accepted: false, ..
+            },
+        ) => {
             *state = HorseTraderState::Greeting { stable };
             HorseTraderOutcome::Declined
         }
@@ -2649,49 +2673,91 @@ mod tests {
     }
 
     #[test]
-    fn horse_trader_purchase_path_marks_pending_delivery() {
+    fn horse_trader_purchase_path_requires_local_marker_and_charges_adjusted_price() {
         let mut state = HorseTraderState::default();
         let mut gold = 500u16;
-        let mut pending = false;
-        step_horse_trader(
-            &mut state,
-            HorseTraderInput::Key(b'Y'),
-            &mut gold,
-            &mut pending,
+        assert_eq!(
+            step_horse_trader(
+                &mut state,
+                HorseTraderInput::Key {
+                    key: b'Y',
+                    speaker_intelligence: 30,
+                },
+                &mut gold,
+            ),
+            HorseTraderOutcome::QuotedPrice { price: 110 }
         );
         let outcome = step_horse_trader(
             &mut state,
-            HorseTraderInput::Confirm(true),
+            HorseTraderInput::Confirm {
+                accepted: true,
+                can_place_horse: true,
+            },
             &mut gold,
-            &mut pending,
         );
-        assert!(matches!(outcome, HorseTraderOutcome::Purchased { .. }));
-        assert!(pending);
-        assert_eq!(gold, 500 - HORSE_TRADER_DEFAULT_PRICE);
+        assert_eq!(outcome, HorseTraderOutcome::Purchased { price: 110 });
+        assert_eq!(gold, 390);
+    }
+
+    #[test]
+    fn horse_trader_refuses_when_no_adjacent_marker_is_available() {
+        let mut state = HorseTraderState::for_stable(Stable::WishingWellHorses);
+        let mut gold = 500u16;
+        assert_eq!(
+            step_horse_trader(
+                &mut state,
+                HorseTraderInput::Key {
+                    key: b'B',
+                    speaker_intelligence: 40,
+                },
+                &mut gold,
+            ),
+            HorseTraderOutcome::QuotedPrice { price: 128 }
+        );
+        assert_eq!(
+            step_horse_trader(
+                &mut state,
+                HorseTraderInput::Confirm {
+                    accepted: true,
+                    can_place_horse: false,
+                },
+                &mut gold,
+            ),
+            HorseTraderOutcome::RefusedNoMarker { price: 128 }
+        );
+        assert_eq!(gold, 500);
+        assert_eq!(
+            state,
+            HorseTraderState::Greeting {
+                stable: Stable::WishingWellHorses
+            }
+        );
     }
 
     #[test]
     fn horse_trader_short_funds_refuses() {
         let mut state = HorseTraderState::default();
         let mut gold = 10u16;
-        let mut pending = false;
         step_horse_trader(
             &mut state,
-            HorseTraderInput::Key(b'Y'),
+            HorseTraderInput::Key {
+                key: b'Y',
+                speaker_intelligence: 30,
+            },
             &mut gold,
-            &mut pending,
         );
         let outcome = step_horse_trader(
             &mut state,
-            HorseTraderInput::Confirm(true),
+            HorseTraderInput::Confirm {
+                accepted: true,
+                can_place_horse: true,
+            },
             &mut gold,
-            &mut pending,
         );
         assert!(matches!(
             outcome,
             HorseTraderOutcome::RefusedShortFunds { .. }
         ));
-        assert!(!pending);
         assert_eq!(gold, 10);
     }
 

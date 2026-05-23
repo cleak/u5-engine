@@ -14,11 +14,11 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-23, including 2566 tests
+- `cargo test -p u5-runtime` passed on 2026-05-23, including 2568 tests
   (latest verification includes public `cleak/u5-spec#47` hourly
   poison/provision/ring ordering, public #28 horse-trader adjacent placement
-  priority, public #15 inn pickup stay-counter billing, combat command-flow
-  regressions for pending Z-stats/Cast actor liveness, public
+  priority plus no-marker refusal, public #15 inn pickup stay-counter billing,
+  combat command-flow regressions for pending Z-stats/Cast actor liveness, public
   `cleak/u5-spec#41` arms-shop scene-row coverage, public issue #3
   terrain-combat replacement-tile main path, and public issue #21 dungeon
   active-monster ambush setup, combat round maintenance, combat-local
@@ -269,15 +269,17 @@ Current worktree context when this TODO was refreshed:
   at the `0xFF` terminator.
 - Public `cleak/u5-spec#28` corrected the old stationary-display purchase path
   to horse-trader sale rows. The obsolete stationary-display purchase runtime is
-  removed, and horse-trader route-smoke/visual/talk-shop tests cover accepted
-  purchases and placement for all three public stables.
+  removed, and horse-trader runtime/talk-shop/route-smoke/visual tests cover
+  Intelligence-adjusted quotes, local marker placement, no-marker refusal, and
+  accepted purchases for all three public stables.
 - Shadowlord shard U-Use follows public `cleak/u5-spec#31` exact native
   positions and requires the matching live Shadowlord/name encounter north of
   the party; route smoke covers Lycaeum, Empath Abbey, and Serpent's Hold native
   paths.
 - The 2026-05-23 clean-engine audit found no broad newly answered engine slice
   left unimplemented in the pulled spec. Follow-up questions remain current for
-  response-needed public blockers #1, #3, #13, #18, #43, #47, #51, and #54.
+  response-needed public blockers #1, #3, #13, #18, #31, #41, #43, #47, #51,
+  and #54.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the
