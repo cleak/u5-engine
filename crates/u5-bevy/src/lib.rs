@@ -809,6 +809,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_fountain),
         },
         VisualRouteSuiteCase {
+            label: "route-yew-wanted-poster-look",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(Scene::new(4).expect("Yew scene is valid")),
+                ..PlayOptions::default()
+            },
+            script: &["l6"],
+            configure: Some(seed_visual_route_yew_wanted_poster),
+        },
+        VisualRouteSuiteCase {
             label: "route-buccaneers-den-wishing-well",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -1030,6 +1040,25 @@ fn stamp_visual_route_look_tile(state: &mut PlayState, tile: u8) {
 
 fn seed_visual_route_fountain(state: &mut PlayState) {
     stamp_visual_route_look_tile(state, 0xD8);
+}
+
+fn seed_visual_route_yew_wanted_poster(state: &mut PlayState) {
+    state.player.x = 16;
+    state.player.y = 21;
+    state.player.facing = Direction::East;
+    let floor = state.current_floor().unwrap_or(0);
+    state.active_objects.push(ActiveObject {
+        type_byte: 0xA0,
+        tile: 0xA0,
+        x: 17,
+        y: 21,
+        z: floor,
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
+    state.sync_player_object();
+    state.mark_visibility_dirty();
 }
 
 fn seed_visual_route_wishing_well(state: &mut PlayState) {
@@ -4696,7 +4725,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 29);
+        assert_eq!(cases.len(), 30);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -4806,6 +4835,11 @@ mod tests {
         assert!(
             cases
                 .iter()
+                .any(|case| case.label == "route-yew-wanted-poster-look")
+        );
+        assert!(
+            cases
+                .iter()
                 .any(|case| case.label == "route-buccaneers-den-wishing-well")
         );
         assert!(
@@ -4878,7 +4912,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 79);
+        assert_eq!(reports.len(), 81);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -4908,6 +4942,7 @@ mod tests {
         assert!(manifest.contains("route-shop-sage-topic-paid-success-02-y"));
         assert!(manifest.contains("route-shop-sage-topic-short-funds-02-y"));
         assert!(manifest.contains("route-castle-fountain-look-02-1"));
+        assert!(manifest.contains("route-yew-wanted-poster-look-01-l6"));
         assert!(manifest.contains("route-buccaneers-den-wishing-well-03-horse"));
         assert!(manifest.contains("route-castle-death-vision-look-02-1"));
         assert!(manifest.contains("route-doom-combat-trigger-01-empty"));

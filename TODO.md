@@ -14,13 +14,16 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-23, including 2563 tests
-  (latest verification includes combat command-flow regressions for pending
-  Z-stats/Cast actor liveness, public `cleak/u5-spec#41` arms-shop scene-row
-  coverage, public issue #3 terrain-combat replacement-tile main path, and
-  public issue #21 dungeon active-monster ambush setup, combat round
-  maintenance, combat-local ambush/camp reveal-slot helper coverage, and disk
-  I/O retry wrapper coverage).
+- `cargo test -p u5-runtime` passed on 2026-05-23, including 2566 tests
+  (latest verification includes public `cleak/u5-spec#47` hourly
+  poison/provision/ring ordering, public #28 horse-trader adjacent placement
+  priority, public #15 inn pickup stay-counter billing, combat command-flow
+  regressions for pending Z-stats/Cast actor liveness, public
+  `cleak/u5-spec#41` arms-shop scene-row coverage, public issue #3
+  terrain-combat replacement-tile main path, and public issue #21 dungeon
+  active-monster ambush setup, combat round maintenance, combat-local
+  ambush/camp reveal-slot helper coverage, and disk I/O retry wrapper
+  coverage).
 - `cargo test -p u5-tui` passed on 2026-05-23, including 79 tests.
 - `cargo test -p u5-tui --features visual` passed on 2026-05-23.
 - `cargo test -p u5-bevy` passed on 2026-05-23, including 56 tests.
@@ -33,13 +36,13 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-23 with 133 scripted route cases (including expanded active-shop/modal
+  2026-05-23 with 134 scripted route cases (including expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
   walk-and-rest, 9-step dungeon turn-and-search, 5-round Doom combat pass, and
-  focused Create Food, fountain Look, Horse/non-horse wishing-well branches,
-  death-vision Look, public
+  focused Create Food, fountain Look, Yew wanted-poster Look,
+  Horse/non-horse wishing-well branches, death-vision Look, public
   #44 sleeping/praying Talk refusals, public #48 Blink ray landing,
   light-decay, dungeon ladder-chain,
   dungeon-to-world return, hourly provision/poison/starvation/ring passes, public
@@ -123,7 +126,7 @@ Last known verification state:
   `a52f8c3db8e33102`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-23 and
-  wrote 79 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 81 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -282,16 +285,18 @@ Current worktree context when this TODO was refreshed:
 - Public `cleak/u5-spec#43` Look specials now cover top-down fountain drink
   prompts with presentation-only refresh, wishing-well coin and 12-character
   wish input with scene gates, structured accepted keyword matching, a native
-  Horse grant, no-effect handling for accepted car keywords until their exact
-  grant table is public, death-vision active-object dispatch with member
-  selection, and sign/poster active-object class routing. Exact death-vision
-  stat/text, wished-object mapping, and wanted-poster fixed-coordinate/resource
-  details remain pending public clarification.
+  Horse grant, accepted car keywords mapping to the horse-family grant in
+  public scenes, death-vision active-object dispatch with member selection, and
+  Yew wanted-poster route/visual evidence with clean-authored placeholder text.
+  Exact wanted-poster resident text and line breaking remain pending public
+  clarification.
 - Return-to-View now expands the MISCMAPS command stream into a per-title-tick
   playback timeline for preview ticks, cell-effect timing, fixed-wipe
   rectangles, eight-title-tick waits, trailing ticks, and one-shot actor draws.
-  Fixed captions and timing are implemented; strip geometry and exact effect
-  rasters remain blocked by the public #54 spec conflict.
+  The loader transposes the 19x4 on-disk strip source into the public 4x19
+  visible preview, derives captions from LoadMapStrip, and applies the
+  `(x, y + 7)` local cell-effect coordinate rule. Exact effect rasters remain
+  presentation work.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry,
   seeded ship/skiff sailing routes, a Spyglass-triggered Britannia chunk-map
@@ -748,8 +753,8 @@ as public details become available.
     or `0xE?` visual wall cells, stale `dungeon_doors.tsv` files are ignored,
     and dungeon Open now uses the public underfoot `0x7?` "Chest opened" /
     default "What?" messages.
-  - Terrain combat now uses the public issue #3 resident per-arena spawn-count
-    table plus `BRIT.CBT` record placement metadata, clamps requested counts
+  - Terrain combat now uses the public issue #3 combat-class stat-field spawn
+    count plus `BRIT.CBT` record placement metadata, clamps requested counts
     above the slot table instead of reproducing the original out-of-bounds edge,
     places the party after the monster slots, and applies the public
     one-in-nine early-spawn replacement-tile roll through the main

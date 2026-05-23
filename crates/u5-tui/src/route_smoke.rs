@@ -445,6 +445,11 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
     x_ray_view.party[0].level = X_RAY_COST;
 
     let surface_fountain = PlayOptions::default();
+    let yew_poster_scene = Scene::new(4).expect("Yew scene is valid");
+    let yew_wanted_poster = PlayOptions {
+        target: PlayTarget::Town(yew_poster_scene),
+        ..PlayOptions::default()
+    };
     let wishing_well_scene = Scene::new(0x16).expect("Buccaneer's Den scene is valid");
     let wishing_well = PlayOptions {
         target: PlayTarget::Town(wishing_well_scene),
@@ -889,6 +894,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: surface_fountain,
             script: &["l6", "1"],
             expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "yew-wanted-poster-look",
+            options: yew_wanted_poster,
+            script: &["l6"],
+            expected: RouteSmokeExpectation::Town(yew_poster_scene),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
         },
@@ -1744,6 +1757,9 @@ fn apply_route_smoke_case_setup(
         "castle-surface-fountain-look" => {
             stamp_town_route_look_tile(state, 0xD8);
         }
+        "yew-wanted-poster-look" => {
+            seed_yew_wanted_poster_route(state);
+        }
         "buccaneers-den-wishing-well-horse"
         | "buccaneers-den-wishing-well-ferrari-grants-horse" => {
             stamp_town_route_look_tile(state, 0xA1);
@@ -2012,6 +2028,30 @@ fn stamp_town_route_look_tile(state: &mut PlayState, tile: u8) {
     if let Some(cell) = state.grid.get_mut(target_idx) {
         *cell = tile;
     }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_yew_wanted_poster_route(state: &mut PlayState) {
+    state.player.x = 16;
+    state.player.y = 21;
+    state.player.facing = Direction::East;
+    let floor = state.current_floor().unwrap_or(0);
+    let target_x = 17;
+    let target_y = 21;
+    state.active_objects.retain(|object| {
+        object.is_empty() || object.x != target_x || object.y != target_y || object.z != floor
+    });
+    state.active_objects.push(ActiveObject {
+        type_byte: 0xA0,
+        tile: 0xA0,
+        x: target_x,
+        y: target_y,
+        z: floor,
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
     state.sync_player_object();
     state.mark_visibility_dirty();
 }
@@ -2298,6 +2338,13 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             if !state.message.contains("fountain") || !state.message.contains("feels refreshed") {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete the fountain Look flow"
+                )));
+            }
+        }
+        "yew-wanted-poster-look" => {
+            if !state.message.contains("Wanted Poster") || !state.message.contains("Avatar") {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not render the hard-coded Yew wanted poster"
                 )));
             }
         }

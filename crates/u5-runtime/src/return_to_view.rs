@@ -18,9 +18,11 @@ use crate::{
 pub const RTV_PREVIEW_SIDE: usize = 32;
 pub const RTV_PREVIEW_CELLS: usize = RTV_PREVIEW_SIDE * RTV_PREVIEW_SIDE;
 pub const RTV_ACTOR_SLOTS: usize = 32;
-pub const RTV_STRIP_VISIBLE_COLUMNS: usize = 19;
-pub const RTV_STRIP_VISIBLE_ROWS: usize = 4;
-pub const RTV_STRIP_RECORD_BYTES: usize = MISCMAPS_RTV_STRIP_ROW_STRIDE * RTV_STRIP_VISIBLE_ROWS;
+pub const RTV_STRIP_SOURCE_COLUMNS: usize = 19;
+pub const RTV_STRIP_SOURCE_ROWS: usize = 4;
+pub const RTV_STRIP_VISIBLE_COLUMNS: usize = 4;
+pub const RTV_STRIP_VISIBLE_ROWS: usize = 19;
+pub const RTV_STRIP_RECORD_BYTES: usize = MISCMAPS_RTV_STRIP_ROW_STRIDE * RTV_STRIP_SOURCE_ROWS;
 pub const RTV_STRIP_TILE_COUNT: usize = RTV_STRIP_VISIBLE_COLUMNS * RTV_STRIP_VISIBLE_ROWS;
 pub const RTV_EFFECT_SENTINEL_TILE: u8 = 0xfe;
 pub const RTV_OPEN_EFFECT_FINAL_TILE: u8 = 0xdc;
@@ -265,7 +267,7 @@ impl ReturnToViewPreviewState {
                 self.total_ticks = self.total_ticks.saturating_add(u32::from(ticks));
             }
             ReturnToViewCommand::OpenCellEffect { x, y } => {
-                self.open_cell_effect(x, y)?;
+                self.open_cell_effect(x, y.saturating_add(7))?;
             }
             ReturnToViewCommand::CloseCellEffect => {
                 let Some((x, y)) = self.cached_effect_cell else {
@@ -545,12 +547,12 @@ pub fn parse_return_to_view_map_strips(bytes: &[u8]) -> io::Result<ReturnToViewM
     let mut strips = [[0u8; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT];
     for (strip_index, strip) in strips.iter_mut().enumerate() {
         let base = strip_index * RTV_STRIP_RECORD_BYTES;
-        for row in 0..RTV_STRIP_VISIBLE_ROWS {
+        for row in 0..RTV_STRIP_SOURCE_ROWS {
             let row_start = base + row * MISCMAPS_RTV_STRIP_ROW_STRIDE;
-            let source = &bytes[row_start..row_start + RTV_STRIP_VISIBLE_COLUMNS];
-            let target =
-                &mut strip[row * RTV_STRIP_VISIBLE_COLUMNS..(row + 1) * RTV_STRIP_VISIBLE_COLUMNS];
-            target.copy_from_slice(source);
+            let source = &bytes[row_start..row_start + RTV_STRIP_SOURCE_COLUMNS];
+            for (col, tile) in source.iter().copied().enumerate() {
+                strip[col * RTV_STRIP_VISIBLE_COLUMNS + row] = tile;
+            }
         }
     }
     Ok(ReturnToViewMapStrips { strips })
@@ -1264,11 +1266,11 @@ mod tests {
     fn parse_return_to_view_map_strips_extracts_visible_cells_and_skips_padding() {
         let mut bytes = vec![0xee; MISCMAPS_RTV_STRIP_SECTION_BYTES];
         for strip in 0..RTV_STRIP_COUNT {
-            for row in 0..RTV_STRIP_VISIBLE_ROWS {
+            for row in 0..RTV_STRIP_SOURCE_ROWS {
                 let row_start =
                     strip * RTV_STRIP_RECORD_BYTES + row * MISCMAPS_RTV_STRIP_ROW_STRIDE;
-                for col in 0..RTV_STRIP_VISIBLE_COLUMNS {
-                    bytes[row_start + col] = (strip * 40 + row * 19 + col) as u8;
+                for col in 0..RTV_STRIP_SOURCE_COLUMNS {
+                    bytes[row_start + col] = (strip * 100 + row * 19 + col) as u8;
                 }
             }
         }
@@ -1276,9 +1278,11 @@ mod tests {
         let strips = parse_return_to_view_map_strips(&bytes).unwrap();
 
         assert_eq!(strips.strips[0][0], 0);
-        assert_eq!(strips.strips[0][18], 18);
-        assert_eq!(strips.strips[0][19], 19);
-        assert_eq!(strips.strips[1][0], 40);
+        assert_eq!(strips.strips[0][1], 19);
+        assert_eq!(strips.strips[0][4], 1);
+        assert_eq!(strips.strips[0][19], 61);
+        assert_eq!(strips.strips[0][75], 75);
+        assert_eq!(strips.strips[1][0], 100);
         assert!(!strips.strips[0].contains(&0xee));
     }
 
@@ -1320,7 +1324,7 @@ mod tests {
             .apply_command(
                 &strips,
                 3,
-                ReturnToViewCommand::OpenCellEffect { x: 4, y: 2 },
+                ReturnToViewCommand::OpenCellEffect { x: 2, y: 2 },
             )
             .unwrap();
         state
@@ -1332,7 +1336,7 @@ mod tests {
         assert_eq!(state.cell(1, 0), Some(0x12));
         assert_eq!(state.actors[3].x, 2);
         assert_eq!(state.actors[3].tile0, 0x44);
-        assert_eq!(state.cell(4, 2), Some(RTV_CLOSE_EFFECT_FINAL_TILE));
+        assert_eq!(state.cell(2, 9), Some(RTV_CLOSE_EFFECT_FINAL_TILE));
         assert_eq!(state.total_ticks, 34);
         assert_eq!(state.cell_effect_steps, 30);
         assert_eq!(state.fixed_wait_ticks, 0);
@@ -1484,7 +1488,7 @@ mod tests {
                     reserved1: 0,
                     slot: 0,
                 },
-                ReturnToViewCommand::OpenCellEffect { x: 4, y: 2 },
+                ReturnToViewCommand::OpenCellEffect { x: 2, y: 2 },
                 ReturnToViewCommand::MoveActorAndTick {
                     slot: 0,
                     direction: 1,

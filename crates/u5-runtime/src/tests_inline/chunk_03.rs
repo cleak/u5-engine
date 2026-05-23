@@ -1882,6 +1882,36 @@
     }
 
     #[test]
+    fn hourly_status_pass_applies_ring_after_poison_and_provisions() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.clock = GameClock::with_date(139, 4, 5, 5, 59).unwrap();
+        state.food = 10;
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: b'A',
+            status: b'P',
+            climb_stat: 30,
+            mana: 8,
+            hp: 20,
+            max_hp: 20,
+            level: 8,
+        }];
+        state.party_equipment = default_party_equipment(1);
+        state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+        state.prng_state = 0x0030;
+
+        state.advance_turn_with_minutes(1);
+
+        assert_eq!(state.clock.hour, 6);
+        assert_eq!(state.food, 9);
+        assert_eq!(state.party[0].status, b'P');
+        assert_eq!(
+            state.party[0].hp, 20,
+            "poison damage should be eligible for the same hourly ring tick"
+        );
+    }
+
+    #[test]
     fn starvation_warning_appends_after_pass_turn_hour_crossing() {
         // `cleak/u5-spec#50`: starvation rolls `prng_range(1, 8)` per
         // non-dead slot. Verify the message bubbles up regardless of

@@ -38,7 +38,7 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#47` | Hourly Ring of Regeneration tick and completed long-camp recovery | Implemented from latest issue answer; spec-file reconciliation pending |
 | `cleak/u5-spec#48` | Non-combat Blink directional ray landing rule | Implemented |
 | `cleak/u5-spec#51` | Full resident town tile-attribute table for poison-gas detection | Published tile step behavior implemented; full table question pending |
-| `cleak/u5-spec#54` | Return-to-View strip captions, timing, and exact effect rasters | Public timing/captions implemented; geometry/effect raster question pending |
+| `cleak/u5-spec#54` | Return-to-View strip captions, timing, geometry, and exact effect rasters | Public timing/captions and 4x19 visible geometry implemented; exact effect raster question pending |
 
 Where an audit row references a pending issue, the engine carries a clean
 implementation or conservative placeholder that avoids private-derived guesses
@@ -50,13 +50,13 @@ Runtime, TUI, and route-smoke results refreshed alongside this audit on
 2026-05-23; Bevy and visual-suite evidence remains from the latest display
 audit:
 
-- `cargo test -p u5-runtime` — 2563 tests pass.
+- `cargo test -p u5-runtime` — 2566 tests pass.
 - `cargo test -p u5-tui` — 79 tests pass, including temp-directory binary
   smoke for empty-save Journey Onward, deterministic Create Character followed
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 56 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 133 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 134 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
@@ -78,7 +78,7 @@ audit:
 - `cargo run -- --save-frame-suite target\audit-frame-suite C:\Games\U5-Clean`
   — 13 PNGs, every frame nonblank with stable hashes.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 79 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 81 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including horse-trader
   purchases and Doom combat entry, pass, attack, refusal, Z-stats, and
   Search-prompt routes.
@@ -231,7 +231,7 @@ through the asset-backed Talk command path.
 
 | Section | Evidence | Tests | Status |
 |--------|----------|-------|--------|
-| `intro.md` §1–§14 | `intro.rs`, `intro_menu.rs`, `menu_dispatch.rs`, `pth.rs` (BRITISH.PTH walker), `return_to_view.rs`, `story_io.rs`; Bevy intro shell composes published title bitmap, animates signature path, draws the public issue #52 four-frame palette-cycled clean flame stripe, renders story art with the spec-defined transition-strip and secondary-art draws, and runs the public issue #53 step-1 36-title-tick column wipe; Return-to-View preview rendering uses public title-tick animation families, transparent actor overlay composition, public #54 fixed strip captions from LoadMapStrip, high-opcode no-ops, and scheduler/playback timing for preview ticks, cell effects, fixed wipes, fixed waits, trailing ticks, and one-shot actor draws; `intro.rs::ACKNOWLEDGEMENTS_LINES` provides clean-room authored Acknowledgements content for §11 (`A` submenu) per the spec's "source-free content transcription" directive | intro/chargen menu tests in `chunk_01.rs`, `chunk_02.rs`; Bevy intro framebuffer/title-tick/story-wipe tests; Return-to-View renderer/playback tests; `intro::tests::acknowledgements_lines_are_clean_room_authored` | Implemented; exact historical title-tick silhouette pixels, exact unpublished wider rectangle-transition rates/rectangles, the #54 strip-geometry wording conflict, and exact Return-to-View effect rasters remain Presentation work |
+| `intro.md` §1–§14 | `intro.rs`, `intro_menu.rs`, `menu_dispatch.rs`, `pth.rs` (BRITISH.PTH walker), `return_to_view.rs`, `story_io.rs`; Bevy intro shell composes published title bitmap, animates signature path, draws the public issue #52 four-frame palette-cycled clean flame stripe, renders story art with the spec-defined transition-strip and secondary-art draws, and runs the public issue #53 step-1 36-title-tick column wipe; Return-to-View preview rendering uses public title-tick animation families, transparent actor overlay composition, public #54 fixed strip captions from LoadMapStrip, high-opcode no-ops, 19x4 source to 4x19 visible strip transposition, `(x, y + 7)` cell-effect coordinates, and scheduler/playback timing for preview ticks, cell effects, fixed wipes, fixed waits, trailing ticks, and one-shot actor draws; `intro.rs::ACKNOWLEDGEMENTS_LINES` provides clean-room authored Acknowledgements content for §11 (`A` submenu) per the spec's "source-free content transcription" directive | intro/chargen menu tests in `chunk_01.rs`, `chunk_02.rs`; Bevy intro framebuffer/title-tick/story-wipe tests; Return-to-View renderer/playback tests; `intro::tests::acknowledgements_lines_are_clean_room_authored` | Implemented; exact historical title-tick silhouette pixels, exact unpublished wider rectangle-transition rates/rectangles, and exact Return-to-View effect rasters remain Presentation work |
 | `chargen.md` §1–§11 | `chargen.rs` questionnaire VM, gender prompt, virtue tournament, stat assignment | chargen tests | Implemented |
 | `u4-transfer.md` §1–§10 | `u4_transfer.rs`, `u4_transfer_session.rs` state machine, public issue #16 `PARTY.SAV` source validation offsets, BRIT.GAM/BRIT.OOL handling, stat translation, OOL ordering | u4-transfer tests | Implemented |
 
@@ -358,7 +358,7 @@ are kept out of gameplay logic until the public spec publishes exact data.
 | `cleak/u5-spec#43` | Exact wanted-poster resident text/template and line breaking | Look routes the public predicates and outcomes, grants all six accepted well wishes as horse-family objects in the public scenes, uses Intelligence for death vision, and inserts party names at the Yew poster predicate with clean-authored placeholder wording |
 | `cleak/u5-spec#47` | Checked-in spec files still contradict the latest public issue answer for non-combat Ring of Regeneration and completed long-camp recovery | Engine implements the latest public issue-comment behavior: hourly 1-in-8 Ring of Regeneration +1 HP and guarded completed long-camp HP/MP recovery |
 | `cleak/u5-spec#51` | Full resident town tile-attribute table | `town_tile_attributes.tsv` can drive the public class `4` + vehicle byte `0x1C` poison-gas trigger predicate; coordinate rows remain as fallback, with route-smoke covering the public per-slot roll semantics |
-| `cleak/u5-spec#54` | Return-to-View strip geometry wording conflict and exact local cell-effect rasters | Parser/scheduler/overlay composition implement the public 19x4 `formats/location-dat.md` source layout, fixed captions from LoadMapStrip, high-opcode no-ops, and timing model; geometry and exact rasters await final public reconciliation |
+| `cleak/u5-spec#54` | Return-to-View exact local cell-effect rasters | Parser/scheduler/overlay composition implement the public 19x4 source layout transposed to a 4x19 visible preview, fixed captions from LoadMapStrip, high-opcode no-ops, `(x, y + 7)` effect coordinates, and timing model; exact rasters await final public reconciliation |
 
 Follow-up questions were current as of the 2026-05-23 issue audit for the
 remaining response-needed items:
@@ -391,7 +391,7 @@ overlays where exact historical pixels are not public.
 
 - Title-tick exact historical silhouette pixels and palette fades.
 - Exact unpublished wider story/endgame rectangle-transition rectangles/rates.
-- Return-to-View strip geometry reconciliation and effect-raster pacing internals.
+- Return-to-View exact effect-raster pacing internals.
 - Exact remote-view panel pixels for X-Ray / Peer.
 - Exact dungeon minimap glyph/floodability edge cases.
 - Gazer eye-burst tile + particle and Gargoyle lava-pool transitions (the

@@ -1962,13 +1962,13 @@ impl PlayState {
 
     pub fn apply_hourly_status_provision_pass(&mut self) -> u16 {
         let consumers = self.hourly_provision_consumer_count();
-        self.apply_hourly_ring_regeneration_tick();
         self.apply_hourly_poison_tick();
         if self.food == 0 {
             self.pending_hourly_status_message = self.apply_hourly_starvation_tick();
         } else if is_provision_decrement_hour(self.clock.hour) {
             self.food = self.food.saturating_sub(consumers);
         }
+        self.apply_hourly_ring_regeneration_tick();
         consumers
     }
 

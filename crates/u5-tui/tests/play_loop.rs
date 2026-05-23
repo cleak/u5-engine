@@ -873,6 +873,11 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "yew-wanted-poster-look")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "castle-talk-status-sleeping-refusal")
     );
     assert!(

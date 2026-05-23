@@ -477,6 +477,7 @@ pub enum InnkeeperInput {
     Key(u8),
     Slot(usize),
     GuestChoice(usize),
+    GuestChoiceWithStay { choice: usize, stay_counter: u8 },
     Confirm(bool),
 }
 
@@ -625,6 +626,32 @@ pub fn step_innkeeper(
             let registry_index = guest_indices[choice];
             let _ = base_lodging_charge;
             let bill = inn_pickup_bill_for_speaker(inn, 1, ctx.speaker_intelligence);
+            *state = InnkeeperState::ConfirmPickUpCompanion {
+                inn,
+                registry_index,
+                base_lodging_charge,
+                bill,
+            };
+            InnkeeperOutcome::QuotedPickUpCompanion {
+                registry_index,
+                bill,
+            }
+        }
+        (
+            InnkeeperState::PickUpCompanion {
+                inn,
+                guest_indices,
+                guest_count,
+                base_lodging_charge,
+            },
+            InnkeeperInput::GuestChoiceWithStay {
+                choice,
+                stay_counter,
+            },
+        ) if choice < guest_count as usize => {
+            let registry_index = guest_indices[choice];
+            let _ = base_lodging_charge;
+            let bill = inn_pickup_bill_for_speaker(inn, stay_counter, ctx.speaker_intelligence);
             *state = InnkeeperState::ConfirmPickUpCompanion {
                 inn,
                 registry_index,
@@ -2093,6 +2120,38 @@ mod tests {
             InnkeeperOutcome::QuotedPickUpCompanion {
                 registry_index: 0,
                 bill: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn innkeeper_pickup_choice_can_carry_guest_stay_counter() {
+        let ctx = ShopTransactionContext {
+            party_gold: 100,
+            speaker_intelligence: 30,
+            world_hour: 12,
+            party_size: 4,
+            living_party_members: 4,
+        };
+        let mut state = InnkeeperState::PickUpCompanion {
+            inn: Inn::HotelBrittany,
+            guest_indices: [2; INN_REGISTRY_CAP],
+            guest_count: 1,
+            base_lodging_charge: 3,
+        };
+
+        assert_eq!(
+            step_innkeeper(
+                &mut state,
+                InnkeeperInput::GuestChoiceWithStay {
+                    choice: 0,
+                    stay_counter: 5,
+                },
+                ctx,
+            ),
+            InnkeeperOutcome::QuotedPickUpCompanion {
+                registry_index: 2,
+                bill: 165,
             }
         );
     }

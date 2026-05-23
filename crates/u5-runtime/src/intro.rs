@@ -180,8 +180,8 @@ pub const fn title_tick_palette_indices(frame: u8) -> (u8, u8) {
 }
 
 /// `intro.md §12`: Return-to-View loads `MISCMAPS.DAT`. The first
-/// four records are 19-by-4 map strips followed by a 655-byte
-/// command stream driving preview actors and animation beats.
+/// four records are shown as 4-by-19 map strips, followed by a
+/// 655-byte command stream driving preview actors and animation beats.
 pub const MISCMAPS_DAT_FILE: &str = "MISCMAPS.DAT";
 pub const RTV_STRIP_COUNT: usize = 4;
 pub const RTV_STRIP_ROWS: usize = 19;
@@ -274,12 +274,14 @@ pub fn parse_miscmaps_cutscene_map_file(
 /// offset (immediately after the cutscene section).
 pub const MISCMAPS_RTV_STRIP_SECTION_OFFSET: usize = MISCMAPS_CUTSCENE_SECTION_BYTES;
 /// `formats/location-dat.md §11` Return-to-View map strip section
-/// byte length: four 19x4 strips padded to a 32-byte row stride,
-/// totalling `4 * 32 * 4 = 512` bytes.
+/// byte length: four strips stored as four 32-byte source rows each,
+/// totalling `4 * 32 * 4 = 512` bytes. The Return-to-View loader
+/// transposes the visible 19x4 source cells into the public 4x19
+/// preview geometry.
 pub const MISCMAPS_RTV_STRIP_SECTION_BYTES: usize = 512;
 /// `formats/location-dat.md §11` per-strip row stride. Each strip
-/// is authored as four 32-byte rows; the first 19 bytes per row
-/// carry tile data and the trailing 13 bytes are zero-padded.
+/// is authored as four 32-byte source rows; the first 19 bytes per
+/// row carry tile data and the trailing 13 bytes are zero-padded.
 pub const MISCMAPS_RTV_STRIP_ROW_STRIDE: usize = 32;
 
 /// `formats/location-dat.md §11` Return-to-View command stream
