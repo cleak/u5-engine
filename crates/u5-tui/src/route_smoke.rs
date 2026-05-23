@@ -1889,9 +1889,14 @@ fn apply_route_smoke_case_setup(
         }
         "shop-healer-heal-decline-route" => {
             state.gold = 999;
+            if let Some(member) = state.party.first_mut() {
+                member.status = b'G';
+                member.hp = 3;
+                member.max_hp = member.max_hp.max(30);
+            }
             state.active_shop = Some(ActiveShopSession::Healer(
                 HealerShopState::Greeting,
-                Healer::TheHealersMission,
+                Healer::WoundsOfHonour,
             ));
         }
         "shop-inn-rest-decline-route" | "shop-inn-rest-accept-public-rate" => {
@@ -2542,6 +2547,41 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                 "Cowardice vanquished",
             )?;
         }
+        "shop-arms-local-buy-sell-route" => {
+            if state.gold != 999
+                || state.active_shop.is_some()
+                || state.equipment_stock[EQUIPMENT_ID_BOW] != 0
+                || !state.message.contains("Farewell")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not exercise arms buy/sell decline without mutation"
+                )));
+            }
+        }
+        "shop-healer-heal-decline-route" => {
+            if state.gold != 999
+                || state.active_shop.is_none()
+                || state
+                    .party
+                    .first()
+                    .is_none_or(|member| member.hp == member.max_hp)
+                || !state.message.contains("Declined Heal")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not quote and decline healer treatment"
+                )));
+            }
+        }
+        "shop-inn-rest-decline-route" => {
+            if state.gold != 999
+                || state.active_shop.is_none()
+                || !state.message.contains("No one here is from thy party")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not decline inn rest and stay in the inn menu"
+                )));
+            }
+        }
         "shop-inn-rest-accept-public-rate" => {
             let raw = inn_base_room_rate(Inn::TheWayfarerInn) * state.party.len() as u16;
             let speaker_intelligence = state.party_intelligence.first().copied().unwrap_or(0);
@@ -2556,6 +2596,28 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the public inn-rest outcome"
+                )));
+            }
+        }
+        "shop-reagent-buy-route" => {
+            if state.gold >= 999
+                || state.active_shop.is_some()
+                || state.reagents.iter().all(|count| *count == 0)
+                || !state.message.contains("Farewell")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not buy reagent stock and exit"
+                )));
+            }
+        }
+        "shop-tavern-drink-and-food-route" => {
+            if state.gold >= 999
+                || state.food == 0
+                || state.active_shop.is_some()
+                || !state.message.contains("Farewell")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not serve a drink round and provisions"
                 )));
             }
         }
@@ -2580,6 +2642,20 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                 )));
             }
         }
+        "shop-horse-trader-decline-route" => {
+            if state.gold != 999
+                || state.active_shop.is_none()
+                || state
+                    .active_objects
+                    .iter()
+                    .any(|object| object.type_byte == HORSE_PARKED_FIRST)
+                || !state.message.contains("As you wish")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not quote and decline the horse trader"
+                )));
+            }
+        }
         "shop-horse-trader-horse-and-rider-buy"
         | "shop-horse-trader-stablehouse-buy"
         | "shop-horse-trader-wishing-well-buy" => {
@@ -2600,6 +2676,31 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete the public horse-trader sale"
+                )));
+            }
+        }
+        "shop-shipwright-quote-decline-route" => {
+            if state.gold != 999
+                || state
+                    .return_world
+                    .as_ref()
+                    .is_none_or(|world| world.pending_vehicle.is_some())
+                || state.active_shop.is_none()
+                || !state.message.contains("As you wish")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not quote and decline shipwright purchase"
+                )));
+            }
+        }
+        "shop-guild-buy-route" => {
+            if state.gold >= 999
+                || state.keys == 0
+                || state.active_shop.is_some()
+                || !state.message.contains("Farewell")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not buy guild stock and exit"
                 )));
             }
         }

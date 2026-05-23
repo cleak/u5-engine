@@ -16,29 +16,30 @@ use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use image::{ImageBuffer, Rgba};
 
 use u5_runtime::{
-    ActiveObject, BLINK_COST, BLINK_SPELL_INDEX, BRITISH_PTH_PEN_ORIGINS, BritishPth,
+    ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX, BRITISH_PTH_PEN_ORIGINS, BritishPth,
     CGA_PALETTE_RGB, COMBAT_ARENA_SIDE, ChargenSession, ChargenSessionResult, ChargenSessionStep,
     DEATH_VISION_OBJECT_CLASS, Direction, DungeonScene, EGA_PALETTE_RGB,
     FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FixedCellFont, GameClock,
-    GraphicImage, HORSE_PARKED_FIRST, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X,
-    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
-    INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE,
-    INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement,
-    MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
-    MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap,
-    PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PROMPT_TEXT_WINDOW_INDEX,
-    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, ProportionalFont,
-    ProportionalWidthTable, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
-    ReturnToViewFrameKind, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX,
-    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
-    STATS_PANEL_TEXT_WINDOW_INDEX, Scene, Stable, StoryRecords, TEXT_SCREEN_ROWS,
-    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
-    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
-    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
-    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, TextWindowSystem, TileAtlas, TileGraphicsDepth, TitleBitAsset,
-    TitleBitImages, TitleBitPlacement, TransportState, U4TransferOverrides, U4TransferSource,
-    WorldPlane, X_RAY_COST, X_RAY_SPELL_INDEX, commit_chargen_save, commit_u4_transfer_save,
+    GraphicImage, GuildShop, HORSE_PARKED_FIRST, Healer, Herbalist, INTRO_INLINE_DOORWAY_STEP,
+    INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE,
+    INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y,
+    INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn,
+    IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
+    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, PCS_GLYPH_HEIGHT, PEER_COST,
+    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition,
+    PlayOptions, PlayState, PlayTarget, ProportionalFont, ProportionalWidthTable,
+    RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition, ReturnToViewFrameKind,
+    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX, STATS_PANEL_TEXT_BOTTOM,
+    STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene,
+    Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT,
+    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TITLE_BIT_INITIAL_PLACEMENTS,
+    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
+    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X,
+    TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE,
+    Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth, TitleBitAsset, TitleBitImages,
+    TitleBitPlacement, TransportState, U4TransferOverrides, U4TransferSource, WorldPlane,
+    WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, commit_chargen_save, commit_u4_transfer_save,
     dungeon_cell_index, handle_play_key_input, hash_bytes, input_case_fold,
     input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
@@ -54,7 +55,8 @@ use u5_runtime::{
     render_play_text_window_system, render_return_to_view_playback_frame_viewport,
     render_text_panel_rgba, render_text_window_rgba, run_return_to_view_playback_until_restart,
     shop_runtime::{
-        GuildShopState, HorseTraderState, InnkeeperState, ReagentShopState, SageState, TavernState,
+        ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
+        ReagentShopState, SageState, ShipBrokerState, TavernState,
     },
     shop_session::ActiveShopSession,
     stats_panel_active_cursor_visible, summarize_return_to_view_preview,
@@ -778,6 +780,96 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-shop-arms-local-buy-sell",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "A", "N", "S", "1", "N"],
+            configure: Some(seed_visual_route_arms_local),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-healer-heal-decline",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "H", "1", "N"],
+            configure: Some(seed_visual_route_healer),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-inn-rest-decline",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["R", "N", "P"],
+            configure: Some(seed_visual_route_inn_rest_decline),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-reagent-buy",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["A", "1", "N"],
+            configure: Some(seed_visual_route_reagent),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-tavern-drink-and-food",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "M", "P", "1", "N"],
+            configure: Some(seed_visual_route_tavern),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-horse-trader-decline",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "N"],
+            configure: Some(seed_visual_route_horse_trader_decline),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-horse-trader-no-marker-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "Y"],
+            configure: Some(seed_visual_route_horse_trader_no_marker),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-shipwright-quote-decline",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["F", "N"],
+            configure: Some(seed_visual_route_shipwright),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-guild-buy",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["A", "1", "D"],
+            configure: Some(seed_visual_route_guild),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-sage-topic-miss",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -1105,6 +1197,37 @@ fn poison_gas_first_poison_seed() -> u16 {
     unreachable!("PRNG range cycle must hit a poison roll")
 }
 
+fn seed_visual_route_arms_local(state: &mut PlayState) {
+    state.gold = 999;
+    if let Some(intelligence) = state.party_intelligence.first_mut() {
+        *intelligence = 20;
+    }
+    state.active_shop = Some(ActiveShopSession::ArmsLocal(
+        ArmsShopState::Greeting,
+        ArmsShop::IolosBows,
+    ));
+}
+
+fn seed_visual_route_healer(state: &mut PlayState) {
+    state.gold = 999;
+    if let Some(member) = state.party.first_mut() {
+        member.status = b'G';
+        member.hp = 3;
+        member.max_hp = member.max_hp.max(30);
+    }
+    state.active_shop = Some(ActiveShopSession::Healer(
+        HealerShopState::Greeting,
+        Healer::WoundsOfHonour,
+    ));
+}
+
+fn seed_visual_route_inn_rest_decline(state: &mut PlayState) {
+    state.gold = 999;
+    state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::for_inn(
+        Inn::TheWayfarerInn,
+    )));
+}
+
 fn seed_visual_route_inn_rest_accept(state: &mut PlayState) {
     state.gold = 999;
     if let Some(member) = state.party.first_mut() {
@@ -1122,6 +1245,21 @@ fn seed_visual_route_inn_rest_accept(state: &mut PlayState) {
     )));
 }
 
+fn seed_visual_route_reagent(state: &mut PlayState) {
+    state.gold = 999;
+    state.active_shop = Some(ActiveShopSession::Reagent(ReagentShopState::for_herbalist(
+        Herbalist::TheHerbalist,
+    )));
+}
+
+fn seed_visual_route_tavern(state: &mut PlayState) {
+    state.gold = 999;
+    state.food = 0;
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(
+        Tavern::TheSwordAndKeg,
+    )));
+}
+
 fn seed_visual_route_horse_trader(state: &mut PlayState, stable: Stable) {
     state.player.x = 15;
     state.player.y = 15;
@@ -1133,6 +1271,28 @@ fn seed_visual_route_horse_trader(state: &mut PlayState, stable: Stable) {
     state.gold = 999;
     state.active_shop = Some(ActiveShopSession::HorseTrader(
         HorseTraderState::for_stable(stable),
+    ));
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_horse_trader_decline(state: &mut PlayState) {
+    seed_visual_route_horse_trader(state, Stable::HorseAndRider);
+}
+
+fn seed_visual_route_horse_trader_no_marker(state: &mut PlayState) {
+    state.player.x = 15;
+    state.player.y = 15;
+    state.player.facing = Direction::South;
+    for (x, y) in [(15, 16), (15, 14), (16, 15), (14, 15)] {
+        let idx = y * TOWN_GRID_SIDE + x;
+        if let Some(cell) = state.grid.get_mut(idx) {
+            *cell = 0x00;
+        }
+    }
+    state.gold = 999;
+    state.active_shop = Some(ActiveShopSession::HorseTrader(
+        HorseTraderState::for_stable(Stable::HorseAndRider),
     ));
     state.sync_player_object();
     state.mark_visibility_dirty();
@@ -1159,6 +1319,32 @@ fn seed_visual_route_sage_paid(state: &mut PlayState) {
 fn seed_visual_route_sage_short_funds(state: &mut PlayState) {
     state.gold = 49;
     state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+}
+
+fn seed_visual_route_shipwright(state: &mut PlayState) {
+    state.gold = 999;
+    state.return_world = Some(WorldReturn {
+        plane: WorldPlane::Britannia,
+        x: state.player.x,
+        y: state.player.y,
+        transport: state.player.transport,
+        timing_status: state.timing_status,
+        sail_cadence: state.sail_cadence,
+        sail_stall_pending: state.sail_stall_pending,
+        grid: state.grid.clone(),
+        active_objects: state.active_objects.clone(),
+        pending_vehicle: None,
+    });
+    state.active_shop = Some(ActiveShopSession::ShipBroker(
+        ShipBrokerState::for_shipwright(Shipwright::IslandShipwrights),
+    ));
+}
+
+fn seed_visual_route_guild(state: &mut PlayState) {
+    state.gold = 999;
+    state.active_shop = Some(ActiveShopSession::Guild(GuildShopState::for_shop(
+        GuildShop::TheGuild,
+    )));
 }
 
 fn seed_visual_route_dungeon_heavy_door_variant(state: &mut PlayState) {
@@ -5424,7 +5610,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 60);
+        assert_eq!(cases.len(), 69);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -5511,6 +5697,19 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-shop-sage-topic-miss")
         );
+        for label in [
+            "route-shop-arms-local-buy-sell",
+            "route-shop-healer-heal-decline",
+            "route-shop-inn-rest-decline",
+            "route-shop-reagent-buy",
+            "route-shop-tavern-drink-and-food",
+            "route-shop-horse-trader-decline",
+            "route-shop-horse-trader-no-marker-refusal",
+            "route-shop-shipwright-quote-decline",
+            "route-shop-guild-buy",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert!(
             cases
                 .iter()
@@ -5651,7 +5850,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 170);
+        assert_eq!(reports.len(), 209);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -5681,6 +5880,15 @@ mod tests {
         assert!(manifest.contains("route-dungeon-heavy-door-variant-block-01-idle"));
         assert!(manifest.contains("route-dungeon-ignite-torch-01-i"));
         assert!(manifest.contains("route-dungeon-exit-refusal-02-n"));
+        assert!(manifest.contains("route-shop-arms-local-buy-sell-06-n"));
+        assert!(manifest.contains("route-shop-healer-heal-decline-04-n"));
+        assert!(manifest.contains("route-shop-inn-rest-decline-03-p"));
+        assert!(manifest.contains("route-shop-reagent-buy-03-n"));
+        assert!(manifest.contains("route-shop-tavern-drink-and-food-05-n"));
+        assert!(manifest.contains("route-shop-horse-trader-decline-02-n"));
+        assert!(manifest.contains("route-shop-horse-trader-no-marker-refusal-02-y"));
+        assert!(manifest.contains("route-shop-shipwright-quote-decline-02-n"));
+        assert!(manifest.contains("route-shop-guild-buy-03-d"));
         assert!(manifest.contains("route-shop-sage-topic-miss-01-mantra"));
         assert!(manifest.contains("route-britannia-blink-east-ray-01-c1ip6"));
         assert!(manifest.contains("route-castle-poison-gas-step-01-d"));
