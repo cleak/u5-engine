@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-23, including 2568 tests
+- `cargo test -p u5-runtime` passed on 2026-05-23, including 2570 tests
   (latest verification includes public `cleak/u5-spec#47` hourly
   poison/provision/ring ordering, public #28 horse-trader adjacent placement
   priority plus no-marker refusal, public #15 inn pickup stay-counter billing,
@@ -259,11 +259,12 @@ Current worktree context when this TODO was refreshed:
   guidance: poison is fixed `-1 HP` per poisoned living member, and starvation
   rolls `1..=8` independently for each non-dead slot.
 - Town poison-gas doorway cells use the latest public `cleak/u5-spec#51`
-  predicate when clean tile attributes are available (`tile_class == 4` and
-  `vehicle_byte == 0x1C`), with a `0..=29` per-non-poisoned-slot roll compared
-  against each member's Dexterity after committed movement steps and before
-  turn-clock advancement. Coordinate sidecar rows remain as fallback until the
-  full resident tile-attribute table is published.
+  predicate from native `0x04` live tiles and, when available, clean tile
+  attributes (`tile_class == 4` and `vehicle_byte == 0x1C`), with a `0..=29`
+  per-non-poisoned-slot roll compared against each member's Dexterity after
+  committed movement steps and before turn-clock advancement. Coordinate
+  sidecar rows remain as fallback until the full resident tile-attribute table
+  is published, and focused tests cover both sidecar fallback paths.
 - Talk-triggered arms shops use the public `cleak/u5-spec#41` scene-to-row
   identity table and exact per-row `a..h` stock arrays; visible buy choices stop
   at the `0xFF` terminator.
@@ -515,7 +516,6 @@ tables are not yet public or not yet encoded.
   - `town_trap_doors.tsv`
   - `town_exit_tiles.tsv`
   - `town_locks.tsv`
-  - `blink_targets.tsv`
   - `moongates.tsv`
   - `location_floor_pages.tsv`
   - `location_entry_y.tsv`

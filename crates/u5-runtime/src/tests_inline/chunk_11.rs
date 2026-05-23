@@ -959,6 +959,58 @@
     }
 
     #[test]
+    fn town_movement_poison_gas_coordinate_sidecar_remains_fallback() {
+        let dir = debug_game_dir();
+        fs::write(
+            dir.join(TOWN_POISON_GAS_TABLE_FILE),
+            "CASTLE:0 0 1 1 0x37\n",
+        )
+        .unwrap();
+        let mut grid = open_grid();
+        grid[32 + 1] = 0x37;
+        let mut state = test_state(grid, 0, 1);
+        state.prng_state = poison_gas_first_poison_seed();
+        state.player.facing = Direction::East;
+        state.party[0].status = b'G';
+        state.party[0].climb_stat = 0;
+        state.party[0].hp = 10;
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Moved
+        );
+
+        assert_eq!(state.party[0].status, b'P');
+        assert!(state.message.contains("poison gas doorway"));
+    }
+
+    #[test]
+    fn town_movement_poison_gas_tile_attribute_sidecar_remains_fallback() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_TILE_ATTRIBUTES_TABLE_FILE), "0x37 4 0x1C\n").unwrap();
+        let mut grid = open_grid();
+        grid[32 + 1] = 0x37;
+        let mut state = test_state(grid, 0, 1);
+        state.prng_state = poison_gas_first_poison_seed();
+        state.player.facing = Direction::East;
+        state.party[0].status = b'G';
+        state.party[0].climb_stat = 0;
+        state.party[0].hp = 10;
+
+        assert_eq!(
+            state
+                .step_with_game_dir(Direction::East, Some(&dir))
+                .unwrap(),
+            MoveOutcome::Moved
+        );
+
+        assert_eq!(state.party[0].status, b'P');
+        assert!(state.message.contains("poison gas doorway"));
+    }
+
+    #[test]
     fn town_poison_gas_rolls_only_non_poisoned_status_slots() {
         let dir = debug_game_dir();
         let mut grid = open_grid();

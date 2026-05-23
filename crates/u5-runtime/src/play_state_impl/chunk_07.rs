@@ -2547,7 +2547,7 @@ impl PlayState {
 
     pub fn town_poison_gas_at(
         &self,
-        _game_dir: &Path,
+        game_dir: &Path,
         scene: Scene,
         floor: i8,
         x: usize,
@@ -2563,6 +2563,29 @@ impl PlayState {
                 y,
                 expected_tile: Some(tile),
             }));
+        }
+        if transport_marker != TOWN_POISON_GAS_VEHICLE_BYTE {
+            return Ok(None);
+        }
+        if let Some(entries) = load_town_tile_attribute_entries(game_dir)? {
+            if town_poison_gas_tile_matches_attributes(&entries, tile) {
+                return Ok(Some(TownPoisonGasEntry {
+                    scene,
+                    floor,
+                    x,
+                    y,
+                    expected_tile: Some(tile),
+                }));
+            }
+        }
+        if let Some(entries) = load_town_poison_gas_entries(game_dir)? {
+            if let Some(entry) = entries
+                .iter()
+                .copied()
+                .find(|entry| town_poison_gas_matches(*entry, scene, floor, x, y, tile))
+            {
+                return Ok(Some(entry));
+            }
         }
         Ok(None)
     }

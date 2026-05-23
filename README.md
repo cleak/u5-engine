@@ -695,25 +695,13 @@ the visit-local map dirty, and consumes one indoor turn; `MAGIC` rows report
 the magic-lock refusal without spending a turn or key. Missing rows keep the
 existing first-playable door behavior.
 
-Blink destinations can be supplied separately as clean-room metadata while the
-spell's exact default range remains open:
-
-```text
-# TARGET FLOOR FROM_X FROM_Y DIRECTION TO_X TO_Y [FROM_TILE|*] [TO_TILE|*]
-CASTLE:0 0 12 4 E 14 4 16 16
-DUNGEON:0 3 1 1 W 0 1 0x00 0x08
-BRITANNIA 0 10 20 E 12 20 * 16
-```
-
-Rows are same-map only: the target names the active world plane, town-family
-scene, or dungeon scene; `FLOOR` is the town floor, dungeon level, or world
-plane save floor (`0` for Britannia, `-1` for Underworld). The direction must
-match the inline cast suffix (`C1IP6`, `C1IP4`, `C1IP8`, or `C1IP2`). Optional
-tile guards keep stale rows from firing; `*` means no guard. Destination cells
-must be legal foot landing cells, so Blink can skip an intervening locked door
-when a clean row targets the far side, but it cannot land on blocked terrain,
-active objects, stair/exit/trap transition cells, visible moongates, waterfalls,
-or disallowed/foot-damaging damage tiles.
+Non-combat Blink (`In Por`) follows the public `cleak/u5-spec#48` rule. After
+the normal spell gates spend charge and mana, the spell prompts for a cardinal
+direction, scans that loaded 32-by-32 window ray to the map edge, ignores
+non-grass terrain as non-blocking, and lands on the farthest grass tile (`0x05`)
+on that ray. Pass at the direction prompt consumes the already-spent resources
+without moving or printing success/failure narration. There is no
+`blink_targets.tsv` sidecar path.
 
 The overworld maps can be entered directly for movement testing:
 

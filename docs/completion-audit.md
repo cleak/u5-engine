@@ -50,7 +50,7 @@ Runtime, TUI, and route-smoke results refreshed alongside this audit on
 2026-05-23; Bevy and visual-suite evidence remains from the latest display
 audit:
 
-- `cargo test -p u5-runtime` — 2568 tests pass.
+- `cargo test -p u5-runtime` — 2570 tests pass.
 - `cargo test -p u5-tui` — 79 tests pass, including temp-directory binary
   smoke for empty-save Journey Onward, deterministic Create Character followed
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
@@ -247,7 +247,7 @@ through the asset-backed Talk command path.
 |--------|----------|-------|--------|
 | `movement.md` §1–§10 | `direction.rs`, `tile_classes.rs`, `predicates.rs`, `transport.rs`, `active_object_io.rs` | per-mode movement tests | Implemented |
 | `overworld.md` §1–§15 | `play_state_impl/chunk_01.rs` overworld loop, `world_tables.rs`, `moongate.rs`, `lord_british_camp.rs`, native and sidecar encounters, public Word-of-Power seal rows | world tests in chunks 03, 05, 06, 07, 10, 12, 13, 15, 17, 23 | Implemented |
-| `town-mode.md` §1–§17 | `town_mode.rs`, `town_tables.rs`, NPC schedules, dawn/dusk substitution, alarms | town tests in chunks 04, 06, 10, 11, 15, 19, 21, 23 | Implemented (public #51 tile `0x04` poison-gas step behavior is native; full resident tile-attribute coverage remains a public-data question) |
+| `town-mode.md` §1–§17 | `town_mode.rs`, `town_tables.rs`, NPC schedules, dawn/dusk substitution, alarms | town tests in chunks 04, 06, 10, 11, 15, 19, 21, 23 | Implemented (public #51 tile `0x04` poison-gas step behavior is native; clean tile-attribute and coordinate sidecars remain fallback coverage while full resident tile-attribute coverage remains a public-data question) |
 | `dungeon-mode.md` §1–§17 | `play_state_impl/chunk_*.rs` dungeon loop, `dungeon_tables.rs`, raster in `crates/u5-bevy/src/lib.rs` first-person draw | dungeon tests in chunks 05, 12, 13, 18, 20, 23 | Implemented |
 
 ### `systems/encounters.md`
@@ -357,7 +357,7 @@ are kept out of gameplay logic until the public spec publishes exact data.
 | `cleak/u5-spec#13` | Exact resident SHOPPE record ids/text for the sage fee quote and insufficient-gold/no-credit refusal | Shared paid 26-row table, strict matching, confirmation/debit, and success rendering are implemented from the public issue answer; prompt wording remains conservative until published |
 | `cleak/u5-spec#43` | Exact wanted-poster resident text/template and line breaking | Look routes the public predicates and outcomes, grants all six accepted well wishes as horse-family objects in the public scenes, uses Intelligence for death vision, and inserts party names at the Yew poster predicate with clean-authored placeholder wording |
 | `cleak/u5-spec#47` | Checked-in spec files still contradict the latest public issue answer for non-combat Ring of Regeneration and completed long-camp recovery | Engine implements the latest public issue-comment behavior: hourly 1-in-8 Ring of Regeneration +1 HP and guarded completed long-camp HP/MP recovery |
-| `cleak/u5-spec#51` | Full resident town tile-attribute table | `town_tile_attributes.tsv` can drive the public class `4` + vehicle byte `0x1C` poison-gas trigger predicate; coordinate rows remain as fallback, with route-smoke covering the public per-slot roll semantics |
+| `cleak/u5-spec#51` | Full resident town tile-attribute table | `town_tile_attributes.tsv` can drive the public class `4` + vehicle byte `0x1C` poison-gas trigger predicate; coordinate rows remain as fallback, with focused tests and route-smoke covering the public per-slot roll semantics |
 | `cleak/u5-spec#54` | Return-to-View exact local cell-effect rasters | Parser/scheduler/overlay composition implement the public 19x4 source layout transposed to a 4x19 visible preview, fixed captions from LoadMapStrip, high-opcode no-ops, `(x, y + 7)` effect coordinates, and timing model; exact rasters await final public reconciliation |
 
 Follow-up questions were current as of the 2026-05-23 issue audit for the
