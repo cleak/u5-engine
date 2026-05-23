@@ -360,6 +360,10 @@ pub fn combat_ranged_effect_stats(class: u8) -> Option<CombatRangedEffectStats> 
 
 pub fn combat_class_for_sprite_byte(byte: u8) -> Option<u8> {
     match byte {
+        0x70..=0x73 => Some(12),
+        0x74..=0x77 => Some(13),
+        0x78..=0x7b => Some(14),
+        0x7c..=0x7f => Some(15),
         0x80..=0x83 => Some(16),
         0x84..=0x87 => Some(17),
         0x88..=0x8b => Some(18),

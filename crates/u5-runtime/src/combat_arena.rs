@@ -121,6 +121,15 @@ impl CombatArenaRecord {
         self.rows.get(y)
     }
 
+    pub fn record_bytes(&self) -> [u8; COMBAT_ARENA_RECORD_LEN] {
+        let mut bytes = [0u8; COMBAT_ARENA_RECORD_LEN];
+        for (row_index, row) in self.rows.iter().enumerate() {
+            let start = row_index * COMBAT_ARENA_ROW_STRIDE;
+            bytes[start..start + COMBAT_ARENA_ROW_STRIDE].copy_from_slice(row);
+        }
+        bytes
+    }
+
     pub fn terrain(&self, x: usize, y: usize) -> Option<u8> {
         if x >= COMBAT_ARENA_SIDE {
             return None;

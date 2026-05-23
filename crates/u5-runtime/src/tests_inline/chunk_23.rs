@@ -44,7 +44,8 @@
 
     #[test]
     fn combat_arena_record_preserves_rows_terrain_and_metadata_slices() {
-        let record = CombatArenaRecord::from_record_bytes(&synthetic_combat_arena_record()).unwrap();
+        let bytes = synthetic_combat_arena_record();
+        let record = CombatArenaRecord::from_record_bytes(&bytes).unwrap();
 
         assert_eq!(record.terrain(0, 0), Some(0));
         assert_eq!(record.terrain(10, 10), Some(0xaa));
@@ -60,6 +61,7 @@
         assert_eq!(record.dungeon_room_sources()[15], 0x3f);
         assert_eq!(record.dungeon_room_setup_sources().len(), 16);
         assert_eq!(record.terrain_grid()[10][10], 0xaa);
+        assert_eq!(record.record_bytes().as_slice(), bytes.as_slice());
     }
 
     #[test]
@@ -2782,9 +2784,44 @@
 
     #[test]
     fn combat_class_for_sprite_byte_maps_published_sprite_runs() {
+        assert_eq!(combat_class_for_sprite_byte(0x70), Some(COMBAT_CLASS_GUARD));
+        assert_eq!(combat_class_for_sprite_byte(0x73), Some(COMBAT_CLASS_GUARD));
+        assert_eq!(
+            combat_class_for_sprite_byte(0x74),
+            Some(COMBAT_CLASS_WANDERER)
+        );
+        assert_eq!(
+            combat_class_for_sprite_byte(0x77),
+            Some(COMBAT_CLASS_WANDERER)
+        );
+        assert_eq!(
+            combat_class_for_sprite_byte(0x78),
+            Some(COMBAT_CLASS_BLACKTHORN)
+        );
+        assert_eq!(
+            combat_class_for_sprite_byte(0x7b),
+            Some(COMBAT_CLASS_BLACKTHORN)
+        );
+        assert_eq!(
+            combat_class_for_sprite_byte(0x7c),
+            Some(COMBAT_CLASS_LORD_BRITISH)
+        );
+        assert_eq!(
+            combat_class_for_sprite_byte(0x7f),
+            Some(COMBAT_CLASS_LORD_BRITISH)
+        );
         assert_eq!(combat_class_for_sprite_byte(0x80), Some(16));
         assert_eq!(combat_class_for_sprite_byte(0x83), Some(16));
         assert_eq!(combat_class_for_sprite_byte(0xc0), Some(32));
+        assert_eq!(
+            combat_class_stats_for_sprite_byte(0x70).map(|stats| stats.name),
+            Some("Guard")
+        );
+        assert_eq!(
+            combat_class_traits_for_sprite_byte(0x7c)
+                .map(|traits| traits.physical_immune),
+            Some(true)
+        );
         assert_eq!(
             combat_class_stats_for_sprite_byte(0xf8).map(|stats| stats.name),
             Some("Rot Worm")
@@ -6255,9 +6292,20 @@
 
     #[test]
     fn summoned_active_object_records_use_class_sprite_base_and_coordinates() {
+        assert_eq!(
+            combat_class_sprite_base(COMBAT_CLASS_GUARD),
+            Some(COMBAT_CLASS_GUARD_SPRITE_BASE)
+        );
+        assert_eq!(combat_class_sprite_base(COMBAT_CLASS_WANDERER), Some(0x74));
+        assert_eq!(combat_class_sprite_base(COMBAT_CLASS_BLACKTHORN), Some(0x78));
+        assert_eq!(
+            combat_class_sprite_base(COMBAT_CLASS_LORD_BRITISH),
+            Some(0x7c)
+        );
         assert_eq!(combat_class_sprite_base(COMBAT_CLASS_GIANT_RAT), Some(0x90));
         assert_eq!(combat_class_sprite_base(COMBAT_CLASS_DAEMON), Some(0xd8));
         assert_eq!(combat_class_sprite_base(44), Some(0xf0));
+        assert_eq!(combat_class_sprite_base(COMBAT_CLASS_SHADOW_LORD), Some(0xfc));
         assert_eq!(combat_class_sprite_base(42), None);
 
         let object = summoned_active_object_record(COMBAT_CLASS_DAEMON, 7, 8, -1).unwrap();
@@ -14125,6 +14173,33 @@
             .is_err());
         assert!(CombatArenaRecord::from_record_bytes(&record[..COMBAT_ARENA_RECORD_LEN - 1])
             .is_err());
+    }
+
+    #[test]
+    fn combat_arena_local_clean_cbt_banks_decode_when_present() {
+        let game_dir = std::path::Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join(BRIT_CBT_FILE).exists() || !game_dir.join(DUNGEON_CBT_FILE).exists() {
+            return;
+        }
+
+        let brit = load_brit_cbt(game_dir).unwrap();
+        let dungeon = load_dungeon_cbt(game_dir).unwrap();
+
+        assert_eq!(brit.resource_name, BRIT_CBT_FILE);
+        assert_eq!(brit.records.len(), BRIT_CBT_RECORDS);
+        assert_eq!(dungeon.resource_name, DUNGEON_CBT_FILE);
+        assert_eq!(dungeon.records.len(), DUNGEON_CBT_RECORDS);
+        assert!(brit.record(BRIT_CBT_RECORDS).is_none());
+        assert!(dungeon.record(DUNGEON_CBT_RECORDS).is_none());
+
+        for bank in [&brit, &dungeon] {
+            for record in &bank.records {
+                assert_eq!(record.record_bytes().len(), COMBAT_ARENA_RECORD_LEN);
+                assert_eq!(record.terrain_grid().len(), COMBAT_ARENA_SIDE);
+                assert!(record.row(COMBAT_ARENA_SIDE).is_none());
+                assert!(record.metadata(0, COMBAT_ARENA_METADATA_START).is_some());
+            }
+        }
     }
 
     /// Regression: without a save and without `--at`, the world fallback

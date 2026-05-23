@@ -269,6 +269,11 @@ pub const COMBAT_EXPERIENCE_CAP: u16 = crate::PARTY_GOLD_CAP;
 pub const COMBAT_TARGET_PICK_COUNTED_PARTY_SLOTS: usize = 5;
 pub const COMBAT_ROUND_COUNTER_WRAP: u8 = 10;
 pub const COMBAT_ROUND_WRAP_TIME_ADVANCE_MINUTES: u8 = 1;
+pub const COMBAT_CLASS_GUARD: u8 = 12;
+pub const COMBAT_CLASS_GUARD_SPRITE_BASE: u8 = 0x70;
+pub const COMBAT_CLASS_WANDERER: u8 = COMBAT_CLASS_GUARD + 1;
+pub const COMBAT_CLASS_BLACKTHORN: u8 = COMBAT_CLASS_WANDERER + 1;
+pub const COMBAT_CLASS_LORD_BRITISH: u8 = COMBAT_CLASS_BLACKTHORN + 1;
 pub const COMBAT_CLASS_GIANT_RAT: u8 = 20;
 pub const COMBAT_CLASS_GIANT_RAT_SPRITE_BASE: u8 = 0x90;
 /// `catalogs/monster-bestiary.md §2` consecutive small-monster
@@ -2301,6 +2306,7 @@ pub fn resolve_summon_daemon_spell_descriptor(
 
 pub fn combat_class_sprite_base(class: u8) -> Option<u8> {
     match class {
+        12..=15 => Some(0x70 + (class - 12) * 4),
         16..=41 => Some(0x80 + (class - 16) * 4),
         44..=47 => Some(0xf0 + (class - 44) * 4),
         _ => None,
