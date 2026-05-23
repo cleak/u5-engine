@@ -1862,12 +1862,11 @@ pub const fn tavern_round_drink_menu_letter(tavern: Tavern) -> char {
         Tavern::TheHonestMeal
         | Tavern::TheWayfarerTavern
         | Tavern::TheSwordAndKeg
-        | Tavern::TheSlaughteredLamb
-        | Tavern::TheHumblePalate
-        | Tavern::TheBlueBoarTavern
         | Tavern::TheCatsLair
-        | Tavern::TheFallenVirgin
-        | Tavern::TheFolleyTap => 'A',
+        | Tavern::TheFolleyTap => 'M',
+        Tavern::TheSlaughteredLamb | Tavern::TheFallenVirgin => 'B',
+        Tavern::TheHumblePalate => 'F',
+        Tavern::TheBlueBoarTavern => 'C',
     }
 }
 

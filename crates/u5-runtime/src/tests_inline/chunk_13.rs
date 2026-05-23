@@ -6150,15 +6150,15 @@ fn herbalist_reagent_prices_match_published_matrix() {
 fn tavern_food_and_drink_prices_match_published_tables() {
     // shops.md section 6 stock tavern provision and drink rows.
     let cases = [
-        (Tavern::TheHonestMeal, 10u16, 'A', 3u16),
-        (Tavern::TheWayfarerTavern, 15, 'A', 4),
-        (Tavern::TheSwordAndKeg, 20, 'A', 5),
-        (Tavern::TheSlaughteredLamb, 25, 'A', 3),
-        (Tavern::TheHumblePalate, 30, 'A', 2),
-        (Tavern::TheBlueBoarTavern, 25, 'A', 5),
-        (Tavern::TheCatsLair, 20, 'A', 3),
-        (Tavern::TheFallenVirgin, 25, 'A', 4),
-        (Tavern::TheFolleyTap, 30, 'A', 5),
+        (Tavern::TheHonestMeal, 10u16, 'M', 3u16),
+        (Tavern::TheWayfarerTavern, 15, 'M', 4),
+        (Tavern::TheSwordAndKeg, 20, 'M', 5),
+        (Tavern::TheSlaughteredLamb, 25, 'B', 3),
+        (Tavern::TheHumblePalate, 30, 'F', 2),
+        (Tavern::TheBlueBoarTavern, 25, 'C', 5),
+        (Tavern::TheCatsLair, 20, 'M', 3),
+        (Tavern::TheFallenVirgin, 25, 'B', 4),
+        (Tavern::TheFolleyTap, 30, 'M', 5),
     ];
     for (tavern, provision_price, drink_letter, drink_price) in cases {
         assert_eq!(

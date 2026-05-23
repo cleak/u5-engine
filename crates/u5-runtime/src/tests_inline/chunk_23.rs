@@ -1524,12 +1524,12 @@
         assert_eq!(tavern_provision_unit_price(Tavern::TheFolleyTap), 30);
 
         let humble = quote_tavern_round_drink(Tavern::TheHumblePalate, 3).unwrap();
-        assert_eq!(humble.menu_letter, 'A');
+        assert_eq!(humble.menu_letter, 'F');
         assert_eq!(humble.unit_price, 2);
         assert_eq!(humble.total_price, 6);
 
         let lamb = quote_tavern_round_drink(Tavern::TheSlaughteredLamb, 2).unwrap();
-        assert_eq!(lamb.menu_letter, 'A');
+        assert_eq!(lamb.menu_letter, 'B');
         assert_eq!(lamb.unit_price, 3);
         assert_eq!(lamb.total_price, 6);
 

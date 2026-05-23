@@ -128,7 +128,7 @@ Last known verification state:
   `a52f8c3db8e33102`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-23 and
-  wrote 95 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 170 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -183,6 +183,14 @@ Last known verification state:
   `route-doom-combat-search-prompt-00-initial` `6fdbd1b19453bbea`,
   `route-doom-combat-search-prompt-01-empty` `a2619c7eb20c407d`, and
   `route-doom-combat-search-prompt-02-s` `3cf0bc15e87d80a5`. The
+  latest combat visual-route expansion adds composed-frame Doom combat
+  command coverage for digit selection/clear, direct movement,
+  Use/Drop/Wear/Enter/Fire/Hole-up/Ignite/Mix/New Order/Talk/View/Look
+  refusal or label branches, Cast/Get/Jimmy/Open/Push/Klimb directed
+  prompts, Ready, Yell, and X-it, including representative terminal frames
+  `route-doom-combat-cast-refusal-02-c1il` `1571e1c7ad091db5`,
+  `route-doom-combat-ready-prompt-02-r` `3cf0bc15e87d80a5`,
+  and `route-doom-combat-xit-foes-remain-02-x` `3cf0bc15e87d80a5`. The
   2026-05-23 expansion added public #48 Blink
   `route-britannia-blink-east-ray-01-c1ip6` `17ceb1f94bc6c6e3`,
   public #51 poison gas `route-castle-poison-gas-step-01-d`
@@ -277,6 +285,10 @@ Current worktree context when this TODO was refreshed:
 - Talk-triggered arms shops use the public `cleak/u5-spec#41` scene-to-row
   identity table and exact per-row `a..h` stock arrays; visible buy choices stop
   at the `0xFF` terminator.
+- Tavern round-drink prompts now use the public `cleak/u5-spec#13`/shops table
+  letters (`M`, `B`, `F`, or `C` by tavern), and the current provisions prompt
+  is internally consistent on `P` while exact original provisions/sage selector
+  details remain a public-spec follow-up.
 - Paid sage rumours use the public `cleak/u5-spec#13` 26-row topic table,
   strict topic matching, and success-record random draw only after the accepted
   confirmation passes the gold/debit gate; short-funds and declines preserve
@@ -290,10 +302,10 @@ Current worktree context when this TODO was refreshed:
   positions and requires the matching live Shadowlord/name encounter north of
   the party; route smoke covers Lycaeum, Empath Abbey, and Serpent's Hold native
   paths.
-- The 2026-05-23 clean-engine audit found no broad newly answered engine slice
-  left unimplemented in the pulled spec. Follow-up questions remain current for
-  response-needed public blockers #1, #3, #13, #18, #31, #41, #43, #47, #51,
-  and #54.
+- The 2026-05-23 clean-engine audit applied the remaining spec-backed tavern
+  drink-letter correction and expanded Doom combat visual routes. Follow-up
+  questions remain current for response-needed public blockers #1, #3, #13,
+  #18, #31, #41, #43, #47, #51, and #54.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the

@@ -3882,7 +3882,7 @@
         )));
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
         assert!(state.message.contains("15 gold each"));
         handle_play_key_input(&mut state, '5', "", Path::new("")).unwrap();
 
@@ -3904,7 +3904,7 @@
         )));
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
         handle_play_key_input(&mut state, '1', "2", Path::new("")).unwrap();
 
         assert_eq!(state.gold, 820);
@@ -4012,7 +4012,7 @@
         )));
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap();
 
         assert_eq!(state.gold, 78);
         assert_eq!(state.prng_state, expected_prng_state);
@@ -4033,7 +4033,7 @@
         )));
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'M', "", Path::new("")).unwrap();
 
         assert_eq!(state.gold, 97);
         assert_eq!(state.prng_state, 0x1234);

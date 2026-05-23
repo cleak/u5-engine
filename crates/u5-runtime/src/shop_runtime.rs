@@ -24,7 +24,7 @@ use crate::shops::{
     inn_base_room_rate, inn_leave_companion_deposit_for_speaker, inn_main_action,
     inn_pickup_bill_for_speaker, quote_horse_purchase_for_speaker, quote_inn_rest,
     quote_inn_rest_for_speaker, quote_shipwright_purchase, shipwright_menu_action,
-    tavern_drink_prompt, tavern_provision_unit_price,
+    tavern_drink_prompt, tavern_provision_unit_price, tavern_round_drink_menu_letter,
 };
 use crate::transport::PendingVehicleAcquisition;
 
@@ -927,7 +927,7 @@ pub fn step_tavern(
                 *state = TavernState::Menu { tavern };
                 TavernOutcome::EnteredMenu {
                     tavern,
-                    round_letter: 'A',
+                    round_letter: tavern_round_drink_menu_letter(tavern),
                 }
             }
             TavernDrinkPrompt::Leave => {
@@ -942,7 +942,7 @@ pub fn step_tavern(
                 *state = TavernState::Exited;
                 return TavernOutcome::Exited;
             }
-            if upper == b'A' {
+            if upper == tavern_round_drink_menu_letter(tavern) as u8 {
                 let outcome = apply_tavern_round_drink(gold, tavern, ctx.living_party_members);
                 *state = TavernState::Menu { tavern };
                 return match outcome {
@@ -960,7 +960,7 @@ pub fn step_tavern(
                 *state = TavernState::BlueBoarDrinkList { tavern };
                 return TavernOutcome::PickBlueBoarDrink;
             }
-            if upper == b'M' {
+            if upper == b'P' {
                 let unit_price = tavern_provision_unit_price(tavern);
                 *state = TavernState::PickProvisionQuantity { tavern, unit_price };
                 return TavernOutcome::PickProvisionQuantity { tavern, unit_price };
@@ -2181,7 +2181,7 @@ mod tests {
     }
 
     #[test]
-    fn tavern_menu_uses_a_for_round_and_m_for_provisions() {
+    fn tavern_menu_uses_published_round_letter_and_p_for_provisions() {
         let mut state = TavernState::for_tavern(Tavern::TheWayfarerTavern);
         let mut gold = 100u16;
         let mut food = 30u16;
@@ -2203,13 +2203,13 @@ mod tests {
             ),
             TavernOutcome::EnteredMenu {
                 tavern: Tavern::TheWayfarerTavern,
-                round_letter: 'A',
+                round_letter: 'M',
             }
         );
         assert_eq!(
             step_tavern(
                 &mut state,
-                TavernInput::Key(b'P'),
+                TavernInput::Key(b'A'),
                 ctx,
                 &mut gold,
                 &mut food,
@@ -2219,7 +2219,7 @@ mod tests {
         assert_eq!(
             step_tavern(
                 &mut state,
-                TavernInput::Key(b'M'),
+                TavernInput::Key(b'P'),
                 ctx,
                 &mut gold,
                 &mut food,
@@ -2360,12 +2360,12 @@ mod tests {
             entered,
             TavernOutcome::EnteredMenu {
                 tavern: Tavern::TheSwordAndKeg,
-                round_letter: 'A',
+                round_letter: 'M',
             }
         );
         let outcome = step_tavern(
             &mut state,
-            TavernInput::Key(b'A'),
+            TavernInput::Key(b'M'),
             ctx,
             &mut gold,
             &mut food,
@@ -2447,7 +2447,7 @@ mod tests {
         );
         let outcome = step_tavern(
             &mut state,
-            TavernInput::Key(b'A'),
+            TavernInput::Key(b'M'),
             ctx,
             &mut gold,
             &mut food,
@@ -2477,7 +2477,7 @@ mod tests {
         );
         let prompt = step_tavern(
             &mut state,
-            TavernInput::Key(b'M'),
+            TavernInput::Key(b'P'),
             ctx,
             &mut gold,
             &mut food,
@@ -2538,7 +2538,7 @@ mod tests {
         );
         step_tavern(
             &mut state,
-            TavernInput::Key(b'M'),
+            TavernInput::Key(b'P'),
             ctx,
             &mut gold,
             &mut food,

@@ -580,7 +580,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
         skiffs: 2,
     };
-    vec![
+    let mut cases = vec![
         VisualRouteSuiteCase {
             label: "route-world-movement",
             frame_kind: "visual route world frame",
@@ -970,7 +970,54 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             script: &["", "S"],
             configure: None,
         },
-    ]
+    ];
+    cases.extend([
+        visual_doom_combat_case("route-doom-combat-select-clear", doom, &["", "0"]),
+        visual_doom_combat_case("route-doom-combat-select-one", doom, &["", "1"]),
+        visual_doom_combat_case("route-doom-combat-select-six", doom, &["", "6"]),
+        visual_doom_combat_case("route-doom-combat-step-east", doom, &["", "d"]),
+        visual_doom_combat_case("route-doom-combat-use-refusal", doom, &["", "U"]),
+        visual_doom_combat_case("route-doom-combat-drop-refusal", doom, &["", "D"]),
+        visual_doom_combat_case("route-doom-combat-wear-refusal", doom, &["", "W"]),
+        visual_doom_combat_case("route-doom-combat-enter-refusal", doom, &["", "E"]),
+        visual_doom_combat_case("route-doom-combat-fire-refusal", doom, &["", "F"]),
+        visual_doom_combat_case("route-doom-combat-hole-up-refusal", doom, &["", "H"]),
+        visual_doom_combat_case("route-doom-combat-ignite-refusal", doom, &["", "I"]),
+        visual_doom_combat_case("route-doom-combat-mix-refusal", doom, &["", "M"]),
+        visual_doom_combat_case("route-doom-combat-new-order-refusal", doom, &["", "N"]),
+        visual_doom_combat_case("route-doom-combat-talk-refusal", doom, &["", "T"]),
+        visual_doom_combat_case("route-doom-combat-view-label", doom, &["", "V"]),
+        visual_doom_combat_case("route-doom-combat-look-label", doom, &["", "L"]),
+        visual_doom_combat_case("route-doom-combat-cast-refusal", doom, &["", "C1IL"]),
+        visual_doom_combat_case("route-doom-combat-get-direction", doom, &["", "G6"]),
+        visual_doom_combat_case("route-doom-combat-jimmy-direction", doom, &["", "J6"]),
+        visual_doom_combat_case("route-doom-combat-open-direction", doom, &["", "O6"]),
+        visual_doom_combat_case("route-doom-combat-push-direction", doom, &["", "P6"]),
+        visual_doom_combat_case("route-doom-combat-klimb-direction", doom, &["", "K6"]),
+        visual_doom_combat_case("route-doom-combat-ready-prompt", doom, &["", "R"]),
+        visual_doom_combat_case("route-doom-combat-yell-word", doom, &["", "YFALLAX"]),
+        visual_doom_combat_case("route-doom-combat-xit-foes-remain", doom, &["", "X"]),
+    ]);
+    cases
+}
+
+fn visual_doom_combat_case(
+    label: &'static str,
+    doom: DungeonScene,
+    script: &'static [&'static str],
+) -> VisualRouteSuiteCase {
+    VisualRouteSuiteCase {
+        label,
+        frame_kind: "visual route combat frame",
+        options: PlayOptions {
+            target: PlayTarget::Dungeon(doom),
+            floor: 0,
+            torch_counter: 9,
+            ..PlayOptions::default()
+        },
+        script,
+        configure: None,
+    }
 }
 
 fn seed_visual_route_board_horse(state: &mut PlayState) {
@@ -4903,7 +4950,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 35);
+        assert_eq!(cases.len(), 60);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -5080,6 +5127,21 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-doom-combat-search-prompt")
         );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-doom-combat-cast-refusal")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-doom-combat-ready-prompt")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-doom-combat-yell-word")
+        );
         assert_eq!(
             visual_route_step_label("route-world-movement", 2, "."),
             "route-world-movement-02-idle"
@@ -5115,7 +5177,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 95);
+        assert_eq!(reports.len(), 170);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -5164,6 +5226,14 @@ mod tests {
         assert!(manifest.contains("route-doom-combat-board-refusal-02-b"));
         assert!(manifest.contains("route-doom-combat-z-stats-02-z"));
         assert!(manifest.contains("route-doom-combat-search-prompt-02-s"));
+        assert!(manifest.contains("route-doom-combat-select-clear-02-0"));
+        assert!(manifest.contains("route-doom-combat-step-east-02-d"));
+        assert!(manifest.contains("route-doom-combat-cast-refusal-02-c1il"));
+        assert!(manifest.contains("route-doom-combat-get-direction-02-g6"));
+        assert!(manifest.contains("route-doom-combat-push-direction-02-p6"));
+        assert!(manifest.contains("route-doom-combat-ready-prompt-02-r"));
+        assert!(manifest.contains("route-doom-combat-yell-word-02-yfallax"));
+        assert!(manifest.contains("route-doom-combat-xit-foes-remain-02-x"));
         assert!(!manifest.contains("Avatar"));
         let _ = fs::remove_dir_all(dir);
     }
