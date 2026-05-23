@@ -1682,6 +1682,74 @@
     }
 
     #[test]
+    fn hourly_ring_regeneration_tick_uses_ring_slot_and_living_hp_cap() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: 30,
+                mana: 8,
+                hp: 19,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'F',
+                status: b'G',
+                climb_stat: 30,
+                mana: 8,
+                hp: 20,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 2,
+                class_byte: b'M',
+                status: b'D',
+                climb_stat: 30,
+                mana: 8,
+                hp: 0,
+                max_hp: 20,
+                level: 8,
+            },
+        ];
+        state.party_equipment = default_party_equipment(3);
+        state.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+        state.party_equipment[1][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+        state.party_equipment[2][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+
+        state.prng_state = 0x0030;
+
+        assert_eq!(state.apply_hourly_ring_regeneration_tick(), 1);
+        assert_eq!(state.party[0].hp, 20);
+        assert_eq!(state.party[0].mana, 8);
+        assert_eq!(state.party[1].hp, 20);
+        assert_eq!(state.party[2].hp, 0);
+    }
+
+    #[test]
+    fn hourly_ring_regeneration_tick_skips_combat_and_wrong_slot() {
+        let mut wrong_slot = world_state(open_world_grid(), 10, 20);
+        wrong_slot.party[0].hp = 19;
+        wrong_slot.party[0].max_hp = 20;
+        wrong_slot.party_equipment[0][EQUIP_SLOT_WEAPON] = EQUIPMENT_ID_RING_REGENERATION as u8;
+        wrong_slot.prng_state = 0x0030;
+
+        assert_eq!(wrong_slot.apply_hourly_ring_regeneration_tick(), 0);
+        assert_eq!(wrong_slot.party[0].hp, 19);
+
+        let mut combat = wrong_slot.clone();
+        combat.party_equipment[0][EQUIP_SLOT_RING] = EQUIPMENT_ID_RING_REGENERATION as u8;
+        combat.combat_active = true;
+
+        assert_eq!(combat.apply_hourly_ring_regeneration_tick(), 0);
+        assert_eq!(combat.party[0].hp, 19);
+    }
+
+    #[test]
     fn hourly_starvation_tick_damages_living_members_when_food_is_zero() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.clock = GameClock::with_date(139, 4, 5, 8, 59).unwrap();

@@ -50,13 +50,13 @@ Runtime, TUI, and route-smoke results refreshed alongside this audit on
 2026-05-23; Bevy and visual-suite evidence remains from the latest display
 audit:
 
-- `cargo test -p u5-runtime` — 2560 tests pass.
+- `cargo test -p u5-runtime` — 2563 tests pass.
 - `cargo test -p u5-tui` — 79 tests pass, including temp-directory binary
   smoke for empty-save Journey Onward, deterministic Create Character followed
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 56 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 129 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 133 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
@@ -66,8 +66,9 @@ audit:
   paths, public #31 native shard/Eternal Flame destruction routes, public #32 Britannia/Doom Word-of-Power seal opening, public #15
   accepted inn-rest pricing, public #44 sleeping/praying Talk refusals, public
   #48 Blink ray landing,
-  #51 poison-gas doorway step, public #47 dungeon no-direct-recovery rest,
-  public #13 sage paid-success/short-funds paths, and
+  #51 poison-gas doorway step, public #47 dungeon no-direct-recovery rest and
+  hourly ring tick, public #13 sage paid-success/short-funds paths, public #28
+  all-stable horse-trader purchases, and
   ship broadside fire, horse boarding, dungeon torch ignition, Mix/Ready/New
   Order command workflow, combat-active Board/Enter/Fire/Hole-up/Ignite/Mix/New
   Order/Talk refusal rows, combat-active digit selection/clear, Escape abort,
@@ -77,9 +78,10 @@ audit:
 - `cargo run -- --save-frame-suite target\audit-frame-suite C:\Games\U5-Clean`
   — 13 PNGs, every frame nonblank with stable hashes.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 47 Bevy-owned per-step route
-  PNGs, every frame nonblank with a sanitized manifest, including Doom combat
-  entry, pass, attack, refusal, Z-stats, and Search-prompt routes.
+  target\visual-route-suite C:\Games\U5-Clean` — 79 Bevy-owned per-step route
+  PNGs, every frame nonblank with a sanitized manifest, including horse-trader
+  purchases and Doom combat entry, pass, attack, refusal, Z-stats, and
+  Search-prompt routes.
 - `cargo fmt -- --check` passed, and `git diff --check` reported only
   CRLF-normalization warnings.
 
@@ -216,7 +218,7 @@ through the asset-backed Talk command path.
 | §8.7 Shipwright | shipwright arm; pending vehicle in `play_state_struct.rs` | shipwright tests | Implemented |
 | §8.8 Horse trader | horse arm | horse tests | Implemented |
 | §8.9 Reagent vendor | `shops.rs` per-herbalist matrix | reagent tests | Implemented |
-| §8.10 Horse trader correction | `shop_session.rs` public issue #28 horse-trader scene rows; `input_dispatch.rs` adjacent marker placement and active-object creation | horse-trader route smoke and talk/shop tests in `chunk_21.rs` | Implemented; obsolete stationary-display purchase runtime removed |
+| §8.10 Horse trader correction | `shop_session.rs` public issue #28 horse-trader scene rows; `input_dispatch.rs` adjacent marker placement and active-object creation | all-stable horse-trader route smoke/visual routes and talk/shop tests in `chunk_21.rs` | Implemented; obsolete stationary-display purchase runtime removed |
 | §9 Karma effects | no karma gating on shop pricing | — | Implemented |
 
 ### `systems/karma.md`

@@ -29,8 +29,8 @@ use u5_runtime::{
     PLAY_MUSIC_TOGGLE_KEY, PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition, PlayOptions, PlayState,
     PlayTarget, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition, SPECIAL_ITEM_OWNED_VALUE,
     SPECIAL_ITEM_SPYGLASS_INDEX, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
-    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, StoryRecords, TEXT_SCREEN_ROWS,
-    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
+    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, Stable, StoryRecords,
+    TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
     TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
     TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
@@ -50,7 +50,9 @@ use u5_runtime::{
     read_u4_transfer_source_from_party_sav, render_play_text_window_system,
     render_return_to_view_playback_frame_viewport, render_text_panel_rgba, render_text_window_rgba,
     run_return_to_view_playback_until_restart,
-    shop_runtime::{GuildShopState, InnkeeperState, ReagentShopState, SageState, TavernState},
+    shop_runtime::{
+        GuildShopState, HorseTraderState, InnkeeperState, ReagentShopState, SageState, TavernState,
+    },
     shop_session::ActiveShopSession,
     stats_panel_active_cursor_visible, summarize_return_to_view_preview,
     summarize_return_to_view_script, title_tick_next_frame, title_tick_palette_indices,
@@ -747,6 +749,36 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_inn_rest_accept),
         },
         VisualRouteSuiteCase {
+            label: "route-shop-horse-trader-horse-and-rider-buy",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "Y"],
+            configure: Some(seed_visual_route_horse_trader_horse_and_rider),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-horse-trader-stablehouse-buy",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "Y"],
+            configure: Some(seed_visual_route_horse_trader_stablehouse),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-horse-trader-wishing-well-buy",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "Y"],
+            configure: Some(seed_visual_route_horse_trader_wishing_well),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-sage-topic-paid-success",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -943,6 +975,34 @@ fn seed_visual_route_inn_rest_accept(state: &mut PlayState) {
     state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::for_inn(
         Inn::TheWayfarerInn,
     )));
+}
+
+fn seed_visual_route_horse_trader(state: &mut PlayState, stable: Stable) {
+    state.player.x = 15;
+    state.player.y = 15;
+    state.player.facing = Direction::South;
+    let target_idx = (state.player.y + 1) * TOWN_GRID_SIDE + state.player.x;
+    if let Some(cell) = state.grid.get_mut(target_idx) {
+        *cell = 0x05;
+    }
+    state.gold = 999;
+    state.active_shop = Some(ActiveShopSession::HorseTrader(
+        HorseTraderState::for_stable(stable),
+    ));
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_horse_trader_horse_and_rider(state: &mut PlayState) {
+    seed_visual_route_horse_trader(state, Stable::HorseAndRider);
+}
+
+fn seed_visual_route_horse_trader_stablehouse(state: &mut PlayState) {
+    seed_visual_route_horse_trader(state, Stable::TheStablehouse);
+}
+
+fn seed_visual_route_horse_trader_wishing_well(state: &mut PlayState) {
+    seed_visual_route_horse_trader(state, Stable::WishingWellHorses);
 }
 
 fn seed_visual_route_sage_paid(state: &mut PlayState) {
@@ -4636,7 +4696,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 26);
+        assert_eq!(cases.len(), 29);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -4716,6 +4776,21 @@ mod tests {
         assert!(
             cases
                 .iter()
+                .any(|case| case.label == "route-shop-horse-trader-horse-and-rider-buy")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-shop-horse-trader-stablehouse-buy")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-shop-horse-trader-wishing-well-buy")
+        );
+        assert!(
+            cases
+                .iter()
                 .any(|case| case.label == "route-shop-sage-topic-paid-success")
         );
         assert!(
@@ -4784,6 +4859,10 @@ mod tests {
             visual_route_step_label("route-britannia-blink-east-ray", 1, "C1IP6"),
             "route-britannia-blink-east-ray-01-c1ip6"
         );
+        assert_eq!(
+            visual_route_step_label("route-shop-horse-trader-stablehouse-buy", 2, "Y"),
+            "route-shop-horse-trader-stablehouse-buy-02-y"
+        );
     }
 
     #[test]
@@ -4799,7 +4878,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 70);
+        assert_eq!(reports.len(), 79);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -4823,6 +4902,9 @@ mod tests {
         assert!(manifest.contains("route-britannia-blink-east-ray-01-c1ip6"));
         assert!(manifest.contains("route-castle-poison-gas-step-01-d"));
         assert!(manifest.contains("route-shop-inn-rest-accept-02-y"));
+        assert!(manifest.contains("route-shop-horse-trader-horse-and-rider-buy-02-y"));
+        assert!(manifest.contains("route-shop-horse-trader-stablehouse-buy-02-y"));
+        assert!(manifest.contains("route-shop-horse-trader-wishing-well-buy-02-y"));
         assert!(manifest.contains("route-shop-sage-topic-paid-success-02-y"));
         assert!(manifest.contains("route-shop-sage-topic-short-funds-02-y"));
         assert!(manifest.contains("route-castle-fountain-look-02-1"));

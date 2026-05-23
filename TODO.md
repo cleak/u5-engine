@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-23, including 2560 tests
+- `cargo test -p u5-runtime` passed on 2026-05-23, including 2563 tests
   (latest verification includes combat command-flow regressions for pending
   Z-stats/Cast actor liveness, public `cleak/u5-spec#41` arms-shop scene-row
   coverage, public issue #3 terrain-combat replacement-tile main path, and
@@ -33,7 +33,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-23 with 129 scripted route cases (including expanded active-shop/modal
+  2026-05-23 with 133 scripted route cases (including expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
@@ -42,7 +42,7 @@ Last known verification state:
   death-vision Look, public
   #44 sleeping/praying Talk refusals, public #48 Blink ray landing,
   light-decay, dungeon ladder-chain,
-  dungeon-to-world return, hourly provision/poison/starvation passes, public
+  dungeon-to-world return, hourly provision/poison/starvation/ring passes, public
   #32 Britannia/Doom Word-of-Power seal opening routes, public #15 accepted
   inn-rest pricing, public #13 sage paid-success/short-funds paths, public #31
   native shard/Eternal Flame destruction routes, and public #21
@@ -77,7 +77,8 @@ Last known verification state:
   (`3f4fdf2e53e4e269`), public #48 Blink ray landing
   (`f4b691ac224b385e`), public #51 poison-gas doorway step
   (`836b6cd5af06c44e`), and public #47 dungeon no-direct-recovery rest
-  (`161ad48dd2a91725`), plus ship broadside fire
+  (`161ad48dd2a91725`) plus hourly Ring of Regeneration
+  (`be84488b7b199310`), plus ship broadside fire
   (`a7f1e8c1d62d7388`), horse boarding (`c346e297d616e667`),
   dungeon torch ignition (`06a7a60a0f84fb96`), and a combined Mix/Ready/New
   Order command workflow (`93018f522ce292ec`),
@@ -122,7 +123,7 @@ Last known verification state:
   `a52f8c3db8e33102`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-23 and
-  wrote 70 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 79 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -177,7 +178,9 @@ Last known verification state:
   `route-shop-inn-rest-accept-02-y` `2591d02e2c602824`, public #13 sage
   paid/short-funds outcomes `3d1bdb8ea9234398` / `c73a1d5ec1594b41`, and
   public #43 fountain, wishing-well, and death-vision Look endings
-  `ce66d6a727da0f4c`, `cb49b5dc01b81ad4`, and `bc9b32161912f71d`.
+  `ce66d6a727da0f4c`, `cb49b5dc01b81ad4`, and `bc9b32161912f71d`. The
+  #28 horse-trader expansion adds accepted Horse & Rider, Stablehouse, and
+  Wishing Well routes through visual step `*-02-y`.
 - Bevy visual screenshot smoke with local assets produced a nonblank
   `792x1182` PNG at `target\codex-fixed-font-status-smoke.png`.
 - Bevy intro screenshot smoke with local assets produced a nonblank
@@ -236,7 +239,10 @@ Current worktree context when this TODO was refreshed:
   eight-byte no-transferable-data virtue gate.
 - Rest/camp ordinary HP/MP recovery follows the latest public guidance in
   `cleak/u5-spec#47`: rest advances time without a separate direct recovery
-  grant. Exact original random-jolt/camp recovery details remain unresolved.
+  grant. Hourly Ring of Regeneration is time-owned, non-combat only, checks the
+  ring equipment slot, heals living wearers by exactly 1 HP on the 1-in-8 roll,
+  and clamps at max HP. Exact original random-jolt/camp recovery details remain
+  unresolved.
 - Non-combat Blink follows the latest public `cleak/u5-spec#48` guidance: it
   prompts for a cardinal direction and lands on the farthest legal grass cell
   along the bounded ray. Route-smoke and Bevy visual-route coverage exercise an
@@ -260,7 +266,8 @@ Current worktree context when this TODO was refreshed:
   at the `0xFF` terminator.
 - Public `cleak/u5-spec#28` corrected the old stationary-display purchase path
   to horse-trader sale rows. The obsolete stationary-display purchase runtime is
-  removed, and horse-trader route-smoke/talk-shop tests cover placement.
+  removed, and horse-trader route-smoke/visual/talk-shop tests cover accepted
+  purchases and placement for all three public stables.
 - Shadowlord shard U-Use follows public `cleak/u5-spec#31` exact native
   positions and requires the matching live Shadowlord/name encounter north of
   the party; route smoke covers Lycaeum, Empath Abbey, and Serpent's Hold native

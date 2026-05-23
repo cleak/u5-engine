@@ -6159,6 +6159,44 @@ fn vehicle_shop_prices_match_published_tables() {
 }
 
 #[test]
+fn arms_shop_stock_rows_preserve_published_terminator_and_zero_item() {
+    let cases = [
+        (ArmsShop::IolosBows, [16, 17, 26, 27, 28, 29, 36]),
+        (ArmsShop::NaughtyNomaans, [19, 24, 46, 22, 3, 6, 25]),
+        (ArmsShop::ArmsOfJustice, [0, 9, 10, 18, 21, 37, 38]),
+        (ArmsShop::DarkwatchArmoury, [2, 4, 11, 23, 30, 24, 31]),
+        (
+            ArmsShop::ThePaladinsProtectorate,
+            [32, 33, 34, 2, 5, 12, 14],
+        ),
+        (ArmsShop::NorthStarArmoury, [1, 7, 13, 14, 30, 37, 43]),
+        (ArmsShop::BuccaneersBooty, [0, 10, 16, 20, 23, 19, 42]),
+        (ArmsShop::TheShatteredShield, [7, 32, 36, 27, 31, 44, 45]),
+        (ArmsShop::SiegeCrafters, [1, 13, 28, 29, 34, 22, 25]),
+    ];
+
+    for (shop, expected) in cases {
+        let table = shop.stock_table();
+        assert_eq!(table.len(), expected.len(), "{shop:?}");
+        assert_eq!(&table.item_ids[..table.len()], &expected, "{shop:?}");
+        assert_eq!(
+            arms_shop_stock_item_for_letter(table, b'h'),
+            Err(ArmsStockLetterError::EmptySlot),
+            "{shop:?}"
+        );
+    }
+
+    assert_eq!(
+        arms_shop_stock_item_for_letter(ArmsShop::ArmsOfJustice.stock_table(), b'a'),
+        Ok(0)
+    );
+    assert_eq!(
+        arms_shop_stock_item_for_letter(ArmsShop::BuccaneersBooty.stock_table(), b'a'),
+        Ok(0)
+    );
+}
+
+#[test]
 fn healer_treatment_fees_match_published_table() {
     // shops.md section 8.3 stock healer headline fees.
     let cases = [

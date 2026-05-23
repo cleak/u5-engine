@@ -2839,6 +2839,7 @@ impl PlayState {
             return Err(HorsePurchaseError::NoActiveObjectSlot);
         };
         self.gold -= quote.price;
+        self.mark_visibility_dirty();
 
         Ok(HorsePurchaseOutcome {
             quote,

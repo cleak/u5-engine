@@ -888,7 +888,27 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "castle-hourly-ring-regeneration-pass")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "shop-inn-rest-accept-public-rate")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "shop-horse-trader-horse-and-rider-buy")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "shop-horse-trader-stablehouse-buy")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "shop-horse-trader-wishing-well-buy")
     );
     assert!(
         cases

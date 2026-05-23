@@ -12,15 +12,15 @@ use u5_runtime::{
     ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE, BLACKTHORN_RESCUE_HANDOFF_SCENE,
     BLINK_COST, BLINK_SPELL_INDEX, COMBAT_PARTY_ACTOR_SLOTS, CREATE_FOOD_COST,
     CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX, DEATH_VISION_OBJECT_CLASS, DEFAULT_FOOD_STOCK,
-    DUNGEON_AMBUSH_ARENA_FLOOR_TILE, Direction, DungeonScene, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY,
-    EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, FIRST_PLAYABLE_FRIGATE_TILE,
-    FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, GATE_TRAVEL_COST,
-    GATE_TRAVEL_SPELL_INDEX, GameClock, GuildShop, HORSE_PARKED_FIRST,
-    HOURLY_STARVATION_DAMAGE_MAX, HOURLY_STARVATION_DAMAGE_MIN, Healer, Herbalist,
-    IN_LOR_SPELL_INDEX, Inn, MoonstoneGateSlot, NATURAL_MOONGATE_TERRAIN_TILE, NpcSlot, PEER_COST,
-    PEER_SPELL_INDEX, PartyMember, PlayOptions, PlayState, PlayTarget, REAGENT_SULFUR_ASH,
-    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
-    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    DUNGEON_AMBUSH_ARENA_FLOOR_TILE, Direction, DungeonScene, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
+    EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION,
+    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
+    FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX, GameClock,
+    GuildShop, HORSE_PARKED_FIRST, HOURLY_STARVATION_DAMAGE_MAX, HOURLY_STARVATION_DAMAGE_MIN,
+    Healer, Herbalist, IN_LOR_SPELL_INDEX, Inn, MoonstoneGateSlot, NATURAL_MOONGATE_TERRAIN_TILE,
+    NpcSlot, PEER_COST, PEER_SPELL_INDEX, PartyMember, PlayOptions, PlayState, PlayTarget,
+    REAGENT_SULFUR_ASH, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
+    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
     SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
     SHADOWLORD_VANQUISHED, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
     SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
@@ -40,7 +40,7 @@ use u5_runtime::{
         ReagentShopState, SageState, ShipBrokerState, TavernState,
     },
     shop_session::ActiveShopSession,
-    u5_prng_range_u16, word_of_power_seal_for_word, world_cell_index,
+    stable_horse_price, u5_prng_range_u16, word_of_power_seal_for_word, world_cell_index,
 };
 
 use crate::{
@@ -271,6 +271,17 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         ],
         ..PlayOptions::default()
     };
+
+    let mut hourly_ring_regeneration = PlayOptions {
+        target: PlayTarget::Town(castle),
+        clock: GameClock::with_date(139, 4, 5, 7, 59).expect("07:59 is a valid game-clock time"),
+        food: 99,
+        party: vec![route_party_member(0, b'A', b'G', 19, 20)],
+        party_equipment: default_party_equipment(1),
+        ..PlayOptions::default()
+    };
+    hourly_ring_regeneration.party_equipment[0][EQUIP_SLOT_RING] =
+        EQUIPMENT_ID_RING_REGENERATION as u8;
 
     let town_poison_gas = PlayOptions {
         target: PlayTarget::Town(castle),
@@ -556,6 +567,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "castle-hourly-poison-starvation-pass",
             options: hourly_poison_starvation,
+            script: &["empty"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-hourly-ring-regeneration-pass",
+            options: hourly_ring_regeneration,
             script: &["empty"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 1,
@@ -997,6 +1016,30 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             name: "shop-horse-trader-decline-route",
             options: PlayOptions::default(),
             script: &["B", "N"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-horse-trader-horse-and-rider-buy",
+            options: PlayOptions::default(),
+            script: &["B", "Y"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-horse-trader-stablehouse-buy",
+            options: PlayOptions::default(),
+            script: &["B", "Y"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-horse-trader-wishing-well-buy",
+            options: PlayOptions::default(),
+            script: &["B", "Y"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -1689,6 +1732,9 @@ fn apply_route_smoke_case_setup(
         "castle-hourly-poison-starvation-pass" => {
             state.prng_state = 0x3456;
         }
+        "castle-hourly-ring-regeneration-pass" => {
+            state.prng_state = ring_regeneration_first_heal_seed();
+        }
         "castle-poison-gas-step" => {
             seed_town_poison_gas_route(state);
         }
@@ -1808,10 +1854,15 @@ fn apply_route_smoke_case_setup(
                 Tavern::TheSwordAndKeg,
             )));
         }
-        "shop-horse-trader-decline-route" => {
+        "shop-horse-trader-decline-route"
+        | "shop-horse-trader-horse-and-rider-buy"
+        | "shop-horse-trader-stablehouse-buy"
+        | "shop-horse-trader-wishing-well-buy" => {
+            let stable = horse_trader_route_stable(case_name);
+            seed_town_horse_trader_route(state);
             state.gold = 999;
             state.active_shop = Some(ActiveShopSession::HorseTrader(
-                HorseTraderState::for_stable(Stable::HorseAndRider),
+                HorseTraderState::for_stable(stable),
             ));
         }
         "shop-shipwright-quote-decline-route" => {
@@ -1989,6 +2040,26 @@ fn seed_town_poison_gas_route(state: &mut PlayState) {
     state.mark_visibility_dirty();
 }
 
+fn seed_town_horse_trader_route(state: &mut PlayState) {
+    state.player.x = 15;
+    state.player.y = 15;
+    state.player.facing = Direction::South;
+    let target_idx = (state.player.y + 1) * TOWN_GRID_SIDE + state.player.x;
+    if let Some(cell) = state.grid.get_mut(target_idx) {
+        *cell = 0x05;
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn horse_trader_route_stable(case_name: &str) -> Stable {
+    match case_name {
+        "shop-horse-trader-stablehouse-buy" => Stable::TheStablehouse,
+        "shop-horse-trader-wishing-well-buy" => Stable::WishingWellHorses,
+        _ => Stable::HorseAndRider,
+    }
+}
+
 fn seed_world_board_horse_route(state: &mut PlayState) {
     state.player.x = 62;
     state.player.y = 124;
@@ -2016,6 +2087,16 @@ fn poison_gas_first_poison_seed() -> u16 {
         }
     }
     unreachable!("PRNG range cycle must hit a poison roll")
+}
+
+fn ring_regeneration_first_heal_seed() -> u16 {
+    for candidate in 0..=u16::MAX {
+        let mut state = candidate;
+        if u5_prng_range_u16(&mut state, 0, 7) == 0 {
+            return candidate;
+        }
+    }
+    unreachable!("PRNG range cycle must hit a ring regeneration roll")
 }
 
 fn route_party_member(slot: u8, class_byte: u8, status: u8, hp: u16, max_hp: u16) -> PartyMember {
@@ -2112,6 +2193,25 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply public poison-before-starvation rolls"
+                )));
+            }
+        }
+        "castle-hourly-ring-regeneration-pass" => {
+            let mut expected_prng = ring_regeneration_first_heal_seed();
+            let roll = u5_prng_range_u16(&mut expected_prng, 0, 7);
+            if roll != 0
+                || state.clock.hour != 8
+                || state.prng_state != expected_prng
+                || state.party.first().is_none_or(|member| {
+                    member.status != b'G' || member.hp != member.max_hp || member.mana != 8
+                })
+                || state.party_equipment.first().is_none_or(|equipment| {
+                    equipment[EQUIP_SLOT_RING] != EQUIPMENT_ID_RING_REGENERATION as u8
+                })
+                || !state.message.contains("Pass")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply hourly Ring of Regeneration"
                 )));
             }
         }
@@ -2327,6 +2427,29 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not preserve gold on sage short funds"
+                )));
+            }
+        }
+        "shop-horse-trader-horse-and-rider-buy"
+        | "shop-horse-trader-stablehouse-buy"
+        | "shop-horse-trader-wishing-well-buy" => {
+            let stable = horse_trader_route_stable(case_name);
+            let raw = stable_horse_price(stable);
+            let speaker_intelligence = state.party_intelligence.first().copied().unwrap_or(0);
+            let expected_gold = 999 - shop_intelligence_adjusted_price(raw, speaker_intelligence);
+            let horse = state
+                .active_objects
+                .iter()
+                .find(|object| object.type_byte == HORSE_PARKED_FIRST);
+            let boardable = state.boardable_vehicle_slot_at(15, 16).is_some();
+            if state.gold != expected_gold
+                || state.active_shop.is_some()
+                || horse.is_none_or(|object| object.x != 15 || object.y != 16)
+                || !boardable
+                || !state.message.contains("Thy horse awaits outside")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not complete the public horse-trader sale"
                 )));
             }
         }
