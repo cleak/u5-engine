@@ -12,13 +12,13 @@
 
 use crate::constants::{EQUIPMENT_COUNT, EQUIPMENT_STOCK_CAP};
 use crate::shops::{
-    ArmsShopAction, ArmsStockTable, BlueBoarDrinkChoice, EMPTY_SAGE_RUMOUR_TABLE, GuildCommodity,
-    GuildPurchaseError, GuildShop, GuildShopAction, Herbalist, INN_REGISTRY_CAP, Inn,
-    InnMainAction, ProvisionPurchaseError, Reagent, ReagentPurchaseError, SageRumourError,
-    SageRumourOutcome, SageRumourTable, Shipwright, ShipwrightMenuAction, ShipwrightPurchaseError,
-    ShipwrightPurchaseOutcome, ShipwrightPurchaseQuote, Stable, StationaryDisplayPrompt, Tavern,
-    TavernDrinkError, TavernDrinkPrompt, apply_blue_boar_drink, apply_guild_purchase,
-    apply_provision_purchase, apply_reagent_purchase, apply_sage_rumour_lookup,
+    ArmsShopAction, ArmsStockTable, BlueBoarDrinkChoice, GuildCommodity, GuildPurchaseError,
+    GuildShop, GuildShopAction, Herbalist, INN_REGISTRY_CAP, Inn, InnMainAction,
+    ProvisionPurchaseError, Reagent, ReagentPurchaseError, SAGE_RUMOUR_TABLE, SageRumourError,
+    SageRumourOutcome, SageRumourQuote, SageRumourTable, Shipwright, ShipwrightMenuAction,
+    ShipwrightPurchaseError, ShipwrightPurchaseOutcome, ShipwrightPurchaseQuote, Stable,
+    StationaryDisplayPrompt, Tavern, TavernDrinkError, TavernDrinkPrompt, apply_blue_boar_drink,
+    apply_guild_purchase, apply_provision_purchase, apply_reagent_purchase,
     apply_shipwright_purchase, apply_tavern_round_drink, arms_shop_action, arms_shop_buy_quote,
     arms_shop_sell_offer, arms_shop_stock_item_for_letter, guild_shop_action, guild_unit_price,
     herbalist_menu_entries, inn_base_room_rate, inn_leave_companion_deposit_for_speaker,
@@ -1156,14 +1156,20 @@ pub const fn blue_boar_choice_for_key(byte: u8) -> Option<BlueBoarDrinkChoice> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SageState {
-    Prompt { table: &'static SageRumourTable },
+    Prompt {
+        table: &'static SageRumourTable,
+    },
+    Confirm {
+        table: &'static SageRumourTable,
+        quote: SageRumourQuote,
+    },
     Exited,
 }
 
 impl Default for SageState {
     fn default() -> Self {
         Self::Prompt {
-            table: &EMPTY_SAGE_RUMOUR_TABLE,
+            table: &SAGE_RUMOUR_TABLE,
         }
     }
 }
@@ -1177,13 +1183,22 @@ impl SageState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SageInput<'a> {
     Keyword(&'a str),
+    Confirm { accepted: bool, record_id: usize },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SageOutcome {
+    QuotedFee {
+        quote: SageRumourQuote,
+    },
     RumourFound {
         outcome: SageRumourOutcome,
         rendered: String,
+    },
+    Declined,
+    RefusedShortFunds {
+        required: u16,
+        available: u16,
     },
     InputTooLong {
         limit: usize,
@@ -1194,13 +1209,13 @@ pub enum SageOutcome {
     InvalidInput,
 }
 
-pub fn step_sage(state: &mut SageState, input: SageInput<'_>) -> SageOutcome {
+pub fn step_sage(state: &mut SageState, input: SageInput<'_>, gold: &mut u16) -> SageOutcome {
     match (*state, input) {
         (SageState::Prompt { table }, SageInput::Keyword(text)) => {
-            match apply_sage_rumour_lookup(table, text) {
-                Ok(outcome) => {
-                    let rendered = outcome.rendered.clone();
-                    SageOutcome::RumourFound { outcome, rendered }
+            match crate::shops::find_sage_topic(table, text) {
+                Ok(quote) => {
+                    *state = SageState::Confirm { table, quote };
+                    SageOutcome::QuotedFee { quote }
                 }
                 Err(SageRumourError::EmptyInput) => {
                     *state = SageState::Exited;
@@ -1212,7 +1227,41 @@ pub fn step_sage(state: &mut SageState, input: SageInput<'_>) -> SageOutcome {
                 Err(SageRumourError::NoTopicMatch) => SageOutcome::NoTopicMatch,
             }
         }
+        (
+            SageState::Confirm { .. },
+            SageInput::Confirm {
+                accepted: false, ..
+            },
+        ) => {
+            *state = SageState::Exited;
+            SageOutcome::Declined
+        }
+        (
+            SageState::Confirm { table, quote },
+            SageInput::Confirm {
+                accepted: true,
+                record_id,
+            },
+        ) => {
+            if *gold < quote.entry.fee {
+                *state = SageState::Prompt { table };
+                return SageOutcome::RefusedShortFunds {
+                    required: quote.entry.fee,
+                    available: *gold,
+                };
+            }
+            *gold -= quote.entry.fee;
+            *state = SageState::Exited;
+            let outcome = SageRumourOutcome {
+                quote,
+                record_id,
+                rendered: crate::shops::render_sage_rumour(quote.entry, record_id),
+            };
+            let rendered = outcome.rendered.clone();
+            SageOutcome::RumourFound { outcome, rendered }
+        }
         (SageState::Exited, _) => SageOutcome::Exited,
+        _ => SageOutcome::InvalidInput,
     }
 }
 
@@ -1564,38 +1613,9 @@ fn select_guild_menu_entry(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shops::{SHOPPE_RECORDS_SAGE_FIRST, SageRumourEntry, SageRumourQuote};
-
-    static TEST_SAGE_TABLE: SageRumourTable = [
-        Some(SageRumourEntry {
-            keyword: "codex",
-            subject: "the Codex",
-            destination: "the Underworld",
-            record_id: SHOPPE_RECORDS_SAGE_FIRST,
-            record_template: "Seek ye & in *!",
-        }),
-        Some(SageRumourEntry {
-            keyword: "shard",
-            subject: "the shard",
-            destination: "Deceit",
-            record_id: SHOPPE_RECORDS_SAGE_FIRST,
-            record_template: "Seek ye & in *!",
-        }),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    ];
+    use crate::shops::{
+        SAGE_RUMOUR_SUCCESS_RECORD_FIRST, SAGE_RUMOUR_TABLE, SageRumourOutcome, SageRumourQuote,
+    };
 
     fn make_price_table() -> [u16; EQUIPMENT_COUNT] {
         let mut table = [0u16; EQUIPMENT_COUNT];
@@ -2618,74 +2638,110 @@ mod tests {
     }
 
     #[test]
-    fn sage_rumour_keyword_match_renders_without_debiting_gold() {
-        let mut state = SageState::for_table(&TEST_SAGE_TABLE);
-        let gold = 20u16;
+    fn sage_rumour_keyword_match_quotes_then_debits_on_confirmation() {
+        let mut state = SageState::default();
+        let mut gold = 60u16;
 
-        let outcome = step_sage(&mut state, SageInput::Keyword("CODEX"));
+        let outcome = step_sage(&mut state, SageInput::Keyword("HONE clue"), &mut gold);
 
-        assert_eq!(gold, 20);
+        assert_eq!(
+            outcome,
+            SageOutcome::QuotedFee {
+                quote: SageRumourQuote {
+                    entry: SAGE_RUMOUR_TABLE[0],
+                    input_len: 9,
+                },
+            }
+        );
+        assert_eq!(gold, 60);
+        assert_eq!(
+            state,
+            SageState::Confirm {
+                table: &SAGE_RUMOUR_TABLE,
+                quote: SageRumourQuote {
+                    entry: SAGE_RUMOUR_TABLE[0],
+                    input_len: 9,
+                }
+            }
+        );
+
+        let outcome = step_sage(
+            &mut state,
+            SageInput::Confirm {
+                accepted: true,
+                record_id: SAGE_RUMOUR_SUCCESS_RECORD_FIRST,
+            },
+            &mut gold,
+        );
+
+        assert_eq!(gold, 10);
         assert_eq!(
             outcome,
             SageOutcome::RumourFound {
                 outcome: SageRumourOutcome {
                     quote: SageRumourQuote {
-                        entry: TEST_SAGE_TABLE[0].unwrap(),
-                        input_len: 5,
+                        entry: SAGE_RUMOUR_TABLE[0],
+                        input_len: 9,
                     },
-                    rendered: "Seek ye the Codex in the Underworld!".to_string(),
+                    record_id: SAGE_RUMOUR_SUCCESS_RECORD_FIRST,
+                    rendered: "Seek ye Malik in Moonglow!".to_string(),
                 },
-                rendered: "Seek ye the Codex in the Underworld!".to_string(),
+                rendered: "Seek ye Malik in Moonglow!".to_string(),
             }
         );
-        assert_eq!(
-            state,
-            SageState::Prompt {
-                table: &TEST_SAGE_TABLE
-            }
-        );
+        assert_eq!(state, SageState::Exited);
     }
 
     #[test]
     fn sage_rumour_refusals_and_empty_exit_preserve_gold() {
-        let mut state = SageState::for_table(&TEST_SAGE_TABLE);
-        let gold = 10u16;
+        let mut state = SageState::default();
+        let mut gold = 10u16;
 
         assert_eq!(
-            step_sage(&mut state, SageInput::Keyword("shards")),
+            step_sage(&mut state, SageInput::Keyword("honesty"), &mut gold),
             SageOutcome::NoTopicMatch
         );
         assert_eq!(gold, 10);
         assert_eq!(
             state,
             SageState::Prompt {
-                table: &TEST_SAGE_TABLE
+                table: &SAGE_RUMOUR_TABLE
             }
         );
 
         assert_eq!(
-            step_sage(&mut state, SageInput::Keyword("shard")),
-            SageOutcome::RumourFound {
-                outcome: SageRumourOutcome {
-                    quote: SageRumourQuote {
-                        entry: TEST_SAGE_TABLE[1].unwrap(),
-                        input_len: 5,
-                    },
-                    rendered: "Seek ye the shard in Deceit!".to_string(),
+            step_sage(&mut state, SageInput::Keyword("hone"), &mut gold),
+            SageOutcome::QuotedFee {
+                quote: SageRumourQuote {
+                    entry: SAGE_RUMOUR_TABLE[0],
+                    input_len: 4,
+                }
+            }
+        );
+        assert_eq!(
+            step_sage(
+                &mut state,
+                SageInput::Confirm {
+                    accepted: true,
+                    record_id: SAGE_RUMOUR_SUCCESS_RECORD_FIRST,
                 },
-                rendered: "Seek ye the shard in Deceit!".to_string(),
+                &mut gold,
+            ),
+            SageOutcome::RefusedShortFunds {
+                required: 50,
+                available: 10,
             }
         );
         assert_eq!(gold, 10);
         assert_eq!(
             state,
             SageState::Prompt {
-                table: &TEST_SAGE_TABLE
+                table: &SAGE_RUMOUR_TABLE
             }
         );
 
         assert_eq!(
-            step_sage(&mut state, SageInput::Keyword(" ")),
+            step_sage(&mut state, SageInput::Keyword(" "), &mut gold),
             SageOutcome::Exited
         );
         assert_eq!(state, SageState::Exited);

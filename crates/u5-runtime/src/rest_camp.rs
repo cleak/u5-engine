@@ -26,6 +26,9 @@ pub enum RestTickOutcome {
 pub const REST_HP_PER_HOUR: u16 = 0;
 pub const REST_MP_PER_HOUR: u8 = 0;
 pub const REST_INTERRUPT_DENOMINATOR: u8 = SLEEP_AMBUSH_INTERRUPT_DENOMINATOR;
+pub const COMPLETED_LONG_CAMP_MIN_HOURS: u8 = 6;
+pub const COMPLETED_LONG_CAMP_HP_GAIN_MIN: u8 = 1;
+pub const COMPLETED_LONG_CAMP_HP_GAIN_MAX: u8 = 63;
 
 /// Inputs the rest tick needs.
 #[derive(Clone, Copy, Debug)]

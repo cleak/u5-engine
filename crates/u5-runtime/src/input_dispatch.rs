@@ -910,12 +910,45 @@ fn handle_active_shop_key_input(
             append_active_shop_surcharge(format_tavern_outcome(outcome), surcharge)
         }
         ActiveShopSession::Sage(s) => {
-            let line = active_shop_text_line(key, suffix);
             let outcome = match *s {
-                SageState::Prompt { .. } => step_sage(s, SageInput::Keyword(&line)),
+                SageState::Prompt { .. } => {
+                    let line = active_shop_text_line(key, suffix);
+                    step_sage(s, SageInput::Keyword(&line), &mut state.gold)
+                }
+                SageState::Confirm { .. } if yes => {
+                    let record_id = usize::from(state.random_range_u8(
+                        SAGE_RUMOUR_SUCCESS_RECORD_FIRST as u8,
+                        SAGE_RUMOUR_SUCCESS_RECORD_LAST as u8,
+                    ));
+                    step_sage(
+                        s,
+                        SageInput::Confirm {
+                            accepted: true,
+                            record_id,
+                        },
+                        &mut state.gold,
+                    )
+                }
+                SageState::Confirm { .. } if no || key_byte == b' ' => step_sage(
+                    s,
+                    SageInput::Confirm {
+                        accepted: false,
+                        record_id: SAGE_RUMOUR_SUCCESS_RECORD_FIRST,
+                    },
+                    &mut state.gold,
+                ),
+                SageState::Confirm { quote, .. } => SageOutcome::QuotedFee { quote },
                 SageState::Exited => SageOutcome::Exited,
             };
-            format_sage_outcome(render_active_sage_outcome_with_shoppe(outcome, game_dir))
+            let paid = matches!(outcome, SageOutcome::RumourFound { .. });
+            let message =
+                format_sage_outcome(render_active_sage_outcome_with_shoppe(outcome, game_dir));
+            let surcharge = if paid {
+                apply_active_shop_surcharge(state)
+            } else {
+                None
+            };
+            append_active_shop_surcharge(message, surcharge)
         }
         ActiveShopSession::Reagent(s) => {
             let mut stock = state.reagents;
@@ -1463,7 +1496,10 @@ fn format_tavern_outcome(outcome: crate::shop_runtime::TavernOutcome) -> String 
 fn format_sage_outcome(outcome: crate::shop_runtime::SageOutcome) -> String {
     use crate::shop_runtime::SageOutcome::*;
     match outcome {
+        QuotedFee { quote } => format!("That will cost {} gold. Pay? (Y/N)", quote.entry.fee),
         RumourFound { rendered, .. } => rendered,
+        Declined => "Farewell.".to_string(),
+        RefusedShortFunds { .. } => TAVERN_AFFORDABILITY_REFUSAL_BARK.to_string(),
         InputTooLong { limit, .. } => format!("Ask in {limit} characters or fewer."),
         NoTopicMatch => "That, I cannot help thee with.".to_string(),
         Exited => "Farewell.".to_string(),
@@ -1483,7 +1519,7 @@ fn render_active_sage_outcome_with_shoppe(
         .and_then(|records| {
             crate::shoppe_bark::render_sage_rumour_shoppe_record(
                 &records,
-                outcome.quote.entry.record_id,
+                outcome.record_id,
                 outcome.quote.entry.subject,
                 outcome.quote.entry.destination,
                 None,

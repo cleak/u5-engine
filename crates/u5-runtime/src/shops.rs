@@ -1349,61 +1349,14 @@ pub const UPMARKET_INN_AFFORDABILITY_REFUSAL_BARK: &str = "Highwaymen!";
 /// callers compose the trailing quantity at format time.
 pub const VEHICLE_BROKER_PARTIAL_AFFORD_PREFIX: &str = "Thou canst afford only ";
 
-/// Public issue `cleak/u5-spec#13`: each sage owns a fixed table of
-/// sixteen keyword rows. The real per-sage rows remain unpublished in
-/// the clean spec; runtime tests use synthetic rows only.
-pub const SAGE_RUMOUR_ENTRIES_PER_SAGE: usize = 16;
+/// Public issue `cleak/u5-spec#13`: the corrected sage flow uses one
+/// global resident topic table, not per-sage synthetic rows.
+pub const SAGE_RUMOUR_TOPIC_COUNT: usize = 26;
 
-/// Public issue `cleak/u5-spec#13`: the sage banner table contains
-/// one of these four label letters for each sage instance.
-pub const SAGE_LABEL_LETTERS: [char; 4] = ['C', 'T', 'H', 'A'];
-
-/// Public issue `cleak/u5-spec#13`: decoded people/name strings that
-/// sages can know about. The per-sage row assignment is not public
-/// yet, so this is a content whitelist rather than a dispatch table.
-pub const SAGE_KNOWN_PEOPLE: [&str; 21] = [
-    "Greyson",
-    "Trian",
-    "Jeremy",
-    "Drew",
-    "Gruman",
-    "Paul",
-    "Chirita",
-    "Malifora",
-    "Cannon",
-    "Felespar",
-    "the mother of Rew",
-    "Sindar",
-    "Saiko",
-    "Terrance",
-    "Greymarch",
-    "Simon and Tessa",
-    "Shalineth",
-    "a daemon",
-    "Lord Malone",
-    "Zachariah",
-    "Tactus",
-];
-
-/// Public issue `cleak/u5-spec#13`: decoded place strings used by
-/// sage rumour substitution. The exact per-sage row mapping remains
-/// unpublished.
-pub const SAGE_KNOWN_PLACES: [&str; 14] = [
-    "Cotham",
-    "Moonglow",
-    "Britain",
-    "Jhelom",
-    "Drew",
-    "Minoc",
-    "Trinsic",
-    "Skara Brae",
-    "New Magincia",
-    "the lighthouse south of Britain",
-    "a hidden mountain keep",
-    "the desert",
-    "the Lycaeum",
-    "Serpent's Hold",
-];
+/// Public issue `cleak/u5-spec#13`: paid sage success barks are drawn
+/// from the sequential SHOPPE.DAT records 85..=88.
+pub const SAGE_RUMOUR_SUCCESS_RECORD_FIRST: usize = 85;
+pub const SAGE_RUMOUR_SUCCESS_RECORD_LAST: usize = 88;
 
 /// Public issue `cleak/u5-spec#13` sage rumour-keyword input cap.
 /// The input pipeline accepts at most fifteen characters for the
@@ -1449,13 +1402,169 @@ pub struct SageRumourEntry {
     pub keyword: &'static str,
     pub subject: &'static str,
     pub destination: &'static str,
-    pub record_id: usize,
-    pub record_template: &'static str,
+    pub fee: u16,
 }
 
-pub type SageRumourTable = [Option<SageRumourEntry>; SAGE_RUMOUR_ENTRIES_PER_SAGE];
+pub type SageRumourTable = [SageRumourEntry; SAGE_RUMOUR_TOPIC_COUNT];
 
-pub const EMPTY_SAGE_RUMOUR_TABLE: SageRumourTable = [None; SAGE_RUMOUR_ENTRIES_PER_SAGE];
+pub const SAGE_RUMOUR_TABLE: SageRumourTable = [
+    SageRumourEntry {
+        keyword: "hone",
+        subject: "Malik",
+        destination: "Moonglow",
+        fee: 50,
+    },
+    SageRumourEntry {
+        keyword: "comp",
+        subject: "Greyson",
+        destination: "Britain",
+        fee: 75,
+    },
+    SageRumourEntry {
+        keyword: "valo",
+        subject: "Trian",
+        destination: "Jhelom",
+        fee: 50,
+    },
+    SageRumourEntry {
+        keyword: "just",
+        subject: "Jeremy",
+        destination: "Yew",
+        fee: 50,
+    },
+    SageRumourEntry {
+        keyword: "sacr",
+        subject: "Rew",
+        destination: "Minoc",
+        fee: 75,
+    },
+    SageRumourEntry {
+        keyword: "hono",
+        subject: "Gruman",
+        destination: "Trinsic",
+        fee: 75,
+    },
+    SageRumourEntry {
+        keyword: "spir",
+        subject: "Saul",
+        destination: "Skara Brae",
+        fee: 25,
+    },
+    SageRumourEntry {
+        keyword: "humi",
+        subject: "Shirita",
+        destination: "New Magincia",
+        fee: 50,
+    },
+    SageRumourEntry {
+        keyword: "dece",
+        subject: "Malifora",
+        destination: "Moonglow",
+        fee: 100,
+    },
+    SageRumourEntry {
+        keyword: "desp",
+        subject: "Annon",
+        destination: "Britain",
+        fee: 150,
+    },
+    SageRumourEntry {
+        keyword: "dest",
+        subject: "Trian",
+        destination: "Jhelom",
+        fee: 75,
+    },
+    SageRumourEntry {
+        keyword: "wron",
+        subject: "Felespar",
+        destination: "Yew",
+        fee: 150,
+    },
+    SageRumourEntry {
+        keyword: "cove",
+        subject: "the mother of Rew",
+        destination: "Minoc",
+        fee: 75,
+    },
+    SageRumourEntry {
+        keyword: "sham",
+        subject: "Sindar",
+        destination: "Trinsic",
+        fee: 100,
+    },
+    SageRumourEntry {
+        keyword: "hyth",
+        subject: "Kaiko",
+        destination: "New Magincia",
+        fee: 100,
+    },
+    SageRumourEntry {
+        keyword: "crow",
+        subject: "Terrance",
+        destination: "Britain",
+        fee: 200,
+    },
+    SageRumourEntry {
+        keyword: "scep",
+        subject: "Greymarch",
+        destination: "Yew",
+        fee: 200,
+    },
+    SageRumourEntry {
+        keyword: "amul",
+        subject: "Simon and Tessa",
+        destination: "a hidden mountain keep",
+        fee: 200,
+    },
+    SageRumourEntry {
+        keyword: "fals",
+        subject: "Shalineth",
+        destination: "the Lycaeum",
+        fee: 250,
+    },
+    SageRumourEntry {
+        keyword: "hatr",
+        subject: "a daemon",
+        destination: "the desert",
+        fee: 250,
+    },
+    SageRumourEntry {
+        keyword: "cowa",
+        subject: "Lord Malone",
+        destination: "Serpent's Hold",
+        fee: 250,
+    },
+    SageRumourEntry {
+        keyword: "astr",
+        subject: "Zachariah",
+        destination: "Moonglow",
+        fee: 100,
+    },
+    SageRumourEntry {
+        keyword: "oppr",
+        subject: "Tactus",
+        destination: "Minoc",
+        fee: 50,
+    },
+    SageRumourEntry {
+        keyword: "brit",
+        subject: "a daemon",
+        destination: "the desert",
+        fee: 50,
+    },
+    SageRumourEntry {
+        keyword: "resi",
+        subject: "Terrance",
+        destination: "Britain",
+        fee: 200,
+    },
+    SageRumourEntry {
+        keyword: "unde",
+        subject: "Jotham",
+        destination: "a lighthouse south of Britain",
+        fee: 100,
+    },
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SageRumourQuote {
@@ -1466,6 +1575,7 @@ pub struct SageRumourQuote {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SageRumourOutcome {
     pub quote: SageRumourQuote,
+    pub record_id: usize,
     pub rendered: String,
 }
 
@@ -2325,7 +2435,7 @@ pub fn find_sage_topic(
 
     table
         .iter()
-        .filter_map(|entry| *entry)
+        .copied()
         .find(|entry| sage_topic_matches_input(entry.keyword, capped))
         .map(|entry| SageRumourQuote {
             entry,
@@ -2334,9 +2444,22 @@ pub fn find_sage_topic(
         .ok_or(SageRumourError::NoTopicMatch)
 }
 
-pub fn render_sage_rumour(entry: SageRumourEntry) -> String {
-    entry
-        .record_template
+pub const fn sage_rumour_success_record_id_accepted(record_id: usize) -> bool {
+    record_id >= SAGE_RUMOUR_SUCCESS_RECORD_FIRST && record_id <= SAGE_RUMOUR_SUCCESS_RECORD_LAST
+}
+
+pub fn sage_rumour_fallback_template(record_id: usize) -> &'static str {
+    match record_id {
+        85 => "Seek ye & in *!",
+        86 => "Rumour says &, who lives in *, has knowledge.",
+        87 => "It may be that &, of *, can help.",
+        88 => "Mayhap & in * will aid the party.",
+        _ => "Seek ye & in *!",
+    }
+}
+
+pub fn render_sage_rumour(entry: SageRumourEntry, record_id: usize) -> String {
+    sage_rumour_fallback_template(record_id)
         .replace('&', entry.subject)
         .replace('*', entry.destination)
 }
@@ -2344,11 +2467,13 @@ pub fn render_sage_rumour(entry: SageRumourEntry) -> String {
 pub fn apply_sage_rumour_lookup(
     table: &SageRumourTable,
     input: &str,
+    record_id: usize,
 ) -> Result<SageRumourOutcome, SageRumourError> {
     let quote = find_sage_topic(table, input)?;
     Ok(SageRumourOutcome {
         quote,
-        rendered: render_sage_rumour(quote.entry),
+        record_id,
+        rendered: render_sage_rumour(quote.entry, record_id),
     })
 }
 
@@ -2871,8 +2996,9 @@ impl PlayState {
         &mut self,
         table: &SageRumourTable,
         input: &str,
+        record_id: usize,
     ) -> Result<SageRumourOutcome, SageRumourError> {
-        apply_sage_rumour_lookup(table, input)
+        apply_sage_rumour_lookup(table, input, record_id)
     }
 
     pub fn pay_inn_rest(

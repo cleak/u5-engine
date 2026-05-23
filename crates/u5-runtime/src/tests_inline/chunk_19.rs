@@ -1049,6 +1049,98 @@
     }
 
     #[test]
+    fn completed_long_camp_recovery_applies_guarded_hp_and_class_mana() {
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.avatar_stats.intelligence = 22;
+        state.party_intelligence = vec![22, 24, 20, 18, 12, 8];
+        state.party = vec![
+            PartyMember {
+                slot: 0,
+                class_byte: b'A',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 0,
+                hp: 1,
+                max_hp: 2,
+                level: 8,
+            },
+            PartyMember {
+                slot: 1,
+                class_byte: b'M',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 1,
+                hp: 4,
+                max_hp: 10,
+                level: 8,
+            },
+            PartyMember {
+                slot: 2,
+                class_byte: b'B',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 2,
+                hp: 5,
+                max_hp: 6,
+                level: 8,
+            },
+            PartyMember {
+                slot: 3,
+                class_byte: b'F',
+                status: b'G',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 3,
+                hp: 5,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 4,
+                class_byte: b'A',
+                status: b'P',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 4,
+                hp: 5,
+                max_hp: 20,
+                level: 8,
+            },
+            PartyMember {
+                slot: 5,
+                class_byte: b'M',
+                status: b'D',
+                climb_stat: DEFAULT_CLIMB_STAT,
+                mana: 5,
+                hp: 0,
+                max_hp: 20,
+                level: 8,
+            },
+        ];
+        let entry_statuses = [b'G', b'G', b'G', b'G', b'P', b'D'];
+
+        assert_eq!(
+            state.apply_completed_long_camp_recovery(5, Some(3), &entry_statuses),
+            (0, 0)
+        );
+
+        let (hp, mana) = state.apply_completed_long_camp_recovery(6, Some(3), &entry_statuses);
+
+        assert!(hp >= 3);
+        assert_eq!(mana, 53);
+        assert_eq!(state.party[0].hp, 2);
+        assert_eq!(state.party[0].mana, 22);
+        assert!((5..=10).contains(&state.party[1].hp));
+        assert_eq!(state.party[1].mana, 24);
+        assert_eq!(state.party[2].hp, 6);
+        assert_eq!(state.party[2].mana, 10);
+        assert_eq!(state.party[3].hp, 5);
+        assert_eq!(state.party[3].mana, 3);
+        assert_eq!(state.party[4].hp, 5);
+        assert_eq!(state.party[4].mana, 4);
+        assert_eq!(state.party[5].hp, 0);
+        assert_eq!(state.party[5].mana, 5);
+    }
+
+    #[test]
     fn lord_british_camp_event_recomputes_level_and_prints_karma_verdict() {
         let dir = debug_game_dir();
         fs::write(

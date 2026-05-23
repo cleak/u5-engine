@@ -14,7 +14,7 @@ use std::{error::Error, fmt, io};
 
 use crate::shops::{
     SHOPPE_DAT_LEN, SHOPPE_DAT_NONEMPTY_RECORDS, SHOPPE_DAT_RECORD_SLOTS, ShopPlaceholderKind,
-    sage_rumour_record_id_accepted, shop_placeholder_kind, shoppe_time_of_day_word,
+    sage_rumour_success_record_id_accepted, shop_placeholder_kind, shoppe_time_of_day_word,
 };
 use crate::tlk_control_codes::{COMMON_WORD_DICTIONARY_ENTRIES, shoppe_dictionary_index};
 use crate::{PUBLISHED_COMMON_WORD_DICTIONARY, read_disk_file};
@@ -272,8 +272,8 @@ pub fn render_shoppe_record(
     Ok(render_shoppe_bark(record, ctx))
 }
 
-/// Render a public issue #13 sage rumour record. Sage records live in
-/// SHOPPE.DAT record ids 84-91 and use the ordinary `&` item-name and
+/// Render a public issue #13 sage rumour success record. Paid sage
+/// success templates live in SHOPPE.DAT record ids 85-88 and use the ordinary `&` item-name and
 /// `*` place-name placeholders for matched-name and location text.
 pub fn render_sage_rumour_shoppe_record(
     records: &ShoppeRecords,
@@ -282,7 +282,7 @@ pub fn render_sage_rumour_shoppe_record(
     location: &str,
     dictionary: Option<&[&str; COMMON_WORD_DICTIONARY_ENTRIES]>,
 ) -> Result<String, ShoppeDatError> {
-    if !sage_rumour_record_id_accepted(record_id) {
+    if !sage_rumour_success_record_id_accepted(record_id) {
         return Err(ShoppeDatError::MissingRecord {
             id: record_id,
             slots: records.slot_count(),
@@ -434,10 +434,10 @@ mod tests {
             records: vec![Vec::new(); 93],
         };
         records.records[83] = b"wrong & *".to_vec();
-        records.records[84] = b"Ask & in *".to_vec();
+        records.records[85] = b"Ask & in *".to_vec();
 
         assert_eq!(
-            render_sage_rumour_shoppe_record(&records, 84, "Greyson", "Cotham", None).unwrap(),
+            render_sage_rumour_shoppe_record(&records, 85, "Greyson", "Cotham", None).unwrap(),
             "Ask Greyson in Cotham"
         );
         assert_eq!(
@@ -445,8 +445,8 @@ mod tests {
             Err(ShoppeDatError::MissingRecord { id: 83, slots: 93 })
         );
         assert_eq!(
-            render_sage_rumour_shoppe_record(&records, 91, "Greyson", "Cotham", None),
-            Err(ShoppeDatError::EmptyRecord { id: 91 })
+            render_sage_rumour_shoppe_record(&records, 84, "Greyson", "Cotham", None),
+            Err(ShoppeDatError::MissingRecord { id: 84, slots: 93 })
         );
     }
 

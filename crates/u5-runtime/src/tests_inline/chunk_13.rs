@@ -8271,18 +8271,28 @@ fn guild_shop_action_routes_a_b_c_and_exits_on_anything_else() {
 
 #[test]
 fn sage_rumour_table_shape_matches_public_issue() {
-    // Public issue cleak/u5-spec#13: sixteen free-text rows per sage.
-    // Public issue cleak/u5-spec#13 has not yet published the real per-sage rows.
-    assert_eq!(SAGE_RUMOUR_ENTRIES_PER_SAGE, 16);
-    assert_eq!(SAGE_LABEL_LETTERS, ['C', 'T', 'H', 'A']);
-    assert!(SAGE_KNOWN_PEOPLE.contains(&"Greyson"));
-    assert!(SAGE_KNOWN_PEOPLE.contains(&"Tactus"));
-    assert!(SAGE_KNOWN_PLACES.contains(&"Cotham"));
-    assert!(SAGE_KNOWN_PLACES.contains(&"Serpent's Hold"));
+    // Public issue cleak/u5-spec#13: one shared paid 26-row sage topic table.
+    assert_eq!(SAGE_RUMOUR_TOPIC_COUNT, 26);
+    assert_eq!(SAGE_RUMOUR_TABLE.len(), 26);
+    assert_eq!(SAGE_RUMOUR_TABLE[0].keyword, "hone");
+    assert_eq!(SAGE_RUMOUR_TABLE[0].subject, "Malik");
+    assert_eq!(SAGE_RUMOUR_TABLE[0].destination, "Moonglow");
+    assert_eq!(SAGE_RUMOUR_TABLE[0].fee, 50);
+    assert_eq!(SAGE_RUMOUR_TABLE[25].keyword, "unde");
+    assert_eq!(SAGE_RUMOUR_TABLE[25].subject, "Jotham");
+    assert_eq!(
+        SAGE_RUMOUR_TABLE[25].destination,
+        "a lighthouse south of Britain"
+    );
+    assert_eq!(SAGE_RUMOUR_TABLE[25].fee, 100);
     assert!(sage_rumour_record_id_accepted(84));
     assert!(sage_rumour_record_id_accepted(91));
     assert!(!sage_rumour_record_id_accepted(83));
     assert!(!sage_rumour_record_id_accepted(92));
+    assert!(sage_rumour_success_record_id_accepted(85));
+    assert!(sage_rumour_success_record_id_accepted(88));
+    assert!(!sage_rumour_success_record_id_accepted(84));
+    assert!(!sage_rumour_success_record_id_accepted(89));
     // Sanity: the input cap stays at 15 chars for free-text entry.
     assert_eq!(SAGE_TOPIC_INPUT_LIMIT, 15);
 }

@@ -1,6 +1,9 @@
 use std::io;
 use std::path::Path;
 
+use crate::rest_camp::{
+    COMPLETED_LONG_CAMP_HP_GAIN_MAX, COMPLETED_LONG_CAMP_HP_GAIN_MIN, COMPLETED_LONG_CAMP_MIN_HOURS,
+};
 use crate::*;
 
 impl PlayState {
@@ -215,6 +218,15 @@ impl PlayState {
         } else {
             self.wake_initial_rest_sleepers(&asleep_at_start)
         };
+        if !interrupted {
+            let (hp, mana) = self.apply_completed_long_camp_recovery(
+                hours,
+                request.watcher,
+                &rest_entry_statuses,
+            );
+            recovered_hp += hp;
+            recovered_mana += mana;
+        }
         let completed_hours = rest_ticks / u64::from(REST_WATCH_TICKS_PER_HOUR);
         let completed_minutes = (rest_ticks % u64::from(REST_WATCH_TICKS_PER_HOUR))
             * u64::from(REST_WATCH_MINUTES_PER_TICK);
@@ -464,6 +476,54 @@ impl PlayState {
         // Watch participation affects prompts, interruption setup, and
         // cleanup status transitions, not direct HP/MP restoration.
         (0, 0)
+    }
+
+    pub fn apply_completed_long_camp_recovery(
+        &mut self,
+        accepted_hours: u8,
+        watcher: Option<usize>,
+        entry_statuses: &[u8],
+    ) -> (u16, u16) {
+        if accepted_hours < COMPLETED_LONG_CAMP_MIN_HOURS {
+            return (0, 0);
+        }
+
+        let mut recovered_hp = 0u16;
+        let mut recovered_mana = 0u16;
+        for index in 0..self.party.len() {
+            if watcher == Some(index) || entry_statuses.get(index).copied() == Some(b'P') {
+                continue;
+            }
+            let member = self.party[index];
+            if !member.living() {
+                continue;
+            }
+
+            let hp_gain = u16::from(self.random_range_u8(
+                COMPLETED_LONG_CAMP_HP_GAIN_MIN,
+                COMPLETED_LONG_CAMP_HP_GAIN_MAX,
+            ));
+            let hp_target = member.hp.saturating_add(hp_gain).min(member.max_hp);
+            recovered_hp = recovered_hp.saturating_add(hp_target.saturating_sub(member.hp));
+            self.party[index].hp = hp_target;
+
+            let intelligence = if index == 0 {
+                self.avatar_stats.intelligence
+            } else {
+                self.party_intelligence
+                    .get(index)
+                    .copied()
+                    .unwrap_or(self.avatar_stats.intelligence)
+            };
+            if let Some(mana_target) =
+                lord_british_camp_refreshed_mana(member.class_byte, intelligence)
+            {
+                recovered_mana = recovered_mana
+                    .saturating_add(u16::from(mana_target.saturating_sub(member.mana)));
+                self.party[index].mana = mana_target;
+            }
+        }
+        (recovered_hp, recovered_mana)
     }
 
     pub fn apply_inn_rest_night_recovery(&mut self) -> (u16, u16, usize) {

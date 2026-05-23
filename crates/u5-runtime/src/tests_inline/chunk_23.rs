@@ -1648,129 +1648,68 @@
 
     #[test]
     fn sage_topic_matching_uses_cap_case_and_strict_boundary() {
-        let topics: SageRumourTable = [
-            Some(SageRumourEntry {
-                keyword: "shard",
-                subject: "the shard",
-                destination: "Deceit",
-                record_id: SHOPPE_RECORDS_SAGE_FIRST,
-                record_template: "Seek ye & in *!",
-            }),
-            Some(SageRumourEntry {
-                keyword: "shadowlords",
-                subject: "the Shadowlords",
-                destination: "Stonegate",
-                record_id: SHOPPE_RECORDS_SAGE_FIRST,
-                record_template: "Seek ye & in *!",
-            }),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ];
+        let hone = find_sage_topic(&SAGE_RUMOUR_TABLE, "  HONE map").unwrap();
+        assert_eq!(hone.entry.subject, "Malik");
+        assert_eq!(hone.input_len, 8);
 
-        let shard = find_sage_topic(&topics, "  SHARD map").unwrap();
-        assert_eq!(shard.entry.subject, "the shard");
-        assert_eq!(shard.input_len, 9);
-
-        assert!(sage_topic_matches_input("shard", "shard"));
-        assert!(sage_topic_matches_input("shard", "shard clue"));
-        assert!(!sage_topic_matches_input("shard", "shards"));
+        assert!(sage_topic_matches_input("hone", "hone"));
+        assert!(sage_topic_matches_input("hone", "hone clue"));
+        assert!(!sage_topic_matches_input("hone", "honesty"));
         assert_eq!(
-            find_sage_topic(&topics, "shadowlordsx"),
+            find_sage_topic(&SAGE_RUMOUR_TABLE, "honesty"),
             Err(SageRumourError::NoTopicMatch)
         );
-        let shadowlords = find_sage_topic(&topics, "shadowlords lore beyond cap").unwrap();
-        assert_eq!(shadowlords.entry.subject, "the Shadowlords");
-        assert_eq!(shadowlords.input_len, SAGE_TOPIC_INPUT_LIMIT);
+        let lighthouse = find_sage_topic(&SAGE_RUMOUR_TABLE, "unde lore beyond cap").unwrap();
+        assert_eq!(lighthouse.entry.subject, "Jotham");
+        assert_eq!(lighthouse.input_len, SAGE_TOPIC_INPUT_LIMIT);
         assert_eq!(
-            find_sage_topic(&topics, "1234567890123456"),
+            find_sage_topic(&SAGE_RUMOUR_TABLE, "1234567890123456"),
             Err(SageRumourError::NoTopicMatch)
         );
-        assert_eq!(find_sage_topic(&topics, " "), Err(SageRumourError::EmptyInput));
+        assert_eq!(
+            find_sage_topic(&SAGE_RUMOUR_TABLE, " "),
+            Err(SageRumourError::EmptyInput)
+        );
     }
 
     #[test]
-    fn sage_rumour_lookup_renders_substitutions_without_debiting_gold() {
-        let topics: SageRumourTable = [
-            Some(SageRumourEntry {
-                keyword: "codex",
-                subject: "the Codex",
-                destination: "the Underworld",
-                record_id: SHOPPE_RECORDS_SAGE_FIRST,
-                record_template: "Seek ye & in *!",
-            }),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ];
+    fn sage_rumour_lookup_renders_paid_table_substitutions() {
         let mut state = world_state(open_world_grid(), 10, 10);
         state.gold = 20;
 
-        let bought = state.consult_sage_rumour(&topics, "CODEX").unwrap();
+        let bought = state
+            .consult_sage_rumour(
+                &SAGE_RUMOUR_TABLE,
+                "HONE",
+                SAGE_RUMOUR_SUCCESS_RECORD_FIRST,
+            )
+            .unwrap();
 
         assert_eq!(state.gold, 20);
-        assert_eq!(bought.rendered, "Seek ye the Codex in the Underworld!");
+        assert_eq!(bought.rendered, "Seek ye Malik in Moonglow!");
+        assert_eq!(bought.quote.entry.fee, 50);
     }
 
     #[test]
     fn sage_rumour_refusals_preserve_gold() {
-        let topics: SageRumourTable = [
-            Some(SageRumourEntry {
-                keyword: "truth",
-                subject: "Truth",
-                destination: "the Lycaeum",
-                record_id: SHOPPE_RECORDS_SAGE_FIRST,
-                record_template: "Seek ye & in *!",
-            }),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ];
         let gold = 24;
 
         assert_eq!(
-            apply_sage_rumour_lookup(&topics, "1234567890123456"),
+            apply_sage_rumour_lookup(
+                &SAGE_RUMOUR_TABLE,
+                "1234567890123456",
+                SAGE_RUMOUR_SUCCESS_RECORD_FIRST,
+            ),
             Err(SageRumourError::NoTopicMatch)
         );
         assert_eq!(gold, 24);
 
         assert_eq!(
-            apply_sage_rumour_lookup(&topics, "valor"),
+            apply_sage_rumour_lookup(
+                &SAGE_RUMOUR_TABLE,
+                "valor",
+                SAGE_RUMOUR_SUCCESS_RECORD_FIRST,
+            ),
             Err(SageRumourError::NoTopicMatch)
         );
         assert_eq!(gold, 24);

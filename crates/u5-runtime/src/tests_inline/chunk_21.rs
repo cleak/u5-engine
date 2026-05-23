@@ -4287,49 +4287,25 @@
     }
 
     #[test]
-    fn end_to_end_sage_rumour_renders_without_confirm_or_debit() {
+    fn end_to_end_sage_rumour_quotes_confirms_debits_and_renders() {
         use crate::shop_runtime::SageState;
         use crate::shop_session::ActiveShopSession;
 
-        static TOPICS: SageRumourTable = [
-            Some(SageRumourEntry {
-                keyword: "codex",
-                subject: "the Codex",
-                destination: "the Underworld",
-                record_id: SHOPPE_RECORDS_SAGE_FIRST,
-                record_template: "Seek ye & in *!",
-            }),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ];
-
         let mut state = test_state(open_grid(), 1, 1);
-        state.gold = 20;
-        state.active_shop = Some(ActiveShopSession::Sage(SageState::for_table(&TOPICS)));
+        state.gold = 200;
+        state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
 
-        handle_play_key_input(&mut state, 'C', "ODEX", Path::new("")).unwrap();
-        assert_eq!(state.gold, 20);
-        assert_eq!(state.message, "Seek ye the Codex in the Underworld!");
+        handle_play_key_input(&mut state, 'H', "ONE", Path::new("")).unwrap();
+        assert_eq!(state.gold, 200);
+        assert_eq!(state.message, "That will cost 50 gold. Pay? (Y/N)");
         assert!(state.active_shop.is_some());
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
-        assert_eq!(state.gold, 20);
-        assert_eq!(state.message, "That, I cannot help thee with.");
-        assert!(state.active_shop.is_some());
+        assert!(state.gold <= 150);
+        assert!(state.message.contains("Malik"));
+        assert!(state.message.contains("Moonglow"));
+        assert!(state.active_shop.is_none());
     }
 
     #[test]
@@ -4337,60 +4313,39 @@
         use crate::shop_runtime::SageState;
         use crate::shop_session::ActiveShopSession;
 
-        static TOPICS: SageRumourTable = [
-            Some(SageRumourEntry {
-                keyword: "codex",
-                subject: "the Codex",
-                destination: "the Underworld",
-                record_id: SHOPPE_RECORDS_SAGE_FIRST,
-                record_template: "Fallback & in *!",
-            }),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ];
-
         let dir = debug_game_dir();
-        let shoppe = shoppe_dat_with_record(
-            SHOPPE_RECORDS_SAGE_FIRST,
-            b"Asset says: seek & below *.",
-        );
+        let shoppe = shoppe_dat_with_records(&[
+            (85, b"Asset says: seek & below *.".as_slice()),
+            (86, b"Asset says: seek & below *.".as_slice()),
+            (87, b"Asset says: seek & below *.".as_slice()),
+            (88, b"Asset says: seek & below *.".as_slice()),
+        ]);
         std::fs::write(dir.join("SHOPPE.DAT"), shoppe).unwrap();
         let mut state = test_state(open_grid(), 1, 1);
-        state.gold = 20;
-        state.active_shop = Some(ActiveShopSession::Sage(SageState::for_table(&TOPICS)));
+        state.gold = 200;
+        state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
 
-        handle_play_key_input(&mut state, 'C', "ODEX", &dir).unwrap();
-        assert_eq!(state.gold, 20);
-        assert_eq!(
-            state.message,
-            "Asset says: seek the Codex below the Underworld."
-        );
+        handle_play_key_input(&mut state, 'H', "ONE", &dir).unwrap();
+        handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
+
+        assert!(state.message.contains("Asset says: seek Malik below Moonglow."));
         let _ = fs::remove_dir_all(dir);
     }
 
-    fn shoppe_dat_with_record(record_id: usize, record: &[u8]) -> Vec<u8> {
-        assert!(record_id < SHOPPE_DAT_NONEMPTY_RECORDS);
-        let filler_record_count = SHOPPE_DAT_NONEMPTY_RECORDS - 2;
+    fn shoppe_dat_with_records(records: &[(usize, &[u8])]) -> Vec<u8> {
+        assert!(!records.is_empty());
+        let payload_len: usize = records.iter().map(|(_, record)| record.len()).sum();
+        for (record_id, _) in records {
+            assert!(*record_id < SHOPPE_DAT_NONEMPTY_RECORDS);
+        }
+        let filler_record_count = SHOPPE_DAT_NONEMPTY_RECORDS - 1 - records.len();
         let record_zero_len =
-            SHOPPE_DAT_LEN - SHOPPE_DAT_RECORD_SLOTS - filler_record_count - record.len();
+            SHOPPE_DAT_LEN - SHOPPE_DAT_RECORD_SLOTS - filler_record_count - payload_len;
         let mut bytes = Vec::with_capacity(SHOPPE_DAT_LEN);
         bytes.extend(std::iter::repeat_n(b'a', record_zero_len));
         bytes.push(0);
         for id in 1..SHOPPE_DAT_NONEMPTY_RECORDS {
-            if id == record_id {
+            if let Some((_, record)) = records.iter().find(|(record_id, _)| *record_id == id) {
                 bytes.extend_from_slice(record);
             } else {
                 bytes.push(b'x');
