@@ -16,33 +16,44 @@ use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use image::{ImageBuffer, Rgba};
 
 use u5_runtime::{
-    ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX, BRITISH_PTH_PEN_ORIGINS, BritishPth,
-    CGA_PALETTE_RGB, COMBAT_ARENA_SIDE, ChargenSession, ChargenSessionResult, ChargenSessionStep,
-    DEATH_VISION_OBJECT_CLASS, Direction, DungeonScene, EGA_PALETTE_RGB, ENDGAME_TABLEAU_HEIGHT,
-    ENDGAME_TABLEAU_WIDTH, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
-    FixedCellFont, GameClock, GraphicImage, GuildShop, HORSE_PARKED_FIRST, Healer, Herbalist,
-    INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
-    INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X,
-    INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
-    INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX,
-    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
-    MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, PCS_GLYPH_HEIGHT, PEER_COST,
-    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, PROMPT_TEXT_WINDOW_INDEX,
+    AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX,
+    BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB, COMBAT_ARENA_SIDE, CURE_COST,
+    CURE_SPELL_INDEX, ChargenSession, ChargenSessionResult, ChargenSessionStep,
+    DEATH_VISION_OBJECT_CLASS, DEFAULT_CLIMB_STAT, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
+    DISPEL_FIELD_SPELL_INDEX, DUNGEON_LEVEL_SPELL_COST, Direction, DungeonScene, EGA_PALETTE_RGB,
+    ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX,
+    FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
+    FIRST_PLAYABLE_FULL_SHIP_HULL, FixedCellFont, GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX,
+    GameClock, GraphicImage, GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer,
+    Herbalist, IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP,
+    INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE,
+    INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y,
+    INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn,
+    IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
+    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, NEGATE_MAGIC_COST,
+    NEGATE_MAGIC_SPELL_INDEX, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST,
+    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, POISON_FIELD_SPELL_INDEX,
+    PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
     PlayInputDisposition, PlayOptions, PlayState, PlayTarget, ProportionalFont,
-    ProportionalWidthTable, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
-    ReturnToViewFrameKind, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX,
-    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
-    STATS_PANEL_TEXT_WINDOW_INDEX, Scene, Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS,
-    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
-    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
-    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
-    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth,
-    TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState,
-    U4TransferOverrides, U4TransferSource, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
-    blit_tile_id_to_viewport, commit_chargen_save, commit_u4_transfer_save, dungeon_cell_index,
-    endgame_tableau_role_for_slot, handle_play_key_input, hash_bytes, input_case_fold,
-    input_function_key_code, input_keypad_digit_direction_code,
+    ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, RESURRECT_COST,
+    RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
+    ReturnToViewFrameKind, SLEEP_FIELD_SPELL_INDEX, SPECIAL_ITEM_OWNED_VALUE,
+    SPECIAL_ITEM_SPYGLASS_INDEX, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
+    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, Shipwright, Stable, StoryRecords,
+    TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
+    TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS,
+    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
+    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X,
+    TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE,
+    Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset,
+    TitleBitImages, TitleBitPlacement, TransportState, U4TransferOverrides, U4TransferSource,
+    UUS_POR_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WorldPlane, WorldReturn, X_RAY_COST,
+    X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, commit_chargen_save, commit_u4_transfer_save,
+    default_party_equipment, default_party_intelligence, default_party_names,
+    default_party_stay_counters, dungeon_cell_index, endgame_tableau_role_for_slot,
+    handle_play_key_input, hash_bytes, input_case_fold, input_function_key_code,
+    input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -894,6 +905,86 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_blink),
         },
         VisualRouteSuiteCase {
+            label: "route-britannia-locate-cast",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                ..PlayOptions::default()
+            },
+            script: &["C1IW"],
+            configure: Some(seed_visual_route_locate),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-light-open-spell",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["C1LV", "C1AS6"],
+            configure: Some(seed_visual_route_light_open),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-restore-spell-suite",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["C1AZ", "C1AN3", "C1M3", "C1MV3", "C1CIM4"],
+            configure: Some(seed_visual_route_restore_spells),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-active-effect-spell-suite",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["C1IS", "C1RT", "C1AI", "C1AT"],
+            configure: Some(seed_visual_route_active_effect_spells),
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-level-up-down-spells",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 1,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["C1PU", "C1DP"],
+            configure: Some(seed_visual_route_dungeon_level_spells),
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-field-cycle-spells",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                facing: Some(Direction::East),
+                ..PlayOptions::default()
+            },
+            script: &[
+                "C1FGI6", "C1AG6", "C1GIN6", "C1AG6", "C1GIZ6", "C1AG6", "C1GIS6", "C1AG6",
+            ],
+            configure: Some(seed_visual_route_dungeon_field_cycle),
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-open-chest-spell",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["C1AS"],
+            configure: Some(seed_visual_route_dungeon_open_chest),
+        },
+        VisualRouteSuiteCase {
             label: "route-castle-poison-gas-step",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -1152,6 +1243,135 @@ fn seed_visual_route_blink(state: &mut PlayState) {
     if let Some(caster) = state.party.first_mut() {
         caster.mana = BLINK_COST;
         caster.level = BLINK_COST;
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_locate(state: &mut PlayState) {
+    state.player.x = 62;
+    state.player.y = 124;
+    state.spell_charges[IN_WIS_SPELL_INDEX] = 1;
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = IN_WIS_COST;
+        caster.level = IN_WIS_COST;
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_light_open(state: &mut PlayState) {
+    state.player.x = 1;
+    state.player.y = 1;
+    state.player.facing = Direction::East;
+    let target = state.player.y * TOWN_GRID_SIDE + state.player.x + 1;
+    if let Some(cell) = state.grid.get_mut(target) {
+        *cell = 0x97;
+    }
+    state.spell_charges[VAS_LOR_SPELL_INDEX] = 1;
+    state.spell_charges[OPEN_SPELL_INDEX] = 1;
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = VAS_LOR_COST + OPEN_SPELL_COST;
+        caster.level = VAS_LOR_COST.max(OPEN_SPELL_COST);
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn route_visual_party_member(
+    slot: u8,
+    class_byte: u8,
+    status: u8,
+    hp: u16,
+    max_hp: u16,
+) -> PartyMember {
+    PartyMember {
+        slot,
+        class_byte,
+        status,
+        climb_stat: DEFAULT_CLIMB_STAT,
+        mana: 0,
+        hp,
+        max_hp,
+        level: 1,
+    }
+}
+
+fn seed_visual_route_restore_spells(state: &mut PlayState) {
+    state.party = vec![
+        route_visual_party_member(0, b'A', b'G', 20, 20),
+        route_visual_party_member(1, b'F', b'S', 8, 24),
+        route_visual_party_member(2, b'M', b'P', 6, 30),
+        route_visual_party_member(3, b'B', b'D', 0, 19),
+    ];
+    state.party_names = default_party_names(4);
+    state.party_experience = vec![0, 0, 0, 350];
+    state.party_stay_counters = default_party_stay_counters(4);
+    state.party_strengths = vec![30; 4];
+    state.party_intelligence = default_party_intelligence(4);
+    state.party_equipment = default_party_equipment(4);
+    state.moral_standing = 99;
+    state.party[0].mana = AWAKEN_COST + CURE_COST + HEAL_COST + GREAT_HEAL_COST + RESURRECT_COST;
+    state.party[0].level = RESURRECT_COST;
+    state.spell_charges[AWAKEN_SPELL_INDEX] = 1;
+    state.spell_charges[CURE_SPELL_INDEX] = 1;
+    state.spell_charges[HEAL_SPELL_INDEX] = 1;
+    state.spell_charges[GREAT_HEAL_SPELL_INDEX] = 1;
+    state.spell_charges[RESURRECT_SPELL_INDEX] = 1;
+}
+
+fn seed_visual_route_active_effect_spells(state: &mut PlayState) {
+    state.spell_charges[PROTECTION_SPELL_INDEX] = 1;
+    state.spell_charges[QUICKNESS_SPELL_INDEX] = 1;
+    state.spell_charges[NEGATE_MAGIC_SPELL_INDEX] = 1;
+    state.spell_charges[TIME_STOP_SPELL_INDEX] = 1;
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = PROTECTION_COST + QUICKNESS_COST + NEGATE_MAGIC_COST + TIME_STOP_COST;
+        caster.level = TIME_STOP_COST;
+    }
+}
+
+fn seed_visual_route_dungeon_level_spells(state: &mut PlayState) {
+    state.spell_charges[UUS_POR_SPELL_INDEX] = 1;
+    state.spell_charges[DES_POR_SPELL_INDEX] = 1;
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = DUNGEON_LEVEL_SPELL_COST * 2;
+        caster.level = DUNGEON_LEVEL_SPELL_COST;
+    }
+}
+
+fn seed_visual_route_dungeon_field_cycle(state: &mut PlayState) {
+    state.player.x = 1;
+    state.player.y = 1;
+    state.player.facing = Direction::East;
+    let target = dungeon_cell_index(0, 2, 1);
+    if let Some(cell) = state.grid.get_mut(target) {
+        *cell = 0x00;
+    }
+    state.spell_charges[FIRE_FIELD_SPELL_INDEX] = 1;
+    state.spell_charges[POISON_FIELD_SPELL_INDEX] = 1;
+    state.spell_charges[SLEEP_FIELD_SPELL_INDEX] = 1;
+    state.spell_charges[ENERGY_FIELD_SPELL_INDEX] = 1;
+    state.spell_charges[DISPEL_FIELD_SPELL_INDEX] = 4;
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = FIELD_SPELL_COST * 3 + ENERGY_FIELD_COST + DISPEL_FIELD_COST * 4;
+        caster.level = ENERGY_FIELD_COST.max(DISPEL_FIELD_COST);
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_dungeon_open_chest(state: &mut PlayState) {
+    state.player.x = 1;
+    state.player.y = 1;
+    let current = dungeon_cell_index(0, state.player.x, state.player.y);
+    if let Some(cell) = state.grid.get_mut(current) {
+        *cell = 0x40;
+    }
+    state.spell_charges[OPEN_SPELL_INDEX] = 1;
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = OPEN_SPELL_COST;
+        caster.level = OPEN_SPELL_COST;
     }
     state.sync_player_object();
     state.mark_visibility_dirty();
@@ -5681,7 +5901,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 69);
+        assert_eq!(cases.len(), 76);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -5786,6 +6006,17 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-britannia-blink-east-ray")
         );
+        for label in [
+            "route-britannia-locate-cast",
+            "route-castle-light-open-spell",
+            "route-castle-restore-spell-suite",
+            "route-castle-active-effect-spell-suite",
+            "route-dungeon-level-up-down-spells",
+            "route-dungeon-field-cycle-spells",
+            "route-dungeon-open-chest-spell",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert!(
             cases
                 .iter()
@@ -5903,6 +6134,14 @@ mod tests {
             "route-britannia-blink-east-ray-01-c1ip6"
         );
         assert_eq!(
+            visual_route_step_label("route-britannia-locate-cast", 1, "C1IW"),
+            "route-britannia-locate-cast-01-c1iw"
+        );
+        assert_eq!(
+            visual_route_step_label("route-dungeon-field-cycle-spells", 8, "C1AG6"),
+            "route-dungeon-field-cycle-spells-08-c1ag6"
+        );
+        assert_eq!(
             visual_route_step_label("route-shop-horse-trader-stablehouse-buy", 2, "Y"),
             "route-shop-horse-trader-stablehouse-buy-02-y"
         );
@@ -5921,7 +6160,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 209);
+        assert_eq!(reports.len(), 239);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -5962,6 +6201,13 @@ mod tests {
         assert!(manifest.contains("route-shop-guild-buy-03-d"));
         assert!(manifest.contains("route-shop-sage-topic-miss-01-mantra"));
         assert!(manifest.contains("route-britannia-blink-east-ray-01-c1ip6"));
+        assert!(manifest.contains("route-britannia-locate-cast-01-c1iw"));
+        assert!(manifest.contains("route-castle-light-open-spell-02-c1as6"));
+        assert!(manifest.contains("route-castle-restore-spell-suite-05-c1cim4"));
+        assert!(manifest.contains("route-castle-active-effect-spell-suite-04-c1at"));
+        assert!(manifest.contains("route-dungeon-level-up-down-spells-02-c1dp"));
+        assert!(manifest.contains("route-dungeon-field-cycle-spells-08-c1ag6"));
+        assert!(manifest.contains("route-dungeon-open-chest-spell-01-c1as"));
         assert!(manifest.contains("route-castle-poison-gas-step-01-d"));
         assert!(manifest.contains("route-shop-inn-rest-accept-02-y"));
         assert!(manifest.contains("route-shop-horse-trader-horse-and-rider-buy-02-y"));

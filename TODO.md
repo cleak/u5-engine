@@ -129,7 +129,7 @@ Last known verification state:
   `a52f8c3db8e33102`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-23 and
-  wrote 170 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 239 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -194,6 +194,8 @@ Last known verification state:
   and `route-doom-combat-xit-foes-remain-02-x` `3cf0bc15e87d80a5`. The
   2026-05-23 expansion added public #48 Blink
   `route-britannia-blink-east-ray-01-c1ip6` `17ceb1f94bc6c6e3`,
+  Locate, Light/Open, restore-spell, active-effect, dungeon level,
+  dungeon field/dispel, and dungeon Open spell route frames,
   public #51 poison gas `route-castle-poison-gas-step-01-d`
   `33ebf44d5ea24373`, public #15 inn rest
   `route-shop-inn-rest-accept-02-y` `2591d02e2c602824`, public #13 sage
