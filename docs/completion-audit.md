@@ -32,13 +32,21 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 
 | Issue | Topic | Engine status |
 |------|-------|---------------|
+| `cleak/u5-spec#1` | Dungeon `0xF?` room-trigger and `0xA?` room-helper reload behavior | Implemented from latest issue answer; checked-in spec wording still has stale contradictions in places |
+| `cleak/u5-spec#3` | Terrain-combat arena records, spawn counts, replacement tiles, and placement metadata | Published placement/count/replacement behavior implemented; skiff/pirate-ship special selector predicate pending |
+| `cleak/u5-spec#8` | Combat non-party sleep/disabled state storage | Public targetability and duration-counter behavior implemented; exact descriptor byte-layout clarification pending |
 | `cleak/u5-spec#13` | Paid shared 26-row sage rumour topic table and success templates | Table/mechanics implemented, including post-debit success-record RNG timing; exact fee/no-credit text still pending |
+| `cleak/u5-spec#15` | Inn Intelligence-adjusted room-rate formula and recovery behavior | Implemented |
+| `cleak/u5-spec#18` | Fixed hidden-treasure found bitmap and special record cookies | Implemented; spec wording correction requested for record 15 predicate |
+| `cleak/u5-spec#28` | Horse-trader sale path replacing old stationary-display purchase premise | Implemented |
+| `cleak/u5-spec#31` | Eternal-Flame-gated Shadowlord shard destruction predicates | Implemented; persistent quest-progress side effect question pending |
 | `cleak/u5-spec#41` | Exact arms-shop eight-item stock rows | Implemented |
 | `cleak/u5-spec#43` | Top-down fountain, wishing-well, death-vision, and wanted-poster outcomes | Published predicates implemented; exact poster text still pending |
 | `cleak/u5-spec#47` | Hourly Ring of Regeneration tick and completed long-camp recovery | Implemented from latest issue answer; spec-file reconciliation pending |
 | `cleak/u5-spec#48` | Non-combat Blink directional ray landing rule | Implemented |
 | `cleak/u5-spec#51` | Full resident town tile-attribute table for poison-gas detection | Published tile step behavior implemented; full table question pending |
 | `cleak/u5-spec#54` | Return-to-View strip captions, timing, geometry, and exact effect rasters | Public timing/captions and 4x19 visible geometry implemented; exact effect raster question pending |
+| `cleak/u5-spec#56` | Endgame tableau active-object layout, sprite mapping, and movement timing | Terminal flow and synthetic clean tableau implemented; exact original tableau metadata pending |
 
 Where an audit row references a pending issue, the engine carries a clean
 implementation or conservative placeholder that avoids private-derived guesses
@@ -50,7 +58,7 @@ Runtime, TUI, and route-smoke results refreshed alongside this audit on
 2026-05-23; Bevy and visual-suite evidence remains from the latest display
 audit:
 
-- `cargo test -p u5-runtime` — 2576 tests pass.
+- `cargo test -p u5-runtime` — 2590 tests pass.
 - `cargo test -p u5-tui` — 79 tests pass, including temp-directory binary
   smoke for empty-save Journey Onward, deterministic Create Character followed
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
@@ -355,16 +363,25 @@ are kept out of gameplay logic until the public spec publishes exact data.
 
 | Issue | Public gap | Engine placeholder |
 |------|------------|--------------------|
+| `cleak/u5-spec#1` | Checked-in `systems/dungeon-mode.md` prose still contains stale cleared-room reload wording in places | Engine follows latest public answer and `formats/dungeon-dat.md`: `0xF?` room triggers demote/replay as navigable `0xA?`, preserving the low-nibble room id |
+| `cleak/u5-spec#3` | Exact skiff/pirate-ship special outdoor arena selector predicate and whether it reads active-object type, tile, or both | Terrain combat uses the published selected `BRIT.CBT` arena record, metadata placement, spawn count, and replacement rows; only the special selector edge remains conservative |
+| `cleak/u5-spec#8` | Exact combat descriptor byte/table layout for non-party sleep/disabled status storage | Engine models the published disabled targetability and per-slot duration counter behavior, but keeps the descriptor/backref layout conservative until the byte conflict is resolved |
 | `cleak/u5-spec#13` | Exact resident SHOPPE record ids/text for the sage fee quote and insufficient-gold/no-credit refusal | Shared paid 26-row table, strict matching, confirmation/debit, post-debit success-record RNG timing, and success rendering are implemented from the public issue answer; prompt wording remains conservative until published |
+| `cleak/u5-spec#18` | Spec prose wording for fixed hidden-treasure record 15 still needs to match the latest issue answer | Engine grants record 15 only when the single-use cookie is clear and no NPC occupies the tile, and does not set the cookie from Search itself |
+| `cleak/u5-spec#31` | Whether Shadowlord shard destruction sets a persisted quest-progress bit beyond the public hideout/encounter state | Engine implements the exact public flame positions, shard/flame pairing, and matching Shadowlord-name encounter gate |
+| `cleak/u5-spec#41` | Exact arms-shop quote/refusal/success text or SHOPPE record ids | Published scene-specific `a..h` stock rows and buy/sell mechanics are implemented; transaction wording remains conservative |
 | `cleak/u5-spec#43` | Exact wanted-poster resident text/template and line breaking | Look routes the public predicates and outcomes, grants all six accepted well wishes as horse-family objects in the public scenes, uses Intelligence for death vision, and inserts party names at the Yew poster predicate with clean-authored placeholder wording |
 | `cleak/u5-spec#47` | Checked-in spec files still contradict the latest public issue answer for non-combat Ring of Regeneration and completed long-camp recovery | Engine implements the latest public issue-comment behavior: hourly 1-in-8 Ring of Regeneration +1 HP and guarded completed long-camp HP/MP recovery |
 | `cleak/u5-spec#51` | Full resident town tile-attribute table | `town_tile_attributes.tsv` can drive the public class `4` + vehicle byte `0x1C` poison-gas trigger predicate; coordinate rows remain as fallback, with focused tests and route-smoke covering the public per-slot roll semantics |
 | `cleak/u5-spec#54` | Return-to-View exact local cell-effect rasters | Parser/scheduler/overlay composition implement the public 19x4 source layout transposed to a 4x19 visible preview, fixed captions from LoadMapStrip, high-opcode no-ops, `(x, y + 7)` effect coordinates, and timing model; exact rasters await final public reconciliation |
+| `cleak/u5-spec#56` | Exact terminal endgame tableau active-object slots, actor roles, coordinates, sprites, cadence, and refusal-branch behavior | Engine has the terminal endgame flow, resource loading, party restoration, confirmation branches, and clean synthetic tableau/jitter model until original tableau metadata is published |
 
 Follow-up questions were current as of the 2026-05-23 issue audit for the
 remaining response-needed items:
 
 - `cleak/u5-spec#13`: exact fee/no-credit text or SHOPPE record ids.
+- `cleak/u5-spec#8`: resolve the descriptor byte conflict between byte 4 as
+  active-object back-reference and byte 4 as sleep/disabled status sub-flags.
 - `cleak/u5-spec#18`: correct the `formats/saved-gam.md` record-15 skip
   predicate wording to match the issue answer.
 - `cleak/u5-spec#31`: publish whether Shadowlord destruction sets a persisted
@@ -379,12 +396,14 @@ remaining response-needed items:
   predicate or publish the full resident tile-attribute table.
 - `cleak/u5-spec#54`: resolve the strip geometry wording conflict and publish
   or defer exact local cell-effect rasters.
+- `cleak/u5-spec#56`: publish the exact endgame tableau actor layout, sprite
+  mapping, movement timing, refusal-branch behavior, and restored-party
+  eligibility.
 - `cleak/u5-spec#3`: publish the exact skiff/pirate-ship special selector
   byte/range and whether the selector inspects active-object type, tile, or both.
-- `cleak/u5-spec#1`: the checked-in spec now names `0xF?` as the walkable
-  room-trigger family, `0xA?` as navigable room-helper state, and `0xE?` as a
-  non-walkable heavy-door presentation variant. The engine follows that current
-  public spec.
+- `cleak/u5-spec#1`: reconcile any stale `systems/dungeon-mode.md` wording
+  that still describes cleared-room reloads as `0xE?` or non-walkable; the
+  engine follows the latest public `0xF? -> 0xA?` room-helper contract.
 
 These spec-sync contradictions do not currently change engine behavior; the
 engine follows the latest public issue answers where checked-in prose lags.

@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-23, including 2576 tests
+- `cargo test -p u5-runtime` passed on 2026-05-23, including 2590 tests
   (latest verification includes public `cleak/u5-spec#47` hourly
   poison/provision/ring ordering, public #28 horse-trader adjacent placement
   priority plus no-marker refusal, public #15 inn pickup stay-counter billing,
@@ -222,8 +222,8 @@ Last known verification state:
   with no newer public push visible from this workspace. Issue answers from the
   public tracker remain the clean source for behavior where checked-in spec
   prose lags.
-- The spec checkout used for the most recent audit was `5b816cc Complete
-  cleanroom specification`.
+- The spec checkout used for the most recent audit was `e34af6b spec: pin
+  fixed hidden-treasure found bitmap and special record cookies`.
 
 Current worktree context when this TODO was refreshed:
 
@@ -304,8 +304,11 @@ Current worktree context when this TODO was refreshed:
   paths.
 - The 2026-05-23 clean-engine audit applied the remaining spec-backed tavern
   drink-letter correction and expanded Doom combat visual routes. Follow-up
-  questions remain current for response-needed public blockers #1, #3, #13,
-  #18, #31, #41, #43, #47, #51, and #54.
+  questions remain current for response-needed public blockers #1, #3, #8,
+  #13, #18, #31, #41, #43, #47, #51, #54, and #56. The only named answered
+  issues with newer public answers after older engine comments were #15, #28,
+  and #48, and their corresponding engine behavior is already implemented and
+  covered by tests or route-smoke.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the
