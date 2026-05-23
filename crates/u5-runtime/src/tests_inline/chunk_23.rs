@@ -1745,45 +1745,137 @@
 
     #[test]
     fn combat_class_stats_expose_published_monster_rows() {
-        let dragon = combat_class_stats(39).unwrap();
-        assert_eq!(dragon.name, "Dragon");
-        assert_eq!(dragon.raw_row(), [30, 25, 25, 10, 30, 99, 2, 30]);
-        assert_eq!(dragon.reward_unit(), 25);
-        assert_eq!(dragon.mass_charm_threshold(), 25);
+        const EXPECTED_ROWS: &[(u8, &str, [u8; 8])] = &[
+            (12, "Guard", [22, 30, 10, 6, 30, 99, 8, 5]),
+            (13, "Wanderer", [30, 30, 30, 30, 99, 99, 1, 0]),
+            (14, "Blackthorn", [30, 30, 30, 30, 30, 99, 1, 0]),
+            (15, "Lord British", [30, 30, 30, 30, 99, 99, 1, 0]),
+            (16, "Sea Horse", [17, 20, 20, 2, 10, 30, 3, 0]),
+            (17, "Squid", [24, 20, 8, 0, 20, 50, 2, 0]),
+            (18, "Sea Serpent", [17, 17, 8, 2, 30, 70, 1, 0]),
+            (19, "Shark", [20, 17, 5, 0, 8, 22, 10, 0]),
+            (20, "Giant Rat", [5, 20, 5, 0, 6, 10, 10, 5]),
+            (21, "Bat", [5, 30, 5, 0, 6, 5, 16, 0]),
+            (22, "Giant Spider", [10, 10, 5, 0, 8, 10, 4, 5]),
+            (23, "Ghost", [1, 20, 10, 0, 12, 20, 6, 0]),
+            (24, "Slime", [6, 6, 2, 0, 4, 10, 16, 0]),
+            (25, "Gremlin", [10, 21, 10, 2, 4, 10, 13, 12]),
+            (26, "Mimic", [20, 30, 12, 3, 15, 30, 1, 20]),
+            (27, "Reaper", [20, 25, 12, 4, 20, 40, 3, 25]),
+            (28, "Gazer", [8, 10, 25, 0, 10, 20, 4, 0]),
+            (29, "Crawler", [17, 15, 12, 0, 15, 35, 4, 0]),
+            (30, "Gargoyle", [20, 10, 5, 15, 20, 40, 1, 0]),
+            (31, "Insect Swarm", [1, 30, 1, 0, 4, 5, 10, 0]),
+            (32, "Orc", [15, 13, 10, 2, 12, 10, 10, 11]),
+            (33, "Skeleton", [10, 20, 5, 0, 12, 20, 8, 13]),
+            (34, "Python", [5, 18, 8, 1, 8, 10, 4, 0]),
+            (35, "Ettin", [20, 15, 12, 3, 15, 30, 6, 17]),
+            (36, "Headless", [19, 12, 8, 2, 12, 20, 8, 12]),
+            (37, "Wisp", [8, 30, 20, 0, 20, 40, 4, 0]),
+            (38, "Daemon", [25, 25, 25, 5, 20, 75, 4, 0]),
+            (39, "Dragon", [30, 25, 25, 10, 30, 99, 2, 30]),
+            (40, "Sand Trap", [25, 25, 5, 10, 30, 80, 1, 25]),
+            (41, "Troll", [18, 17, 9, 4, 15, 15, 4, 15]),
+            (42, "Reserved gap", [0; 8]),
+            (43, "Reserved gap", [0; 8]),
+            (44, "Mongbat", [10, 30, 15, 4, 20, 20, 16, 5]),
+            (45, "Corpser", [17, 10, 8, 0, 15, 40, 4, 0]),
+            (46, "Rot Worm", [5, 17, 6, 0, 6, 5, 10, 0]),
+            (47, "Shadow Lord", [25, 30, 30, 10, 30, 99, 1, 0]),
+        ];
 
-        let guard = combat_class_stats(12).unwrap();
-        assert_eq!(guard.raw_row(), [22, 30, 10, 6, 30, 99, 8, 5]);
-        assert_eq!(guard.mass_charm_threshold(), 10);
+        for &(class, name, row) in EXPECTED_ROWS {
+            let stats = combat_class_stats(class).unwrap();
+            assert_eq!(stats.name, name, "class {class} name");
+            assert_eq!(stats.raw_row(), row, "class {class} stat row");
+            assert_eq!(
+                stats.reward_unit(),
+                row[5] / 4 + 1,
+                "class {class} reward unit"
+            );
+            assert_eq!(
+                stats.mass_charm_threshold(),
+                row[2],
+                "class {class} charm threshold"
+            );
+        }
 
-        let reserved = combat_class_stats(42).unwrap();
-        assert_eq!(reserved.raw_row(), [0; 8]);
         assert_eq!(combat_class_stats(11), None);
         assert_eq!(combat_class_stats(COMBAT_CLASS_COUNT as u8), None);
     }
 
     #[test]
     fn combat_ranged_effect_stats_expose_published_side_rows() {
-        let mage = combat_ranged_effect_stats(0).unwrap();
-        assert_eq!(mage.name, "Mage");
-        assert_eq!(mage.range_effect_selector, 7);
-        assert_eq!(mage.payload, 4);
-        assert!(mage.scene_resistance);
-        assert!(!mage.cast_like_branch);
-        assert!(!mage.pre_gate_bypass);
+        const EXPECTED_ROWS: &[(u8, &str, u8, u8, bool, bool, bool)] = &[
+            (0, "Mage", 7, 4, true, false, false),
+            (12, "Guard", 15, 2, false, false, false),
+            (13, "Wanderer", 9, 4, true, false, false),
+            (14, "Blackthorn", 9, 3, true, false, false),
+            (15, "Lord British", 9, 4, true, false, false),
+            (16, "Sea Horse", 5, 4, true, false, false),
+            (17, "Squid", 7, 4, false, false, false),
+            (18, "Sea Serpent", 9, 3, false, false, false),
+            (19, "Shark", 1, 0, false, false, false),
+            (20, "Giant Rat", 1, 0, false, false, false),
+            (21, "Bat", 1, 0, false, false, false),
+            (22, "Giant Spider", 1, 0, false, false, false),
+            (23, "Ghost", 1, 0, false, false, false),
+            (24, "Slime", 1, 0, false, false, false),
+            (25, "Gremlin", 1, 0, false, true, false),
+            (26, "Mimic", 2, 5, false, false, true),
+            (27, "Reaper", 9, 4, true, false, false),
+            (28, "Gazer", 5, 6, true, false, false),
+            (29, "Crawler", 1, 0, false, false, false),
+            (30, "Gargoyle", 9, 7, false, false, false),
+            (31, "Insect Swarm", 1, 0, false, false, false),
+            (32, "Orc", 1, 0, false, false, false),
+            (33, "Skeleton", 1, 0, false, false, false),
+            (34, "Python", 3, 5, false, false, false),
+            (35, "Ettin", 5, 7, false, false, false),
+            (36, "Headless", 1, 0, false, false, false),
+            (37, "Wisp", 1, 0, false, false, false),
+            (38, "Daemon", 9, 3, true, false, false),
+            (39, "Dragon", 9, 3, false, false, false),
+            (40, "Sand Trap", 1, 0, false, false, false),
+            (41, "Troll", 5, 2, false, false, false),
+            (42, "Reserved gap", 1, 0, false, false, false),
+            (43, "Reserved gap", 1, 0, false, false, false),
+            (44, "Mongbat", 1, 0, false, false, false),
+            (45, "Corpser", 1, 0, false, false, false),
+            (46, "Rot Worm", 1, 0, false, false, false),
+            (47, "Shadow Lord", 9, 3, true, false, false),
+        ];
 
-        let gremlin = combat_ranged_effect_stats(25).unwrap();
-        assert_eq!(gremlin.range_effect_selector, 1);
-        assert!(gremlin.cast_like_branch);
-
-        let mimic = combat_ranged_effect_stats(26).unwrap();
-        assert_eq!(mimic.range_effect_selector, 2);
-        assert_eq!(mimic.payload, 5);
-        assert!(mimic.pre_gate_bypass);
-
-        let dragon = combat_ranged_effect_stats(39).unwrap();
-        assert_eq!(dragon.range_effect_selector, 9);
-        assert_eq!(dragon.payload, 3);
-        assert!(!dragon.scene_resistance);
+        for &(
+            class,
+            name,
+            range_effect_selector,
+            payload,
+            scene_resistance,
+            cast_like_branch,
+            pre_gate_bypass,
+        ) in EXPECTED_ROWS
+        {
+            let stats = combat_ranged_effect_stats(class).unwrap();
+            assert_eq!(stats.name, name, "class {class} name");
+            assert_eq!(
+                stats.range_effect_selector, range_effect_selector,
+                "class {class} range/effect selector"
+            );
+            assert_eq!(stats.payload, payload, "class {class} payload");
+            assert_eq!(
+                stats.scene_resistance, scene_resistance,
+                "class {class} scene resistance"
+            );
+            assert_eq!(
+                stats.cast_like_branch, cast_like_branch,
+                "class {class} cast-like branch"
+            );
+            assert_eq!(
+                stats.pre_gate_bypass, pre_gate_bypass,
+                "class {class} pre-gate bypass"
+            );
+        }
 
         assert_eq!(combat_ranged_effect_stats(11), None);
         assert_eq!(combat_ranged_effect_stats(48), None);
@@ -1822,6 +1914,40 @@
 
         assert_eq!(combat_class_traits(11), None);
         assert_eq!(combat_class_traits(48), None);
+    }
+
+    #[test]
+    fn monster_ability_hook_is_bounded_to_three_bits_in_fixed_order() {
+        assert_eq!(first_monster_ability(0), None);
+        assert_eq!(
+            first_monster_ability(MONSTER_ABILITY_POSSESS),
+            Some(MonsterAbility::Possess)
+        );
+        assert_eq!(
+            first_monster_ability(MONSTER_ABILITY_BLINK),
+            Some(MonsterAbility::Blink)
+        );
+        assert_eq!(
+            first_monster_ability(MONSTER_ABILITY_SUMMON_DAEMON),
+            Some(MonsterAbility::SummonDaemon)
+        );
+        assert_eq!(
+            first_monster_ability(MONSTER_ABILITY_POSSESS | MONSTER_ABILITY_BLINK),
+            Some(MonsterAbility::Possess)
+        );
+        assert_eq!(
+            first_monster_ability(MONSTER_ABILITY_BLINK | MONSTER_ABILITY_SUMMON_DAEMON),
+            Some(MonsterAbility::Blink)
+        );
+        assert_eq!(
+            first_monster_ability(
+                MONSTER_ABILITY_POSSESS
+                    | MONSTER_ABILITY_BLINK
+                    | MONSTER_ABILITY_SUMMON_DAEMON
+            ),
+            Some(MonsterAbility::Possess)
+        );
+        assert_eq!(first_monster_ability(0xffff & !0x0c40), None);
     }
 
     fn traits_without_identity(class: u8, name: &'static str) -> CombatClassTraits {

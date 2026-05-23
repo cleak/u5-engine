@@ -803,8 +803,14 @@ as public details become available.
     clearing, Gazer eye-burst, and Gargoyle lava-then-default-death transitions
     are implemented in the temporary combat active-object table; continue
     auditing damage, defense, status, rewards, loot, and escape parity.
-  - Monster combat-AI runner instruction set and class effect map are still
-    called out as remaining public-spec parity work.
+  - The current public combat spec explicitly bounds monster AI to helper-driven
+    target selection, movement, morale, and the fixed possess -> blink ->
+    summon-daemon class-flag hook rather than a general per-class script
+    runner. Engine tests now pin every published combat stat row, ranged/effect
+    side row, and the fixed three-bit hook order. Remaining combat parity work
+    is focused on behavioral/visual audit coverage, exact issue #8 duration
+    constants, and any future public data tables rather than inventing an
+    unpublished AI instruction interpreter.
 
 ## Milestone 6: Content Systems
 

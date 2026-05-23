@@ -99,7 +99,7 @@ audit:
 | §6 Actor table | `combat_actor.rs` (32 slots, 6 party) | actor-slot tests | Implemented |
 | §7 Per-round structure | `combat_driver.rs` round-walk classifier; `combat_frame.rs` post-round maintenance report | `chunk_23.rs` round-cycle and post-round maintenance tests | Implemented |
 | §8 Player commands | `combat_scenario.rs` (`CombatScenarioInput`) | command-route smoke (route-smoke combat-*) | Implemented |
-| §9 Monster AI | `combat_frame.rs::combat_ai_actor_fleeing`, `combat_target_group_for_slot`, suppression bypass; `combat_actor.rs::party_name_forces_monster_combat_group` | `combat_ai`, `combat_actor_slot_dispatch`, `cause_fear` filters | Implemented |
+| §9 Monster AI | `combat_frame.rs::combat_ai_actor_fleeing`, `combat_target_group_for_slot`, suppression bypass; `combat_actor.rs::party_name_forces_monster_combat_group`, `first_monster_ability`; `combat_stats.rs` class trait rows | `combat_ai`, `combat_actor_slot_dispatch`, `cause_fear` filters, exhaustive combat stat/ranged/ability-hook row tests in chunk 23 | Implemented |
 | §10 Spells in combat | `magic.rs` (scene-mask `SPELL_SCENE_COMBAT`), `combat_frame.rs` directed-spell dispatch | `directed_spell_status`, spell-route tests in `chunk_23.rs` | Implemented |
 | §11 Attack resolution | `combat_frame.rs::resolve_combat_weapon_attack`, `combat_actor.rs::combat_to_hit_score` | weapon-attack tests, ranged tests | Implemented |
 | §12 Damage & status | `combat_frame.rs::apply_combat_weapon_damage_to_target`, `apply_combat_monster_death_active_object_effect`, vanish/death-marker logic | `combat_monster_default_death_materializes`, vanish tests | Implemented |
@@ -340,7 +340,7 @@ through the asset-backed Talk command path.
 |--------|----------|-------|-------|
 | `catalogs/gazetteer.md` | `world_tables_io_locations.rs`, sidecar overlays | locations tests | Implemented (stock location entry/return coordinates are native; several non-location transition families remain sidecar-backed pending public gazetteer rows) |
 | `catalogs/item-list.md` | `equipment.rs`, `containers.rs::InventoryAddClass` | inventory-add tests | Implemented |
-| `catalogs/monster-bestiary.md` | `combat_stats.rs::combat_class_stats`, `combat_ranged_effect_stats` | per-class tests | Implemented |
+| `catalogs/monster-bestiary.md` | `combat_stats.rs::combat_class_stats`, `combat_ranged_effect_stats`, `combat_class_traits` | exhaustive per-class stat, ranged/effect side-row, trait, and ability-hook tests in chunk 23 | Implemented |
 | `catalogs/npc-roster.md` | `npc_runtime.rs`, conversation/shop dispatch | roster tests | Implemented |
 | `catalogs/quest-graph.md` | `quest_flags.rs`, `endgame.rs` | quest-flag tests | Implemented |
 | `catalogs/spell-list.md` | `magic.rs` parser, cost, scene-mask tables | spell metadata tests | Implemented |
