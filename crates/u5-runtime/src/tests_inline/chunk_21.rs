@@ -4254,6 +4254,48 @@
     }
 
     #[test]
+    fn end_to_end_sage_short_funds_does_not_draw_success_record() {
+        use crate::shop_runtime::SageState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 49;
+        state.prng_state = 0x2468;
+        state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+
+        handle_play_key_input(&mut state, 'H', "ONE", Path::new("")).unwrap();
+        assert!(state.message.contains("50 gold"));
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 49);
+        assert_eq!(state.prng_state, 0x2468);
+        assert_eq!(state.message, "Beat it!");
+        assert!(state.active_shop.is_some());
+    }
+
+    #[test]
+    fn end_to_end_sage_success_draws_record_after_debit_gate() {
+        use crate::shop_runtime::SageState;
+        use crate::shop_session::ActiveShopSession;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 50;
+        state.prng_state = 0x2468;
+        let expected_prng = u5_prng_advance_state(state.prng_state);
+        state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+
+        handle_play_key_input(&mut state, 'H', "ONE", Path::new("")).unwrap();
+        assert_eq!(state.prng_state, 0x2468);
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 0);
+        assert_eq!(state.prng_state, expected_prng);
+        assert!(state.message.contains("Malik"));
+        assert!(state.message.contains("Moonglow"));
+        assert!(state.active_shop.is_none());
+    }
+
+    #[test]
     fn end_to_end_arms_shop_exit_clears_session() {
         let dialogue = HashMap::new();
         let mut state = test_state(open_grid(), 1, 1);

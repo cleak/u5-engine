@@ -916,7 +916,7 @@ fn handle_active_shop_key_input(
                     let line = active_shop_text_line(key, suffix);
                     step_sage(s, SageInput::Keyword(&line), &mut state.gold)
                 }
-                SageState::Confirm { .. } if yes => {
+                SageState::Confirm { quote, .. } if yes && state.gold >= quote.entry.fee => {
                     let record_id = usize::from(state.random_range_u8(
                         SAGE_RUMOUR_SUCCESS_RECORD_FIRST as u8,
                         SAGE_RUMOUR_SUCCESS_RECORD_LAST as u8,
@@ -930,6 +930,14 @@ fn handle_active_shop_key_input(
                         &mut state.gold,
                     )
                 }
+                SageState::Confirm { .. } if yes => step_sage(
+                    s,
+                    SageInput::Confirm {
+                        accepted: true,
+                        record_id: SAGE_RUMOUR_SUCCESS_RECORD_FIRST,
+                    },
+                    &mut state.gold,
+                ),
                 SageState::Confirm { .. } if no || key_byte == b' ' => step_sage(
                     s,
                     SageInput::Confirm {

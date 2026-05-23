@@ -297,9 +297,11 @@ still route in one command. The command follows the public lockpick rules:
 non-dungeon doors, chests, and NPC pockets use the selected member's class byte
 against the `1..29` strict-greater roll, object and dungeon chests use their
 published threshold formulas, failures break keys where specified, and magic
-locks refuse without consuming a key. Clean town-lock and dungeon-door rows
-still provide authored coordinate bindings where native exact cells are not
-public. Numeric diagonals still refuse as unsupported dungeon movement, and
+locks refuse without consuming a key. Clean town-lock rows still provide
+authored coordinate bindings where native exact cells are not public; dungeon
+door sidecars are ignored because public dungeon cells carry the room-trigger,
+room-helper, chest, passage, and visual-wall semantics directly. Numeric
+diagonals still refuse as unsupported dungeon movement, and
 dungeon `Q` routes to the public mode-loop `Exit to DOS?` prompt instead of
 the resident save writer.
 Top-down uppercase `L` opens the Look direction prompt, while inline forms such

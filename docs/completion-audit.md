@@ -32,7 +32,7 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 
 | Issue | Topic | Engine status |
 |------|-------|---------------|
-| `cleak/u5-spec#13` | Paid shared 26-row sage rumour topic table and success templates | Table/mechanics implemented; exact fee/no-credit text still pending |
+| `cleak/u5-spec#13` | Paid shared 26-row sage rumour topic table and success templates | Table/mechanics implemented, including post-debit success-record RNG timing; exact fee/no-credit text still pending |
 | `cleak/u5-spec#41` | Exact arms-shop eight-item stock rows | Implemented |
 | `cleak/u5-spec#43` | Top-down fountain, wishing-well, death-vision, and wanted-poster outcomes | Published predicates implemented; exact poster text still pending |
 | `cleak/u5-spec#47` | Hourly Ring of Regeneration tick and completed long-camp recovery | Implemented from latest issue answer; spec-file reconciliation pending |
@@ -50,7 +50,7 @@ Runtime, TUI, and route-smoke results refreshed alongside this audit on
 2026-05-23; Bevy and visual-suite evidence remains from the latest display
 audit:
 
-- `cargo test -p u5-runtime` — 2570 tests pass.
+- `cargo test -p u5-runtime` — 2572 tests pass.
 - `cargo test -p u5-tui` — 79 tests pass, including temp-directory binary
   smoke for empty-save Journey Onward, deterministic Create Character followed
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
@@ -214,7 +214,7 @@ through the asset-backed Talk command path.
 | §8.3 Healer | healer arm in `shop_runtime.rs`; Minoc bypass | healer tests | Implemented |
 | §8.4 Innkeeper | `shop_runtime.rs` inn flow; stay counter in `clock.rs`; public issue #15 Intelligence-adjusted rest, leave, and pickup charges plus paid-rest class recovery and poison death conversion | inn tests | Implemented |
 | §8.5 Tavernkeeper | tavern arm in `shop_runtime.rs` | tavern tests | Implemented |
-| §8.6 Sage | sage arm: shared 26-row paid keyword lookup, strict four-letter topic boundary, fee quote/confirmation, gold debit, and SHOPPE record 85..=88 success rendering | sage runtime tests plus full public #13 table-sync test | Implemented (exact fee/no-credit resident wording still pending) |
+| §8.6 Sage | sage arm: shared 26-row paid keyword lookup, strict four-letter topic boundary, fee quote/confirmation, gold debit before success-template RNG, and SHOPPE record 85..=88 success rendering | sage runtime tests plus full public #13 table-sync and PRNG-timing tests | Implemented (exact fee/no-credit resident wording still pending) |
 | §8.7 Shipwright | shipwright arm; pending vehicle in `play_state_struct.rs` | shipwright tests | Implemented |
 | §8.8 Horse trader | horse arm | horse tests | Implemented |
 | §8.9 Reagent vendor | `shops.rs` per-herbalist matrix | reagent tests | Implemented |
@@ -354,7 +354,7 @@ are kept out of gameplay logic until the public spec publishes exact data.
 
 | Issue | Public gap | Engine placeholder |
 |------|------------|--------------------|
-| `cleak/u5-spec#13` | Exact resident SHOPPE record ids/text for the sage fee quote and insufficient-gold/no-credit refusal | Shared paid 26-row table, strict matching, confirmation/debit, and success rendering are implemented from the public issue answer; prompt wording remains conservative until published |
+| `cleak/u5-spec#13` | Exact resident SHOPPE record ids/text for the sage fee quote and insufficient-gold/no-credit refusal | Shared paid 26-row table, strict matching, confirmation/debit, post-debit success-record RNG timing, and success rendering are implemented from the public issue answer; prompt wording remains conservative until published |
 | `cleak/u5-spec#43` | Exact wanted-poster resident text/template and line breaking | Look routes the public predicates and outcomes, grants all six accepted well wishes as horse-family objects in the public scenes, uses Intelligence for death vision, and inserts party names at the Yew poster predicate with clean-authored placeholder wording |
 | `cleak/u5-spec#47` | Checked-in spec files still contradict the latest public issue answer for non-combat Ring of Regeneration and completed long-camp recovery | Engine implements the latest public issue-comment behavior: hourly 1-in-8 Ring of Regeneration +1 HP and guarded completed long-camp HP/MP recovery |
 | `cleak/u5-spec#51` | Full resident town tile-attribute table | `town_tile_attributes.tsv` can drive the public class `4` + vehicle byte `0x1C` poison-gas trigger predicate; coordinate rows remain as fallback, with focused tests and route-smoke covering the public per-slot roll semantics |

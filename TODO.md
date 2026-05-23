@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-23, including 2570 tests
+- `cargo test -p u5-runtime` passed on 2026-05-23, including 2572 tests
   (latest verification includes public `cleak/u5-spec#47` hourly
   poison/provision/ring ordering, public #28 horse-trader adjacent placement
   priority plus no-marker refusal, public #15 inn pickup stay-counter billing,
@@ -268,6 +268,10 @@ Current worktree context when this TODO was refreshed:
 - Talk-triggered arms shops use the public `cleak/u5-spec#41` scene-to-row
   identity table and exact per-row `a..h` stock arrays; visible buy choices stop
   at the `0xFF` terminator.
+- Paid sage rumours use the public `cleak/u5-spec#13` 26-row topic table,
+  strict topic matching, and success-record random draw only after the accepted
+  confirmation passes the gold/debit gate; short-funds and declines preserve
+  PRNG state.
 - Public `cleak/u5-spec#28` corrected the old stationary-display purchase path
   to horse-trader sale rows. The obsolete stationary-display purchase runtime is
   removed, and horse-trader runtime/talk-shop/route-smoke/visual tests cover
@@ -470,7 +474,6 @@ non-combat-first version before moving into Bevy.
     room combat handoff, and text proxy view.
   - Remaining work:
     - complete exact dungeon exit-cell identities when public data is available,
-    - replace sidecar-heavy-door rows with public low-nibble rules when safe,
     - verify dungeon view/flood map edge cases against public spec.
 
 - Area transition invariants.
@@ -826,10 +829,11 @@ Goal: turn diagnostic interactions into game-like content.
       added.
 
 - Doors, locks, and secrets.
-  - Current sidecars cover town locks, dungeon doors, and secret doors.
+  - Current sidecars cover town locks and secret doors; stale dungeon-door
+    sidecars are ignored because public dungeon packed-cell classes own those
+    semantics directly.
   - Remaining work:
     - exact surface lock-state byte pairs,
-    - exact dungeon low-nibble split,
     - cannon/fire durability details.
 
 - NPC schedules and conversations.
