@@ -295,38 +295,33 @@
 
     #[test]
     fn active_cast_direction_followup_collects_cardinal_before_spending_resources() {
-        let dir = debug_game_dir();
-        fs::write(
-            dir.join(BLINK_TARGET_TABLE_FILE),
-            "BRITANNIA 0 1 1 E 3 1 5 5\n",
-        )
-        .unwrap();
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.spell_charges[BLINK_SPELL_INDEX] = 1;
         state.party[0].mana = BLINK_COST;
         state.party[0].level = BLINK_COST;
 
         assert_eq!(state.start_cast_spell_prompt(), MoveOutcome::Observed);
-        assert!(state.step_active_cast('I', "P", &dir).unwrap().is_none());
-        assert!(state.step_active_cast(' ', "", &dir).unwrap().is_none());
+        assert!(state.step_active_cast('I', "P", Path::new("")).unwrap().is_none());
+        assert!(state.step_active_cast(' ', "", Path::new("")).unwrap().is_none());
         assert!(state.active_cast.is_none());
         assert!(state.active_cast_followup.is_some());
-        assert_eq!(state.message, "Direction-");
+        assert!(state.message.starts_with("Direction-"));
+        assert!(state.message.contains("Space passes"));
         assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 1);
         assert_eq!(state.party[0].mana, BLINK_COST);
         assert_eq!(state.turn, 0);
 
         assert!(
             state
-                .step_active_cast_followup('X', "", &dir)
+                .step_active_cast_followup('X', "", Path::new(""))
                 .unwrap()
                 .is_none()
         );
         assert!(state.active_cast_followup.is_some());
-        assert_eq!(state.message, "Direction-");
+        assert!(state.message.starts_with("Direction-"));
 
         let result = state
-            .step_active_cast_followup('6', "", &dir)
+            .step_active_cast_followup('6', "", Path::new(""))
             .unwrap()
             .expect("east direction should finish Blink");
         assert_eq!(result.0, MoveOutcome::Cast);
@@ -336,7 +331,6 @@
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Blinked East to (15, 1) in BRITANNIA.");
-        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -3087,13 +3081,7 @@
     }
 
     #[test]
-    fn cast_blink_uses_clean_sidecar_target_and_leaves_intervening_lock() {
-        let dir = debug_game_dir();
-        fs::write(
-            dir.join(BLINK_TARGET_TABLE_FILE),
-            "BRITANNIA 0 1 1 E 3 1 5 5\n",
-        )
-        .unwrap();
+    fn cast_blink_scans_cardinal_ray_and_leaves_intervening_lock() {
         let mut grid = open_world_grid();
         grid[world_cell_index(2, 1)] = 97;
         let mut state = britannia_state(grid, 1, 1);
@@ -3103,7 +3091,7 @@
         state.visibility_dirty = false;
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'C', "1IP6", &dir).unwrap(),
+            handle_play_key_input(&mut state, 'C', "1IP6", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -3115,24 +3103,17 @@
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert!(state.visibility_dirty);
         assert_eq!(state.message, "Blinked East to (15, 1) in BRITANNIA.");
-        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn cast_blink_rejects_indoor_sidecar_target_before_spending_resources() {
-        let dir = debug_game_dir();
-        fs::write(
-            dir.join(BLINK_TARGET_TABLE_FILE),
-            "CASTLE:0 0 1 1 E 3 1 16 16\n",
-        )
-        .unwrap();
+    fn cast_blink_rejects_indoor_context_before_spending_resources() {
         let mut state = test_state(open_grid(), 1, 1);
         state.spell_charges[BLINK_SPELL_INDEX] = 1;
         state.party[0].mana = BLINK_COST;
         state.party[0].level = BLINK_COST;
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'C', "1IP6", &dir).unwrap(),
+            handle_play_key_input(&mut state, 'C', "1IP6", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -3141,17 +3122,11 @@
         assert_eq!(state.party[0].mana, BLINK_COST);
         assert_eq!(state.turn, 0);
         assert_eq!(state.message, "Not here!");
-        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
-    fn cast_blink_ignores_sidecar_destination_and_lands_on_farthest_grass() {
+    fn cast_blink_lands_on_farthest_grass_without_step_effect() {
         let dir = debug_game_dir();
-        fs::write(
-            dir.join(BLINK_TARGET_TABLE_FILE),
-            "BRITANNIA 0 1 1 E 2 1 5 5\n",
-        )
-        .unwrap();
         fs::write(
             dir.join(WORLD_DAMAGE_TILE_TABLE_FILE),
             "BRITANNIA 2 1 DROWNING 5\n",
@@ -3163,7 +3138,7 @@
         state.party[0].level = BLINK_COST;
 
         assert_eq!(
-            handle_play_key_input(&mut state, 'C', "1IP6", &dir).unwrap(),
+            handle_play_key_input(&mut state, 'C', "1IP6", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -3178,14 +3153,13 @@
 
     #[test]
     fn cast_blink_rejections_preserve_public_resource_ordering() {
-        let dir = debug_game_dir();
         let mut missing_direction = test_state(open_grid(), 1, 1);
         missing_direction.spell_charges[BLINK_SPELL_INDEX] = 1;
         missing_direction.party[0].mana = BLINK_COST;
         missing_direction.party[0].level = BLINK_COST;
 
         assert_eq!(
-            handle_play_key_input(&mut missing_direction, 'C', "1IP", &dir).unwrap(),
+            handle_play_key_input(&mut missing_direction, 'C', "1IP", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -3194,68 +3168,53 @@
         assert_eq!(missing_direction.turn, 0);
         assert_eq!(missing_direction.message, "Direction? Use C1IP6.");
 
-        let mut missing_row = britannia_state(open_world_grid(), 1, 1);
+        let mut passed = britannia_state(open_world_grid(), 1, 1);
+        passed.spell_charges[BLINK_SPELL_INDEX] = 1;
+        passed.party[0].mana = BLINK_COST;
+        passed.party[0].level = BLINK_COST;
+        assert_eq!(passed.start_cast_spell_prompt(), MoveOutcome::Observed);
+        assert!(passed
+            .step_active_cast('I', "P", Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(passed
+            .step_active_cast(' ', "", Path::new(""))
+            .unwrap()
+            .is_none());
+        let pass_result = passed
+            .step_active_cast_followup(' ', "", Path::new(""))
+            .unwrap()
+            .expect("Pass should finish Blink");
+        assert_eq!(pass_result.0, MoveOutcome::Cast);
+        assert_eq!((passed.player.x, passed.player.y), (1, 1));
+        assert_eq!(passed.spell_charges[BLINK_SPELL_INDEX], 0);
+        assert_eq!(passed.party[0].mana, 0);
+        assert_eq!(passed.turn, 1);
+        assert_eq!(passed.message, DIRECTION_PROMPT_LABEL_PASS);
+
+        let mut no_grass_grid = open_world_grid();
+        for x in 2..=15 {
+            no_grass_grid[world_cell_index(x, 1)] = 0x04;
+        }
+        let mut missing_row = britannia_state(no_grass_grid, 1, 1);
         missing_row.spell_charges[BLINK_SPELL_INDEX] = 1;
         missing_row.party[0].mana = BLINK_COST;
         missing_row.party[0].level = BLINK_COST;
 
         assert_eq!(
-            handle_play_key_input(&mut missing_row, 'C', "1IP6", &dir).unwrap(),
+            handle_play_key_input(&mut missing_row, 'C', "1IP6", Path::new("")).unwrap(),
             PlayInputDisposition::Continue
         );
 
+        assert_eq!((missing_row.player.x, missing_row.player.y), (1, 1));
         assert_eq!(missing_row.spell_charges[BLINK_SPELL_INDEX], 0);
         assert_eq!(missing_row.party[0].mana, 0);
         assert_eq!(missing_row.turn, 1);
-        assert_eq!(missing_row.message, "Blinked East to (15, 1) in BRITANNIA.");
-
-        fs::write(
-            dir.join(BLINK_TARGET_TABLE_FILE),
-            "BRITANNIA 0 1 1 E 2 1 5 5\n",
-        )
-        .unwrap();
-        let mut blocked_destination = britannia_state(open_world_grid(), 1, 1);
-        blocked_destination.spell_charges[BLINK_SPELL_INDEX] = 1;
-        blocked_destination.party[0].mana = BLINK_COST;
-        blocked_destination.party[0].level = BLINK_COST;
-        blocked_destination.active_objects.push(ActiveObject {
-            type_byte: 192,
-            tile: 192,
-            x: 2,
-            y: 1,
-            z: 0,
-            phase: STEADY_PHASE,
-            aux1: 0,
-            aux3: 0,
-        });
-
-        assert_eq!(
-            handle_play_key_input(&mut blocked_destination, 'C', "1IP6", &dir).unwrap(),
-            PlayInputDisposition::Continue
-        );
-
-        assert_eq!(
-            (blocked_destination.player.x, blocked_destination.player.y),
-            (15, 1)
-        );
-        assert_eq!(blocked_destination.spell_charges[BLINK_SPELL_INDEX], 0);
-        assert_eq!(blocked_destination.party[0].mana, 0);
-        assert_eq!(blocked_destination.turn, 1);
-        assert_eq!(
-            blocked_destination.message,
-            "Blinked East to (15, 1) in BRITANNIA."
-        );
-        let _ = fs::remove_dir_all(dir);
+        assert_eq!(missing_row.message, "Failed!");
     }
 
     #[test]
-    fn combat_allowed_blink_moves_linked_actor_without_using_sidecar_teleport() {
-        let dir = debug_game_dir();
-        fs::write(
-            dir.join(BLINK_TARGET_TABLE_FILE),
-            "BRITANNIA 0 1 1 E 3 1 5 5\n",
-        )
-        .unwrap();
+    fn combat_allowed_blink_moves_linked_actor_to_selected_coordinate() {
         let mut state = britannia_state(open_world_grid(), 1, 1);
         state.combat_active = true;
         state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
@@ -3275,20 +3234,19 @@
         state.visibility_dirty = false;
 
         assert_eq!(
-            state.cast_spell_from_suffix("1IP6", &dir).unwrap(),
+            state.cast_spell_from_suffix("1IP3,1", Path::new("")).unwrap(),
             MoveOutcome::Cast
         );
 
         assert_eq!((state.player.x, state.player.y), (1, 1));
-        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (2, 1));
-        assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (2, 1));
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (3, 1));
+        assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (3, 1));
         assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Blinked East to (2, 1).");
-        let _ = fs::remove_dir_all(dir);
+        assert_eq!(state.message, "Blinked to (3, 1).");
     }
 
     #[test]
@@ -3314,7 +3272,7 @@
 
         assert_eq!(
             state
-                .cast_spell_from_suffix("1IP6", Path::new(""))
+                .cast_spell_from_suffix("1IP2,1", Path::new(""))
                 .unwrap(),
             MoveOutcome::Blocked
         );
@@ -3325,6 +3283,55 @@
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.message, "Failed!");
+    }
+
+    #[test]
+    fn active_combat_blink_followup_moves_cursor_and_confirms_coordinate() {
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.combat_active = true;
+        state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+        state.spell_charges[BLINK_SPELL_INDEX] = 1;
+        state.party[0].mana = BLINK_COST;
+        state.party[0].level = BLINK_COST;
+
+        assert_eq!(
+            state.start_combat_cast_spell_prompt(0, false),
+            MoveOutcome::Observed
+        );
+        assert!(state
+            .step_active_cast('I', "P", Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(state
+            .step_active_cast(' ', "", Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(state.active_cast_followup.is_some());
+        assert!(state.message.contains("Target?"));
+
+        assert!(state
+            .step_active_cast_followup('6', "", Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(state.message.contains("(6, 5)"));
+        let result = state
+            .step_active_cast_followup(' ', "", Path::new(""))
+            .unwrap()
+            .expect("coordinate confirmation should finish Blink");
+        assert_eq!(result.0, MoveOutcome::Cast);
+        assert_eq!(result.1, Some((0, false)));
+        assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (6, 5));
+        assert_eq!(state.message, "Blinked to (6, 5).");
     }
 
     #[test]

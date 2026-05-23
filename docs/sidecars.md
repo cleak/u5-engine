@@ -54,7 +54,6 @@ move below level `7`. Missing rows preserve the conservative in-place block.
 | `world_encounters.tsv` | Optional encounter spawn overrides; unmatched terrain uses the native public selector. |
 | `shrines.tsv` | Shrine coordinates and virtue binding. |
 | `eternal_flames.tsv` | Optional legacy Eternal Flame coordinate overrides. Native shard destruction uses the three published exact party positions and still requires the matching Shadowlord-name encounter immediately north. |
-| `blink_targets.tsv` | Legacy Blink landing rows retained for old parser coverage; native non-combat Blink uses the published straight-ray farthest-grass rule. |
 | `tile_passability.bin` | Optional 32-byte public tile passability bitmap. |
 
 ## Content And Companion Save Files

@@ -37,7 +37,6 @@ pub const TOWN_POISON_GAS_TABLE_FILE: &str = "town_poison_gas.tsv";
 pub const TOWN_TILE_ATTRIBUTES_TABLE_FILE: &str = "town_tile_attributes.tsv";
 pub const TOWN_EXIT_TILE_TABLE_FILE: &str = "town_exit_tiles.tsv";
 pub const TOWN_LOCK_TABLE_FILE: &str = "town_locks.tsv";
-pub const BLINK_TARGET_TABLE_FILE: &str = "blink_targets.tsv";
 pub const ETERNAL_FLAME_TABLE_FILE: &str = "eternal_flames.tsv";
 pub const MOONGATE_TABLE_FILE: &str = "moongates.tsv";
 pub const LOCATION_FLOOR_TABLE_FILE: &str = "location_floor_pages.tsv";

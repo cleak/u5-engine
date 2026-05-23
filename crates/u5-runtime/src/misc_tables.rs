@@ -1,21 +1,8 @@
-//! Misc TSV-table data structures: blink targets, town fire targets, moongates, tile descriptions, location floor/entry-y.
+//! Misc TSV-table data structures: town fire targets, moongates, tile descriptions, location floor/entry-y.
 
 use std::io;
 
 use crate::*;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct BlinkTargetEntry {
-    pub target: PlayTarget,
-    pub floor: i8,
-    pub from_x: usize,
-    pub from_y: usize,
-    pub direction: Direction,
-    pub to_x: usize,
-    pub to_y: usize,
-    pub expected_from_tile: Option<u8>,
-    pub expected_to_tile: Option<u8>,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TownFireTarget {

@@ -298,6 +298,22 @@ pub fn parse_inline_cardinal_direction(value: &str) -> Option<Direction> {
     })
 }
 
+pub fn parse_inline_blink_combat_coordinate(value: &str) -> Option<(u8, u8)> {
+    let (_, tail) = value.split_once("IP")?;
+    let trimmed = tail.trim();
+    let (x, y) = trimmed
+        .split_once(',')
+        .or_else(|| trimmed.split_once(':'))
+        .or_else(|| trimmed.split_once('/'))?;
+    let x = x.trim().parse::<u8>().ok()?;
+    let y = y.trim().parse::<u8>().ok()?;
+    (usize::from(x) < COMBAT_ARENA_SIDE && usize::from(y) < COMBAT_ARENA_SIDE).then_some((x, y))
+}
+
+pub fn inline_explicit_pass(value: &str) -> bool {
+    value.chars().any(char::is_whitespace)
+}
+
 pub fn parse_inline_yes_no(value: &str) -> Option<bool> {
     value.chars().find_map(|ch| match ch.to_ascii_lowercase() {
         'y' => Some(true),

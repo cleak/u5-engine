@@ -101,6 +101,7 @@ pub enum CastFollowupKind {
     PartyTarget,
     GatePhase,
     CombatTarget { creature: bool },
+    CombatCoordinate { x: u8, y: u8 },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

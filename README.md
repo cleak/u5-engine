@@ -373,13 +373,11 @@ visit-marked `0x08`, preserving the marker bit in the placed field byte.
 `C1AG6` casts Dispel Field from party slot 1, spending the saved charge,
 MP, and level gates before clearing a public dungeon field target back to
 passage while preserving the visit marker bit.
-`C1IP6` casts a clean sidecar-backed Blink hook from party slot 1, using
-`blink_targets.tsv` to choose a same-map destination for the current
-scene/floor/source/direction and then applying the saved charge/MP/level gates
-before teleporting to a legal foot landing cell. This keeps magic-lock bypasses
-authored by clean metadata without inventing the unresolved default Blink range
-or reconciling the current public scene-mask conflict. The default range/search
-rule remains blocked on clean spec issue `cleak/u5-spec#48`.
+`C1IP6` casts Blink from party slot 1. Outside combat it uses the public
+cardinal direction prompt and lands on the farthest grass cell along the
+window-bounded ray, while `C1IP<space>` spends the shared cast resources and
+passes without success/failure narration. In combat, Blink uses a target-cell
+picker/coordinate instead of the non-combat ray.
 `C1AEP` and `C1EIP` cast narrow indoor Magic Lock and
 Unlock Magic hooks from party slot 1, rewriting facing magic-lock rows supplied
 by the clean `town_locks.tsv` sidecar. `C1IQW` casts the narrow Peer hook in

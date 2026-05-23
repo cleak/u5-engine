@@ -209,6 +209,9 @@ impl PlayState {
                     };
                     format!("{label}? {value}\nChoose combat slot 1-{COMBAT_ACTOR_SLOTS}; Esc cancels.")
                 }
+                CastFollowupKind::CombatCoordinate { x, y } => {
+                    format!("Target? ({x}, {y})\nMove cursor with cardinal keys; Space/Enter confirms; Esc cancels.")
+                }
             })
             .unwrap_or_else(|| "Cast target?".to_string())
     }
@@ -319,6 +322,28 @@ impl PlayState {
                         );
                     }
                 }
+                CastFollowupKind::CombatCoordinate { x, y } => {
+                    if ch == '\u{1b}' {
+                        self.message = "None!".to_string();
+                        return Ok(None);
+                    }
+                    if matches!(ch, ' ' | '\r' | '\n') {
+                        let tail = format!("{x},{y}");
+                        return self.finish_active_cast_followup(session, &tail, game_dir);
+                    }
+                    let Some(direction) =
+                        Direction::from_play_key(ch).filter(|direction| direction.is_cardinal())
+                    else {
+                        continue;
+                    };
+                    let (dx, dy) = direction.delta();
+                    let nx = (i16::from(x) + dx as i16).clamp(0, (COMBAT_ARENA_SIDE - 1) as i16);
+                    let ny = (i16::from(y) + dy as i16).clamp(0, (COMBAT_ARENA_SIDE - 1) as i16);
+                    session.kind = CastFollowupKind::CombatCoordinate {
+                        x: nx as u8,
+                        y: ny as u8,
+                    };
+                }
             }
         }
         self.active_cast_followup = Some(session);
@@ -349,7 +374,7 @@ impl PlayState {
     ) -> bool {
         let kind = if self.message.starts_with("Direction? Use C") {
             Some(CastFollowupKind::Direction {
-                pass_allowed: spell_code == "HR",
+                pass_allowed: spell_code == "HR" || spell_code == "IP",
             })
         } else if self.message.starts_with("Whom? Use C") {
             Some(CastFollowupKind::PartyTarget)
@@ -357,6 +382,18 @@ impl PlayState {
             Some(CastFollowupKind::GatePhase)
         } else if self.message.starts_with("Creature? Use C") {
             Some(CastFollowupKind::CombatTarget { creature: true })
+        } else if spell_code == "IP"
+            && self.combat_active
+            && self.message.starts_with("Target? Use C")
+        {
+            self.combat_actors
+                .get(caster_index)
+                .copied()
+                .filter(|actor| combat_actor_is_active_not_dead(*actor))
+                .map(|actor| CastFollowupKind::CombatCoordinate {
+                    x: actor.x,
+                    y: actor.y,
+                })
         } else if self.message.starts_with("Target? Use C") {
             Some(CastFollowupKind::CombatTarget { creature: false })
         } else {
@@ -3072,18 +3109,19 @@ impl PlayState {
         &mut self,
         caster_index: usize,
         direction: Option<Direction>,
+        explicit_pass: bool,
         _game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
         let Some(direction) = direction else {
+            if explicit_pass {
+                return Ok(self.cast_blink_pass(caster_index));
+            }
             self.message = "Direction? Use C1IP6.".to_string();
             return Ok(MoveOutcome::Blocked);
         };
         if !direction.is_cardinal() {
             self.message = "Blink requires a cardinal direction.".to_string();
             return Ok(MoveOutcome::Blocked);
-        }
-        if self.combat_active {
-            return Ok(self.cast_combat_blink(caster_index, Some(direction)));
         }
         if !self.spell_allowed_in_current_cast_context(BLINK_SPELL_INDEX) {
             self.message = "Not here!".to_string();
@@ -3116,6 +3154,21 @@ impl PlayState {
         Ok(MoveOutcome::Cast)
     }
 
+    pub fn cast_blink_pass(&mut self, caster_index: usize) -> MoveOutcome {
+        if self.combat_active || !self.spell_allowed_in_current_cast_context(BLINK_SPELL_INDEX) {
+            self.message = "Not here!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        if let Some(outcome) =
+            self.cast_spell_resource_gate(caster_index, BLINK_SPELL_INDEX, BLINK_COST)
+        {
+            return outcome;
+        }
+        self.advance_turn();
+        self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
+        MoveOutcome::Cast
+    }
+
     pub fn noncombat_blink_target(&self, direction: Direction) -> Option<(usize, usize)> {
         if !matches!(self.area, Area::World { .. }) {
             return None;
@@ -3141,23 +3194,19 @@ impl PlayState {
         farthest
     }
 
-    pub fn cast_combat_blink(
+    pub fn cast_combat_blink_to_coordinate(
         &mut self,
         caster_index: usize,
-        direction: Option<Direction>,
+        target: Option<(u8, u8)>,
     ) -> MoveOutcome {
         if !self.combat_active || !self.spell_allowed_in_current_cast_context(BLINK_SPELL_INDEX) {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         }
-        let Some(direction) = direction else {
-            self.message = "Direction? Use C1IP6.".to_string();
+        let Some((tx, ty)) = target else {
+            self.message = "Target? Use C1IP5,5 to select a combat cell.".to_string();
             return MoveOutcome::Blocked;
         };
-        if !direction.is_cardinal() {
-            self.message = "Blink requires a cardinal direction.".to_string();
-            return MoveOutcome::Blocked;
-        }
         let Some(caster_actor) = self.combat_actors.get(caster_index).copied() else {
             self.message = "Who casts?".to_string();
             return MoveOutcome::Blocked;
@@ -3172,12 +3221,17 @@ impl PlayState {
             return outcome;
         }
 
-        let (dx, dy) = direction.delta();
-        let tx = caster_actor.x as isize + dx;
-        let ty = caster_actor.y as isize + dy;
         let legal_cells = self.combat_legal_cell_mask();
-        let legal = combat_arena_coordinate_in_bounds(tx as i16, ty as i16)
-            && legal_cells[ty as usize][tx as usize];
+        let legal = combat_arena_coordinate_in_bounds(i16::from(tx), i16::from(ty))
+            && legal_cells[usize::from(ty)][usize::from(tx)]
+            && find_combat_actor_at_field_coordinate_skipping(
+                &self.combat_actors,
+                &self.active_objects,
+                tx,
+                ty,
+                Some(caster_index),
+            )
+            .is_none();
 
         self.advance_turn();
         if !legal {
@@ -3188,37 +3242,18 @@ impl PlayState {
         let Some(commit) = commit_combat_actor_linked_position(
             &mut self.combat_actors[caster_index],
             &mut self.active_objects,
-            tx as u8,
-            ty as u8,
+            tx,
+            ty,
         ) else {
             self.message = "Who casts?".to_string();
             return MoveOutcome::Blocked;
         };
         self.mark_visibility_dirty();
         self.message = format!(
-            "Blinked {} to ({}, {}).",
-            direction.name(),
-            commit.actor_position_after.0,
-            commit.actor_position_after.1
+            "Blinked to ({}, {}).",
+            commit.actor_position_after.0, commit.actor_position_after.1
         );
         MoveOutcome::Cast
-    }
-
-    pub fn blink_target_at(
-        &self,
-        game_dir: &Path,
-        direction: Direction,
-    ) -> io::Result<Option<BlinkTargetEntry>> {
-        let (target, floor, x, y) = self.current_blink_context();
-        Ok(load_blink_target_entries(game_dir)?.and_then(|entries| {
-            entries.into_iter().find(|entry| {
-                entry.target == target
-                    && entry.floor == floor
-                    && entry.from_x == x
-                    && entry.from_y == y
-                    && entry.direction == direction
-            })
-        }))
     }
 
     pub fn current_blink_context(&self) -> (PlayTarget, i8, usize, usize) {
@@ -3246,33 +3281,6 @@ impl PlayState {
             Area::World { plane } => plane.key().to_string(),
             Area::Town { scene, floor } => format!("{} floor {floor}", scene.key()),
             Area::Dungeon { scene, level } => format!("{} level {level}", scene.key()),
-        }
-    }
-
-    pub fn blink_source_matches(&self, entry: BlinkTargetEntry) -> bool {
-        entry.expected_from_tile.map_or(true, |expected| {
-            expected == self.current_area_tile(entry.from_x, entry.from_y)
-        })
-    }
-
-    pub fn blink_destination_legal(
-        &self,
-        game_dir: &Path,
-        entry: BlinkTargetEntry,
-    ) -> io::Result<bool> {
-        if entry.expected_to_tile.map_or(false, |expected| {
-            expected != self.current_area_tile(entry.to_x, entry.to_y)
-        }) {
-            return Ok(false);
-        }
-        match self.area {
-            Area::World { .. } | Area::Town { .. } => {
-                self.player_can_land_on_foot(Some(game_dir), entry.to_x, entry.to_y)
-            }
-            Area::Dungeon { level, .. } => {
-                let cell = self.dungeon_cell(level, entry.to_x, entry.to_y);
-                Ok(is_dungeon_walkable(cell))
-            }
         }
     }
 

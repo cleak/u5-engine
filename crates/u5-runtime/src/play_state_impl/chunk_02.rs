@@ -884,9 +884,17 @@ impl PlayState {
                     self.message = "Who casts? Use C1IP6 for party slot 1.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
+                if self.combat_active {
+                    return Ok(self.cast_combat_blink_to_coordinate(
+                        caster_index,
+                        parse_inline_blink_combat_coordinate(suffix),
+                    ));
+                }
                 self.cast_blink(
                     caster_index,
                     parse_inline_cardinal_direction(suffix),
+                    inline_explicit_pass(suffix)
+                        && parse_inline_cardinal_direction(suffix).is_none(),
                     game_dir,
                 )
             }

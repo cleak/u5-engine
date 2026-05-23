@@ -319,60 +319,6 @@ BRITANNIA 11 21
     }
 
     #[test]
-    fn parse_blink_target_entries_accepts_same_map_targets() {
-        let entries = parse_blink_target_entries(
-            "\
-BRITANNIA 0 5 5 E 7 5 16 16
-CASTLE:0 0 1 1 6 3 1 * 16
-DUNGEON:0 4 1 1 WEST 0 1 0x00 0x08
-",
-        )
-        .unwrap();
-
-        assert_eq!(
-            entries,
-            vec![
-                BlinkTargetEntry {
-                    target: PlayTarget::World(WorldPlane::Britannia),
-                    floor: 0,
-                    from_x: 5,
-                    from_y: 5,
-                    direction: Direction::East,
-                    to_x: 7,
-                    to_y: 5,
-                    expected_from_tile: Some(16),
-                    expected_to_tile: Some(16),
-                },
-                BlinkTargetEntry {
-                    target: PlayTarget::Town(Scene::new(17).unwrap()),
-                    floor: 0,
-                    from_x: 1,
-                    from_y: 1,
-                    direction: Direction::East,
-                    to_x: 3,
-                    to_y: 1,
-                    expected_from_tile: None,
-                    expected_to_tile: Some(16),
-                },
-                BlinkTargetEntry {
-                    target: PlayTarget::Dungeon(DungeonScene::new(33).unwrap()),
-                    floor: 4,
-                    from_x: 1,
-                    from_y: 1,
-                    direction: Direction::West,
-                    to_x: 0,
-                    to_y: 1,
-                    expected_from_tile: Some(0),
-                    expected_to_tile: Some(8),
-                },
-            ]
-        );
-        assert!(parse_blink_target_entries("BRITANNIA -1 0 0 E 1 0\n").is_err());
-        assert!(parse_blink_target_entries("CASTLE:0 0 32 1 E 3 1\n").is_err());
-        assert!(parse_blink_target_entries("DUNGEON:0 8 1 1 E 2 1\n").is_err());
-    }
-
-    #[test]
     fn cast_in_lor_sets_light_counter_and_consumes_charge_mana_and_turn() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.spell_charges[IN_LOR_SPELL_INDEX] = 1;
