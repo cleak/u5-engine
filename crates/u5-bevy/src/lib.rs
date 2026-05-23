@@ -19,6 +19,7 @@ use u5_runtime::{
     ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX, BRITISH_PTH_PEN_ORIGINS, BritishPth,
     CGA_PALETTE_RGB, COMBAT_ARENA_SIDE, ChargenSession, ChargenSessionResult, ChargenSessionStep,
     DEATH_VISION_OBJECT_CLASS, Direction, DungeonScene, EGA_PALETTE_RGB,
+    ENDGAME_TABLEAU_AUX3_ROLE_MARKER, ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH,
     FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FixedCellFont, GameClock,
     GraphicImage, GuildShop, HORSE_PARKED_FIRST, Healer, Herbalist, INTRO_INLINE_DOORWAY_STEP,
     INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE,
@@ -27,21 +28,22 @@ use u5_runtime::{
     IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
     MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, PCS_GLYPH_HEIGHT, PEER_COST,
-    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition,
-    PlayOptions, PlayState, PlayTarget, ProportionalFont, ProportionalWidthTable,
-    RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition, ReturnToViewFrameKind,
-    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX, STATS_PANEL_TEXT_BOTTOM,
-    STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene,
-    Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT,
-    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TITLE_BIT_INITIAL_PLACEMENTS,
-    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
-    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X,
-    TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE,
-    Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth, TitleBitAsset, TitleBitImages,
-    TitleBitPlacement, TransportState, U4TransferOverrides, U4TransferSource, WorldPlane,
-    WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, commit_chargen_save, commit_u4_transfer_save,
-    dungeon_cell_index, handle_play_key_input, hash_bytes, input_case_fold,
-    input_function_key_code, input_keypad_digit_direction_code,
+    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, PROMPT_TEXT_WINDOW_INDEX,
+    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, ProportionalFont,
+    ProportionalWidthTable, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
+    ReturnToViewFrameKind, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX,
+    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
+    STATS_PANEL_TEXT_WINDOW_INDEX, Scene, Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS,
+    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
+    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
+    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
+    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth,
+    TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState,
+    U4TransferOverrides, U4TransferSource, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    blit_tile_id_to_viewport, commit_chargen_save, commit_u4_transfer_save, dungeon_cell_index,
+    handle_play_key_input, hash_bytes, input_case_fold, input_function_key_code,
+    input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -3889,7 +3891,7 @@ fn render_visual_play_frame_with_input_and_cursor(
     prompt_cursor_visible: bool,
 ) -> Vec<u8> {
     if state.endgame.is_some() {
-        return render_status_framebuffer(state, input_line, fallback, font);
+        return render_endgame_framebuffer(state, atlas, input_line, fallback, font);
     }
 
     let width = VISUAL_PLAY_FRAME_WIDTH as usize;
@@ -3915,6 +3917,71 @@ fn render_visual_play_frame_with_input_and_cursor(
     );
     blit_active_view_overlay_rgba(&mut rgba, width, height, state, atlas.depth);
     rgba
+}
+
+fn render_endgame_framebuffer(
+    state: &mut PlayState,
+    atlas: &TileAtlas,
+    input_line: &str,
+    fallback: &str,
+    font: &FixedCellFont,
+) -> Vec<u8> {
+    let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+    let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
+    let mut rgba = render_status_framebuffer(state, input_line, fallback, font);
+    if let Ok(viewport) = render_endgame_tableau_viewport(state, atlas) {
+        blit_rgba(
+            &mut rgba,
+            width,
+            height,
+            &viewport.to_rgba(),
+            viewport.width,
+            viewport.height,
+            0,
+            0,
+        );
+    }
+    rgba
+}
+
+fn render_endgame_tableau_viewport(
+    state: &PlayState,
+    atlas: &TileAtlas,
+) -> io::Result<TileViewport> {
+    let width = ENDGAME_TABLEAU_WIDTH * TILE_ATLAS_SIDE;
+    let height = ENDGAME_TABLEAU_HEIGHT * TILE_ATLAS_SIDE;
+    let mut viewport = TileViewport {
+        depth: atlas.depth,
+        cells_wide: ENDGAME_TABLEAU_WIDTH,
+        cells_high: ENDGAME_TABLEAU_HEIGHT,
+        width,
+        height,
+        pixels: vec![0; width * height],
+    };
+
+    for y in 0..ENDGAME_TABLEAU_HEIGHT {
+        for x in 0..ENDGAME_TABLEAU_WIDTH {
+            let tile = if y < 3 { 0x0f } else { 0x05 };
+            blit_tile_id_to_viewport(&mut viewport, atlas, tile, x, y)?;
+        }
+    }
+
+    for object in state
+        .active_objects
+        .iter()
+        .filter(|object| object.aux3 == ENDGAME_TABLEAU_AUX3_ROLE_MARKER && !object.is_empty())
+    {
+        if object.x >= ENDGAME_TABLEAU_WIDTH || object.y >= ENDGAME_TABLEAU_HEIGHT {
+            continue;
+        }
+        let tile = if object.tile == u5_runtime::PLAYER_TILE {
+            PLAYER_SPRITE_TILE
+        } else {
+            usize::from(object.tile)
+        };
+        blit_tile_id_to_viewport(&mut viewport, atlas, tile, object.x, object.y)?;
+    }
+    Ok(viewport)
 }
 
 fn write_visual_report(
@@ -5432,7 +5499,7 @@ mod tests {
     }
 
     #[test]
-    fn visual_play_frame_uses_full_endgame_surface_without_viewport_blit() {
+    fn visual_play_frame_composes_endgame_tableau_over_modal_surface() {
         let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
@@ -5442,7 +5509,12 @@ mod tests {
         let expected = render_status_framebuffer(&mut expected_state, "", READY_HINT, &font);
         let rgba = render_visual_play_frame(&mut state, &atlas, &font);
 
-        assert_eq!(rgba, expected);
+        assert_ne!(rgba, expected);
+        assert_nonblack_rgba(&rgba);
+        assert_eq!(
+            rgba.len(),
+            (VISUAL_PLAY_FRAME_WIDTH as usize) * (VISUAL_PLAY_FRAME_HEIGHT as usize) * 4
+        );
     }
 
     #[test]

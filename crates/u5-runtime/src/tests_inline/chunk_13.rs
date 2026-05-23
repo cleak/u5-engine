@@ -20220,6 +20220,94 @@ fn endgame_step_toward_target_prefers_axis_with_greater_distance() {
 }
 
 #[test]
+fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
+    // endgame.md §3-§4: the endgame clears the live active-object table
+    // and rebuilds it as cinematic party/Lord British tableau state.
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party = vec![state.party[0]; 3];
+    state.active_objects.push(ActiveObject {
+        type_byte: 0xaa,
+        tile: 0xaa,
+        x: 1,
+        y: 1,
+        z: 0,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    });
+
+    state.enter_endgame();
+
+    assert_eq!(state.active_objects.len(), OOL_SLOTS);
+    assert!(state.endgame_tableau_is_settled());
+    assert_eq!(
+        endgame_tableau_role_for_object(state.active_objects[0]),
+        Some(EndgameTableauActorRole::PartyMember(0))
+    );
+    assert_eq!(
+        endgame_tableau_role_for_object(state.active_objects[2]),
+        Some(EndgameTableauActorRole::PartyMember(2))
+    );
+    assert_eq!(
+        endgame_tableau_role_for_object(state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT]),
+        Some(EndgameTableauActorRole::LordBritish)
+    );
+    assert!(!state
+        .active_objects
+        .iter()
+        .any(|object| object.type_byte == 0xaa));
+}
+
+#[test]
+fn endgame_tableau_target_step_moves_active_objects_until_settled() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party = vec![state.party[0]; 2];
+    state.install_endgame_tableau();
+    assert!(!state.endgame_tableau_is_settled());
+
+    assert!(state.advance_endgame_tableau_toward_targets());
+    assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 9));
+
+    let steps = state.settle_endgame_tableau_to_targets();
+    assert!(steps > 0);
+    assert!(state.endgame_tableau_is_settled());
+}
+
+#[test]
+fn missing_box_terminal_input_runs_tableau_jitter_without_leaving_endgame() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party = vec![state.party[0]; 3];
+    state.enter_endgame();
+    state.resolve_endgame_confirmation(true);
+    state.resolve_endgame_confirmation(true);
+    assert_eq!(
+        state.endgame.as_ref().and_then(|endgame| endgame.outcome),
+        Some(EndgameOutcome::MissingBoxOrRefused)
+    );
+    let before = state.active_objects.clone();
+    for _ in 0..16 {
+        state.resolve_endgame_confirmation(true);
+    }
+
+    assert!(state.endgame.is_some());
+    assert_eq!(
+        state.endgame.as_ref().and_then(|endgame| endgame.outcome),
+        Some(EndgameOutcome::MissingBoxOrRefused)
+    );
+    assert_ne!(state.active_objects, before);
+    assert!(state.active_objects.iter().all(|object| {
+        endgame_tableau_role_for_object(*object).is_none()
+            || (object.x < ENDGAME_TABLEAU_WIDTH
+                && object.y < ENDGAME_TABLEAU_HEIGHT
+                && endgame_tableau_cell_walkable(object.x, object.y))
+            || matches!(
+                endgame_tableau_role_for_object(*object),
+                Some(EndgameTableauActorRole::LordBritish)
+            )
+    }));
+}
+
+#[test]
 fn endgame_certificate_word_helpers_cover_calendar_range() {
     assert_eq!(endgame_ordinal_word(1).as_deref(), Some("first"));
     assert_eq!(endgame_ordinal_word(21).as_deref(), Some("twenty-first"));

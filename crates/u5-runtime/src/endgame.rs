@@ -166,6 +166,36 @@ pub enum EndgameOutcome {
     MissingBoxOrRefused,
 }
 
+pub const ENDGAME_TABLEAU_WIDTH: usize = 11;
+pub const ENDGAME_TABLEAU_HEIGHT: usize = 11;
+pub const ENDGAME_TABLEAU_FLOOR: i8 = 0;
+pub const ENDGAME_TABLEAU_LORD_BRITISH_SLOT: usize = 8;
+pub const ENDGAME_TABLEAU_AUX3_ROLE_MARKER: u8 = 0xe5;
+pub const ENDGAME_TABLEAU_LORD_BRITISH_TYPE: u8 = 0xf7;
+
+const ENDGAME_TABLEAU_PARTY_STARTS: [(usize, usize); SAVE_PARTY_SIZE_MAX as usize] =
+    [(5, 10), (4, 10), (6, 10), (3, 10), (7, 10), (2, 10)];
+const ENDGAME_TABLEAU_PARTY_TARGETS: [(usize, usize); SAVE_PARTY_SIZE_MAX as usize] =
+    [(5, 8), (4, 8), (6, 8), (3, 7), (7, 7), (2, 8)];
+const ENDGAME_TABLEAU_LORD_BRITISH_POS: (usize, usize) = (5, 2);
+const ENDGAME_TABLEAU_SETTLE_STEP_CAP: usize = ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EndgameTableauActorRole {
+    PartyMember(u8),
+    LordBritish,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EndgameTableauActorPlacement {
+    pub role: EndgameTableauActorRole,
+    pub active_object_slot: usize,
+    pub start: (usize, usize),
+    pub target: (usize, usize),
+    pub tile: u8,
+    pub type_byte: u8,
+}
+
 impl EndgameState {
     pub fn awaiting_first_confirmation() -> Self {
         Self::awaiting_first_confirmation_with_messages(None)
@@ -545,6 +575,77 @@ pub fn endgame_step_toward_target(
     }
 }
 
+pub fn endgame_tableau_party_placement(party_slot: usize) -> Option<EndgameTableauActorPlacement> {
+    let start = ENDGAME_TABLEAU_PARTY_STARTS.get(party_slot).copied()?;
+    let target = ENDGAME_TABLEAU_PARTY_TARGETS.get(party_slot).copied()?;
+    Some(EndgameTableauActorPlacement {
+        role: EndgameTableauActorRole::PartyMember(party_slot as u8),
+        active_object_slot: party_slot,
+        start,
+        target,
+        tile: PLAYER_TILE,
+        type_byte: PLAYER_TILE,
+    })
+}
+
+pub fn endgame_tableau_lord_british_placement() -> EndgameTableauActorPlacement {
+    EndgameTableauActorPlacement {
+        role: EndgameTableauActorRole::LordBritish,
+        active_object_slot: ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
+        start: ENDGAME_TABLEAU_LORD_BRITISH_POS,
+        target: ENDGAME_TABLEAU_LORD_BRITISH_POS,
+        tile: combat_class_sprite_base(COMBAT_CLASS_LORD_BRITISH).unwrap_or(PLAYER_TILE),
+        type_byte: ENDGAME_TABLEAU_LORD_BRITISH_TYPE,
+    }
+}
+
+pub fn endgame_tableau_actor_placements(party_len: usize) -> Vec<EndgameTableauActorPlacement> {
+    let mut placements = (0..party_len.min(SAVE_PARTY_SIZE_MAX as usize))
+        .filter_map(endgame_tableau_party_placement)
+        .collect::<Vec<_>>();
+    placements.push(endgame_tableau_lord_british_placement());
+    placements
+}
+
+pub fn endgame_tableau_cell_walkable(x: usize, y: usize) -> bool {
+    x > 0
+        && x + 1 < ENDGAME_TABLEAU_WIDTH
+        && (3..ENDGAME_TABLEAU_HEIGHT).contains(&y)
+        && !(y == 3 && !(3..=7).contains(&x))
+}
+
+pub fn endgame_tableau_role_for_object(object: ActiveObject) -> Option<EndgameTableauActorRole> {
+    if object.aux3 != ENDGAME_TABLEAU_AUX3_ROLE_MARKER || object.is_empty() {
+        return None;
+    }
+    if object.type_byte == ENDGAME_TABLEAU_LORD_BRITISH_TYPE {
+        Some(EndgameTableauActorRole::LordBritish)
+    } else if object.type_byte == PLAYER_TILE {
+        Some(EndgameTableauActorRole::PartyMember(object.aux1))
+    } else {
+        None
+    }
+}
+
+pub fn endgame_tableau_object_from_placement(
+    placement: EndgameTableauActorPlacement,
+) -> ActiveObject {
+    let aux1 = match placement.role {
+        EndgameTableauActorRole::PartyMember(slot) => slot,
+        EndgameTableauActorRole::LordBritish => 0,
+    };
+    ActiveObject {
+        type_byte: placement.type_byte,
+        tile: placement.tile,
+        x: placement.start.0,
+        y: placement.start.1,
+        z: ENDGAME_TABLEAU_FLOOR,
+        phase: STEADY_PHASE,
+        aux1,
+        aux3: ENDGAME_TABLEAU_AUX3_ROLE_MARKER,
+    }
+}
+
 impl PlayState {
     pub fn enter_endgame(&mut self) -> MoveOutcome {
         self.enter_endgame_with_messages(None)
@@ -570,6 +671,8 @@ impl PlayState {
         // restored state for the ending tableau, with current health restored
         // from the stored maximum.
         self.restore_party_for_endgame_tableau();
+        self.install_endgame_tableau();
+        self.settle_endgame_tableau_to_targets();
         self.endgame = Some(EndgameState::awaiting_first_confirmation_with_messages(
             messages,
         ));
@@ -606,6 +709,111 @@ impl PlayState {
                 member.hp = member.max_hp;
             }
         }
+    }
+
+    pub fn install_endgame_tableau(&mut self) {
+        let placements = endgame_tableau_actor_placements(self.party.len());
+        self.active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
+        for placement in placements {
+            if let Some(slot) = self.active_objects.get_mut(placement.active_object_slot) {
+                *slot = endgame_tableau_object_from_placement(placement);
+            }
+        }
+    }
+
+    pub fn advance_endgame_tableau_toward_targets(&mut self) -> bool {
+        let placements = endgame_tableau_actor_placements(self.party.len());
+        let mut moved = false;
+        for placement in placements {
+            let Some(object) = self.active_objects.get_mut(placement.active_object_slot) else {
+                continue;
+            };
+            if endgame_tableau_role_for_object(*object) != Some(placement.role) {
+                continue;
+            }
+            let current = (object.x as isize, object.y as isize);
+            let target = (placement.target.0 as isize, placement.target.1 as isize);
+            let next = endgame_step_toward_target(current, target);
+            if next != current {
+                object.x = next.0 as usize;
+                object.y = next.1 as usize;
+                moved = true;
+            }
+        }
+        moved
+    }
+
+    pub fn settle_endgame_tableau_to_targets(&mut self) -> usize {
+        let mut steps = 0;
+        while steps < ENDGAME_TABLEAU_SETTLE_STEP_CAP
+            && self.advance_endgame_tableau_toward_targets()
+        {
+            steps += 1;
+        }
+        steps
+    }
+
+    pub fn endgame_tableau_is_settled(&self) -> bool {
+        endgame_tableau_actor_placements(self.party.len())
+            .into_iter()
+            .all(|placement| {
+                self.active_objects
+                    .get(placement.active_object_slot)
+                    .copied()
+                    .is_some_and(|object| {
+                        endgame_tableau_role_for_object(object) == Some(placement.role)
+                            && (object.x, object.y) == placement.target
+                    })
+            })
+    }
+
+    pub fn advance_endgame_terminal_tableau_jitter(&mut self) -> bool {
+        let party_slots = self.party.len().min(SAVE_PARTY_SIZE_MAX as usize);
+        if party_slots == 0 || u5_prng_range_u16(&mut self.prng_state, 0, 1) != 0 {
+            return false;
+        }
+        let actor_slot =
+            u5_prng_range_u16(&mut self.prng_state, 0, party_slots as u16 - 1) as usize;
+        for _ in 0..8 {
+            let dir = u5_prng_range_u16(&mut self.prng_state, 0, 3) as u8;
+            let (dx, dy) = match dir {
+                0 => (0isize, -1isize),
+                1 => (0, 1),
+                2 => (-1, 0),
+                _ => (1, 0),
+            };
+            let Some(object) = self.active_objects.get(actor_slot).copied() else {
+                return false;
+            };
+            if object.is_empty() {
+                return false;
+            }
+            let nx = object.x as isize + dx;
+            let ny = object.y as isize + dy;
+            if nx < 0 || ny < 0 {
+                continue;
+            }
+            let nx = nx as usize;
+            let ny = ny as usize;
+            if !endgame_tableau_cell_walkable(nx, ny) || self.endgame_tableau_cell_occupied(nx, ny)
+            {
+                continue;
+            }
+            if let Some(object) = self.active_objects.get_mut(actor_slot) {
+                object.x = nx;
+                object.y = ny;
+            }
+            self.animation.tick_static_tiles();
+            return true;
+        }
+        self.animation.tick_static_tiles();
+        false
+    }
+
+    fn endgame_tableau_cell_occupied(&self, x: usize, y: usize) -> bool {
+        self.active_objects.iter().any(|object| {
+            endgame_tableau_role_for_object(*object).is_some() && object.x == x && object.y == y
+        })
     }
 
     pub fn resolve_endgame_confirmation(&mut self, answer: bool) -> MoveOutcome {
@@ -654,6 +862,9 @@ impl PlayState {
                     }
                     return MoveOutcome::Observed;
                 }
+            }
+            if matches!(current.outcome, Some(EndgameOutcome::MissingBoxOrRefused)) {
+                self.advance_endgame_terminal_tableau_jitter();
             }
             self.message = match current.outcome {
                 Some(EndgameOutcome::Victory) => current
