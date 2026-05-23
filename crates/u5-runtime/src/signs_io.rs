@@ -1,8 +1,8 @@
-//! Parser for `SIGNS.DAT`: scene-keyed sign records keyed by `(scene, z, y, x)`.
+//! Parser for `SIGNS.DAT`: scene-keyed sign records keyed by `(scene, z, x, y)`.
 //!
 //! Implements `formats/signs-dat.md` §2-§4: a 66-byte little-endian directory
 //! of 33 scene-block offsets, variable-size scene blocks of records, and
-//! per-record `[scene, z, y, x]` headers followed by NUL-terminated payloads.
+//! per-record `[scene, z, x, y]` headers followed by NUL-terminated payloads.
 //!
 //! The decoder produces a printable approximation of the on-disk payload:
 //! - `0x00` ends the record;
@@ -35,14 +35,14 @@ pub const SIGNS_DAT_FILE: &str = "SIGNS.DAT";
 pub const SIGNS_DAT_SCENE_DIRECTORY_SLOTS: usize = crate::SCENE_TOWN_FAMILY_LAST as usize + 1;
 pub const SIGNS_DAT_SCENE_DIRECTORY_BYTES: usize = SIGNS_DAT_SCENE_DIRECTORY_SLOTS * 2;
 /// `formats/signs-dat.md §3`: each sign record begins with a four-byte
-/// `(scene, z, y, x)` header followed by a NUL-terminated payload.
+/// `(scene, z, x, y)` header followed by a NUL-terminated payload.
 pub const SIGNS_DAT_RECORD_HEADER_LEN: usize = 4;
 
 /// `formats/signs-dat.md §3` alias-bridge length. The on-disk alias
 /// bridge that lets multiple coordinate headers share one printed
 /// body is a separator byte, a zero byte that terminates the
 /// scanner's current payload walk, and then another four-byte
-/// `[scene, z, y, x]` header — six bytes total. Promote the length
+/// `[scene, z, x, y]` header — six bytes total. Promote the length
 /// so content tools and the bridge-aware scanner can refer to one
 /// named value instead of re-deriving the sum at each call site.
 pub const SIGNS_DAT_ALIAS_BRIDGE_LEN: usize = 1 + 1 + SIGNS_DAT_RECORD_HEADER_LEN;
@@ -205,8 +205,8 @@ fn parse_scene_block(
         let header = &bytes[cursor..cursor + RECORD_HEADER_LEN];
         let scene = header[0];
         let z = header[1];
-        let y = header[2];
-        let x = header[3];
+        let x = header[2];
+        let y = header[3];
         cursor += RECORD_HEADER_LEN;
         let payload_start = cursor;
         while cursor < bytes.len() && bytes[cursor] != 0x00 {

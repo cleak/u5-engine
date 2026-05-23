@@ -462,7 +462,7 @@ fn handle_active_shop_key_input(
     };
     let ctx = ShopTransactionContext {
         party_gold: state.gold,
-        speaker_intelligence: state.party_intelligence.first().copied().unwrap_or(0),
+        speaker_intelligence: active_speaker_intelligence(state),
         world_hour: state.clock.hour,
         party_size: state.party.len(),
         living_party_members: state
@@ -1181,7 +1181,18 @@ fn horse_sale_position(state: &PlayState) -> Option<(usize, usize)> {
     .find(|(x, y)| {
         matches!(state.current_area_tile(*x, *y), 0x44 | 0x45 | 0x05)
             && state.object_at_current_floor(*x, *y).is_none()
+            && state.npc_at_current_floor(*x, *y).is_none()
     })
+}
+
+fn active_speaker_intelligence(state: &PlayState) -> u8 {
+    let slot = state.active_player.unwrap_or(0);
+    state
+        .party_intelligence
+        .get(slot)
+        .copied()
+        .or_else(|| state.party_intelligence.first().copied())
+        .unwrap_or(0)
 }
 
 fn active_shop_text_line(key: char, suffix: &str) -> String {

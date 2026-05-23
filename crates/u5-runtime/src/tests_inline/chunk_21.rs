@@ -296,10 +296,38 @@
     }
 
     #[test]
+    fn yew_wanted_poster_exception_uses_party_names_without_signs_dat() {
+        let mut state = test_state(open_grid(), 16, 21);
+        state.area = Area::Town {
+            scene: Scene::new(4).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0"];
+        state.active_objects.push(ActiveObject {
+            type_byte: 0xa0,
+            tile: 0xa0,
+            x: 17,
+            y: 21,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        assert_eq!(state.look_facing(), MoveOutcome::Observed);
+
+        assert!(state.message.contains("Wanted Poster"));
+        assert!(state.message.contains("AVATAR"));
+        assert!(state.message.contains("IOLO"));
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
     fn town_look_routes_death_vision_object_before_generic_object_description() {
         let mut state = test_state(open_grid(), 1, 1);
         state.player.facing = Direction::East;
-        state.party_intelligence[0] = 30;
+        state.party_intelligence[0] = 31;
         state.active_objects.push(ActiveObject {
             type_byte: DEATH_VISION_OBJECT_CLASS,
             tile: DEATH_VISION_OBJECT_CLASS,
@@ -327,8 +355,25 @@
 
         assert_eq!(outcome, Some(MoveOutcome::Observed));
         assert!(state.active_direction_prompt.is_none());
-        assert!(state.message.contains("Death vision"));
+        assert!(state.message.contains("Strange vision"));
+        assert!(state.active_view_overlay.is_some());
         assert!(!state.message.contains("actor tile"));
+        assert_eq!(state.turn, 0);
+    }
+
+    #[test]
+    fn death_vision_failure_has_no_overlay_and_names_member_number() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.player.facing = Direction::East;
+        state.party_intelligence[0] = 0;
+
+        assert_eq!(
+            state.apply_death_vision_look_for_member(2, 1, 0),
+            MoveOutcome::Observed
+        );
+
+        assert_eq!(state.message, "Death vision: party member 1.");
+        assert!(state.active_view_overlay.is_none());
         assert_eq!(state.turn, 0);
     }
 
@@ -544,7 +589,10 @@
             .iter()
             .find(|object| object.type_byte == HORSE_PARKED_FIRST)
             .expect("accepted wishing-well wish should spawn a horse");
-        assert_eq!((horse.x, horse.y), (2, 1));
+        assert_eq!(
+            (horse.type_byte, horse.x, horse.y, horse.z, horse.aux1),
+            (HORSE_PARKED_FIRST, 2, 1, 0, 0)
+        );
         assert_eq!(
             state.boardable_vehicle_slot_at(2, 1).map(|candidate| candidate.transport),
             Some(TransportState::Horse {
@@ -689,6 +737,24 @@
         assert_eq!(state.clock, GameClock::default());
     }
 
+    #[test]
+    fn town_surface_fountain_prompt_cancel_prints_no_one_result() {
+        let mut grid = open_grid();
+        grid[32 + 2] = 0xd8;
+        let mut state = test_state(grid, 1, 1);
+        state.player.facing = Direction::East;
+        assert_eq!(state.look_facing(), MoveOutcome::Observed);
+
+        let outcome = state
+            .step_active_direction_prompt(' ', "", Path::new(""))
+            .unwrap();
+
+        assert_eq!(outcome, Some(MoveOutcome::Observed));
+        assert!(state.active_direction_prompt.is_none());
+        assert_eq!(state.message, "You see: a fountain. No one drinks.");
+        assert_eq!(state.turn, 0);
+    }
+
     fn signs_dat_bytes_for_test(records: &[(u8, u8, u8, u8, &[u8])]) -> Vec<u8> {
         let mut bytes = vec![0; SIGNS_DAT_SCENE_DIRECTORY_BYTES];
         if let Some((scene, ..)) = records.first() {
@@ -697,7 +763,7 @@
                 .copy_from_slice(&offset.to_le_bytes());
         }
         for (scene, z, y, x, body) in records {
-            bytes.extend_from_slice(&[*scene, *z, *y, *x]);
+            bytes.extend_from_slice(&[*scene, *z, *x, *y]);
             bytes.extend_from_slice(body);
             bytes.push(0);
         }
@@ -3141,6 +3207,38 @@
     }
 
     #[test]
+    fn town_talk_horse_trader_quotes_active_speaker_intelligence() {
+        let dialogue = HashMap::new();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(20).unwrap(),
+            floor: 0,
+        };
+        state.player.facing = Direction::East;
+        state.gold = 300;
+        state.party_intelligence = vec![30, 10];
+        state.active_player = Some(1);
+        state.load_scheduled_npcs(&[
+            NpcSlot { slot: 0, type_byte: 0, dialog_id: 0, schedule: [0; 16], name: None },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x83,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_dialogue(&dialogue),
+            MoveOutcome::Talked
+        );
+
+        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
+        assert!(state.message.contains("221 gold"));
+    }
+
+    #[test]
     fn open_conversation_session_renders_greeting_and_stores_session() {
         let mut dialogue: HashMap<u16, Vec<String>> = HashMap::new();
         dialogue.insert(
@@ -3972,7 +4070,7 @@
     }
 
     #[test]
-    fn talk_stationary_display_entry_opens_from_adjacent_published_marker() {
+    fn talk_ignores_obsolete_stationary_display_sidecar_rows() {
         use crate::shop_session::ActiveShopSession;
 
         let dialogue = HashMap::new();
@@ -4011,7 +4109,6 @@
             aux1: 0,
             aux3: 0,
         });
-        let display_slot = state.active_objects.len() - 1;
         let entries = [StationaryDisplayEntry {
             scene: Scene::new(21).unwrap(),
             floor: 0,
@@ -4040,22 +4137,14 @@
 
         assert!(matches!(
             state.active_shop,
-            Some(ActiveShopSession::StationaryDisplay(_))
+            Some(ActiveShopSession::ShipBroker(_))
         ));
-        assert!(state.message.contains("Shop Display is now open"));
+        assert!(state.message.contains("Ship"));
         assert_eq!(state.turn, 1);
-
-        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-
-        assert_eq!(state.gold, 25);
-        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
-        assert!(state.active_objects[display_slot].is_empty());
-        assert!(state.active_shop.is_none());
     }
 
     #[test]
-    fn talk_stationary_display_entry_can_select_marker_ordinal_without_coordinates() {
+    fn talk_ignores_obsolete_stationary_display_marker_ordinal_rows() {
         use crate::shop_session::ActiveShopSession;
 
         let dialogue = HashMap::new();
@@ -4103,7 +4192,6 @@
             aux1: 0,
             aux3: 0,
         });
-        let display_slot = state.active_objects.len() - 1;
         let entries = [StationaryDisplayEntry {
             scene: Scene::new(21).unwrap(),
             floor: 0,
@@ -4132,19 +4220,14 @@
 
         assert!(matches!(
             state.active_shop,
-            Some(ActiveShopSession::StationaryDisplay(_))
+            Some(ActiveShopSession::ShipBroker(_))
         ));
-
-        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-
-        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
-        assert!(state.active_objects[display_slot].is_empty());
-        assert!(!state.active_objects[display_slot - 1].is_empty());
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 0);
+        assert!(state.active_objects.iter().any(|object| object.tile == 0x05));
     }
 
     #[test]
-    fn talk_stationary_display_marker_ordinal_counts_scene_markers_not_only_adjacent() {
+    fn talk_ignores_obsolete_stationary_display_scene_marker_order() {
         use crate::shop_session::ActiveShopSession;
 
         let dialogue = HashMap::new();
@@ -4192,7 +4275,6 @@
             aux1: 0,
             aux3: 0,
         });
-        let display_slot = state.active_objects.len() - 1;
         let entries = [StationaryDisplayEntry {
             scene: Scene::new(21).unwrap(),
             floor: 0,
@@ -4221,19 +4303,16 @@
 
         assert!(matches!(
             state.active_shop,
-            Some(ActiveShopSession::StationaryDisplay(_))
+            Some(ActiveShopSession::ShipBroker(_))
         ));
-
-        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-
-        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 1);
-        assert!(state.active_objects[display_slot].is_empty());
-        assert!(!state.active_objects[display_slot - 1].is_empty());
+        assert_eq!(state.equipment_stock[EQUIPMENT_ID_BOW], 0);
+        assert!(state.active_objects.iter().any(|object| object.tile == 0x05));
     }
 
     #[test]
-    fn talk_stationary_display_marker_without_published_row_blocks_without_turn() {
+    fn talk_obsolete_stationary_display_marker_without_row_still_opens_real_shop() {
+        use crate::shop_session::ActiveShopSession;
+
         let dialogue = HashMap::new();
         let raw = HashMap::new();
         let mut state = test_state(open_grid(), 1, 1);
@@ -4278,12 +4357,15 @@
                 None,
                 Some(&[]),
             ),
-            MoveOutcome::Blocked
+            MoveOutcome::Talked
         );
 
-        assert_eq!(state.message, "No shop here.");
-        assert_eq!(state.turn, 0);
-        assert!(state.active_shop.is_none());
+        assert!(state.message.contains("Ship"));
+        assert_eq!(state.turn, 1);
+        assert!(matches!(
+            state.active_shop,
+            Some(ActiveShopSession::ShipBroker(_))
+        ));
     }
 
     #[test]

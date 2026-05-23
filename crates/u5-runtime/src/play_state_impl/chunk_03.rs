@@ -930,6 +930,13 @@ impl PlayState {
         };
         for ch in std::iter::once(key).chain(suffix.chars()) {
             if matches!(ch, '\u{1b}' | ' ') {
+                if matches!(
+                    session.kind,
+                    DirectionPromptKind::SurfaceFountainDrink { .. }
+                ) {
+                    self.message = "You see: a fountain. No one drinks.".to_string();
+                    return Ok(Some(MoveOutcome::Observed));
+                }
                 self.message = DIRECTION_PROMPT_LABEL_PASS.to_string();
                 return Ok(Some(MoveOutcome::PromptDeclined));
             }

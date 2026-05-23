@@ -4163,7 +4163,7 @@ fn signs_dat_alias_bridge_length_matches_spec() {
     // shares one body across multiple coordinate headers is a
     // separator byte, a zero byte that terminates the scanner's
     // current payload walk, and then another four-byte
-    // `[scene, z, y, x]` header — six bytes total.
+    // `[scene, z, x, y]` header — six bytes total.
     assert_eq!(SIGNS_DAT_ALIAS_BRIDGE_LEN, 6);
     assert_eq!(
         SIGNS_DAT_ALIAS_BRIDGE_LEN,
@@ -19885,7 +19885,7 @@ fn parse_endgame_messages_ignores_extra_records_without_moving_refusal_branch() 
 fn parse_sign_records_decodes_directory_and_payload() {
     // formats/signs-dat.md §2-§4. Build a minimal SIGNS.DAT image with
     // two scene blocks separated by a zero-scene sentinel. Scene 17 has
-    // one record at (0, 5, 6); scene 18 has one record at (1, 7, 8)
+    // one record at (0, x=5, y=6); scene 18 has one record at (1, x=7, y=8)
     // using divider/decoration glyphs.
     let mut bytes = vec![0u8; 33 * 2];
     let scene17_offset = 66u16;
@@ -19907,10 +19907,10 @@ fn parse_sign_records_decodes_directory_and_payload() {
     let records = parse_sign_records(&bytes).expect("parse should succeed");
     assert_eq!(records.len(), 2);
 
-    let lookup_17 = find_sign(&records, 17, 0, 5, 6).expect("scene 17 record present");
+    let lookup_17 = find_sign(&records, 17, 0, 6, 5).expect("scene 17 record present");
     assert_eq!(lookup_17.body, "Hello");
 
-    let lookup_18 = find_sign(&records, 18, 1, 7, 8).expect("scene 18 record present");
+    let lookup_18 = find_sign(&records, 18, 1, 8, 7).expect("scene 18 record present");
     assert_eq!(lookup_18.body, "A-B*C");
 
     // No matching record returns None.
@@ -19940,19 +19940,19 @@ fn parse_sign_records_resolves_alias_bridges_to_shared_body() {
     assert_eq!(records.len(), 3);
 
     assert_eq!(
-        find_sign(&records, 17, 0, 5, 6)
+        find_sign(&records, 17, 0, 6, 5)
             .expect("first bridged coordinate")
             .body,
         "Shared"
     );
     assert_eq!(
-        find_sign(&records, 17, 0, 7, 8)
+        find_sign(&records, 17, 0, 8, 7)
             .expect("second bridged coordinate")
             .body,
         "Shared"
     );
     assert_eq!(
-        find_sign(&records, 17, 0, 9, 10)
+        find_sign(&records, 17, 0, 10, 9)
             .expect("shared body coordinate")
             .body,
         "Shared"

@@ -838,7 +838,7 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
-            .any(|case| case.name == "buccaneers-den-wishing-well-car-no-native-grant")
+            .any(|case| case.name == "buccaneers-den-wishing-well-ferrari-grants-horse")
     );
     assert!(
         cases

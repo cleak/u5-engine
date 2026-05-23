@@ -2,45 +2,9 @@ use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::path::Path;
 
-use crate::shop_runtime::StationaryDisplayState;
-use crate::shop_session::ActiveShopSession;
 use crate::*;
 
 const SURFACE_LOOK_VISIBILITY_RADIUS: usize = 5;
-const STATIONARY_DISPLAY_MARKER_WEST_ENTRANCE: u8 = 0x44;
-const STATIONARY_DISPLAY_MARKER_EAST_ENTRANCE: u8 = 0x45;
-const STATIONARY_DISPLAY_MARKER_STOCK: u8 = 0x05;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct StationaryDisplayCandidate {
-    x: usize,
-    y: usize,
-    marker_tile: u8,
-    marker_ordinal: usize,
-    object_slot: Option<usize>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum StationaryDisplayTalkResolution {
-    NoCandidate,
-    MissingPublishedRow,
-    Session(ActiveShopSession),
-}
-
-const fn stationary_display_marker_tile(tile: u8) -> bool {
-    matches!(
-        tile,
-        STATIONARY_DISPLAY_MARKER_WEST_ENTRANCE
-            | STATIONARY_DISPLAY_MARKER_EAST_ENTRANCE
-            | STATIONARY_DISPLAY_MARKER_STOCK
-    )
-}
-
-fn stationary_display_adjacent(px: usize, py: usize, x: usize, y: usize) -> bool {
-    let dx = px.abs_diff(x);
-    let dy = py.abs_diff(y);
-    (dx != 0 || dy != 0) && dx <= 1 && dy <= 1
-}
 
 #[derive(Clone, Debug)]
 struct UseItemPickerRow {
@@ -2407,10 +2371,7 @@ impl PlayState {
             self.message = "Thou seest nothing.".to_string();
             return MoveOutcome::Observed;
         };
-        if !member.living() {
-            self.message = "Thou seest nothing.".to_string();
-            return MoveOutcome::Observed;
-        }
+        let _ = member;
         let intelligence = if member_index == 0 {
             self.party_intelligence
                 .first()
@@ -2424,7 +2385,7 @@ impl PlayState {
         };
         let roll = self.random_range_u8(DEATH_VISION_ROLL_LOW, DEATH_VISION_ROLL_HIGH);
         if intelligence > roll {
-            let title = format!("Death vision at ({x}, {y})");
+            let title = format!("Strange vision at ({x}, {y})");
             let text_map = self.surface_view_map();
             self.active_view_overlay = Some(ViewOverlay {
                 title: title.clone(),
@@ -2433,7 +2394,7 @@ impl PlayState {
                 mode: ViewOverlayMode::SurfaceLook,
             });
             self.message = format!(
-                "Death vision: party member {} beholds a distant fate at ({x}, {y}).\n{text_map}",
+                "Strange vision: party member {} beholds a distant fate at ({x}, {y}).\n{text_map}",
                 member_index + 1
             );
         } else {
@@ -2544,6 +2505,9 @@ impl PlayState {
         y: u8,
         x: u8,
     ) -> io::Result<Option<String>> {
+        if let Some(message) = self.yew_wanted_poster_message(scene, z, y, x) {
+            return Ok(Some(message));
+        }
         let Some(game_dir) = game_dir else {
             return Ok(None);
         };
@@ -2555,6 +2519,25 @@ impl PlayState {
             return Ok(None);
         }
         Ok(Some(format!("Sign:\n{}", bodies.join("\n"))))
+    }
+
+    fn yew_wanted_poster_message(&self, scene: u8, z: u8, y: u8, x: u8) -> Option<String> {
+        if !(scene == 4 && z == 0 && x == 17 && y == 21) {
+            return None;
+        }
+        let names = self
+            .party_names
+            .iter()
+            .filter_map(|name| party_name_to_string(name))
+            .collect::<Vec<_>>();
+        let party = if names.is_empty() {
+            "the Avatar".to_string()
+        } else {
+            names.join(", ")
+        };
+        Some(format!(
+            "Wanted Poster:\nWanted by Lord Blackthorn:\n{party}"
+        ))
     }
 
     pub fn sign_message_at_for_current_area(
@@ -2695,15 +2678,10 @@ impl PlayState {
         let dialogue = parse_tlk(&game_dir.join(format!("{}.TLK", scene.family.stem())))?;
         let raw_blob = parse_tlk_raw(&game_dir.join(format!("{}.TLK", scene.family.stem())))
             .unwrap_or_default();
-        let stationary_displays = load_stationary_display_entries(game_dir)?;
         self.common_word_dictionary = load_common_word_dictionary_optional(game_dir)?;
         Ok(
             self.talk_direction_with_dialogue_and_keyword_raw_and_stationary_displays(
-                direction,
-                &dialogue,
-                &raw_blob,
-                keyword,
-                stationary_displays.as_deref(),
+                direction, &dialogue, &raw_blob, keyword, None,
             ),
         )
     }
@@ -2774,6 +2752,7 @@ impl PlayState {
         keyword: Option<&str>,
         stationary_displays: Option<&[StationaryDisplayEntry]>,
     ) -> MoveOutcome {
+        let _ = stationary_displays;
         if !matches!(self.area, Area::Town { .. }) {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;
@@ -2808,21 +2787,6 @@ impl PlayState {
                 Area::Town { scene, .. } => Some(scene.byte),
                 _ => None,
             };
-            match self.stationary_display_talk_resolution(stationary_displays) {
-                StationaryDisplayTalkResolution::Session(session) => {
-                    self.advance_turn();
-                    let label = session.shop_label().to_string();
-                    let prompt = session.opening_prompt().to_string();
-                    self.active_shop = Some(session);
-                    self.message = format!("{label} is now open. {prompt}");
-                    return MoveOutcome::Talked;
-                }
-                StationaryDisplayTalkResolution::MissingPublishedRow => {
-                    self.message = "No shop here.".to_string();
-                    return MoveOutcome::Blocked;
-                }
-                StationaryDisplayTalkResolution::NoCandidate => {}
-            }
             if let Some(session) =
                 crate::shop_session::shop_session_for_talk_context(dialog_id, scene_byte)
             {
@@ -2927,6 +2891,7 @@ impl PlayState {
         keyword: Option<&str>,
         stationary_displays: Option<&[StationaryDisplayEntry]>,
     ) -> MoveOutcome {
+        let _ = stationary_displays;
         if !matches!(self.area, Area::Town { .. }) {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;
@@ -2957,22 +2922,6 @@ impl PlayState {
                 Area::Town { scene, .. } => Some(scene.byte),
                 _ => None,
             };
-            match self.stationary_display_talk_resolution(stationary_displays) {
-                StationaryDisplayTalkResolution::Session(session) => {
-                    self.advance_turn();
-                    let label = session.shop_label().to_string();
-                    let prompt = session.opening_prompt().to_string();
-                    self.active_shop = Some(session);
-                    self.message =
-                        format!("{label} is now open. {prompt} Dispatch family: {family}.");
-                    return MoveOutcome::Talked;
-                }
-                StationaryDisplayTalkResolution::MissingPublishedRow => {
-                    self.message = "No shop here.".to_string();
-                    return MoveOutcome::Blocked;
-                }
-                StationaryDisplayTalkResolution::NoCandidate => {}
-            }
             if let Some(session) =
                 crate::shop_session::shop_session_for_talk_context(dialog_id, scene_byte)
             {
@@ -3159,126 +3108,6 @@ impl PlayState {
             self.message = format!("Talked to {name}: {description}. {legacy_text} Your interest?");
         }
         MoveOutcome::Talked
-    }
-
-    fn stationary_display_talk_resolution(
-        &self,
-        entries: Option<&[StationaryDisplayEntry]>,
-    ) -> StationaryDisplayTalkResolution {
-        let Some(entries) = entries else {
-            return StationaryDisplayTalkResolution::NoCandidate;
-        };
-        let candidates = self.stationary_display_candidates_adjacent_to_player();
-        if candidates.is_empty() {
-            return StationaryDisplayTalkResolution::NoCandidate;
-        }
-        let Area::Town { scene, floor } = self.area else {
-            return StationaryDisplayTalkResolution::NoCandidate;
-        };
-        let Some((candidate, entry)) = candidates.iter().find_map(|candidate| {
-            entries
-                .iter()
-                .find(|entry| {
-                    entry.scene == scene
-                        && entry.floor == floor
-                        && entry.x.map_or(true, |x| x == candidate.x)
-                        && entry.y.map_or(true, |y| y == candidate.y)
-                        && entry
-                            .marker_tile
-                            .map_or(true, |tile| tile == candidate.marker_tile)
-                        && entry
-                            .marker_ordinal
-                            .map_or(true, |ordinal| ordinal == candidate.marker_ordinal)
-                        && entry
-                            .expected_tile
-                            .map_or(true, |tile| tile == candidate.marker_tile)
-                })
-                .map(|entry| (*candidate, entry))
-        }) else {
-            return StationaryDisplayTalkResolution::MissingPublishedRow;
-        };
-        StationaryDisplayTalkResolution::Session(ActiveShopSession::StationaryDisplay(
-            StationaryDisplayState::with_grant(
-                entry.grant,
-                entry.price,
-                self.active_player.unwrap_or(0),
-                candidate.object_slot,
-            ),
-        ))
-    }
-
-    fn stationary_display_candidates_adjacent_to_player(&self) -> Vec<StationaryDisplayCandidate> {
-        let Some(floor) = self.current_floor() else {
-            return Vec::new();
-        };
-        let mut candidates = Vec::new();
-        let mut marker_ordinal = 0usize;
-        let mut seen_marker_cells = Vec::new();
-        for (slot, object) in self.active_objects.iter().copied().enumerate().skip(1) {
-            if object.is_empty() || object.is_player_phantom() || object.z != floor {
-                continue;
-            }
-            let surface_tile = self.surface_tile_at(object.x, object.y);
-            let marker_tile = if stationary_display_marker_tile(surface_tile) {
-                surface_tile
-            } else if stationary_display_marker_tile(object.tile) {
-                object.tile
-            } else {
-                continue;
-            };
-            if stationary_display_adjacent(self.player.x, self.player.y, object.x, object.y)
-                && self.npc_at_current_floor(object.x, object.y).is_none()
-            {
-                candidates.push(StationaryDisplayCandidate {
-                    x: object.x,
-                    y: object.y,
-                    marker_tile,
-                    marker_ordinal,
-                    object_slot: Some(slot),
-                });
-            }
-            seen_marker_cells.push((object.x, object.y));
-            marker_ordinal += 1;
-        }
-
-        for y in 0..32 {
-            for x in 0..32 {
-                if candidates
-                    .iter()
-                    .any(|candidate| candidate.x == x && candidate.y == y)
-                    || seen_marker_cells.iter().any(|cell| *cell == (x, y))
-                {
-                    continue;
-                }
-                let marker_tile = self.surface_tile_at(x, y);
-                if !stationary_display_marker_tile(marker_tile) {
-                    continue;
-                }
-                let object_slot =
-                    self.object_slot_at_current_floor(x, y)
-                        .and_then(|(slot, object)| {
-                            stationary_display_marker_tile(object.tile).then_some(slot)
-                        });
-                if self.object_slot_at_current_floor(x, y).is_some() && object_slot.is_none() {
-                    marker_ordinal += 1;
-                    continue;
-                }
-                if (x != self.player.x || y != self.player.y)
-                    && stationary_display_adjacent(self.player.x, self.player.y, x, y)
-                    && self.npc_at_current_floor(x, y).is_none()
-                {
-                    candidates.push(StationaryDisplayCandidate {
-                        x,
-                        y,
-                        marker_tile,
-                        marker_ordinal,
-                        object_slot,
-                    });
-                }
-                marker_ordinal += 1;
-            }
-        }
-        candidates
     }
 
     /// Apply the byte-runner's recorded [`TlkActionDispatchVerb`] grants
