@@ -9,29 +9,37 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use u5_runtime::{
-    ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE, BLACKTHORN_RESCUE_HANDOFF_SCENE,
-    BLINK_COST, BLINK_SPELL_INDEX, COMBAT_PARTY_ACTOR_SLOTS, CREATE_FOOD_COST,
-    CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX, DEATH_VISION_OBJECT_CLASS, DEFAULT_FOOD_STOCK,
-    DUNGEON_AMBUSH_ARENA_FLOOR_TILE, Direction, DungeonScene, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
+    AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE,
+    BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX, COMBAT_PARTY_ACTOR_SLOTS,
+    CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX,
+    DEATH_VISION_OBJECT_CLASS, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
+    DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_LEVEL_SPELL_COST, Direction,
+    DungeonScene, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
     EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION,
-    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
-    FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX, GameClock,
-    GuildShop, HORSE_PARKED_FIRST, HOURLY_STARVATION_DAMAGE_MAX, HOURLY_STARVATION_DAMAGE_MIN,
-    Healer, Herbalist, IN_LOR_SPELL_INDEX, Inn, MoonstoneGateSlot, NATURAL_MOONGATE_TERRAIN_TILE,
-    NpcSlot, PEER_COST, PEER_SPELL_INDEX, PartyMember, PlayOptions, PlayState, PlayTarget,
-    REAGENT_SULFUR_ASH, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
-    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
+    FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, GATE_TRAVEL_COST,
+    GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GuildShop,
+    HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, HOURLY_STARVATION_DAMAGE_MAX,
+    HOURLY_STARVATION_DAMAGE_MIN, Healer, Herbalist, IN_LOR_SPELL_INDEX, IN_WIS_COST,
+    IN_WIS_SPELL_INDEX, Inn, MoonstoneGateSlot, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST,
+    NEGATE_MAGIC_SPELL_INDEX, NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot, OPEN_SPELL_COST,
+    OPEN_SPELL_INDEX, PEER_COST, PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX, PROTECTION_COST,
+    PROTECTION_SPELL_INDEX, PartyMember, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
+    QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, RESURRECT_COST, RESURRECT_SPELL_INDEX,
+    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
+    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
     SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
-    SHADOWLORD_VANQUISHED, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
-    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
-    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    SHADOWLORD_VANQUISHED, SLEEP_FIELD_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
+    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
+    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
     SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
     SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
     SURFACE_CHASM_Y, Scene, Shipwright, Stable, TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE,
     TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK,
-    TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern,
-    TileGraphicsDepth, TransportState, WORD_OF_POWER_SEAL_XOR, WORLD_SIDE, WindState,
-    WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    TIME_STOP_COST, TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_GAS_DOORWAY_RANGE_MAX,
+    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TransportState,
+    UUS_POR_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WORD_OF_POWER_SEAL_XOR, WORLD_SIDE,
+    WindState, WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_stay_counters, dungeon_cell_index, inn_base_room_rate,
     load_tile_atlas, shop_intelligence_adjusted_price,
@@ -245,6 +253,89 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
     blink_east.spell_charges[BLINK_SPELL_INDEX] = 1;
     blink_east.party[0].mana = BLINK_COST;
     blink_east.party[0].level = BLINK_COST;
+
+    let mut locate = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        start: Some((62, 124)),
+        ..PlayOptions::default()
+    };
+    locate.spell_charges[IN_WIS_SPELL_INDEX] = 1;
+    locate.party[0].mana = IN_WIS_COST;
+    locate.party[0].level = IN_WIS_COST;
+
+    let mut light_open = PlayOptions::default();
+    light_open.spell_charges[VAS_LOR_SPELL_INDEX] = 1;
+    light_open.spell_charges[OPEN_SPELL_INDEX] = 1;
+    light_open.party[0].mana = VAS_LOR_COST + OPEN_SPELL_COST;
+    light_open.party[0].level = VAS_LOR_COST.max(OPEN_SPELL_COST);
+
+    let mut restore_spells = PlayOptions {
+        party: vec![
+            route_party_member(0, b'A', b'G', 20, 20),
+            route_party_member(1, b'F', b'S', 8, 24),
+            route_party_member(2, b'M', b'P', 6, 30),
+            route_party_member(3, b'B', b'D', 0, 19),
+        ],
+        party_names: default_party_names(4),
+        party_experience: vec![0, 0, 0, 350],
+        party_stay_counters: default_party_stay_counters(4),
+        party_strengths: vec![30; 4],
+        party_intelligence: default_party_intelligence(4),
+        party_equipment: default_party_equipment(4),
+        moral_standing: 99,
+        ..PlayOptions::default()
+    };
+    restore_spells.party[0].mana =
+        AWAKEN_COST + CURE_COST + HEAL_COST + GREAT_HEAL_COST + RESURRECT_COST;
+    restore_spells.party[0].level = RESURRECT_COST;
+    restore_spells.spell_charges[AWAKEN_SPELL_INDEX] = 1;
+    restore_spells.spell_charges[CURE_SPELL_INDEX] = 1;
+    restore_spells.spell_charges[HEAL_SPELL_INDEX] = 1;
+    restore_spells.spell_charges[GREAT_HEAL_SPELL_INDEX] = 1;
+    restore_spells.spell_charges[RESURRECT_SPELL_INDEX] = 1;
+
+    let mut active_effect_spells = PlayOptions::default();
+    active_effect_spells.spell_charges[PROTECTION_SPELL_INDEX] = 1;
+    active_effect_spells.spell_charges[QUICKNESS_SPELL_INDEX] = 1;
+    active_effect_spells.spell_charges[NEGATE_MAGIC_SPELL_INDEX] = 1;
+    active_effect_spells.spell_charges[TIME_STOP_SPELL_INDEX] = 1;
+    active_effect_spells.party[0].mana =
+        PROTECTION_COST + QUICKNESS_COST + NEGATE_MAGIC_COST + TIME_STOP_COST;
+    active_effect_spells.party[0].level = TIME_STOP_COST;
+
+    let mut dungeon_level_spells = PlayOptions {
+        target: PlayTarget::Dungeon(dungeon),
+        floor: 1,
+        ..PlayOptions::default()
+    };
+    dungeon_level_spells.spell_charges[UUS_POR_SPELL_INDEX] = 1;
+    dungeon_level_spells.spell_charges[DES_POR_SPELL_INDEX] = 1;
+    dungeon_level_spells.party[0].mana = DUNGEON_LEVEL_SPELL_COST * 2;
+    dungeon_level_spells.party[0].level = DUNGEON_LEVEL_SPELL_COST;
+
+    let mut dungeon_field_cycle = PlayOptions {
+        target: PlayTarget::Dungeon(dungeon),
+        floor: 0,
+        facing: Some(Direction::East),
+        ..PlayOptions::default()
+    };
+    dungeon_field_cycle.spell_charges[FIRE_FIELD_SPELL_INDEX] = 1;
+    dungeon_field_cycle.spell_charges[POISON_FIELD_SPELL_INDEX] = 1;
+    dungeon_field_cycle.spell_charges[SLEEP_FIELD_SPELL_INDEX] = 1;
+    dungeon_field_cycle.spell_charges[ENERGY_FIELD_SPELL_INDEX] = 1;
+    dungeon_field_cycle.spell_charges[DISPEL_FIELD_SPELL_INDEX] = 4;
+    dungeon_field_cycle.party[0].mana =
+        FIELD_SPELL_COST * 3 + ENERGY_FIELD_COST + DISPEL_FIELD_COST * 4;
+    dungeon_field_cycle.party[0].level = ENERGY_FIELD_COST.max(DISPEL_FIELD_COST);
+
+    let mut dungeon_open_chest = PlayOptions {
+        target: PlayTarget::Dungeon(dungeon),
+        floor: 0,
+        ..PlayOptions::default()
+    };
+    dungeon_open_chest.spell_charges[OPEN_SPELL_INDEX] = 1;
+    dungeon_open_chest.party[0].mana = OPEN_SPELL_COST;
+    dungeon_open_chest.party[0].level = OPEN_SPELL_COST;
 
     let hourly_provision_poison = PlayOptions {
         target: PlayTarget::Town(castle),
@@ -560,6 +651,64 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "britannia-locate-cast",
+            options: locate,
+            script: &["C1IW"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-light-open-spell-route",
+            options: light_open,
+            script: &["C1LV", "C1AS6"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 2,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-restore-spell-suite",
+            options: restore_spells,
+            script: &["C1AZ", "C1AN3", "C1M3", "C1MV3", "C1CIM4"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 5,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-active-effect-spell-suite",
+            options: active_effect_spells,
+            script: &["C1IS", "C1RT", "C1AI", "C1AT"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 4,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "dungeon-level-up-down-spells",
+            options: dungeon_level_spells,
+            script: &["C1PU", "C1DP"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 2,
+            expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
+            name: "dungeon-field-cycle-spells",
+            options: dungeon_field_cycle,
+            script: &[
+                "C1FGI6", "C1AG6", "C1GIN6", "C1AG6", "C1GIZ6", "C1AG6", "C1GIS6", "C1AG6",
+            ],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 8,
+            expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
+            name: "dungeon-open-chest-spell",
+            options: dungeon_open_chest,
+            script: &["C1AS"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 1,
+            expected_frame_kind: "dungeon first-person viewport",
         },
         RouteSmokeCase {
             name: "castle-hourly-provision-poison-pass",
@@ -1737,6 +1886,17 @@ fn apply_route_smoke_case_setup(
         "blackthorn-rescue-refuge" => {
             state.apply_blackthorn_rescue_refuge(game_dir)?;
         }
+        "castle-light-open-spell-route" => {
+            state.player.x = 1;
+            state.player.y = 1;
+            state.player.facing = Direction::East;
+            let target = state.player.y * TOWN_GRID_SIDE + state.player.x + 1;
+            if let Some(cell) = state.grid.get_mut(target) {
+                *cell = 0x97;
+            }
+            state.sync_player_object();
+            state.mark_visibility_dirty();
+        }
         "lycaeum-shard-falsehood-vanquish" => {
             seed_shadowlord_shard_route(state, SHADOWLORD_FALSEHOOD_INDEX, 15, 9);
         }
@@ -1848,6 +2008,27 @@ fn apply_route_smoke_case_setup(
             let target = dungeon_cell_index(0, 2, 1);
             if let Some(cell) = state.grid.get_mut(target) {
                 *cell = 0xE0;
+            }
+            state.sync_player_object();
+            state.mark_visibility_dirty();
+        }
+        "dungeon-field-cycle-spells" => {
+            state.player.x = 1;
+            state.player.y = 1;
+            state.player.facing = Direction::East;
+            let target = dungeon_cell_index(0, 2, 1);
+            if let Some(cell) = state.grid.get_mut(target) {
+                *cell = 0x00;
+            }
+            state.sync_player_object();
+            state.mark_visibility_dirty();
+        }
+        "dungeon-open-chest-spell" => {
+            state.player.x = 1;
+            state.player.y = 1;
+            let current = dungeon_cell_index(0, state.player.x, state.player.y);
+            if let Some(cell) = state.grid.get_mut(current) {
+                *cell = 0x40;
             }
             state.sync_player_object();
             state.mark_visibility_dirty();
@@ -2249,6 +2430,114 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the public Blink ray rule"
+                )));
+            }
+        }
+        "britannia-locate-cast" => {
+            if state.player.x != 62
+                || state.player.y != 124
+                || state.spell_charges[IN_WIS_SPELL_INDEX] != 0
+                || state.party.first().is_none_or(|member| member.mana != 0)
+                || state.message != "Locate: H'M,D'O\""
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the public Locate sextant output"
+                )));
+            }
+        }
+        "castle-light-open-spell-route" => {
+            let target = state.player.y * TOWN_GRID_SIDE + state.player.x + 1;
+            if state.spell_charges[VAS_LOR_SPELL_INDEX] != 0
+                || state.spell_charges[OPEN_SPELL_INDEX] != 0
+                || state.light_spell_counter == 0
+                || state.grid.get(target).copied() != Some(0xb8)
+                || state.message != "Opened!"
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not light the scene and open the stamped door"
+                )));
+            }
+        }
+        "castle-restore-spell-suite" => {
+            if state.spell_charges[AWAKEN_SPELL_INDEX] != 0
+                || state.spell_charges[CURE_SPELL_INDEX] != 0
+                || state.spell_charges[HEAL_SPELL_INDEX] != 0
+                || state.spell_charges[GREAT_HEAL_SPELL_INDEX] != 0
+                || state.spell_charges[RESURRECT_SPELL_INDEX] != 0
+                || state.party.first().is_none_or(|member| member.mana != 0)
+                || state
+                    .party
+                    .get(1)
+                    .is_none_or(|member| member.status != b'G' || member.hp != 8)
+                || state
+                    .party
+                    .get(2)
+                    .is_none_or(|member| member.status != b'G' || member.hp != member.max_hp)
+                || state.party.get(3).is_none_or(|member| {
+                    member.status != b'G' || member.hp != 1 || member.max_hp == 0
+                })
+                || !state.message.starts_with("Resurrected party member 4")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not complete the restore spell suite"
+                )));
+            }
+        }
+        "castle-active-effect-spell-suite" => {
+            if state.spell_charges[PROTECTION_SPELL_INDEX] != 0
+                || state.spell_charges[QUICKNESS_SPELL_INDEX] != 0
+                || state.spell_charges[NEGATE_MAGIC_SPELL_INDEX] != 0
+                || state.spell_charges[TIME_STOP_SPELL_INDEX] != 0
+                || state.active_effect_tag != Some(NEGATE_TIME_ACTIVE_EFFECT_TAG)
+                || state.active_effect_counter != TIME_STOP_DURATION
+                || state.message != "Negate time!"
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the active-effect spell sequence"
+                )));
+            }
+        }
+        "dungeon-level-up-down-spells" => {
+            if !matches!(state.area, Area::Dungeon { level: 1, .. })
+                || state
+                    .active_objects
+                    .first()
+                    .is_none_or(|object| object.z != 1)
+                || state.spell_charges[UUS_POR_SPELL_INDEX] != 0
+                || state.spell_charges[DES_POR_SPELL_INDEX] != 0
+                || state.party.first().is_none_or(|member| member.mana != 0)
+                || !state.message.contains("Down!")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not move dungeon levels up then down"
+                )));
+            }
+        }
+        "dungeon-field-cycle-spells" => {
+            let target = dungeon_cell_index(0, 2, 1);
+            if state.grid.get(target).copied() != Some(0x00)
+                || state.spell_charges[FIRE_FIELD_SPELL_INDEX] != 0
+                || state.spell_charges[POISON_FIELD_SPELL_INDEX] != 0
+                || state.spell_charges[SLEEP_FIELD_SPELL_INDEX] != 0
+                || state.spell_charges[ENERGY_FIELD_SPELL_INDEX] != 0
+                || state.spell_charges[DISPEL_FIELD_SPELL_INDEX] != 0
+                || state.party.first().is_none_or(|member| member.mana != 0)
+                || !state.message.contains("Dispelled electric field")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not cycle dungeon field placement and dispel"
+                )));
+            }
+        }
+        "dungeon-open-chest-spell" => {
+            let current = dungeon_cell_index(0, state.player.x, state.player.y);
+            if state.grid.get(current).copied() != Some(0x70)
+                || state.spell_charges[OPEN_SPELL_INDEX] != 0
+                || state.party.first().is_none_or(|member| member.mana != 0)
+                || !state.message.contains("Safely opened dungeon chest")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not open the dungeon chest by spell"
                 )));
             }
         }

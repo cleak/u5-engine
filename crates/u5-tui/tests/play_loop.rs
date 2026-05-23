@@ -764,6 +764,26 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "britannia-locate-cast")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "castle-light-open-spell-route")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "castle-restore-spell-suite")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "castle-active-effect-spell-suite")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "ship-hms-cape-plans-use")
     );
     assert!(
@@ -929,6 +949,21 @@ fn route_smoke_cases_cover_representative_modes() {
         cases
             .iter()
             .any(|case| case.name == "dungeon-turn-and-blocked-step")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "dungeon-level-up-down-spells")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "dungeon-field-cycle-spells")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "dungeon-open-chest-spell")
     );
     assert!(
         cases
