@@ -32,12 +32,17 @@ pub const DUNGEON_CBT_RECORDS: usize = DUNGEON_CBT_BANK_COUNT * DUNGEON_ROOM_SLO
 pub const BRIT_CBT_FILE: &str = "BRIT.CBT";
 pub const DUNGEON_CBT_FILE: &str = "DUNGEON.CBT";
 pub const DUNGEON_ROOM_SOURCE_ROW: usize = 5;
+pub const DUNGEON_ROOM_PARTY_POSITION_COUNT: usize = 6;
+pub const DUNGEON_ROOM_PARTY_COLUMN_X: usize = COMBAT_ARENA_METADATA_START;
+pub const DUNGEON_ROOM_PARTY_COLUMN_Y: usize = 17;
 /// `formats/cbt.md §5`: the dungeon-room source band starts in
 /// the metadata column (one past the visible 11-cell terrain
 /// band). Anchored to [`COMBAT_ARENA_METADATA_START`] so the
 /// dungeon-room source column derives from the visible/metadata
 /// split.
 pub const DUNGEON_ROOM_SOURCE_COLUMN: usize = COMBAT_ARENA_METADATA_START;
+pub const DUNGEON_ROOM_SOURCE_X_ROW: usize = 6;
+pub const DUNGEON_ROOM_SOURCE_Y_ROW: usize = 7;
 /// `formats/cbt.md §5` dungeon-room source slot count per bank.
 /// Equal to [`crate::DUNGEON_ROOM_SLOTS_PER_BANK`] — each bank's
 /// source records occupy the same 16 slots as the bank's room
@@ -45,6 +50,10 @@ pub const DUNGEON_ROOM_SOURCE_COLUMN: usize = COMBAT_ARENA_METADATA_START;
 pub const DUNGEON_ROOM_SOURCE_COUNT: usize = crate::DUNGEON_ROOM_SLOTS_PER_BANK;
 pub const DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE: u8 = 0x3c;
 pub const DUNGEON_ROOM_ABSORBABLE_FIELD_CLASS_MASK: u8 = 0xfc;
+pub const DUNGEON_ROOM_ORDINARY_SOURCE_FIRST: u8 = 0x40;
+pub const DUNGEON_ROOM_SPECIAL_SOURCE_MASK: u8 = 0xfc;
+pub const DUNGEON_ROOM_SPECIAL_SOURCE_B4: u8 = 0xb4;
+pub const DUNGEON_ROOM_SPECIAL_SOURCE_E8: u8 = 0xe8;
 
 /// `formats/cbt.md §5` outdoor metadata band slices. Per-arena setup
 /// tables A and B sit on row 3 at columns 11..=16 and 17..=22; the
@@ -181,11 +190,56 @@ impl CombatArenaRecord {
         )
     }
 
+    pub fn dungeon_room_source_x(&self) -> [u8; 16] {
+        self.slice_from_row::<DUNGEON_ROOM_SOURCE_COUNT>(
+            DUNGEON_ROOM_SOURCE_X_ROW,
+            DUNGEON_ROOM_SOURCE_COLUMN,
+        )
+    }
+
+    pub fn dungeon_room_source_y(&self) -> [u8; 16] {
+        self.slice_from_row::<DUNGEON_ROOM_SOURCE_COUNT>(
+            DUNGEON_ROOM_SOURCE_Y_ROW,
+            DUNGEON_ROOM_SOURCE_COLUMN,
+        )
+    }
+
+    pub fn dungeon_room_party_positions_for_seed(
+        &self,
+        entry_seed: u8,
+    ) -> [(u8, u8); DUNGEON_ROOM_PARTY_POSITION_COUNT] {
+        let row = dungeon_room_party_position_row(entry_seed);
+        let x = self
+            .slice_from_row::<DUNGEON_ROOM_PARTY_POSITION_COUNT>(row, DUNGEON_ROOM_PARTY_COLUMN_X);
+        let y = self
+            .slice_from_row::<DUNGEON_ROOM_PARTY_POSITION_COUNT>(row, DUNGEON_ROOM_PARTY_COLUMN_Y);
+        let mut positions = [(0u8, 0u8); DUNGEON_ROOM_PARTY_POSITION_COUNT];
+        for (slot, position) in positions.iter_mut().enumerate() {
+            *position = (x[slot], y[slot]);
+        }
+        positions
+    }
+
     pub fn dungeon_room_setup_sources(&self) -> Vec<DungeonRoomSetupSource> {
-        self.dungeon_room_sources()
+        self.dungeon_room_setup_sources_with_scan(true)
+    }
+
+    pub fn dungeon_room_setup_sources_with_scan(
+        &self,
+        scan_sources: bool,
+    ) -> Vec<DungeonRoomSetupSource> {
+        if !scan_sources {
+            return Vec::new();
+        }
+        let sources = self.dungeon_room_sources();
+        let x = self.dungeon_room_source_x();
+        let y = self.dungeon_room_source_y();
+        sources
             .into_iter()
             .enumerate()
-            .filter_map(|(slot, source)| DungeonRoomSetupSource::new(slot, source))
+            .filter_map(|(slot, source)| {
+                DungeonRoomSetupSource::new(slot, source, x[slot], y[slot])
+            })
             .collect()
     }
 
@@ -196,21 +250,34 @@ impl CombatArenaRecord {
     }
 }
 
+pub const fn dungeon_room_party_position_row(entry_seed: u8) -> usize {
+    match entry_seed {
+        3 => 1,
+        1 => 2,
+        0 | 5 => 3,
+        _ => 4,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DungeonRoomSetupSource {
     pub slot: usize,
     pub source: u8,
+    pub x: u8,
+    pub y: u8,
     pub kind: DungeonRoomSetupSourceKind,
 }
 
 impl DungeonRoomSetupSource {
-    pub fn new(slot: usize, source: u8) -> Option<Self> {
+    pub fn new(slot: usize, source: u8, x: u8, y: u8) -> Option<Self> {
         if source == 0 || slot >= DUNGEON_ROOM_SOURCE_COUNT {
             return None;
         }
         Some(Self {
             slot,
             source,
+            x,
+            y,
             kind: DungeonRoomSetupSourceKind::from_source(source),
         })
     }
@@ -225,9 +292,13 @@ pub enum DungeonRoomSetupSourceKind {
 
 impl DungeonRoomSetupSourceKind {
     pub fn from_source(source: u8) -> Self {
-        if source == DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE {
+        let family = source & DUNGEON_ROOM_SPECIAL_SOURCE_MASK;
+        if dungeon_room_absorbable_field_family(source) {
             Self::AbsorbableField
-        } else if (0x40..=0x7f).contains(&(source & 0x7f)) {
+        } else if source >= DUNGEON_ROOM_ORDINARY_SOURCE_FIRST
+            && family != DUNGEON_ROOM_SPECIAL_SOURCE_B4
+            && family != DUNGEON_ROOM_SPECIAL_SOURCE_E8
+        {
             Self::OrdinaryCombatant
         } else {
             Self::SpecialPlacement

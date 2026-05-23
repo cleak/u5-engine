@@ -32,11 +32,12 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 
 | Issue | Topic | Engine status |
 |------|-------|---------------|
-| `cleak/u5-spec#1` | Dungeon `0xF?` room-trigger and `0xA?` room-helper reload behavior | Implemented from latest issue answer; checked-in spec wording still has stale contradictions in places |
-| `cleak/u5-spec#3` | Terrain-combat arena records, spawn counts, replacement tiles, and placement metadata | Published placement/count/replacement behavior implemented; skiff/pirate-ship special selector predicate pending |
+| `cleak/u5-spec#1` | Dungeon `0xF?` room-trigger and `0xA?` room-helper reload behavior | Implemented from latest issue answer and reconciled checked-in spec wording |
+| `cleak/u5-spec#3` | Terrain-combat arena records, spawn counts, replacement tiles, placement metadata, and pirate selector | Implemented from latest issue answer, including active-object byte-0 `0x2C..0x2F` pirate arena selector |
 | `cleak/u5-spec#8` | Combat non-party sleep/disabled state storage | Implemented from latest issue answer; descriptor byte 2 carries the sleep/disabled bit and byte 4 remains the active-object link |
 | `cleak/u5-spec#9`/`#22` | Directed Sleep/Wind combat cone targeting | Implemented from latest issue answer; cardinal direction cone targeting replaces target-slot targeting |
 | `cleak/u5-spec#10` | Combat arena field marker placement gate | Implemented from latest issue answer; Fire/Poison/Sleep/Energy markers place after confirmed impact without a random materialization gate |
+| `cleak/u5-spec#12`/`#19` | Dungeon-room combat party/source placement | Published row/column layout, helper scan suppression, ordinary boundary, and Doom marker behavior implemented; non-Doom special id post-write table requested |
 | `cleak/u5-spec#13` | Paid shared 26-row sage rumour topic table and success templates | Table/mechanics implemented, including post-debit success-record RNG timing; exact fee/no-credit text still pending |
 | `cleak/u5-spec#15` | Inn Intelligence-adjusted room-rate formula and recovery behavior | Implemented |
 | `cleak/u5-spec#18` | Fixed hidden-treasure found bitmap and special record cookies | Implemented; spec wording correction requested for record 15 predicate |
@@ -365,8 +366,7 @@ are kept out of gameplay logic until the public spec publishes exact data.
 
 | Issue | Public gap | Engine placeholder |
 |------|------------|--------------------|
-| `cleak/u5-spec#1` | Checked-in `systems/dungeon-mode.md` prose still contains stale cleared-room reload wording in places | Engine follows latest public answer and `formats/dungeon-dat.md`: `0xF?` room triggers demote/replay as navigable `0xA?`, preserving the low-nibble room id |
-| `cleak/u5-spec#3` | Exact skiff/pirate-ship special outdoor arena selector predicate and whether it reads active-object type, tile, or both | Terrain combat uses the published selected `BRIT.CBT` arena record, metadata placement, spawn count, and replacement rows; only the special selector edge remains conservative |
+| `cleak/u5-spec#12` | Exact non-Doom dungeon-room special-placement id post-write tables and actor/descriptor effects | Engine consumes the published party/source row layout, source-owned coordinates, helper-cell scan suppression, ordinary/source-family boundary, and Doom marker behavior; non-Doom special sources are preserved as inert markers until the id tables are published |
 | `cleak/u5-spec#8` | Exact combat descriptor byte/table layout for non-party sleep/disabled status storage | Engine models the published disabled targetability and per-slot duration counter behavior, but keeps the descriptor/backref layout conservative until the byte conflict is resolved |
 | `cleak/u5-spec#13` | Exact resident SHOPPE record ids/text for the sage fee quote and insufficient-gold/no-credit refusal | Shared paid 26-row table, strict matching, confirmation/debit, post-debit success-record RNG timing, and success rendering are implemented from the public issue answer; prompt wording remains conservative until published |
 | `cleak/u5-spec#18` | Spec prose wording for fixed hidden-treasure record 15 still needs to match the latest issue answer | Engine grants record 15 only when the single-use cookie is clear and no NPC occupies the tile, and does not set the cookie from Search itself |
@@ -382,6 +382,8 @@ Follow-up questions were current as of the 2026-05-23 issue audit for the
 remaining response-needed items:
 
 - `cleak/u5-spec#13`: exact fee/no-credit text or SHOPPE record ids.
+- `cleak/u5-spec#12`: exact non-Doom dungeon-room special-placement id
+  derivation, post-write formulas, range tables, and actor/descriptor effects.
 - `cleak/u5-spec#8`: resolve the descriptor byte conflict between byte 4 as
   active-object back-reference and byte 4 as sleep/disabled status sub-flags.
 - `cleak/u5-spec#18`: correct the `formats/saved-gam.md` record-15 skip
@@ -398,14 +400,8 @@ remaining response-needed items:
   predicate or publish the full resident tile-attribute table.
 - `cleak/u5-spec#54`: resolve the strip geometry wording conflict and publish
   or defer exact local cell-effect rasters.
-- `cleak/u5-spec#3`: publish the exact skiff/pirate-ship special selector
-  byte/range and whether the selector inspects active-object type, tile, or both.
-- `cleak/u5-spec#1`: reconcile any stale `systems/dungeon-mode.md` wording
-  that still describes cleared-room reloads as `0xE?` or non-walkable; the
-  engine follows the latest public `0xF? -> 0xA?` room-helper contract.
-
-These spec-sync contradictions do not currently change engine behavior; the
-engine follows the latest public issue answers where checked-in prose lags.
+No remaining response-needed issue in this audit is about #1 or #3; both are
+implemented from current checked-in public spec plus latest issue answers.
 
 ## Presentation Work (Separate From Gameplay Correctness)
 

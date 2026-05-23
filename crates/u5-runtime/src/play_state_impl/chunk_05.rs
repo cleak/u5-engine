@@ -396,12 +396,15 @@ impl PlayState {
         };
         if dungeon_cbt_available {
             let game_dir = game_dir.expect("availability checked from game_dir");
+            let entry_seed = dungeon_room_entry_seed_for_direction(self.player.facing);
             let combat_note = self.enter_dungeon_room_combat(
                 game_dir,
                 scene,
                 level,
                 slot,
                 arena,
+                entry_seed,
+                !helper_state,
                 doom_final_room,
             )?;
             self.message = format!(

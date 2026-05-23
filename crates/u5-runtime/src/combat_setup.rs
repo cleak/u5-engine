@@ -17,19 +17,20 @@ pub const OUTDOOR_ARENA_COUNT: usize = BRIT_CBT_RECORDS;
 pub const OUTDOOR_ARENA_CLASS_FIRST: u8 = 0x40;
 pub const OUTDOOR_ARENA_CLASS_LAST: u8 = 0x7F;
 
-/// `encounters.md §4` skiff/pirate-ship special class id. The active
-/// object's class for pirate-ship encounters is hard-coded to arena 1
-/// regardless of where the linear formula would place it.
-pub const OUTDOOR_ARENA_SKIFF_CLASS: u8 = 0x18;
+/// `encounters.md §4` skiff/pirate-ship special class family. Terrain
+/// combat masks active-object byte zero with `0xFC`; any byte in
+/// `0x2C..=0x2F` selects arena 1.
+pub const OUTDOOR_ARENA_PIRATE_CLASS_FAMILY: u8 = 0x2c;
+pub const OUTDOOR_ARENA_PIRATE_CLASS_MASK: u8 = 0xfc;
 pub const OUTDOOR_ARENA_SKIFF_INDEX: u8 = 1;
 
 /// `encounters.md §4`: returns the outdoor arena id (`0..=15`) for an
-/// active-object trigger class byte. Class bytes inside `0x40..=0x7F`
-/// use the linear formula `(class - 0x40) / 4`; the skiff/pirate-ship
-/// class hard-codes arena 1; other class bytes fall through (`None`)
-/// to scripted handling.
+/// active-object trigger class byte. Pirate/water-creature body bytes
+/// in `0x2C..=0x2F` select arena 1 after masking. Class bytes inside
+/// `0x40..=0x7F` use the linear formula `(class - 0x40) / 4`; other
+/// class bytes fall through (`None`) to scripted handling.
 pub const fn outdoor_arena_id_for_class(class_byte: u8) -> Option<u8> {
-    if class_byte == OUTDOOR_ARENA_SKIFF_CLASS {
+    if class_byte & OUTDOOR_ARENA_PIRATE_CLASS_MASK == OUTDOOR_ARENA_PIRATE_CLASS_FAMILY {
         return Some(OUTDOOR_ARENA_SKIFF_INDEX);
     }
     if class_byte < OUTDOOR_ARENA_CLASS_FIRST || class_byte > OUTDOOR_ARENA_CLASS_LAST {
@@ -55,6 +56,7 @@ pub struct DungeonRoomCombatSetup {
     pub arena_index: usize,
     pub terrain: [[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
     pub placement_slots: Vec<CombatPlacementSlot>,
+    pub party_positions: [(u8, u8); COMBAT_PARTY_ACTOR_SLOTS],
     pub setup_sources: Vec<DungeonRoomSetupSource>,
 }
 
@@ -76,6 +78,19 @@ pub struct CombatPlacementSlot {
 
 pub const TERRAIN_COMBAT_PARTY_POSITIONS: [(u8, u8); COMBAT_PARTY_ACTOR_SLOTS] =
     [(5, 5), (4, 5), (6, 5), (5, 4), (5, 6), (4, 6)];
+
+pub const fn dungeon_room_entry_seed_for_direction(direction: Direction) -> u8 {
+    match direction {
+        Direction::North => 0,
+        Direction::East => 1,
+        Direction::South => 2,
+        Direction::West => 3,
+        Direction::NorthWest => 4,
+        Direction::NorthEast => 5,
+        Direction::SouthWest => 6,
+        Direction::SouthEast => 7,
+    }
+}
 
 /// Public issue #3 resident terrain-combat replacement-tile table.
 /// Spawn counts now come from the combat-class stat row's
@@ -124,11 +139,21 @@ pub fn dungeon_room_combat_setup_from_record(
     arena_index: usize,
     record: &CombatArenaRecord,
 ) -> DungeonRoomCombatSetup {
+    dungeon_room_combat_setup_from_record_for_entry(arena_index, record, 0, true)
+}
+
+pub fn dungeon_room_combat_setup_from_record_for_entry(
+    arena_index: usize,
+    record: &CombatArenaRecord,
+    entry_seed: u8,
+    scan_sources: bool,
+) -> DungeonRoomCombatSetup {
     DungeonRoomCombatSetup {
         arena_index,
         terrain: record.terrain_grid(),
         placement_slots: combat_placement_slots_from_record(record),
-        setup_sources: record.dungeon_room_setup_sources(),
+        party_positions: record.dungeon_room_party_positions_for_seed(entry_seed),
+        setup_sources: record.dungeon_room_setup_sources_with_scan(scan_sources),
     }
 }
 
@@ -156,29 +181,15 @@ pub fn dungeon_room_combat_instance_from_setup(
 ) -> TerrainCombatInstance {
     let mut active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
     let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
-    let ordinary_source_count = setup
-        .setup_sources
-        .iter()
-        .filter(|source| source.kind == DungeonRoomSetupSourceKind::OrdinaryCombatant)
-        .count();
     let mut placed_count = 0u8;
-    let mut marker_count = 0usize;
 
     for source in &setup.setup_sources {
+        let active_object_slot = COMBAT_PARTY_ACTOR_SLOTS + usize::from(placed_count);
+        if active_object_slot >= OOL_SLOTS || active_object_slot >= COMBAT_ACTOR_SLOTS {
+            continue;
+        }
         match source.kind {
             DungeonRoomSetupSourceKind::OrdinaryCombatant => {
-                let spawn_index = usize::from(placed_count);
-                let active_object_slot = COMBAT_PARTY_ACTOR_SLOTS + spawn_index;
-                if active_object_slot >= OOL_SLOTS || active_object_slot >= COMBAT_ACTOR_SLOTS {
-                    continue;
-                }
-                let placement = setup.placement_slots.get(spawn_index).copied().unwrap_or(
-                    CombatPlacementSlot {
-                        slot: spawn_index,
-                        x: (spawn_index % COMBAT_ARENA_SIDE) as u8,
-                        y: (spawn_index / COMBAT_ARENA_SIDE) as u8,
-                    },
-                );
                 let Some(tile) = dungeon_room_source_sprite(source.source) else {
                     continue;
                 };
@@ -188,8 +199,8 @@ pub fn dungeon_room_combat_instance_from_setup(
                 active_objects[active_object_slot] = ActiveObject {
                     type_byte: tile,
                     tile,
-                    x: usize::from(placement.x),
-                    y: usize::from(placement.y),
+                    x: usize::from(source.x),
+                    y: usize::from(source.y),
                     z,
                     phase: STEADY_PHASE,
                     aux1: 0,
@@ -198,38 +209,39 @@ pub fn dungeon_room_combat_instance_from_setup(
                 actors[active_object_slot] = CombatActorDescriptor::for_monster_placement(
                     stats,
                     active_object_slot as u8,
-                    placement.x,
-                    placement.y,
+                    source.x,
+                    source.y,
                     COMBAT_ACTOR_FLAG_SELECTABLE_80,
                     0,
                 );
                 placed_count = placed_count.saturating_add(1);
             }
             DungeonRoomSetupSourceKind::AbsorbableField => {
-                let marker_slot = COMBAT_PARTY_ACTOR_SLOTS + ordinary_source_count + marker_count;
-                if marker_slot >= OOL_SLOTS {
-                    continue;
-                }
-                let placement = setup.placement_slots.get(source.slot).copied().unwrap_or(
-                    CombatPlacementSlot {
-                        slot: source.slot,
-                        x: (source.slot % COMBAT_ARENA_SIDE) as u8,
-                        y: (source.slot / COMBAT_ARENA_SIDE) as u8,
-                    },
-                );
-                active_objects[marker_slot] = ActiveObject {
+                active_objects[active_object_slot] = ActiveObject {
                     type_byte: source.source,
                     tile: source.source,
-                    x: usize::from(placement.x),
-                    y: usize::from(placement.y),
+                    x: usize::from(source.x),
+                    y: usize::from(source.y),
                     z,
                     phase: STEADY_PHASE,
                     aux1: 0,
                     aux3: 0,
                 };
-                marker_count += 1;
+                placed_count = placed_count.saturating_add(1);
             }
-            DungeonRoomSetupSourceKind::SpecialPlacement => {}
+            DungeonRoomSetupSourceKind::SpecialPlacement => {
+                active_objects[active_object_slot] = ActiveObject {
+                    type_byte: source.source,
+                    tile: source.source,
+                    x: usize::from(source.x),
+                    y: usize::from(source.y),
+                    z,
+                    phase: STEADY_PHASE,
+                    aux1: 0,
+                    aux3: 0,
+                };
+                placed_count = placed_count.saturating_add(1);
+            }
         }
     }
 
@@ -409,6 +421,8 @@ impl PlayState {
         level: u8,
         room_slot: u8,
         arena_index: usize,
+        entry_seed: u8,
+        scan_sources: bool,
         enter_endgame_after_successful_absorbable_combat: bool,
     ) -> io::Result<String> {
         let bank = load_dungeon_cbt(game_dir)?;
@@ -418,18 +432,22 @@ impl PlayState {
                 format!("DUNGEON.CBT has no arena record {arena_index}"),
             )
         })?;
-        let setup = dungeon_room_combat_setup_from_record(arena_index, record);
+        let setup = dungeon_room_combat_setup_from_record_for_entry(
+            arena_index,
+            record,
+            entry_seed,
+            scan_sources,
+        );
         let has_absorbable_field = setup
             .setup_sources
             .iter()
             .any(|source| source.kind == DungeonRoomSetupSourceKind::AbsorbableField);
         let mut instance = dungeon_room_combat_instance_from_setup(&setup, level as i8);
-        self.populate_combat_party_at_placement_slots(
+        self.populate_dungeon_room_combat_party(
             &mut instance.active_objects,
             &mut instance.actors,
             level as i8,
-            &setup.placement_slots,
-            usize::from(instance.placed_count),
+            &setup.party_positions,
         );
         let placed_count = instance.placed_count;
         let requested_count = instance.requested_count;
@@ -648,6 +666,16 @@ impl PlayState {
             }
         }
         self.populate_combat_party_with_positions(active_objects, actors, z, &positions);
+    }
+
+    pub fn populate_dungeon_room_combat_party(
+        &self,
+        active_objects: &mut [ActiveObject],
+        actors: &mut [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
+        z: i8,
+        positions: &[(u8, u8); COMBAT_PARTY_ACTOR_SLOTS],
+    ) {
+        self.populate_combat_party_with_positions(active_objects, actors, z, positions);
     }
 
     fn populate_combat_party_with_positions(

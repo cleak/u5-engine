@@ -14002,13 +14002,20 @@ fn outdoor_arena_id_for_class_matches_spec_table() {
             );
         }
     }
-    // Skiff/pirate-ship special hard-codes arena 1.
+    // Skiff/pirate-ship body family 0x2C..=0x2F hard-codes arena 1.
+    for class_byte in 0x2cu8..=0x2f {
+        assert_eq!(
+            outdoor_arena_id_for_class(class_byte),
+            Some(OUTDOOR_ARENA_SKIFF_INDEX)
+        );
+    }
     assert_eq!(
-        outdoor_arena_id_for_class(OUTDOOR_ARENA_SKIFF_CLASS),
-        Some(OUTDOOR_ARENA_SKIFF_INDEX)
+        OUTDOOR_ARENA_PIRATE_CLASS_FAMILY & OUTDOOR_ARENA_PIRATE_CLASS_MASK,
+        OUTDOOR_ARENA_PIRATE_CLASS_FAMILY
     );
     // Out-of-window classes fall through to scripted handling.
     assert_eq!(outdoor_arena_id_for_class(0x00), None);
+    assert_eq!(outdoor_arena_id_for_class(0x18), None);
     assert_eq!(outdoor_arena_id_for_class(0x3F), None);
     assert_eq!(outdoor_arena_id_for_class(0x80), None);
     assert_eq!(outdoor_arena_id_for_class(0xFF), None);
@@ -15490,6 +15497,9 @@ fn dungeon_room_trigger_loads_selected_dungeon_cbt_record_when_available() {
     let mut record = synthetic_combat_arena_record();
     let source_base =
         DUNGEON_ROOM_SOURCE_ROW * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_SOURCE_COLUMN;
+    for offset in 0..DUNGEON_ROOM_SOURCE_COUNT {
+        record[source_base + offset] = 0;
+    }
     record[source_base + 2] = 0x44;
     let mut dungeon_cbt = Vec::new();
     for _ in 0..DUNGEON_CBT_RECORDS {
@@ -15512,13 +15522,13 @@ fn dungeon_room_trigger_loads_selected_dungeon_cbt_record_when_available() {
     assert!(state.combat_active);
     assert!(state.message.contains("entered dungeon combat"));
     assert!(state.message.contains("DUNGEON.CBT arena 23"));
-    assert!(state.message.contains("16 room source marker(s)"));
+    assert!(state.message.contains("1 room source marker(s)"));
     assert!(state.message.contains("1 ordinary combatant"));
     assert_eq!(state.combat_terrain[0][0], 0x00);
     assert_eq!(state.active_objects[6].tile, 0xc4);
     assert_eq!(
         (state.active_objects[6].x, state.active_objects[6].y),
-        (0, 15)
+        (2, 13)
     );
     assert!(!state.combat_actors[6].is_empty());
     assert!(!dungeon_room_clear_bit_is_set(
@@ -15575,8 +15585,8 @@ fn dungeon_room_helper_state_loads_dungeon_cbt_record_when_available() {
     assert!(state.message.contains("entered dungeon combat"));
     assert!(state.message.contains("DUNGEON.CBT arena 20"));
     assert_eq!(state.combat_terrain[0][0], 0x00);
-    assert_eq!(state.active_objects[6].tile, 0xc4);
-    assert!(!state.combat_actors[6].is_empty());
+    assert_eq!(state.active_objects[6].tile, 0);
+    assert!(state.combat_actors[6].is_empty());
     assert_eq!(
         state
             .combat_frame_snapshot
@@ -15766,8 +15776,10 @@ fn doom_final_room_trigger_loads_dungeon_cbt_before_endgame_when_available() {
         scene,
         DOOM_FINAL_ROOM_SLOT
     ));
-    assert_eq!(state.active_objects[6].tile, 0xc4);
-    assert!(!state.combat_actors[6].is_empty());
+    assert_eq!(state.active_objects[6].tile, DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE);
+    assert!(state.combat_actors[6].is_empty());
+    assert_eq!(state.active_objects[7].tile, 0xc4);
+    assert!(!state.combat_actors[7].is_empty());
     let _ = fs::remove_dir_all(dir);
 }
 

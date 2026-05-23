@@ -303,12 +303,10 @@ Current worktree context when this TODO was refreshed:
   the party; route smoke covers Lycaeum, Empath Abbey, and Serpent's Hold native
   paths.
 - The 2026-05-23 clean-engine audit applied the remaining spec-backed tavern
-  drink-letter correction and expanded Doom combat visual routes. Follow-up
-  questions remain current for response-needed public blockers #1, #3, #8,
-  #13, #18, #31, #41, #43, #47, #51, #54, and #56. The only named answered
-  issues with newer public answers after older engine comments were #15, #28,
-  and #48, and their corresponding engine behavior is already implemented and
-  covered by tests or route-smoke.
+  drink-letter correction, expanded Doom combat visual routes, implemented the
+  latest dungeon-room placement contract, and retired #1/#3/#56 as gameplay
+  blockers. Follow-up questions remain current for response-needed public
+  blockers #8, #12, #13, #18, #31, #41, #43, #47, #51, and #54.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the

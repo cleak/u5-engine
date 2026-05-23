@@ -59,6 +59,17 @@
         assert_eq!(record.outdoor_placement_y()[15], 0);
         assert_eq!(record.dungeon_room_sources()[0], 0x30);
         assert_eq!(record.dungeon_room_sources()[15], 0x3f);
+        assert_eq!(record.dungeon_room_source_x()[15], 15);
+        assert_eq!(record.dungeon_room_source_y()[15], 0);
+        assert_eq!(dungeon_room_party_position_row(3), 1);
+        assert_eq!(dungeon_room_party_position_row(1), 2);
+        assert_eq!(dungeon_room_party_position_row(0), 3);
+        assert_eq!(dungeon_room_party_position_row(5), 3);
+        assert_eq!(dungeon_room_party_position_row(2), 4);
+        assert_eq!(
+            record.dungeon_room_party_positions_for_seed(0)[5],
+            (0xa5, 0xb5)
+        );
         assert_eq!(record.dungeon_room_setup_sources().len(), 16);
         assert_eq!(record.terrain_grid()[10][10], 0xaa);
         assert_eq!(record.record_bytes().as_slice(), bytes.as_slice());
@@ -113,8 +124,17 @@
         bytes[source_base] = 0x00;
         bytes[source_base + 1] = 0x3c;
         bytes[source_base + 2] = 0x44;
-        bytes[source_base + 3] = 0x80;
+        bytes[source_base + 3] = 0xb4;
         bytes[source_base + 4] = 0xc4;
+        bytes[source_base + 5] = 0xe8;
+        let source_x_base =
+            DUNGEON_ROOM_SOURCE_X_ROW * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_SOURCE_COLUMN;
+        let source_y_base =
+            DUNGEON_ROOM_SOURCE_Y_ROW * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_SOURCE_COLUMN;
+        for offset in 0..DUNGEON_ROOM_SOURCE_COUNT {
+            bytes[source_x_base + offset] = (offset + 10) as u8;
+            bytes[source_y_base + offset] = (offset + 20) as u8;
+        }
         let record = CombatArenaRecord::from_record_bytes(&bytes).unwrap();
 
         let sources = record.dungeon_room_setup_sources();
@@ -125,28 +145,44 @@
                 DungeonRoomSetupSource {
                     slot: 1,
                     source: 0x3c,
+                    x: 11,
+                    y: 21,
                     kind: DungeonRoomSetupSourceKind::AbsorbableField,
                 },
                 DungeonRoomSetupSource {
                     slot: 2,
                     source: 0x44,
+                    x: 12,
+                    y: 22,
                     kind: DungeonRoomSetupSourceKind::OrdinaryCombatant,
                 },
                 DungeonRoomSetupSource {
                     slot: 3,
-                    source: 0x80,
+                    source: 0xb4,
+                    x: 13,
+                    y: 23,
                     kind: DungeonRoomSetupSourceKind::SpecialPlacement,
                 },
                 DungeonRoomSetupSource {
                     slot: 4,
                     source: 0xc4,
+                    x: 14,
+                    y: 24,
                     kind: DungeonRoomSetupSourceKind::OrdinaryCombatant,
+                },
+                DungeonRoomSetupSource {
+                    slot: 5,
+                    source: 0xe8,
+                    x: 15,
+                    y: 25,
+                    kind: DungeonRoomSetupSourceKind::SpecialPlacement,
                 },
             ]
         );
         assert_eq!(dungeon_room_source_sprite(0x44), Some(0xc4));
         assert_eq!(dungeon_room_source_sprite(0xc4), Some(0xc4));
-        assert_eq!(dungeon_room_source_sprite(0x80), None);
+        assert_eq!(dungeon_room_source_sprite(0xb4), None);
+        assert_eq!(dungeon_room_source_sprite(0xe8), None);
         assert!(dungeon_room_absorbable_field_family(0x3c));
         assert!(dungeon_room_absorbable_field_family(0x3f));
         assert!(!dungeon_room_absorbable_field_family(0x38));
@@ -176,26 +212,31 @@
                 DungeonRoomSetupSource {
                     slot: 1,
                     source: 0x3c,
+                    x: 1,
+                    y: 14,
                     kind: DungeonRoomSetupSourceKind::AbsorbableField,
                 },
                 DungeonRoomSetupSource {
                     slot: 2,
                     source: 0x44,
+                    x: 2,
+                    y: 13,
                     kind: DungeonRoomSetupSourceKind::OrdinaryCombatant,
                 },
             ]
         );
 
         let instance = dungeon_room_combat_instance_from_setup(&setup, 7);
-        assert_eq!(instance.active_objects[7].type_byte, DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE);
-        assert_eq!(instance.active_objects[7].tile, DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE);
-        assert!(instance.actors[7].is_empty());
-        assert_eq!(instance.active_objects[6].tile, 0xc4);
-        assert!(!instance.actors[6].is_empty());
+        assert_eq!(instance.active_objects[6].type_byte, DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE);
+        assert_eq!(instance.active_objects[6].tile, DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE);
+        assert!(instance.actors[6].is_empty());
+        assert_eq!(instance.active_objects[7].tile, 0xc4);
+        assert_eq!((instance.active_objects[7].x, instance.active_objects[7].y), (2, 13));
+        assert!(!instance.actors[7].is_empty());
     }
 
     #[test]
-    fn dungeon_room_combat_setup_compacts_monsters_and_places_party_after_them() {
+    fn dungeon_room_combat_setup_uses_source_coordinates_and_facing_party_row() {
         let mut bytes = vec![0u8; COMBAT_ARENA_RECORD_LEN];
         let source_base = DUNGEON_ROOM_SOURCE_ROW * COMBAT_ARENA_ROW_STRIDE
             + DUNGEON_ROOM_SOURCE_COLUMN;
@@ -204,42 +245,94 @@
         bytes[source_base + 2] = 0x44;
         bytes[source_base + 3] = DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE;
         for index in 0..CBT_PLACEMENT_SLOT_COUNT {
-            bytes[CBT_PLACEMENT_X_ROW * COMBAT_ARENA_ROW_STRIDE
+            bytes[DUNGEON_ROOM_SOURCE_X_ROW * COMBAT_ARENA_ROW_STRIDE
                 + COMBAT_ARENA_METADATA_START
                 + index] = (index + 1) as u8;
-            bytes[CBT_PLACEMENT_Y_ROW * COMBAT_ARENA_ROW_STRIDE
+            bytes[DUNGEON_ROOM_SOURCE_Y_ROW * COMBAT_ARENA_ROW_STRIDE
                 + COMBAT_ARENA_METADATA_START
-                + index] = (index + 2) as u8;
+                + index] = (index + 20) as u8;
+        }
+        for slot in 0..COMBAT_PARTY_ACTOR_SLOTS {
+            bytes[2 * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_PARTY_COLUMN_X + slot] =
+                (30 + slot) as u8;
+            bytes[2 * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_PARTY_COLUMN_Y + slot] =
+                (40 + slot) as u8;
         }
         let record = CombatArenaRecord::from_record_bytes(&bytes).unwrap();
-        let setup = dungeon_room_combat_setup_from_record(3, &record);
+        let setup = dungeon_room_combat_setup_from_record_for_entry(3, &record, 1, true);
 
         let mut instance = dungeon_room_combat_instance_from_setup(&setup, 4);
 
         assert_eq!(instance.requested_count, 4);
-        assert_eq!(instance.placed_count, 2);
-        assert_eq!(instance.unplaced_count, 2);
-        assert_eq!((instance.active_objects[6].tile, instance.active_objects[6].x), (0xc4, 1));
-        assert_eq!((instance.active_objects[7].tile, instance.active_objects[7].x), (0xc4, 2));
+        assert_eq!(instance.placed_count, 4);
+        assert_eq!(instance.unplaced_count, 0);
         assert_eq!(
-            (instance.active_objects[8].tile, instance.active_objects[8].x),
-            (DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE, 4)
+            (
+                instance.active_objects[6].tile,
+                instance.active_objects[6].x,
+                instance.active_objects[6].y
+            ),
+            (0x02, 1, 20)
         );
-        assert!(!instance.actors[6].is_empty());
+        assert!(instance.actors[6].is_empty());
+        assert_eq!(
+            (
+                instance.active_objects[7].tile,
+                instance.active_objects[7].x,
+                instance.active_objects[7].y
+            ),
+            (0xc4, 2, 21)
+        );
+        assert_eq!(
+            (
+                instance.active_objects[8].tile,
+                instance.active_objects[8].x,
+                instance.active_objects[8].y
+            ),
+            (0xc4, 3, 22)
+        );
         assert!(!instance.actors[7].is_empty());
-        assert!(instance.actors[8].is_empty());
+        assert!(!instance.actors[8].is_empty());
+        assert_eq!(
+            (
+                instance.active_objects[9].tile,
+                instance.active_objects[9].x,
+                instance.active_objects[9].y
+            ),
+            (DUNGEON_ROOM_ABSORBABLE_FIELD_SOURCE, 4, 23)
+        );
+        assert!(instance.actors[9].is_empty());
 
         let state = test_state(open_grid(), 1, 1);
-        state.populate_combat_party_at_placement_slots(
+        state.populate_dungeon_room_combat_party(
             &mut instance.active_objects,
             &mut instance.actors,
             4,
-            &setup.placement_slots,
-            usize::from(instance.placed_count),
+            &setup.party_positions,
         );
 
-        assert_eq!((instance.active_objects[0].x, instance.active_objects[0].y), (3, 4));
-        assert_eq!((instance.actors[0].x, instance.actors[0].y), (3, 4));
+        assert_eq!((instance.active_objects[0].x, instance.active_objects[0].y), (30, 40));
+        assert_eq!((instance.actors[0].x, instance.actors[0].y), (30, 40));
+    }
+
+    #[test]
+    fn dungeon_room_helper_setup_skips_source_scan_but_keeps_party_row() {
+        let mut bytes = vec![0u8; COMBAT_ARENA_RECORD_LEN];
+        let source_base = DUNGEON_ROOM_SOURCE_ROW * COMBAT_ARENA_ROW_STRIDE
+            + DUNGEON_ROOM_SOURCE_COLUMN;
+        bytes[source_base] = 0xc4;
+        for slot in 0..COMBAT_PARTY_ACTOR_SLOTS {
+            bytes[3 * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_PARTY_COLUMN_X + slot] =
+                (50 + slot) as u8;
+            bytes[3 * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_PARTY_COLUMN_Y + slot] =
+                (60 + slot) as u8;
+        }
+        let record = CombatArenaRecord::from_record_bytes(&bytes).unwrap();
+
+        let setup = dungeon_room_combat_setup_from_record_for_entry(4, &record, 0, false);
+
+        assert!(setup.setup_sources.is_empty());
+        assert_eq!(setup.party_positions[0], (50, 60));
     }
 
     #[test]
