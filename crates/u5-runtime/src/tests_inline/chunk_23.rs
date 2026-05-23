@@ -13979,6 +13979,48 @@
     }
 
     #[test]
+    fn terrain_combat_replacement_rows_apply_to_each_published_outdoor_arena() {
+        for arena_index in 0..BRIT_CBT_RECORDS {
+            let replacement = terrain_combat_raw_replacement_tile_for_arena(arena_index).unwrap();
+
+            assert_eq!(
+                terrain_combat_tile_for_spawn_index(0, 16, 0xc0, Some(replacement), 0),
+                0xc0,
+                "arena {arena_index} first spawn must keep base tile"
+            );
+            for spawn_index in 1..terrain_combat_replacement_threshold(16) {
+                assert_eq!(
+                    terrain_combat_tile_for_spawn_index(
+                        spawn_index,
+                        16,
+                        0xc0,
+                        Some(replacement),
+                        0,
+                    ),
+                    replacement,
+                    "arena {arena_index} eligible follower spawn {spawn_index} must accept replacement roll"
+                );
+                assert_eq!(
+                    terrain_combat_tile_for_spawn_index(
+                        spawn_index,
+                        16,
+                        0xc0,
+                        Some(replacement),
+                        1,
+                    ),
+                    0xc0,
+                    "arena {arena_index} eligible follower spawn {spawn_index} must reject nonzero replacement roll"
+                );
+            }
+            assert_eq!(
+                terrain_combat_tile_for_spawn_index(5, 16, 0xc0, Some(replacement), 0),
+                0xc0,
+                "arena {arena_index} late spawn must not roll for replacement"
+            );
+        }
+    }
+
+    #[test]
     fn terrain_combat_setup_from_record_copies_record_slices_and_base_class() {
         let record = CombatArenaRecord::from_record_bytes(&synthetic_combat_arena_record()).unwrap();
         let trigger = ActiveObject {
@@ -14153,6 +14195,74 @@
             .expect_err("object has no outdoor arena selector");
 
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn terrain_combat_local_brit_cbt_records_drive_all_outdoor_arenas_when_present() {
+        let game_dir = std::path::Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join(BRIT_CBT_FILE).exists() {
+            return;
+        }
+
+        let bank = load_brit_cbt(game_dir).unwrap();
+        assert_eq!(bank.records.len(), BRIT_CBT_RECORDS);
+
+        for arena_index in 0..BRIT_CBT_RECORDS {
+            let record = bank.record(arena_index).unwrap();
+            let trigger = ActiveObject {
+                type_byte: 0x40 + (arena_index as u8) * 4,
+                tile: 0xc0,
+                x: 10,
+                y: 20,
+                z: WorldPlane::Britannia.save_floor(),
+                phase: 0,
+                aux1: 0,
+                aux3: 0,
+            };
+            let setup =
+                terrain_combat_setup_from_record(WorldPlane::Britannia, trigger, record).unwrap();
+
+            assert_eq!(setup.arena_index, arena_index);
+            assert!(!setup.underworld_variant);
+            assert_eq!(setup.terrain, record.terrain_grid());
+            assert_eq!(setup.setup_table_a, record.outdoor_setup_table_a());
+            assert_eq!(setup.setup_table_b, record.outdoor_setup_table_b());
+            assert_eq!(setup.placement_slots.len(), CBT_PLACEMENT_SLOT_COUNT);
+            assert_eq!(setup.base_class.map(|class| class.class), Some(32));
+
+            for (slot, placement) in setup.placement_slots.iter().enumerate() {
+                assert_eq!(placement.slot, slot);
+                assert!(
+                    usize::from(placement.x) < COMBAT_ARENA_SIDE
+                        && usize::from(placement.y) < COMBAT_ARENA_SIDE,
+                    "arena {arena_index} placement slot {slot} is outside the visible 11x11 arena: ({}, {})",
+                    placement.x,
+                    placement.y
+                );
+            }
+
+            let instance = terrain_combat_instance_from_setup(&setup, 16, None, &[]).unwrap();
+            assert_eq!(instance.requested_count, 16);
+            assert_eq!(instance.placed_count, 16);
+            assert_eq!(instance.unplaced_count, 0);
+
+            for spawn_index in 0..16 {
+                let actor_slot = COMBAT_PARTY_ACTOR_SLOTS + spawn_index;
+                let placement = setup.placement_slots[spawn_index];
+                let object = instance.active_objects[actor_slot];
+                let actor = instance.actors[actor_slot];
+
+                assert_eq!(object.tile, 0xc0, "arena {arena_index} spawn {spawn_index}");
+                assert_eq!(object.type_byte, 0xc0);
+                assert_eq!(object.x, usize::from(placement.x));
+                assert_eq!(object.y, usize::from(placement.y));
+                assert_eq!(object.z, WorldPlane::Britannia.save_floor());
+                assert_eq!(actor.owner_target_class, 32);
+                assert_eq!(actor.active_object_slot, actor_slot as u8);
+                assert_eq!((actor.x, actor.y), (placement.x, placement.y));
+                assert!(combat_actor_is_active_not_dead(actor));
+            }
+        }
     }
 
     #[test]
