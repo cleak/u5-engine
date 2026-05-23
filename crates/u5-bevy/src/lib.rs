@@ -16,28 +16,28 @@ use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use image::{ImageBuffer, Rgba};
 
 use u5_runtime::{
-    ActiveObject, BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB, COMBAT_ARENA_SIDE,
-    ChargenSession, ChargenSessionResult, ChargenSessionStep, Direction, DungeonScene,
-    EGA_PALETTE_RGB, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FixedCellFont,
-    GameClock, GraphicImage, HORSE_PARKED_FIRST, INTRO_INLINE_DOORWAY_STEP,
-    INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE,
-    INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y,
-    INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA,
-    IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
-    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
-    MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, PLAY_MUSIC_TOGGLE_KEY,
-    PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
-    RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition, SPECIAL_ITEM_OWNED_VALUE,
+    ActiveObject, BLINK_COST, BLINK_SPELL_INDEX, BRITISH_PTH_PEN_ORIGINS, BritishPth,
+    CGA_PALETTE_RGB, COMBAT_ARENA_SIDE, ChargenSession, ChargenSessionResult, ChargenSessionStep,
+    DEATH_VISION_OBJECT_CLASS, Direction, DungeonScene, EGA_PALETTE_RGB,
+    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FixedCellFont, GameClock,
+    GraphicImage, HORSE_PARKED_FIRST, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X,
+    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
+    INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE,
+    INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement,
+    MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
+    MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap,
+    PLAY_MUSIC_TOGGLE_KEY, PROMPT_TEXT_WINDOW_INDEX, PlayInputDisposition, PlayOptions, PlayState,
+    PlayTarget, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition, SPECIAL_ITEM_OWNED_VALUE,
     SPECIAL_ITEM_SPYGLASS_INDEX, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
     STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, StoryRecords, TEXT_SCREEN_ROWS,
     TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
     TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
-    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TextWindowSystem, TileAtlas, TileGraphicsDepth,
-    TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState, U4TransferOverrides,
-    U4TransferSource, WorldPlane, commit_chargen_save, commit_u4_transfer_save,
-    handle_play_key_input, hash_bytes, input_case_fold, input_function_key_code,
-    input_keypad_digit_direction_code,
+    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, TextWindowSystem, TileAtlas, TileGraphicsDepth, TitleBitAsset,
+    TitleBitImages, TitleBitPlacement, TransportState, U4TransferOverrides, U4TransferSource,
+    WorldPlane, commit_chargen_save, commit_u4_transfer_save, handle_play_key_input, hash_bytes,
+    input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -50,11 +50,12 @@ use u5_runtime::{
     read_u4_transfer_source_from_party_sav, render_play_text_window_system,
     render_return_to_view_playback_frame_viewport, render_text_panel_rgba, render_text_window_rgba,
     run_return_to_view_playback_until_restart,
-    shop_runtime::{GuildShopState, ReagentShopState, SageState, TavernState},
+    shop_runtime::{GuildShopState, InnkeeperState, ReagentShopState, SageState, TavernState},
     shop_session::ActiveShopSession,
     stats_panel_active_cursor_visible, summarize_return_to_view_preview,
     summarize_return_to_view_script, title_tick_next_frame, title_tick_palette_indices,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
+    u5_prng_range_u16,
 };
 
 const VIEWPORT_RADIUS: usize = 5;
@@ -715,6 +716,87 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             }),
         },
         VisualRouteSuiteCase {
+            label: "route-britannia-blink-east-ray",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                ..PlayOptions::default()
+            },
+            script: &["C1IP6"],
+            configure: Some(seed_visual_route_blink),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-poison-gas-step",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["d"],
+            configure: Some(seed_visual_route_poison_gas),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-inn-rest-accept",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["R", "Y"],
+            configure: Some(seed_visual_route_inn_rest_accept),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-sage-topic-paid-success",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["HONE", "Y"],
+            configure: Some(seed_visual_route_sage_paid),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-sage-topic-short-funds",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["COMP", "Y"],
+            configure: Some(seed_visual_route_sage_short_funds),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-fountain-look",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["l6", "1"],
+            configure: Some(seed_visual_route_fountain),
+        },
+        VisualRouteSuiteCase {
+            label: "route-buccaneers-den-wishing-well",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(Scene::new(0x18).expect("Buccaneer's Den scene is valid")),
+                ..PlayOptions::default()
+            },
+            script: &["l6", "Y", "Horse"],
+            configure: Some(seed_visual_route_wishing_well),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-death-vision-look",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["l6", "1"],
+            configure: Some(seed_visual_route_death_vision),
+        },
+        VisualRouteSuiteCase {
             label: "route-doom-combat-trigger",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
@@ -806,6 +888,106 @@ fn seed_visual_route_board_horse(state: &mut PlayState) {
         aux3: 0,
     });
     state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_blink(state: &mut PlayState) {
+    state.player.x = 62;
+    state.player.y = 124;
+    state.player.facing = Direction::East;
+    state.spell_charges[BLINK_SPELL_INDEX] = 1;
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = BLINK_COST;
+        caster.level = BLINK_COST;
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_poison_gas(state: &mut PlayState) {
+    state.player.x = 15;
+    state.player.y = 15;
+    state.player.facing = Direction::East;
+    let target_x = state.player.x + 1;
+    let target_y = state.player.y;
+    let target_idx = target_y * TOWN_GRID_SIDE + target_x;
+    if let Some(cell) = state.grid.get_mut(target_idx) {
+        *cell = TOWN_POISON_GAS_LIVE_TILE;
+    }
+    state.prng_state = poison_gas_first_poison_seed();
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn poison_gas_first_poison_seed() -> u16 {
+    for candidate in 0..=u16::MAX {
+        let mut state = candidate;
+        if u5_prng_range_u16(&mut state, 0, TOWN_GAS_DOORWAY_RANGE_MAX) > 0 {
+            return candidate;
+        }
+    }
+    unreachable!("PRNG range cycle must hit a poison roll")
+}
+
+fn seed_visual_route_inn_rest_accept(state: &mut PlayState) {
+    state.gold = 999;
+    if let Some(member) = state.party.first_mut() {
+        member.class_byte = b'A';
+        member.status = b'G';
+        member.hp = 10;
+        member.max_hp = 30;
+        member.mana = 0;
+    }
+    if let Some(intelligence) = state.party_intelligence.first_mut() {
+        *intelligence = 24;
+    }
+    state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::for_inn(
+        Inn::TheWayfarerInn,
+    )));
+}
+
+fn seed_visual_route_sage_paid(state: &mut PlayState) {
+    state.gold = 100;
+    state.prng_state = 0x3456;
+    state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+}
+
+fn seed_visual_route_sage_short_funds(state: &mut PlayState) {
+    state.gold = 49;
+    state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+}
+
+fn stamp_visual_route_look_tile(state: &mut PlayState, tile: u8) {
+    state.player.x = 15;
+    state.player.y = 15;
+    state.player.facing = Direction::East;
+    let target_idx = state.player.y * TOWN_GRID_SIDE + state.player.x + 1;
+    if let Some(cell) = state.grid.get_mut(target_idx) {
+        *cell = tile;
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_fountain(state: &mut PlayState) {
+    stamp_visual_route_look_tile(state, 0xD8);
+}
+
+fn seed_visual_route_wishing_well(state: &mut PlayState) {
+    stamp_visual_route_look_tile(state, 0xA1);
+}
+
+fn seed_visual_route_death_vision(state: &mut PlayState) {
+    stamp_visual_route_look_tile(state, 0x00);
+    state.active_objects.push(ActiveObject {
+        type_byte: DEATH_VISION_OBJECT_CLASS,
+        tile: DEATH_VISION_OBJECT_CLASS,
+        x: state.player.x + 1,
+        y: state.player.y,
+        z: state.current_floor().unwrap_or(0),
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    });
 }
 
 fn apply_visual_route_command(
@@ -4454,7 +4636,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 18);
+        assert_eq!(cases.len(), 26);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -4519,6 +4701,46 @@ mod tests {
         assert!(
             cases
                 .iter()
+                .any(|case| case.label == "route-britannia-blink-east-ray")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-castle-poison-gas-step")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-shop-inn-rest-accept")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-shop-sage-topic-paid-success")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-shop-sage-topic-short-funds")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-castle-fountain-look")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-buccaneers-den-wishing-well")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-castle-death-vision-look")
+        );
+        assert!(
+            cases
+                .iter()
                 .any(|case| case.label == "route-doom-combat-trigger")
         );
         assert!(
@@ -4558,6 +4780,10 @@ mod tests {
             visual_route_step_label("route-doom-combat-trigger", 1, ""),
             "route-doom-combat-trigger-01-empty"
         );
+        assert_eq!(
+            visual_route_step_label("route-britannia-blink-east-ray", 1, "C1IP6"),
+            "route-britannia-blink-east-ray-01-c1ip6"
+        );
     }
 
     #[test]
@@ -4573,7 +4799,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 47);
+        assert_eq!(reports.len(), 70);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -4594,6 +4820,14 @@ mod tests {
         assert!(manifest.contains("route-dungeon-ignite-torch-01-i"));
         assert!(manifest.contains("route-dungeon-exit-refusal-02-n"));
         assert!(manifest.contains("route-shop-sage-topic-miss-01-mantra"));
+        assert!(manifest.contains("route-britannia-blink-east-ray-01-c1ip6"));
+        assert!(manifest.contains("route-castle-poison-gas-step-01-d"));
+        assert!(manifest.contains("route-shop-inn-rest-accept-02-y"));
+        assert!(manifest.contains("route-shop-sage-topic-paid-success-02-y"));
+        assert!(manifest.contains("route-shop-sage-topic-short-funds-02-y"));
+        assert!(manifest.contains("route-castle-fountain-look-02-1"));
+        assert!(manifest.contains("route-buccaneers-den-wishing-well-03-horse"));
+        assert!(manifest.contains("route-castle-death-vision-look-02-1"));
         assert!(manifest.contains("route-doom-combat-trigger-01-empty"));
         assert!(manifest.contains("route-doom-combat-pass-02-empty"));
         assert!(manifest.contains("route-doom-combat-attack-02-a6"));

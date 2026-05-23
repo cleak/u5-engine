@@ -759,6 +759,11 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "britannia-blink-east-ray")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "ship-hms-cape-plans-use")
     );
     assert!(

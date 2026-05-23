@@ -14,18 +14,18 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-21, including 2558 tests
+- `cargo test -p u5-runtime` passed on 2026-05-23, including 2560 tests
   (latest verification includes combat command-flow regressions for pending
   Z-stats/Cast actor liveness, public `cleak/u5-spec#41` arms-shop scene-row
   coverage, public issue #3 terrain-combat replacement-tile main path, and
   public issue #21 dungeon active-monster ambush setup, combat round
   maintenance, combat-local ambush/camp reveal-slot helper coverage, and disk
   I/O retry wrapper coverage).
-- `cargo test -p u5-tui` passed on 2026-05-21, including 78 tests.
-- `cargo test -p u5-tui --features visual` passed on 2026-05-21.
-- `cargo test -p u5-bevy` passed on 2026-05-21, including 55 tests.
-- `cargo fmt -- --check` passed on 2026-05-21 after the latest Rust changes.
-- `git diff --check` passed on 2026-05-21; the only output was existing
+- `cargo test -p u5-tui` passed on 2026-05-23, including 79 tests.
+- `cargo test -p u5-tui --features visual` passed on 2026-05-23.
+- `cargo test -p u5-bevy` passed on 2026-05-23, including 56 tests.
+- `cargo fmt -- --check` passed on 2026-05-23 after the latest Rust changes.
+- `git diff --check` passed on 2026-05-23; the only output was existing
   CRLF-normalization warnings.
 - Representative raster smoke checks with local assets produced nonblank hashes:
   `BRITANNIA` top-down `fd923dc0f87a9f3c`, `BRITANNIA` after movement
@@ -33,14 +33,15 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-23 with 128 scripted route cases (including expanded active-shop/modal
+  2026-05-23 with 129 scripted route cases (including expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
   walk-and-rest, 9-step dungeon turn-and-search, 5-round Doom combat pass, and
   focused Create Food, fountain Look, Horse/non-horse wishing-well branches,
   death-vision Look, public
-  #44 sleeping/praying Talk refusals, light-decay, dungeon ladder-chain,
+  #44 sleeping/praying Talk refusals, public #48 Blink ray landing,
+  light-decay, dungeon ladder-chain,
   dungeon-to-world return, hourly provision/poison/starvation passes, public
   #32 Britannia/Doom Word-of-Power seal opening routes, public #15 accepted
   inn-rest pricing, public #13 sage paid-success/short-funds paths, public #31
@@ -73,7 +74,8 @@ Last known verification state:
   `483b27d450a54309`, `d4a86e6efb5c8978`, `b862359d883858c9`),
   saved-slot natural moongate live-entry routes (`8989fd97ff26da04`,
   `0242f19174914479`), public Britannia chasm fall route
-  (`3f4fdf2e53e4e269`), public #51 poison-gas doorway step
+  (`3f4fdf2e53e4e269`), public #48 Blink ray landing
+  (`f4b691ac224b385e`), public #51 poison-gas doorway step
   (`836b6cd5af06c44e`), and public #47 dungeon no-direct-recovery rest
   (`161ad48dd2a91725`), plus ship broadside fire
   (`a7f1e8c1d62d7388`), horse boarding (`c346e297d616e667`),
@@ -119,8 +121,8 @@ Last known verification state:
   `intro-return-to-view`
   `a52f8c3db8e33102`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-21 and
-  wrote 47 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-23 and
+  wrote 70 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -131,8 +133,8 @@ Last known verification state:
   `route-town-view-overlay-02-idle` `5d5af54c5d7eb0f0`,
   `route-britannia-look-00-initial` `f68b906acde0bd4a`,
   `route-britannia-look-01-l6` `da5ca5200c222d0f`,
-  `route-britannia-spyglass-chunk-map-00-initial` `304fa9974e1dc665`,
-  `route-britannia-spyglass-chunk-map-01-usp` `a65a4a22456dc25a`,
+  `route-britannia-spyglass-chunk-map-00-initial` `ee035bc3da0ecedd`,
+  `route-britannia-spyglass-chunk-map-01-usp` `4d75505e3140a852`,
   `route-castle-save-refusal-00-initial` `2beb3b7734800e11`,
   `route-castle-save-refusal-01-q` `c58e3249e4d12730`,
   `route-castle-save-refusal-02-n` `6465878cfb486dd1`,
@@ -167,7 +169,15 @@ Last known verification state:
   `route-doom-combat-z-stats-02-z` `3cf0bc15e87d80a5`,
   `route-doom-combat-search-prompt-00-initial` `6fdbd1b19453bbea`,
   `route-doom-combat-search-prompt-01-empty` `a2619c7eb20c407d`, and
-  `route-doom-combat-search-prompt-02-s` `3cf0bc15e87d80a5`.
+  `route-doom-combat-search-prompt-02-s` `3cf0bc15e87d80a5`. The
+  2026-05-23 expansion added public #48 Blink
+  `route-britannia-blink-east-ray-01-c1ip6` `17ceb1f94bc6c6e3`,
+  public #51 poison gas `route-castle-poison-gas-step-01-d`
+  `33ebf44d5ea24373`, public #15 inn rest
+  `route-shop-inn-rest-accept-02-y` `2591d02e2c602824`, public #13 sage
+  paid/short-funds outcomes `3d1bdb8ea9234398` / `c73a1d5ec1594b41`, and
+  public #43 fountain, wishing-well, and death-vision Look endings
+  `ce66d6a727da0f4c`, `cb49b5dc01b81ad4`, and `bc9b32161912f71d`.
 - Bevy visual screenshot smoke with local assets produced a nonblank
   `792x1182` PNG at `target\codex-fixed-font-status-smoke.png`.
 - Bevy intro screenshot smoke with local assets produced a nonblank
@@ -215,10 +225,11 @@ Current worktree context when this TODO was refreshed:
   the published EGA bright/dim color pairs. Exact historical driver-resident
   silhouette pixels remain out of scope.
 - Inn rest, leave, and pickup charges now follow the latest public
-  `cleak/u5-spec#15` guidance: fixed base-rate arithmetic with no speaker
-  Intelligence discount. Paid inn rest advances eight hours, wakes sleepers,
-  cures poison, and applies class-based night restoration: full HP/MP targets
-  for Avatar/Mage-style classes and half targets for Bards.
+  `cleak/u5-spec#15` guidance: Intelligence-adjusted arithmetic using the
+  speaking member's Intelligence. Pickup adjusts `base_rate * 10` before
+  multiplying by the billable stay counter. Paid inn rest advances eight hours,
+  wakes sleepers, cures poison, and applies class-based night restoration: full
+  HP/MP targets for Avatar/Mage-style classes and half targets for Bards.
 - U4 transfer source validation now follows public `cleak/u5-spec#16`:
   fixed 532-byte `PARTY.SAV`, public offsets for move/moon/dungeon counters,
   gold/food/keys/torches/gems/sextants counters, leading class/name, and the
@@ -226,9 +237,10 @@ Current worktree context when this TODO was refreshed:
 - Rest/camp ordinary HP/MP recovery follows the latest public guidance in
   `cleak/u5-spec#47`: rest advances time without a separate direct recovery
   grant. Exact original random-jolt/camp recovery details remain unresolved.
-- Non-combat Blink default target selection is blocked on clean spec
-  clarification in `cleak/u5-spec#48`; the engine keeps sidecar-authored
-  destinations rather than inventing a range/search rule.
+- Non-combat Blink follows the latest public `cleak/u5-spec#48` guidance: it
+  prompts for a cardinal direction and lands on the farthest legal grass cell
+  along the bounded ray. Route-smoke and Bevy visual-route coverage exercise an
+  eastward Britannia ray.
 - Create Food follows the latest public `cleak/u5-spec#49` guidance with a
   tiny `0..=2` food PRNG grant capped at the party food cap.
 - TLK `0x85` accepted toll payments debit gold, increment the toll-progress
@@ -239,10 +251,10 @@ Current worktree context when this TODO was refreshed:
   rolls `1..=8` independently for each non-dead slot.
 - Town poison-gas doorway cells use the latest public `cleak/u5-spec#51`
   predicate when clean tile attributes are available (`tile_class == 4` and
-  `vehicle_byte == 0x1C`), with 1-in-29 per-non-poisoned-slot roll semantics
-  after committed movement steps and before turn-clock advancement. Coordinate
-  sidecar rows remain as fallback until the full resident tile-attribute table
-  is published.
+  `vehicle_byte == 0x1C`), with a `0..=29` per-non-poisoned-slot roll compared
+  against each member's Dexterity after committed movement steps and before
+  turn-clock advancement. Coordinate sidecar rows remain as fallback until the
+  full resident tile-attribute table is published.
 - Talk-triggered arms shops use the public `cleak/u5-spec#41` scene-to-row
   identity table and exact per-row `a..h` stock arrays; visible buy choices stop
   at the `0xFF` terminator.
@@ -271,7 +283,8 @@ Current worktree context when this TODO was refreshed:
 - Return-to-View now expands the MISCMAPS command stream into a per-title-tick
   playback timeline for preview ticks, cell-effect timing, fixed-wipe
   rectangles, eight-title-tick waits, trailing ticks, and one-shot actor draws.
-  Caption source/opcode/text remains blocked by the public #54 spec conflict.
+  Fixed captions and timing are implemented; strip geometry and exact effect
+  rasters remain blocked by the public #54 spec conflict.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry,
   seeded ship/skiff sailing routes, a Spyglass-triggered Britannia chunk-map
@@ -641,8 +654,8 @@ experience.
 - Public spec still calls out optional exactness gaps:
   - wider story/endgame rectangle transition helper rates beyond the
     published step-1 one-column-per-title-tick wipe,
-  - Return-to-View caption opcode/text and exact effect rasters (the public
-    #54 scheduler timing is now modeled in runtime state),
+  - Return-to-View strip geometry and exact effect rasters (the public #54
+    scheduler timing and fixed captions are now modeled in runtime state),
   - broader `EGA.DRV` behavior beyond the canonical EGA/Tandy-equivalent path,
   - exact historical title-tick silhouette pixels,
   - exact remote-view panel for X-Ray/Peer,
@@ -683,9 +696,9 @@ until combat exists.
     (`0..=2`) and cap behavior.
   - Rel Hur uses the public `weather.md` prompt-to-wind mapping and is covered
     by cast/resource-order tests.
-  - Blink default range is sidecar-authored outside combat; combat Blink uses
-    the current arena state and legal in-arena landing checks. Non-combat
-    default target selection remains blocked on `cleak/u5-spec#48`.
+  - Non-combat Blink uses the public `cleak/u5-spec#48` cardinal direction
+    prompt and farthest-grass ray landing rule; combat Blink uses the current
+    arena state and legal in-arena landing checks.
   - View, Peer, and X-Ray overlays now carry explicit runtime modes, and the
     surface/dungeon overlay rasters apply the public peer/gem alternate
     bank/tint branch for affected cell classes. Exact remote-view panel pixels

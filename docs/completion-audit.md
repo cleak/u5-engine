@@ -50,13 +50,13 @@ Runtime, TUI, and route-smoke results refreshed alongside this audit on
 2026-05-23; Bevy and visual-suite evidence remains from the latest display
 audit:
 
-- `cargo test -p u5-runtime` — 2559 tests pass.
+- `cargo test -p u5-runtime` — 2560 tests pass.
 - `cargo test -p u5-tui` — 79 tests pass, including temp-directory binary
   smoke for empty-save Journey Onward, deterministic Create Character followed
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
-- `cargo test -p u5-bevy` — 55 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 128 scripted cases pass,
+- `cargo test -p u5-bevy` — 56 tests pass.
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 129 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
@@ -65,6 +65,7 @@ audit:
   PRV Gate Travel success/refusal paths, saved-slot natural moongate live-entry
   paths, public #31 native shard/Eternal Flame destruction routes, public #32 Britannia/Doom Word-of-Power seal opening, public #15
   accepted inn-rest pricing, public #44 sleeping/praying Talk refusals, public
+  #48 Blink ray landing,
   #51 poison-gas doorway step, public #47 dungeon no-direct-recovery rest,
   public #13 sage paid-success/short-funds paths, and
   ship broadside fire, horse boarding, dungeon torch ignition, Mix/Ready/New

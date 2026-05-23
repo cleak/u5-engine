@@ -266,7 +266,7 @@ and `L`ook obey the public personal-light gate; optional
 exact encoding remains open. Runtime
 `0xA?` room-helper state fires before the next dungeon key just like room
 triggers while keeping its low-nibble arena slot; reloaded cleared room triggers
-demote to non-walkable `0xE?` wall variants per the public dungeon-mode spec.
+demote to navigable `0xA?` room-helper variants per the public dungeon-mode spec.
 Public `0xE?` dungeon cells are visual wall/door silhouettes, not interactive
 doors, while `0xF?` cells are walkable room triggers and `0xA?` is visit-local
 room-helper state. No sidecar can redefine those packed classes. Stepping into
@@ -1102,9 +1102,9 @@ The runtime also accepts clean tile attributes:
 Stepping onto a tile whose attributes match the public `cleak/u5-spec#51`
 predicate (`tile_class == 4` and `vehicle_byte == 0x1C`), or onto a matching
 coordinate row, runs the town underfoot poison-gas branch against non-poisoned
-party slots with the latest public 1-in-29 per-slot roll. The coordinate sidecar
-remains a fallback until the full resident tile-attribute table is published in
-the clean spec.
+party slots with the latest public `0..=29` per-slot roll compared against each
+member's Dexterity. The coordinate sidecar remains a fallback until the full
+resident tile-attribute table is published in the clean spec.
 
 Town boundary exits use the native public threshold tile `0x59`. Additional
 authored exit cells can be supplied as clean-room sidecar metadata:

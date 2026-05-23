@@ -10,16 +10,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use u5_runtime::{
     ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE, BLACKTHORN_RESCUE_HANDOFF_SCENE,
-    COMBAT_PARTY_ACTOR_SLOTS, CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX,
-    DEATH_VISION_OBJECT_CLASS, DEFAULT_FOOD_STOCK, DUNGEON_AMBUSH_ARENA_FLOOR_TILE, Direction,
-    DungeonScene, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
-    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
-    FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX, GameClock,
-    GuildShop, HORSE_PARKED_FIRST, HOURLY_STARVATION_DAMAGE_MAX, HOURLY_STARVATION_DAMAGE_MIN,
-    Healer, Herbalist, IN_LOR_SPELL_INDEX, Inn, MoonstoneGateSlot, NATURAL_MOONGATE_TERRAIN_TILE,
-    NpcSlot, PEER_COST, PEER_SPELL_INDEX, PartyMember, PlayOptions, PlayState, PlayTarget,
-    REAGENT_SULFUR_ASH, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
-    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    BLINK_COST, BLINK_SPELL_INDEX, COMBAT_PARTY_ACTOR_SLOTS, CREATE_FOOD_COST,
+    CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX, DEATH_VISION_OBJECT_CLASS, DEFAULT_FOOD_STOCK,
+    DUNGEON_AMBUSH_ARENA_FLOOR_TILE, Direction, DungeonScene, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY,
+    EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, FIRST_PLAYABLE_FRIGATE_TILE,
+    FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, GATE_TRAVEL_COST,
+    GATE_TRAVEL_SPELL_INDEX, GameClock, GuildShop, HORSE_PARKED_FIRST,
+    HOURLY_STARVATION_DAMAGE_MAX, HOURLY_STARVATION_DAMAGE_MIN, Healer, Herbalist,
+    IN_LOR_SPELL_INDEX, Inn, MoonstoneGateSlot, NATURAL_MOONGATE_TERRAIN_TILE, NpcSlot, PEER_COST,
+    PEER_SPELL_INDEX, PartyMember, PlayOptions, PlayState, PlayTarget, REAGENT_SULFUR_ASH,
+    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
+    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
     SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
     SHADOWLORD_VANQUISHED, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
     SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
@@ -33,7 +34,7 @@ use u5_runtime::{
     WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_stay_counters, dungeon_cell_index, inn_base_room_rate,
-    load_tile_atlas,
+    load_tile_atlas, shop_intelligence_adjusted_price,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -235,6 +236,15 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
     create_food.spell_charges[CREATE_FOOD_SPELL_INDEX] = 1;
     create_food.party[0].mana = CREATE_FOOD_COST;
     create_food.party[0].level = CREATE_FOOD_COST;
+
+    let mut blink_east = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        start: Some((62, 124)),
+        ..PlayOptions::default()
+    };
+    blink_east.spell_charges[BLINK_SPELL_INDEX] = 1;
+    blink_east.party[0].mana = BLINK_COST;
+    blink_east.party[0].level = BLINK_COST;
 
     let hourly_provision_poison = PlayOptions {
         target: PlayTarget::Town(castle),
@@ -523,6 +533,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             name: "britannia-create-food-cast",
             options: create_food,
             script: &["C1IMX"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "britannia-blink-east-ray",
+            options: blink_east,
+            script: &["C1IP6"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -2026,6 +2044,18 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                 )));
             }
         }
+        "britannia-blink-east-ray" => {
+            if state.player.x <= 62
+                || state.player.y != 124
+                || state.spell_charges[BLINK_SPELL_INDEX] != 0
+                || state.party.first().is_none_or(|member| member.mana != 0)
+                || !state.message.contains("Blinked East")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the public Blink ray rule"
+                )));
+            }
+        }
         "castle-hourly-provision-poison-pass" => {
             if state.clock.hour != 6
                 || state.food != 8
@@ -2263,8 +2293,9 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             )?;
         }
         "shop-inn-rest-accept-public-rate" => {
-            let expected_gold =
-                999 - inn_base_room_rate(Inn::TheWayfarerInn) * state.party.len() as u16;
+            let raw = inn_base_room_rate(Inn::TheWayfarerInn) * state.party.len() as u16;
+            let speaker_intelligence = state.party_intelligence.first().copied().unwrap_or(0);
+            let expected_gold = 999 - shop_intelligence_adjusted_price(raw, speaker_intelligence);
             let inn_recovery_applied = state.party.first().is_some_and(|member| {
                 member.hp == member.max_hp && member.mana == 24 && member.status == b'G'
             });
