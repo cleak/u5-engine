@@ -744,6 +744,30 @@
     }
 
     #[test]
+    fn active_view_overlay_leaves_base_viewport_renderable_for_composed_frames() {
+        let mut grid = open_grid();
+        grid[5 * 32 + 5] = 5;
+        let mut state = test_state(grid, 5, 5);
+        state.gems = 1;
+        assert_eq!(state.view_gem(), MoveOutcome::Observed);
+
+        let atlas = TileAtlas {
+            depth: TileGraphicsDepth::Ega16,
+            pixels: vec![2; 512 * TILE_ATLAS_SIDE * TILE_ATLAS_SIDE],
+        };
+        let replacement = state.render_top_down_frame(5, &atlas).unwrap().unwrap();
+        let base = state
+            .render_top_down_base_frame(5, &atlas)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(replacement.cells_wide, LOCAL_VIEW_OVERLAY_SIDE);
+        assert_eq!(base.cells_wide, VIEWPORT_SIDE);
+        assert_eq!(base.cells_high, VIEWPORT_SIDE);
+        assert!(state.active_view_overlay.is_some());
+    }
+
+    #[test]
     fn dungeon_view_overlay_renders_centered_minimap_raster() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(0, 2, 1)] = 0x40;

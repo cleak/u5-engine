@@ -8,14 +8,18 @@ use std::path::Path;
 
 use image::{ImageBuffer, Rgba};
 use u5_runtime::{
-    COMBAT_ARENA_SIDE, DungeonScene, PlayOptions, PlayState, PlayTarget, Scene,
-    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TileGraphicsDepth,
+    COMBAT_ARENA_SIDE, DungeonScene, PlayOptions, PlayState, PlayTarget, STATS_PANEL_TEXT_LEFT,
+    Scene, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TileGraphicsDepth,
     WorldPlane, hash_bytes, load_tile_atlas, render_text_panel_rgba,
 };
 
 use crate::{raster_frame_kind, replay_play_script_commands};
 
 const VIEWPORT_RADIUS: usize = 5;
+const VIEWPORT_CELLS: usize = VIEWPORT_RADIUS * 2 + 1;
+const VIEWPORT_SIZE_PX: usize = VIEWPORT_CELLS * TILE_ATLAS_SIDE;
+const OVERLAY_SIDE_PANEL_X: usize = STATS_PANEL_TEXT_LEFT as usize * 8;
+const OVERLAY_SIDE_PANEL_Y: usize = 0;
 
 pub fn run_save_frame(
     game_dir: &Path,
@@ -201,28 +205,61 @@ fn save_frame_capture_state(
     out: &Path,
 ) -> io::Result<SavedFrameReport> {
     let mut state = state;
-    let cells = VIEWPORT_RADIUS * 2 + 1;
-    let fallback_width = cells * TILE_ATLAS_SIDE;
-    let (width, height, rgba, frame_kind) =
-        if let Some(viewport) = state.render_top_down_frame(VIEWPORT_RADIUS, &atlas)? {
-            (
-                viewport.width as u32,
-                viewport.height as u32,
-                viewport.to_rgba(),
-                raster_frame_kind(&state),
-            )
-        } else {
-            (
-                fallback_width as u32,
-                fallback_width as u32,
-                render_text_panel_rgba(
-                    &state.render_text_view(VIEWPORT_RADIUS),
-                    fallback_width,
-                    fallback_width,
-                )?,
-                "text panel",
-            )
-        };
+    let (width, height, rgba, frame_kind) = if state.active_view_overlay.is_some() {
+        let mut rgba = render_text_panel_rgba(
+            &state.render_text_window_frame(None),
+            TEXT_WINDOW_RENDER_WIDTH,
+            TEXT_WINDOW_RENDER_HEIGHT,
+        )?;
+        if let Some(base) = state.render_top_down_base_frame(VIEWPORT_RADIUS, atlas)? {
+            blit_rgba(
+                &mut rgba,
+                TEXT_WINDOW_RENDER_WIDTH,
+                TEXT_WINDOW_RENDER_HEIGHT,
+                &base.to_rgba(),
+                base.width,
+                base.height,
+                0,
+                0,
+            );
+        }
+        if let Some(overlay) = state.render_active_view_overlay(atlas.depth) {
+            blit_rgba(
+                &mut rgba,
+                TEXT_WINDOW_RENDER_WIDTH,
+                TEXT_WINDOW_RENDER_HEIGHT,
+                &overlay.to_rgba(),
+                overlay.width,
+                overlay.height,
+                OVERLAY_SIDE_PANEL_X,
+                OVERLAY_SIDE_PANEL_Y,
+            );
+        }
+        (
+            TEXT_WINDOW_RENDER_WIDTH as u32,
+            TEXT_WINDOW_RENDER_HEIGHT as u32,
+            rgba,
+            "composed view overlay",
+        )
+    } else if let Some(viewport) = state.render_top_down_frame(VIEWPORT_RADIUS, &atlas)? {
+        (
+            viewport.width as u32,
+            viewport.height as u32,
+            viewport.to_rgba(),
+            raster_frame_kind(&state),
+        )
+    } else {
+        (
+            VIEWPORT_SIZE_PX as u32,
+            VIEWPORT_SIZE_PX as u32,
+            render_text_panel_rgba(
+                &state.render_text_view(VIEWPORT_RADIUS),
+                VIEWPORT_SIZE_PX,
+                VIEWPORT_SIZE_PX,
+            )?,
+            "text panel",
+        )
+    };
 
     let byte_hash = hash_bytes(&rgba);
     let nonblack_pixels = rgba
@@ -247,6 +284,34 @@ fn save_frame_capture_state(
         byte_hash,
         nonblack_pixels,
     })
+}
+
+fn blit_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    src: &[u8],
+    src_width: usize,
+    src_height: usize,
+    dst_x: usize,
+    dst_y: usize,
+) {
+    for row in 0..src_height {
+        let y = dst_y + row;
+        if y >= dst_height {
+            break;
+        }
+        let src_row = row * src_width * 4;
+        let dst_row = (y * dst_width + dst_x) * 4;
+        let cols = src_width.min(dst_width.saturating_sub(dst_x));
+        let bytes = cols * 4;
+        if let (Some(src_slice), Some(dst_slice)) = (
+            src.get(src_row..src_row + bytes),
+            dst.get_mut(dst_row..dst_row + bytes),
+        ) {
+            dst_slice.copy_from_slice(src_slice);
+        }
+    }
 }
 
 fn save_frame_suite_combat(
@@ -538,29 +603,17 @@ mod tests {
                 .iter()
                 .find(|report| report.label == label)
                 .expect("expected surface view overlay report");
-            assert_eq!(
-                report.width,
-                32 * u5_runtime::LOCAL_VIEW_CELL_PIXEL_SCALE as u32
-            );
-            assert_eq!(
-                report.height,
-                32 * u5_runtime::LOCAL_VIEW_CELL_PIXEL_SCALE as u32
-            );
-            assert_eq!(report.frame_kind, "view overlay");
+            assert_eq!(report.width, TEXT_WINDOW_RENDER_WIDTH as u32);
+            assert_eq!(report.height, TEXT_WINDOW_RENDER_HEIGHT as u32);
+            assert_eq!(report.frame_kind, "composed view overlay");
         }
         let dungeon_view = reports
             .iter()
             .find(|report| report.label == "dungeon-view")
             .expect("expected dungeon view overlay report");
-        assert_eq!(
-            dungeon_view.width,
-            11 * u5_runtime::LOCAL_VIEW_CELL_PIXEL_SCALE as u32
-        );
-        assert_eq!(
-            dungeon_view.height,
-            11 * u5_runtime::LOCAL_VIEW_CELL_PIXEL_SCALE as u32
-        );
-        assert_eq!(dungeon_view.frame_kind, "view overlay");
+        assert_eq!(dungeon_view.width, TEXT_WINDOW_RENDER_WIDTH as u32);
+        assert_eq!(dungeon_view.height, TEXT_WINDOW_RENDER_HEIGHT as u32);
+        assert_eq!(dungeon_view.frame_kind, "composed view overlay");
         let endgame = reports
             .iter()
             .find(|report| report.label == "endgame-status")

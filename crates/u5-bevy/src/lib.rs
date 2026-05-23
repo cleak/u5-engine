@@ -3160,6 +3160,8 @@ const VISUAL_PLAY_FRAME_WIDTH: u32 = TEXT_WINDOW_RENDER_WIDTH as u32;
 const VISUAL_PLAY_FRAME_HEIGHT: u32 = TEXT_WINDOW_RENDER_HEIGHT as u32;
 const VISUAL_MAIN_TEXT_TOP: u8 = 22;
 const VISUAL_MAIN_TEXT_RIGHT: u8 = 22;
+const VISUAL_OVERLAY_SIDE_PANEL_X: usize = STATS_PANEL_TEXT_LEFT as usize * 8;
+const VISUAL_OVERLAY_SIDE_PANEL_Y: usize = 0;
 
 fn render_visual_play_frame(
     state: &mut PlayState,
@@ -3201,7 +3203,7 @@ fn render_visual_play_frame_with_input_and_cursor(
         prompt_cursor_visible,
     );
 
-    let viewport = render_framebuffer(state, atlas);
+    let viewport = render_base_framebuffer(state, atlas);
     blit_rgba(
         &mut rgba,
         width,
@@ -3212,6 +3214,7 @@ fn render_visual_play_frame_with_input_and_cursor(
         0,
         0,
     );
+    blit_active_view_overlay_rgba(&mut rgba, width, height, state, atlas.depth);
     rgba
 }
 
@@ -3393,6 +3396,7 @@ fn display_name_bytes(name: &[u8]) -> String {
     String::from_utf8_lossy(&name[..end]).trim_end().to_string()
 }
 
+#[cfg(test)]
 fn render_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
     match state.render_top_down_frame(VIEWPORT_RADIUS, atlas) {
         Ok(Some(viewport)) => {
@@ -3412,6 +3416,50 @@ fn render_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
         )
         .unwrap_or_else(|_| vec![0; (VIEWPORT_SIZE_PX as usize) * (VIEWPORT_SIZE_PX as usize) * 4]),
     }
+}
+
+fn render_base_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
+    match state.render_top_down_base_frame(VIEWPORT_RADIUS, atlas) {
+        Ok(Some(viewport)) => {
+            let rgba = viewport.to_rgba();
+            if viewport.width as u32 == VIEWPORT_SIZE_PX
+                && viewport.height as u32 == VIEWPORT_SIZE_PX
+            {
+                rgba
+            } else {
+                center_rgba_on_viewport(rgba, viewport.width, viewport.height)
+            }
+        }
+        _ => render_text_panel_rgba(
+            &state.render_text_view(VIEWPORT_RADIUS),
+            VIEWPORT_SIZE_PX as usize,
+            VIEWPORT_SIZE_PX as usize,
+        )
+        .unwrap_or_else(|_| vec![0; (VIEWPORT_SIZE_PX as usize) * (VIEWPORT_SIZE_PX as usize) * 4]),
+    }
+}
+
+fn blit_active_view_overlay_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    state: &PlayState,
+    depth: TileGraphicsDepth,
+) {
+    let Some(overlay) = state.render_active_view_overlay(depth) else {
+        return;
+    };
+    let rgba = overlay.to_rgba();
+    blit_rgba(
+        dst,
+        dst_width,
+        dst_height,
+        &rgba,
+        overlay.width,
+        overlay.height,
+        VISUAL_OVERLAY_SIDE_PANEL_X,
+        VISUAL_OVERLAY_SIDE_PANEL_Y,
+    );
 }
 
 fn center_rgba_on_viewport(src: Vec<u8>, src_width: usize, src_height: usize) -> Vec<u8> {
@@ -4641,6 +4689,48 @@ mod tests {
         );
         assert!(rgba.chunks_exact(4).all(|pixel| pixel[3] == 0xff));
         assert_nonblack_rgba(&rgba);
+    }
+
+    #[test]
+    fn visual_play_frame_blits_view_overlay_into_side_panel_over_base_viewport() {
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.gems = 1;
+        state.view_gem();
+        assert!(state.active_view_overlay.is_some());
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let overlay = state
+            .render_active_view_overlay(TileGraphicsDepth::Ega16)
+            .unwrap();
+        let overlay_rgba = overlay.to_rgba();
+        let (overlay_index, expected_overlay_pixel) = overlay_rgba
+            .chunks_exact(4)
+            .enumerate()
+            .find_map(|(index, pixel)| {
+                (pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
+                    .then_some((index, [pixel[0], pixel[1], pixel[2], pixel[3]]))
+            })
+            .expect("overlay should contain nonblack pixels");
+        let overlay_sample_x = overlay_index % overlay.width;
+        let overlay_sample_y = overlay_index / overlay.width;
+
+        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+        let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+        let base_pixel = rgba_pixel(
+            &rgba,
+            width,
+            VIEWPORT_SIZE_PX as usize / 2,
+            VIEWPORT_SIZE_PX as usize / 2,
+        );
+        let overlay_pixel = rgba_pixel(
+            &rgba,
+            width,
+            VISUAL_OVERLAY_SIDE_PANEL_X + overlay_sample_x,
+            VISUAL_OVERLAY_SIDE_PANEL_Y + overlay_sample_y,
+        );
+
+        assert_ne!(base_pixel, [0x00, 0x00, 0x00, 0xff]);
+        assert_eq!(overlay_pixel, expected_overlay_pixel);
     }
 
     #[test]

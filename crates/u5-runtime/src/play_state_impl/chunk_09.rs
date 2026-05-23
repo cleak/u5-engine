@@ -425,6 +425,14 @@ impl PlayState {
         if let Some(viewport) = self.render_active_view_overlay(atlas.depth) {
             return Ok(Some(viewport));
         }
+        self.render_top_down_base_frame(radius, atlas)
+    }
+
+    pub fn render_top_down_base_frame(
+        &mut self,
+        radius: usize,
+        atlas: &TileAtlas,
+    ) -> io::Result<Option<TileViewport>> {
         if !self.combat_active {
             self.sync_player_object();
         }
