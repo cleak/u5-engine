@@ -72,6 +72,9 @@ const READY_HINT: &str =
 const INTRO_FRAMEBUFFER_WIDTH: u32 = 320;
 const INTRO_FRAMEBUFFER_HEIGHT: u32 = 220;
 const INTRO_DISPLAY_SCALE: f32 = 2.5;
+const RETURN_TO_VIEW_CAPTION_Y: usize = 4;
+const RETURN_TO_VIEW_CAPTION_HEIGHT: usize = 14;
+const RETURN_TO_VIEW_PREVIEW_Y: usize = 18;
 const PROMPT_CURSOR_GLYPH: u8 = 4;
 
 pub fn run_visual_loop(
@@ -2617,6 +2620,10 @@ fn format_story_art_line(file: &str, placement: IntroStoryArtPlacement) -> Strin
 }
 
 fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
+    if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
+        return render_return_to_view_intro_frame(intro);
+    }
+
     let summary = summarize_intro(intro);
     let menu_panel = visual_intro_title_surface_visible(intro);
     let title_phase =
@@ -2708,9 +2715,57 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
                 *preview_width,
                 *preview_height,
                 x,
-                18,
+                RETURN_TO_VIEW_PREVIEW_Y,
             );
         }
+    }
+    rgba
+}
+
+fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
+    let mut rgba =
+        vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+    }
+
+    let VisualIntroPanel::ReturnToView {
+        preview_frames_rgba,
+        frame_metadata,
+        preview_frame_index,
+        preview_width,
+        preview_height,
+        ..
+    } = &intro.panel
+    else {
+        return rgba;
+    };
+
+    let caption = frame_metadata
+        .get(*preview_frame_index)
+        .and_then(|meta| meta.caption)
+        .unwrap_or("Return to View");
+    overlay_centered_text_band_rgba(
+        &mut rgba,
+        INTRO_FRAMEBUFFER_WIDTH as usize,
+        INTRO_FRAMEBUFFER_HEIGHT as usize,
+        caption,
+        RETURN_TO_VIEW_CAPTION_Y,
+        RETURN_TO_VIEW_CAPTION_HEIGHT,
+    );
+
+    if let Some(preview_rgba) = preview_frames_rgba.get(*preview_frame_index) {
+        let x = ((INTRO_FRAMEBUFFER_WIDTH as usize).saturating_sub(*preview_width)) / 2;
+        blit_rgba(
+            &mut rgba,
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+            preview_rgba,
+            *preview_width,
+            *preview_height,
+            x,
+            RETURN_TO_VIEW_PREVIEW_Y,
+        );
     }
     rgba
 }
@@ -3212,6 +3267,44 @@ fn overlay_nonblack_text_panel_rgba(
         let offset = index * 4;
         if let Some(dst_pixel) = dst.get_mut(offset..offset + 4) {
             dst_pixel.copy_from_slice(&pixel);
+        }
+    }
+}
+
+fn overlay_centered_text_band_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    text: &str,
+    y: usize,
+    band_height: usize,
+) {
+    if y >= dst_height || band_height == 0 {
+        return;
+    }
+    let glyph_advance = 4usize;
+    let max_cols = dst_width / glyph_advance;
+    let text_cols = text.chars().count().min(max_cols);
+    let pad_cols = max_cols.saturating_sub(text_cols) / 2;
+    let centered = format!("{}{}", " ".repeat(pad_cols), text);
+    let Ok(text_rgba) = render_text_panel_rgba(&centered, dst_width, band_height) else {
+        return;
+    };
+
+    let band_height = band_height.min(dst_height - y);
+    for row in 0..band_height {
+        for x in 0..dst_width {
+            let src_offset = (row * dst_width + x) * 4;
+            let Some(pixel) = text_rgba.get(src_offset..src_offset + 4) else {
+                continue;
+            };
+            if pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0 {
+                continue;
+            }
+            let dst_offset = ((y + row) * dst_width + x) * 4;
+            if let Some(dst_pixel) = dst.get_mut(dst_offset..dst_offset + 4) {
+                dst_pixel.copy_from_slice(pixel);
+            }
         }
     }
 }
@@ -6164,9 +6257,17 @@ mod tests {
 
         let frame = render_intro_frame(&mut intro);
         let x = ((INTRO_FRAMEBUFFER_WIDTH as usize) - 2) / 2;
-        let offset = ((18 * INTRO_FRAMEBUFFER_WIDTH as usize) + x) * 4;
+        let offset = ((RETURN_TO_VIEW_PREVIEW_Y * INTRO_FRAMEBUFFER_WIDTH as usize) + x) * 4;
 
         assert_eq!(&frame[offset..offset + 4], &[0xff, 0x00, 0x00, 0xff]);
+        let caption_start = RETURN_TO_VIEW_CAPTION_Y * INTRO_FRAMEBUFFER_WIDTH as usize * 4;
+        let caption_end =
+            caption_start + RETURN_TO_VIEW_CAPTION_HEIGHT * INTRO_FRAMEBUFFER_WIDTH as usize * 4;
+        assert!(
+            frame[caption_start..caption_end]
+                .chunks_exact(4)
+                .any(|pixel| { pixel == [0x55, 0xff, 0xff, 0xff] })
+        );
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 

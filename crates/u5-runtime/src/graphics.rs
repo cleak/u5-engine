@@ -498,34 +498,29 @@ impl FixedFont {
     }
 }
 
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProportionalGlyph {
     pub advance_width: u8,
     pub bitmap: MonochromeBitmap,
 }
 
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProportionalFontResource {
     pub strips: Vec<MonochromeBitmap>,
 }
 
-#[cfg(test)]
 impl ProportionalFontResource {
     pub fn strip(&self, slot: usize) -> Option<&MonochromeBitmap> {
         self.strips.get(slot)
     }
 }
 
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProportionalFont {
     pub first_code: u8,
     pub glyphs: Vec<ProportionalGlyph>,
 }
 
-#[cfg(test)]
 impl ProportionalFont {
     pub fn glyph_for_code(&self, code: u8) -> Option<&ProportionalGlyph> {
         code.checked_sub(self.first_code)

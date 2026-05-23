@@ -733,6 +733,70 @@
     }
 
     #[test]
+    fn font_graphics_layouts_proportional_paragraph_with_public_markers() {
+        let mut raw_widths = [0u8; PROPORTIONAL_WIDTH_TABLE_LEN];
+        for byte in b'A'..=b'Z' {
+            raw_widths[usize::from(byte)] = 4;
+        }
+        raw_widths[usize::from(b' ')] = 2;
+        let widths = ProportionalWidthTable::new(raw_widths);
+
+        let lines = layout_proportional_paragraph(&widths, b"{AB CD\nEF_GH IJ\0ignored", 10)
+            .unwrap();
+
+        assert_eq!(lines.len(), 5);
+        assert_eq!(lines[0].bytes, b"AB");
+        assert!(!lines[0].hard_break);
+        assert_eq!(lines[1].bytes, b"CD");
+        assert!(lines[1].hard_break);
+        assert_eq!(lines[2].bytes, b"EF");
+        assert_eq!(lines[3].bytes, b"GH");
+        assert_eq!(lines[4].bytes, b"IJ");
+        assert!(lines.iter().all(|line| line.width <= 10));
+    }
+
+    #[test]
+    fn font_graphics_rasterizes_proportional_paragraph_with_width_table() {
+        let mut widths = [0u8; PROPORTIONAL_WIDTH_TABLE_LEN];
+        widths[usize::from(b' ')] = 2;
+        widths[usize::from(b'A')] = 3;
+        widths[usize::from(b'B')] = 4;
+        let widths = ProportionalWidthTable::new(widths);
+        let glyph = |advance_width: u8, row: u8| ProportionalGlyph {
+            advance_width,
+            bitmap: MonochromeBitmap {
+                width: PCS_GLYPH_BITMAP_WIDTH,
+                height: PCS_GLYPH_HEIGHT,
+                pixels: (0..PCS_GLYPH_HEIGHT)
+                    .flat_map(|y| {
+                        (0..PCS_GLYPH_BITMAP_WIDTH)
+                            .map(move |x| u8::from(y == 0 && x < usize::from(row)))
+                    })
+                    .collect(),
+            },
+        };
+        let mut glyphs = vec![glyph(0, 0); usize::from(b'B' - b' ' + 1)];
+        glyphs[usize::from(b'A' - b' ')] = glyph(7, 3);
+        glyphs[usize::from(b'B' - b' ')] = glyph(7, 4);
+        let font = ProportionalFont {
+            first_code: b' ',
+            glyphs,
+        };
+
+        let paragraph =
+            rasterize_proportional_paragraph(&font, &widths, b"AB BA\0", 10, PCS_GLYPH_HEIGHT)
+                .unwrap();
+
+        assert_eq!((paragraph.width, paragraph.height), (10, PCS_GLYPH_HEIGHT * 2));
+        assert_eq!(&paragraph.pixels[..7], &[1, 1, 1, 1, 1, 1, 1]);
+        assert_eq!(
+            &paragraph.pixels[PCS_GLYPH_HEIGHT * paragraph.width
+                ..PCS_GLYPH_HEIGHT * paragraph.width + 7],
+            &[1, 1, 1, 1, 1, 1, 1]
+        );
+    }
+
+    #[test]
     fn font_graphics_parses_sparse_proportional_font_resource() {
         let mut body = Vec::new();
         body.extend_from_slice(&3u16.to_le_bytes());

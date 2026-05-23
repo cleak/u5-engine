@@ -398,23 +398,19 @@ pub fn parse_fixed_font_body(
     })
 }
 
-#[cfg(test)]
 pub fn load_proportional_font(game_dir: &Path) -> io::Result<ProportionalFont> {
     parse_proportional_font(&read_disk_file(&game_dir.join(PROPORT_PCS_FILE))?)
 }
 
-#[cfg(test)]
 pub fn parse_proportional_font(bytes: &[u8]) -> io::Result<ProportionalFont> {
     let body = decode_lzw_envelope(bytes, PROPORT_PCS_FILE)?;
     parse_proportional_font_body(&body, PROPORT_PCS_FILE)
 }
 
-#[cfg(test)]
 pub fn load_proportional_font_resource(game_dir: &Path) -> io::Result<ProportionalFontResource> {
     parse_proportional_font_resource(&read_disk_file(&game_dir.join(PROPORT_PCS_FILE))?)
 }
 
-#[cfg(test)]
 pub fn parse_proportional_font_resource(bytes: &[u8]) -> io::Result<ProportionalFontResource> {
     parse_sparse_proportional_font_resource(bytes).or_else(|sparse_err| {
         let body = decode_lzw_envelope(bytes, PROPORT_PCS_FILE).map_err(|lzw_err| {
@@ -440,7 +436,6 @@ pub fn parse_proportional_font_resource(bytes: &[u8]) -> io::Result<Proportional
     })
 }
 
-#[cfg(test)]
 pub fn parse_sparse_proportional_font_resource(
     bytes: &[u8],
 ) -> io::Result<ProportionalFontResource> {
@@ -449,14 +444,12 @@ pub fn parse_sparse_proportional_font_resource(
     })
 }
 
-#[cfg(test)]
 fn legacy_proportional_font_as_resource(font: ProportionalFont) -> ProportionalFontResource {
     ProportionalFontResource {
         strips: font.glyphs.into_iter().map(|glyph| glyph.bitmap).collect(),
     }
 }
 
-#[cfg(test)]
 pub fn parse_proportional_font_body(
     body: &[u8],
     resource_name: &str,
@@ -539,7 +532,6 @@ pub fn parse_proportional_font_body(
     })
 }
 
-#[cfg(test)]
 pub fn monochrome_row_stride(width: usize) -> io::Result<usize> {
     width.checked_add(7).map(|bits| bits / 8).ok_or_else(|| {
         io::Error::new(
@@ -549,7 +541,6 @@ pub fn monochrome_row_stride(width: usize) -> io::Result<usize> {
     })
 }
 
-#[cfg(test)]
 pub fn unpack_monochrome_rows(
     bytes: &[u8],
     width: usize,
@@ -641,7 +632,6 @@ pub fn rasterize_fixed_text_line(
     })
 }
 
-#[cfg(test)]
 pub fn measure_proportional_text(font: &ProportionalFont, text: &[u8]) -> io::Result<usize> {
     let mut width = 0usize;
     for code in text {
@@ -663,7 +653,372 @@ pub fn measure_proportional_text(font: &ProportionalFont, text: &[u8]) -> io::Re
     Ok(width)
 }
 
-#[cfg(test)]
+pub const PROPORTIONAL_WIDTH_TABLE_LEN: usize = 128;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProportionalWidthTable {
+    pub widths: [u8; PROPORTIONAL_WIDTH_TABLE_LEN],
+}
+
+impl ProportionalWidthTable {
+    pub const fn new(widths: [u8; PROPORTIONAL_WIDTH_TABLE_LEN]) -> Self {
+        Self { widths }
+    }
+
+    pub fn from_font_advances(font: &ProportionalFont) -> Self {
+        let mut widths = [0u8; PROPORTIONAL_WIDTH_TABLE_LEN];
+        for (slot, glyph) in font.glyphs.iter().enumerate() {
+            let Some(code) = usize::from(font.first_code).checked_add(slot) else {
+                break;
+            };
+            if code >= widths.len() {
+                break;
+            }
+            widths[code] = glyph.advance_width;
+        }
+        Self { widths }
+    }
+
+    pub fn width_for_byte(&self, code: u8) -> io::Result<usize> {
+        self.widths
+            .get(usize::from(code))
+            .copied()
+            .map(usize::from)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("proportional width-table code {code} is outside 0..127"),
+                )
+            })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProportionalParagraphLine {
+    pub bytes: Vec<u8>,
+    pub width: usize,
+    pub hard_break: bool,
+}
+
+pub fn measure_proportional_text_with_widths(
+    widths: &ProportionalWidthTable,
+    text: &[u8],
+) -> io::Result<usize> {
+    let mut width = 0usize;
+    for code in text {
+        width = width
+            .checked_add(widths.width_for_byte(*code)?)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "proportional text width overflows",
+                )
+            })?;
+    }
+    Ok(width)
+}
+
+pub fn layout_proportional_paragraph(
+    widths: &ProportionalWidthTable,
+    text: &[u8],
+    max_width: usize,
+) -> io::Result<Vec<ProportionalParagraphLine>> {
+    if max_width == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "proportional paragraph width must be nonzero",
+        ));
+    }
+
+    let mut lines = Vec::new();
+    let mut line = Vec::new();
+    let mut line_width = 0usize;
+    let mut word = Vec::new();
+    let mut pending_space = false;
+
+    for byte in text {
+        match paragraph_byte_kind(*byte) {
+            ParagraphByteKind::EndOfStream => break,
+            ParagraphByteKind::Glyph | ParagraphByteKind::SoftHyphen => word.push(*byte),
+            ParagraphByteKind::SpaceBreak => {
+                append_proportional_word(
+                    widths,
+                    max_width,
+                    &mut lines,
+                    &mut line,
+                    &mut line_width,
+                    &word,
+                    pending_space,
+                )?;
+                word.clear();
+                pending_space = !line.is_empty();
+            }
+            ParagraphByteKind::HardBreak => {
+                append_proportional_word(
+                    widths,
+                    max_width,
+                    &mut lines,
+                    &mut line,
+                    &mut line_width,
+                    &word,
+                    pending_space,
+                )?;
+                word.clear();
+                push_proportional_line(&mut lines, &mut line, &mut line_width, true);
+                pending_space = false;
+            }
+            ParagraphByteKind::PageMarker => {
+                append_proportional_word(
+                    widths,
+                    max_width,
+                    &mut lines,
+                    &mut line,
+                    &mut line_width,
+                    &word,
+                    pending_space,
+                )?;
+                word.clear();
+                if !line.is_empty() {
+                    push_proportional_line(&mut lines, &mut line, &mut line_width, true);
+                }
+                pending_space = false;
+            }
+        }
+    }
+
+    append_proportional_word(
+        widths,
+        max_width,
+        &mut lines,
+        &mut line,
+        &mut line_width,
+        &word,
+        pending_space,
+    )?;
+    if !line.is_empty() {
+        push_proportional_line(&mut lines, &mut line, &mut line_width, false);
+    }
+    Ok(lines)
+}
+
+pub fn rasterize_proportional_text_line_with_widths(
+    font: &ProportionalFont,
+    widths: &ProportionalWidthTable,
+    text: &[u8],
+) -> io::Result<MonochromeBitmap> {
+    let width = measure_proportional_text_with_widths(widths, text)?;
+    let pixel_count = width.checked_mul(PCS_GLYPH_HEIGHT).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "proportional text pixel count overflows",
+        )
+    })?;
+    let mut pixels = vec![0; pixel_count];
+    let mut cursor_x = 0usize;
+    for code in text {
+        let glyph = font.glyph_for_code(*code).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("proportional font code {code} is outside the loaded range"),
+            )
+        })?;
+        let advance = widths.width_for_byte(*code)?;
+        if advance > 0 {
+            blit_monochrome_bitmap(
+                &mut pixels,
+                width,
+                PCS_GLYPH_HEIGHT,
+                &glyph.bitmap,
+                cursor_x,
+                0,
+                advance.min(glyph.bitmap.width),
+            );
+        }
+        cursor_x = cursor_x.checked_add(advance).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "proportional text cursor overflows",
+            )
+        })?;
+    }
+    Ok(MonochromeBitmap {
+        width,
+        height: PCS_GLYPH_HEIGHT,
+        pixels,
+    })
+}
+
+pub fn rasterize_proportional_paragraph(
+    font: &ProportionalFont,
+    widths: &ProportionalWidthTable,
+    text: &[u8],
+    max_width: usize,
+    line_height: usize,
+) -> io::Result<MonochromeBitmap> {
+    if line_height < PCS_GLYPH_HEIGHT {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "proportional paragraph line height must fit glyph height",
+        ));
+    }
+    let lines = layout_proportional_paragraph(widths, text, max_width)?;
+    let height = line_height
+        .checked_mul(lines.len().max(1))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "paragraph height overflows"))?;
+    let pixel_count = max_width
+        .checked_mul(height)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "paragraph pixels overflow"))?;
+    let mut pixels = vec![0; pixel_count];
+    for (row, line) in lines.iter().enumerate() {
+        let bitmap = rasterize_proportional_text_line_with_widths(font, widths, &line.bytes)?;
+        blit_monochrome_bitmap(
+            &mut pixels,
+            max_width,
+            height,
+            &bitmap,
+            0,
+            row * line_height,
+            bitmap.width,
+        );
+    }
+    Ok(MonochromeBitmap {
+        width: max_width,
+        height,
+        pixels,
+    })
+}
+
+fn append_proportional_word(
+    widths: &ProportionalWidthTable,
+    max_width: usize,
+    lines: &mut Vec<ProportionalParagraphLine>,
+    line: &mut Vec<u8>,
+    line_width: &mut usize,
+    word: &[u8],
+    pending_space: bool,
+) -> io::Result<()> {
+    if word.is_empty() {
+        return Ok(());
+    }
+    let visible = word
+        .iter()
+        .copied()
+        .filter(|byte| !matches!(paragraph_byte_kind(*byte), ParagraphByteKind::SoftHyphen))
+        .collect::<Vec<_>>();
+    if visible.is_empty() {
+        return Ok(());
+    }
+
+    let space_width = if pending_space && !line.is_empty() {
+        widths.width_for_byte(b' ')?
+    } else {
+        0
+    };
+    let visible_width = measure_proportional_text_with_widths(widths, &visible)?;
+    if !line.is_empty()
+        && line_width
+            .checked_add(space_width)
+            .and_then(|value| value.checked_add(visible_width))
+            .is_some_and(|width| width <= max_width)
+    {
+        if space_width > 0 {
+            line.push(b' ');
+            *line_width += space_width;
+        }
+        append_proportional_bytes(widths, line, line_width, &visible)?;
+        return Ok(());
+    }
+    if line.is_empty() && visible_width <= max_width {
+        append_proportional_bytes(widths, line, line_width, &visible)?;
+        return Ok(());
+    }
+    if !line.is_empty() {
+        push_proportional_line(lines, line, line_width, false);
+    }
+
+    let mut segment = Vec::new();
+    for byte in word {
+        if matches!(paragraph_byte_kind(*byte), ParagraphByteKind::SoftHyphen) {
+            append_proportional_word_segment(widths, max_width, lines, line, line_width, &segment)?;
+            segment.clear();
+        } else {
+            segment.push(*byte);
+        }
+    }
+    append_proportional_word_segment(widths, max_width, lines, line, line_width, &segment)
+}
+
+fn append_proportional_word_segment(
+    widths: &ProportionalWidthTable,
+    max_width: usize,
+    lines: &mut Vec<ProportionalParagraphLine>,
+    line: &mut Vec<u8>,
+    line_width: &mut usize,
+    segment: &[u8],
+) -> io::Result<()> {
+    if segment.is_empty() {
+        return Ok(());
+    }
+    let segment_width = measure_proportional_text_with_widths(widths, segment)?;
+    if !line.is_empty()
+        && line_width
+            .checked_add(segment_width)
+            .is_some_and(|width| width > max_width)
+    {
+        push_proportional_line(lines, line, line_width, false);
+    }
+    if segment_width <= max_width {
+        append_proportional_bytes(widths, line, line_width, segment)?;
+        return Ok(());
+    }
+    for byte in segment {
+        let width = widths.width_for_byte(*byte)?;
+        if !line.is_empty()
+            && line_width
+                .checked_add(width)
+                .is_some_and(|value| value > max_width)
+        {
+            push_proportional_line(lines, line, line_width, false);
+        }
+        append_proportional_bytes(widths, line, line_width, &[*byte])?;
+    }
+    Ok(())
+}
+
+fn append_proportional_bytes(
+    widths: &ProportionalWidthTable,
+    line: &mut Vec<u8>,
+    line_width: &mut usize,
+    bytes: &[u8],
+) -> io::Result<()> {
+    for byte in bytes {
+        line.push(*byte);
+        *line_width = line_width
+            .checked_add(widths.width_for_byte(*byte)?)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "proportional line width overflows",
+                )
+            })?;
+    }
+    Ok(())
+}
+
+fn push_proportional_line(
+    lines: &mut Vec<ProportionalParagraphLine>,
+    line: &mut Vec<u8>,
+    line_width: &mut usize,
+    hard_break: bool,
+) {
+    lines.push(ProportionalParagraphLine {
+        bytes: std::mem::take(line),
+        width: *line_width,
+        hard_break,
+    });
+    *line_width = 0;
+}
+
 pub fn rasterize_proportional_text_line(
     font: &ProportionalFont,
     text: &[u8],
@@ -705,7 +1060,6 @@ pub fn rasterize_proportional_text_line(
     })
 }
 
-#[cfg(test)]
 pub fn blit_monochrome_bitmap(
     dst: &mut [u8],
     dst_width: usize,

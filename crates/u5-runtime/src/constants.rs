@@ -152,7 +152,6 @@ pub const RUNES_CH_FILE: &str = "RUNES.CH";
 pub const IBM_HCS_FILE: &str = "IBM.HCS";
 #[cfg(test)]
 pub const RUNES_HCS_FILE: &str = "RUNES.HCS";
-#[cfg(test)]
 pub const PROPORT_PCS_FILE: &str = "PROPORT.PCS";
 pub const TILE_PASSABILITY_LEN: usize = 32;
 /// `formats/look2-dat.md §2` & `catalogs/tile-catalog.md §1`: the
@@ -248,13 +247,9 @@ pub const HCS_FONT_CELL_WIDTH: usize = HCS_CELL_WIDTH;
 /// value with the format-side cell height.
 #[cfg(test)]
 pub const HCS_FONT_CELL_HEIGHT: usize = HCS_CELL_HEIGHT;
-#[cfg(test)]
 pub const PCS_FIRST_CODE: u8 = 0x20;
-#[cfg(test)]
 pub const PCS_GLYPH_BITMAP_WIDTH: usize = 8;
-#[cfg(test)]
 pub const PCS_GLYPH_HEIGHT: usize = 11;
-#[cfg(test)]
 pub const PCS_GLYPH_BLOCK_LEN: usize = 1 + PCS_GLYPH_HEIGHT;
 pub const PLAY_SCRIPT_MAX_IDLE_TICKS: usize = 1024;
 /// Runtime count of karma reaction records. The KARMA.DAT parser
