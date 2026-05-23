@@ -27,34 +27,36 @@ Created on 2026-05-19. This document satisfies the completion criterion in
   - **Presentation work** — gameplay behavior is implemented; remaining work is
     visual/audio polish covered by `Milestone 3` in `TODO.md`.
 
-The blocked-issue catalogue in scope of this audit is the set already tracked
-in `TODO.md`:
+The public issue catalogue in scope of this audit is the answered-or-blocking
+set already tracked in `TODO.md` and the latest GitHub issue sweep:
 
-| Issue | Topic |
-|------|-------|
-| `cleak/u5-spec#13` | Paid shared 26-row sage rumour topic table and success templates |
-| `cleak/u5-spec#41` | Exact arms-shop eight-item stock rows |
-| `cleak/u5-spec#43` | Top-down fountain, wishing-well, death-vision, and wanted-poster outcomes |
-| `cleak/u5-spec#47` | Hourly Ring of Regeneration tick and completed long-camp recovery |
-| `cleak/u5-spec#48` | Non-combat Blink directional ray landing rule |
-| `cleak/u5-spec#51` | Full resident town tile-attribute table for poison-gas detection |
-| `cleak/u5-spec#54` | Return-to-View strip captions, timing, and exact effect rasters |
+| Issue | Topic | Engine status |
+|------|-------|---------------|
+| `cleak/u5-spec#13` | Paid shared 26-row sage rumour topic table and success templates | Table/mechanics implemented; exact fee/no-credit text still pending |
+| `cleak/u5-spec#41` | Exact arms-shop eight-item stock rows | Implemented |
+| `cleak/u5-spec#43` | Top-down fountain, wishing-well, death-vision, and wanted-poster outcomes | Published predicates implemented; exact poster text still pending |
+| `cleak/u5-spec#47` | Hourly Ring of Regeneration tick and completed long-camp recovery | Implemented from latest issue answer; spec-file reconciliation pending |
+| `cleak/u5-spec#48` | Non-combat Blink directional ray landing rule | Implemented |
+| `cleak/u5-spec#51` | Full resident town tile-attribute table for poison-gas detection | Published tile step behavior implemented; full table question pending |
+| `cleak/u5-spec#54` | Return-to-View strip captions, timing, and exact effect rasters | Public timing/captions implemented; geometry/effect raster question pending |
 
-Where an audit row references one of these issues, the engine carries a clean
-implementation that avoids private-derived guesses until the public spec
-publishes the missing rule.
+Where an audit row references a pending issue, the engine carries a clean
+implementation or conservative placeholder that avoids private-derived guesses
+until the public spec publishes the missing rule.
 
 ## Verification Baseline
 
-Refreshed alongside this audit on 2026-05-21:
+Runtime, TUI, and route-smoke results refreshed alongside this audit on
+2026-05-23; Bevy and visual-suite evidence remains from the latest display
+audit:
 
-- `cargo test -p u5-runtime` — 2553 tests pass.
-- `cargo test -p u5-tui` — 78 tests pass, including temp-directory binary
+- `cargo test -p u5-runtime` — 2559 tests pass.
+- `cargo test -p u5-tui` — 79 tests pass, including temp-directory binary
   smoke for empty-save Journey Onward, deterministic Create Character followed
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 55 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 123 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 122 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
@@ -128,7 +130,7 @@ Notes:
 | §5 C-Cast | `play_state_impl/chunk_04.rs` cast handler, `magic.rs::cast_dispatcher_gate` | cast scene-gate tests in `chunk_17.rs`, `chunk_18.rs` | Implemented |
 | §6 M-Mix | `play_state_impl/chunk_04.rs` mix handler; `magic.rs::SPELL_SELECTOR_IGNORED_LETTERS` (J/O) | mix recipe tests | Implemented |
 | §7 Prerequisites | `magic.rs::cast_dispatcher_gate` (`CastGateOutcome`) | gate tests | Implemented |
-| §8 Spell effects | per-spell handlers in `play_state_impl/chunk_*.rs`; field placement in `magic.rs::spell_field_placement_byte` | field-cast and restoration/status spell PRNG tests | Implemented (Heal uses the public shared-PRNG roll path; Create Food uses the latest public tiny PRNG grant; non-combat Blink sidecar default remains tied to `cleak/u5-spec#48`) |
+| §8 Spell effects | per-spell handlers in `play_state_impl/chunk_*.rs`; field placement in `magic.rs::spell_field_placement_byte` | field-cast and restoration/status spell PRNG tests | Implemented (Heal uses the public shared-PRNG roll path; Create Food uses the latest public tiny PRNG grant; non-combat Blink follows public #48 directional ray-to-farthest-grass behavior) |
 | §9 Casting in combat | `combat_frame.rs` cast dispatch; scene allow-mask | combat-cast tests in `chunk_23.rs` | Implemented |
 | §10 Virtue/shrine linkage | `shrine_virtue.rs` stat reward, ordained mask | shrine-meditation tests | Implemented |
 | §11 Z-stats integration | `z_stats.rs`, `stats_panel.rs` | z-stats render tests | Implemented |
@@ -145,7 +147,7 @@ Notes:
 | §4 Z-Stats browsing | `z_stats.rs` inventory pages | z-stats tests | Implemented |
 | §5 R-Ready flow | `play_state_impl/chunk_04.rs` ready handler | ready picker tests | Implemented |
 | §6 R-Ready eligibility | strength gate, occupancy, ring-vanish in ready handler | ring-vanish 1-in-16 tests | Implemented |
-| §7 U-Use flows | `play_state_impl/chunk_04.rs::apply_u_use_*` for every public family (torch/gem/key/scroll/potion/Moonstone/regalia/shard/carpet/skull key/spyglass/HMS plans/sextant/pocket watch/wooden box); shard destruction follows public issue #31 flame predicate + shard pairing through clean Eternal Flame metadata | per-item use tests in `chunk_03.rs`–`chunk_05.rs`, shard/flame tests in `chunk_17.rs` | Implemented (native Eternal Flame coordinates remain blocked until published) |
+| §7 U-Use flows | `play_state_impl/chunk_04.rs::apply_u_use_*` for every public family (torch/gem/key/scroll/potion/Moonstone/regalia/shard/carpet/skull key/spyglass/HMS plans/sextant/pocket watch/wooden box); shard destruction follows public issue #31 exact party positions, shard/flame pairing, and matching Shadowlord encounter north of the party | per-item use tests in `chunk_03.rs`–`chunk_05.rs`, shard/flame tests in `chunk_17.rs` cover all three published native Eternal Flame positions and exact scene/floor/coordinate rejection | Implemented |
 | §8 Implementation contract | `equipment.rs` 0xFF sentinel; carried/readied separation | contract tests | Implemented |
 | §9 Boundaries | Ring of Invisibility/Regeneration in combat | combat ring-vanish tests | Implemented |
 
@@ -206,7 +208,7 @@ through the asset-backed Talk command path.
 | §8.1 Weaponsmith/armourer | `shops.rs::ArmsShop`, `shop_session.rs::arms_shop_for_scene`, `shops.rs::arms_shop_stock_letter_index` | arms scene-row, published stock-row, and transaction tests | Implemented (public #41 scene-to-`a..h` stock rows) |
 | §8.2 Guildmaster | `shops.rs` guild prices | guild tests | Implemented |
 | §8.3 Healer | healer arm in `shop_runtime.rs`; Minoc bypass | healer tests | Implemented |
-| §8.4 Innkeeper | `shop_runtime.rs` inn flow; stay counter in `clock.rs`; public issue #15 fixed base-rate charges with no speaker-Intelligence discount plus paid-rest class recovery and poison cure | inn tests | Implemented |
+| §8.4 Innkeeper | `shop_runtime.rs` inn flow; stay counter in `clock.rs`; public issue #15 Intelligence-adjusted rest, leave, and pickup charges plus paid-rest class recovery and poison death conversion | inn tests | Implemented |
 | §8.5 Tavernkeeper | tavern arm in `shop_runtime.rs` | tavern tests | Implemented |
 | §8.6 Sage | sage arm: shared 26-row paid keyword lookup, strict four-letter topic boundary, fee quote/confirmation, gold debit, and SHOPPE record 85..=88 success rendering | sage runtime tests plus full public #13 table-sync test | Implemented (exact fee/no-credit resident wording still pending) |
 | §8.7 Shipwright | shipwright arm; pending vehicle in `play_state_struct.rs` | shipwright tests | Implemented |
@@ -241,7 +243,7 @@ through the asset-backed Talk command path.
 |--------|----------|-------|--------|
 | `movement.md` §1–§10 | `direction.rs`, `tile_classes.rs`, `predicates.rs`, `transport.rs`, `active_object_io.rs` | per-mode movement tests | Implemented |
 | `overworld.md` §1–§15 | `play_state_impl/chunk_01.rs` overworld loop, `world_tables.rs`, `moongate.rs`, `lord_british_camp.rs`, native and sidecar encounters, public Word-of-Power seal rows | world tests in chunks 03, 05, 06, 07, 10, 12, 13, 15, 17, 23 | Implemented |
-| `town-mode.md` §1–§17 | `town_mode.rs`, `town_tables.rs`, NPC schedules, dawn/dusk substitution, alarms | town tests in chunks 04, 06, 10, 11, 15, 19, 21, 23 | Implemented (native poison-gas doorway detection remains tied to `cleak/u5-spec#51`) |
+| `town-mode.md` §1–§17 | `town_mode.rs`, `town_tables.rs`, NPC schedules, dawn/dusk substitution, alarms | town tests in chunks 04, 06, 10, 11, 15, 19, 21, 23 | Implemented (public #51 tile `0x04` poison-gas step behavior is native; full resident tile-attribute coverage remains a public-data question) |
 | `dungeon-mode.md` §1–§17 | `play_state_impl/chunk_*.rs` dungeon loop, `dungeon_tables.rs`, raster in `crates/u5-bevy/src/lib.rs` first-person draw | dungeon tests in chunks 05, 12, 13, 18, 20, 23 | Implemented |
 
 ### `systems/encounters.md`

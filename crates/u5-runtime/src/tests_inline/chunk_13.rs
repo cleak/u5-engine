@@ -13465,6 +13465,15 @@ fn inn_leave_and_pickup_bills_match_spec_formulas() {
     assert_eq!(inn_pickup_bill(0, 0), 0);
     // Public issue #15 applies the shared Intelligence adjustment after
     // each raw inn bill is computed.
+    assert_eq!(quote_inn_rest_for_speaker(Inn::HotelBrittany, 2, 17).unwrap().total_price, 8);
+    assert_eq!(
+        inn_leave_companion_deposit_for_speaker(Inn::HotelBrittany, 17),
+        44
+    );
+    assert_eq!(
+        inn_pickup_bill_for_speaker(Inn::HotelBrittany, 3, 17),
+        132
+    );
     assert_eq!(
         quote_inn_rest_for_speaker(Inn::HotelBrittany, 2, 75)
             .unwrap()

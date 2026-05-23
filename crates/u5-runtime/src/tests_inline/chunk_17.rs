@@ -1083,6 +1083,120 @@
     }
 
     #[test]
+    fn published_shadowlord_shard_flames_cover_all_three_issue_31_positions() {
+        let dir = debug_game_dir();
+        let cases = [
+            (
+                SHADOWLORD_FALSEHOOD_INDEX,
+                SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
+                SCENE_THE_LYCAEUM,
+                2,
+                15,
+                9,
+                EternalFlame::Truth,
+                "Shard of Falsehood: cast into Flame of Truth; Falsehood vanquished; cleared 1 encounter(s).",
+            ),
+            (
+                SHADOWLORD_HATRED_INDEX,
+                SPECIAL_ITEM_SHARD_HATRED_INDEX,
+                SCENE_EMPATH_ABBEY,
+                1,
+                15,
+                3,
+                EternalFlame::Love,
+                "Shard of Hatred: cast into Flame of Love; Hatred vanquished; cleared 1 encounter(s).",
+            ),
+            (
+                SHADOWLORD_COWARDICE_INDEX,
+                SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+                SCENE_SERPENTS_HOLD,
+                -1,
+                15,
+                16,
+                EternalFlame::Courage,
+                "Shard of Cowardice: cast into Flame of Courage; Cowardice vanquished; cleared 1 encounter(s).",
+            ),
+        ];
+
+        for (shadowlord, item, scene, floor, x, y, flame, message) in cases {
+            let mut state = test_state(open_grid(), x, y);
+            state.area = Area::Town {
+                scene: Scene::new(scene).unwrap(),
+                floor,
+            };
+            state.special_items[item] = 1;
+            state.shadowlord_hideouts[shadowlord] = 1;
+            assert_eq!(
+                state
+                    .published_eternal_flame_at_current_position()
+                    .map(|entry| entry.flame),
+                Some(flame),
+                "published flame at scene {scene} floor {floor} ({x}, {y})"
+            );
+
+            let z = state.current_floor().unwrap();
+            state.active_objects.push(
+                state
+                    .shadowlord_name_encounter_object(shadowlord, x, y - 1, z)
+                    .unwrap(),
+            );
+
+            assert_eq!(
+                state.use_shadowlord_shard(shadowlord, Some(&dir)).unwrap(),
+                MoveOutcome::Used,
+                "shard {shadowlord} should succeed at its published flame"
+            );
+            assert_eq!(state.special_items[item], 0);
+            assert!(state.shadowlord_vanquished(shadowlord));
+            assert_eq!(state.turn, 1);
+            assert_eq!(state.message, message);
+        }
+    }
+
+    #[test]
+    fn published_shadowlord_shard_flames_require_exact_scene_floor_and_position() {
+        let cases = [
+            (SCENE_THE_LYCAEUM, 2, 15, 9),
+            (SCENE_EMPATH_ABBEY, 1, 15, 3),
+            (SCENE_SERPENTS_HOLD, -1, 15, 16),
+        ];
+
+        for (scene, floor, x, y) in cases {
+            let mut exact = test_state(open_grid(), x, y);
+            exact.area = Area::Town {
+                scene: Scene::new(scene).unwrap(),
+                floor,
+            };
+            assert!(
+                exact.published_eternal_flame_at_current_position().is_some(),
+                "sanity: exact flame exists for scene {scene} floor {floor}"
+            );
+
+            let mut wrong_x = exact.clone();
+            wrong_x.player.x = x.wrapping_sub(1);
+            assert!(wrong_x.published_eternal_flame_at_current_position().is_none());
+
+            let mut wrong_y = exact.clone();
+            wrong_y.player.y = y.wrapping_sub(1);
+            assert!(wrong_y.published_eternal_flame_at_current_position().is_none());
+
+            let mut wrong_floor = exact.clone();
+            wrong_floor.area = Area::Town {
+                scene: Scene::new(scene).unwrap(),
+                floor: floor + 1,
+            };
+            assert!(wrong_floor.published_eternal_flame_at_current_position().is_none());
+
+            let mut wrong_scene = exact;
+            wrong_scene.area = Area::Town {
+                scene: Scene::new(SCENE_LORD_BRITISHS_CASTLE).unwrap(),
+                floor,
+            };
+            assert!(wrong_scene.published_eternal_flame_at_current_position().is_none());
+        }
+    }
+
+    #[test]
     fn use_shadowlord_shard_rejects_cardinal_adjacent_flame_tile() {
         let dir = debug_game_dir();
         fs::write(dir.join(ETERNAL_FLAME_TABLE_FILE), "CASTLE:0 0 5 5 TRUTH\n").unwrap();
