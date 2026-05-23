@@ -26,12 +26,13 @@ use u5_runtime::{
     INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement,
     MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
     MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap,
-    PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PROMPT_TEXT_WINDOW_INDEX,
-    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, RTV_COMMAND_STREAM_BYTES,
-    RectColumnSweepTransition, ReturnToViewFrameKind, SPECIAL_ITEM_OWNED_VALUE,
-    SPECIAL_ITEM_SPYGLASS_INDEX, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
-    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, Stable, StoryRecords,
-    TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
+    PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PROMPT_TEXT_WINDOW_INDEX,
+    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, ProportionalFont,
+    ProportionalWidthTable, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
+    ReturnToViewFrameKind, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX,
+    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
+    STATS_PANEL_TEXT_WINDOW_INDEX, Scene, Stable, StoryRecords, TEXT_SCREEN_ROWS,
+    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
     TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
     TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
@@ -45,13 +46,13 @@ use u5_runtime::{
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
     intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_british_bit,
     load_british_pth, load_graphic_image_directory, load_ibm_ch_font, load_play_options_from_save,
-    load_question_records, load_return_to_view_assets, load_story_records, load_tile_atlas,
-    load_title_bit,
+    load_proportional_font, load_question_records, load_return_to_view_assets, load_story_records,
+    load_tile_atlas, load_title_bit,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_message_text_window, paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
-    read_u4_transfer_source_from_party_sav, render_play_text_window_system,
-    render_return_to_view_playback_frame_viewport, render_text_panel_rgba, render_text_window_rgba,
-    run_return_to_view_playback_until_restart,
+    rasterize_proportional_paragraph, read_u4_transfer_source_from_party_sav,
+    render_play_text_window_system, render_return_to_view_playback_frame_viewport,
+    render_text_panel_rgba, render_text_window_rgba, run_return_to_view_playback_until_restart,
     shop_runtime::{
         GuildShopState, HorseTraderState, InnkeeperState, ReagentShopState, SageState, TavernState,
     },
@@ -75,6 +76,13 @@ const INTRO_DISPLAY_SCALE: f32 = 2.5;
 const RETURN_TO_VIEW_CAPTION_Y: usize = 4;
 const RETURN_TO_VIEW_CAPTION_HEIGHT: usize = 14;
 const RETURN_TO_VIEW_PREVIEW_Y: usize = 18;
+const PROPORTIONAL_TEXT_LINE_HEIGHT: usize = PCS_GLYPH_HEIGHT + 2;
+const INTRO_STORY_TEXT_X: usize = 10;
+const INTRO_STORY_TEXT_Y: usize = 138;
+const INTRO_STORY_TEXT_WIDTH: usize = 300;
+const CHARGEN_PROPORTIONAL_TEXT_X: usize = 16;
+const CHARGEN_PROPORTIONAL_TEXT_Y: usize = 34;
+const CHARGEN_PROPORTIONAL_TEXT_WIDTH: usize = 288;
 const PROMPT_CURSOR_GLYPH: u8 = 4;
 
 pub fn run_visual_loop(
@@ -2623,6 +2631,12 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
         return render_return_to_view_intro_frame(intro);
     }
+    if matches!(intro.panel, VisualIntroPanel::Story { .. }) {
+        return render_story_intro_frame(intro);
+    }
+    if matches!(intro.panel, VisualIntroPanel::CharacterCreation { .. }) {
+        return render_chargen_intro_frame(intro);
+    }
 
     let summary = summarize_intro(intro);
     let menu_panel = visual_intro_title_surface_visible(intro);
@@ -2720,6 +2734,152 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         }
     }
     rgba
+}
+
+fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
+    let mut rgba =
+        vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+    }
+
+    let VisualIntroPanel::Story {
+        records,
+        step,
+        transition,
+    } = &intro.panel
+    else {
+        return rgba;
+    };
+    for draw in
+        visual_intro_story_art_draws_rgba(&intro.game_dir, intro.raster_depth, *step, *transition)
+    {
+        blit_rgba(
+            &mut rgba,
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+            &draw.rgba,
+            draw.width,
+            draw.height,
+            usize::from(draw.top_left_x),
+            usize::from(draw.top_left_y),
+        );
+    }
+
+    if let Some(text) = visual_intro_story_text(records, *step) {
+        if overlay_proportional_text_from_assets_rgba(
+            &mut rgba,
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+            &intro.game_dir,
+            text,
+            ProportionalTextPlacement {
+                x: INTRO_STORY_TEXT_X,
+                y: INTRO_STORY_TEXT_Y,
+                width: INTRO_STORY_TEXT_WIDTH,
+                line_height: PROPORTIONAL_TEXT_LINE_HEIGHT,
+                color: [0xff, 0xff, 0xff, 0xff],
+                shadow: true,
+            },
+        )
+        .is_ok()
+        {
+            return rgba;
+        }
+    }
+
+    let summary = summarize_intro(intro);
+    overlay_nonblack_text_panel_rgba(
+        &mut rgba,
+        INTRO_FRAMEBUFFER_WIDTH as usize,
+        INTRO_FRAMEBUFFER_HEIGHT as usize,
+        &summary,
+    );
+    rgba
+}
+
+fn render_chargen_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
+    let mut rgba =
+        vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+    }
+
+    let VisualIntroPanel::CharacterCreation {
+        session,
+        input_line,
+    } = &intro.panel
+    else {
+        return rgba;
+    };
+    overlay_centered_text_band_rgba(
+        &mut rgba,
+        INTRO_FRAMEBUFFER_WIDTH as usize,
+        INTRO_FRAMEBUFFER_HEIGHT as usize,
+        "Create New Character",
+        8,
+        14,
+    );
+    let proportional_text = visual_chargen_proportional_text(session, input_line);
+    if overlay_proportional_text_from_assets_rgba(
+        &mut rgba,
+        INTRO_FRAMEBUFFER_WIDTH as usize,
+        INTRO_FRAMEBUFFER_HEIGHT as usize,
+        &intro.game_dir,
+        &proportional_text,
+        ProportionalTextPlacement {
+            x: CHARGEN_PROPORTIONAL_TEXT_X,
+            y: CHARGEN_PROPORTIONAL_TEXT_Y,
+            width: CHARGEN_PROPORTIONAL_TEXT_WIDTH,
+            line_height: PROPORTIONAL_TEXT_LINE_HEIGHT,
+            color: [0xff, 0xff, 0xff, 0xff],
+            shadow: true,
+        },
+    )
+    .is_err()
+    {
+        let summary = summarize_visual_chargen(session, input_line);
+        rgba = render_text_panel_rgba(
+            &summary,
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+        )
+        .unwrap_or(rgba);
+    }
+    rgba
+}
+
+fn visual_intro_story_text(records: &StoryRecords, step: usize) -> Option<&str> {
+    if step == INTRO_INLINE_DOORWAY_STEP {
+        return None;
+    }
+    let record_index = if step < INTRO_INLINE_DOORWAY_STEP {
+        step
+    } else {
+        step - 1
+    };
+    records.record(record_index)
+}
+
+fn visual_chargen_proportional_text(session: &ChargenSession, input_line: &str) -> String {
+    match session.current_step() {
+        ChargenSessionStep::PromptName => {
+            format!("By what name shalt thou be known?\n> {input_line}")
+        }
+        ChargenSessionStep::PromptGender => "Art thou Male or Female?".to_string(),
+        ChargenSessionStep::PresentIntro { text, .. } => text,
+        ChargenSessionStep::PresentQuestion(question) => format!(
+            "{}\n\nA: {}    B: {}",
+            question.text,
+            question.option_a.name(),
+            question.option_b.name()
+        ),
+        ChargenSessionStep::Completed(result) => {
+            format!("Writing save for {}.", display_name_bytes(&result.name))
+        }
+        ChargenSessionStep::Aborted => "Character creation aborted.".to_string(),
+        ChargenSessionStep::Ignored => "Character creation is waiting.".to_string(),
+    }
 }
 
 fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
@@ -3228,6 +3388,115 @@ fn blit_rgba(
             dst.get_mut(dst_row..dst_row + bytes),
         ) {
             dst_slice.copy_from_slice(src_slice);
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ProportionalTextPlacement {
+    x: usize,
+    y: usize,
+    width: usize,
+    line_height: usize,
+    color: [u8; 4],
+    shadow: bool,
+}
+
+fn overlay_proportional_text_from_assets_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    game_dir: &Path,
+    text: &str,
+    placement: ProportionalTextPlacement,
+) -> io::Result<()> {
+    let font = load_proportional_font(game_dir)?;
+    overlay_proportional_text_rgba(dst, dst_width, dst_height, &font, text, placement)
+}
+
+fn overlay_proportional_text_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    font: &ProportionalFont,
+    text: &str,
+    placement: ProportionalTextPlacement,
+) -> io::Result<()> {
+    let widths = visual_proportional_width_table(font);
+    let bitmap = rasterize_proportional_paragraph(
+        font,
+        &widths,
+        text.as_bytes(),
+        placement.width,
+        placement.line_height,
+    )?;
+    if placement.shadow {
+        overlay_monochrome_bitmap_rgba(
+            dst,
+            dst_width,
+            dst_height,
+            &bitmap,
+            placement.x.saturating_add(1),
+            placement.y.saturating_add(1),
+            [0x00, 0x00, 0x00, 0xff],
+        );
+    }
+    overlay_monochrome_bitmap_rgba(
+        dst,
+        dst_width,
+        dst_height,
+        &bitmap,
+        placement.x,
+        placement.y,
+        placement.color,
+    );
+    Ok(())
+}
+
+fn visual_proportional_width_table(font: &ProportionalFont) -> ProportionalWidthTable {
+    let mut widths = ProportionalWidthTable::from_font_advances(font);
+    if widths.widths[usize::from(b' ')] == 0 {
+        widths.widths[usize::from(b' ')] = 4;
+    }
+    for byte in b'A'..=b'Z' {
+        if widths.widths[usize::from(byte)] == 0 {
+            widths.widths[usize::from(byte)] = 6;
+        }
+    }
+    for byte in b'a'..=b'z' {
+        if widths.widths[usize::from(byte)] == 0 {
+            widths.widths[usize::from(byte)] = 6;
+        }
+    }
+    widths
+}
+
+fn overlay_monochrome_bitmap_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    bitmap: &MonochromeBitmap,
+    x: usize,
+    y: usize,
+    color: [u8; 4],
+) {
+    for row in 0..bitmap.height {
+        let target_y = y + row;
+        if target_y >= dst_height {
+            break;
+        }
+        for col in 0..bitmap.width {
+            if bitmap.pixels[row * bitmap.width + col] == 0 {
+                continue;
+            }
+            let target_x = x + col;
+            if target_x >= dst_width {
+                break;
+            }
+            let offset = (target_y * dst_width + target_x) * 4;
+            if let Some(pixel) = dst.get_mut(offset..offset + 4) {
+                pixel.copy_from_slice(&color);
+            }
         }
     }
 }
@@ -4207,12 +4476,13 @@ mod tests {
     use u5_runtime::{
         Area, BRIT_OOL_FILENAME, CH_FONT_LEN, COMBAT_ARENA_SIDE, DEFAULT_GAME_DIR, Direction,
         EGA_PALETTE_RGB, GuildShop, Herbalist, IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME,
-        OOL_PLANE_LEN, PenStroke, REAGENT_COUNT, REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET,
-        SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN,
-        SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
-        SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern,
-        TileGraphicsDepth, U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane,
-        dungeon_cell_index, parse_ch_font, world_cell_index, wrap_text_panel_lines,
+        OOL_PLANE_LEN, PenStroke, ProportionalGlyph, REAGENT_COUNT, REAGENT_SPIDER_SILK,
+        SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET,
+        SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME,
+        SAVED_OOL_FILENAME, SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb,
+        TILES_EGA_FILE, Tavern, TileGraphicsDepth, U4_TRANSFER_U5_SEED_GAM_FILENAME,
+        U4TransferSource, WorldPlane, dungeon_cell_index, parse_ch_font, world_cell_index,
+        wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
@@ -4269,6 +4539,64 @@ mod tests {
             rgba[offset + 2],
             rgba[offset + 3],
         ]
+    }
+
+    fn proportional_test_font() -> ProportionalFont {
+        let glyph = |advance_width: u8, lit_width: usize| ProportionalGlyph {
+            advance_width,
+            bitmap: MonochromeBitmap {
+                width: PCS_GLYPH_HEIGHT.min(8),
+                height: PCS_GLYPH_HEIGHT,
+                pixels: (0..PCS_GLYPH_HEIGHT)
+                    .flat_map(|row| {
+                        (0..PCS_GLYPH_HEIGHT.min(8))
+                            .map(move |col| u8::from(row < 3 && col < lit_width))
+                    })
+                    .collect(),
+            },
+        };
+        let mut glyphs = vec![glyph(0, 0); usize::from(b'z' - b' ' + 1)];
+        for byte in b'A'..=b'Z' {
+            glyphs[usize::from(byte - b' ')] = glyph(5, 3);
+        }
+        for byte in b'a'..=b'z' {
+            glyphs[usize::from(byte - b' ')] = glyph(5, 3);
+        }
+        glyphs[usize::from(b' ' - b' ')] = glyph(0, 0);
+        ProportionalFont {
+            first_code: b' ',
+            glyphs,
+        }
+    }
+
+    #[test]
+    fn proportional_intro_overlay_draws_glyphs_and_shadow() {
+        let font = proportional_test_font();
+        let mut rgba = vec![0; 40 * 30 * 4];
+        for pixel in rgba.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[0x11, 0x11, 0x11, 0xff]);
+        }
+
+        overlay_proportional_text_rgba(
+            &mut rgba,
+            40,
+            30,
+            &font,
+            "AB",
+            ProportionalTextPlacement {
+                x: 4,
+                y: 5,
+                width: 24,
+                line_height: PROPORTIONAL_TEXT_LINE_HEIGHT,
+                color: [0xee, 0xdd, 0xcc, 0xff],
+                shadow: true,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(rgba_pixel(&rgba, 40, 4, 5), [0xee, 0xdd, 0xcc, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, 40, 5, 6), [0xee, 0xdd, 0xcc, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, 40, 7, 8), [0x00, 0x00, 0x00, 0xff]);
     }
 
     #[test]
