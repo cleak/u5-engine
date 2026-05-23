@@ -34,7 +34,9 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 |------|-------|---------------|
 | `cleak/u5-spec#1` | Dungeon `0xF?` room-trigger and `0xA?` room-helper reload behavior | Implemented from latest issue answer; checked-in spec wording still has stale contradictions in places |
 | `cleak/u5-spec#3` | Terrain-combat arena records, spawn counts, replacement tiles, and placement metadata | Published placement/count/replacement behavior implemented; skiff/pirate-ship special selector predicate pending |
-| `cleak/u5-spec#8` | Combat non-party sleep/disabled state storage | Public targetability and duration-counter behavior implemented; exact descriptor byte-layout clarification pending |
+| `cleak/u5-spec#8` | Combat non-party sleep/disabled state storage | Implemented from latest issue answer; descriptor byte 2 carries the sleep/disabled bit and byte 4 remains the active-object link |
+| `cleak/u5-spec#9`/`#22` | Directed Sleep/Wind combat cone targeting | Implemented from latest issue answer; cardinal direction cone targeting replaces target-slot targeting |
+| `cleak/u5-spec#10` | Combat arena field marker placement gate | Implemented from latest issue answer; Fire/Poison/Sleep/Energy markers place after confirmed impact without a random materialization gate |
 | `cleak/u5-spec#13` | Paid shared 26-row sage rumour topic table and success templates | Table/mechanics implemented, including post-debit success-record RNG timing; exact fee/no-credit text still pending |
 | `cleak/u5-spec#15` | Inn Intelligence-adjusted room-rate formula and recovery behavior | Implemented |
 | `cleak/u5-spec#18` | Fixed hidden-treasure found bitmap and special record cookies | Implemented; spec wording correction requested for record 15 predicate |

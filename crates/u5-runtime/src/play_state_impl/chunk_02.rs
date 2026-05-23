@@ -914,15 +914,15 @@ impl PlayState {
                     self.message = "Not here!".to_string();
                     return Ok(MoveOutcome::Blocked);
                 }
-                let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
-                    self.message = "Target? Use C1IZ7 to target combat slot 7.".to_string();
+                let Some(direction) = parse_inline_cardinal_direction(suffix) else {
+                    self.message = "Direction? Use C1IZ6 for east.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_directed_combat_spell(
                     caster_index,
                     spell_index.unwrap(),
                     CombatDirectedSpellEffect::Sleep,
-                    target_slot,
+                    Some(direction),
                 ))
             }
             "IQW" => {
@@ -955,15 +955,15 @@ impl PlayState {
                     self.message = "Not here!".to_string();
                     return Ok(MoveOutcome::Blocked);
                 }
-                let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
-                    self.message = "Target? Use C1HIN7 to target combat slot 7.".to_string();
+                let Some(direction) = parse_inline_cardinal_direction(suffix) else {
+                    self.message = "Direction? Use C1HIN6 for east.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_directed_combat_spell(
                     caster_index,
                     spell_index.unwrap(),
                     CombatDirectedSpellEffect::PoisonWind,
-                    target_slot,
+                    Some(direction),
                 ))
             }
             "HR" => {
@@ -1050,15 +1050,15 @@ impl PlayState {
                     self.message = "Not here!".to_string();
                     return Ok(MoveOutcome::Blocked);
                 }
-                let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
-                    self.message = "Target? Use C1CGIV7 to target combat slot 7.".to_string();
+                let Some(direction) = parse_inline_cardinal_direction(suffix) else {
+                    self.message = "Direction? Use C1CGIV6 for east.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_directed_combat_spell(
                     caster_index,
                     spell_index.unwrap(),
                     CombatDirectedSpellEffect::DeathWind,
-                    target_slot,
+                    Some(direction),
                 ))
             }
             "CIQ" => {
@@ -1077,15 +1077,15 @@ impl PlayState {
                     self.message = "Not here!".to_string();
                     return Ok(MoveOutcome::Blocked);
                 }
-                let Some(target_slot) = parse_inline_combat_actor_slot(suffix) else {
-                    self.message = "Target? Use C1FHI7 to target combat slot 7.".to_string();
+                let Some(direction) = parse_inline_cardinal_direction(suffix) else {
+                    self.message = "Direction? Use C1FHI6 for east.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
                 Ok(self.cast_directed_combat_spell(
                     caster_index,
                     spell_index.unwrap(),
                     CombatDirectedSpellEffect::FlameWind,
-                    target_slot,
+                    Some(direction),
                 ))
             }
             "PU" => {

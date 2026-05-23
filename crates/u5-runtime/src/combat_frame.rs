@@ -417,7 +417,7 @@ pub struct CombatAbsorbableFieldApplication {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CombatArenaFieldPlacementApplication {
     pub field: CombatArenaFieldKind,
-    pub target_slot: usize,
+    pub target_slot: Option<usize>,
     pub active_object_slot: usize,
     pub x: u8,
     pub y: u8,
@@ -726,15 +726,9 @@ impl PlayState {
         spell_index: usize,
     ) -> bool {
         let _ = (caster_index, target_slot, spell_index);
-        match spell_combat_field_kind(spell_index).and_then(CombatArenaFieldKind::from_kind_byte) {
-            Some(CombatArenaFieldKind::Poison) => true,
-            Some(
-                CombatArenaFieldKind::Fire
-                | CombatArenaFieldKind::Sleep
-                | CombatArenaFieldKind::Energy,
-            ) => self.random_mod_u8(COMBAT_ARENA_FIELD_RANDOM_GATE_DENOMINATOR) == 0,
-            None => false,
-        }
+        spell_combat_field_kind(spell_index)
+            .and_then(CombatArenaFieldKind::from_kind_byte)
+            .is_some()
     }
 
     pub fn combat_spell_damage_roll_for_kind(&mut self, kind: CombatSpellDamageKind) -> u8 {
@@ -792,7 +786,7 @@ impl PlayState {
             &self.active_objects,
             target_x,
             target_y,
-        )?;
+        );
         if !resolve_combat_field_placement_acceptance(field, callback_accepts) {
             return None;
         }
@@ -807,9 +801,9 @@ impl PlayState {
             tile: kind_byte,
             x: usize::from(target_x),
             y: usize::from(target_y),
-            z: self
-                .active_objects
-                .get(self.combat_actors.get(target_slot)?.active_object_slot as usize)
+            z: target_slot
+                .and_then(|slot| self.combat_actors.get(slot))
+                .and_then(|actor| self.active_objects.get(actor.active_object_slot as usize))
                 .map(|object| object.z)
                 .unwrap_or_default(),
             phase: STEADY_PHASE,
@@ -877,9 +871,11 @@ impl PlayState {
             target_x,
             target_y,
         );
-        let callback_accepts = target_slot.is_some_and(|slot| {
-            self.combat_arena_field_placement_callback_accepts(caster_index, slot, spell_index)
-        });
+        let callback_accepts = target_slot
+            .map(|slot| {
+                self.combat_arena_field_placement_callback_accepts(caster_index, slot, spell_index)
+            })
+            .unwrap_or(true);
         let applied =
             self.apply_combat_arena_field_placement(field, target_x, target_y, callback_accepts);
 
@@ -1700,18 +1696,28 @@ impl PlayState {
             if accepted.len() >= 8 {
                 break;
             }
-            if !combat_ai_legal_cell(&remaining_legal, i16::from(x), i16::from(y)) {
-                continue;
+            let mut attempts = vec![(x, y)];
+            for _ in 0..3 {
+                attempts.extend(combat_neighbor_candidate_coordinates(
+                    x,
+                    y,
+                    self.combat_neighbor_placement_seed(),
+                ));
             }
+            let Some((accepted_x, accepted_y)) =
+                resolve_combat_clone_placement_coordinate(&remaining_legal, &attempts)
+            else {
+                continue;
+            };
             let Some(application) = self.apply_combat_summon_class_with_legal_mask(
                 COMBAT_CLASS_INSECT_SWARM,
                 z,
                 &remaining_legal,
-                &[(x, y)],
+                &[(accepted_x, accepted_y)],
             ) else {
                 break;
             };
-            remaining_legal[usize::from(y)][usize::from(x)] = false;
+            remaining_legal[usize::from(application.y)][usize::from(application.x)] = false;
             accepted.push(application);
         }
         accepted
@@ -2515,43 +2521,69 @@ impl PlayState {
     pub fn directed_combat_spell_target_cells(
         &self,
         caster_index: usize,
-        target_slot: usize,
+        direction: Direction,
         _effect: CombatDirectedSpellEffect,
     ) -> Option<Vec<(u8, u8)>> {
         let caster = self.combat_actors.get(caster_index).copied()?;
-        let target = self.combat_actors.get(target_slot).copied()?;
-        if !combat_actor_is_active_not_dead(caster) || !directed_spell_actor_is_eligible(target) {
+        if !combat_actor_is_active_not_dead(caster) || !direction.is_cardinal() {
             return None;
         }
-        let delta_x = target.x as i16 - caster.x as i16;
-        let delta_y = target.y as i16 - caster.y as i16;
-        let (forward_x, forward_y) = if delta_x.abs() >= delta_y.abs() {
-            (delta_x.signum(), 0)
-        } else {
-            (0, delta_y.signum())
-        };
-        if forward_x == 0 && forward_y == 0 {
-            return Some(vec![(caster.x, caster.y)]);
-        }
-        let (side_x, side_y) = (-forward_y, forward_x);
         let mut cells = Vec::new();
-        for distance in 1..COMBAT_ARENA_SIDE as i16 {
-            let lateral_radius = (distance / 2).min(2);
-            for lateral in -lateral_radius..=lateral_radius {
-                let x = caster.x as i16 + forward_x * distance + side_x * lateral;
-                let y = caster.y as i16 + forward_y * distance + side_y * lateral;
-                if (0..COMBAT_ARENA_SIDE as i16).contains(&x)
-                    && (0..COMBAT_ARENA_SIDE as i16).contains(&y)
-                {
-                    let cell = (x as u8, y as u8);
-                    if !cells.contains(&cell) {
-                        cells.push(cell);
-                        if cells.len() == DIRECTED_TARGET_WALK_MAX_CELLS {
+        let cx = caster.x as i16;
+        let cy = caster.y as i16;
+        let max = (COMBAT_ARENA_SIDE - 1) as i16;
+        let emit = |cells: &mut Vec<(u8, u8)>, x: i16, y: i16| -> bool {
+            if (0..=max).contains(&x) && (0..=max).contains(&y) {
+                let cell = (x as u8, y as u8);
+                if !cells.contains(&cell) {
+                    cells.push(cell);
+                    return cells.len() == DIRECTED_TARGET_WALK_MAX_CELLS;
+                }
+            }
+            false
+        };
+        match direction {
+            Direction::West => {
+                for d in 1..=cx {
+                    let x = cx - d;
+                    for y in (cy - d)..=(cy + d) {
+                        if emit(&mut cells, x, y) {
                             return Some(cells);
                         }
                     }
                 }
             }
+            Direction::East => {
+                for d in 1..=(max - cx) {
+                    let x = cx + d;
+                    for y in (cy - d)..=(cy + d) {
+                        if emit(&mut cells, x, y) {
+                            return Some(cells);
+                        }
+                    }
+                }
+            }
+            Direction::North => {
+                for d in 1..=cy {
+                    let y = cy - d;
+                    for x in (cx - d)..=(cx + d) {
+                        if emit(&mut cells, x, y) {
+                            return Some(cells);
+                        }
+                    }
+                }
+            }
+            Direction::South => {
+                for d in 1..=(max - cy) {
+                    let y = cy + d;
+                    for x in (cx - d)..=(cx + d) {
+                        if emit(&mut cells, x, y) {
+                            return Some(cells);
+                        }
+                    }
+                }
+            }
+            _ => return None,
         }
         Some(cells)
     }
@@ -2561,27 +2593,25 @@ impl PlayState {
         caster_index: usize,
         spell_index: usize,
         effect: CombatDirectedSpellEffect,
-        target_slot: usize,
+        direction: Option<Direction>,
     ) -> MoveOutcome {
         if !self.combat_active || !self.spell_allowed_in_current_cast_context(spell_index) {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         }
-        if target_slot >= COMBAT_ACTOR_SLOTS
-            || !self
-                .combat_actors
-                .get(target_slot)
-                .copied()
-                .is_some_and(directed_spell_actor_is_eligible)
-        {
-            self.message = "Target? Use C1IZ7 to target a live visible combat slot.".to_string();
+        let Some(direction) = direction else {
+            self.message = "Direction? Use C1IZ6/C1HIN6/C1CGIV6/C1FHI6.".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !direction.is_cardinal() {
+            self.message = "Directed spell requires a cardinal direction.".to_string();
             return MoveOutcome::Blocked;
         }
 
         let Some(target_cells) =
-            self.directed_combat_spell_target_cells(caster_index, target_slot, effect)
+            self.directed_combat_spell_target_cells(caster_index, direction, effect)
         else {
-            self.message = "Target? Use C1IZ7 to target a live visible combat slot.".to_string();
+            self.message = "Who casts?".to_string();
             return MoveOutcome::Blocked;
         };
 

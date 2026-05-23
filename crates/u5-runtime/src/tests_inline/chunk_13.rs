@@ -4347,15 +4347,12 @@ fn monster_reward_unit_derivation_constants_match_spec() {
 }
 
 #[test]
-fn directed_target_walk_max_cells_matches_spec() {
-    // magic.md §8: the directed target-walk family (In Zu, In Nox
-    // Hur, In Vas Grav Corp, In Flam Hur) builds a directed set
-    // of up to twenty-one arena cells from the active target/
-    // caster state before scanning combat actor slots for
-    // matches. Promote the cap so future target-walk
-    // implementations do not bake `21` as a bare literal.
-    assert_eq!(DIRECTED_TARGET_WALK_MAX_CELLS, 21);
-    // Sanity-check: a 21-cell directed area cannot exceed the
+fn directed_wind_cone_max_cells_matches_spec() {
+    // magic.md §8: the directed wind-cone family (In Zu, In Nox
+    // Hur, In Vas Grav Corp, In Flam Hur) builds up to sixty-three
+    // de-duplicated arena cells from a cardinal direction.
+    assert_eq!(DIRECTED_TARGET_WALK_MAX_CELLS, 63);
+    // Sanity-check: the capped directed area cannot exceed the
     // 121-cell arena footprint.
     assert!(DIRECTED_TARGET_WALK_MAX_CELLS <= COMBAT_ARENA_SIDE * COMBAT_ARENA_SIDE);
 }
@@ -11819,7 +11816,7 @@ fn spell_scene_allow_mask_bits_match_spec() {
 #[test]
 fn directed_wind_spell_kill_xp_predicate_matches_spec() {
     // magic.md §8
-    assert_eq!(DIRECTED_WIND_MAX_CELLS, 21);
+    assert_eq!(DIRECTED_WIND_MAX_CELLS, 63);
     // Damage winds credit kill XP; status winds do not.
     assert!(DirectedWindSpell::DeathWind.credits_kill_xp());
     assert!(DirectedWindSpell::FlameWind.credits_kill_xp());

@@ -131,14 +131,15 @@ pub const fn spell_allowed_in_scene(allow_mask: u8, scene: SpellSceneClass) -> b
 }
 
 /// `magic.md §8` directed-spell wind family. Sleep, Poison Wind,
-/// Death Wind, and Flame Wind share one shared target-walk layer
-/// that builds a directed set of arena cells from the caster/target
-/// state, then iterates the matching combat actors. The common
+/// Death Wind, and Flame Wind share one cardinal direction cone
+/// layer that builds a widening clipped set of arena cells from the
+/// caster, then iterates the matching combat actors. The common
 /// layer skips empty actors, actors masked by disqualifying status
 /// flags, and actors already processed by this same spell pass; it
 /// does not run the friend/foe faction lookup, so same-faction
-/// actors and the caster are eligible if their cells are in the
-/// directed area and they pass the non-faction gates.
+/// actors are eligible if their cells are in the directed area and
+/// they pass the non-faction gates. The caster's own cell is not in
+/// the normal cone because enumeration starts one cell forward.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DirectedWindSpell {
     /// `In Zu` — Sleep (single-target sleep status branch).
@@ -151,10 +152,8 @@ pub enum DirectedWindSpell {
     FlameWind,
 }
 
-/// `magic.md §8` directed-target-walk maximum cell count. The
-/// shared target-walk layer builds up to twenty-one arena cells
-/// from the caster/target state.
-pub const DIRECTED_WIND_MAX_CELLS: usize = 21;
+/// `magic.md §8` directed wind-cone maximum output count.
+pub const DIRECTED_WIND_MAX_CELLS: usize = 63;
 
 impl DirectedWindSpell {
     /// `magic.md §8`: returns `true` when this wind spell credits

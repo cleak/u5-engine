@@ -36,14 +36,11 @@ pub const fn monster_kill_xp_reward(class_max_hp: u16) -> u16 {
     (class_max_hp / 4).saturating_add(1)
 }
 
-/// `magic.md §8` directed target-walk maximum cell count. Wind- and
-/// vortex-style spells (In Zu, In Nox Hur, In Vas Grav Corp,
-/// In Flam Hur) build a directed set of up to this many arena cells
-/// from the active target/caster state before scanning the combat
-/// actor table for matches. The cap is shared spec data — the same
-/// twenty-one-cell area shape carries through every directed
-/// target-walk spell.
-pub const DIRECTED_TARGET_WALK_MAX_CELLS: usize = 21;
+/// `magic.md §8` directed wind-cone output cap. In Zu, In Nox Hur,
+/// In Vas Grav Corp, and In Flam Hur prompt for a cardinal direction,
+/// then emit up to sixty-three de-duplicated arena coordinates from the
+/// widening clipped cone in front of the caster.
+pub const DIRECTED_TARGET_WALK_MAX_CELLS: usize = 63;
 
 /// `combat.md §11` Fire Field per-contact raw-damage roll. The
 /// post-step contact hook rolls a uniform `[1, 21]` value before the
@@ -303,10 +300,6 @@ pub const COMBAT_FIELD_KIND_POISON: u8 = 0x33;
 pub const COMBAT_FIELD_KIND_SLEEP: u8 = COMBAT_FIELD_KIND_POISON + 1;
 pub const COMBAT_FIELD_KIND_FIRE: u8 = COMBAT_FIELD_KIND_SLEEP + 1;
 pub const COMBAT_FIELD_KIND_ENERGY: u8 = COMBAT_FIELD_KIND_FIRE + 1;
-/// Public issue #10 scopes Fire/Sleep/Energy arena-field placement
-/// as a one-in-N callback gate and recommends N=8 until empirical
-/// tracing pins the exact byte-level threshold.
-pub const COMBAT_ARENA_FIELD_RANDOM_GATE_DENOMINATOR: u8 = 8;
 pub const COMBAT_ROUND_RESULT_DEFEAT: u8 = 0;
 pub const COMBAT_ROUND_RESULT_SUCCESS: u8 = COMBAT_ROUND_RESULT_DEFEAT + 1;
 pub const COMBAT_TARGET_GROUP_NEUTRAL: u8 = 0;
@@ -841,7 +834,7 @@ pub enum CombatSpellHandlerFamily {
     ActiveTargetAttack(CombatSpellDamageKind),
     FieldPlacement(CombatArenaFieldKind),
     FieldRemoval,
-    DirectedTargetWalk(CombatDirectedSpellEffect),
+    DirectedWindCone(CombatDirectedSpellEffect),
     TableWideTremor,
     ActiveEffect { tag: u8, duration: u8 },
     CreaturePromptTargeter(CombatCreaturePromptSpellEffect),
@@ -1742,7 +1735,7 @@ pub const fn resolve_combat_spell_handler_family(
             CombatArenaFieldKind::Energy,
         )),
         24 => Some(CombatSpellHandlerFamily::Swarm),
-        28 => Some(CombatSpellHandlerFamily::DirectedTargetWalk(
+        28 => Some(CombatSpellHandlerFamily::DirectedWindCone(
             CombatDirectedSpellEffect::Sleep,
         )),
         29 => Some(CombatSpellHandlerFamily::ActiveEffect {
@@ -1771,15 +1764,15 @@ pub const fn resolve_combat_spell_handler_family(
         38 => Some(CombatSpellHandlerFamily::CreaturePromptTargeter(
             CombatCreaturePromptSpellEffect::Clone,
         )),
-        40 => Some(CombatSpellHandlerFamily::DirectedTargetWalk(
+        40 => Some(CombatSpellHandlerFamily::DirectedWindCone(
             CombatDirectedSpellEffect::PoisonWind,
         )),
         41 => Some(CombatSpellHandlerFamily::TableWideFear),
         43 => Some(CombatSpellHandlerFamily::SummonDaemon),
-        44 => Some(CombatSpellHandlerFamily::DirectedTargetWalk(
+        44 => Some(CombatSpellHandlerFamily::DirectedWindCone(
             CombatDirectedSpellEffect::DeathWind,
         )),
-        45 => Some(CombatSpellHandlerFamily::DirectedTargetWalk(
+        45 => Some(CombatSpellHandlerFamily::DirectedWindCone(
             CombatDirectedSpellEffect::FlameWind,
         )),
         _ => None,
@@ -2695,12 +2688,8 @@ pub const fn resolve_combat_field_placement_acceptance(
     field: CombatArenaFieldKind,
     callback_accepts: bool,
 ) -> bool {
-    match field {
-        CombatArenaFieldKind::Poison => true,
-        CombatArenaFieldKind::Sleep | CombatArenaFieldKind::Fire | CombatArenaFieldKind::Energy => {
-            callback_accepts
-        }
-    }
+    let _ = (field, callback_accepts);
+    true
 }
 
 pub const fn combat_field_poison_fallback_damage(roll: u8) -> u8 {

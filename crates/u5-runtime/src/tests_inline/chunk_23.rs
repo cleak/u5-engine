@@ -2414,7 +2414,7 @@
             CombatArenaFieldKind::Poison,
             false
         ));
-        assert!(!resolve_combat_field_placement_acceptance(
+        assert!(resolve_combat_field_placement_acceptance(
             CombatArenaFieldKind::Fire,
             false
         ));
@@ -2424,37 +2424,21 @@
         ));
     }
 
-    fn seed_for_first_mod_roll(modulus: u8, expected: u8) -> u16 {
-        for seed in 0..=u16::MAX {
-            let mut prng = seed;
-            if u5_prng_range_u16(&mut prng, 0, u16::from(modulus - 1)) as u8 == expected {
-                return seed;
-            }
-        }
-        panic!("no deterministic PRNG seed found for requested mod roll");
-    }
-
     #[test]
-    fn combat_field_placement_callback_uses_poison_immediate_and_one_in_eight_gate() {
+    fn combat_field_placement_callback_accepts_all_arena_field_kinds() {
         let mut state = world_state(open_world_grid(), 10, 20);
-        assert_eq!(COMBAT_ARENA_FIELD_RANDOM_GATE_DENOMINATOR, 8);
 
-        state.prng_state = seed_for_first_mod_roll(COMBAT_ARENA_FIELD_RANDOM_GATE_DENOMINATOR, 7);
         assert!(state.combat_arena_field_placement_callback_accepts(
             0,
             COMBAT_PARTY_ACTOR_SLOTS,
             POISON_FIELD_SPELL_INDEX
         ));
-
-        state.prng_state = seed_for_first_mod_roll(COMBAT_ARENA_FIELD_RANDOM_GATE_DENOMINATOR, 0);
         assert!(state.combat_arena_field_placement_callback_accepts(
             0,
             COMBAT_PARTY_ACTOR_SLOTS,
             FIRE_FIELD_SPELL_INDEX
         ));
-
-        state.prng_state = seed_for_first_mod_roll(COMBAT_ARENA_FIELD_RANDOM_GATE_DENOMINATOR, 7);
-        assert!(!state.combat_arena_field_placement_callback_accepts(
+        assert!(state.combat_arena_field_placement_callback_accepts(
             0,
             COMBAT_PARTY_ACTOR_SLOTS,
             ENERGY_FIELD_SPELL_INDEX
@@ -5888,39 +5872,32 @@
     }
 
     #[test]
-    fn directed_sleep_uses_shared_target_walk_cells() {
+    fn directed_sleep_uses_shared_cardinal_wind_cone_cells() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_actors[0] =
             CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
-        state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS] = CombatActorDescriptor::from_row([
-            20,
-            1,
-            COMBAT_ACTOR_FLAG_SELECTABLE_80,
-            32,
-            COMBAT_PARTY_ACTOR_SLOTS as u8,
-            0,
-            8,
-            5,
-        ]);
 
         let sleep_cells = state
             .directed_combat_spell_target_cells(
                 0,
-                COMBAT_PARTY_ACTOR_SLOTS,
+                Direction::West,
                 CombatDirectedSpellEffect::Sleep,
             )
             .unwrap();
         let poison_cells = state
             .directed_combat_spell_target_cells(
                 0,
-                COMBAT_PARTY_ACTOR_SLOTS,
+                Direction::West,
                 CombatDirectedSpellEffect::PoisonWind,
             )
             .unwrap();
 
         assert_eq!(sleep_cells, poison_cells);
-        assert!(sleep_cells.len() > 1);
-        assert!(sleep_cells.contains(&(8, 5)));
+        assert_eq!(sleep_cells.len(), 35);
+        assert_eq!(&sleep_cells[0..3], &[(4, 4), (4, 5), (4, 6)]);
+        assert!(sleep_cells.contains(&(0, 0)));
+        assert!(sleep_cells.contains(&(0, 10)));
+        assert!(!sleep_cells.contains(&(5, 5)));
     }
 
     #[test]
@@ -5974,25 +5951,25 @@
 
         assert_eq!(
             family("IZ"),
-            Some(CombatSpellHandlerFamily::DirectedTargetWalk(
+            Some(CombatSpellHandlerFamily::DirectedWindCone(
                 CombatDirectedSpellEffect::Sleep
             ))
         );
         assert_eq!(
             family("HIN"),
-            Some(CombatSpellHandlerFamily::DirectedTargetWalk(
+            Some(CombatSpellHandlerFamily::DirectedWindCone(
                 CombatDirectedSpellEffect::PoisonWind
             ))
         );
         assert_eq!(
             family("CGIV"),
-            Some(CombatSpellHandlerFamily::DirectedTargetWalk(
+            Some(CombatSpellHandlerFamily::DirectedWindCone(
                 CombatDirectedSpellEffect::DeathWind
             ))
         );
         assert_eq!(
             family("FHI"),
-            Some(CombatSpellHandlerFamily::DirectedTargetWalk(
+            Some(CombatSpellHandlerFamily::DirectedWindCone(
                 CombatDirectedSpellEffect::FlameWind
             ))
         );
@@ -7209,8 +7186,6 @@
             aux1: 0,
             aux3: 0,
         };
-        let expected_prng = state.prng_state;
-
         assert_eq!(
             state
                 .cast_spell_from_suffix("1BIX", std::path::Path::new(""))
@@ -7221,7 +7196,6 @@
         assert_eq!(state.spell_charges[spell_index], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.message, "Success!");
         assert_eq!(
             state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS],
@@ -11815,7 +11789,7 @@
 
         assert_eq!(
             sleep
-                .cast_spell_from_suffix("1IZ2", std::path::Path::new(""))
+                .cast_spell_from_suffix("1IZ6", std::path::Path::new(""))
                 .unwrap(),
             MoveOutcome::Cast
         );
@@ -11867,7 +11841,7 @@
 
         assert_eq!(
             poison
-                .cast_spell_from_suffix("1HIN3", std::path::Path::new(""))
+                .cast_spell_from_suffix("1HIN6", std::path::Path::new(""))
                 .unwrap(),
             MoveOutcome::Cast
         );
@@ -11923,7 +11897,7 @@
 
         assert_eq!(
             death
-                .cast_spell_from_suffix("1CGIV7", std::path::Path::new(""))
+                .cast_spell_from_suffix("1CGIV6", std::path::Path::new(""))
                 .unwrap(),
             MoveOutcome::Cast
         );
@@ -11958,7 +11932,7 @@
 
         assert_eq!(
             flame
-                .cast_spell_from_suffix("1FHI7", std::path::Path::new(""))
+                .cast_spell_from_suffix("1FHI6", std::path::Path::new(""))
                 .unwrap(),
             MoveOutcome::Cast
         );
@@ -12450,7 +12424,6 @@
         state.party_experience = vec![123];
         let spell_index = spell_index_from_code("FGI").unwrap();
         state.spell_charges[spell_index] = 1;
-        state.prng_state = seed_for_first_mod_roll(COMBAT_ARENA_FIELD_RANDOM_GATE_DENOMINATOR, 0);
         state.combat_actors[0] = CombatActorDescriptor::from_row([
             30,
             1,
@@ -12523,7 +12496,7 @@
     }
 
     #[test]
-    fn combat_cast_fire_field_random_gate_failure_consumes_cast_without_marker() {
+    fn combat_cast_fire_field_places_marker_without_random_gate() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
         state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
@@ -12539,7 +12512,6 @@
         }];
         let spell_index = spell_index_from_code("FGI").unwrap();
         state.spell_charges[spell_index] = 1;
-        state.prng_state = seed_for_first_mod_roll(COMBAT_ARENA_FIELD_RANDOM_GATE_DENOMINATOR, 7);
         state.combat_actors[0] = CombatActorDescriptor::from_row([
             30,
             1,
@@ -12585,23 +12557,22 @@
             state
                 .cast_spell_from_suffix("1FGI6", std::path::Path::new(""))
                 .unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Cast
         );
 
         assert_eq!(state.spell_charges[spell_index], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Failed!");
+        assert_eq!(state.message, "Fire field placed.");
         assert!(!state.combat_actors[target_slot].is_marked_dead());
         assert_eq!(state.combat_actors[target_slot].hp_or_wound, stats.max_hp);
         assert_eq!(state.active_objects[target_slot].tile, 0x70);
-        assert!(state.active_objects[1..target_slot]
-            .iter()
-            .all(|object| object.is_empty()));
+        assert_eq!(state.active_objects[1].type_byte, COMBAT_FIELD_KIND_FIRE);
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (4, 3));
     }
 
     #[test]
-    fn combat_cast_field_spell_requires_target_lookup_and_keeps_marker_table_unchanged() {
+    fn combat_cast_field_spell_places_marker_without_actor_contact_target() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
         state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
@@ -12642,14 +12613,15 @@
             state
                 .cast_spell_from_suffix("1GIN6", std::path::Path::new(""))
                 .unwrap(),
-            MoveOutcome::Blocked
+            MoveOutcome::Cast
         );
 
         assert_eq!(state.spell_charges[spell_index], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Failed!");
-        assert!(state.active_objects[1..].iter().all(|object| object.is_empty()));
+        assert_eq!(state.message, "Poison field placed.");
+        assert_eq!(state.active_objects[1].type_byte, COMBAT_FIELD_KIND_POISON);
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (4, 3));
     }
 
     #[test]
