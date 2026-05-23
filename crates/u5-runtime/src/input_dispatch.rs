@@ -484,12 +484,30 @@ fn handle_active_shop_key_input(
     let mut replacement_session: Option<ActiveShopSession> = None;
 
     let message = match &mut session {
-        ActiveShopSession::Arms(s) => {
-            handle_arms_shop_key_input(state, s, None, ctx, key_byte, inline_digit, yes, no)
-        }
+        ActiveShopSession::Arms(s) => handle_arms_shop_key_input(
+            state,
+            s,
+            None,
+            ctx,
+            key_byte,
+            inline_digit,
+            yes,
+            no,
+            game_dir,
+        ),
         ActiveShopSession::ArmsLocal(s, shop) => {
             let table = shop.stock_table();
-            handle_arms_shop_key_input(state, s, Some(table), ctx, key_byte, inline_digit, yes, no)
+            handle_arms_shop_key_input(
+                state,
+                s,
+                Some(table),
+                ctx,
+                key_byte,
+                inline_digit,
+                yes,
+                no,
+                game_dir,
+            )
         }
         ActiveShopSession::ArmsStocked(s, stock_table) => handle_arms_shop_key_input(
             state,
@@ -500,6 +518,7 @@ fn handle_active_shop_key_input(
             inline_digit,
             yes,
             no,
+            game_dir,
         ),
         ActiveShopSession::Healer(s, healer) => match (*s, yes, no, inline_digit) {
             (HealerShopState::Greeting, _, true, _) => {
@@ -1235,6 +1254,7 @@ fn handle_arms_shop_key_input(
     inline_digit: Option<u8>,
     yes: bool,
     no: bool,
+    game_dir: &Path,
 ) -> String {
     use crate::shop_runtime::{ArmsShopInput, ArmsShopOutcome, ArmsShopState, step_arms_shop};
 
@@ -1312,9 +1332,15 @@ fn handle_arms_shop_key_input(
     } else {
         None
     };
+    let was_invalid_stock_pick = matches!(outcome, ArmsShopOutcome::InvalidInput)
+        && matches!(*shop_state, ArmsShopState::BuyPickItem)
+        && stock_table.is_some();
     let message = match (outcome, stock_table) {
         (ArmsShopOutcome::EnteredBuy, Some(table)) => format_arms_stock_buy_menu(table),
-        (outcome, _) => format_arms_outcome(outcome),
+        (ArmsShopOutcome::InvalidInput, Some(table)) if was_invalid_stock_pick => {
+            format_arms_stock_buy_menu(table)
+        }
+        (outcome, _) => format_arms_outcome(outcome, game_dir),
     };
     append_active_shop_surcharge(message, surcharge)
 }
@@ -1351,28 +1377,53 @@ fn format_inn_error(err: InnError) -> String {
     }
 }
 
-fn format_arms_outcome(outcome: crate::shop_runtime::ArmsShopOutcome) -> String {
+fn format_arms_outcome(outcome: crate::shop_runtime::ArmsShopOutcome, game_dir: &Path) -> String {
     use crate::shop_runtime::ArmsShopOutcome::*;
     match outcome {
         EnteredBuy => "Buy: pick an item number.".to_string(),
         EnteredSell => "Sell: pick an item number.".to_string(),
         Exited => "Farewell.".to_string(),
-        QuotedBuyPrice { item, price } => {
-            format!("Item {item} costs {price} gold. (Y/N)")
+        QuotedBuyPrice {
+            item,
+            price,
+            quote_record_id,
+        } => {
+            let quote = render_shoppe_record_for_arms_quote(game_dir, quote_record_id, item, price);
+            format!(
+                "{quote}\n{}",
+                crate::shops::arms_buy_confirmation_prompt(item)
+            )
         }
         OfferedSellPrice { item, offer } => {
             format!("I will pay {offer} gold for item {item}. (Y/N)")
         }
-        Bought { item, paid } => format!("Bought item {item} for {paid} gold."),
+        Bought { .. } => "Sold!".to_string(),
         Sold { item, received } => format!("Sold item {item} for {received} gold."),
         Declined => "As you wish.".to_string(),
-        BuyRefusedShortFunds { quoted_price, .. } => {
-            format!("Thou lackest the {quoted_price} gold needed.")
-        }
+        BuyRefusedShortFunds { item, .. } => crate::shops::arms_no_credit_bark(item).to_string(),
         SellRefusedNoStock { item } => format!("Thou hast no item {item} to sell."),
-        BuyRefusedCapHit { .. } => "Thou canst carry no more of those.".to_string(),
+        BuyRefusedCapHit { .. } => "Thou canst not carry any more!".to_string(),
         InvalidInput => "I do not understand.".to_string(),
     }
+}
+
+fn render_shoppe_record_for_arms_quote(
+    game_dir: &Path,
+    record_id: usize,
+    item: u8,
+    price: u16,
+) -> String {
+    let placeholders = crate::shoppe_bark::ShoppeBarkContext {
+        gold: price,
+        item_name: equipment_name(item as usize),
+        ..Default::default()
+    };
+    crate::shoppe_bark::load_shoppe_records(&game_dir.join("SHOPPE.DAT"))
+        .and_then(|records| {
+            crate::shoppe_bark::render_shoppe_record(&records, record_id, &placeholders)
+                .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))
+        })
+        .unwrap_or_else(|_| format!("{} costs {price} gold.", equipment_name(item as usize)))
 }
 
 fn healer_treatment_for_service(service: HealerService) -> HealerTreatment {
@@ -1434,15 +1485,24 @@ fn format_tavern_outcome(outcome: crate::shop_runtime::TavernOutcome) -> String 
         EnteredMenu {
             tavern,
             round_letter,
+            secondary_letter,
+            provisions_letter,
+            lore_letter,
         } => {
+            let provisions = provisions_letter
+                .map(|letter| format!(", provisions ({letter})"))
+                .unwrap_or_default();
             format!(
-                "{}: drink round ({round_letter}), lore (A/C/H/T), provisions (P), or Space.",
+                "{}: drink round ({round_letter}), tavern ({secondary_letter}){provisions}, lore ({lore_letter}), or Space.",
                 tavern.display_name()
             )
         }
         EnteredSagePrompt => "Of what wouldst thou hear my lore?".to_string(),
         RoundDrinkServed { tavern, cost } => {
             format!("{} served a round for {cost} gold.", tavern.display_name())
+        }
+        SecondaryTavernSelected { tavern, letter } => {
+            format!("{} tavern branch {letter}.", tavern.display_name())
         }
         PickBlueBoarDrink => "Choose Blue Boar drink A-F.".to_string(),
         BlueBoarDrinkServed { choice, cost } => {

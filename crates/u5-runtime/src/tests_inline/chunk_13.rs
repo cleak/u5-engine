@@ -10269,10 +10269,12 @@ fn shadowlord_hideout_predicates_match_spec() {
     assert_eq!(SHADOWLORD_HIDEOUT_FIRST, 1);
     assert_eq!(SHADOWLORD_HIDEOUT_LAST, 8);
     assert_eq!(SHADOWLORD_HIDEOUT_VANQUISHED, 0xFF);
-    assert_eq!(SAVE_SHADOWLORD_HIDEOUTS_OFFSET, 0x0246);
+    assert_eq!(SAVE_SHADOWLORD_HIDEOUTS_OFFSET, 0x0322);
+    assert_eq!(SAVE_QUEST_PROGRESS_WORD_OFFSET, 0x0624);
+    assert_eq!(SAVE_QUEST_PROGRESS_WORD_LEN, 2);
     assert_eq!(
         SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT - 1,
-        0x0248
+        0x0324
     );
     assert_eq!(DEFAULT_SHADOWLORD_HIDEOUTS, [4, 7, 8]);
     // Vanquished sentinel.
@@ -13628,6 +13630,23 @@ fn shoppe_record_cluster_constants_match_spec_table() {
     assert_eq!(SHOPPE_RECORDS_INNKEEPER_LAST, 193);
     // Last innkeeper record fits inside the file's record-slot count.
     assert!(SHOPPE_RECORDS_INNKEEPER_LAST < SHOPPE_DAT_RECORD_SLOTS);
+}
+
+#[test]
+fn arms_buy_quote_record_selector_matches_public_issue_41_ranges() {
+    assert_eq!(arms_buy_quote_record_id_for_item(0), Some(8));
+    assert_eq!(arms_buy_quote_record_id_for_item(7), Some(15));
+    assert_eq!(arms_buy_quote_record_id_for_item(9), Some(16));
+    assert_eq!(arms_buy_quote_record_id_for_item(14), Some(21));
+    assert_eq!(arms_buy_quote_record_id_for_item(16), Some(22));
+    assert_eq!(arms_buy_quote_record_id_for_item(34), Some(40));
+    assert_eq!(arms_buy_quote_record_id_for_item(36), Some(41));
+    assert_eq!(arms_buy_quote_record_id_for_item(38), Some(43));
+    assert_eq!(arms_buy_quote_record_id_for_item(42), Some(44));
+    assert_eq!(arms_buy_quote_record_id_for_item(46), Some(48));
+    for item in [8, 15, 35, 39, 40, 41, 47] {
+        assert_eq!(arms_buy_quote_record_id_for_item(item), None);
+    }
 }
 
 #[test]

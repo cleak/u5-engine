@@ -193,6 +193,7 @@ pub fn play_options_from_save_bytes_named(
     shadowlord_hideouts.copy_from_slice(
         &bytes[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT],
     );
+    let quest_progress_word = u16_at(bytes, SAVE_QUEST_PROGRESS_WORD_OFFSET);
 
     let transport_marker = bytes[SAVE_TRANSPORT_MARKER_OFFSET];
     let mut transport = transport_from_save_marker(transport_marker);
@@ -246,6 +247,7 @@ pub fn play_options_from_save_bytes_named(
         saved_dungeon_working_buffer,
         moonstone_slots,
         shadowlord_hideouts,
+        quest_progress_word,
         shrine_ordained_mask: bytes[SAVE_SHRINE_ORDAINED_MASK_OFFSET],
         shrine_codex_mask: bytes[SAVE_SHRINE_CODEX_MASK_OFFSET],
         moral_standing: bytes[SAVE_MORAL_STANDING_OFFSET],

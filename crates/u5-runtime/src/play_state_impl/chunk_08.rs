@@ -1299,6 +1299,7 @@ impl PlayState {
             saved_dungeon_working_buffer: None,
             moonstone_slots: self.moonstone_slots,
             shadowlord_hideouts: self.shadowlord_hideouts,
+            quest_progress_word: self.quest_progress_word,
             shrine_ordained_mask: self.shrine_ordained_mask,
             shrine_codex_mask: self.shrine_codex_mask,
             moral_standing: self.moral_standing,

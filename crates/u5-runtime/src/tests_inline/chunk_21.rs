@@ -317,9 +317,21 @@
 
         assert_eq!(state.look_facing(), MoveOutcome::Observed);
 
-        assert!(state.message.contains("Wanted Poster"));
-        assert!(state.message.contains("AVATAR"));
-        assert!(state.message.contains("IOLO"));
+        assert_eq!(
+            state.message,
+            [
+                "abbbbbbbbbbbbbc",
+                "g   Wanted:   g",
+                "g             g",
+                "g   AVATAR    g",
+                "g    IOLO     g",
+                "g             g",
+                "g             g",
+                "gDead or Aliveg",
+                "deeeeeeeeeeeeeef",
+            ]
+            .join("\n")
+        );
         assert_eq!(state.turn, 0);
     }
 
@@ -3882,7 +3894,7 @@
         )));
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
         assert!(state.message.contains("15 gold each"));
         handle_play_key_input(&mut state, '5', "", Path::new("")).unwrap();
 
@@ -3904,7 +3916,7 @@
         )));
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'R', "", Path::new("")).unwrap();
         handle_play_key_input(&mut state, '1', "2", Path::new("")).unwrap();
 
         assert_eq!(state.gold, 820);
@@ -4130,6 +4142,8 @@
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
         assert!(state.message.contains("lore"));
         handle_play_key_input(&mut state, 'A', "", Path::new("")).unwrap();
+        assert!(state.message.contains("tavern branch A"));
+        handle_play_key_input(&mut state, 'C', "", Path::new("")).unwrap();
 
         assert_eq!(state.message, "Of what wouldst thou hear my lore?");
         assert!(matches!(
@@ -4362,13 +4376,14 @@
         assert!(state.message.contains("b) Mace"));
 
         handle_play_key_input(&mut state, 'b', "", Path::new("")).unwrap();
-        assert!(state.message.contains("Item 24 costs"));
+        assert!(state.message.contains("Mace costs"));
+        assert!(state.message.contains("Wouldst thou buy one?"));
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
         assert_eq!(state.equipment_stock[24], 1);
         assert_eq!(state.equipment_stock[1], 0);
         assert!(state.gold < 1000);
-        assert!(state.message.contains("Bought item 24"));
+        assert!(state.message.contains("Sold!"));
         assert!(state.active_shop.is_some());
     }
 
@@ -4390,7 +4405,7 @@
 
         assert_eq!(state.gold, 1000);
         assert!(state.equipment_stock.iter().all(|count| *count == 0));
-        assert_eq!(state.message, "I do not understand.");
+        assert!(state.message.contains("a) Short Sword"));
         assert!(matches!(
             state.active_shop,
             Some(ActiveShopSession::ArmsStocked(

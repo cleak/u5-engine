@@ -142,6 +142,11 @@ impl PlayState {
             self.fixed_hidden_treasure_single_use_cookie;
         save[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
             .copy_from_slice(&self.shadowlord_hideouts);
+        write_u16_at(
+            &mut save,
+            SAVE_QUEST_PROGRESS_WORD_OFFSET,
+            self.quest_progress_word,
+        );
         save[SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET
             ..SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET + SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN]
             .copy_from_slice(&self.dungeon_room_clear_bitmap);
@@ -394,6 +399,7 @@ impl PlayState {
             dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
+            quest_progress_word: options.quest_progress_word,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
             moral_standing: options.moral_standing,
@@ -615,6 +621,7 @@ impl PlayState {
             dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
+            quest_progress_word: options.quest_progress_word,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
             moral_standing: options.moral_standing,
@@ -841,6 +848,7 @@ impl PlayState {
             dungeon_room_clear_bitmap: options.dungeon_room_clear_bitmap,
             moonstone_slots: options.moonstone_slots,
             shadowlord_hideouts: options.shadowlord_hideouts,
+            quest_progress_word: options.quest_progress_word,
             shrine_ordained_mask: options.shrine_ordained_mask,
             shrine_codex_mask: options.shrine_codex_mask,
             moral_standing: options.moral_standing,

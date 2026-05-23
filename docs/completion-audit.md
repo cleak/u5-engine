@@ -38,16 +38,16 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#9`/`#22` | Directed Sleep/Wind combat cone targeting | Implemented from latest issue answer; cardinal direction cone targeting replaces target-slot targeting |
 | `cleak/u5-spec#10` | Combat arena field marker placement gate | Implemented from latest issue answer; Fire/Poison/Sleep/Energy markers place after confirmed impact without a random materialization gate |
 | `cleak/u5-spec#12`/`#19` | Dungeon-room combat party/source placement | Published row/column layout, helper scan suppression, ordinary boundary, and Doom marker behavior implemented; non-Doom special id post-write table requested |
-| `cleak/u5-spec#13` | Paid shared 26-row sage rumour topic table and success templates | Table/mechanics implemented, including post-debit success-record RNG timing; exact fee/no-credit text still pending |
+| `cleak/u5-spec#13` | Tavern/meal/sage selector table plus paid shared 26-row sage rumour topic table and success templates | Table/mechanics implemented, including per-tavern selector letters, lore continuation gating, and post-debit success-record RNG timing; exact fee/no-credit text still pending |
 | `cleak/u5-spec#15` | Inn Intelligence-adjusted room-rate formula and recovery behavior | Implemented |
 | `cleak/u5-spec#18` | Fixed hidden-treasure found bitmap and special record cookies | Implemented; spec wording correction requested for record 15 predicate |
 | `cleak/u5-spec#28` | Horse-trader sale path replacing old stationary-display purchase premise | Implemented |
 | `cleak/u5-spec#31` | Eternal-Flame-gated Shadowlord shard destruction predicates | Implemented; persistent quest-progress side effect question pending |
-| `cleak/u5-spec#41` | Exact arms-shop eight-item stock rows | Implemented |
-| `cleak/u5-spec#43` | Top-down fountain, wishing-well, death-vision, and wanted-poster outcomes | Published predicates implemented; exact poster text still pending |
+| `cleak/u5-spec#41` | Exact arms-shop eight-item stock rows and buy transaction quote selector/text flow | Implemented |
+| `cleak/u5-spec#43` | Top-down fountain, wishing-well, death-vision, and wanted-poster outcomes | Implemented |
 | `cleak/u5-spec#47` | Hourly Ring of Regeneration tick and completed long-camp recovery | Implemented from latest issue answer; spec-file reconciliation pending |
 | `cleak/u5-spec#48` | Non-combat Blink directional ray landing rule | Implemented |
-| `cleak/u5-spec#51` | Full resident town tile-attribute table for poison-gas detection | Published tile step behavior implemented; full table question pending |
+| `cleak/u5-spec#51` | Native tile `0x04` town poison-gas detection | Implemented |
 | `cleak/u5-spec#54` | Return-to-View strip captions, timing, geometry, and exact effect rasters | Public timing/captions and 4x19 visible geometry implemented; exact effect raster question pending |
 | `cleak/u5-spec#56` | Endgame tableau active-object layout, sprite mapping, and movement timing | Implemented from latest issue answer; active-object slots, class sprites, scene marker, branch movement, and refusal jitter follow the published contract |
 
@@ -163,7 +163,7 @@ Notes:
 | §4 Z-Stats browsing | `z_stats.rs` inventory pages | z-stats tests | Implemented |
 | §5 R-Ready flow | `play_state_impl/chunk_04.rs` ready handler | ready picker tests | Implemented |
 | §6 R-Ready eligibility | strength gate, occupancy, ring-vanish in ready handler | ring-vanish 1-in-16 tests | Implemented |
-| §7 U-Use flows | `play_state_impl/chunk_04.rs::apply_u_use_*` for every public family (torch/gem/key/scroll/potion/Moonstone/regalia/shard/carpet/skull key/spyglass/HMS plans/sextant/pocket watch/wooden box); shard destruction follows public issue #31 exact party positions, shard/flame pairing, and matching Shadowlord encounter north of the party | per-item use tests in `chunk_03.rs`–`chunk_05.rs`, shard/flame tests in `chunk_17.rs` cover all three published native Eternal Flame positions and exact scene/floor/coordinate rejection | Implemented |
+| §7 U-Use flows | `play_state_impl/chunk_04.rs::apply_u_use_*` for every public family (torch/gem/key/scroll/potion/Moonstone/regalia/shard/carpet/skull key/spyglass/HMS plans/sextant/pocket watch/wooden box); shard destruction follows public issue #31 exact party positions, shard/flame pairing, matching Shadowlord encounter north of the party, and save-backed quest-progress bits | per-item use tests in `chunk_03.rs`–`chunk_05.rs`, shard/flame tests in `chunk_17.rs` cover all three published native Eternal Flame positions, exact scene/floor/coordinate rejection, and quest-progress bit mutation | Implemented |
 | §8 Implementation contract | `equipment.rs` 0xFF sentinel; carried/readied separation | contract tests | Implemented |
 | §9 Boundaries | Ring of Invisibility/Regeneration in combat | combat ring-vanish tests | Implemented |
 
@@ -259,7 +259,7 @@ through the asset-backed Talk command path.
 |--------|----------|-------|--------|
 | `movement.md` §1–§10 | `direction.rs`, `tile_classes.rs`, `predicates.rs`, `transport.rs`, `active_object_io.rs` | per-mode movement tests | Implemented |
 | `overworld.md` §1–§15 | `play_state_impl/chunk_01.rs` overworld loop, `world_tables.rs`, `moongate.rs`, `lord_british_camp.rs`, native and sidecar encounters, public Word-of-Power seal rows | world tests in chunks 03, 05, 06, 07, 10, 12, 13, 15, 17, 23 | Implemented |
-| `town-mode.md` §1–§17 | `town_mode.rs`, `town_tables.rs`, NPC schedules, dawn/dusk substitution, alarms | town tests in chunks 04, 06, 10, 11, 15, 19, 21, 23 | Implemented (public #51 tile `0x04` poison-gas step behavior is native; clean tile-attribute and coordinate sidecars remain fallback coverage while full resident tile-attribute coverage remains a public-data question) |
+| `town-mode.md` §1–§17 | `town_mode.rs`, `town_tables.rs`, NPC schedules, dawn/dusk substitution, alarms | town tests in chunks 04, 06, 10, 11, 15, 19, 21, 23 | Implemented (public #51 tile `0x04` poison-gas step behavior is native; coordinate and tile-attribute sidecars no longer trigger this branch) |
 | `dungeon-mode.md` §1–§17 | `play_state_impl/chunk_*.rs` dungeon loop, `dungeon_tables.rs`, raster in `crates/u5-bevy/src/lib.rs` first-person draw | dungeon tests in chunks 05, 12, 13, 18, 20, 23 | Implemented |
 
 ### `systems/encounters.md`
@@ -370,11 +370,11 @@ are kept out of gameplay logic until the public spec publishes exact data.
 | `cleak/u5-spec#8` | Exact combat descriptor byte/table layout for non-party sleep/disabled status storage | Engine models the published disabled targetability and per-slot duration counter behavior, but keeps the descriptor/backref layout conservative until the byte conflict is resolved |
 | `cleak/u5-spec#13` | Exact resident SHOPPE record ids/text for the sage fee quote and insufficient-gold/no-credit refusal | Shared paid 26-row table, strict matching, confirmation/debit, post-debit success-record RNG timing, and success rendering are implemented from the public issue answer; prompt wording remains conservative until published |
 | `cleak/u5-spec#18` | Spec prose wording for fixed hidden-treasure record 15 still needs to match the latest issue answer | Engine grants record 15 only when the single-use cookie is clear and no NPC occupies the tile, and does not set the cookie from Search itself |
-| `cleak/u5-spec#31` | Whether Shadowlord shard destruction sets a persisted quest-progress bit beyond the public hideout/encounter state | Engine implements the exact public flame positions, shard/flame pairing, and matching Shadowlord-name encounter gate |
-| `cleak/u5-spec#41` | Exact arms-shop quote/refusal/success text or SHOPPE record ids | Published scene-specific `a..h` stock rows and buy/sell mechanics are implemented; transaction wording remains conservative |
-| `cleak/u5-spec#43` | Exact wanted-poster resident text/template and line breaking | Look routes the public predicates and outcomes, grants all six accepted well wishes as horse-family objects in the public scenes, uses Intelligence for death vision, and inserts party names at the Yew poster predicate with clean-authored placeholder wording |
+| `cleak/u5-spec#31` | Shadowlord shard destruction save-backed quest-progress bits | Engine implements the exact public flame positions, shard/flame pairing, matching Shadowlord-name encounter gate, hideout-slot vanquish, and low-byte quest-progress bits |
+| `cleak/u5-spec#41` | Exact arms-shop quote/refusal/success text or SHOPPE record ids | Implemented: buy quote record ids map from equipment ids, invalid selectors silently re-prompt, carry-cap is checked before gold, no-credit barks/refusal text and `Sold!` success are modeled |
+| `cleak/u5-spec#43` | Exact wanted-poster resident text/template and line breaking | Implemented: Look routes the public predicates and outcomes, grants all six accepted well wishes as horse-family objects in the public scenes, uses Intelligence for death vision, and renders the Yew poster as the fixed framed row stream with party slots 0..2 centered |
 | `cleak/u5-spec#47` | Checked-in spec files still contradict the latest public issue answer for non-combat Ring of Regeneration and completed long-camp recovery | Engine implements the latest public issue-comment behavior: hourly 1-in-8 Ring of Regeneration +1 HP and guarded completed long-camp HP/MP recovery |
-| `cleak/u5-spec#51` | Full resident town tile-attribute table | `town_tile_attributes.tsv` can drive the public class `4` + vehicle byte `0x1C` poison-gas trigger predicate; coordinate rows remain as fallback, with focused tests and route-smoke covering the public per-slot roll semantics |
+| `cleak/u5-spec#51` | Native town poison-gas predicate | Implemented: live tile `0x04` plus foot transport is the complete trigger; retired sidecar rows are covered by non-trigger tests |
 | `cleak/u5-spec#54` | Return-to-View exact local cell-effect rasters | Parser/scheduler/overlay composition implement the public 19x4 source layout transposed to a 4x19 visible preview, fixed captions from LoadMapStrip, high-opcode no-ops, `(x, y + 7)` effect coordinates, and timing model; exact rasters await final public reconciliation |
 | `cleak/u5-spec#56` | Exact terminal endgame tableau active-object slots, actor roles, coordinates, sprites, cadence, and refusal-branch behavior | Implemented from the public issue answer; remaining endgame gaps are pixel/display-helper presentation parity, not tableau metadata |
 
@@ -388,16 +388,16 @@ remaining response-needed items:
   active-object back-reference and byte 4 as sleep/disabled status sub-flags.
 - `cleak/u5-spec#18`: correct the `formats/saved-gam.md` record-15 skip
   predicate wording to match the issue answer.
-- `cleak/u5-spec#31`: publish whether Shadowlord destruction sets a persisted
-  quest-progress bit.
-- `cleak/u5-spec#41`: publish exact arms-shop quote/refusal/success text or
-  SHOPPE record ids.
-- `cleak/u5-spec#43`: exact wanted-poster resident template/text and party-name
-  insertion order.
+- `cleak/u5-spec#31`: no current follow-up; latest quest-progress answer is
+  implemented.
+- `cleak/u5-spec#41`: no current follow-up; latest buy text and quote selector
+  answer is implemented.
+- `cleak/u5-spec#43`: no current follow-up; latest wanted-poster frame answer
+  is implemented.
 - `cleak/u5-spec#47`: reconcile checked-in spec prose with the latest public
   issue-comment Ring of Regeneration and completed long-camp behavior.
-- `cleak/u5-spec#51`: confirm whether tile `0x04` is the complete poison-gas
-  predicate or publish the full resident tile-attribute table.
+- `cleak/u5-spec#51`: no current follow-up; tile `0x04` complete predicate is
+  implemented.
 - `cleak/u5-spec#54`: resolve the strip geometry wording conflict and publish
   or defer exact local cell-effect rasters.
 No remaining response-needed issue in this audit is about #1 or #3; both are

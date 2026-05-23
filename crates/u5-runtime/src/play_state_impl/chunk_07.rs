@@ -1134,6 +1134,9 @@ impl PlayState {
             return false;
         }
         self.shadowlord_hideouts[index] = SHADOWLORD_VANQUISHED;
+        if let Some(bit) = shadowlord_quest_progress_bit(index) {
+            self.quest_progress_word |= bit;
+        }
         true
     }
 
@@ -2547,7 +2550,7 @@ impl PlayState {
 
     pub fn town_poison_gas_at(
         &self,
-        game_dir: &Path,
+        _game_dir: &Path,
         scene: Scene,
         floor: i8,
         x: usize,
@@ -2563,29 +2566,6 @@ impl PlayState {
                 y,
                 expected_tile: Some(tile),
             }));
-        }
-        if transport_marker != TOWN_POISON_GAS_VEHICLE_BYTE {
-            return Ok(None);
-        }
-        if let Some(entries) = load_town_tile_attribute_entries(game_dir)? {
-            if town_poison_gas_tile_matches_attributes(&entries, tile) {
-                return Ok(Some(TownPoisonGasEntry {
-                    scene,
-                    floor,
-                    x,
-                    y,
-                    expected_tile: Some(tile),
-                }));
-            }
-        }
-        if let Some(entries) = load_town_poison_gas_entries(game_dir)? {
-            if let Some(entry) = entries
-                .iter()
-                .copied()
-                .find(|entry| town_poison_gas_matches(*entry, scene, floor, x, y, tile))
-            {
-                return Ok(Some(entry));
-            }
         }
         Ok(None)
     }
@@ -3543,6 +3523,15 @@ impl PlayState {
         entries.iter().any(|entry| {
             town_rest_bed_matches(*entry, scene, floor, self.player.x, self.player.y, tile)
         })
+    }
+}
+
+pub const fn shadowlord_quest_progress_bit(index: usize) -> Option<u16> {
+    match index {
+        SHADOWLORD_FALSEHOOD_INDEX => Some(SHADOWLORD_FALSEHOOD_QUEST_PROGRESS_BIT),
+        SHADOWLORD_HATRED_INDEX => Some(SHADOWLORD_HATRED_QUEST_PROGRESS_BIT),
+        SHADOWLORD_COWARDICE_INDEX => Some(SHADOWLORD_COWARDICE_QUEST_PROGRESS_BIT),
+        _ => None,
     }
 }
 

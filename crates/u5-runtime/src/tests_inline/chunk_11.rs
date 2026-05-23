@@ -959,7 +959,7 @@
     }
 
     #[test]
-    fn town_movement_poison_gas_coordinate_sidecar_remains_fallback() {
+    fn town_movement_poison_gas_coordinate_sidecar_no_longer_triggers() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(TOWN_POISON_GAS_TABLE_FILE),
@@ -982,12 +982,12 @@
             MoveOutcome::Moved
         );
 
-        assert_eq!(state.party[0].status, b'P');
-        assert!(state.message.contains("poison gas doorway"));
+        assert_eq!(state.party[0].status, b'G');
+        assert!(!state.message.contains("poison gas doorway"));
     }
 
     #[test]
-    fn town_movement_poison_gas_tile_attribute_sidecar_remains_fallback() {
+    fn town_movement_poison_gas_tile_attribute_sidecar_no_longer_triggers() {
         let dir = debug_game_dir();
         fs::write(dir.join(TOWN_TILE_ATTRIBUTES_TABLE_FILE), "0x37 4 0x1C\n").unwrap();
         let mut grid = open_grid();
@@ -1006,8 +1006,8 @@
             MoveOutcome::Moved
         );
 
-        assert_eq!(state.party[0].status, b'P');
-        assert!(state.message.contains("poison gas doorway"));
+        assert_eq!(state.party[0].status, b'G');
+        assert!(!state.message.contains("poison gas doorway"));
     }
 
     #[test]

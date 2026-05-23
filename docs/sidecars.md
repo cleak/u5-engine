@@ -22,8 +22,8 @@ from decompiled code.
 | `dungeon_exit_tiles.tsv` | Dungeon exit cells that return to overworld metadata. |
 | `town_stairs.tsv` | Clean stair rows for town floor changes. |
 | `town_trap_doors.tsv` | Town trap-door/chute rows. |
-| `town_poison_gas.tsv` | Town poison-gas doorway rows. |
-| `town_tile_attributes.tsv` | Optional clean tile-id attributes (`TILE TILE_CLASS VEHICLE_BYTE`) used by town poison-gas native predicate tests. |
+| `town_poison_gas.tsv` | Legacy town poison-gas doorway rows; no longer used by the native #51 tile `0x04` branch. |
+| `town_tile_attributes.tsv` | Legacy clean tile-id attributes; no longer used by the native #51 tile `0x04` branch. |
 | `town_exit_tiles.tsv` | Town exit threshold rows. |
 | `moongates.tsv` | Authored moongate origin/destination rows. |
 

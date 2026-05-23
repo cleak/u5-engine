@@ -1047,7 +1047,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "shop-tavern-drink-and-food-route",
             options: PlayOptions::default(),
-            script: &["Y", "M", "P", "1", "N"],
+            script: &["Y", "M", "R", "1", "N"],
             expected: RouteSmokeExpectation::Town(castle),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
@@ -2417,7 +2417,7 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             }
         }
         "yew-wanted-poster-look" => {
-            if !state.message.contains("Wanted Poster") || !state.message.contains("Avatar") {
+            if !state.message.contains("Wanted:") || !state.message.contains("Dead or Alive") {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not render the hard-coded Yew wanted poster"
                 )));

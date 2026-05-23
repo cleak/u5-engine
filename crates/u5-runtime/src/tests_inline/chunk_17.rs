@@ -1074,6 +1074,10 @@
 
         assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 0);
         assert!(state.shadowlord_vanquished(SHADOWLORD_FALSEHOOD_INDEX));
+        assert_eq!(
+            state.quest_progress_word & SHADOWLORD_FALSEHOOD_QUEST_PROGRESS_BIT,
+            SHADOWLORD_FALSEHOOD_QUEST_PROGRESS_BIT
+        );
         assert!(!state.shadowlord_name_encounter_present(SHADOWLORD_FALSEHOOD_INDEX));
         assert_eq!(state.turn, 1);
         assert_eq!(

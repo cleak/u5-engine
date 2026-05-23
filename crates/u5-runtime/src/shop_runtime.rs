@@ -19,12 +19,13 @@ use crate::shops::{
     ShipwrightPurchaseError, ShipwrightPurchaseOutcome, ShipwrightPurchaseQuote, Stable, Tavern,
     TavernDrinkError, TavernDrinkPrompt, apply_blue_boar_drink, apply_guild_purchase,
     apply_provision_purchase, apply_reagent_purchase, apply_shipwright_purchase,
-    apply_tavern_round_drink, arms_shop_action, arms_shop_buy_quote, arms_shop_sell_offer,
-    arms_shop_stock_item_for_letter, guild_shop_action, guild_unit_price, herbalist_menu_entries,
-    inn_base_room_rate, inn_leave_companion_deposit_for_speaker, inn_main_action,
-    inn_pickup_bill_for_speaker, quote_horse_purchase_for_speaker, quote_inn_rest,
-    quote_inn_rest_for_speaker, quote_shipwright_purchase, shipwright_menu_action,
-    tavern_drink_prompt, tavern_provision_unit_price, tavern_round_drink_menu_letter,
+    apply_tavern_round_drink, arms_buy_quote_record_id_for_item, arms_shop_action,
+    arms_shop_buy_quote, arms_shop_sell_offer, arms_shop_stock_item_for_letter, guild_shop_action,
+    guild_unit_price, herbalist_menu_entries, inn_base_room_rate,
+    inn_leave_companion_deposit_for_speaker, inn_main_action, inn_pickup_bill_for_speaker,
+    quote_horse_purchase_for_speaker, quote_inn_rest, quote_inn_rest_for_speaker,
+    quote_shipwright_purchase, shipwright_menu_action, tavern_drink_prompt,
+    tavern_lore_menu_letter, tavern_menu_letters, tavern_provision_unit_price,
 };
 use crate::transport::PendingVehicleAcquisition;
 
@@ -57,7 +58,11 @@ pub enum ArmsShopState {
     /// Buy menu open. Player picks an item id `0..EQUIPMENT_COUNT`.
     BuyPickItem,
     /// Shop has quoted a buy price and awaits Yes/No confirmation.
-    BuyConfirm { item: u8, quoted_price: u16 },
+    BuyConfirm {
+        item: u8,
+        quoted_price: u16,
+        quote_record_id: usize,
+    },
     /// Sell menu open. Player picks an inventory slot to sell.
     SellPickItem,
     /// Shop has offered a sell price and awaits Yes/No confirmation.
@@ -90,7 +95,11 @@ pub enum ArmsShopOutcome {
     /// Player aborted at any prompt.
     Exited,
     /// Player picked an item to buy; shop quoted a price.
-    QuotedBuyPrice { item: u8, price: u16 },
+    QuotedBuyPrice {
+        item: u8,
+        price: u16,
+        quote_record_id: usize,
+    },
     /// Player picked an item to sell; shop offered a price.
     OfferedSellPrice { item: u8, offer: u16 },
     /// Buy completed: gold debited, item stock incremented.
@@ -148,15 +157,20 @@ pub fn step_arms_shop(
             };
             quote_arms_shop_buy_item(state, item, ctx, base_price_table)
         }
-        (ArmsShopState::BuyConfirm { item, quoted_price }, ArmsShopInput::Confirm(true)) => {
-            if *gold < quoted_price {
-                *state = ArmsShopState::Greeting;
-                return ArmsShopOutcome::BuyRefusedShortFunds { item, quoted_price };
-            }
+        (
+            ArmsShopState::BuyConfirm {
+                item, quoted_price, ..
+            },
+            ArmsShopInput::Confirm(true),
+        ) => {
             let item_idx = item as usize;
             if stock[item_idx] >= EQUIPMENT_STOCK_CAP {
                 *state = ArmsShopState::Greeting;
                 return ArmsShopOutcome::BuyRefusedCapHit { item };
+            }
+            if *gold < quoted_price {
+                *state = ArmsShopState::Greeting;
+                return ArmsShopOutcome::BuyRefusedShortFunds { item, quoted_price };
             }
             *gold -= quoted_price;
             stock[item_idx] = stock[item_idx].saturating_add(1);
@@ -223,12 +237,20 @@ fn quote_arms_shop_buy_item(
         // invalid pick rather than an offer of free goods.
         return ArmsShopOutcome::InvalidInput;
     }
+    let Some(quote_record_id) = arms_buy_quote_record_id_for_item(item) else {
+        return ArmsShopOutcome::InvalidInput;
+    };
     let price = arms_shop_buy_quote(base, ctx.speaker_intelligence);
     *state = ArmsShopState::BuyConfirm {
         item,
         quoted_price: price,
+        quote_record_id,
     };
-    ArmsShopOutcome::QuotedBuyPrice { item, price }
+    ArmsShopOutcome::QuotedBuyPrice {
+        item,
+        price,
+        quote_record_id,
+    }
 }
 
 // ---------- Healer ----------
@@ -851,10 +873,22 @@ fn select_reagent_menu_entry(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TavernState {
-    Greeting { tavern: Tavern },
-    Menu { tavern: Tavern },
-    PickProvisionQuantity { tavern: Tavern, unit_price: u16 },
-    BlueBoarDrinkList { tavern: Tavern },
+    Greeting {
+        tavern: Tavern,
+    },
+    Menu {
+        tavern: Tavern,
+        continuation_ready: bool,
+    },
+    PickProvisionQuantity {
+        tavern: Tavern,
+        unit_price: u16,
+        continuation_ready: bool,
+    },
+    BlueBoarDrinkList {
+        tavern: Tavern,
+        continuation_ready: bool,
+    },
     Exited,
 }
 
@@ -883,11 +917,18 @@ pub enum TavernOutcome {
     EnteredMenu {
         tavern: Tavern,
         round_letter: char,
+        secondary_letter: char,
+        provisions_letter: Option<char>,
+        lore_letter: char,
     },
     EnteredSagePrompt,
     RoundDrinkServed {
         tavern: Tavern,
         cost: u16,
+    },
+    SecondaryTavernSelected {
+        tavern: Tavern,
+        letter: char,
     },
     PickBlueBoarDrink,
     BlueBoarDrinkServed {
@@ -915,13 +956,8 @@ pub enum TavernOutcome {
     InvalidInput,
 }
 
-/// Public issue `cleak/u5-spec#13`: the shared tavern arm can enter
-/// the global sage lookup through one of the published lore selector
-/// letters. The exact per-scene visibility table is still outside the
-/// checked-in spec, so callers try this after higher-priority tavern
-/// branches have accepted their own letters.
-pub const fn tavern_sage_lore_menu_letter(byte: u8) -> bool {
-    matches!(byte, b'A' | b'C' | b'H' | b'T')
+pub const fn tavern_sage_lore_menu_letter(tavern: Tavern) -> char {
+    tavern_lore_menu_letter(tavern)
 }
 
 pub fn step_tavern(
@@ -934,10 +970,17 @@ pub fn step_tavern(
     match (*state, input) {
         (TavernState::Greeting { tavern }, TavernInput::Key(b)) => match tavern_drink_prompt(b) {
             TavernDrinkPrompt::Enter => {
-                *state = TavernState::Menu { tavern };
+                let letters = tavern_menu_letters(tavern);
+                *state = TavernState::Menu {
+                    tavern,
+                    continuation_ready: false,
+                };
                 TavernOutcome::EnteredMenu {
                     tavern,
-                    round_letter: tavern_round_drink_menu_letter(tavern),
+                    round_letter: letters.round,
+                    secondary_letter: letters.secondary,
+                    provisions_letter: letters.provisions,
+                    lore_letter: letters.lore,
                 }
             }
             TavernDrinkPrompt::Leave => {
@@ -946,74 +989,154 @@ pub fn step_tavern(
             }
             TavernDrinkPrompt::Discard => TavernOutcome::InvalidInput,
         },
-        (TavernState::Menu { tavern }, TavernInput::Key(b)) => {
+        (
+            TavernState::Menu {
+                tavern,
+                continuation_ready,
+            },
+            TavernInput::Key(b),
+        ) => {
             let upper = b.to_ascii_uppercase();
             if upper == b' ' || upper == 0x1B || upper == b'N' {
                 *state = TavernState::Exited;
                 return TavernOutcome::Exited;
             }
-            if upper == tavern_round_drink_menu_letter(tavern) as u8 {
+            let letters = tavern_menu_letters(tavern);
+            if upper == letters.round as u8 {
                 let outcome = apply_tavern_round_drink(gold, tavern, ctx.living_party_members);
-                *state = TavernState::Menu { tavern };
                 return match outcome {
-                    Ok(outcome) => TavernOutcome::RoundDrinkServed {
-                        tavern,
-                        cost: outcome.total_price,
-                    },
+                    Ok(outcome) => {
+                        *state = TavernState::Menu {
+                            tavern,
+                            continuation_ready: true,
+                        };
+                        TavernOutcome::RoundDrinkServed {
+                            tavern,
+                            cost: outcome.total_price,
+                        }
+                    }
                     Err(TavernDrinkError::NoLivingParty) => TavernOutcome::RefusedNoLivingParty,
                     Err(TavernDrinkError::InsufficientGold { required, .. }) => {
                         TavernOutcome::RefusedShortFunds { cost: required }
                     }
                 };
             }
-            if matches!(tavern, Tavern::TheBlueBoarTavern) && upper == b'W' {
-                *state = TavernState::BlueBoarDrinkList { tavern };
-                return TavernOutcome::PickBlueBoarDrink;
+            if upper == letters.secondary as u8 {
+                if matches!(tavern, Tavern::TheBlueBoarTavern) {
+                    *state = TavernState::BlueBoarDrinkList {
+                        tavern,
+                        continuation_ready,
+                    };
+                    return TavernOutcome::PickBlueBoarDrink;
+                }
+                *state = TavernState::Menu {
+                    tavern,
+                    continuation_ready: true,
+                };
+                return TavernOutcome::SecondaryTavernSelected {
+                    tavern,
+                    letter: letters.secondary,
+                };
             }
-            if upper == b'P' {
+            if letters
+                .provisions
+                .is_some_and(|letter| upper == letter as u8)
+            {
                 let unit_price = tavern_provision_unit_price(tavern);
-                *state = TavernState::PickProvisionQuantity { tavern, unit_price };
+                *state = TavernState::PickProvisionQuantity {
+                    tavern,
+                    unit_price,
+                    continuation_ready,
+                };
                 return TavernOutcome::PickProvisionQuantity { tavern, unit_price };
             }
-            if tavern_sage_lore_menu_letter(upper) {
+            if upper == letters.lore as u8 {
+                if !continuation_ready {
+                    return TavernOutcome::InvalidInput;
+                }
                 *state = TavernState::Exited;
                 return TavernOutcome::EnteredSagePrompt;
             }
             TavernOutcome::InvalidInput
         }
-        (TavernState::PickProvisionQuantity { tavern, .. }, TavernInput::Quantity(quantity)) => {
+        (
+            TavernState::PickProvisionQuantity {
+                tavern,
+                continuation_ready,
+                ..
+            },
+            TavernInput::Quantity(quantity),
+        ) => {
             let outcome = apply_provision_purchase(gold, food, tavern, quantity);
-            *state = TavernState::Menu { tavern };
             match outcome {
-                Ok(outcome) => TavernOutcome::ProvisionsPurchased {
-                    tavern,
-                    requested_quantity: outcome.requested_quantity,
-                    purchased_quantity: outcome.purchased_quantity,
-                    paid: outcome.total_price,
-                    food_added: outcome.food_after.saturating_sub(outcome.food_before),
-                },
-                Err(ProvisionPurchaseError::ZeroQuantity) => TavernOutcome::Declined,
-                Err(ProvisionPurchaseError::NoNeed) => TavernOutcome::RefusedNoNeed,
+                Ok(outcome) => {
+                    *state = TavernState::Menu {
+                        tavern,
+                        continuation_ready: outcome.purchased_quantity > 0,
+                    };
+                    TavernOutcome::ProvisionsPurchased {
+                        tavern,
+                        requested_quantity: outcome.requested_quantity,
+                        purchased_quantity: outcome.purchased_quantity,
+                        paid: outcome.total_price,
+                        food_added: outcome.food_after.saturating_sub(outcome.food_before),
+                    }
+                }
+                Err(ProvisionPurchaseError::ZeroQuantity) => {
+                    *state = TavernState::Menu {
+                        tavern,
+                        continuation_ready,
+                    };
+                    TavernOutcome::Declined
+                }
+                Err(ProvisionPurchaseError::NoNeed) => {
+                    *state = TavernState::Menu {
+                        tavern,
+                        continuation_ready,
+                    };
+                    TavernOutcome::RefusedNoNeed
+                }
                 Err(ProvisionPurchaseError::InsufficientGold {
                     required_per_unit, ..
-                }) => TavernOutcome::RefusedShortFunds {
-                    cost: required_per_unit,
-                },
+                }) => {
+                    *state = TavernState::Menu {
+                        tavern,
+                        continuation_ready,
+                    };
+                    TavernOutcome::RefusedShortFunds {
+                        cost: required_per_unit,
+                    }
+                }
             }
         }
-        (TavernState::BlueBoarDrinkList { tavern }, TavernInput::Key(b)) => {
+        (
+            TavernState::BlueBoarDrinkList {
+                tavern,
+                continuation_ready,
+            },
+            TavernInput::Key(b),
+        ) => {
             let Some(choice) = blue_boar_choice_for_key(b) else {
                 return TavernOutcome::InvalidInput;
             };
             let outcome = apply_blue_boar_drink(gold, choice);
-            *state = TavernState::Menu { tavern };
             match outcome {
-                Ok(outcome) => TavernOutcome::BlueBoarDrinkServed {
-                    choice,
-                    cost: outcome.total_price,
-                },
+                Ok(outcome) => {
+                    *state = TavernState::Menu {
+                        tavern,
+                        continuation_ready: true,
+                    };
+                    TavernOutcome::BlueBoarDrinkServed {
+                        choice,
+                        cost: outcome.total_price,
+                    }
+                }
                 Err(TavernDrinkError::NoLivingParty) => TavernOutcome::RefusedNoLivingParty,
                 Err(TavernDrinkError::InsufficientGold { required, .. }) => {
+                    *state = TavernState::Menu {
+                        tavern,
+                        continuation_ready,
+                    };
                     TavernOutcome::RefusedShortFunds { cost: required }
                 }
             }
@@ -1628,6 +1751,7 @@ mod tests {
             ArmsShopOutcome::QuotedBuyPrice {
                 item: 7,
                 price: arms_shop_buy_quote(prices[7], 10),
+                quote_record_id: arms_buy_quote_record_id_for_item(7).unwrap(),
             }
         );
 
@@ -2218,6 +2342,9 @@ mod tests {
             TavernOutcome::EnteredMenu {
                 tavern: Tavern::TheWayfarerTavern,
                 round_letter: 'M',
+                secondary_letter: 'A',
+                provisions_letter: Some('R'),
+                lore_letter: 'C',
             }
         );
         assert_eq!(
@@ -2233,7 +2360,7 @@ mod tests {
         assert_eq!(
             step_tavern(
                 &mut state,
-                TavernInput::Key(b'P'),
+                TavernInput::Key(b'R'),
                 ctx,
                 &mut gold,
                 &mut food,
@@ -2270,6 +2397,19 @@ mod tests {
             step_tavern(
                 &mut state,
                 TavernInput::Key(b'A'),
+                ctx,
+                &mut gold,
+                &mut food,
+            ),
+            TavernOutcome::SecondaryTavernSelected {
+                tavern: Tavern::TheWayfarerTavern,
+                letter: 'A',
+            }
+        );
+        assert_eq!(
+            step_tavern(
+                &mut state,
+                TavernInput::Key(b'C'),
                 ctx,
                 &mut gold,
                 &mut food,
@@ -2431,6 +2571,9 @@ mod tests {
             TavernOutcome::EnteredMenu {
                 tavern: Tavern::TheSwordAndKeg,
                 round_letter: 'M',
+                secondary_letter: 'A',
+                provisions_letter: Some('R'),
+                lore_letter: 'C',
             }
         );
         let outcome = step_tavern(
@@ -2547,7 +2690,7 @@ mod tests {
         );
         let prompt = step_tavern(
             &mut state,
-            TavernInput::Key(b'P'),
+            TavernInput::Key(b'R'),
             ctx,
             &mut gold,
             &mut food,
@@ -2582,6 +2725,7 @@ mod tests {
             state,
             TavernState::Menu {
                 tavern: Tavern::TheWayfarerTavern,
+                continuation_ready: true,
             }
         );
     }
@@ -2608,7 +2752,7 @@ mod tests {
         );
         step_tavern(
             &mut state,
-            TavernInput::Key(b'P'),
+            TavernInput::Key(b'R'),
             ctx,
             &mut gold,
             &mut food,
@@ -2628,6 +2772,7 @@ mod tests {
             state,
             TavernState::Menu {
                 tavern: Tavern::TheHonestMeal,
+                continuation_ready: false,
             }
         );
     }

@@ -71,6 +71,7 @@
         state.fixed_hidden_treasure_daily_day = 6;
         state.fixed_hidden_treasure_single_use_cookie = 0x77;
         state.shadowlord_hideouts = [8, SHADOWLORD_VANQUISHED, 4];
+        state.quest_progress_word = 0x120e;
         state.shrine_ordained_mask = 0b0000_1010;
         state.shrine_codex_mask = 0b0100_0001;
         state.moral_standing = 42;
@@ -187,6 +188,7 @@
                 ..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT],
             &state.shadowlord_hideouts
         );
+        assert_eq!(u16_at(&saved, SAVE_QUEST_PROGRESS_WORD_OFFSET), 0x120e);
         assert_eq!(
             &saved[SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET
                 ..SAVE_DUNGEON_ROOM_CLEAR_BITMAP_OFFSET + SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
@@ -502,6 +504,7 @@
         save[SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET] = 0x34;
         save[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
             .copy_from_slice(&[8, SHADOWLORD_VANQUISHED, 4]);
+        write_u16_at(&mut save, SAVE_QUEST_PROGRESS_WORD_OFFSET, 0x120e);
         fs::write(dir.join(SAVED_GAM_FILENAME), save).unwrap();
         fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
 
@@ -522,6 +525,7 @@
         assert_eq!(options.fixed_hidden_treasure_daily_day, 0x12);
         assert_eq!(options.fixed_hidden_treasure_single_use_cookie, 0x34);
         assert_eq!(options.shadowlord_hideouts, [8, SHADOWLORD_VANQUISHED, 4]);
+        assert_eq!(options.quest_progress_word, 0x120e);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -531,10 +535,12 @@
         bytes[SAVE_AVATAR_NAME_OFFSET] = b'A';
         bytes[SAVE_SHADOWLORD_HIDEOUTS_OFFSET..SAVE_SHADOWLORD_HIDEOUTS_OFFSET + SHADOWLORD_COUNT]
             .copy_from_slice(&[8, SHADOWLORD_VANQUISHED, 4]);
+        write_u16_at(&mut bytes, SAVE_QUEST_PROGRESS_WORD_OFFSET, 0x120e);
 
         let options = play_options_from_save_bytes(&bytes).unwrap();
 
         assert_eq!(options.shadowlord_hideouts, [8, SHADOWLORD_VANQUISHED, 4]);
+        assert_eq!(options.quest_progress_word, 0x120e);
     }
 
     #[test]
@@ -2025,6 +2031,7 @@
             saved_dungeon_working_buffer: None,
             moonstone_slots: [MoonstoneGateSlot::invalid(); MOONSTONE_SLOT_COUNT],
             shadowlord_hideouts: DEFAULT_SHADOWLORD_HIDEOUTS,
+            quest_progress_word: DEFAULT_QUEST_PROGRESS_WORD,
             shrine_ordained_mask: 0,
             shrine_codex_mask: 0,
             moral_standing: 0,

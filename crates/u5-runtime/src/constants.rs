@@ -476,7 +476,9 @@ pub const SAVE_SCROLL_COUNTERS_OFFSET: usize = 0x027A;
 pub const SAVE_POTION_COUNTERS_OFFSET: usize = 0x0282;
 pub const SAVE_FIXED_HIDDEN_TREASURE_DAILY_COOKIE_OFFSET: usize = 0x020C;
 pub const SAVE_FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_OFFSET: usize = 0x0241;
-pub const SAVE_SHADOWLORD_HIDEOUTS_OFFSET: usize = 0x0246;
+pub const SAVE_SHADOWLORD_HIDEOUTS_OFFSET: usize = 0x0322;
+pub const SAVE_QUEST_PROGRESS_WORD_OFFSET: usize = 0x0624;
+pub const SAVE_QUEST_PROGRESS_WORD_LEN: usize = 2;
 pub const SAVE_FIXED_HIDDEN_TREASURE_FOUND_OFFSET: usize = 0x02B6;
 /// `formats/saved-gam.md §6` location-cluster scratch offsets.
 pub const SAVE_SAVED_SCENE_SCRATCH_OFFSET: usize = 0x02EE;
@@ -708,6 +710,10 @@ pub const SHADOWLORD_HIDEOUT_MIN: u8 = 1;
 pub const SHADOWLORD_HIDEOUT_MAX: u8 = 8;
 pub const SHADOWLORD_VANQUISHED: u8 = 0xff;
 pub const DEFAULT_SHADOWLORD_HIDEOUTS: [u8; SHADOWLORD_COUNT] = [4, 7, 8];
+pub const DEFAULT_QUEST_PROGRESS_WORD: u16 = 0;
+pub const SHADOWLORD_FALSEHOOD_QUEST_PROGRESS_BIT: u16 = 0x0002;
+pub const SHADOWLORD_HATRED_QUEST_PROGRESS_BIT: u16 = 0x0004;
+pub const SHADOWLORD_COWARDICE_QUEST_PROGRESS_BIT: u16 = 0x0008;
 pub const SHADOWLORD_OBJECT_TILE_BASE: u8 = 0xfd;
 /// `inventory.md §7` U-Use scroll dispatch order. The eight scroll
 /// indices occupy 0..=7 in sequence. Anchor each successor to

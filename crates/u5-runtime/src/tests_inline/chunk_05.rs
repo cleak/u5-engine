@@ -1076,8 +1076,17 @@
         assert!(!state.shadowlord_alive(SHADOWLORD_COWARDICE_INDEX));
         assert!(!state.all_shadowlords_vanquished());
 
+        state.quest_progress_word = 0x0100;
         assert!(state.vanquish_shadowlord(SHADOWLORD_FALSEHOOD_INDEX));
+        assert_eq!(
+            state.quest_progress_word,
+            0x0100 | SHADOWLORD_FALSEHOOD_QUEST_PROGRESS_BIT
+        );
         assert!(!state.vanquish_shadowlord(SHADOWLORD_FALSEHOOD_INDEX));
+        assert_eq!(
+            state.quest_progress_word,
+            0x0100 | SHADOWLORD_FALSEHOOD_QUEST_PROGRESS_BIT
+        );
         state.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX] = SHADOWLORD_VANQUISHED;
 
         assert!(state.all_shadowlords_vanquished());

@@ -1549,6 +1549,7 @@ impl PlayState {
             saved_dungeon_working_buffer: None,
             moonstone_slots: self.moonstone_slots,
             shadowlord_hideouts: self.shadowlord_hideouts,
+            quest_progress_word: self.quest_progress_word,
             shrine_ordained_mask: self.shrine_ordained_mask,
             shrine_codex_mask: self.shrine_codex_mask,
             moral_standing: self.moral_standing,
@@ -2585,19 +2586,7 @@ impl PlayState {
         if !(scene == 4 && z == 0 && x == 17 && y == 21) {
             return None;
         }
-        let names = self
-            .party_names
-            .iter()
-            .filter_map(|name| party_name_to_string(name))
-            .collect::<Vec<_>>();
-        let party = if names.is_empty() {
-            "the Avatar".to_string()
-        } else {
-            names.join(", ")
-        };
-        Some(format!(
-            "Wanted Poster:\nWanted by Lord Blackthorn:\n{party}"
-        ))
+        Some(yew_wanted_poster_rows(&self.party_names).join("\n"))
     }
 
     pub fn sign_message_at_for_current_area(
@@ -3816,6 +3805,33 @@ impl PlayState {
         };
         self.set_talk_branch_flag_for_scene(scene, bit_index)
     }
+}
+
+pub fn yew_wanted_poster_rows(names: &[[u8; SAVE_CHARACTER_NAME_LEN]]) -> Vec<String> {
+    let mut rows = Vec::with_capacity(9);
+    rows.push("abbbbbbbbbbbbbc".to_string());
+    rows.push("g   Wanted:   g".to_string());
+    rows.push("g             g".to_string());
+    for slot in 0..3 {
+        rows.push(yew_wanted_poster_name_row(names.get(slot)));
+    }
+    rows.push("g             g".to_string());
+    rows.push("gDead or Aliveg".to_string());
+    rows.push("deeeeeeeeeeeeeef".to_string());
+    rows
+}
+
+fn yew_wanted_poster_name_row(name: Option<&[u8; SAVE_CHARACTER_NAME_LEN]>) -> String {
+    let mut row = [b' '; 15];
+    row[0] = b'g';
+    row[14] = b'g';
+    if let Some(name) = name.and_then(|name| party_name_to_string(name)) {
+        let start = 7usize.saturating_sub(name.len() / 2);
+        for (offset, byte) in name.bytes().take(13usize.saturating_sub(start)).enumerate() {
+            row[start + offset] = byte;
+        }
+    }
+    String::from_utf8(row.to_vec()).expect("poster rows are ASCII")
 }
 
 fn party_roster_name_matches(record: &PartyRosterRecord, needle: &str) -> bool {

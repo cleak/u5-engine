@@ -69,9 +69,9 @@ impl ActiveShopSession {
             Self::Reagent(ReagentShopState::Exited) => "Herbalist",
             Self::Sage(_) => "Sage",
             Self::Tavern(TavernState::Greeting { tavern })
-            | Self::Tavern(TavernState::Menu { tavern })
+            | Self::Tavern(TavernState::Menu { tavern, .. })
             | Self::Tavern(TavernState::PickProvisionQuantity { tavern, .. })
-            | Self::Tavern(TavernState::BlueBoarDrinkList { tavern }) => tavern.display_name(),
+            | Self::Tavern(TavernState::BlueBoarDrinkList { tavern, .. }) => tavern.display_name(),
             Self::Tavern(TavernState::Exited) => "Tavern",
             Self::HorseTrader(HorseTraderState::Greeting { stable })
             | Self::HorseTrader(HorseTraderState::ConfirmPurchase { stable, .. }) => {

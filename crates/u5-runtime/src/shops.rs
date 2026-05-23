@@ -1857,16 +1857,90 @@ pub const fn tavern_provision_unit_price(tavern: Tavern) -> u16 {
     }
 }
 
-pub const fn tavern_round_drink_menu_letter(tavern: Tavern) -> char {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TavernMenuLetters {
+    pub round: char,
+    pub secondary: char,
+    pub provisions: Option<char>,
+    pub lore: char,
+}
+
+pub const fn tavern_menu_letters(tavern: Tavern) -> TavernMenuLetters {
     match tavern {
         Tavern::TheHonestMeal
         | Tavern::TheWayfarerTavern
         | Tavern::TheSwordAndKeg
         | Tavern::TheCatsLair
-        | Tavern::TheFolleyTap => 'M',
-        Tavern::TheSlaughteredLamb | Tavern::TheFallenVirgin => 'B',
-        Tavern::TheHumblePalate => 'F',
-        Tavern::TheBlueBoarTavern => 'C',
+        | Tavern::TheFolleyTap => TavernMenuLetters {
+            round: 'M',
+            secondary: 'A',
+            provisions: Some('R'),
+            lore: 'C',
+        },
+        Tavern::TheSlaughteredLamb | Tavern::TheFallenVirgin => TavernMenuLetters {
+            round: 'B',
+            secondary: 'R',
+            provisions: None,
+            lore: 'H',
+        },
+        Tavern::TheHumblePalate => TavernMenuLetters {
+            round: 'F',
+            secondary: 'S',
+            provisions: Some('P'),
+            lore: 'A',
+        },
+        Tavern::TheBlueBoarTavern => TavernMenuLetters {
+            round: 'C',
+            secondary: 'W',
+            provisions: None,
+            lore: 'T',
+        },
+    }
+}
+
+pub const fn tavern_round_drink_menu_letter(tavern: Tavern) -> char {
+    tavern_menu_letters(tavern).round
+}
+
+pub const fn tavern_secondary_menu_letter(tavern: Tavern) -> char {
+    tavern_menu_letters(tavern).secondary
+}
+
+pub const fn tavern_provisions_menu_letter(tavern: Tavern) -> Option<char> {
+    tavern_menu_letters(tavern).provisions
+}
+
+pub const fn tavern_lore_menu_letter(tavern: Tavern) -> char {
+    tavern_menu_letters(tavern).lore
+}
+
+pub const fn arms_buy_quote_record_id_for_item(item_id: u8) -> Option<usize> {
+    let item = item_id as usize;
+    match item {
+        0..=7 => Some(8 + item),
+        9..=14 => Some(16 + (item - 9)),
+        16..=34 => Some(22 + (item - 16)),
+        36..=38 => Some(41 + (item - 36)),
+        42..=46 => Some(44 + (item - 42)),
+        _ => None,
+    }
+}
+
+pub const fn arms_buy_confirmation_prompt(item_id: u8) -> &'static str {
+    match item_id & 0x03 {
+        0 => "Wouldst thou buy one?",
+        1 => "Wilt thou take it?",
+        2 => "Wish ye it?",
+        _ => "May I get one for thee?",
+    }
+}
+
+pub const fn arms_no_credit_bark(item_id: u8) -> &'static str {
+    match item_id & 0x03 {
+        0 => "I cannot extend thee credit.",
+        1 => "Thou hast not the gold.",
+        2 => "No gold, no goods.",
+        _ => "Come back when thou canst pay.",
     }
 }
 

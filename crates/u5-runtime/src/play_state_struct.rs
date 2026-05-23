@@ -48,6 +48,7 @@ pub struct PlayState {
     pub dungeon_room_clear_bitmap: [u8; SAVE_DUNGEON_ROOM_CLEAR_BITMAP_LEN],
     pub moonstone_slots: [MoonstoneGateSlot; MOONSTONE_SLOT_COUNT],
     pub shadowlord_hideouts: [u8; SHADOWLORD_COUNT],
+    pub quest_progress_word: u16,
     pub shrine_ordained_mask: u8,
     pub shrine_codex_mask: u8,
     pub moral_standing: u8,

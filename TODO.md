@@ -276,19 +276,18 @@ Current worktree context when this TODO was refreshed:
   guidance: poison is fixed `-1 HP` per poisoned living member, and starvation
   rolls `1..=8` independently for each non-dead slot.
 - Town poison-gas doorway cells use the latest public `cleak/u5-spec#51`
-  predicate from native `0x04` live tiles and, when available, clean tile
-  attributes (`tile_class == 4` and `vehicle_byte == 0x1C`), with a `0..=29`
+  predicate from native `0x04` live tiles with foot transport, with a `0..=29`
   per-non-poisoned-slot roll compared against each member's Dexterity after
-  committed movement steps and before turn-clock advancement. Coordinate
-  sidecar rows remain as fallback until the full resident tile-attribute table
-  is published, and focused tests cover both sidecar fallback paths.
+  committed movement steps and before turn-clock advancement. Older coordinate
+  and tile-attribute sidecars no longer trigger this branch.
 - Talk-triggered arms shops use the public `cleak/u5-spec#41` scene-to-row
   identity table and exact per-row `a..h` stock arrays; visible buy choices stop
-  at the `0xFF` terminator.
+  at the `0xFF` terminator, and buy quotes map equipment ids to the published
+  SHOPPE.DAT record ranges with cap-first purchase refusal and `Sold!` success.
 - Tavern round-drink prompts now use the public `cleak/u5-spec#13`/shops table
-  letters (`M`, `B`, `F`, or `C` by tavern), and the current provisions prompt
-  is internally consistent on `P` while exact original provisions/sage selector
-  details remain a public-spec follow-up.
+  letters (`M`, `B`, `F`, or `C` by tavern), secondary-tavern letters,
+  provisions letters (`R` or `P` where present), and per-tavern lore letters
+  with lore gated behind an accepted continuation branch.
 - Paid sage rumours use the public `cleak/u5-spec#13` 26-row topic table,
   strict topic matching, and success-record random draw only after the accepted
   confirmation passes the gold/debit gate; short-funds and declines preserve
@@ -300,13 +299,15 @@ Current worktree context when this TODO was refreshed:
   accepted purchases for all three public stables.
 - Shadowlord shard U-Use follows public `cleak/u5-spec#31` exact native
   positions and requires the matching live Shadowlord/name encounter north of
-  the party; route smoke covers Lycaeum, Empath Abbey, and Serpent's Hold native
-  paths.
+  the party; successful destruction marks the native hideout byte and ORs the
+  save-backed quest-progress word bits. Route smoke covers Lycaeum, Empath
+  Abbey, and Serpent's Hold native paths.
 - The 2026-05-23 clean-engine audit applied the remaining spec-backed tavern
   drink-letter correction, expanded Doom combat visual routes, implemented the
   latest dungeon-room placement contract, and retired #1/#3/#56 as gameplay
   blockers. Follow-up questions remain current for response-needed public
-  blockers #8, #12, #13, #18, #31, #41, #43, #47, #51, and #54.
+  blockers #12 and #54; current answers for #13/#31/#41/#43/#51 have been
+  applied.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the
@@ -316,9 +317,8 @@ Current worktree context when this TODO was refreshed:
   wish input with scene gates, structured accepted keyword matching, a native
   Horse grant, accepted car keywords mapping to the horse-family grant in
   public scenes, death-vision active-object dispatch with member selection, and
-  Yew wanted-poster route/visual evidence with clean-authored placeholder text.
-  Exact wanted-poster resident text and line breaking remain pending public
-  clarification.
+  the Yew wanted-poster fixed framed row stream with party slots 0..2 centered
+  and slots 3+ omitted.
 - Return-to-View now expands the MISCMAPS command stream into a per-title-tick
   playback timeline for preview ticks, cell-effect timing, fixed-wipe
   rectangles, eight-title-tick waits, trailing ticks, and one-shot actor draws.
