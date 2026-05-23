@@ -15,12 +15,13 @@ use u5_runtime::u4_transfer_session::u4_transfer_preview_from_u4_values;
 use u5_runtime::{
     INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, MISCMAPS_DAT_FILE,
     MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
-    MISCMAPS_RTV_STRIP_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES, TileGraphicsDepth,
-    U4TransferOverrides, commit_u4_transfer_save, intro_step_has_story6_secondary_pass,
-    intro_step_transition_strips, intro_story_art_file_for_step,
-    intro_story_art_placement_for_step, intro_story_step_waits_for_input,
-    intro_story6_secondary_subimage, load_play_options_from_save, load_return_to_view_assets,
-    load_story_records, read_u4_transfer_source_from_party_sav, summarize_return_to_view_preview,
+    MISCMAPS_RTV_STRIP_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES, ReturnToViewFrameKind,
+    TileGraphicsDepth, U4TransferOverrides, commit_u4_transfer_save,
+    intro_step_has_story6_secondary_pass, intro_step_transition_strips,
+    intro_story_art_file_for_step, intro_story_art_placement_for_step,
+    intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_play_options_from_save,
+    load_return_to_view_assets, load_story_records, read_u4_transfer_source_from_party_sav,
+    run_return_to_view_playback_until_restart, summarize_return_to_view_preview,
     summarize_return_to_view_script,
 };
 
@@ -239,6 +240,39 @@ fn run_return_to_view_preview(game_dir: &Path) -> io::Result<()> {
                         Ok(summary) => println!("{summary}"),
                         Err(err) => println!("Return-to-View dry-run error: {err}"),
                     }
+                    match run_return_to_view_playback_until_restart(
+                        &assets.strips,
+                        &assets.script,
+                        4096,
+                    ) {
+                        Ok(playback) => {
+                            println!(
+                                "Playback metadata: {} frame(s), final caption {:?}, final strip {:?}.",
+                                playback.frames.len(),
+                                playback.run.state.current_caption,
+                                playback.run.state.current_strip
+                            );
+                            if let Some(first) = playback.frames.first() {
+                                println!(
+                                    "First frame: {}; command {}; title tick {}; caption {:?}.",
+                                    return_to_view_frame_kind_label(first.kind),
+                                    first.command_index,
+                                    first.elapsed_title_ticks,
+                                    first.state.current_caption
+                                );
+                            }
+                            if let Some(last) = playback.frames.last() {
+                                println!(
+                                    "Last frame: {}; command {}; title tick {}; caption {:?}.",
+                                    return_to_view_frame_kind_label(last.kind),
+                                    last.command_index,
+                                    last.elapsed_title_ticks,
+                                    last.state.current_caption
+                                );
+                            }
+                        }
+                        Err(err) => println!("Return-to-View playback metadata error: {err}"),
+                    }
                 }
                 Ok(None) => println!("{MISCMAPS_DAT_FILE} is missing; preview cannot run."),
                 Err(err) => println!("Return-to-View script error: {err}"),
@@ -251,6 +285,20 @@ fn run_return_to_view_preview(game_dir: &Path) -> io::Result<()> {
     }
     println!("The terminal harness reports the clean preview layout and returns to the menu.");
     Ok(())
+}
+
+fn return_to_view_frame_kind_label(kind: ReturnToViewFrameKind) -> &'static str {
+    match kind {
+        ReturnToViewFrameKind::PreviewTick => "preview title tick",
+        ReturnToViewFrameKind::CellEffectStep { .. } => "local cell-effect step",
+        ReturnToViewFrameKind::CellEffectFinalTick { .. } => "local cell-effect final tick",
+        ReturnToViewFrameKind::TemporaryActorDraw => "temporary actor draw",
+        ReturnToViewFrameKind::TemporaryActorDrawOverBacking => "temporary actor backing draw",
+        ReturnToViewFrameKind::FixedWipeRectangle { .. } => "fixed wipe rectangle",
+        ReturnToViewFrameKind::FixedWait { .. } => "fixed wait tick",
+        ReturnToViewFrameKind::FixedWipeTrailingTick { .. } => "fixed wipe trailing tick",
+        ReturnToViewFrameKind::MoveActorTick => "actor movement tick",
+    }
 }
 
 fn run_manual_u4_transfer(game_dir: &Path) -> io::Result<bool> {

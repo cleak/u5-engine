@@ -28,10 +28,10 @@ use u5_runtime::{
     MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap,
     PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PROMPT_TEXT_WINDOW_INDEX,
     PlayInputDisposition, PlayOptions, PlayState, PlayTarget, RTV_COMMAND_STREAM_BYTES,
-    RectColumnSweepTransition, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX,
-    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
-    STATS_PANEL_TEXT_WINDOW_INDEX, Scene, Stable, StoryRecords, TEXT_SCREEN_ROWS,
-    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
+    RectColumnSweepTransition, ReturnToViewFrameKind, SPECIAL_ITEM_OWNED_VALUE,
+    SPECIAL_ITEM_SPYGLASS_INDEX, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
+    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, Stable, StoryRecords,
+    TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
     TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
     TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
     TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
@@ -287,6 +287,7 @@ pub fn visual_frame_suite(
         VisualIntroPanel::ReturnToView {
             summary: preview.summary,
             preview_frames_rgba: preview.frames_rgba,
+            frame_metadata: preview.frame_metadata,
             preview_frame_index: 0,
             preview_width: preview.width,
             preview_height: preview.height,
@@ -1437,6 +1438,7 @@ enum VisualIntroPanel {
     ReturnToView {
         summary: String,
         preview_frames_rgba: Vec<Vec<u8>>,
+        frame_metadata: Vec<VisualReturnToViewFrameMeta>,
         preview_frame_index: usize,
         preview_width: usize,
         preview_height: usize,
@@ -1447,8 +1449,17 @@ enum VisualIntroPanel {
 struct VisualReturnToViewPreview {
     summary: String,
     frames_rgba: Vec<Vec<u8>>,
+    frame_metadata: Vec<VisualReturnToViewFrameMeta>,
     width: usize,
     height: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct VisualReturnToViewFrameMeta {
+    command_index: usize,
+    elapsed_title_ticks: u32,
+    kind: ReturnToViewFrameKind,
+    caption: Option<&'static str>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2231,6 +2242,7 @@ fn resolve_visual_intro_subflow(
             intro.panel = VisualIntroPanel::ReturnToView {
                 summary: preview.summary,
                 preview_frames_rgba: preview.frames_rgba,
+                frame_metadata: preview.frame_metadata,
                 preview_frame_index: 0,
                 preview_width: preview.width,
                 preview_height: preview.height,
@@ -2355,6 +2367,7 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
         VisualIntroPanel::ReturnToView {
             summary,
             preview_frames_rgba,
+            frame_metadata,
             preview_frame_index,
             ..
         } => {
@@ -2367,6 +2380,19 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
                     preview_frames_rgba.len()
                 )
             };
+            let frame_detail = frame_metadata
+                .get(*preview_frame_index)
+                .map(|meta| {
+                    let caption = meta.caption.unwrap_or("No active map-strip caption");
+                    format!(
+                        "{}; command {}; title tick {}; caption: {}.",
+                        visual_return_to_view_frame_kind_label(meta.kind),
+                        meta.command_index,
+                        meta.elapsed_title_ticks,
+                        caption
+                    )
+                })
+                .unwrap_or_else(|| "No playback metadata for this frame.".to_string());
             return [
                 "Return to View".to_string(),
                 String::new(),
@@ -2384,6 +2410,7 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
                 summary.clone(),
                 String::new(),
                 frame_line,
+                frame_detail,
                 "Press any key to return to the intro menu.".to_string(),
             ]
             .join("\n");
@@ -2566,6 +2593,20 @@ fn summarize_intro_story(records: &StoryRecords, step: usize) -> String {
         lines.push("Opening transition step; press any key to continue.".to_string());
     }
     lines.join("\n")
+}
+
+fn visual_return_to_view_frame_kind_label(kind: ReturnToViewFrameKind) -> &'static str {
+    match kind {
+        ReturnToViewFrameKind::PreviewTick => "Preview title tick",
+        ReturnToViewFrameKind::CellEffectStep { .. } => "Local cell-effect step",
+        ReturnToViewFrameKind::CellEffectFinalTick { .. } => "Local cell-effect final tick",
+        ReturnToViewFrameKind::TemporaryActorDraw => "Temporary actor draw",
+        ReturnToViewFrameKind::TemporaryActorDrawOverBacking => "Temporary actor backing draw",
+        ReturnToViewFrameKind::FixedWipeRectangle { .. } => "Fixed wipe rectangle",
+        ReturnToViewFrameKind::FixedWait { .. } => "Fixed wait tick",
+        ReturnToViewFrameKind::FixedWipeTrailingTick { .. } => "Fixed wipe trailing tick",
+        ReturnToViewFrameKind::MoveActorTick => "Actor movement tick",
+    }
 }
 
 fn format_story_art_line(file: &str, placement: IntroStoryArtPlacement) -> String {
@@ -3413,14 +3454,24 @@ fn visual_return_to_view_summary(
             match load_return_to_view_assets(game_dir) {
                 Ok(Some(assets)) => {
                     let script_summary = summarize_return_to_view_script(&assets.script);
-                    let playback = run_return_to_view_playback_until_restart(
+                    let playback_result = run_return_to_view_playback_until_restart(
                         &assets.strips,
                         &assets.script,
                         4096,
                     );
                     let frames = load_tile_atlas(game_dir, raster_depth).and_then(|atlas| {
-                        let playback = playback?;
-                        playback
+                        let playback = playback_result?;
+                        let metadata = playback
+                            .frames
+                            .iter()
+                            .map(|frame| VisualReturnToViewFrameMeta {
+                                command_index: frame.command_index,
+                                elapsed_title_ticks: frame.elapsed_title_ticks,
+                                kind: frame.kind,
+                                caption: frame.state.current_caption,
+                            })
+                            .collect::<Vec<_>>();
+                        let rendered_frames = playback
                             .frames
                             .iter()
                             .map(|frame| {
@@ -3430,13 +3481,14 @@ fn visual_return_to_view_summary(
                                     },
                                 )
                             })
-                            .collect::<io::Result<Vec<_>>>()
+                            .collect::<io::Result<Vec<_>>>()?;
+                        Ok((rendered_frames, metadata))
                     });
                     match (
                         summarize_return_to_view_preview(&assets.strips, &assets.script),
                         frames,
                     ) {
-                        (Ok(preview_summary), Ok(rendered_frames)) => {
+                        (Ok(preview_summary), Ok((rendered_frames, frame_metadata))) => {
                             let (width, height) = rendered_frames
                                 .first()
                                 .map(|(_, width, height)| (*width, *height))
@@ -3451,6 +3503,7 @@ fn visual_return_to_view_summary(
                                     frames_rgba.len()
                                 ),
                                 frames_rgba,
+                                frame_metadata,
                                 width,
                                 height,
                             }
@@ -6095,6 +6148,12 @@ mod tests {
             panel: VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),
                 preview_frames_rgba: vec![preview_rgba],
+                frame_metadata: vec![VisualReturnToViewFrameMeta {
+                    command_index: 6,
+                    elapsed_title_ticks: 12,
+                    kind: ReturnToViewFrameKind::PreviewTick,
+                    caption: Some("The Castle of Lord British"),
+                }],
                 preview_frame_index: 0,
                 preview_width: 2,
                 preview_height: 2,
@@ -6116,6 +6175,20 @@ mod tests {
         let mut panel = VisualIntroPanel::ReturnToView {
             summary: "Preview".to_string(),
             preview_frames_rgba: vec![vec![0x00, 0x00, 0x00, 0xff], vec![0xff, 0xff, 0xff, 0xff]],
+            frame_metadata: vec![
+                VisualReturnToViewFrameMeta {
+                    command_index: 0,
+                    elapsed_title_ticks: 1,
+                    kind: ReturnToViewFrameKind::PreviewTick,
+                    caption: Some("The Castle of Lord British"),
+                },
+                VisualReturnToViewFrameMeta {
+                    command_index: 1,
+                    elapsed_title_ticks: 2,
+                    kind: ReturnToViewFrameKind::FixedWait { tick: 0 },
+                    caption: Some("The Keep of Lord Blackthorn"),
+                },
+            ],
             preview_frame_index: 0,
             preview_width: 1,
             preview_height: 1,
@@ -6146,5 +6219,52 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn return_to_view_intro_summary_reports_current_caption_and_frame_kind() {
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_signature_progress: 0,
+            title_signature_complete: false,
+            title_tick_frame: 0,
+            message: String::new(),
+            panel: VisualIntroPanel::ReturnToView {
+                summary: "Preview".to_string(),
+                preview_frames_rgba: vec![
+                    vec![0x00, 0x00, 0x00, 0xff],
+                    vec![0xff, 0xff, 0xff, 0xff],
+                ],
+                frame_metadata: vec![
+                    VisualReturnToViewFrameMeta {
+                        command_index: 2,
+                        elapsed_title_ticks: 9,
+                        kind: ReturnToViewFrameKind::CellEffectStep { step: 4 },
+                        caption: Some("The Castle of Lord British"),
+                    },
+                    VisualReturnToViewFrameMeta {
+                        command_index: 3,
+                        elapsed_title_ticks: 10,
+                        kind: ReturnToViewFrameKind::TemporaryActorDraw,
+                        caption: Some("The Keep of Lord Blackthorn"),
+                    },
+                ],
+                preview_frame_index: 1,
+                preview_width: 1,
+                preview_height: 1,
+            },
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        let summary = summarize_intro(&mut intro);
+        assert!(summary.contains("Playback frame 2 of 2"));
+        assert!(summary.contains("Temporary actor draw"));
+        assert!(summary.contains("command 3"));
+        assert!(summary.contains("title tick 10"));
+        assert!(summary.contains("The Keep of Lord Blackthorn"));
+        let _ = fs::remove_dir_all(&intro.game_dir);
     }
 }
