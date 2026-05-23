@@ -52,7 +52,7 @@ pub fn first_dungeon_walkable(grid: &[u8], level: u8) -> Option<(usize, usize)> 
 }
 
 pub fn is_dungeon_walkable(tile: u8) -> bool {
-    !matches!(tile >> 4, 0x0b..=0x0e)
+    !matches!(tile >> 4, 0x0b..=0x0d)
 }
 
 pub fn dungeon_minimap_expands(tile: u8) -> bool {
@@ -802,7 +802,8 @@ pub const fn dungeon_fountain_effect(tile: u8) -> Option<DungeonFountainEffect> 
 
 /// `dungeon-mode.md §6` first-person renderer wall-class predicate.
 /// The renderer paints a wall cue when the high nibble identifies a
-/// wall class (`0xB..=0xE`) or the `0xF?` room-trigger threshold.
+/// wall or door-presentation class (`0xB..=0xE`) or the `0xF?`
+/// room-trigger threshold.
 /// Open passages and the other low-nibble classes paint as void/floor
 /// instead. `0xF?` cells remain walkable gameplay triggers; the wall
 /// cue is a first-person presentation choice, not a movement blocker.
@@ -980,6 +981,7 @@ pub enum DungeonCellClass {
     EnergyFieldSecondary,
     RoomHelperState,
     Wall,
+    HeavyDoorVariant,
     RoomTrigger,
 }
 
@@ -1267,7 +1269,8 @@ pub const fn dungeon_cell_class_of(tile: u8) -> DungeonCellClass {
         0x8 => DungeonCellClass::EnergyField,
         0x9 => DungeonCellClass::EnergyFieldSecondary,
         0xA => DungeonCellClass::RoomHelperState,
-        0xB..=0xE => DungeonCellClass::Wall,
+        0xB..=0xD => DungeonCellClass::Wall,
+        0xE => DungeonCellClass::HeavyDoorVariant,
         // 0xF and any (impossible) higher value
         _ => DungeonCellClass::RoomTrigger,
     }
@@ -1275,7 +1278,8 @@ pub const fn dungeon_cell_class_of(tile: u8) -> DungeonCellClass {
 
 impl DungeonCellClass {
     /// `dungeon-mode.md §3`: solid-blocker wall classes (high nibble
-    /// `0xB..=0xE`). The renderer's wall checks branch on this.
+    /// `0xB..=0xD`). `0xE?` remains a separate door-presentation
+    /// variant per public issue #1.
     pub const fn is_wall(self) -> bool {
         matches!(self, DungeonCellClass::Wall)
     }
@@ -1312,7 +1316,8 @@ pub fn dungeon_cell_class(tile: u8) -> &'static str {
         0x7 => "passage variant",
         0x8 | 0x9 => "energy field",
         0xA => "room-helper state",
-        0xB..=0xE => "wall",
+        0xB..=0xD => "wall",
+        0xE => "heavy-door variant",
         0xF => "room trigger",
         _ => "unknown",
     }
@@ -1336,7 +1341,8 @@ pub fn dungeon_look_description(tile: u8) -> &'static str {
             0x7 => "passage",
             0x8 | 0x9 => "an energy field",
             0xA => "a cleared room trigger",
-            0xB..=0xE => "a wall",
+            0xB..=0xD => "a wall",
+            0xE => "a heavy-door variant",
             0xF => "a room trigger",
             _ => "unknown dungeon cell",
         },
@@ -1357,7 +1363,8 @@ pub fn dungeon_search_description(tile: u8) -> &'static str {
         0x6 => "a pit or trap",
         0x7 => "a passage",
         0xA => "a cleared room trigger",
-        0xB..=0xE => "a wall",
+        0xB..=0xD => "a wall",
+        0xE => "a heavy-door variant",
         0xF => "a room trigger",
         _ => "an unknown dungeon cell",
     }

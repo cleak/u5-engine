@@ -36,7 +36,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-23 with 134 scripted route cases (including expanded active-shop/modal
+  2026-05-23 with 135 scripted route cases (including expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
@@ -62,7 +62,7 @@ Last known verification state:
   H-Hole-up rest in Britannia (`8d7e6e0336279317`) and a dungeon
   (`22ccb05a46f3140e`), Underworld startup, debug-entered town return to world,
   Underworld-to-town debug entry, ship X-it/skiff launch, hoisted-sail movement,
-  dungeon turn/block movement, dungeon exit confirmation/refusal, a Doom room
+  dungeon turn/block movement, public #1 `0xE?` heavy-door stepping, dungeon exit confirmation/refusal, a Doom room
   trigger that enters a combat raster viewport, dungeon Attack/Search/Get/
   Jimmy/Open/refusal command routing, and combat pass, active-player digit
   selection/clear, raw Escape abort (`54a47033c570623a`), Ctrl-S music toggle
@@ -126,7 +126,7 @@ Last known verification state:
   `a52f8c3db8e33102`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-23 and
-  wrote 81 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 83 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -149,7 +149,9 @@ Last known verification state:
   `route-dungeon-movement-search-00-initial` `67e7e116d8be67aa`,
   `route-dungeon-movement-search-01-w` `5be54e4dfc5e923f`,
   `route-dungeon-movement-search-02-a` `55d65ca1a5c74e9f`, and
-  `route-dungeon-movement-search-03-s6` `fbcbfb63d205e997`,
+  `route-dungeon-movement-search-03-s6` `fbcbfb63d205e997`, public #1
+  `route-dungeon-heavy-door-variant-step-00-initial` `129a8d9f74bf37a2`
+  and `route-dungeon-heavy-door-variant-step-01-idle` `98d0b825772837af`,
   `route-dungeon-ignite-torch-00-initial` `29289813c0f0397c`, and
   `route-dungeon-ignite-torch-01-i` `462ca23693fa9e2a`,
   `route-dungeon-exit-refusal-00-initial` `67e7e116d8be67aa`,
@@ -754,10 +756,11 @@ as public details become available.
     `DUNGEON.CBT`, and creates exactly one initial monster at the central-front
     placement.
 - Dungeon `0xF?` cells now follow the latest public issue #1 correction as
-    room triggers; dungeon Open and Jimmy no longer mutate `0xF?` trigger cells
-    or `0xE?` visual wall cells, stale `dungeon_doors.tsv` files are ignored,
-    and dungeon Open now uses the public underfoot `0x7?` "Chest opened" /
-    default "What?" messages.
+    room triggers, and `0xE?` cells are kept as walkable door-presentation /
+    runtime wall-search variants instead of ordinary wall blockers. Dungeon
+    Open and Jimmy no longer mutate `0xE?`, `0xF?`, or `0xA?` cells, stale
+    `dungeon_doors.tsv` files are ignored, and dungeon Open now uses the public
+    underfoot `0x7?` "Chest opened" / default "What?" messages.
   - Terrain combat now uses the public issue #3 combat-class stat-field spawn
     count plus `BRIT.CBT` record placement metadata, clamps requested counts
     above the slot table instead of reproducing the original out-of-bounds edge,

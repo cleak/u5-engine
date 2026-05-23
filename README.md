@@ -642,7 +642,7 @@ exact class is still open.
 
 Dungeon heavy-door silhouettes are now native packed-cell behavior rather than
 sidecar metadata. Public dungeon-mode rules classify `0xE?` cells as
-non-walkable visual wall/door variants, `0xF?` cells as walkable room triggers,
+walkable visual wall/door variants, `0xF?` cells as walkable room triggers,
 and `0xA?` cells as visit-local room-helper state. `O` and `J` act only on
 underfoot chest classes (`0x4?` and already-open `0x7?` variants); they do not
 rewrite `0xE?`, `0xF?`, or `0xA?` cells.

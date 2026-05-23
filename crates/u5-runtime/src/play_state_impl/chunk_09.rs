@@ -2714,7 +2714,10 @@ fn dungeon_palette_index(depth: TileGraphicsDepth, ega_index: u8) -> u8 {
 fn dungeon_first_person_blocks(tile: u8) -> bool {
     matches!(
         dungeon_cell_class_of(tile),
-        DungeonCellClass::RoomHelperState | DungeonCellClass::Wall | DungeonCellClass::RoomTrigger
+        DungeonCellClass::RoomHelperState
+            | DungeonCellClass::Wall
+            | DungeonCellClass::HeavyDoorVariant
+            | DungeonCellClass::RoomTrigger
     )
 }
 
@@ -2727,7 +2730,9 @@ fn dungeon_first_person_feature_colour(tile: u8) -> Option<u8> {
         DungeonCellClass::Fountain => 11,
         DungeonCellClass::PitTrap => 8,
         DungeonCellClass::EnergyField | DungeonCellClass::EnergyFieldSecondary => 12,
-        DungeonCellClass::RoomHelperState | DungeonCellClass::RoomTrigger => 14,
+        DungeonCellClass::RoomHelperState
+        | DungeonCellClass::HeavyDoorVariant
+        | DungeonCellClass::RoomTrigger => 14,
         DungeonCellClass::Passage | DungeonCellClass::PassageVariant | DungeonCellClass::Wall => {
             return None;
         }
@@ -2779,7 +2784,9 @@ fn draw_dungeon_side_cell(
         DungeonCellClass::Passage | DungeonCellClass::PassageVariant => {
             draw_side_flat_marker(viewport, outer, inner, side, dim);
         }
-        DungeonCellClass::RoomHelperState | DungeonCellClass::RoomTrigger => {
+        DungeonCellClass::RoomHelperState
+        | DungeonCellClass::HeavyDoorVariant
+        | DungeonCellClass::RoomTrigger => {
             draw_side_wall(viewport, outer, inner, side, wall_fill, bright);
             draw_side_door_marker(viewport, outer, inner, side, bright);
         }

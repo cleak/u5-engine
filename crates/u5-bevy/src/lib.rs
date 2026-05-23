@@ -36,8 +36,9 @@ use u5_runtime::{
     TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
     TOWN_POISON_GAS_LIVE_TILE, TextWindowSystem, TileAtlas, TileGraphicsDepth, TitleBitAsset,
     TitleBitImages, TitleBitPlacement, TransportState, U4TransferOverrides, U4TransferSource,
-    WorldPlane, commit_chargen_save, commit_u4_transfer_save, handle_play_key_input, hash_bytes,
-    input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
+    WorldPlane, commit_chargen_save, commit_u4_transfer_save, dungeon_cell_index,
+    handle_play_key_input, hash_bytes, input_case_fold, input_function_key_code,
+    input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -681,6 +682,18 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-dungeon-heavy-door-variant-step",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["."],
+            configure: Some(seed_visual_route_dungeon_heavy_door_variant),
+        },
+        VisualRouteSuiteCase {
             label: "route-dungeon-ignite-torch",
             frame_kind: "visual route dungeon frame",
             options: PlayOptions {
@@ -1024,6 +1037,18 @@ fn seed_visual_route_sage_paid(state: &mut PlayState) {
 fn seed_visual_route_sage_short_funds(state: &mut PlayState) {
     state.gold = 49;
     state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+}
+
+fn seed_visual_route_dungeon_heavy_door_variant(state: &mut PlayState) {
+    state.player.x = 1;
+    state.player.y = 1;
+    state.player.facing = Direction::East;
+    let target = dungeon_cell_index(0, 2, 1);
+    if let Some(cell) = state.grid.get_mut(target) {
+        *cell = 0xE0;
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
 }
 
 fn stamp_visual_route_look_tile(state: &mut PlayState, tile: u8) {
@@ -4725,7 +4750,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 30);
+        assert_eq!(cases.len(), 31);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -4771,6 +4796,11 @@ mod tests {
             cases
                 .iter()
                 .any(|case| case.label == "route-dungeon-movement-search")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-dungeon-heavy-door-variant-step")
         );
         assert!(
             cases
@@ -4912,7 +4942,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 81);
+        assert_eq!(reports.len(), 83);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -4930,6 +4960,7 @@ mod tests {
         assert!(manifest.contains("route-world-board-horse-01-b"));
         assert!(manifest.contains("route-ship-broadside-fire-01-f6"));
         assert!(manifest.contains("route-dungeon-movement-search-03-s6"));
+        assert!(manifest.contains("route-dungeon-heavy-door-variant-step-01-idle"));
         assert!(manifest.contains("route-dungeon-ignite-torch-01-i"));
         assert!(manifest.contains("route-dungeon-exit-refusal-02-n"));
         assert!(manifest.contains("route-shop-sage-topic-miss-01-mantra"));

@@ -56,7 +56,7 @@ audit:
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 56 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 134 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 135 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
@@ -78,7 +78,7 @@ audit:
 - `cargo run -- --save-frame-suite target\audit-frame-suite C:\Games\U5-Clean`
   — 13 PNGs, every frame nonblank with stable hashes.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 81 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 83 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including horse-trader
   purchases and Doom combat entry, pass, attack, refusal, Z-stats, and
   Search-prompt routes.
@@ -381,7 +381,8 @@ remaining response-needed items:
 - `cleak/u5-spec#3`: publish the exact skiff/pirate-ship special selector
   byte/range and whether the selector inspects active-object type, tile, or both.
 - `cleak/u5-spec#1`: reconcile stale `systems/dungeon-mode.md` cleared-room
-  `0xE?` wording with the authoritative `0xA?` room-helper answer.
+  `0xE?` wording with the authoritative `0xA?` room-helper answer and
+  `0xE?` forward-movement issue answer. The engine follows the issue comments.
 
 These spec-sync contradictions do not currently change engine behavior; the
 engine follows the latest public issue answers where checked-in prose lags.

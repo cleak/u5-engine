@@ -5783,17 +5783,19 @@ fn dungeon_minimap_glyph_matches_published_class_table() {
 #[test]
 fn dungeon_walkability_matches_room_trigger_class_table() {
     // Public issue #1 / dungeon-mode.md: 0xA? helper cells and
-    // 0xF? room-trigger cells are walkable; 0xE? is a solid
-    // decorative heavy-door wall.
+    // 0xF? room-trigger cells are walkable. The later public #1
+    // correction limits the ordinary movement blocker band to
+    // 0xB?..=0xD?, leaving 0xE? to door-presentation/runtime
+    // wall-search dispatch instead of the forward-move rejection.
     assert!(is_dungeon_walkable(0x00));
     assert!(is_dungeon_walkable(0xA0));
     assert!(is_dungeon_walkable(0xAF));
+    assert!(is_dungeon_walkable(0xE0));
+    assert!(is_dungeon_walkable(0xEF));
     assert!(is_dungeon_walkable(0xF0));
     assert!(is_dungeon_walkable(0xFF));
     assert!(!is_dungeon_walkable(0xB0));
     assert!(!is_dungeon_walkable(0xD0));
-    assert!(!is_dungeon_walkable(0xE0));
-    assert!(!is_dungeon_walkable(0xEF));
 }
 
 #[test]
@@ -6495,8 +6497,8 @@ fn dungeon_movement_action_maps_published_numpad_directions() {
 #[test]
 fn dungeon_renderer_paints_wall_cue_for_published_classes() {
     // dungeon-mode.md §6: the first-person renderer paints a
-    // wall cue for cells whose high nibble identifies a wall
-    // class (0xB..=0xE) or the 0xF? heavy-door / room-trigger
+    // wall cue for cells whose high nibble identifies a wall or
+    // door-presentation class (0xB..=0xE) or the 0xF? room-trigger
     // family. Open passages and other low classes paint as void.
     for tile in 0x00u8..=0xAF {
         assert!(
@@ -17610,12 +17612,15 @@ fn dungeon_cell_class_of_matches_high_nibble_table() {
         dungeon_cell_class_of(0xA0),
         DungeonCellClass::RoomHelperState
     );
-    for high in 0xB..=0xE {
+    for high in 0xB..=0xD {
         assert_eq!(dungeon_cell_class_of(high << 4), DungeonCellClass::Wall);
     }
+    assert_eq!(dungeon_cell_class_of(0xE0), DungeonCellClass::HeavyDoorVariant);
+    assert_eq!(dungeon_cell_class_of(0xEF), DungeonCellClass::HeavyDoorVariant);
     assert_eq!(dungeon_cell_class_of(0xF0), DungeonCellClass::RoomTrigger);
     // Convenience predicates
     assert!(DungeonCellClass::Wall.is_wall());
+    assert!(!DungeonCellClass::HeavyDoorVariant.is_wall());
     assert!(!DungeonCellClass::Passage.is_wall());
     assert!(DungeonCellClass::UpLadder.is_ladder());
     assert!(DungeonCellClass::DownLadder.is_ladder());
@@ -17624,6 +17629,7 @@ fn dungeon_cell_class_of_matches_high_nibble_table() {
     assert!(DungeonCellClass::Passage.is_passage_like());
     assert!(DungeonCellClass::PassageVariant.is_passage_like());
     assert!(!DungeonCellClass::Wall.is_passage_like());
+    assert!(!DungeonCellClass::HeavyDoorVariant.is_passage_like());
 }
 
 #[test]
@@ -20310,6 +20316,20 @@ fn dungeon_period_forward_respects_wall_blocking() {
     assert_eq!((state.player.x, state.player.y), (1, 1));
     assert_eq!(state.turn, 0);
     assert_eq!(state.message, "Blocked!");
+}
+
+#[test]
+fn dungeon_period_forward_allows_heavy_door_variant_cell() {
+    let mut grid = open_dungeon_record();
+    grid[dungeon_cell_index(0, 2, 1)] = 0xe0;
+    let mut state = dungeon_state(grid, 0, 1, 1);
+    state.player.facing = Direction::East;
+
+    assert!(state.handle_dungeon_key('.', Path::new("")).unwrap());
+
+    assert_eq!((state.player.x, state.player.y), (2, 1));
+    assert_eq!(state.turn, 1);
+    assert!(state.message.contains("underfoot heavy-door variant"));
 }
 
 #[test]

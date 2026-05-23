@@ -1194,6 +1194,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "dungeon first-person viewport",
         },
         RouteSmokeCase {
+            name: "dungeon-heavy-door-variant-step",
+            options: dungeon_options.clone(),
+            script: &["."],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 1,
+            expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
             name: "dungeon-ladder-down-up-route",
             options: dungeon_options.clone(),
             script: &[">", "<"],
@@ -1795,6 +1803,17 @@ fn apply_route_smoke_case_setup(
             if let Some(cell) = state.grid.get_mut(below) {
                 *cell = 0x30;
             }
+            state.mark_visibility_dirty();
+        }
+        "dungeon-heavy-door-variant-step" => {
+            state.player.x = 1;
+            state.player.y = 1;
+            state.player.facing = Direction::East;
+            let target = dungeon_cell_index(0, 2, 1);
+            if let Some(cell) = state.grid.get_mut(target) {
+                *cell = 0xE0;
+            }
+            state.sync_player_object();
             state.mark_visibility_dirty();
         }
         "dungeon-surface-exit-return-world" => {
@@ -2537,6 +2556,17 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             if state.current_floor() != Some(0) || !state.message.contains("level 0") {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete the down/up ladder chain"
+                )));
+            }
+        }
+        "dungeon-heavy-door-variant-step" => {
+            if state.player.x != 2
+                || state.player.y != 1
+                || state.turn != 1
+                || !state.message.contains("underfoot heavy-door variant")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not allow the public #1 0xE? step"
                 )));
             }
         }
