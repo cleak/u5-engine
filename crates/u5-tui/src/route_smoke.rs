@@ -1194,11 +1194,11 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "dungeon first-person viewport",
         },
         RouteSmokeCase {
-            name: "dungeon-heavy-door-variant-step",
+            name: "dungeon-heavy-door-variant-block",
             options: dungeon_options.clone(),
             script: &["."],
             expected: RouteSmokeExpectation::Dungeon(dungeon),
-            min_turn: 1,
+            min_turn: 0,
             expected_frame_kind: "dungeon first-person viewport",
         },
         RouteSmokeCase {
@@ -1805,7 +1805,7 @@ fn apply_route_smoke_case_setup(
             }
             state.mark_visibility_dirty();
         }
-        "dungeon-heavy-door-variant-step" => {
+        "dungeon-heavy-door-variant-block" => {
             state.player.x = 1;
             state.player.y = 1;
             state.player.facing = Direction::East;
@@ -2559,14 +2559,14 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                 )));
             }
         }
-        "dungeon-heavy-door-variant-step" => {
-            if state.player.x != 2
+        "dungeon-heavy-door-variant-block" => {
+            if state.player.x != 1
                 || state.player.y != 1
-                || state.turn != 1
-                || !state.message.contains("underfoot heavy-door variant")
+                || state.turn != 0
+                || state.message != "Blocked!"
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not allow the public #1 0xE? step"
+                    "route smoke `{case_name}` did not block the public 0xE? heavy-door variant"
                 )));
             }
         }

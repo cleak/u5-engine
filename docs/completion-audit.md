@@ -380,9 +380,10 @@ remaining response-needed items:
   or defer exact local cell-effect rasters.
 - `cleak/u5-spec#3`: publish the exact skiff/pirate-ship special selector
   byte/range and whether the selector inspects active-object type, tile, or both.
-- `cleak/u5-spec#1`: reconcile stale `systems/dungeon-mode.md` cleared-room
-  `0xE?` wording with the authoritative `0xA?` room-helper answer and
-  `0xE?` forward-movement issue answer. The engine follows the issue comments.
+- `cleak/u5-spec#1`: the checked-in spec now names `0xF?` as the walkable
+  room-trigger family, `0xA?` as navigable room-helper state, and `0xE?` as a
+  non-walkable heavy-door presentation variant. The engine follows that current
+  public spec.
 
 These spec-sync contradictions do not currently change engine behavior; the
 engine follows the latest public issue answers where checked-in prose lags.

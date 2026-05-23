@@ -5783,19 +5783,18 @@ fn dungeon_minimap_glyph_matches_published_class_table() {
 #[test]
 fn dungeon_walkability_matches_room_trigger_class_table() {
     // Public issue #1 / dungeon-mode.md: 0xA? helper cells and
-    // 0xF? room-trigger cells are walkable. The later public #1
-    // correction limits the ordinary movement blocker band to
-    // 0xB?..=0xD?, leaving 0xE? to door-presentation/runtime
-    // wall-search dispatch instead of the forward-move rejection.
+    // 0xF? room-trigger cells are walkable. Current dungeon-mode
+    // prose keeps 0xE? as a decorative heavy-door blocker rather
+    // than a cell the party can stand on.
     assert!(is_dungeon_walkable(0x00));
     assert!(is_dungeon_walkable(0xA0));
     assert!(is_dungeon_walkable(0xAF));
-    assert!(is_dungeon_walkable(0xE0));
-    assert!(is_dungeon_walkable(0xEF));
     assert!(is_dungeon_walkable(0xF0));
     assert!(is_dungeon_walkable(0xFF));
     assert!(!is_dungeon_walkable(0xB0));
     assert!(!is_dungeon_walkable(0xD0));
+    assert!(!is_dungeon_walkable(0xE0));
+    assert!(!is_dungeon_walkable(0xEF));
 }
 
 #[test]
@@ -17620,7 +17619,7 @@ fn dungeon_cell_class_of_matches_high_nibble_table() {
     assert_eq!(dungeon_cell_class_of(0xF0), DungeonCellClass::RoomTrigger);
     // Convenience predicates
     assert!(DungeonCellClass::Wall.is_wall());
-    assert!(!DungeonCellClass::HeavyDoorVariant.is_wall());
+    assert!(DungeonCellClass::HeavyDoorVariant.is_wall());
     assert!(!DungeonCellClass::Passage.is_wall());
     assert!(DungeonCellClass::UpLadder.is_ladder());
     assert!(DungeonCellClass::DownLadder.is_ladder());
@@ -20319,7 +20318,7 @@ fn dungeon_period_forward_respects_wall_blocking() {
 }
 
 #[test]
-fn dungeon_period_forward_allows_heavy_door_variant_cell() {
+fn dungeon_period_forward_blocks_heavy_door_variant_cell() {
     let mut grid = open_dungeon_record();
     grid[dungeon_cell_index(0, 2, 1)] = 0xe0;
     let mut state = dungeon_state(grid, 0, 1, 1);
@@ -20327,9 +20326,9 @@ fn dungeon_period_forward_allows_heavy_door_variant_cell() {
 
     assert!(state.handle_dungeon_key('.', Path::new("")).unwrap());
 
-    assert_eq!((state.player.x, state.player.y), (2, 1));
-    assert_eq!(state.turn, 1);
-    assert!(state.message.contains("underfoot heavy-door variant"));
+    assert_eq!((state.player.x, state.player.y), (1, 1));
+    assert_eq!(state.turn, 0);
+    assert_eq!(state.message, "Blocked!");
 }
 
 #[test]

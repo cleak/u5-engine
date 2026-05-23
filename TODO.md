@@ -62,7 +62,7 @@ Last known verification state:
   H-Hole-up rest in Britannia (`8d7e6e0336279317`) and a dungeon
   (`22ccb05a46f3140e`), Underworld startup, debug-entered town return to world,
   Underworld-to-town debug entry, ship X-it/skiff launch, hoisted-sail movement,
-  dungeon turn/block movement, public #1 `0xE?` heavy-door stepping, dungeon exit confirmation/refusal, a Doom room
+  dungeon turn/block movement, public `0xE?` heavy-door blocking, dungeon exit confirmation/refusal, a Doom room
   trigger that enters a combat raster viewport, dungeon Attack/Search/Get/
   Jimmy/Open/refusal command routing, and combat pass, active-player digit
   selection/clear, raw Escape abort (`54a47033c570623a`), Ctrl-S music toggle
@@ -150,8 +150,8 @@ Last known verification state:
   `route-dungeon-movement-search-01-w` `5be54e4dfc5e923f`,
   `route-dungeon-movement-search-02-a` `55d65ca1a5c74e9f`, and
   `route-dungeon-movement-search-03-s6` `fbcbfb63d205e997`, public #1
-  `route-dungeon-heavy-door-variant-step-00-initial` `129a8d9f74bf37a2`
-  and `route-dungeon-heavy-door-variant-step-01-idle` `98d0b825772837af`,
+  `route-dungeon-heavy-door-variant-block-00-initial` and
+  `route-dungeon-heavy-door-variant-block-01-idle`,
   `route-dungeon-ignite-torch-00-initial` `29289813c0f0397c`, and
   `route-dungeon-ignite-torch-01-i` `462ca23693fa9e2a`,
   `route-dungeon-exit-refusal-00-initial` `67e7e116d8be67aa`,
@@ -755,10 +755,11 @@ as public details become available.
     ambush framer path, builds a stock-floor 11-by-11 arena without loading
     `DUNGEON.CBT`, and creates exactly one initial monster at the central-front
     placement.
-- Dungeon `0xF?` cells now follow the latest public issue #1 correction as
-    room triggers, and `0xE?` cells are kept as walkable door-presentation /
-    runtime wall-search variants instead of ordinary wall blockers. Dungeon
-    Open and Jimmy no longer mutate `0xE?`, `0xF?`, or `0xA?` cells, stale
+- Dungeon `0xF?` cells now follow the latest public dungeon-mode contract as
+    walkable room triggers, `0xA?` cells remain navigable room-helper state,
+    and `0xE?` heavy-door variants block forward movement while retaining
+    their door presentation. Dungeon Open and Jimmy no longer mutate `0xE?`,
+    `0xF?`, or `0xA?` cells, stale
     `dungeon_doors.tsv` files are ignored, and dungeon Open now uses the public
     underfoot `0x7?` "Chest opened" / default "What?" messages.
   - Terrain combat now uses the public issue #3 combat-class stat-field spawn

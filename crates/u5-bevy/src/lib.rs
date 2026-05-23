@@ -682,7 +682,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
-            label: "route-dungeon-heavy-door-variant-step",
+            label: "route-dungeon-heavy-door-variant-block",
             frame_kind: "visual route dungeon frame",
             options: PlayOptions {
                 target: PlayTarget::Dungeon(dungeon),
@@ -4800,7 +4800,7 @@ mod tests {
         assert!(
             cases
                 .iter()
-                .any(|case| case.label == "route-dungeon-heavy-door-variant-step")
+                .any(|case| case.label == "route-dungeon-heavy-door-variant-block")
         );
         assert!(
             cases
@@ -4960,7 +4960,7 @@ mod tests {
         assert!(manifest.contains("route-world-board-horse-01-b"));
         assert!(manifest.contains("route-ship-broadside-fire-01-f6"));
         assert!(manifest.contains("route-dungeon-movement-search-03-s6"));
-        assert!(manifest.contains("route-dungeon-heavy-door-variant-step-01-idle"));
+        assert!(manifest.contains("route-dungeon-heavy-door-variant-block-01-idle"));
         assert!(manifest.contains("route-dungeon-ignite-torch-01-i"));
         assert!(manifest.contains("route-dungeon-exit-refusal-02-n"));
         assert!(manifest.contains("route-shop-sage-topic-miss-01-mantra"));

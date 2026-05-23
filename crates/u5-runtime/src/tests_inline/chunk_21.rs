@@ -96,7 +96,7 @@
     }
 
     #[test]
-    fn dungeon_e_cells_are_walkable_visual_variants_not_openable_doors() {
+    fn dungeon_e_cells_are_blocking_visual_variants_not_openable_doors() {
         let mut open_grid = open_dungeon_record();
         open_grid[dungeon_cell_index(0, 1, 1)] = 0xe2;
         let mut open_state = dungeon_state(open_grid, 0, 1, 1);
@@ -123,10 +123,10 @@
         let mut step_grid = open_dungeon_record();
         step_grid[dungeon_cell_index(0, 2, 1)] = 0xe2;
         let mut step_state = dungeon_state(step_grid, 0, 1, 1);
-        assert_eq!(step_state.step(Direction::East), MoveOutcome::Moved);
-        assert_eq!((step_state.player.x, step_state.player.y), (2, 1));
-        assert_eq!(step_state.turn, 1);
-        assert!(step_state.message.contains("underfoot heavy-door variant"));
+        assert_eq!(step_state.step(Direction::East), MoveOutcome::Blocked);
+        assert_eq!((step_state.player.x, step_state.player.y), (1, 1));
+        assert_eq!(step_state.turn, 0);
+        assert_eq!(step_state.message, "Blocked!");
     }
 
     #[test]
