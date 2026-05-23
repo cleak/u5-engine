@@ -6,9 +6,12 @@ use std::path::Path;
 use crate::*;
 
 pub fn load_play_options_from_save(game_dir: &Path) -> io::Result<PlayOptions> {
+    let bytes = read_save_image_file(&game_dir.join(SAVED_GAM_FILENAME), SAVED_GAM_FILENAME)?;
+    let needs_underworld_disk_swap =
+        save_load_needs_underworld_disk_swap(bytes[SAVE_SCENE_OFFSET], bytes[SAVE_Z_OFFSET]);
     let mut options =
-        load_play_options_from_save_file(game_dir, SAVED_GAM_FILENAME, "--from-save", true)?;
-    refresh_saved_ool_mirrors_for_load(game_dir)?;
+        play_options_from_save_bytes_named(&bytes, SAVED_GAM_FILENAME, "--from-save", true)?;
+    refresh_saved_ool_mirrors_for_load(game_dir, needs_underworld_disk_swap)?;
     load_world_progress_state(game_dir)?.apply_sidecar_only_to_play_options(&mut options);
     options.blackthorn_story = load_blackthorn_story_state(game_dir)?;
     options.save_template_source = SaveTemplateSource::SavedGame;
@@ -52,7 +55,7 @@ pub fn load_save_image_template(
 }
 
 pub fn read_save_image_file(path: &Path, file_name: &str) -> io::Result<Vec<u8>> {
-    let bytes = read(path)?;
+    let bytes = read_disk_file(path)?;
     if bytes.len() != SAVED_GAM_LEN {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -71,7 +74,7 @@ pub fn load_play_options_from_save_file(
     option_name: &str,
     include_active_objects: bool,
 ) -> io::Result<PlayOptions> {
-    let bytes = read(&game_dir.join(file_name))?;
+    let bytes = read_save_image_file(&game_dir.join(file_name), file_name)?;
     play_options_from_save_bytes_named(&bytes, file_name, option_name, include_active_objects)
 }
 

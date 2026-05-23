@@ -554,7 +554,9 @@ first-playable session without losing supported state.
   - Save/load, chargen, and U4 transfer save-pair reads/writes now route
     through the shared `disk_io` wrapper; tests cover zero-byte retry,
     nonzero short-read/short-write success, write-handler phase restoration,
-    and fast failure in the modern single-directory path.
+    save-image/`SAVED.OOL` zero-byte failures, the load-time underworld
+    mirror re-flush branch, the save-time entry-mode-gated extra
+    `UNDER.OOL` write, and fast failure in the modern single-directory path.
   - Original binary content/resource loaders for CBT, END/ENDMSG, MISCMAPS,
     MISCMSG, QUESTION, SIGNS, STORY, SHOPPE, fonts, PTH, and KARMAS now use
     the same disk I/O wrapper; optional clean TSV sidecars remain direct

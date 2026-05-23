@@ -4701,6 +4701,70 @@ fn disk_single_directory_policy_fails_fast_on_zero_byte_io() {
 }
 
 #[test]
+fn save_image_and_saved_ool_reads_use_disk_zero_byte_contract() {
+    let dir = debug_game_dir();
+    fs::write(dir.join(SAVED_GAM_FILENAME), Vec::<u8>::new()).unwrap();
+    fs::write(dir.join(SAVED_OOL_FILENAME), Vec::<u8>::new()).unwrap();
+
+    let save_err = read_save_image_file(&dir.join(SAVED_GAM_FILENAME), SAVED_GAM_FILENAME)
+        .err()
+        .unwrap();
+    let ool_err = read_saved_ool_bytes(&dir).err().unwrap();
+
+    assert_eq!(save_err.kind(), io::ErrorKind::UnexpectedEof);
+    assert_eq!(ool_err.kind(), io::ErrorKind::UnexpectedEof);
+    assert!(save_err.to_string().contains("zero-byte disk read"));
+    assert!(ool_err.to_string().contains("zero-byte disk read"));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn saved_ool_mirror_write_counts_capture_load_and_save_extra_underworld_writes() {
+    let dir = debug_game_dir();
+    let mut saved_ool = vec![0; SAVED_OOL_LEN];
+    saved_ool[..OOL_PLANE_LEN].fill(0x11);
+    saved_ool[OOL_PLANE_LEN..].fill(0x22);
+
+    assert_eq!(
+        write_saved_ool_mirrors_for_load(&dir, &saved_ool, false).unwrap(),
+        SavedOolMirrorWriteCounts {
+            brit_ool: 1,
+            under_ool: 1,
+        }
+    );
+    assert_eq!(
+        write_saved_ool_mirrors_for_load(&dir, &saved_ool, true).unwrap(),
+        SavedOolMirrorWriteCounts {
+            brit_ool: 1,
+            under_ool: 2,
+        }
+    );
+    assert_eq!(
+        write_saved_ool_mirrors_for_save(&dir, &saved_ool, DISK_PROMPT_MODE_CANONICAL).unwrap(),
+        SavedOolMirrorWriteCounts {
+            brit_ool: 1,
+            under_ool: 1,
+        }
+    );
+    assert_eq!(
+        write_saved_ool_mirrors_for_save(&dir, &saved_ool, 0).unwrap(),
+        SavedOolMirrorWriteCounts {
+            brit_ool: 1,
+            under_ool: 2,
+        }
+    );
+    assert_eq!(
+        fs::read(dir.join(BRIT_OOL_FILENAME)).unwrap(),
+        vec![0x11; OOL_PLANE_LEN]
+    );
+    assert_eq!(
+        fs::read(dir.join(UNDER_OOL_FILENAME)).unwrap(),
+        vec![0x22; OOL_PLANE_LEN]
+    );
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn active_object_eviction_phase_class_ranges_match_spec() {
     // active-objects.md §4: the eviction cascade names four class
     // ranges paired across phases 2..=5 (off-screen) and 6..=9

@@ -45,6 +45,15 @@ impl PlayState {
         game_dir: &Path,
         confirm: Option<bool>,
     ) -> io::Result<MoveOutcome> {
+        self.save_game_command_with_entry_disk_prompt_mode(game_dir, confirm, 0)
+    }
+
+    pub fn save_game_command_with_entry_disk_prompt_mode(
+        &mut self,
+        game_dir: &Path,
+        confirm: Option<bool>,
+        entry_disk_prompt_mode: u8,
+    ) -> io::Result<MoveOutcome> {
         match confirm {
             None => {
                 self.message = "Save game? Use QY to save or QN to cancel.".to_string();
@@ -55,7 +64,10 @@ impl PlayState {
                 Ok(MoveOutcome::PromptDeclined)
             }
             Some(true) => {
-                self.write_save_files(game_dir)?;
+                self.write_save_files_with_entry_disk_prompt_mode(
+                    game_dir,
+                    entry_disk_prompt_mode,
+                )?;
                 self.message = "Yes. Saving... Done.".to_string();
                 Ok(MoveOutcome::Saved)
             }
@@ -63,6 +75,14 @@ impl PlayState {
     }
 
     pub fn write_save_files(&mut self, game_dir: &Path) -> io::Result<()> {
+        self.write_save_files_with_entry_disk_prompt_mode(game_dir, 0)
+    }
+
+    pub fn write_save_files_with_entry_disk_prompt_mode(
+        &mut self,
+        game_dir: &Path,
+        entry_disk_prompt_mode: u8,
+    ) -> io::Result<()> {
         let (scene, z, x, y) = self.current_save_location().ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -192,7 +212,7 @@ impl PlayState {
             .copy_from_slice(&active_table);
 
         let saved_ool = self.encode_saved_ool(game_dir)?;
-        write_saved_ool_mirrors_for_save(game_dir, &saved_ool, 0)?;
+        write_saved_ool_mirrors_for_save(game_dir, &saved_ool, entry_disk_prompt_mode)?;
         write_disk_file(&game_dir.join(SAVED_GAM_FILENAME), save)?;
         write_disk_file(&game_dir.join(SAVED_OOL_FILENAME), saved_ool)?;
         write_blackthorn_story_state(game_dir, self.blackthorn_story)?;

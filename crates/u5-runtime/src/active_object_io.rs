@@ -395,9 +395,35 @@ pub const fn active_object_eviction_phase(byte0: u8, off_screen: bool) -> Option
     }
 }
 
-pub fn refresh_saved_ool_mirrors_for_load(game_dir: &Path) -> io::Result<()> {
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SavedOolMirrorWriteCounts {
+    pub brit_ool: usize,
+    pub under_ool: usize,
+}
+
+pub fn refresh_saved_ool_mirrors_for_load(
+    game_dir: &Path,
+    needs_underworld_disk_swap: bool,
+) -> io::Result<SavedOolMirrorWriteCounts> {
     let bytes = read_saved_ool_bytes(game_dir)?;
-    write_saved_ool_mirrors(game_dir, &bytes)
+    write_saved_ool_mirrors_for_load(game_dir, &bytes, needs_underworld_disk_swap)
+}
+
+pub fn write_saved_ool_mirrors_for_load(
+    game_dir: &Path,
+    bytes: &[u8],
+    needs_underworld_disk_swap: bool,
+) -> io::Result<SavedOolMirrorWriteCounts> {
+    write_saved_ool_mirrors(game_dir, bytes)?;
+    let mut counts = SavedOolMirrorWriteCounts {
+        brit_ool: 1,
+        under_ool: 1,
+    };
+    if needs_underworld_disk_swap {
+        write_disk_file(&game_dir.join(UNDER_OOL_FILENAME), &bytes[OOL_PLANE_LEN..])?;
+        counts.under_ool += 1;
+    }
+    Ok(counts)
 }
 
 pub fn write_saved_ool_mirrors(game_dir: &Path, bytes: &[u8]) -> io::Result<()> {
@@ -419,17 +445,22 @@ pub fn write_saved_ool_mirrors_for_save(
     game_dir: &Path,
     bytes: &[u8],
     entry_disk_prompt_mode: u8,
-) -> io::Result<()> {
+) -> io::Result<SavedOolMirrorWriteCounts> {
     write_saved_ool_mirrors(game_dir, bytes)?;
+    let mut counts = SavedOolMirrorWriteCounts {
+        brit_ool: 1,
+        under_ool: 1,
+    };
     if save_flow_double_writes_underworld(entry_disk_prompt_mode) {
         write_disk_file(&game_dir.join(UNDER_OOL_FILENAME), &bytes[OOL_PLANE_LEN..])?;
+        counts.under_ool += 1;
     }
-    Ok(())
+    Ok(counts)
 }
 
 pub fn read_saved_ool_bytes(game_dir: &Path) -> io::Result<Vec<u8>> {
-    let path = game_dir.join("SAVED.OOL");
-    let bytes = read(&path)?;
+    let path = game_dir.join(SAVED_OOL_FILENAME);
+    let bytes = read_disk_file(&path)?;
     if bytes.len() != SAVED_OOL_LEN {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,

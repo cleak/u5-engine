@@ -410,8 +410,8 @@ pub fn commit_u4_transfer_save(
 
     let mut saved_ool = vec![0; SAVED_OOL_LEN];
     saved_ool[OOL_PLANE_LEN..].copy_from_slice(&brit_ool);
-    write_disk_file(&game_dir.join("SAVED.OOL"), saved_ool)?;
-    write_disk_file(&game_dir.join("SAVED.GAM"), save)?;
+    write_disk_file(&game_dir.join(SAVED_OOL_FILENAME), saved_ool)?;
+    write_disk_file(&game_dir.join(SAVED_GAM_FILENAME), save)?;
 
     Ok(avatar)
 }
