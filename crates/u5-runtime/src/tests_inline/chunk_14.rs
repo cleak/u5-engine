@@ -1739,6 +1739,39 @@
     }
 
     #[test]
+    fn combat_viewport_renders_post_round_cursor_and_secondary_marker_hooks() {
+        let mut combat = test_state(open_grid(), 1, 1);
+        combat.combat_active = true;
+        combat.combat_terrain = [[5; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        combat.active_player = Some(0);
+        combat.combat_cursor_blink = true;
+        combat.combat_secondary_marker = Some((3, 4));
+        combat.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            0,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            1,
+            1,
+            5,
+            6,
+        ]);
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let marked = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
+
+        assert_eq!(marked.pixel(56, 72), Some(11));
+        assert_eq!(marked.pixel(80, 96), Some(14));
+
+        combat.combat_cursor_blink = false;
+        combat.combat_secondary_marker = Some((99, 99));
+        let cleared = combat.render_top_down_frame(5, &atlas).unwrap().unwrap();
+
+        assert_ne!(cleared.pixel(56, 72), Some(11));
+        assert_ne!(cleared.pixel(80, 96), Some(14));
+    }
+
+    #[test]
     fn tile_viewport_to_rgba_matches_dimensions_and_palette() {
         let mut state = test_state(open_grid(), 1, 1);
         let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);

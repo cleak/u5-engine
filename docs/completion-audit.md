@@ -38,14 +38,14 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#9`/`#22` | Directed Sleep/Wind combat cone targeting | Implemented from latest issue answer; cardinal direction cone targeting replaces target-slot targeting |
 | `cleak/u5-spec#10` | Combat arena field marker placement gate | Implemented from latest issue answer; Fire/Poison/Sleep/Energy markers place after confirmed impact without a random materialization gate |
 | `cleak/u5-spec#12`/`#19` | Dungeon-room combat party/source placement | Published row/column layout, helper scan suppression, ordinary boundary, and Doom marker behavior implemented; non-Doom special id post-write table requested |
-| `cleak/u5-spec#13` | Tavern/meal/sage selector table plus paid shared 26-row sage rumour topic table and success templates | Table/mechanics implemented, including per-tavern selector letters, lore continuation gating, and post-debit success-record RNG timing; exact fee/no-credit text still pending |
+| `cleak/u5-spec#13` | Tavern/meal/sage selector table plus paid shared 26-row sage rumour topic table and success templates | Table/mechanics implemented, including per-tavern selector letters, lore continuation gating, post-debit success-record RNG timing, and short-funds exit; exact fee/short-funds text source requested |
 | `cleak/u5-spec#15` | Inn Intelligence-adjusted room-rate formula and recovery behavior | Implemented |
-| `cleak/u5-spec#18` | Fixed hidden-treasure found bitmap and special record cookies | Implemented; spec wording correction requested for record 15 predicate |
+| `cleak/u5-spec#18` | Fixed hidden-treasure found bitmap and special record cookies | Implemented from latest issue answer and reconciled checked-in spec wording |
 | `cleak/u5-spec#28` | Horse-trader sale path replacing old stationary-display purchase premise | Implemented |
-| `cleak/u5-spec#31` | Eternal-Flame-gated Shadowlord shard destruction predicates | Implemented; persistent quest-progress side effect question pending |
+| `cleak/u5-spec#31` | Eternal-Flame-gated Shadowlord shard destruction predicates | Implemented, including hideout slots and low-byte quest-progress bits |
 | `cleak/u5-spec#41` | Exact arms-shop eight-item stock rows and buy transaction quote selector/text flow | Implemented |
 | `cleak/u5-spec#43` | Top-down fountain, wishing-well, death-vision, and wanted-poster outcomes | Implemented |
-| `cleak/u5-spec#47` | Hourly Ring of Regeneration tick and completed long-camp recovery | Implemented from latest issue answer; spec-file reconciliation pending |
+| `cleak/u5-spec#47` | Hourly Ring of Regeneration tick and completed long-camp recovery | Implemented from latest issue answer and reconciled checked-in spec wording |
 | `cleak/u5-spec#48` | Non-combat Blink directional ray landing rule | Implemented |
 | `cleak/u5-spec#51` | Native tile `0x04` town poison-gas detection | Implemented |
 | `cleak/u5-spec#54` | Return-to-View strip captions, timing, geometry, and exact effect rasters | Public timing/captions and 4x19 visible geometry implemented; exact effect rasters are explicitly deferred by the clean spec |
@@ -226,7 +226,7 @@ through the asset-backed Talk command path.
 | §8.3 Healer | healer arm in `shop_runtime.rs`; Minoc bypass | healer tests | Implemented |
 | §8.4 Innkeeper | `shop_runtime.rs` inn flow; stay counter in `clock.rs`; public issue #15 Intelligence-adjusted rest, leave, and pickup charges plus paid-rest class recovery and poison death conversion | inn tests | Implemented |
 | §8.5 Tavernkeeper | tavern arm in `shop_runtime.rs` | tavern tests | Implemented |
-| §8.6 Sage | sage arm: shared 26-row paid keyword lookup, strict four-letter topic boundary, fee quote/confirmation, gold debit before success-template RNG, and SHOPPE record 85..=88 success rendering | sage runtime tests plus full public #13 table-sync and PRNG-timing tests | Implemented (exact fee/no-credit resident wording still pending) |
+| §8.6 Sage | sage arm: shared 26-row paid keyword lookup, strict four-letter topic boundary, fee quote/confirmation, gold debit before success-template RNG, short-funds exit, and SHOPPE record 85..=88 success rendering | sage runtime tests plus full public #13 table-sync and PRNG-timing tests | Implemented (exact fee/short-funds resident text source pending #13 follow-up) |
 | §8.7 Shipwright | shipwright arm; pending vehicle in `play_state_struct.rs` | shipwright tests | Implemented |
 | §8.8 Horse trader | horse arm | horse tests | Implemented |
 | §8.9 Reagent vendor | `shops.rs` per-herbalist matrix | reagent tests | Implemented |
@@ -276,7 +276,7 @@ through the asset-backed Talk command path.
 | `weather.md` §1–§11 | `wind.rs`, Rel Hur cast in `magic.rs`, sail cadence | wind cast and sailing tests, including the two-wait into-wind case | Implemented |
 | `moons.md` §1–§4 | `play_state_impl/chunk_*.rs` sky strip; moongate counters in `moongate.rs`; public issue #38 Felucca off-horizon sentinels for hours 10/11/19/20 | sky-strip and moon-glyph cache tests | Implemented |
 | `time.md` §1–§13 | `clock.rs` cascade, Q/T tag handling, mode-specific increment | clock and cascade tests | Implemented |
-| `rest-and-camp.md` §1–§10 | `rest_camp.rs`, `lord_british_camp.rs`, `play_state_impl/chunk_08.rs::apply_completed_long_camp_recovery`, and hourly Ring of Regeneration tick in `chunk_09.rs` | rest, camp, ambush, long-camp recovery, and hourly ring tests | Implemented (ordinary rest has no direct HP/MP recovery; public #47 issue-comment behavior is implemented, while checked-in spec files still need reconciliation) |
+| `rest-and-camp.md` §1–§10 | `rest_camp.rs`, `lord_british_camp.rs`, `play_state_impl/chunk_08.rs::apply_completed_long_camp_recovery`, and hourly Ring of Regeneration tick in `chunk_09.rs` | rest, camp, ambush, long-camp recovery, and hourly ring tests | Implemented (ordinary rest has no direct HP/MP recovery; current checked-in spec matches public #47 issue-comment behavior) |
 | `lighting.rs` §1–§11 | `lighting.rs` ambient + torch + light-spell counters | lighting tests | Implemented |
 | `doors-and-z-transitions.md` §1–§15 | `jimmy.rs`, `play_state_impl/chunk_*.rs` open/get/look cascade, `ship_broadside.rs` BOOOM, secret doors, climb command | jimmy, open, secret-door, klimb tests | Implemented |
 
@@ -367,25 +367,23 @@ are kept out of gameplay logic until the public spec publishes exact data.
 | Issue | Public gap | Engine placeholder |
 |------|------------|--------------------|
 | `cleak/u5-spec#12` | Exact non-Doom dungeon-room special-placement id post-write tables and actor/descriptor effects | Engine consumes the published party/source row layout, source-owned coordinates, helper-cell scan suppression, ordinary/source-family boundary, and Doom marker behavior; non-Doom special sources are preserved as inert markers until the id tables are published |
-| `cleak/u5-spec#8` | Exact combat descriptor byte/table layout for non-party sleep/disabled status storage | Engine models the published disabled targetability and per-slot duration counter behavior, but keeps the descriptor/backref layout conservative until the byte conflict is resolved |
-| `cleak/u5-spec#13` | Exact resident SHOPPE record ids/text for the sage fee quote and insufficient-gold/no-credit refusal | Shared paid 26-row table, strict matching, confirmation/debit, post-debit success-record RNG timing, and success rendering are implemented from the public issue answer; prompt wording remains conservative until published |
-| `cleak/u5-spec#18` | Spec prose wording for fixed hidden-treasure record 15 still needs to match the latest issue answer | Engine grants record 15 only when the single-use cookie is clear and no NPC occupies the tile, and does not set the cookie from Search itself |
-| `cleak/u5-spec#31` | Shadowlord shard destruction save-backed quest-progress bits | Engine implements the exact public flame positions, shard/flame pairing, matching Shadowlord-name encounter gate, hideout-slot vanquish, and low-byte quest-progress bits |
+| `cleak/u5-spec#13` | Exact resident text source for the sage fee quote/confirmation and short-funds refusal | Shared paid 26-row table, strict matching, confirmation/debit, short-funds exit, post-debit success-record RNG timing, and success rendering are implemented from the checked-in spec; prompt wording remains conservative until published |
 | `cleak/u5-spec#41` | Exact arms-shop quote/refusal/success text or SHOPPE record ids | Implemented: buy quote record ids map from equipment ids, invalid selectors silently re-prompt, carry-cap is checked before gold, no-credit barks/refusal text and `Sold!` success are modeled |
 | `cleak/u5-spec#43` | Exact wanted-poster resident text/template and line breaking | Implemented: Look routes the public predicates and outcomes, grants all six accepted well wishes as horse-family objects in the public scenes, uses Intelligence for death vision, and renders the Yew poster as the fixed framed row stream with party slots 0..2 centered |
-| `cleak/u5-spec#47` | Checked-in spec files still contradict the latest public issue answer for non-combat Ring of Regeneration and completed long-camp recovery | Engine implements the latest public issue-comment behavior: hourly 1-in-8 Ring of Regeneration +1 HP and guarded completed long-camp HP/MP recovery |
 | `cleak/u5-spec#51` | Native town poison-gas predicate | Implemented: live tile `0x04` plus foot transport is the complete trigger; retired sidecar rows are covered by non-trigger tests |
 | `cleak/u5-spec#54` | Return-to-View exact local cell-effect rasters | Parser/scheduler/overlay composition implement the public 19x4 source layout transposed to a 4x19 visible preview, fixed captions from LoadMapStrip, high-opcode no-ops, `(x, y + 7)` effect coordinates, and timing model; exact rasters are clean-spec-deferred presentation work |
 | `cleak/u5-spec#56` | Exact terminal endgame tableau active-object slots, actor roles, coordinates, sprites, cadence, and refusal-branch behavior | Implemented from the public issue answer, including MISCMAPS cutscene-map record 3 and authored `0x44` walkability for terminal jitter; remaining endgame gaps are pixel/display-helper presentation parity, not tableau metadata |
 
 Follow-up questions were current as of the 2026-05-23 issue audit for the
-remaining response-needed item:
+remaining response-needed items:
 
 - `cleak/u5-spec#12`: exact non-Doom dungeon-room special-placement id
   derivation, post-write formulas, range tables, and actor/descriptor effects.
+- `cleak/u5-spec#13`: exact resident text source/templates for the sage fee
+  quote/confirmation prompt and short-funds refusal branch.
 
-No remaining response-needed issue in this audit is about #1, #3, #13, #31,
-#41, #43, #51, #54, or #56; those are implemented from current checked-in
+No remaining response-needed issue in this audit is about #1, #3, #8, #18,
+#31, #41, #43, #47, #51, #54, or #56; those are implemented from current checked-in
 public spec plus latest issue answers, or explicitly deferred as presentation
 work in the public spec.
 

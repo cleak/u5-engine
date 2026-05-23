@@ -3738,7 +3738,7 @@ impl PlayState {
         report
     }
 
-    fn combat_cursor_actor_cell(&self) -> Option<(u8, u8)> {
+    pub(crate) fn combat_cursor_actor_cell(&self) -> Option<(u8, u8)> {
         let slot = self.active_player.or_else(|| {
             self.combat_actors
                 .iter()

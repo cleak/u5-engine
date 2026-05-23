@@ -18,15 +18,14 @@ use image::{ImageBuffer, Rgba};
 use u5_runtime::{
     ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX, BRITISH_PTH_PEN_ORIGINS, BritishPth,
     CGA_PALETTE_RGB, COMBAT_ARENA_SIDE, ChargenSession, ChargenSessionResult, ChargenSessionStep,
-    DEATH_VISION_OBJECT_CLASS, Direction, DungeonScene, EGA_PALETTE_RGB,
-    ENDGAME_TABLEAU_AUX3_ROLE_MARKER, ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH,
-    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FixedCellFont, GameClock,
-    GraphicImage, GuildShop, HORSE_PARKED_FIRST, Healer, Herbalist, INTRO_INLINE_DOORWAY_STEP,
-    INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE,
-    INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y,
-    INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn,
-    IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
-    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    DEATH_VISION_OBJECT_CLASS, Direction, DungeonScene, EGA_PALETTE_RGB, ENDGAME_TABLEAU_HEIGHT,
+    ENDGAME_TABLEAU_WIDTH, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
+    FixedCellFont, GameClock, GraphicImage, GuildShop, HORSE_PARKED_FIRST, Healer, Herbalist,
+    INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
+    INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X,
+    INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
+    INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX,
+    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, PCS_GLYPH_HEIGHT, PEER_COST,
     PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, PROMPT_TEXT_WINDOW_INDEX,
     PlayInputDisposition, PlayOptions, PlayState, PlayTarget, ProportionalFont,
@@ -42,8 +41,8 @@ use u5_runtime::{
     TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState,
     U4TransferOverrides, U4TransferSource, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
     blit_tile_id_to_viewport, commit_chargen_save, commit_u4_transfer_save, dungeon_cell_index,
-    handle_play_key_input, hash_bytes, input_case_fold, input_function_key_code,
-    input_keypad_digit_direction_code,
+    endgame_tableau_role_for_slot, handle_play_key_input, hash_bytes, input_case_fold,
+    input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -828,7 +827,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["Y", "M", "P", "1", "N"],
+            script: &["Y", "M", "R", "1", "N"],
             configure: Some(seed_visual_route_tavern),
         },
         VisualRouteSuiteCase {
@@ -3967,11 +3966,10 @@ fn render_endgame_tableau_viewport(
         }
     }
 
-    for object in state
-        .active_objects
-        .iter()
-        .filter(|object| object.aux3 == ENDGAME_TABLEAU_AUX3_ROLE_MARKER && !object.is_empty())
-    {
+    for (slot, object) in state.active_objects.iter().copied().enumerate() {
+        if endgame_tableau_role_for_slot(slot, object).is_none() {
+            continue;
+        }
         if object.x >= ENDGAME_TABLEAU_WIDTH || object.y >= ENDGAME_TABLEAU_HEIGHT {
             continue;
         }
@@ -6430,6 +6428,7 @@ mod tests {
             TavernState::PickProvisionQuantity {
                 tavern: Tavern::TheWayfarerTavern,
                 unit_price: 15,
+                continuation_ready: false,
             },
         ));
         assert!(visual_line_prompt_active(&tavern));

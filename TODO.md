@@ -218,12 +218,10 @@ Last known verification state:
 - `cargo run -- --help` is a supported no-asset usage path.
 - The latest checkpointed engine commit at the time of this refresh included
   container Search object-table and trap-narration parity work.
-- Clean spec refresh on 2026-05-23 still found `cleak/u5-spec` at `e34af6b`
-  with no newer public push visible from this workspace. Issue answers from the
-  public tracker remain the clean source for behavior where checked-in spec
-  prose lags.
-- The spec checkout used for the most recent audit was `e34af6b spec: pin
-  fixed hidden-treasure found bitmap and special record cookies`.
+- Clean spec refresh on 2026-05-23 found `cleak/u5-spec` at `da0654d`; no newer
+  public push was visible from this workspace.
+- The spec checkout used for the most recent audit was `da0654d Specify
+  directed wind cone targeting`.
 
 Current worktree context when this TODO was refreshed:
 
@@ -291,7 +289,9 @@ Current worktree context when this TODO was refreshed:
 - Paid sage rumours use the public `cleak/u5-spec#13` 26-row topic table,
   strict topic matching, and success-record random draw only after the accepted
   confirmation passes the gold/debit gate; short-funds and declines preserve
-  PRNG state.
+  PRNG state, and short-funds exits the sage flow per checked-in spec. Exact
+  fee-prompt and short-funds text source is now asked in the latest #13
+  follow-up.
 - Public `cleak/u5-spec#28` corrected the old stationary-display purchase path
   to horse-trader sale rows. The obsolete stationary-display purchase runtime is
   removed, and horse-trader runtime/talk-shop/route-smoke/visual tests cover
@@ -304,9 +304,11 @@ Current worktree context when this TODO was refreshed:
   Abbey, and Serpent's Hold native paths.
 - The 2026-05-23 clean-engine audit applied the remaining spec-backed tavern
   drink-letter correction, expanded Doom combat visual routes, implemented the
-  latest dungeon-room placement contract, and retired #1/#3/#54/#56 as
-  gameplay blockers. The only current response-needed public blocker is #12;
-  current answers for #13/#31/#41/#43/#51 have been applied.
+  latest dungeon-room placement contract, and retired #1/#3/#8/#18/#31/#47/#54/#56
+  as gameplay blockers. The current response-needed public blockers are #12
+  for non-Doom dungeon-room special-placement post-writes and #13 for exact
+  sage fee/short-funds text source; our comments are currently latest on both.
+  Current answers for #41/#43/#51 have been applied.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the
@@ -325,6 +327,10 @@ Current worktree context when this TODO was refreshed:
   visible preview, derives captions from LoadMapStrip, and applies the
   `(x, y + 7)` local cell-effect coordinate rule. Exact effect rasters remain
   presentation work.
+- Combat rendering now consumes the post-round cursor/secondary-marker hook:
+  the tactical viewport draws the blinking active-player cursor marker and
+  explicit secondary marker cell from shared runtime state. Exact resident
+  marker pixels remain visual parity work until published.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry,
   seeded ship/skiff sailing routes, a Spyglass-triggered Britannia chunk-map

@@ -1243,14 +1243,14 @@ pub fn step_sage(state: &mut SageState, input: SageInput<'_>, gold: &mut u16) ->
             SageOutcome::Declined
         }
         (
-            SageState::Confirm { table, quote },
+            SageState::Confirm { table: _, quote },
             SageInput::Confirm {
                 accepted: true,
                 record_id,
             },
         ) => {
             if *gold < quote.entry.fee {
-                *state = SageState::Prompt { table };
+                *state = SageState::Exited;
                 return SageOutcome::RefusedShortFunds {
                     required: quote.entry.fee,
                     available: *gold,
@@ -2873,12 +2873,7 @@ mod tests {
             }
         );
         assert_eq!(gold, 10);
-        assert_eq!(
-            state,
-            SageState::Prompt {
-                table: &SAGE_RUMOUR_TABLE
-            }
-        );
+        assert_eq!(state, SageState::Exited);
 
         assert_eq!(
             step_sage(&mut state, SageInput::Keyword(" "), &mut gold),

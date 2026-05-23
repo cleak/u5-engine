@@ -2634,11 +2634,11 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
         }
         "shop-sage-topic-short-funds-route" => {
             if state.gold != 49
-                || state.active_shop.is_none()
+                || state.active_shop.is_some()
                 || state.message != TAVERN_AFFORDABILITY_REFUSAL_BARK
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not preserve gold on sage short funds"
+                    "route smoke `{case_name}` did not preserve gold and exit on sage short funds"
                 )));
             }
         }

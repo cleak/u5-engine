@@ -543,6 +543,14 @@ impl PlayState {
                 if let Some(kind) = self.combat_potion_presentation_at(arena_x, arena_y) {
                     draw_combat_potion_presentation_cell(viewport, cell_x, cell_y, kind);
                 }
+                if self.combat_secondary_marker_cell() == Some((arena_x as u8, arena_y as u8)) {
+                    draw_combat_secondary_marker_cell(viewport, cell_x, cell_y);
+                }
+                if self.combat_cursor_blink
+                    && self.combat_cursor_actor_cell() == Some((arena_x as u8, arena_y as u8))
+                {
+                    draw_combat_cursor_marker_cell(viewport, cell_x, cell_y);
+                }
             }
         }
         Ok(())
@@ -612,6 +620,13 @@ impl PlayState {
             return None;
         }
         Some(presentation.kind)
+    }
+
+    fn combat_secondary_marker_cell(&self) -> Option<(u8, u8)> {
+        self.combat_secondary_marker.and_then(|(x, y)| {
+            (usize::from(x) < COMBAT_ARENA_SIDE && usize::from(y) < COMBAT_ARENA_SIDE)
+                .then_some((x, y))
+        })
     }
 
     pub fn combat_render_sprite_at(&self, x: usize, y: usize) -> Option<usize> {
@@ -2873,6 +2888,16 @@ fn draw_combat_potion_presentation_cell(
             draw_presentation_star(viewport, cell_x, cell_y, colour)
         }
     }
+}
+
+fn draw_combat_cursor_marker_cell(viewport: &mut TileViewport, cell_x: usize, cell_y: usize) {
+    let colour = presentation_palette_index(viewport.depth, 14);
+    draw_presentation_cell_corners(viewport, cell_x, cell_y, colour);
+}
+
+fn draw_combat_secondary_marker_cell(viewport: &mut TileViewport, cell_x: usize, cell_y: usize) {
+    let colour = presentation_palette_index(viewport.depth, 11);
+    draw_presentation_cross(viewport, cell_x, cell_y, colour);
 }
 
 fn draw_presentation_cross(viewport: &mut TileViewport, cell_x: usize, cell_y: usize, colour: u8) {

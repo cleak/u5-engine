@@ -4315,7 +4315,7 @@
         assert_eq!(state.gold, 49);
         assert_eq!(state.prng_state, 0x2468);
         assert_eq!(state.message, "Beat it!");
-        assert!(state.active_shop.is_some());
+        assert!(state.active_shop.is_none());
     }
 
     #[test]
