@@ -295,6 +295,7 @@ fn return_to_view_frame_kind_label(kind: ReturnToViewFrameKind) -> &'static str 
         ReturnToViewFrameKind::TemporaryActorDraw => "temporary actor draw",
         ReturnToViewFrameKind::TemporaryActorDrawOverBacking => "temporary actor backing draw",
         ReturnToViewFrameKind::FixedWipeRectangle { .. } => "fixed wipe rectangle",
+        ReturnToViewFrameKind::FixedWipeActorDraw => "fixed wipe actor draw",
         ReturnToViewFrameKind::FixedWait { .. } => "fixed wait tick",
         ReturnToViewFrameKind::FixedWipeTrailingTick { .. } => "fixed wipe trailing tick",
         ReturnToViewFrameKind::MoveActorTick => "actor movement tick",

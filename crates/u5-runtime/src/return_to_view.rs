@@ -58,6 +58,12 @@ pub const RTV_FIXED_WIPE_TOTAL_TICKS: u8 =
 /// after the current command finishes.
 pub const RTV_WAIT_IS_NON_INTERRUPTIBLE: bool = true;
 
+/// `formats/location-dat.md` Return-to-View commands draw special actors in
+/// the visible text/map screen seven tile rows below the script-local actor Y.
+pub const fn return_to_view_actor_screen_y(actor_y: u8) -> u8 {
+    actor_y.saturating_add(7)
+}
+
 /// Resolve a Return-to-View map-cell tile through the title-screen
 /// animation selector published in `cleak/u5-spec#54`.
 ///
@@ -445,9 +451,34 @@ pub enum ReturnToViewFrameKind {
     TemporaryActorDraw,
     TemporaryActorDrawOverBacking,
     FixedWipeRectangle { step: u8 },
+    FixedWipeActorDraw,
     FixedWait { tick: u8 },
     FixedWipeTrailingTick { tick: u8 },
     MoveActorTick,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReturnToViewActorDrawSource {
+    TemporaryActorTile,
+    CurrentActorTile,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReturnToViewActorDrawControl {
+    OriginalActorTile(u8),
+    BackingMapTile(u8),
+    Zero,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReturnToViewActorDraw {
+    pub slot: u8,
+    pub tile: u8,
+    pub x: u8,
+    pub y: u8,
+    pub screen_y: u8,
+    pub source: ReturnToViewActorDrawSource,
+    pub control: ReturnToViewActorDrawControl,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -456,12 +487,19 @@ pub struct ReturnToViewPlaybackFrame {
     pub elapsed_title_ticks: u32,
     pub kind: ReturnToViewFrameKind,
     pub state: ReturnToViewPreviewState,
+    pub actor_draw: Option<ReturnToViewActorDraw>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReturnToViewPlayback {
     pub frames: Vec<ReturnToViewPlaybackFrame>,
     pub run: ReturnToViewPreviewRun,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ReturnToViewActorDrawControlSource {
+    OriginalActorTile,
+    BackingMapTile,
 }
 
 impl ReturnToViewCommand {
@@ -903,25 +941,29 @@ fn append_return_to_view_playback_frames(
                 );
             }
         }
-        ReturnToViewCommand::TemporaryActorDraw { .. } => {
-            push_return_to_view_frame(
+        ReturnToViewCommand::TemporaryActorDraw { slot } => {
+            push_return_to_view_actor_draw_frame(
                 frames,
                 command_index,
                 before_ticks,
                 ReturnToViewFrameKind::TemporaryActorDraw,
                 state,
+                slot,
+                ReturnToViewActorDrawControlSource::OriginalActorTile,
             );
         }
-        ReturnToViewCommand::TemporaryActorDrawOverBacking { .. } => {
-            push_return_to_view_frame(
+        ReturnToViewCommand::TemporaryActorDrawOverBacking { slot } => {
+            push_return_to_view_actor_draw_frame(
                 frames,
                 command_index,
                 before_ticks,
                 ReturnToViewFrameKind::TemporaryActorDrawOverBacking,
                 state,
+                slot,
+                ReturnToViewActorDrawControlSource::BackingMapTile,
             );
         }
-        ReturnToViewCommand::FixedWipeAndActorDraw { .. } => {
+        ReturnToViewCommand::FixedWipeAndActorDraw { slot, .. } => {
             let mut elapsed = before_ticks;
             for step in 0..RTV_FIXED_WIPE_STEPS {
                 elapsed += 1;
@@ -933,6 +975,7 @@ fn append_return_to_view_playback_frames(
                     state,
                 );
             }
+            push_return_to_view_fixed_actor_draw_frame(frames, command_index, elapsed, state, slot);
             for tick in 0..RTV_WAIT_FIXED_TICKS {
                 elapsed += 1;
                 push_return_to_view_frame(
@@ -981,6 +1024,79 @@ fn push_return_to_view_frame(
         elapsed_title_ticks,
         kind,
         state,
+        actor_draw: None,
+    });
+}
+
+fn push_return_to_view_actor_draw_frame(
+    frames: &mut Vec<ReturnToViewPlaybackFrame>,
+    command_index: usize,
+    elapsed_title_ticks: u32,
+    kind: ReturnToViewFrameKind,
+    state: &ReturnToViewPreviewState,
+    slot: u8,
+    control_source: ReturnToViewActorDrawControlSource,
+) {
+    let mut state = state.clone();
+    let slot_index = usize::from(slot);
+    if slot_index >= state.actors.len() {
+        push_return_to_view_frame(frames, command_index, elapsed_title_ticks, kind, &state);
+        return;
+    }
+    let actor = state.actors[slot_index];
+    let original_tile = actor.tile0;
+    let backing_tile = preview_cell_index(actor.x, actor.y)
+        .map(|index| state.backing[index])
+        .unwrap_or_default();
+    state.actors[slot_index].tile0 = RTV_TEMPORARY_ACTOR_TILE;
+    state.actors[slot_index].tile1 = RTV_TEMPORARY_ACTOR_TILE;
+    frames.push(ReturnToViewPlaybackFrame {
+        command_index,
+        elapsed_title_ticks,
+        kind,
+        state,
+        actor_draw: Some(ReturnToViewActorDraw {
+            slot,
+            tile: RTV_TEMPORARY_ACTOR_TILE,
+            x: actor.x,
+            y: actor.y,
+            screen_y: return_to_view_actor_screen_y(actor.y),
+            source: ReturnToViewActorDrawSource::TemporaryActorTile,
+            control: match control_source {
+                ReturnToViewActorDrawControlSource::OriginalActorTile => {
+                    ReturnToViewActorDrawControl::OriginalActorTile(original_tile)
+                }
+                ReturnToViewActorDrawControlSource::BackingMapTile => {
+                    ReturnToViewActorDrawControl::BackingMapTile(backing_tile)
+                }
+            },
+        }),
+    });
+}
+
+fn push_return_to_view_fixed_actor_draw_frame(
+    frames: &mut Vec<ReturnToViewPlaybackFrame>,
+    command_index: usize,
+    elapsed_title_ticks: u32,
+    state: &ReturnToViewPreviewState,
+    slot: u8,
+) {
+    let slot_index = usize::from(slot);
+    let actor = state.actors.get(slot_index).copied().unwrap_or_default();
+    frames.push(ReturnToViewPlaybackFrame {
+        command_index,
+        elapsed_title_ticks,
+        kind: ReturnToViewFrameKind::FixedWipeActorDraw,
+        state: state.clone(),
+        actor_draw: Some(ReturnToViewActorDraw {
+            slot,
+            tile: actor.tile0,
+            x: actor.x,
+            y: actor.y,
+            screen_y: return_to_view_actor_screen_y(actor.y),
+            source: ReturnToViewActorDrawSource::CurrentActorTile,
+            control: ReturnToViewActorDrawControl::Zero,
+        }),
     });
 }
 
@@ -1524,6 +1640,14 @@ mod tests {
             playback
                 .frames
                 .iter()
+                .filter(|frame| frame.kind == ReturnToViewFrameKind::FixedWipeActorDraw)
+                .count(),
+            1
+        );
+        assert_eq!(
+            playback
+                .frames
+                .iter()
                 .filter(|frame| matches!(frame.kind, ReturnToViewFrameKind::FixedWait { .. }))
                 .count(),
             RTV_WAIT_FIXED_TICKS as usize
@@ -1544,6 +1668,72 @@ mod tests {
             Some(36)
         );
         assert_eq!(playback.run.state.actors[0].x, 2);
+
+        let temporary = playback
+            .frames
+            .iter()
+            .find(|frame| frame.kind == ReturnToViewFrameKind::TemporaryActorDraw)
+            .expect("temporary actor draw frame");
+        assert_eq!(
+            temporary.actor_draw.as_ref().unwrap().tile,
+            RTV_TEMPORARY_ACTOR_TILE
+        );
+        assert_eq!(temporary.actor_draw.as_ref().unwrap().screen_y, 8);
+        assert_eq!(
+            temporary.actor_draw.as_ref().unwrap().control,
+            ReturnToViewActorDrawControl::OriginalActorTile(3)
+        );
+        assert_eq!(temporary.state.actors[0].tile0, RTV_TEMPORARY_ACTOR_TILE);
+
+        let fixed_actor = playback
+            .frames
+            .iter()
+            .find(|frame| frame.kind == ReturnToViewFrameKind::FixedWipeActorDraw)
+            .expect("fixed wipe actor draw frame");
+        assert_eq!(fixed_actor.actor_draw.as_ref().unwrap().tile, 3);
+        assert_eq!(fixed_actor.actor_draw.as_ref().unwrap().screen_y, 8);
+        assert_eq!(
+            fixed_actor.actor_draw.as_ref().unwrap().control,
+            ReturnToViewActorDrawControl::Zero
+        );
+    }
+
+    #[test]
+    fn return_to_view_actor_draw_over_backing_reports_backing_control_tile() {
+        let mut strips = ReturnToViewMapStrips {
+            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
+        };
+        strips.strips[0][0] = 0x55;
+        let script = ReturnToViewScript {
+            commands: vec![
+                ReturnToViewCommand::LoadMapStrip { strip: 0 },
+                ReturnToViewCommand::SetActor {
+                    slot: 0,
+                    tile: 0x44,
+                    x: 0,
+                    y: 0,
+                },
+                ReturnToViewCommand::TemporaryActorDrawOverBacking { slot: 0 },
+                ReturnToViewCommand::RestartStream,
+            ],
+        };
+
+        let playback = run_return_to_view_playback_until_restart(&strips, &script, 16).unwrap();
+        let frame = playback
+            .frames
+            .iter()
+            .find(|frame| frame.kind == ReturnToViewFrameKind::TemporaryActorDrawOverBacking)
+            .expect("temporary actor backing frame");
+
+        assert_eq!(
+            frame.actor_draw.as_ref().unwrap().control,
+            ReturnToViewActorDrawControl::BackingMapTile(0x55)
+        );
+        assert_eq!(
+            frame.actor_draw.as_ref().unwrap().screen_y,
+            return_to_view_actor_screen_y(0)
+        );
+        assert_eq!(playback.run.state.actors[0].tile0, 0x44);
     }
 
     #[test]
