@@ -1010,7 +1010,7 @@
     }
 
     #[test]
-    fn paid_inn_rest_night_recovery_restores_by_class_and_cures_poison() {
+    fn paid_inn_rest_night_recovery_restores_by_class_and_kills_poisoned() {
         assert_eq!(inn_rest_hp_target(b'A', 30), 30);
         assert_eq!(inn_rest_hp_target(b'M', 30), 30);
         assert_eq!(inn_rest_hp_target(b'F', 30), 30);
@@ -1055,13 +1055,13 @@
 
         let (hp, mana, cured) = state.apply_inn_rest_night_recovery();
 
-        assert_eq!((hp, mana, cured), (25, 34, 1));
+        assert_eq!((hp, mana, cured), (20, 23, 1));
         assert_eq!(state.party[0].hp, 30);
         assert_eq!(state.party[0].mana, 24);
         assert_eq!(state.party[0].status, b'G');
-        assert_eq!(state.party[1].hp, 15);
-        assert_eq!(state.party[1].mana, 12);
-        assert_eq!(state.party[1].status, b'G');
+        assert_eq!(state.party[1].hp, 0);
+        assert_eq!(state.party[1].mana, 1);
+        assert_eq!(state.party[1].status, b'D');
         assert_eq!(state.party[2].hp, 0);
         assert_eq!(state.party[2].mana, 0);
         assert_eq!(state.party[2].status, b'D');

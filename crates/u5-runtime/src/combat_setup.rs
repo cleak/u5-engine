@@ -614,9 +614,8 @@ impl PlayState {
                 ),
             )
         })?;
-        let base_count = terrain_combat_spawn_count_for_arena(arena_index)
-            .unwrap_or(base_class.default_spawn_count);
-        let requested_count = self.roll_terrain_combat_setup_count(base_count, false);
+        let requested_count =
+            self.roll_terrain_combat_setup_count(base_class.default_spawn_count, false);
         let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(arena_index);
         let replacement_roll_seeds =
             self.terrain_combat_replacement_roll_seeds(requested_count, replacement_tile);

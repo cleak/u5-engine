@@ -1962,6 +1962,7 @@ impl PlayState {
 
     pub fn apply_hourly_status_provision_pass(&mut self) -> u16 {
         let consumers = self.hourly_provision_consumer_count();
+        self.apply_hourly_ring_regeneration_tick();
         self.apply_hourly_poison_tick();
         if self.food == 0 {
             self.pending_hourly_status_message = self.apply_hourly_starvation_tick();
@@ -1969,6 +1970,31 @@ impl PlayState {
             self.food = self.food.saturating_sub(consumers);
         }
         consumers
+    }
+
+    pub fn apply_hourly_ring_regeneration_tick(&mut self) -> u16 {
+        if self.combat_active {
+            return 0;
+        }
+        let mut healed = 0;
+        if self.party_equipment.len() < self.party.len() {
+            self.party_equipment
+                .resize(self.party.len(), [EQUIPMENT_EMPTY; EQUIPMENT_SLOT_COUNT]);
+        }
+        for index in 0..self.party.len() {
+            let member = &mut self.party[index];
+            if member.status == b'D'
+                || !member.living()
+                || self.party_equipment[index][EQUIP_SLOT_RING]
+                    != EQUIPMENT_ID_RING_REGENERATION as u8
+            {
+                continue;
+            }
+            if u5_prng_range_u16(&mut self.prng_state, 0, 7) == 0 {
+                healed += member.heal_by(1);
+            }
+        }
+        healed
     }
 
     pub fn apply_hourly_poison_tick(&mut self) -> u16 {

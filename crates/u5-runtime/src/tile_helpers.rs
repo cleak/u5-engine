@@ -205,7 +205,7 @@ pub fn apply_dungeon_room_clear_bitmap(
         if is_dungeon_room_trigger(*cell)
             && dungeon_room_clear_bit_is_set(bitmap, scene, dungeon_room_slot(*cell))
         {
-            *cell = 0xE0 | dungeon_room_slot(*cell);
+            *cell = 0xA0 | dungeon_room_slot(*cell);
         }
     }
 }

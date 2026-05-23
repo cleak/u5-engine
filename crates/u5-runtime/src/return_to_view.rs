@@ -31,6 +31,12 @@ pub const RTV_CELL_EFFECT_STEPS: u8 = 15;
 pub const RTV_CELL_EFFECT_FINAL_TICKS: u8 = 2;
 pub const RTV_FIXED_WIPE_STEPS: u8 = 5;
 pub const RTV_FIXED_WIPE_TRAILING_TICKS: u8 = 3;
+pub const RTV_STRIP_CAPTIONS: [&str; RTV_STRIP_COUNT] = [
+    "The Summoning",
+    "The Journey",
+    "The Arrival",
+    "The Welcoming",
+];
 
 /// `cleak/u5-spec#54` published Return-to-View wait duration. Per
 /// the spec answer, the helper's `WAIT` beat inserts an eight-title-tick
@@ -67,6 +73,10 @@ pub const fn return_to_view_tile_for_title_tick(tile: u8, title_tick: u32) -> u8
         }
         _ => tile,
     }
+}
+
+pub fn return_to_view_caption_for_strip(strip: u8) -> Option<&'static str> {
+    RTV_STRIP_CAPTIONS.get(usize::from(strip)).copied()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -183,6 +193,7 @@ pub struct ReturnToViewPreviewState {
     pub backing: [u8; RTV_PREVIEW_CELLS],
     pub actors: [ReturnToViewActor; RTV_ACTOR_SLOTS],
     pub current_strip: Option<u8>,
+    pub current_caption: Option<&'static str>,
     pub loop_count: u8,
     pub loop_start_command: Option<usize>,
     pub cached_effect_cell: Option<(u8, u8)>,
@@ -201,6 +212,7 @@ impl Default for ReturnToViewPreviewState {
             backing: [0; RTV_PREVIEW_CELLS],
             actors: [ReturnToViewActor::default(); RTV_ACTOR_SLOTS],
             current_strip: None,
+            current_caption: None,
             loop_count: 0,
             loop_start_command: None,
             cached_effect_cell: None,
@@ -355,6 +367,7 @@ impl ReturnToViewPreviewState {
             }
         }
         self.current_strip = Some(strip);
+        self.current_caption = return_to_view_caption_for_strip(strip);
         Ok(())
     }
 
@@ -405,6 +418,7 @@ pub struct ReturnToViewPreviewReport {
     pub restart_seen: bool,
     pub max_commands_reached: bool,
     pub current_strip: Option<u8>,
+    pub current_caption: Option<&'static str>,
     pub drawable_actor_count: usize,
     pub total_ticks: u32,
     pub temporary_actor_draws: u32,
@@ -772,6 +786,7 @@ pub fn run_return_to_view_preview_state_until_restart(
             && pc < script.commands.len()
             && applied_commands >= max_commands,
         current_strip: state.current_strip,
+        current_caption: state.current_caption,
         drawable_actor_count: state.drawable_actor_count(),
         total_ticks: state.total_ticks,
         temporary_actor_draws: state.temporary_actor_draws,
@@ -831,6 +846,7 @@ pub fn run_return_to_view_playback_until_restart(
             && pc < script.commands.len()
             && applied_commands >= max_commands,
         current_strip: state.current_strip,
+        current_caption: state.current_caption,
         drawable_actor_count: state.drawable_actor_count(),
         total_ticks: state.total_ticks,
         temporary_actor_draws: state.temporary_actor_draws,

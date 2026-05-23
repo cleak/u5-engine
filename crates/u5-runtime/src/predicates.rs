@@ -1341,6 +1341,10 @@ pub fn town_poison_gas_tile_matches_attributes(
     })
 }
 
+pub const fn town_poison_gas_live_tile_matches(tile: u8, transport_marker: u8) -> bool {
+    tile == TOWN_POISON_GAS_LIVE_TILE && transport_marker == TOWN_POISON_GAS_VEHICLE_BYTE
+}
+
 pub fn town_exit_tile_matches(
     entry: TownExitTileEntry,
     scene: Scene,

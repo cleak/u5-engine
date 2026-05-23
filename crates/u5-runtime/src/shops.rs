@@ -55,6 +55,22 @@ impl ArmsShop {
             Self::SiegeCrafters => "Siege Crafters",
         }
     }
+
+    pub const fn stock_table(self) -> ArmsStockTable {
+        match self {
+            Self::IolosBows => ArmsStockTable::from_raw([16, 17, 26, 27, 28, 29, 36, 0xFF]),
+            Self::NaughtyNomaans => ArmsStockTable::from_raw([19, 24, 46, 22, 3, 6, 25, 0xFF]),
+            Self::ArmsOfJustice => ArmsStockTable::from_raw([0, 9, 10, 18, 21, 37, 38, 0xFF]),
+            Self::DarkwatchArmoury => ArmsStockTable::from_raw([2, 4, 11, 23, 30, 24, 31, 0xFF]),
+            Self::ThePaladinsProtectorate => {
+                ArmsStockTable::from_raw([32, 33, 34, 2, 5, 12, 14, 0xFF])
+            }
+            Self::NorthStarArmoury => ArmsStockTable::from_raw([1, 7, 13, 14, 30, 37, 43, 0xFF]),
+            Self::BuccaneersBooty => ArmsStockTable::from_raw([0, 10, 16, 20, 23, 19, 42, 0xFF]),
+            Self::TheShatteredShield => ArmsStockTable::from_raw([7, 32, 36, 27, 31, 44, 45, 0xFF]),
+            Self::SiegeCrafters => ArmsStockTable::from_raw([1, 13, 28, 29, 34, 22, 25, 0xFF]),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -76,6 +92,22 @@ impl ArmsStockTable {
             len
         };
         Self { item_ids, len }
+    }
+
+    pub const fn from_raw(raw: [u8; ARMS_SHOP_STOCK_TABLE_LEN]) -> Self {
+        let mut item_ids = [0; ARMS_SHOP_STOCK_TABLE_LEN];
+        let mut len = 0usize;
+        while len < ARMS_SHOP_STOCK_TABLE_LEN {
+            if raw[len] == 0xFF {
+                break;
+            }
+            item_ids[len] = raw[len];
+            len += 1;
+        }
+        Self {
+            item_ids,
+            len: len as u8,
+        }
     }
 
     pub const fn len(self) -> usize {
@@ -1031,6 +1063,20 @@ pub const fn inn_leave_companion_deposit(base_room_rate: u16) -> u16 {
     base_room_rate * INN_LEAVE_DEPOSIT_ROOM_RATE_UNITS as u16
 }
 
+pub const fn shop_intelligence_adjusted_price(raw: u16, speaker_intelligence: u8) -> u16 {
+    let factor: i32 =
+        ARMS_SHOP_PERCENT_DENOMINATOR - ARMS_SHOP_INTELLIGENCE_WEIGHT * speaker_intelligence as i32;
+    let adjustment = (raw as i32 * factor) / ARMS_SHOP_PERCENT_DENOMINATOR;
+    let adjusted = raw as i32 + adjustment;
+    if adjusted < 0 {
+        0
+    } else if adjusted > u16::MAX as i32 {
+        u16::MAX
+    } else {
+        adjusted as u16
+    }
+}
+
 /// `shops.md §8.4`: Pickup bill calculated from the base local
 /// lodging charge and the guest's stored stay counter, treating zero
 /// as one billable unit (so a same-day pickup still costs one
@@ -1041,8 +1087,10 @@ pub const fn inn_pickup_bill(base_lodging_charge: u16, stay_counter: u8) -> u16 
 }
 
 pub const fn inn_leave_companion_deposit_for_speaker(inn: Inn, speaker_intelligence: u8) -> u16 {
-    let _ = speaker_intelligence;
-    inn_leave_companion_deposit(inn_base_room_rate(inn))
+    shop_intelligence_adjusted_price(
+        inn_leave_companion_deposit(inn_base_room_rate(inn)),
+        speaker_intelligence,
+    )
 }
 
 pub const fn inn_pickup_bill_for_speaker(
@@ -1050,8 +1098,13 @@ pub const fn inn_pickup_bill_for_speaker(
     stay_counter: u8,
     speaker_intelligence: u8,
 ) -> u16 {
-    let _ = speaker_intelligence;
-    inn_pickup_bill(inn_base_room_rate(inn), stay_counter)
+    inn_pickup_bill(
+        shop_intelligence_adjusted_price(
+            inn_leave_companion_deposit(inn_base_room_rate(inn)),
+            speaker_intelligence,
+        ),
+        stay_counter,
+    )
 }
 
 /// `shops.md §8.4` morbid pickup conversion. A guest left at the
@@ -1094,9 +1147,8 @@ impl Inn {
     }
 
     /// `shops.md §8.4` per-inn base room rate. Public issue #15
-    /// corrected the inn flow to fixed
-    /// base-rate arithmetic with no speaking-member Intelligence
-    /// discount.
+    /// corrected the inn flow to apply the shared speaking-member
+    /// Intelligence adjustment after computing each raw bill.
     pub const fn base_room_rate(self) -> u16 {
         match self {
             Self::TheWayfarerInn => 2,
@@ -1962,17 +2014,17 @@ pub fn quote_inn_rest_for_speaker(
     party_size: usize,
     speaker_intelligence: u8,
 ) -> Result<InnRestQuote, InnError> {
-    let _ = speaker_intelligence;
     if party_size == 0 {
         return Err(InnError::EmptyParty);
     }
     let base_room_rate = inn_base_room_rate(inn);
+    let raw = base_room_rate * party_size as u16;
     Ok(InnRestQuote {
         inn,
         party_size,
         base_room_rate,
         minimum_gold: inn_minimum_gold(inn),
-        total_price: base_room_rate * party_size as u16,
+        total_price: shop_intelligence_adjusted_price(raw, speaker_intelligence),
     })
 }
 
@@ -2368,6 +2420,16 @@ pub const fn quote_horse_purchase(stable: Stable) -> HorsePurchaseQuote {
     }
 }
 
+pub const fn quote_horse_purchase_for_speaker(
+    stable: Stable,
+    speaker_intelligence: u8,
+) -> HorsePurchaseQuote {
+    HorsePurchaseQuote {
+        stable,
+        price: shop_intelligence_adjusted_price(stable_horse_price(stable), speaker_intelligence),
+    }
+}
+
 pub const fn horse_purchase_active_object(x: usize, y: usize, z: i8) -> ActiveObject {
     ActiveObject {
         type_byte: HORSE_PARKED_FIRST,
@@ -2645,6 +2707,25 @@ impl PlayState {
         y: usize,
     ) -> Result<HorsePurchaseOutcome, HorsePurchaseError> {
         let quote = quote_horse_purchase(stable);
+        self.buy_horse_with_quote(quote, x, y)
+    }
+
+    pub fn buy_horse_for_price(
+        &mut self,
+        stable: Stable,
+        price: u16,
+        x: usize,
+        y: usize,
+    ) -> Result<HorsePurchaseOutcome, HorsePurchaseError> {
+        self.buy_horse_with_quote(HorsePurchaseQuote { stable, price }, x, y)
+    }
+
+    fn buy_horse_with_quote(
+        &mut self,
+        quote: HorsePurchaseQuote,
+        x: usize,
+        y: usize,
+    ) -> Result<HorsePurchaseOutcome, HorsePurchaseError> {
         if self.gold < quote.price {
             return Err(HorsePurchaseError::InsufficientGold {
                 available: self.gold,

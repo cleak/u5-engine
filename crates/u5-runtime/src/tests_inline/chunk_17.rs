@@ -335,7 +335,7 @@
         assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Blinked East to (3, 1) in BRITANNIA.");
+        assert_eq!(state.message, "Blinked East to (15, 1) in BRITANNIA.");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1068,7 +1068,7 @@
         let z = state.current_floor().unwrap();
         state.active_objects.push(
             state
-                .shadowlord_name_encounter_object(SHADOWLORD_FALSEHOOD_INDEX, 6, 5, z)
+                .shadowlord_name_encounter_object(SHADOWLORD_FALSEHOOD_INDEX, 5, 4, z)
                 .unwrap(),
         );
 
@@ -1101,7 +1101,7 @@
         let z = state.current_floor().unwrap();
         state.active_objects.push(
             state
-                .shadowlord_name_encounter_object(SHADOWLORD_FALSEHOOD_INDEX, 6, 4, z)
+                .shadowlord_name_encounter_object(SHADOWLORD_FALSEHOOD_INDEX, 5, 3, z)
                 .unwrap(),
         );
 
@@ -1117,7 +1117,7 @@
     }
 
     #[test]
-    fn use_shadowlord_shard_matching_flame_does_not_require_live_encounter() {
+    fn use_shadowlord_shard_matching_flame_requires_live_encounter_north() {
         let dir = debug_game_dir();
         fs::write(dir.join(ETERNAL_FLAME_TABLE_FILE), "CASTLE:0 0 5 5 TRUTH\n").unwrap();
         let mut grid = open_grid();
@@ -1130,15 +1130,15 @@
             state
                 .use_shadowlord_shard(SHADOWLORD_FALSEHOOD_INDEX, Some(&dir))
                 .unwrap(),
-            MoveOutcome::Used
+            MoveOutcome::Blocked
         );
 
-        assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 0);
-        assert!(state.shadowlord_vanquished(SHADOWLORD_FALSEHOOD_INDEX));
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX], 1);
+        assert!(!state.shadowlord_vanquished(SHADOWLORD_FALSEHOOD_INDEX));
+        assert_eq!(state.turn, 0);
         assert_eq!(
             state.message,
-            "Shard of Falsehood: cast into Flame of Truth; Falsehood vanquished; cleared 0 encounter(s)."
+            "Shard of Falsehood: matching Shadowlord is not present."
         );
     }
 
@@ -3104,14 +3104,14 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!((state.player.x, state.player.y), (3, 1));
+        assert_eq!((state.player.x, state.player.y), (15, 1));
         assert_eq!(state.grid[world_cell_index(2, 1)], 97);
         assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert!(state.visibility_dirty);
-        assert_eq!(state.message, "Blinked East to (3, 1) in BRITANNIA.");
+        assert_eq!(state.message, "Blinked East to (15, 1) in BRITANNIA.");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -3142,7 +3142,7 @@
     }
 
     #[test]
-    fn cast_blink_rejects_foot_damaging_sidecar_destination() {
+    fn cast_blink_ignores_sidecar_destination_and_lands_on_farthest_grass() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(BLINK_TARGET_TABLE_FILE),
@@ -3164,12 +3164,12 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!((state.player.x, state.player.y), (15, 1));
         assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.party[0].hp, DEFAULT_PARTY_HP);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Failed!");
+        assert_eq!(state.message, "Blinked East to (15, 1) in BRITANNIA.");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -3201,10 +3201,10 @@
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(missing_row.spell_charges[BLINK_SPELL_INDEX], 1);
-        assert_eq!(missing_row.party[0].mana, BLINK_COST);
-        assert_eq!(missing_row.turn, 0);
-        assert_eq!(missing_row.message, "No Blink target.");
+        assert_eq!(missing_row.spell_charges[BLINK_SPELL_INDEX], 0);
+        assert_eq!(missing_row.party[0].mana, 0);
+        assert_eq!(missing_row.turn, 1);
+        assert_eq!(missing_row.message, "Blinked East to (15, 1) in BRITANNIA.");
 
         fs::write(
             dir.join(BLINK_TARGET_TABLE_FILE),
@@ -3233,12 +3233,15 @@
 
         assert_eq!(
             (blocked_destination.player.x, blocked_destination.player.y),
-            (1, 1)
+            (15, 1)
         );
         assert_eq!(blocked_destination.spell_charges[BLINK_SPELL_INDEX], 0);
         assert_eq!(blocked_destination.party[0].mana, 0);
         assert_eq!(blocked_destination.turn, 1);
-        assert_eq!(blocked_destination.message, "Failed!");
+        assert_eq!(
+            blocked_destination.message,
+            "Blinked East to (15, 1) in BRITANNIA."
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

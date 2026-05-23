@@ -607,7 +607,7 @@
     }
 
     #[test]
-    fn town_surface_wishing_well_car_wish_has_no_native_grant_until_published() {
+    fn town_surface_wishing_well_car_wish_grants_horse_family_object() {
         let mut grid = open_grid();
         grid[32 + 2] = 0xa1;
         let mut state = test_state(grid, 1, 1);
@@ -625,8 +625,8 @@
             Some(MoveOutcome::Observed)
         );
 
-        assert_eq!(state.message, "Wishing well: no effect.");
-        assert!(state.boardable_vehicle_slot_at(2, 1).is_none());
+        assert_eq!(state.message, "Wishing well: a horse appears.");
+        assert!(state.boardable_vehicle_slot_at(2, 1).is_some());
     }
 
     #[test]
@@ -777,7 +777,9 @@
     #[test]
     fn look_clock_tiles_append_twelve_hour_time_context() {
         let table = parse_look2_dat(&look2_bytes(&[(0xfa, "a clock")])).unwrap();
-        let mut state = test_state(open_grid(), 1, 1);
+        let mut grid = open_grid();
+        grid[2 * 32 + 1] = 0x05;
+        let mut state = test_state(grid, 1, 1);
 
         state.clock = GameClock::new(0, 7).unwrap();
         assert_eq!(
@@ -2978,13 +2980,15 @@
     #[test]
     fn end_to_end_horse_trader_purchase_places_boardable_horse() {
         let dialogue = HashMap::new();
-        let mut state = test_state(open_grid(), 1, 1);
+        let mut grid = open_grid();
+        grid[2 * 32 + 1] = 0x05;
+        let mut state = test_state(grid, 1, 1);
         state.area = Area::Town {
             scene: Scene::new(20).unwrap(),
             floor: 0,
         };
         state.player.facing = Direction::East;
-        state.gold = 130;
+        state.gold = 143;
         state.load_scheduled_npcs(&[
             NpcSlot {
                 slot: 0,
@@ -3007,7 +3011,7 @@
             MoveOutcome::Talked
         );
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        assert!(state.message.contains("130 gold"));
+        assert!(state.message.contains("143 gold"));
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
@@ -3032,7 +3036,9 @@
     #[test]
     fn town_talk_guild_shop_uses_scene_local_prices() {
         let dialogue = HashMap::new();
-        let mut state = test_state(open_grid(), 1, 1);
+        let mut grid = open_grid();
+        grid[2 * 32 + 1] = 0x05;
+        let mut state = test_state(grid, 1, 1);
         state.area = Area::Town {
             scene: Scene::new(24).unwrap(),
             floor: 0,
@@ -3131,7 +3137,7 @@
         assert!(state.message.contains("The Stablehouse"));
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
-        assert!(state.message.contains("130 gold"));
+        assert!(state.message.contains("143 gold"));
     }
 
     #[test]
@@ -3543,12 +3549,12 @@
         ));
 
         handle_play_key_input(&mut state, 'L', "", Path::new("")).unwrap();
-        assert!(state.message.contains("Deposit is 30 gold"));
+        assert!(state.message.contains("Deposit is 33 gold"));
         handle_play_key_input(&mut state, '2', "", Path::new("")).unwrap();
         assert!(state.message.contains("party member 2"));
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
-        assert_eq!(state.gold, 70);
+        assert_eq!(state.gold, 67);
         assert_eq!(state.party.len(), 1);
         assert_eq!(state.party_names, vec![*b"AVATAR\0\0\0"]);
         assert_eq!(state.inn_registry.len(), 1);
@@ -3586,10 +3592,10 @@
         state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::default()));
 
         handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
-        assert!(state.message.contains("2 gold"));
+        assert!(state.message.contains("22 gold"));
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
-        assert_eq!(state.gold, 98);
+        assert_eq!(state.gold, 78);
         assert!(state.inn_registry.is_empty());
         assert_eq!(state.party.len(), 2);
         assert_eq!(state.party[1].status, b'D');
@@ -3628,13 +3634,13 @@
         state.active_shop = Some(ActiveShopSession::Innkeeper(InnkeeperState::default()));
 
         handle_play_key_input(&mut state, 'P', "", Path::new("")).unwrap();
-        assert!(state.message.contains("6 gold"));
+        assert!(state.message.contains("75 gold"));
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
 
-        assert_eq!(state.gold, 94);
+        assert_eq!(state.gold, 25);
         assert!(state.inn_registry.is_empty());
         assert_eq!(state.party.len(), 2);
-        assert!(state.message.contains("Picked up companion 2 for 6 gold"));
+        assert!(state.message.contains("Picked up companion 2 for 75 gold"));
     }
 
     #[test]

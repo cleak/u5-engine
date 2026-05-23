@@ -3065,12 +3065,16 @@ impl PlayState {
         &mut self,
         caster_index: usize,
         direction: Option<Direction>,
-        game_dir: &Path,
+        _game_dir: &Path,
     ) -> io::Result<MoveOutcome> {
         let Some(direction) = direction else {
             self.message = "Direction? Use C1IP6.".to_string();
             return Ok(MoveOutcome::Blocked);
         };
+        if !direction.is_cardinal() {
+            self.message = "Blink requires a cardinal direction.".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
         if self.combat_active {
             return Ok(self.cast_combat_blink(caster_index, Some(direction)));
         }
@@ -3078,35 +3082,56 @@ impl PlayState {
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
-        let Some(entry) = self.blink_target_at(game_dir, direction)? else {
-            self.message = "No Blink target.".to_string();
-            return Ok(MoveOutcome::Blocked);
-        };
         if let Some(outcome) =
             self.cast_spell_resource_gate(caster_index, BLINK_SPELL_INDEX, BLINK_COST)
         {
             return Ok(outcome);
         }
 
-        if !self.blink_source_matches(entry) || !self.blink_destination_legal(game_dir, entry)? {
+        let Some((to_x, to_y)) = self.noncombat_blink_target(direction) else {
             self.advance_turn();
             self.message = "Failed!".to_string();
             return Ok(MoveOutcome::Blocked);
-        }
+        };
 
-        self.player.x = entry.to_x;
-        self.player.y = entry.to_y;
+        self.player.x = to_x;
+        self.player.y = to_y;
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_turn();
         self.message = format!(
             "Blinked {} to ({}, {}) in {}.",
             direction.name(),
-            entry.to_x,
-            entry.to_y,
+            to_x,
+            to_y,
             self.current_area_label()
         );
         Ok(MoveOutcome::Cast)
+    }
+
+    pub fn noncombat_blink_target(&self, direction: Direction) -> Option<(usize, usize)> {
+        if !matches!(self.area, Area::World { .. }) {
+            return None;
+        }
+        let (dx, dy) = direction.delta();
+        let scroll_base = world_scroll_base(self.player.x, self.player.y);
+        let mut x = self.player.x;
+        let mut y = self.player.y;
+        let mut farthest = None;
+        loop {
+            x = (x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
+            y = (y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
+            let ox = world_scroll_axis_offset(scroll_base.0, x);
+            let oy = world_scroll_axis_offset(scroll_base.1, y);
+            if ox >= OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE || oy >= OVERWORLD_CHUNK_BUFFER_WINDOW_SIDE
+            {
+                break;
+            }
+            if self.grid[world_cell_index(x, y)] == 0x05 {
+                farthest = Some((x, y));
+            }
+        }
+        farthest
     }
 
     pub fn cast_combat_blink(

@@ -248,7 +248,7 @@ impl WishingWellWish {
     }
 
     pub const fn has_native_grant(self) -> bool {
-        matches!(self, Self::Horse)
+        true
     }
 }
 

@@ -128,7 +128,8 @@ pub fn shop_session_for_talk_context(
     Some(match dialog_id {
         0x81 => {
             if let Some(scene) = scene_byte {
-                ActiveShopSession::ArmsLocal(ArmsShopState::Greeting, arms_shop_for_scene(scene)?)
+                let shop = arms_shop_for_scene(scene)?;
+                ActiveShopSession::ArmsStocked(ArmsShopState::Greeting, shop.stock_table())
             } else {
                 ActiveShopSession::Arms(ArmsShopState::Greeting)
             }
@@ -330,10 +331,8 @@ mod tests {
     fn talk_context_resolves_scene_local_shop_instances() {
         assert!(matches!(
             shop_session_for_talk_context(0x81, Some(26)),
-            Some(ActiveShopSession::ArmsLocal(
-                _,
-                ArmsShop::TheShatteredShield
-            ))
+            Some(ActiveShopSession::ArmsStocked(_, table))
+                if table == ArmsShop::TheShatteredShield.stock_table()
         ));
         assert!(matches!(
             shop_session_for_talk_context(0x86, Some(8)),
@@ -554,7 +553,7 @@ mod tests {
             assert_eq!(shop.display_name(), name);
             assert!(matches!(
                 shop_session_for_talk_context(0x81, Some(scene)),
-                Some(ActiveShopSession::ArmsLocal(_, resolved)) if resolved == shop
+                Some(ActiveShopSession::ArmsStocked(_, table)) if table == shop.stock_table()
             ));
         }
         assert_eq!(arms_shop_for_scene(1), None);

@@ -7539,15 +7539,15 @@ fn rect_column_sweep_transition_state_advances_at_title_tick_cadence() {
 
 #[test]
 fn town_gas_doorway_roll_constants_match_published_spec() {
-    // `cleak/u5-spec#51`: 1-in-29 chance per non-poisoned member
-    // (inclusive `0..=28` range with a hit on exact zero).
-    assert_eq!(TOWN_GAS_DOORWAY_RANGE_MAX, 28);
+    // `cleak/u5-spec#51`: inclusive `0..=29` roll per eligible member,
+    // poisoning when the roll is greater than Dexterity.
+    assert_eq!(TOWN_GAS_DOORWAY_RANGE_MAX, 29);
     assert_eq!(TOWN_POISON_GAS_TILE_CLASS, 4);
     assert_eq!(TOWN_POISON_GAS_VEHICLE_BYTE, 0x1C);
     assert!(town_poison_gas_tile_attribute_matches(4, 0x1C));
     assert!(!town_poison_gas_tile_attribute_matches(3, 0x1C));
     assert!(!town_poison_gas_tile_attribute_matches(4, 0x1D));
-    // Sample many seeds and confirm the average hit rate is near 1/29.
+    // Sample many seeds and confirm the average exact-zero rate is near 1/30.
     let mut hits = 0usize;
     let mut state: u16 = 0;
     const TRIALS: usize = 29_000;
@@ -7556,11 +7556,11 @@ fn town_gas_doorway_roll_constants_match_published_spec() {
             hits += 1;
         }
     }
-    // Expected hits ~ TRIALS / 29 = 1000. Permit +/- 25%.
+    // Expected hits ~ TRIALS / 30. Permit +/- 25%.
     let expected = TRIALS / (TOWN_GAS_DOORWAY_RANGE_MAX as usize + 1);
     assert!(
         hits >= expected * 3 / 4 && hits <= expected * 5 / 4,
-        "1-in-29 PRNG hit rate {hits} too far from expected {expected}"
+        "1-in-30 PRNG hit rate {hits} too far from expected {expected}"
     );
 }
 
@@ -12568,11 +12568,10 @@ fn wishing_well_keywords_and_view_outcome_match_spec() {
         assert!(wishing_well_wish_accepted(&k.to_uppercase()));
     }
     assert_eq!(wishing_well_wish("horse"), Some(WishingWellWish::Horse));
-    assert!(wishing_well_wish("Horse").unwrap().has_native_grant());
     for k in ["Corvette", "Ferrari", "Lamborghini", "Lotus", "Porsche"] {
         assert!(
-            !wishing_well_wish(k).unwrap().has_native_grant(),
-            "{k} has no native grant until the exact public #43 object table is published"
+            wishing_well_wish(k).unwrap().has_native_grant(),
+            "{k} grants the same horse-family object as Horse"
         );
     }
     assert!(!wishing_well_wish_accepted(""));
@@ -13442,30 +13441,30 @@ fn inn_leave_and_pickup_bills_match_spec_formulas() {
     assert_eq!(inn_pickup_bill(15, 25), 15 * 25);
     assert_eq!(inn_pickup_bill(0, 4), 0);
     assert_eq!(inn_pickup_bill(0, 0), 0);
-    // Public issue #15 retracts the earlier Intelligence discount:
-    // inn charges are fixed base-rate arithmetic.
+    // Public issue #15 applies the shared Intelligence adjustment after
+    // each raw inn bill is computed.
     assert_eq!(
         quote_inn_rest_for_speaker(Inn::HotelBrittany, 2, 75)
             .unwrap()
             .total_price,
-        6
+        0
     );
     assert_eq!(
         quote_inn_rest_for_speaker(Inn::HotelBrittany, 2, 99)
             .unwrap()
             .total_price,
-        6
+        0
     );
     assert_eq!(
         inn_leave_companion_deposit_for_speaker(Inn::HotelBrittany, 75),
-        30
+        0
     );
     assert_eq!(
         inn_leave_companion_deposit_for_speaker(Inn::HotelBrittany, 99),
-        30
+        0
     );
-    assert_eq!(inn_pickup_bill_for_speaker(Inn::HotelBrittany, 3, 75), 9);
-    assert_eq!(inn_pickup_bill_for_speaker(Inn::HotelBrittany, 3, 99), 9);
+    assert_eq!(inn_pickup_bill_for_speaker(Inn::HotelBrittany, 3, 75), 0);
+    assert_eq!(inn_pickup_bill_for_speaker(Inn::HotelBrittany, 3, 99), 0);
 }
 
 #[test]
@@ -15313,7 +15312,7 @@ fn dungeon_room_clear_bitmap_demotes_matching_triggers_on_load() {
 
     let state = PlayState::load_dungeon_scene(&dir, scene, options).unwrap();
 
-    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xe7);
+    assert_eq!(state.grid[dungeon_cell_index(0, 2, 1)], 0xa7);
     assert_eq!(state.grid[dungeon_cell_index(0, 3, 1)], 0xf6);
     assert!(dungeon_room_clear_bit_is_set(
         &state.dungeon_room_clear_bitmap,

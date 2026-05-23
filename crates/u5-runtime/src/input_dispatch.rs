@@ -948,18 +948,26 @@ fn handle_active_shop_key_input(
         ActiveShopSession::HorseTrader(s) => {
             let mut pending = false;
             let outcome = match (*s, yes, no) {
-                (HorseTraderState::Greeting { .. }, _, _) => step_horse_trader(
-                    s,
-                    HorseTraderInput::Key(key_byte),
-                    &mut state.gold,
-                    &mut pending,
-                ),
+                (HorseTraderState::Greeting { stable }, _, _)
+                    if matches!(key_byte, b'Y' | b'y' | b'B' | b'b') =>
+                {
+                    let quote = quote_horse_purchase_for_speaker(stable, ctx.speaker_intelligence);
+                    *s = HorseTraderState::ConfirmPurchase {
+                        stable,
+                        price: quote.price,
+                    };
+                    HorseTraderOutcome::QuotedPrice { price: quote.price }
+                }
+                (HorseTraderState::Greeting { .. }, _, _) => {
+                    *s = HorseTraderState::Exited;
+                    HorseTraderOutcome::Exited
+                }
                 (HorseTraderState::ConfirmPurchase { stable, price }, true, _) => {
                     if state.gold < price {
                         *s = HorseTraderState::Greeting { stable };
                         HorseTraderOutcome::RefusedShortFunds { price }
                     } else if let Some((x, y)) = horse_sale_position(state) {
-                        match state.buy_horse(stable, x, y) {
+                        match state.buy_horse_for_price(stable, price, x, y) {
                             Ok(_) => {
                                 pending = true;
                                 *s = HorseTraderState::Exited;
@@ -1129,32 +1137,18 @@ fn handle_active_shop_key_input(
 }
 
 fn horse_sale_position(state: &PlayState) -> Option<(usize, usize)> {
-    let mut candidates = Vec::new();
-    let mut push_unique = |pos: Option<(usize, usize)>| {
-        if let Some(pos) = pos {
-            if !candidates.contains(&pos) {
-                candidates.push(pos);
-            }
-        }
-    };
-
-    push_unique(state.adjacent_position(state.player.facing));
-    for direction in [
-        Direction::East,
+    [
         Direction::South,
-        Direction::West,
         Direction::North,
-        Direction::SouthEast,
-        Direction::SouthWest,
-        Direction::NorthEast,
-        Direction::NorthWest,
-    ] {
-        push_unique(state.adjacent_position(direction));
-    }
-
-    candidates
-        .into_iter()
-        .find(|(x, y)| state.player_can_land_on_foot(None, *x, *y).unwrap_or(false))
+        Direction::East,
+        Direction::West,
+    ]
+    .into_iter()
+    .filter_map(|direction| state.adjacent_position(direction))
+    .find(|(x, y)| {
+        matches!(state.current_area_tile(*x, *y), 0x44 | 0x45 | 0x05)
+            && state.object_at_current_floor(*x, *y).is_none()
+    })
 }
 
 fn active_shop_text_line(key: char, suffix: &str) -> String {

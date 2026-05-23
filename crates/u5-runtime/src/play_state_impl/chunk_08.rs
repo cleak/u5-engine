@@ -469,17 +469,20 @@ impl PlayState {
     pub fn apply_inn_rest_night_recovery(&mut self) -> (u16, u16, usize) {
         let mut recovered_hp = 0u16;
         let mut recovered_mana = 0u16;
-        let mut cured = 0usize;
+        let mut status_changes = 0usize;
         for (index, member) in self.party.iter_mut().enumerate() {
-            if !member.living() {
+            if member.status == b'D' {
                 continue;
             }
             if member.status == b'P' {
-                member.status = b'G';
-                cured += 1;
-            }
-            if !matches!(member.status, b'G' | b'S') {
+                member.status = b'D';
+                member.hp = 0;
+                status_changes += 1;
                 continue;
+            }
+            if member.status == b'S' {
+                member.status = b'G';
+                status_changes += 1;
             }
 
             let hp_target = inn_rest_hp_target(member.class_byte, member.max_hp);
@@ -495,7 +498,7 @@ impl PlayState {
                 member.mana = mana_target;
             }
         }
-        (recovered_hp, recovered_mana, cured)
+        (recovered_hp, recovered_mana, status_changes)
     }
 
     pub fn mark_town_rest_sleepers(&mut self) -> usize {

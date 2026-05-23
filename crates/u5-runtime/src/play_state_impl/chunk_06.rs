@@ -2079,7 +2079,7 @@ impl PlayState {
         match entry.rule {
             HiddenTreasureRule::OneShot => !self.fixed_hidden_treasure_found(entry.record),
             HiddenTreasureRule::KeyNpcGated => {
-                self.keys != 0
+                self.keys == 0
                     && !self.fixed_hidden_treasure_found(entry.record)
                     && !self.fixed_hidden_treasure_target_has_npc(x, y)
             }

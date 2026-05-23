@@ -890,34 +890,33 @@
     }
 
     /// `cleak/u5-spec#51`: seed the PRNG so the first
-    /// `u5_prng_range_u16(_, 0, 28)` roll returns exactly `0`,
-    /// triggering a guaranteed poison hit. The search is bounded and
-    /// always succeeds in well under 256 seeds because the published
-    /// roll has a `1/29` hit rate.
-    fn poison_gas_first_roll_zero_seed() -> u16 {
+    /// `u5_prng_range_u16(_, 0, 29)` roll returns a nonzero value,
+    /// triggering a deterministic poison hit for a zero-Dexterity test
+    /// member.
+    fn poison_gas_first_poison_seed() -> u16 {
         for candidate in 0..=u16::MAX {
             let mut state = candidate;
-            if u5_prng_range_u16(&mut state, 0, TOWN_GAS_DOORWAY_RANGE_MAX) == 0 {
+            if u5_prng_range_u16(&mut state, 0, TOWN_GAS_DOORWAY_RANGE_MAX) > 0 {
                 return candidate;
             }
         }
-        unreachable!("PRNG range cycle must hit zero")
+        unreachable!("PRNG range cycle must hit a nonzero value")
     }
 
     #[test]
     fn town_movement_onto_clean_poison_gas_sidecar_poisons_eligible_member() {
-        // `cleak/u5-spec#51`: every non-poisoned member rolls
-        // `prng_range(0, 28)` independently per step; on exact zero
-        // the member is poisoned. Seed the PRNG so the first roll
-        // lands on zero so the test is deterministic.
+        // `cleak/u5-spec#51`: every eligible member rolls
+        // `prng_range(0, 29)` independently per step; the member is
+        // poisoned when the roll is greater than Dexterity.
         let dir = debug_game_dir();
         fs::write(dir.join(TOWN_POISON_GAS_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
         let mut grid = open_grid();
         grid[32 + 1] = 55;
         let mut state = test_state(grid, 0, 1);
-        state.prng_state = poison_gas_first_roll_zero_seed();
+        state.prng_state = poison_gas_first_poison_seed();
         state.player.facing = Direction::East;
         state.party[0].status = b'G';
+        state.party[0].climb_stat = 0;
         state.party[0].hp = 10;
 
         assert_eq!(
@@ -940,9 +939,10 @@
         let mut grid = open_grid();
         grid[32 + 1] = 55;
         let mut state = test_state(grid, 0, 1);
-        state.prng_state = poison_gas_first_roll_zero_seed();
+        state.prng_state = poison_gas_first_poison_seed();
         state.player.facing = Direction::East;
         state.party[0].status = b'G';
+        state.party[0].climb_stat = 0;
         state.party[0].hp = 10;
 
         assert_eq!(
@@ -965,16 +965,16 @@
         let mut grid = open_grid();
         grid[32 + 1] = 55;
         let mut state = test_state(grid, 0, 1);
-        state.prng_state = poison_gas_first_roll_zero_seed();
+        state.prng_state = poison_gas_first_poison_seed();
         state.player.facing = Direction::East;
         state.party[0].status = b'P';
         state.party.push(PartyMember {
             slot: 1,
             class_byte: b'A',
-            status: b'D',
-            climb_stat: DEFAULT_CLIMB_STAT,
+            status: b'S',
+            climb_stat: 0,
             mana: 0,
-            hp: 0,
+            hp: 10,
             max_hp: 10,
             level: 1,
         });
@@ -995,13 +995,13 @@
     #[test]
     fn town_poison_gas_skips_poisoned_slots_without_advancing_prng() {
         let mut state = test_state(open_grid(), 0, 1);
-        state.prng_state = poison_gas_first_roll_zero_seed();
+        state.prng_state = poison_gas_first_poison_seed();
         state.party[0].status = b'P';
         state.party.push(PartyMember {
             slot: 1,
             class_byte: b'A',
             status: b'G',
-            climb_stat: DEFAULT_CLIMB_STAT,
+            climb_stat: 0,
             mana: 0,
             hp: 10,
             max_hp: 10,
@@ -1010,7 +1010,7 @@
         let mut expected_prng = state.prng_state;
         let expected_roll =
             u5_prng_range_u16(&mut expected_prng, 0, TOWN_GAS_DOORWAY_RANGE_MAX);
-        assert_eq!(expected_roll, 0);
+        assert!(expected_roll > 0);
 
         let report = state.apply_town_poison_gas(TownPoisonGasEntry {
             scene: Scene::new(17).unwrap(),
@@ -1033,10 +1033,11 @@
         let mut grid = open_grid();
         grid[32 + 1] = 55;
         let mut state = test_state(grid, 0, 1);
-        state.prng_state = poison_gas_first_roll_zero_seed();
+        state.prng_state = poison_gas_first_poison_seed();
         state.clock = GameClock::new(8, 59).unwrap();
         state.player.facing = Direction::East;
         state.party[0].status = b'G';
+        state.party[0].climb_stat = 0;
         state.party[0].hp = 10;
 
         assert_eq!(
@@ -1059,7 +1060,7 @@
         let mut grid = open_grid();
         grid[32 + 1] = 55;
         let mut state = test_state(grid, 1, 1);
-        state.prng_state = poison_gas_first_roll_zero_seed();
+        state.prng_state = poison_gas_first_poison_seed();
         state.party[0].status = b'G';
         state.party[0].hp = 10;
 
@@ -1069,7 +1070,7 @@
         );
 
         assert_eq!(state.party[0].status, b'G');
-        assert_eq!(state.prng_state, poison_gas_first_roll_zero_seed());
+        assert_eq!(state.prng_state, poison_gas_first_poison_seed());
         assert_eq!(state.message, "Passed.");
         let _ = fs::remove_dir_all(dir);
     }

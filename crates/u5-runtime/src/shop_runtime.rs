@@ -2182,7 +2182,7 @@ mod tests {
         let outcome = step_innkeeper(&mut state, InnkeeperInput::Key(b'L'), ctx);
         assert_eq!(
             outcome,
-            InnkeeperOutcome::PickLeaveCompanion { deposit: 30 }
+            InnkeeperOutcome::PickLeaveCompanion { deposit: 33 }
         );
 
         let outcome = step_innkeeper(&mut state, InnkeeperInput::Slot(1), ctx);
@@ -2190,13 +2190,13 @@ mod tests {
             outcome,
             InnkeeperOutcome::QuotedLeaveCompanion {
                 party_index: 1,
-                deposit: 30,
+                deposit: 33,
             }
         );
     }
 
     #[test]
-    fn innkeeper_quotes_fixed_base_rate_without_intelligence_discount() {
+    fn innkeeper_quotes_intelligence_adjusted_price_after_raw_bill() {
         let high_int = ShopTransactionContext {
             party_gold: 100,
             speaker_intelligence: 75,
@@ -2210,14 +2210,14 @@ mod tests {
             InnkeeperOutcome::QuotedRest {
                 inn: Inn::HotelBrittany,
                 base_room_rate: 3,
-                total_price: 12,
+                total_price: 0,
             }
         );
 
         let mut leave = InnkeeperState::for_inn(Inn::HotelBrittany);
         assert_eq!(
             step_innkeeper(&mut leave, InnkeeperInput::Key(b'L'), high_int),
-            InnkeeperOutcome::PickLeaveCompanion { deposit: 30 }
+            InnkeeperOutcome::PickLeaveCompanion { deposit: 0 }
         );
 
         let mut pickup = InnkeeperState::PickUpCompanion {
@@ -2230,7 +2230,7 @@ mod tests {
             step_innkeeper(&mut pickup, InnkeeperInput::GuestChoice(0), high_int),
             InnkeeperOutcome::QuotedPickUpCompanion {
                 registry_index: 0,
-                bill: 3,
+                bill: 0,
             }
         );
     }

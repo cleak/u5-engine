@@ -649,6 +649,10 @@ impl PlayState {
             );
             return Ok(MoveOutcome::Blocked);
         }
+        if !self.matching_shadowlord_name_encounter_north(index) {
+            self.message = format!("{name}: matching Shadowlord is not present.");
+            return Ok(MoveOutcome::Blocked);
+        }
 
         self.special_items[item_index] = 0;
         self.vanquish_shadowlord(index);
@@ -2369,12 +2373,10 @@ impl PlayState {
             self.message = "Wishing well: no effect.".to_string();
             return MoveOutcome::Observed;
         }
-        if !wish.has_native_grant() {
-            self.message = "Wishing well: no effect.".to_string();
-            return MoveOutcome::Observed;
-        }
-
-        if self.object_at_current_floor(x, y).is_some() {
+        let _ = wish;
+        let grant_x = self.player.x.saturating_add(1);
+        let grant_y = self.player.y;
+        if grant_x >= 32 || self.object_at_current_floor(grant_x, grant_y).is_some() {
             self.message = "Wishing well: no effect.".to_string();
             return MoveOutcome::Observed;
         }
@@ -2383,7 +2385,7 @@ impl PlayState {
             return MoveOutcome::Observed;
         };
         if self
-            .allocate_active_object_slot(horse_purchase_active_object(x, y, z))
+            .allocate_active_object_slot(horse_purchase_active_object(grant_x, grant_y, z))
             .is_none()
         {
             self.message = "Wishing well: no effect.".to_string();
@@ -2421,12 +2423,7 @@ impl PlayState {
                 .unwrap_or(self.avatar_stats.intelligence)
         };
         let roll = self.random_range_u8(DEATH_VISION_ROLL_LOW, DEATH_VISION_ROLL_HIGH);
-        if roll <= intelligence {
-            self.message = format!(
-                "Death vision: party member {} beholds a distant fate at ({x}, {y}).",
-                member_index + 1
-            );
-        } else {
+        if intelligence > roll {
             let title = format!("Death vision at ({x}, {y})");
             let text_map = self.surface_view_map();
             self.active_view_overlay = Some(ViewOverlay {
@@ -2435,7 +2432,13 @@ impl PlayState {
                 kind: ViewOverlayKind::Surface,
                 mode: ViewOverlayMode::SurfaceLook,
             });
-            self.message = format!("Thou seest nothing.\n{text_map}");
+            self.message = format!(
+                "Death vision: party member {} beholds a distant fate at ({x}, {y}).\n{text_map}",
+                member_index + 1
+            );
+        } else {
+            self.active_view_overlay = None;
+            self.message = format!("Death vision: party member {}.", member_index + 1);
         }
         MoveOutcome::Observed
     }

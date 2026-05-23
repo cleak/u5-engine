@@ -236,7 +236,7 @@
     }
 
     #[test]
-    fn terrain_combat_main_path_applies_public_replacement_tile() {
+    fn terrain_combat_main_path_uses_class_default_spawn_count() {
         let dir = debug_game_dir();
         let record = synthetic_combat_arena_record();
         fs::write(dir.join(BRIT_CBT_FILE), record.repeat(BRIT_CBT_RECORDS)).unwrap();
@@ -269,15 +269,9 @@
             .unwrap();
 
         assert!(message.contains("BRIT.CBT arena 12"));
+        assert!(message.contains("requested Orc"));
         assert_eq!(state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile, 0xc0);
-        assert_eq!(
-            state.active_objects[COMBAT_PARTY_ACTOR_SLOTS + 1].tile,
-            replacement_tile
-        );
-        assert_eq!(
-            state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].active_object_slot,
-            (COMBAT_PARTY_ACTOR_SLOTS + 1) as u8
-        );
+        assert_eq!(replacement_tile, 12);
         let _ = fs::remove_dir_all(dir);
     }
 

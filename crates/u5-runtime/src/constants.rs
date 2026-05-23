@@ -1390,12 +1390,13 @@ pub const HOURLY_STARVATION_DAMAGE_MIN: u16 = 1;
 pub const HOURLY_STARVATION_DAMAGE_MAX: u16 = 8;
 
 /// `systems/town-mode.md` / `cleak/u5-spec#51`: town poison-gas
-/// doorway per-member acceptance gate is `prng_range(0, 28) == 0`,
-/// i.e. an inclusive `0..=28` roll with a hit on exact zero. This
-/// constant names the inclusive upper bound; probability is `1/29`.
-pub const TOWN_GAS_DOORWAY_RANGE_MAX: u16 = 28;
+/// doorway rolls an inclusive `0..=29` Dexterity save per eligible
+/// member. A member is poisoned when the roll is greater than that
+/// member's Dexterity byte.
+pub const TOWN_GAS_DOORWAY_RANGE_MAX: u16 = 29;
 pub const TOWN_POISON_GAS_TILE_CLASS: u8 = 4;
 pub const TOWN_POISON_GAS_VEHICLE_BYTE: u8 = 0x1C;
+pub const TOWN_POISON_GAS_LIVE_TILE: u8 = 0x04;
 /// `npc-schedules.md §8.4` BFS queue capacity used by the NPC
 /// pathfinder. Anchored to the canonical
 /// [`crate::NPC_PATHFIND_QUEUE_CAPACITY`] so the two parallel

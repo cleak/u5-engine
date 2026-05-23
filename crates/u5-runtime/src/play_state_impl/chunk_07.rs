@@ -1038,6 +1038,22 @@ impl PlayState {
         })
     }
 
+    pub fn matching_shadowlord_name_encounter_north(&self, index: usize) -> bool {
+        let Some(floor) = self.current_floor() else {
+            return false;
+        };
+        let Some(y) = self.player.y.checked_sub(1) else {
+            return false;
+        };
+        let x = self.player.x;
+        self.active_objects.iter().copied().any(|object| {
+            object.z == floor
+                && object.x == x
+                && object.y == y
+                && Self::shadowlord_name_encounter_index(object) == Some(index)
+        })
+    }
+
     pub fn place_shadowlord_name_encounter(&mut self, index: usize) -> Option<usize> {
         let current = self.current_shadowlord_hideout_id()?;
         if self.shadowlord_hideouts.get(index).copied() != Some(current) {
@@ -2538,8 +2554,10 @@ impl PlayState {
         y: usize,
         tile: u8,
     ) -> io::Result<Option<TownPoisonGasEntry>> {
-        if load_town_tile_attribute_entries(game_dir)?
-            .is_some_and(|entries| town_poison_gas_tile_matches_attributes(&entries, tile))
+        let transport_marker = self.player.transport.save_marker();
+        if town_poison_gas_live_tile_matches(tile, transport_marker)
+            || load_town_tile_attribute_entries(game_dir)?
+                .is_some_and(|entries| town_poison_gas_tile_matches_attributes(&entries, tile))
         {
             return Ok(Some(TownPoisonGasEntry {
                 scene,
@@ -2577,12 +2595,12 @@ impl PlayState {
         let mut checked = 0usize;
         let mut poisoned = Vec::new();
         for member in &mut self.party {
-            if member.status == b'P' {
+            if member.status == b'D' || member.status == b'P' {
                 continue;
             }
             checked += 1;
             let roll = u5_prng_range_u16(&mut self.prng_state, 0, TOWN_GAS_DOORWAY_RANGE_MAX);
-            if roll == 0 {
+            if roll > u16::from(member.climb_stat) {
                 member.status = b'P';
                 poisoned.push(member.slot);
             }
