@@ -4578,6 +4578,7 @@
             endgame_messages: Some(EndgameMessages {
                 records: vec!["Welcome back".to_string()],
             }),
+            endgame_tableau_map: None,
         });
 
         let outcome = state.apply_combat_step_or_attack_primitive(
@@ -4636,6 +4637,7 @@
             dungeon_room_clear_on_success: None,
             enter_endgame_after_successful_combat: false,
             endgame_messages: None,
+            endgame_tableau_map: None,
         });
 
         let application = state
@@ -8008,6 +8010,7 @@
             dungeon_room_clear_on_success: None,
             enter_endgame_after_successful_combat: false,
             endgame_messages: None,
+            endgame_tableau_map: None,
         });
 
         let application = state

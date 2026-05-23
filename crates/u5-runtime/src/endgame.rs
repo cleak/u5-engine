@@ -175,6 +175,10 @@ pub const ENDGAME_TABLEAU_LORD_BRITISH_TYPE: u8 = 0x0e;
 pub const ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE: u8 = 0x08;
 pub const ENDGAME_TABLEAU_SCENE_MARKER_TYPE: u8 = 0x7c;
 pub const ENDGAME_TABLEAU_PHASE: u8 = 0;
+/// `formats/location-dat.md section 11`: endgame loads MISCMAPS cutscene-map
+/// record 3 as the authored 11x11 terminal tableau scene.
+pub const ENDGAME_TABLEAU_CUTSCENE_MAP_RECORD: usize = 3;
+pub const ENDGAME_TABLEAU_WALKABLE_TILE: u8 = 0x44;
 
 const ENDGAME_TABLEAU_PARTY_TARGETS: [(usize, usize); SAVE_PARTY_SIZE_MAX as usize] =
     [(5, 5), (4, 6), (6, 6), (3, 7), (5, 7), (7, 7)];
@@ -652,11 +656,24 @@ pub fn endgame_tableau_actor_placements(
     placements
 }
 
-pub fn endgame_tableau_cell_walkable(x: usize, y: usize) -> bool {
+pub fn endgame_tableau_cell_walkable_fallback(x: usize, y: usize) -> bool {
     x > 0
         && x + 1 < ENDGAME_TABLEAU_WIDTH
         && (3..ENDGAME_TABLEAU_HEIGHT).contains(&y)
         && !(y == 3 && !(3..=7).contains(&x))
+}
+
+pub const fn endgame_tableau_cell_tile_walkable(tile: u8) -> bool {
+    tile == ENDGAME_TABLEAU_WALKABLE_TILE
+}
+
+pub fn endgame_tableau_cell_walkable_in_grid(grid: &[u8], x: usize, y: usize) -> bool {
+    if x >= ENDGAME_TABLEAU_WIDTH || y >= ENDGAME_TABLEAU_HEIGHT {
+        return false;
+    }
+    grid.get(y * TOWN_GRID_SIDE + x)
+        .copied()
+        .is_some_and(endgame_tableau_cell_tile_walkable)
 }
 
 pub fn endgame_tableau_role_for_slot(
@@ -718,17 +735,32 @@ impl PlayState {
         game_dir: Option<&std::path::Path>,
     ) -> std::io::Result<MoveOutcome> {
         let messages = game_dir.map(require_endgame_messages).transpose()?;
-        Ok(self.enter_endgame_with_messages(messages))
+        let tableau_map = game_dir
+            .map(|dir| load_miscmaps_cutscene_map(dir, ENDGAME_TABLEAU_CUTSCENE_MAP_RECORD))
+            .transpose()?
+            .flatten();
+        Ok(self.enter_endgame_with_resources(messages, tableau_map))
     }
 
     pub fn enter_endgame_with_messages(
         &mut self,
         messages: Option<EndgameMessages>,
     ) -> MoveOutcome {
+        self.enter_endgame_with_resources(messages, None)
+    }
+
+    pub fn enter_endgame_with_resources(
+        &mut self,
+        messages: Option<EndgameMessages>,
+        tableau_map: Option<MiscmapsCutsceneMap>,
+    ) -> MoveOutcome {
         self.pending_moongate = None;
         self.combat_active = false;
         self.pending_combat_actor_slot = None;
         self.pending_combat_terrain_trigger_slot = None;
+        if let Some(map) = tableau_map {
+            self.install_endgame_tableau_map(&map);
+        }
         // endgame.md §10: dead party members are mutated into a present /
         // restored state for the ending tableau, with current health restored
         // from the stored maximum.
@@ -785,6 +817,18 @@ impl PlayState {
                 write_endgame_tableau_placement(slot, placement);
             }
         }
+    }
+
+    pub fn install_endgame_tableau_map(&mut self, map: &MiscmapsCutsceneMap) {
+        let mut grid = vec![0; TOWN_GRID_BYTES];
+        for y in 0..ENDGAME_TABLEAU_HEIGHT {
+            for x in 0..ENDGAME_TABLEAU_WIDTH {
+                if let Some(tile) = map.tile(x, y) {
+                    grid[y * TOWN_GRID_SIDE + x] = tile;
+                }
+            }
+        }
+        self.grid = grid;
     }
 
     pub fn advance_endgame_tableau_toward_targets(&mut self) -> bool {
@@ -848,6 +892,29 @@ impl PlayState {
         steps
     }
 
+    fn step_endgame_tableau_slot_once_to_target(
+        &mut self,
+        slot: usize,
+        target: (usize, usize),
+    ) -> bool {
+        let Some(object) = self.active_objects.get_mut(slot) else {
+            return false;
+        };
+        if object.is_empty() {
+            return false;
+        }
+        let current = (object.x as isize, object.y as isize);
+        let target = (target.0 as isize, target.1 as isize);
+        let next = endgame_step_toward_target(current, target);
+        if next == current {
+            return false;
+        }
+        object.x = next.0 as usize;
+        object.y = next.1 as usize;
+        self.animation.tick_static_tiles();
+        true
+    }
+
     fn clear_endgame_tableau_slot_type_tile(&mut self, slot: usize) {
         if let Some(object) = self.active_objects.get_mut(slot) {
             object.type_byte = 0;
@@ -865,13 +932,16 @@ impl PlayState {
         }
         loop {
             let moved = self
-                .step_endgame_tableau_slot_to_target(2, ENDGAME_TABLEAU_REFUSAL_SLOT2_TARGET)
-                + self.step_endgame_tableau_slot_to_target(
+                .step_endgame_tableau_slot_once_to_target(2, ENDGAME_TABLEAU_REFUSAL_SLOT2_TARGET)
+                | self.step_endgame_tableau_slot_once_to_target(
                     ENDGAME_TABLEAU_SCENE_MARKER_SLOT,
                     ENDGAME_TABLEAU_REFUSAL_MARKER_TARGET,
                 )
-                + self.step_endgame_tableau_slot_to_target(0, ENDGAME_TABLEAU_REFUSAL_SLOT0_TARGET);
-            if moved == 0 {
+                | self.step_endgame_tableau_slot_once_to_target(
+                    0,
+                    ENDGAME_TABLEAU_REFUSAL_SLOT0_TARGET,
+                );
+            if !moved {
                 break;
             }
         }
@@ -946,12 +1016,22 @@ impl PlayState {
                     })
             })
             .collect::<Vec<_>>();
-        if eligible.is_empty() || u5_prng_range_u16(&mut self.prng_state, 0, 1) != 0 {
+        if eligible.is_empty() {
             self.animation.tick_static_tiles();
             return false;
         }
-        let actor_slot = eligible
-            [u5_prng_range_u16(&mut self.prng_state, 0, eligible.len() as u16 - 1) as usize];
+        let mut moved = false;
+        for actor_slot in eligible {
+            moved |= self.advance_endgame_tableau_jitter_slot(actor_slot);
+        }
+        moved
+    }
+
+    fn advance_endgame_tableau_jitter_slot(&mut self, actor_slot: usize) -> bool {
+        if u5_prng_range_u16(&mut self.prng_state, 0, 1) != 0 {
+            self.animation.tick_static_tiles();
+            return false;
+        }
         for _ in 0..8 {
             let dir = u5_prng_range_u16(&mut self.prng_state, 0, 3) as u8;
             let (dx, dy) = match dir {
@@ -975,7 +1055,7 @@ impl PlayState {
             }
             let nx = nx as usize;
             let ny = ny as usize;
-            if !endgame_tableau_cell_walkable(nx, ny) {
+            if !endgame_tableau_cell_walkable_in_grid(&self.grid, nx, ny) {
                 continue;
             }
             if let Some(object) = self.active_objects.get_mut(actor_slot) {

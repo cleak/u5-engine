@@ -464,8 +464,11 @@ impl PlayState {
         }
         if enter_endgame_after_successful_absorbable_combat && has_absorbable_field {
             let endgame_messages = require_endgame_messages(game_dir)?;
+            let endgame_tableau_map =
+                load_miscmaps_cutscene_map(game_dir, ENDGAME_TABLEAU_CUTSCENE_MAP_RECORD)?;
             if let Some(snapshot) = &mut self.combat_frame_snapshot {
                 snapshot.endgame_messages = Some(endgame_messages);
+                snapshot.endgame_tableau_map = endgame_tableau_map;
             }
         }
         Ok(format!(

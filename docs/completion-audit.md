@@ -48,8 +48,8 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#47` | Hourly Ring of Regeneration tick and completed long-camp recovery | Implemented from latest issue answer; spec-file reconciliation pending |
 | `cleak/u5-spec#48` | Non-combat Blink directional ray landing rule | Implemented |
 | `cleak/u5-spec#51` | Native tile `0x04` town poison-gas detection | Implemented |
-| `cleak/u5-spec#54` | Return-to-View strip captions, timing, geometry, and exact effect rasters | Public timing/captions and 4x19 visible geometry implemented; exact effect raster question pending |
-| `cleak/u5-spec#56` | Endgame tableau active-object layout, sprite mapping, and movement timing | Implemented from latest issue answer; active-object slots, class sprites, scene marker, branch movement, and refusal jitter follow the published contract |
+| `cleak/u5-spec#54` | Return-to-View strip captions, timing, geometry, and exact effect rasters | Public timing/captions and 4x19 visible geometry implemented; exact effect rasters are explicitly deferred by the clean spec |
+| `cleak/u5-spec#56` | Endgame tableau active-object layout, sprite mapping, and movement timing | Implemented from latest issue answer; MISCMAPS record 3, active-object slots, class sprites, scene marker, branch movement, and `0x44`-gated refusal jitter follow the published contract |
 
 Where an audit row references a pending issue, the engine carries a clean
 implementation or conservative placeholder that avoids private-derived guesses
@@ -375,33 +375,19 @@ are kept out of gameplay logic until the public spec publishes exact data.
 | `cleak/u5-spec#43` | Exact wanted-poster resident text/template and line breaking | Implemented: Look routes the public predicates and outcomes, grants all six accepted well wishes as horse-family objects in the public scenes, uses Intelligence for death vision, and renders the Yew poster as the fixed framed row stream with party slots 0..2 centered |
 | `cleak/u5-spec#47` | Checked-in spec files still contradict the latest public issue answer for non-combat Ring of Regeneration and completed long-camp recovery | Engine implements the latest public issue-comment behavior: hourly 1-in-8 Ring of Regeneration +1 HP and guarded completed long-camp HP/MP recovery |
 | `cleak/u5-spec#51` | Native town poison-gas predicate | Implemented: live tile `0x04` plus foot transport is the complete trigger; retired sidecar rows are covered by non-trigger tests |
-| `cleak/u5-spec#54` | Return-to-View exact local cell-effect rasters | Parser/scheduler/overlay composition implement the public 19x4 source layout transposed to a 4x19 visible preview, fixed captions from LoadMapStrip, high-opcode no-ops, `(x, y + 7)` effect coordinates, and timing model; exact rasters await final public reconciliation |
-| `cleak/u5-spec#56` | Exact terminal endgame tableau active-object slots, actor roles, coordinates, sprites, cadence, and refusal-branch behavior | Implemented from the public issue answer; remaining endgame gaps are pixel/display-helper presentation parity, not tableau metadata |
+| `cleak/u5-spec#54` | Return-to-View exact local cell-effect rasters | Parser/scheduler/overlay composition implement the public 19x4 source layout transposed to a 4x19 visible preview, fixed captions from LoadMapStrip, high-opcode no-ops, `(x, y + 7)` effect coordinates, and timing model; exact rasters are clean-spec-deferred presentation work |
+| `cleak/u5-spec#56` | Exact terminal endgame tableau active-object slots, actor roles, coordinates, sprites, cadence, and refusal-branch behavior | Implemented from the public issue answer, including MISCMAPS cutscene-map record 3 and authored `0x44` walkability for terminal jitter; remaining endgame gaps are pixel/display-helper presentation parity, not tableau metadata |
 
 Follow-up questions were current as of the 2026-05-23 issue audit for the
-remaining response-needed items:
+remaining response-needed item:
 
-- `cleak/u5-spec#13`: exact fee/no-credit text or SHOPPE record ids.
 - `cleak/u5-spec#12`: exact non-Doom dungeon-room special-placement id
   derivation, post-write formulas, range tables, and actor/descriptor effects.
-- `cleak/u5-spec#8`: resolve the descriptor byte conflict between byte 4 as
-  active-object back-reference and byte 4 as sleep/disabled status sub-flags.
-- `cleak/u5-spec#18`: correct the `formats/saved-gam.md` record-15 skip
-  predicate wording to match the issue answer.
-- `cleak/u5-spec#31`: no current follow-up; latest quest-progress answer is
-  implemented.
-- `cleak/u5-spec#41`: no current follow-up; latest buy text and quote selector
-  answer is implemented.
-- `cleak/u5-spec#43`: no current follow-up; latest wanted-poster frame answer
-  is implemented.
-- `cleak/u5-spec#47`: reconcile checked-in spec prose with the latest public
-  issue-comment Ring of Regeneration and completed long-camp behavior.
-- `cleak/u5-spec#51`: no current follow-up; tile `0x04` complete predicate is
-  implemented.
-- `cleak/u5-spec#54`: resolve the strip geometry wording conflict and publish
-  or defer exact local cell-effect rasters.
-No remaining response-needed issue in this audit is about #1 or #3; both are
-implemented from current checked-in public spec plus latest issue answers.
+
+No remaining response-needed issue in this audit is about #1, #3, #13, #31,
+#41, #43, #51, #54, or #56; those are implemented from current checked-in
+public spec plus latest issue answers, or explicitly deferred as presentation
+work in the public spec.
 
 ## Presentation Work (Separate From Gameplay Correctness)
 

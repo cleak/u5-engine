@@ -304,10 +304,9 @@ Current worktree context when this TODO was refreshed:
   Abbey, and Serpent's Hold native paths.
 - The 2026-05-23 clean-engine audit applied the remaining spec-backed tavern
   drink-letter correction, expanded Doom combat visual routes, implemented the
-  latest dungeon-room placement contract, and retired #1/#3/#56 as gameplay
-  blockers. Follow-up questions remain current for response-needed public
-  blockers #12 and #54; current answers for #13/#31/#41/#43/#51 have been
-  applied.
+  latest dungeon-room placement contract, and retired #1/#3/#54/#56 as
+  gameplay blockers. The only current response-needed public blocker is #12;
+  current answers for #13/#31/#41/#43/#51 have been applied.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the

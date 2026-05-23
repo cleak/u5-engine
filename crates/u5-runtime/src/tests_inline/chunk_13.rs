@@ -15665,6 +15665,19 @@ fn write_synthetic_end_dat(dir: &std::path::Path) {
     .unwrap();
 }
 
+fn write_synthetic_miscmaps_endgame_tableau(dir: &std::path::Path) {
+    let mut bytes = vec![0xee; MISCMAPS_CUTSCENE_SECTION_BYTES];
+    let start = ENDGAME_TABLEAU_CUTSCENE_MAP_RECORD * MISCMAPS_CUTSCENE_RECORD_BYTES;
+    for row in 0..MISCMAPS_CUTSCENE_ROWS {
+        let row_start = start + row * MISCMAPS_CUTSCENE_ROW_STRIDE;
+        for col in 0..MISCMAPS_CUTSCENE_VISIBLE_COLUMNS {
+            bytes[row_start + col] = ((row * MISCMAPS_CUTSCENE_VISIBLE_COLUMNS + col) & 0xff) as u8;
+        }
+    }
+    bytes[start + 6 * MISCMAPS_CUTSCENE_ROW_STRIDE + 4] = ENDGAME_TABLEAU_WALKABLE_TILE;
+    fs::write(dir.join(MISCMAPS_DAT_FILE), bytes).unwrap();
+}
+
 #[test]
 fn endgame_real_handoff_requires_endmsg_dat_resource() {
     let dir = debug_game_dir();
@@ -15674,6 +15687,27 @@ fn endgame_real_handoff_requires_endmsg_dat_resource() {
     assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
     assert!(err.to_string().contains("ENDMSG.DAT"));
     assert!(state.endgame.is_none());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn endgame_real_handoff_loads_miscmaps_record_three_tableau_grid() {
+    let dir = debug_game_dir();
+    write_synthetic_endmsg_dat(&dir);
+    write_synthetic_miscmaps_endgame_tableau(&dir);
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+
+    state
+        .enter_endgame_from_game_dir(Some(&dir))
+        .expect("ENDMSG.DAT and MISCMAPS.DAT should load");
+
+    assert_eq!(state.grid.len(), TOWN_GRID_BYTES);
+    assert_eq!(state.grid[0], 0);
+    assert_eq!(
+        state.grid[6 * TOWN_GRID_SIDE + 4],
+        ENDGAME_TABLEAU_WALKABLE_TILE
+    );
+    assert_eq!(state.grid[11], 0);
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -20259,6 +20293,18 @@ fn endgame_step_toward_target_prefers_axis_with_greater_distance() {
     assert_eq!(endgame_step_toward_target((0, 0), (3, 3)), (1, 0));
 }
 
+fn endgame_tableau_test_grid() -> Vec<u8> {
+    let mut grid = vec![0; TOWN_GRID_BYTES];
+    for y in 0..ENDGAME_TABLEAU_HEIGHT {
+        for x in 0..ENDGAME_TABLEAU_WIDTH {
+            if endgame_tableau_cell_walkable_fallback(x, y) {
+                grid[y * TOWN_GRID_SIDE + x] = ENDGAME_TABLEAU_WALKABLE_TILE;
+            }
+        }
+    }
+    grid
+}
+
 #[test]
 fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
     // endgame.md §3-§4: the endgame clears the live active-object table
@@ -20336,7 +20382,7 @@ fn endgame_tableau_target_step_moves_active_objects_until_settled() {
 
 #[test]
 fn missing_box_terminal_input_runs_tableau_jitter_without_leaving_endgame() {
-    let mut state = test_state(open_grid(), 5, 5);
+    let mut state = test_state(endgame_tableau_test_grid(), 5, 5);
     state.party = vec![state.party[0]; 3];
     state.enter_endgame();
     state.resolve_endgame_confirmation(true);
@@ -20371,7 +20417,7 @@ fn missing_box_terminal_input_runs_tableau_jitter_without_leaving_endgame() {
                 let object = state.active_objects[*slot];
                 object.x < ENDGAME_TABLEAU_WIDTH
                     && object.y < ENDGAME_TABLEAU_HEIGHT
-                    && endgame_tableau_cell_walkable(object.x, object.y)
+                    && endgame_tableau_cell_walkable_in_grid(&state.grid, object.x, object.y)
             }
     }));
 }

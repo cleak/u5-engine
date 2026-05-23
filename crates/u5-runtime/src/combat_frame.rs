@@ -14,6 +14,7 @@ pub struct CombatFrameSnapshot {
     pub dungeon_room_clear_on_success: Option<PendingDungeonRoomClear>,
     pub enter_endgame_after_successful_combat: bool,
     pub endgame_messages: Option<EndgameMessages>,
+    pub endgame_tableau_map: Option<MiscmapsCutsceneMap>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1927,6 +1928,7 @@ impl PlayState {
             dungeon_room_clear_on_success: None,
             enter_endgame_after_successful_combat: false,
             endgame_messages: None,
+            endgame_tableau_map: None,
         };
         self.active_objects = active_objects;
         self.combat_actors = actors;
@@ -1995,6 +1997,7 @@ impl PlayState {
             let enter_endgame_after_restore =
                 snapshot.enter_endgame_after_successful_combat && body_retrieval_exit;
             let endgame_messages = snapshot.endgame_messages.clone();
+            let endgame_tableau_map = snapshot.endgame_tableau_map.clone();
             let dungeon_room_clear_on_success = snapshot.dungeon_room_clear_on_success;
             self.restore_combat_frame_with_trigger_reconcile(snapshot, body_retrieval_exit);
             if result_code != COMBAT_ROUND_RESULT_DEFEAT {
@@ -2008,7 +2011,7 @@ impl PlayState {
                 }
             }
             if enter_endgame_after_restore {
-                self.enter_endgame_with_messages(endgame_messages);
+                self.enter_endgame_with_resources(endgame_messages, endgame_tableau_map);
             }
             true
         } else {
