@@ -1925,10 +1925,11 @@ impl PlayState {
             height: width,
             pixels: vec![0; width * width],
         };
-        let map = self.dungeon_vision_map(level);
-        for (cell_y, row) in map.lines().enumerate() {
-            for (cell_x, glyph) in row.chars().enumerate() {
-                draw_dungeon_view_cell(&mut viewport, cell_x, cell_y, scale, glyph, mode);
+        let glyphs = self.dungeon_vision_glyphs(level);
+        for cell_y in 0..cells {
+            for cell_x in 0..cells {
+                let index = cell_y * cells + cell_x;
+                draw_dungeon_view_glyph(&mut viewport, cell_x, cell_y, scale, glyphs[index], mode);
             }
         }
         viewport
@@ -1964,7 +1965,7 @@ impl PlayState {
         viewport
     }
 
-    pub fn dungeon_vision_map(&self, level: u8) -> String {
+    pub fn dungeon_vision_glyphs(&self, level: u8) -> Vec<Option<u8>> {
         let radius = DUNGEON_GEM_VIEW_RADIUS;
         let side = (radius * 2 + 1) as usize;
         let center = radius as usize;
@@ -2005,25 +2006,35 @@ impl PlayState {
             }
         }
 
+        let mut glyphs = vec![None; side * side];
+        glyphs[center_index] = Some(DUNGEON_VIEW_PARTY_GLYPH);
+        for scratch_y in 0..side {
+            for scratch_x in 0..side {
+                let index = scratch_y * side + scratch_x;
+                if !visible[index] || index == center_index {
+                    continue;
+                }
+                let dx = scratch_x as isize - radius;
+                let dy = scratch_y as isize - radius;
+                let world_x =
+                    (self.player.x as isize + dx).rem_euclid(DUNGEON_SIDE as isize) as usize;
+                let world_y =
+                    (self.player.y as isize + dy).rem_euclid(DUNGEON_SIDE as isize) as usize;
+                glyphs[index] = dungeon_minimap_glyph(self.dungeon_cell(level, world_x, world_y));
+            }
+        }
+        glyphs
+    }
+
+    pub fn dungeon_vision_map(&self, level: u8) -> String {
+        let radius = DUNGEON_GEM_VIEW_RADIUS;
+        let side = (radius * 2 + 1) as usize;
+        let glyphs = self.dungeon_vision_glyphs(level);
         let mut out = String::new();
         for scratch_y in 0..side {
             for scratch_x in 0..side {
                 let index = scratch_y * side + scratch_x;
-                if scratch_x == center && scratch_y == center {
-                    out.push('@');
-                } else if visible[index] {
-                    let dx = scratch_x as isize - radius;
-                    let dy = scratch_y as isize - radius;
-                    let world_x =
-                        (self.player.x as isize + dx).rem_euclid(DUNGEON_SIDE as isize) as usize;
-                    let world_y =
-                        (self.player.y as isize + dy).rem_euclid(DUNGEON_SIDE as isize) as usize;
-                    out.push(render_dungeon_glyph(
-                        self.dungeon_cell(level, world_x, world_y),
-                    ));
-                } else {
-                    out.push(' ');
-                }
+                out.push(render_dungeon_minimap_glyph_code(glyphs[index]));
             }
             out.push('\n');
         }
@@ -3896,6 +3907,8 @@ fn pending_use_cardinal_direction(key: char, suffix: &str) -> Option<Direction> 
         .filter(|direction| direction.opposite_cardinal().is_some())
 }
 
+const DUNGEON_VIEW_PARTY_GLYPH: u8 = 0xff;
+
 fn draw_surface_view_cell(
     viewport: &mut TileViewport,
     cell_x: usize,
@@ -3923,7 +3936,17 @@ fn draw_surface_view_cell(
             set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, scale - 1, color);
             set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale - 1, scale - 1, color);
         }
-        0x02 | 0x03 | 0x0D | 0x0F => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
+        0x02 | 0x0F => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
+        0x03 => {
+            fill_view_overlay_cell(
+                viewport,
+                cell_x,
+                cell_y,
+                scale,
+                surface_view_class_color(0x02, mode),
+            );
+            draw_view_overlay_box(viewport, cell_x, cell_y, scale, color);
+        }
         0x04 => {
             draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 0, color);
             draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale - 1, color);
@@ -3963,6 +3986,16 @@ fn draw_surface_view_cell(
             set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale - 1, scale - 1, color);
             set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, scale / 2, color);
         }
+        0x0D => {
+            fill_view_overlay_cell(
+                viewport,
+                cell_x,
+                cell_y,
+                scale,
+                surface_view_modal_background_color(mode),
+            );
+            draw_view_overlay_creature_marker(viewport, cell_x, cell_y, scale, color);
+        }
         0x0E => {
             for y in 0..scale {
                 set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, y, color);
@@ -3974,6 +4007,93 @@ fn draw_surface_view_cell(
     }
 }
 
+fn draw_dungeon_view_glyph(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    glyph: Option<u8>,
+    mode: ViewOverlayMode,
+) {
+    let Some(glyph) = glyph else {
+        return;
+    };
+    let door_color = dungeon_view_door_color(mode);
+    let wall_color = dungeon_view_wall_color(mode);
+    let highlight = if mode.uses_alternate_view_bank() {
+        14
+    } else {
+        15
+    };
+    match glyph {
+        DUNGEON_VIEW_PARTY_GLYPH => {
+            draw_surface_view_cell(viewport, cell_x, cell_y, scale, 0, 0, true, mode)
+        }
+        0x18 => draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, 7),
+        0x2e => draw_dungeon_ladder_glyph(viewport, cell_x, cell_y, scale, true, false, highlight),
+        0x2d => draw_dungeon_ladder_glyph(viewport, cell_x, cell_y, scale, false, true, highlight),
+        0x2f => draw_dungeon_ladder_glyph(viewport, cell_x, cell_y, scale, true, true, highlight),
+        0x70 => {
+            fill_view_overlay_cell(viewport, cell_x, cell_y, scale, 6);
+            draw_view_overlay_box(viewport, cell_x, cell_y, scale, highlight);
+        }
+        0x12 => draw_dungeon_fountain_glyph(viewport, cell_x, cell_y, scale, mode),
+        0x19 => draw_dungeon_pit_glyph(viewport, cell_x, cell_y, scale, highlight),
+        0x71 => draw_dungeon_trap_glyph(viewport, cell_x, cell_y, scale, 12),
+        0x72 => draw_dungeon_trap_glyph(viewport, cell_x, cell_y, scale, 14),
+        0x73 => draw_dungeon_door_glyph(viewport, cell_x, cell_y, scale, door_color),
+        0x74 => draw_view_overlay_box(viewport, cell_x, cell_y, scale, wall_color),
+        0x75 => {
+            draw_view_overlay_box(viewport, cell_x, cell_y, scale, wall_color);
+            draw_view_overlay_vline(viewport, cell_x, cell_y, scale, scale / 2, highlight);
+        }
+        0x76 => {
+            draw_view_overlay_box(
+                viewport,
+                cell_x,
+                cell_y,
+                scale,
+                dungeon_view_extra_wall_color(mode),
+            );
+            set_view_overlay_pixel(
+                viewport,
+                cell_x,
+                cell_y,
+                scale,
+                scale / 2,
+                scale / 2,
+                highlight,
+            );
+        }
+        0x77 => {
+            draw_dungeon_door_glyph(viewport, cell_x, cell_y, scale, door_color);
+            draw_view_overlay_box(viewport, cell_x, cell_y, scale, door_color);
+        }
+        0x7f => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, wall_color),
+        _ => set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, scale / 2, 7),
+    }
+}
+
+fn render_dungeon_minimap_glyph_code(glyph: Option<u8>) -> char {
+    match glyph {
+        Some(DUNGEON_VIEW_PARTY_GLYPH) => '@',
+        Some(0x18) => '.',
+        Some(0x2e) => '<',
+        Some(0x2d) => '>',
+        Some(0x2f) => 'H',
+        Some(0x70) => '$',
+        Some(0x12) => 'f',
+        Some(0x19) => 'o',
+        Some(0x71) => 'v',
+        Some(0x72) => '!',
+        Some(0x73) => '+',
+        Some(0x74 | 0x75 | 0x76 | 0x7f) => '#',
+        Some(0x77) => '+',
+        Some(_) => '?',
+        None => ' ',
+    }
+}
+
 fn draw_dungeon_view_cell(
     viewport: &mut TileViewport,
     cell_x: usize,
@@ -3982,27 +4102,145 @@ fn draw_dungeon_view_cell(
     glyph: char,
     mode: ViewOverlayMode,
 ) {
-    let door_color = if mode.uses_alternate_view_bank() {
+    let glyph = match glyph {
+        '@' => Some(DUNGEON_VIEW_PARTY_GLYPH),
+        '.' => Some(0x18),
+        '<' => Some(0x2e),
+        '>' => Some(0x2d),
+        'H' => Some(0x2f),
+        '$' => Some(0x70),
+        'f' => Some(0x12),
+        'o' => Some(0x19),
+        'v' => Some(0x71),
+        '!' => Some(0x72),
+        '+' => Some(0x73),
+        '#' => Some(0x74),
+        '*' => Some(0x77),
+        '~' => Some(0x18),
+        ' ' => None,
+        _ => Some(0x18),
+    };
+    draw_dungeon_view_glyph(viewport, cell_x, cell_y, scale, glyph, mode);
+}
+
+fn surface_view_modal_background_color(mode: ViewOverlayMode) -> u8 {
+    if mode.uses_alternate_view_bank() {
+        5
+    } else {
+        2
+    }
+}
+
+fn dungeon_view_door_color(mode: ViewOverlayMode) -> u8 {
+    if mode.uses_alternate_view_bank() {
         14
     } else {
         11
-    };
-    let wall_color = if mode.uses_alternate_view_bank() {
+    }
+}
+
+fn dungeon_view_wall_color(mode: ViewOverlayMode) -> u8 {
+    if mode.uses_alternate_view_bank() {
         13
     } else {
         8
-    };
-    match glyph {
-        '@' => draw_surface_view_cell(viewport, cell_x, cell_y, scale, 0, 0, true, mode),
-        '#' => draw_view_overlay_box(viewport, cell_x, cell_y, scale, wall_color),
-        '>' | '<' => draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, 14),
-        '$' => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, 6),
-        '+' => draw_view_overlay_diagonals(viewport, cell_x, cell_y, scale, door_color),
-        '~' => draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 1.min(scale - 1), 9),
-        '*' => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, 12),
-        ' ' => {}
-        _ => set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, scale / 2, 7),
     }
+}
+
+fn dungeon_view_extra_wall_color(mode: ViewOverlayMode) -> u8 {
+    if mode.uses_alternate_view_bank() {
+        5
+    } else {
+        13
+    }
+}
+
+fn draw_view_overlay_creature_marker(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    color: u8,
+) {
+    draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, color);
+    draw_view_overlay_vline(viewport, cell_x, cell_y, scale, scale / 2, color);
+    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 0, color);
+    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale - 1, 0, color);
+    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, scale - 1, color);
+    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale - 1, scale - 1, color);
+}
+
+fn draw_dungeon_ladder_glyph(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    up: bool,
+    down: bool,
+    color: u8,
+) {
+    draw_view_overlay_vline(viewport, cell_x, cell_y, scale, scale / 2, color);
+    if up {
+        draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 0, color);
+    }
+    if down {
+        draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale - 1, color);
+    }
+    if up && down {
+        draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, color);
+    }
+}
+
+fn draw_dungeon_fountain_glyph(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    mode: ViewOverlayMode,
+) {
+    let color = if mode.uses_alternate_view_bank() {
+        11
+    } else {
+        9
+    };
+    draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, color);
+    draw_view_overlay_vline(viewport, cell_x, cell_y, scale, scale / 2, color);
+    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, 0, color);
+    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, scale - 1, color);
+}
+
+fn draw_dungeon_pit_glyph(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    color: u8,
+) {
+    draw_view_overlay_box(viewport, cell_x, cell_y, scale, color);
+    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, scale / 2, color);
+}
+
+fn draw_dungeon_trap_glyph(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    color: u8,
+) {
+    draw_view_overlay_diagonals(viewport, cell_x, cell_y, scale, color);
+    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, scale / 2, color);
+}
+
+fn draw_dungeon_door_glyph(
+    viewport: &mut TileViewport,
+    cell_x: usize,
+    cell_y: usize,
+    scale: usize,
+    color: u8,
+) {
+    draw_view_overlay_vline(viewport, cell_x, cell_y, scale, scale / 2, color);
+    draw_view_overlay_vline(viewport, cell_x, cell_y, scale, (scale / 2) + 1, color);
+    draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, color);
 }
 
 fn surface_view_class_color(class: u8, mode: ViewOverlayMode) -> u8 {

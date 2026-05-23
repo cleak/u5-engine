@@ -14,14 +14,15 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-23, including 2572 tests
+- `cargo test -p u5-runtime` passed on 2026-05-23, including 2576 tests
   (latest verification includes public `cleak/u5-spec#47` hourly
   poison/provision/ring ordering, public #28 horse-trader adjacent placement
   priority plus no-marker refusal, public #15 inn pickup stay-counter billing,
   combat command-flow regressions for pending Z-stats/Cast actor liveness, public
   `cleak/u5-spec#41` arms-shop scene-row coverage, public issue #3
-  terrain-combat replacement-tile main path, and public issue #21 dungeon
-  active-monster ambush setup, combat round maintenance, combat-local
+  terrain-combat replacement-tile main path, public-spec View/Peer/X-Ray
+  overlay raster-class and dungeon minimap glyph-id coverage, and public issue
+  #21 dungeon active-monster ambush setup, combat round maintenance, combat-local
   ambush/camp reveal-slot helper coverage, and disk I/O retry wrapper
   coverage).
 - `cargo test -p u5-tui` passed on 2026-05-23, including 79 tests.
@@ -322,6 +323,9 @@ Current worktree context when this TODO was refreshed:
 - Search now runs clean object-pickup table matches before live-tile scans,
   keeps active treasure-marker priority ahead of trap narration, and narrates
   surface/town object trap metadata without clearing the object slot.
+- View/Peer/X-Ray overlay rasters now draw surface class `3` as a framed cell,
+  class `0x0D` as a creature-on-terrain composite, and dungeon V-View from the
+  published minimap glyph ids instead of the lossy diagnostic text glyphs.
 
 Before starting a major slice, inspect `git status --short` and preserve user
 changes. Do not revert unrelated work.

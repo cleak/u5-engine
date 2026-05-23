@@ -765,6 +765,52 @@
     }
 
     #[test]
+    fn dungeon_view_overlay_uses_published_minimap_glyph_ids_for_raster() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 2, 1)] = 0x10;
+        grid[dungeon_cell_index(0, 0, 1)] = 0x20;
+        grid[dungeon_cell_index(0, 1, 0)] = 0x30;
+        grid[dungeon_cell_index(0, 1, 2)] = 0x40;
+        grid[dungeon_cell_index(0, 2, 0)] = 0x50;
+        grid[dungeon_cell_index(0, 0, 0)] = 0x60;
+        grid[dungeon_cell_index(0, 2, 2)] = 0x61;
+        grid[dungeon_cell_index(0, 0, 2)] = 0xE0;
+        let state = dungeon_state(grid, 0, 1, 1);
+
+        let glyphs = state.dungeon_vision_glyphs(0);
+        let side = (DUNGEON_GEM_VIEW_RADIUS * 2 + 1) as usize;
+        let center = DUNGEON_GEM_VIEW_RADIUS as usize;
+        let at = |dx: isize, dy: isize| {
+            let x = (center as isize + dx) as usize;
+            let y = (center as isize + dy) as usize;
+            glyphs[y * side + x]
+        };
+
+        assert_eq!(at(0, 0), Some(0xff));
+        assert_eq!(at(1, 0), Some(0x2E));
+        assert_eq!(at(-1, 0), Some(0x2D));
+        assert_eq!(at(0, -1), Some(0x2F));
+        assert_eq!(at(0, 1), Some(0x70));
+        assert_eq!(at(1, -1), Some(0x12));
+        assert_eq!(at(-1, -1), Some(0x19));
+        assert_eq!(at(1, 1), Some(0x71));
+        assert_eq!(at(-1, 1), Some(0x77));
+
+        let viewport =
+            state.render_dungeon_view_overlay_for_mode(0, TileGraphicsDepth::Ega16, ViewOverlayMode::GemView);
+        let cell = LOCAL_VIEW_CELL_PIXEL_SCALE;
+        let px = |dx: isize, dy: isize, lx: usize, ly: usize| {
+            let x = (center as isize + dx) as usize * cell + lx;
+            let y = (center as isize + dy) as usize * cell + ly;
+            viewport.pixel(x, y)
+        };
+        assert_eq!(px(1, 0, cell / 2, 0), Some(14));
+        assert_eq!(px(0, 1, 0, 0), Some(14));
+        assert_eq!(px(1, -1, cell / 2, cell / 2), Some(11));
+        assert_eq!(px(-1, 1, cell / 2, cell / 2), Some(14));
+    }
+
+    #[test]
     fn surface_view_class_uses_spec_tile_ranges() {
         assert_eq!(surface_view_class(0x00), 0x00);
         assert_eq!(surface_view_class(0x05), 0x01);
@@ -785,6 +831,32 @@
         assert_eq!(surface_view_class(0x26), 0x10);
         assert_eq!(render_surface_view_class(0x0a), 'A');
         assert_eq!(render_surface_view_class(0x10), 'G');
+    }
+
+    #[test]
+    fn surface_view_overlay_renders_spec_class_shapes() {
+        let mut grid = open_grid();
+        grid[5 * 32 + 6] = 0x70;
+        grid[5 * 32 + 7] = 0x1D;
+        grid[5 * 32 + 8] = 0x04;
+        let state = test_state(grid, 5, 5);
+        let viewport = state.render_surface_view_overlay_for_mode(
+            TileGraphicsDepth::Ega16,
+            ViewOverlayMode::GemView,
+        );
+        let scale = LOCAL_VIEW_CELL_PIXEL_SCALE;
+        let center = LOCAL_VIEW_OVERLAY_SIDE / 2;
+        let sample = |dx: usize, lx: usize, ly: usize| {
+            viewport.pixel((center + dx) * scale + lx, center * scale + ly)
+        };
+
+        assert_eq!(sample(1, 0, 0), Some(3));
+        assert_eq!(sample(1, scale / 2, scale / 2), Some(2));
+        assert_eq!(sample(2, 0, 0), Some(14));
+        assert_eq!(sample(2, 0, scale - 1), Some(14));
+        assert_eq!(sample(2, 0, scale / 2), Some(0));
+        assert_eq!(sample(3, scale / 2, scale / 2), Some(12));
+        assert_eq!(sample(3, 1, 1), Some(5));
     }
 
     #[test]
