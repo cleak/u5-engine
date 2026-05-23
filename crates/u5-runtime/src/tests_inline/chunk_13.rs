@@ -10035,10 +10035,10 @@ fn tile_animation_family_classifies_published_ranges() {
 #[test]
 fn hidden_treasure_record_special_gates_match_spec() {
     // hidden-treasures.md §2
-    // Record 13: requires keys >= 1 and not NPC-occupied.
-    assert!(hidden_treasure_record_13_accepts(1, false));
-    assert!(hidden_treasure_record_13_accepts(99, false));
-    assert!(!hidden_treasure_record_13_accepts(0, false));
+    // Record 13: zero-key cache; no NPC.
+    assert!(hidden_treasure_record_13_accepts(0, false));
+    assert!(!hidden_treasure_record_13_accepts(1, false));
+    assert!(!hidden_treasure_record_13_accepts(99, false));
     assert!(!hidden_treasure_record_13_accepts(1, true));
     // Record 14: stages once per in-game day.
     assert!(hidden_treasure_record_14_ready(0, 5));
@@ -16360,9 +16360,9 @@ fn hidden_treasure_rule_special_records_match_spec() {
         HiddenTreasureRule::SingleUseAndNpcAbsence
     );
     // Stage gates
-    // Record 13: requires keys >= 1 and no NPC on the tile
-    assert!(hidden_treasure_can_stage(13, 1, false, 0, 0, 0));
-    assert!(!hidden_treasure_can_stage(13, 0, false, 0, 0, 0));
+    // Record 13: zero-key cache with no NPC on the tile
+    assert!(hidden_treasure_can_stage(13, 0, false, 0, 0, 0));
+    assert!(!hidden_treasure_can_stage(13, 1, false, 0, 0, 0));
     assert!(!hidden_treasure_can_stage(13, 5, true, 0, 0, 0));
     // Record 14: cookie != current day
     assert!(hidden_treasure_can_stage(14, 0, false, 5, 6, 0));

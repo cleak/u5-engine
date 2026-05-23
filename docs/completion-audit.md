@@ -56,12 +56,12 @@ audit:
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 55 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 127 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 128 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
   plus active shop/modal flows, Blackthorn audience correct/wrong and
-  rescue-refuge routes, fixed hidden-treasure single-use/daily/stacked routes,
+  rescue-refuge routes, fixed hidden-treasure zero-key/single-use/daily/stacked routes,
   PRV Gate Travel success/refusal paths, saved-slot natural moongate live-entry
   paths, public #31 native shard/Eternal Flame destruction routes, public #32 Britannia/Doom Word-of-Power seal opening, public #15
   accepted inn-rest pricing, public #44 sleeping/praying Talk refusals, public

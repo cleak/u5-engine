@@ -145,6 +145,12 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         ..PlayOptions::default()
     };
 
+    let blackthorn_fixed_hidden_key_cache = PlayOptions {
+        target: PlayTarget::Town(Scene::new(18).expect("Blackthorn castle scene is valid")),
+        floor: -1,
+        ..PlayOptions::default()
+    };
+
     let mut world_move = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
         ..PlayOptions::default()
@@ -663,6 +669,16 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             script: &["S6", "G6", "S6"],
             expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
             min_turn: 3,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "blackthorn-fixed-hidden-zero-key-search",
+            options: blackthorn_fixed_hidden_key_cache,
+            script: &["S6"],
+            expected: RouteSmokeExpectation::Town(
+                Scene::new(18).expect("Blackthorn castle scene is valid"),
+            ),
+            min_turn: 1,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
@@ -1628,6 +1644,14 @@ fn apply_route_smoke_case_setup(
             state.sync_player_object();
             state.mark_visibility_dirty();
         }
+        "blackthorn-fixed-hidden-zero-key-search" => {
+            state.player.x = 5;
+            state.player.y = 8;
+            state.player.facing = Direction::East;
+            state.keys = 0;
+            state.sync_player_object();
+            state.mark_visibility_dirty();
+        }
         "minoc-fixed-hidden-daily-search-get-repeat" => {
             state.player.x = 1;
             state.player.y = 2;
@@ -2086,6 +2110,20 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply public #51 poison-gas roll semantics"
+                )));
+            }
+        }
+        "blackthorn-fixed-hidden-zero-key-search" => {
+            if state.keys != 0
+                || !state.fixed_hidden_treasure_found(13)
+                || !state
+                    .active_objects
+                    .iter()
+                    .any(|object| object.fixed_hidden_treasure_record() == Some(13))
+                || !state.message.contains("Found ring of keys")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the fixed hidden zero-key cache rule"
                 )));
             }
         }

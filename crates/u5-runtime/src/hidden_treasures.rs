@@ -7,11 +7,11 @@ pub const HIDDEN_TREASURE_RECORD_KEY_NPC_GATED: usize = 13;
 pub const HIDDEN_TREASURE_RECORD_DAILY_CACHE: usize = 14;
 pub const HIDDEN_TREASURE_RECORD_SINGLE_USE_NPC_GATED: usize = 15;
 
-/// `hidden-treasures.md §2` record 13 stage-acceptance gate. Search
-/// stages this record only when the party owns at least one
-/// ordinary key and the searched cell is not occupied by an NPC.
+/// Public issue #18 record 13 stage-acceptance gate. Search stages
+/// this zero-key cache only when the party owns no ordinary keys and
+/// the searched cell is not occupied by an NPC.
 pub const fn hidden_treasure_record_13_accepts(keys: u8, npc_present: bool) -> bool {
-    keys >= 1 && !npc_present
+    keys == 0 && !npc_present
 }
 
 /// `hidden-treasures.md §2` record 14 daily-cooldown gate. Search
@@ -24,9 +24,9 @@ pub const fn hidden_treasure_record_14_ready(stored_day: u8, current_day: u8) ->
     stored_day != current_day
 }
 
-/// `hidden-treasures.md §2` record 15 stage-acceptance gate. Search
-/// stages this record only when its single-use flag is still clear
-/// and the searched cell is not occupied by an NPC.
+/// Public issue #18 record 15 stage-acceptance gate. Search stages
+/// this record only when its single-use cookie is clear and the
+/// searched cell is not occupied by an NPC.
 pub const fn hidden_treasure_record_15_accepts(single_use_cookie: u8, npc_present: bool) -> bool {
     single_use_cookie == crate::FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR && !npc_present
 }
@@ -94,13 +94,13 @@ pub enum HiddenTreasureRule {
     /// shot only, prevented from staging again by the save-backed
     /// found bitmap after a successful Search.
     OneShot,
-    /// Record 13 — requires the party to own at least one key and the
+    /// Record 13 — requires the party to own no ordinary keys and the
     /// searched tile not to be occupied by an NPC.
     KeyAndNpcAbsence,
     /// Record 14 — daily cache: can stage once per in-game day; success
     /// stores the current day as the cooldown cookie.
     DailyCache,
-    /// Record 15 — requires its single-use flag to be clear and the
+    /// Record 15 — requires its single-use cookie to be clear and the
     /// searched tile not to be occupied by an NPC.
     SingleUseAndNpcAbsence,
 }
@@ -116,8 +116,8 @@ pub const fn hidden_treasure_rule(record_index: usize) -> HiddenTreasureRule {
 }
 
 /// `hidden-treasures.md §2`: predicate combining the rule check with
-/// caller-provided context for record 13 (key + NPC), 14 (daily
-/// cooldown), and 15 (single-use flag + NPC). For record 13 the caller
+/// caller-provided context for record 13 (zero-key + NPC), 14 (daily
+/// cooldown), and 15 (single-use cookie + NPC). For record 13 the caller
 /// passes the party key count; for 14 the cooldown cookie + current
 /// day; for 15 the saved single-use flag. Records outside the gated
 /// set return `true` because the ordinary one-shot bitmap is owned by
@@ -132,11 +132,12 @@ pub const fn hidden_treasure_can_stage(
 ) -> bool {
     match hidden_treasure_rule(record_index) {
         HiddenTreasureRule::OneShot => true,
-        HiddenTreasureRule::KeyAndNpcAbsence => keys >= 1 && !tile_has_npc,
+        HiddenTreasureRule::KeyAndNpcAbsence => {
+            hidden_treasure_record_13_accepts(keys, tile_has_npc)
+        }
         HiddenTreasureRule::DailyCache => cooldown_day_cookie != current_day,
         HiddenTreasureRule::SingleUseAndNpcAbsence => {
-            single_use_cookie == crate::FIXED_HIDDEN_TREASURE_SINGLE_USE_COOKIE_CLEAR
-                && !tile_has_npc
+            hidden_treasure_record_15_accepts(single_use_cookie, tile_has_npc)
         }
     }
 }

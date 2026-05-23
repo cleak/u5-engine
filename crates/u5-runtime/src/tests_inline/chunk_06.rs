@@ -1719,6 +1719,36 @@
     }
 
     #[test]
+    fn search_fixed_hidden_record_13_requires_zero_keys() {
+        let dir = debug_game_dir();
+        let mut state = test_state(open_grid(), 5, 8);
+        state.area = Area::Town {
+            scene: Scene::new(18).unwrap(),
+            floor: -1,
+        };
+        state.player.facing = Direction::East;
+        state.keys = 1;
+
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert!(!state.fixed_hidden_treasure_found(13));
+
+        state.keys = 0;
+        assert_eq!(
+            state.search_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Searched
+        );
+        assert!(state.fixed_hidden_treasure_found(13));
+        assert_eq!(
+            state.active_objects[1].fixed_hidden_treasure_record(),
+            Some(13)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn fixed_hidden_special_records_ignore_non_npc_active_object_on_target() {
         let dir = debug_game_dir();
         let mut state = world_state(open_world_grid(), 79, 64);
@@ -1759,7 +1789,7 @@
             floor: -1,
         };
         state.player.facing = Direction::East;
-        state.keys = 1;
+        state.keys = 0;
         state.npcs.push(RuntimeNpc {
             slot: 1,
             type_byte: 1,

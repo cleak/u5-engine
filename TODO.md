@@ -33,7 +33,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-23 with 127 scripted route cases (including expanded active-shop/modal
+  2026-05-23 with 128 scripted route cases (including expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
@@ -67,7 +67,7 @@ Last known verification state:
   Ready, Talk, Up, View, West, X-it, Yell, Z-stats, refusal, and Search-prompt
   command routing, plus combat Look label-only routing (`25343578fe3b2a4d`),
   world dispatcher refusals (`2936fb4c6ff7e3ef`),
-  fixed hidden-treasure single-use, daily-cache, and stacked Underworld search
+  fixed hidden-treasure zero-key, single-use, daily-cache, and stacked Underworld search
   routes (`669a8d5524328039`, `d2b7835b9994c5d8`, `e7b98faee10c7445`),
   PRV Gate Travel success/refusal routes (`8989fd97ff26da04`,
   `483b27d450a54309`, `d4a86e6efb5c8978`, `b862359d883858c9`),
@@ -185,12 +185,10 @@ Last known verification state:
 - `cargo run -- --help` is a supported no-asset usage path.
 - The latest checkpointed engine commit at the time of this refresh included
   container Search object-table and trap-narration parity work.
-- Clean spec refresh on 2026-05-21 still found `cleak/u5-spec` at `e34af6b`
-  with no newer public push visible from this workspace. A GitHub follow-up was
-  posted on `cleak/u5-spec#15` because checked-in `systems/shops.md` still
-  mentions Intelligence-adjusted inn pricing while the latest public issue
-  answer says the clean engine should use fixed base-rate inn pricing with no
-  Intelligence discount.
+- Clean spec refresh on 2026-05-23 still found `cleak/u5-spec` at `e34af6b`
+  with no newer public push visible from this workspace. Issue answers from the
+  public tracker remain the clean source for behavior where checked-in spec
+  prose lags.
 - The spec checkout used for the most recent audit was `5b816cc Complete
   cleanroom specification`.
 
@@ -245,26 +243,19 @@ Current worktree context when this TODO was refreshed:
   after committed movement steps and before turn-clock advancement. Coordinate
   sidecar rows remain as fallback until the full resident tile-attribute table
   is published.
-- Talk-triggered arms shops now use the public `cleak/u5-spec#41`
-  scene-to-row identity table for all nine published shop rows and display
-  the scene-local shop name. The exact `a..h` stock arrays are still missing
-  from the clean spec, so the buy path keeps the legacy broad equipment menu
-  until those row bytes are published.
-- Stationary-display purchases now match public `cleak/u5-spec#28` marker-order
-  semantics for clean rows: marker ordinals count the scene/floor display-marker
-  list, not just the adjacent candidate subset.
-- Shadowlord shard U-Use now follows the latest public `cleak/u5-spec#31`
-  predicate shape for clean Eternal Flame metadata: the flame coordinate/tile
-  family plus shard/flame pairing is sufficient, and a separate live
-  Shadowlord-name encounter is not required. Exact native Eternal Flame
-  coordinates remain blocked until published, so `eternal_flames.tsv` is still
-  the clean metadata path.
-- The 2026-05-21 clean-engine audit found no broad newly answered engine slice
-  left unimplemented in the pulled spec. Follow-up questions were posted for
-  the largest blockers: #13 sage rows, #41 arms `a..h` stock arrays, #43 exact
-  Look-special outcomes, #47 random-jolt/camp recovery, #51 native tile
-  attributes, and #54 Return-to-View captions/effect rasters. Existing
-  #1/#3/#18 contradiction questions remain open.
+- Talk-triggered arms shops use the public `cleak/u5-spec#41` scene-to-row
+  identity table and exact per-row `a..h` stock arrays; visible buy choices stop
+  at the `0xFF` terminator.
+- Public `cleak/u5-spec#28` corrected the old stationary-display purchase path
+  to horse-trader sale rows. The obsolete stationary-display purchase runtime is
+  removed, and horse-trader route-smoke/talk-shop tests cover placement.
+- Shadowlord shard U-Use follows public `cleak/u5-spec#31` exact native
+  positions and requires the matching live Shadowlord/name encounter north of
+  the party; route smoke covers Lycaeum, Empath Abbey, and Serpent's Hold native
+  paths.
+- The 2026-05-23 clean-engine audit found no broad newly answered engine slice
+  left unimplemented in the pulled spec. Follow-up questions remain current for
+  response-needed public blockers #1, #3, #13, #18, #43, #47, #51, and #54.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the

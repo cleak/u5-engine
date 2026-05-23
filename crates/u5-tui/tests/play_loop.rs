@@ -825,6 +825,11 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "blackthorn-fixed-hidden-zero-key-search")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "stonegate-shadowlord-entry")
     );
     assert!(
