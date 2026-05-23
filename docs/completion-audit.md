@@ -32,13 +32,13 @@ in `TODO.md`:
 
 | Issue | Topic |
 |------|-------|
-| `cleak/u5-spec#13` | Corrected per-sage 16-entry rumour tables and scene/template mapping |
+| `cleak/u5-spec#13` | Paid shared 26-row sage rumour topic table and success templates |
 | `cleak/u5-spec#41` | Exact arms-shop eight-item stock rows |
-| `cleak/u5-spec#43` | Exact death-vision stat/text and wanted-poster/wishing-well resource details |
-| `cleak/u5-spec#47` | Exact original random-jolt/camp recovery details |
-| `cleak/u5-spec#48` | Non-combat Blink default-target selection |
+| `cleak/u5-spec#43` | Top-down fountain, wishing-well, death-vision, and wanted-poster outcomes |
+| `cleak/u5-spec#47` | Hourly Ring of Regeneration tick and completed long-camp recovery |
+| `cleak/u5-spec#48` | Non-combat Blink directional ray landing rule |
 | `cleak/u5-spec#51` | Full resident town tile-attribute table for poison-gas detection |
-| `cleak/u5-spec#54` | Return-to-View caption source/opcode/text and exact effect rasters |
+| `cleak/u5-spec#54` | Return-to-View strip captions, timing, and exact effect rasters |
 
 Where an audit row references one of these issues, the engine carries a clean
 implementation that avoids private-derived guesses until the public spec
@@ -203,12 +203,12 @@ through the asset-backed Talk command path.
 | §5 Bark renderer | `shoppe_bark.rs` substitution (`%/^/$/&/*/#/@`) | bark tests | Implemented |
 | §6 Pricing model | `shops.rs::arms_shop_price`, healer table, etc. | pricing tests in `chunk_21.rs` | Implemented |
 | §7 Inventory model | `equipment.rs` stock tables; inn registry in `play_state_struct.rs` | inn-stay tests | Implemented |
-| §8.1 Weaponsmith/armourer | `shops.rs::ArmsShop`, `shop_session.rs::arms_shop_for_scene`, `shops.rs::arms_shop_stock_letter_index` | arms scene-row and transaction tests | Implemented (scene-local row identity; exact stock arrays blocked on `cleak/u5-spec#41`) |
+| §8.1 Weaponsmith/armourer | `shops.rs::ArmsShop`, `shop_session.rs::arms_shop_for_scene`, `shops.rs::arms_shop_stock_letter_index` | arms scene-row, published stock-row, and transaction tests | Implemented (public #41 scene-to-`a..h` stock rows) |
 | §8.2 Guildmaster | `shops.rs` guild prices | guild tests | Implemented |
 | §8.3 Healer | healer arm in `shop_runtime.rs`; Minoc bypass | healer tests | Implemented |
 | §8.4 Innkeeper | `shop_runtime.rs` inn flow; stay counter in `clock.rs`; public issue #15 fixed base-rate charges with no speaker-Intelligence discount plus paid-rest class recovery and poison cure | inn tests | Implemented |
 | §8.5 Tavernkeeper | tavern arm in `shop_runtime.rs` | tavern tests | Implemented |
-| §8.6 Sage | sage arm: free 16-slot keyword lookup with no gold debit; synthetic placeholder rows until the corrected per-sage table is public | sage tests | Implemented (mechanics; real rows blocked on `cleak/u5-spec#13`) |
+| §8.6 Sage | sage arm: shared 26-row paid keyword lookup, strict four-letter topic boundary, fee quote/confirmation, gold debit, and SHOPPE record 85..=88 success rendering | sage runtime tests plus full public #13 table-sync test | Implemented (exact fee/no-credit resident wording still pending) |
 | §8.7 Shipwright | shipwright arm; pending vehicle in `play_state_struct.rs` | shipwright tests | Implemented |
 | §8.8 Horse trader | horse arm | horse tests | Implemented |
 | §8.9 Reagent vendor | `shops.rs` per-herbalist matrix | reagent tests | Implemented |
@@ -225,7 +225,7 @@ through the asset-backed Talk command path.
 
 | Section | Evidence | Tests | Status |
 |--------|----------|-------|--------|
-| `intro.md` §1–§14 | `intro.rs`, `intro_menu.rs`, `menu_dispatch.rs`, `pth.rs` (BRITISH.PTH walker), `return_to_view.rs`, `story_io.rs`; Bevy intro shell composes published title bitmap, animates signature path, draws the public issue #52 four-frame palette-cycled clean flame stripe, renders story art with the spec-defined transition-strip and secondary-art draws, and runs the public issue #53 step-1 36-title-tick column wipe; Return-to-View preview rendering uses public title-tick animation families, transparent actor overlay composition, and the public issue #54 scheduler/playback timing for preview ticks, cell effects, fixed wipes, fixed waits, trailing ticks, and one-shot actor draws; `intro.rs::ACKNOWLEDGEMENTS_LINES` provides clean-room authored Acknowledgements content for §11 (`A` submenu) per the spec's "source-free content transcription" directive | intro/chargen menu tests in `chunk_01.rs`, `chunk_02.rs`; Bevy intro framebuffer/title-tick/story-wipe tests; Return-to-View renderer/playback tests; `intro::tests::acknowledgements_lines_are_clean_room_authored` | Implemented; exact historical title-tick silhouette pixels, exact unpublished wider rectangle-transition rates/rectangles, and Return-to-View caption/effect rasters remain Presentation work |
+| `intro.md` §1–§14 | `intro.rs`, `intro_menu.rs`, `menu_dispatch.rs`, `pth.rs` (BRITISH.PTH walker), `return_to_view.rs`, `story_io.rs`; Bevy intro shell composes published title bitmap, animates signature path, draws the public issue #52 four-frame palette-cycled clean flame stripe, renders story art with the spec-defined transition-strip and secondary-art draws, and runs the public issue #53 step-1 36-title-tick column wipe; Return-to-View preview rendering uses public title-tick animation families, transparent actor overlay composition, public #54 fixed strip captions from LoadMapStrip, high-opcode no-ops, and scheduler/playback timing for preview ticks, cell effects, fixed wipes, fixed waits, trailing ticks, and one-shot actor draws; `intro.rs::ACKNOWLEDGEMENTS_LINES` provides clean-room authored Acknowledgements content for §11 (`A` submenu) per the spec's "source-free content transcription" directive | intro/chargen menu tests in `chunk_01.rs`, `chunk_02.rs`; Bevy intro framebuffer/title-tick/story-wipe tests; Return-to-View renderer/playback tests; `intro::tests::acknowledgements_lines_are_clean_room_authored` | Implemented; exact historical title-tick silhouette pixels, exact unpublished wider rectangle-transition rates/rectangles, the #54 strip-geometry wording conflict, and exact Return-to-View effect rasters remain Presentation work |
 | `chargen.md` §1–§11 | `chargen.rs` questionnaire VM, gender prompt, virtue tournament, stat assignment | chargen tests | Implemented |
 | `u4-transfer.md` §1–§10 | `u4_transfer.rs`, `u4_transfer_session.rs` state machine, public issue #16 `PARTY.SAV` source validation offsets, BRIT.GAM/BRIT.OOL handling, stat translation, OOL ordering | u4-transfer tests | Implemented |
 
@@ -258,7 +258,7 @@ through the asset-backed Talk command path.
 | `weather.md` §1–§11 | `wind.rs`, Rel Hur cast in `magic.rs`, sail cadence | wind cast and sailing tests, including the two-wait into-wind case | Implemented |
 | `moons.md` §1–§4 | `play_state_impl/chunk_*.rs` sky strip; moongate counters in `moongate.rs`; public issue #38 Felucca off-horizon sentinels for hours 10/11/19/20 | sky-strip and moon-glyph cache tests | Implemented |
 | `time.md` §1–§13 | `clock.rs` cascade, Q/T tag handling, mode-specific increment | clock and cascade tests | Implemented |
-| `rest-and-camp.md` §1–§10 | `rest_camp.rs`, `lord_british_camp.rs` | rest, camp, ambush tests | Implemented (ordinary rest has no direct HP/MP recovery; exact original camp/random-jolt details remain tied to `cleak/u5-spec#47`) |
+| `rest-and-camp.md` §1–§10 | `rest_camp.rs`, `lord_british_camp.rs`, `play_state_impl/chunk_08.rs::apply_completed_long_camp_recovery`, and hourly Ring of Regeneration tick in `chunk_09.rs` | rest, camp, ambush, long-camp recovery, and hourly ring tests | Implemented (ordinary rest has no direct HP/MP recovery; public #47 issue-comment behavior is implemented, while checked-in spec files still need reconciliation) |
 | `lighting.rs` §1–§11 | `lighting.rs` ambient + torch + light-spell counters | lighting tests | Implemented |
 | `doors-and-z-transitions.md` §1–§15 | `jimmy.rs`, `play_state_impl/chunk_*.rs` open/get/look cascade, `ship_broadside.rs` BOOOM, secret doors, climb command | jimmy, open, secret-door, klimb tests | Implemented |
 
@@ -348,31 +348,33 @@ are kept out of gameplay logic until the public spec publishes exact data.
 
 | Issue | Public gap | Engine placeholder |
 |------|------------|--------------------|
-| `cleak/u5-spec#13` | Corrected real per-sage 16-entry rumour rows, location strings, SHOPPE record/template ids, and scene/dialog-state selection | Sage mechanics use the corrected free keyword lookup/no-debit flow, but rows remain synthetic/empty until published |
-| `cleak/u5-spec#41` | Exact arms-shop eight-item stock rows | Scene-to-shop dispatch and the nine public arms-shop row identities are implemented; exact `a..h` stock rows remain broad-menu-backed until published |
-| `cleak/u5-spec#43` | Exact death-vision stat/text plus wished-object and wanted-poster resource details | Look routes the public object/tile predicates, prompts for the member on death vision, keeps top-down fountains presentation-only per checked-in `systems/view.md`, grants the native Horse wish, and leaves accepted car keywords on the no-effect path until the exact public wish-grant table is published |
-| `cleak/u5-spec#47` | Exact original random-jolt/camp recovery details | ordinary rest advances time without a direct HP/MP recovery grant; route-smoke covers the dungeon no-direct-recovery path |
-| `cleak/u5-spec#48` | Non-combat Blink default target | `play_state_impl/chunk_04.rs` uses sidecar-authored destinations |
+| `cleak/u5-spec#13` | Exact resident SHOPPE record ids/text for the sage fee quote and insufficient-gold/no-credit refusal | Shared paid 26-row table, strict matching, confirmation/debit, and success rendering are implemented from the public issue answer; prompt wording remains conservative until published |
+| `cleak/u5-spec#43` | Exact wanted-poster resident text/template and line breaking | Look routes the public predicates and outcomes, grants all six accepted well wishes as horse-family objects in the public scenes, uses Intelligence for death vision, and inserts party names at the Yew poster predicate with clean-authored placeholder wording |
+| `cleak/u5-spec#47` | Checked-in spec files still contradict the latest public issue answer for non-combat Ring of Regeneration and completed long-camp recovery | Engine implements the latest public issue-comment behavior: hourly 1-in-8 Ring of Regeneration +1 HP and guarded completed long-camp HP/MP recovery |
 | `cleak/u5-spec#51` | Full resident town tile-attribute table | `town_tile_attributes.tsv` can drive the public class `4` + vehicle byte `0x1C` poison-gas trigger predicate; coordinate rows remain as fallback, with route-smoke covering the public per-slot roll semantics |
-| `cleak/u5-spec#54` | Return-to-View caption source/opcode/text and exact effect rasters | Parser/scheduler/overlay composition implement the public timing model; captions and exact rasters remain presentation placeholders |
+| `cleak/u5-spec#54` | Return-to-View strip geometry wording conflict and exact local cell-effect rasters | Parser/scheduler/overlay composition implement the public 19x4 `formats/location-dat.md` source layout, fixed captions from LoadMapStrip, high-opcode no-ops, and timing model; geometry and exact rasters await final public reconciliation |
 
-Follow-up questions were posted from the clean-engine side on 2026-05-21 for
-the largest remaining implementation blockers:
+Follow-up questions were current as of the 2026-05-23 issue audit for the
+remaining response-needed items:
 
-- `cleak/u5-spec#13`: publish per-sage 16-entry rumour rows and selector data.
-- `cleak/u5-spec#41`: publish the nine `scene -> [a..h]` arms-stock rows.
-- `cleak/u5-spec#43`: publish exact death-vision, fountain, wishing-well, and
-  wanted-poster outcomes.
-- `cleak/u5-spec#47`: publish the random-jolt/camp recovery trigger and deltas.
-- `cleak/u5-spec#51`: publish the resident town tile-attribute table or
-  semantic tile-id mapping.
-- `cleak/u5-spec#54`: publish/confirm Return-to-View caption source and exact
-  effect rasters.
+- `cleak/u5-spec#13`: exact fee/no-credit text or SHOPPE record ids.
+- `cleak/u5-spec#18`: correct the `formats/saved-gam.md` record-15 skip
+  predicate wording to match the issue answer.
+- `cleak/u5-spec#43`: exact wanted-poster resident template/text and party-name
+  insertion order.
+- `cleak/u5-spec#47`: reconcile checked-in spec prose with the latest public
+  issue-comment Ring of Regeneration and completed long-camp behavior.
+- `cleak/u5-spec#51`: confirm whether tile `0x04` is the complete poison-gas
+  predicate or publish the full resident tile-attribute table.
+- `cleak/u5-spec#54`: resolve the strip geometry wording conflict and publish
+  or defer exact local cell-effect rasters.
+- `cleak/u5-spec#3`: publish the exact skiff/pirate-ship special selector
+  byte/range and whether the selector inspects active-object type, tile, or both.
+- `cleak/u5-spec#1`: reconcile stale `systems/dungeon-mode.md` cleared-room
+  `0xE?` wording with the authoritative `0xA?` room-helper answer.
 
-Separate spec-sync contradictions remain tracked on GitHub but do not currently
-change engine behavior: `cleak/u5-spec#1` cleared dungeon-room reload wording,
-`cleak/u5-spec#3` terrain-combat placement-source wording, and
-`cleak/u5-spec#18` record-15 cookie skip wording.
+These spec-sync contradictions do not currently change engine behavior; the
+engine follows the latest public issue answers where checked-in prose lags.
 
 ## Presentation Work (Separate From Gameplay Correctness)
 
@@ -383,7 +385,7 @@ overlays where exact historical pixels are not public.
 
 - Title-tick exact historical silhouette pixels and palette fades.
 - Exact unpublished wider story/endgame rectangle-transition rectangles/rates.
-- Return-to-View captions and effect-raster pacing internals.
+- Return-to-View strip geometry reconciliation and effect-raster pacing internals.
 - Exact remote-view panel pixels for X-Ray / Peer.
 - Exact dungeon minimap glyph/floodability edge cases.
 - Gazer eye-burst tile + particle and Gargoyle lava-pool transitions (the

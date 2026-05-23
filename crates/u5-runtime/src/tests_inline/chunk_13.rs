@@ -8256,17 +8256,47 @@ fn sage_rumour_table_shape_matches_public_issue() {
     // Public issue cleak/u5-spec#13: one shared paid 26-row sage topic table.
     assert_eq!(SAGE_RUMOUR_TOPIC_COUNT, 26);
     assert_eq!(SAGE_RUMOUR_TABLE.len(), 26);
-    assert_eq!(SAGE_RUMOUR_TABLE[0].keyword, "hone");
-    assert_eq!(SAGE_RUMOUR_TABLE[0].subject, "Malik");
-    assert_eq!(SAGE_RUMOUR_TABLE[0].destination, "Moonglow");
-    assert_eq!(SAGE_RUMOUR_TABLE[0].fee, 50);
-    assert_eq!(SAGE_RUMOUR_TABLE[25].keyword, "unde");
-    assert_eq!(SAGE_RUMOUR_TABLE[25].subject, "Jotham");
-    assert_eq!(
-        SAGE_RUMOUR_TABLE[25].destination,
-        "a lighthouse south of Britain"
-    );
-    assert_eq!(SAGE_RUMOUR_TABLE[25].fee, 100);
+    let expected = [
+        ("hone", "Malik", "Moonglow", 50),
+        ("comp", "Greyson", "Britain", 75),
+        ("valo", "Trian", "Jhelom", 50),
+        ("just", "Jeremy", "Yew", 50),
+        ("sacr", "Rew", "Minoc", 75),
+        ("hono", "Gruman", "Trinsic", 75),
+        ("spir", "Saul", "Skara Brae", 25),
+        ("humi", "Shirita", "New Magincia", 50),
+        ("dece", "Malifora", "Moonglow", 100),
+        ("desp", "Annon", "Britain", 150),
+        ("dest", "Trian", "Jhelom", 75),
+        ("wron", "Felespar", "Yew", 150),
+        ("cove", "the mother of Rew", "Minoc", 75),
+        ("sham", "Sindar", "Trinsic", 100),
+        ("hyth", "Kaiko", "New Magincia", 100),
+        ("crow", "Terrance", "Britain", 200),
+        ("scep", "Greymarch", "Yew", 200),
+        (
+            "amul",
+            "Simon and Tessa",
+            "a hidden mountain keep",
+            200,
+        ),
+        ("fals", "Shalineth", "the Lycaeum", 250),
+        ("hatr", "a daemon", "the desert", 250),
+        ("cowa", "Lord Malone", "Serpent's Hold", 250),
+        ("astr", "Zachariah", "Moonglow", 100),
+        ("oppr", "Tactus", "Minoc", 50),
+        ("brit", "a daemon", "the desert", 50),
+        ("resi", "Terrance", "Britain", 200),
+        ("unde", "Jotham", "a lighthouse south of Britain", 100),
+    ];
+    for (index, (keyword, subject, destination, fee)) in expected.iter().enumerate() {
+        let entry = SAGE_RUMOUR_TABLE[index];
+        assert_eq!(
+            (entry.keyword, entry.subject, entry.destination, entry.fee),
+            (*keyword, *subject, *destination, *fee),
+            "sage rumour row {index}"
+        );
+    }
     assert!(sage_rumour_record_id_accepted(84));
     assert!(sage_rumour_record_id_accepted(91));
     assert!(!sage_rumour_record_id_accepted(83));
