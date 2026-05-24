@@ -782,6 +782,7 @@ impl PlayState {
             Area::World { .. } => {
                 if x < WORLD_SIDE && y < WORLD_SIDE {
                     self.grid[world_cell_index(x, y)] = LOCATION_MARKER_CLEANUP_TILE;
+                    let _ = self.refresh_world_live_chunks_for_current_area();
                 }
             }
             Area::Dungeon { .. } => {}
@@ -1474,6 +1475,7 @@ impl PlayState {
         };
 
         self.grid[idx] = entry.replacement_tile;
+        self.rebuild_world_live_chunks_from_grid(plane)?;
         if let Some(grant) = entry.grant {
             self.apply_get_tile_grant(grant);
         }

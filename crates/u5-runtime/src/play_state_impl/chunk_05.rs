@@ -747,6 +747,7 @@ impl PlayState {
             self.player.y = y;
             self.force_foot_transport();
             self.grid = load_world_map(game_dir, plane)?;
+            self.rebuild_world_live_chunks_from_grid(plane)?;
             self.natural_moongate_live_cells.clear();
             self.npcs.clear();
             self.replace_world_active_objects(game_dir, plane, x, y)?;
@@ -870,6 +871,7 @@ impl PlayState {
 
         self.player.x = final_x;
         self.player.y = final_y;
+        self.rebuild_world_live_chunks_from_grid(plane)?;
         self.sync_player_object();
         self.mark_visibility_dirty();
         self.advance_turn();

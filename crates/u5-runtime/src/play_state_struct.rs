@@ -16,6 +16,7 @@ pub struct PlayState {
     pub passability: Option<TilePassability>,
     pub moongates: Vec<MoongateEntry>,
     pub grid: Vec<u8>,
+    pub world_live_chunks: Option<WorldLiveChunkBuffer>,
     pub clock: GameClock,
     pub prng_state: u16,
     pub animation: AnimationClock,

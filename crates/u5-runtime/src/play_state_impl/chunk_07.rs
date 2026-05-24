@@ -2100,6 +2100,7 @@ impl PlayState {
         self.player.x = tx;
         self.player.y = ty;
         self.sync_player_object();
+        let _ = self.refresh_world_live_chunks_for_current_area();
         self.mark_visibility_dirty();
         self.advance_turn();
     }

@@ -281,6 +281,7 @@ impl PlayState {
             self.force_foot_transport();
         }
         self.grid = load_world_map(game_dir, entry.to_plane)?;
+        self.rebuild_world_live_chunks_from_grid(entry.to_plane)?;
         self.natural_moongate_live_cells.clear();
         self.npcs.clear();
         self.replace_world_active_objects(game_dir, entry.to_plane, entry.to_x, entry.to_y)?;
@@ -1141,7 +1142,7 @@ impl PlayState {
                 let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
                 let terrain = self
                     .animation
-                    .resolve_static_tile(self.grid[world_cell_index(wx, wy)]);
+                    .resolve_static_tile(self.world_live_tile_at(wx, wy));
                 Some((terrain, None))
             }
         }
@@ -1332,7 +1333,7 @@ impl PlayState {
                     TopDownRenderArea::World(_) => {
                         let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
                         let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
-                        self.grid[world_cell_index(wx, wy)]
+                        self.world_live_tile_at(wx, wy)
                     }
                 };
                 if static_tile_animation_family(tile).is_some() {
@@ -1543,7 +1544,7 @@ impl PlayState {
 
     pub fn world_cell_blocks_sight(&self, x: usize, y: usize) -> bool {
         self.sight_blocking_object_at_current_floor(x, y).is_some()
-            || world_surface_tile_blocks_sight(self.grid[world_cell_index(x, y)])
+            || world_surface_tile_blocks_sight(self.world_live_tile_at(x, y))
     }
 
     pub fn surface_visibility_carve(
@@ -1828,7 +1829,7 @@ impl PlayState {
         if wrap_world {
             let wx = x.rem_euclid(WORLD_SIDE as isize) as usize;
             let wy = y.rem_euclid(WORLD_SIDE as isize) as usize;
-            Some(self.grid[world_cell_index(wx, wy)])
+            Some(self.world_live_tile_at(wx, wy))
         } else if (0..32).contains(&x) && (0..32).contains(&y) {
             Some(self.grid[y as usize * 32 + x as usize])
         } else {

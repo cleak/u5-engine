@@ -56,6 +56,7 @@ pub fn test_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         passability: None,
         moongates: Vec::new(),
         grid,
+        world_live_chunks: None,
         clock: GameClock::default(),
         prng_state: DEFAULT_PRNG_STATE,
         animation: AnimationClock::default(),
@@ -203,6 +204,7 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
         passability: None,
         moongates: Vec::new(),
         grid,
+        world_live_chunks: None,
         clock: GameClock::default(),
         prng_state: DEFAULT_PRNG_STATE,
         animation: AnimationClock::default(),
@@ -324,6 +326,8 @@ pub fn dungeon_state(grid: Vec<u8>, level: u8, x: usize, y: usize) -> PlayState 
 }
 
 pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
+    let world_live_chunks =
+        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Underworld, &grid, x, y, |_| false).ok();
     PlayState {
         area: Area::World {
             plane: WorldPlane::Underworld,
@@ -351,6 +355,7 @@ pub fn world_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
         passability: None,
         moongates: Vec::new(),
         grid,
+        world_live_chunks,
         clock: GameClock::default(),
         prng_state: DEFAULT_PRNG_STATE,
         animation: AnimationClock::default(),

@@ -13,6 +13,7 @@ mod chunk_08;
 mod chunk_09;
 mod chunk_10;
 mod chunk_11;
+mod chunk_12;
 
 pub use chunk_09::{
     town_free_roaming_direction, town_free_roaming_facing_byte, town_free_roaming_object_eligible,

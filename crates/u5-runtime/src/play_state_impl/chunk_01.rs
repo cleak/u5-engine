@@ -405,6 +405,7 @@ impl PlayState {
             passability,
             moongates,
             grid,
+            world_live_chunks: None,
             clock: options.clock,
             prng_state: DEFAULT_PRNG_STATE,
             animation: AnimationClock::default(),
@@ -639,6 +640,7 @@ impl PlayState {
             passability,
             moongates,
             grid,
+            world_live_chunks: None,
             clock: options.clock,
             prng_state: DEFAULT_PRNG_STATE,
             animation: AnimationClock::default(),
@@ -861,6 +863,13 @@ impl PlayState {
         if let Some(pending) = options.pending_vehicle {
             place_pending_vehicle_acquisition(&mut active_objects, plane, pending)?;
         }
+        let world_live_chunks = Some(WorldLiveChunkBuffer::from_full_grid(
+            plane,
+            &grid,
+            x,
+            y,
+            |_| false,
+        )?);
 
         let mut state = Self {
             area: Area::World { plane },
@@ -878,6 +887,7 @@ impl PlayState {
             passability,
             moongates,
             grid,
+            world_live_chunks,
             clock: options.clock,
             prng_state: DEFAULT_PRNG_STATE,
             animation: AnimationClock::default(),

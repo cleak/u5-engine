@@ -973,6 +973,7 @@ impl PlayState {
         self.player.y = entry.to_y;
         self.force_foot_transport();
         self.grid = load_world_map(game_dir, entry.to_plane)?;
+        self.rebuild_world_live_chunks_from_grid(entry.to_plane)?;
         self.natural_moongate_live_cells.clear();
         self.npcs.clear();
         self.replace_world_active_objects(game_dir, entry.to_plane, entry.to_x, entry.to_y)?;
@@ -1093,6 +1094,7 @@ impl PlayState {
         }
         self.player.x = entry.destination_x;
         self.player.y = entry.destination_y;
+        self.rebuild_world_live_chunks_from_grid(to_plane)?;
         self.sync_player_object();
         self.mode_zero_cleanup();
         self.mark_visibility_dirty();
@@ -1178,6 +1180,7 @@ impl PlayState {
         }
 
         self.grid[idx] = NATURAL_MOONGATE_RESTORED_TERRAIN_TILE;
+        self.refresh_world_live_chunks_for_current_area()?;
         self.natural_moongate_live_cells
             .retain(|tracked_idx| *tracked_idx != idx);
         self.mark_visibility_dirty();
@@ -1416,6 +1419,9 @@ impl PlayState {
         self.sail_cadence = return_world.sail_cadence;
         self.sail_stall_pending = return_world.sail_stall_pending;
         self.grid = return_world.grid;
+        if let Err(err) = self.rebuild_world_live_chunks_from_grid(plane) {
+            self.message = err.to_string();
+        }
         self.natural_moongate_live_cells.clear();
         self.npcs.clear();
         self.active_objects = return_world.active_objects;
@@ -1466,6 +1472,7 @@ impl PlayState {
         self.player.y = entry.y;
         self.force_foot_transport();
         self.grid = load_world_map(game_dir, entry.plane)?;
+        self.rebuild_world_live_chunks_from_grid(entry.plane)?;
         self.natural_moongate_live_cells.clear();
         self.npcs.clear();
         self.replace_world_active_objects(game_dir, entry.plane, entry.x, entry.y)?;
@@ -1707,6 +1714,7 @@ impl PlayState {
         } else {
             self.player.y = (self.player.y + 1) % WORLD_SIDE;
             self.sync_player_object();
+            let _ = self.rebuild_world_live_chunks_from_grid(plane);
             self.mark_visibility_dirty();
             "A fixed narrative gate opens. The party enters and steps south."
         };

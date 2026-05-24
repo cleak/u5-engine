@@ -2092,6 +2092,37 @@
     }
 
     #[test]
+    fn top_down_viewport_samples_world_live_chunk_buffer() {
+        let mut grid = open_world_grid();
+        grid[world_cell_index(9, 8)] = 0x16;
+        let mut state = britannia_state(grid, 8, 8);
+        state.ambient_light = FULL_DAYLIGHT;
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+
+        let viewport = state.render_top_down_viewport(1, &atlas).unwrap().unwrap();
+
+        assert_eq!(
+            viewport.pixel(2 * 16, 16),
+            Some(LIVE_CHUNK_SUBSTITUTION_TARGET_DF % atlas.depth.pixel_limit())
+        );
+        assert_eq!(state.grid[world_cell_index(9, 8)], 0x16);
+    }
+
+    #[test]
+    fn world_step_refreshes_live_chunk_buffer_scroll_base() {
+        let mut state = britannia_state(open_world_grid(), 23, 8);
+        assert_eq!(state.world_live_chunks.as_ref().unwrap().scroll_base, (0, 0));
+
+        let outcome = state
+            .step_world(Direction::East, 24, 8, WorldPlane::Britannia, None)
+            .unwrap();
+
+        assert_eq!(outcome, MoveOutcome::Moved);
+        assert_eq!(state.player.x, 24);
+        assert_eq!(state.world_live_chunks.as_ref().unwrap().scroll_base, (16, 0));
+    }
+
+    #[test]
     fn top_down_frame_repairs_player_object_and_clears_dirty() {
         let mut state = test_state(open_grid(), 4, 5);
         state.visibility_dirty = true;

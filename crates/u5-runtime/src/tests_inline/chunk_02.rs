@@ -21,6 +21,9 @@ fn britannia_state(grid: Vec<u8>, x: usize, y: usize) -> PlayState {
     };
     state.active_objects[0].z = WorldPlane::Britannia.save_floor();
     state
+        .rebuild_world_live_chunks_from_grid(WorldPlane::Britannia)
+        .unwrap();
+    state
 }
 
 #[test]
