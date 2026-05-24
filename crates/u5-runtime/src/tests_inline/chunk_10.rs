@@ -445,6 +445,130 @@
         }));
     }
 
+    fn write_all_location_family_fixtures(dir: &Path) {
+        let mut open_pages = Vec::with_capacity(LOCATION_DAT_FILE_LEN);
+        for _ in 0..LOCATION_DAT_BLOCKS_PER_FILE * LOCATION_DAT_FLOOR_PAGES_PER_BLOCK {
+            open_pages.extend(open_grid());
+        }
+        for (dat, npc, tlk) in [
+            ("TOWNE.DAT", TOWNE_NPC_FILENAME, TOWNE_TLK_FILENAME),
+            ("DWELLING.DAT", DWELLING_NPC_FILENAME, DWELLING_TLK_FILENAME),
+            ("CASTLE.DAT", CASTLE_NPC_FILENAME, CASTLE_TLK_FILENAME),
+            ("KEEP.DAT", KEEP_NPC_FILENAME, KEEP_TLK_FILENAME),
+        ] {
+            fs::write(dir.join(dat), &open_pages).unwrap();
+            fs::write(dir.join(npc), vec![0; NPC_FILE_LEN]).unwrap();
+            fs::write(dir.join(tlk), [1, 0, 0, 0]).unwrap();
+        }
+    }
+
+    #[test]
+    fn world_enter_all_published_locations_without_sidecar() {
+        let dir = debug_game_dir();
+        write_all_location_family_fixtures(&dir);
+
+        for entry in published_world_location_entries() {
+            let mut state = world_state(open_world_grid(), entry.x, entry.y);
+            state.area = Area::World { plane: entry.plane };
+            state.active_objects[0].z = entry.plane.save_floor();
+            if matches!(entry.target, PlayTarget::Dungeon(scene) if scene.record == 7) {
+                state.shadowlord_hideouts = [SHADOWLORD_VANQUISHED; SHADOWLORD_COUNT];
+            }
+
+            let outcome = state.enter_current_location(&dir).unwrap();
+
+            match entry.target {
+                PlayTarget::Town(scene) => {
+                    assert_eq!(
+                        outcome,
+                        MoveOutcome::Transition(AreaTransition::EnteredLocation(scene)),
+                        "published location row for {} at {} ({}, {}) did not enter town",
+                        scene.key(),
+                        entry.plane.key(),
+                        entry.x,
+                        entry.y
+                    );
+                    assert_eq!(state.area, Area::Town { scene, floor: 0 });
+                    assert_eq!(
+                        state.return_world.as_ref().map(|ret| (
+                            ret.plane, ret.x, ret.y
+                        )),
+                        Some((entry.plane, entry.x, entry.y))
+                    );
+                    assert!(state.message.contains(&format!(
+                        "Entered {} from {}",
+                        scene.key(),
+                        entry.plane.key()
+                    )));
+                }
+                PlayTarget::Dungeon(scene) => {
+                    assert_eq!(
+                        outcome,
+                        MoveOutcome::Transition(AreaTransition::EnteredDungeon(scene)),
+                        "published location row for {} at {} ({}, {}) did not enter dungeon",
+                        scene.key(),
+                        entry.plane.key(),
+                        entry.x,
+                        entry.y
+                    );
+                    let expected_level =
+                        if entry.plane == WorldPlane::Underworld && scene.record != 7 {
+                            7
+                        } else {
+                            0
+                        };
+                    assert_eq!(
+                        state.area,
+                        Area::Dungeon {
+                            scene,
+                            level: expected_level
+                        }
+                    );
+                    assert_eq!(
+                        state.return_world.as_ref().map(|ret| (
+                            ret.plane, ret.x, ret.y
+                        )),
+                        Some((entry.plane, entry.x, entry.y))
+                    );
+                    assert!(state.message.contains(&format!(
+                        "Entered {} ({}) from {}",
+                        scene.key(),
+                        scene.name(),
+                        entry.plane.key()
+                    )));
+                }
+                PlayTarget::World(_) => unreachable!("published table excludes world targets"),
+            }
+        }
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn restore_world_for_all_published_location_targets_without_sidecar() {
+        let dir = debug_game_dir();
+
+        for entry in published_world_location_entries() {
+            let mut state = world_state(open_world_grid(), 0, 0);
+
+            assert!(
+                state
+                    .restore_world_for_target(&dir, entry.target)
+                    .unwrap(),
+                "published return row for {} did not restore",
+                entry.target.key()
+            );
+
+            assert_eq!(state.area, Area::World { plane: entry.plane });
+            assert_eq!((state.player.x, state.player.y), (entry.x, entry.y));
+            assert_eq!(state.player.transport, TransportState::Foot);
+            assert_eq!(state.active_objects[0].z, entry.plane.save_floor());
+            assert!(state.return_world.is_none());
+        }
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn world_enter_uses_published_location_table_without_sidecar() {
         let dir = debug_game_dir();

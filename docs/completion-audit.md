@@ -65,13 +65,16 @@ Runtime, TUI, route-smoke, and visual-route results refreshed alongside this
 audit on 2026-05-24; Bevy frame-suite evidence remains from the latest display
 audit:
 
-- `cargo test -p u5-runtime` — 2631 tests pass, including stats-panel
+- `cargo test -p u5-runtime` — 2634 tests pass, including stats-panel
   combat-row inverse-video style coverage.
+- `cargo test -p u5-runtime published_location --tests` - 6 focused tests pass,
+  including exhaustive entry and return coverage for all forty public
+  world-location rows without sidecars.
 - `cargo test -p u5-tui` — 79 tests pass, including temp-directory binary
   smoke for empty-save Journey Onward, deterministic Create Character followed
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
-- `cargo test -p u5-bevy` — 66 tests pass.
+- `cargo test -p u5-bevy` — 67 tests pass.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 220 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
