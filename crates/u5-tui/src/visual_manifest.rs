@@ -223,7 +223,7 @@ fn compare_frame(
     actual: &ManifestFrame,
     report: &mut ManifestCompareReport,
 ) {
-    if actual.nonblack == 0 {
+    if expected.nonblack != 0 && actual.nonblack == 0 {
         report
             .differences
             .push(format!("frame `{label}` is all black"));
@@ -339,5 +339,15 @@ britannia\t320x200\tworld frame\tturn 0\tat (136, 146) facing North\thash 111111
         assert!(report.is_clean());
         assert_eq!(report.baseline_coverage, 0);
         assert_eq!(report.baseline_frames, 1);
+    }
+
+    #[test]
+    fn compare_manifest_text_accepts_baseline_black_route_frame() {
+        let baseline = "\
+coverage\ttotal-routes\t1
+route-dungeon-dark\t176x176\tdungeon first-person viewport\thash 0000000000000000\tnonblack 0\tcommands 1\tState: DUNGEON
+";
+        let report = compare_manifest_text(baseline, baseline).unwrap();
+        assert!(report.is_clean(), "{:?}", report.differences);
     }
 }

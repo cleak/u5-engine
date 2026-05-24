@@ -317,6 +317,8 @@ fn cli_parser_accepts_play_script_and_implies_play_mode() {
 fn cli_parser_accepts_route_smoke_mode() {
     let args = parse_cli_args([
         "--route-smoke",
+        "--route-smoke-manifest",
+        "target/route-smoke/manifest.txt",
         "--raster-depth",
         "tandy",
         r"C:\Games\U5-Clean",
@@ -326,6 +328,10 @@ fn cli_parser_accepts_route_smoke_mode() {
     assert!(args.route_smoke);
     assert!(!args.play);
     assert!(!args.visual);
+    assert_eq!(
+        args.route_smoke_manifest,
+        Some(PathBuf::from("target/route-smoke/manifest.txt"))
+    );
     assert_eq!(args.raster_depth, TileGraphicsDepth::Ega16);
     assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
 }
@@ -337,6 +343,17 @@ fn cli_route_smoke_rejects_other_play_modes_and_overrides() {
     assert!(parse_cli_args(["--route-smoke", "--save-frame", "frame.png"]).is_err());
     assert!(parse_cli_args(["--route-smoke", "--scene", "BRITANNIA"]).is_err());
     assert!(parse_cli_args(["--route-smoke", "--wind", "north"]).is_err());
+    assert!(parse_cli_args(["--route-smoke-manifest", "target/manifest.txt"]).is_err());
+    assert!(
+        parse_cli_args([
+            "--route-smoke",
+            "--route-smoke-manifest",
+            "one.txt",
+            "--route-smoke-manifest",
+            "two.txt"
+        ])
+        .is_err()
+    );
 }
 
 #[test]
@@ -572,6 +589,7 @@ fn cli_parser_rejects_missing_save_frame_path() {
     assert!(parse_cli_args(["--save-frame-suite"]).is_err());
     assert!(parse_cli_args(["--visual-frame-suite"]).is_err());
     assert!(parse_cli_args(["--visual-route-suite"]).is_err());
+    assert!(parse_cli_args(["--route-smoke", "--route-smoke-manifest"]).is_err());
     assert!(parse_cli_args(["--compare-frame-manifests"]).is_err());
 }
 

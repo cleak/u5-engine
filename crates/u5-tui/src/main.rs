@@ -66,7 +66,11 @@ fn main() -> io::Result<()> {
         return run_visual_route_suite(&args, out_dir);
     }
     if args.route_smoke {
-        return run_route_smoke(&args.game_dir, args.raster_depth);
+        return run_route_smoke(
+            &args.game_dir,
+            args.raster_depth,
+            args.route_smoke_manifest.as_deref(),
+        );
     }
     if args.visual {
         return run_visual(args);

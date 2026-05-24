@@ -5,7 +5,9 @@
 //! TUI symbols live here because the TUI symbols are no longer in
 //! `u5-runtime`'s scope.
 
+use std::fs;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use u5_runtime::shop_runtime::ReagentShopState;
 use u5_runtime::shop_session::ActiveShopSession;
@@ -1402,7 +1404,50 @@ fn route_smoke_local_clean_cases_run_when_present() {
         assert!(report.final_state_line.contains("State:"));
         assert!(report.final_raster_line.contains(case.expected_frame_kind));
         assert!(report.final_raster_line.contains(" hash "));
+        assert!(report.final_width > 0);
+        assert!(report.final_height > 0);
+        assert!(report.final_hash != 0);
     }
+}
+
+#[test]
+fn route_smoke_manifest_is_sanitized_and_comparable() {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!(
+        "u5-route-smoke-manifest-test-{}-{nonce}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("manifest.txt");
+    let reports = vec![RouteSmokeReport {
+        name: "world\tmove".to_string(),
+        commands_run: 2,
+        final_state_line: "State:\tBRITANNIA\nhash 1234".to_string(),
+        final_raster_line: "Raster tile viewport: 48x48 px, hash aaaaaaaaaaaaaaaa.".to_string(),
+        final_frame_kind: "tile viewport".to_string(),
+        final_width: 48,
+        final_height: 48,
+        final_hash: 0xaaaaaaaaaaaaaaaa,
+        final_nonblack_pixels: 42,
+    }];
+
+    write_route_smoke_manifest(&path, &reports).unwrap();
+    let manifest = fs::read_to_string(&path).unwrap();
+    let _ = fs::remove_dir_all(&dir);
+
+    assert!(manifest.contains("coverage\ttotal-routes\t1"));
+    assert!(manifest.contains("route-world move\t48x48\ttile viewport"));
+    assert!(manifest.contains("hash aaaaaaaaaaaaaaaa"));
+    assert!(manifest.contains("nonblack 42"));
+    assert!(!manifest.contains("world\tmove"));
+    assert!(
+        compare_manifest_text(&manifest, &manifest)
+            .unwrap()
+            .is_clean()
+    );
 }
 
 #[test]

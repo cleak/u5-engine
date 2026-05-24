@@ -32,6 +32,7 @@ pub struct CliArgs {
     pub raster_diagnostics: bool,
     pub raster_depth: TileGraphicsDepth,
     pub route_smoke: bool,
+    pub route_smoke_manifest: Option<PathBuf>,
     pub play_script: Option<Vec<String>>,
     pub game_dir: PathBuf,
     pub play_options: PlayOptions,
@@ -75,6 +76,7 @@ where
     let mut raster_diagnostics = false;
     let mut raster_depth = TileGraphicsDepth::Ega16;
     let mut route_smoke = false;
+    let mut route_smoke_manifest: Option<PathBuf> = None;
     let mut play_script = None;
     let mut game_dir = None;
     let mut options = PlayOptions::default();
@@ -178,6 +180,20 @@ where
             }
             "--raster-diagnostics" => raster_diagnostics = true,
             "--route-smoke" => route_smoke = true,
+            "--route-smoke-manifest" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--route-smoke-manifest requires a manifest output path",
+                    )
+                })?;
+                if route_smoke_manifest.replace(PathBuf::from(value)).is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--route-smoke-manifest may only be supplied once",
+                    ));
+                }
+            }
             "--raster-depth" => {
                 let value = args.next().ok_or_else(|| {
                     io::Error::new(
@@ -331,6 +347,7 @@ where
             raster_diagnostics: false,
             raster_depth,
             route_smoke: false,
+            route_smoke_manifest: None,
             play_script: None,
             game_dir,
             play_options: PlayOptions::default(),
@@ -371,6 +388,12 @@ where
             "--route-smoke runs its own scripted scenes; it cannot be combined with play, visual, save-frame, visual-frame-suite, visual-route-suite, compare-frame-manifests, from-save, from-init, scene, start, or gameplay overrides",
         ));
     }
+    if route_smoke_manifest.is_some() && !route_smoke {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--route-smoke-manifest requires --route-smoke",
+        ));
+    }
     if save_frame_suite.is_some()
         && (play
             || visual
@@ -379,6 +402,7 @@ where
             || visual_route_suite.is_some()
             || compare_frame_manifests.is_some()
             || route_smoke
+            || route_smoke_manifest.is_some()
             || from_save
             || from_init
             || play_script.is_some()
@@ -401,6 +425,7 @@ where
             || visual_route_suite.is_some()
             || compare_frame_manifests.is_some()
             || route_smoke
+            || route_smoke_manifest.is_some()
             || from_save
             || from_init
             || play_script.is_some()
@@ -423,6 +448,7 @@ where
             || visual_frame_suite.is_some()
             || compare_frame_manifests.is_some()
             || route_smoke
+            || route_smoke_manifest.is_some()
             || from_save
             || from_init
             || play_script.is_some()
@@ -446,6 +472,7 @@ where
             || visual_frame_suite.is_some()
             || visual_route_suite.is_some()
             || route_smoke
+            || route_smoke_manifest.is_some()
             || from_save
             || from_init
             || play_script.is_some()
@@ -468,6 +495,7 @@ where
             || visual_route_suite.is_some()
             || compare_frame_manifests.is_some()
             || route_smoke
+            || route_smoke_manifest.is_some()
             || from_save
             || from_init)
     {
@@ -486,6 +514,7 @@ where
             || visual_route_suite.is_some()
             || compare_frame_manifests.is_some()
             || route_smoke
+            || route_smoke_manifest.is_some()
             || from_save
             || from_init)
     {
@@ -511,6 +540,7 @@ where
             || visual_route_suite.is_some()
             || compare_frame_manifests.is_some()
             || route_smoke
+            || route_smoke_manifest.is_some()
             || from_save
             || from_init
         {
@@ -576,6 +606,7 @@ where
         raster_diagnostics,
         raster_depth,
         route_smoke,
+        route_smoke_manifest,
         play_script,
         game_dir,
         play_options: options,
@@ -621,6 +652,9 @@ OPTIONS:
         --chargen-winners <V> Seven comma-separated winning virtues for chargen.
         --raster-diagnostics  Emit per-frame raster diagnostics.
         --route-smoke         Run route-level scripted smoke cases and exit.
+        --route-smoke-manifest <PATH>
+                              With --route-smoke, write a sanitized manifest
+                              compatible with --compare-frame-manifests.
         --raster-depth <D>    ega|tandy (default ega; tandy uses the EGA-equivalent path; CGA/Hercules are outside v1).
         --visual              Launch the Bevy visual harness.
                               Requires building with `--features visual`.
@@ -649,6 +683,7 @@ SMOKE COMMANDS:
     cargo run -- --play C:\\Games\\U5-Clean
     cargo run -- --play-script \"z;q\" C:\\Games\\U5-Clean
     cargo run -- --route-smoke C:\\Games\\U5-Clean
+    cargo run -- --route-smoke --route-smoke-manifest target\\route-smoke\\manifest.txt C:\\Games\\U5-Clean
     cargo run -- --save-frame-suite target\\frame-suite C:\\Games\\U5-Clean
     cargo run -- --compare-frame-manifests target\\baseline\\manifest.txt target\\candidate\\manifest.txt
     cargo run -- --play --scene DUNGEON:0 --floor 0 C:\\Games\\U5-Clean

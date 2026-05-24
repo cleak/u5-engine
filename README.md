@@ -159,12 +159,16 @@ for N no-turn visual ticks:
 cargo run -- --play-script "d;empty;idle:4;q" --raster-diagnostics C:\Games\U5-Clean
 ```
 
-`--route-smoke` runs a bundled 220-case local-asset route suite covering world,
+`--route-smoke` runs a bundled 493-case local-asset route suite covering world,
 town, dungeon, combat, shop, endgame, transition, save/reload, and modal
-routes. It prints sanitized state lines and raster hashes:
+routes. It prints sanitized state lines and raster hashes; add
+`--route-smoke-manifest <PATH>` to write a clean manifest with route labels,
+command counts, final frame dimensions, hashes, nonblack counts, and state
+hashes:
 
 ```powershell
 cargo run -- --route-smoke C:\Games\U5-Clean
+cargo run -- --route-smoke --route-smoke-manifest target\route-smoke\manifest.txt C:\Games\U5-Clean
 ```
 
 `--play-script` can be combined with `--scene` and `--debug-enter` for

@@ -58,7 +58,7 @@ use u5_runtime::{
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters,
     default_party_strengths, dungeon_cell_index, dungeon_room_entry_seed_for_direction,
-    inn_base_room_rate, load_play_options_from_save, load_tile_atlas,
+    hash_palette_indices, inn_base_room_rate, load_play_options_from_save, load_tile_atlas,
     published_world_location_entries, shipwright_delivery_coordinate, shipwright_price,
     shop_intelligence_adjusted_price,
     shop_runtime::{
@@ -126,6 +126,11 @@ pub struct RouteSmokeReport {
     pub commands_run: usize,
     pub final_state_line: String,
     pub final_raster_line: String,
+    pub final_frame_kind: String,
+    pub final_width: usize,
+    pub final_height: usize,
+    pub final_hash: u64,
+    pub final_nonblack_pixels: usize,
 }
 
 pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
@@ -2697,10 +2702,15 @@ fn seed_gate_travel_resources(options: &mut PlayOptions) {
     }
 }
 
-pub fn run_route_smoke(game_dir: &Path, raster_depth: TileGraphicsDepth) -> io::Result<()> {
+pub fn run_route_smoke(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    manifest_path: Option<&Path>,
+) -> io::Result<()> {
     let cases = route_smoke_cases();
     let atlas = load_tile_atlas(game_dir, raster_depth)?;
     println!("Route smoke: {} case(s).", cases.len());
+    let mut reports = Vec::with_capacity(cases.len());
     for case in &cases {
         let report = run_route_smoke_case(game_dir, &atlas, case)?;
         println!(
@@ -2708,6 +2718,11 @@ pub fn run_route_smoke(game_dir: &Path, raster_depth: TileGraphicsDepth) -> io::
             report.name, report.commands_run, report.final_state_line
         );
         println!("{}", report.final_raster_line);
+        reports.push(report);
+    }
+    if let Some(path) = manifest_path {
+        write_route_smoke_manifest(path, &reports)?;
+        println!("Saved route smoke manifest: {}.", path.display());
     }
     println!("Route smoke: all cases passed.");
     Ok(())
@@ -2788,12 +2803,61 @@ pub fn run_route_smoke_case(
 
     let final_raster_line = raster_diagnostic_line(&mut state, VIEWPORT_RADIUS, atlas)?;
     require_raster_hash(case, &final_raster_line)?;
+    let final_viewport = state
+        .render_top_down_frame(VIEWPORT_RADIUS, atlas)?
+        .ok_or_else(|| {
+            io::Error::other(format!("route smoke `{}` has no final raster", case.name))
+        })?;
+    let final_nonblack_pixels = final_viewport
+        .pixels
+        .iter()
+        .filter(|pixel| **pixel != 0)
+        .count();
     Ok(RouteSmokeReport {
         name: case.name.to_string(),
         commands_run,
         final_state_line: play_script_state_line(&state),
         final_raster_line,
+        final_frame_kind: final_frame_kind.to_string(),
+        final_width: final_viewport.width,
+        final_height: final_viewport.height,
+        final_hash: hash_palette_indices(&final_viewport.pixels),
+        final_nonblack_pixels,
     })
+}
+
+pub fn write_route_smoke_manifest(path: &Path, reports: &[RouteSmokeReport]) -> io::Result<()> {
+    let mut manifest = String::new();
+    manifest.push_str("# Ultima V route smoke manifest\n");
+    manifest.push_str(
+        "# Sanitized: contains labels, command counts, dimensions, frame hashes, and state hashes only.\n",
+    );
+    manifest.push_str(&format!("coverage\ttotal-routes\t{}\n", reports.len()));
+    manifest.push_str("# label\tdimensions\tframe-kind\thash\tnonblack\treview-metadata\n");
+    for report in reports {
+        manifest.push_str(&format!(
+            "route-{}\t{}x{}\t{}\thash {:016x}\tnonblack {}\tcommands {}\t{}\n",
+            sanitize_manifest_field(&report.name),
+            report.final_width,
+            report.final_height,
+            sanitize_manifest_field(&report.final_frame_kind),
+            report.final_hash,
+            report.final_nonblack_pixels,
+            report.commands_run,
+            sanitize_manifest_field(&report.final_state_line),
+        ));
+    }
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, manifest)
+}
+
+fn sanitize_manifest_field(value: &str) -> String {
+    value.replace(['\t', '\r', '\n'], " ")
 }
 
 fn prepare_route_smoke_case_game_dir(case_name: &str) -> io::Result<Option<PathBuf>> {

@@ -835,6 +835,9 @@ experience.
     town View-overlay, and dungeon movement/search routes through the Bevy
     full-frame compositor, writes per-step PNGs plus a sanitized manifest, and
     fails if a scripted route step leaves the frame unchanged.
+  - `--route-smoke --route-smoke-manifest <PATH>` writes a sanitized manifest
+    for the non-visual route suite with route labels, command counts, final
+    frame dimensions, hashes, nonblack counts, and state hashes.
   - `--compare-frame-manifests <BASE> <CURRENT>` compares sanitized manifests
     by coverage row, frame label, dimensions, frame kind, hash, nonblack count,
     and review metadata so PNG-generating suites can be used as a clean

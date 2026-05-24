@@ -40,6 +40,7 @@ scene launch with local assets:
 
 ```powershell
 cargo run -- --route-smoke C:\Games\U5-Clean
+cargo run -- --route-smoke --route-smoke-manifest target\route-smoke\manifest.txt C:\Games\U5-Clean
 cargo run -- --save-frame-suite target\frame-suite C:\Games\U5-Clean
 cargo run -- --compare-frame-manifests target\baseline\manifest.txt target\frame-suite\manifest.txt
 cargo run -- --save-frame screenshots\britannia.png --scene BRITANNIA C:\Games\U5-Clean
