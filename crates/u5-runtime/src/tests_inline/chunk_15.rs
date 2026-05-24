@@ -109,6 +109,35 @@
     }
 
     #[test]
+    fn sync_player_object_preserves_linked_0xfc_scheduled_npc() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(SCENE_MOONGLOW).unwrap(),
+            floor: 0,
+        };
+        state.clock = GameClock::new(0, 0).unwrap();
+        state.sync_player_object();
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            scheduled_npc_test_slot(1, 0xfc, 2, 1),
+        ]);
+        let active_slot = state.npcs[0].active_object.unwrap();
+        assert_eq!(state.active_objects[active_slot].type_byte, 0xfc);
+
+        state.sync_player_object();
+
+        assert_eq!(state.npcs[0].active_object, Some(active_slot));
+        assert_eq!(state.active_objects[active_slot].type_byte, 0xfc);
+        assert_eq!((state.active_objects[active_slot].x, state.active_objects[active_slot].y), (2, 1));
+    }
+
+    #[test]
     fn world_render_line_of_sight_wraps_with_viewport() {
         // A propagation-blocking barrier at the wrapped viewport edge should
         // be visible itself while preventing the carve from reaching cells
@@ -1185,6 +1214,275 @@
         assert!(runtime_npcs >= 325 * sample_hours.len());
         assert!(linked_npcs > 0);
         assert!(moved_or_relinked > 0);
+    }
+
+    fn shipped_npc_boundary_hours(slots: &[NpcSlot]) -> Vec<u8> {
+        let mut hours = std::collections::BTreeSet::new();
+        hours.extend([0u8, 5, 8, 12, 16, 20, 23]);
+        for slot in effective_npc_slots(slots).filter(|slot| npc_type_byte_occupied(slot.type_byte))
+        {
+            for boundary in slot.schedule[NPC_SCHEDULE_TIME_OFFSET
+                ..NPC_SCHEDULE_TIME_OFFSET + NPC_SCHEDULE_TIME_BOUNDARY_COUNT]
+                .iter()
+                .copied()
+            {
+                let hour = boundary % HOURS_PER_DAY;
+                hours.insert(hour);
+                hours.insert((hour + HOURS_PER_DAY - 1) % HOURS_PER_DAY);
+                hours.insert((hour + 1) % HOURS_PER_DAY);
+            }
+        }
+        hours.into_iter().collect()
+    }
+
+    fn shipped_npc_referenced_floors(slots: &[NpcSlot]) -> Vec<i8> {
+        let mut floors = std::collections::BTreeSet::new();
+        floors.insert(0i8);
+        for slot in effective_npc_slots(slots).filter(|slot| npc_type_byte_occupied(slot.type_byte))
+        {
+            for z in slot.schedule
+                [NPC_SCHEDULE_Z_OFFSET..NPC_SCHEDULE_Z_OFFSET + NPC_SCHEDULE_WAYPOINT_COUNT]
+                .iter()
+                .copied()
+            {
+                if z <= 7 {
+                    floors.insert(z as i8);
+                }
+            }
+        }
+        floors.into_iter().collect()
+    }
+
+    fn shipped_npc_corpus_player_cell(
+        grid: &[u8],
+        slots: &[NpcSlot],
+        floor: i8,
+        hour: u8,
+    ) -> (usize, usize) {
+        let occupied = effective_npc_slots(slots)
+            .filter(|slot| npc_type_byte_occupied(slot.type_byte))
+            .filter_map(|slot| {
+                let wp = waypoint_for_hour(&slot.schedule, hour);
+                (slot.schedule[NPC_SCHEDULE_Z_OFFSET + wp] as i8 == floor).then_some((
+                    slot.schedule[NPC_SCHEDULE_X_OFFSET + wp] as usize,
+                    slot.schedule[NPC_SCHEDULE_Y_OFFSET + wp] as usize,
+                ))
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        for y in 0..TOWN_GRID_SIDE {
+            for x in 0..TOWN_GRID_SIDE {
+                if occupied.contains(&(x, y)) {
+                    continue;
+                }
+                if grid
+                    .get(y * TOWN_GRID_SIDE + x)
+                    .copied()
+                    .is_some_and(npc_path_tile_open)
+                {
+                    return (x, y);
+                }
+            }
+        }
+        (usize::from(VIEWPORT_CENTER), usize::from(VIEWPORT_CENTER))
+    }
+
+    fn assert_shipped_npc_runtime_invariants(
+        state: &PlayState,
+        scene_byte: u8,
+        floor: i8,
+        hour: u8,
+        tick: usize,
+    ) {
+        let mut linked_slots = std::collections::BTreeSet::new();
+        for npc in &state.npcs {
+            assert_ne!(
+                npc.slot, NPC_SENTINEL_SLOT,
+                "scene {scene_byte} floor {floor} hour {hour} tick {tick} kept slot zero"
+            );
+            assert!(
+                npc_schedule_state_classify(npc.state).is_some(),
+                "scene {scene_byte} floor {floor} hour {hour} tick {tick} slot {} has invalid scheduler state {}",
+                npc.slot,
+                npc.state
+            );
+            assert!(
+                npc.x < TOWN_GRID_SIDE,
+                "scene {scene_byte} floor {floor} hour {hour} tick {tick} slot {} x {} outside town grid",
+                npc.slot,
+                npc.x
+            );
+            assert!(
+                npc.y < TOWN_GRID_SIDE,
+                "scene {scene_byte} floor {floor} hour {hour} tick {tick} slot {} y {} outside town grid",
+                npc.slot,
+                npc.y
+            );
+            assert!(
+                npc.z <= 7 || npc.z == u8::MAX,
+                "scene {scene_byte} floor {floor} hour {hour} tick {tick} slot {} has unexpected floor byte {}",
+                npc.slot,
+                npc.z
+            );
+            assert_ne!(
+                (npc.x, npc.y, npc.z as i8),
+                (state.player.x, state.player.y, floor),
+                "scene {scene_byte} floor {floor} hour {hour} tick {tick} slot {} stepped onto the player",
+                npc.slot
+            );
+
+            if let Some(active_slot) = npc.active_object {
+                assert!(
+                    linked_slots.insert(active_slot),
+                    "scene {scene_byte} floor {floor} hour {hour} tick {tick} active-object slot {active_slot} was linked twice"
+                );
+                let object = &state.active_objects[active_slot];
+                assert_eq!(
+                    (object.x, object.y, object.z),
+                    (npc.x, npc.y, floor),
+                    "scene {scene_byte} floor {floor} hour {hour} tick {tick} slot {} active-object coordinate mismatch",
+                    npc.slot
+                );
+                assert_eq!(
+                    npc.z as i8, floor,
+                    "scene {scene_byte} floor {floor} hour {hour} tick {tick} off-floor slot {} stayed linked",
+                    npc.slot
+                );
+                assert_ne!(
+                    object.type_byte, 0,
+                    "scene {scene_byte} floor {floor} hour {hour} tick {tick} slot {} type {:#04x} state {} linked to empty active-object slot {active_slot}",
+                    npc.slot,
+                    npc.type_byte,
+                    npc.state
+                );
+                if npc_hidden_sprite_slot(scene_byte, npc.slot) {
+                    assert_eq!(
+                        object.tile, NPC_HIDDEN_SPRITE_TILE,
+                        "scene {scene_byte} floor {floor} hour {hour} tick {tick} hidden slot {} did not use transparent tile",
+                        npc.slot
+                    );
+                }
+            } else {
+                assert!(
+                    npc.z as i8 != floor || (npc.x, npc.y) == (state.player.x, state.player.y),
+                    "scene {scene_byte} floor {floor} hour {hour} tick {tick} visible slot {} was not linked",
+                    npc.slot
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn shipped_npc_scheduler_corpus_runs_boundary_routes_when_present() {
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join(TOWNE_NPC_FILENAME).exists() {
+            return;
+        }
+
+        let mut loaded_scenes = 0usize;
+        let mut loaded_floor_hours = 0usize;
+        let mut runtime_npcs = 0usize;
+        let mut linked_hidden_npcs = 0usize;
+        let mut state_transitions = 0usize;
+        let mut floor_handoffs = 0usize;
+        let mut visible_steps = 0usize;
+
+        for scene_byte in SCENE_TOWN_FAMILY_FIRST..=SCENE_TOWN_FAMILY_LAST {
+            let scene = Scene::new(scene_byte).unwrap();
+            let tlk = parse_tlk(&game_dir.join(npc_tlk_filename(scene_byte).unwrap())).unwrap();
+            let npc_slots = parse_npc_block(game_dir, scene, &tlk).unwrap();
+            loaded_scenes += 1;
+
+            let hours = shipped_npc_boundary_hours(&npc_slots);
+            let floors = shipped_npc_referenced_floors(&npc_slots);
+            assert!(
+                hours.len() >= 7,
+                "scene {scene_byte} did not produce the baseline NPC scheduler hours"
+            );
+
+            for floor in floors {
+                for hour in hours.iter().copied() {
+                    let Ok(grid) = load_town_runtime_floor(game_dir, scene, floor, hour) else {
+                        continue;
+                    };
+                    loaded_floor_hours += 1;
+                    let (player_x, player_y) =
+                        shipped_npc_corpus_player_cell(&grid, &npc_slots, floor, hour);
+
+                    let mut state = test_state(grid, player_x, player_y);
+                    state.area = Area::Town { scene, floor };
+                    state.clock = GameClock::new(hour, 59).unwrap();
+                    state.sync_player_object();
+                    state.load_scheduled_npcs(&npc_slots);
+
+                    runtime_npcs += state.npcs.len();
+                    assert_shipped_npc_runtime_invariants(&state, scene_byte, floor, hour, 0);
+                    linked_hidden_npcs += state
+                        .npcs
+                        .iter()
+                        .filter(|npc| npc_hidden_sprite_slot(scene_byte, npc.slot))
+                        .filter_map(|npc| npc.active_object)
+                        .filter(|slot| state.active_objects[*slot].tile == NPC_HIDDEN_SPRITE_TILE)
+                        .count();
+
+                    for tick in 1..=48 {
+                        let before = state
+                            .npcs
+                            .iter()
+                            .map(|npc| {
+                                (
+                                    npc.slot,
+                                    npc.x,
+                                    npc.y,
+                                    npc.z,
+                                    npc.state,
+                                    npc.active_object,
+                                )
+                            })
+                            .collect::<Vec<_>>();
+
+                        state.advance_turn_with_minutes_and_door_tick_and_active_objects(
+                            1, false, false,
+                        );
+                        assert_shipped_npc_runtime_invariants(
+                            &state, scene_byte, floor, hour, tick,
+                        );
+
+                        for (slot, old_x, old_y, old_z, old_state, old_active_object) in before {
+                            let npc = state
+                                .npcs
+                                .iter()
+                                .find(|npc| npc.slot == slot)
+                                .unwrap_or_else(|| {
+                                    panic!("scene {scene_byte} floor {floor} hour {hour} lost NPC slot {slot}")
+                                });
+                            let distance = npc.x.abs_diff(old_x) + npc.y.abs_diff(old_y);
+                            if npc.z == old_z {
+                                assert!(
+                                    distance <= 1,
+                                    "scene {scene_byte} floor {floor} hour {hour} tick {tick} slot {slot} moved {distance} cells without a floor handoff"
+                                );
+                            } else {
+                                floor_handoffs += 1;
+                            }
+                            if npc.state != old_state {
+                                state_transitions += 1;
+                            }
+                            if distance > 0 || npc.active_object != old_active_object {
+                                visible_steps += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        assert_eq!(loaded_scenes, SCENE_TOWN_FAMILY_LAST as usize);
+        assert!(loaded_floor_hours >= 100);
+        assert!(runtime_npcs >= 325 * 7);
+        assert!(state_transitions > 0);
+        assert!(floor_handoffs > 0);
+        assert!(visible_steps > 0);
+        assert!(linked_hidden_npcs > 0);
     }
 
     #[test]

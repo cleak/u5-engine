@@ -1012,7 +1012,11 @@ Goal: turn diagnostic interactions into game-like content.
 - NPC schedules and conversations.
   - Current schedules link and move NPCs in town-family scenes, preserve
     cached-waypoint movement state until a transition settles, and route
-    floor changes through the `0xC8`/`0xC9` floor-link marker BFS.
+    floor changes through the `0xC8`/`0xC9` floor-link marker BFS. The
+    shipped `.NPC` corpus now runs boundary-hour, multi-floor scheduler
+    routes when local clean assets are present, including active-object
+    relinking, hidden-sprite suppression, one-cell-per-tick movement, and
+    linked `0xFC` scheduled NPC preservation during player-slot sync.
   - Conversation sessions cover ASK-PARTY-NAME, ASK-WHO, non-`JOIN`
     recruitment prompts for roster companions, and non-roster name prompts
     without accidental joins.

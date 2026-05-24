@@ -254,7 +254,7 @@ through the asset-backed Talk command path.
 
 | Section | Evidence | Tests | Status |
 |--------|----------|-------|--------|
-| §1–§11 | `npc_runtime.rs` state machine, `town_tables_io_movement.rs`, schedule walker invoked from `town_mode.rs` per turn; `0xC8`/`0xC9` floor-link BFS | `scheduled_npc` tests; town-floor change tests | Implemented |
+| §1–§11 | `npc_runtime.rs` state machine, `town_tables_io_movement.rs`, schedule walker invoked from `town_mode.rs` per turn; `0xC8`/`0xC9` floor-link BFS; town player-slot sync preserves linked scheduled NPC active objects even when their sprite class is `0xFC` | `scheduled_npc` tests; shipped `.NPC` boundary-hour/multi-floor scheduler corpus test when local clean assets are present; town-floor change tests | Implemented |
 
 ### `systems/shops.md`
 

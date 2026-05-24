@@ -57,8 +57,16 @@ impl PlayState {
         } else {
             self.active_objects[0] = player_object;
         }
-        for object in self.active_objects.iter_mut().skip(1) {
-            if object.is_player() {
+        let linked_npc_active_objects = if matches!(self.area, Area::Town { .. }) {
+            self.npcs
+                .iter()
+                .filter_map(|npc| npc.active_object)
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        for (slot, object) in self.active_objects.iter_mut().enumerate().skip(1) {
+            if object.is_player() && !linked_npc_active_objects.contains(&slot) {
                 object.free();
             }
         }
