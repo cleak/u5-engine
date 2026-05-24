@@ -6398,6 +6398,14 @@
             combat_neighbor_candidate_coordinates(0, 0, 0),
             vec![(1, 0), (0, 1), (1, 1)]
         );
+        assert_eq!(
+            combat_swarm_jitter_candidate_coordinate(5, 5, 1, 2),
+            Some((4, 5))
+        );
+        assert_eq!(
+            combat_swarm_jitter_candidate_coordinate(0, 0, 0, 0),
+            None
+        );
     }
 
     #[test]
@@ -7333,6 +7341,46 @@
     }
 
     #[test]
+    fn combat_swarm_uses_target_cell_then_three_short_jitter_retries() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        let mut legal_cells = [[false; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        legal_cells[4][4] = true;
+        let seed = (0..=u16::MAX)
+            .find(|candidate| {
+                let mut prng = *candidate;
+                u5_prng_range_u16(&mut prng, 0, u16::from(COMBAT_SWARM_JITTER_ROLL_MAX)) == 1
+                    && u5_prng_range_u16(&mut prng, 0, u16::from(COMBAT_SWARM_JITTER_ROLL_MAX))
+                        == 2
+            })
+            .unwrap();
+        state.prng_state = seed;
+        let mut expected_prng = seed;
+        let _jitter_x =
+            u5_prng_range_u16(&mut expected_prng, 0, u16::from(COMBAT_SWARM_JITTER_ROLL_MAX));
+        let _jitter_y =
+            u5_prng_range_u16(&mut expected_prng, 0, u16::from(COMBAT_SWARM_JITTER_ROLL_MAX));
+
+        let applied = state.apply_combat_swarm_with_legal_mask(0, &legal_cells, &[(5, 4)]);
+
+        assert_eq!(applied.len(), 1);
+        assert_eq!((applied[0].x, applied[0].y), (4, 4));
+        assert_eq!(state.prng_state, expected_prng);
+        assert_eq!(
+            state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS],
+            resolve_swarm_spell_descriptor(
+                COMBAT_PARTY_ACTOR_SLOTS as u8,
+                4,
+                4,
+                COMBAT_SUMMONED_ACTOR_FLAGS,
+                0,
+            )
+            .unwrap()
+        );
+    }
+
+    #[test]
     fn combat_cast_summon_daemon_routes_resources_and_places_daemon() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
@@ -8008,6 +8056,7 @@
     fn combat_ai_turn_applies_saduj_name_group_to_target_scan() {
         let mut state = combat_ai_turn_state(8, 5);
         state.party_names[0] = *b"ABCDj\0\0\0\0";
+        state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_SELECTABLE_40;
 
         let application = state
             .apply_combat_ai_turn_with_inputs(
@@ -8284,6 +8333,7 @@
     fn combat_ai_turn_applies_possess_hook_before_target_synthesis() {
         let mut state = combat_ai_turn_state(8, 5);
         state.combat_actors[8].owner_target_class = 28;
+        state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_SELECTABLE_40;
 
         let application = state
             .apply_combat_ai_turn_with_inputs(
@@ -10317,27 +10367,72 @@
     #[test]
     fn combat_ai_center_fallback_marks_live_monster_side_slots_backwards() {
         let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
-        actors[4] =
-            CombatActorDescriptor::from_row([25, 1, 0, COMBAT_CLASS_DAEMON, 0, 0, 1, 1]);
-        actors[6] =
-            CombatActorDescriptor::from_row([25, 1, 0, COMBAT_CLASS_DAEMON, 0, 0, 2, 2]);
+        actors[4] = CombatActorDescriptor::from_row([
+            25,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            COMBAT_CLASS_DAEMON,
+            0,
+            0,
+            1,
+            1,
+        ]);
+        actors[5] = CombatActorDescriptor::from_row([
+            25,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            COMBAT_CLASS_DAEMON,
+            0,
+            0,
+            2,
+            2,
+        ]);
+        actors[6] = CombatActorDescriptor::from_row([25, 1, 0, COMBAT_CLASS_DAEMON, 0, 0, 2, 2]);
         actors[9] = CombatActorDescriptor::from_row([
             25,
             1,
-            COMBAT_ACTOR_FLAG_MARKED_DEAD,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_MARKED_DEAD,
             COMBAT_CLASS_PYTHON,
             0,
             0,
             3,
             3,
         ]);
-        actors[10] =
-            CombatActorDescriptor::from_row([10, 1, 0, COMBAT_CLASS_GIANT_RAT, 0, 0, 4, 4]);
+        actors[10] = CombatActorDescriptor::from_row([
+            10,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            COMBAT_CLASS_GIANT_RAT,
+            0,
+            0,
+            4,
+            4,
+        ]);
         actors[12] = CombatActorDescriptor::from_row([10, 1, 0, 0, 0, 0, 5, 5]);
+        actors[25] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            COMBAT_CLASS_PYTHON,
+            0,
+            0,
+            6,
+            6,
+        ]);
+        actors[26] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40,
+            COMBAT_CLASS_PYTHON,
+            0,
+            0,
+            6,
+            6,
+        ]);
         actors[31] = CombatActorDescriptor::from_row([
             20,
             1,
-            COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+            COMBAT_ACTOR_FLAG_SELECTABLE_40 | COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
             COMBAT_CLASS_PYTHON,
             0,
             0,
@@ -10357,15 +10452,20 @@
             CombatAiTargetResolution::CenterFallback {
                 x: COMBAT_ARENA_CENTER_COORDINATE,
                 y: COMBAT_ARENA_CENTER_COORDINATE,
-                critical_hp_flee_slots: vec![31, 10, 6],
+                critical_hp_flee_slots: vec![25, 10, 5],
             }
         );
         assert_eq!(combat_ai_center_fallback_target(), (5, 5));
         assert_eq!(actors[4].hp_or_wound, 25);
+        assert!(!actors[4].is_fleeing());
         assert_eq!(
-            actors[6].hp_or_wound,
+            actors[5].hp_or_wound,
             cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_DAEMON).unwrap().max_hp)
         );
+        assert_eq!(actors[5].phase_counter, COMBAT_NO_TARGET_FLEE_STEP_QUEUE);
+        assert!(actors[5].is_fleeing());
+        assert_eq!(actors[6].hp_or_wound, 25);
+        assert!(!actors[6].is_fleeing());
         assert_eq!(actors[9].hp_or_wound, 25);
         assert_eq!(
             actors[10].hp_or_wound,
@@ -10373,11 +10473,21 @@
                 combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().max_hp
             )
         );
+        assert_eq!(actors[10].phase_counter, COMBAT_NO_TARGET_FLEE_STEP_QUEUE);
+        assert!(actors[10].is_fleeing());
         assert_eq!(actors[12].hp_or_wound, 10);
         assert_eq!(
-            actors[31].hp_or_wound,
+            actors[25].hp_or_wound,
             cause_fear_forced_current_hp(combat_class_stats(COMBAT_CLASS_PYTHON).unwrap().max_hp)
         );
+        assert_eq!(actors[25].phase_counter, COMBAT_NO_TARGET_FLEE_STEP_QUEUE);
+        assert!(actors[25].is_fleeing());
+        assert_eq!(actors[26].hp_or_wound, 20);
+        assert!(!actors[26].is_fleeing());
+        assert_eq!(
+            actors[31].hp_or_wound, 20
+        );
+        assert!(!actors[31].is_fleeing());
 
         assert_eq!(
             resolve_combat_ai_target_after_scan(

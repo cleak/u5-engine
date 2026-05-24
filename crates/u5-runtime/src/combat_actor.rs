@@ -218,6 +218,11 @@ pub const COMBAT_ACTOR_FLAG_SELECTABLE_80: u8 = 0x80;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_40: u8 = 0x40;
 pub const COMBAT_ACTOR_FLAG_MARKED_DEAD: u8 = 0x20;
 pub const COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED: u8 = 0x04;
+pub const COMBAT_SWARM_JITTER_ROLL_MAX: u8 = 4;
+pub const COMBAT_SWARM_JITTER_CENTER_ROLL: u8 = 2;
+pub const COMBAT_NO_TARGET_FLEE_MIN_SLOT: usize = 5;
+pub const COMBAT_NO_TARGET_FLEE_MAX_SLOT: usize = 25;
+pub const COMBAT_NO_TARGET_FLEE_STEP_QUEUE: u8 = 1;
 pub const COMBAT_FIELD_REJECTED_ACTIVE_OBJECT_TILE: u8 = 0xf4;
 pub const COMBAT_INSTANT_KILL_DAMAGE: i16 = 99;
 /// `combat.md §12`: default monster death drop gates use the
@@ -2432,6 +2437,21 @@ pub fn combat_neighbor_candidate_coordinates(
         .collect()
 }
 
+pub fn combat_swarm_jitter_candidate_coordinate(
+    center_x: u8,
+    center_y: u8,
+    roll_x: u8,
+    roll_y: u8,
+) -> Option<(u8, u8)> {
+    let dx = i16::from(roll_x % (COMBAT_SWARM_JITTER_ROLL_MAX + 1))
+        - i16::from(COMBAT_SWARM_JITTER_CENTER_ROLL);
+    let dy = i16::from(roll_y % (COMBAT_SWARM_JITTER_ROLL_MAX + 1))
+        - i16::from(COMBAT_SWARM_JITTER_CENTER_ROLL);
+    let x = i16::from(center_x) + dx;
+    let y = i16::from(center_y) + dy;
+    combat_arena_coordinate_in_bounds(x, y).then_some((x as u8, y as u8))
+}
+
 pub fn combat_ring_candidate_coordinates_around(center_x: i16, center_y: i16) -> Vec<(u8, u8)> {
     const OFFSETS: [(i16, i16); 8] = [
         (0, -1),
@@ -3086,16 +3106,23 @@ pub const fn combat_ai_center_fallback_target() -> (u8, u8) {
 
 pub fn apply_combat_ai_center_fallback_markers(actors: &mut [CombatActorDescriptor]) -> Vec<usize> {
     let mut critical_hp_flee_slots = Vec::new();
-    let scan_len = actors.len().min(COMBAT_ACTOR_SLOTS);
-    for slot in (COMBAT_PARTY_ACTOR_SLOTS..scan_len).rev() {
+    let max_slot = actors
+        .len()
+        .min(COMBAT_NO_TARGET_FLEE_MAX_SLOT + 1)
+        .saturating_sub(1);
+    if max_slot < COMBAT_NO_TARGET_FLEE_MIN_SLOT {
+        return critical_hp_flee_slots;
+    }
+    for slot in (COMBAT_NO_TARGET_FLEE_MIN_SLOT..=max_slot).rev() {
         let actor = &mut actors[slot];
-        if !cause_fear_actor_is_live(*actor) || actor.owner_target_class < 16 {
+        if !cause_fear_actor_is_live(*actor) || actor.flags & COMBAT_ACTOR_FLAG_SELECTABLE_40 == 0 {
             continue;
         }
         let Some(stats) = combat_class_stats(actor.owner_target_class) else {
             continue;
         };
         actor.hp_or_wound = cause_fear_forced_current_hp(stats.max_hp);
+        actor.phase_counter = COMBAT_NO_TARGET_FLEE_STEP_QUEUE;
         actor.set_fleeing(true);
         critical_hp_flee_slots.push(slot);
     }

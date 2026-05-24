@@ -1709,17 +1709,28 @@ impl PlayState {
             if accepted.len() >= 8 {
                 break;
             }
-            let mut attempts = vec![(x, y)];
+            let mut accepted_coordinate =
+                combat_ai_legal_cell(&remaining_legal, i16::from(x), i16::from(y))
+                    .then_some((x, y));
             for _ in 0..3 {
-                attempts.extend(combat_neighbor_candidate_coordinates(
-                    x,
-                    y,
-                    self.combat_neighbor_placement_seed(),
-                ));
+                if accepted_coordinate.is_some() {
+                    break;
+                }
+                let jitter_x = self.random_range_u8(0, COMBAT_SWARM_JITTER_ROLL_MAX);
+                let jitter_y = self.random_range_u8(0, COMBAT_SWARM_JITTER_ROLL_MAX);
+                if let Some((candidate_x, candidate_y)) =
+                    combat_swarm_jitter_candidate_coordinate(x, y, jitter_x, jitter_y)
+                {
+                    if combat_ai_legal_cell(
+                        &remaining_legal,
+                        i16::from(candidate_x),
+                        i16::from(candidate_y),
+                    ) {
+                        accepted_coordinate = Some((candidate_x, candidate_y));
+                    }
+                }
             }
-            let Some((accepted_x, accepted_y)) =
-                resolve_combat_clone_placement_coordinate(&remaining_legal, &attempts)
-            else {
+            let Some((accepted_x, accepted_y)) = accepted_coordinate else {
                 continue;
             };
             let Some(application) = self.apply_combat_summon_class_with_legal_mask(
