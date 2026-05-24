@@ -138,7 +138,7 @@ Britannia, a moved Britannia frame, Castle:0, a lit Dungeon:0 frame, composed
 combat, View/Peer/X-Ray/chunk-map overlays, intro/status/modal surfaces, and an
 endgame status panel, plus a sanitized manifest with dimensions, frame kinds,
 positions, and hashes. The Bevy feature also provides `--visual-frame-suite`
-for 163 composed Bevy-owned frames and `--visual-route-suite` for 1770
+for 163 composed Bevy-owned frames and `--visual-route-suite` for 1780
 per-step route frames; both Bevy manifests include review coverage rows and
 per-frame clean metadata for auditing generated screenshots. Use
 `--compare-frame-manifests <BASE> <CURRENT>` to gate sanitized manifests by

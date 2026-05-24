@@ -130,7 +130,7 @@ audit:
   combat, and Talk, surface View class galleries for gem/Peer/X-Ray modes, plus
   combat status-highlight and death/field/cursor marker galleries.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 1770 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 1780 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including all 40
   published stock world-location entry rows, TLK-backed reserved-word
   conversation routes across all 32 named-location scenes, exact

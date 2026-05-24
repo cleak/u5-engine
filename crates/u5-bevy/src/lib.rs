@@ -1945,6 +1945,18 @@ const VISUAL_KEY_NEW_ORDER_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("digit_2", KeyCode::Digit2),
     VisualKeyStep::key("digit_3", KeyCode::Digit3),
 ];
+const VISUAL_KEY_DUNGEON_CONTROL_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_w", KeyCode::KeyW),
+    VisualKeyStep::key("key_a", KeyCode::KeyA),
+    VisualKeyStep::key("key_d", KeyCode::KeyD),
+    VisualKeyStep::key("key_s", KeyCode::KeyS),
+];
+const VISUAL_KEY_DIRECTIONAL_KEY_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("arrow_right", KeyCode::ArrowRight),
+    VisualKeyStep::key("arrow_down", KeyCode::ArrowDown),
+    VisualKeyStep::key("numpad_4", KeyCode::Numpad4),
+    VisualKeyStep::key("home", KeyCode::Home),
+];
 
 fn visual_key_route_suite_cases() -> Vec<VisualKeyRouteSuiteCase> {
     vec![
@@ -2066,6 +2078,28 @@ fn visual_key_route_suite_cases() -> Vec<VisualKeyRouteSuiteCase> {
             options: PlayOptions::default(),
             steps: VISUAL_KEY_NEW_ORDER_STEPS,
             configure: Some(seed_visual_key_route_new_order),
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-dungeon-controls",
+            frame_kind: "visual key route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(
+                    DungeonScene::new(0x21).expect("dungeon scene is valid"),
+                ),
+                ..PlayOptions::default()
+            },
+            steps: VISUAL_KEY_DUNGEON_CONTROL_STEPS,
+            configure: None,
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-directional-keys",
+            frame_kind: "visual key route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            steps: VISUAL_KEY_DIRECTIONAL_KEY_STEPS,
+            configure: None,
         },
     ]
 }
@@ -12350,7 +12384,7 @@ mod tests {
     fn visual_key_route_suite_cases_cover_real_keyboard_prompts() {
         let cases = visual_key_route_suite_cases();
 
-        assert_eq!(cases.len(), 14);
+        assert_eq!(cases.len(), 16);
         for label in [
             "route-key-world-movement-pass-music",
             "route-key-save-refusal",
@@ -12366,6 +12400,8 @@ mod tests {
             "route-key-mix-prompt",
             "route-key-rest-watch-prompt",
             "route-key-new-order-picker",
+            "route-key-dungeon-controls",
+            "route-key-directional-keys",
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
         }
@@ -12384,6 +12420,18 @@ mod tests {
                 .iter()
                 .any(|case| case.steps.iter().any(|step| step.key == KeyCode::Escape))
         );
+        assert!(cases.iter().any(|case| {
+            case.frame_kind == "visual key route dungeon frame"
+                && case.steps.iter().any(|step| step.key == KeyCode::KeyW)
+        }));
+        assert!(cases.iter().any(|case| {
+            case.label == "route-key-directional-keys"
+                && case
+                    .steps
+                    .iter()
+                    .any(|step| step.key == KeyCode::ArrowRight)
+                && case.steps.iter().any(|step| step.key == KeyCode::Numpad4)
+        }));
     }
 
     #[test]
@@ -12458,7 +12506,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 1770);
+        assert_eq!(reports.len(), 1780);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -12466,8 +12514,8 @@ mod tests {
             assert!(report.nonblack_pixels > 0);
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1770"));
-        assert!(manifest.contains("coverage\tvisual-key-route-steps\t79"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1780"));
+        assert!(manifest.contains("coverage\tvisual-key-route-steps\t89"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
         assert!(manifest.contains("review=route-step route=route-world-movement step=01 input=d"));
