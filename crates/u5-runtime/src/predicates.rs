@@ -1259,6 +1259,17 @@ pub fn town_get_tile_matches(
             .map_or(true, |expected| expected == tile)
 }
 
+/// `tile-catalog.md` §6: town bed head/foot tiles. The H-Hole-up
+/// command accepts these only in scenes that the public shop table
+/// identifies as inns; clean sidecar rows may still authorize
+/// additional test/custom beds.
+pub const TOWN_REST_BED_TILE_FIRST: u8 = 0x48;
+pub const TOWN_REST_BED_TILE_LAST: u8 = 0x49;
+
+pub const fn is_town_rest_bed_tile(tile: u8) -> bool {
+    tile >= TOWN_REST_BED_TILE_FIRST && tile <= TOWN_REST_BED_TILE_LAST
+}
+
 pub fn town_rest_bed_matches(
     entry: TownRestBedEntry,
     scene: Scene,

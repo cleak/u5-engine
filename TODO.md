@@ -700,7 +700,8 @@ tables are not yet public or not yet encoded.
   - `town_fire_sources.tsv` (now an override for native `0xB4..=0xB7` cannons)
   - `town_pushables.tsv`
   - `town_get_tiles.tsv`
-  - `town_rest_beds.tsv`
+  - `town_rest_beds.tsv` (optional override; native inn H-Hole-up accepts
+    the public `0x48..=0x49` bed pair in published inn scenes)
   - `town_stairs.tsv`
   - `town_trap_doors.tsv`
   - `town_exit_tiles.tsv`

@@ -3434,24 +3434,21 @@ impl PlayState {
             self.message = "Rest hours must be in 1..9.".to_string();
             return Ok(MoveOutcome::Blocked);
         }
-        let Some(entries) = load_town_rest_bed_entries(game_dir)? else {
-            self.message = "Not here!".to_string();
-            return Ok(MoveOutcome::Blocked);
-        };
-        if !self.town_rest_bed_still_accepts(&entries, scene, floor) {
+        let entries = load_town_rest_bed_entries(game_dir)?;
+        if !self.town_rest_bed_still_accepts(entries.as_deref(), scene, floor) {
             self.message = "Not here!".to_string();
             return Ok(MoveOutcome::Blocked);
         }
 
         self.mark_town_rest_sleepers();
-        if !self.advance_town_rest_initial_schedule_burst(&entries, scene, floor) {
+        if !self.advance_town_rest_initial_schedule_burst(entries.as_deref(), scene, floor) {
             let woke = self.wake_town_rest_sleepers();
             self.message = format!(
                 "Rest interrupted; thrown out of the inn bed; woke {woke} asleep member(s)."
             );
             return Ok(MoveOutcome::Blocked);
         }
-        if !self.advance_town_rest_until_target_hour(hours, &entries, scene, floor) {
+        if !self.advance_town_rest_until_target_hour(hours, entries.as_deref(), scene, floor) {
             let woke = self.wake_town_rest_sleepers();
             self.message = format!(
                 "Rest interrupted; thrown out of the inn bed; woke {woke} asleep member(s)."
@@ -3485,7 +3482,7 @@ impl PlayState {
     pub fn advance_town_rest_until_target_hour(
         &mut self,
         duration_digit: u8,
-        entries: &[TownRestBedEntry],
+        entries: Option<&[TownRestBedEntry]>,
         scene: Scene,
         floor: i8,
     ) -> bool {
@@ -3503,7 +3500,7 @@ impl PlayState {
 
     pub fn advance_town_rest_initial_schedule_burst(
         &mut self,
-        entries: &[TownRestBedEntry],
+        entries: Option<&[TownRestBedEntry]>,
         scene: Scene,
         floor: i8,
     ) -> bool {
@@ -3518,14 +3515,17 @@ impl PlayState {
 
     pub fn town_rest_bed_still_accepts(
         &self,
-        entries: &[TownRestBedEntry],
+        entries: Option<&[TownRestBedEntry]>,
         scene: Scene,
         floor: i8,
     ) -> bool {
         let tile = self.grid[self.player.y * 32 + self.player.x];
-        entries.iter().any(|entry| {
-            town_rest_bed_matches(*entry, scene, floor, self.player.x, self.player.y, tile)
-        })
+        let native_inn_bed =
+            crate::shop_session::inn_for_scene(scene.byte).is_some() && is_town_rest_bed_tile(tile);
+        native_inn_bed
+            || entries.unwrap_or(&[]).iter().any(|entry| {
+                town_rest_bed_matches(*entry, scene, floor, self.player.x, self.player.y, tile)
+            })
     }
 }
 

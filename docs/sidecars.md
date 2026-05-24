@@ -45,7 +45,7 @@ move below level `7`. Missing rows preserve the conservative in-place block.
 | `town_get_tiles.tsv` | Town tile pickups and replacements. |
 | `town_fire_sources.tsv` | Optional town fire-source overrides; native static cannons use `0xB4..=0xB7` without a row. |
 | `town_pushables.tsv` | Town pushable furniture/object rows. |
-| `town_rest_beds.tsv` | Town bed/rest surfaces accepted by H-Hole-up. |
+| `town_rest_beds.tsv` | Optional town bed/rest overrides for H-Hole-up; native inn scenes accept the public `0x48..=0x49` bed pair without a row. |
 | `town_locks.tsv` | Town lock rows for Jimmy/Open/Use-key handling. |
 | `secret_doors.tsv` | Search-revealed secret doors. |
 | `dungeon_chests.tsv` | Dungeon chest guard/grant metadata used by tests. |

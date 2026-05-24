@@ -131,6 +131,14 @@
     }
 
     #[test]
+    fn town_rest_bed_tile_predicate_matches_public_pair() {
+        assert!(!is_town_rest_bed_tile(0x47));
+        assert!(is_town_rest_bed_tile(0x48));
+        assert!(is_town_rest_bed_tile(0x49));
+        assert!(!is_town_rest_bed_tile(0x4a));
+    }
+
+    #[test]
     fn parse_town_stair_entries_accepts_direction_and_optional_tile_guard() {
         let entries =
             parse_town_stair_entries("CASTLE:0 0 1 1 UP 55\nCASTLE:0 1 2 1 both\n").unwrap();
@@ -281,6 +289,72 @@
         assert_eq!(state.message, "Not here!");
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, GameClock::default());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_hole_up_accepts_native_inn_bed_without_sidecar() {
+        let dir = debug_game_dir();
+        let _ = fs::remove_file(dir.join(TOWN_REST_BED_TABLE_FILE));
+        let mut grid = open_grid();
+        grid[32 + 1] = 0x48;
+        let mut state = test_state(grid, 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(2).unwrap(),
+            floor: 0,
+        };
+        state.clock = GameClock::new(8, 0).unwrap();
+
+        assert_eq!(
+            state.hole_up_command(&dir, Some(1)).unwrap(),
+            MoveOutcome::Rested
+        );
+
+        assert_eq!(state.clock, GameClock::new(9, 0).unwrap());
+        assert!(state.message.contains("Rested 1 hour at the inn bed"));
+        assert_eq!(
+            state.turn,
+            u64::from(TOWN_REST_INITIAL_SCHEDULE_BURST_TICKS)
+                + u64::from(TOWN_REST_TICKS_PER_HOUR)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_hole_up_rejects_native_bed_outside_inn_scene() {
+        let dir = debug_game_dir();
+        let _ = fs::remove_file(dir.join(TOWN_REST_BED_TABLE_FILE));
+        let mut grid = open_grid();
+        grid[32 + 1] = 0x48;
+        let mut state = test_state(grid, 1, 1);
+
+        assert_eq!(
+            state.hole_up_command(&dir, Some(1)).unwrap(),
+            MoveOutcome::Blocked
+        );
+
+        assert_eq!(state.message, "Not here!");
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.clock, GameClock::default());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn town_hole_up_sidecar_still_authorizes_custom_bed_cell() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(TOWN_REST_BED_TABLE_FILE), "CASTLE:0 0 1 1 55\n").unwrap();
+        let mut grid = open_grid();
+        grid[32 + 1] = 55;
+        let mut state = test_state(grid, 1, 1);
+        state.clock = GameClock::new(8, 0).unwrap();
+
+        assert_eq!(
+            state.hole_up_command(&dir, Some(1)).unwrap(),
+            MoveOutcome::Rested
+        );
+
+        assert_eq!(state.clock, GameClock::new(9, 0).unwrap());
+        assert!(state.message.contains("Rested 1 hour at the inn bed"));
         let _ = fs::remove_dir_all(dir);
     }
 
