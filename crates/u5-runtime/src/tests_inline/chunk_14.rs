@@ -1673,6 +1673,19 @@
             .region_rows(0, 0, MESSAGE_TEXT_WINDOW_RIGHT, 5, b' ')
             .join("\n");
 
+        assert_eq!(system.active_window_index(), TALK_SHOP_TEXT_WINDOW_INDEX);
+        assert_eq!(
+            system.window(TALK_SHOP_TEXT_WINDOW_INDEX).unwrap().top_left_x,
+            0
+        );
+        assert_eq!(
+            system
+                .window(TALK_SHOP_TEXT_WINDOW_INDEX)
+                .unwrap()
+                .bottom_right_x,
+            MESSAGE_TEXT_WINDOW_RIGHT
+        );
+        assert!(system.cell(0, 0).is_none(), "Talk entry newline leaves row 0 untouched");
         assert!(main.contains("Iolo"), "{main}");
         assert!(main.contains("Item 1 costs 42 gold"), "{main}");
         assert!(main.contains("Mace costs 42 gold."), "{main}");
@@ -1690,6 +1703,67 @@
                 .trim_end(),
             "STATS"
         );
+    }
+
+    #[test]
+    fn inn_pickup_register_uses_window_one_then_restores_talk_shop_window_two() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.inn_registry.push(InnGuestRecord {
+            scene_marker: 0x11,
+            name: *b"IOLO\0\0\0\0\0",
+            member: PartyMember {
+                slot: 4,
+                class_byte: b'B',
+                status: b'G',
+                climb_stat: 7,
+                mana: 3,
+                hp: 12,
+                max_hp: 28,
+                level: 3,
+            },
+            strength: 17,
+            intelligence: 19,
+            experience: 700,
+            equipment: [1, 2, 3, 4, 5, 6],
+            stay_counter: 1,
+        });
+        state.active_shop = Some(crate::shop_session::ActiveShopSession::Innkeeper(
+            crate::shop_runtime::InnkeeperState::PickUpCompanion {
+                inn: Inn::TheWayfarerInn,
+                guest_indices: [0; INN_REGISTRY_CAP],
+                guest_count: 1,
+                base_lodging_charge: 22,
+            },
+        ));
+
+        let system = render_play_text_window_system(&state, state.active_player, None);
+
+        assert_eq!(system.active_window_index(), TALK_SHOP_TEXT_WINDOW_INDEX);
+        assert_eq!(
+            system.window(INN_PICKUP_REGISTER_TEXT_WINDOW_INDEX).unwrap(),
+            TextWindowDescriptor {
+                top_left_x: INN_PICKUP_REGISTER_LEFT,
+                top_left_y: INN_PICKUP_REGISTER_TOP,
+                bottom_right_x: INN_PICKUP_REGISTER_FRAME_RIGHT,
+                bottom_right_y: INN_PICKUP_REGISTER_BOTTOM,
+                cursor_x: 7,
+                cursor_y: 3,
+                color: text_window_default_color_byte(),
+                flags: 0,
+            }
+        );
+        let register = system
+            .region_rows(
+                INN_PICKUP_REGISTER_LEFT,
+                INN_PICKUP_REGISTER_TOP,
+                INN_PICKUP_REGISTER_FRAME_RIGHT,
+                INN_PICKUP_REGISTER_BOTTOM,
+                b' ',
+            )
+            .join("\n");
+        assert!(register.contains("Pick up"), "{register}");
+        assert!(register.contains("Companion"), "{register}");
+        assert!(register.contains("1 IOLO"), "{register}");
     }
 
     #[test]

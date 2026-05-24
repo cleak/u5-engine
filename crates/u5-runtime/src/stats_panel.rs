@@ -6,11 +6,18 @@ pub const STATS_PANEL_WIDTH: usize = 16;
 pub const STATS_PANEL_PARTY_ROWS: usize = SAVE_PARTY_SIZE_MAX as usize;
 pub const MAIN_TEXT_WINDOW_INDEX: usize = 0;
 pub const STATS_PANEL_TEXT_WINDOW_INDEX: usize = 1;
-pub const PROMPT_TEXT_WINDOW_INDEX: usize = 2;
+pub const TALK_SHOP_TEXT_WINDOW_INDEX: usize = 2;
+pub const PROMPT_TEXT_WINDOW_INDEX: usize = 3;
 pub const MESSAGE_TEXT_WINDOW_RIGHT: u8 = 23;
 pub const STATS_PANEL_TEXT_LEFT: u8 = 23;
 pub const STATS_PANEL_TEXT_RIGHT: u8 = TEXT_SCREEN_COLUMNS - 1;
 pub const STATS_PANEL_TEXT_BOTTOM: u8 = TEXT_SCREEN_ROWS - 1;
+pub const INN_PICKUP_REGISTER_TEXT_WINDOW_INDEX: usize = STATS_PANEL_TEXT_WINDOW_INDEX;
+pub const INN_PICKUP_REGISTER_LEFT: u8 = 24;
+pub const INN_PICKUP_REGISTER_TOP: u8 = 1;
+pub const INN_PICKUP_REGISTER_INITIAL_RIGHT: u8 = 38;
+pub const INN_PICKUP_REGISTER_FRAME_RIGHT: u8 = 39;
+pub const INN_PICKUP_REGISTER_BOTTOM: u8 = 9;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct StatsPanelCombatRowOverlay {
@@ -56,6 +63,17 @@ pub fn configure_play_text_windows(system: &mut TextWindowSystem) {
     system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
 }
 
+pub fn configure_talk_shop_text_window(system: &mut TextWindowSystem) {
+    system.set_window_rect(
+        TALK_SHOP_TEXT_WINDOW_INDEX,
+        0,
+        0,
+        MESSAGE_TEXT_WINDOW_RIGHT,
+        TEXT_SCREEN_ROWS - 1,
+    );
+    system.set_active_window(TALK_SHOP_TEXT_WINDOW_INDEX);
+}
+
 pub fn render_play_text_window_system(
     state: &PlayState,
     active_cursor: Option<usize>,
@@ -68,12 +86,24 @@ pub fn render_play_text_window_system(
         .as_ref()
         .map(|shop| shop.modal_text(&state.message))
         .unwrap_or_else(|| state.message.clone());
-    paint_message_text_window(&mut system, &message);
+    if state.active_shop.is_some() {
+        configure_talk_shop_text_window(&mut system);
+        paint_talk_shop_text_window(&mut system, &message);
+    } else {
+        paint_message_text_window(&mut system, &message);
+    }
     paint_stats_panel_text_window(&mut system, state, active_cursor);
+    if state.active_shop.is_some() {
+        paint_inn_pickup_register_text_window(&mut system, state);
+    }
     if let Some(input_echo) = input_echo {
         paint_prompt_text_window(&mut system, input_echo);
     }
-    system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
+    if state.active_shop.is_some() {
+        system.set_active_window(TALK_SHOP_TEXT_WINDOW_INDEX);
+    } else {
+        system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
+    }
     system
 }
 
@@ -92,6 +122,67 @@ pub fn paint_message_text_window(system: &mut TextWindowSystem, message: &str) {
     system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
     system.set_active_cursor(0, 0);
     system.print_wrapped_string(message);
+}
+
+pub fn paint_talk_shop_text_window(system: &mut TextWindowSystem, message: &str) {
+    system.set_active_window(TALK_SHOP_TEXT_WINDOW_INDEX);
+    system.emit_byte(b'\r');
+    system.emit_byte(b'\n');
+    system.print_wrapped_string(message);
+    system.set_active_window(TALK_SHOP_TEXT_WINDOW_INDEX);
+}
+
+pub fn paint_inn_pickup_register_text_window(system: &mut TextWindowSystem, state: &PlayState) {
+    let Some(crate::shop_session::ActiveShopSession::Innkeeper(
+        crate::shop_runtime::InnkeeperState::PickUpCompanion {
+            guest_indices,
+            guest_count,
+            ..
+        },
+    )) = state.active_shop.as_ref()
+    else {
+        return;
+    };
+
+    system.set_active_window(INN_PICKUP_REGISTER_TEXT_WINDOW_INDEX);
+    system.set_window_rect(
+        INN_PICKUP_REGISTER_TEXT_WINDOW_INDEX,
+        INN_PICKUP_REGISTER_LEFT,
+        INN_PICKUP_REGISTER_TOP,
+        INN_PICKUP_REGISTER_INITIAL_RIGHT,
+        INN_PICKUP_REGISTER_BOTTOM,
+    );
+    system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
+    system.set_window_rect(
+        INN_PICKUP_REGISTER_TEXT_WINDOW_INDEX,
+        INN_PICKUP_REGISTER_LEFT,
+        INN_PICKUP_REGISTER_TOP,
+        INN_PICKUP_REGISTER_FRAME_RIGHT,
+        INN_PICKUP_REGISTER_BOTTOM,
+    );
+
+    system.set_active_cursor(1, 1);
+    system.print_wrapped_string("Pick up");
+    system.set_active_cursor(1, 2);
+    system.print_wrapped_string("Companion");
+
+    let rows = usize::from(*guest_count).min(INN_REGISTRY_CAP).min(5);
+    for row in 0..rows {
+        let Some(guest) = guest_indices
+            .get(row)
+            .and_then(|index| state.inn_registry.get(*index))
+        else {
+            continue;
+        };
+        let display_row = 3 + row;
+        let name =
+            party_name_to_string(&guest.name).unwrap_or_else(|| format!("Guest {}", row + 1));
+        let line = format!("{} {}", row + 1, truncate_ascii_chars(&name, 11));
+        system.set_active_cursor(1, display_row.min(u8::MAX as usize) as u8);
+        system.print_wrapped_string(&line);
+    }
+
+    system.set_active_window(TALK_SHOP_TEXT_WINDOW_INDEX);
 }
 
 pub fn paint_stats_panel_text_window(

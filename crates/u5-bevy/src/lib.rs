@@ -64,19 +64,20 @@ use u5_runtime::{
     SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_BOTTOM,
     STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE,
     SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable, StoryRecords,
-    TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING, TERRAIN_COMBAT_PARTY_POSITIONS,
-    TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
-    TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS,
-    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
-    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X,
-    TITLE_TICK_FRAME_Y, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowSystem, TileAtlas,
-    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
+    TALK_SHOP_TEXT_WINDOW_INDEX, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
+    TERRAIN_COMBAT_PARTY_POSITIONS, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT,
+    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
+    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
+    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
+    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX,
+    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowSystem,
+    TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
     TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
     UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
     VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
     X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_actor_is_active_not_dead,
     combat_class_stats, commit_chargen_save, commit_u4_transfer_save,
+    configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_roster, default_party_stay_counters, disk_io_error_message,
@@ -93,11 +94,13 @@ use u5_runtime::{
     load_question_records, load_return_to_view_assets, load_story_records, load_tile_atlas,
     load_title_bit,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
-    paint_message_text_window, paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
-    published_world_location_entries, rasterize_proportional_paragraph,
-    read_u4_transfer_source_from_party_sav, render_play_text_window_system,
-    render_return_to_view_playback_frame_viewport, render_text_panel_rgba, render_text_window_rgba,
-    return_to_view_fixed_wipe_rectangles, run_return_to_view_playback_until_restart,
+    paint_inn_pickup_register_text_window, paint_message_text_window,
+    paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
+    paint_talk_shop_text_window, published_world_location_entries,
+    rasterize_proportional_paragraph, read_u4_transfer_source_from_party_sav,
+    render_play_text_window_system, render_return_to_view_playback_frame_viewport,
+    render_text_panel_rgba, render_text_window_rgba, return_to_view_fixed_wipe_rectangles,
+    run_return_to_view_playback_until_restart,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -10206,13 +10209,32 @@ fn render_integrated_status_framebuffer(
         .as_ref()
         .map(|shop| shop.modal_text(&display_state.message))
         .unwrap_or_else(|| display_state.message.clone());
-    paint_message_text_window(&mut system, &message);
+    if display_state.active_shop.is_some() {
+        configure_talk_shop_text_window(&mut system);
+        system.set_window_rect(
+            TALK_SHOP_TEXT_WINDOW_INDEX,
+            0,
+            VISUAL_MAIN_TEXT_TOP,
+            VISUAL_MAIN_TEXT_RIGHT,
+            TEXT_SCREEN_ROWS - 1,
+        );
+        paint_talk_shop_text_window(&mut system, &message);
+    } else {
+        paint_message_text_window(&mut system, &message);
+    }
     paint_stats_panel_text_window(&mut system, &display_state, active_cursor);
+    if display_state.active_shop.is_some() {
+        paint_inn_pickup_register_text_window(&mut system, &display_state);
+    }
     if let Some(input_echo) = input_echo {
         let cursor_glyph = prompt_cursor_visible.then_some(PROMPT_CURSOR_GLYPH);
         paint_prompt_text_window_with_cursor(&mut system, input_echo, cursor_glyph);
     }
-    system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
+    if display_state.active_shop.is_some() {
+        system.set_active_window(TALK_SHOP_TEXT_WINDOW_INDEX);
+    } else {
+        system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
+    }
     if stats_panel_active_cursor_visible(state, active_cursor) {
         state.active_player = None;
     }
