@@ -27,6 +27,7 @@ pub mod conversation_session;
 pub mod directed_step;
 pub mod direction;
 pub mod disk_io;
+pub mod display_driver;
 pub mod dungeon_tables;
 pub mod dungeon_tables_io;
 pub mod dungeon_tables_io_movement;
@@ -230,6 +231,7 @@ pub use directed_step::{
 };
 pub use direction::Direction;
 pub use disk_io::*;
+pub use display_driver::*;
 pub use dungeon_tables::*;
 pub use dungeon_tables_io::*;
 pub use dungeon_tables_io_movement::*;

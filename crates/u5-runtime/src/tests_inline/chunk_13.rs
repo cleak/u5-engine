@@ -5050,6 +5050,126 @@ fn pth_byte_decoder_constants_match_spec() {
 }
 
 #[test]
+fn display_surface_rects_normalize_clamp_and_fill_inclusive_pixels() {
+    let mut surface = EgaDisplaySurface::new();
+    surface.set_current_color(0x2f);
+    let rect = normalize_clamp_pixel_rect(5, 4, -2, 1).unwrap();
+
+    assert_eq!(
+        rect,
+        DisplayPixelRect {
+            x0: 0,
+            y0: 1,
+            x1: 5,
+            y1: 4
+        }
+    );
+    surface.fill_rect_current_color(rect);
+
+    assert_eq!(surface.current_color(), 0x0f);
+    assert_eq!(surface.read_pixel(0, 1), Some(0x0f));
+    assert_eq!(surface.read_pixel(5, 4), Some(0x0f));
+    assert_eq!(surface.read_pixel(6, 4), Some(0));
+    assert_eq!(surface.read_pixel(0, 0), Some(0));
+    assert_eq!(normalize_clamp_pixel_rect(-20, -20, -1, 5), None);
+}
+
+#[test]
+fn display_text_cell_rect_converts_to_inclusive_pixel_rect() {
+    assert_eq!(
+        text_cell_rect_to_pixel_rect(39, 24, 0, 0),
+        Some(DisplayPixelRect {
+            x0: 0,
+            y0: 0,
+            x1: 319,
+            y1: 199
+        })
+    );
+    assert_eq!(
+        text_cell_rect_to_pixel_rect(1, 2, 1, 2),
+        Some(DisplayPixelRect {
+            x0: 8,
+            y0: 16,
+            x1: 15,
+            y1: 23
+        })
+    );
+}
+
+#[test]
+fn display_surface_scrolls_rect_up_one_text_row_and_blanks_exposed_band() {
+    let mut surface = EgaDisplaySurface::new();
+    let rect = normalize_clamp_pixel_rect(0, 0, 15, 15).unwrap();
+    for y in 0..16 {
+        surface.fill_rect(
+            normalize_clamp_pixel_rect(0, y, 15, y).unwrap(),
+            y as u8,
+        );
+    }
+
+    surface.scroll_text_rect_up_one_row(rect, 0);
+
+    assert_eq!(surface.read_pixel(0, 0), Some(8));
+    assert_eq!(surface.read_pixel(15, 7), Some(15));
+    assert_eq!(surface.read_pixel(0, 8), Some(0));
+    assert_eq!(surface.read_pixel(15, 15), Some(0));
+}
+
+#[test]
+fn display_surface_draws_tiles_and_fixed_glyphs_to_front_buffer() {
+    let mut surface = EgaDisplaySurface::new();
+    let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+    surface.blit_tile_at_pixel(&atlas, 3, 318, 198).unwrap();
+
+    assert_eq!(surface.read_pixel(318, 198), Some(3));
+    assert_eq!(surface.read_pixel(319, 199), Some(3));
+
+    let mut font_bytes = vec![0u8; CH_FONT_LEN];
+    let glyph = usize::from(b'A') * CH_CELL_SIDE;
+    font_bytes[glyph] = 0b1000_0001;
+    font_bytes[glyph + 1] = 0b0111_1110;
+    let font = parse_ch_font(&font_bytes, "fixture").unwrap();
+    surface.draw_fixed_glyph_cell(&font, b'A', 1, 1, 0x0e, 0x01).unwrap();
+
+    assert_eq!(surface.read_pixel(8, 8), Some(0x0e));
+    assert_eq!(surface.read_pixel(9, 8), Some(0x01));
+    assert_eq!(surface.read_pixel(9, 9), Some(0x0e));
+}
+
+#[test]
+fn display_surface_title_tick_touches_only_published_rectangle_and_presents_explicitly() {
+    let mut surface = EgaDisplaySurface::new();
+    surface.set_current_color(0x03);
+    surface.plot_pixel(10, 64);
+    surface.plot_pixel(10, 65);
+    surface.plot_pixel(10, 113);
+    surface.plot_pixel(10, 114);
+
+    let rect = surface.advance_title_tick();
+
+    assert_eq!(
+        rect,
+        DisplayPixelRect {
+            x0: TITLE_TICK_FRAME_X as usize,
+            y0: TITLE_TICK_FRAME_Y as usize,
+            x1: (TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH - 1) as usize,
+            y1: (TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1) as usize
+        }
+    );
+    let (bright, dim) = title_tick_palette_indices(0);
+    assert_eq!(surface.title_tick_frame(), 1);
+    assert_eq!(surface.read_pixel(10, 64), Some(0x03));
+    assert_eq!(surface.read_pixel(10, 65), Some(bright));
+    assert_eq!(surface.read_pixel(10, 113), Some(dim));
+    assert_eq!(surface.read_pixel(10, 114), Some(0x03));
+    assert_eq!(surface.presented_frames(), 0);
+
+    surface.present_frame();
+
+    assert_eq!(surface.presented_frames(), 1);
+}
+
+#[test]
 fn chest_content_roll_die_and_secondary_attempt_formula_match_spec() {
     // containers.md §4: chest content gates use a `1..=30` die,
     // and the secondary-pool attempt count is `floor(chest_class

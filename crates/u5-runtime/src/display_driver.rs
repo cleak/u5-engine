@@ -1,0 +1,275 @@
+//! Clean semantic display-driver surface for the EGA-compatible v1 renderer.
+
+use std::io;
+
+use crate::*;
+
+pub const DISPLAY_SURFACE_WIDTH: usize = TITLE_SURFACE_WIDTH as usize;
+pub const DISPLAY_SURFACE_HEIGHT: usize = TITLE_SURFACE_HEIGHT as usize;
+pub const DISPLAY_SURFACE_PIXELS: usize = DISPLAY_SURFACE_WIDTH * DISPLAY_SURFACE_HEIGHT;
+pub const DISPLAY_TEXT_COLUMNS: usize = TEXT_SCREEN_COLUMNS as usize;
+pub const DISPLAY_TEXT_ROWS: usize = TEXT_SCREEN_ROWS as usize;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DisplayPixelRect {
+    pub x0: usize,
+    pub y0: usize,
+    pub x1: usize,
+    pub y1: usize,
+}
+
+impl DisplayPixelRect {
+    pub const fn width(self) -> usize {
+        self.x1 - self.x0 + 1
+    }
+
+    pub const fn height(self) -> usize {
+        self.y1 - self.y0 + 1
+    }
+}
+
+pub fn normalize_clamp_pixel_rect(x0: i32, y0: i32, x1: i32, y1: i32) -> Option<DisplayPixelRect> {
+    let min_x = if x0 < x1 { x0 } else { x1 };
+    let max_x = if x0 < x1 { x1 } else { x0 };
+    let min_y = if y0 < y1 { y0 } else { y1 };
+    let max_y = if y0 < y1 { y1 } else { y0 };
+    if max_x < 0
+        || max_y < 0
+        || min_x >= DISPLAY_SURFACE_WIDTH as i32
+        || min_y >= DISPLAY_SURFACE_HEIGHT as i32
+    {
+        return None;
+    }
+    Some(DisplayPixelRect {
+        x0: min_x.max(0) as usize,
+        y0: min_y.max(0) as usize,
+        x1: max_x.min(DISPLAY_SURFACE_WIDTH as i32 - 1) as usize,
+        y1: max_y.min(DISPLAY_SURFACE_HEIGHT as i32 - 1) as usize,
+    })
+}
+
+pub fn text_cell_rect_to_pixel_rect(
+    cell_x0: i32,
+    cell_y0: i32,
+    cell_x1: i32,
+    cell_y1: i32,
+) -> Option<DisplayPixelRect> {
+    let min_cell_x = cell_x0.min(cell_x1);
+    let max_cell_x = cell_x0.max(cell_x1);
+    let min_cell_y = cell_y0.min(cell_y1);
+    let max_cell_y = cell_y0.max(cell_y1);
+
+    normalize_clamp_pixel_rect(
+        min_cell_x * CH_CELL_SIDE as i32,
+        min_cell_y * CH_CELL_SIDE as i32,
+        max_cell_x * CH_CELL_SIDE as i32 + (CH_CELL_SIDE as i32 - 1),
+        max_cell_y * CH_CELL_SIDE as i32 + (CH_CELL_SIDE as i32 - 1),
+    )
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EgaDisplaySurface {
+    front_pixels: Vec<u8>,
+    current_color: u8,
+    title_tick_frame: u8,
+    presented_frames: u64,
+}
+
+impl Default for EgaDisplaySurface {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EgaDisplaySurface {
+    pub fn new() -> Self {
+        Self {
+            front_pixels: vec![0; DISPLAY_SURFACE_PIXELS],
+            current_color: 0,
+            title_tick_frame: 0,
+            presented_frames: 0,
+        }
+    }
+
+    pub fn front_pixels(&self) -> &[u8] {
+        &self.front_pixels
+    }
+
+    pub fn current_color(&self) -> u8 {
+        self.current_color
+    }
+
+    pub fn title_tick_frame(&self) -> u8 {
+        self.title_tick_frame
+    }
+
+    pub fn presented_frames(&self) -> u64 {
+        self.presented_frames
+    }
+
+    pub fn set_current_color(&mut self, color: u8) {
+        self.current_color = color & 0x0f;
+    }
+
+    pub fn read_pixel(&self, x: usize, y: usize) -> Option<u8> {
+        if x >= DISPLAY_SURFACE_WIDTH || y >= DISPLAY_SURFACE_HEIGHT {
+            return None;
+        }
+        self.front_pixels
+            .get(y * DISPLAY_SURFACE_WIDTH + x)
+            .copied()
+    }
+
+    pub fn plot_pixel(&mut self, x: usize, y: usize) {
+        if x >= DISPLAY_SURFACE_WIDTH || y >= DISPLAY_SURFACE_HEIGHT {
+            return;
+        }
+        self.front_pixels[y * DISPLAY_SURFACE_WIDTH + x] = self.current_color;
+    }
+
+    pub fn fill_rect_current_color(&mut self, rect: DisplayPixelRect) {
+        self.fill_rect(rect, self.current_color);
+    }
+
+    pub fn fill_rect(&mut self, rect: DisplayPixelRect, color: u8) {
+        let color = color & 0x0f;
+        for y in rect.y0..=rect.y1 {
+            let start = y * DISPLAY_SURFACE_WIDTH + rect.x0;
+            self.front_pixels[start..=start + rect.width() - 1].fill(color);
+        }
+    }
+
+    pub fn clear_rect(&mut self, rect: DisplayPixelRect) {
+        self.fill_rect(rect, 0);
+    }
+
+    pub fn scroll_rect(&mut self, rect: DisplayPixelRect, dx: i32, dy: i32, blank_color: u8) {
+        let original = self.front_pixels.clone();
+        self.fill_rect(rect, blank_color);
+        for y in rect.y0..=rect.y1 {
+            for x in rect.x0..=rect.x1 {
+                let src_x = x as i32 - dx;
+                let src_y = y as i32 - dy;
+                if src_x < rect.x0 as i32
+                    || src_x > rect.x1 as i32
+                    || src_y < rect.y0 as i32
+                    || src_y > rect.y1 as i32
+                {
+                    continue;
+                }
+                let src = src_y as usize * DISPLAY_SURFACE_WIDTH + src_x as usize;
+                let dst = y * DISPLAY_SURFACE_WIDTH + x;
+                self.front_pixels[dst] = original[src];
+            }
+        }
+    }
+
+    pub fn scroll_text_rect_up_one_row(&mut self, rect: DisplayPixelRect, blank_color: u8) {
+        self.scroll_rect(rect, 0, -(CH_CELL_SIDE as i32), blank_color);
+    }
+
+    pub fn blit_tile_at_pixel(
+        &mut self,
+        atlas: &TileAtlas,
+        tile: usize,
+        dst_x: i32,
+        dst_y: i32,
+    ) -> io::Result<()> {
+        let pixels = atlas.tile_pixels(tile).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("tile atlas is missing tile {tile}"),
+            )
+        })?;
+        for row in 0..TILE_ATLAS_SIDE {
+            let y = dst_y + row as i32;
+            if !(0..DISPLAY_SURFACE_HEIGHT as i32).contains(&y) {
+                continue;
+            }
+            for col in 0..TILE_ATLAS_SIDE {
+                let x = dst_x + col as i32;
+                if !(0..DISPLAY_SURFACE_WIDTH as i32).contains(&x) {
+                    continue;
+                }
+                self.front_pixels[y as usize * DISPLAY_SURFACE_WIDTH + x as usize] =
+                    pixels[row * TILE_ATLAS_SIDE + col] & 0x0f;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn blit_tile_cell(
+        &mut self,
+        atlas: &TileAtlas,
+        tile: usize,
+        cell_x: usize,
+        cell_y: usize,
+    ) -> io::Result<()> {
+        self.blit_tile_at_pixel(
+            atlas,
+            tile,
+            (cell_x * TILE_ATLAS_SIDE) as i32,
+            (cell_y * TILE_ATLAS_SIDE) as i32,
+        )
+    }
+
+    pub fn draw_fixed_glyph_cell(
+        &mut self,
+        font: &FixedCellFont,
+        code: u8,
+        cell_x: usize,
+        cell_y: usize,
+        foreground: u8,
+        background: u8,
+    ) -> io::Result<()> {
+        let dst_x = cell_x * CH_CELL_SIDE;
+        let dst_y = cell_y * CH_CELL_SIDE;
+        for glyph_y in 0..CH_CELL_SIDE {
+            let row_bits = font.glyph_row(code & 0x7f, glyph_y).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("fixed font glyph {} is missing row {glyph_y}", code & 0x7f),
+                )
+            })?;
+            for glyph_x in 0..CH_CELL_SIDE {
+                let color = if row_bits & (1 << (7 - glyph_x)) != 0 {
+                    foreground
+                } else {
+                    background
+                } & 0x0f;
+                let x = dst_x + glyph_x;
+                let y = dst_y + glyph_y;
+                if x < DISPLAY_SURFACE_WIDTH && y < DISPLAY_SURFACE_HEIGHT {
+                    self.front_pixels[y * DISPLAY_SURFACE_WIDTH + x] = color;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn advance_title_tick(&mut self) -> DisplayPixelRect {
+        let (bright, dim) = title_tick_palette_indices(self.title_tick_frame);
+        let rect = normalize_clamp_pixel_rect(
+            i32::from(TITLE_TICK_FRAME_X),
+            i32::from(TITLE_TICK_FRAME_Y),
+            i32::from(TITLE_TICK_FRAME_X + TITLE_TICK_FRAME_WIDTH - 1),
+            i32::from(TITLE_TICK_FRAME_Y + TITLE_TICK_FRAME_HEIGHT - 1),
+        )
+        .expect("title tick rectangle is inside the display surface");
+        for y in rect.y0..=rect.y1 {
+            let color = if y - rect.y0 < rect.height() / 2 {
+                bright
+            } else {
+                dim
+            };
+            let start = y * DISPLAY_SURFACE_WIDTH + rect.x0;
+            self.front_pixels[start..=start + rect.width() - 1].fill(color);
+        }
+        self.title_tick_frame = title_tick_next_frame(self.title_tick_frame);
+        rect
+    }
+
+    pub fn present_frame(&mut self) {
+        self.presented_frames = self.presented_frames.saturating_add(1);
+    }
+}
