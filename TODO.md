@@ -137,7 +137,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 367 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 381 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -153,6 +153,16 @@ Last known verification state:
   (`route-castle-x-ray-overlay-01-c1imx` `703fdeef9d192429`),
   `route-britannia-look-00-initial` `f68b906acde0bd4a`,
   `route-britannia-look-01-l6` `da5ca5200c222d0f`,
+  Shadowlord/quest frames `route-virtue-town-shadowlord-entry-00-initial`
+  `d1d1b68786dacfc7`, `route-virtue-town-shadowlord-yell-01-yfaulinei`
+  `b7478369c5d5dcaa`, `route-lycaeum-shard-falsehood-vanquish-01-uf`
+  `f89b3fec282be2b2`, `route-empath-shard-hatred-vanquish-01-uh`
+  `4697d02e7b1b717e`, `route-serpents-hold-shard-cowardice-vanquish-01-ucw`
+  `8d6b68ed8daa4599`, `route-stonegate-shadowlord-entry-00-initial`
+  `7f3f20ca7b391cc8`, `route-britannia-word-of-power-seal-opens-01-yfallax`
+  `09710bf07543b67e`, and
+  `route-underworld-doom-word-of-power-seal-opens-01-yveramocor`
+  `456def28b0dff5b1`,
   `route-britannia-spyglass-chunk-map-00-initial` `ee035bc3da0ecedd`,
   `route-britannia-spyglass-chunk-map-01-usp` `00e243b8973a3bc5`,
   `route-castle-save-refusal-00-initial` `2beb3b7734800e11`,

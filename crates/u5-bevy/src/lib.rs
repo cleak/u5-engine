@@ -43,23 +43,28 @@ use u5_runtime::{
     PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions,
     PlayState, PlayTarget, ProportionalFont, ProportionalWidthTable, QUICKNESS_COST,
     QUICKNESS_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES,
-    RectColumnSweepTransition, ReturnToViewFrameKind, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
-    SLEEP_SPELL_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX,
-    SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
-    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE, Scene, Shipwright, Stable,
-    StoryRecords, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH,
-    TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS,
-    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
-    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X,
-    TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE,
-    Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset,
-    TitleBitImages, TitleBitPlacement, TransportState, U4TransferOverrides, U4TransferSource,
-    UUS_POR_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WorldPlane, WorldReturn, X_RAY_COST,
-    X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save,
-    commit_u4_transfer_save, default_party_equipment, default_party_intelligence,
-    default_party_names, default_party_stay_counters, dungeon_cell_index,
-    endgame_tableau_role_for_slot, handle_play_key_input, hash_bytes, input_case_fold,
-    input_function_key_code, input_keypad_digit_direction_code,
+    RectColumnSweepTransition, ReturnToViewFrameKind, SCENE_EMPATH_ABBEY, SCENE_JHELOM,
+    SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM,
+    SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX,
+    SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE, SLEEP_COST,
+    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_OWNED_VALUE,
+    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
+    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_BOTTOM,
+    STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE,
+    Scene, Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT,
+    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
+    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
+    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
+    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth,
+    TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState,
+    U4TransferOverrides, U4TransferSource, UUS_POR_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
+    WORLD_SIDE, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport,
+    combat_class_stats, commit_chargen_save, commit_u4_transfer_save, default_party_equipment,
+    default_party_intelligence, default_party_names, default_party_stay_counters,
+    dungeon_cell_index, endgame_tableau_role_for_slot, handle_play_key_input, hash_bytes,
+    input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -84,7 +89,7 @@ use u5_runtime::{
     terrain_combat_raw_replacement_tile_for_arena, terrain_combat_setup_from_record,
     title_tick_flame_palette_index, title_tick_next_frame,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
-    u5_prng_range_u16,
+    u5_prng_range_u16, word_of_power_seal_for_word,
 };
 
 const VIEWPORT_RADIUS: usize = 5;
@@ -736,6 +741,55 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
         skiffs: 2,
     };
+    let shadowlord_town = Scene::new(SCENE_MOONGLOW).expect("Shadowlord hideout town is valid");
+    let stonegate = Scene::new(SCENE_STONEGATE).expect("Stonegate scene is valid");
+    let mut shadowlord_town_entry = PlayOptions {
+        target: PlayTarget::Town(shadowlord_town),
+        ..PlayOptions::default()
+    };
+    shadowlord_town_entry.shadowlord_hideouts = [
+        SCENE_MOONGLOW,
+        SHADOWLORD_HIDEOUT_VANQUISHED,
+        SHADOWLORD_HIDEOUT_VANQUISHED,
+    ];
+    let mut shadowlord_town_yell = shadowlord_town_entry.clone();
+    shadowlord_town_yell.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = SCENE_MOONGLOW;
+    let mut lycaeum_shard_falsehood = PlayOptions {
+        target: PlayTarget::Town(Scene::new(SCENE_THE_LYCAEUM).expect("Lycaeum scene is valid")),
+        floor: 2,
+        ..PlayOptions::default()
+    };
+    lycaeum_shard_falsehood.special_items[SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX] =
+        SPECIAL_ITEM_OWNED_VALUE;
+    lycaeum_shard_falsehood.shadowlord_hideouts[SHADOWLORD_FALSEHOOD_INDEX] = SCENE_MOONGLOW;
+    let mut empath_shard_hatred = PlayOptions {
+        target: PlayTarget::Town(Scene::new(SCENE_EMPATH_ABBEY).expect("Empath Abbey is valid")),
+        floor: 1,
+        ..PlayOptions::default()
+    };
+    empath_shard_hatred.special_items[SPECIAL_ITEM_SHARD_HATRED_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    empath_shard_hatred.shadowlord_hideouts[SHADOWLORD_HATRED_INDEX] = SCENE_MOONGLOW;
+    let mut serpents_shard_cowardice = PlayOptions {
+        target: PlayTarget::Town(
+            Scene::new(SCENE_SERPENTS_HOLD).expect("Serpent's Hold scene is valid"),
+        ),
+        floor: -1,
+        ..PlayOptions::default()
+    };
+    serpents_shard_cowardice.special_items[SPECIAL_ITEM_SHARD_COWARDICE_INDEX] =
+        SPECIAL_ITEM_OWNED_VALUE;
+    serpents_shard_cowardice.shadowlord_hideouts[SHADOWLORD_COWARDICE_INDEX] = SCENE_MOONGLOW;
+    let mut stonegate_entry = PlayOptions {
+        target: PlayTarget::Town(stonegate),
+        ..PlayOptions::default()
+    };
+    stonegate_entry.special_items[SPECIAL_ITEM_SCEPTRE_LB_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    stonegate_entry.shadowlord_hideouts =
+        [SCENE_MOONGLOW, SHADOWLORD_HIDEOUT_VANQUISHED, SCENE_JHELOM];
+    let fallax_seal =
+        word_of_power_seal_for_word("FALLAX").expect("FALLAX Word-of-Power seal row is public");
+    let veramocor_seal = word_of_power_seal_for_word("VERAMOCOR")
+        .expect("VERAMOCOR Word-of-Power seal row is public");
     let mut cases = vec![
         VisualRouteSuiteCase {
             label: "route-world-movement",
@@ -1473,6 +1527,68 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             },
             script: &["l6", "1"],
             configure: Some(seed_visual_route_death_vision),
+        },
+        VisualRouteSuiteCase {
+            label: "route-virtue-town-shadowlord-entry",
+            frame_kind: "visual route town frame",
+            options: shadowlord_town_entry,
+            script: &[],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-virtue-town-shadowlord-yell",
+            frame_kind: "visual route town frame",
+            options: shadowlord_town_yell,
+            script: &["YFAULINEI"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-lycaeum-shard-falsehood-vanquish",
+            frame_kind: "visual route town frame",
+            options: lycaeum_shard_falsehood,
+            script: &["UF"],
+            configure: Some(seed_visual_route_falsehood_shard),
+        },
+        VisualRouteSuiteCase {
+            label: "route-empath-shard-hatred-vanquish",
+            frame_kind: "visual route town frame",
+            options: empath_shard_hatred,
+            script: &["UH"],
+            configure: Some(seed_visual_route_hatred_shard),
+        },
+        VisualRouteSuiteCase {
+            label: "route-serpents-hold-shard-cowardice-vanquish",
+            frame_kind: "visual route town frame",
+            options: serpents_shard_cowardice,
+            script: &["UCW"],
+            configure: Some(seed_visual_route_cowardice_shard),
+        },
+        VisualRouteSuiteCase {
+            label: "route-stonegate-shadowlord-entry",
+            frame_kind: "visual route town frame",
+            options: stonegate_entry,
+            script: &[],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-word-of-power-seal-opens",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(fallax_seal.plane),
+                ..PlayOptions::default()
+            },
+            script: &["YFALLAX"],
+            configure: Some(seed_visual_route_britannia_word_of_power),
+        },
+        VisualRouteSuiteCase {
+            label: "route-underworld-doom-word-of-power-seal-opens",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(veramocor_seal.plane),
+                ..PlayOptions::default()
+            },
+            script: &["YVERAMOCOR"],
+            configure: Some(seed_visual_route_underworld_word_of_power),
         },
         VisualRouteSuiteCase {
             label: "route-endgame-missing-box-terminal-jitter",
@@ -2452,6 +2568,60 @@ fn seed_visual_route_death_vision(state: &mut PlayState) {
         aux1: 0,
         aux3: 0,
     });
+}
+
+fn seed_visual_route_shadowlord_shard(state: &mut PlayState, index: usize, x: usize, y: usize) {
+    state.player.x = x;
+    state.player.y = y;
+    state.player.facing = Direction::South;
+    state.sync_player_object();
+    let tile = SHADOWLORD_OBJECT_TILE_BASE + index as u8;
+    state.active_objects.push(ActiveObject {
+        type_byte: tile,
+        tile,
+        x,
+        y: y.saturating_sub(1),
+        z: state.current_floor().unwrap_or(0),
+        phase: STEADY_PHASE,
+        aux1: index as u8,
+        aux3: state.shadowlord_hideouts.get(index).copied().unwrap_or(0),
+    });
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_falsehood_shard(state: &mut PlayState) {
+    seed_visual_route_shadowlord_shard(state, SHADOWLORD_FALSEHOOD_INDEX, 15, 9);
+}
+
+fn seed_visual_route_hatred_shard(state: &mut PlayState) {
+    seed_visual_route_shadowlord_shard(state, SHADOWLORD_HATRED_INDEX, 15, 3);
+}
+
+fn seed_visual_route_cowardice_shard(state: &mut PlayState) {
+    seed_visual_route_shadowlord_shard(state, SHADOWLORD_COWARDICE_INDEX, 15, 16);
+}
+
+fn seed_visual_route_word_of_power(state: &mut PlayState, word: &str) {
+    if let Some(seal) = word_of_power_seal_for_word(word) {
+        if matches!(state.area, u5_runtime::Area::World { plane } if plane == seal.plane) {
+            state.player.x = seal.x;
+            state.player.y = seal.y;
+            state.sync_player_object();
+            let idx = seal.y * WORLD_SIDE + seal.x;
+            if let Some(cell) = state.grid.get_mut(idx) {
+                *cell = seal.closed_tile;
+            }
+            state.mark_visibility_dirty();
+        }
+    }
+}
+
+fn seed_visual_route_britannia_word_of_power(state: &mut PlayState) {
+    seed_visual_route_word_of_power(state, "FALLAX");
+}
+
+fn seed_visual_route_underworld_word_of_power(state: &mut PlayState) {
+    seed_visual_route_word_of_power(state, "VERAMOCOR");
 }
 
 fn seed_visual_route_endgame_missing_box(state: &mut PlayState) {
@@ -6959,8 +7129,14 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 108);
-        assert!(cases.iter().all(|case| !case.script.is_empty()));
+        assert_eq!(cases.len(), 116);
+        assert!(cases.iter().all(|case| {
+            !case.script.is_empty()
+                || matches!(
+                    case.label,
+                    "route-virtue-town-shadowlord-entry" | "route-stonegate-shadowlord-entry"
+                )
+        }));
         assert!(
             cases
                 .iter()
@@ -7155,6 +7331,18 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-castle-death-vision-look")
         );
+        for label in [
+            "route-virtue-town-shadowlord-entry",
+            "route-virtue-town-shadowlord-yell",
+            "route-lycaeum-shard-falsehood-vanquish",
+            "route-empath-shard-hatred-vanquish",
+            "route-serpents-hold-shard-cowardice-vanquish",
+            "route-stonegate-shadowlord-entry",
+            "route-britannia-word-of-power-seal-opens",
+            "route-underworld-doom-word-of-power-seal-opens",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert!(
             cases
                 .iter()
@@ -7280,7 +7468,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 367);
+        assert_eq!(reports.len(), 381);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -7364,6 +7552,14 @@ mod tests {
         assert!(manifest.contains("route-yew-wanted-poster-look-01-l6"));
         assert!(manifest.contains("route-buccaneers-den-wishing-well-03-horse"));
         assert!(manifest.contains("route-castle-death-vision-look-02-1"));
+        assert!(manifest.contains("route-virtue-town-shadowlord-entry-00-initial"));
+        assert!(manifest.contains("route-virtue-town-shadowlord-yell-01-yfaulinei"));
+        assert!(manifest.contains("route-lycaeum-shard-falsehood-vanquish-01-uf"));
+        assert!(manifest.contains("route-empath-shard-hatred-vanquish-01-uh"));
+        assert!(manifest.contains("route-serpents-hold-shard-cowardice-vanquish-01-ucw"));
+        assert!(manifest.contains("route-stonegate-shadowlord-entry-00-initial"));
+        assert!(manifest.contains("route-britannia-word-of-power-seal-opens-01-yfallax"));
+        assert!(manifest.contains("route-underworld-doom-word-of-power-seal-opens-01-yveramocor"));
         assert!(manifest.contains("route-endgame-missing-box-terminal-jitter-03-empty"));
         assert!(manifest.contains("route-endgame-box-full-victory-cinematic-18-empty"));
         assert!(manifest.contains("route-doom-combat-trigger-01-empty"));
