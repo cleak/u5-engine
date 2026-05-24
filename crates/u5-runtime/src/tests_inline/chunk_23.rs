@@ -4087,11 +4087,22 @@
             5,
             5,
         ]);
+        actors[8] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_STATUS_DISABLED,
+            35,
+            0,
+            0,
+            5,
+            5,
+        ]);
         actors[9] = CombatActorDescriptor::from_row([20, 1, 0, 12, 0, 0, 5, 5]);
 
         assert!(directed_spell_actor_is_eligible(actors[0]));
         assert!(!directed_spell_actor_is_eligible(actors[5]));
         assert!(!directed_spell_actor_is_eligible(actors[7]));
+        assert!(!directed_spell_actor_is_eligible(actors[8]));
 
         let slots = collect_directed_spell_actor_slots(&actors, &[(5, 5), (5, 5), (3, 3)]);
 
@@ -6013,6 +6024,50 @@
         assert!(sleep_cells.contains(&(0, 0)));
         assert!(sleep_cells.contains(&(0, 10)));
         assert!(!sleep_cells.contains(&(5, 5)));
+    }
+
+    #[test]
+    fn directed_wind_cone_geometry_matches_cardinal_bands_and_cap() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_actors[0] =
+            CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+
+        let cases = [
+            (Direction::West, [(4, 4), (4, 5), (4, 6)], (0, 0), (0, 10)),
+            (Direction::East, [(6, 4), (6, 5), (6, 6)], (10, 0), (10, 10)),
+            (Direction::North, [(4, 4), (5, 4), (6, 4)], (0, 0), (10, 0)),
+            (Direction::South, [(4, 6), (5, 6), (6, 6)], (0, 10), (10, 10)),
+        ];
+
+        for (direction, first_band, edge_a, edge_b) in cases {
+            let cells = state
+                .directed_combat_spell_target_cells(
+                    0,
+                    direction,
+                    CombatDirectedSpellEffect::FlameWind,
+                )
+                .unwrap();
+            assert_eq!(cells.len(), 35, "{direction:?}");
+            assert_eq!(&cells[0..3], &first_band, "{direction:?}");
+            assert!(cells.contains(&edge_a), "{direction:?}");
+            assert!(cells.contains(&edge_b), "{direction:?}");
+            assert!(!cells.contains(&(5, 5)), "{direction:?}");
+        }
+
+        state.combat_actors[0] =
+            CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 0, 5]);
+        let capped = state
+            .directed_combat_spell_target_cells(
+                0,
+                Direction::East,
+                CombatDirectedSpellEffect::DeathWind,
+            )
+            .unwrap();
+        assert_eq!(capped.len(), DIRECTED_TARGET_WALK_MAX_CELLS);
+        assert_eq!(&capped[0..3], &[(1, 4), (1, 5), (1, 6)]);
+        assert_eq!(capped.last().copied(), Some((8, 5)));
+        let unique: std::collections::HashSet<_> = capped.iter().copied().collect();
+        assert_eq!(unique.len(), capped.len());
     }
 
     #[test]
@@ -13148,6 +13203,55 @@
             state.party_experience[0],
             10 + u16::from(stats.reward_unit())
         );
+    }
+
+    #[test]
+    fn directed_spell_damage_skips_disabled_targets_in_cone() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.party_experience = vec![10];
+        let stats = combat_class_stats(32).unwrap();
+        let disabled_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        let enabled_slot = disabled_slot + 1;
+        state.combat_actors[disabled_slot] =
+            CombatActorDescriptor::for_monster_placement(stats, 7, 4, 5, 0, 0);
+        state.combat_actors[disabled_slot].flags |= COMBAT_ACTOR_FLAG_STATUS_DISABLED;
+        state.combat_actors[enabled_slot] =
+            CombatActorDescriptor::for_monster_placement(stats, 8, 5, 5, 0, 0);
+
+        assert_eq!(
+            state.apply_directed_combat_spell_damage(
+                Some(0),
+                CombatDirectedSpellEffect::DeathWind,
+                &[(4, 5), (5, 5)],
+                &[],
+            ),
+            Some(CombatDirectedSpellDamageApplication {
+                effect: CombatDirectedSpellEffect::DeathWind,
+                applications: vec![CombatDirectedSpellSlotDamageApplication {
+                    target_slot: enabled_slot,
+                    raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
+                    damage_application: CombatWeaponDamageApplication::Monster {
+                        target_slot: enabled_slot,
+                        damage: CombatMonsterDamageOutcome {
+                            class: 32,
+                            raw_damage: COMBAT_INSTANT_KILL_DAMAGE,
+                            applied_damage: stats.max_hp,
+                            missed: false,
+                            instant_kill: true,
+                            killed: true,
+                            return_value: stats.reward_unit(),
+                            death_path: Some(CombatMonsterDeathPath::DefaultDropCheck),
+                        },
+                        credited_experience: Some(10 + u16::from(stats.reward_unit())),
+                    },
+                }],
+            })
+        );
+        assert_eq!(
+            state.combat_actors[disabled_slot].hp_or_wound,
+            stats.max_hp
+        );
+        assert!(state.combat_actors[enabled_slot].is_marked_dead());
     }
 
     #[test]

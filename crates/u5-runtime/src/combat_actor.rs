@@ -1548,7 +1548,10 @@ pub const fn resolve_active_target_spell_damage(
 }
 
 pub const fn directed_spell_actor_is_eligible(actor: CombatActorDescriptor) -> bool {
-    !actor.is_empty() && !actor.is_marked_dead() && !actor.is_hidden_or_unrevealed()
+    !actor.is_empty()
+        && !actor.is_marked_dead()
+        && !actor.is_hidden_or_unrevealed()
+        && !actor.is_status_disabled()
 }
 
 pub const fn combat_actor_is_present_not_dead(actor: CombatActorDescriptor) -> bool {

@@ -1155,6 +1155,102 @@
     }
 
     #[test]
+    fn shipped_tlk_corpus_parses_and_runner_smokes_sanitized_fields() {
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join(TOWNE_TLK_FILENAME).exists() {
+            return;
+        }
+
+        let corpora = [
+            (TOWNE_TLK_FILENAME, TlkFileClass::Towne.shipped_npc_count()),
+            (
+                DWELLING_TLK_FILENAME,
+                TlkFileClass::Dwelling.shipped_npc_count(),
+            ),
+            (
+                CASTLE_TLK_FILENAME,
+                TlkFileClass::Castle.shipped_npc_count(),
+            ),
+            (KEEP_TLK_FILENAME, TlkFileClass::Keep.shipped_npc_count()),
+        ];
+        let inputs = crate::tlk_runner::TlkRunInputs {
+            avatar_name: "Avatar",
+            moral_standing: 99,
+            dictionary: Some(&PUBLISHED_COMMON_WORD_DICTIONARY),
+            gold_payment_accepted: true,
+            gold_available: Some(9999),
+            ..Default::default()
+        };
+        let mut total_npcs = 0usize;
+        let mut total_fields = 0usize;
+        let mut dictionary_fields = 0usize;
+        let mut control_counts = [(0u8, 0usize); 7];
+        for (slot, code) in [0x84, 0x85, 0x86, 0x87, 0x88, 0x8c, 0xfe]
+            .into_iter()
+            .enumerate()
+        {
+            control_counts[slot].0 = code;
+        }
+
+        for (file_name, expected_npcs) in corpora {
+            let bytes = fs::read(game_dir.join(file_name)).unwrap();
+            let decoded = parse_tlk_bytes(&bytes).unwrap();
+            let raw = parse_tlk_blob_fields_raw(&bytes).unwrap();
+
+            assert_eq!(decoded.len(), expected_npcs, "{file_name}");
+            assert_eq!(raw.len(), expected_npcs, "{file_name}");
+            total_npcs += raw.len();
+
+            for npc_id in 1..=expected_npcs as u16 {
+                let fields = raw
+                    .get(&npc_id)
+                    .unwrap_or_else(|| panic!("{file_name} missing NPC id {npc_id}"));
+                assert!(
+                    fields.len() >= 5,
+                    "{file_name} NPC id {npc_id} has too few fields"
+                );
+                total_fields += fields.len();
+
+                if tlk_fields_use_common_word_dictionary(fields) {
+                    dictionary_fields += 1;
+                }
+
+                for field in fields {
+                    for byte in field.iter().copied() {
+                        if let Some((_, count)) =
+                            control_counts.iter_mut().find(|(code, _)| *code == byte)
+                        {
+                            *count += 1;
+                        }
+                    }
+
+                    let output = crate::tlk_runner::run_tlk_stream(field, &inputs);
+                    assert!(
+                        !matches!(
+                            output.stop,
+                            crate::tlk_runner::TlkRunStop::MalformedIntroducer(_)
+                        ),
+                        "{file_name} NPC id {npc_id} stopped at {:?}",
+                        output.stop
+                    );
+                    assert!(
+                        !output.text.contains("[w"),
+                        "{file_name} NPC id {npc_id} left an unresolved dictionary token"
+                    );
+                }
+            }
+        }
+
+        assert_eq!(
+            total_npcs,
+            TOWNE_TLK_NPCS + DWELLING_TLK_NPCS + CASTLE_TLK_NPCS + KEEP_TLK_NPCS
+        );
+        assert!(total_fields > total_npcs * 5);
+        assert!(dictionary_fields > 0);
+        assert!(control_counts.iter().any(|(_, count)| *count > 0));
+    }
+
+    #[test]
     fn town_talk_dialog_id_one_uses_sentinel_alias() {
         let dialogue = parse_tlk_bytes(&tlk_bytes(&[(
             2,
