@@ -290,7 +290,8 @@ pub use intro::{
     TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_COUNT, TITLE_TICK_FRAME_HEIGHT,
     TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TITLE_TICK_PALETTE_CYCLE,
     TitleBitAsset, TitleBitPlacement, intro_menu_action, load_miscmaps_cutscene_map,
-    parse_miscmaps_cutscene_map_file, title_tick_next_frame, title_tick_palette_indices,
+    parse_miscmaps_cutscene_map_file, require_miscmaps_cutscene_map, title_tick_next_frame,
+    title_tick_palette_indices,
 };
 pub use jimmy::{
     DOOR_AUTO_CLOSE_TURNS, DoorAutoCloseTick, JIMMY_CHEST_THRESHOLD_BIAS,

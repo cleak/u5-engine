@@ -330,7 +330,7 @@ Current worktree context when this TODO was refreshed:
 - Return-to-View now expands the MISCMAPS command stream into a per-title-tick
   playback timeline for preview ticks, cell-effect timing, fixed-wipe
   rectangles, eight-title-tick waits, trailing ticks, and one-shot actor draws.
-  The loader transposes the 19x4 on-disk strip source into the public 4x19
+  The loader copies the 4x19 on-disk strip source into the public 4x19
   visible preview, derives captions from LoadMapStrip, and applies the
   `(x, y + 7)` local cell-effect coordinate rule. Exact effect rasters remain
   presentation work.

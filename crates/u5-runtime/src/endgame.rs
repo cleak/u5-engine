@@ -736,9 +736,8 @@ impl PlayState {
     ) -> std::io::Result<MoveOutcome> {
         let messages = game_dir.map(require_endgame_messages).transpose()?;
         let tableau_map = game_dir
-            .map(|dir| load_miscmaps_cutscene_map(dir, ENDGAME_TABLEAU_CUTSCENE_MAP_RECORD))
-            .transpose()?
-            .flatten();
+            .map(|dir| require_miscmaps_cutscene_map(dir, ENDGAME_TABLEAU_CUTSCENE_MAP_RECORD))
+            .transpose()?;
         Ok(self.enter_endgame_with_resources(messages, tableau_map))
     }
 
@@ -856,13 +855,15 @@ impl PlayState {
     }
 
     pub fn settle_endgame_tableau_to_targets(&mut self) -> usize {
-        let mut steps = 0;
-        while steps < ENDGAME_TABLEAU_SETTLE_STEP_CAP
-            && self.advance_endgame_tableau_toward_targets()
-        {
-            steps += 1;
-        }
-        steps
+        endgame_tableau_actor_placements(&self.party)
+            .into_iter()
+            .map(|placement| {
+                self.step_endgame_tableau_slot_to_target(
+                    placement.active_object_slot,
+                    placement.target,
+                )
+            })
+            .sum()
     }
 
     fn step_endgame_tableau_slot_to_target(
@@ -983,6 +984,68 @@ impl PlayState {
             self.step_endgame_tableau_slot_to_target(slot, ENDGAME_TABLEAU_VICTORY_EXIT_TARGET);
             self.clear_endgame_tableau_slot_type_tile(slot);
         }
+    }
+
+    pub fn advance_endgame_victory_tableau_exit_step(&mut self) -> bool {
+        if let Some(lord_british) = self
+            .active_objects
+            .get_mut(ENDGAME_TABLEAU_LORD_BRITISH_SLOT)
+        {
+            if endgame_tableau_role_for_slot(ENDGAME_TABLEAU_LORD_BRITISH_SLOT, *lord_british)
+                == Some(EndgameTableauActorRole::LordBritish)
+            {
+                if lord_british.type_byte == ENDGAME_TABLEAU_LORD_BRITISH_TYPE {
+                    lord_british.type_byte = ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE;
+                    lord_british.tile = ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE;
+                    self.animation.tick_static_tiles();
+                    return true;
+                }
+                self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_LORD_BRITISH_SLOT);
+                self.animation.tick_static_tiles();
+                return true;
+            }
+        }
+
+        if self
+            .active_objects
+            .get(ENDGAME_TABLEAU_SCENE_MARKER_SLOT)
+            .copied()
+            .is_some_and(|object| {
+                endgame_tableau_role_for_slot(ENDGAME_TABLEAU_SCENE_MARKER_SLOT, object)
+                    == Some(EndgameTableauActorRole::SceneMarker)
+            })
+        {
+            if self.step_endgame_tableau_slot_once_to_target(
+                ENDGAME_TABLEAU_SCENE_MARKER_SLOT,
+                ENDGAME_TABLEAU_VICTORY_EXIT_TARGET,
+            ) {
+                return true;
+            }
+            self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_SCENE_MARKER_SLOT);
+            self.animation.tick_static_tiles();
+            return true;
+        }
+
+        for slot in 0..self.party.len().min(SAVE_PARTY_SIZE_MAX as usize) {
+            let Some(object) = self.active_objects.get(slot).copied() else {
+                continue;
+            };
+            if endgame_tableau_role_for_slot(slot, object)
+                != Some(EndgameTableauActorRole::PartyMember(slot as u8))
+            {
+                continue;
+            }
+            if self
+                .step_endgame_tableau_slot_once_to_target(slot, ENDGAME_TABLEAU_VICTORY_EXIT_TARGET)
+            {
+                return true;
+            }
+            self.clear_endgame_tableau_slot_type_tile(slot);
+            self.animation.tick_static_tiles();
+            return true;
+        }
+
+        false
     }
 
     pub fn endgame_tableau_is_settled(&self) -> bool {
@@ -1106,7 +1169,18 @@ impl PlayState {
             // keystroke until the closer is finished, then keeps the terminal
             // final panel active.
             if matches!(current.outcome, Some(EndgameOutcome::Victory)) {
+                if matches!(
+                    current.cinematic.step,
+                    crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau
+                ) && self.advance_endgame_victory_tableau_exit_step()
+                {
+                    if let Some(state) = self.endgame.as_ref() {
+                        self.message = state.current_cinematic_text();
+                    }
+                    return MoveOutcome::Observed;
+                }
                 if let Some(state) = self.endgame.as_mut() {
+                    let mut entered_throne_tableau = false;
                     if state.cinematic_is_finished() {
                         self.message = state.current_cinematic_text();
                     } else {
@@ -1114,18 +1188,16 @@ impl PlayState {
                         state.advance_cinematic();
                         let next_step = state.cinematic.step;
                         self.message = state.current_cinematic_text();
-                        if matches!(
+                        entered_throne_tableau = matches!(
                             (previous_step, next_step),
                             (
                                 crate::endgame_cinematic::EndgameCinematicStep::RiteMessage(_),
                                 crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau
-                            ) | (
-                                crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau,
-                                crate::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(0)
                             )
-                        ) {
-                            self.complete_endgame_victory_tableau();
-                        }
+                        );
+                    }
+                    if entered_throne_tableau {
+                        self.advance_endgame_victory_tableau_exit_step();
                     }
                     return MoveOutcome::Observed;
                 }

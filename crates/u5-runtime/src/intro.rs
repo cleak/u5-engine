@@ -234,6 +234,18 @@ pub fn load_miscmaps_cutscene_map(
     parse_miscmaps_cutscene_map_file(&bytes, record_index).map(Some)
 }
 
+pub fn require_miscmaps_cutscene_map(
+    game_dir: &Path,
+    record_index: usize,
+) -> io::Result<MiscmapsCutsceneMap> {
+    load_miscmaps_cutscene_map(game_dir, record_index)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("{MISCMAPS_DAT_FILE}: required cutscene map resource is missing"),
+        )
+    })
+}
+
 pub fn parse_miscmaps_cutscene_map_file(
     bytes: &[u8],
     record_index: usize,
@@ -274,14 +286,14 @@ pub fn parse_miscmaps_cutscene_map_file(
 /// offset (immediately after the cutscene section).
 pub const MISCMAPS_RTV_STRIP_SECTION_OFFSET: usize = MISCMAPS_CUTSCENE_SECTION_BYTES;
 /// `formats/location-dat.md §11` Return-to-View map strip section
-/// byte length: four strips stored as four 32-byte source rows each,
+/// byte length: four strips stored as four 32-byte source columns each,
 /// totalling `4 * 32 * 4 = 512` bytes. The Return-to-View loader
-/// transposes the visible 19x4 source cells into the public 4x19
+/// loads the visible 4x19 source cells into the public 4x19
 /// preview geometry.
 pub const MISCMAPS_RTV_STRIP_SECTION_BYTES: usize = 512;
-/// `formats/location-dat.md §11` per-strip row stride. Each strip
-/// is authored as four 32-byte source rows; the first 19 bytes per
-/// row carry tile data and the trailing 13 bytes are zero-padded.
+/// `formats/location-dat.md §11` per-strip column stride. Each strip
+/// is authored as four 32-byte source columns; the first 19 bytes per
+/// column carry tile data and the trailing 13 bytes are zero-padded.
 pub const MISCMAPS_RTV_STRIP_ROW_STRIDE: usize = 32;
 
 /// `formats/location-dat.md §11` Return-to-View command stream

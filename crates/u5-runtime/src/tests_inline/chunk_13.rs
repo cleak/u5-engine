@@ -4819,8 +4819,8 @@ fn question_dat_len_matches_shipped_total() {
 fn miscmaps_section_offsets_and_sizes_match_spec() {
     // formats/location-dat.md §11: MISCMAPS.DAT concatenates
     // three sections — four 11x11 cutscene maps padded to 16-byte
-    // rows (704 bytes), four 19x4 Return-to-View strips padded
-    // to 32-byte rows (512 bytes), and the 655-byte
+    // rows (704 bytes), four 4x19 Return-to-View strips padded
+    // to 32-byte columns (512 bytes), and the 655-byte
     // Return-to-View command stream. Promote the per-section
     // offsets, lengths, and row strides so a future loader does
     // not bake them as bare numbers.
@@ -15691,6 +15691,19 @@ fn endgame_real_handoff_requires_endmsg_dat_resource() {
 }
 
 #[test]
+fn endgame_real_handoff_requires_miscmaps_dat_resource() {
+    let dir = debug_game_dir();
+    write_synthetic_endmsg_dat(&dir);
+    let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+    let err = state.enter_endgame_from_game_dir(Some(&dir)).unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+    assert!(err.to_string().contains(MISCMAPS_DAT_FILE));
+    assert!(state.endgame.is_none());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn endgame_real_handoff_loads_miscmaps_record_three_tableau_grid() {
     let dir = debug_game_dir();
     write_synthetic_endmsg_dat(&dir);
@@ -15715,6 +15728,7 @@ fn endgame_real_handoff_loads_miscmaps_record_three_tableau_grid() {
 fn endgame_real_victory_requires_end_dat_resource() {
     let dir = debug_game_dir();
     write_synthetic_endmsg_dat(&dir);
+    write_synthetic_miscmaps_endgame_tableau(&dir);
     let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
     state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 1;
     state
@@ -15784,6 +15798,7 @@ fn doom_final_room_trigger_enters_endgame_without_room_rewrite() {
 fn doom_final_room_trigger_loads_dungeon_cbt_before_endgame_when_available() {
     let dir = debug_game_dir();
     write_synthetic_endmsg_dat(&dir);
+    write_synthetic_miscmaps_endgame_tableau(&dir);
     let scene = DungeonScene::new(40).unwrap();
     let mut record = synthetic_combat_arena_record();
     let source_base =
@@ -15840,6 +15855,7 @@ fn doom_final_room_trigger_loads_dungeon_cbt_before_endgame_when_available() {
 fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_marker() {
     let dir = debug_game_dir();
     write_synthetic_endmsg_dat(&dir);
+    write_synthetic_miscmaps_endgame_tableau(&dir);
     let scene = DungeonScene::new(40).unwrap();
     let mut record = synthetic_combat_arena_record();
     let source_base =
@@ -15922,9 +15938,10 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
     let endgame = state.endgame.as_ref().unwrap();
     assert_eq!(endgame.first_confirmation, None);
     assert!(endgame.messages.is_some());
+    assert_eq!(state.grid.len(), TOWN_GRID_BYTES);
     assert_eq!(
-        state.grid[dungeon_cell_index(DOOM_FINAL_ROOM_LEVEL, DOOM_FINAL_ROOM_X, DOOM_FINAL_ROOM_Y,)],
-        0xf0 | DOOM_FINAL_ROOM_SLOT
+        state.grid[6 * TOWN_GRID_SIDE + 4],
+        ENDGAME_TABLEAU_WALKABLE_TILE
     );
     assert!(!dungeon_room_clear_bit_is_set(
         &state.dungeon_room_clear_bitmap,
@@ -15940,6 +15957,7 @@ fn doom_final_room_successful_dungeon_cbt_combat_enters_endgame_from_absorbable_
 fn doom_final_room_defeated_dungeon_cbt_combat_does_not_enter_endgame() {
     let dir = debug_game_dir();
     write_synthetic_endmsg_dat(&dir);
+    write_synthetic_miscmaps_endgame_tableau(&dir);
     let scene = DungeonScene::new(40).unwrap();
     let mut record = synthetic_combat_arena_record();
     let source_base =
@@ -16048,6 +16066,7 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
 
     let dir = debug_game_dir();
     fs::write(dir.join("ENDMSG.DAT"), &bytes).unwrap();
+    write_synthetic_miscmaps_endgame_tableau(&dir);
     let mut loaded = dungeon_state(open_dungeon_record(), 0, 1, 1);
     loaded.party_names = vec![*b"AVATAR\0\0\0"];
     loaded
@@ -16112,13 +16131,23 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     // → origin closer → finished. That's 1 + 6 + 1 + 1 = 9 steps;
     // after which endgame remains active.
     state.resolve_endgame_confirmation(true);
-    assert!(
-        (0..state.party.len().min(SAVE_PARTY_SIZE_MAX as usize))
-            .chain([ENDGAME_TABLEAU_LORD_BRITISH_SLOT, ENDGAME_TABLEAU_SCENE_MARKER_SLOT])
-            .all(|slot| state.active_objects[slot].type_byte == 0
-                && state.active_objects[slot].tile == 0)
+    assert_eq!(
+        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
+        ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE
     );
-    for _ in 0..8 {
+    state.resolve_endgame_confirmation(true);
+    assert_eq!(
+        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
+        0
+    );
+
+    while (0..state.party.len().min(SAVE_PARTY_SIZE_MAX as usize))
+        .chain([ENDGAME_TABLEAU_SCENE_MARKER_SLOT])
+        .any(|slot| state.active_objects[slot].type_byte != 0 || state.active_objects[slot].tile != 0)
+    {
+        state.resolve_endgame_confirmation(true);
+    }
+    for _ in 0..9 {
         state.resolve_endgame_confirmation(true);
     }
     let endgame = state.endgame.as_ref().unwrap();
@@ -20373,7 +20402,10 @@ fn endgame_rendering_does_not_repopulate_gameplay_player_object() {
     state.enter_endgame();
     state.resolve_endgame_confirmation(true);
     state.resolve_endgame_confirmation(true);
-    for _ in 0..8 {
+    for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {
+        if state.active_objects[0].is_empty() {
+            break;
+        }
         state.resolve_endgame_confirmation(false);
     }
     assert!(state.active_objects[0].is_empty());

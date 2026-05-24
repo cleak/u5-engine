@@ -667,7 +667,6 @@ pub fn is_whirlpool_object(object: ActiveObject) -> bool {
 
 pub fn outdoor_combat_arena_index_for_object(object: ActiveObject) -> Option<usize> {
     outdoor_combat_arena_index_for_byte(object.type_byte)
-        .or_else(|| outdoor_combat_arena_index_for_byte(object.tile))
 }
 
 pub fn outdoor_combat_arena_index_for_byte(byte: u8) -> Option<usize> {

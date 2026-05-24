@@ -14266,6 +14266,45 @@
     }
 
     #[test]
+    fn terrain_combat_arena_selector_uses_active_object_type_not_tile() {
+        let record = CombatArenaRecord::from_record_bytes(&synthetic_combat_arena_record()).unwrap();
+        let invalid_type_with_arena_tile = ActiveObject {
+            type_byte: 0x10,
+            tile: 0x50,
+            x: 10,
+            y: 20,
+            z: 0,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+
+        assert_eq!(
+            outdoor_combat_arena_index_for_object(invalid_type_with_arena_tile),
+            None
+        );
+        let err = terrain_combat_setup_from_record(
+            WorldPlane::Britannia,
+            invalid_type_with_arena_tile,
+            &record,
+        )
+        .expect_err("tile/frame byte must not select the outdoor arena");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+
+        let pirate = ActiveObject {
+            type_byte: 0x2f,
+            tile: 0x10,
+            x: 10,
+            y: 20,
+            z: 0,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+        assert_eq!(outdoor_combat_arena_index_for_object(pirate), Some(1));
+    }
+
+    #[test]
     fn terrain_combat_local_brit_cbt_records_drive_all_outdoor_arenas_when_present() {
         let game_dir = std::path::Path::new(DEFAULT_GAME_DIR);
         if !game_dir.join(BRIT_CBT_FILE).exists() {

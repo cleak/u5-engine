@@ -4404,12 +4404,12 @@ fn render_endgame_tableau_viewport(
 
     for y in 0..ENDGAME_TABLEAU_HEIGHT {
         for x in 0..ENDGAME_TABLEAU_WIDTH {
-            let tile = if y < 3 { 0x0f } else { 0x05 };
-            blit_tile_id_to_viewport(&mut viewport, atlas, tile, x, y)?;
+            let tile = state.grid.get(y * TOWN_GRID_SIDE + x).copied().unwrap_or(0);
+            blit_tile_id_to_viewport(&mut viewport, atlas, usize::from(tile), x, y)?;
         }
     }
 
-    for (slot, object) in state.active_objects.iter().copied().enumerate() {
+    for (slot, object) in state.active_objects.iter().copied().enumerate().rev() {
         if endgame_tableau_role_for_slot(slot, object).is_none() {
             continue;
         }
@@ -5957,6 +5957,53 @@ mod tests {
             rgba.len(),
             (VISUAL_PLAY_FRAME_WIDTH as usize) * (VISUAL_PLAY_FRAME_HEIGHT as usize) * 4
         );
+    }
+
+    #[test]
+    fn endgame_tableau_viewport_uses_loaded_grid_and_low_slot_top_order() {
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.grid = vec![0; TOWN_GRID_SIDE * TOWN_GRID_SIDE];
+        state.grid[0] = 0x21;
+        state
+            .active_objects
+            .resize(u5_runtime::OOL_SLOTS, ActiveObject::empty());
+        state.active_objects[31] = ActiveObject {
+            type_byte: 0x7c,
+            tile: 0x7c,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+        state.active_objects[6] = ActiveObject {
+            type_byte: 0x0e,
+            tile: 0x0e,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+        state.active_objects[0] = ActiveObject {
+            type_byte: 0x44,
+            tile: 0x44,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        };
+
+        let viewport = render_endgame_tableau_viewport(&state, &atlas).unwrap();
+
+        assert_eq!(viewport.pixels[0], 0x21 % 16);
+        let overlap_pixel = 5 * TILE_ATLAS_SIDE * viewport.width + 5 * TILE_ATLAS_SIDE;
+        assert_eq!(viewport.pixels[overlap_pixel], 0x44 % 16);
     }
 
     #[test]
