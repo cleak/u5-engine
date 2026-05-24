@@ -496,6 +496,7 @@ fn visual_route_reload_checkpoints(case_label: &str) -> &'static [usize] {
         | "route-reload-chasm-underworld-pass"
         | "route-reload-ship-xit-skiff-pass"
         | "route-reload-dungeon-ladder-down-up"
+        | "route-reload-dungeon-ladder-down-up-route"
         | "route-reload-dungeon-surface-exit-return-world" => &[1],
         "route-reload-underworld-fixed-hidden-stack-search-get-search"
         | "route-reload-horse-trader-horse-and-rider-buy-pass" => &[2],
@@ -1461,6 +1462,13 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         VisualRouteSuiteCase {
             label: "route-minoc-fixed-hidden-daily-search-get-repeat",
             frame_kind: "visual route town frame",
+            options: fixed_hidden_daily.clone(),
+            script: &["S6", "G6", "S6"],
+            configure: Some(seed_visual_route_minoc_fixed_hidden_daily),
+        },
+        VisualRouteSuiteCase {
+            label: "route-reload-minoc-fixed-hidden-daily-search-get-repeat",
+            frame_kind: "visual route town frame",
             options: fixed_hidden_daily,
             script: &["S6", "G6", "S6"],
             configure: Some(seed_visual_route_minoc_fixed_hidden_daily),
@@ -1484,6 +1492,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         },
         VisualRouteSuiteCase {
             label: "route-castle-dispatcher-board-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-dispatcher-refusals",
             frame_kind: "visual route town frame",
             options: PlayOptions {
                 target: PlayTarget::Town(castle),
@@ -1765,6 +1783,18 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         },
         VisualRouteSuiteCase {
             label: "route-reload-dungeon-ladder-down-up",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &[">", "<"],
+            configure: Some(seed_visual_route_dungeon_ladder),
+        },
+        VisualRouteSuiteCase {
+            label: "route-reload-dungeon-ladder-down-up-route",
             frame_kind: "visual route dungeon frame",
             options: PlayOptions {
                 target: PlayTarget::Dungeon(dungeon),
@@ -2426,7 +2456,27 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_combat_fire_field),
         },
         VisualRouteSuiteCase {
+            label: "route-combat-field-fire-marker-placement",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1FGI6"],
+            configure: Some(seed_visual_route_combat_fire_field),
+        },
+        VisualRouteSuiteCase {
             label: "route-combat-field-poison-marker",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1GIN6"],
+            configure: Some(seed_visual_route_combat_poison_field),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-field-poison-marker-placement",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
                 target: PlayTarget::World(WorldPlane::Britannia),
@@ -2446,7 +2496,27 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_combat_sleep_field),
         },
         VisualRouteSuiteCase {
+            label: "route-combat-field-sleep-marker-placement",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1GIZ6"],
+            configure: Some(seed_visual_route_combat_sleep_field),
+        },
+        VisualRouteSuiteCase {
             label: "route-combat-field-energy-marker",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1GIS6"],
+            configure: Some(seed_visual_route_combat_energy_field),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-field-energy-marker-placement",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
                 target: PlayTarget::World(WorldPlane::Britannia),
@@ -2464,6 +2534,26 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             },
             script: &["C1AG6"],
             configure: Some(seed_visual_route_combat_dispel_field),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-field-dispel-fire-marker",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1AG6"],
+            configure: Some(seed_visual_route_combat_dispel_field),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-field-dispel-empty-refusal",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1AG6"],
+            configure: Some(seed_visual_route_combat_dispel_empty),
         },
         VisualRouteSuiteCase {
             label: "route-combat-utility-vanish-failure",
@@ -2686,6 +2776,26 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-terrain-combat-xit-no-foes-clean-exit",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["setup:terrain-combat-no-foes", "X"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-terrain-combat-out-of-arena-leave",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["setup:terrain-combat-east-edge", "d"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
             label: "route-dungeon-room-party-entry",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
@@ -2856,6 +2966,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_fountain),
         },
         VisualRouteSuiteCase {
+            label: "route-castle-surface-fountain-look",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["l6", "1"],
+            configure: Some(seed_visual_route_fountain),
+        },
+        VisualRouteSuiteCase {
             label: "route-yew-wanted-poster-look",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -2873,6 +2993,26 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 ..PlayOptions::default()
             },
             script: &["l6", "Y", "Horse"],
+            configure: Some(seed_visual_route_wishing_well),
+        },
+        VisualRouteSuiteCase {
+            label: "route-buccaneers-den-wishing-well-horse",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(Scene::new(0x18).expect("Buccaneer's Den scene is valid")),
+                ..PlayOptions::default()
+            },
+            script: &["l6", "Y", "Horse"],
+            configure: Some(seed_visual_route_wishing_well),
+        },
+        VisualRouteSuiteCase {
+            label: "route-buccaneers-den-wishing-well-ferrari-grants-horse",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(Scene::new(0x18).expect("Buccaneer's Den scene is valid")),
+                ..PlayOptions::default()
+            },
+            script: &["l6", "Y", "Ferrari"],
             configure: Some(seed_visual_route_wishing_well),
         },
         VisualRouteSuiteCase {
@@ -3101,6 +3241,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-castle-extended-walk-and-rest",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["s"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
             label: "route-dungeon-extended-turn-and-search",
             frame_kind: "visual route dungeon frame",
             options: PlayOptions {
@@ -3124,6 +3274,18 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             script: &["empty", "empty", "empty", "empty", "empty"],
             configure: None,
         },
+        VisualRouteSuiteCase {
+            label: "route-doom-combat-quit-defeat",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(doom),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["setup:dungeon-room-party-entry", "q"],
+            configure: None,
+        },
     ];
     cases.extend([
         VisualRouteSuiteCase {
@@ -3145,6 +3307,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             },
             script: &["C1IL", "I", "N12", "R"],
             configure: Some(seed_visual_route_party_overlay_workflows),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-talk-ordinary-keyword-route",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["T", "6", "NAME"],
+            configure: Some(seed_visual_route_talk_ordinary_keyword),
         },
         VisualRouteSuiteCase {
             label: "route-dungeon-ignite-torch-route",
@@ -3205,6 +3377,8 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         visual_doom_combat_case("route-doom-combat-view-label-only", doom, &["", "V"]),
         visual_doom_combat_case("route-doom-combat-look-label-only", doom, &["", "L"]),
         visual_doom_combat_case("route-doom-combat-attack-direction", doom, &["", "A6"]),
+        visual_doom_combat_case("route-doom-combat-escape-abort", doom, &["", "\x1b"]),
+        visual_doom_combat_case("route-doom-combat-music-toggle", doom, &["", "\u{13}"]),
         visual_doom_combat_case("route-doom-combat-select-clear", doom, &["", "0"]),
         visual_doom_combat_case("route-doom-combat-select-one", doom, &["", "1"]),
         visual_doom_combat_case("route-doom-combat-select-six", doom, &["", "6"]),
@@ -3354,6 +3528,35 @@ fn seed_visual_route_talk_status_tile(state: &mut PlayState, status_tile: u8) {
         object.type_byte = 1;
         object.tile = status_tile;
     }
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_talk_ordinary_keyword(state: &mut PlayState) {
+    state.player.x = 15;
+    state.player.y = 15;
+    state.player.facing = Direction::East;
+    state.sync_player_object();
+
+    let mut schedule = [0u8; 16];
+    schedule[3..6].copy_from_slice(&[16, 16, 16]);
+    schedule[6..9].copy_from_slice(&[15, 15, 15]);
+    schedule[12..16].copy_from_slice(&[0, 8, 16, 20]);
+    state.load_scheduled_npcs(&[
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot: 1,
+            type_byte: 1,
+            dialog_id: 2,
+            schedule,
+            name: None,
+        },
+    ]);
     state.mark_visibility_dirty();
 }
 
@@ -3772,6 +3975,14 @@ fn seed_visual_route_combat_energy_field(state: &mut PlayState) {
 }
 
 fn seed_visual_route_combat_dispel_field(state: &mut PlayState) {
+    seed_visual_route_combat_dispel_route(state, true);
+}
+
+fn seed_visual_route_combat_dispel_empty(state: &mut PlayState) {
+    seed_visual_route_combat_dispel_route(state, false);
+}
+
+fn seed_visual_route_combat_dispel_route(state: &mut PlayState, place_field: bool) {
     state.party = vec![route_visual_party_member(0, b'A', b'G', 20, 20)];
     state.party_names = default_party_names(1);
     state.party_experience = vec![0];
@@ -3792,7 +4003,9 @@ fn seed_visual_route_combat_dispel_field(state: &mut PlayState) {
 
     let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
     active_objects[0] = visual_route_combat_active_object(0x4c, 5, 5, 0);
-    active_objects[6] = visual_route_combat_active_object(COMBAT_FIELD_KIND_FIRE, 6, 5, 0);
+    if place_field {
+        active_objects[6] = visual_route_combat_active_object(COMBAT_FIELD_KIND_FIRE, 6, 5, 0);
+    }
     state
         .enter_combat_frame(active_objects, actors)
         .expect("visual route combat field dispel frame should seed");
@@ -4611,23 +4824,33 @@ fn apply_visual_route_command(
         return Ok(PlayInputDisposition::Continue);
     }
     if lower == "setup:terrain-combat-party-entry" {
-        seed_visual_route_combat_entry_party(state);
-        let trigger = ActiveObject {
-            type_byte: 0x50,
-            tile: 0xc0,
-            x: state.player.x,
-            y: state.player.y,
-            z: WorldPlane::Britannia.save_floor(),
-            phase: STEADY_PHASE,
-            aux1: 0,
-            aux3: 0,
-        };
-        state.enter_terrain_combat_from_world_object(
-            game_dir,
-            WorldPlane::Britannia,
-            1,
-            trigger,
-        )?;
+        seed_visual_route_terrain_combat_party_entry(state, game_dir)?;
+        return Ok(PlayInputDisposition::Continue);
+    }
+    if lower == "setup:terrain-combat-no-foes" {
+        seed_visual_route_terrain_combat_party_entry(state, game_dir)?;
+        for slot in COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS {
+            state.combat_actors[slot].clear();
+            if let Some(object) = state.active_objects.get_mut(slot) {
+                *object = ActiveObject::empty();
+            }
+        }
+        state.active_player = Some(0);
+        state.pending_combat_actor_slot = Some(0);
+        return Ok(PlayInputDisposition::Continue);
+    }
+    if lower == "setup:terrain-combat-east-edge" {
+        seed_visual_route_terrain_combat_party_entry(state, game_dir)?;
+        state.active_player = Some(0);
+        state.pending_combat_actor_slot = Some(0);
+        if let Some(actor) = state.combat_actors.get_mut(0) {
+            actor.x = (COMBAT_ARENA_SIDE - 1) as u8;
+            actor.y = 5;
+        }
+        if let Some(object) = state.active_objects.get_mut(0) {
+            object.x = COMBAT_ARENA_SIDE - 1;
+            object.y = 5;
+        }
         return Ok(PlayInputDisposition::Continue);
     }
     if lower == "setup:dungeon-room-party-entry" {
@@ -4679,6 +4902,25 @@ fn apply_visual_route_command(
         return handle_play_key_input(state, '\n', "", game_dir);
     };
     handle_play_key_input(state, key, chars.as_str(), game_dir)
+}
+
+fn seed_visual_route_terrain_combat_party_entry(
+    state: &mut PlayState,
+    game_dir: &Path,
+) -> io::Result<()> {
+    seed_visual_route_combat_entry_party(state);
+    let trigger = ActiveObject {
+        type_byte: 0x50,
+        tile: 0xc0,
+        x: state.player.x,
+        y: state.player.y,
+        z: WorldPlane::Britannia.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    };
+    state.enter_terrain_combat_from_world_object(game_dir, WorldPlane::Britannia, 1, trigger)?;
+    Ok(())
 }
 
 fn visual_route_step_label(route_label: &str, step: usize, command: &str) -> String {
@@ -9132,7 +9374,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 247);
+        assert_eq!(cases.len(), 266);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -9217,6 +9459,7 @@ mod tests {
             "route-reload-underworld-fixed-hidden-stack-search-get-search",
             "route-blackthorn-fixed-hidden-zero-key-search",
             "route-minoc-fixed-hidden-daily-search-get-repeat",
+            "route-reload-minoc-fixed-hidden-daily-search-get-repeat",
             "route-castle-wooden-box-use",
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
@@ -9228,10 +9471,12 @@ mod tests {
         );
         for label in [
             "route-castle-dispatcher-board-refusal",
+            "route-castle-dispatcher-refusals",
             "route-castle-dispatcher-fire-refusal",
             "route-castle-command-workflow-overlays",
             "route-castle-mix-ready-order-route",
             "route-castle-party-overlay-routes",
+            "route-castle-talk-ordinary-keyword-route",
             "route-castle-hourly-provision-poison-pass",
             "route-castle-hourly-poison-starvation-pass",
             "route-castle-hourly-ring-regeneration-pass",
@@ -9315,6 +9560,7 @@ mod tests {
         );
         for label in [
             "route-reload-dungeon-ladder-down-up",
+            "route-reload-dungeon-ladder-down-up-route",
             "route-reload-dungeon-surface-exit-return-world",
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
@@ -9407,10 +9653,16 @@ mod tests {
             "route-combat-directed-death-wind-cone",
             "route-combat-directed-flame-wind-cone",
             "route-combat-field-fire-marker",
+            "route-combat-field-fire-marker-placement",
             "route-combat-field-poison-marker",
+            "route-combat-field-poison-marker-placement",
             "route-combat-field-sleep-marker",
+            "route-combat-field-sleep-marker-placement",
             "route-combat-field-energy-marker",
+            "route-combat-field-energy-marker-placement",
             "route-combat-dispel-field-marker",
+            "route-combat-field-dispel-fire-marker",
+            "route-combat-field-dispel-empty-refusal",
             "route-combat-magic-missile-target",
             "route-combat-fireball-target",
             "route-combat-reveal-hidden-target",
@@ -9429,6 +9681,8 @@ mod tests {
             "route-combat-kill-gargoyle-lava-marker",
             "route-combat-kill-shadowlord-vanish-marker",
             "route-terrain-combat-party-entry",
+            "route-terrain-combat-xit-no-foes-clean-exit",
+            "route-terrain-combat-out-of-arena-leave",
             "route-dungeon-room-party-entry",
             "route-dungeon-level-up-down-spells",
             "route-dungeon-field-cycle-spells",
@@ -9499,6 +9753,11 @@ mod tests {
         assert!(
             cases
                 .iter()
+                .any(|case| case.label == "route-castle-surface-fountain-look")
+        );
+        assert!(
+            cases
+                .iter()
                 .any(|case| case.label == "route-yew-wanted-poster-look")
         );
         assert!(
@@ -9506,6 +9765,12 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-buccaneers-den-wishing-well")
         );
+        for label in [
+            "route-buccaneers-den-wishing-well-horse",
+            "route-buccaneers-den-wishing-well-ferrari-grants-horse",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert!(
             cases
                 .iter()
@@ -9609,6 +9874,7 @@ mod tests {
         for label in [
             "route-britannia-extended-exploration",
             "route-castle-extended-walk-and-save",
+            "route-castle-extended-walk-and-rest",
             "route-dungeon-extended-turn-and-search",
             "route-doom-combat-multi-round-pass",
             "route-endgame-class-tableau-restoration",
@@ -9708,7 +9974,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 757);
+        assert_eq!(reports.len(), 810);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -9768,9 +10034,11 @@ mod tests {
         );
         assert!(manifest.contains("route-blackthorn-fixed-hidden-zero-key-search-01-s6"));
         assert!(manifest.contains("route-minoc-fixed-hidden-daily-search-get-repeat-03-s6"));
+        assert!(manifest.contains("route-reload-minoc-fixed-hidden-daily-search-get-repeat-03-s6"));
         assert!(manifest.contains("route-castle-wooden-box-use-01-ub"));
         assert!(manifest.contains("route-castle-save-refusal-02-n"));
         assert!(manifest.contains("route-castle-dispatcher-board-refusal-01-b"));
+        assert!(manifest.contains("route-castle-dispatcher-refusals-01-b"));
         assert!(manifest.contains("route-castle-dispatcher-fire-refusal-01-f6"));
         assert!(manifest.contains("route-castle-command-workflow-overlays-04-n23"));
         assert!(manifest.contains("route-castle-mix-ready-order-route-04-n23"));
@@ -9780,6 +10048,7 @@ mod tests {
         assert!(manifest.contains("route-castle-hourly-ring-regeneration-pass-01-empty"));
         assert!(manifest.contains("route-castle-talk-status-sleeping-refusal-01-t6"));
         assert!(manifest.contains("route-castle-talk-status-praying-refusal-01-t6"));
+        assert!(manifest.contains("route-castle-talk-ordinary-keyword-route-03-name"));
         assert!(manifest.contains("route-castle-native-stair-up-route-01-d"));
         assert!(manifest.contains("route-castle-native-stair-down-route-01-d"));
         assert!(manifest.contains("route-castle-native-stair-cross-route-01-w"));
@@ -9803,6 +10072,11 @@ mod tests {
         assert!(manifest.contains("route-dungeon-ladder-down-up-route-02-_"));
         assert!(manifest.contains(&visual_route_step_label(
             "route-reload-dungeon-ladder-down-up",
+            2,
+            "<"
+        )));
+        assert!(manifest.contains(&visual_route_step_label(
+            "route-reload-dungeon-ladder-down-up-route",
             2,
             "<"
         )));
@@ -9863,10 +10137,16 @@ mod tests {
         assert!(manifest.contains("route-combat-directed-death-wind-cone-01-c1cgiv6"));
         assert!(manifest.contains("route-combat-directed-flame-wind-cone-01-c1fhi6"));
         assert!(manifest.contains("route-combat-field-fire-marker-01-c1fgi6"));
+        assert!(manifest.contains("route-combat-field-fire-marker-placement-01-c1fgi6"));
         assert!(manifest.contains("route-combat-field-poison-marker-01-c1gin6"));
+        assert!(manifest.contains("route-combat-field-poison-marker-placement-01-c1gin6"));
         assert!(manifest.contains("route-combat-field-sleep-marker-01-c1giz6"));
+        assert!(manifest.contains("route-combat-field-sleep-marker-placement-01-c1giz6"));
         assert!(manifest.contains("route-combat-field-energy-marker-01-c1gis6"));
+        assert!(manifest.contains("route-combat-field-energy-marker-placement-01-c1gis6"));
         assert!(manifest.contains("route-combat-dispel-field-marker-01-c1ag6"));
+        assert!(manifest.contains("route-combat-field-dispel-fire-marker-01-c1ag6"));
+        assert!(manifest.contains("route-combat-field-dispel-empty-refusal-01-c1ag6"));
         assert!(manifest.contains("route-combat-magic-missile-target-01-c1gp7"));
         assert!(manifest.contains("route-combat-fireball-target-01-c1fv7"));
         assert!(manifest.contains("route-combat-reveal-hidden-target-01-c1qw"));
@@ -9888,6 +10168,8 @@ mod tests {
             manifest
                 .contains("route-terrain-combat-party-entry-01-setup_terrain-combat-party-entry")
         );
+        assert!(manifest.contains("route-terrain-combat-xit-no-foes-clean-exit-02-x"));
+        assert!(manifest.contains("route-terrain-combat-out-of-arena-leave-02-d"));
         assert!(
             manifest.contains("route-dungeon-room-party-entry-01-setup_dungeon-room-party-entry")
         );
@@ -9906,8 +10188,13 @@ mod tests {
         assert!(manifest.contains("route-shop-sage-topic-paid-success-route-02-y"));
         assert!(manifest.contains("route-shop-sage-topic-short-funds-route-02-y"));
         assert!(manifest.contains("route-castle-fountain-look-02-1"));
+        assert!(manifest.contains("route-castle-surface-fountain-look-02-1"));
         assert!(manifest.contains("route-yew-wanted-poster-look-01-l6"));
         assert!(manifest.contains("route-buccaneers-den-wishing-well-03-horse"));
+        assert!(manifest.contains("route-buccaneers-den-wishing-well-horse-03-horse"));
+        assert!(
+            manifest.contains("route-buccaneers-den-wishing-well-ferrari-grants-horse-03-ferrari")
+        );
         assert!(manifest.contains("route-castle-death-vision-look-02-1"));
         assert!(manifest.contains("route-blackthorn-audience-correct-02-ahm"));
         assert!(manifest.contains("route-blackthorn-audience-wrong-02-wrong"));
@@ -9937,6 +10224,8 @@ mod tests {
         assert!(manifest.contains("route-doom-combat-select-player-clear-02-0"));
         assert!(manifest.contains("route-doom-combat-select-player-one-02-1"));
         assert!(manifest.contains("route-doom-combat-select-player-six-02-6"));
+        assert!(manifest.contains("route-doom-combat-escape-abort-02-_"));
+        assert!(manifest.contains("route-doom-combat-music-toggle-02-_"));
         assert!(manifest.contains("route-doom-combat-step-east-02-d"));
         assert!(manifest.contains("route-doom-combat-direct-step-east-02-d"));
         assert!(manifest.contains("route-doom-combat-d-refusal-02-d"));
@@ -9949,9 +10238,11 @@ mod tests {
         assert!(manifest.contains("route-doom-combat-ready-prompt-02-r"));
         assert!(manifest.contains("route-doom-combat-yell-word-02-yfallax"));
         assert!(manifest.contains("route-doom-combat-xit-foes-remain-02-x"));
+        assert!(manifest.contains("route-doom-combat-quit-defeat-02-q"));
         assert!(manifest.contains("route-endgame-class-tableau-restoration-01-y"));
         assert!(manifest.contains("route-britannia-extended-exploration-12-empty"));
         assert!(manifest.contains("route-castle-extended-walk-and-save-09-z"));
+        assert!(manifest.contains("route-castle-extended-walk-and-rest-01-s"));
         assert!(manifest.contains("route-dungeon-extended-turn-and-search-09-s6"));
         assert!(manifest.contains("route-doom-combat-multi-round-pass-05-empty"));
         assert!(!manifest.contains("Avatar"));
