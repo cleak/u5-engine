@@ -387,6 +387,10 @@ Current worktree context when this TODO was refreshed:
 - TLK `0x85` accepted toll payments debit gold, increment the toll-progress
   counter, and apply the published milestone karma behavior from
   `cleak/u5-spec#27`.
+- The shipped `.TLK` asset corpus has a sanitized runtime test that scans raw
+  fields for public side-effect controls without committing dialogue text:
+  action-dispatch grants `A`, `C`, `F`, `J`, and `K`, plus `0x85` payments,
+  `0x87` follow-up scans, IF/ELSE controls, and ASK-PARTY-NAME prompts.
 - Hourly poison and starvation follow the latest public `cleak/u5-spec#50`
   guidance: poison is fixed `-1 HP` per poisoned living member, and starvation
   rolls `1..=8` independently for each non-dead slot.
@@ -1014,8 +1018,8 @@ Goal: turn diagnostic interactions into game-like content.
     without accidental joins.
   - Remaining work:
     - exact audit of every authored schedule/AI edge,
-    - conversation side-effect audit beyond the currently known action letters,
-    - shop/service conversations,
+    - exact authored keyword paths for content-specific conversation effects,
+    - broader shop/service conversation content audits,
     - NPC memory flags such as thanked/picked/quest state.
 
 - Encounters.

@@ -1251,6 +1251,119 @@
     }
 
     #[test]
+    fn shipped_tlk_corpus_contains_public_action_payment_and_flag_controls() {
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join(TOWNE_TLK_FILENAME).exists() {
+            return;
+        }
+
+        let corpora = [
+            (TOWNE_TLK_FILENAME, TlkFileClass::Towne.shipped_npc_count()),
+            (
+                DWELLING_TLK_FILENAME,
+                TlkFileClass::Dwelling.shipped_npc_count(),
+            ),
+            (
+                CASTLE_TLK_FILENAME,
+                TlkFileClass::Castle.shipped_npc_count(),
+            ),
+            (KEEP_TLK_FILENAME, TlkFileClass::Keep.shipped_npc_count()),
+        ];
+        let inputs = crate::tlk_runner::TlkRunInputs {
+            avatar_name: "Avatar",
+            moral_standing: 99,
+            dictionary: Some(&PUBLISHED_COMMON_WORD_DICTIONARY),
+            gold_payment_accepted: true,
+            gold_available: Some(9999),
+            ..Default::default()
+        };
+
+        let mut action_arg_counts = [0usize; 11];
+        let mut surfaced_action_count = 0usize;
+        let mut gold_payment_controls = 0usize;
+        let mut surfaced_gold_payments = 0usize;
+        let mut set_flag_controls = 0usize;
+        let mut if_else_controls = 0usize;
+        let mut ask_party_controls = 0usize;
+
+        for (file_name, expected_npcs) in corpora {
+            let bytes = fs::read(game_dir.join(file_name)).unwrap();
+            let raw = parse_tlk_blob_fields_raw(&bytes).unwrap();
+
+            for npc_id in 2..=expected_npcs as u16 {
+                let fields = raw
+                    .get(&npc_id)
+                    .unwrap_or_else(|| panic!("{file_name} missing NPC id {npc_id}"));
+                for field in fields {
+                    let mut idx = 0usize;
+                    while idx < field.len() {
+                        match field[idx] {
+                            TLK_CODE_ACTION_DISPATCH if idx + 1 < field.len() => {
+                                let arg = field[idx + 1] & 0x7F;
+                                if (b'A'..=b'K').contains(&arg) {
+                                    action_arg_counts[usize::from(arg - b'A')] += 1;
+                                }
+                                idx += 2;
+                            }
+                            TLK_CODE_GOLD_PAYMENT if idx + 3 < field.len() => {
+                                gold_payment_controls += 1;
+                                idx += 4;
+                            }
+                            TLK_CODE_SET_FLAG => {
+                                set_flag_controls += 1;
+                                idx += 1;
+                            }
+                            TLK_CODE_ASK_PARTY_NAME => {
+                                ask_party_controls += 1;
+                                idx += 1;
+                            }
+                            TLK_CODE_IF_ELSE if idx + 1 < field.len() => {
+                                if_else_controls += 1;
+                                idx += 2;
+                            }
+                            TLK_CODE_IF_ELSE_ALT if idx + 2 < field.len() => {
+                                if_else_controls += 1;
+                                idx += 3;
+                            }
+                            _ => idx += 1,
+                        }
+                    }
+
+                    let output = crate::tlk_runner::run_tlk_stream(field, &inputs);
+                    surfaced_action_count += output.action_grants.len();
+                    surfaced_gold_payments += output
+                        .events
+                        .iter()
+                        .filter(|event| {
+                            matches!(event, crate::tlk_runner::TlkRunEvent::GoldPayment { .. })
+                        })
+                        .count();
+                }
+            }
+        }
+
+        for (letter, description) in [
+            (b'A', "food grants"),
+            (b'C', "ordinary key grants"),
+            (b'F', "Grapple/Klimb gear grants"),
+            (b'J', "Black Badge grants"),
+            (b'K', "skull/special-key grants"),
+        ] {
+            let index = usize::from(letter - b'A');
+            assert!(
+                action_arg_counts[index] > 0,
+                "asset TLK corpus should contain public {description}"
+            );
+        }
+        assert!(surfaced_action_count > 0);
+        assert!(gold_payment_controls > 0);
+        assert!(surfaced_gold_payments > 0);
+        assert!(set_flag_controls > 0);
+        assert!(if_else_controls > 0);
+        assert!(ask_party_controls > 0);
+    }
+
+    #[test]
     fn shipped_npc_roster_corpus_matches_public_catalog_counts() {
         let game_dir = Path::new(DEFAULT_GAME_DIR);
         if !game_dir.join(TOWNE_NPC_FILENAME).exists() {
