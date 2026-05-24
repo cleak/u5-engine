@@ -91,12 +91,13 @@ audit:
 - `cargo run -- --save-frame-suite target\audit-frame-suite C:\Games\U5-Clean`
   — 13 PNGs, every frame nonblank with stable hashes.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 239 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 247 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including horse-trader
   purchases, spell routes for Locate, Light/Open, restore, active effects,
-  dungeon levels, dungeon fields/dispel, dungeon Open chest, and broad Doom
-  combat command routes covering digit selection, direct movement, command
-  refusals/prompts, Ready, Yell, and X-it.
+  directed Sleep/Poison Wind/Death Wind/Flame Wind combat casts, dungeon levels,
+  dungeon fields/dispel, dungeon Open chest, and broad Doom combat command routes
+  covering digit selection, direct movement, command refusals/prompts, Ready,
+  Yell, and X-it.
 - `cargo fmt -- --check` passed, and `git diff --check` reported only
   CRLF-normalization warnings.
 

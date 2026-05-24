@@ -17,43 +17,45 @@ use image::{ImageBuffer, Rgba};
 
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX,
-    BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB, COMBAT_ARENA_SIDE, CURE_COST,
-    CURE_SPELL_INDEX, ChargenSession, ChargenSessionResult, ChargenSessionStep,
-    DEATH_VISION_OBJECT_CLASS, DEFAULT_CLIMB_STAT, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
-    DISPEL_FIELD_SPELL_INDEX, DUNGEON_LEVEL_SPELL_COST, Direction, DungeonScene, EGA_PALETTE_RGB,
-    ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX,
-    FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
-    FIRST_PLAYABLE_FULL_SHIP_HULL, FixedCellFont, GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX,
-    GameClock, GraphicImage, GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer,
-    Herbalist, IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP,
-    INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE,
-    INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y,
-    INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn,
-    IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
-    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB, COMBAT_ACTOR_FLAG_SELECTABLE_80,
+    COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_PARTY_ACTOR_SLOTS,
+    CURE_COST, CURE_SPELL_INDEX, ChargenSession, ChargenSessionResult, ChargenSessionStep,
+    CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
+    DEFAULT_CLIMB_STAT, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX,
+    DUNGEON_LEVEL_SPELL_COST, Direction, DungeonScene, EGA_PALETTE_RGB, ENDGAME_TABLEAU_HEIGHT,
+    ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, FIELD_SPELL_COST,
+    FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
+    FLAME_WIND_COST, FLAME_WIND_SPELL_INDEX, FixedCellFont, GREAT_HEAL_COST,
+    GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage, GuildShop, HEAL_COST, HEAL_SPELL_INDEX,
+    HORSE_PARKED_FIRST, Healer, Herbalist, IN_WIS_COST, IN_WIS_SPELL_INDEX,
+    INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
+    INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X,
+    INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
+    INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX,
+    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, NEGATE_MAGIC_COST,
     NEGATE_MAGIC_SPELL_INDEX, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST,
     PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, POISON_FIELD_SPELL_INDEX,
-    PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
-    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, ProportionalFont,
-    ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, RESURRECT_COST,
-    RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
-    ReturnToViewFrameKind, SLEEP_FIELD_SPELL_INDEX, SPECIAL_ITEM_OWNED_VALUE,
-    SPECIAL_ITEM_SPYGLASS_INDEX, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
-    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene, Shipwright, Stable, StoryRecords,
-    TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
-    TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS,
-    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
-    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X,
-    TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE,
-    Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset,
-    TitleBitImages, TitleBitPlacement, TransportState, U4TransferOverrides, U4TransferSource,
-    UUS_POR_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WorldPlane, WorldReturn, X_RAY_COST,
-    X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, commit_chargen_save, commit_u4_transfer_save,
-    default_party_equipment, default_party_intelligence, default_party_names,
-    default_party_stay_counters, dungeon_cell_index, endgame_tableau_role_for_slot,
-    handle_play_key_input, hash_bytes, input_case_fold, input_function_key_code,
-    input_keypad_digit_direction_code,
+    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST,
+    PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
+    ProportionalFont, ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX,
+    RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
+    ReturnToViewFrameKind, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
+    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX, STATS_PANEL_TEXT_BOTTOM,
+    STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene,
+    Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT,
+    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
+    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
+    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
+    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth,
+    TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState,
+    U4TransferOverrides, U4TransferSource, UUS_POR_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
+    WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport,
+    combat_class_stats, commit_chargen_save, commit_u4_transfer_save, default_party_equipment,
+    default_party_intelligence, default_party_names, default_party_stay_counters,
+    dungeon_cell_index, endgame_tableau_role_for_slot, handle_play_key_input, hash_bytes,
+    input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -72,7 +74,8 @@ use u5_runtime::{
     },
     shop_session::ActiveShopSession,
     stats_panel_active_cursor_visible, summarize_return_to_view_preview,
-    summarize_return_to_view_script, title_tick_next_frame, title_tick_palette_indices,
+    summarize_return_to_view_script, summoned_active_object_record, title_tick_next_frame,
+    title_tick_palette_indices,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16,
 };
@@ -946,6 +949,46 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_active_effect_spells),
         },
         VisualRouteSuiteCase {
+            label: "route-combat-directed-sleep-cone",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1IZ6"],
+            configure: Some(seed_visual_route_directed_sleep),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-directed-poison-wind-cone",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1HIN6"],
+            configure: Some(seed_visual_route_directed_poison_wind),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-directed-death-wind-cone",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1CGIV6"],
+            configure: Some(seed_visual_route_directed_death_wind),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-directed-flame-wind-cone",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1FHI6"],
+            configure: Some(seed_visual_route_directed_flame_wind),
+        },
+        VisualRouteSuiteCase {
             label: "route-dungeon-level-up-down-spells",
             frame_kind: "visual route dungeon frame",
             options: PlayOptions {
@@ -1329,6 +1372,153 @@ fn seed_visual_route_active_effect_spells(state: &mut PlayState) {
         caster.mana = PROTECTION_COST + QUICKNESS_COST + NEGATE_MAGIC_COST + TIME_STOP_COST;
         caster.level = TIME_STOP_COST;
     }
+}
+
+fn visual_route_combat_active_object(tile: u8, x: usize, y: usize, z: i8) -> ActiveObject {
+    ActiveObject {
+        type_byte: tile,
+        tile,
+        x,
+        y,
+        z,
+        phase: 0,
+        aux1: 0,
+        aux3: 0,
+    }
+}
+
+fn seed_visual_route_directed_wind_combat(
+    state: &mut PlayState,
+    spell_index: usize,
+    cost: u8,
+    party_count: usize,
+    target_party_slot: Option<usize>,
+    include_monster_target: bool,
+) {
+    state.party = (0..party_count)
+        .map(|slot| route_visual_party_member(slot as u8, b'A', b'G', 12, 20))
+        .collect();
+    state.party_names = default_party_names(party_count);
+    state.party_experience = vec![0; party_count];
+    state.party_stay_counters = default_party_stay_counters(party_count);
+    state.party_strengths = vec![30; party_count];
+    state.party_intelligence = default_party_intelligence(party_count);
+    state.party_equipment = default_party_equipment(party_count);
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = cost;
+        caster.level = cost;
+    }
+    state.active_player = Some(0);
+    state.spell_charges[spell_index] = 1;
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    actors[0] =
+        CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+    if let Some(target_slot) = target_party_slot {
+        actors[target_slot] = CombatActorDescriptor::from_row([
+            12,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            target_slot as u8,
+            0,
+            6,
+            5,
+        ]);
+    }
+
+    let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+    for slot in 0..party_count {
+        let x = if Some(slot) == target_party_slot {
+            6
+        } else {
+            5
+        };
+        active_objects[slot] = visual_route_combat_active_object(0x4c, x, 5, 0);
+    }
+
+    if include_monster_target {
+        let stats =
+            combat_class_stats(COMBAT_CLASS_GIANT_RAT).expect("giant rat combat stats exist");
+        let monster_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        let monster_x = if target_party_slot.is_some() { 7 } else { 6 };
+        actors[monster_slot] = CombatActorDescriptor::for_monster_placement(
+            stats,
+            monster_slot as u8,
+            monster_x,
+            5,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+        );
+        active_objects[monster_slot] =
+            summoned_active_object_record(COMBAT_CLASS_GIANT_RAT, monster_x as usize, 5, 0)
+                .expect("giant rat active object exists");
+
+        let reserve_slot = monster_slot + 1;
+        actors[reserve_slot] = CombatActorDescriptor::for_monster_placement(
+            stats,
+            reserve_slot as u8,
+            3,
+            5,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+        );
+        active_objects[reserve_slot] =
+            summoned_active_object_record(COMBAT_CLASS_GIANT_RAT, 3, 5, 0)
+                .expect("reserve giant rat active object exists");
+    }
+
+    state
+        .enter_combat_frame(active_objects, actors)
+        .expect("visual route directed wind combat frame should seed");
+}
+
+fn seed_visual_route_directed_sleep(state: &mut PlayState) {
+    seed_visual_route_directed_wind_combat(state, SLEEP_SPELL_INDEX, SLEEP_COST, 2, Some(1), false);
+}
+
+fn seed_visual_route_directed_poison_wind(state: &mut PlayState) {
+    seed_visual_route_directed_wind_combat(
+        state,
+        POISON_WIND_SPELL_INDEX,
+        POISON_WIND_COST,
+        3,
+        Some(2),
+        false,
+    );
+    state.prng_state = poison_wind_first_accept_seed();
+}
+
+fn seed_visual_route_directed_death_wind(state: &mut PlayState) {
+    seed_visual_route_directed_wind_combat(
+        state,
+        DEATH_WIND_SPELL_INDEX,
+        DEATH_WIND_COST,
+        2,
+        Some(1),
+        true,
+    );
+}
+
+fn seed_visual_route_directed_flame_wind(state: &mut PlayState) {
+    seed_visual_route_directed_wind_combat(
+        state,
+        FLAME_WIND_SPELL_INDEX,
+        FLAME_WIND_COST,
+        1,
+        None,
+        true,
+    );
+}
+
+fn poison_wind_first_accept_seed() -> u16 {
+    for candidate in 0..=u16::MAX {
+        let mut state = candidate;
+        if u5_prng_range_u16(&mut state, 0, 19) & 1 == 0 {
+            return candidate;
+        }
+    }
+    unreachable!("PRNG range cycle must hit a Poison Wind acceptance roll")
 }
 
 fn seed_visual_route_dungeon_level_spells(state: &mut PlayState) {
@@ -5901,7 +6091,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 76);
+        assert_eq!(cases.len(), 80);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -6011,6 +6201,10 @@ mod tests {
             "route-castle-light-open-spell",
             "route-castle-restore-spell-suite",
             "route-castle-active-effect-spell-suite",
+            "route-combat-directed-sleep-cone",
+            "route-combat-directed-poison-wind-cone",
+            "route-combat-directed-death-wind-cone",
+            "route-combat-directed-flame-wind-cone",
             "route-dungeon-level-up-down-spells",
             "route-dungeon-field-cycle-spells",
             "route-dungeon-open-chest-spell",
@@ -6142,6 +6336,10 @@ mod tests {
             "route-dungeon-field-cycle-spells-08-c1ag6"
         );
         assert_eq!(
+            visual_route_step_label("route-combat-directed-death-wind-cone", 1, "C1CGIV6"),
+            "route-combat-directed-death-wind-cone-01-c1cgiv6"
+        );
+        assert_eq!(
             visual_route_step_label("route-shop-horse-trader-stablehouse-buy", 2, "Y"),
             "route-shop-horse-trader-stablehouse-buy-02-y"
         );
@@ -6160,7 +6358,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 239);
+        assert_eq!(reports.len(), 247);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -6205,6 +6403,10 @@ mod tests {
         assert!(manifest.contains("route-castle-light-open-spell-02-c1as6"));
         assert!(manifest.contains("route-castle-restore-spell-suite-05-c1cim4"));
         assert!(manifest.contains("route-castle-active-effect-spell-suite-04-c1at"));
+        assert!(manifest.contains("route-combat-directed-sleep-cone-01-c1iz6"));
+        assert!(manifest.contains("route-combat-directed-poison-wind-cone-01-c1hin6"));
+        assert!(manifest.contains("route-combat-directed-death-wind-cone-01-c1cgiv6"));
+        assert!(manifest.contains("route-combat-directed-flame-wind-cone-01-c1fhi6"));
         assert!(manifest.contains("route-dungeon-level-up-down-spells-02-c1dp"));
         assert!(manifest.contains("route-dungeon-field-cycle-spells-08-c1ag6"));
         assert!(manifest.contains("route-dungeon-open-chest-spell-01-c1as"));
