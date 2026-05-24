@@ -17,53 +17,56 @@ use image::{ImageBuffer, Rgba};
 
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX,
-    BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB, COMBAT_ACTOR_FLAG_SELECTABLE_80,
-    COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_PARTY_ACTOR_SLOTS,
-    CURE_COST, CURE_SPELL_INDEX, ChargenSession, ChargenSessionResult, ChargenSessionStep,
-    CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
-    DEFAULT_CLIMB_STAT, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX,
-    DUNGEON_LEVEL_SPELL_COST, Direction, DungeonScene, EGA_PALETTE_RGB, ENDGAME_TABLEAU_HEIGHT,
-    ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, FIELD_SPELL_COST,
-    FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
-    FLAME_WIND_COST, FLAME_WIND_SPELL_INDEX, FixedCellFont, GREAT_HEAL_COST,
-    GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage, GuildShop, HEAL_COST, HEAL_SPELL_INDEX,
-    HORSE_PARKED_FIRST, Healer, Herbalist, IN_WIS_COST, IN_WIS_SPELL_INDEX,
-    INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
-    INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X,
-    INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
-    INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX,
-    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
-    MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, NEGATE_MAGIC_COST,
-    NEGATE_MAGIC_SPELL_INDEX, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST,
-    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, POISON_FIELD_SPELL_INDEX,
-    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST,
-    PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
-    ProportionalFont, ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX,
-    RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
-    ReturnToViewFrameKind, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
-    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
-    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
-    STATS_PANEL_TEXT_WINDOW_INDEX, Scene, Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS,
-    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST,
-    TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS,
-    TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT,
-    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX,
-    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas,
-    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
-    TransportState, U4TransferOverrides, U4TransferSource, UUS_POR_SPELL_INDEX, VAS_LOR_COST,
-    VAS_LOR_SPELL_INDEX, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
-    blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save, commit_u4_transfer_save,
-    default_party_equipment, default_party_intelligence, default_party_names,
-    default_party_stay_counters, dungeon_cell_index, endgame_tableau_role_for_slot,
-    handle_play_key_input, hash_bytes, input_case_fold, input_function_key_code,
-    input_keypad_digit_direction_code,
+    BRIT_CBT_RECORDS, BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB,
+    COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
+    COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE,
+    COMBAT_FIELD_KIND_POISON, COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
+    COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PARTY_CORPSE_TILE,
+    COMBAT_VANISH_DEATH_MARKER_TILE, CURE_COST, CURE_SPELL_INDEX, ChargenSession,
+    ChargenSessionResult, ChargenSessionStep, CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS,
+    DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX, DEFAULT_CLIMB_STAT, DES_POR_SPELL_INDEX,
+    DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_LEVEL_SPELL_COST, Direction, DungeonScene,
+    EGA_PALETTE_RGB, ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST,
+    ENERGY_FIELD_SPELL_INDEX, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX,
+    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FLAME_WIND_COST,
+    FLAME_WIND_SPELL_INDEX, FixedCellFont, GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock,
+    GraphicImage, GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist,
+    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X,
+    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
+    INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE,
+    INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement,
+    MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
+    MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap,
+    NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
+    PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE,
+    POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX,
+    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions,
+    PlayState, PlayTarget, ProportionalFont, ProportionalWidthTable, QUICKNESS_COST,
+    QUICKNESS_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES,
+    RectColumnSweepTransition, ReturnToViewFrameKind, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
+    SLEEP_SPELL_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX,
+    SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT,
+    STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE, Scene, Shipwright, Stable,
+    StoryRecords, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH,
+    TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS,
+    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
+    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X,
+    TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE,
+    Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset,
+    TitleBitImages, TitleBitPlacement, TransportState, U4TransferOverrides, U4TransferSource,
+    UUS_POR_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WorldPlane, WorldReturn, X_RAY_COST,
+    X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save,
+    commit_u4_transfer_save, default_party_equipment, default_party_intelligence,
+    default_party_names, default_party_stay_counters, dungeon_cell_index,
+    endgame_tableau_role_for_slot, handle_play_key_input, hash_bytes, input_case_fold,
+    input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
-    intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_british_bit,
-    load_british_pth, load_graphic_image_directory, load_ibm_ch_font, load_play_options_from_save,
-    load_proportional_font, load_question_records, load_return_to_view_assets, load_story_records,
-    load_tile_atlas, load_title_bit,
+    intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_brit_cbt,
+    load_british_bit, load_british_pth, load_graphic_image_directory, load_ibm_ch_font,
+    load_play_options_from_save, load_proportional_font, load_question_records,
+    load_return_to_view_assets, load_story_records, load_tile_atlas, load_title_bit,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_message_text_window, paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
     rasterize_proportional_paragraph, read_u4_transfer_source_from_party_sav,
@@ -77,7 +80,9 @@ use u5_runtime::{
     shop_session::ActiveShopSession,
     spell_index_from_code, spell_mp_cost, stats_panel_active_cursor_visible,
     summarize_return_to_view_preview, summarize_return_to_view_script,
-    summoned_active_object_record, title_tick_flame_palette_index, title_tick_next_frame,
+    summoned_active_object_record, terrain_combat_instance_from_setup,
+    terrain_combat_raw_replacement_tile_for_arena, terrain_combat_setup_from_record,
+    title_tick_flame_palette_index, title_tick_next_frame,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16,
 };
@@ -280,6 +285,7 @@ pub fn visual_frame_suite(
             &font,
         )?);
     }
+    push_visual_combat_gallery_reports(game_dir, out_dir, &atlas, &font, &mut reports)?;
 
     reports.push(write_visual_intro_report(
         out_dir,
@@ -593,6 +599,122 @@ fn seed_visual_suite_combat(state: &mut PlayState) {
     state.combat_terrain[0][0] = 12;
     state.combat_terrain[5][5] = 4;
     state.combat_terrain[6][5] = 1;
+}
+
+fn push_visual_combat_gallery_reports(
+    game_dir: &Path,
+    out_dir: &Path,
+    atlas: &TileAtlas,
+    font: &FixedCellFont,
+    reports: &mut Vec<VisualFrameReport>,
+) -> io::Result<()> {
+    let bank = load_brit_cbt(game_dir)?;
+    for arena_index in 0..BRIT_CBT_RECORDS {
+        let record = bank.record(arena_index).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("BRIT.CBT has no outdoor arena record {arena_index}"),
+            )
+        })?;
+        let type_byte = 0x40 + (arena_index as u8) * 4;
+        let trigger = ActiveObject {
+            type_byte,
+            tile: 0xc0,
+            x: 0,
+            y: 0,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+        let setup = terrain_combat_setup_from_record(WorldPlane::Britannia, trigger, record)?;
+        let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(arena_index);
+        let replacement_rolls = vec![0; 16];
+        let mut instance =
+            terrain_combat_instance_from_setup(&setup, 16, replacement_tile, &replacement_rolls)?;
+
+        let mut state = PlayState::load_scene(
+            game_dir,
+            PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+        )?;
+        state.populate_combat_party_at_placement_slots(
+            &mut instance.active_objects,
+            &mut instance.actors,
+            trigger.z,
+            &setup.placement_slots,
+            usize::from(instance.placed_count),
+        );
+        state.enter_combat_frame_with_terrain(
+            instance.active_objects,
+            instance.actors,
+            setup.terrain,
+        )?;
+        reports.push(write_visual_play_report(
+            out_dir,
+            &format!("combat-arena-{arena_index:02}"),
+            "combat outdoor arena replacement gallery",
+            &mut state,
+            atlas,
+            font,
+        )?);
+    }
+
+    let mut marker_state = PlayState::load_scene(
+        game_dir,
+        PlayOptions {
+            target: PlayTarget::World(WorldPlane::Britannia),
+            ..PlayOptions::default()
+        },
+    )?;
+    seed_visual_combat_marker_gallery(&mut marker_state)?;
+    reports.push(write_visual_play_report(
+        out_dir,
+        "combat-marker-gallery",
+        "combat death and marker gallery",
+        &mut marker_state,
+        atlas,
+        font,
+    )?);
+    Ok(())
+}
+
+fn seed_visual_combat_marker_gallery(state: &mut PlayState) -> io::Result<()> {
+    state.party = vec![route_visual_party_member(0, b'A', b'G', 20, 20)];
+    state.party_names = default_party_names(1);
+    state.party_experience = vec![0];
+    state.party_stay_counters = default_party_stay_counters(1);
+    state.party_strengths = vec![30];
+    state.party_intelligence = default_party_intelligence(1);
+    state.party_equipment = default_party_equipment(1);
+    state.active_player = Some(0);
+
+    let mut terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+    terrain[6][6] = COMBAT_GARGOYLE_DEATH_TERRAIN_TILE;
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    actors[0] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 8]);
+
+    let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+    active_objects[0] = visual_route_combat_active_object(0x4c, 5, 8, 0);
+    active_objects[1] = visual_route_combat_active_object(COMBAT_PARTY_CORPSE_TILE, 1, 2, 0);
+    active_objects[2] = visual_route_combat_active_object(COMBAT_DEFAULT_DEATH_DROP_TILE, 2, 2, 0);
+    active_objects[3] = visual_route_combat_active_object(COMBAT_VANISH_DEATH_MARKER_TILE, 3, 2, 0);
+    active_objects[4] = visual_route_combat_active_object(COMBAT_GAZER_DEATH_MARKER_TILE, 4, 2, 0);
+    active_objects[5] = visual_route_combat_active_object(COMBAT_DEFAULT_DEATH_DROP_TILE, 6, 6, 0);
+    active_objects[6] = visual_route_combat_active_object(COMBAT_FIELD_KIND_POISON, 7, 3, 0);
+    active_objects[7] = visual_route_combat_active_object(COMBAT_FIELD_KIND_SLEEP, 8, 3, 0);
+    active_objects[8] = visual_route_combat_active_object(COMBAT_FIELD_KIND_FIRE, 7, 4, 0);
+    active_objects[9] = visual_route_combat_active_object(COMBAT_FIELD_KIND_ENERGY, 8, 4, 0);
+
+    state.enter_combat_frame_with_terrain(active_objects, actors, terrain)?;
+    state.combat_cursor_blink = true;
+    state.combat_secondary_marker = Some((3, 4));
+    state.message = "Combat marker gallery".to_string();
+    Ok(())
 }
 
 struct VisualRouteSuiteCase {
@@ -6531,7 +6653,7 @@ mod tests {
         let reports = visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
         let has_story = game_dir.join(STORY_DAT_FILE).exists();
-        assert_eq!(reports.len(), if has_story { 17 } else { 16 });
+        assert_eq!(reports.len(), if has_story { 34 } else { 33 });
         for report in &reports {
             assert!(report.path.exists());
             assert!(report.nonblack_pixels > 0);
@@ -6550,11 +6672,21 @@ mod tests {
             "x-ray-view-overlay",
             "z-stats-modal",
             "endgame-status",
+            "combat-marker-gallery",
         ] {
             let report = reports
                 .iter()
                 .find(|report| report.label == label)
                 .expect("expected visual gameplay report");
+            assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
+            assert_eq!(report.height, VISUAL_PLAY_FRAME_HEIGHT);
+        }
+        for arena_index in 0..BRIT_CBT_RECORDS {
+            let label = format!("combat-arena-{arena_index:02}");
+            let report = reports
+                .iter()
+                .find(|report| report.label == label)
+                .expect("expected outdoor combat arena gallery report");
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
             assert_eq!(report.height, VISUAL_PLAY_FRAME_HEIGHT);
         }
@@ -6590,6 +6722,9 @@ mod tests {
         assert!(manifest.contains("x-ray-view-overlay"));
         assert!(manifest.contains("z-stats-modal"));
         assert!(manifest.contains("endgame-status"));
+        assert!(manifest.contains("combat-arena-00"));
+        assert!(manifest.contains("combat-arena-15"));
+        assert!(manifest.contains("combat-marker-gallery"));
         assert!(manifest.contains("intro-menu"));
         assert!(manifest.contains("intro-finished-menu"));
         if has_story {

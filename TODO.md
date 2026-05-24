@@ -116,22 +116,25 @@ Last known verification state:
   `bf7a428a4b00ad2b`, `z-stats-modal` `61b033bfa2488b46`, and
   `endgame-status` `532cb7f1bdd03ffd`.
 - `cargo run -p u5-tui --features visual -- --visual-frame-suite
-  target\codex-britannia-chunk-map-suite C:\Games\U5-Clean` passed on
-  2026-05-19 and wrote seventeen nonblank Bevy-owned PNGs plus a sanitized
-  manifest:
+  target\visual-frame-suite C:\Games\U5-Clean` passed on 2026-05-24 and
+  wrote 34 nonblank Bevy-owned PNGs plus a sanitized manifest, including all
+  16 public `BRIT.CBT` outdoor arenas with accepted early replacement rolls
+  and a combat death/field/cursor marker gallery:
   `world-play` `f68b906acde0bd4a`, `world-after-step`
   `b9720ab18affa566`, `town-play` `2beb3b7734800e11`,
   `dungeon-play` `67e7e116d8be67aa`, `dungeon-dark`
   `29289813c0f0397c`, `combat-play` `9b1937b3e807ba05`,
-  `surface-view-overlay` `c82bbd585b1d8f6b`, `dungeon-view-overlay`
-  `e995f913cb07aca2`, `britannia-chunk-map-overlay`
-  `2e843bf012b76297`, `peer-view-overlay` `34e217c3c9fdc23c`,
-  `x-ray-view-overlay` `34e217c3c9fdc23c`, `z-stats-modal`
-  `bee4e11801862ad1`, `endgame-status` `a2362c168f42d288`,
-  `intro-menu` `74547d4e4d487e9c`, `intro-finished-menu`
-  `fc0e64c23363f715`, `intro-story-art` `34dfde7e247537f4`, and
-  `intro-return-to-view`
-  `a52f8c3db8e33102`.
+  `surface-view-overlay` `2ee1809341456a23`, `dungeon-view-overlay`
+  `450b8690ef5bc292`, `britannia-chunk-map-overlay`
+  `f47cb69abda0e1e2`, `peer-view-overlay` `2c64191172043730`,
+  `x-ray-view-overlay` `2c64191172043730`, `z-stats-modal`
+  `bee4e11801862ad1`, `endgame-status` `d6c3450bd51d97f0`,
+  `combat-arena-00` `774828109138f22a`, `combat-arena-15`
+  `f5708df6d90c001b`, `combat-marker-gallery`
+  `49026b4f6ae59390`, `intro-menu` `9713a4bbd31395e8`,
+  `intro-finished-menu` `16dfab9fc3d5f489`, `intro-story-art`
+  `5aa68210c861bc65`, and `intro-return-to-view`
+  `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
   wrote 299 nonblank Bevy-owned per-step route PNGs plus a sanitized
@@ -340,8 +343,11 @@ Current worktree context when this TODO was refreshed:
   presentation work.
 - Combat rendering now consumes the post-round cursor/secondary-marker hook:
   the tactical viewport draws the blinking active-player cursor marker and
-  explicit secondary marker cell from shared runtime state. Exact resident
-  marker pixels remain visual parity work until published.
+  explicit secondary marker cell from shared runtime state. The Bevy visual
+  frame suite now adds all sixteen public `BRIT.CBT` outdoor arena gallery
+  frames with accepted early replacement rolls plus a death/field/cursor marker
+  gallery. Exact resident marker pixels remain visual parity work until
+  published.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry,
   seeded ship/skiff sailing routes, a Spyglass-triggered Britannia chunk-map

@@ -94,6 +94,11 @@ audit:
   real asset-backed play states.
 - `cargo run -- --save-frame-suite target\audit-frame-suite C:\Games\U5-Clean`
   — 13 PNGs, every frame nonblank with stable hashes.
+- `cargo run -p u5-tui --features visual -- --visual-frame-suite
+  target\visual-frame-suite C:\Games\U5-Clean` — 34 Bevy-owned PNGs, every
+  frame nonblank with a sanitized manifest, including all sixteen public
+  `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls
+  and a combat death/field/cursor marker gallery.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` — 299 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including horse-trader
