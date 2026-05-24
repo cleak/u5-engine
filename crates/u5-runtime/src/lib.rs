@@ -107,6 +107,7 @@ pub mod view_classes;
 pub mod visibility;
 pub mod visual_asset_audit;
 pub mod wind;
+pub mod world_chunk_buffer;
 pub mod world_progress;
 pub mod world_tables;
 pub mod world_tables_io;
@@ -657,6 +658,7 @@ pub use wind::{
     WIND_DRIFT_OUTER_ROLL_MASK, WindSetterOutcome, WindState, wind_setter_outcome,
     wind_status_message_from_save_byte, wind_status_message_from_state_and_save_byte,
 };
+pub use world_chunk_buffer::*;
 pub use world_progress::{
     WORLD_PROGRESS_STATE_FILE, WORLD_PROGRESS_STATE_LEGACY_SHRINE_STANDING_LEN,
     WORLD_PROGRESS_STATE_LEN, WORLD_PROGRESS_STATE_MAGIC, WorldProgressState,

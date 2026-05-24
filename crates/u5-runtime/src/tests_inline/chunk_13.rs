@@ -13805,6 +13805,157 @@ fn live_chunk_substituted_tile_matches_spec_rules() {
 }
 
 #[test]
+fn world_live_chunk_buffer_projects_four_quadrants_from_full_grid() {
+    let mut grid = vec![0; WORLD_CELLS];
+    for chunk_y in 0..WORLD_CHUNKS_PER_SIDE {
+        for chunk_x in 0..WORLD_CHUNKS_PER_SIDE {
+            let chunk_slot = chunk_y * WORLD_CHUNKS_PER_SIDE + chunk_x;
+            for local_y in 0..CHUNK_SIDE {
+                for local_x in 0..CHUNK_SIDE {
+                    grid[world_cell_index(
+                        chunk_x * CHUNK_SIDE + local_x,
+                        chunk_y * CHUNK_SIDE + local_y,
+                    )] = chunk_slot as u8;
+                }
+            }
+        }
+    }
+
+    let buffer =
+        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Underworld, &grid, 8, 8, |_| false)
+            .unwrap();
+
+    assert_eq!(buffer.scroll_base, (0, 0));
+    assert_eq!(
+        buffer
+            .descriptors
+            .iter()
+            .map(|descriptor| descriptor.logical_slot)
+            .collect::<Vec<_>>(),
+        vec![0, 1, 16, 17]
+    );
+    assert_eq!(buffer.tile_at(0, 0), 0);
+    assert_eq!(buffer.tile_at(16, 0), 1);
+    assert_eq!(buffer.tile_at(0, 16), 16);
+    assert_eq!(buffer.tile_at(16, 16), 17);
+    assert!(buffer.contains_world_tile(31, 31));
+    assert!(!buffer.contains_world_tile(32, 0));
+}
+
+#[test]
+fn world_live_chunk_buffer_wraps_scroll_base_around_world_edges() {
+    let mut grid = open_world_grid();
+    grid[world_cell_index(255, 255)] = 0xAA;
+    grid[world_cell_index(0, 0)] = 0xBB;
+
+    let buffer =
+        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Britannia, &grid, 0, 0, |_| false)
+            .unwrap();
+
+    assert_eq!(buffer.scroll_base, (240, 240));
+    assert_eq!(buffer.quadrant_chunk_origin(0), (240, 240));
+    assert_eq!(buffer.quadrant_chunk_origin(3), (0, 0));
+    assert_eq!(buffer.tile_at(255, 255), 0xAA);
+    assert_eq!(buffer.tile_at(0, 0), 0xBB);
+    assert!(buffer.contains_world_tile(255, 255));
+    assert!(buffer.contains_world_tile(0, 0));
+    assert!(!buffer.contains_world_tile(32, 0));
+}
+
+#[test]
+fn world_live_chunk_buffer_applies_live_substitution_without_mutating_source_grid() {
+    let mut grid = open_world_grid();
+    grid[world_cell_index(0, 0)] = 0x16;
+    grid[world_cell_index(1, 0)] = 0x17;
+    grid[world_cell_index(2, 0)] = 0x18;
+    grid[world_cell_index(16, 0)] = 0x19;
+    grid[world_cell_index(0, 16)] = 0x19;
+
+    let buffer =
+        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Britannia, &grid, 8, 8, |descriptor| {
+            descriptor.logical_slot == 1
+        })
+        .unwrap();
+
+    assert_eq!(buffer.tile_at(0, 0), 0xDF);
+    assert_eq!(buffer.tile_at(1, 0), 0xDF);
+    assert_eq!(buffer.tile_at(2, 0), 0xDF);
+    assert_eq!(buffer.tile_at(16, 0), 0x1A);
+    assert_eq!(buffer.tile_at(0, 16), 0x19);
+    assert_eq!(grid[world_cell_index(0, 0)], 0x16);
+    assert_eq!(grid[world_cell_index(16, 0)], 0x19);
+}
+
+#[test]
+fn world_live_chunk_buffer_decodes_britannia_water_and_stored_chunks() {
+    let mut chunk_index = [BRIT_WATER_SENTINEL; WORLD_CHUNK_COUNT];
+    for (idx, entry) in chunk_index.iter_mut().take(BRIT_STORED_CHUNKS).enumerate() {
+        *entry = idx as u8;
+    }
+    let mut brit = vec![0; BRIT_DAT_LEN];
+    for file_index in 0..BRIT_STORED_CHUNKS {
+        let tile = 0x80 | ((file_index as u8) & 0x1F);
+        brit[file_index * CHUNK_BYTES..file_index * CHUNK_BYTES + CHUNK_BYTES].fill(tile);
+    }
+
+    let stored =
+        WorldLiveChunkBuffer::from_britannia_bytes(&brit, &chunk_index, 8, 8, |_| false).unwrap();
+    assert_eq!(stored.tile_at(0, 0), 0x80);
+    assert_eq!(stored.tile_at(16, 0), 0x81);
+    assert_eq!(stored.tile_at(0, 16), 0x90);
+    assert_eq!(stored.descriptors[0].file_index, Some(0));
+
+    let water =
+        WorldLiveChunkBuffer::from_britannia_bytes(&brit, &chunk_index, 0, 0, |_| false).unwrap();
+    assert_eq!(water.tile_at(255, 255), BRIT_DEEP_WATER_TILE);
+    assert_eq!(water.descriptors[0].logical_slot, 255);
+    assert!(water.descriptors[0].all_water);
+    assert_eq!(water.descriptors[0].file_index, None);
+}
+
+#[test]
+fn world_live_chunk_buffer_decodes_underworld_dense_chunk_offsets() {
+    let mut under = vec![0; UNDER_DAT_LEN];
+    under[under_file_offset(16, 16)] = 0x44;
+
+    let buffer =
+        WorldLiveChunkBuffer::from_underworld_bytes(&under, 8, 8, |_| false).unwrap();
+
+    assert_eq!(buffer.tile_at(16, 16), 0x44);
+    assert_eq!(buffer.descriptors[3].logical_slot, 17);
+    assert_eq!(buffer.descriptors[3].plane, WorldPlane::Underworld);
+}
+
+#[test]
+fn world_live_chunk_buffer_shuffle_preserves_overlapping_chunks() {
+    let mut grid = vec![0; WORLD_CELLS];
+    for chunk_y in 0..WORLD_CHUNKS_PER_SIDE {
+        for chunk_x in 0..WORLD_CHUNKS_PER_SIDE {
+            let chunk_slot = chunk_y * WORLD_CHUNKS_PER_SIDE + chunk_x;
+            for local_y in 0..CHUNK_SIDE {
+                for local_x in 0..CHUNK_SIDE {
+                    grid[world_cell_index(
+                        chunk_x * CHUNK_SIDE + local_x,
+                        chunk_y * CHUNK_SIDE + local_y,
+                    )] = chunk_slot as u8;
+                }
+            }
+        }
+    }
+    let buffer =
+        WorldLiveChunkBuffer::from_full_grid(WorldPlane::Britannia, &grid, 8, 8, |_| false)
+            .unwrap();
+
+    let shuffled = buffer.shuffled_to_scroll_base((16, 0));
+
+    assert_eq!(shuffled.copied_quadrants, [true, false, true, false]);
+    assert_eq!(shuffled.buffer.tile_at(16, 0), 1);
+    assert_eq!(shuffled.buffer.tile_at(16, 16), 17);
+    assert_eq!(shuffled.buffer.descriptors[0].logical_slot, 1);
+    assert_eq!(shuffled.buffer.descriptors[2].logical_slot, 17);
+}
+
+#[test]
 fn calendar_thresholds_and_display_hour_match_spec() {
     // time.md §2,§5
     assert_eq!(MINUTES_PER_HOUR, 60);
