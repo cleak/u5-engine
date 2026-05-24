@@ -121,23 +121,27 @@ Last known verification state:
   transfer commit from `PARTY.SAV`, and a confirmed `QY` save/reload
   round trip. These tests mutate only per-test temporary asset directories,
   never `C:\Games\U5-Clean`.
-- `cargo run -p u5-tui -- --save-frame-suite target\codex-stats-panel-frame-suite
-  C:\Games\U5-Clean` passed on 2026-05-24 and wrote thirteen nonblank PNGs:
+- `cargo run -p u5-tui -- --save-frame-suite target\codex-view-class-gallery-frame-suite
+  C:\Games\U5-Clean` passed on 2026-05-24 and wrote sixteen nonblank PNGs:
   `britannia` `859a1bdabe5c9b7a`, `britannia-step` `05b13e47da048fe6`,
   `castle` `bda625019405af09`, lit `dungeon` `91ea22aa5e09c692`,
   composed `combat` `49bcd6e0986745fd`, `surface-view`
   `b8d9ef46cd161b93`, `dungeon-view` `8629ba329e58a747`,
   `peer-view` `4c9e7bb65a91b568`, `x-ray-view` `4c9e7bb65a91b568`,
-  `intro-menu` `7bf01c36de552e16`, `status-window`
+  `surface-view-class-gallery` `1c725f8e26c826f4`,
+  `peer-view-class-gallery` `1c725f8e26c826f4`,
+  `x-ray-view-class-gallery` `9861d57c4d8f3dbd`, `intro-menu`
+  `7bf01c36de552e16`, `status-window`
   `bf7a428a4b00ad2b`, `z-stats-modal` `61b033bfa2488b46`, and
   `endgame-status` `532cb7f1bdd03ffd`.
 - `cargo run -p u5-tui --features visual -- --visual-frame-suite
-  target\codex-dungeon-cbt-visual-frame-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 160 nonblank Bevy-owned PNGs plus a sanitized manifest, including all
+  target\codex-view-class-gallery-visual-frame-suite C:\Games\U5-Clean` passed on 2026-05-24 and
+  wrote 163 nonblank Bevy-owned PNGs plus a sanitized manifest, including all
   16 public `BRIT.CBT` outdoor arenas with accepted early replacement rolls,
   all 112 public `DUNGEON.CBT` dungeon-room terrain records with source scanning
   disabled, prompt/modal frames for world, town, dungeon, combat, and Talk,
-  and combat status-highlight plus death/field/cursor marker galleries:
+  surface/town View class galleries for gem, Peer, and X-Ray modes, and combat
+  status-highlight plus death/field/cursor marker galleries:
   `world-play` `f68b906acde0bd4a`, `world-after-step`
   `b9720ab18affa566`, `town-play` `2beb3b7734800e11`,
   `dungeon-play` `67e7e116d8be67aa`, `dungeon-dark`
@@ -148,6 +152,9 @@ Last known verification state:
   `12d68ef9587532c6`, `peer-view-overlay` `2c64191172043730`,
   `x-ray-view-overlay` `2c64191172043730`, `z-stats-modal`
   `bee4e11801862ad1`, `endgame-status` `d6c3450bd51d97f0`,
+  `surface-view-class-gallery` `1c725f8e26c826f4`,
+  `peer-view-class-gallery` `2640d7f6238170bc`,
+  `x-ray-view-class-gallery` `70ce97b654df9d85`,
   `combat-arena-00` `774828109138f22a`, `combat-arena-15`
   `f5708df6d90c001b`, `dungeon-combat-arena-000`
   `d40e5e2b05532e84`, `dungeon-combat-arena-111`
@@ -428,7 +435,10 @@ Current worktree context when this TODO was refreshed:
   spec. Current response-needed public blockers are #10, #11, #12/#19, #13,
   #36, #49, #54, #57, and #58; clean-engine follow-up comments are currently
   latest on each of those issues, so do not post duplicate comments unless new
-  spec evidence or implementation questions appear.
+  spec evidence or implementation questions appear. Follow-up parity questions
+  are also now open/latest on #8 for exact combat sleep wakeup counters, #20
+  for stale gazetteer known-gaps wording versus remaining coordinate families,
+  and #59 for overworld water/current transition and damage rules.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the
@@ -454,6 +464,11 @@ Current worktree context when this TODO was refreshed:
   frames with accepted early replacement rolls plus a death/field/cursor marker
   gallery. Exact resident marker pixels remain visual parity work until
   published.
+- Surface/town View rendering now has a synthetic public-class gallery that
+  covers every published class `0x00..0x10` in ordinary gem, Peer, and X-Ray
+  modes. Runtime pixel tests pin no-op versus rendered classes and the
+  alternate-bank colors for `0x0A`, `0x0B`, and `0x0F`; the TUI and Bevy frame
+  suites emit the same class-gallery PNGs for visual audit.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry,
   seeded ship/skiff sailing routes, a Spyglass-triggered Britannia chunk-map

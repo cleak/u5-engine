@@ -906,6 +906,100 @@
         assert_eq!(gem.pixel(px, py), Some(14));
     }
 
+    fn surface_view_class_gallery_state() -> PlayState {
+        let mut grid = vec![0; TOWN_GRID_SIDE * TOWN_GRID_SIDE];
+        for (index, (tile, _class)) in SURFACE_VIEW_CLASS_GALLERY_TILES.iter().enumerate() {
+            grid[4 * TOWN_GRID_SIDE + 4 + index] = *tile;
+        }
+        test_state(grid, TOWN_GRID_SIDE / 2, TOWN_GRID_SIDE / 2)
+    }
+
+    const SURFACE_VIEW_CLASS_GALLERY_TILES: [(u8, u8); 17] = [
+        (0x00, 0x00),
+        (0x05, 0x01),
+        (0x09, 0x02),
+        (0x70, 0x03),
+        (0x1D, 0x04),
+        (0x10, 0x05),
+        (0x0D, 0x06),
+        (0x0C, 0x07),
+        (0x0B, 0x08),
+        (0x06, 0x09),
+        (0x60, 0x0A),
+        (0xD4, 0x0B),
+        (0x01, 0x0C),
+        (0x04, 0x0D),
+        (0xE0, 0x0E),
+        (0xD8, 0x0F),
+        (0x20, 0x10),
+    ];
+
+    #[test]
+    fn surface_view_overlay_class_gallery_covers_all_published_classes() {
+        for (tile, class) in SURFACE_VIEW_CLASS_GALLERY_TILES {
+            assert_eq!(surface_view_class(tile), class);
+        }
+
+        for mode in [
+            ViewOverlayMode::GemView,
+            ViewOverlayMode::PeerSpell,
+            ViewOverlayMode::XRaySpell,
+        ] {
+            let state = surface_view_class_gallery_state();
+            let viewport = state.render_surface_view_overlay_for_mode(TileGraphicsDepth::Ega16, mode);
+            let scale = LOCAL_VIEW_CELL_PIXEL_SCALE;
+
+            for (index, (_tile, class)) in SURFACE_VIEW_CLASS_GALLERY_TILES.iter().enumerate() {
+                let cell_x = 4 + index;
+                let cell_y = 4;
+                let has_colored_pixel = (0..scale).any(|local_y| {
+                    (0..scale).any(|local_x| {
+                        viewport.pixel(cell_x * scale + local_x, cell_y * scale + local_y)
+                            != Some(0)
+                    })
+                });
+                assert_eq!(
+                    has_colored_pixel,
+                    !matches!(class, 0x00 | 0x0C),
+                    "class {class:#04x} mode {mode:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn surface_view_overlay_class_gallery_pins_peer_gem_bank_switches() {
+        let state = surface_view_class_gallery_state();
+        let gem = state.render_surface_view_overlay_for_mode(
+            TileGraphicsDepth::Ega16,
+            ViewOverlayMode::GemView,
+        );
+        let peer = state.render_surface_view_overlay_for_mode(
+            TileGraphicsDepth::Ega16,
+            ViewOverlayMode::PeerSpell,
+        );
+        let x_ray = state.render_surface_view_overlay_for_mode(
+            TileGraphicsDepth::Ega16,
+            ViewOverlayMode::XRaySpell,
+        );
+        let scale = LOCAL_VIEW_CELL_PIXEL_SCALE;
+        let sample = |viewport: &TileViewport, index: usize, local_x: usize, local_y: usize| {
+            viewport.pixel((4 + index) * scale + local_x, 4 * scale + local_y)
+        };
+
+        assert_eq!(sample(&gem, 10, scale / 2, scale / 2), Some(3));
+        assert_eq!(sample(&peer, 10, scale / 2, scale / 2), Some(3));
+        assert_eq!(sample(&x_ray, 10, scale / 2, scale / 2), Some(11));
+
+        assert_eq!(sample(&gem, 11, 0, 0), Some(11));
+        assert_eq!(sample(&peer, 11, 0, 0), Some(11));
+        assert_eq!(sample(&x_ray, 11, 0, 0), Some(13));
+
+        assert_eq!(sample(&gem, 15, 0, 0), Some(14));
+        assert_eq!(sample(&peer, 15, 0, 0), Some(14));
+        assert_eq!(sample(&x_ray, 15, 0, 0), Some(4));
+    }
+
     #[test]
     fn ignite_torch_consumes_stock_and_lights_dungeon() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);

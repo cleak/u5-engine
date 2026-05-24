@@ -36,13 +36,14 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#1` | Dungeon `0xF?` room-trigger and `0xA?` room-helper reload behavior | Implemented from latest issue answer and reconciled checked-in spec wording |
 | `cleak/u5-spec#3` | Terrain-combat arena records, spawn counts, replacement tiles, placement metadata, and pirate selector | Implemented from latest issue answer, including active-object byte-0 `0x2C..0x2F` pirate arena selector |
 | `cleak/u5-spec#5` | Combat party entry placement and descriptor seeding | Implemented for terrain and dungeon-room combat; party descriptor byte 3 links to the party slot while byte 1 keeps class-derived speed |
-| `cleak/u5-spec#8` | Combat non-party sleep/disabled state storage | Implemented from latest issue answer; descriptor byte 2 carries the sleep/disabled bit and byte 4 remains the active-object link |
+| `cleak/u5-spec#8` | Combat non-party sleep/disabled state storage and wakeup counters | Storage implemented from latest issue answer; descriptor byte 2 carries the sleep/disabled bit and byte 4 remains the active-object link. Exact per-effect wakeup counters requested in a follow-up comment |
 | `cleak/u5-spec#9`/`#22` | Directed Sleep/Wind combat cone targeting | Implemented from latest issue answer; cardinal direction cone targeting replaces target-slot targeting |
 | `cleak/u5-spec#10` | Combat arena field marker placement gate | Implemented from latest issue answer; Fire/Poison/Sleep/Energy markers place after confirmed impact without a random materialization gate |
 | `cleak/u5-spec#12`/`#19` | Dungeon-room combat party/source placement | Published row/column layout, helper scan suppression, ordinary boundary, special id categories, random-special selectors, and Doom marker behavior implemented; exact non-Doom post-write formulas/tables requested |
 | `cleak/u5-spec#13` | Tavern/meal/sage selector table plus paid shared 26-row sage rumour topic table and success templates | Table/mechanics implemented, including per-tavern selector letters, lore continuation gating, post-debit success-record RNG timing, and short-funds exit; exact fee/short-funds text source requested |
 | `cleak/u5-spec#15` | Inn Intelligence-adjusted room-rate formula and recovery behavior | Implemented |
 | `cleak/u5-spec#18` | Fixed hidden-treasure found bitmap and special record cookies | Implemented from latest issue answer and reconciled checked-in spec wording |
+| `cleak/u5-spec#20` | Location and dungeon return coordinates | Main 40-row published coordinate table implemented; follow-up asks the spec to reconcile stale Known Gaps wording and clarify remaining coordinate families |
 | `cleak/u5-spec#28` | Horse-trader sale path replacing old stationary-display purchase premise | Implemented |
 | `cleak/u5-spec#31` | Eternal-Flame-gated Shadowlord shard destruction predicates | Implemented, including hideout slots and low-byte quest-progress bits |
 | `cleak/u5-spec#41` | Exact arms-shop eight-item stock rows and buy transaction quote selector/text flow | Implemented |
@@ -54,6 +55,7 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#56` | Endgame tableau active-object layout, sprite mapping, and movement timing | Implemented from latest issue answer; MISCMAPS record 3, active-object slots, class sprites, scene marker, branch movement, and `0x44`-gated refusal jitter follow the published contract |
 | `cleak/u5-spec#57` | `.NPC` slot-zero sentinel byte policy | Runtime scheduling skips slot zero regardless of stored bytes; strict validator behavior remains a spec question |
 | `cleak/u5-spec#58` | Conversation reserved rebuke keyword table | Five functional reserved words are implemented; the unpublished 29 rebuke words remain inactive until the table and presentation behavior are published |
+| `cleak/u5-spec#59` | Overworld water/current transition and damage rules | New clean-spec issue opened; engine retains conservative sidecar-backed behavior until exact forced-transition rows, transport handling, and damage rules are published |
 
 Where an audit row references a pending issue, the engine carries a clean
 implementation or conservative placeholder that avoids private-derived guesses
@@ -108,16 +110,17 @@ audit:
   victory cinematic routes, the public Britannia chasm fall route, the forced
   whirlpool Underworld branch, and fixed narrative gate open/ordained-block
   routes through real asset-backed play states.
-- `cargo run -- --save-frame-suite target\audit-frame-suite C:\Games\U5-Clean`
-  — 13 PNGs, every frame nonblank with stable hashes.
+- `cargo run -- --save-frame-suite target\codex-view-class-gallery-frame-suite C:\Games\U5-Clean`
+  — 16 PNGs, every frame nonblank with stable hashes, including gem/Peer/X-Ray
+  surface View class galleries.
 - `cargo run -p u5-tui --features visual -- --visual-frame-suite
-  target\codex-dungeon-cbt-visual-frame-suite C:\Games\U5-Clean` — 160 Bevy-owned PNGs,
+  target\codex-view-class-gallery-visual-frame-suite C:\Games\U5-Clean` — 163 Bevy-owned PNGs,
   every frame nonblank with a sanitized manifest, including all sixteen public
   `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls,
   all one hundred twelve public `DUNGEON.CBT` dungeon-room terrain records with
   source scanning disabled, prompt/modal frames for world, town, dungeon,
-  combat, and Talk, plus combat status-highlight and death/field/cursor marker
-  galleries.
+  combat, and Talk, surface View class galleries for gem/Peer/X-Ray modes, plus
+  combat status-highlight and death/field/cursor marker galleries.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` — 1625 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including all 40

@@ -71,11 +71,11 @@ use u5_runtime::{
     TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
     TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
     UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
-    VAS_LOR_SPELL_INDEX, WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST,
-    X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save,
-    commit_u4_transfer_save, default_party_equipment, default_party_experience,
-    default_party_intelligence, default_party_names, default_party_roster,
-    default_party_stay_counters, disk_io_error_message, dungeon_cell_index,
+    VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
+    X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_class_stats,
+    commit_chargen_save, commit_u4_transfer_save, default_party_equipment,
+    default_party_experience, default_party_intelligence, default_party_names,
+    default_party_roster, default_party_stay_counters, disk_io_error_message, dungeon_cell_index,
     dungeon_room_combat_instance_from_setup, dungeon_room_combat_setup_from_record_for_entry,
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
     hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
@@ -110,6 +110,10 @@ const VIEWPORT_RADIUS: usize = 5;
 const VIEWPORT_CELLS: usize = VIEWPORT_RADIUS * 2 + 1;
 const VIEWPORT_SIZE_PX: u32 = (VIEWPORT_CELLS * TILE_ATLAS_SIDE) as u32;
 const DISPLAY_SCALE: f32 = 3.0;
+const SURFACE_VIEW_CLASS_GALLERY_TILES: [u8; 17] = [
+    0x00, 0x05, 0x09, 0x70, 0x1D, 0x10, 0x0D, 0x0C, 0x0B, 0x06, 0x60, 0xD4, 0x01, 0x04, 0xE0, 0xD8,
+    0x20,
+];
 
 const READY_HINT: &str =
     "Arrows/keypad: move. Shift+A attacks, Shift+S searches. Ctrl+S music. Esc quit.";
@@ -305,6 +309,7 @@ pub fn visual_frame_suite(
         )?);
     }
     push_visual_combat_gallery_reports(game_dir, out_dir, &atlas, &font, &mut reports)?;
+    push_visual_surface_view_class_gallery_reports(game_dir, out_dir, &atlas, &font, &mut reports)?;
 
     reports.push(write_visual_intro_report(
         out_dir,
@@ -978,6 +983,65 @@ fn seed_visual_suite_combat_status_highlight(state: &mut PlayState) {
     state.combat_actors[0] =
         CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
     state.message = "Combat status highlight".to_string();
+}
+
+fn seed_surface_view_class_gallery(state: &mut PlayState, mode: ViewOverlayMode) {
+    state.player.x = TOWN_GRID_SIDE / 2;
+    state.player.y = TOWN_GRID_SIDE / 2;
+    state.grid = vec![0; TOWN_GRID_SIDE * TOWN_GRID_SIDE];
+    for (index, tile) in SURFACE_VIEW_CLASS_GALLERY_TILES.iter().enumerate() {
+        state.grid[4 * TOWN_GRID_SIDE + 4 + index] = *tile;
+    }
+    state.active_view_overlay = None;
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+    match mode {
+        ViewOverlayMode::GemView => {
+            state.gems = 1;
+            state.view_gem();
+        }
+        ViewOverlayMode::PeerSpell => {
+            state.activate_peer_view_overlay();
+        }
+        ViewOverlayMode::XRaySpell => {
+            state.activate_x_ray_view_overlay();
+        }
+        ViewOverlayMode::SurfaceLook | ViewOverlayMode::BritanniaOverview => {
+            unreachable!("surface view class gallery uses local surface-view modes")
+        }
+    }
+}
+
+fn push_visual_surface_view_class_gallery_reports(
+    game_dir: &Path,
+    out_dir: &Path,
+    atlas: &TileAtlas,
+    font: &FixedCellFont,
+    reports: &mut Vec<VisualFrameReport>,
+) -> io::Result<()> {
+    for (label, mode) in [
+        ("surface-view-class-gallery", ViewOverlayMode::GemView),
+        ("peer-view-class-gallery", ViewOverlayMode::PeerSpell),
+        ("x-ray-view-class-gallery", ViewOverlayMode::XRaySpell),
+    ] {
+        let mut state = PlayState::load_scene(
+            game_dir,
+            PlayOptions {
+                target: PlayTarget::Town(Scene::new(0x11).expect("castle scene is valid")),
+                ..PlayOptions::default()
+            },
+        )?;
+        seed_surface_view_class_gallery(&mut state, mode);
+        reports.push(write_visual_play_report(
+            out_dir,
+            label,
+            "visual surface view class gallery frame",
+            &mut state,
+            atlas,
+            font,
+        )?);
+    }
+    Ok(())
 }
 
 fn push_visual_combat_gallery_reports(
@@ -10116,7 +10180,7 @@ mod tests {
         let reports = visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
         let has_story = game_dir.join(STORY_DAT_FILE).exists();
-        assert_eq!(reports.len(), if has_story { 160 } else { 159 });
+        assert_eq!(reports.len(), if has_story { 163 } else { 162 });
         for report in &reports {
             assert!(report.path.exists());
             assert!(report.nonblack_pixels > 0);
@@ -10147,6 +10211,9 @@ mod tests {
             "britannia-chunk-map-overlay",
             "peer-view-overlay",
             "x-ray-view-overlay",
+            "surface-view-class-gallery",
+            "peer-view-class-gallery",
+            "x-ray-view-class-gallery",
             "z-stats-modal",
             "endgame-status",
             "combat-marker-gallery",
@@ -10220,6 +10287,9 @@ mod tests {
         assert!(manifest.contains("britannia-chunk-map-overlay"));
         assert!(manifest.contains("peer-view-overlay"));
         assert!(manifest.contains("x-ray-view-overlay"));
+        assert!(manifest.contains("surface-view-class-gallery"));
+        assert!(manifest.contains("peer-view-class-gallery"));
+        assert!(manifest.contains("x-ray-view-class-gallery"));
         assert!(manifest.contains("z-stats-modal"));
         assert!(manifest.contains("endgame-status"));
         assert!(manifest.contains("combat-arena-00"));

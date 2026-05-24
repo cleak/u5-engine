@@ -9,8 +9,9 @@ use std::path::Path;
 use image::{ImageBuffer, Rgba};
 use u5_runtime::{
     COMBAT_ARENA_SIDE, DungeonScene, PlayOptions, PlayState, PlayTarget, STATS_PANEL_TEXT_LEFT,
-    Scene, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TileGraphicsDepth,
-    WorldPlane, hash_bytes, load_tile_atlas, render_text_panel_rgba,
+    Scene, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TOWN_GRID_SIDE,
+    TileGraphicsDepth, ViewOverlayMode, WorldPlane, hash_bytes, load_tile_atlas,
+    render_text_panel_rgba,
 };
 
 use crate::{raster_frame_kind, replay_play_script_commands};
@@ -20,6 +21,10 @@ const VIEWPORT_CELLS: usize = VIEWPORT_RADIUS * 2 + 1;
 const VIEWPORT_SIZE_PX: usize = VIEWPORT_CELLS * TILE_ATLAS_SIDE;
 const OVERLAY_SIDE_PANEL_X: usize = STATS_PANEL_TEXT_LEFT as usize * 8;
 const OVERLAY_SIDE_PANEL_Y: usize = 0;
+const SURFACE_VIEW_CLASS_GALLERY_TILES: [u8; 17] = [
+    0x00, 0x05, 0x09, 0x70, 0x1D, 0x10, 0x0D, 0x0C, 0x0B, 0x06, 0x60, 0xD4, 0x01, 0x04, 0xE0, 0xD8,
+    0x20,
+];
 
 pub fn run_save_frame(
     game_dir: &Path,
@@ -116,6 +121,24 @@ pub fn save_frame_suite(
         save_frame_suite_dungeon_view(game_dir, raster_depth, &out_dir.join("dungeon-view.png"))?,
         save_frame_suite_peer_view(game_dir, raster_depth, &out_dir.join("peer-view.png"))?,
         save_frame_suite_x_ray_view(game_dir, raster_depth, &out_dir.join("x-ray-view.png"))?,
+        save_frame_suite_surface_view_class_gallery(
+            game_dir,
+            raster_depth,
+            ViewOverlayMode::GemView,
+            &out_dir.join("surface-view-class-gallery.png"),
+        )?,
+        save_frame_suite_surface_view_class_gallery(
+            game_dir,
+            raster_depth,
+            ViewOverlayMode::PeerSpell,
+            &out_dir.join("peer-view-class-gallery.png"),
+        )?,
+        save_frame_suite_surface_view_class_gallery(
+            game_dir,
+            raster_depth,
+            ViewOverlayMode::XRaySpell,
+            &out_dir.join("x-ray-view-class-gallery.png"),
+        )?,
         save_frame_suite_intro_menu(&out_dir.join("intro-menu.png"))?,
         save_frame_suite_status_window(game_dir, &out_dir.join("status-window.png"))?,
         save_frame_suite_z_stats(game_dir, &out_dir.join("z-stats-modal.png"))?,
@@ -432,6 +455,51 @@ fn save_frame_suite_x_ray_view(
     save_frame_capture_state(state, &atlas, out)
 }
 
+fn save_frame_suite_surface_view_class_gallery(
+    game_dir: &Path,
+    raster_depth: TileGraphicsDepth,
+    mode: ViewOverlayMode,
+    out: &Path,
+) -> io::Result<SavedFrameReport> {
+    let mut state = PlayState::load_scene(
+        game_dir,
+        PlayOptions {
+            target: PlayTarget::Town(Scene::new(0x11).expect("castle scene is valid")),
+            ..PlayOptions::default()
+        },
+    )?;
+    seed_surface_view_class_gallery(&mut state, mode);
+    let atlas = load_tile_atlas(game_dir, raster_depth)?;
+    save_frame_capture_state(state, &atlas, out)
+}
+
+fn seed_surface_view_class_gallery(state: &mut PlayState, mode: ViewOverlayMode) {
+    state.player.x = TOWN_GRID_SIDE / 2;
+    state.player.y = TOWN_GRID_SIDE / 2;
+    state.grid = vec![0; TOWN_GRID_SIDE * TOWN_GRID_SIDE];
+    for (index, tile) in SURFACE_VIEW_CLASS_GALLERY_TILES.iter().enumerate() {
+        state.grid[4 * TOWN_GRID_SIDE + 4 + index] = *tile;
+    }
+    state.active_view_overlay = None;
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+    match mode {
+        ViewOverlayMode::GemView => {
+            state.gems = 1;
+            state.view_gem();
+        }
+        ViewOverlayMode::PeerSpell => {
+            state.activate_peer_view_overlay();
+        }
+        ViewOverlayMode::XRaySpell => {
+            state.activate_x_ray_view_overlay();
+        }
+        ViewOverlayMode::SurfaceLook | ViewOverlayMode::BritanniaOverview => {
+            unreachable!("surface view class gallery uses local surface-view modes")
+        }
+    }
+}
+
 fn save_frame_suite_intro_menu(out: &Path) -> io::Result<SavedFrameReport> {
     let text = [
         "Ultima V",
@@ -609,7 +677,7 @@ mod tests {
         let dir = temp_output_dir("suite");
         let reports = save_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 13);
+        assert_eq!(reports.len(), 16);
         for report in &reports {
             assert!(report.path.exists());
             assert!(report.nonblack_pixels > 0);
@@ -634,6 +702,19 @@ mod tests {
                 .iter()
                 .find(|report| report.label == label)
                 .expect("expected surface view overlay report");
+            assert_eq!(report.width, TEXT_WINDOW_RENDER_WIDTH as u32);
+            assert_eq!(report.height, TEXT_WINDOW_RENDER_HEIGHT as u32);
+            assert_eq!(report.frame_kind, "composed view overlay");
+        }
+        for label in [
+            "surface-view-class-gallery",
+            "peer-view-class-gallery",
+            "x-ray-view-class-gallery",
+        ] {
+            let report = reports
+                .iter()
+                .find(|report| report.label == label)
+                .expect("expected surface view class gallery report");
             assert_eq!(report.width, TEXT_WINDOW_RENDER_WIDTH as u32);
             assert_eq!(report.height, TEXT_WINDOW_RENDER_HEIGHT as u32);
             assert_eq!(report.frame_kind, "composed view overlay");
@@ -668,6 +749,9 @@ mod tests {
         assert!(manifest.contains("dungeon-view"));
         assert!(manifest.contains("peer-view"));
         assert!(manifest.contains("x-ray-view"));
+        assert!(manifest.contains("surface-view-class-gallery"));
+        assert!(manifest.contains("peer-view-class-gallery"));
+        assert!(manifest.contains("x-ray-view-class-gallery"));
         assert!(manifest.contains("intro-menu"));
         assert!(manifest.contains("status-window"));
         assert!(manifest.contains("z-stats-modal"));
