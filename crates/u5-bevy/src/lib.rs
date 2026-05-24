@@ -653,6 +653,54 @@ fn seed_visual_key_route_ready_picker(state: &mut PlayState) {
     state.equipment_stock[EQUIPMENT_ID_ARROWS] = 5;
 }
 
+fn seed_visual_key_route_use_picker(state: &mut PlayState) {
+    state.clock = GameClock::with_date(139, 1, 1, 13, 0).expect("visual route clock is valid");
+    state.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX] = 1;
+}
+
+fn seed_visual_key_route_mix_prompt(state: &mut PlayState) {
+    state.reagents = [0; REAGENT_COUNT];
+    state.reagents[REAGENT_SULFUR_ASH] = 2;
+}
+
+fn seed_visual_key_route_rest_watch(state: &mut PlayState) {
+    state.clock = GameClock::new(8, 0).expect("visual route clock is valid");
+    state.party.push(PartyMember {
+        slot: 1,
+        class_byte: b'B',
+        status: b'G',
+        climb_stat: DEFAULT_CLIMB_STAT,
+        mana: 0,
+        hp: 8,
+        max_hp: 12,
+        level: 8,
+    });
+}
+
+fn seed_visual_key_route_new_order(state: &mut PlayState) {
+    state.party.push(PartyMember {
+        slot: 1,
+        class_byte: b'F',
+        status: b'G',
+        climb_stat: DEFAULT_CLIMB_STAT,
+        mana: 0,
+        hp: 20,
+        max_hp: 20,
+        level: 1,
+    });
+    state.party.push(PartyMember {
+        slot: 2,
+        class_byte: b'M',
+        status: b'G',
+        climb_stat: DEFAULT_CLIMB_STAT,
+        mana: 4,
+        hp: 18,
+        max_hp: 18,
+        level: 2,
+    });
+    state.party_names = vec![*b"AVATAR\0\0\0", *b"IOLO\0\0\0\0\0", *b"MARIA\0\0\0\0"];
+}
+
 fn visual_route_public_location_index(label: &str) -> Option<usize> {
     let suffix = label.strip_prefix("route-stock-location-enter-")?;
     let row = suffix.parse::<usize>().ok()?;
@@ -1877,6 +1925,25 @@ const VISUAL_KEY_STATS_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_z", KeyCode::KeyZ),
     VisualKeyStep::key("space", KeyCode::Space),
 ];
+const VISUAL_KEY_USE_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_u", KeyCode::KeyU),
+    VisualKeyStep::key("enter", KeyCode::Enter),
+];
+const VISUAL_KEY_MIX_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_m", KeyCode::KeyM),
+    VisualKeyStep::key("escape", KeyCode::Escape),
+];
+const VISUAL_KEY_REST_WATCH_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_h", KeyCode::KeyH),
+    VisualKeyStep::key("digit_1", KeyCode::Digit1),
+    VisualKeyStep::key("key_y", KeyCode::KeyY),
+    VisualKeyStep::key("digit_2", KeyCode::Digit2),
+];
+const VISUAL_KEY_NEW_ORDER_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_n", KeyCode::KeyN),
+    VisualKeyStep::key("digit_2", KeyCode::Digit2),
+    VisualKeyStep::key("digit_3", KeyCode::Digit3),
+];
 
 fn visual_key_route_suite_cases() -> Vec<VisualKeyRouteSuiteCase> {
     vec![
@@ -1967,6 +2034,37 @@ fn visual_key_route_suite_cases() -> Vec<VisualKeyRouteSuiteCase> {
             options: PlayOptions::default(),
             steps: VISUAL_KEY_STATS_STEPS,
             configure: None,
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-use-picker",
+            frame_kind: "visual key route prompt frame",
+            options: PlayOptions::default(),
+            steps: VISUAL_KEY_USE_STEPS,
+            configure: Some(seed_visual_key_route_use_picker),
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-mix-prompt",
+            frame_kind: "visual key route prompt frame",
+            options: PlayOptions::default(),
+            steps: VISUAL_KEY_MIX_STEPS,
+            configure: Some(seed_visual_key_route_mix_prompt),
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-rest-watch-prompt",
+            frame_kind: "visual key route prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            steps: VISUAL_KEY_REST_WATCH_STEPS,
+            configure: Some(seed_visual_key_route_rest_watch),
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-new-order-picker",
+            frame_kind: "visual key route prompt frame",
+            options: PlayOptions::default(),
+            steps: VISUAL_KEY_NEW_ORDER_STEPS,
+            configure: Some(seed_visual_key_route_new_order),
         },
     ]
 }
@@ -12251,7 +12349,7 @@ mod tests {
     fn visual_key_route_suite_cases_cover_real_keyboard_prompts() {
         let cases = visual_key_route_suite_cases();
 
-        assert_eq!(cases.len(), 10);
+        assert_eq!(cases.len(), 14);
         for label in [
             "route-key-world-movement-pass-music",
             "route-key-save-refusal",
@@ -12263,6 +12361,10 @@ mod tests {
             "route-key-yell-buffer",
             "route-key-ready-picker",
             "route-key-z-stats-picker",
+            "route-key-use-picker",
+            "route-key-mix-prompt",
+            "route-key-rest-watch-prompt",
+            "route-key-new-order-picker",
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
         }
@@ -12355,7 +12457,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 1755);
+        assert_eq!(reports.len(), 1770);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -12363,8 +12465,8 @@ mod tests {
             assert!(report.nonblack_pixels > 0);
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1755"));
-        assert!(manifest.contains("coverage\tvisual-key-route-steps\t64"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1770"));
+        assert!(manifest.contains("coverage\tvisual-key-route-steps\t79"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
         assert!(manifest.contains("review=route-step route=route-world-movement step=01 input=d"));
@@ -12379,6 +12481,10 @@ mod tests {
         assert!(manifest.contains("route-key-yell-buffer-09-enter"));
         assert!(manifest.contains("route-key-ready-picker-05-space"));
         assert!(manifest.contains("route-key-z-stats-picker-02-space"));
+        assert!(manifest.contains("route-key-use-picker-02-enter"));
+        assert!(manifest.contains("route-key-mix-prompt-02-escape"));
+        assert!(manifest.contains("route-key-rest-watch-prompt-04-digit_2"));
+        assert!(manifest.contains("route-key-new-order-picker-03-digit_3"));
         assert!(
             manifest.contains(
                 "review=route-step route=route-key-talk-keyword-buffer step=03 input=key_b"

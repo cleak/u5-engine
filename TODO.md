@@ -169,7 +169,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 1755 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 1770 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest, with all 40 published stock world-location entry rows, native
   shrine/Codex quest routes, TLK-backed reserved-word conversation routes across
   all 32 named-location scenes, and

@@ -128,7 +128,7 @@ audit:
   combat, and Talk, surface View class galleries for gem/Peer/X-Ray modes, plus
   combat status-highlight and death/field/cursor marker galleries.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 1755 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 1770 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including all 40
   published stock world-location entry rows, TLK-backed reserved-word
   conversation routes across all 32 named-location scenes, exact
@@ -153,7 +153,7 @@ audit:
   selection, direct movement, command refusals/prompts, Ready, Yell, and X-it,
   and real-key Bevy keyboard routes for movement, pass, Ctrl-S music toggle,
   save refusal, conversation/shrine/shop line buffers, direction prompts, Yell
-  text, Ready/Z-stats modal pickers, Backspace, Enter, and prompt-safe Escape.
+  text, Ready/Z-stats modal pickers, U-Use, M-Mix, H-Hole-up/Rest watch, New Order, Backspace, Enter, and prompt-safe Escape.
 - `cargo fmt -- --check` passed, and `git diff --check` reported only
   CRLF-normalization warnings.
 
