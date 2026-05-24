@@ -48,6 +48,7 @@ pub mod intro_menu;
 pub mod jimmy;
 pub mod karma;
 pub mod lighting;
+pub mod location_audit;
 pub mod lord_british_camp;
 pub mod lzw;
 pub mod magic;
@@ -325,6 +326,7 @@ pub use lighting::{
     light_counter_spend_with_tag, moongate_animator_render_eligible,
     overworld_underfoot_forces_dark,
 };
+pub use location_audit::*;
 pub use lord_british_camp::{
     LORD_BRITISH_CAMP_EVENT_ROLL_BOUND, LORD_BRITISH_CAMP_EVENT_THRESHOLD,
     LORD_BRITISH_CAMP_STAT_REWARD_CAP, LordBritishCampStatReward, level_for_experience,
@@ -682,4 +684,5 @@ mod tests {
     include!("tests_inline/chunk_21.rs");
     include!("tests_inline/chunk_22.rs");
     include!("tests_inline/chunk_23.rs");
+    include!("tests_inline/chunk_24.rs");
 }

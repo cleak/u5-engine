@@ -14,18 +14,19 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-24, including 2634 tests
+- `cargo test -p u5-runtime --lib` passed on 2026-05-24, including 2646 tests
   (latest verification includes public `cleak/u5-spec#47` hourly
   poison/provision/ring ordering, public #28 horse-trader adjacent placement
   priority plus no-marker refusal, public #15 inn pickup stay-counter billing,
   combat command-flow regressions for pending Z-stats/Cast actor liveness, public
   `cleak/u5-spec#41` arms-shop scene-row coverage, public issue #3
   terrain-combat replacement-tile main path, public-spec View/Peer/X-Ray
-  overlay raster-class and dungeon minimap glyph-id coverage, and public issue
-  #21 dungeon active-monster ambush setup, combat round maintenance, combat-local
+  overlay raster-class and dungeon minimap glyph-id coverage, sanitized
+  aggregate `LOCATION.DAT` authored-cell audit coverage, and public issue #21
+  dungeon active-monster ambush setup, combat round maintenance, combat-local
   ambush/camp reveal-slot helper coverage, stats-panel combat inverse-video
-  overlay coverage, disk I/O retry wrapper coverage, and shared TUI/Bevy Journey
-  Onward disk-error presentation).
+  overlay coverage, disk I/O retry wrapper coverage, and shared TUI/Bevy
+  Journey Onward disk-error presentation).
 - `cargo test -p u5-runtime published_location --tests` passed on 2026-05-24,
   including exhaustive clean fixture coverage for entering and restoring all 40
   public world-location rows without a sidecar.
@@ -1090,6 +1091,9 @@ Goal: keep asset readers complete while preserving repository cleanliness.
 
 - Areas to audit:
   - all `.DAT` map and metadata files used by runtime systems,
+  - `LOCATION.DAT` now has a sanitized aggregate authored-cell audit covering
+    all four shipped town-family files when local clean assets are present;
+    keep reports to counts, hashes, and anomaly totals rather than raw map rows,
   - all `.OOL` active-object overlays,
   - tile sheets and masks,
   - fonts,

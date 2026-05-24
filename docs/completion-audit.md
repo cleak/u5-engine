@@ -317,7 +317,7 @@ through the asset-backed Talk command path.
 |--------|----------|-------|--------|
 | `movement.md` §1–§10 | `direction.rs`, `tile_classes.rs`, `predicates.rs`, `transport.rs`, `active_object_io.rs` | per-mode movement tests | Implemented |
 | `overworld.md` §1–§15 | `play_state_impl/chunk_01.rs` overworld loop, `world_tables.rs`, `moongate.rs`, `lord_british_camp.rs`, native and sidecar encounters, public Word-of-Power seal rows | world tests in chunks 03, 05, 06, 07, 10, 12, 13, 15, 17, 23 | Implemented |
-| `town-mode.md` §1–§17 | `town_mode.rs`, `town_tables.rs`, NPC schedules, dawn/dusk substitution, alarms | town tests in chunks 04, 06, 10, 11, 15, 19, 21, 23 | Implemented (public #51 tile `0x04` poison-gas step behavior is native; coordinate and tile-attribute sidecars no longer trigger this branch) |
+| `town-mode.md` §1–§17 | `town_mode.rs`, `town_tables.rs`, `location_audit.rs`, NPC schedules, dawn/dusk substitution, alarms | town tests in chunks 04, 06, 10, 11, 15, 19, 21, 23, 24, including sanitized shipped `LOCATION.DAT` aggregate owner/class/view audits when local clean assets are present | Implemented (public #51 tile `0x04` poison-gas step behavior is native; coordinate and tile-attribute sidecars no longer trigger this branch) |
 | `dungeon-mode.md` §1–§17 | `play_state_impl/chunk_*.rs` dungeon loop, `dungeon_tables.rs`, raster in `crates/u5-bevy/src/lib.rs` first-person draw | dungeon tests in chunks 05, 12, 13, 18, 20, 23 | Implemented |
 
 ### `systems/encounters.md`
@@ -388,7 +388,7 @@ through the asset-backed Talk command path.
 | `formats/end-dat.md`, `formats/endmsg-dat.md` | `end_io.rs`, `endmsg_io.rs` | END/ENDMSG tests | Implemented |
 | `formats/font-ch.md`, `formats/font-hcs.md`, `formats/font-pcs.md` | `fonts_io.rs::load_ibm_ch`, sparse PCS loader | font decode tests | Implemented |
 | `formats/karma-dat.md` | `endmsg_io.rs::load_karma_dat` (6 verdict records) | karma decode tests | Implemented |
-| `formats/location-dat.md` | `town_tables_io.rs::load_*_dat` | location decode tests | Implemented |
+| `formats/location-dat.md` | `map_io.rs::load_floor`, `map_io.rs::resolve_location_floor_page`, `town_tables_io.rs::load_*_dat`, `location_audit.rs::audit_location_dat_files` | layout constants, location decode tests, synthetic `LOCATION.DAT` audit, and local clean all-family authored-cell audit when assets are present | Implemented |
 | `formats/look2-dat.md` | `misc_tables_io.rs::load_look2` (descriptions) | look2 decode tests | Implemented |
 | `formats/lzw.md` | `lzw.rs` decompressor | LZW round-trip tests | Implemented |
 | `formats/miscmsg-dat.md` | `miscmsg_io.rs` | message lookup tests | Implemented |
