@@ -29,7 +29,8 @@ use u5_runtime::{
     DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX, DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK,
     DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_LEVEL_SPELL_COST,
     Direction, DiskIoHandlerPhase, DungeonScene, EGA_PALETTE_RGB, ENDGAME_TABLEAU_HEIGHT,
-    ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, FIELD_SPELL_COST,
+    ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_WEAPON,
+    EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, FIELD_SPELL_COST,
     FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
     FLAME_WIND_COST, FLAME_WIND_SPELL_INDEX, FixedCellFont, GATE_TRAVEL_COST,
     GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage,
@@ -46,30 +47,31 @@ use u5_runtime::{
     PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
     POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX,
     PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget, ProportionalFont,
-    ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REL_HUR_COST,
-    REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES,
-    RectColumnSweepTransition, ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
-    SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
-    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
-    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
-    SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
-    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
-    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
-    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
-    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_BOTTOM,
-    STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE,
-    SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS,
-    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST,
-    TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS,
-    TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT,
-    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX,
-    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas,
-    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
-    TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
-    UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
-    VAS_LOR_SPELL_INDEX, WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST,
-    X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save,
-    commit_u4_transfer_save, default_party_equipment, default_party_intelligence,
+    ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH,
+    REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
+    RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition, ReturnToViewFrameKind, SAVED_GAM_FILENAME,
+    SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
+    SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
+    SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
+    SHADOWLORD_OBJECT_TILE_BASE, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
+    SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
+    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX,
+    SPECIAL_ITEM_SHARD_COWARDICE_INDEX, SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
+    SPECIAL_ITEM_SHARD_HATRED_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
+    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
+    STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene,
+    Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT,
+    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
+    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
+    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
+    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth,
+    TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState,
+    U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX,
+    UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
+    WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save, commit_u4_transfer_save,
+    default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_stay_counters, disk_io_error_message, dungeon_cell_index,
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
     hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
@@ -1345,6 +1347,36 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-castle-dispatcher-board-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-dispatcher-fire-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["F6"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-command-workflow-overlays",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["MIL/0x80/1", "R1/26", "R1/26", "N23"],
+            configure: Some(seed_visual_route_command_workflows),
+        },
+        VisualRouteSuiteCase {
             label: "route-debug-enter-castle",
             frame_kind: "visual route town frame",
             options: world_to_castle.clone(),
@@ -1483,6 +1515,42 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-dungeon-sjog-underfoot-get",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["G"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-sjog-underfoot-jimmy",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["J"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-sjog-underfoot-open",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["O"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
             label: "route-debug-enter-dungeon",
             frame_kind: "visual route dungeon frame",
             options: world_to_dungeon,
@@ -1499,6 +1567,30 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 ..PlayOptions::default()
             },
             script: &["Q", "N"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-refusal-board",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["B"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-refusal-fire",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["F"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -2633,6 +2725,26 @@ fn seed_visual_route_blackthorn_fixed_hidden(state: &mut PlayState) {
     state.player.y = 8;
     state.player.facing = Direction::East;
     state.keys = 0;
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_command_workflows(state: &mut PlayState) {
+    state.party = vec![
+        route_visual_party_member(0, b'A', b'G', 20, 20),
+        route_visual_party_member(1, b'F', b'G', 20, 20),
+        route_visual_party_member(2, b'M', b'G', 20, 20),
+    ];
+    state.party_names = default_party_names(3);
+    state.party_experience = default_party_experience(3);
+    state.party_stay_counters = default_party_stay_counters(3);
+    state.party_strengths = vec![50; 3];
+    state.party_intelligence = default_party_intelligence(3);
+    state.party_equipment = default_party_equipment(3);
+    state.reagents[REAGENT_SULFUR_ASH] = 2;
+    state.equipment_stock[EQUIPMENT_ID_BOW] = 1;
+    state.equipment_stock[EQUIPMENT_ID_ARROWS] = 5;
+    state.party_equipment[0][EQUIP_SLOT_WEAPON] = EQUIPMENT_EMPTY;
     state.sync_player_object();
     state.mark_visibility_dirty();
 }
@@ -8330,7 +8442,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 180);
+        assert_eq!(cases.len(), 188);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -8417,6 +8529,13 @@ mod tests {
                 .any(|case| case.label == "route-castle-save-refusal")
         );
         for label in [
+            "route-castle-dispatcher-board-refusal",
+            "route-castle-dispatcher-fire-refusal",
+            "route-castle-command-workflow-overlays",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
+        for label in [
             "route-debug-enter-castle",
             "route-debug-enter-castle-return-world",
             "route-debug-enter-castle-from-underworld",
@@ -8474,6 +8593,13 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-dungeon-ignite-torch")
         );
+        for label in [
+            "route-dungeon-sjog-underfoot-get",
+            "route-dungeon-sjog-underfoot-jimmy",
+            "route-dungeon-sjog-underfoot-open",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert!(
             cases
                 .iter()
@@ -8484,6 +8610,9 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-dungeon-exit-refusal")
         );
+        for label in ["route-dungeon-refusal-board", "route-dungeon-refusal-fire"] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert!(
             cases
                 .iter()
@@ -8788,7 +8917,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 566);
+        assert_eq!(reports.len(), 585);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -8842,6 +8971,9 @@ mod tests {
         assert!(manifest.contains("route-blackthorn-fixed-hidden-zero-key-search-01-s6"));
         assert!(manifest.contains("route-castle-wooden-box-use-01-ub"));
         assert!(manifest.contains("route-castle-save-refusal-02-n"));
+        assert!(manifest.contains("route-castle-dispatcher-board-refusal-01-b"));
+        assert!(manifest.contains("route-castle-dispatcher-fire-refusal-01-f6"));
+        assert!(manifest.contains("route-castle-command-workflow-overlays-04-n23"));
         assert!(manifest.contains("route-debug-enter-castle-03-idle_1"));
         assert!(manifest.contains("route-debug-enter-castle-return-world-02-w"));
         assert!(manifest.contains("route-debug-enter-castle-from-underworld-02-empty"));
@@ -8860,8 +8992,13 @@ mod tests {
         )));
         assert!(manifest.contains("route-reload-dungeon-surface-exit-return-world-02-empty"));
         assert!(manifest.contains("route-dungeon-ignite-torch-01-i"));
+        assert!(manifest.contains("route-dungeon-sjog-underfoot-get-01-g"));
+        assert!(manifest.contains("route-dungeon-sjog-underfoot-jimmy-01-j"));
+        assert!(manifest.contains("route-dungeon-sjog-underfoot-open-01-o"));
         assert!(manifest.contains("route-debug-enter-dungeon-03-n"));
         assert!(manifest.contains("route-dungeon-exit-refusal-02-n"));
+        assert!(manifest.contains("route-dungeon-refusal-board-01-b"));
+        assert!(manifest.contains("route-dungeon-refusal-fire-01-f"));
         assert!(manifest.contains("route-shop-arms-local-buy-sell-06-n"));
         assert!(manifest.contains("route-shop-healer-heal-decline-04-n"));
         assert!(manifest.contains("route-shop-healer-cure-accept-04-y"));

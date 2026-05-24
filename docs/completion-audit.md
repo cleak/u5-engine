@@ -109,7 +109,7 @@ audit:
   `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls
   plus combat status-highlight and death/field/cursor marker galleries.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 566 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 585 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including horse-trader
   purchases, all nine public arms-shop first-stock purchases, accepted healer cure/heal/resurrect, all four public shipwright
   delivery-row purchases, spell routes for Locate, In Lor/Light/Open, restore, active effects,
@@ -118,7 +118,8 @@ audit:
   Daemon, dungeon levels, dungeon fields/dispel, dungeon Open chest, utility
   item use, Gate Travel success/refusal, natural moongate live-entry, chasm
   fall, forced whirlpool Underworld branch, fixed narrative gate open/ordained-block
-  routes, H-Hole-up rest, save/refusal, fixed hidden-treasure, Blackthorn
+  routes, H-Hole-up rest, save/refusal, castle dispatcher/workflow overlays,
+  dungeon SJOG/refusal paths, fixed hidden-treasure, Blackthorn
   audience/rescue routes, debug-enter town/dungeon transitions, ship X-it/skiff
   and hoisted-sail movement routes, extended Britannia/castle/dungeon routes,
   Shadowlord town entry/Yell/Stonegate, all three native shard vanquish paths,
