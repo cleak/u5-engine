@@ -5238,6 +5238,36 @@ fn display_driver_executes_back_buffer_copy_and_front_fill_boundaries() {
 }
 
 #[test]
+fn display_driver_dissolve_progresses_in_deterministic_partial_order() {
+    let mut surface = EgaDisplaySurface::new();
+    let rect = normalize_clamp_pixel_rect(0, 0, 3, 2).unwrap();
+    surface.fill_back_rect(rect, 0x0a);
+    let mut dissolve = EgaDissolveState::new(rect);
+
+    assert_eq!(dissolve.total_pixels(), 12);
+    assert_eq!(surface.dissolve_back_to_front_step(&mut dissolve, 5), 5);
+    assert_eq!(dissolve.copied_pixels(), 5);
+    assert_eq!(dissolve.remaining_pixels(), 7);
+    assert!(!dissolve.is_finished());
+    assert_eq!(
+        surface
+            .front_pixels()
+            .iter()
+            .filter(|pixel| **pixel == 0x0a)
+            .count(),
+        5
+    );
+
+    assert_eq!(surface.dissolve_back_to_front_step(&mut dissolve, usize::MAX), 7);
+    assert!(dissolve.is_finished());
+    for y in rect.y0..=rect.y1 {
+        for x in rect.x0..=rect.x1 {
+            assert_eq!(surface.read_pixel(x, y), Some(0x0a));
+        }
+    }
+}
+
+#[test]
 fn display_driver_executes_front_buffer_tile_glyph_pixel_and_title_ops() {
     let mut surface = EgaDisplaySurface::new();
     let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
@@ -5292,6 +5322,18 @@ fn display_driver_executes_front_buffer_tile_glyph_pixel_and_title_ops() {
         .execute(EgaDisplayOperation::SetCurrentColor(0x1f))
         .unwrap();
     surface
+        .execute(EgaDisplayOperation::DrawLine {
+            x0: -2,
+            y0: 4,
+            x1: 2,
+            y1: 4
+        })
+        .unwrap();
+    assert_eq!(surface.read_pixel(0, 4), Some(0x0f));
+    assert_eq!(surface.read_pixel(2, 4), Some(0x0f));
+    assert_eq!(surface.read_pixel(3, 4), Some(5));
+
+    surface
         .execute(EgaDisplayOperation::PlotPixel { x: 319, y: 199 })
         .unwrap();
     assert_eq!(
@@ -5307,6 +5349,49 @@ fn display_driver_executes_front_buffer_tile_glyph_pixel_and_title_ops() {
     assert!(matches!(title_rect, EgaDispatchResult::Rect(_)));
     surface.execute(EgaDisplayOperation::PresentFrame).unwrap();
     assert_eq!(surface.presented_frames(), 1);
+}
+
+#[test]
+fn display_driver_loaded_tile_graphics_save_restore_and_plane_swap() {
+    let surface = EgaDisplaySurface::new();
+    let mut atlas = TileAtlas {
+        depth: TileGraphicsDepth::Ega16,
+        pixels: vec![0; TILE_ATLAS_TILE_PIXELS * 3],
+    };
+    atlas.pixels[0] = 0x02;
+    atlas.pixels[TILE_ATLAS_TILE_PIXELS] = 0x04;
+    atlas.pixels[TILE_ATLAS_TILE_PIXELS * 2] = 0x06;
+    let mut saved = EgaLoadedTileGraphicsSave::default();
+
+    assert!(!saved.has_saved_pixels());
+    let mut surface = surface;
+    surface
+        .execute(EgaDisplayOperation::SaveLoadedTileGraphics {
+            atlas: &atlas,
+            saved: &mut saved,
+        })
+        .unwrap();
+    assert!(saved.has_saved_pixels());
+
+    surface
+        .execute(EgaDisplayOperation::SwapLoadedTileRedGreenPlanes {
+            atlas: &mut atlas,
+            tile_range: 0..2,
+        })
+        .unwrap();
+    assert_eq!(atlas.pixels[0], 0x04);
+    assert_eq!(atlas.pixels[TILE_ATLAS_TILE_PIXELS], 0x02);
+    assert_eq!(atlas.pixels[TILE_ATLAS_TILE_PIXELS * 2], 0x06);
+
+    surface
+        .execute(EgaDisplayOperation::RestoreLoadedTileGraphics {
+            atlas: &mut atlas,
+            saved: &saved,
+        })
+        .unwrap();
+    assert_eq!(atlas.pixels[0], 0x02);
+    assert_eq!(atlas.pixels[TILE_ATLAS_TILE_PIXELS], 0x04);
+    assert_eq!(atlas.pixels[TILE_ATLAS_TILE_PIXELS * 2], 0x06);
 }
 
 #[test]
@@ -7799,14 +7884,14 @@ fn toll_progress_counter_increments_per_payment_and_bumps_standing_at_milestone(
 fn return_to_view_published_wait_cadence_constants() {
     // `cleak/u5-spec#54`: the published WAIT beat pauses for
     // exactly eight title ticks (~1.1s at 30fps), and any keypress
-    // observed during the wait does not cancel the cinematic.
+    // observed during the wait exits the preview.
     assert_eq!(RTV_WAIT_FIXED_TICKS, 8);
     assert_eq!(RTV_CELL_EFFECT_STEPS, 15);
     assert_eq!(RTV_CELL_EFFECT_FINAL_TICKS, 2);
     assert_eq!(RTV_FIXED_WIPE_STEPS, 5);
     assert_eq!(RTV_FIXED_WIPE_TRAILING_TICKS, 3);
     assert_eq!(RTV_FIXED_WIPE_TOTAL_TICKS, 16);
-    assert!(RTV_WAIT_IS_NON_INTERRUPTIBLE);
+    assert!(RTV_WAIT_EXITS_ON_KEYPRESS);
 }
 
 #[test]

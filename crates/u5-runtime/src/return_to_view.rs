@@ -51,12 +51,10 @@ pub const RTV_WAIT_FIXED_TICKS: u8 = 8;
 pub const RTV_FIXED_WIPE_TOTAL_TICKS: u8 =
     RTV_FIXED_WIPE_STEPS + RTV_WAIT_FIXED_TICKS + RTV_FIXED_WIPE_TRAILING_TICKS;
 
-/// `cleak/u5-spec#54`: the Return-to-View preview is a non-interruptible
-/// cinematic — keystrokes during a [`RunPreviewTick`](ReturnToViewCommand)
-/// beat do not cancel the wait. The cinematic exits only when the
-/// command stream completes or the surrounding ESC handler fires
-/// after the current command finishes.
-pub const RTV_WAIT_IS_NON_INTERRUPTIBLE: bool = true;
+/// `systems/intro.md section 12`: the Return-to-View preview exits on any
+/// keypress observed by a wait/tick path, then restores the preserved
+/// title/menu surface.
+pub const RTV_WAIT_EXITS_ON_KEYPRESS: bool = true;
 
 /// `formats/location-dat.md` Return-to-View commands draw special actors in
 /// the visible text/map screen seven tile rows below the script-local actor Y.

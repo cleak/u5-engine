@@ -1,6 +1,7 @@
 //! Clean semantic display-driver surface for the EGA-compatible v1 renderer.
 
 use std::io;
+use std::ops::Range;
 
 use crate::*;
 
@@ -43,6 +44,12 @@ pub enum EgaDisplayOperation<'a> {
         x: usize,
         y: usize,
     },
+    DrawLine {
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+    },
     ScrollTextUp {
         rect: DisplayPixelRect,
         blank_color: u8,
@@ -73,6 +80,18 @@ pub enum EgaDisplayOperation<'a> {
         background: u8,
     },
     AdvanceTitleTick,
+    SaveLoadedTileGraphics {
+        atlas: &'a TileAtlas,
+        saved: &'a mut EgaLoadedTileGraphicsSave,
+    },
+    RestoreLoadedTileGraphics {
+        atlas: &'a mut TileAtlas,
+        saved: &'a EgaLoadedTileGraphicsSave,
+    },
+    SwapLoadedTileRedGreenPlanes {
+        atlas: &'a mut TileAtlas,
+        tile_range: Range<usize>,
+    },
     PresentFrame,
     NoOp,
 }
@@ -146,6 +165,109 @@ pub fn text_cell_rect_to_pixel_rect(
         max_cell_x * CH_CELL_SIDE as i32 + (CH_CELL_SIDE as i32 - 1),
         max_cell_y * CH_CELL_SIDE as i32 + (CH_CELL_SIDE as i32 - 1),
     )
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EgaDissolveState {
+    rect: DisplayPixelRect,
+    cursor: usize,
+    total: usize,
+    stride: usize,
+    offset: usize,
+}
+
+impl EgaDissolveState {
+    pub fn new(rect: DisplayPixelRect) -> Self {
+        let total = rect.width() * rect.height();
+        Self {
+            rect,
+            cursor: 0,
+            total,
+            stride: dissolve_stride(total),
+            offset: total / 2,
+        }
+    }
+
+    pub const fn rect(&self) -> DisplayPixelRect {
+        self.rect
+    }
+
+    pub const fn total_pixels(&self) -> usize {
+        self.total
+    }
+
+    pub const fn copied_pixels(&self) -> usize {
+        self.cursor
+    }
+
+    pub const fn remaining_pixels(&self) -> usize {
+        self.total.saturating_sub(self.cursor)
+    }
+
+    pub const fn is_finished(&self) -> bool {
+        self.cursor >= self.total
+    }
+
+    pub fn next_pixel(&mut self) -> Option<(usize, usize)> {
+        if self.is_finished() {
+            return None;
+        }
+        let visit = (self
+            .cursor
+            .saturating_mul(self.stride)
+            .saturating_add(self.offset))
+            % self.total;
+        self.cursor += 1;
+        Some((
+            self.rect.x0 + (visit % self.rect.width()),
+            self.rect.y0 + (visit / self.rect.width()),
+        ))
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct EgaLoadedTileGraphicsSave {
+    pixels: Option<Vec<u8>>,
+}
+
+impl EgaLoadedTileGraphicsSave {
+    pub fn has_saved_pixels(&self) -> bool {
+        self.pixels.is_some()
+    }
+
+    pub fn saved_pixels(&self) -> Option<&[u8]> {
+        self.pixels.as_deref()
+    }
+
+    pub fn save_from_atlas(&mut self, atlas: &TileAtlas) {
+        self.pixels = Some(atlas.pixels.clone());
+    }
+
+    pub fn restore_to_atlas(&self, atlas: &mut TileAtlas) -> io::Result<()> {
+        let Some(pixels) = &self.pixels else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "loaded tile graphics restore requested before save",
+            ));
+        };
+        atlas.pixels.clone_from(pixels);
+        Ok(())
+    }
+}
+
+pub fn swap_loaded_tile_red_green_planes(atlas: &mut TileAtlas, tile_range: Range<usize>) {
+    let start = tile_range.start.saturating_mul(TILE_ATLAS_TILE_PIXELS);
+    let end = tile_range
+        .end
+        .saturating_mul(TILE_ATLAS_TILE_PIXELS)
+        .min(atlas.pixels.len());
+    if start >= end {
+        return;
+    }
+    for pixel in &mut atlas.pixels[start..end] {
+        let value = *pixel & 0x0f;
+        *pixel = (value & !0x06) | ((value & 0x02) << 1) | ((value & 0x04) >> 1);
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -241,6 +363,40 @@ impl EgaDisplaySurface {
         self.front_pixels[y * DISPLAY_SURFACE_WIDTH + x] = self.current_color;
     }
 
+    pub fn draw_line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32) {
+        let mut x = x0;
+        let mut y = y0;
+        let dx = (x1 - x0).abs();
+        let sx = if x0 < x1 { 1 } else { -1 };
+        let dy = -(y1 - y0).abs();
+        let sy = if y0 < y1 { 1 } else { -1 };
+        let mut err = dx + dy;
+
+        loop {
+            self.plot_pixel_checked(x, y);
+            if x == x1 && y == y1 {
+                break;
+            }
+            let e2 = err.saturating_mul(2);
+            if e2 >= dy {
+                err += dy;
+                x += sx;
+            }
+            if e2 <= dx {
+                err += dx;
+                y += sy;
+            }
+        }
+    }
+
+    fn plot_pixel_checked(&mut self, x: i32, y: i32) {
+        if (0..DISPLAY_SURFACE_WIDTH as i32).contains(&x)
+            && (0..DISPLAY_SURFACE_HEIGHT as i32).contains(&y)
+        {
+            self.front_pixels[y as usize * DISPLAY_SURFACE_WIDTH + x as usize] = self.current_color;
+        }
+    }
+
     pub fn fill_rect_current_color(&mut self, rect: DisplayPixelRect) {
         self.fill_rect(rect, self.current_color);
     }
@@ -289,7 +445,25 @@ impl EgaDisplaySurface {
     }
 
     pub fn dissolve_back_to_front_rect(&mut self, rect: DisplayPixelRect) {
-        copy_rect_between_buffers(&self.back_pixels, &mut self.front_pixels, rect);
+        let mut state = EgaDissolveState::new(rect);
+        while self.dissolve_back_to_front_step(&mut state, usize::MAX) != 0 {}
+    }
+
+    pub fn dissolve_back_to_front_step(
+        &mut self,
+        state: &mut EgaDissolveState,
+        max_pixels: usize,
+    ) -> usize {
+        let mut copied = 0;
+        while copied < max_pixels {
+            let Some((x, y)) = state.next_pixel() else {
+                break;
+            };
+            let index = y * DISPLAY_SURFACE_WIDTH + x;
+            self.front_pixels[index] = self.back_pixels[index];
+            copied += 1;
+        }
+        copied
     }
 
     pub fn blit_tile_at_pixel(
@@ -441,6 +615,12 @@ impl EgaDisplaySurface {
                 }
                 Ok(EgaDispatchResult::None)
             }
+            EgaDisplayOperation::DrawLine { x0, y0, x1, y1 } => {
+                if self.render_target == DisplayRenderTarget::Front {
+                    self.draw_line(x0, y0, x1, y1);
+                }
+                Ok(EgaDispatchResult::None)
+            }
             EgaDisplayOperation::ScrollTextUp { rect, blank_color } => {
                 if self.render_target == DisplayRenderTarget::Front {
                     self.scroll_text_rect_up_one_row(rect, blank_color);
@@ -498,6 +678,18 @@ impl EgaDisplaySurface {
                 let rect = self.advance_title_tick();
                 Ok(EgaDispatchResult::Rect(rect))
             }
+            EgaDisplayOperation::SaveLoadedTileGraphics { atlas, saved } => {
+                saved.save_from_atlas(atlas);
+                Ok(EgaDispatchResult::None)
+            }
+            EgaDisplayOperation::RestoreLoadedTileGraphics { atlas, saved } => {
+                saved.restore_to_atlas(atlas)?;
+                Ok(EgaDispatchResult::None)
+            }
+            EgaDisplayOperation::SwapLoadedTileRedGreenPlanes { atlas, tile_range } => {
+                swap_loaded_tile_red_green_planes(atlas, tile_range);
+                Ok(EgaDispatchResult::None)
+            }
             EgaDisplayOperation::PresentFrame => {
                 self.present_frame();
                 Ok(EgaDispatchResult::None)
@@ -520,4 +712,20 @@ fn copy_rect_between_buffers(src: &[u8], dst: &mut [u8], rect: DisplayPixelRect)
         let end = start + rect.width();
         dst[start..end].copy_from_slice(&src[start..end]);
     }
+}
+
+fn dissolve_stride(total: usize) -> usize {
+    [521, 257, 131, 73, 37, 17, 5, 1]
+        .into_iter()
+        .find(|candidate| *candidate < total && gcd(*candidate, total) == 1)
+        .unwrap_or(1)
+}
+
+fn gcd(mut a: usize, mut b: usize) -> usize {
+    while b != 0 {
+        let rem = a % b;
+        a = b;
+        b = rem;
+    }
+    a
 }

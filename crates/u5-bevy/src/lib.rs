@@ -3847,6 +3847,27 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
     for pixel in rgba.chunks_exact_mut(4) {
         pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
     }
+    if let Some(title_rgba) =
+        visual_intro_title_art_rgba(&intro.game_dir, None, intro.title_tick_frame)
+    {
+        blit_rgba(
+            &mut rgba,
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+            &title_rgba,
+            TITLE_SURFACE_WIDTH as usize,
+            TITLE_SURFACE_HEIGHT as usize,
+            0,
+            0,
+        );
+    } else {
+        rgba = render_text_panel_rgba(
+            "Return to View",
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+        )
+        .unwrap_or(rgba);
+    }
 
     let VisualIntroPanel::ReturnToView {
         preview_frames_rgba,
@@ -7780,6 +7801,12 @@ mod tests {
             frame[caption_start..caption_end]
                 .chunks_exact(4)
                 .any(|pixel| { pixel == [0x55, 0xff, 0xff, 0xff] })
+        );
+        assert!(
+            frame[..caption_start]
+                .chunks_exact(4)
+                .any(|pixel| { pixel != [0x00, 0x00, 0x00, 0xff] }),
+            "Return-to-View should preserve or synthesize a visible intro backing surface"
         );
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
