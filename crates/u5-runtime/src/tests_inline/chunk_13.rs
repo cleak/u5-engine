@@ -12192,6 +12192,73 @@ fn spell_scene_allow_mask_bits_match_spec() {
 }
 
 #[test]
+fn spell_route_family_covers_every_published_spell_row() {
+    // magic.md §8: every spell-list row has an explicit dispatcher family.
+    let expected = [
+        ("IL", SpellRouteFamily::LightCounter),
+        ("GP", SpellRouteFamily::ActiveTargetAttack),
+        ("AZ", SpellRouteFamily::PartyRestore),
+        ("AN", SpellRouteFamily::PartyRestore),
+        ("M", SpellRouteFamily::PartyRestore),
+        ("AY", SpellRouteFamily::Vanish),
+        ("AS", SpellRouteFamily::Open),
+        ("ACX", SpellRouteFamily::RepelUndead),
+        ("HR", SpellRouteFamily::RelHur),
+        ("IW", SpellRouteFamily::Locate),
+        ("KX", SpellRouteFamily::ConjureAnimal),
+        ("IMX", SpellRouteFamily::CreateFood),
+        ("LV", SpellRouteFamily::LightCounter),
+        ("FV", SpellRouteFamily::ActiveTargetAttack),
+        ("FGI", SpellRouteFamily::FieldPlacement),
+        ("GIN", SpellRouteFamily::FieldPlacement),
+        ("GIZ", SpellRouteFamily::FieldPlacement),
+        ("IP", SpellRouteFamily::Blink),
+        ("AG", SpellRouteFamily::FieldRemoval),
+        ("IS", SpellRouteFamily::ActiveEffect),
+        ("GIS", SpellRouteFamily::FieldPlacement),
+        ("PU", SpellRouteFamily::DungeonLevel),
+        ("DP", SpellRouteFamily::DungeonLevel),
+        ("QW", SpellRouteFamily::Reveal),
+        ("BIX", SpellRouteFamily::Swarm),
+        ("AEP", SpellRouteFamily::MagicLock),
+        ("EIP", SpellRouteFamily::UnlockMagic),
+        ("MV", SpellRouteFamily::PartyRestore),
+        ("IZ", SpellRouteFamily::DirectedWindCone),
+        ("RT", SpellRouteFamily::ActiveEffect),
+        ("IPVY", SpellRouteFamily::Tremor),
+        ("AQW", SpellRouteFamily::ActiveEffect),
+        ("AI", SpellRouteFamily::ActiveEffect),
+        ("AWY", SpellRouteFamily::XRay),
+        ("AEX", SpellRouteFamily::CreaturePromptTargeter),
+        ("BRX", SpellRouteFamily::CreaturePromptTargeter),
+        ("LS", SpellRouteFamily::Invisibility),
+        ("CX", SpellRouteFamily::ActiveTargetAttack),
+        ("IQX", SpellRouteFamily::CreaturePromptTargeter),
+        ("IQW", SpellRouteFamily::Peer),
+        ("HIN", SpellRouteFamily::DirectedWindCone),
+        ("CIQ", SpellRouteFamily::Fear),
+        ("CIM", SpellRouteFamily::PartyRestore),
+        ("CKX", SpellRouteFamily::SummonDaemon),
+        ("CGIV", SpellRouteFamily::DirectedWindCone),
+        ("FHI", SpellRouteFamily::DirectedWindCone),
+        ("PRV", SpellRouteFamily::GateTravel),
+        ("AT", SpellRouteFamily::NegateTime),
+    ];
+
+    assert_eq!(expected.len(), SPELL_COUNT);
+    for (index, (code, family)) in expected.into_iter().enumerate() {
+        assert_eq!(SPELL_CODES[index], code, "spell-list row {index}");
+        assert_eq!(
+            spell_route_family(index),
+            Some(family),
+            "{code} route family"
+        );
+        assert_eq!(spell_index_from_code(code), Some(index));
+    }
+    assert_eq!(spell_route_family(SPELL_COUNT), None);
+}
+
+#[test]
 fn directed_wind_spell_kill_xp_predicate_matches_spec() {
     // magic.md §8
     assert_eq!(DIRECTED_WIND_MAX_CELLS, 63);

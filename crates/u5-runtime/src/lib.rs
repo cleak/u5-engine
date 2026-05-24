@@ -341,12 +341,12 @@ pub use magic::{
     MMIX_QUANTITY_PROMPT_MESSAGE, MMIX_SPELL_PROMPT_MESSAGE, RUNE_SYLLABLE_VOCABULARY,
     SPELL_SCENE_BIT_COMBAT, SPELL_SCENE_BIT_DUNGEON, SPELL_SCENE_BIT_INDOOR,
     SPELL_SCENE_BIT_OVERWORLD, SPELL_SELECTOR_IGNORED_LETTERS, SPELL_SELECTOR_MAX_LEN,
-    SpellSceneClass, active_effect_tag_for_byte, cast_dispatcher_gate, combat_interference_blocks,
-    conjure_summon_for_roll, field_spell_kind_for_dungeon_byte, heal_spell_amount_from_raw_roll_u8,
-    is_resident_rune_syllable, sextant_coordinate_letters, spell_allowed_in_scene,
-    spell_charge_add_capped, spell_circle_for, spell_combat_field_kind, spell_common_name,
-    spell_field_placement_byte, spell_indoor_absorbs, spell_mana_cost, spell_min_caster_level,
-    spell_rune_name, spell_selector_is_ignored,
+    SpellRouteFamily, SpellSceneClass, active_effect_tag_for_byte, cast_dispatcher_gate,
+    combat_interference_blocks, conjure_summon_for_roll, field_spell_kind_for_dungeon_byte,
+    heal_spell_amount_from_raw_roll_u8, is_resident_rune_syllable, sextant_coordinate_letters,
+    spell_allowed_in_scene, spell_charge_add_capped, spell_circle_for, spell_combat_field_kind,
+    spell_common_name, spell_field_placement_byte, spell_indoor_absorbs, spell_mana_cost,
+    spell_min_caster_level, spell_route_family, spell_rune_name, spell_selector_is_ignored,
 };
 pub use main_loop::{
     CommandDispatchStatus, DUNGEON_DOOM_SCENE_BYTE, DUNGEON_ENTRY_SURFACE_X,

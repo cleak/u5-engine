@@ -130,6 +130,96 @@ pub const fn spell_allowed_in_scene(allow_mask: u8, scene: SpellSceneClass) -> b
     (allow_mask & scene.allow_mask_bit()) != 0
 }
 
+/// `magic.md §8` player-spell dispatcher family. This covers every
+/// published spell-list row, including combat-only rows whose finer
+/// combat behavior is further classified by
+/// [`crate::resolve_combat_spell_handler_family`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpellRouteFamily {
+    LightCounter,
+    ActiveTargetAttack,
+    PartyRestore,
+    Vanish,
+    Open,
+    RepelUndead,
+    RelHur,
+    Locate,
+    Peer,
+    ConjureAnimal,
+    Swarm,
+    CreateFood,
+    FieldPlacement,
+    Blink,
+    FieldRemoval,
+    ActiveEffect,
+    DungeonLevel,
+    Reveal,
+    MagicLock,
+    UnlockMagic,
+    DirectedWindCone,
+    Tremor,
+    XRay,
+    CreaturePromptTargeter,
+    Invisibility,
+    Fear,
+    SummonDaemon,
+    GateTravel,
+    NegateTime,
+}
+
+/// `magic.md §8`: classify a spell-list index into the route family
+/// handled by the C-Cast dispatcher. Returns `None` only for
+/// out-of-range indexes.
+pub const fn spell_route_family(spell_index: usize) -> Option<SpellRouteFamily> {
+    Some(match spell_index {
+        IN_LOR_SPELL_INDEX | VAS_LOR_SPELL_INDEX => SpellRouteFamily::LightCounter,
+        MAGIC_MISSILE_SPELL_INDEX | FIREBALL_SPELL_INDEX | KILL_SPELL_INDEX => {
+            SpellRouteFamily::ActiveTargetAttack
+        }
+        AWAKEN_SPELL_INDEX
+        | CURE_SPELL_INDEX
+        | HEAL_SPELL_INDEX
+        | GREAT_HEAL_SPELL_INDEX
+        | RESURRECT_SPELL_INDEX => SpellRouteFamily::PartyRestore,
+        VANISH_SPELL_INDEX => SpellRouteFamily::Vanish,
+        OPEN_SPELL_INDEX => SpellRouteFamily::Open,
+        REPEL_UNDEAD_SPELL_INDEX => SpellRouteFamily::RepelUndead,
+        REL_HUR_SPELL_INDEX => SpellRouteFamily::RelHur,
+        IN_WIS_SPELL_INDEX => SpellRouteFamily::Locate,
+        PEER_SPELL_INDEX => SpellRouteFamily::Peer,
+        10 => SpellRouteFamily::ConjureAnimal,
+        CREATE_FOOD_SPELL_INDEX => SpellRouteFamily::CreateFood,
+        FIRE_FIELD_SPELL_INDEX
+        | POISON_FIELD_SPELL_INDEX
+        | SLEEP_FIELD_SPELL_INDEX
+        | ENERGY_FIELD_SPELL_INDEX => SpellRouteFamily::FieldPlacement,
+        BLINK_SPELL_INDEX => SpellRouteFamily::Blink,
+        DISPEL_FIELD_SPELL_INDEX => SpellRouteFamily::FieldRemoval,
+        PROTECTION_SPELL_INDEX
+        | QUICKNESS_SPELL_INDEX
+        | MASS_CHARM_SPELL_INDEX
+        | NEGATE_MAGIC_SPELL_INDEX => SpellRouteFamily::ActiveEffect,
+        UUS_POR_SPELL_INDEX | DES_POR_SPELL_INDEX => SpellRouteFamily::DungeonLevel,
+        REVEAL_SPELL_INDEX => SpellRouteFamily::Reveal,
+        24 => SpellRouteFamily::Swarm,
+        MAGIC_LOCK_SPELL_INDEX => SpellRouteFamily::MagicLock,
+        UNLOCK_MAGIC_SPELL_INDEX => SpellRouteFamily::UnlockMagic,
+        SLEEP_SPELL_INDEX
+        | POISON_WIND_SPELL_INDEX
+        | DEATH_WIND_SPELL_INDEX
+        | FLAME_WIND_SPELL_INDEX => SpellRouteFamily::DirectedWindCone,
+        30 => SpellRouteFamily::Tremor,
+        X_RAY_SPELL_INDEX => SpellRouteFamily::XRay,
+        34 | 35 | 38 => SpellRouteFamily::CreaturePromptTargeter,
+        INVISIBILITY_SPELL_INDEX => SpellRouteFamily::Invisibility,
+        CAUSE_FEAR_SPELL_INDEX => SpellRouteFamily::Fear,
+        SUMMON_DAEMON_SPELL_INDEX => SpellRouteFamily::SummonDaemon,
+        GATE_TRAVEL_SPELL_INDEX => SpellRouteFamily::GateTravel,
+        TIME_STOP_SPELL_INDEX => SpellRouteFamily::NegateTime,
+        _ => return None,
+    })
+}
+
 /// `magic.md §8` directed-spell wind family. Sleep, Poison Wind,
 /// Death Wind, and Flame Wind share one cardinal direction cone
 /// layer that builds a widening clipped set of arena cells from the
