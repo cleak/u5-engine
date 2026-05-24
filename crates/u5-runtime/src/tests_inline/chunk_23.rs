@@ -6410,6 +6410,14 @@
             combat_ring_candidate_coordinates(0, 0),
             vec![(1, 0), (1, 1), (0, 1)]
         );
+        assert_eq!(
+            combat_ring_candidate_coordinates_around(-1, 5),
+            vec![(0, 4), (0, 5), (0, 6)]
+        );
+        assert_eq!(
+            combat_direction_target_coordinate(5, 5, Direction::East),
+            Some((6, 5))
+        );
     }
 
     #[test]
@@ -7329,7 +7337,7 @@
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
         state.combat_terrain = [[0x0c; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
-        state.combat_terrain[5][4] = 0x04;
+        state.combat_terrain[4][6] = 0x04;
         state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
         state.party = vec![PartyMember {
             slot: 0,
@@ -7368,7 +7376,7 @@
 
         assert_eq!(
             state
-                .cast_spell_from_suffix("1CKX", std::path::Path::new(""))
+                .cast_spell_from_suffix("1CKX6", std::path::Path::new(""))
                 .unwrap(),
             MoveOutcome::Cast
         );
@@ -7383,8 +7391,8 @@
             resolve_summoned_combat_actor_descriptor(
                 COMBAT_CLASS_DAEMON,
                 COMBAT_PARTY_ACTOR_SLOTS as u8,
+                6,
                 4,
-                5,
                 COMBAT_SUMMONED_ACTOR_FLAGS,
                 0,
             )
@@ -7392,8 +7400,47 @@
         );
         assert_eq!(
             state.active_objects[COMBAT_PARTY_ACTOR_SLOTS],
-            summoned_active_object_record(COMBAT_CLASS_DAEMON, 4, 5, 0).unwrap()
+            summoned_active_object_record(COMBAT_CLASS_DAEMON, 6, 4, 0).unwrap()
         );
+    }
+
+    #[test]
+    fn combat_cast_summon_daemon_requires_direction_before_spending_resources() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.party = vec![PartyMember {
+            slot: 0,
+            class_byte: 1,
+            status: b'G',
+            climb_stat: 0,
+            mana: 8,
+            hp: 30,
+            max_hp: 30,
+            level: 8,
+        }];
+        let spell_index = spell_index_from_code("CKX").unwrap();
+        state.spell_charges[spell_index] = 1;
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            30,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+
+        assert_eq!(
+            state
+                .cast_spell_from_suffix("1CKX", std::path::Path::new(""))
+                .unwrap(),
+            MoveOutcome::Blocked
+        );
+        assert_eq!(state.message, "Direction? Use C1CKX6.");
+        assert_eq!(state.spell_charges[spell_index], 1);
+        assert_eq!(state.party[0].mana, 8);
+        assert_eq!(state.turn, 0);
     }
 
     #[test]
@@ -9430,6 +9477,26 @@
     }
 
     #[test]
+    fn combat_input_dispatch_accepts_controlled_non_party_actor_turn() {
+        let game_dir = std::path::Path::new(".");
+        let mut state = combat_player_command_state(8, 5);
+        state.combat_actors[8].flags |= COMBAT_ACTOR_FLAG_TEAM_TOGGLE;
+        state.pending_combat_actor_slot = Some(8);
+        state.next_combat_actor_slot = 9;
+        state.visibility_dirty = false;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, '6', "", game_dir).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!((state.combat_actors[8].x, state.combat_actors[8].y), (9, 5));
+        assert_eq!((state.active_objects[8].x, state.active_objects[8].y), (9, 5));
+        assert_ne!(state.message, "No active combatant.");
+        assert!(state.visibility_dirty);
+    }
+
+    #[test]
     fn combat_input_dispatch_ready_binds_pending_actor_to_picker() {
         let game_dir = std::path::Path::new(".");
         let mut state = combat_player_command_state(8, 5);
@@ -10414,8 +10481,19 @@
             99,
             99,
         ]);
+        actors[9] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80 | COMBAT_ACTOR_FLAG_STATUS_DISABLED,
+            COMBAT_CLASS_GIANT_RAT,
+            0,
+            0,
+            9,
+            9,
+        ]);
 
         assert!(combat_actor_occupies_arena_cell(actors[0], 2, 2));
+        assert!(combat_actor_occupies_arena_cell(actors[9], 9, 9));
         assert!(!combat_actor_occupies_arena_cell(actors[7], 4, 4));
 
         let legal = build_combat_ai_legal_cell_mask(&terrain, &actors, |tile| tile != 0xff);
@@ -10425,7 +10503,7 @@
         assert!(!legal[2][2]);
         assert!(!legal[3][3]);
         assert!(legal[4][4]);
-        assert!(legal[9][9]);
+        assert!(!legal[9][9]);
     }
 
     #[test]
@@ -13454,7 +13532,7 @@
     }
 
     #[test]
-    fn combat_step_post_field_contact_applies_without_consuming_marker() {
+    fn combat_step_post_field_contact_skips_current_actor_without_consuming_marker() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
         state.party = vec![PartyMember {
@@ -13498,24 +13576,14 @@
             aux1: 0,
             aux3: 0,
         };
-        let mut expected_prng = state.prng_state;
-        let _poison_roll = u5_prng_range_u16(&mut expected_prng, 0, 19);
-        let fire_roll = u5_prng_range_u16(&mut expected_prng, 0, 20) as u8;
-        let defense_roll =
-            u5_prng_range_u16(&mut expected_prng, 0, CHARACTER_DEFENSE_FACTORY_SEED.into())
-                as u8;
-        let expected_damage = resolve_spell_damage_after_defense(
-            combat_field_fire_raw_damage(fire_roll) as i16,
-            defense_roll,
-        )
-        .max(0) as u16;
+        let expected_prng = state.prng_state;
 
         let outcome = state.apply_combat_step_or_attack_primitive(0, 1, COMBAT_DIRECTION_EAST, true);
 
         assert!(outcome.committed_movement());
         assert_eq!((state.combat_actors[0].x, state.combat_actors[0].y), (4, 3));
         assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (4, 3));
-        assert_eq!(state.party[0].hp, 20 - expected_damage);
+        assert_eq!(state.party[0].hp, 20);
         assert_eq!(state.prng_state, expected_prng);
         assert_eq!(state.party[0].status, b'G');
         assert_eq!(

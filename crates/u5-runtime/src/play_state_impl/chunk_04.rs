@@ -1034,9 +1034,30 @@ impl PlayState {
                     self.message = "Not here!".to_string();
                     return MoveOutcome::Blocked;
                 }
-                let seed = self.combat_neighbor_placement_seed();
-                let applied =
-                    self.apply_combat_summon_class_around_slot(COMBAT_CLASS_DAEMON, 0, seed);
+                let Some(direction) = direction else {
+                    self.message = "Direction? Use UCKX6.".to_string();
+                    return MoveOutcome::Blocked;
+                };
+                let Some(caster) = self.combat_actors.first().copied() else {
+                    self.message = "Who uses?".to_string();
+                    return MoveOutcome::Blocked;
+                };
+                if !combat_actor_is_active_not_dead(caster) {
+                    self.message = "Who uses?".to_string();
+                    return MoveOutcome::Blocked;
+                }
+                let Some((target_x, target_y)) =
+                    combat_direction_target_coordinate(caster.x, caster.y, direction)
+                else {
+                    self.message = "Summon requires a cardinal direction.".to_string();
+                    return MoveOutcome::Blocked;
+                };
+                let applied = self.apply_combat_summon_class_around_target_coordinate(
+                    COMBAT_CLASS_DAEMON,
+                    self.combat_actor_z(0),
+                    target_x,
+                    target_y,
+                );
                 self.advance_turn();
                 self.message = if applied.is_some() {
                     "Summon Daemon!".to_string()

@@ -930,7 +930,10 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: PlayOptions::default(),
             script: &[
                 "Y", "Y", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
-                "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
+                "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
+                "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
+                "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
+                "empty", "empty", "empty", "empty", "empty", "empty", "empty",
             ],
             expected: RouteSmokeExpectation::Endgame(EndgameOutcome::Victory),
             min_turn: 0,
@@ -2678,7 +2681,8 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                 || !cinematic_slots_cleared
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not finish the victory cinematic and clear tableau actors (finished={}, certificate={}, party_slots_cleared={}, cinematic_slots_cleared={})",
+                    "route smoke `{case_name}` did not finish the victory cinematic and clear tableau actors (step={:?}, finished={}, certificate={}, party_slots_cleared={}, cinematic_slots_cleared={})",
+                    endgame.cinematic.step,
                     endgame.cinematic_is_finished(),
                     endgame.certificate.is_some(),
                     party_slots_cleared,
@@ -2980,9 +2984,7 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                     .party
                     .get(2)
                     .is_none_or(|member| member.status != b'P')
-                || !state
-                    .message
-                    .contains("poison gas doorway: poisoned party slot 1")
+                || !state.message.contains("is poisoned!")
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply public #51 poison-gas roll semantics"

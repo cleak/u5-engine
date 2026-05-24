@@ -111,7 +111,7 @@ pub fn handle_play_key_input(
         return Ok(PlayInputDisposition::Continue);
     }
     if state.combat_active
-        && combat_has_dispatchable_party_actor(state)
+        && combat_has_dispatchable_player_actor(state)
         && (state.pending_combat_actor_slot.is_some() || combat_has_active_non_party_actor(state))
         && key == 'C'
         && !suffix.is_empty()
@@ -1808,13 +1808,19 @@ fn handle_endgame_key_input(
     Ok(PlayInputDisposition::Continue)
 }
 
-fn combat_has_dispatchable_party_actor(state: &PlayState) -> bool {
+fn combat_actor_accepts_player_input(slot: usize, actor: CombatActorDescriptor) -> bool {
+    combat_actor_is_active_not_dead(actor)
+        && (slot < COMBAT_PARTY_ACTOR_SLOTS || actor.is_controlled())
+}
+
+fn combat_has_dispatchable_player_actor(state: &PlayState) -> bool {
     state
         .combat_actors
         .iter()
-        .take(COMBAT_PARTY_ACTOR_SLOTS)
-        .copied()
-        .any(combat_actor_is_active_not_dead)
+        .enumerate()
+        .take(COMBAT_ACTOR_SLOTS)
+        .map(|(slot, actor)| (slot, *actor))
+        .any(|(slot, actor)| combat_actor_accepts_player_input(slot, actor))
 }
 
 fn combat_has_active_non_party_actor(state: &PlayState) -> bool {
@@ -1826,13 +1832,12 @@ fn combat_has_active_non_party_actor(state: &PlayState) -> bool {
         .any(combat_actor_is_active_not_dead)
 }
 
-fn combat_pending_party_actor_is_active(state: &PlayState, actor_slot: usize) -> bool {
-    actor_slot < COMBAT_PARTY_ACTOR_SLOTS
-        && state
-            .combat_actors
-            .get(actor_slot)
-            .copied()
-            .is_some_and(combat_actor_is_active_not_dead)
+fn combat_pending_player_actor_is_active(state: &PlayState, actor_slot: usize) -> bool {
+    state
+        .combat_actors
+        .get(actor_slot)
+        .copied()
+        .is_some_and(|actor| combat_actor_accepts_player_input(actor_slot, actor))
 }
 
 fn handle_combat_cast_key_input(
@@ -1845,7 +1850,7 @@ fn handle_combat_cast_key_input(
         state.message = "No active combatant.".to_string();
         return Ok(PlayInputDisposition::Continue);
     };
-    if !combat_pending_party_actor_is_active(state, actor_slot) {
+    if !combat_pending_player_actor_is_active(state, actor_slot) {
         state.message = "No active combatant.".to_string();
         return Ok(PlayInputDisposition::Continue);
     }
@@ -1892,7 +1897,7 @@ fn handle_combat_key_input(state: &mut PlayState, key: char, suffix: &str) -> Pl
         state.message = "No active combatant.".to_string();
         return PlayInputDisposition::Continue;
     };
-    if !combat_pending_party_actor_is_active(state, actor_slot) {
+    if !combat_pending_player_actor_is_active(state, actor_slot) {
         state.message = "No active combatant.".to_string();
         return PlayInputDisposition::Continue;
     }

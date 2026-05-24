@@ -1308,6 +1308,18 @@ impl PlayState {
         )
     }
 
+    pub fn apply_combat_summon_class_around_target_coordinate(
+        &mut self,
+        class: u8,
+        z: i8,
+        target_x: i16,
+        target_y: i16,
+    ) -> Option<CombatSummonApplication> {
+        let legal_cells = self.combat_legal_cell_mask();
+        let candidates = combat_ring_candidate_coordinates_around(target_x, target_y);
+        self.apply_combat_summon_class_with_legal_mask(class, z, &legal_cells, &candidates)
+    }
+
     pub fn apply_combat_ai_blink_special(
         &mut self,
         actor_slot: usize,
@@ -1801,19 +1813,46 @@ impl PlayState {
         &mut self,
         caster_index: usize,
         spell_index: usize,
+        direction: Option<Direction>,
     ) -> MoveOutcome {
         if !self.combat_active || !self.spell_allowed_in_current_cast_context(spell_index) {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
         }
+        let Some(direction) = direction else {
+            self.message = "Direction? Use C1CKX6.".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !direction.is_cardinal() {
+            self.message = "Summon requires a cardinal direction.".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let Some(caster) = self.combat_actors.get(caster_index).copied() else {
+            self.message = "Who casts?".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if !combat_actor_is_active_not_dead(caster) {
+            self.message = "Who casts?".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let Some((target_x, target_y)) =
+            combat_direction_target_coordinate(caster.x, caster.y, direction)
+        else {
+            self.message = "Summon requires a cardinal direction.".to_string();
+            return MoveOutcome::Blocked;
+        };
 
         let mana_cost = (spell_index / 6 + 1) as u8;
         if let Some(outcome) = self.cast_spell_resource_gate(caster_index, spell_index, mana_cost) {
             return outcome;
         }
 
-        let applied =
-            self.apply_combat_summon_class_in_ring_around_slot(COMBAT_CLASS_DAEMON, caster_index);
+        let applied = self.apply_combat_summon_class_around_target_coordinate(
+            COMBAT_CLASS_DAEMON,
+            self.combat_actor_z(caster_index),
+            target_x,
+            target_y,
+        );
         self.advance_turn();
         self.message = if applied.is_some() {
             "Summon Daemon!".to_string()
@@ -2825,17 +2864,8 @@ impl PlayState {
             return None;
         }
         let (_, field) = self.find_combat_arena_field_marker(actor.x, actor.y)?;
-        let poison_damage_roll = self.combat_arena_field_poison_damage_roll();
-        let fire_damage_roll = self.combat_arena_field_fire_damage_roll();
-        let defense_roll = self.combat_arena_field_defense_roll(actor_slot);
-        let application = self.apply_combat_arena_field_contact(
-            field,
-            COMBAT_FIELD_CONTACT_NO_ACTIVE_SKIP_SLOT,
-            actor_slot,
-            poison_damage_roll,
-            fire_damage_roll,
-            defense_roll,
-        )?;
+        let application =
+            self.apply_combat_arena_field_contact(field, actor_slot, actor_slot, 0, 0, 0)?;
         self.mark_visibility_dirty();
         Some(application)
     }
@@ -3283,11 +3313,14 @@ impl PlayState {
         quickness_roll: u8,
         weapon_attack_inputs: CombatPlayerWeaponAttackInputs,
     ) -> Option<CombatPlayerCommandApplication> {
-        if !self.combat_active || actor_slot >= COMBAT_PARTY_ACTOR_SLOTS {
+        if !self.combat_active {
             return None;
         }
         let active_actor = self.combat_actors.get(actor_slot).copied()?;
         if !combat_actor_is_active_not_dead(active_actor) {
+            return None;
+        }
+        if actor_slot >= COMBAT_PARTY_ACTOR_SLOTS && !active_actor.is_controlled() {
             return None;
         }
 

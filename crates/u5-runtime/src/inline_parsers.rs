@@ -129,7 +129,7 @@ pub fn parse_inline_use_request(value: &str) -> Option<UseItemRequest> {
     {
         return Some(UseItemRequest::Scroll {
             index: SCROLL_SUMMON_DAEMON_INDEX,
-            direction: None,
+            direction: parse_inline_cardinal_direction(trimmed),
             target: None,
         });
     }

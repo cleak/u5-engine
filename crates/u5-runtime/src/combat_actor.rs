@@ -2432,7 +2432,7 @@ pub fn combat_neighbor_candidate_coordinates(
         .collect()
 }
 
-pub fn combat_ring_candidate_coordinates(center_x: u8, center_y: u8) -> Vec<(u8, u8)> {
+pub fn combat_ring_candidate_coordinates_around(center_x: i16, center_y: i16) -> Vec<(u8, u8)> {
     const OFFSETS: [(i16, i16); 8] = [
         (0, -1),
         (1, -1),
@@ -2446,11 +2446,30 @@ pub fn combat_ring_candidate_coordinates(center_x: u8, center_y: u8) -> Vec<(u8,
     OFFSETS
         .iter()
         .filter_map(|(dx, dy)| {
-            let x = i16::from(center_x) + dx;
-            let y = i16::from(center_y) + dy;
+            let x = center_x + dx;
+            let y = center_y + dy;
             combat_arena_coordinate_in_bounds(x, y).then_some((x as u8, y as u8))
         })
         .collect()
+}
+
+pub fn combat_ring_candidate_coordinates(center_x: u8, center_y: u8) -> Vec<(u8, u8)> {
+    combat_ring_candidate_coordinates_around(i16::from(center_x), i16::from(center_y))
+}
+
+pub fn combat_direction_target_coordinate(
+    center_x: u8,
+    center_y: u8,
+    direction: Direction,
+) -> Option<(i16, i16)> {
+    if !direction.is_cardinal() {
+        return None;
+    }
+    let (dx, dy) = direction.delta();
+    Some((
+        i16::from(center_x) + dx as i16,
+        i16::from(center_y) + dy as i16,
+    ))
 }
 
 pub fn combat_step_direction_candidate_coordinates(
@@ -3126,7 +3145,7 @@ pub fn combat_ai_legal_cell(
 }
 
 pub const fn combat_actor_occupies_arena_cell(actor: CombatActorDescriptor, x: u8, y: u8) -> bool {
-    combat_actor_is_active_not_dead(actor) && actor.x == x && actor.y == y
+    combat_actor_is_present_not_dead(actor) && actor.x == x && actor.y == y
 }
 
 pub fn build_combat_ai_legal_cell_mask(
@@ -3142,7 +3161,7 @@ pub fn build_combat_ai_legal_cell_mask(
     }
 
     for actor in actors.iter().copied().take(COMBAT_ACTOR_SLOTS) {
-        if !combat_actor_is_active_not_dead(actor) {
+        if !combat_actor_is_present_not_dead(actor) {
             continue;
         }
         let x = actor.x as usize;

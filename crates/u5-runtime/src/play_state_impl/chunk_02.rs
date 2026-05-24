@@ -1036,10 +1036,14 @@ impl PlayState {
             }
             "CKX" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
-                    self.message = "Who casts? Use C1CKX for party slot 1.".to_string();
+                    self.message = "Who casts? Use C1CKX6 for party slot 1 east.".to_string();
                     return Ok(MoveOutcome::Blocked);
                 };
-                Ok(self.cast_combat_summon_daemon_spell(caster_index, spell_index.unwrap()))
+                Ok(self.cast_combat_summon_daemon_spell(
+                    caster_index,
+                    spell_index.unwrap(),
+                    parse_inline_cardinal_direction(suffix),
+                ))
             }
             "CGIV" => {
                 let Some(caster_index) = parse_inline_party_index(suffix) else {
