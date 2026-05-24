@@ -1401,12 +1401,32 @@
                 status_override: None,
             }
         );
-        assert!(state
-            .render_stats_panel_view()
-            .lines()
-            .nth(1)
-            .unwrap()
-            .contains(STATS_PANEL_COMBAT_ROW_MARKER));
+        assert_eq!(
+            state
+                .render_stats_panel_view()
+                .lines()
+                .nth(1)
+                .unwrap()
+                .chars()
+                .nth(10),
+            Some(' ')
+        );
+        let system = render_play_text_window_system(&state, None, None);
+        for offset in 0..STATS_PANEL_WIDTH {
+            assert!(
+                system
+                    .cell(STATS_PANEL_TEXT_LEFT + offset as u8, 1)
+                    .unwrap()
+                    .inverse,
+                "party row cell {offset} should be inverse-highlighted"
+            );
+        }
+        assert!(
+            !system
+                .cell(STATS_PANEL_TEXT_LEFT, 2)
+                .map(|cell| cell.inverse)
+                .unwrap_or(false)
+        );
 
         state.active_cast = Some(CastSession::for_combat_actor(0, true));
         let casting_overlay = stats_panel_combat_row_overlay(&state, 0);
@@ -1421,7 +1441,7 @@
     }
 
     #[test]
-    fn stats_panel_combat_overlay_preserves_active_player_cursor_priority() {
+    fn stats_panel_combat_overlay_brackets_active_player_cursor_with_inverse_video() {
         let mut state = test_state(open_grid(), 1, 1);
         state.combat_active = true;
         state.active_player = Some(0);
@@ -1441,7 +1461,45 @@
         let row = panel.lines().nth(1).unwrap();
 
         assert!(row.contains('>'));
-        assert!(!row.contains(STATS_PANEL_COMBAT_ROW_MARKER));
+        let system = render_play_text_window_system(&state, state.active_player, None);
+        assert_eq!(system.cell(STATS_PANEL_TEXT_LEFT + 10, 1).unwrap().byte, b'>');
+        assert!(system.cell(STATS_PANEL_TEXT_LEFT + 10, 1).unwrap().inverse);
+        assert!(system.cell(STATS_PANEL_TEXT_LEFT + 15, 1).unwrap().inverse);
+    }
+
+    #[test]
+    fn stats_panel_combat_overlay_matches_descriptor_owner_field_not_slot_number() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.party.push(PartyMember {
+            slot: 1,
+            class_byte: b'B',
+            status: b'P',
+            climb_stat: DEFAULT_CLIMB_STAT,
+            mana: 4,
+            hp: 87,
+            max_hp: 120,
+            level: 3,
+        });
+        state.party_names.push(*b"Julia\0\0\0\0");
+        state.combat_active = true;
+        state.pending_combat_actor_slot = Some(0);
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            20,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            1,
+            0,
+            0,
+            5,
+            5,
+        ]);
+
+        assert!(!stats_panel_combat_row_overlay(&state, 0).highlighted);
+        assert!(stats_panel_combat_row_overlay(&state, 1).highlighted);
+
+        let system = render_play_text_window_system(&state, None, None);
+        assert!(!system.cell(STATS_PANEL_TEXT_LEFT, 1).unwrap().inverse);
+        assert!(system.cell(STATS_PANEL_TEXT_LEFT, 2).unwrap().inverse);
     }
 
     #[test]

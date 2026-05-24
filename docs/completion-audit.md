@@ -64,7 +64,8 @@ Runtime, TUI, route-smoke, and visual-route results refreshed alongside this
 audit on 2026-05-24; Bevy frame-suite evidence remains from the latest display
 audit:
 
-- `cargo test -p u5-runtime` — 2628 tests pass.
+- `cargo test -p u5-runtime` — 2630 tests pass, including stats-panel
+  combat-row inverse-video style coverage.
 - `cargo test -p u5-tui` — 79 tests pass, including temp-directory binary
   smoke for empty-save Journey Onward, deterministic Create Character followed
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a

@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-24, including 2628 tests
+- `cargo test -p u5-runtime` passed on 2026-05-24, including 2630 tests
   (latest verification includes public `cleak/u5-spec#47` hourly
   poison/provision/ring ordering, public #28 horse-trader adjacent placement
   priority plus no-marker refusal, public #15 inn pickup stay-counter billing,
@@ -23,8 +23,9 @@ Last known verification state:
   terrain-combat replacement-tile main path, public-spec View/Peer/X-Ray
   overlay raster-class and dungeon minimap glyph-id coverage, and public issue
   #21 dungeon active-monster ambush setup, combat round maintenance, combat-local
-  ambush/camp reveal-slot helper coverage, disk I/O retry wrapper coverage, and
-  shared TUI/Bevy Journey Onward disk-error presentation).
+  ambush/camp reveal-slot helper coverage, stats-panel combat inverse-video
+  overlay coverage, disk I/O retry wrapper coverage, and shared TUI/Bevy Journey
+  Onward disk-error presentation).
 - `cargo test -p u5-tui` passed on 2026-05-24, including 79 tests.
 - `cargo test -p u5-tui --features visual` passed on 2026-05-23.
 - `cargo test -p u5-bevy` passed on 2026-05-24, including 65 tests.
@@ -108,8 +109,8 @@ Last known verification state:
   transfer commit from `PARTY.SAV`, and a confirmed `QY` save/reload
   round trip. These tests mutate only per-test temporary asset directories,
   never `C:\Games\U5-Clean`.
-- `cargo run -p u5-tui -- --save-frame-suite target\frame-suite
-  C:\Games\U5-Clean` passed on 2026-05-23 and wrote thirteen nonblank PNGs:
+- `cargo run -p u5-tui -- --save-frame-suite target\codex-stats-panel-frame-suite
+  C:\Games\U5-Clean` passed on 2026-05-24 and wrote thirteen nonblank PNGs:
   `britannia` `859a1bdabe5c9b7a`, `britannia-step` `05b13e47da048fe6`,
   `castle` `bda625019405af09`, lit `dungeon` `91ea22aa5e09c692`,
   composed `combat` `49bcd6e0986745fd`, `surface-view`

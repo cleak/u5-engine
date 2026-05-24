@@ -4,7 +4,6 @@ use crate::*;
 
 pub const STATS_PANEL_WIDTH: usize = 16;
 pub const STATS_PANEL_PARTY_ROWS: usize = SAVE_PARTY_SIZE_MAX as usize;
-pub const STATS_PANEL_COMBAT_ROW_MARKER: char = '*';
 pub const MAIN_TEXT_WINDOW_INDEX: usize = 0;
 pub const STATS_PANEL_TEXT_WINDOW_INDEX: usize = 1;
 pub const PROMPT_TEXT_WINDOW_INDEX: usize = 2;
@@ -97,12 +96,30 @@ pub fn paint_stats_panel_text_window(
 ) {
     system.set_active_window(STATS_PANEL_TEXT_WINDOW_INDEX);
     system.emit_byte(TEXT_CTRL_CLEAR_WINDOW);
-    for (row, line) in render_stats_panel(state, active_cursor).lines().enumerate() {
+    system.clear_active_flags();
+
+    system.set_active_cursor(0, 0);
+    emit_fixed_panel_line(system, &fixed_panel_line("STATS"));
+
+    for index in 0..STATS_PANEL_PARTY_ROWS {
+        let row = index + 1;
+        system.set_active_cursor(0, row.min(u8::MAX as usize) as u8);
+        paint_stats_panel_party_row(system, state, active_cursor, index);
+    }
+
+    let bottom_rows = [
+        render_stats_panel_food_row(state.food),
+        render_stats_panel_middle_row(state),
+        render_stats_panel_date_row(&state.clock),
+        render_stats_panel_sky_status_row(state),
+    ];
+    for (offset, line) in bottom_rows.iter().enumerate() {
+        let row = STATS_PANEL_PARTY_ROWS + 1 + offset;
         if row >= usize::from(TEXT_SCREEN_ROWS) {
             break;
         }
         system.set_active_cursor(0, row.min(u8::MAX as usize) as u8);
-        system.print_wrapped_string(line.trim_end());
+        emit_fixed_panel_line(system, line);
     }
 }
 
@@ -142,8 +159,19 @@ fn render_stats_panel_party_row(
     active_cursor: Option<usize>,
     index: usize,
 ) -> String {
+    stats_panel_party_row(state, active_cursor, index).0
+}
+
+fn stats_panel_party_row(
+    state: &PlayState,
+    active_cursor: Option<usize>,
+    index: usize,
+) -> (String, StatsPanelCombatRowOverlay) {
     let Some(member) = state.party.get(index).copied() else {
-        return " ".repeat(STATS_PANEL_WIDTH);
+        return (
+            " ".repeat(STATS_PANEL_WIDTH),
+            StatsPanelCombatRowOverlay::default(),
+        );
     };
     let name = state
         .party_names
@@ -154,17 +182,40 @@ fn render_stats_panel_party_row(
     let overlay = stats_panel_combat_row_overlay(state, index);
     let cursor = if active_cursor == Some(index) && !matches!(member.status, b'D' | b'S') {
         '>'
-    } else if overlay.highlighted {
-        STATS_PANEL_COMBAT_ROW_MARKER
     } else {
         ' '
     };
     let status = overlay.status_override.unwrap_or(member.status);
-    fixed_panel_line(&format!(
-        "{name:<10}{cursor}{:>4}{}",
-        member.hp.min(9999),
-        char::from(status)
-    ))
+    (
+        fixed_panel_line(&format!(
+            "{name:<10}{cursor}{:>4}{}",
+            member.hp.min(9999),
+            char::from(status)
+        )),
+        overlay,
+    )
+}
+
+fn paint_stats_panel_party_row(
+    system: &mut TextWindowSystem,
+    state: &PlayState,
+    active_cursor: Option<usize>,
+    index: usize,
+) {
+    let (line, overlay) = stats_panel_party_row(state, active_cursor, index);
+    if overlay.highlighted {
+        system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
+    }
+    emit_fixed_panel_line(system, &line);
+    if overlay.highlighted {
+        system.emit_byte(TEXT_CTRL_INVERSE_TOGGLE);
+    }
+}
+
+fn emit_fixed_panel_line(system: &mut TextWindowSystem, line: &str) {
+    for byte in fixed_panel_line(line).bytes().take(STATS_PANEL_WIDTH) {
+        system.emit_byte(byte);
+    }
 }
 
 pub fn stats_panel_combat_row_overlay(
@@ -177,9 +228,11 @@ pub fn stats_panel_combat_row_overlay(
 
     let highlighted = state
         .pending_combat_actor_slot
-        .filter(|slot| *slot == index && *slot < COMBAT_PARTY_ACTOR_SLOTS)
+        .filter(|slot| *slot < COMBAT_PARTY_ACTOR_SLOTS)
         .and_then(|slot| state.combat_actors.get(slot).copied())
-        .is_some_and(combat_actor_is_active_not_dead);
+        .is_some_and(|actor| {
+            usize::from(actor.owner_target_class) == index && combat_actor_is_active_not_dead(actor)
+        });
 
     let status_override = stats_panel_combat_cast_status_override(state, index);
     StatsPanelCombatRowOverlay {
