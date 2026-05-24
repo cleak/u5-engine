@@ -33,8 +33,6 @@ pub const TOWN_GET_TILE_TABLE_FILE: &str = "town_get_tiles.tsv";
 pub const TOWN_REST_BED_TABLE_FILE: &str = "town_rest_beds.tsv";
 pub const TOWN_STAIR_TABLE_FILE: &str = "town_stairs.tsv";
 pub const TOWN_TRAP_DOOR_TABLE_FILE: &str = "town_trap_doors.tsv";
-pub const TOWN_POISON_GAS_TABLE_FILE: &str = "town_poison_gas.tsv";
-pub const TOWN_TILE_ATTRIBUTES_TABLE_FILE: &str = "town_tile_attributes.tsv";
 pub const TOWN_EXIT_TILE_TABLE_FILE: &str = "town_exit_tiles.tsv";
 pub const TOWN_LOCK_TABLE_FILE: &str = "town_locks.tsv";
 pub const ETERNAL_FLAME_TABLE_FILE: &str = "eternal_flames.tsv";
@@ -1391,9 +1389,9 @@ pub const HOURLY_STARVATION_DAMAGE_MAX: u16 = 8;
 /// `systems/town-mode.md` / `cleak/u5-spec#51`: town poison-gas
 /// doorway rolls an inclusive `0..=29` Dexterity save per eligible
 /// member. A member is poisoned when the roll is greater than that
-/// member's Dexterity byte.
+/// member's Dexterity byte. The materialised live tile is complete;
+/// coordinate and tile-attribute sidecars do not participate.
 pub const TOWN_GAS_DOORWAY_RANGE_MAX: u16 = 29;
-pub const TOWN_POISON_GAS_TILE_CLASS: u8 = 4;
 pub const TOWN_POISON_GAS_VEHICLE_BYTE: u8 = 0x1C;
 pub const TOWN_POISON_GAS_LIVE_TILE: u8 = 0x04;
 /// `npc-schedules.md §8.4` BFS queue capacity used by the NPC

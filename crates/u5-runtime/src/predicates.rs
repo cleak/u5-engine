@@ -1310,37 +1310,6 @@ pub fn town_trap_door_matches(
             .map_or(true, |expected| expected == tile)
 }
 
-pub fn town_poison_gas_matches(
-    entry: TownPoisonGasEntry,
-    scene: Scene,
-    floor: i8,
-    x: usize,
-    y: usize,
-    tile: u8,
-) -> bool {
-    entry.scene == scene
-        && entry.floor == floor
-        && entry.x == x
-        && entry.y == y
-        && entry
-            .expected_tile
-            .map_or(true, |expected| expected == tile)
-}
-
-pub const fn town_poison_gas_tile_attribute_matches(tile_class: u8, vehicle_byte: u8) -> bool {
-    tile_class == TOWN_POISON_GAS_TILE_CLASS && vehicle_byte == TOWN_POISON_GAS_VEHICLE_BYTE
-}
-
-pub fn town_poison_gas_tile_matches_attributes(
-    entries: &[TownTileAttributeEntry],
-    tile: u8,
-) -> bool {
-    entries.iter().any(|entry| {
-        entry.tile == tile
-            && town_poison_gas_tile_attribute_matches(entry.tile_class, entry.vehicle_byte)
-    })
-}
-
 pub const fn town_poison_gas_live_tile_matches(tile: u8, transport_marker: u8) -> bool {
     tile == TOWN_POISON_GAS_LIVE_TILE && transport_marker == TOWN_POISON_GAS_VEHICLE_BYTE
 }

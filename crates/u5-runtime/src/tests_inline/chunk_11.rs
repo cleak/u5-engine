@@ -962,7 +962,7 @@
     fn town_movement_poison_gas_coordinate_sidecar_no_longer_triggers() {
         let dir = debug_game_dir();
         fs::write(
-            dir.join(TOWN_POISON_GAS_TABLE_FILE),
+            dir.join("town_poison_gas.tsv"),
             "CASTLE:0 0 1 1 0x37\n",
         )
         .unwrap();
@@ -989,7 +989,7 @@
     #[test]
     fn town_movement_poison_gas_tile_attribute_sidecar_no_longer_triggers() {
         let dir = debug_game_dir();
-        fs::write(dir.join(TOWN_TILE_ATTRIBUTES_TABLE_FILE), "0x37 4 0x1C\n").unwrap();
+        fs::write(dir.join("town_tile_attributes.tsv"), "0x37 4 0x1C\n").unwrap();
         let mut grid = open_grid();
         grid[32 + 1] = 0x37;
         let mut state = test_state(grid, 0, 1);

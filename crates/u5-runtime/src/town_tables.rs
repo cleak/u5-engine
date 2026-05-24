@@ -95,13 +95,6 @@ pub struct TownPoisonGasEntry {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TownTileAttributeEntry {
-    pub tile: u8,
-    pub tile_class: u8,
-    pub vehicle_byte: u8,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TownExitTileEntry {
     pub scene: Scene,
     pub floor: i8,

@@ -7628,11 +7628,11 @@ fn town_gas_doorway_roll_constants_match_published_spec() {
     // `cleak/u5-spec#51`: inclusive `0..=29` roll per eligible member,
     // poisoning when the roll is greater than Dexterity.
     assert_eq!(TOWN_GAS_DOORWAY_RANGE_MAX, 29);
-    assert_eq!(TOWN_POISON_GAS_TILE_CLASS, 4);
     assert_eq!(TOWN_POISON_GAS_VEHICLE_BYTE, 0x1C);
-    assert!(town_poison_gas_tile_attribute_matches(4, 0x1C));
-    assert!(!town_poison_gas_tile_attribute_matches(3, 0x1C));
-    assert!(!town_poison_gas_tile_attribute_matches(4, 0x1D));
+    assert_eq!(TOWN_POISON_GAS_LIVE_TILE, 0x04);
+    assert!(town_poison_gas_live_tile_matches(0x04, 0x1C));
+    assert!(!town_poison_gas_live_tile_matches(0x37, 0x1C));
+    assert!(!town_poison_gas_live_tile_matches(0x04, 0x1D));
     // Sample many seeds and confirm the average exact-zero rate is near 1/30.
     let mut hits = 0usize;
     let mut state: u16 = 0;

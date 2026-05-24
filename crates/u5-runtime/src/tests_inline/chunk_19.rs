@@ -195,61 +195,6 @@
     }
 
     #[test]
-    fn parse_town_poison_gas_entries_accepts_optional_tile_guard() {
-        let entries =
-            parse_town_poison_gas_entries("CASTLE:0 0 2 1 55\nCASTLE:0 -1 4 5\n").unwrap();
-
-        assert_eq!(
-            entries,
-            vec![
-                TownPoisonGasEntry {
-                    scene: Scene::new(17).unwrap(),
-                    floor: 0,
-                    x: 2,
-                    y: 1,
-                    expected_tile: Some(55),
-                },
-                TownPoisonGasEntry {
-                    scene: Scene::new(17).unwrap(),
-                    floor: -1,
-                    x: 4,
-                    y: 5,
-                    expected_tile: None,
-                },
-            ]
-        );
-        assert!(parse_town_poison_gas_entries("CASTLE:0 0 32 1 55\n").is_err());
-        assert!(parse_town_poison_gas_entries("DUNGEON:0 0 1 1 55\n").is_err());
-        assert!(
-            parse_town_poison_gas_entries("CASTLE:0 0 1 1\nCASTLE:0 0 1 1 55\n").is_err()
-        );
-    }
-
-    #[test]
-    fn parse_town_tile_attribute_entries_accepts_hex_values() {
-        let entries = parse_town_tile_attribute_entries("0x37 4 0x1C\n56 3 0x1C\n").unwrap();
-
-        assert_eq!(
-            entries,
-            vec![
-                TownTileAttributeEntry {
-                    tile: 0x37,
-                    tile_class: TOWN_POISON_GAS_TILE_CLASS,
-                    vehicle_byte: TOWN_POISON_GAS_VEHICLE_BYTE,
-                },
-                TownTileAttributeEntry {
-                    tile: 56,
-                    tile_class: 3,
-                    vehicle_byte: TOWN_POISON_GAS_VEHICLE_BYTE,
-                },
-            ]
-        );
-        assert!(parse_town_tile_attribute_entries("0x37 4\n").is_err());
-        assert!(parse_town_tile_attribute_entries("0x37 4 0x1C\n56 4 0x1C\n").is_ok());
-        assert!(parse_town_tile_attribute_entries("0x37 4 0x1C\n0x37 5 0x1C\n").is_err());
-    }
-
-    #[test]
     fn parse_town_exit_tile_entries_accepts_optional_tile_guard() {
         let entries = parse_town_exit_tile_entries("CASTLE:0 0 1 1 55\nCASTLE:0 1 2 1\n").unwrap();
 

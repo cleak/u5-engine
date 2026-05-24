@@ -3224,6 +3224,66 @@
     }
 
     #[test]
+    fn cast_blink_ignores_active_object_occupancy_on_farthest_grass() {
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x10,
+            tile: 0x10,
+            x: 15,
+            y: 1,
+            z: 0,
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        });
+        state.spell_charges[BLINK_SPELL_INDEX] = 1;
+        state.party[0].mana = BLINK_COST;
+        state.party[0].level = BLINK_COST;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1IP6", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!((state.player.x, state.player.y), (15, 1));
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (15, 1));
+        assert_eq!(state.spell_charges[BLINK_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Blinked East to (15, 1) in BRITANNIA.");
+    }
+
+    #[test]
+    fn cast_blink_preserves_current_transport_marker_without_vehicle_refusal() {
+        let mut state = britannia_state(open_world_grid(), 1, 1);
+        state.player.transport = TransportState::Horse {
+            type_byte: 0x10,
+            tile: 0x10,
+        };
+        state.sync_player_object();
+        state.spell_charges[BLINK_SPELL_INDEX] = 1;
+        state.party[0].mana = BLINK_COST;
+        state.party[0].level = BLINK_COST;
+
+        assert_eq!(
+            handle_play_key_input(&mut state, 'C', "1IP6", Path::new("")).unwrap(),
+            PlayInputDisposition::Continue
+        );
+
+        assert_eq!((state.player.x, state.player.y), (15, 1));
+        assert_eq!(
+            state.player.transport,
+            TransportState::Horse {
+                type_byte: 0x10,
+                tile: 0x10,
+            }
+        );
+        assert_eq!(state.active_objects[0].tile, 0x10);
+        assert_eq!(state.turn, 1);
+        assert_eq!(state.message, "Blinked East to (15, 1) in BRITANNIA.");
+    }
+
+    #[test]
     fn cast_blink_rejects_indoor_context_before_spending_resources() {
         let mut state = test_state(open_grid(), 1, 1);
         state.spell_charges[BLINK_SPELL_INDEX] = 1;
