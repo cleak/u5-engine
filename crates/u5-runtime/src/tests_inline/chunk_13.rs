@@ -20784,6 +20784,80 @@ fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
 }
 
 #[test]
+fn endgame_tableau_class_table_matches_public_sprite_mapping() {
+    // endgame.md section 4: the tableau maps every party class byte
+    // through a small fixed sprite table; unsupported bytes fall back to
+    // the Avatar-like tableau sprite.
+    for (class, tile) in [
+        (b'A', 0x4c),
+        (b'M', 0x40),
+        (b'B', 0x44),
+        (b'F', 0x48),
+        (b'D', 0x4c),
+        (b'T', 0x4c),
+        (b'P', 0x4c),
+        (b'R', 0x4c),
+        (b'S', 0x4c),
+        (b'?', 0x4c),
+    ] {
+        assert_eq!(endgame_tableau_tile_for_class_byte(class), tile);
+        let placement = endgame_tableau_party_placement(0, class).unwrap();
+        assert_eq!(placement.type_byte, tile);
+        assert_eq!(placement.tile, tile);
+    }
+    assert!(endgame_tableau_party_placement(SAVE_PARTY_SIZE_MAX as usize, b'A').is_none());
+}
+
+#[test]
+fn endgame_tableau_six_member_layout_restores_dead_and_omits_lord_british_until_victory() {
+    let mut state = test_state(open_grid(), 5, 5);
+    let classes = [b'A', b'M', b'B', b'F', b'D', b'R'];
+    state.party = classes
+        .iter()
+        .enumerate()
+        .map(|(slot, class)| PartyMember {
+            slot: slot as u8,
+            class_byte: *class,
+            status: if slot == 4 { b'D' } else { b'G' },
+            climb_stat: 0,
+            mana: 0,
+            hp: if slot == 4 { 0 } else { 30 },
+            max_hp: 30 + slot as u16,
+            level: 1,
+        })
+        .collect();
+
+    state.enter_endgame();
+
+    assert_eq!(state.party[4].status, b'G');
+    assert_eq!(state.party[4].hp, state.party[4].max_hp);
+    for (slot, class) in classes.iter().enumerate() {
+        let object = state.active_objects[slot];
+        let expected_tile = endgame_tableau_tile_for_class_byte(*class);
+        assert_eq!((object.type_byte, object.tile), (expected_tile, expected_tile));
+        assert_eq!(
+            endgame_tableau_role_for_slot(slot, object),
+            Some(EndgameTableauActorRole::PartyMember(slot as u8))
+        );
+    }
+    assert_eq!(
+        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
+        0
+    );
+
+    state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    state.resolve_endgame_confirmation(true);
+    state.resolve_endgame_confirmation(true);
+    assert_eq!(
+        endgame_tableau_role_for_slot(
+            ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
+            state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT]
+        ),
+        Some(EndgameTableauActorRole::LordBritish)
+    );
+}
+
+#[test]
 fn endgame_tableau_install_preserves_non_type_tile_fields() {
     // endgame.md Sections 4 and 7: setup clears only type/tile for every
     // active-object slot. Rebuilt actors then receive x/y/phase, while z and

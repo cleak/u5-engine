@@ -137,7 +137,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 338 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 340 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -206,9 +206,14 @@ Last known verification state:
   `route-castle-extended-walk-and-save-09-z` `431f2a5ad9c4b417`,
   `route-dungeon-extended-turn-and-search-09-s6` `eb8f6403c755776f`, and
   `route-doom-combat-multi-round-pass-05-empty` `c1ffc74f45610145`. The
-  latest endgame visual-route expansion adds the missing-box terminal tableau
-  and full Sandalwood Box victory cinematic route steps on the composed Bevy
-  framebuffer; the 2026-05-23 expansion added public #48 Blink
+  latest endgame visual-route expansion adds the public #56 six-member
+  class-tableau/restoration route
+  `route-endgame-class-tableau-restoration-00-initial`
+  `412fa97088d0737f` and
+  `route-endgame-class-tableau-restoration-01-y` `f854216c1a7eae8f`,
+  alongside the missing-box terminal tableau and full Sandalwood Box victory
+  cinematic route steps on the composed Bevy framebuffer; the 2026-05-23
+  expansion added public #48 Blink
   `route-britannia-blink-east-ray-01-c1ip6` `17ceb1f94bc6c6e3`,
   Locate, Light/Open, restore-spell, active-effect, directed Sleep/Poison
   Wind/Death Wind/Flame Wind combat casts, dungeon level,

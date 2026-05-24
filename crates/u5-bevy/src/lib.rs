@@ -1421,6 +1421,13 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_endgame_victory),
         },
         VisualRouteSuiteCase {
+            label: "route-endgame-class-tableau-restoration",
+            frame_kind: "visual route endgame frame",
+            options: PlayOptions::default(),
+            script: &["Y"],
+            configure: Some(seed_visual_route_endgame_class_tableau),
+        },
+        VisualRouteSuiteCase {
             label: "route-doom-combat-trigger",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
@@ -2348,6 +2355,34 @@ fn seed_visual_route_endgame_missing_box(state: &mut PlayState) {
 
 fn seed_visual_route_endgame_victory(state: &mut PlayState) {
     state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    state.enter_endgame();
+}
+
+fn seed_visual_route_endgame_class_tableau(state: &mut PlayState) {
+    let template = state.party.first().copied().unwrap_or(PartyMember {
+        slot: 0,
+        class_byte: b'A',
+        status: b'G',
+        climb_stat: DEFAULT_CLIMB_STAT,
+        mana: 0,
+        hp: 30,
+        max_hp: 30,
+        level: 1,
+    });
+    let classes = [b'A', b'M', b'B', b'F', b'D', b'R'];
+    state.party = classes
+        .iter()
+        .enumerate()
+        .map(|(slot, class)| PartyMember {
+            slot: slot as u8,
+            class_byte: *class,
+            status: if slot == 4 { b'D' } else { b'G' },
+            hp: if slot == 4 { 0 } else { template.hp.max(1) },
+            max_hp: template.max_hp.max(30) + slot as u16,
+            ..template
+        })
+        .collect();
+    state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 0;
     state.enter_endgame();
 }
 
@@ -6818,7 +6853,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 100);
+        assert_eq!(cases.len(), 101);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -7067,6 +7102,7 @@ mod tests {
             "route-castle-extended-walk-and-save",
             "route-dungeon-extended-turn-and-search",
             "route-doom-combat-multi-round-pass",
+            "route-endgame-class-tableau-restoration",
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
         }
@@ -7127,7 +7163,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 338);
+        assert_eq!(reports.len(), 340);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -7220,6 +7256,7 @@ mod tests {
         assert!(manifest.contains("route-doom-combat-ready-prompt-02-r"));
         assert!(manifest.contains("route-doom-combat-yell-word-02-yfallax"));
         assert!(manifest.contains("route-doom-combat-xit-foes-remain-02-x"));
+        assert!(manifest.contains("route-endgame-class-tableau-restoration-01-y"));
         assert!(manifest.contains("route-britannia-extended-exploration-12-empty"));
         assert!(manifest.contains("route-castle-extended-walk-and-save-09-z"));
         assert!(manifest.contains("route-dungeon-extended-turn-and-search-09-s6"));
