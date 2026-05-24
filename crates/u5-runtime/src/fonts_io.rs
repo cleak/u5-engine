@@ -312,7 +312,6 @@ pub fn unpack_monochrome_bits(bytes: &[u8], pixel_count: usize) -> Vec<u8> {
     pixels
 }
 
-#[cfg(test)]
 pub fn load_ch_font(game_dir: &Path, file_name: &str) -> io::Result<FixedFont> {
     parse_fixed_font_body(
         &read_disk_file(&game_dir.join(file_name))?,
@@ -322,7 +321,6 @@ pub fn load_ch_font(game_dir: &Path, file_name: &str) -> io::Result<FixedFont> {
     )
 }
 
-#[cfg(test)]
 pub fn load_hcs_font(game_dir: &Path, file_name: &str) -> io::Result<FixedFont> {
     parse_fixed_font_body(
         &read_disk_file(&game_dir.join(file_name))?,
@@ -332,7 +330,6 @@ pub fn load_hcs_font(game_dir: &Path, file_name: &str) -> io::Result<FixedFont> 
     )
 }
 
-#[cfg(test)]
 pub fn parse_fixed_font_body(
     body: &[u8],
     resource_name: &str,

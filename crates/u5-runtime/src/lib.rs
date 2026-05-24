@@ -105,6 +105,7 @@ pub mod u4_transfer;
 pub mod u4_transfer_session;
 pub mod view_classes;
 pub mod visibility;
+pub mod visual_asset_audit;
 pub mod wind;
 pub mod world_progress;
 pub mod world_tables;
@@ -637,6 +638,7 @@ pub use visibility::{
     light_radius_branch, terrain_band_active_index, visibility_cheap_path_needs_refill,
     visibility_grid_active_index, visibility_in_radius, visibility_marker,
 };
+pub use visual_asset_audit::*;
 pub use wind::{
     ACTIVE_SHIP_CADENCE_EVERY_TURN, ACTIVE_SHIP_CADENCE_INTO_WIND, ACTIVE_SHIP_CADENCE_WITH_WIND,
     PLAYER_SAIL_WAIT_TICKS_INTO_WIND, PLAYER_SAIL_WAIT_TICKS_PERPENDICULAR,
@@ -688,4 +690,5 @@ mod tests {
     include!("tests_inline/chunk_23.rs");
     include!("tests_inline/chunk_24.rs");
     include!("tests_inline/chunk_25.rs");
+    include!("tests_inline/chunk_26.rs");
 }

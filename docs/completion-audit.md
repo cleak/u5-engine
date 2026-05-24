@@ -386,7 +386,7 @@ through the asset-backed Talk command path.
 | `formats/data-ovl.md` | `misc_tables_io.rs`, `world_tables_io.rs` overlay readers | DATA.OVL field tests | Implemented |
 | `formats/dungeon-dat.md` | `dungeon_tables_io.rs::load_dungeon_dat` | dungeon decode tests | Implemented |
 | `formats/end-dat.md`, `formats/endmsg-dat.md` | `end_io.rs`, `endmsg_io.rs` | END/ENDMSG tests | Implemented |
-| `formats/font-ch.md`, `formats/font-hcs.md`, `formats/font-pcs.md` | `fonts_io.rs::load_ibm_ch`, sparse PCS loader | font decode tests | Implemented |
+| `formats/font-ch.md`, `formats/font-hcs.md`, `formats/font-pcs.md` | `fonts_io.rs::load_ch_font`, `fonts_io.rs::load_hcs_font`, sparse PCS loader, `visual_asset_audit.rs::audit_visual_assets` fixed-font aggregate report | font decode tests plus synthetic and local-clean fixed-font aggregate audits for `IBM.CH`, `RUNES.CH`, `IBM.HCS`, and `RUNES.HCS` when assets are present | Implemented for fixed fonts; proportional resource exact envelope policy remains tracked by `cleak/u5-spec#36` |
 | `formats/karma-dat.md` | `endmsg_io.rs::load_karma_dat` (6 verdict records) | karma decode tests | Implemented |
 | `formats/location-dat.md` | `map_io.rs::load_floor`, `map_io.rs::resolve_location_floor_page`, `town_tables_io.rs::load_*_dat`, `location_audit.rs::audit_location_dat_files` | layout constants, location decode tests, synthetic `LOCATION.DAT` audit, and local clean all-family authored-cell audit when assets are present | Implemented |
 | `formats/look2-dat.md` | `misc_tables_io.rs::load_look2` (descriptions) | look2 decode tests | Implemented |
@@ -400,7 +400,7 @@ through the asset-backed Talk command path.
 | `formats/shoppe-dat.md` | `shoppe_records.rs` | SHOPPE decode tests | Implemented |
 | `formats/signs-dat.md` | `signs_io.rs` | SIGNS lookup tests | Implemented |
 | `formats/story-dat.md` | `story_io.rs` | STORY decode tests | Implemented |
-| `formats/tiles.md` | `graphics.rs`, `graphics_io.rs` tile sheet decode | tile-sheet tests | Implemented |
+| `formats/tiles.md` | `graphics.rs`, `graphics_io.rs` tile sheet decode, `visual_asset_audit.rs::audit_visual_assets` tile-atlas aggregate report | tile-sheet tests plus synthetic and local-clean aggregate audits for `TILES.16` and `TILES.4` when assets are present | Implemented |
 | `formats/tlk.md` | `tlk_runner.rs`, `tlk_control_codes.rs` | TLK runner tests | Implemented |
 | `formats/under-dat.md` | `map_io.rs::load_under_dat` | underworld decode tests | Implemented |
 

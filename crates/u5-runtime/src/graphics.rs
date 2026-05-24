@@ -483,7 +483,6 @@ pub struct TextCellStyle {
     pub inverse: bool,
 }
 
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FixedFont {
     pub cell_width: usize,
@@ -491,7 +490,6 @@ pub struct FixedFont {
     pub glyphs: Vec<MonochromeBitmap>,
 }
 
-#[cfg(test)]
 impl FixedFont {
     pub fn glyph(&self, code: u8) -> Option<&MonochromeBitmap> {
         self.glyphs.get(code as usize)

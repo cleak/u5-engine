@@ -144,11 +144,8 @@ pub const TITLE_BIT_FILE: &str = "TITLE.BIT";
 pub const BRITISH_BIT_FILE: &str = "BRITISH.BIT";
 pub const WD_BIT_FILE: &str = "WD.BIT";
 pub const IBM_CH_FILE: &str = "IBM.CH";
-#[cfg(test)]
 pub const RUNES_CH_FILE: &str = "RUNES.CH";
-#[cfg(test)]
 pub const IBM_HCS_FILE: &str = "IBM.HCS";
-#[cfg(test)]
 pub const RUNES_HCS_FILE: &str = "RUNES.HCS";
 pub const PROPORT_PCS_FILE: &str = "PROPORT.PCS";
 pub const TILE_PASSABILITY_LEN: usize = 32;
@@ -225,25 +222,20 @@ pub const SINGLE_IMAGE_BIT_MODE_MARKER: u16 = 4;
 /// Anchored to [`CH_GLYPH_COUNT`] so the parse-side glyph count
 /// stays one value with the .CH catalog size; [`HCS_GLYPH_COUNT`]
 /// is required to match.
-#[cfg(test)]
 pub const FIXED_FONT_GLYPH_COUNT: usize = CH_GLYPH_COUNT;
 /// `formats/font-ch.md §2`: .CH cells are 8x8. Anchored to
 /// [`CH_CELL_SIDE`] so the parse-side cell width stays one value.
-#[cfg(test)]
 pub const CH_FONT_CELL_WIDTH: usize = CH_CELL_SIDE;
 /// `formats/font-ch.md §2`: .CH cells are 8x8. Anchored to
 /// [`CH_CELL_SIDE`] so the parse-side cell height stays one value.
-#[cfg(test)]
 pub const CH_FONT_CELL_HEIGHT: usize = CH_CELL_SIDE;
 /// `formats/font-hcs.md §2`: .HCS cells are 16x12. Anchored to
 /// [`HCS_CELL_WIDTH`] so the parser-side cell width stays one
 /// value with the format-side cell width.
-#[cfg(test)]
 pub const HCS_FONT_CELL_WIDTH: usize = HCS_CELL_WIDTH;
 /// `formats/font-hcs.md §2`: .HCS cells are 16x12. Anchored to
 /// [`HCS_CELL_HEIGHT`] so the parser-side cell height stays one
 /// value with the format-side cell height.
-#[cfg(test)]
 pub const HCS_FONT_CELL_HEIGHT: usize = HCS_CELL_HEIGHT;
 pub const PCS_FIRST_CODE: u8 = 0x20;
 pub const PCS_GLYPH_BITMAP_WIDTH: usize = 8;

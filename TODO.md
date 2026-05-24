@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime --lib` passed on 2026-05-24, including 2650 tests
+- `cargo test -p u5-runtime --lib` passed on 2026-05-24, including 2652 tests
   (latest verification includes public `cleak/u5-spec#47` hourly
   poison/provision/ring ordering, public #28 horse-trader adjacent placement
   priority plus no-marker refusal, public #15 inn pickup stay-counter billing,
@@ -23,7 +23,8 @@ Last known verification state:
   terrain-combat replacement-tile main path, public-spec View/Peer/X-Ray
   overlay raster-class and dungeon minimap glyph-id coverage, sanitized
   aggregate `LOCATION.DAT` authored-cell audit coverage, sanitized aggregate
-  `.OOL` active-object overlay audit coverage, and public issue #21 dungeon
+  `.OOL` active-object overlay audit coverage, sanitized aggregate tile-atlas
+  and fixed-font audit coverage, and public issue #21 dungeon
   active-monster ambush setup, combat round maintenance, combat-local ambush/camp
   reveal-slot helper coverage, stats-panel combat inverse-video overlay
   coverage, disk I/O retry wrapper coverage, and shared TUI/Bevy Journey Onward
@@ -1099,10 +1100,17 @@ Goal: keep asset readers complete while preserving repository cleanliness.
     `SAVED.GAM`, `SAVED.OOL`, `BRIT.OOL`, `UNDER.OOL`, and `INIT.OOL` when
     local clean assets are present; keep reports to counts, hashes, mirror
     checks, and anomaly totals rather than raw slot inventories,
-  - tile sheets and masks,
-  - fonts,
-  - proportional text assets,
-  - bitmap resources used by eventual Bevy UI,
+  - tile sheets now have a sanitized aggregate audit covering the shipped
+    EGA and CGA tile atlases when local clean assets are present; reports stay
+    to counts, hashes, palette masks, and nonzero totals rather than raw
+    pixels,
+  - fixed-cell `.CH` and `.HCS` fonts now have a sanitized aggregate audit
+    covering the shipped IBM and Runes resources when local clean assets are
+    present; reports stay to glyph counts, dimensions, bit masks, hashes, and
+    nonzero totals rather than raw glyph rows,
+  - proportional text assets (pending `cleak/u5-spec#36` envelope policy),
+  - bitmap resources used by eventual Bevy UI (pending `cleak/u5-spec#36`
+    envelope policy for `.BIT` resources),
   - any distribution variants the user wants to support.
 
 - Do not add audio/music unless a target distribution actually includes it.
