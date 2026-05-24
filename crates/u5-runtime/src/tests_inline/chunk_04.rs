@@ -82,7 +82,7 @@
     #[test]
     fn movement_blocks_impassable_tiles_without_spending_turn() {
         let mut grid = open_grid();
-        grid[32 + 2] = 24;
+        grid[32 + 2] = 0x0c;
         let mut state = test_state(grid, 1, 1);
         state.ambient_light = FULL_DAYLIGHT;
         state.visibility_dirty = false;
@@ -95,16 +95,16 @@
     }
 
     #[test]
-    fn movement_uses_optional_passability_bitmap() {
+    fn movement_ignores_optional_passability_bitmap_for_promoted_transport() {
         let mut grid = open_grid();
-        grid[32 + 2] = 24;
+        grid[32 + 2] = 0x0c;
         let mut state = test_state(grid, 1, 1);
-        state.passability = Some(passability_with_tiles(&[24]));
+        state.passability = Some(passability_with_tiles(&[0x0c]));
 
-        assert_eq!(state.step(Direction::East), MoveOutcome::Moved);
+        assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
 
-        assert_eq!((state.player.x, state.player.y), (2, 1));
-        assert_eq!(state.turn, 1);
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.turn, 0);
     }
 
     #[test]
@@ -235,7 +235,7 @@
     #[test]
     fn world_movement_blocks_impassable_tiles_without_turn() {
         let mut grid = open_world_grid();
-        grid[world_cell_index(1, 0)] = 24;
+        grid[world_cell_index(1, 0)] = 0x0c;
         let mut state = world_state(grid, 0, 0);
 
         assert_eq!(state.step(Direction::East), MoveOutcome::Blocked);
@@ -897,7 +897,7 @@
     #[test]
     fn balloon_world_movement_drifts_with_wind_over_blocked_terrain() {
         let mut grid = open_world_grid();
-        grid[world_cell_index(1, 0)] = 24;
+        grid[world_cell_index(1, 0)] = 0x28;
         let mut state = world_state(grid, 0, 0);
         mount_balloon(&mut state);
         state.wind = WindState::East;

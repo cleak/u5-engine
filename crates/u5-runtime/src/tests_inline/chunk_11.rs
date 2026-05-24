@@ -58,7 +58,7 @@
         let scene = Scene::new(17).unwrap();
         fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
         let mut grid = open_grid();
-        grid[1] = 80;
+        grid[1] = TOWN_STAIR_TILE_FIRST + 1;
         let mut state = test_state(grid, 0, 0);
 
         assert_eq!(
@@ -950,12 +950,12 @@
             state
                 .step_with_game_dir(Direction::East, Some(&dir))
                 .unwrap(),
-            MoveOutcome::Moved
+            MoveOutcome::Blocked
         );
 
         assert_eq!(state.party[0].status, b'G');
         assert!(!state.message.contains("poison gas doorway"));
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, 0);
     }
 
     #[test]
@@ -1277,15 +1277,27 @@
         fs::write(dir.join("CASTLE.DAT"), location_pages()).unwrap();
         fs::write(dir.join(LOCATION_FLOOR_TABLE_FILE), "CASTLE:0 5\n").unwrap();
         let mut grid = open_grid();
-        grid[1] = 80;
+        grid[1] = TOWN_STAIR_TILE_FIRST;
         let mut state = test_state(grid, 0, 0);
 
         assert_eq!(
             state
                 .step_with_game_dir(Direction::East, Some(&dir))
                 .unwrap(),
-            MoveOutcome::Observed
+            MoveOutcome::Moved
         );
+        assert_eq!(
+            state.area,
+            Area::Town {
+                scene: Scene::new(17).unwrap(),
+                floor: 0
+            }
+        );
+        assert_eq!((state.player.x, state.player.y), (1, 0));
+        assert_eq!(state.active_objects[0].x, 1);
+        assert_eq!(state.turn, 1);
+
+        assert_eq!(state.klimb_command(&dir).unwrap(), MoveOutcome::Observed);
 
         assert_eq!(state.message, "Klimb-");
         assert_eq!(
@@ -1301,10 +1313,10 @@
         );
         assert_eq!((state.player.x, state.player.y), (1, 0));
         assert_eq!(state.active_objects[0].x, 1);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.turn, 1);
 
         assert_eq!(
-            handle_play_key_input(&mut state, '<', "", &dir).unwrap(),
+            handle_play_key_input(&mut state, '>', "", &dir).unwrap(),
             PlayInputDisposition::Continue
         );
 
@@ -1312,12 +1324,12 @@
             state.area,
             Area::Town {
                 scene: Scene::new(17).unwrap(),
-                floor: 1
+                floor: -1
             }
         );
         assert_eq!((state.player.x, state.player.y), (1, 0));
-        assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Changed to CASTLE:0 floor 1"));
+        assert_eq!(state.turn, 2);
+        assert!(state.message.contains("Changed to CASTLE:0 floor -1"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1370,7 +1382,7 @@
     #[test]
     fn world_k_refuses_impassable_target_without_turn() {
         let mut grid = open_world_grid();
-        grid[world_cell_index(11, 20)] = 24;
+        grid[world_cell_index(11, 20)] = 0x2e;
         let mut state = world_state(grid, 10, 20);
         state.climbing_gear = 1;
         state.player.facing = Direction::East;

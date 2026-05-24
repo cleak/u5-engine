@@ -54,7 +54,7 @@ move below level `7`. Missing rows preserve the conservative in-place block.
 | `world_encounters.tsv` | Optional encounter spawn overrides; unmatched terrain uses the native public selector. |
 | `shrines.tsv` | Shrine coordinates and virtue binding. |
 | `eternal_flames.tsv` | Optional legacy Eternal Flame coordinate overrides. Native shard destruction uses the three published exact party positions and still requires the matching Shadowlord-name encounter immediately north. |
-| `tile_passability.bin` | Optional 32-byte public tile passability bitmap. |
+| `tile_passability.bin` | Optional 32-byte base-predicate override; native player transport movement uses the published foot/horse/carpet/ship/skiff tile sets without this file. |
 
 ## Content And Companion Save Files
 

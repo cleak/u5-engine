@@ -240,7 +240,7 @@ impl PlayState {
         match self.area {
             Area::Town { scene, floor } => {
                 let tile = self.grid[y * 32 + x];
-                if (80..=87).contains(&tile) {
+                if is_town_stair_tile(tile) || (80..=87).contains(&tile) {
                     return Ok(false);
                 }
                 if let Some(game_dir) = game_dir {

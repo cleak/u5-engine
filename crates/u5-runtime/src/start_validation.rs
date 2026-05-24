@@ -110,6 +110,14 @@ pub fn validate_world_start_for_transport(
         ));
     }
     if !is_tile_walkable_for_transport(tile, passability, transport) {
+        // Explicit debug/route starts sometimes seed the player on a
+        // diagnostic cell that the promoted player movement predicate would
+        // not enter through a normal step. Keep that startup compatibility
+        // isolated to foot starts; ordinary movement still uses the exact
+        // transport predicate.
+        if matches!(transport, TransportState::Foot) && is_probe_walkable(tile) {
+            return Ok(());
+        }
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             format!(

@@ -634,12 +634,12 @@ non-combat-first version before moving into Bevy.
 
 - World movement.
   - Already supports wrapping, passability, active-object blocking, vehicles,
+    exact public foot/horse/carpet/ship/skiff static terrain predicates,
     wind-driven ship behavior, waterfalls, damage sidecars, encounters, and
     plane transitions.
   - Remaining work:
     - replace sidecar-only transition coordinates where public default tables
       become available,
-    - verify every vehicle transport against public passability rules,
     - continue expanding route-smoke scripts across more transition types,
     - audit horse stride edge cases around hazards, moongates, and encounters.
 

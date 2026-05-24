@@ -1055,7 +1055,7 @@ fn town_push_consumes_turn_when_pushable_destination_is_blocked() {
     fs::write(dir.join(TOWN_PUSHABLE_TABLE_FILE), "CASTLE:0 0 2 1 44\n").unwrap();
     let mut grid = open_grid();
     grid[32 + 2] = 44;
-    grid[32 + 3] = 24;
+    grid[32 + 3] = 0x0c;
     let mut state = test_state(grid, 1, 1);
     state.player.facing = Direction::East;
 
@@ -1065,7 +1065,7 @@ fn town_push_consumes_turn_when_pushable_destination_is_blocked() {
     );
 
     assert_eq!(state.grid[32 + 2], 44);
-    assert_eq!(state.grid[32 + 3], 24);
+    assert_eq!(state.grid[32 + 3], 0x0c);
     assert_eq!(state.turn, 1);
     assert!(state.message.contains("Push blocked"));
     let _ = fs::remove_dir_all(dir);

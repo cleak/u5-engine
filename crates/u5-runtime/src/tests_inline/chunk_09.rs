@@ -115,7 +115,7 @@
     fn moongate_requires_daylight_for_render_movement_and_entry() {
         let dir = debug_game_dir();
         let mut grid = open_world_grid();
-        grid[world_cell_index(1, 0)] = 24;
+        grid[world_cell_index(1, 0)] = 0x0c;
         let mut state = britannia_state(grid, 0, 0);
         state.clock = GameClock::new(20, 0).unwrap();
         state.ambient_light = FULL_DARKNESS;
@@ -544,11 +544,11 @@
         let dir = debug_game_dir();
         fs::write(
             dir.join(WORLD_PLANE_TRANSITION_TABLE_FILE),
-            "BRITANNIA 11 20 UNDERWORLD 30 40 24\n",
+            "BRITANNIA 11 20 UNDERWORLD 30 40 12\n",
         )
         .unwrap();
         let mut grid = open_world_grid();
-        grid[world_cell_index(11, 20)] = 24;
+        grid[world_cell_index(11, 20)] = 0x0c;
         let mut state = britannia_state(grid, 10, 20);
 
         assert_eq!(

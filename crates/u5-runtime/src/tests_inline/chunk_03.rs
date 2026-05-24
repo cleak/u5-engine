@@ -2086,7 +2086,7 @@
     #[test]
     fn validate_start_rejects_blocked_tiles() {
         let mut grid = open_grid();
-        grid[3 * 32 + 4] = 24;
+        grid[3 * 32 + 4] = 0x0c;
 
         assert!(validate_start(&grid, (4, 3), None).is_err());
         assert!(validate_start(&grid, (5, 3), None).is_ok());
@@ -2112,12 +2112,11 @@
     }
 
     #[test]
-    fn optional_passability_bitmap_can_allow_class_blocked_tile() {
-        let mut grid = open_grid();
-        grid[3 * 32 + 4] = 24;
-        let passability = passability_with_tiles(&[24]);
+    fn optional_passability_bitmap_still_controls_base_predicate() {
+        let passability = passability_with_tiles(&[0x0c]);
 
-        assert!(validate_start(&grid, (4, 3), Some(&passability)).is_ok());
+        assert!(is_base_tile_passable(0x0c, Some(&passability)));
+        assert!(!is_base_tile_passable(0x0c, None));
     }
 
     #[test]

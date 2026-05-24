@@ -84,6 +84,116 @@ pub const fn water_creature_terrain_accepts(tile: u8) -> bool {
     ship_terrain_accepts(tile)
 }
 
+/// `movement.md §4` on-foot/avatar static terrain predicate.
+/// Dynamic occupants and command-specific effects are checked after this
+/// static tile-id acceptance layer.
+pub const fn foot_terrain_accepts(tile: u8) -> bool {
+    matches!(
+        tile,
+        0x00
+            | 0x04..=0x0B
+            | 0x0E..=0x19
+            | 0x1B
+            | 0x1D..=0x26
+            | 0x2C..=0x2D
+            | 0x30..=0x37
+            | 0x39
+            | 0x3E
+            | 0x40
+            | 0x44..=0x45
+            | 0x47..=0x49
+            | 0x6A..=0x6B
+            | 0x86..=0x87
+            | 0x8C
+            | 0x8F..=0x93
+            | 0xAA..=0xAC
+            | 0xBC
+            | 0xC4..=0xC9
+            | 0xDC..=0xDD
+            | 0xF9
+            | 0xFF
+    )
+}
+
+/// `movement.md §4` mounted-horse static terrain predicate.
+pub const fn horse_terrain_accepts(tile: u8) -> bool {
+    matches!(
+        tile,
+        0x00
+            | 0x05..=0x0B
+            | 0x0E..=0x19
+            | 0x1B
+            | 0x1D..=0x26
+            | 0x2C..=0x2D
+            | 0x30..=0x37
+            | 0x39
+            | 0x3E
+            | 0x40
+            | 0x44..=0x45
+            | 0x47..=0x49
+            | 0x6A..=0x6B
+            | 0x86..=0x87
+            | 0x8C
+            | 0xAA..=0xAC
+            | 0xBC
+            | 0xC4..=0xC9
+            | 0xDC..=0xDD
+            | 0xF9
+            | 0xFF
+    )
+}
+
+/// `movement.md §4` magic-carpet static terrain predicate.
+pub const fn carpet_terrain_accepts(tile: u8) -> bool {
+    matches!(
+        tile,
+        0x00..=0x0B
+            | 0x0E..=0x19
+            | 0x1B
+            | 0x1D..=0x26
+            | 0x2C..=0x2D
+            | 0x30..=0x37
+            | 0x39
+            | 0x3E
+            | 0x40
+            | 0x44..=0x45
+            | 0x47..=0x49
+            | 0x60..=0x6F
+            | 0x86..=0x87
+            | 0x8C
+            | 0x8F
+            | 0xAA..=0xAC
+            | 0xBC
+            | 0xC4..=0xC9
+            | 0xDC..=0xDD
+            | 0xF9
+            | 0xFF
+    )
+}
+
+/// `movement.md §4` skiff static terrain predicate. The low two bits
+/// of the skiff query marker select the north/east/south/west mask.
+pub const fn skiff_terrain_accepts(tile: u8, facing_index: u8) -> bool {
+    match facing_index & TRANSPORT_FACING_MASK {
+        0 => matches!(
+            tile,
+            0x00..=0x03 | 0x36..=0x37 | 0x60 | 0x63..=0x64 | 0x66..=0x68 | 0x6A | 0x6C
+        ),
+        1 => matches!(
+            tile,
+            0x00..=0x03 | 0x34 | 0x37 | 0x61 | 0x64..=0x65 | 0x67..=0x69 | 0x6B | 0x6D
+        ),
+        2 => matches!(
+            tile,
+            0x00..=0x03 | 0x34..=0x35 | 0x60 | 0x62 | 0x65..=0x66 | 0x68..=0x6A | 0x6E
+        ),
+        _ => matches!(
+            tile,
+            0x00..=0x03 | 0x35..=0x36 | 0x61..=0x63 | 0x66..=0x67 | 0x69 | 0x6B | 0x6F
+        ),
+    }
+}
+
 /// `movement.md §4` chair-tile force-reject range `0x90..=0x93`. The
 /// base bitset would otherwise allow these ids; most query classes
 /// force-reject them. Two query families exempt themselves from the
@@ -850,43 +960,26 @@ pub fn is_probe_walkable(tile: u8) -> bool {
     if is_location_entry_marker(tile) {
         return true;
     }
-    // Class boundaries derived from canonical LOOK2.DAT and actual U5
-    // gameplay (cross-checked with u5-spec/catalogs/tile-catalog.md and
-    // systems/visibility.md). Notable corrections to the old code:
-    //   0x04 swamp           -- walkable on foot (poisons the party)
-    //   0x0a tropical forest -- walkable, BUT blocks sight (dense)
-    //   0x0b/0x0e/0x0f foothills -- walkable hills
-    //   0x0c mountains, 0x0d high peaks -- impassable except balloon
+    // This broad probe is used by diagnostics, smoke pathfinding, and
+    // combat arena helpers that predate the promoted top-down movement
+    // query families. Player world/town movement should use
+    // `is_tile_walkable_for_transport`, which applies the exact
+    // movement.md static tile sets for the current transport.
     !matches!(
         tile,
-        // Sentinel.
-        0
-        // Open water: deep water, coastal water, shoals (impassable on
-        // foot; 0x04 swamp is walkable so it is NOT in this set).
-        | 1..=3
-        // True mountains and high peaks. Foothills (0x0b/0x0e/0x0f),
-        // tropical forest (0x0a), and swamp (0x04) are all walkable.
-        | 0x0c | 0x0d
-        // Dungeon entrance, mystic shrine, ruined shrine, lighthouse
-        // (landmarks the player can E-Enter but not step over).
-        | 24..=27
-        // Roofs and crystal sphere.
-        | 39..=41
-        // Hollow stump, crops, fruit tree, cactus.
-        | 43 | 45..=47
-        // Gargoyle landmark and "a mighty castle" tile band.
-        | 56..=63
-        // Town interior surfaces that act as obstacles: planks, codex,
-        // mast, rail, cobble, pillar, pier (but NOT bridges).
-        | 64..=71
-        // Walls, arrow slits, windows, piles of rocks.
-        | 74..=79
-        // Signs, wells, brazier, fireplace.
-        | 88..=95
-        // Doors (id-dependent; closed/locked block).
-        | 96..=103
-        // Decorative obstructions in the upper decoration band.
-        | 120..=127
+        0 | 1..=3
+            | 0x0c
+            | 0x0d
+            | 24..=27
+            | 39..=41
+            | 43
+            | 45..=47
+            | 56..=63
+            | 64..=71
+            | 74..=79
+            | 88..=95
+            | 96..=103
+            | 120..=127
     )
 }
 
@@ -900,24 +993,22 @@ pub fn is_base_tile_passable(tile: u8, passability: Option<&TilePassability>) ->
     }
     passability
         .map(|passability| passability.is_passable(tile))
-        .unwrap_or_else(|| is_probe_walkable(tile))
+        .unwrap_or_else(|| foot_terrain_accepts(tile))
 }
 
 pub fn is_tile_walkable_for_transport(
     tile: u8,
-    passability: Option<&TilePassability>,
+    _passability: Option<&TilePassability>,
     transport: TransportState,
 ) -> bool {
-    let base = is_base_tile_passable(tile, passability);
     match transport {
-        TransportState::Foot => base && !is_water_tile(tile),
-        TransportState::Horse { .. } => base && !is_water_tile(tile) && !is_mountain_or_lava(tile),
-        TransportState::Ship { .. } | TransportState::Skiff { .. } => is_water_tile(tile),
-        TransportState::Carpet { .. } => {
-            (base || is_water_tile(tile) || is_lava_tile(tile))
-                && !is_mountain_tile(tile)
-                && !is_wall_or_closed_door_tile(tile)
+        TransportState::Foot => foot_terrain_accepts(tile),
+        TransportState::Horse { .. } => horse_terrain_accepts(tile),
+        TransportState::Ship { .. } => ship_terrain_accepts(tile),
+        TransportState::Skiff { type_byte, .. } => {
+            skiff_terrain_accepts(tile, type_byte & TRANSPORT_FACING_MASK)
         }
+        TransportState::Carpet { .. } => carpet_terrain_accepts(tile),
         TransportState::Balloon { .. } => true,
     }
 }

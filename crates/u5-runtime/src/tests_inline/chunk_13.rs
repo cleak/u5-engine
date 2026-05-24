@@ -3538,6 +3538,175 @@ fn tile_passability_bit_shift_and_mask_align_with_spec() {
     );
 }
 
+fn movement_range_table(ranges: &[(u8, u8)]) -> [bool; 256] {
+    let mut table = [false; 256];
+    for &(first, last) in ranges {
+        for tile in first..=last {
+            table[tile as usize] = true;
+        }
+    }
+    table
+}
+
+#[test]
+fn native_transport_terrain_predicates_match_published_tile_sets() {
+    // movement.md §4 publishes exact accepted static tile ids for the
+    // player-facing foot/horse/carpet/ship/skiff query families. Keep
+    // the native fallback exhaustive so it cannot drift back into the
+    // older broad class-derived movement probe.
+    let foot = movement_range_table(&[
+        (0x00, 0x00),
+        (0x04, 0x0B),
+        (0x0E, 0x19),
+        (0x1B, 0x1B),
+        (0x1D, 0x26),
+        (0x2C, 0x2D),
+        (0x30, 0x37),
+        (0x39, 0x39),
+        (0x3E, 0x3E),
+        (0x40, 0x40),
+        (0x44, 0x45),
+        (0x47, 0x49),
+        (0x6A, 0x6B),
+        (0x86, 0x87),
+        (0x8C, 0x8C),
+        (0x8F, 0x93),
+        (0xAA, 0xAC),
+        (0xBC, 0xBC),
+        (0xC4, 0xC9),
+        (0xDC, 0xDD),
+        (0xF9, 0xF9),
+        (0xFF, 0xFF),
+    ]);
+    let horse = movement_range_table(&[
+        (0x00, 0x00),
+        (0x05, 0x0B),
+        (0x0E, 0x19),
+        (0x1B, 0x1B),
+        (0x1D, 0x26),
+        (0x2C, 0x2D),
+        (0x30, 0x37),
+        (0x39, 0x39),
+        (0x3E, 0x3E),
+        (0x40, 0x40),
+        (0x44, 0x45),
+        (0x47, 0x49),
+        (0x6A, 0x6B),
+        (0x86, 0x87),
+        (0x8C, 0x8C),
+        (0xAA, 0xAC),
+        (0xBC, 0xBC),
+        (0xC4, 0xC9),
+        (0xDC, 0xDD),
+        (0xF9, 0xF9),
+        (0xFF, 0xFF),
+    ]);
+    let carpet = movement_range_table(&[
+        (0x00, 0x0B),
+        (0x0E, 0x19),
+        (0x1B, 0x1B),
+        (0x1D, 0x26),
+        (0x2C, 0x2D),
+        (0x30, 0x37),
+        (0x39, 0x39),
+        (0x3E, 0x3E),
+        (0x40, 0x40),
+        (0x44, 0x45),
+        (0x47, 0x49),
+        (0x60, 0x6F),
+        (0x86, 0x87),
+        (0x8C, 0x8C),
+        (0x8F, 0x8F),
+        (0xAA, 0xAC),
+        (0xBC, 0xBC),
+        (0xC4, 0xC9),
+        (0xDC, 0xDD),
+        (0xF9, 0xF9),
+        (0xFF, 0xFF),
+    ]);
+    let ship = movement_range_table(&[(0x00, 0x02)]);
+    for tile in 0u8..=u8::MAX {
+        assert_eq!(foot_terrain_accepts(tile), foot[tile as usize], "foot 0x{tile:02x}");
+        assert_eq!(
+            horse_terrain_accepts(tile),
+            horse[tile as usize],
+            "horse 0x{tile:02x}"
+        );
+        assert_eq!(
+            carpet_terrain_accepts(tile),
+            carpet[tile as usize],
+            "carpet 0x{tile:02x}"
+        );
+        assert_eq!(ship_terrain_accepts(tile), ship[tile as usize], "ship 0x{tile:02x}");
+        assert_eq!(
+            is_tile_walkable_for_transport(tile, None, TransportState::Foot),
+            foot[tile as usize],
+            "foot transport 0x{tile:02x}"
+        );
+    }
+}
+
+#[test]
+fn native_skiff_terrain_predicate_is_facing_sensitive() {
+    let expected = [
+        movement_range_table(&[
+            (0x00, 0x03),
+            (0x36, 0x37),
+            (0x60, 0x60),
+            (0x63, 0x64),
+            (0x66, 0x68),
+            (0x6A, 0x6A),
+            (0x6C, 0x6C),
+        ]),
+        movement_range_table(&[
+            (0x00, 0x03),
+            (0x34, 0x34),
+            (0x37, 0x37),
+            (0x61, 0x61),
+            (0x64, 0x65),
+            (0x67, 0x69),
+            (0x6B, 0x6B),
+            (0x6D, 0x6D),
+        ]),
+        movement_range_table(&[
+            (0x00, 0x03),
+            (0x34, 0x35),
+            (0x60, 0x60),
+            (0x62, 0x62),
+            (0x65, 0x66),
+            (0x68, 0x6A),
+            (0x6E, 0x6E),
+        ]),
+        movement_range_table(&[
+            (0x00, 0x03),
+            (0x35, 0x36),
+            (0x61, 0x63),
+            (0x66, 0x67),
+            (0x69, 0x69),
+            (0x6B, 0x6B),
+            (0x6F, 0x6F),
+        ]),
+    ];
+    for facing in 0u8..=3 {
+        let transport = TransportState::Skiff {
+            type_byte: TRANSPORT_MARKER_SKIFF_FIRST + facing,
+            tile: FIRST_PLAYABLE_SKIFF_TILE + facing,
+        };
+        for tile in 0u8..=u8::MAX {
+            assert_eq!(
+                skiff_terrain_accepts(tile, facing),
+                expected[facing as usize][tile as usize],
+                "skiff helper facing {facing} tile 0x{tile:02x}"
+            );
+            assert_eq!(
+                is_tile_walkable_for_transport(tile, None, transport),
+                expected[facing as usize][tile as usize],
+                "skiff transport facing {facing} tile 0x{tile:02x}"
+            );
+        }
+    }
+}
+
 #[test]
 fn dungeon_render_cell_byte_strips_visit_bit_below_wall_band() {
     // dungeon-mode.md §6.1: renderer-facing cell reads strip

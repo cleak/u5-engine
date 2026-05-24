@@ -751,7 +751,7 @@ impl PlayState {
         if let Some(entry) = self.town_stair_at(game_dir, scene, floor, x, y, tile)? {
             return self.available_town_climb_choices(game_dir, scene, floor, entry.kind.intents());
         }
-        if !(80..=87).contains(&tile) {
+        if !is_town_stair_tile(tile) && !(80..=87).contains(&tile) {
             return Ok(Vec::new());
         }
         self.available_town_climb_choices(
@@ -796,6 +796,8 @@ impl PlayState {
             town_climb_delta(intent)
         } else if let Some(delta) = stair_delta(tile, intent) {
             delta
+        } else if is_town_stair_tile(tile) {
+            town_climb_delta(intent)
         } else {
             self.message = "Not climbable!".to_string();
             return Ok(MoveOutcome::Blocked);

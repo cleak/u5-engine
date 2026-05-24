@@ -1129,11 +1129,12 @@ next 1,024-byte page, and floor `-1` reads the previous page. Without this
 file the harness falls back to the physical two-page pairing in the location
 `.DAT` files.
 
-Town and overworld movement can also consume the public tile passability
-bitmap as a clean-room sidecar. Place the 32-byte bitmap next to the game data
-as `tile_passability.bin`. Tile id `n` uses byte `n >> 3` and mask
-`0x80 >> (n & 7)`; a set bit means broadly passable. Without this file the
-harness keeps using its class-derived fallback.
+Town and overworld movement use the public `systems/movement.md` static tile
+sets for foot, horse, carpet, ship, and facing-sensitive skiff travel when no
+override is present. Focused tests can still provide the clean-room
+`tile_passability.bin` sidecar next to the game data. Tile id `n` uses byte
+`n >> 3` and mask `0x80 >> (n & 7)`; a set bit means broadly passable for the
+legacy base-predicate override.
 
 For transition plumbing tests before those clean coordinates exist, use
 `--debug-enter` with an overworld scene. Press `e` to enter the requested
