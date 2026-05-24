@@ -4710,6 +4710,41 @@
     }
 
     #[test]
+    fn end_to_end_stocked_arms_shop_escape_exits_buy_and_sell_submenus() {
+        use crate::shop_runtime::ArmsShopState;
+        use crate::shop_session::ActiveShopSession;
+        use crate::shops::ArmsStockTable;
+
+        let mut buy_state = test_state(open_grid(), 1, 1);
+        buy_state.gold = 1000;
+        buy_state.active_shop = Some(ActiveShopSession::ArmsStocked(
+            ArmsShopState::Greeting,
+            ArmsStockTable::new([23, 24, 30, 0, 0, 0, 0, 0], 3),
+        ));
+
+        handle_play_key_input(&mut buy_state, 'B', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut buy_state, '\x1b', "", Path::new("")).unwrap();
+        assert!(buy_state.active_shop.is_none());
+        assert_eq!(buy_state.gold, 1000);
+        assert!(buy_state.equipment_stock.iter().all(|count| *count == 0));
+        assert!(buy_state.message.contains("Farewell"));
+
+        let mut sell_state = test_state(open_grid(), 1, 1);
+        sell_state.gold = 1000;
+        sell_state.active_shop = Some(ActiveShopSession::ArmsStocked(
+            ArmsShopState::Greeting,
+            ArmsStockTable::new([23, 24, 30, 0, 0, 0, 0, 0], 3),
+        ));
+
+        handle_play_key_input(&mut sell_state, 'S', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut sell_state, ' ', "", Path::new("")).unwrap();
+        assert!(sell_state.active_shop.is_none());
+        assert_eq!(sell_state.gold, 1000);
+        assert!(sell_state.equipment_stock.iter().all(|count| *count == 0));
+        assert!(sell_state.message.contains("Farewell"));
+    }
+
+    #[test]
     fn end_to_end_stocked_arms_shop_confirmation_ignores_non_yes_no_keys() {
         use crate::shop_runtime::ArmsShopState;
         use crate::shop_session::ActiveShopSession;

@@ -1263,6 +1263,12 @@ fn handle_arms_shop_key_input(
             &mut stock,
             &prices,
         ),
+        (ArmsShopState::BuyPickItem | ArmsShopState::SellPickItem, _, _, _)
+            if matches!(key_byte, b' ' | 0x1b) =>
+        {
+            *shop_state = ArmsShopState::Exited;
+            ArmsShopOutcome::Exited
+        }
         (ArmsShopState::BuyPickItem, _, _, _) => {
             if let Some(table) = stock_table {
                 step_arms_shop(

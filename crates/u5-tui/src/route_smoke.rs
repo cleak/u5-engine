@@ -1262,6 +1262,150 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "shop-arms-iolos-bows-buy-first",
+            options: PlayOptions::default(),
+            script: &["B", "A", "Y", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-naughty-nomaans-buy-first",
+            options: PlayOptions::default(),
+            script: &["B", "A", "Y", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-arms-of-justice-buy-first",
+            options: PlayOptions::default(),
+            script: &["B", "A", "Y", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-darkwatch-armoury-buy-first",
+            options: PlayOptions::default(),
+            script: &["B", "A", "Y", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-paladins-protectorate-buy-first",
+            options: PlayOptions::default(),
+            script: &["B", "A", "Y", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-north-star-armoury-buy-first",
+            options: PlayOptions::default(),
+            script: &["B", "A", "Y", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-buccaneers-booty-buy-first",
+            options: PlayOptions::default(),
+            script: &["B", "A", "Y", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-shattered-shield-buy-first",
+            options: PlayOptions::default(),
+            script: &["B", "A", "Y", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-siege-crafters-buy-first",
+            options: PlayOptions::default(),
+            script: &["B", "A", "Y", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-iolos-bows-terminator-refusal",
+            options: PlayOptions::default(),
+            script: &["B", "H", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-naughty-nomaans-terminator-refusal",
+            options: PlayOptions::default(),
+            script: &["B", "H", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-arms-of-justice-terminator-refusal",
+            options: PlayOptions::default(),
+            script: &["B", "H", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-darkwatch-armoury-terminator-refusal",
+            options: PlayOptions::default(),
+            script: &["B", "H", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-paladins-protectorate-terminator-refusal",
+            options: PlayOptions::default(),
+            script: &["B", "H", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-north-star-armoury-terminator-refusal",
+            options: PlayOptions::default(),
+            script: &["B", "H", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-buccaneers-booty-terminator-refusal",
+            options: PlayOptions::default(),
+            script: &["B", "H", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-shattered-shield-terminator-refusal",
+            options: PlayOptions::default(),
+            script: &["B", "H", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-arms-siege-crafters-terminator-refusal",
+            options: PlayOptions::default(),
+            script: &["B", "H", "\x1b"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "shop-healer-heal-decline-route",
             options: PlayOptions::default(),
             script: &["Y", "H", "1", "N"],
@@ -2552,14 +2696,11 @@ fn apply_route_smoke_case_setup(
             seed_dungeon_active_monster_route(state, 0x20);
         }
         "shop-arms-local-buy-sell-route" => {
-            state.gold = 999;
-            if let Some(intelligence) = state.party_intelligence.first_mut() {
-                *intelligence = 20;
-            }
-            state.active_shop = Some(ActiveShopSession::ArmsLocal(
-                ArmsShopState::Greeting,
-                ArmsShop::IolosBows,
-            ));
+            seed_route_arms_shop(state, ArmsShop::IolosBows, 999);
+        }
+        _ if arms_route_shop(case_name).is_some() => {
+            let shop = arms_route_shop(case_name).expect("arms route shop is known");
+            seed_route_arms_shop(state, shop, 9999);
         }
         "shop-healer-heal-decline-route" => {
             state.gold = 999;
@@ -2722,6 +2863,48 @@ fn stamp_word_of_power_seal_route(state: &mut PlayState, case_name: &str) {
             }
         }
     }
+}
+
+fn seed_route_arms_shop(state: &mut PlayState, shop: ArmsShop, gold: u16) {
+    state.gold = gold;
+    if let Some(intelligence) = state.party_intelligence.first_mut() {
+        *intelligence = 20;
+    }
+    state.equipment_stock.fill(0);
+    state.active_shop = Some(ActiveShopSession::ArmsLocal(ArmsShopState::Greeting, shop));
+}
+
+fn arms_route_shop(case_name: &str) -> Option<ArmsShop> {
+    let shop = if case_name.contains("iolos-bows") {
+        ArmsShop::IolosBows
+    } else if case_name.contains("naughty-nomaans") {
+        ArmsShop::NaughtyNomaans
+    } else if case_name.contains("arms-of-justice") {
+        ArmsShop::ArmsOfJustice
+    } else if case_name.contains("darkwatch-armoury") {
+        ArmsShop::DarkwatchArmoury
+    } else if case_name.contains("paladins-protectorate") {
+        ArmsShop::ThePaladinsProtectorate
+    } else if case_name.contains("north-star-armoury") {
+        ArmsShop::NorthStarArmoury
+    } else if case_name.contains("buccaneers-booty") {
+        ArmsShop::BuccaneersBooty
+    } else if case_name.contains("shattered-shield") {
+        ArmsShop::TheShatteredShield
+    } else if case_name.contains("siege-crafters") {
+        ArmsShop::SiegeCrafters
+    } else {
+        return None;
+    };
+    Some(shop)
+}
+
+fn is_arms_buy_first_route(case_name: &str) -> bool {
+    case_name.starts_with("shop-arms-") && case_name.ends_with("-buy-first")
+}
+
+fn is_arms_terminator_refusal_route(case_name: &str) -> bool {
+    case_name.starts_with("shop-arms-") && case_name.ends_with("-terminator-refusal")
 }
 
 fn seed_town_talk_status_tile_route(state: &mut PlayState, status_tile: u8) {
@@ -4313,6 +4496,34 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not exercise arms buy/sell decline without mutation"
+                )));
+            }
+        }
+        _ if is_arms_buy_first_route(case_name) => {
+            let shop = arms_route_shop(case_name).ok_or_else(|| {
+                io::Error::other(format!(
+                    "route smoke `{case_name}` has no arms shop mapping"
+                ))
+            })?;
+            let item = shop.stock_table().item_ids[0] as usize;
+            if state.gold >= 9999
+                || state.active_shop.is_some()
+                || state.equipment_stock.get(item).copied() != Some(1)
+                || !state.message.contains("Farewell")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not buy the first published arms-shop stock item and exit"
+                )));
+            }
+        }
+        _ if is_arms_terminator_refusal_route(case_name) => {
+            if state.gold != 9999
+                || state.active_shop.is_some()
+                || state.equipment_stock.iter().any(|count| *count != 0)
+                || !state.message.contains("Farewell")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not reject the arms-shop terminator letter without mutation"
                 )));
             }
         }

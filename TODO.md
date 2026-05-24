@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-24, including 2630 tests
+- `cargo test -p u5-runtime` passed on 2026-05-24, including 2631 tests
   (latest verification includes public `cleak/u5-spec#47` hourly
   poison/provision/ring ordering, public #28 horse-trader adjacent placement
   priority plus no-marker refusal, public #15 inn pickup stay-counter billing,
@@ -38,7 +38,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-24 with 186 scripted route cases (including expanded active-shop/modal
+  2026-05-24 with 204 scripted route cases (including expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
@@ -104,6 +104,9 @@ Last known verification state:
   routes, plus Blackthorn audience correct-password
   (`338605b812db4ced`), wrong-password (`b700db952bc67bbf`), and
   rescue-refuge (`3c4488f67ab70cb5`) paths.
+- Public #41 arms-shop route coverage includes first-stock purchases across all
+  nine published stocked rows plus terminator-letter refusal rows that verify no
+  gold or equipment mutation before submenu exit.
 - The TUI binary integration tests include temp-directory startup and save
   smoke for Journey Onward's empty-save return-to-menu path, deterministic
   Create Character followed by `--from-save --play-script`, intro-driven U4
@@ -143,7 +146,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 481 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 526 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -262,7 +265,11 @@ Last known verification state:
   `route-shop-shipwright-oaken-oar-frigate-buy-02-y`
   `e47cf61edd1372b9`, and
   `route-shop-shipwright-rusty-bucket-skiff-buy-02-y`
-  `6f9691ff490ad348`. The previous endgame visual-route expansion adds the
+  `6f9691ff490ad348`. The latest public #41 arms-shop visual-route expansion
+  adds accepted first-stock purchase routes across all nine published stocked
+  shop rows; terminator-letter refusal remains in route-smoke because the
+  visual route harness correctly rejects unchanged frames. The previous endgame
+  visual-route expansion adds the
   public #56 six-member
   class-tableau/restoration route
   `route-endgame-class-tableau-restoration-00-initial`

@@ -64,14 +64,14 @@ Runtime, TUI, route-smoke, and visual-route results refreshed alongside this
 audit on 2026-05-24; Bevy frame-suite evidence remains from the latest display
 audit:
 
-- `cargo test -p u5-runtime` — 2630 tests pass, including stats-panel
+- `cargo test -p u5-runtime` — 2631 tests pass, including stats-panel
   combat-row inverse-video style coverage.
 - `cargo test -p u5-tui` — 79 tests pass, including temp-directory binary
   smoke for empty-save Journey Onward, deterministic Create Character followed
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 66 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 186 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 204 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
@@ -85,7 +85,8 @@ audit:
   Undead/Charm/Polymorph/Clone casts, Conjure/Swarm/Summon Daemon routes,
   special death-marker Kill routes, combat-entry party descriptor routes, and combat terminal cleanup routes,
   #51 poison-gas doorway step, public #47 dungeon no-direct-recovery rest and
-  hourly ring tick, public #13 sage paid-success/short-funds paths, public #28
+  hourly ring tick, public #13 sage paid-success/short-funds paths, public #41
+  all nine arms-shop first-stock purchases and terminator-letter refusals, public #28
   all-stable horse-trader purchases, accepted shipwright frigate/skiff dock
   deliveries, native town walk-on stair up/down/crossing routes, and
   ship broadside fire, horse boarding, dungeon torch ignition, Mix/Ready/New
@@ -104,9 +105,9 @@ audit:
   `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls
   plus combat status-highlight and death/field/cursor marker galleries.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 481 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 526 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including horse-trader
-  purchases, accepted healer cure/heal/resurrect, all four public shipwright
+  purchases, all nine public arms-shop first-stock purchases, accepted healer cure/heal/resurrect, all four public shipwright
   delivery-row purchases, spell routes for Locate, Light/Open, restore, active effects,
   directed Sleep/Poison Wind/Death Wind/Flame Wind combat casts, combat utility fallback casts, targeted
   Magic Missile/Tremor/Repel Undead/Charm/Polymorph/Clone, Conjure/Swarm/Summon

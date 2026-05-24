@@ -1356,6 +1356,96 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_arms_local),
         },
         VisualRouteSuiteCase {
+            label: "route-shop-arms-iolos-bows-buy-first",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "A", "Y", "\x1b"],
+            configure: Some(seed_visual_route_arms_iolos_bows),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-naughty-nomaans-buy-first",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "A", "Y", "\x1b"],
+            configure: Some(seed_visual_route_arms_naughty_nomaans),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-arms-of-justice-buy-first",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "A", "Y", "\x1b"],
+            configure: Some(seed_visual_route_arms_arms_of_justice),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-darkwatch-armoury-buy-first",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "A", "Y", "\x1b"],
+            configure: Some(seed_visual_route_arms_darkwatch_armoury),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-paladins-protectorate-buy-first",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "A", "Y", "\x1b"],
+            configure: Some(seed_visual_route_arms_paladins_protectorate),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-north-star-armoury-buy-first",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "A", "Y", "\x1b"],
+            configure: Some(seed_visual_route_arms_north_star_armoury),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-buccaneers-booty-buy-first",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "A", "Y", "\x1b"],
+            configure: Some(seed_visual_route_arms_buccaneers_booty),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-shattered-shield-buy-first",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "A", "Y", "\x1b"],
+            configure: Some(seed_visual_route_arms_shattered_shield),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-siege-crafters-buy-first",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "A", "Y", "\x1b"],
+            configure: Some(seed_visual_route_arms_siege_crafters),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-healer-heal-decline",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -2993,14 +3083,52 @@ fn poison_gas_first_poison_seed() -> u16 {
 }
 
 fn seed_visual_route_arms_local(state: &mut PlayState) {
-    state.gold = 999;
+    seed_visual_route_arms_shop(state, ArmsShop::IolosBows, 999);
+}
+
+fn seed_visual_route_arms_shop(state: &mut PlayState, shop: ArmsShop, gold: u16) {
+    state.gold = gold;
     if let Some(intelligence) = state.party_intelligence.first_mut() {
         *intelligence = 20;
     }
-    state.active_shop = Some(ActiveShopSession::ArmsLocal(
-        ArmsShopState::Greeting,
-        ArmsShop::IolosBows,
-    ));
+    state.equipment_stock.fill(0);
+    state.active_shop = Some(ActiveShopSession::ArmsLocal(ArmsShopState::Greeting, shop));
+}
+
+fn seed_visual_route_arms_iolos_bows(state: &mut PlayState) {
+    seed_visual_route_arms_shop(state, ArmsShop::IolosBows, 9999);
+}
+
+fn seed_visual_route_arms_naughty_nomaans(state: &mut PlayState) {
+    seed_visual_route_arms_shop(state, ArmsShop::NaughtyNomaans, 9999);
+}
+
+fn seed_visual_route_arms_arms_of_justice(state: &mut PlayState) {
+    seed_visual_route_arms_shop(state, ArmsShop::ArmsOfJustice, 9999);
+}
+
+fn seed_visual_route_arms_darkwatch_armoury(state: &mut PlayState) {
+    seed_visual_route_arms_shop(state, ArmsShop::DarkwatchArmoury, 9999);
+}
+
+fn seed_visual_route_arms_paladins_protectorate(state: &mut PlayState) {
+    seed_visual_route_arms_shop(state, ArmsShop::ThePaladinsProtectorate, 9999);
+}
+
+fn seed_visual_route_arms_north_star_armoury(state: &mut PlayState) {
+    seed_visual_route_arms_shop(state, ArmsShop::NorthStarArmoury, 9999);
+}
+
+fn seed_visual_route_arms_buccaneers_booty(state: &mut PlayState) {
+    seed_visual_route_arms_shop(state, ArmsShop::BuccaneersBooty, 9999);
+}
+
+fn seed_visual_route_arms_shattered_shield(state: &mut PlayState) {
+    seed_visual_route_arms_shop(state, ArmsShop::TheShatteredShield, 9999);
+}
+
+fn seed_visual_route_arms_siege_crafters(state: &mut PlayState) {
+    seed_visual_route_arms_shop(state, ArmsShop::SiegeCrafters, 9999);
 }
 
 fn seed_visual_route_healer(state: &mut PlayState) {
@@ -7883,7 +8011,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 156);
+        assert_eq!(cases.len(), 165);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -8286,7 +8414,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 481);
+        assert_eq!(reports.len(), 526);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
