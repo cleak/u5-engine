@@ -18,17 +18,18 @@ use image::{ImageBuffer, Rgba};
 
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX,
-    BRIT_CBT_RECORDS, BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB, CODEX_URN_TABLE_FILE,
-    COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED, COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS,
-    COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_DEFAULT_DEATH_DROP_TILE,
-    COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE, COMBAT_FIELD_KIND_POISON,
-    COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE, COMBAT_GAZER_DEATH_MARKER_TILE,
-    COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PARTY_CORPSE_TILE, COMBAT_VANISH_DEATH_MARKER_TILE,
-    CREATE_FOOD_COST, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX, ChargenSession,
-    ChargenSessionResult, ChargenSessionStep, CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS,
-    DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX, DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK,
-    DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_CBT_RECORDS,
-    DUNGEON_LEVEL_SPELL_COST, Direction, DiskIoHandlerPhase, DungeonScene, EGA_PALETTE_RGB,
+    BRIT_CBT_RECORDS, BRITISH_PTH_PEN_ORIGINS, BritishPth, CBT_PLACEMENT_SLOT_COUNT,
+    CGA_PALETTE_RGB, CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+    COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
+    COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE,
+    COMBAT_FIELD_KIND_POISON, COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
+    COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PARTY_CORPSE_TILE,
+    COMBAT_VANISH_DEATH_MARKER_TILE, CREATE_FOOD_COST, CREATE_FOOD_SPELL_INDEX, CURE_COST,
+    CURE_SPELL_INDEX, ChargenSession, ChargenSessionResult, ChargenSessionStep,
+    CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
+    DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
+    DISPEL_FIELD_SPELL_INDEX, DUNGEON_CBT_RECORDS, DUNGEON_LEVEL_SPELL_COST, Direction,
+    DiskIoHandlerPhase, DungeonRoomCombatSetup, DungeonScene, EGA_PALETTE_RGB,
     ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX,
     EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
     EQUIPMENT_ID_RING_REGENERATION, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX,
@@ -45,34 +46,36 @@ use u5_runtime::{
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X,
     NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
     NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST,
-    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, POISON_FIELD_SPELL_INDEX,
-    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST,
-    PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
-    ProportionalFont, ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX,
-    REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
-    RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition, ReturnToViewFrameKind, SAVED_GAM_FILENAME,
-    SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
-    SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
-    SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
-    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST,
-    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
-    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
-    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, PLAYER_TILE,
+    POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX,
+    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions,
+    PlayState, PlayTarget, ProportionalFont, ProportionalWidthTable, QUICKNESS_COST,
+    QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST,
+    RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
+    ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
+    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
+    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
+    SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
+    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
+    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
+    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
     SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
     SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_BOTTOM,
     STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE,
     SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable, StoryRecords,
-    TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING, TEXT_SCREEN_ROWS,
-    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST,
-    TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS,
-    TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT,
-    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX,
-    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas,
-    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
-    TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
-    UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
-    VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
-    X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_class_stats,
+    TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING, TERRAIN_COMBAT_PARTY_POSITIONS,
+    TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
+    TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS,
+    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
+    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X,
+    TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE,
+    Tavern, TerrainCombatSetup, TextWindowSystem, TileAtlas, TileGraphicsDepth, TileViewport,
+    TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState, U4TransferOverrides,
+    U4TransferSource, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX,
+    VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, ViewOverlayMode,
+    WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    blit_tile_id_to_viewport, combat_actor_is_active_not_dead, combat_class_stats,
     commit_chargen_save, commit_u4_transfer_save, default_party_equipment,
     default_party_experience, default_party_intelligence, default_party_names,
     default_party_roster, default_party_stay_counters, disk_io_error_message, dungeon_cell_index,
@@ -101,7 +104,7 @@ use u5_runtime::{
     summarize_return_to_view_preview, summarize_return_to_view_script,
     summoned_active_object_record, terrain_combat_instance_from_setup,
     terrain_combat_raw_replacement_tile_for_arena, terrain_combat_setup_from_record,
-    title_tick_flame_palette_index, title_tick_next_frame,
+    terrain_combat_tile_for_spawn_index, title_tick_flame_palette_index, title_tick_next_frame,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16, word_of_power_seal_for_word,
 };
@@ -1095,6 +1098,7 @@ fn push_visual_combat_gallery_reports(
             instance.actors,
             setup.terrain,
         )?;
+        validate_visual_outdoor_combat_gallery_state(arena_index, &setup, &state)?;
         reports.push(write_visual_play_report(
             out_dir,
             &format!("combat-arena-{arena_index:02}"),
@@ -1115,6 +1119,7 @@ fn push_visual_combat_gallery_reports(
         })?;
         let setup = dungeon_room_combat_setup_from_record_for_entry(arena_index, record, 0, false);
         let mut instance = dungeon_room_combat_instance_from_setup(&setup, 0);
+        let placed_count = instance.placed_count;
         let mut state = PlayState::load_scene(
             game_dir,
             PlayOptions {
@@ -1134,6 +1139,7 @@ fn push_visual_combat_gallery_reports(
             instance.actors,
             setup.terrain,
         )?;
+        validate_visual_dungeon_combat_gallery_state(arena_index, &setup, placed_count, &state)?;
         reports.push(write_visual_play_report(
             out_dir,
             &format!("dungeon-combat-arena-{arena_index:03}"),
@@ -1174,6 +1180,257 @@ fn seed_visual_combat_gallery_party(state: &mut PlayState) {
     state.party_intelligence = default_party_intelligence(COMBAT_PARTY_ACTOR_SLOTS);
     state.party_equipment = default_party_equipment(COMBAT_PARTY_ACTOR_SLOTS);
     state.party_roster = default_party_roster(COMBAT_PARTY_ACTOR_SLOTS);
+}
+
+fn validate_visual_outdoor_combat_gallery_state(
+    arena_index: usize,
+    setup: &TerrainCombatSetup,
+    state: &PlayState,
+) -> io::Result<()> {
+    validate_visual_combat_gallery_base(
+        state,
+        &setup.terrain,
+        &format!("outdoor arena {arena_index:02}"),
+    )?;
+    if setup.arena_index != arena_index || setup.placement_slots.len() != CBT_PLACEMENT_SLOT_COUNT {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("outdoor arena {arena_index:02} setup metadata mismatch"),
+        ));
+    }
+    validate_visual_combat_party_slots(
+        state,
+        WorldPlane::Britannia.save_floor(),
+        &TERRAIN_COMBAT_PARTY_POSITIONS,
+        &format!("outdoor arena {arena_index:02} party"),
+    )?;
+
+    let replacement_tile = terrain_combat_raw_replacement_tile_for_arena(arena_index);
+    for spawn_index in 0..16 {
+        let actor_slot = COMBAT_PARTY_ACTOR_SLOTS + spawn_index;
+        let Some(placement) = setup.placement_slots.get(spawn_index).copied() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("outdoor arena {arena_index:02} missing placement {spawn_index}"),
+            ));
+        };
+        if placement.slot != spawn_index
+            || usize::from(placement.x) >= COMBAT_ARENA_SIDE
+            || usize::from(placement.y) >= COMBAT_ARENA_SIDE
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "outdoor arena {arena_index:02} placement {spawn_index} is invalid at ({},{})",
+                    placement.x, placement.y
+                ),
+            ));
+        }
+        let expected_tile = terrain_combat_tile_for_spawn_index(
+            spawn_index as u8,
+            16,
+            setup.base_tile,
+            replacement_tile,
+            0,
+        );
+        validate_visual_combat_actor_slot(
+            state,
+            actor_slot,
+            expected_tile,
+            usize::from(placement.x),
+            usize::from(placement.y),
+            WorldPlane::Britannia.save_floor(),
+            &format!("outdoor arena {arena_index:02} spawn {spawn_index}"),
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_visual_dungeon_combat_gallery_state(
+    arena_index: usize,
+    setup: &DungeonRoomCombatSetup,
+    placed_count: u8,
+    state: &PlayState,
+) -> io::Result<()> {
+    validate_visual_combat_gallery_base(
+        state,
+        &setup.terrain,
+        &format!("dungeon arena {arena_index:03}"),
+    )?;
+    if setup.arena_index != arena_index || setup.placement_slots.len() != CBT_PLACEMENT_SLOT_COUNT {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("dungeon arena {arena_index:03} setup metadata mismatch"),
+        ));
+    }
+    validate_visual_combat_party_slots(
+        state,
+        0,
+        &setup.party_positions,
+        &format!("dungeon arena {arena_index:03} party"),
+    )?;
+    for (slot, (x, y)) in setup.party_positions.iter().copied().enumerate() {
+        if usize::from(x) >= COMBAT_ARENA_SIDE || usize::from(y) >= COMBAT_ARENA_SIDE {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("dungeon arena {arena_index:03} party slot {slot} is outside arena"),
+            ));
+        }
+    }
+
+    let placed_count = usize::from(placed_count);
+    if placed_count > COMBAT_ACTOR_SLOTS - COMBAT_PARTY_ACTOR_SLOTS {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("dungeon arena {arena_index:03} placed too many sources: {placed_count}"),
+        ));
+    }
+    for source_index in 0..placed_count {
+        let slot = COMBAT_PARTY_ACTOR_SLOTS + source_index;
+        let Some(object) = state.active_objects.get(slot).copied() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("dungeon arena {arena_index:03} missing active-object slot {slot}"),
+            ));
+        };
+        if object.is_empty()
+            || object.x >= COMBAT_ARENA_SIDE
+            || object.y >= COMBAT_ARENA_SIDE
+            || object.z != 0
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "dungeon arena {arena_index:03} source {source_index} invalid object at ({},{},{})",
+                    object.x, object.y, object.z
+                ),
+            ));
+        }
+        let actor = state.combat_actors.get(slot).copied().unwrap_or_default();
+        if !actor.is_empty() {
+            validate_visual_combat_actor_link(
+                state,
+                slot,
+                object.tile,
+                object.x,
+                object.y,
+                0,
+                &format!("dungeon arena {arena_index:03} source {source_index}"),
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_visual_combat_gallery_base(
+    state: &PlayState,
+    expected_terrain: &[[u8; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    label: &str,
+) -> io::Result<()> {
+    if !state.combat_active || state.combat_terrain != *expected_terrain {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{label} visual combat gallery did not preserve combat terrain"),
+        ));
+    }
+    if state.active_objects.len() < COMBAT_ACTOR_SLOTS {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{label} visual combat gallery has too few active objects"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_visual_combat_party_slots(
+    state: &PlayState,
+    z: i8,
+    positions: &[(u8, u8); COMBAT_PARTY_ACTOR_SLOTS],
+    label: &str,
+) -> io::Result<()> {
+    for (slot, (x, y)) in positions.iter().copied().enumerate() {
+        if !state
+            .party
+            .get(slot)
+            .copied()
+            .is_some_and(PartyMember::conscious)
+        {
+            continue;
+        }
+        validate_visual_combat_actor_link(
+            state,
+            slot,
+            PLAYER_TILE,
+            usize::from(x),
+            usize::from(y),
+            z,
+            &format!("{label} slot {slot}"),
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_visual_combat_actor_slot(
+    state: &PlayState,
+    slot: usize,
+    expected_tile: u8,
+    x: usize,
+    y: usize,
+    z: i8,
+    label: &str,
+) -> io::Result<()> {
+    validate_visual_combat_actor_link(state, slot, expected_tile, x, y, z, label)?;
+    let actor = state.combat_actors.get(slot).copied().unwrap_or_default();
+    if !combat_actor_is_active_not_dead(actor) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{label} combat actor is not active"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_visual_combat_actor_link(
+    state: &PlayState,
+    slot: usize,
+    expected_tile: u8,
+    x: usize,
+    y: usize,
+    z: i8,
+    label: &str,
+) -> io::Result<()> {
+    let Some(object) = state.active_objects.get(slot).copied() else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("{label} missing active-object slot {slot}"),
+        ));
+    };
+    let actor = state.combat_actors.get(slot).copied().unwrap_or_default();
+    if object.tile != expected_tile
+        || object.type_byte != expected_tile
+        || object.x != x
+        || object.y != y
+        || object.z != z
+        || actor.active_object_slot as usize != slot
+        || usize::from(actor.x) != x
+        || usize::from(actor.y) != y
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "{label} expected tile 0x{expected_tile:02x} at ({x},{y},{z}) linked to actor slot {slot}, got object tile 0x{:02x} type 0x{:02x} at ({},{},{}) and actor ({},{}) -> object {}",
+                object.tile,
+                object.type_byte,
+                object.x,
+                object.y,
+                object.z,
+                actor.x,
+                actor.y,
+                actor.active_object_slot
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn seed_visual_combat_marker_gallery(state: &mut PlayState) -> io::Result<()> {
