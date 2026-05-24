@@ -58,7 +58,7 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#58` | Conversation reserved rebuke keyword table | Five functional reserved words are implemented; the unpublished 29 rebuke words remain inactive until the table and presentation behavior are published |
 | `cleak/u5-spec#59` | Overworld water/current transition and damage rules | New clean-spec issue opened; engine retains conservative sidecar-backed behavior until exact forced-transition rows, transport handling, and damage rules are published |
 | `cleak/u5-spec#60` | Look/View overlay pixel renderer tables and dungeon minimap exact glyph/flood presentation | Gameplay-depth View and minimap behavior is implemented from `systems/view.md`; exact per-class 4x4 glyph pixels, source-bank/tint choices, chunk-map pixels, and dungeon minimap renderer details remain clean-spec questions |
-| `cleak/u5-spec#61` | Ship/skiff boarding and handoff edge cases | Core boarding, X-it, skiff launch, shipwright delivery, and save/reload behavior are implemented; exact refusal/handoff edge cases remain a clean-spec question |
+| `cleak/u5-spec#61` | Town free-roaming active-object walker exact rules | Conservative public-depth walker behavior is implemented; exact eligibility bytes, chance/PRNG timing, direction mapping, terrain/occupancy rules, state-update order, redraw behavior, and persistence remain clean-spec questions |
 | `cleak/u5-spec#62` | Live shop-dialogue record selection and window pacing | Initial shared `SHOPPE.DAT` selection timing is implemented where published; exhaustive live dialogue records, modal rectangles, wait/clear/prompt pacing, and window rules remain clean-spec questions |
 
 Where an audit row references a pending issue, the engine carries a clean
@@ -437,7 +437,7 @@ are kept out of gameplay logic until the public spec publishes exact data.
 | `cleak/u5-spec#58` | The unpublished 29 reserved rebuke words and exact rebuke/pause behavior in conversations | The five functional reserved words are active; other unmatched input follows the normal no-match path until the clean table is published |
 | `cleak/u5-spec#59` | Exact overworld water/current transition, transport, damage, and precedence rules | Existing waterfall/chasm/whirlpool routes remain conservative and route-tested; exact current/waterfall forced-movement parity waits on the published transition table |
 | `cleak/u5-spec#60` | Exact Look/View overlay glyph pixels, source-bank/tint selection, full chunk-map presentation, and dungeon minimap glyph/flood renderer details | Gameplay-depth View and minimap behavior is implemented from `systems/view.md`; exact per-class 4x4 glyph pixels, source-bank/tint choices, chunk-map pixels, and dungeon minimap renderer details remain clean-spec questions |
-| `cleak/u5-spec#61` | Exact ship/skiff boarding, boarding refusal, and vehicle handoff edge cases | Core boarding, X-it, skiff launch, shipwright delivery, and save/reload behavior are implemented; exact refusal/handoff edge cases remain conservative until published |
+| `cleak/u5-spec#61` | Exact town free-roaming active-object walker rules | Conservative public-depth walker behavior is implemented; exact eligibility bytes, chance/PRNG timing, direction mapping, terrain/occupancy rules, state-update order, redraw behavior, and persistence remain conservative until published |
 | `cleak/u5-spec#62` | Exhaustive live shop-dialogue record selection, modal rectangles, wait/clear/prompt pacing, and window rules | Initial shared `SHOPPE.DAT` selection timing is implemented where published; remaining live dialogue/window details stay in the modal-summary path until published |
 
 Follow-up questions were current as of the 2026-05-24 issue audit for the
@@ -458,8 +458,9 @@ remaining response-needed items:
 - `cleak/u5-spec#60`: exact Look/View overlay glyph pixels, source-bank/tint
   selection, full chunk-map presentation, and dungeon minimap glyph/flood
   renderer details.
-- `cleak/u5-spec#61`: exact ship/skiff boarding, boarding refusal, and vehicle
-  handoff edge cases.
+- `cleak/u5-spec#61`: exact town free-roaming active-object walker eligibility,
+  chance/PRNG timing, direction mapping, destination rules, state update order,
+  redraw behavior, and persistence.
 - `cleak/u5-spec#62`: exhaustive live shop-dialogue record selection, modal
   rectangles, wait/clear/prompt pacing, and window rules beyond the initial
   shared record-selection timing table.

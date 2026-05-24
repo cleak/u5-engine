@@ -444,7 +444,8 @@ Current worktree context when this TODO was refreshed:
 - The 2026-05-24 clean-engine audit retired #1/#3/#5/#9/#13/#18/#20/#31/#36/#38/#41/#43/#47/#49/#51/#54/#56/#57
   as gameplay blockers after applying the current public answers and checked-in
   spec. Current response-needed public blockers are #8, #10, #11, #12/#19,
-  #53, #58, #59, #60, #61, and #62; clean-engine follow-up comments are
+  #53, #58, #59, #60, #61 (town free-roaming active-object walker), and #62;
+  clean-engine follow-up comments are
   currently latest on each of those issues, so do not post duplicate comments
   unless new spec evidence or implementation questions appear.
 - Shop session regression tests now lock the corrected public scene-byte rows
