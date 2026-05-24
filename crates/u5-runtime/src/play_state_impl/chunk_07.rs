@@ -2590,7 +2590,7 @@ impl PlayState {
     pub fn apply_town_poison_gas(&mut self, _entry: TownPoisonGasEntry) -> String {
         let mut checked = 0usize;
         let mut poisoned = Vec::new();
-        for member in &mut self.party {
+        for (member_index, member) in self.party.iter_mut().enumerate() {
             if member.status == b'D' || member.status == b'P' {
                 continue;
             }
@@ -2598,21 +2598,24 @@ impl PlayState {
             let roll = u5_prng_range_u16(&mut self.prng_state, 0, TOWN_GAS_DOORWAY_RANGE_MAX);
             if roll > u16::from(member.climb_stat) {
                 member.status = b'P';
-                poisoned.push(member.slot);
+                poisoned.push((member_index, member.slot));
             }
         }
         if poisoned.is_empty() {
             format!("poison gas doorway checked {checked} eligible member(s); no poison")
         } else {
-            format!(
-                "poison gas doorway: poisoned party slot{} {}",
-                if poisoned.len() == 1 { "" } else { "s" },
-                poisoned
-                    .iter()
-                    .map(|slot| slot.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
+            poisoned
+                .iter()
+                .map(|(member_index, slot)| {
+                    let name = self
+                        .party_names
+                        .get(*member_index)
+                        .and_then(|name| party_name_to_string(name))
+                        .unwrap_or_else(|| format!("Party member {slot}"));
+                    format!("{name} is poisoned!")
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
         }
     }
 

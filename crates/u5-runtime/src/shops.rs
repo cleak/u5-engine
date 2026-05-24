@@ -1926,8 +1926,8 @@ pub const fn arms_buy_quote_record_id_for_item(item_id: u8) -> Option<usize> {
     }
 }
 
-pub const fn arms_buy_confirmation_prompt(item_id: u8) -> &'static str {
-    match item_id & 0x03 {
+pub const fn arms_buy_confirmation_prompt_for_roll(roll: u8) -> &'static str {
+    match roll & 0x03 {
         0 => "Wouldst thou buy one?",
         1 => "Wilt thou take it?",
         2 => "Wish ye it?",
@@ -1935,13 +1935,21 @@ pub const fn arms_buy_confirmation_prompt(item_id: u8) -> &'static str {
     }
 }
 
-pub const fn arms_no_credit_bark(item_id: u8) -> &'static str {
-    match item_id & 0x03 {
+pub const fn arms_buy_confirmation_prompt(item_id: u8) -> &'static str {
+    arms_buy_confirmation_prompt_for_roll(item_id)
+}
+
+pub const fn arms_no_credit_bark_for_roll(roll: u8) -> &'static str {
+    match roll & 0x03 {
         0 => "I cannot extend thee credit.",
         1 => "Thou hast not the gold.",
         2 => "No gold, no goods.",
         _ => "Come back when thou canst pay.",
     }
+}
+
+pub const fn arms_no_credit_bark(item_id: u8) -> &'static str {
+    arms_no_credit_bark_for_roll(item_id)
 }
 
 pub const fn tavern_round_drink_unit_price(tavern: Tavern) -> u16 {

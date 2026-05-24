@@ -2151,10 +2151,10 @@
     }
 
     #[test]
-    fn natural_moongate_entry_treats_felucca_hour_19_as_off_horizon() {
-        // Public issue #38 corrected Felucca hour 19 to the high-bit
-        // off-horizon sentinel. A live natural-moongate cell clears,
-        // but there is no Moonstone slot to route through.
+    fn natural_moongate_entry_treats_felucca_hour_19_as_phase_zero() {
+        // Public issue #38 corrected Felucca hour 19 to literal
+        // phase 0. A live natural-moongate cell clears and routes
+        // through Moonstone slot 0, even if that slot is unset.
         let origin_idx = world_cell_index(5, 5);
         let mut grid = open_world_grid();
         grid[origin_idx] = NATURAL_MOONGATE_TERRAIN_TILE;
@@ -2173,10 +2173,7 @@
         assert_eq!(state.grid[origin_idx], NATURAL_MOONGATE_RESTORED_TERRAIN_TILE);
         assert!(state.natural_moongate_live_cells.is_empty());
         assert!(state.visibility_dirty);
-        assert_eq!(
-            state.message,
-            "Natural moongate moon-glyph cache is unavailable."
-        );
+        assert_eq!(state.message, "Natural moongate phase 1 is not set.");
     }
 
     #[test]

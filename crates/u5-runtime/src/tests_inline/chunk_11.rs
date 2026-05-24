@@ -926,7 +926,7 @@
         );
 
         assert_eq!(state.party[0].status, b'P');
-        assert!(state.message.contains("poison gas doorway"));
+        assert!(state.message.contains("Avatar is poisoned!"));
         assert_eq!(state.turn, 1);
     }
 
@@ -1039,7 +1039,7 @@
 
         assert_eq!(state.party[0].status, b'P');
         assert_eq!(state.party[1].status, b'P');
-        assert!(state.message.contains("poison gas doorway"));
+        assert!(state.message.contains("Party member 1 is poisoned!"));
     }
 
     #[test]
@@ -1073,7 +1073,7 @@
         assert_eq!(state.party[0].status, b'P');
         assert_eq!(state.party[1].status, b'P');
         assert_eq!(state.prng_state, expected_prng);
-        assert_eq!(report, "poison gas doorway: poisoned party slot 1");
+        assert_eq!(report, "Party member 1 is poisoned!");
     }
 
     #[test]

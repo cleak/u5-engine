@@ -4377,7 +4377,11 @@
 
         handle_play_key_input(&mut state, 'b', "", Path::new("")).unwrap();
         assert!(state.message.contains("Mace costs"));
-        assert!(state.message.contains("Wouldst thou buy one?"));
+        assert!((0..4).any(|roll| {
+            state
+                .message
+                .contains(crate::shops::arms_buy_confirmation_prompt_for_roll(roll))
+        }));
 
         handle_play_key_input(&mut state, 'Y', "", Path::new("")).unwrap();
         assert_eq!(state.equipment_stock[24], 1);
@@ -4410,6 +4414,35 @@
             state.active_shop,
             Some(ActiveShopSession::ArmsStocked(
                 ArmsShopState::BuyPickItem,
+                _
+            ))
+        ));
+    }
+
+    #[test]
+    fn end_to_end_stocked_arms_shop_confirmation_ignores_non_yes_no_keys() {
+        use crate::shop_runtime::ArmsShopState;
+        use crate::shop_session::ActiveShopSession;
+        use crate::shops::ArmsStockTable;
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 1000;
+        state.active_shop = Some(ActiveShopSession::ArmsStocked(
+            ArmsShopState::Greeting,
+            ArmsStockTable::new([23, 24, 30, 0, 0, 0, 0, 0], 3),
+        ));
+
+        handle_play_key_input(&mut state, 'B', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'b', "", Path::new("")).unwrap();
+        handle_play_key_input(&mut state, 'x', "", Path::new("")).unwrap();
+
+        assert_eq!(state.gold, 1000);
+        assert_eq!(state.equipment_stock[24], 0);
+        assert!(state.message.contains("Mace costs"));
+        assert!(matches!(
+            state.active_shop,
+            Some(ActiveShopSession::ArmsStocked(
+                ArmsShopState::BuyConfirm { item: 24, .. },
                 _
             ))
         ));

@@ -245,9 +245,9 @@ Current worktree context when this TODO was refreshed:
   glyph bytes now refresh from the public hour-indexed tables on construction,
   hour changes, and status redraw, and live-gate entry decodes only the cached
   byte instead of recomputing the table at entry time. The engine now follows
-  public `cleak/u5-spec#38` for Felucca hours 10/11/19/20: they are high-bit
-  off-horizon sentinels, so natural-gate entry does not route them through
-  Moonstone slot 0.
+  public `cleak/u5-spec#38` for Felucca hours 10/11/19/20: they are literal
+  phase-0 glyph bytes, so natural-gate entry routes them through Moonstone
+  slot 0.
 - Bevy title-tick rendering now follows public issue #52 at cleanroom
   replacement depth: a four-frame palette-cycled procedural flame stripe using
   the published EGA bright/dim color pairs. Exact historical driver-resident

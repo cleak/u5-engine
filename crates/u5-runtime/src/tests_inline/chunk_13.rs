@@ -16311,12 +16311,12 @@ fn moon_glyph_tables_match_published_hour_index() {
     assert_eq!(FELUCCA_GLYPH_BY_HOUR[12], b'1');
     assert_eq!(FELUCCA_GLYPH_BY_HOUR[18], b'7');
     assert_eq!(FELUCCA_GLYPH_BY_HOUR[23], b'3');
-    // Public issue #38 corrected these Felucca rows to the high-bit
-    // off-horizon sentinel, not a live slot-0 glyph.
-    assert_eq!(FELUCCA_GLYPH_BY_HOUR[10], FELUCCA_OFF_HORIZON_SENTINEL);
-    assert_eq!(FELUCCA_GLYPH_BY_HOUR[11], FELUCCA_OFF_HORIZON_SENTINEL);
-    assert_eq!(FELUCCA_GLYPH_BY_HOUR[19], FELUCCA_OFF_HORIZON_SENTINEL);
-    assert_eq!(FELUCCA_GLYPH_BY_HOUR[20], FELUCCA_OFF_HORIZON_SENTINEL);
+    // Public issue #38 corrected these Felucca rows to literal
+    // phase-0 glyph bytes, not high-bit off-horizon sentinels.
+    assert_eq!(FELUCCA_GLYPH_BY_HOUR[10], b'0');
+    assert_eq!(FELUCCA_GLYPH_BY_HOUR[11], b'0');
+    assert_eq!(FELUCCA_GLYPH_BY_HOUR[19], b'0');
+    assert_eq!(FELUCCA_GLYPH_BY_HOUR[20], b'0');
     // Decode rule: high-bit => None, '0'..'7' => Some(slot)
     assert_eq!(moonstone_slot_from_glyph_byte(b'0'), Some(0));
     assert_eq!(moonstone_slot_from_glyph_byte(b'7'), Some(7));
@@ -16334,8 +16334,8 @@ fn moon_glyph_tables_match_published_hour_index() {
     assert_eq!(trammel_moonstone_slot_for_hour(0), None);
     assert_eq!(trammel_moonstone_slot_for_hour(1), Some(0));
     assert_eq!(trammel_moonstone_slot_for_hour(8), Some(4));
-    assert_eq!(felucca_moonstone_slot_for_hour(10), None);
-    assert_eq!(felucca_moonstone_slot_for_hour(20), None);
+    assert_eq!(felucca_moonstone_slot_for_hour(10), Some(0));
+    assert_eq!(felucca_moonstone_slot_for_hour(20), Some(0));
     assert_eq!(felucca_moonstone_slot_for_hour(12), Some(1));
     // Out-of-range hours
     assert_eq!(trammel_moonstone_slot_for_hour(24), None);

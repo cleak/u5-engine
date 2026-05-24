@@ -141,9 +141,8 @@ pub const TRAMMEL_GLYPH_BY_HOUR: [u8; 24] = [
 /// `moons.md §2`: hour-indexed Felucca glyph byte table.
 ///
 /// Felucca cycles once per day. Public issue `cleak/u5-spec#38`
-/// corrected the off-horizon rows at hours `10`, `11`, `19`, and `20`
-/// to the high-bit sentinel, so natural-gate entry does not route them
-/// through Moonstone slot `0`.
+/// corrected hours `10`, `11`, `19`, and `20` to literal phase `0`
+/// bytes, not high-bit off-horizon sentinels.
 pub const FELUCCA_GLYPH_BY_HOUR: [u8; 24] = [
     FELUCCA_OFF_HORIZON_SENTINEL,
     b'0',
@@ -155,8 +154,8 @@ pub const FELUCCA_GLYPH_BY_HOUR: [u8; 24] = [
     b'5',
     b'6',
     b'7',
-    FELUCCA_OFF_HORIZON_SENTINEL,
-    FELUCCA_OFF_HORIZON_SENTINEL,
+    b'0',
+    b'0',
     b'1',
     b'2',
     b'3',
@@ -164,8 +163,8 @@ pub const FELUCCA_GLYPH_BY_HOUR: [u8; 24] = [
     b'5',
     b'6',
     b'7',
-    FELUCCA_OFF_HORIZON_SENTINEL,
-    FELUCCA_OFF_HORIZON_SENTINEL,
+    b'0',
+    b'0',
     b'1',
     b'2',
     b'3',

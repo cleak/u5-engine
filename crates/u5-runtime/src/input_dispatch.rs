@@ -1261,7 +1261,8 @@ fn handle_arms_shop_key_input(
     let mut prices = [0u16; crate::EQUIPMENT_COUNT];
     prices.copy_from_slice(&crate::EQUIPMENT_BASE_PRICES);
     let mut stock = state.equipment_stock;
-    let outcome = match (*shop_state, yes, no, inline_digit) {
+    let prior_state = *shop_state;
+    let outcome = match (prior_state, yes, no, inline_digit) {
         (ArmsShopState::Greeting, _, _, _) => step_arms_shop(
             shop_state,
             ArmsShopInput::Key(key_byte),
@@ -1333,14 +1334,43 @@ fn handle_arms_shop_key_input(
         None
     };
     let was_invalid_stock_pick = matches!(outcome, ArmsShopOutcome::InvalidInput)
-        && matches!(*shop_state, ArmsShopState::BuyPickItem)
+        && matches!(prior_state, ArmsShopState::BuyPickItem)
         && stock_table.is_some();
+    let confirmation_prompt_roll = matches!(outcome, ArmsShopOutcome::QuotedBuyPrice { .. })
+        .then(|| state.random_range_u8(0, 3));
+    let no_credit_roll = matches!(outcome, ArmsShopOutcome::BuyRefusedShortFunds { .. })
+        .then(|| state.random_range_u8(0, 3));
     let message = match (outcome, stock_table) {
         (ArmsShopOutcome::EnteredBuy, Some(table)) => format_arms_stock_buy_menu(table),
         (ArmsShopOutcome::InvalidInput, Some(table)) if was_invalid_stock_pick => {
             format_arms_stock_buy_menu(table)
         }
-        (outcome, _) => format_arms_outcome(outcome, game_dir),
+        (ArmsShopOutcome::InvalidInput, _) => match prior_state {
+            ArmsShopState::BuyConfirm {
+                item,
+                quoted_price,
+                quote_record_id,
+            } => format_arms_outcome_with_rolls(
+                ArmsShopOutcome::QuotedBuyPrice {
+                    item,
+                    price: quoted_price,
+                    quote_record_id,
+                },
+                game_dir,
+                None,
+                None,
+            ),
+            ArmsShopState::SellConfirm { item, offer } => {
+                format_arms_outcome(ArmsShopOutcome::OfferedSellPrice { item, offer }, game_dir)
+            }
+            _ => format_arms_outcome(ArmsShopOutcome::InvalidInput, game_dir),
+        },
+        (outcome, _) => format_arms_outcome_with_rolls(
+            outcome,
+            game_dir,
+            confirmation_prompt_roll,
+            no_credit_roll,
+        ),
     };
     append_active_shop_surcharge(message, surcharge)
 }
@@ -1378,6 +1408,15 @@ fn format_inn_error(err: InnError) -> String {
 }
 
 fn format_arms_outcome(outcome: crate::shop_runtime::ArmsShopOutcome, game_dir: &Path) -> String {
+    format_arms_outcome_with_rolls(outcome, game_dir, None, None)
+}
+
+fn format_arms_outcome_with_rolls(
+    outcome: crate::shop_runtime::ArmsShopOutcome,
+    game_dir: &Path,
+    confirmation_prompt_roll: Option<u8>,
+    no_credit_roll: Option<u8>,
+) -> String {
     use crate::shop_runtime::ArmsShopOutcome::*;
     match outcome {
         EnteredBuy => "Buy: pick an item number.".to_string(),
@@ -1391,7 +1430,9 @@ fn format_arms_outcome(outcome: crate::shop_runtime::ArmsShopOutcome, game_dir: 
             let quote = render_shoppe_record_for_arms_quote(game_dir, quote_record_id, item, price);
             format!(
                 "{quote}\n{}",
-                crate::shops::arms_buy_confirmation_prompt(item)
+                confirmation_prompt_roll
+                    .map(crate::shops::arms_buy_confirmation_prompt_for_roll)
+                    .unwrap_or_else(|| crate::shops::arms_buy_confirmation_prompt(item))
             )
         }
         OfferedSellPrice { item, offer } => {
@@ -1400,7 +1441,10 @@ fn format_arms_outcome(outcome: crate::shop_runtime::ArmsShopOutcome, game_dir: 
         Bought { .. } => "Sold!".to_string(),
         Sold { item, received } => format!("Sold item {item} for {received} gold."),
         Declined => "As you wish.".to_string(),
-        BuyRefusedShortFunds { item, .. } => crate::shops::arms_no_credit_bark(item).to_string(),
+        BuyRefusedShortFunds { item, .. } => no_credit_roll
+            .map(crate::shops::arms_no_credit_bark_for_roll)
+            .unwrap_or_else(|| crate::shops::arms_no_credit_bark(item))
+            .to_string(),
         SellRefusedNoStock { item } => format!("Thou hast no item {item} to sell."),
         BuyRefusedCapHit { .. } => "Thou canst not carry any more!".to_string(),
         InvalidInput => "I do not understand.".to_string(),
