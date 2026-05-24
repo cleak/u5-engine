@@ -505,6 +505,18 @@ fn visual_gameplay_frame_cases() -> Vec<VisualGameplayFrameCase> {
             synthetic_combat: true,
         },
         VisualGameplayFrameCase {
+            label: "combat-status-highlight",
+            frame_kind: "visual combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                ..PlayOptions::default()
+            },
+            inputs: None,
+            configure: Some(seed_visual_suite_combat_status_highlight),
+            synthetic_combat: true,
+        },
+        VisualGameplayFrameCase {
             label: "surface-view-overlay",
             frame_kind: "visual view overlay frame",
             options: PlayOptions {
@@ -609,6 +621,14 @@ fn seed_visual_suite_combat(state: &mut PlayState) {
     state.combat_terrain[0][0] = 12;
     state.combat_terrain[5][5] = 4;
     state.combat_terrain[6][5] = 1;
+}
+
+fn seed_visual_suite_combat_status_highlight(state: &mut PlayState) {
+    state.pending_combat_actor_slot = Some(0);
+    state.active_player = Some(0);
+    state.combat_actors[0] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+    state.message = "Combat status highlight".to_string();
 }
 
 fn push_visual_combat_gallery_reports(
@@ -6257,6 +6277,7 @@ fn render_status_framebuffer(
 ) -> Vec<u8> {
     let active_cursor = state.active_player;
     let mut display_state = state.clone();
+    display_state.refresh_cached_moon_glyphs();
     if display_state.message.is_empty() {
         display_state.message = fallback.to_string();
     }
@@ -6280,6 +6301,7 @@ fn render_integrated_status_framebuffer(
 ) -> Vec<u8> {
     let active_cursor = state.active_player;
     let mut display_state = state.clone();
+    display_state.refresh_cached_moon_glyphs();
     if display_state.message.is_empty() {
         display_state.message = fallback.to_string();
     }
@@ -6708,15 +6730,15 @@ mod tests {
     };
     use u5_runtime::tlk_control_codes::TLK_TEXT_XOR_MASK;
     use u5_runtime::{
-        Area, BRIT_OOL_FILENAME, CH_FONT_LEN, COMBAT_ARENA_SIDE, DEFAULT_GAME_DIR, Direction,
-        EGA_PALETTE_RGB, GuildShop, Herbalist, IBM_CH_FILE, INIT_GAM_FILENAME, INIT_OOL_FILENAME,
-        OOL_PLANE_LEN, PenStroke, ProportionalGlyph, REAGENT_COUNT, REAGENT_SPIDER_SILK,
-        SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET,
-        SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME,
-        SAVED_OOL_FILENAME, SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb,
-        TILES_EGA_FILE, Tavern, TileGraphicsDepth, U4_TRANSFER_U5_SEED_GAM_FILENAME,
-        U4TransferSource, WorldPlane, dungeon_cell_index, parse_ch_font, world_cell_index,
-        wrap_text_panel_lines,
+        Area, BRIT_OOL_FILENAME, CH_CELL_SIDE, CH_FONT_LEN, COMBAT_ARENA_SIDE, DEFAULT_GAME_DIR,
+        Direction, EGA_PALETTE_RGB, GuildShop, Herbalist, IBM_CH_FILE, INIT_GAM_FILENAME,
+        INIT_OOL_FILENAME, OOL_PLANE_LEN, PenStroke, ProportionalGlyph, REAGENT_COUNT,
+        REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET,
+        SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET,
+        SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SHRINE_TABLE_FILE,
+        STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth,
+        U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane, dungeon_cell_index,
+        parse_ch_font, world_cell_index, wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
@@ -6949,6 +6971,26 @@ mod tests {
                 .any(|pixel| pixel == [0xff, 0xff, 0xff, 0xff])
         );
         assert_eq!(state.active_player, None);
+    }
+
+    #[test]
+    fn status_framebuffer_refreshes_moon_glyphs_before_rendering() {
+        let mut font_bytes = vec![0x00; CH_FONT_LEN];
+        for row in 0..CH_CELL_SIDE {
+            font_bytes[usize::from(b'6') * CH_CELL_SIDE + row] = 0xff;
+        }
+        let font = parse_ch_font(&font_bytes, IBM_CH_FILE).unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.clock = GameClock::with_date(12, 5, 18, 17, 0).unwrap();
+        state.set_cached_moon_glyph_bytes(b'0', b'0');
+
+        let rgba = render_status_framebuffer(&mut state, "", READY_HINT, &font);
+
+        assert!(
+            rgba.chunks_exact(4)
+                .any(|pixel| pixel == [0xff, 0xff, 0xff, 0xff]),
+            "Felucca hour-17 glyph `6` should be refreshed from the clock before Bevy renders"
+        );
     }
 
     #[test]
@@ -7667,7 +7709,7 @@ mod tests {
         let reports = visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
         let has_story = game_dir.join(STORY_DAT_FILE).exists();
-        assert_eq!(reports.len(), if has_story { 34 } else { 33 });
+        assert_eq!(reports.len(), if has_story { 35 } else { 34 });
         for report in &reports {
             assert!(report.path.exists());
             assert!(report.nonblack_pixels > 0);
@@ -7679,6 +7721,7 @@ mod tests {
             "dungeon-play",
             "dungeon-dark",
             "combat-play",
+            "combat-status-highlight",
             "surface-view-overlay",
             "dungeon-view-overlay",
             "britannia-chunk-map-overlay",
@@ -7729,6 +7772,7 @@ mod tests {
         assert!(manifest.contains("dungeon-play"));
         assert!(manifest.contains("dungeon-dark"));
         assert!(manifest.contains("combat-play"));
+        assert!(manifest.contains("combat-status-highlight"));
         assert!(manifest.contains("surface-view-overlay"));
         assert!(manifest.contains("dungeon-view-overlay"));
         assert!(manifest.contains("britannia-chunk-map-overlay"));

@@ -70,7 +70,7 @@ audit:
   smoke for empty-save Journey Onward, deterministic Create Character followed
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
-- `cargo test -p u5-bevy` — 65 tests pass.
+- `cargo test -p u5-bevy` — 66 tests pass.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 182 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
@@ -99,10 +99,10 @@ audit:
 - `cargo run -- --save-frame-suite target\audit-frame-suite C:\Games\U5-Clean`
   — 13 PNGs, every frame nonblank with stable hashes.
 - `cargo run -p u5-tui --features visual -- --visual-frame-suite
-  target\visual-frame-suite C:\Games\U5-Clean` — 34 Bevy-owned PNGs, every
+  target\codex-status-visual-frame-suite C:\Games\U5-Clean` — 35 Bevy-owned PNGs, every
   frame nonblank with a sanitized manifest, including all sixteen public
   `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls
-  and a combat death/field/cursor marker gallery.
+  plus combat status-highlight and death/field/cursor marker galleries.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` — 473 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including horse-trader

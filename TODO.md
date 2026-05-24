@@ -28,7 +28,7 @@ Last known verification state:
   Onward disk-error presentation).
 - `cargo test -p u5-tui` passed on 2026-05-24, including 79 tests.
 - `cargo test -p u5-tui --features visual` passed on 2026-05-23.
-- `cargo test -p u5-bevy` passed on 2026-05-24, including 65 tests.
+- `cargo test -p u5-bevy` passed on 2026-05-24, including 66 tests.
 - `cargo fmt -- --check` passed on 2026-05-24 after the latest Rust changes.
 - `git diff --check` passed on 2026-05-24; the only output was existing
   CRLF-normalization warnings.
@@ -120,17 +120,18 @@ Last known verification state:
   `bf7a428a4b00ad2b`, `z-stats-modal` `61b033bfa2488b46`, and
   `endgame-status` `532cb7f1bdd03ffd`.
 - `cargo run -p u5-tui --features visual -- --visual-frame-suite
-  target\visual-frame-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 34 nonblank Bevy-owned PNGs plus a sanitized manifest, including all
+  target\codex-status-visual-frame-suite C:\Games\U5-Clean` passed on 2026-05-24 and
+  wrote 35 nonblank Bevy-owned PNGs plus a sanitized manifest, including all
   16 public `BRIT.CBT` outdoor arenas with accepted early replacement rolls
-  and a combat death/field/cursor marker gallery:
+  and combat status-highlight plus death/field/cursor marker galleries:
   `world-play` `f68b906acde0bd4a`, `world-after-step`
   `b9720ab18affa566`, `town-play` `2beb3b7734800e11`,
   `dungeon-play` `67e7e116d8be67aa`, `dungeon-dark`
   `29289813c0f0397c`, `combat-play` `9b1937b3e807ba05`,
+  `combat-status-highlight` `8f619b26cbe87bed`,
   `surface-view-overlay` `2ee1809341456a23`, `dungeon-view-overlay`
   `450b8690ef5bc292`, `britannia-chunk-map-overlay`
-  `f47cb69abda0e1e2`, `peer-view-overlay` `2c64191172043730`,
+  `12d68ef9587532c6`, `peer-view-overlay` `2c64191172043730`,
   `x-ray-view-overlay` `2c64191172043730`, `z-stats-modal`
   `bee4e11801862ad1`, `endgame-status` `d6c3450bd51d97f0`,
   `combat-arena-00` `774828109138f22a`, `combat-arena-15`
