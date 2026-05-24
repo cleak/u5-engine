@@ -169,7 +169,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 1723 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 1755 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest, with all 40 published stock world-location entry rows, native
   shrine/Codex quest routes, TLK-backed reserved-word conversation routes across
   all 32 named-location scenes, and
@@ -280,7 +280,8 @@ Last known verification state:
   unchanged where the underlying route produces no visual delta. The latest
   Bevy real-key visual-route expansion adds keyboard-path coverage for
   movement, pass, Ctrl-S music toggle, save refusal, conversation/shrine/shop
-  line buffers, Backspace, Enter, and prompt-safe Escape. The
+  line buffers, direction prompts, Yell text, Ready/Z-stats modal pickers,
+  Backspace, Enter, and prompt-safe Escape. The
   latest combat visual-route expansion adds composed-frame Doom combat
   command coverage for digit selection/clear, direct movement,
   Use/Drop/Wear/Enter/Fire/Hole-up/Ignite/Mix/New Order/Talk/View/Look

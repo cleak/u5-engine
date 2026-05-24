@@ -646,6 +646,13 @@ fn seed_visual_key_route_reagent_shop(state: &mut PlayState) {
     )));
 }
 
+fn seed_visual_key_route_ready_picker(state: &mut PlayState) {
+    state.party_strengths = vec![50];
+    state.party_equipment = default_party_equipment(1);
+    state.equipment_stock[EQUIPMENT_ID_BOW] = 1;
+    state.equipment_stock[EQUIPMENT_ID_ARROWS] = 5;
+}
+
 fn visual_route_public_location_index(label: &str) -> Option<usize> {
     let suffix = label.strip_prefix("route-stock-location-enter-")?;
     let row = suffix.parse::<usize>().ok()?;
@@ -1834,6 +1841,42 @@ const VISUAL_KEY_ESCAPE_STEPS: &[VisualKeyStep] = &[
     VisualKeyStep::key("key_h", KeyCode::KeyH),
     VisualKeyStep::key("escape", KeyCode::Escape),
 ];
+const VISUAL_KEY_DIRECTION_PROMPT_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_l", KeyCode::KeyL),
+    VisualKeyStep::key("key_d", KeyCode::KeyD),
+    VisualKeyStep::key("key_a", KeyCode::KeyA),
+    VisualKeyStep::key("key_d", KeyCode::KeyD),
+    VisualKeyStep::key("key_g", KeyCode::KeyG),
+    VisualKeyStep::key("key_d", KeyCode::KeyD),
+    VisualKeyStep::key("key_o", KeyCode::KeyO),
+    VisualKeyStep::key("key_d", KeyCode::KeyD),
+    VisualKeyStep::key("key_p", KeyCode::KeyP),
+    VisualKeyStep::key("key_d", KeyCode::KeyD),
+    VisualKeyStep::key("key_s", KeyCode::KeyS),
+    VisualKeyStep::key("key_d", KeyCode::KeyD),
+];
+const VISUAL_KEY_YELL_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_y", KeyCode::KeyY),
+    VisualKeyStep::key("key_f", KeyCode::KeyF),
+    VisualKeyStep::key("key_a", KeyCode::KeyA),
+    VisualKeyStep::key("key_l", KeyCode::KeyL),
+    VisualKeyStep::key("key_l", KeyCode::KeyL),
+    VisualKeyStep::key("key_a", KeyCode::KeyA),
+    VisualKeyStep::key("backspace", KeyCode::Backspace),
+    VisualKeyStep::key("key_x", KeyCode::KeyX),
+    VisualKeyStep::key("enter", KeyCode::Enter),
+];
+const VISUAL_KEY_READY_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_r", KeyCode::KeyR),
+    VisualKeyStep::key("digit_1", KeyCode::Digit1),
+    VisualKeyStep::key("enter", KeyCode::Enter),
+    VisualKeyStep::key("enter", KeyCode::Enter),
+    VisualKeyStep::key("space", KeyCode::Space),
+];
+const VISUAL_KEY_STATS_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_z", KeyCode::KeyZ),
+    VisualKeyStep::key("space", KeyCode::Space),
+];
 
 fn visual_key_route_suite_cases() -> Vec<VisualKeyRouteSuiteCase> {
     vec![
@@ -1890,6 +1933,40 @@ fn visual_key_route_suite_cases() -> Vec<VisualKeyRouteSuiteCase> {
             },
             steps: VISUAL_KEY_ESCAPE_STEPS,
             configure: Some(seed_visual_key_route_shrine),
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-world-direction-prompts",
+            frame_kind: "visual key route prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            steps: VISUAL_KEY_DIRECTION_PROMPT_STEPS,
+            configure: None,
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-yell-buffer",
+            frame_kind: "visual key route prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            steps: VISUAL_KEY_YELL_STEPS,
+            configure: None,
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-ready-picker",
+            frame_kind: "visual key route prompt frame",
+            options: PlayOptions::default(),
+            steps: VISUAL_KEY_READY_STEPS,
+            configure: Some(seed_visual_key_route_ready_picker),
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-z-stats-picker",
+            frame_kind: "visual key route prompt frame",
+            options: PlayOptions::default(),
+            steps: VISUAL_KEY_STATS_STEPS,
+            configure: None,
         },
     ]
 }
@@ -12174,7 +12251,7 @@ mod tests {
     fn visual_key_route_suite_cases_cover_real_keyboard_prompts() {
         let cases = visual_key_route_suite_cases();
 
-        assert_eq!(cases.len(), 6);
+        assert_eq!(cases.len(), 10);
         for label in [
             "route-key-world-movement-pass-music",
             "route-key-save-refusal",
@@ -12182,6 +12259,10 @@ mod tests {
             "route-key-shrine-mantra-buffer",
             "route-key-shop-quantity-buffer",
             "route-key-prompt-escape-cancel",
+            "route-key-world-direction-prompts",
+            "route-key-yell-buffer",
+            "route-key-ready-picker",
+            "route-key-z-stats-picker",
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
         }
@@ -12274,7 +12355,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 1723);
+        assert_eq!(reports.len(), 1755);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -12282,8 +12363,8 @@ mod tests {
             assert!(report.nonblack_pixels > 0);
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1723"));
-        assert!(manifest.contains("coverage\tvisual-key-route-steps\t32"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1755"));
+        assert!(manifest.contains("coverage\tvisual-key-route-steps\t64"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
         assert!(manifest.contains("review=route-step route=route-world-movement step=01 input=d"));
@@ -12294,6 +12375,10 @@ mod tests {
         assert!(manifest.contains("route-key-shrine-mantra-buffer-05-enter"));
         assert!(manifest.contains("route-key-shop-quantity-buffer-06-enter"));
         assert!(manifest.contains("route-key-prompt-escape-cancel-04-escape"));
+        assert!(manifest.contains("route-key-world-direction-prompts-12-key_d"));
+        assert!(manifest.contains("route-key-yell-buffer-09-enter"));
+        assert!(manifest.contains("route-key-ready-picker-05-space"));
+        assert!(manifest.contains("route-key-z-stats-picker-02-space"));
         assert!(
             manifest.contains(
                 "review=route-step route=route-key-talk-keyword-buffer step=03 input=key_b"
