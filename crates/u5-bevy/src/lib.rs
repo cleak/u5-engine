@@ -284,16 +284,16 @@ pub fn visual_frame_suite(
 
     for case in visual_gameplay_frame_cases() {
         let mut state = PlayState::load_scene(game_dir, case.options)?;
-        if let Some(inputs) = case.inputs {
-            for (key, suffix) in inputs {
-                handle_play_key_input(&mut state, *key, suffix, game_dir)?;
-            }
-        }
         if case.synthetic_combat {
             seed_visual_suite_combat(&mut state);
         }
         if let Some(configure) = case.configure {
             configure(&mut state);
+        }
+        if let Some(inputs) = case.inputs {
+            for (key, suffix) in inputs {
+                handle_play_key_input(&mut state, *key, suffix, game_dir)?;
+            }
         }
         reports.push(write_visual_play_report(
             out_dir,
@@ -687,6 +687,113 @@ fn visual_gameplay_frame_cases() -> Vec<VisualGameplayFrameCase> {
             synthetic_combat: false,
         },
         VisualGameplayFrameCase {
+            label: "world-save-confirmation-prompt",
+            frame_kind: "visual world prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            inputs: Some(&[('Q', "")]),
+            configure: None,
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "world-hole-up-watch-prompt",
+            frame_kind: "visual world prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            inputs: Some(&[('H', "")]),
+            configure: None,
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "world-use-item-prompt",
+            frame_kind: "visual world prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            inputs: Some(&[('U', "")]),
+            configure: None,
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "castle-cast-party-prompt",
+            frame_kind: "visual town prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(Scene::new(0x11).expect("castle scene is valid")),
+                ..PlayOptions::default()
+            },
+            inputs: Some(&[('C', "")]),
+            configure: None,
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "castle-mix-reagent-prompt",
+            frame_kind: "visual town prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(Scene::new(0x11).expect("castle scene is valid")),
+                ..PlayOptions::default()
+            },
+            inputs: Some(&[('M', "")]),
+            configure: None,
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "castle-ready-party-prompt",
+            frame_kind: "visual town prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(Scene::new(0x11).expect("castle scene is valid")),
+                ..PlayOptions::default()
+            },
+            inputs: Some(&[('R', "")]),
+            configure: None,
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "castle-talk-keyword-prompt",
+            frame_kind: "visual town conversation frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(Scene::new(0x11).expect("castle scene is valid")),
+                ..PlayOptions::default()
+            },
+            inputs: Some(&[('T', ""), ('6', "")]),
+            configure: Some(seed_visual_route_talk_ordinary_keyword),
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "dungeon-search-direction-prompt",
+            frame_kind: "visual dungeon prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(
+                    DungeonScene::new(0x21).expect("dungeon scene is valid"),
+                ),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            inputs: Some(&[('S', "")]),
+            configure: None,
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
+            label: "dungeon-open-direction-prompt",
+            frame_kind: "visual dungeon prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(
+                    DungeonScene::new(0x21).expect("dungeon scene is valid"),
+                ),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            inputs: Some(&[('O', "")]),
+            configure: None,
+            synthetic_combat: false,
+        },
+        VisualGameplayFrameCase {
             label: "combat-play",
             frame_kind: "visual combat frame",
             options: PlayOptions {
@@ -708,6 +815,54 @@ fn visual_gameplay_frame_cases() -> Vec<VisualGameplayFrameCase> {
             },
             inputs: None,
             configure: Some(seed_visual_suite_combat_status_highlight),
+            synthetic_combat: true,
+        },
+        VisualGameplayFrameCase {
+            label: "combat-attack-direction-prompt",
+            frame_kind: "visual combat prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                ..PlayOptions::default()
+            },
+            inputs: Some(&[('A', "")]),
+            configure: None,
+            synthetic_combat: true,
+        },
+        VisualGameplayFrameCase {
+            label: "combat-cast-party-prompt",
+            frame_kind: "visual combat prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                ..PlayOptions::default()
+            },
+            inputs: Some(&[('C', "")]),
+            configure: None,
+            synthetic_combat: true,
+        },
+        VisualGameplayFrameCase {
+            label: "combat-ready-party-prompt",
+            frame_kind: "visual combat prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                ..PlayOptions::default()
+            },
+            inputs: Some(&[('R', "")]),
+            configure: None,
+            synthetic_combat: true,
+        },
+        VisualGameplayFrameCase {
+            label: "combat-search-direction-prompt",
+            frame_kind: "visual combat prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                ..PlayOptions::default()
+            },
+            inputs: Some(&[('S', "")]),
+            configure: None,
             synthetic_combat: true,
         },
         VisualGameplayFrameCase {
@@ -9712,7 +9867,7 @@ mod tests {
         let reports = visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
         let has_story = game_dir.join(STORY_DAT_FILE).exists();
-        assert_eq!(reports.len(), if has_story { 147 } else { 146 });
+        assert_eq!(reports.len(), if has_story { 160 } else { 159 });
         for report in &reports {
             assert!(report.path.exists());
             assert!(report.nonblack_pixels > 0);
@@ -9723,8 +9878,21 @@ mod tests {
             "town-play",
             "dungeon-play",
             "dungeon-dark",
+            "world-save-confirmation-prompt",
+            "world-hole-up-watch-prompt",
+            "world-use-item-prompt",
+            "castle-cast-party-prompt",
+            "castle-mix-reagent-prompt",
+            "castle-ready-party-prompt",
+            "castle-talk-keyword-prompt",
+            "dungeon-search-direction-prompt",
+            "dungeon-open-direction-prompt",
             "combat-play",
             "combat-status-highlight",
+            "combat-attack-direction-prompt",
+            "combat-cast-party-prompt",
+            "combat-ready-party-prompt",
+            "combat-search-direction-prompt",
             "surface-view-overlay",
             "dungeon-view-overlay",
             "britannia-chunk-map-overlay",
@@ -9783,8 +9951,21 @@ mod tests {
         assert!(manifest.contains("town-play"));
         assert!(manifest.contains("dungeon-play"));
         assert!(manifest.contains("dungeon-dark"));
+        assert!(manifest.contains("world-save-confirmation-prompt"));
+        assert!(manifest.contains("world-hole-up-watch-prompt"));
+        assert!(manifest.contains("world-use-item-prompt"));
+        assert!(manifest.contains("castle-cast-party-prompt"));
+        assert!(manifest.contains("castle-mix-reagent-prompt"));
+        assert!(manifest.contains("castle-ready-party-prompt"));
+        assert!(manifest.contains("castle-talk-keyword-prompt"));
+        assert!(manifest.contains("dungeon-search-direction-prompt"));
+        assert!(manifest.contains("dungeon-open-direction-prompt"));
         assert!(manifest.contains("combat-play"));
         assert!(manifest.contains("combat-status-highlight"));
+        assert!(manifest.contains("combat-attack-direction-prompt"));
+        assert!(manifest.contains("combat-cast-party-prompt"));
+        assert!(manifest.contains("combat-ready-party-prompt"));
+        assert!(manifest.contains("combat-search-direction-prompt"));
         assert!(manifest.contains("surface-view-overlay"));
         assert!(manifest.contains("dungeon-view-overlay"));
         assert!(manifest.contains("britannia-chunk-map-overlay"));

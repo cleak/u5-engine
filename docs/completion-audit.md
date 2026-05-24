@@ -111,12 +111,13 @@ audit:
 - `cargo run -- --save-frame-suite target\audit-frame-suite C:\Games\U5-Clean`
   — 13 PNGs, every frame nonblank with stable hashes.
 - `cargo run -p u5-tui --features visual -- --visual-frame-suite
-  target\codex-dungeon-cbt-visual-frame-suite C:\Games\U5-Clean` — 147 Bevy-owned PNGs,
+  target\codex-dungeon-cbt-visual-frame-suite C:\Games\U5-Clean` — 160 Bevy-owned PNGs,
   every frame nonblank with a sanitized manifest, including all sixteen public
   `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls,
   all one hundred twelve public `DUNGEON.CBT` dungeon-room terrain records with
-  source scanning disabled, plus combat status-highlight and death/field/cursor
-  marker galleries.
+  source scanning disabled, prompt/modal frames for world, town, dungeon,
+  combat, and Talk, plus combat status-highlight and death/field/cursor marker
+  galleries.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` — 1593 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including all 40
