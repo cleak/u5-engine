@@ -130,7 +130,7 @@ Last known verification state:
   `a52f8c3db8e33102`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-23 and
-  wrote 247 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 270 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -193,7 +193,9 @@ Last known verification state:
   `route-doom-combat-cast-refusal-02-c1il` `1571e1c7ad091db5`,
   `route-doom-combat-ready-prompt-02-r` `3cf0bc15e87d80a5`,
   and `route-doom-combat-xit-foes-remain-02-x` `3cf0bc15e87d80a5`. The
-  2026-05-23 expansion added public #48 Blink
+  latest endgame visual-route expansion adds the missing-box terminal tableau
+  and full Sandalwood Box victory cinematic route steps on the composed Bevy
+  framebuffer; the 2026-05-23 expansion added public #48 Blink
   `route-britannia-blink-east-ray-01-c1ip6` `17ceb1f94bc6c6e3`,
   Locate, Light/Open, restore-spell, active-effect, directed Sleep/Poison
   Wind/Death Wind/Flame Wind combat casts, dungeon level,

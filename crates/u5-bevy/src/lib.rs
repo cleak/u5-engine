@@ -41,21 +41,22 @@ use u5_runtime::{
     ProportionalFont, ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX,
     RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
     ReturnToViewFrameKind, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
-    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX, STATS_PANEL_TEXT_BOTTOM,
-    STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, Scene,
-    Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT,
-    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
-    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
-    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
-    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth,
-    TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState,
-    U4TransferOverrides, U4TransferSource, UUS_POR_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
-    WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport,
-    combat_class_stats, commit_chargen_save, commit_u4_transfer_save, default_party_equipment,
-    default_party_intelligence, default_party_names, default_party_stay_counters,
-    dungeon_cell_index, endgame_tableau_role_for_slot, handle_play_key_input, hash_bytes,
-    input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
+    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
+    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
+    STATS_PANEL_TEXT_WINDOW_INDEX, Scene, Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS,
+    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST,
+    TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS,
+    TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT,
+    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX,
+    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas,
+    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
+    TransportState, U4TransferOverrides, U4TransferSource, UUS_POR_SPELL_INDEX, VAS_LOR_COST,
+    VAS_LOR_SPELL_INDEX, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save, commit_u4_transfer_save,
+    default_party_equipment, default_party_intelligence, default_party_names,
+    default_party_stay_counters, dungeon_cell_index, endgame_tableau_role_for_slot,
+    handle_play_key_input, hash_bytes, input_case_fold, input_function_key_code,
+    input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -372,7 +373,9 @@ pub fn visual_route_suite(
                 &atlas,
                 &font,
             )?;
-            if report.byte_hash == previous_hash {
+            if report.byte_hash == previous_hash
+                && !visual_route_allows_unchanged_step(case.label, index + 1)
+            {
                 return Err(io::Error::other(format!(
                     "visual route suite `{}` command `{}` did not change the frame",
                     case.label, command
@@ -1138,6 +1141,22 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_death_vision),
         },
         VisualRouteSuiteCase {
+            label: "route-endgame-missing-box-terminal-jitter",
+            frame_kind: "visual route endgame frame",
+            options: PlayOptions::default(),
+            script: &["Y", "Y", ""],
+            configure: Some(seed_visual_route_endgame_missing_box),
+        },
+        VisualRouteSuiteCase {
+            label: "route-endgame-box-full-victory-cinematic",
+            frame_kind: "visual route endgame frame",
+            options: PlayOptions::default(),
+            script: &[
+                "Y", "Y", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+            ],
+            configure: Some(seed_visual_route_endgame_victory),
+        },
+        VisualRouteSuiteCase {
             label: "route-doom-combat-trigger",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
@@ -1823,6 +1842,16 @@ fn seed_visual_route_death_vision(state: &mut PlayState) {
     });
 }
 
+fn seed_visual_route_endgame_missing_box(state: &mut PlayState) {
+    state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 0;
+    state.enter_endgame();
+}
+
+fn seed_visual_route_endgame_victory(state: &mut PlayState) {
+    state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    state.enter_endgame();
+}
+
 fn apply_visual_route_command(
     state: &mut PlayState,
     command: &str,
@@ -1851,6 +1880,10 @@ fn visual_route_step_label(route_label: &str, step: usize, command: &str) -> Str
         command_label.push_str("empty");
     }
     format!("{route_label}-{step:02}-{command_label}")
+}
+
+fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
+    route_label == "route-endgame-box-full-victory-cinematic" && (3..=18).contains(&step)
 }
 
 fn run_visual_intro_menu_app(
@@ -6091,7 +6124,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 80);
+        assert_eq!(cases.len(), 82);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -6269,6 +6302,16 @@ mod tests {
         assert!(
             cases
                 .iter()
+                .any(|case| case.label == "route-endgame-missing-box-terminal-jitter")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-endgame-box-full-victory-cinematic")
+        );
+        assert!(
+            cases
+                .iter()
                 .any(|case| case.label == "route-doom-combat-trigger")
         );
         assert!(
@@ -6343,6 +6386,10 @@ mod tests {
             visual_route_step_label("route-shop-horse-trader-stablehouse-buy", 2, "Y"),
             "route-shop-horse-trader-stablehouse-buy-02-y"
         );
+        assert_eq!(
+            visual_route_step_label("route-endgame-missing-box-terminal-jitter", 3, ""),
+            "route-endgame-missing-box-terminal-jitter-03-empty"
+        );
     }
 
     #[test]
@@ -6351,6 +6398,8 @@ mod tests {
         if !game_dir.join("CASTLE.DAT").exists()
             || !game_dir.join(TILES_EGA_FILE).exists()
             || !game_dir.join(IBM_CH_FILE).exists()
+            || !game_dir.join("ENDMSG.DAT").exists()
+            || !game_dir.join("END.DAT").exists()
         {
             return;
         }
@@ -6358,7 +6407,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 247);
+        assert_eq!(reports.len(), 270);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -6421,6 +6470,8 @@ mod tests {
         assert!(manifest.contains("route-yew-wanted-poster-look-01-l6"));
         assert!(manifest.contains("route-buccaneers-den-wishing-well-03-horse"));
         assert!(manifest.contains("route-castle-death-vision-look-02-1"));
+        assert!(manifest.contains("route-endgame-missing-box-terminal-jitter-03-empty"));
+        assert!(manifest.contains("route-endgame-box-full-victory-cinematic-18-empty"));
         assert!(manifest.contains("route-doom-combat-trigger-01-empty"));
         assert!(manifest.contains("route-doom-combat-pass-02-empty"));
         assert!(manifest.contains("route-doom-combat-attack-02-a6"));
