@@ -13,6 +13,31 @@ impl PlayState {
         level: u8,
         game_dir: Option<&Path>,
     ) -> io::Result<MoveOutcome> {
+        self.step_dungeon_with_back_step_gate(direction, nx, ny, scene, level, game_dir, false)
+    }
+
+    pub fn step_dungeon_back(
+        &mut self,
+        direction: Direction,
+        nx: isize,
+        ny: isize,
+        scene: DungeonScene,
+        level: u8,
+        game_dir: Option<&Path>,
+    ) -> io::Result<MoveOutcome> {
+        self.step_dungeon_with_back_step_gate(direction, nx, ny, scene, level, game_dir, true)
+    }
+
+    fn step_dungeon_with_back_step_gate(
+        &mut self,
+        direction: Direction,
+        nx: isize,
+        ny: isize,
+        scene: DungeonScene,
+        level: u8,
+        game_dir: Option<&Path>,
+        back_step: bool,
+    ) -> io::Result<MoveOutcome> {
         if !direction.is_cardinal() {
             self.message =
                 "Dungeon debug movement uses cardinal steps only in this slice.".to_string();
@@ -27,6 +52,10 @@ impl PlayState {
         }
 
         let tile = self.dungeon_cell(level, nx, ny);
+        if back_step && dungeon_back_step_rejected(tile) {
+            self.message = "Blocked!".to_string();
+            return Ok(MoveOutcome::Blocked);
+        }
         if is_dungeon_room_trigger(tile) {
             self.player.x = nx;
             self.player.y = ny;

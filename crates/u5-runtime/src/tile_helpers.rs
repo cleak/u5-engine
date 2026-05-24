@@ -52,7 +52,11 @@ pub fn first_dungeon_walkable(grid: &[u8], level: u8) -> Option<(usize, usize)> 
 }
 
 pub fn is_dungeon_walkable(tile: u8) -> bool {
-    !matches!(tile >> 4, 0x0b..=0x0e)
+    !matches!(tile >> 4, 0x0b..=0x0d)
+}
+
+pub const fn dungeon_back_step_rejected(tile: u8) -> bool {
+    matches!(tile >> 4, 0x0a | 0x0f)
 }
 
 pub fn dungeon_minimap_expands(tile: u8) -> bool {
@@ -1278,12 +1282,9 @@ pub const fn dungeon_cell_class_of(tile: u8) -> DungeonCellClass {
 impl DungeonCellClass {
     /// `dungeon-mode.md §3/§8`: solid-blocker wall classes. `0xE?`
     /// remains a separate door-presentation variant for rendering and
-    /// minimap glyphs, but movement treats it as non-walkable.
+    /// minimap glyphs, but ordinary movement treats it as pass-through.
     pub const fn is_wall(self) -> bool {
-        matches!(
-            self,
-            DungeonCellClass::Wall | DungeonCellClass::HeavyDoorVariant
-        )
+        matches!(self, DungeonCellClass::Wall)
     }
 
     /// `dungeon-mode.md §3`: classes that K-Klimb can act on.

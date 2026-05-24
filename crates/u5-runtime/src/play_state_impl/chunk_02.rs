@@ -81,16 +81,13 @@ impl PlayState {
                 Direction::South => {
                     let facing = self.player.facing;
                     let outcome = if let Some(direction) = facing.opposite_cardinal() {
-                        let outcome = self.step_with_game_dir(direction, Some(game_dir))?;
-                        if matches!(self.area, Area::Dungeon { .. }) {
-                            self.player.facing = facing;
-                        }
-                        outcome
+                        self.step_dungeon_back_with_game_dir(direction, Some(game_dir))?
                     } else {
                         self.message =
                             "Dungeon back-step requires a cardinal facing direction.".to_string();
                         MoveOutcome::Blocked
                     };
+                    self.player.facing = facing;
                     handled!(outcome);
                 }
                 Direction::West => {
@@ -116,16 +113,13 @@ impl PlayState {
             '2' | 's' => {
                 let facing = self.player.facing;
                 let outcome = if let Some(direction) = facing.opposite_cardinal() {
-                    let outcome = self.step_with_game_dir(direction, Some(game_dir))?;
-                    if matches!(self.area, Area::Dungeon { .. }) {
-                        self.player.facing = facing;
-                    }
-                    outcome
+                    self.step_dungeon_back_with_game_dir(direction, Some(game_dir))?
                 } else {
                     self.message =
                         "Dungeon back-step requires a cardinal facing direction.".to_string();
                     MoveOutcome::Blocked
                 };
+                self.player.facing = facing;
                 handled!(outcome);
             }
             '4' | 'a' => {
@@ -229,6 +223,20 @@ impl PlayState {
             }
             _ => Ok(false),
         }
+    }
+
+    fn step_dungeon_back_with_game_dir(
+        &mut self,
+        direction: Direction,
+        game_dir: Option<&Path>,
+    ) -> io::Result<MoveOutcome> {
+        let Area::Dungeon { scene, level } = self.area else {
+            return self.step_with_game_dir(direction, game_dir);
+        };
+        let (dx, dy) = direction.delta();
+        let nx = self.player.x as isize + dx;
+        let ny = self.player.y as isize + dy;
+        self.step_dungeon_back(direction, nx, ny, scene, level, game_dir)
     }
 
     pub fn handle_top_down_key_with_inline(

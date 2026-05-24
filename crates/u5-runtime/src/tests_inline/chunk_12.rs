@@ -519,6 +519,7 @@
     fn dungeon_movement_accepts_passage_and_blocks_walls() {
         let mut grid = open_dungeon_record();
         grid[dungeon_cell_index(1, 2, 1)] = 0xb0;
+        grid[dungeon_cell_index(1, 1, 2)] = 0xe0;
         let mut state = dungeon_state(grid, 1, 0, 0);
 
         assert_eq!(state.step(Direction::South), MoveOutcome::Moved);
@@ -532,6 +533,39 @@
         assert_eq!((state.player.x, state.player.y), (1, 1));
         assert_eq!(state.turn, 2);
         assert_eq!(state.message, "Blocked!");
+
+        assert_eq!(state.step(Direction::South), MoveOutcome::Moved);
+        assert_eq!((state.player.x, state.player.y), (1, 2));
+        assert_eq!(state.turn, 3);
+        assert!(state.message.contains("underfoot heavy-door variant"));
+    }
+
+    #[test]
+    fn dungeon_back_step_rejects_room_families_but_allows_e_variant() {
+        let mut grid = open_dungeon_record();
+        grid[dungeon_cell_index(0, 0, 1)] = 0xa0;
+        let mut state = dungeon_state(grid, 0, 1, 1);
+        state.player.facing = Direction::East;
+
+        assert!(state.handle_dungeon_key('s', Path::new("")).unwrap());
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.player.facing, Direction::East);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Blocked!");
+
+        state.grid[dungeon_cell_index(0, 0, 1)] = 0xf0;
+        assert!(state.handle_dungeon_key('s', Path::new("")).unwrap());
+        assert_eq!((state.player.x, state.player.y), (1, 1));
+        assert_eq!(state.player.facing, Direction::East);
+        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Blocked!");
+
+        state.grid[dungeon_cell_index(0, 0, 1)] = 0xe0;
+        assert!(state.handle_dungeon_key('s', Path::new("")).unwrap());
+        assert_eq!((state.player.x, state.player.y), (0, 1));
+        assert_eq!(state.player.facing, Direction::East);
+        assert_eq!(state.turn, 1);
+        assert!(state.message.contains("underfoot heavy-door variant"));
     }
 
     #[test]
