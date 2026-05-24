@@ -1034,6 +1034,112 @@
     }
 
     #[test]
+    fn shipped_npc_scheduler_corpus_initializes_and_ticks_when_present() {
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join(TOWNE_NPC_FILENAME).exists() {
+            return;
+        }
+
+        let sample_hours = [0u8, 5, 8, 12, 16, 20, 23];
+        let mut loaded_scenes = 0usize;
+        let mut runtime_npcs = 0usize;
+        let mut linked_npcs = 0usize;
+        let mut moved_or_relinked = 0usize;
+
+        for scene_byte in SCENE_TOWN_FAMILY_FIRST..=SCENE_TOWN_FAMILY_LAST {
+            let scene = Scene::new(scene_byte).unwrap();
+            let tlk = parse_tlk(&game_dir.join(npc_tlk_filename(scene_byte).unwrap())).unwrap();
+            let npc_slots = parse_npc_block(game_dir, scene, &tlk).unwrap();
+            loaded_scenes += 1;
+
+            for hour in sample_hours {
+                let grid = load_town_runtime_floor(game_dir, scene, 0, hour).unwrap();
+                let mut state = test_state(
+                    grid,
+                    usize::from(VIEWPORT_CENTER),
+                    usize::from(VIEWPORT_CENTER),
+                );
+                state.area = Area::Town { scene, floor: 0 };
+                state.clock = GameClock::new(hour, 0).unwrap();
+                state.sync_player_object();
+                state.load_scheduled_npcs(&npc_slots);
+
+                let before = state
+                    .npcs
+                    .iter()
+                    .map(|npc| (npc.slot, npc.x, npc.y, npc.z, npc.active_object))
+                    .collect::<Vec<_>>();
+                runtime_npcs += before.len();
+                linked_npcs += before
+                    .iter()
+                    .filter(|(_, _, _, _, active_object)| active_object.is_some())
+                    .count();
+
+                for npc in &state.npcs {
+                    assert_ne!(npc.slot, NPC_SENTINEL_SLOT);
+                    assert!(npc.x < TOWN_GRID_SIDE);
+                    assert!(npc.y < TOWN_GRID_SIDE);
+                    assert!(
+                        npc.z <= 7 || npc.z == u8::MAX,
+                        "scene {scene_byte} hour {hour} slot {} has unexpected floor byte {}",
+                        npc.slot,
+                        npc.z
+                    );
+                    if let Some(active_slot) = npc.active_object {
+                        let object = &state.active_objects[active_slot];
+                        assert_eq!((object.x, object.y, object.z), (npc.x, npc.y, 0));
+                        assert_ne!(object.type_byte, 0);
+                    } else {
+                        assert!(
+                            npc.z != 0 || (npc.x, npc.y) == (state.player.x, state.player.y),
+                            "scene {scene_byte} hour {hour} slot {} on current floor was not linked",
+                            npc.slot
+                        );
+                    }
+                }
+
+                state.advance_npc_schedules();
+
+                for (slot, old_x, old_y, old_z, old_active_object) in before {
+                    let npc = state
+                        .npcs
+                        .iter()
+                        .find(|npc| npc.slot == slot)
+                        .unwrap_or_else(|| panic!("scene {scene_byte} lost NPC slot {slot}"));
+                    assert!(npc.x < TOWN_GRID_SIDE);
+                    assert!(npc.y < TOWN_GRID_SIDE);
+                    assert!(
+                        npc.z <= 7 || npc.z == u8::MAX,
+                        "scene {scene_byte} hour {hour} slot {slot} ticked to unexpected floor byte {}",
+                        npc.z
+                    );
+                    let distance = npc.x.abs_diff(old_x) + npc.y.abs_diff(old_y);
+                    if npc.z == old_z {
+                        assert!(
+                            distance <= 1,
+                            "scene {scene_byte} hour {hour} slot {slot} moved {distance} cells"
+                        );
+                    }
+                    if npc.active_object != old_active_object || distance > 0 || npc.z != old_z {
+                        moved_or_relinked += 1;
+                    }
+                    if let Some(active_slot) = npc.active_object {
+                        let object = &state.active_objects[active_slot];
+                        assert_eq!((object.x, object.y), (npc.x, npc.y));
+                        assert_eq!(object.z, npc.z as i8);
+                        assert_ne!(object.type_byte, 0);
+                    }
+                }
+            }
+        }
+
+        assert_eq!(loaded_scenes, SCENE_TOWN_FAMILY_LAST as usize);
+        assert!(runtime_npcs >= 325 * sample_hours.len());
+        assert!(linked_npcs > 0);
+        assert!(moved_or_relinked > 0);
+    }
+
+    #[test]
     fn blackthorn_captive_arrest_enters_audience_and_handoffs_after_answer() {
         let dir = debug_game_dir();
         let mut state = test_state(open_grid(), 5, 5);
