@@ -149,8 +149,9 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 645 nonblank Bevy-owned per-step route PNGs plus a sanitized
-  manifest, with TUI-parity labels for additional world/town/dungeon
+  wrote 757 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  manifest, with TUI-parity labels for additional ship/castle/shop/dungeon
+  and Doom combat aliases as well as world/town/dungeon
   movement/pass/look/view/status, Minoc daily fixed-hidden, hourly
   status/ring, native stair, dungeon rest/ladder/exit/search, and
   active-monster ambush routes: `route-world-movement-00-initial` `f68b906acde0bd4a`,
@@ -245,6 +246,10 @@ Last known verification state:
   `route-doom-combat-search-prompt-00-initial` `6fdbd1b19453bbea`,
   `route-doom-combat-search-prompt-01-empty` `30fecda7448a111d`, and
   `route-doom-combat-search-prompt-02-s` `c1ffc74f45610145`. The
+  latest TUI-label visual-route expansion adds exact ship broadside,
+  castle Light/Open and Mix/Ready/New Order, castle party overlay, active
+  shop, dungeon torch/turn/SJOG/refusal, endgame confirmation, and Doom room
+  combat/pass/selection/direct-step/attack/refusal label coverage. The
   latest combat visual-route expansion adds composed-frame Doom combat
   command coverage for digit selection/clear, direct movement,
   Use/Drop/Wear/Enter/Fire/Hole-up/Ignite/Mix/New Order/Talk/View/Look

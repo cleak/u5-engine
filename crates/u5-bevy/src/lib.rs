@@ -1674,6 +1674,17 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-ship-broadside-fire-route",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                transport: ship_transport,
+                ..PlayOptions::default()
+            },
+            script: &["F6"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
             label: "route-dungeon-movement-search",
             frame_kind: "visual route dungeon frame",
             options: PlayOptions {
@@ -1927,6 +1938,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_arms_local),
         },
         VisualRouteSuiteCase {
+            label: "route-shop-arms-local-buy-sell-route",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "A", "N", "S", "1", "N"],
+            configure: Some(seed_visual_route_arms_local),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-arms-iolos-bows-buy-first",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -2027,6 +2048,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_healer),
         },
         VisualRouteSuiteCase {
+            label: "route-shop-healer-heal-decline-route",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "H", "1", "N"],
+            configure: Some(seed_visual_route_healer),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-healer-cure-accept",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -2067,7 +2098,27 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_inn_rest_decline),
         },
         VisualRouteSuiteCase {
+            label: "route-shop-inn-rest-decline-route",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["R", "N", "P"],
+            configure: Some(seed_visual_route_inn_rest_decline),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-reagent-buy",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["A", "1", "N"],
+            configure: Some(seed_visual_route_reagent),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-reagent-buy-route",
             frame_kind: "visual route town frame",
             options: PlayOptions {
                 target: PlayTarget::Town(castle),
@@ -2087,7 +2138,27 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_tavern),
         },
         VisualRouteSuiteCase {
+            label: "route-shop-tavern-drink-and-food-route",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "M", "R", "1", "N"],
+            configure: Some(seed_visual_route_tavern),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-horse-trader-decline",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "N"],
+            configure: Some(seed_visual_route_horse_trader_decline),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-horse-trader-decline-route",
             frame_kind: "visual route town frame",
             options: PlayOptions {
                 target: PlayTarget::Town(castle),
@@ -2108,6 +2179,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         },
         VisualRouteSuiteCase {
             label: "route-shop-shipwright-quote-decline",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["F", "N"],
+            configure: Some(seed_visual_route_shipwright),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-shipwright-quote-decline-route",
             frame_kind: "visual route town frame",
             options: PlayOptions {
                 target: PlayTarget::Town(castle),
@@ -2177,7 +2258,29 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_guild),
         },
         VisualRouteSuiteCase {
+            label: "route-shop-guild-buy-route",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["A", "1", "D"],
+            configure: Some(seed_visual_route_guild),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-sage-topic-miss",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["MANTRA"],
+            configure: Some(|state| {
+                state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+            }),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-sage-topic-miss-route",
             frame_kind: "visual route town frame",
             options: PlayOptions {
                 target: PlayTarget::Town(castle),
@@ -2234,6 +2337,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         },
         VisualRouteSuiteCase {
             label: "route-castle-light-open-spell",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["C1LV", "C1AS6"],
+            configure: Some(seed_visual_route_light_open),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-light-open-spell-route",
             frame_kind: "visual route town frame",
             options: PlayOptions {
                 target: PlayTarget::Town(castle),
@@ -2643,6 +2756,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_inn_rest_accept),
         },
         VisualRouteSuiteCase {
+            label: "route-shop-inn-rest-accept-public-rate",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["R", "Y"],
+            configure: Some(seed_visual_route_inn_rest_accept),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-horse-trader-horse-and-rider-buy",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -2693,7 +2816,27 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_sage_paid),
         },
         VisualRouteSuiteCase {
+            label: "route-shop-sage-topic-paid-success-route",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["HONE", "Y"],
+            configure: Some(seed_visual_route_sage_paid),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-sage-topic-short-funds",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["COMP", "Y"],
+            configure: Some(seed_visual_route_sage_short_funds),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-sage-topic-short-funds-route",
             frame_kind: "visual route town frame",
             options: PlayOptions {
                 target: PlayTarget::Town(castle),
@@ -2833,6 +2976,20 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_endgame_missing_box),
         },
         VisualRouteSuiteCase {
+            label: "route-endgame-missing-box-confirmation",
+            frame_kind: "visual route endgame frame",
+            options: PlayOptions::default(),
+            script: &["Y", "Y"],
+            configure: Some(seed_visual_route_endgame_missing_box),
+        },
+        VisualRouteSuiteCase {
+            label: "route-endgame-box-victory-confirmation",
+            frame_kind: "visual route endgame frame",
+            options: PlayOptions::default(),
+            script: &["Y", "Y"],
+            configure: Some(seed_visual_route_endgame_victory),
+        },
+        VisualRouteSuiteCase {
             label: "route-endgame-box-full-victory-cinematic",
             frame_kind: "visual route endgame frame",
             options: PlayOptions::default(),
@@ -2969,6 +3126,85 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         },
     ];
     cases.extend([
+        VisualRouteSuiteCase {
+            label: "route-castle-mix-ready-order-route",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["MIL/0x80/1", "R1/26", "R1/26", "N23"],
+            configure: Some(seed_visual_route_command_workflows),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-party-overlay-routes",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["C1IL", "I", "N12", "R"],
+            configure: Some(seed_visual_route_party_overlay_workflows),
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-ignite-torch-route",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 0,
+                ..PlayOptions::default()
+            },
+            script: &["I"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-turn-and-blocked-step",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["w", "a", "d", "s"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-sjog-underfoot-routes",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["G", "J"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-refusal-letter-routes",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["B"],
+            configure: None,
+        },
+        visual_doom_combat_case("route-doom-room-combat-trigger", doom, &[""]),
+        visual_doom_combat_case("route-doom-combat-pass-round", doom, &["", ""]),
+        visual_doom_combat_case("route-doom-combat-select-player-clear", doom, &["", "0"]),
+        visual_doom_combat_case("route-doom-combat-select-player-one", doom, &["", "1"]),
+        visual_doom_combat_case("route-doom-combat-select-player-six", doom, &["", "6"]),
+        visual_doom_combat_case("route-doom-combat-direct-step-east", doom, &["", "d"]),
+        visual_doom_combat_case("route-doom-combat-d-refusal", doom, &["", "D"]),
+        visual_doom_combat_case("route-doom-combat-w-refusal", doom, &["", "W"]),
+        visual_doom_combat_case("route-doom-combat-view-label-only", doom, &["", "V"]),
+        visual_doom_combat_case("route-doom-combat-look-label-only", doom, &["", "L"]),
+        visual_doom_combat_case("route-doom-combat-attack-direction", doom, &["", "A6"]),
         visual_doom_combat_case("route-doom-combat-select-clear", doom, &["", "0"]),
         visual_doom_combat_case("route-doom-combat-select-one", doom, &["", "1"]),
         visual_doom_combat_case("route-doom-combat-select-six", doom, &["", "6"]),
@@ -3192,6 +3428,15 @@ fn seed_visual_route_command_workflows(state: &mut PlayState) {
     state.party_equipment[0][EQUIP_SLOT_WEAPON] = EQUIPMENT_EMPTY;
     state.sync_player_object();
     state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_party_overlay_workflows(state: &mut PlayState) {
+    seed_visual_route_command_workflows(state);
+    state.spell_charges[IN_LOR_SPELL_INDEX] = 1;
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = caster.mana.max(IN_LOR_COST);
+        caster.level = caster.level.max(IN_LOR_COST);
+    }
 }
 
 fn seed_visual_route_board_horse(state: &mut PlayState) {
@@ -8887,7 +9132,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 214);
+        assert_eq!(cases.len(), 247);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -8985,6 +9230,8 @@ mod tests {
             "route-castle-dispatcher-board-refusal",
             "route-castle-dispatcher-fire-refusal",
             "route-castle-command-workflow-overlays",
+            "route-castle-mix-ready-order-route",
+            "route-castle-party-overlay-routes",
             "route-castle-hourly-provision-poison-pass",
             "route-castle-hourly-poison-starvation-pass",
             "route-castle-hourly-ring-regeneration-pass",
@@ -9041,6 +9288,11 @@ mod tests {
         assert!(
             cases
                 .iter()
+                .any(|case| case.label == "route-ship-broadside-fire-route")
+        );
+        assert!(
+            cases
+                .iter()
                 .any(|case| case.label == "route-dungeon-movement-search")
         );
         for label in [
@@ -9072,6 +9324,18 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-dungeon-ignite-torch")
         );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-dungeon-ignite-torch-route")
+        );
+        for label in [
+            "route-dungeon-turn-and-blocked-step",
+            "route-dungeon-sjog-underfoot-routes",
+            "route-dungeon-refusal-letter-routes",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         for label in [
             "route-dungeon-sjog-underfoot-get",
             "route-dungeon-sjog-underfoot-jimmy",
@@ -9100,21 +9364,28 @@ mod tests {
         for label in [
             "route-shop-arms-local-buy-sell",
             "route-shop-healer-heal-decline",
+            "route-shop-healer-heal-decline-route",
             "route-shop-healer-cure-accept",
             "route-shop-healer-heal-accept",
             "route-shop-healer-resurrect-accept",
             "route-shop-inn-rest-decline",
+            "route-shop-inn-rest-decline-route",
             "route-shop-reagent-buy",
+            "route-shop-reagent-buy-route",
             "route-shop-tavern-drink-and-food",
+            "route-shop-tavern-drink-and-food-route",
             "route-shop-horse-trader-decline",
+            "route-shop-horse-trader-decline-route",
             "route-shop-horse-trader-no-marker-refusal",
             "route-shop-shipwright-quote-decline",
+            "route-shop-shipwright-quote-decline-route",
             "route-shop-shipwright-frigate-buy",
             "route-shop-shipwright-island-frigate-buy",
             "route-shop-shipwright-crows-nest-skiff-buy",
             "route-shop-shipwright-oaken-oar-frigate-buy",
             "route-shop-shipwright-rusty-bucket-skiff-buy",
             "route-shop-guild-buy",
+            "route-shop-guild-buy-route",
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
         }
@@ -9128,6 +9399,7 @@ mod tests {
             "route-britannia-rel-hur-east",
             "route-castle-in-lor-spell",
             "route-castle-light-open-spell",
+            "route-castle-light-open-spell-route",
             "route-castle-restore-spell-suite",
             "route-castle-active-effect-spell-suite",
             "route-combat-directed-sleep-cone",
@@ -9177,6 +9449,11 @@ mod tests {
         assert!(
             cases
                 .iter()
+                .any(|case| case.label == "route-shop-inn-rest-accept-public-rate")
+        );
+        assert!(
+            cases
+                .iter()
                 .any(|case| case.label == "route-shop-horse-trader-horse-and-rider-buy")
         );
         assert!(
@@ -9202,7 +9479,17 @@ mod tests {
         assert!(
             cases
                 .iter()
+                .any(|case| case.label == "route-shop-sage-topic-paid-success-route")
+        );
+        assert!(
+            cases
+                .iter()
                 .any(|case| case.label == "route-shop-sage-topic-short-funds")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-shop-sage-topic-short-funds-route")
         );
         assert!(
             cases
@@ -9247,6 +9534,16 @@ mod tests {
         assert!(
             cases
                 .iter()
+                .any(|case| case.label == "route-endgame-missing-box-confirmation")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-endgame-box-victory-confirmation")
+        );
+        assert!(
+            cases
+                .iter()
                 .any(|case| case.label == "route-endgame-box-full-victory-cinematic")
         );
         assert!(
@@ -9257,12 +9554,27 @@ mod tests {
         assert!(
             cases
                 .iter()
+                .any(|case| case.label == "route-doom-room-combat-trigger")
+        );
+        assert!(
+            cases
+                .iter()
                 .any(|case| case.label == "route-doom-combat-pass")
         );
         assert!(
             cases
                 .iter()
+                .any(|case| case.label == "route-doom-combat-pass-round")
+        );
+        assert!(
+            cases
+                .iter()
                 .any(|case| case.label == "route-doom-combat-attack")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-doom-combat-attack-direction")
         );
         assert!(
             cases
@@ -9396,7 +9708,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 645);
+        assert_eq!(reports.len(), 757);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -9461,6 +9773,8 @@ mod tests {
         assert!(manifest.contains("route-castle-dispatcher-board-refusal-01-b"));
         assert!(manifest.contains("route-castle-dispatcher-fire-refusal-01-f6"));
         assert!(manifest.contains("route-castle-command-workflow-overlays-04-n23"));
+        assert!(manifest.contains("route-castle-mix-ready-order-route-04-n23"));
+        assert!(manifest.contains("route-castle-party-overlay-routes-04-r"));
         assert!(manifest.contains("route-castle-hourly-provision-poison-pass-01-empty"));
         assert!(manifest.contains("route-castle-hourly-poison-starvation-pass-01-empty"));
         assert!(manifest.contains("route-castle-hourly-ring-regeneration-pass-01-empty"));
@@ -9479,6 +9793,7 @@ mod tests {
         assert!(manifest.contains("route-reload-ship-xit-skiff-pass-02-empty"));
         assert!(manifest.contains("route-ship-hoist-and-sail-east-02-d"));
         assert!(manifest.contains("route-ship-broadside-fire-01-f6"));
+        assert!(manifest.contains("route-ship-broadside-fire-route-01-f6"));
         assert!(manifest.contains("route-dungeon-movement-search-03-s6"));
         assert!(manifest.contains("route-dungeon-search-focus-route-01-s6"));
         assert!(manifest.contains("route-dungeon-attack-direction-route-02-6"));
@@ -9496,37 +9811,51 @@ mod tests {
         assert!(manifest.contains("route-dungeon-active-monster-attack-ambush-01-a"));
         assert!(manifest.contains("route-dungeon-active-monster-contact-ambush-01-empty"));
         assert!(manifest.contains("route-dungeon-ignite-torch-01-i"));
+        assert!(manifest.contains("route-dungeon-ignite-torch-route-01-i"));
+        assert!(manifest.contains("route-dungeon-turn-and-blocked-step-04-s"));
         assert!(manifest.contains("route-dungeon-sjog-underfoot-get-01-g"));
         assert!(manifest.contains("route-dungeon-sjog-underfoot-jimmy-01-j"));
         assert!(manifest.contains("route-dungeon-sjog-underfoot-open-01-o"));
+        assert!(manifest.contains("route-dungeon-sjog-underfoot-routes-02-j"));
+        assert!(manifest.contains("route-dungeon-refusal-letter-routes-01-b"));
         assert!(manifest.contains("route-debug-enter-dungeon-03-n"));
         assert!(manifest.contains("route-dungeon-exit-refusal-02-n"));
         assert!(manifest.contains("route-dungeon-exit-confirm-02-y"));
         assert!(manifest.contains("route-dungeon-refusal-board-01-b"));
         assert!(manifest.contains("route-dungeon-refusal-fire-01-f"));
         assert!(manifest.contains("route-shop-arms-local-buy-sell-06-n"));
+        assert!(manifest.contains("route-shop-arms-local-buy-sell-route-06-n"));
         assert!(manifest.contains("route-shop-healer-heal-decline-04-n"));
+        assert!(manifest.contains("route-shop-healer-heal-decline-route-04-n"));
         assert!(manifest.contains("route-shop-healer-cure-accept-04-y"));
         assert!(manifest.contains("route-shop-healer-heal-accept-04-y"));
         assert!(manifest.contains("route-shop-healer-resurrect-accept-04-y"));
         assert!(manifest.contains("route-shop-inn-rest-decline-03-p"));
+        assert!(manifest.contains("route-shop-inn-rest-decline-route-03-p"));
         assert!(manifest.contains("route-shop-reagent-buy-03-n"));
+        assert!(manifest.contains("route-shop-reagent-buy-route-03-n"));
         assert!(manifest.contains("route-shop-tavern-drink-and-food-05-n"));
+        assert!(manifest.contains("route-shop-tavern-drink-and-food-route-05-n"));
         assert!(manifest.contains("route-shop-horse-trader-decline-02-n"));
+        assert!(manifest.contains("route-shop-horse-trader-decline-route-02-n"));
         assert!(manifest.contains("route-shop-horse-trader-no-marker-refusal-02-y"));
         assert!(manifest.contains("route-shop-shipwright-quote-decline-02-n"));
+        assert!(manifest.contains("route-shop-shipwright-quote-decline-route-02-n"));
         assert!(manifest.contains("route-shop-shipwright-frigate-buy-02-y"));
         assert!(manifest.contains("route-shop-shipwright-island-frigate-buy-02-y"));
         assert!(manifest.contains("route-shop-shipwright-crows-nest-skiff-buy-02-y"));
         assert!(manifest.contains("route-shop-shipwright-oaken-oar-frigate-buy-02-y"));
         assert!(manifest.contains("route-shop-shipwright-rusty-bucket-skiff-buy-02-y"));
         assert!(manifest.contains("route-shop-guild-buy-03-d"));
+        assert!(manifest.contains("route-shop-guild-buy-route-03-d"));
         assert!(manifest.contains("route-shop-sage-topic-miss-01-mantra"));
+        assert!(manifest.contains("route-shop-sage-topic-miss-route-01-mantra"));
         assert!(manifest.contains("route-britannia-blink-east-ray-01-c1ip6"));
         assert!(manifest.contains("route-britannia-locate-cast-01-c1iw"));
         assert!(manifest.contains("route-britannia-rel-hur-east-01-c1hr6"));
         assert!(manifest.contains("route-castle-in-lor-spell-01-c1il"));
         assert!(manifest.contains("route-castle-light-open-spell-02-c1as6"));
+        assert!(manifest.contains("route-castle-light-open-spell-route-02-c1as6"));
         assert!(manifest.contains("route-castle-restore-spell-suite-05-c1cim4"));
         assert!(manifest.contains("route-castle-active-effect-spell-suite-04-c1at"));
         assert!(manifest.contains("route-combat-directed-sleep-cone-01-c1iz6"));
@@ -9567,12 +9896,15 @@ mod tests {
         assert!(manifest.contains("route-dungeon-open-chest-spell-01-c1as"));
         assert!(manifest.contains("route-castle-poison-gas-step-01-d"));
         assert!(manifest.contains("route-shop-inn-rest-accept-02-y"));
+        assert!(manifest.contains("route-shop-inn-rest-accept-public-rate-02-y"));
         assert!(manifest.contains("route-shop-horse-trader-horse-and-rider-buy-02-y"));
         assert!(manifest.contains("route-reload-horse-trader-horse-and-rider-buy-pass-03-empty"));
         assert!(manifest.contains("route-shop-horse-trader-stablehouse-buy-02-y"));
         assert!(manifest.contains("route-shop-horse-trader-wishing-well-buy-02-y"));
         assert!(manifest.contains("route-shop-sage-topic-paid-success-02-y"));
         assert!(manifest.contains("route-shop-sage-topic-short-funds-02-y"));
+        assert!(manifest.contains("route-shop-sage-topic-paid-success-route-02-y"));
+        assert!(manifest.contains("route-shop-sage-topic-short-funds-route-02-y"));
         assert!(manifest.contains("route-castle-fountain-look-02-1"));
         assert!(manifest.contains("route-yew-wanted-poster-look-01-l6"));
         assert!(manifest.contains("route-buccaneers-den-wishing-well-03-horse"));
@@ -9589,15 +9921,28 @@ mod tests {
         assert!(manifest.contains("route-britannia-word-of-power-seal-opens-01-yfallax"));
         assert!(manifest.contains("route-underworld-doom-word-of-power-seal-opens-01-yveramocor"));
         assert!(manifest.contains("route-endgame-missing-box-terminal-jitter-03-empty"));
+        assert!(manifest.contains("route-endgame-missing-box-confirmation-02-y"));
+        assert!(manifest.contains("route-endgame-box-victory-confirmation-02-y"));
         assert!(manifest.contains("route-endgame-box-full-victory-cinematic-18-empty"));
         assert!(manifest.contains("route-doom-combat-trigger-01-empty"));
+        assert!(manifest.contains("route-doom-room-combat-trigger-01-empty"));
         assert!(manifest.contains("route-doom-combat-pass-02-empty"));
+        assert!(manifest.contains("route-doom-combat-pass-round-02-empty"));
         assert!(manifest.contains("route-doom-combat-attack-02-a6"));
+        assert!(manifest.contains("route-doom-combat-attack-direction-02-a6"));
         assert!(manifest.contains("route-doom-combat-board-refusal-02-b"));
         assert!(manifest.contains("route-doom-combat-z-stats-02-z"));
         assert!(manifest.contains("route-doom-combat-search-prompt-02-s"));
         assert!(manifest.contains("route-doom-combat-select-clear-02-0"));
+        assert!(manifest.contains("route-doom-combat-select-player-clear-02-0"));
+        assert!(manifest.contains("route-doom-combat-select-player-one-02-1"));
+        assert!(manifest.contains("route-doom-combat-select-player-six-02-6"));
         assert!(manifest.contains("route-doom-combat-step-east-02-d"));
+        assert!(manifest.contains("route-doom-combat-direct-step-east-02-d"));
+        assert!(manifest.contains("route-doom-combat-d-refusal-02-d"));
+        assert!(manifest.contains("route-doom-combat-w-refusal-02-w"));
+        assert!(manifest.contains("route-doom-combat-view-label-only-02-v"));
+        assert!(manifest.contains("route-doom-combat-look-label-only-02-l"));
         assert!(manifest.contains("route-doom-combat-cast-refusal-02-c1il"));
         assert!(manifest.contains("route-doom-combat-get-direction-02-g6"));
         assert!(manifest.contains("route-doom-combat-push-direction-02-p6"));

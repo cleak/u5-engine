@@ -109,8 +109,9 @@ audit:
   `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls
   plus combat status-highlight and death/field/cursor marker galleries.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 645 Bevy-owned per-step route
-  PNGs, every frame nonblank with a sanitized manifest, including horse-trader
+  target\visual-route-suite C:\Games\U5-Clean` — 757 Bevy-owned per-step route
+  PNGs, every frame nonblank with a sanitized manifest, including exact
+  TUI-label ship/castle/shop/dungeon/Doom aliases, horse-trader
   purchases, all nine public arms-shop first-stock purchases, accepted healer cure/heal/resurrect, all four public shipwright
   delivery-row purchases, spell routes for Locate, In Lor/Light/Open, restore, active effects,
   directed Sleep/Poison Wind/Death Wind/Flame Wind combat casts, combat utility fallback casts, targeted
