@@ -950,6 +950,14 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "shop-horse-trader-wishing-well-buy")
     );
+    for name in [
+        "shop-shipwright-island-frigate-buy",
+        "shop-shipwright-crows-nest-skiff-buy",
+        "shop-shipwright-oaken-oar-frigate-buy",
+        "shop-shipwright-rusty-bucket-skiff-buy",
+    ] {
+        assert!(cases.iter().any(|case| case.name == name), "{name}");
+    }
     assert!(
         cases
             .iter()

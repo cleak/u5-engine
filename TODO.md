@@ -37,7 +37,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-24 with 151 scripted route cases (including expanded active-shop/modal
+  2026-05-24 with 155 scripted route cases (including expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
@@ -52,7 +52,8 @@ Last known verification state:
   #32 Britannia/Doom Word-of-Power seal opening routes, public #15 accepted
   inn-rest pricing, public #13 sage paid-success/short-funds paths, public #31
   native shard/Eternal Flame destruction routes, native town walk-on stair
-  up/down/crossing routes, and public #21
+  up/down/crossing routes, accepted shipwright frigate/skiff purchase routes
+  that verify published dock-coordinate delivery, and public #21
   active-monster attack/contact ambush routes)
   covering world/town look and
   save-refusal prompts, surface/town/dungeon View overlays, Spyglass
@@ -130,7 +131,7 @@ Last known verification state:
   `a52f8c3db8e33102`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-23 and
-  wrote 270 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 273 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,

@@ -878,6 +878,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_shipwright),
         },
         VisualRouteSuiteCase {
+            label: "route-shop-shipwright-frigate-buy",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["F", "Y"],
+            configure: Some(seed_visual_route_shipwright),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-guild-buy",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -1755,8 +1765,8 @@ fn seed_visual_route_shipwright(state: &mut PlayState) {
     state.gold = 999;
     state.return_world = Some(WorldReturn {
         plane: WorldPlane::Britannia,
-        x: state.player.x,
-        y: state.player.y,
+        x: 1,
+        y: 2,
         transport: state.player.transport,
         timing_status: state.timing_status,
         sail_cadence: state.sail_cadence,
@@ -6171,7 +6181,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 82);
+        assert_eq!(cases.len(), 83);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -6267,6 +6277,7 @@ mod tests {
             "route-shop-horse-trader-decline",
             "route-shop-horse-trader-no-marker-refusal",
             "route-shop-shipwright-quote-decline",
+            "route-shop-shipwright-frigate-buy",
             "route-shop-guild-buy",
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
@@ -6454,7 +6465,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 270);
+        assert_eq!(reports.len(), 273);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -6492,6 +6503,7 @@ mod tests {
         assert!(manifest.contains("route-shop-horse-trader-decline-02-n"));
         assert!(manifest.contains("route-shop-horse-trader-no-marker-refusal-02-y"));
         assert!(manifest.contains("route-shop-shipwright-quote-decline-02-n"));
+        assert!(manifest.contains("route-shop-shipwright-frigate-buy-02-y"));
         assert!(manifest.contains("route-shop-guild-buy-03-d"));
         assert!(manifest.contains("route-shop-sage-topic-miss-01-mantra"));
         assert!(manifest.contains("route-britannia-blink-east-ray-01-c1ip6"));

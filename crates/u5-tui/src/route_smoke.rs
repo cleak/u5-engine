@@ -27,26 +27,27 @@ use u5_runtime::{
     NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
     NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PEER_COST,
     PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
-    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember, PlayOptions, PlayState, PlayTarget,
-    QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, RESURRECT_COST,
-    RESURRECT_SPELL_INDEX, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
-    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
-    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
-    SHADOWLORD_VANQUISHED, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
-    SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
-    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX,
-    SPECIAL_ITEM_SHARD_COWARDICE_INDEX, SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
-    SPECIAL_ITEM_SHARD_HATRED_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
-    STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, Stable,
-    TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
-    TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST,
-    TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TransportState, UUS_POR_SPELL_INDEX,
-    VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WORD_OF_POWER_SEAL_XOR, WORLD_SIDE, WindState,
-    WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, combat_class_stats,
-    default_party_equipment, default_party_experience, default_party_intelligence,
-    default_party_names, default_party_stay_counters, dungeon_cell_index, inn_base_room_rate,
-    load_tile_atlas, shop_intelligence_adjusted_price,
+    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember, PendingVehicleAcquisition, PlayOptions,
+    PlayState, PlayTarget, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH,
+    RESURRECT_COST, RESURRECT_SPELL_INDEX, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
+    SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
+    SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
+    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
+    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
+    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
+    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
+    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
+    SURFACE_CHASM_Y, Scene, Shipwright, ShipwrightPurchaseKind, Stable, TALK_NO_RESPONSE_MESSAGE,
+    TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
+    TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST, TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX,
+    TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern,
+    TileGraphicsDepth, TransportState, UUS_POR_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
+    WORD_OF_POWER_SEAL_XOR, WORLD_SIDE, WindState, WordOfPowerSeal, WorldPlane, WorldReturn,
+    X_RAY_COST, X_RAY_SPELL_INDEX, combat_class_stats, default_party_equipment,
+    default_party_experience, default_party_intelligence, default_party_names,
+    default_party_stay_counters, dungeon_cell_index, inn_base_room_rate, load_tile_atlas,
+    shipwright_delivery_coordinate, shipwright_price, shop_intelligence_adjusted_price,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -1277,6 +1278,38 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "shop-shipwright-island-frigate-buy",
+            options: world.clone(),
+            script: &["F", "Y"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-shipwright-crows-nest-skiff-buy",
+            options: world.clone(),
+            script: &["S", "Y"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-shipwright-oaken-oar-frigate-buy",
+            options: world.clone(),
+            script: &["F", "Y"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-shipwright-rusty-bucket-skiff-buy",
+            options: world.clone(),
+            script: &["S", "Y"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "shop-guild-buy-route",
             options: PlayOptions::default(),
             script: &["A", "1", "D"],
@@ -2230,12 +2263,17 @@ fn apply_route_smoke_case_setup(
                 HorseTraderState::for_stable(stable),
             ));
         }
-        "shop-shipwright-quote-decline-route" => {
+        "shop-shipwright-quote-decline-route"
+        | "shop-shipwright-island-frigate-buy"
+        | "shop-shipwright-crows-nest-skiff-buy"
+        | "shop-shipwright-oaken-oar-frigate-buy"
+        | "shop-shipwright-rusty-bucket-skiff-buy" => {
+            let shipwright = shipwright_route_shop(case_name);
             state.gold = 999;
             state.return_world = Some(WorldReturn {
                 plane: WorldPlane::Britannia,
-                x: state.player.x,
-                y: state.player.y,
+                x: 1,
+                y: 2,
                 transport: state.player.transport,
                 timing_status: state.timing_status,
                 sail_cadence: state.sail_cadence,
@@ -2245,7 +2283,7 @@ fn apply_route_smoke_case_setup(
                 pending_vehicle: None,
             });
             state.active_shop = Some(ActiveShopSession::ShipBroker(
-                ShipBrokerState::for_shipwright(Shipwright::IslandShipwrights),
+                ShipBrokerState::for_shipwright(shipwright),
             ));
         }
         "shop-guild-buy-route" => {
@@ -2461,6 +2499,15 @@ fn horse_trader_route_stable(case_name: &str) -> Stable {
         "shop-horse-trader-stablehouse-buy" => Stable::TheStablehouse,
         "shop-horse-trader-wishing-well-buy" => Stable::WishingWellHorses,
         _ => Stable::HorseAndRider,
+    }
+}
+
+fn shipwright_route_shop(case_name: &str) -> Shipwright {
+    match case_name {
+        "shop-shipwright-crows-nest-skiff-buy" => Shipwright::TheCrowsNest,
+        "shop-shipwright-oaken-oar-frigate-buy" => Shipwright::TheOakenOar,
+        "shop-shipwright-rusty-bucket-skiff-buy" => Shipwright::TheRustyBucket,
+        _ => Shipwright::IslandShipwrights,
     }
 }
 
@@ -3323,6 +3370,34 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not quote and decline shipwright purchase"
+                )));
+            }
+        }
+        "shop-shipwright-island-frigate-buy"
+        | "shop-shipwright-crows-nest-skiff-buy"
+        | "shop-shipwright-oaken-oar-frigate-buy"
+        | "shop-shipwright-rusty-bucket-skiff-buy" => {
+            let shipwright = shipwright_route_shop(case_name);
+            let (x, y) = shipwright_delivery_coordinate(shipwright);
+            let expected_pending = if case_name.contains("skiff") {
+                PendingVehicleAcquisition::Skiff { x, y }
+            } else {
+                PendingVehicleAcquisition::Frigate { x, y, skiffs: 2 }
+            };
+            let expected_gold = 999
+                - match case_name.contains("skiff") {
+                    true => shipwright_price(shipwright, ShipwrightPurchaseKind::Skiff),
+                    false => shipwright_price(shipwright, ShipwrightPurchaseKind::Frigate),
+                };
+            if state.gold != expected_gold
+                || state
+                    .return_world
+                    .as_ref()
+                    .is_none_or(|world| world.pending_vehicle != Some(expected_pending))
+                || !state.message.contains("Delivery is queued")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not queue delivery at the published shipwright coordinate"
                 )));
             }
         }
