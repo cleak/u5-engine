@@ -17,7 +17,7 @@ use crate::shops::{
     sage_rumour_success_record_id_accepted, shop_placeholder_kind, shoppe_time_of_day_word,
 };
 use crate::tlk_control_codes::{COMMON_WORD_DICTIONARY_ENTRIES, shoppe_dictionary_index};
-use crate::{PUBLISHED_COMMON_WORD_DICTIONARY, read_disk_file};
+use crate::{PUBLISHED_COMMON_WORD_DICTIONARY, TextWindowSystem, read_disk_file};
 
 /// Per-record sliced view of a loaded SHOPPE.DAT.
 #[derive(Clone, Debug, Default)]
@@ -209,6 +209,55 @@ pub fn load_shoppe_records(path: &Path) -> io::Result<ShoppeRecords> {
     let bytes = read_disk_file(path)?;
     parse_shoppe_records_checked(&bytes)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
+}
+
+/// Shared SHOPPE.DAT text renderer for shop overlays.
+///
+/// The renderer owns the validated record table and provides both string
+/// expansion and text-window emission. Shop state machines still own the
+/// gameplay side effects and exact record selection.
+#[derive(Clone, Debug)]
+pub struct ShoppeTextRenderer {
+    records: ShoppeRecords,
+}
+
+impl ShoppeTextRenderer {
+    pub fn new(records: ShoppeRecords) -> Self {
+        Self { records }
+    }
+
+    pub fn load(path: &Path) -> io::Result<Self> {
+        Ok(Self::new(load_shoppe_records(path)?))
+    }
+
+    pub fn records(&self) -> &ShoppeRecords {
+        &self.records
+    }
+
+    pub fn render_record(
+        &self,
+        id: usize,
+        ctx: &ShoppeBarkContext,
+    ) -> Result<String, ShoppeDatError> {
+        render_shoppe_record(&self.records, id, ctx)
+    }
+
+    pub fn print_record(
+        &self,
+        system: &mut TextWindowSystem,
+        id: usize,
+        ctx: &ShoppeBarkContext,
+    ) -> Result<String, ShoppeDatError> {
+        let rendered = self.render_record(id, ctx)?;
+        system.print_wrapped_string(&rendered);
+        Ok(rendered)
+    }
+}
+
+impl From<ShoppeRecords> for ShoppeTextRenderer {
+    fn from(records: ShoppeRecords) -> Self {
+        Self::new(records)
+    }
 }
 
 /// Render one bark record byte slice into a String, substituting the
@@ -426,6 +475,49 @@ mod tests {
             render_shoppe_record(&records, 1, &ShoppeBarkContext::default()),
             Err(ShoppeDatError::EmptyRecord { id: 1 })
         ));
+    }
+
+    #[test]
+    fn shoppe_text_renderer_renders_and_prints_to_text_window() {
+        let records = ShoppeRecords {
+            records: vec![b"$ sells & for % gold in @".to_vec()],
+        };
+        let renderer = ShoppeTextRenderer::new(records);
+        let ctx = ShoppeBarkContext {
+            gold: 27,
+            vendor_name: "Julia",
+            item_name: "keys",
+            hour: 16,
+            ..Default::default()
+        };
+        let mut system = TextWindowSystem::new();
+        system.set_window_rect(0, 0, 0, 39, 5);
+        system.set_active_cursor(0, 0);
+
+        let rendered = renderer.print_record(&mut system, 0, &ctx).unwrap();
+
+        assert_eq!(rendered, "Julia sells keys for 27 gold in afternoon");
+        let rows = system.region_rows(0, 0, 39, 5, b' ');
+        let compact = rows.join("").replace(' ', "");
+        assert!(compact.contains("Juliasellskeysfor27goldinafternoon"));
+    }
+
+    #[test]
+    fn shoppe_text_renderer_errors_without_partial_window_paint() {
+        let records = ShoppeRecords {
+            records: vec![Vec::new()],
+        };
+        let renderer = ShoppeTextRenderer::new(records);
+        let mut system = TextWindowSystem::new();
+        system.set_window_rect(0, 0, 0, 9, 1);
+
+        let before = system.region_rows(0, 0, 9, 1, b'.');
+
+        assert_eq!(
+            renderer.print_record(&mut system, 0, &ShoppeBarkContext::default()),
+            Err(ShoppeDatError::EmptyRecord { id: 0 })
+        );
+        assert_eq!(system.region_rows(0, 0, 9, 1, b'.'), before);
     }
 
     #[test]
