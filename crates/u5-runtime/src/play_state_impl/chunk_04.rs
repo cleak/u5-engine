@@ -2777,8 +2777,15 @@ impl PlayState {
         let raw_blob = parse_tlk_raw(&game_dir.join(format!("{}.TLK", scene.family.stem())))
             .unwrap_or_default();
         self.common_word_dictionary = load_common_word_dictionary_optional(game_dir)?;
-        Ok(self
-            .talk_direction_with_dialogue_and_keyword_raw(direction, &dialogue, &raw_blob, keyword))
+        let shoppe_renderer =
+            crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir).ok();
+        Ok(self.talk_direction_with_dialogue_and_keyword_raw_inner(
+            direction,
+            &dialogue,
+            &raw_blob,
+            keyword,
+            shoppe_renderer.as_ref(),
+        ))
     }
 
     pub fn facing_talk_target(&self) -> Option<(u8, usize, usize)> {
@@ -2969,6 +2976,19 @@ impl PlayState {
         raw_blob: &HashMap<u16, Vec<Vec<u8>>>,
         keyword: Option<&str>,
     ) -> MoveOutcome {
+        self.talk_direction_with_dialogue_and_keyword_raw_inner(
+            direction, dialogue, raw_blob, keyword, None,
+        )
+    }
+
+    fn talk_direction_with_dialogue_and_keyword_raw_inner(
+        &mut self,
+        direction: Direction,
+        dialogue: &HashMap<u16, Vec<String>>,
+        raw_blob: &HashMap<u16, Vec<Vec<u8>>>,
+        keyword: Option<&str>,
+        shoppe_renderer: Option<&crate::shoppe_bark::ShoppeTextRenderer>,
+    ) -> MoveOutcome {
         if !matches!(self.area, Area::Town { .. }) {
             self.message = "Funny, no response!".to_string();
             return MoveOutcome::Blocked;
@@ -3003,10 +3023,14 @@ impl PlayState {
                 crate::shop_session::shop_session_for_talk_context(dialog_id, scene_byte)
             {
                 self.advance_turn();
-                let label = session.shop_label().to_string();
-                let prompt = session.opening_prompt().to_string();
+                let message = self.format_talk_shop_opening_message(
+                    dialog_id,
+                    &session,
+                    Some(family),
+                    shoppe_renderer,
+                );
                 self.active_shop = Some(session);
-                self.message = format!("{label} is now open. {prompt} Dispatch family: {family}.");
+                self.message = message;
                 return MoveOutcome::Talked;
             }
         }
@@ -3185,6 +3209,43 @@ impl PlayState {
             self.message = format!("Talked to {name}: {description}. {legacy_text} Your interest?");
         }
         MoveOutcome::Talked
+    }
+
+    fn format_talk_shop_opening_message(
+        &mut self,
+        dialog_id: u8,
+        session: &crate::shop_session::ActiveShopSession,
+        family: Option<&str>,
+        shoppe_renderer: Option<&crate::shoppe_bark::ShoppeTextRenderer>,
+    ) -> String {
+        if crate::shoppe_records::talk_entry_uses_shared_preamble(dialog_id) {
+            if let Some(renderer) = shoppe_renderer {
+                let ordinal = self.random_range_u8(0, 3);
+                if let Some(record_id) = crate::shoppe_records::shared_shop_bark_record(
+                    dialog_id,
+                    crate::shoppe_records::SharedShopBarkKind::Preamble,
+                    ordinal,
+                ) {
+                    let label = session.shop_label();
+                    let ctx = crate::shoppe_bark::ShoppeBarkContext {
+                        vendor_name: label,
+                        shop_name: label,
+                        hour: self.clock.hour,
+                        ..Default::default()
+                    };
+                    if let Ok(rendered) = renderer.render_record(record_id, &ctx) {
+                        return append_shop_opening_prompt(rendered, session.opening_prompt());
+                    }
+                }
+            }
+        }
+
+        let label = session.shop_label();
+        let prompt = session.opening_prompt();
+        match family {
+            Some(family) => format!("{label} is now open. {prompt} Dispatch family: {family}."),
+            None => format!("{label} is now open. {prompt}"),
+        }
     }
 
     /// Apply the byte-runner's recorded [`TlkActionDispatchVerb`] grants
@@ -4450,4 +4511,14 @@ fn conversation_opening_text(description: &str, greeting: &str) -> String {
     }
     text.push_str(TLK_KEYWORD_PROMPT);
     text
+}
+
+fn append_shop_opening_prompt(mut rendered: String, prompt: &str) -> String {
+    if rendered.ends_with('\n') {
+        rendered.push_str(prompt);
+    } else {
+        rendered.push(' ');
+        rendered.push_str(prompt);
+    }
+    rendered
 }

@@ -443,11 +443,11 @@ Current worktree context when this TODO was refreshed:
   Abbey, and Serpent's Hold native paths.
 - The 2026-05-24 clean-engine audit retired #1/#3/#5/#8/#9/#10/#11/#12/#13/#18/#19/#20/#31/#36/#38/#41/#43/#47/#49/#51/#54/#56/#57/#58
   as gameplay blockers after applying the current public answers and checked-in
-  spec. Current response-needed public blockers are #53, #60, and #62; #59
-  and #61 now have fresh public answers and are implementation follow-up items
-  rather than response-needed questions. Clean-engine follow-up comments are
-  currently latest on the response-needed issues, so do not post duplicate
-  comments unless new spec evidence or implementation questions appear.
+  spec. Current response-needed public blockers are #53, #60, and #62. #59
+  and #61 are implemented from their latest answers. Clean-engine follow-up
+  comments are currently latest on the response-needed issues, so do not post
+  duplicate comments unless new spec evidence or implementation questions
+  appear.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the
@@ -946,9 +946,9 @@ as public details become available.
     rooms, rest ambushes, and outdoor encounters can enter a combat frame.
   - Dungeon-room combat now uses the public issue #12/#19 source rules for
     high-bit-masked ordinary monsters, compact source-order placement, special
-    id post-write categories, `0xEC..0xEF` random-special selectors, guarded
-    unpublished special effects, Doom's absorbable field, and party positions
-    after the placed ordinary monsters.
+    id auxiliary-byte post-write formulas, `0xEC..0xEF` random-special
+    pre-roll selectors, Doom's absorbable field, and metadata-driven party
+    positions.
   - Dungeon active-monster combat now follows public issue #21: it uses the
     ambush framer path, builds a stock-floor 11-by-11 arena without loading
     `DUNGEON.CBT`, and creates exactly one initial monster at the central-front

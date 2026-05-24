@@ -36,10 +36,10 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#1` | Dungeon `0xF?` room-trigger and `0xA?` room-helper reload behavior | Implemented from latest issue answer and reconciled checked-in spec wording |
 | `cleak/u5-spec#3` | Terrain-combat arena records, spawn counts, replacement tiles, placement metadata, and pirate selector | Implemented from latest issue answer, including active-object byte-0 `0x2C..0x2F` pirate arena selector |
 | `cleak/u5-spec#5` | Combat party entry placement and descriptor seeding | Implemented for terrain and dungeon-room combat; party descriptor byte 3 links to the party slot while byte 1 keeps class-derived speed |
-| `cleak/u5-spec#8` | Combat non-party sleep/disabled state storage and wakeup counters | Storage implemented from latest issue answer; descriptor byte 2 carries the sleep/disabled bit and byte 4 remains the active-object link. Exact per-effect wakeup counters requested in a follow-up comment |
+| `cleak/u5-spec#8` | Combat non-party sleep/disabled state storage and wake timing | Implemented from latest issue answer: descriptor byte 2 carries the sleep/disabled bit, byte 4 remains the active-object link, Sleep/Sleep Field seed no duration counter, and the actor's own dispatch rolls `0..16` with only `16` clearing the bit |
 | `cleak/u5-spec#9`/`#22` | Directed Sleep/Wind combat cone targeting | Implemented from latest issue answer; cardinal direction cone targeting replaces target-slot targeting |
 | `cleak/u5-spec#10` | Combat arena field marker placement gate | Implemented from latest issue answer; Fire/Poison/Sleep/Energy markers place after confirmed impact without a random materialization gate |
-| `cleak/u5-spec#12`/`#19` | Dungeon-room combat party/source placement | Published row/column layout, helper scan suppression, ordinary boundary, special id categories, random-special selectors, and Doom marker behavior implemented; exact non-Doom post-write formulas/tables requested |
+| `cleak/u5-spec#12`/`#19` | Dungeon-room combat party/source placement | Implemented from latest issue answer: published row/column layout, helper scan suppression, ordinary boundary, special id categories, `0xEC..0xEF` pre-rolled palette selectors, non-Doom auxiliary-byte post-write formulas/tables, and Doom marker behavior |
 | `cleak/u5-spec#13` | Tavern/meal/sage selector table plus paid shared 26-row sage rumour topic table and success templates | Table/mechanics implemented, including per-tavern selector letters, lore continuation gating, SHOPPE.DAT fee quote/short-funds records, post-debit success-record RNG timing, and success rendering |
 | `cleak/u5-spec#15` | Inn Intelligence-adjusted room-rate formula and recovery behavior | Implemented |
 | `cleak/u5-spec#18` | Fixed hidden-treasure found bitmap and special record cookies | Implemented from latest issue answer and reconciled checked-in spec wording |
@@ -51,15 +51,15 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#47` | Hourly Ring of Regeneration tick and completed long-camp recovery | Implemented from latest issue answer and reconciled checked-in spec wording |
 | `cleak/u5-spec#48` | Non-combat Blink directional ray landing rule | Implemented |
 | `cleak/u5-spec#51` | Native tile `0x04` town poison-gas detection | Implemented |
-| `cleak/u5-spec#53` | Story step-1 wipe, STARTSC menu-loader reveal, and endgame transition clarification | Step-1 and STARTSC use public one-column-per-title-tick rectangles; ordinary END.DAT narrative pages no longer invent intro-style wipes; the late certificate rectangle operation is modeled separately |
+| `cleak/u5-spec#53` | Story step-1 wipe, STARTSC menu-loader reveal, and endgame transition clarification | Step-1 and STARTSC use public one-column-per-title-tick rectangles; ordinary END.DAT narrative pages no longer invent intro-style wipes; the late certificate rectangle operation is modeled separately, with a fresh follow-up asking for its exact primitive/cadence |
 | `cleak/u5-spec#54` | Return-to-View strip captions, timing, geometry, and exact effect rasters | Public timing/captions and 4x19 visible geometry implemented; exact effect rasters are explicitly deferred by the clean spec |
 | `cleak/u5-spec#56` | Endgame tableau active-object layout, sprite mapping, and movement timing | Implemented from latest issue answer; MISCMAPS record 3, active-object slots, class sprites, scene marker, branch movement, and `0x44`-gated refusal jitter follow the published contract |
 | `cleak/u5-spec#57` | `.NPC` slot-zero sentinel byte policy | Runtime scheduling skips slot zero regardless of stored bytes; validators do not reject a nonzero slot-zero type/tag byte |
-| `cleak/u5-spec#58` | Conversation reserved rebuke keyword table | Five functional reserved words are implemented; the unpublished 29 rebuke words remain inactive until the table and presentation behavior are published |
+| `cleak/u5-spec#58` | Conversation reserved rebuke keyword table | Implemented from latest issue answer: all 34 reserved entries are active, including the 29 rebuke words, space-boundary matching, fixed rebuke text, pause limit, and return-to-prompt behavior |
 | `cleak/u5-spec#59` | Overworld fall/transition and damage rules | Implemented: fixed chasm/falls preserves transport, applies Dex-gated one-HP checks, and ignores retired `world_waterfalls.tsv` current-sweep rows at runtime |
 | `cleak/u5-spec#60` | Look/View overlay pixel renderer tables and dungeon minimap exact glyph/flood presentation | Gameplay-depth View and minimap behavior is implemented from `systems/view.md`; exact per-class 4x4 glyph pixels, source-bank/tint choices, chunk-map pixels, and dungeon minimap renderer details remain clean-spec questions |
 | `cleak/u5-spec#61` | Town free-roaming active-object walker exact rules | Implemented from the latest answer: byte/floor eligibility, 50% gate, four-neighbor `0xA2`/`0x43` blocker gate, query-`0x10` destination classifier, occupancy checks, X-facing writes, Y-facing preservation, and visibility dirties on success |
-| `cleak/u5-spec#62` | Live shop-dialogue record selection and window pacing | Implemented where published: shared `SHOPPE.DAT` selection timing, Talk-to-shop inherited window-2 handoff, prompt window separation, and inn Pickup window-1 register geometry; exact per-shop live bark layout/pacing beyond those contracts remains open |
+| `cleak/u5-spec#62` | Live shop-dialogue record selection and window pacing | Implemented where published: shared `SHOPPE.DAT` selection timing, Talk-to-shop inherited window-2 handoff, prompt window separation, and inn Pickup window-1 register geometry; a fresh follow-up asks for the live per-state transcript/wait/clear table needed to replace modal summaries frame-accurately |
 
 Where an audit row references a pending issue, the engine carries a clean
 implementation or conservative placeholder that avoids private-derived guesses
@@ -245,7 +245,7 @@ Notes:
 | §2 T-Talk command | `play_state_impl/chunk_04.rs` Talk dispatch, position check | Talk tests in `chunk_21.rs` | Implemented |
 | §3 Four `.TLK` files | `tlk_runner.rs` filename dispatch | TLK file load tests | Implemented |
 | §4 NPC blob structure | `tlk_runner.rs` leading-entry parser, high-bit strip | parser tests | Implemented |
-| §5 Keyword scan | `conversation_session.rs::tlk_player_input_kind`, reserved-word table | keyword-match tests | Implemented for the five functional reserved words; `cleak/u5-spec#58` tracks the unpublished 29 rebuke words and exact pause/presentation behavior, so other unmatched input uses the normal no-match response |
+| §5 Keyword scan | `conversation_session.rs::tlk_player_input_kind`, reserved-word table | keyword-match tests | Implemented for the five functional reserved words plus all 29 published rebuke words from `cleak/u5-spec#58`; unmatched input uses the normal no-match response |
 | §6 Keyword input loop | `conversation_session.rs::AwaitingKeyword` phase | phase tests | Implemented |
 | §7 Byte runner | `tlk_runner.rs` full control-code dispatch | per-control-code tests | Implemented |
 | §7.1 Printable text | `tlk_runner.rs` word-buffer, soft-break | text emission tests | Implemented |
@@ -368,7 +368,7 @@ through the asset-backed Talk command path.
 |--------|----------|-------|--------|
 | `text-output.md` §1–§7 | `text_wrap.rs` fixed-cell text window, control bytes `0xFB`..`0xFF`, padded numeric printer, descriptor cursors | text-wrap tests in `chunk_13.rs`, `chunk_14.rs` | Implemented |
 | `stats-panel.md` §1–§5 | `stats_panel.rs` party rows, active-cursor handling, combat overlays | stats-panel tests | Implemented |
-| `display-driver.md`, `display-driver-abi.md` | `crates/u5-bevy/src/lib.rs` framebuffer composition, atlas-backed top-down and first-person rasters, fixed-font shared surface, intro column-sweep and endgame certificate-rectangle rendering, and per-step visual route replay harness; Tandy CLI raster depth aliases route to the EGA-equivalent path while Hercules is explicitly rejected as outside v1 scope | Bevy framebuffer/story-wipe/STARTSC/endgame-transition tests; visual frame suite; visual route suite; CLI display-depth tests | Implemented (exact unpublished wider story/endgame rectangles/rates, return-to-view captions/effect rasters — Presentation work) |
+| `display-driver.md`, `display-driver-abi.md` | `crates/u5-bevy/src/lib.rs` framebuffer composition, atlas-backed top-down and first-person rasters, fixed-font shared surface, intro column-sweep and endgame certificate-rectangle rendering, and per-step visual route replay harness; Tandy CLI raster depth aliases route to the EGA-equivalent path while Hercules is explicitly rejected as outside v1 scope | Bevy framebuffer/story-wipe/STARTSC/endgame-transition tests; visual frame suite; visual route suite; CLI display-depth tests | Implemented with public story/menu-loader timing; exact late endgame rectangle primitive/cadence and Return-to-View effect rasters remain presentation work |
 | `overlay-abi.md` | `crates/u5-bevy/src/lib.rs` overlay composition for status/Z-stats/endgame/intro | Bevy overlay tests | Implemented |
 
 ### `systems/prng.md`, `systems/timing.md`, `systems/stat-arithmetic.md`, `systems/active-objects.md`
@@ -428,45 +428,27 @@ are kept out of gameplay logic until the public spec publishes exact data.
 
 | Issue | Public gap | Engine placeholder |
 |------|------------|--------------------|
-| `cleak/u5-spec#8` | Exact combat sleep wakeup/decrement counters for each Sleep-producing path | Descriptor byte 2 bit `0x08` and the per-slot non-party sleep/disabled state are implemented; effect-specific starting durations and wake timing stay conservative until the clean table is published |
-| `cleak/u5-spec#10` | Exact player C-Cast field-spell impact-cell input path and out-of-arena resource behavior | Combat field markers follow the corrected no-random-gate placement/contact contract; the current target-coordinate path remains conservative until the input helper is published |
-| `cleak/u5-spec#11` | Exact Summon target-coordinate helper, off-arena behavior, and self-checking/rebound branch | Summon uses the public ordered clipped ring around the adjacent direction target, applies summoned/controlled flags, and leaves the unpublished self-checking branch unmodeled |
-| `cleak/u5-spec#12` | Exact non-Doom dungeon-room special-placement id post-write tables and actor/descriptor effects | Engine consumes the published party/source row layout, source-owned coordinates, helper-cell scan suppression, ordinary/source-family boundary, special id post-write categories, and Doom marker behavior; non-Doom special sources remain guarded markers until the exact formulas/tables are published |
-| `cleak/u5-spec#19` | Same non-Doom dungeon-room special-placement id/post-write table as `#12`, plus the unpublished four pre-rolled setup ids used by `0xEC..0xEF` | Ordinary dungeon-room sources, random-special low-bit selectors, special id categories, and Doom `0x3C` follow the public contract; effects that require unpublished tables remain guarded markers |
-| `cleak/u5-spec#53` | Remaining transition caller coverage | Step-1 and STARTSC use public one-column-per-title-tick rectangles; ordinary END.DAT narrative pages are fixed windows with no invented intro-style wipe; the late certificate rectangle operation is modeled without assigning a column cadence |
-| `cleak/u5-spec#58` | The unpublished 29 reserved rebuke words and exact rebuke/pause behavior in conversations | The five functional reserved words are active; other unmatched input follows the normal no-match path until the clean table is published |
-| `cleak/u5-spec#59` | Exact overworld water/current transition, transport, damage, and precedence rules | Implemented for the published baseline: ordinary water remains one-cell transport movement, fixed chasm/falls and whirlpool are synchronous effects, and `world_waterfalls.tsv` is ignored as a retired diagnostic artifact |
+| `cleak/u5-spec#53` | Late endgame rectangle-operation primitive/cadence and any caller-owned fixed-window page-in behavior | Step-1 and STARTSC use public one-column-per-title-tick rectangles; ordinary END.DAT narrative pages are fixed windows with no invented intro-style wipe; the late certificate rectangle operation is modeled at published order/bounds while awaiting primitive/timing detail |
 | `cleak/u5-spec#60` | Exact Look/View overlay glyph pixels, source-bank/tint selection, full chunk-map presentation, and dungeon minimap glyph/flood renderer details | Gameplay-depth View and minimap behavior is implemented from `systems/view.md`; exact per-class 4x4 glyph pixels, source-bank/tint choices, chunk-map pixels, and dungeon minimap renderer details remain clean-spec questions |
-| `cleak/u5-spec#61` | Exact town free-roaming active-object walker rules | Implemented from the latest public contract; remaining work is broader per-town placement/schedule audit, not the free-roaming walker mechanism |
-| `cleak/u5-spec#62` | Exhaustive live shop-dialogue record selection, modal rectangles, wait/clear/prompt pacing, and window rules | Implemented for the published shared timing and inherited-window/register geometry slices; remaining live dialogue details stay in the modal-summary path until published |
+| `cleak/u5-spec#62` | Exhaustive live shop-dialogue transcript, resident literal table, wait/clear/prompt pacing, and inherited-window first-frame state | Implemented for the published shared timing and inherited-window/register geometry slices; remaining live dialogue details stay in the modal-summary path until published |
 
 Follow-up questions were current as of the 2026-05-24 issue audit for the
 remaining response-needed items:
 
-- `cleak/u5-spec#8`: exact combat sleep starting counters and decrement/wakeup
-  timing for each Sleep-producing path.
-- `cleak/u5-spec#10`: exact player C-Cast field-spell target/impact path.
-- `cleak/u5-spec#11`: exact Summon target helper and self-checking rebound.
-- `cleak/u5-spec#12` / `#19`: exact non-Doom dungeon-room special-placement
-  id derivation, post-write formulas, range tables, and actor/descriptor effects.
-- `cleak/u5-spec#53`: any future transition caller rectangles beyond the now-published step-1, STARTSC, and certificate contracts,
-  reveal rates, clipping, title-tick interaction, and interrupt behavior.
-- `cleak/u5-spec#58`: exact conversation reserved rebuke keyword table and
-  presentation behavior.
-- `cleak/u5-spec#59`: exact overworld water/current forced-transition,
-  transport, damage, and precedence rules.
+- `cleak/u5-spec#53`: exact primitive and cadence for the late endgame
+  full-screen rectangle operation, plus any caller-owned clear/page-in behavior
+  around ordinary fixed `END.DAT` narrative windows.
 - `cleak/u5-spec#60`: exact Look/View overlay glyph pixels, source-bank/tint
   selection, full chunk-map presentation, and dungeon minimap glyph/flood
   renderer details.
-- `cleak/u5-spec#61`: exact town free-roaming active-object walker eligibility,
-  chance/PRNG timing, direction mapping, destination rules, state update order,
-  redraw behavior, and persistence.
-- `cleak/u5-spec#62`: exhaustive live shop-dialogue record selection, modal
-  rectangles, wait/clear/prompt pacing, and window rules beyond the initial
-  shared record-selection timing table.
+- `cleak/u5-spec#62`: exhaustive live shop-dialogue transcript, resident
+  literal/template table, wait/clear/prompt pacing, redraw rules, and
+  inherited-window first-frame state beyond the shared record-selection timing
+  and register geometry already published.
 
-No remaining response-needed issue in this audit is about #1, #3, #5, #9,
-#13, #18, #20, #31, #36, #38, #41, #43, #47, #49, #51, #54, #56, or #57; those
+No remaining response-needed issue in this audit is about #1, #3, #5, #8, #9,
+#10, #11, #12, #13, #18, #19, #20, #31, #36, #38, #41, #43, #47, #49, #51,
+#54, #56, #57, #58, #59, or #61; those
 are implemented from current checked-in public spec plus latest issue answers,
 or explicitly deferred as presentation work in the public spec.
 

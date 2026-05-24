@@ -2440,6 +2440,58 @@
     }
 
     #[test]
+    fn talk_shop_entry_uses_shared_preamble_record_when_shoppe_dat_is_loaded() {
+        let dir = debug_game_dir();
+        let scene = Scene::new(22).unwrap();
+        fs::write(dir.join(format!("{}.TLK", scene.family.stem())), tlk_bytes(&[])).unwrap();
+        fs::write(
+            dir.join("SHOPPE.DAT"),
+            shoppe_dat_with_records(&[(149, b"Guild preamble two.")]),
+        )
+        .unwrap();
+
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town { scene, floor: 0 };
+        state.player.facing = Direction::East;
+        state.prng_state = (0..=u16::MAX)
+            .find(|seed| {
+                let mut prng = *seed;
+                u5_prng_range_u16(&mut prng, 0, 3) == 1
+            })
+            .unwrap();
+        let mut expected_prng = state.prng_state;
+        let _ = u5_prng_range_u16(&mut expected_prng, 0, 3);
+        state.load_scheduled_npcs(&[
+            NpcSlot {
+                slot: 0,
+                type_byte: 0,
+                dialog_id: 0,
+                schedule: [0; 16],
+                name: None,
+            },
+            NpcSlot {
+                slot: 1,
+                type_byte: 1,
+                dialog_id: 0x86,
+                schedule: [0, 0, 0, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 8, 16, 20],
+                name: None,
+            },
+        ]);
+
+        assert_eq!(
+            state.talk_facing_with_game_dir(&dir).unwrap(),
+            MoveOutcome::Talked
+        );
+
+        assert!(state.message.starts_with("Guild preamble two."));
+        assert!(state.message.contains("Keys (A), Gems (B), Torches (C)"));
+        assert_eq!(state.prng_state, expected_prng);
+        assert!(state.active_shop.is_some());
+        assert_eq!(state.turn, 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn town_raw_tlk_status_tile_filter_runs_before_shop_dispatch() {
         let dialogue = HashMap::new();
         let raw = HashMap::new();

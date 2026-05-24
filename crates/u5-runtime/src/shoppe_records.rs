@@ -126,6 +126,52 @@ pub const fn shared_bark_record_by_seed(seed: u64) -> usize {
     ShoppeBand::SharedBark.pick_by_seed(seed)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SharedShopBarkKind {
+    Preamble,
+    InitialGreeting,
+    Farewell,
+}
+
+const SHARED_SHOP_BARK_UNUSED: usize = usize::MAX;
+
+const SHARED_SHOP_PREAMBLE_FIRST: [usize; 8] =
+    [SHARED_SHOP_BARK_UNUSED, 57, 92, 105, 127, 148, 165, 174];
+const SHARED_SHOP_INITIAL_FIRST: [usize; 8] = [0, 61, 96, 109, 131, 152, 169, 178];
+const SHARED_SHOP_FAREWELL_FIRST: [usize; 8] = [4, 65, 100, 113, 135, 156, 169, 182];
+
+pub const fn shop_trigger_row(dialog_id: u8) -> Option<usize> {
+    if dialog_id >= 0x81 && dialog_id <= 0x88 {
+        Some((dialog_id - 0x81) as usize)
+    } else {
+        None
+    }
+}
+
+pub const fn shared_shop_bark_record(
+    dialog_id: u8,
+    kind: SharedShopBarkKind,
+    ordinal: u8,
+) -> Option<usize> {
+    let Some(row) = shop_trigger_row(dialog_id) else {
+        return None;
+    };
+    let first = match kind {
+        SharedShopBarkKind::Preamble => SHARED_SHOP_PREAMBLE_FIRST[row],
+        SharedShopBarkKind::InitialGreeting => SHARED_SHOP_INITIAL_FIRST[row],
+        SharedShopBarkKind::Farewell => SHARED_SHOP_FAREWELL_FIRST[row],
+    };
+    if first == SHARED_SHOP_BARK_UNUSED || ordinal > 3 {
+        None
+    } else {
+        Some(first + ordinal as usize)
+    }
+}
+
+pub const fn talk_entry_uses_shared_preamble(dialog_id: u8) -> bool {
+    matches!(dialog_id, 0x83 | 0x85 | 0x86 | 0x87)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,6 +251,66 @@ mod tests {
             let id = shared_bark_record_by_seed(seed);
             assert!(ShoppeBand::SharedBark.contains(id));
         }
+    }
+
+    #[test]
+    fn shared_shop_bark_rows_match_published_table() {
+        assert_eq!(
+            shared_shop_bark_record(0x81, SharedShopBarkKind::Preamble, 0),
+            None
+        );
+        assert_eq!(
+            shared_shop_bark_record(0x81, SharedShopBarkKind::InitialGreeting, 0),
+            Some(0)
+        );
+        assert_eq!(
+            shared_shop_bark_record(0x81, SharedShopBarkKind::Farewell, 3),
+            Some(7)
+        );
+        assert_eq!(
+            shared_shop_bark_record(0x82, SharedShopBarkKind::Preamble, 3),
+            Some(60)
+        );
+        assert_eq!(
+            shared_shop_bark_record(0x83, SharedShopBarkKind::InitialGreeting, 2),
+            Some(98)
+        );
+        assert_eq!(
+            shared_shop_bark_record(0x84, SharedShopBarkKind::Farewell, 1),
+            Some(114)
+        );
+        assert_eq!(
+            shared_shop_bark_record(0x85, SharedShopBarkKind::Preamble, 0),
+            Some(127)
+        );
+        assert_eq!(
+            shared_shop_bark_record(0x86, SharedShopBarkKind::InitialGreeting, 3),
+            Some(155)
+        );
+        assert_eq!(
+            shared_shop_bark_record(0x87, SharedShopBarkKind::Farewell, 0),
+            Some(169)
+        );
+        assert_eq!(
+            shared_shop_bark_record(0x88, SharedShopBarkKind::Farewell, 3),
+            Some(185)
+        );
+        assert_eq!(
+            shared_shop_bark_record(0x88, SharedShopBarkKind::Farewell, 4),
+            None
+        );
+    }
+
+    #[test]
+    fn talk_entry_preamble_is_limited_to_published_shop_flows() {
+        assert!(!talk_entry_uses_shared_preamble(0x81));
+        assert!(!talk_entry_uses_shared_preamble(0x82));
+        assert!(talk_entry_uses_shared_preamble(0x83));
+        assert!(!talk_entry_uses_shared_preamble(0x84));
+        assert!(talk_entry_uses_shared_preamble(0x85));
+        assert!(talk_entry_uses_shared_preamble(0x86));
+        assert!(talk_entry_uses_shared_preamble(0x87));
+        assert!(!talk_entry_uses_shared_preamble(0x88));
     }
 
     #[test]

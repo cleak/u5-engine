@@ -7,7 +7,8 @@
 //! NPC says Bye. Each typed keyword resolves to one of:
 //!
 //! - the empty Bye shortcut,
-//! - one of the five reserved functional words (NAME/JOB/WORK/BYE/THANK),
+//! - one of the reserved functional words (NAME/JOB/WORK/BYE/THANK),
+//! - one of the reserved rebuke words,
 //! - an ordinary NPC keyword pair,
 //! - or the "I cannot help thee" no-match response.
 //!

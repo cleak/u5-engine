@@ -2171,7 +2171,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "combat-field-fire-marker-placement",
             options: world.clone(),
-            script: &["C1FGI6"],
+            script: &["C1FGI6,5"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "combat viewport",
@@ -2179,7 +2179,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "combat-field-poison-marker-placement",
             options: world.clone(),
-            script: &["C1GIN6"],
+            script: &["C1GIN6,5"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "combat viewport",
@@ -2187,7 +2187,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "combat-field-sleep-marker-placement",
             options: world.clone(),
-            script: &["C1GIZ6"],
+            script: &["C1GIZ6,5"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "combat viewport",
@@ -2195,7 +2195,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         RouteSmokeCase {
             name: "combat-field-energy-marker-placement",
             options: world.clone(),
-            script: &["C1GIS6"],
+            script: &["C1GIS6,5"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "combat viewport",
@@ -2841,7 +2841,7 @@ pub fn run_route_smoke_case(
             case.name, final_frame_kind, case.expected_frame_kind
         )));
     }
-    validate_route_smoke_case_state(&state, case.name)?;
+    validate_route_smoke_case_state(&state, case.name, game_dir)?;
 
     let final_raster_line = raster_diagnostic_line(&mut state, VIEWPORT_RADIUS, atlas)?;
     require_raster_hash(case, &final_raster_line)?;
@@ -4760,7 +4760,11 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
     Ok(())
 }
 
-fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Result<()> {
+fn validate_route_smoke_case_state(
+    state: &PlayState,
+    case_name: &str,
+    game_dir: &Path,
+) -> io::Result<()> {
     if let Some(index) = route_smoke_public_location_index(case_name) {
         let Some(entry) = published_world_location_entries().into_iter().nth(index) else {
             return Err(io::Error::other(format!(
@@ -5900,9 +5904,12 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             }
         }
         "shop-sage-topic-short-funds-route" => {
-            if state.gold != 49
-                || state.active_shop.is_some()
-                || state.message != TAVERN_AFFORDABILITY_REFUSAL_BARK
+            let expected_message =
+                u5_runtime::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
+                    .ok()
+                    .and_then(|renderer| renderer.render_sage_short_funds_record(None).ok())
+                    .unwrap_or_else(|| TAVERN_AFFORDABILITY_REFUSAL_BARK.to_string());
+            if state.gold != 49 || state.active_shop.is_some() || state.message != expected_message
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not preserve gold and exit on sage short funds"

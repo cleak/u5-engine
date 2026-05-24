@@ -107,10 +107,10 @@ impl ActiveShopSession {
 
     /// State-derived presentation for the active shop overlay.
     ///
-    /// This is intentionally semantic rather than a claim of exact
-    /// SHOPPE.DAT record selection. The text-window/frontend layers can
-    /// present the current shop state consistently while `cleak/u5-spec#62`
-    /// tracks exact live bark selection and pacing.
+    /// This remains semantic for states whose live transcript is not
+    /// fully public. Published entry barks and sage records are rendered
+    /// through SHOPPE.DAT elsewhere; this summary gives the frontend a
+    /// stable fallback for stateful prompts.
     pub fn modal_summary(&self) -> String {
         let mut lines = vec![format!("{}.", self.modal_shop_label())];
         match self {
