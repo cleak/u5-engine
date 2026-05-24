@@ -102,10 +102,44 @@
         assert_eq!(state.npcs.len(), 1);
         assert_eq!(state.npcs[0].slot, 1);
         assert_eq!((state.npcs[0].x, state.npcs[0].y), (5, 5));
+        assert!(state.npc_at_current_floor(4, 4).is_none());
+        assert!(state.npc_live_tile_at(4, 4).is_none());
+        assert_eq!(state.town_attack_target_at(0, 4, 4), None);
+        assert!(state.object_at_current_floor(4, 4).is_none());
         assert!(state
             .active_objects
             .iter()
             .all(|object| object.type_byte != 0x10 || (object.x, object.y) != (4, 4)));
+    }
+
+    #[test]
+    fn scheduled_npc_existing_active_object_relink_skips_slot_zero() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(SCENE_MOONGLOW).unwrap(),
+            floor: 0,
+        };
+        state.clock = GameClock::new(0, 0).unwrap();
+        state.sync_player_object();
+        state
+            .active_objects
+            .push(npc_active_object(0x10, 4, 4, 0));
+        state
+            .active_objects
+            .push(npc_active_object(0x11, 5, 5, 0));
+        let slots = vec![
+            scheduled_npc_test_slot(NPC_SENTINEL_SLOT, 0x10, 4, 4),
+            scheduled_npc_test_slot(1, 0x11, 5, 5),
+        ];
+
+        state.load_scheduled_npcs_from_existing_active_objects(&slots);
+
+        assert_eq!(state.npcs.len(), 1);
+        assert_eq!(state.npcs[0].slot, 1);
+        assert_eq!(state.npcs[0].active_object, Some(2));
+        assert!(state.npc_at_current_floor(4, 4).is_none());
+        assert!(state.npc_live_tile_at(4, 4).is_none());
+        assert_eq!(state.town_attack_target_at(0, 4, 4), None);
     }
 
     #[test]

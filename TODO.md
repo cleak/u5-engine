@@ -1048,7 +1048,10 @@ Goal: turn diagnostic interactions into game-like content.
     shipped `.NPC` corpus now runs boundary-hour, multi-floor scheduler
     routes when local clean assets are present, including active-object
     relinking, hidden-sprite suppression, one-cell-per-tick movement, and
-    linked `0xFC` scheduled NPC preservation during player-slot sync.
+    linked `0xFC` scheduled NPC preservation during player-slot sync. Slot-zero
+    sentinel records are skipped by runtime loading, live NPC/Talk/attack
+    lookups, and saved-active-object relinking even if their stored bytes are
+    nonzero; strict validator policy remains blocked on public #57.
   - Conversation sessions cover ASK-PARTY-NAME, ASK-WHO, non-`JOIN`
     recruitment prompts for roster companions, and non-roster name prompts
     without accidental joins.
