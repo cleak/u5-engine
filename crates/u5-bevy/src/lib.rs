@@ -942,6 +942,36 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_healer),
         },
         VisualRouteSuiteCase {
+            label: "route-shop-healer-cure-accept",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "C", "1", "Y"],
+            configure: Some(seed_visual_route_healer_cure),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-healer-heal-accept",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "H", "1", "Y"],
+            configure: Some(seed_visual_route_healer_heal),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-healer-resurrect-accept",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "R", "1", "Y"],
+            configure: Some(seed_visual_route_healer_resurrect),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-inn-rest-decline",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -1010,6 +1040,46 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             },
             script: &["F", "Y"],
             configure: Some(seed_visual_route_shipwright),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-shipwright-island-frigate-buy",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["F", "Y"],
+            configure: Some(seed_visual_route_shipwright_island),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-shipwright-crows-nest-skiff-buy",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["S", "Y"],
+            configure: Some(seed_visual_route_shipwright_crows_nest),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-shipwright-oaken-oar-frigate-buy",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["F", "Y"],
+            configure: Some(seed_visual_route_shipwright_oaken_oar),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-shipwright-rusty-bucket-skiff-buy",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["S", "Y"],
+            configure: Some(seed_visual_route_shipwright_rusty_bucket),
         },
         VisualRouteSuiteCase {
             label: "route-shop-guild-buy",
@@ -2145,11 +2215,27 @@ fn seed_visual_route_arms_local(state: &mut PlayState) {
 }
 
 fn seed_visual_route_healer(state: &mut PlayState) {
+    seed_visual_route_healer_member(state, b'G', 3, 30);
+}
+
+fn seed_visual_route_healer_cure(state: &mut PlayState) {
+    seed_visual_route_healer_member(state, b'P', 3, 30);
+}
+
+fn seed_visual_route_healer_heal(state: &mut PlayState) {
+    seed_visual_route_healer_member(state, b'G', 3, 30);
+}
+
+fn seed_visual_route_healer_resurrect(state: &mut PlayState) {
+    seed_visual_route_healer_member(state, b'D', 0, 30);
+}
+
+fn seed_visual_route_healer_member(state: &mut PlayState, status: u8, hp: u16, max_hp: u16) {
     state.gold = 999;
     if let Some(member) = state.party.first_mut() {
-        member.status = b'G';
-        member.hp = 3;
-        member.max_hp = member.max_hp.max(30);
+        member.status = status;
+        member.hp = hp;
+        member.max_hp = member.max_hp.max(max_hp);
     }
     state.active_shop = Some(ActiveShopSession::Healer(
         HealerShopState::Greeting,
@@ -2258,6 +2344,26 @@ fn seed_visual_route_sage_short_funds(state: &mut PlayState) {
 }
 
 fn seed_visual_route_shipwright(state: &mut PlayState) {
+    seed_visual_route_shipwright_shop(state, Shipwright::IslandShipwrights);
+}
+
+fn seed_visual_route_shipwright_island(state: &mut PlayState) {
+    seed_visual_route_shipwright_shop(state, Shipwright::IslandShipwrights);
+}
+
+fn seed_visual_route_shipwright_crows_nest(state: &mut PlayState) {
+    seed_visual_route_shipwright_shop(state, Shipwright::TheCrowsNest);
+}
+
+fn seed_visual_route_shipwright_oaken_oar(state: &mut PlayState) {
+    seed_visual_route_shipwright_shop(state, Shipwright::TheOakenOar);
+}
+
+fn seed_visual_route_shipwright_rusty_bucket(state: &mut PlayState) {
+    seed_visual_route_shipwright_shop(state, Shipwright::TheRustyBucket);
+}
+
+fn seed_visual_route_shipwright_shop(state: &mut PlayState, shipwright: Shipwright) {
     state.gold = 999;
     state.return_world = Some(WorldReturn {
         plane: WorldPlane::Britannia,
@@ -2272,7 +2378,7 @@ fn seed_visual_route_shipwright(state: &mut PlayState) {
         pending_vehicle: None,
     });
     state.active_shop = Some(ActiveShopSession::ShipBroker(
-        ShipBrokerState::for_shipwright(Shipwright::IslandShipwrights),
+        ShipBrokerState::for_shipwright(shipwright),
     ));
 }
 
@@ -6853,7 +6959,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 101);
+        assert_eq!(cases.len(), 108);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -6943,6 +7049,9 @@ mod tests {
         for label in [
             "route-shop-arms-local-buy-sell",
             "route-shop-healer-heal-decline",
+            "route-shop-healer-cure-accept",
+            "route-shop-healer-heal-accept",
+            "route-shop-healer-resurrect-accept",
             "route-shop-inn-rest-decline",
             "route-shop-reagent-buy",
             "route-shop-tavern-drink-and-food",
@@ -6950,6 +7059,10 @@ mod tests {
             "route-shop-horse-trader-no-marker-refusal",
             "route-shop-shipwright-quote-decline",
             "route-shop-shipwright-frigate-buy",
+            "route-shop-shipwright-island-frigate-buy",
+            "route-shop-shipwright-crows-nest-skiff-buy",
+            "route-shop-shipwright-oaken-oar-frigate-buy",
+            "route-shop-shipwright-rusty-bucket-skiff-buy",
             "route-shop-guild-buy",
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
@@ -7139,6 +7252,10 @@ mod tests {
             "route-shop-horse-trader-stablehouse-buy-02-y"
         );
         assert_eq!(
+            visual_route_step_label("route-shop-shipwright-crows-nest-skiff-buy", 2, "Y"),
+            "route-shop-shipwright-crows-nest-skiff-buy-02-y"
+        );
+        assert_eq!(
             visual_route_step_label("route-endgame-missing-box-terminal-jitter", 3, ""),
             "route-endgame-missing-box-terminal-jitter-03-empty"
         );
@@ -7163,7 +7280,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 340);
+        assert_eq!(reports.len(), 367);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -7195,6 +7312,9 @@ mod tests {
         assert!(manifest.contains("route-dungeon-exit-refusal-02-n"));
         assert!(manifest.contains("route-shop-arms-local-buy-sell-06-n"));
         assert!(manifest.contains("route-shop-healer-heal-decline-04-n"));
+        assert!(manifest.contains("route-shop-healer-cure-accept-04-y"));
+        assert!(manifest.contains("route-shop-healer-heal-accept-04-y"));
+        assert!(manifest.contains("route-shop-healer-resurrect-accept-04-y"));
         assert!(manifest.contains("route-shop-inn-rest-decline-03-p"));
         assert!(manifest.contains("route-shop-reagent-buy-03-n"));
         assert!(manifest.contains("route-shop-tavern-drink-and-food-05-n"));
@@ -7202,6 +7322,10 @@ mod tests {
         assert!(manifest.contains("route-shop-horse-trader-no-marker-refusal-02-y"));
         assert!(manifest.contains("route-shop-shipwright-quote-decline-02-n"));
         assert!(manifest.contains("route-shop-shipwright-frigate-buy-02-y"));
+        assert!(manifest.contains("route-shop-shipwright-island-frigate-buy-02-y"));
+        assert!(manifest.contains("route-shop-shipwright-crows-nest-skiff-buy-02-y"));
+        assert!(manifest.contains("route-shop-shipwright-oaken-oar-frigate-buy-02-y"));
+        assert!(manifest.contains("route-shop-shipwright-rusty-bucket-skiff-buy-02-y"));
         assert!(manifest.contains("route-shop-guild-buy-03-d"));
         assert!(manifest.contains("route-shop-sage-topic-miss-01-mantra"));
         assert!(manifest.contains("route-britannia-blink-east-ray-01-c1ip6"));

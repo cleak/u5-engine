@@ -137,7 +137,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 340 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 367 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -206,7 +206,21 @@ Last known verification state:
   `route-castle-extended-walk-and-save-09-z` `431f2a5ad9c4b417`,
   `route-dungeon-extended-turn-and-search-09-s6` `eb8f6403c755776f`, and
   `route-doom-combat-multi-round-pass-05-empty` `c1ffc74f45610145`. The
-  latest endgame visual-route expansion adds the public #56 six-member
+  latest shop visual-route expansion adds accepted healer cure/heal/resurrect
+  route endings `route-shop-healer-cure-accept-04-y`
+  `ebfe20f2b6b24a78`, `route-shop-healer-heal-accept-04-y`
+  `4c68bd7db37eeff9`, and
+  `route-shop-healer-resurrect-accept-04-y` `218eae0cf0de4491`, plus all
+  public shipwright delivery-row endings
+  `route-shop-shipwright-island-frigate-buy-02-y`
+  `a9cb3a58bcf43fe9`,
+  `route-shop-shipwright-crows-nest-skiff-buy-02-y`
+  `afa92cf12c5d0f91`,
+  `route-shop-shipwright-oaken-oar-frigate-buy-02-y`
+  `e47cf61edd1372b9`, and
+  `route-shop-shipwright-rusty-bucket-skiff-buy-02-y`
+  `6f9691ff490ad348`. The previous endgame visual-route expansion adds the
+  public #56 six-member
   class-tableau/restoration route
   `route-endgame-class-tableau-restoration-00-initial`
   `412fa97088d0737f` and

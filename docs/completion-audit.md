@@ -100,9 +100,10 @@ audit:
   `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls
   and a combat death/field/cursor marker gallery.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 340 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 367 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including horse-trader
-  purchases, spell routes for Locate, Light/Open, restore, active effects,
+  purchases, accepted healer cure/heal/resurrect, all four public shipwright
+  delivery-row purchases, spell routes for Locate, Light/Open, restore, active effects,
   directed Sleep/Poison Wind/Death Wind/Flame Wind combat casts, targeted
   Magic Missile/Tremor/Repel Undead/Charm/Polymorph/Clone, Conjure/Swarm/Summon
   Daemon, dungeon levels, dungeon fields/dispel, dungeon Open chest, extended
