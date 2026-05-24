@@ -8946,10 +8946,12 @@ fn sage_rumour_table_shape_matches_public_issue() {
     assert!(sage_rumour_record_id_accepted(91));
     assert!(!sage_rumour_record_id_accepted(83));
     assert!(!sage_rumour_record_id_accepted(92));
+    assert_eq!(SAGE_RUMOUR_FEE_QUOTE_RECORD, 84);
     assert!(sage_rumour_success_record_id_accepted(85));
     assert!(sage_rumour_success_record_id_accepted(88));
     assert!(!sage_rumour_success_record_id_accepted(84));
     assert!(!sage_rumour_success_record_id_accepted(89));
+    assert_eq!(SAGE_RUMOUR_SHORT_FUNDS_RECORD, 91);
     // Sanity: the input cap stays at 15 chars for free-text entry.
     assert_eq!(SAGE_TOPIC_INPUT_LIMIT, 15);
 }

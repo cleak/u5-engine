@@ -431,11 +431,10 @@ mod tests {
     /// this test in the same patch.
     #[test]
     fn clean_room_policy_constants_match_documented_defaults() {
-        // `cleak/u5-spec#49` — Create Food grant per cast is the
-        // PRNG roll `rand() mod 3` (uniform `0..=2`); not a flat
-        // constant any more.
-        assert_eq!(crate::CREATE_FOOD_MIN_GRANT, 0);
-        assert_eq!(crate::CREATE_FOOD_MAX_GRANT, 2);
+        // `cleak/u5-spec#49` — Create Food grant per cast is a
+        // uniform `1..=3`; successful casts never grant zero food.
+        assert_eq!(crate::CREATE_FOOD_MIN_GRANT, 1);
+        assert_eq!(crate::CREATE_FOOD_MAX_GRANT, 3);
         // `cleak/u5-spec#50` — Hourly poison damage per Poisoned living
         // member is a deterministic `-1` (not RNG-rolled).
         assert_eq!(crate::FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, 1);

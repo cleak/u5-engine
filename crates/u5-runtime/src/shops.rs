@@ -1328,8 +1328,10 @@ pub const SAGE_RUMOUR_TOPIC_COUNT: usize = 26;
 
 /// Public issue `cleak/u5-spec#13`: paid sage success barks are drawn
 /// from the sequential SHOPPE.DAT records 85..=88.
+pub const SAGE_RUMOUR_FEE_QUOTE_RECORD: usize = 84;
 pub const SAGE_RUMOUR_SUCCESS_RECORD_FIRST: usize = 85;
 pub const SAGE_RUMOUR_SUCCESS_RECORD_LAST: usize = 88;
+pub const SAGE_RUMOUR_SHORT_FUNDS_RECORD: usize = 91;
 
 /// Public issue `cleak/u5-spec#13` sage rumour-keyword input cap.
 /// The input pipeline accepts at most fifteen characters for the

@@ -14,7 +14,8 @@ use std::{error::Error, fmt, io};
 
 use crate::shoppe_records::ShoppeBand;
 use crate::shops::{
-    SHOPPE_DAT_LEN, SHOPPE_DAT_NONEMPTY_RECORDS, SHOPPE_DAT_RECORD_SLOTS, ShopPlaceholderKind,
+    SAGE_RUMOUR_FEE_QUOTE_RECORD, SAGE_RUMOUR_SHORT_FUNDS_RECORD, SHOPPE_DAT_LEN,
+    SHOPPE_DAT_NONEMPTY_RECORDS, SHOPPE_DAT_RECORD_SLOTS, ShopPlaceholderKind,
     sage_rumour_success_record_id_accepted, shop_placeholder_kind, shoppe_time_of_day_word,
 };
 use crate::tlk_control_codes::{COMMON_WORD_DICTIONARY_ENTRIES, shoppe_dictionary_index};
@@ -299,6 +300,34 @@ impl ShoppeTextRenderer {
             matched_name,
             location,
             dictionary,
+        )
+    }
+
+    pub fn render_sage_fee_quote_record(
+        &self,
+        fee: u16,
+        dictionary: Option<&[&str; COMMON_WORD_DICTIONARY_ENTRIES]>,
+    ) -> Result<String, ShoppeDatError> {
+        self.render_record(
+            SAGE_RUMOUR_FEE_QUOTE_RECORD,
+            &ShoppeBarkContext {
+                gold: fee,
+                dictionary,
+                ..Default::default()
+            },
+        )
+    }
+
+    pub fn render_sage_short_funds_record(
+        &self,
+        dictionary: Option<&[&str; COMMON_WORD_DICTIONARY_ENTRIES]>,
+    ) -> Result<String, ShoppeDatError> {
+        self.render_record(
+            SAGE_RUMOUR_SHORT_FUNDS_RECORD,
+            &ShoppeBarkContext {
+                dictionary,
+                ..Default::default()
+            },
         )
     }
 
@@ -714,7 +743,7 @@ mod tests {
     }
 
     #[test]
-    fn render_sage_rumour_shoppe_record_accepts_only_sage_band() {
+    fn render_sage_rumour_shoppe_record_accepts_only_success_band() {
         let mut records = ShoppeRecords {
             records: vec![Vec::new(); 93],
         };
@@ -732,6 +761,25 @@ mod tests {
         assert_eq!(
             render_sage_rumour_shoppe_record(&records, 84, "Greyson", "Cotham", None),
             Err(ShoppeDatError::MissingRecord { id: 84, slots: 93 })
+        );
+    }
+
+    #[test]
+    fn shoppe_text_renderer_renders_sage_quote_and_short_funds_records() {
+        let mut records = ShoppeRecords {
+            records: vec![Vec::new(); 93],
+        };
+        records.records[SAGE_RUMOUR_FEE_QUOTE_RECORD] = b"Pay % gold?".to_vec();
+        records.records[SAGE_RUMOUR_SHORT_FUNDS_RECORD] = b"No credit.".to_vec();
+        let renderer = ShoppeTextRenderer::new(records);
+
+        assert_eq!(
+            renderer.render_sage_fee_quote_record(50, None).unwrap(),
+            "Pay 50 gold?"
+        );
+        assert_eq!(
+            renderer.render_sage_short_funds_record(None).unwrap(),
+            "No credit."
         );
     }
 

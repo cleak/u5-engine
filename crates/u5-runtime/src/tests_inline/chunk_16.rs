@@ -808,10 +808,9 @@ BRITANNIA 11 21
 
     #[test]
     fn cast_create_food_increases_food_and_consumes_resources() {
-        // `cleak/u5-spec#49`: per-cast grant is `rand() mod 3` so the
-        // increment lands in `0..=2`. Cast many times and assert the
-        // grant range, spell-list consumption, and turn tick are
-        // unaffected by the random per-call grant.
+        // `cleak/u5-spec#49`: per-cast grant is uniform `1..=3`.
+        // Cast once and assert the grant range, spell-list
+        // consumption, and turn tick.
         let mut state = britannia_state(open_world_grid(), 5, 5);
         state.food = 12;
         state.spell_charges[CREATE_FOOD_SPELL_INDEX] = 1;
@@ -827,7 +826,7 @@ BRITANNIA 11 21
         let created = state.food - food_before;
         assert!(
             (CREATE_FOOD_MIN_GRANT..=CREATE_FOOD_MAX_GRANT).contains(&created),
-            "Create Food roll {created} outside spec range 0..=2"
+            "Create Food roll {created} outside spec range 1..=3"
         );
         assert_eq!(state.spell_charges[CREATE_FOOD_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 1);
@@ -840,20 +839,22 @@ BRITANNIA 11 21
     }
 
     #[test]
-    fn cast_create_food_zero_roll_still_consumes_resources() {
-        let mut zero_seed = None;
+    fn cast_create_food_minimum_roll_still_consumes_resources() {
+        let mut min_seed = None;
         for candidate in 0..=u16::MAX {
             let mut prng = candidate;
-            if u5_prng_range_u16(&mut prng, CREATE_FOOD_MIN_GRANT, CREATE_FOOD_MAX_GRANT) == 0 {
-                zero_seed = Some(candidate);
+            if u5_prng_range_u16(&mut prng, CREATE_FOOD_MIN_GRANT, CREATE_FOOD_MAX_GRANT)
+                == CREATE_FOOD_MIN_GRANT
+            {
+                min_seed = Some(candidate);
                 break;
             }
         }
-        let zero_seed = zero_seed.expect("PRNG should be able to roll zero for Create Food");
+        let min_seed = min_seed.expect("PRNG should be able to roll minimum for Create Food");
 
         let mut state = britannia_state(open_world_grid(), 5, 5);
         state.food = 77;
-        state.prng_state = zero_seed;
+        state.prng_state = min_seed;
         state.spell_charges[CREATE_FOOD_SPELL_INDEX] = 1;
         state.party[0].mana = CREATE_FOOD_COST;
         state.party[0].level = CREATE_FOOD_COST;
@@ -863,21 +864,25 @@ BRITANNIA 11 21
             PlayInputDisposition::Continue
         );
 
-        assert_eq!(state.food, 77);
+        assert_eq!(state.food, 77 + CREATE_FOOD_MIN_GRANT);
         assert_eq!(state.spell_charges[CREATE_FOOD_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
-        assert_eq!(state.message, "Created 0 food; stock is 77.");
+        assert_eq!(
+            state.message,
+            format!(
+                "Created {} food; stock is {}.",
+                CREATE_FOOD_MIN_GRANT,
+                77 + CREATE_FOOD_MIN_GRANT
+            )
+        );
     }
 
     #[test]
     fn cast_create_food_clamps_to_party_food_cap() {
-        // `cleak/u5-spec#49`: even at one below the cap, a max-roll
-        // grant must clamp at [`PARTY_FOOD_CAP`] without overflow.
-        // Seed the PRNG to produce a known-positive roll: advancing
-        // state `1` with `prng_range(0, 2)` consults a single
-        // advance whose low bits are non-zero, so the resulting roll
-        // is at least one.
+        // `cleak/u5-spec#49`: even at one below the cap, the
+        // guaranteed-positive grant must clamp at [`PARTY_FOOD_CAP`]
+        // without overflow.
         let mut state = britannia_state(open_world_grid(), 5, 5);
         state.food = PARTY_FOOD_CAP - 1;
         state.prng_state = 1;
@@ -890,11 +895,7 @@ BRITANNIA 11 21
             PlayInputDisposition::Continue
         );
 
-        // Either the roll was zero (food stays one below cap) or the
-        // roll was >=1 (food clamps at cap). Both are spec-legal; we
-        // only assert that no overflow has occurred.
-        assert!(state.food <= PARTY_FOOD_CAP);
-        assert!(state.food >= PARTY_FOOD_CAP - 1);
+        assert_eq!(state.food, PARTY_FOOD_CAP);
         assert_eq!(state.spell_charges[CREATE_FOOD_SPELL_INDEX], 0);
         assert_eq!(state.party[0].mana, 0);
         assert_eq!(state.turn, 1);
@@ -902,7 +903,7 @@ BRITANNIA 11 21
 
     #[test]
     fn cast_create_food_roll_stays_within_spec_range_across_many_casts() {
-        // `cleak/u5-spec#49`: verify the uniform `0..=2` grant by
+        // `cleak/u5-spec#49`: verify the uniform `1..=3` grant by
         // sampling many independent casts and confirming every roll
         // lands in the published range.
         let mut state = britannia_state(open_world_grid(), 5, 5);
@@ -910,20 +911,21 @@ BRITANNIA 11 21
         state.spell_charges[CREATE_FOOD_SPELL_INDEX] = 200;
         state.party[0].mana = (CREATE_FOOD_COST as u16 * 200).min(255) as u8;
         state.party[0].level = CREATE_FOOD_COST;
-        let mut seen = [false; 3];
+        let mut seen = [false; 4];
         for _ in 0..200 {
             let before = state.food;
             state.party[0].mana = CREATE_FOOD_COST + 1;
             state.spell_charges[CREATE_FOOD_SPELL_INDEX] = 1;
             handle_play_key_input(&mut state, 'C', "1IMX", Path::new("")).unwrap();
             let grant = state.food - before;
+            assert!(grant >= CREATE_FOOD_MIN_GRANT);
             assert!(grant <= CREATE_FOOD_MAX_GRANT);
             seen[grant as usize] = true;
         }
-        // Every value in `0..=2` should appear over 200 samples.
-        assert!(seen[0], "PRNG never rolled 0 over 200 casts");
+        // Every value in `1..=3` should appear over 200 samples.
         assert!(seen[1], "PRNG never rolled 1 over 200 casts");
         assert!(seen[2], "PRNG never rolled 2 over 200 casts");
+        assert!(seen[3], "PRNG never rolled 3 over 200 casts");
     }
 
     #[test]

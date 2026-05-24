@@ -948,13 +948,12 @@ pub const CREATE_FOOD_SPELL_INDEX: usize = 11;
 pub const CREATE_FOOD_COST: u8 = (CREATE_FOOD_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 /// `catalogs/spell-list.md` row 11 / `cleak/u5-spec#49`: maximum
 /// per-cast `In Xen Mani` (Create Food) grant. The spec answer to
-/// issue #49 confirms the handler rolls `rand() mod 3` per cast,
-/// yielding a uniform `0..=2` food increment that is then
-/// saturating-added against the [`PARTY_FOOD_CAP`]. The cast still
-/// consumes its MP and reagent costs even when the roll is zero.
-pub const CREATE_FOOD_MAX_GRANT: u16 = 2;
+/// issue #49 confirms the handler grants a uniform `1..=3` food
+/// increment that is then saturating-added against the
+/// [`PARTY_FOOD_CAP`]. Successful casts never grant zero food.
+pub const CREATE_FOOD_MAX_GRANT: u16 = 3;
 /// Minimum per-cast Create Food grant (uniform PRNG lower bound).
-pub const CREATE_FOOD_MIN_GRANT: u16 = 0;
+pub const CREATE_FOOD_MIN_GRANT: u16 = 1;
 pub const VAS_LOR_SPELL_INDEX: usize = 12;
 pub const VAS_LOR_COST: u8 = (VAS_LOR_SPELL_INDEX / SPELLS_PER_CIRCLE) as u8 + 1;
 pub const VAS_LOR_LIGHT_DURATION: u8 = 255;

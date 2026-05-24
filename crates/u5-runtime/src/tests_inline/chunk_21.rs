@@ -4571,10 +4571,12 @@
 
         let dir = debug_game_dir();
         let shoppe = shoppe_dat_with_records(&[
+            (SAGE_RUMOUR_FEE_QUOTE_RECORD, b"Asset fee: % gold?".as_slice()),
             (85, b"Asset says: seek & below *.".as_slice()),
             (86, b"Asset says: seek & below *.".as_slice()),
             (87, b"Asset says: seek & below *.".as_slice()),
             (88, b"Asset says: seek & below *.".as_slice()),
+            (SAGE_RUMOUR_SHORT_FUNDS_RECORD, b"Asset says no credit.".as_slice()),
         ]);
         std::fs::write(dir.join("SHOPPE.DAT"), shoppe).unwrap();
         let mut state = test_state(open_grid(), 1, 1);
@@ -4582,9 +4584,37 @@
         state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
 
         handle_play_key_input(&mut state, 'H', "ONE", &dir).unwrap();
+        assert_eq!(state.message, "Asset fee: 50 gold?");
         handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
 
         assert!(state.message.contains("Asset says: seek Malik below Moonglow."));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn end_to_end_sage_short_funds_prefers_shoppe_record_rendering() {
+        use crate::shop_runtime::SageState;
+        use crate::shop_session::ActiveShopSession;
+
+        let dir = debug_game_dir();
+        let shoppe = shoppe_dat_with_records(&[
+            (SAGE_RUMOUR_FEE_QUOTE_RECORD, b"Asset fee: % gold?".as_slice()),
+            (SAGE_RUMOUR_SHORT_FUNDS_RECORD, b"Asset says no credit.".as_slice()),
+        ]);
+        std::fs::write(dir.join("SHOPPE.DAT"), shoppe).unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.gold = 49;
+        state.prng_state = 0x2468;
+        state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+
+        handle_play_key_input(&mut state, 'H', "ONE", &dir).unwrap();
+        assert_eq!(state.message, "Asset fee: 50 gold?");
+        handle_play_key_input(&mut state, 'Y', "", &dir).unwrap();
+
+        assert_eq!(state.gold, 49);
+        assert_eq!(state.prng_state, 0x2468);
+        assert_eq!(state.message, "Asset says no credit.");
+        assert!(state.active_shop.is_none());
         let _ = fs::remove_dir_all(dir);
     }
 

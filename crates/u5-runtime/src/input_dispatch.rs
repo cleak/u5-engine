@@ -973,8 +973,7 @@ fn handle_active_shop_key_input(
                 SageState::Exited => SageOutcome::Exited,
             };
             let paid = matches!(outcome, SageOutcome::RumourFound { .. });
-            let message =
-                format_sage_outcome(render_active_sage_outcome_with_shoppe(outcome, game_dir));
+            let message = format_sage_outcome_with_shoppe(outcome, game_dir);
             let surcharge = if paid {
                 apply_active_shop_surcharge(state)
             } else {
@@ -1588,27 +1587,49 @@ fn format_sage_outcome(outcome: crate::shop_runtime::SageOutcome) -> String {
     }
 }
 
-fn render_active_sage_outcome_with_shoppe(
+fn format_sage_outcome_with_shoppe(
     outcome: crate::shop_runtime::SageOutcome,
     game_dir: &Path,
-) -> crate::shop_runtime::SageOutcome {
-    let crate::shop_runtime::SageOutcome::RumourFound { outcome, .. } = outcome else {
-        return outcome;
-    };
-    let rendered = crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
-        .ok()
-        .and_then(|renderer| {
-            renderer
-                .render_sage_rumour_record(
-                    outcome.record_id,
-                    outcome.quote.entry.subject,
-                    outcome.quote.entry.destination,
-                    None,
-                )
-                .ok()
-        })
-        .unwrap_or_else(|| outcome.rendered.clone());
-    crate::shop_runtime::SageOutcome::RumourFound { outcome, rendered }
+) -> String {
+    use crate::shop_runtime::SageOutcome::*;
+
+    let renderer = crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir).ok();
+    match outcome {
+        QuotedFee { quote } => renderer
+            .as_ref()
+            .and_then(|renderer| {
+                renderer
+                    .render_sage_fee_quote_record(quote.entry.fee, None)
+                    .ok()
+            })
+            .unwrap_or_else(|| format_sage_outcome(QuotedFee { quote })),
+        RefusedShortFunds {
+            required,
+            available,
+        } => renderer
+            .as_ref()
+            .and_then(|renderer| renderer.render_sage_short_funds_record(None).ok())
+            .unwrap_or_else(|| {
+                format_sage_outcome(RefusedShortFunds {
+                    required,
+                    available,
+                })
+            }),
+        RumourFound { outcome, rendered } => renderer
+            .as_ref()
+            .and_then(|renderer| {
+                renderer
+                    .render_sage_rumour_record(
+                        outcome.record_id,
+                        outcome.quote.entry.subject,
+                        outcome.quote.entry.destination,
+                        None,
+                    )
+                    .ok()
+            })
+            .unwrap_or(rendered),
+        outcome => format_sage_outcome(outcome),
+    }
 }
 
 fn format_reagent_outcome(outcome: crate::shop_runtime::ReagentShopOutcome) -> String {

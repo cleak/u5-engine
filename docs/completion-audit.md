@@ -40,10 +40,10 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#9`/`#22` | Directed Sleep/Wind combat cone targeting | Implemented from latest issue answer; cardinal direction cone targeting replaces target-slot targeting |
 | `cleak/u5-spec#10` | Combat arena field marker placement gate | Implemented from latest issue answer; Fire/Poison/Sleep/Energy markers place after confirmed impact without a random materialization gate |
 | `cleak/u5-spec#12`/`#19` | Dungeon-room combat party/source placement | Published row/column layout, helper scan suppression, ordinary boundary, special id categories, random-special selectors, and Doom marker behavior implemented; exact non-Doom post-write formulas/tables requested |
-| `cleak/u5-spec#13` | Tavern/meal/sage selector table plus paid shared 26-row sage rumour topic table and success templates | Table/mechanics implemented, including per-tavern selector letters, lore continuation gating, post-debit success-record RNG timing, and short-funds exit; exact fee/short-funds text source requested |
+| `cleak/u5-spec#13` | Tavern/meal/sage selector table plus paid shared 26-row sage rumour topic table and success templates | Table/mechanics implemented, including per-tavern selector letters, lore continuation gating, SHOPPE.DAT fee quote/short-funds records, post-debit success-record RNG timing, and success rendering |
 | `cleak/u5-spec#15` | Inn Intelligence-adjusted room-rate formula and recovery behavior | Implemented |
 | `cleak/u5-spec#18` | Fixed hidden-treasure found bitmap and special record cookies | Implemented from latest issue answer and reconciled checked-in spec wording |
-| `cleak/u5-spec#20` | Location and dungeon return coordinates | Main 40-row published coordinate table implemented; follow-up asks the spec to reconcile stale Known Gaps wording and clarify remaining coordinate families |
+| `cleak/u5-spec#20` | Location and dungeon return coordinates | Main 40-row published coordinate table implemented; remaining shrine/Codex, moongate, plane-transition, Hythloth, and underworld coordinate families are owned by their specific systems |
 | `cleak/u5-spec#28` | Horse-trader sale path replacing old stationary-display purchase premise | Implemented |
 | `cleak/u5-spec#31` | Eternal-Flame-gated Shadowlord shard destruction predicates | Implemented, including hideout slots and low-byte quest-progress bits |
 | `cleak/u5-spec#41` | Exact arms-shop eight-item stock rows and buy transaction quote selector/text flow | Implemented |
@@ -54,10 +54,12 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 | `cleak/u5-spec#53` | Story step-1 rectangle-transition wipe pattern and pacing | Step-1 implemented from public answer; wider story/endgame rectangle tables now have a follow-up clarification request |
 | `cleak/u5-spec#54` | Return-to-View strip captions, timing, geometry, and exact effect rasters | Public timing/captions and 4x19 visible geometry implemented; exact effect rasters are explicitly deferred by the clean spec |
 | `cleak/u5-spec#56` | Endgame tableau active-object layout, sprite mapping, and movement timing | Implemented from latest issue answer; MISCMAPS record 3, active-object slots, class sprites, scene marker, branch movement, and `0x44`-gated refusal jitter follow the published contract |
-| `cleak/u5-spec#57` | `.NPC` slot-zero sentinel byte policy | Runtime scheduling skips slot zero regardless of stored bytes; strict validator behavior remains a spec question |
+| `cleak/u5-spec#57` | `.NPC` slot-zero sentinel byte policy | Runtime scheduling skips slot zero regardless of stored bytes; validators do not reject a nonzero slot-zero type/tag byte |
 | `cleak/u5-spec#58` | Conversation reserved rebuke keyword table | Five functional reserved words are implemented; the unpublished 29 rebuke words remain inactive until the table and presentation behavior are published |
 | `cleak/u5-spec#59` | Overworld water/current transition and damage rules | New clean-spec issue opened; engine retains conservative sidecar-backed behavior until exact forced-transition rows, transport handling, and damage rules are published |
 | `cleak/u5-spec#60` | Look/View overlay pixel renderer tables and dungeon minimap exact glyph/flood presentation | Gameplay-depth View and minimap behavior is implemented from `systems/view.md`; exact per-class 4x4 glyph pixels, source-bank/tint choices, chunk-map pixels, and dungeon minimap renderer details remain clean-spec questions |
+| `cleak/u5-spec#61` | Ship/skiff boarding and handoff edge cases | Core boarding, X-it, skiff launch, shipwright delivery, and save/reload behavior are implemented; exact refusal/handoff edge cases remain a clean-spec question |
+| `cleak/u5-spec#62` | Live shop-dialogue record selection and window pacing | Initial shared `SHOPPE.DAT` selection timing is implemented where published; exhaustive live dialogue records, modal rectangles, wait/clear/prompt pacing, and window rules remain clean-spec questions |
 
 Where an audit row references a pending issue, the engine carries a clean
 implementation or conservative placeholder that avoids private-derived guesses
@@ -286,7 +288,7 @@ through the asset-backed Talk command path.
 | §8.3 Healer | healer arm in `shop_runtime.rs`; Minoc bypass | healer tests | Implemented |
 | §8.4 Innkeeper | `shop_runtime.rs` inn flow; stay counter in `clock.rs`; public issue #15 Intelligence-adjusted rest, leave, and pickup charges plus paid-rest class recovery and poison death conversion | inn tests | Implemented |
 | §8.5 Tavernkeeper | tavern arm in `shop_runtime.rs` | tavern tests | Implemented |
-| §8.6 Sage | sage arm: shared 26-row paid keyword lookup, strict four-letter topic boundary, fee quote/confirmation, gold debit before success-template RNG, short-funds exit, and SHOPPE record 85..=88 success rendering | sage runtime tests plus full public #13 table-sync and PRNG-timing tests | Implemented (exact fee/short-funds resident text source pending #13 follow-up) |
+| §8.6 Sage | sage arm: shared 26-row paid keyword lookup, strict four-letter topic boundary, SHOPPE record 84 fee quote, gold debit before success-template RNG, short-funds exit with SHOPPE record 91, and SHOPPE record 85..=88 success rendering | sage runtime tests plus full public #13 table-sync, SHOPPE rendering, and PRNG-timing tests | Implemented |
 | §8.7 Shipwright | shipwright arm; fixed scene-entry delivery coordinates; pending vehicle in `play_state_struct.rs` | shipwright tests | Implemented |
 | §8.8 Horse trader | horse arm | horse tests | Implemented |
 | §8.9 Reagent vendor | `shops.rs` per-herbalist matrix | reagent tests | Implemented |
@@ -388,7 +390,7 @@ through the asset-backed Talk command path.
 | `formats/data-ovl.md` | `misc_tables_io.rs`, `world_tables_io.rs` overlay readers | DATA.OVL field tests | Implemented |
 | `formats/dungeon-dat.md` | `dungeon_tables_io.rs::load_dungeon_dat` | dungeon decode tests | Implemented |
 | `formats/end-dat.md`, `formats/endmsg-dat.md` | `end_io.rs`, `endmsg_io.rs` | END/ENDMSG tests | Implemented |
-| `formats/font-ch.md`, `formats/font-hcs.md`, `formats/font-pcs.md` | `fonts_io.rs::load_ch_font`, `fonts_io.rs::load_hcs_font`, canonical sparse `parse_proportional_font_resource`, explicit legacy local `load_legacy_proportional_font`, and `visual_asset_audit.rs::audit_visual_assets` fixed-font aggregate report | font decode tests plus synthetic and local-clean fixed-font aggregate audits for `IBM.CH`, `RUNES.CH`, `IBM.HCS`, and `RUNES.HCS` when assets are present; sparse PCS tests now reject LZW wrappers on canonical parser entry points and exercise legacy compatibility separately | Implemented at public sparse-resource depth; exact pre-decoded variant detection remains tracked by `cleak/u5-spec#36` |
+| `formats/font-ch.md`, `formats/font-hcs.md`, `formats/font-pcs.md` | `fonts_io.rs::load_ch_font`, `fonts_io.rs::load_hcs_font`, canonical sparse `parse_proportional_font_resource`, explicit legacy local `load_legacy_proportional_font`, and `visual_asset_audit.rs::audit_visual_assets` fixed-font aggregate report | font decode tests plus synthetic and local-clean fixed-font aggregate audits for `IBM.CH`, `RUNES.CH`, `IBM.HCS`, and `RUNES.HCS` when assets are present; sparse PCS tests now reject LZW wrappers on canonical parser entry points and exercise legacy compatibility separately | Implemented at public sparse-resource depth; pre-decoded local variants remain noncanonical compatibility fallbacks |
 | `formats/karma-dat.md` | `endmsg_io.rs::load_karma_dat` (6 verdict records) | karma decode tests | Implemented |
 | `formats/location-dat.md` | `map_io.rs::load_floor`, `map_io.rs::resolve_location_floor_page`, `town_tables_io.rs::load_*_dat`, `location_audit.rs::audit_location_dat_files` | layout constants, location decode tests, synthetic `LOCATION.DAT` audit, and local clean all-family authored-cell audit when assets are present | Implemented |
 | `formats/look2-dat.md` | `misc_tables_io.rs::load_look2` (descriptions) | look2 decode tests | Implemented |
@@ -430,16 +432,13 @@ are kept out of gameplay logic until the public spec publishes exact data.
 | `cleak/u5-spec#10` | Exact player C-Cast field-spell impact-cell input path and out-of-arena resource behavior | Combat field markers follow the corrected no-random-gate placement/contact contract; the current target-coordinate path remains conservative until the input helper is published |
 | `cleak/u5-spec#11` | Exact Summon target-coordinate helper, off-arena behavior, and self-checking/rebound branch | Summon uses the public ordered clipped ring around the adjacent direction target, applies summoned/controlled flags, and leaves the unpublished self-checking branch unmodeled |
 | `cleak/u5-spec#12` | Exact non-Doom dungeon-room special-placement id post-write tables and actor/descriptor effects | Engine consumes the published party/source row layout, source-owned coordinates, helper-cell scan suppression, ordinary/source-family boundary, special id post-write categories, and Doom marker behavior; non-Doom special sources remain guarded markers until the exact formulas/tables are published |
-| `cleak/u5-spec#13` | Exact resident text source for the sage fee quote/confirmation and short-funds refusal | Shared paid 26-row table, strict matching, confirmation/debit, short-funds exit, post-debit success-record RNG timing, and success rendering are implemented from the checked-in spec; prompt wording remains conservative until published |
 | `cleak/u5-spec#19` | Same non-Doom dungeon-room special-placement id/post-write table as `#12`, plus the unpublished four pre-rolled setup ids used by `0xEC..0xEF` | Ordinary dungeon-room sources, random-special low-bit selectors, special id categories, and Doom `0x3C` follow the public contract; effects that require unpublished tables remain guarded markers |
-| `cleak/u5-spec#20` | Stale gazetteer known-gaps wording versus the coordinate families still unpublished after the 40-row stock location table | Stock world-location entry/return rows use the native checked-in gazetteer table; remaining moongate/plane-transition coordinate families stay sidecar-backed or separately owned until the spec names them |
-| `cleak/u5-spec#36` | Exact `.BIT` / `PROPORT.PCS` pre-decoded variant-detection and layout contract | Canonical sparse resources are normative; local compatibility fallbacks remain conservative and are not promoted to clean spec behavior |
-| `cleak/u5-spec#49` | Exact Create Food grant range/message contract (`0..=2` versus `1..=3`) | Engine uses the latest issue-comment leaning: uniform `0..=2`, cap at 9999, and successful zero-grant casts after normal resource gates |
 | `cleak/u5-spec#53` | Exact wider story/endgame rectangle-transition bounds and per-caller reveal rates beyond the published step-1 rectangle | Step-1 uses the public one-column-per-title-tick 36-column contract; unpublished wider story/endgame transitions use the clean column-sweep/full-page fallback |
-| `cleak/u5-spec#54` | Return-to-View exact strip-reveal schedule and local cell-effect rasters | Parser/scheduler/overlay composition implement the public 4x19 source layout, fixed captions from LoadMapStrip, high-opcode no-ops, `(x, y + 7)` effect coordinates, and timing model; exact reveal/raster parity is clean-spec-deferred presentation work |
-| `cleak/u5-spec#57` | Whether shipped `.NPC` slot-zero records may contain nonzero schedule/dialog/type bytes and how validators should treat them | Runtime scheduling, saved-active-object relinking, occupancy, Talk, attack targeting, and roster counts skip slot zero regardless of stored bytes; no strict byte-zero validation is applied |
 | `cleak/u5-spec#58` | The unpublished 29 reserved rebuke words and exact rebuke/pause behavior in conversations | The five functional reserved words are active; other unmatched input follows the normal no-match path until the clean table is published |
 | `cleak/u5-spec#59` | Exact overworld water/current transition, transport, damage, and precedence rules | Existing waterfall/chasm/whirlpool routes remain conservative and route-tested; exact current/waterfall forced-movement parity waits on the published transition table |
+| `cleak/u5-spec#60` | Exact Look/View overlay glyph pixels, source-bank/tint selection, full chunk-map presentation, and dungeon minimap glyph/flood renderer details | Gameplay-depth View and minimap behavior is implemented from `systems/view.md`; exact per-class 4x4 glyph pixels, source-bank/tint choices, chunk-map pixels, and dungeon minimap renderer details remain clean-spec questions |
+| `cleak/u5-spec#61` | Exact ship/skiff boarding, boarding refusal, and vehicle handoff edge cases | Core boarding, X-it, skiff launch, shipwright delivery, and save/reload behavior are implemented; exact refusal/handoff edge cases remain conservative until published |
+| `cleak/u5-spec#62` | Exhaustive live shop-dialogue record selection, modal rectangles, wait/clear/prompt pacing, and window rules | Initial shared `SHOPPE.DAT` selection timing is implemented where published; remaining live dialogue/window details stay in the modal-summary path until published |
 
 Follow-up questions were current as of the 2026-05-24 issue audit for the
 remaining response-needed items:
@@ -450,19 +449,8 @@ remaining response-needed items:
 - `cleak/u5-spec#11`: exact Summon target helper and self-checking rebound.
 - `cleak/u5-spec#12` / `#19`: exact non-Doom dungeon-room special-placement
   id derivation, post-write formulas, range tables, and actor/descriptor effects.
-- `cleak/u5-spec#13`: exact resident text source/templates for the sage fee
-  quote/confirmation prompt and short-funds refusal branch.
-- `cleak/u5-spec#20`: clarification of which coordinate families remain
-  unpublished now that the main 40-row stock location table is checked in.
-- `cleak/u5-spec#36`: exact pre-decoded `.BIT` / `PROPORT.PCS` variant
-  detection, if that compatibility format is intended to be normative.
-- `cleak/u5-spec#49`: exact Create Food grant range and success-message
-  contract.
 - `cleak/u5-spec#53`: exact wider story/endgame rectangle-transition bounds,
   reveal rates, clipping, title-tick interaction, and interrupt behavior.
-- `cleak/u5-spec#54`: exact Return-to-View strip-reveal schedule, if the
-  middle-row reveal prose is normative.
-- `cleak/u5-spec#57`: exact `.NPC` slot-zero byte/validator policy.
 - `cleak/u5-spec#58`: exact conversation reserved rebuke keyword table and
   presentation behavior.
 - `cleak/u5-spec#59`: exact overworld water/current forced-transition,
@@ -470,11 +458,16 @@ remaining response-needed items:
 - `cleak/u5-spec#60`: exact Look/View overlay glyph pixels, source-bank/tint
   selection, full chunk-map presentation, and dungeon minimap glyph/flood
   renderer details.
+- `cleak/u5-spec#61`: exact ship/skiff boarding, boarding refusal, and vehicle
+  handoff edge cases.
+- `cleak/u5-spec#62`: exhaustive live shop-dialogue record selection, modal
+  rectangles, wait/clear/prompt pacing, and window rules beyond the initial
+  shared record-selection timing table.
 
 No remaining response-needed issue in this audit is about #1, #3, #5, #9,
-#18, #31, #38, #41, #43, #47, #51, or #56; those are implemented from current
-checked-in public spec plus latest issue answers, or explicitly deferred as
-presentation work in the public spec.
+#13, #18, #20, #31, #36, #38, #41, #43, #47, #49, #51, #54, #56, or #57; those
+are implemented from current checked-in public spec plus latest issue answers,
+or explicitly deferred as presentation work in the public spec.
 
 ## Presentation Work (Separate From Gameplay Correctness)
 

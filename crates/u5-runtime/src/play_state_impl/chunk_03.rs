@@ -2722,8 +2722,8 @@ impl PlayState {
         }
 
         let before = self.food;
-        // `cleak/u5-spec#49`: per-cast grant is `rand() mod 3` —
-        // uniform `0..=2` — capped at [`PARTY_FOOD_CAP`].
+        // `cleak/u5-spec#49`: per-cast grant is uniform `1..=3`,
+        // capped at [`PARTY_FOOD_CAP`].
         let grant = u5_prng_range_u16(
             &mut self.prng_state,
             CREATE_FOOD_MIN_GRANT,

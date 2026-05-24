@@ -402,7 +402,7 @@ Current worktree context when this TODO was refreshed:
   along the bounded ray. Route-smoke and Bevy visual-route coverage exercise an
   eastward Britannia ray.
 - Create Food follows the latest public `cleak/u5-spec#49` guidance with a
-  tiny `0..=2` food PRNG grant capped at the party food cap.
+  tiny `1..=3` food PRNG grant capped at the party food cap.
 - TLK `0x85` accepted toll payments debit gold, increment the toll-progress
   counter, and apply the published milestone karma behavior from
   `cleak/u5-spec#27`.
@@ -427,11 +427,10 @@ Current worktree context when this TODO was refreshed:
   provisions letters (`R` or `P` where present), and per-tavern lore letters
   with lore gated behind an accepted continuation branch.
 - Paid sage rumours use the public `cleak/u5-spec#13` 26-row topic table,
-  strict topic matching, and success-record random draw only after the accepted
+  strict topic matching, SHOPPE.DAT record 84 fee quotes, SHOPPE.DAT record 91
+  short-funds refusal, and success-record random draw only after the accepted
   confirmation passes the gold/debit gate; short-funds and declines preserve
-  PRNG state, and short-funds exits the sage flow per checked-in spec. Exact
-  fee-prompt and short-funds text source is now asked in the latest #13
-  follow-up.
+  PRNG state, and short-funds exits the sage flow per checked-in spec.
 - Public `cleak/u5-spec#28` corrected the old stationary-display purchase path
   to horse-trader sale rows. The obsolete stationary-display purchase runtime is
   removed, and horse-trader runtime/talk-shop/route-smoke/visual tests cover
@@ -442,16 +441,12 @@ Current worktree context when this TODO was refreshed:
   the party; successful destruction marks the native hideout byte and ORs the
   save-backed quest-progress word bits. Route smoke covers Lycaeum, Empath
   Abbey, and Serpent's Hold native paths.
-- The 2026-05-24 clean-engine audit retired #1/#3/#5/#8/#9/#18/#31/#38/#41/#43/#47/#51/#56
+- The 2026-05-24 clean-engine audit retired #1/#3/#5/#9/#13/#18/#20/#31/#36/#38/#41/#43/#47/#49/#51/#54/#56/#57
   as gameplay blockers after applying the current public answers and checked-in
-  spec. Current response-needed public blockers are #10, #11, #12/#19, #13,
-  #36, #49, #53, #54, #57, and #58; clean-engine follow-up comments are
+  spec. Current response-needed public blockers are #8, #10, #11, #12/#19,
+  #53, #58, #59, #60, #61, and #62; clean-engine follow-up comments are
   currently latest on each of those issues, so do not post duplicate comments
-  unless new spec evidence or implementation questions appear. Follow-up parity
-  questions are also now open/latest on #8 for exact combat sleep wakeup
-  counters, #20 for stale gazetteer known-gaps wording versus remaining
-  coordinate families, #59 for overworld water/current transition and damage
-  rules, and #60 for Look/View overlay pixel renderer tables.
+  unless new spec evidence or implementation questions appear.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the
@@ -913,7 +908,7 @@ the public combat contract while exact combat presentation evolves.
     including dungeon combat-active refusal and resurrection experience, mana,
     level, and max-HP recomputation.
   - Create Food uses the latest public `cleak/u5-spec#49` tiny PRNG grant
-    (`0..=2`) and cap behavior.
+    (`1..=3`) and cap behavior.
   - Rel Hur uses the public `weather.md` prompt-to-wind mapping and is covered
     by cast/resource-order tests.
   - Non-combat Blink uses the public `cleak/u5-spec#48` cardinal direction
@@ -1057,11 +1052,11 @@ Goal: turn diagnostic interactions into game-like content.
     floor changes through the `0xC8`/`0xC9` floor-link marker BFS. The
     shipped `.NPC` corpus now runs boundary-hour, multi-floor scheduler
     routes when local clean assets are present, including active-object
-    relinking, hidden-sprite suppression, one-cell-per-tick movement, and
-    linked `0xFC` scheduled NPC preservation during player-slot sync. Slot-zero
-    sentinel records are skipped by runtime loading, live NPC/Talk/attack
-    lookups, and saved-active-object relinking even if their stored bytes are
-    nonzero; strict validator policy remains blocked on public #57.
+  relinking, hidden-sprite suppression, one-cell-per-tick movement, and
+  linked `0xFC` scheduled NPC preservation during player-slot sync. Slot-zero
+  sentinel records are skipped by runtime loading, live NPC/Talk/attack
+  lookups, and saved-active-object relinking even if their stored bytes are
+    nonzero; validators do not reject a nonzero slot-zero type/tag byte.
   - Conversation sessions cover ASK-PARTY-NAME, ASK-WHO, non-`JOIN`
     recruitment prompts for roster companions, and non-roster name prompts
     without accidental joins.
@@ -1090,7 +1085,7 @@ Goal: keep asset readers complete while preserving repository cleanliness.
 - Existing local decoders cover many files, paired-graphics LZW resources, and
   canonical sparse `.BIT` / `PROPORT.PCS` driver resources. Local preprocessed
   `.BIT` / `PROPORT.PCS` wrappers are handled only through explicit legacy
-  compatibility paths while `cleak/u5-spec#36` remains open.
+  compatibility paths and remain noncanonical.
 - Continue adding tests that verify:
   - declared decoded lengths,
   - parser shape,
@@ -1114,10 +1109,10 @@ Goal: keep asset readers complete while preserving repository cleanliness.
     covering the shipped IBM and Runes resources when local clean assets are
     present; reports stay to glyph counts, dimensions, bit masks, hashes, and
     nonzero totals rather than raw glyph rows,
-  - proportional text sparse-resource glyph mapping and preprocessed variant
-    detection (pending `cleak/u5-spec#36`),
-  - bitmap sparse-resource rendering versus local preprocessed variants
-    (pending `cleak/u5-spec#36` for exact variant-detection policy),
+  - proportional text sparse-resource glyph mapping and noncanonical local
+    preprocessed variant compatibility,
+  - bitmap sparse-resource rendering versus noncanonical local preprocessed
+    variants,
   - any distribution variants the user wants to support.
 
 - Do not add audio/music unless a target distribution actually includes it.
