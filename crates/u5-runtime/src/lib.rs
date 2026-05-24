@@ -61,6 +61,7 @@ pub mod misc_tables_io;
 pub mod miscmsg_io;
 pub mod moongate;
 pub mod npc_runtime;
+pub mod ool_audit;
 pub mod party;
 pub mod play_options;
 pub mod play_state_impl;
@@ -406,6 +407,7 @@ pub use npc_runtime::{
     npc_shop_trigger, npc_state_off_floor_or_empty, npc_stuck_counter_forces_replan,
     npc_type_byte_class, npc_type_byte_occupied, schedule_floor_state,
 };
+pub use ool_audit::*;
 pub use party::{
     Area, AvatarStats, LEVEL_FROM_EXPERIENCE_BASE_DIVISOR, LEVEL_FROM_EXPERIENCE_HALVING_STEP,
     MoonstoneGateSlot, POTION_VARIATION_FORCED_ORANGE_ROLL, POTION_VARIATION_RANDOM_INDEX_MASK,
@@ -685,4 +687,5 @@ mod tests {
     include!("tests_inline/chunk_22.rs");
     include!("tests_inline/chunk_23.rs");
     include!("tests_inline/chunk_24.rs");
+    include!("tests_inline/chunk_25.rs");
 }

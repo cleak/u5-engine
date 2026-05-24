@@ -374,7 +374,7 @@ through the asset-backed Talk command path.
 | `prng.md` | `prng.rs` LCG; `random_*` helpers in `play_state_*.rs` | rng round-trip tests | Implemented |
 | `timing.md` | `timing.rs` wait counters; integrated in clock and sailing cadence | timing tests | Implemented |
 | `stat-arithmetic.md` | `stat_arithmetic.rs` saturating add/sub | stat-arith tests | Implemented |
-| `active-objects.md` | `active_object_io.rs` 32-slot table, animator, OOL persistence | active-object tests across chunks | Implemented |
+| `active-objects.md` | `active_object_io.rs` 32-slot table, animator, OOL persistence, `ool_audit.rs` aggregate active-object overlay census | active-object tests across chunks plus synthetic and local-clean `.OOL` aggregate audit coverage | Implemented |
 
 ## Formats
 
@@ -393,7 +393,7 @@ through the asset-backed Talk command path.
 | `formats/lzw.md` | `lzw.rs` decompressor | LZW round-trip tests | Implemented |
 | `formats/miscmsg-dat.md` | `miscmsg_io.rs` | message lookup tests | Implemented |
 | `formats/npc.md` | `npc_runtime.rs` + `town_tables_io.rs` NPC block decode | NPC decode tests | Implemented |
-| `formats/ool.md` | `active_object_io.rs` | OOL round-trip tests | Implemented |
+| `formats/ool.md` | `active_object_io.rs`, `ool_audit.rs::audit_ool_files` | OOL round-trip tests plus synthetic and local-clean aggregate audits over `SAVED.GAM`, `SAVED.OOL`, `BRIT.OOL`, `UNDER.OOL`, and `INIT.OOL` when assets are present | Implemented |
 | `formats/pth.md` | `pth.rs::load_path_records`, Bevy signature animation | PTH parse tests | Implemented |
 | `formats/question-dat.md` | `question_io.rs` | QUESTION decode tests | Implemented |
 | `formats/saved-gam.md` | `save_load.rs`, `play_state_struct.rs` | save/load round-trip tests | Implemented |
