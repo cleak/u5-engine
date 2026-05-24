@@ -37,7 +37,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-24 with 168 scripted route cases (including expanded active-shop/modal
+  2026-05-24 with 171 scripted route cases (including expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
@@ -46,7 +46,7 @@ Last known verification state:
   Horse/non-horse wishing-well branches, death-vision Look, public
   #44 sleeping/praying Talk refusals, public #48 Blink ray landing,
   Locate, Light/Open, restore-spell, active-effect, directed Sleep/Poison
-  Wind/Death Wind/Flame Wind combat casts, combat field marker casts,
+  Wind/Death Wind/Flame Wind combat casts, combat field marker casts/removal,
   targeted Magic Missile/Tremor/Repel Undead/Charm/Polymorph/Clone and
   Conjure/Swarm/Summon Daemon combat spell casts,
   dungeon level, dungeon
@@ -137,7 +137,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 433 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 435 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,

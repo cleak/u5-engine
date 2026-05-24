@@ -69,7 +69,7 @@ audit:
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 64 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 168 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 171 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
@@ -79,7 +79,7 @@ audit:
   paths, public #31 native shard/Eternal Flame destruction routes, public #32 Britannia/Doom Word-of-Power seal opening, public #15
   accepted inn-rest pricing, public #44 sleeping/praying Talk refusals, public
   #48 Blink ray landing, directed Sleep/Poison Wind/Death Wind/Flame Wind
-  combat casts, combat field marker casts, targeted Magic Missile/Tremor/Repel
+  combat casts, combat field marker casts/removal, targeted Magic Missile/Tremor/Repel
   Undead/Charm/Polymorph/Clone casts and Conjure/Swarm/Summon Daemon routes,
   #51 poison-gas doorway step, public #47 dungeon no-direct-recovery rest and
   hourly ring tick, public #13 sage paid-success/short-funds paths, public #28
@@ -100,7 +100,7 @@ audit:
   `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls
   and a combat death/field/cursor marker gallery.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 433 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 435 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including horse-trader
   purchases, accepted healer cure/heal/resurrect, all four public shipwright
   delivery-row purchases, spell routes for Locate, Light/Open, restore, active effects,

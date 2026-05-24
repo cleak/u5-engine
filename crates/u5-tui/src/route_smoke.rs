@@ -1775,6 +1775,22 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
+            name: "combat-field-dispel-fire-marker",
+            options: world.clone(),
+            script: &["C1AG6"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-field-dispel-empty-refusal",
+            options: world.clone(),
+            script: &["C1AG6"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
             name: "combat-magic-missile-target",
             options: world.clone(),
             script: &["C1GP7"],
@@ -2157,6 +2173,12 @@ fn apply_route_smoke_case_setup(
         | "combat-field-energy-marker-placement" => {
             let (spell_index, cost, _) = combat_field_route_spell(case_name);
             seed_combat_field_route(state, spell_index, cost)?;
+        }
+        "combat-field-dispel-fire-marker" => {
+            seed_combat_field_dispel_route(state, Some(CombatArenaFieldKind::Fire))?;
+        }
+        "combat-field-dispel-empty-refusal" => {
+            seed_combat_field_dispel_route(state, None)?;
         }
         "combat-magic-missile-target"
         | "combat-tremor-targets"
@@ -2885,6 +2907,37 @@ fn seed_combat_field_route(state: &mut PlayState, spell_index: usize, cost: u8) 
     Ok(())
 }
 
+fn seed_combat_field_dispel_route(
+    state: &mut PlayState,
+    field: Option<CombatArenaFieldKind>,
+) -> io::Result<()> {
+    state.party = vec![route_party_member(0, b'A', b'G', 20, 20)];
+    state.party_names = default_party_names(1);
+    state.party_experience = default_party_experience(1);
+    state.party_stay_counters = default_party_stay_counters(1);
+    state.party_strengths = vec![30];
+    state.party_intelligence = default_party_intelligence(1);
+    state.party_equipment = default_party_equipment(1);
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = DISPEL_FIELD_COST;
+        caster.level = DISPEL_FIELD_COST;
+    }
+    state.active_player = Some(0);
+    state.spell_charges[DISPEL_FIELD_SPELL_INDEX] = 1;
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    actors[0] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+
+    let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+    active_objects[0] = route_combat_active_object(0x4c, 5, 5, 0);
+    if let Some(field) = field {
+        active_objects[6] = route_combat_active_object(field.kind_byte(), 6, 5, 0);
+    }
+    state.enter_combat_frame(active_objects, actors)?;
+    Ok(())
+}
+
 fn combat_spell_route_code(case_name: &str) -> &'static str {
     match case_name {
         "combat-tremor-targets" => "IPVY",
@@ -3354,6 +3407,29 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not materialize the public combat field marker"
+                )));
+            }
+        }
+        "combat-field-dispel-fire-marker" => {
+            if !state.combat_active
+                || state.spell_charges[DISPEL_FIELD_SPELL_INDEX] != 0
+                || state.party.first().is_none_or(|member| member.mana != 0)
+                || state.find_combat_arena_field_marker(6, 5).is_some()
+                || state.message != "Dispelled Fire field."
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not remove the public combat field marker"
+                )));
+            }
+        }
+        "combat-field-dispel-empty-refusal" => {
+            if !state.combat_active
+                || state.spell_charges[DISPEL_FIELD_SPELL_INDEX] != 0
+                || state.party.first().is_none_or(|member| member.mana != 0)
+                || state.message != "Failed!"
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not spend resources and fail on a missing combat field"
                 )));
             }
         }

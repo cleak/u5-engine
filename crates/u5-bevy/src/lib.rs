@@ -1523,6 +1523,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_combat_energy_field),
         },
         VisualRouteSuiteCase {
+            label: "route-combat-dispel-field-marker",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1AG6"],
+            configure: Some(seed_visual_route_combat_dispel_field),
+        },
+        VisualRouteSuiteCase {
             label: "route-combat-magic-missile-target",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
@@ -2363,6 +2373,33 @@ fn seed_visual_route_combat_sleep_field(state: &mut PlayState) {
 
 fn seed_visual_route_combat_energy_field(state: &mut PlayState) {
     seed_visual_route_combat_field(state, ENERGY_FIELD_SPELL_INDEX, ENERGY_FIELD_COST);
+}
+
+fn seed_visual_route_combat_dispel_field(state: &mut PlayState) {
+    state.party = vec![route_visual_party_member(0, b'A', b'G', 20, 20)];
+    state.party_names = default_party_names(1);
+    state.party_experience = vec![0];
+    state.party_stay_counters = default_party_stay_counters(1);
+    state.party_strengths = vec![30];
+    state.party_intelligence = default_party_intelligence(1);
+    state.party_equipment = default_party_equipment(1);
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = DISPEL_FIELD_COST;
+        caster.level = DISPEL_FIELD_COST;
+    }
+    state.active_player = Some(0);
+    state.spell_charges[DISPEL_FIELD_SPELL_INDEX] = 1;
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    actors[0] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+
+    let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+    active_objects[0] = visual_route_combat_active_object(0x4c, 5, 5, 0);
+    active_objects[6] = visual_route_combat_active_object(COMBAT_FIELD_KIND_FIRE, 6, 5, 0);
+    state
+        .enter_combat_frame(active_objects, actors)
+        .expect("visual route combat field dispel frame should seed");
 }
 
 fn seed_visual_route_combat_magic_missile(state: &mut PlayState) {
@@ -7426,7 +7463,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 137);
+        assert_eq!(cases.len(), 138);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -7580,6 +7617,7 @@ mod tests {
             "route-combat-field-poison-marker",
             "route-combat-field-sleep-marker",
             "route-combat-field-energy-marker",
+            "route-combat-dispel-field-marker",
             "route-combat-magic-missile-target",
             "route-combat-tremor-targets",
             "route-combat-repel-undead-targets",
@@ -7790,7 +7828,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 433);
+        assert_eq!(reports.len(), 435);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -7869,6 +7907,7 @@ mod tests {
         assert!(manifest.contains("route-combat-field-poison-marker-01-c1gin6"));
         assert!(manifest.contains("route-combat-field-sleep-marker-01-c1giz6"));
         assert!(manifest.contains("route-combat-field-energy-marker-01-c1gis6"));
+        assert!(manifest.contains("route-combat-dispel-field-marker-01-c1ag6"));
         assert!(manifest.contains("route-combat-magic-missile-target-01-c1gp7"));
         assert!(manifest.contains("route-combat-tremor-targets-01-c1ipvy"));
         assert!(manifest.contains("route-combat-repel-undead-targets-01-c1acx"));
