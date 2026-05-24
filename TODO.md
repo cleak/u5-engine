@@ -445,12 +445,13 @@ Current worktree context when this TODO was refreshed:
 - The 2026-05-24 clean-engine audit retired #1/#3/#5/#8/#9/#18/#31/#38/#41/#43/#47/#51/#56
   as gameplay blockers after applying the current public answers and checked-in
   spec. Current response-needed public blockers are #10, #11, #12/#19, #13,
-  #36, #49, #54, #57, and #58; clean-engine follow-up comments are currently
-  latest on each of those issues, so do not post duplicate comments unless new
-  spec evidence or implementation questions appear. Follow-up parity questions
-  are also now open/latest on #8 for exact combat sleep wakeup counters, #20
-  for stale gazetteer known-gaps wording versus remaining coordinate families,
-  and #59 for overworld water/current transition and damage rules.
+  #36, #49, #53, #54, #57, and #58; clean-engine follow-up comments are
+  currently latest on each of those issues, so do not post duplicate comments
+  unless new spec evidence or implementation questions appear. Follow-up parity
+  questions are also now open/latest on #8 for exact combat sleep wakeup
+  counters, #20 for stale gazetteer known-gaps wording versus remaining
+  coordinate families, #59 for overworld water/current transition and damage
+  rules, and #60 for Look/View overlay pixel renderer tables.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the
@@ -1086,7 +1087,10 @@ Goal: turn diagnostic interactions into game-like content.
 
 Goal: keep asset readers complete while preserving repository cleanliness.
 
-- Existing local decoders cover many files and LZW resources.
+- Existing local decoders cover many files, paired-graphics LZW resources, and
+  canonical sparse `.BIT` / `PROPORT.PCS` driver resources. Local preprocessed
+  `.BIT` / `PROPORT.PCS` wrappers are handled only through explicit legacy
+  compatibility paths while `cleak/u5-spec#36` remains open.
 - Continue adding tests that verify:
   - declared decoded lengths,
   - parser shape,
@@ -1110,9 +1114,10 @@ Goal: keep asset readers complete while preserving repository cleanliness.
     covering the shipped IBM and Runes resources when local clean assets are
     present; reports stay to glyph counts, dimensions, bit masks, hashes, and
     nonzero totals rather than raw glyph rows,
-  - proportional text assets (pending `cleak/u5-spec#36` envelope policy),
-  - bitmap resources used by eventual Bevy UI (pending `cleak/u5-spec#36`
-    envelope policy for `.BIT` resources),
+  - proportional text sparse-resource glyph mapping and preprocessed variant
+    detection (pending `cleak/u5-spec#36`),
+  - bitmap sparse-resource rendering versus local preprocessed variants
+    (pending `cleak/u5-spec#36` for exact variant-detection policy),
   - any distribution variants the user wants to support.
 
 - Do not add audio/music unless a target distribution actually includes it.

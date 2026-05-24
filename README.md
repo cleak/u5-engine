@@ -12,8 +12,9 @@ against real files, and keeps raw game data out of the repository:
 - world, town, dungeon, combat, shop, conversation, magic, rest/camp,
   Blackthorn, Codex, Shadowlord, and endgame runtime paths;
 - public LZW graphics-envelope decoding for tile atlases, image directories,
-  sprite/mask sheets, standalone `.BIT` bitmaps, and proportional/fixed font
-  rasterization;
+  and sprite/mask sheets; canonical sparse-strip decoding for standalone
+  `.BIT` and `PROPORT.PCS` resources, with explicit legacy compatibility for
+  local preprocessed proportional text assets; and fixed font rasterization;
 - atlas-backed top-down, dungeon, combat, intro, modal, status, and endgame
   frame rendering; and
 - asset-backed route, frame, and visual-route smoke suites.

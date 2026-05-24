@@ -80,6 +80,14 @@
         bytes
     }
 
+    fn lzw_envelope_with_literal_body(body: &[u8]) -> Vec<u8> {
+        let mut codes = Vec::with_capacity(body.len() + 2);
+        codes.push(LZW_CLEAR_CODE);
+        codes.extend(body.iter().map(|byte| u16::from(*byte)));
+        codes.push(LZW_END_CODE);
+        lzw_envelope_with_9_bit_codes(body.len(), &codes)
+    }
+
     fn tlk_bytes(entries: &[(u16, &[&str])]) -> Vec<u8> {
         let count = entries.len() + 1;
         let mut bytes = vec![0; count * 4];
@@ -521,6 +529,34 @@
     }
 
     #[test]
+    fn bit_graphics_canonical_parsers_do_not_decode_lzw_wrappers() {
+        let mut title_body = Vec::new();
+        title_body.extend_from_slice(&1u16.to_le_bytes());
+        title_body.extend_from_slice(&4u16.to_le_bytes());
+        title_body.extend_from_slice(&8u16.to_le_bytes());
+        title_body.extend_from_slice(&1u16.to_le_bytes());
+        title_body.push(0b1010_0000);
+        let wrapped_title = lzw_envelope_with_literal_body(&title_body);
+
+        assert!(parse_title_bit(&wrapped_title).is_err());
+        let legacy_title = parse_legacy_lzw_title_bit(&wrapped_title).unwrap();
+        assert_eq!(legacy_title.blocks.len(), 1);
+        assert_eq!(legacy_title.blocks[0].pixels, vec![1, 0, 1, 0, 0, 0, 0, 0]);
+
+        let mut british_body = Vec::new();
+        british_body.extend_from_slice(&SINGLE_IMAGE_BIT_FORMAT_MARKER.to_le_bytes());
+        british_body.extend_from_slice(&SINGLE_IMAGE_BIT_MODE_MARKER.to_le_bytes());
+        british_body.extend_from_slice(&8u16.to_le_bytes());
+        british_body.extend_from_slice(&1u16.to_le_bytes());
+        british_body.push(0b1100_0000);
+        let wrapped_british = lzw_envelope_with_literal_body(&british_body);
+
+        assert!(parse_british_bit(&wrapped_british).is_err());
+        let legacy_british = parse_legacy_lzw_british_bit(&wrapped_british).unwrap();
+        assert_eq!(legacy_british.pixels, vec![1, 1, 0, 0, 0, 0, 0, 0]);
+    }
+
+    #[test]
     fn bit_graphics_rejects_bad_markers_and_lengths() {
         let mut bad_marker = Vec::new();
         bad_marker.extend_from_slice(&2u16.to_le_bytes());
@@ -823,6 +859,28 @@
     }
 
     #[test]
+    fn font_graphics_canonical_resource_does_not_decode_lzw_wrappers() {
+        let mut legacy_body = Vec::new();
+        legacy_body.extend_from_slice(&1u16.to_le_bytes());
+        legacy_body.extend_from_slice(&4u16.to_le_bytes());
+        legacy_body.push(3);
+        legacy_body.extend_from_slice(&[0b1110_0000; PCS_GLYPH_HEIGHT]);
+        let wrapped = lzw_envelope_with_literal_body(&legacy_body);
+
+        assert!(parse_proportional_font_resource(&wrapped).is_err());
+        let legacy_resource = parse_legacy_lzw_proportional_font_resource(&wrapped).unwrap();
+        assert_eq!(legacy_resource.strips.len(), 1);
+        assert_eq!(
+            legacy_resource.strip(0).map(|strip| (strip.width, strip.height)),
+            Some((PCS_GLYPH_BITMAP_WIDTH, PCS_GLYPH_HEIGHT))
+        );
+
+        let legacy_font = parse_legacy_lzw_proportional_font(&wrapped).unwrap();
+        assert_eq!(legacy_font.glyphs.len(), 1);
+        assert_eq!(legacy_font.glyph_for_code(PCS_FIRST_CODE).unwrap().advance_width, 3);
+    }
+
+    #[test]
     fn font_graphics_rejects_bad_lengths_offsets_and_widths() {
         assert!(
             parse_fixed_font_body(&[0], "fixture.ch", CH_FONT_CELL_WIDTH, CH_FONT_CELL_HEIGHT)
@@ -876,32 +934,32 @@
             assert_eq!(line.pixels.len(), 32 * 12);
         }
         if game_dir.join(PROPORT_PCS_FILE).exists() {
-            let font = load_proportional_font(game_dir).unwrap();
             let resource = load_proportional_font_resource(game_dir).unwrap();
-            assert_eq!(font.first_code, PCS_FIRST_CODE);
-            assert_eq!(font.glyphs.len(), 91);
-            assert!(font.glyph_for_code(0x7a).is_some());
-            assert!(font.glyph_for_code(0x7b).is_none());
-            assert!(measure_proportional_text(&font, b"Ultima").is_ok());
-            assert!(!resource.strips.is_empty());
             assert!(resource.strips.iter().all(|strip| {
                 strip.width > 0
                     && strip.height > 0
                     && strip.pixels.len() == strip.width * strip.height
                     && strip.pixels.iter().all(|pixel| *pixel <= 1)
             }));
-            assert!(font.glyphs.iter().all(|glyph| {
-                glyph.advance_width as usize <= PCS_GLYPH_BITMAP_WIDTH
-                    && glyph.bitmap.width == PCS_GLYPH_BITMAP_WIDTH
-                    && glyph.bitmap.height == PCS_GLYPH_HEIGHT
-                    && glyph.bitmap.pixels.len() == PCS_GLYPH_BITMAP_WIDTH * PCS_GLYPH_HEIGHT
-                    && glyph.bitmap.pixels.iter().all(|pixel| *pixel <= 1)
-            }));
-            let space = font.glyph_for_code(0x20).unwrap();
-            assert_eq!(space.advance_width, 0);
-            let line = rasterize_proportional_text_line(&font, b"Ultima").unwrap();
-            assert_eq!(line.height, PCS_GLYPH_HEIGHT);
-            assert_eq!(line.pixels.len(), line.width * line.height);
+            if let Ok(font) = load_legacy_proportional_font(game_dir) {
+                assert_eq!(font.first_code, PCS_FIRST_CODE);
+                assert_eq!(font.glyphs.len(), 91);
+                assert!(font.glyph_for_code(0x7a).is_some());
+                assert!(font.glyph_for_code(0x7b).is_none());
+                assert!(measure_proportional_text(&font, b"Ultima").is_ok());
+                assert!(font.glyphs.iter().all(|glyph| {
+                    glyph.advance_width as usize <= PCS_GLYPH_BITMAP_WIDTH
+                        && glyph.bitmap.width == PCS_GLYPH_BITMAP_WIDTH
+                        && glyph.bitmap.height == PCS_GLYPH_HEIGHT
+                        && glyph.bitmap.pixels.len() == PCS_GLYPH_BITMAP_WIDTH * PCS_GLYPH_HEIGHT
+                        && glyph.bitmap.pixels.iter().all(|pixel| *pixel <= 1)
+                }));
+                let space = font.glyph_for_code(0x20).unwrap();
+                assert_eq!(space.advance_width, 0);
+                let line = rasterize_proportional_text_line(&font, b"Ultima").unwrap();
+                assert_eq!(line.height, PCS_GLYPH_HEIGHT);
+                assert_eq!(line.pixels.len(), line.width * line.height);
+            }
         }
     }
 

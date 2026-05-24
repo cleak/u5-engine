@@ -89,8 +89,9 @@ use u5_runtime::{
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
     intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_brit_cbt,
     load_british_bit, load_british_pth, load_dungeon_cbt, load_graphic_image_directory,
-    load_ibm_ch_font, load_play_options_from_save, load_proportional_font, load_question_records,
-    load_return_to_view_assets, load_story_records, load_tile_atlas, load_title_bit,
+    load_ibm_ch_font, load_legacy_proportional_font, load_play_options_from_save,
+    load_question_records, load_return_to_view_assets, load_story_records, load_tile_atlas,
+    load_title_bit,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_message_text_window, paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
     published_world_location_entries, rasterize_proportional_paragraph,
@@ -9133,7 +9134,7 @@ fn overlay_proportional_text_from_assets_rgba(
     text: &str,
     placement: ProportionalTextPlacement,
 ) -> io::Result<()> {
-    let font = load_proportional_font(game_dir)?;
+    let font = load_legacy_proportional_font(game_dir)?;
     overlay_proportional_text_rgba(dst, dst_width, dst_height, &font, text, placement)
 }
 

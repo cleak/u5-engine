@@ -5,21 +5,28 @@ use std::{io, path::Path};
 use crate::*;
 
 pub fn load_title_bit(game_dir: &Path) -> io::Result<TitleBitImages> {
-    parse_title_bit(&read_disk_file(&game_dir.join(TITLE_BIT_FILE))?)
+    let bytes = read_disk_file(&game_dir.join(TITLE_BIT_FILE))?;
+    parse_title_bit(&bytes).or_else(|sparse_err| {
+        parse_legacy_lzw_title_bit(&bytes).map_err(|legacy_err| {
+            io::Error::new(
+                legacy_err.kind(),
+                format!(
+                    "{TITLE_BIT_FILE} is neither a canonical sparse strip resource ({sparse_err}) nor a legacy local LZW-wrapped bitmap directory ({legacy_err})"
+                ),
+            )
+        })
+    })
 }
 
 pub fn parse_title_bit(bytes: &[u8]) -> io::Result<TitleBitImages> {
-    parse_sparse_bit_images(bytes, TITLE_BIT_FILE).or_else(|raw_err| {
-        let body = decode_lzw_envelope(bytes, TITLE_BIT_FILE).map_err(|lzw_err| {
-            io::Error::new(
-                lzw_err.kind(),
-                format!(
-                    "{TITLE_BIT_FILE} is neither a sparse strip resource ({raw_err}) nor a legacy LZW-wrapped bitmap directory ({lzw_err})"
-                ),
-            )
-        })?;
-        parse_title_bit_body(&body, TITLE_BIT_FILE)
-    })
+    parse_sparse_bit_images(bytes, TITLE_BIT_FILE)
+}
+
+/// Compatibility parser for local preprocessed asset sets. The public
+/// `.BIT` format is the sparse-strip resource parsed by [`parse_title_bit`].
+pub fn parse_legacy_lzw_title_bit(bytes: &[u8]) -> io::Result<TitleBitImages> {
+    let body = decode_lzw_envelope(bytes, TITLE_BIT_FILE)?;
+    parse_title_bit_body(&body, TITLE_BIT_FILE)
 }
 
 pub fn parse_sparse_bit_images(bytes: &[u8], resource_name: &str) -> io::Result<TitleBitImages> {
@@ -71,21 +78,28 @@ pub fn parse_title_bit_body(body: &[u8], resource_name: &str) -> io::Result<Titl
 }
 
 pub fn load_british_bit(game_dir: &Path) -> io::Result<MonochromeBitmap> {
-    parse_british_bit(&read_disk_file(&game_dir.join(BRITISH_BIT_FILE))?)
+    let bytes = read_disk_file(&game_dir.join(BRITISH_BIT_FILE))?;
+    parse_british_bit(&bytes).or_else(|sparse_err| {
+        parse_legacy_lzw_british_bit(&bytes).map_err(|legacy_err| {
+            io::Error::new(
+                legacy_err.kind(),
+                format!(
+                    "{BRITISH_BIT_FILE} is neither a canonical sparse strip resource ({sparse_err}) nor a legacy local LZW-wrapped bitmap ({legacy_err})"
+                ),
+            )
+        })
+    })
 }
 
 pub fn parse_british_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
-    parse_single_sparse_bit_image(bytes, BRITISH_BIT_FILE).or_else(|raw_err| {
-        let body = decode_lzw_envelope(bytes, BRITISH_BIT_FILE).map_err(|lzw_err| {
-            io::Error::new(
-                lzw_err.kind(),
-                format!(
-                    "{BRITISH_BIT_FILE} is neither a sparse strip resource ({raw_err}) nor a legacy LZW-wrapped bitmap ({lzw_err})"
-                ),
-            )
-        })?;
-        parse_single_image_bit_body(&body, BRITISH_BIT_FILE)
-    })
+    parse_single_sparse_bit_image(bytes, BRITISH_BIT_FILE)
+}
+
+/// Compatibility parser for local preprocessed asset sets. The public
+/// `.BIT` format is the sparse-strip resource parsed by [`parse_british_bit`].
+pub fn parse_legacy_lzw_british_bit(bytes: &[u8]) -> io::Result<MonochromeBitmap> {
+    let body = decode_lzw_envelope(bytes, BRITISH_BIT_FILE)?;
+    parse_single_image_bit_body(&body, BRITISH_BIT_FILE)
 }
 
 pub fn load_wd_bit(game_dir: &Path) -> io::Result<MonochromeBitmap> {
@@ -396,40 +410,60 @@ pub fn parse_fixed_font_body(
 }
 
 pub fn load_proportional_font(game_dir: &Path) -> io::Result<ProportionalFont> {
-    parse_proportional_font(&read_disk_file(&game_dir.join(PROPORT_PCS_FILE))?)
+    load_legacy_proportional_font(game_dir)
 }
 
+/// Compatibility parser for local preprocessed glyph-directory assets. The
+/// public `PROPORT.PCS` resource envelope is parsed by
+/// [`parse_proportional_font_resource`].
 pub fn parse_proportional_font(bytes: &[u8]) -> io::Result<ProportionalFont> {
+    parse_legacy_lzw_proportional_font(bytes)
+}
+
+pub fn load_legacy_proportional_font(game_dir: &Path) -> io::Result<ProportionalFont> {
+    parse_legacy_lzw_proportional_font(&read_disk_file(&game_dir.join(PROPORT_PCS_FILE))?)
+}
+
+pub fn parse_legacy_lzw_proportional_font(bytes: &[u8]) -> io::Result<ProportionalFont> {
     let body = decode_lzw_envelope(bytes, PROPORT_PCS_FILE)?;
     parse_proportional_font_body(&body, PROPORT_PCS_FILE)
 }
 
 pub fn load_proportional_font_resource(game_dir: &Path) -> io::Result<ProportionalFontResource> {
-    parse_proportional_font_resource(&read_disk_file(&game_dir.join(PROPORT_PCS_FILE))?)
+    let bytes = read_disk_file(&game_dir.join(PROPORT_PCS_FILE))?;
+    parse_proportional_font_resource(&bytes).or_else(|sparse_err| {
+        parse_legacy_lzw_proportional_font_resource(&bytes).map_err(|legacy_err| {
+            io::Error::new(
+                legacy_err.kind(),
+                format!(
+                    "{PROPORT_PCS_FILE} is neither a canonical sparse strip resource ({sparse_err}) nor a legacy local LZW-wrapped proportional font ({legacy_err})"
+                ),
+            )
+        })
+    })
 }
 
 pub fn parse_proportional_font_resource(bytes: &[u8]) -> io::Result<ProportionalFontResource> {
-    parse_sparse_proportional_font_resource(bytes).or_else(|sparse_err| {
-        let body = decode_lzw_envelope(bytes, PROPORT_PCS_FILE).map_err(|lzw_err| {
-            io::Error::new(
-                lzw_err.kind(),
-                format!(
-                    "{PROPORT_PCS_FILE} is neither a sparse strip resource ({sparse_err}) nor a legacy LZW-wrapped proportional font ({lzw_err})"
-                ),
-            )
-        })?;
-        parse_sparse_proportional_font_resource(&body).or_else(|body_sparse_err| {
-            parse_proportional_font_body(&body, PROPORT_PCS_FILE)
-                .map(legacy_proportional_font_as_resource)
-                .map_err(|legacy_err| {
-                    io::Error::new(
-                        legacy_err.kind(),
-                        format!(
-                            "{PROPORT_PCS_FILE} decoded body is neither a sparse strip resource ({body_sparse_err}) nor the legacy glyph-directory shape ({legacy_err})"
-                        ),
-                    )
-                })
-        })
+    parse_sparse_proportional_font_resource(bytes)
+}
+
+/// Compatibility parser for local preprocessed `PROPORT.PCS` assets. The
+/// canonical parser intentionally does not unwrap this form.
+pub fn parse_legacy_lzw_proportional_font_resource(
+    bytes: &[u8],
+) -> io::Result<ProportionalFontResource> {
+    let body = decode_lzw_envelope(bytes, PROPORT_PCS_FILE)?;
+    parse_sparse_proportional_font_resource(&body).or_else(|sparse_err| {
+        parse_proportional_font_body(&body, PROPORT_PCS_FILE)
+            .map(legacy_proportional_font_as_resource)
+            .map_err(|legacy_err| {
+                io::Error::new(
+                    legacy_err.kind(),
+                    format!(
+                        "{PROPORT_PCS_FILE} decoded body is neither a sparse strip resource ({sparse_err}) nor the legacy glyph-directory shape ({legacy_err})"
+                    ),
+                )
+            })
     })
 }
 
