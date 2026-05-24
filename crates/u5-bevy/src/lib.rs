@@ -19,38 +19,38 @@ use image::{ImageBuffer, Rgba};
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX,
     BRIT_CBT_RECORDS, BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB,
-    COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
-    COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE,
-    COMBAT_FIELD_KIND_POISON, COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
-    COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PARTY_CORPSE_TILE,
-    COMBAT_VANISH_DEATH_MARKER_TILE, CREATE_FOOD_COST, CREATE_FOOD_SPELL_INDEX, CURE_COST,
-    CURE_SPELL_INDEX, ChargenSession, ChargenSessionResult, ChargenSessionStep,
-    CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
-    DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
-    DISPEL_FIELD_SPELL_INDEX, DUNGEON_LEVEL_SPELL_COST, Direction, DiskIoHandlerPhase,
-    DungeonScene, EGA_PALETTE_RGB, ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH,
-    ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX,
-    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FLAME_WIND_COST,
-    FLAME_WIND_SPELL_INDEX, FixedCellFont, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX,
-    GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage, GuildShop, HEAL_COST,
-    HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist, IN_WIS_COST, IN_WIS_SPELL_INDEX,
-    INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
-    INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X,
-    INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
-    INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement, MAGIC_LOCK_COST,
-    MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
-    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED, COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS,
+    COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_DEFAULT_DEATH_DROP_TILE,
+    COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE, COMBAT_FIELD_KIND_POISON,
+    COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE, COMBAT_GAZER_DEATH_MARKER_TILE,
+    COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PARTY_CORPSE_TILE, COMBAT_VANISH_DEATH_MARKER_TILE,
+    CREATE_FOOD_COST, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX, ChargenSession,
+    ChargenSessionResult, ChargenSessionStep, CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS,
+    DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX, DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK,
+    DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_LEVEL_SPELL_COST,
+    Direction, DiskIoHandlerPhase, DungeonScene, EGA_PALETTE_RGB, ENDGAME_TABLEAU_HEIGHT,
+    ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, FIELD_SPELL_COST,
+    FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
+    FLAME_WIND_COST, FLAME_WIND_SPELL_INDEX, FixedCellFont, GATE_TRAVEL_COST,
+    GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage,
+    GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist, IN_LOR_COST,
+    IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP,
+    INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE,
+    INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y,
+    INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn,
+    IntroStoryArtPlacement, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX,
+    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X,
     NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
     OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX,
     PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
     POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX,
     PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget, ProportionalFont,
-    ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, RESURRECT_COST,
-    RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
-    ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
-    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
-    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REL_HUR_COST,
+    REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES,
+    RectColumnSweepTransition, ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
+    SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
+    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
     SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
     SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
     SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
@@ -1136,7 +1136,7 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
-            script: &["C1IMX", "."],
+            script: &["C1AWY", "."],
             configure: Some(seed_visual_route_x_ray_spell),
         },
         VisualRouteSuiteCase {
@@ -1796,6 +1796,28 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_locate),
         },
         VisualRouteSuiteCase {
+            label: "route-britannia-rel-hur-east",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                wind: WindState::Calm,
+                wind_save_byte: WindState::Calm.save_byte(),
+                ..PlayOptions::default()
+            },
+            script: &["C1HR6"],
+            configure: Some(seed_visual_route_rel_hur),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-in-lor-spell",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["C1IL"],
+            configure: Some(seed_visual_route_in_lor),
+        },
+        VisualRouteSuiteCase {
             label: "route-castle-light-open-spell",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -1964,6 +1986,56 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             },
             script: &["C1GP7"],
             configure: Some(seed_visual_route_combat_magic_missile),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-fireball-target",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1FV7"],
+            configure: Some(seed_visual_route_combat_fireball),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-reveal-hidden-target",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1QW"],
+            configure: Some(seed_visual_route_combat_reveal),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-invisibility-caster",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1LS"],
+            configure: Some(seed_visual_route_combat_invisibility),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-cause-fear-target",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1CIQ"],
+            configure: Some(seed_visual_route_combat_cause_fear),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-mass-charm-effect",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1AQW"],
+            configure: Some(seed_visual_route_combat_mass_charm),
         },
         VisualRouteSuiteCase {
             label: "route-combat-tremor-targets",
@@ -2612,6 +2684,28 @@ fn seed_visual_route_locate(state: &mut PlayState) {
     state.mark_visibility_dirty();
 }
 
+fn seed_visual_route_rel_hur(state: &mut PlayState) {
+    state.wind = WindState::Calm;
+    state.wind_save_byte = WindState::Calm.save_byte();
+    state.spell_charges[REL_HUR_SPELL_INDEX] = 1;
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = REL_HUR_COST;
+        caster.level = REL_HUR_COST;
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_in_lor(state: &mut PlayState) {
+    state.spell_charges[IN_LOR_SPELL_INDEX] = 1;
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = IN_LOR_COST;
+        caster.level = IN_LOR_COST;
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
 fn seed_visual_route_light_open(state: &mut PlayState) {
     state.player.x = 1;
     state.player.y = 1;
@@ -2950,6 +3044,26 @@ fn seed_visual_route_combat_magic_missile(state: &mut PlayState) {
     seed_visual_route_combat_spell(state, "GP");
 }
 
+fn seed_visual_route_combat_fireball(state: &mut PlayState) {
+    seed_visual_route_combat_spell(state, "FV");
+}
+
+fn seed_visual_route_combat_reveal(state: &mut PlayState) {
+    seed_visual_route_combat_spell(state, "QW");
+}
+
+fn seed_visual_route_combat_invisibility(state: &mut PlayState) {
+    seed_visual_route_combat_spell(state, "LS");
+}
+
+fn seed_visual_route_combat_cause_fear(state: &mut PlayState) {
+    seed_visual_route_combat_spell(state, "CIQ");
+}
+
+fn seed_visual_route_combat_mass_charm(state: &mut PlayState) {
+    seed_visual_route_combat_spell(state, "AQW");
+}
+
 fn seed_visual_route_combat_tremor(state: &mut PlayState) {
     seed_visual_route_combat_spell(state, "IPVY");
 }
@@ -3039,6 +3153,7 @@ fn seed_visual_route_combat_spell(state: &mut PlayState, code: &str) {
     }
     state.prng_state = match code {
         "GP" => first_nonzero_prng_roll_seed(15),
+        "FV" => first_nonzero_prng_roll_seed(29),
         "IPVY" => first_nonzero_prng_roll_seed(19),
         _ => 0,
     };
@@ -3058,12 +3173,15 @@ fn seed_visual_route_combat_spell(state: &mut PlayState, code: &str) {
         }
         "KX" | "BIX" | "CKX" => {}
         _ => {
-            let class = if matches!(code, "BRX" | "IPVY") {
+            let class = if matches!(code, "BRX" | "FV" | "IPVY") {
                 39
             } else {
                 COMBAT_CLASS_GIANT_RAT
             };
             seed_visual_route_combat_monster(&mut actors, &mut active_objects, class, 6, 6, 5);
+            if code == "QW" {
+                actors[6].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+            }
         }
     }
 
@@ -8212,7 +8330,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 173);
+        assert_eq!(cases.len(), 180);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -8399,6 +8517,8 @@ mod tests {
         );
         for label in [
             "route-britannia-locate-cast",
+            "route-britannia-rel-hur-east",
+            "route-castle-in-lor-spell",
             "route-castle-light-open-spell",
             "route-castle-restore-spell-suite",
             "route-castle-active-effect-spell-suite",
@@ -8412,6 +8532,11 @@ mod tests {
             "route-combat-field-energy-marker",
             "route-combat-dispel-field-marker",
             "route-combat-magic-missile-target",
+            "route-combat-fireball-target",
+            "route-combat-reveal-hidden-target",
+            "route-combat-invisibility-caster",
+            "route-combat-cause-fear-target",
+            "route-combat-mass-charm-effect",
             "route-combat-tremor-targets",
             "route-combat-repel-undead-targets",
             "route-combat-charm-target",
@@ -8629,6 +8754,26 @@ mod tests {
     }
 
     #[test]
+    fn visual_route_suite_scripts_cover_every_published_spell_code() {
+        let cases = visual_route_suite_cases();
+        let mut covered = [false; u5_runtime::SPELL_COUNT];
+
+        for command in cases.iter().flat_map(|case| case.script.iter().copied()) {
+            let Some(suffix) = command.strip_prefix('C') else {
+                continue;
+            };
+            let code = u5_runtime::inline_parsers::inline_spell_code(suffix);
+            if let Some(index) = spell_index_from_code(&code) {
+                covered[index] = true;
+            }
+        }
+
+        for (index, code) in u5_runtime::SPELL_CODES.iter().enumerate() {
+            assert!(covered[index], "visual route scripts should cover {code}");
+        }
+    }
+
+    #[test]
     fn visual_route_suite_local_clean_writes_per_step_pngs_when_present() {
         let game_dir = Path::new(DEFAULT_GAME_DIR);
         if !game_dir.join("CASTLE.DAT").exists()
@@ -8643,7 +8788,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 552);
+        assert_eq!(reports.len(), 566);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -8662,7 +8807,7 @@ mod tests {
         assert!(manifest.contains("route-dungeon-view-overlay-02-idle"));
         assert!(manifest.contains("route-castle-peer-overlay-01-c1iqw"));
         assert!(manifest.contains("route-castle-peer-overlay-02-idle"));
-        assert!(manifest.contains("route-castle-x-ray-overlay-01-c1imx"));
+        assert!(manifest.contains("route-castle-x-ray-overlay-01-c1awy"));
         assert!(manifest.contains("route-castle-x-ray-overlay-02-idle"));
         assert!(manifest.contains("route-britannia-look-01-l6"));
         assert!(manifest.contains("route-britannia-spyglass-chunk-map-01-usp"));
@@ -8737,6 +8882,8 @@ mod tests {
         assert!(manifest.contains("route-shop-sage-topic-miss-01-mantra"));
         assert!(manifest.contains("route-britannia-blink-east-ray-01-c1ip6"));
         assert!(manifest.contains("route-britannia-locate-cast-01-c1iw"));
+        assert!(manifest.contains("route-britannia-rel-hur-east-01-c1hr6"));
+        assert!(manifest.contains("route-castle-in-lor-spell-01-c1il"));
         assert!(manifest.contains("route-castle-light-open-spell-02-c1as6"));
         assert!(manifest.contains("route-castle-restore-spell-suite-05-c1cim4"));
         assert!(manifest.contains("route-castle-active-effect-spell-suite-04-c1at"));
@@ -8750,6 +8897,11 @@ mod tests {
         assert!(manifest.contains("route-combat-field-energy-marker-01-c1gis6"));
         assert!(manifest.contains("route-combat-dispel-field-marker-01-c1ag6"));
         assert!(manifest.contains("route-combat-magic-missile-target-01-c1gp7"));
+        assert!(manifest.contains("route-combat-fireball-target-01-c1fv7"));
+        assert!(manifest.contains("route-combat-reveal-hidden-target-01-c1qw"));
+        assert!(manifest.contains("route-combat-invisibility-caster-01-c1ls"));
+        assert!(manifest.contains("route-combat-cause-fear-target-01-c1ciq"));
+        assert!(manifest.contains("route-combat-mass-charm-effect-01-c1aqw"));
         assert!(manifest.contains("route-combat-tremor-targets-01-c1ipvy"));
         assert!(manifest.contains("route-combat-repel-undead-targets-01-c1acx"));
         assert!(manifest.contains("route-combat-charm-target-01-c1aex7"));

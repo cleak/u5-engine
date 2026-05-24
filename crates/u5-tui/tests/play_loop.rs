@@ -774,6 +774,11 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "britannia-rel-hur-east")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "castle-light-open-spell-route")
     );
     assert!(
@@ -1230,6 +1235,11 @@ fn route_smoke_cases_cover_representative_modes() {
         "combat-field-sleep-marker-placement",
         "combat-field-energy-marker-placement",
         "combat-magic-missile-target",
+        "combat-fireball-target",
+        "combat-reveal-hidden-target",
+        "combat-invisibility-caster",
+        "combat-cause-fear-target",
+        "combat-mass-charm-effect",
         "combat-tremor-targets",
         "combat-repel-undead-targets",
         "combat-charm-target",
@@ -1324,5 +1334,25 @@ fn route_smoke_local_clean_cases_run_when_present() {
         assert!(report.final_state_line.contains("State:"));
         assert!(report.final_raster_line.contains(case.expected_frame_kind));
         assert!(report.final_raster_line.contains(" hash "));
+    }
+}
+
+#[test]
+fn route_smoke_scripts_cover_every_published_spell_code() {
+    let cases = route_smoke_cases();
+    let mut covered = [false; SPELL_COUNT];
+
+    for command in cases.iter().flat_map(|case| case.script.iter().copied()) {
+        let Some(suffix) = command.strip_prefix('C') else {
+            continue;
+        };
+        let code = u5_runtime::inline_parsers::inline_spell_code(suffix);
+        if let Some(index) = spell_index_from_code(&code) {
+            covered[index] = true;
+        }
+    }
+
+    for (index, code) in SPELL_CODES.iter().enumerate() {
+        assert!(covered[index], "route smoke scripts should cover {code}");
     }
 }

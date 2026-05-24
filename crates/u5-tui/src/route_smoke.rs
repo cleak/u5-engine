@@ -10,51 +10,54 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE,
-    BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX,
-    COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
-    COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
-    COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMBAT_VANISH_DEATH_MARKER_TILE,
-    CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX,
-    CombatActorDescriptor, CombatArenaFieldKind, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST,
-    DEATH_WIND_SPELL_INDEX, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
-    DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_LEVEL_SPELL_COST, Direction,
-    DungeonScene, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
+    BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX, COMBAT_ACTOR_FLAG_FLEEING,
+    COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED, COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS,
+    COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_DEFAULT_DEATH_DROP_TILE,
+    COMBAT_GARGOYLE_DEATH_TERRAIN_TILE, COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS,
+    COMBAT_VANISH_DEATH_MARKER_TILE, CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT,
+    CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX, CombatActorDescriptor,
+    CombatArenaFieldKind, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
+    DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX,
+    DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_LEVEL_SPELL_COST, Direction, DungeonScene,
+    ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
     EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION,
     EndgameOutcome, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
     FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, FLAME_WIND_COST,
     FLAME_WIND_SPELL_INDEX, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST,
     GREAT_HEAL_SPELL_INDEX, GameClock, GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST,
-    HOURLY_STARVATION_DAMAGE_MAX, HOURLY_STARVATION_DAMAGE_MIN, Healer, Herbalist,
+    HOURLY_STARVATION_DAMAGE_MAX, HOURLY_STARVATION_DAMAGE_MIN, Healer, Herbalist, IN_LOR_COST,
     IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, Inn, MAGIC_LOCK_COST,
-    MAGIC_LOCK_SPELL_INDEX, MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,
-    NATURAL_MOONGATE_RESTORED_TERRAIN_TILE, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST,
-    NEGATE_MAGIC_SPELL_INDEX, NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST,
-    OPEN_SPELL_INDEX, PEER_COST, PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
+    MAGIC_LOCK_SPELL_INDEX, MASS_CHARM_ACTIVE_EFFECT_DURATION, MASS_CHARM_ACTIVE_EFFECT_TAG,
+    MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_RESTORED_TERRAIN_TILE,
+    NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
+    NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
+    PEER_COST, PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
     POISON_WIND_SPELL_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
     PendingVehicleAcquisition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
-    QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, RESURRECT_COST, RESURRECT_SPELL_INDEX,
-    SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM,
-    SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM,
-    SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX,
-    SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SLEEP_COST,
-    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
-    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
-    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
-    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
-    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
-    SURFACE_CHASM_Y, Scene, Shipwright, ShipwrightPurchaseKind, Stable, TALK_NO_RESPONSE_MESSAGE,
-    TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
-    TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST, TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX,
-    TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern,
-    TileGraphicsDepth, TransportState, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX,
-    UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
-    WHIRLPOOL_EMERGENCE_X, WHIRLPOOL_EMERGENCE_Y, WORD_OF_POWER_SEAL_XOR, WORLD_SIDE, WindState,
-    WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, combat_class_stats,
-    default_party_equipment, default_party_experience, default_party_intelligence,
-    default_party_names, default_party_roster, default_party_stay_counters,
-    default_party_strengths, dungeon_cell_index, dungeon_room_entry_seed_for_direction,
-    inn_base_room_rate, load_play_options_from_save, load_tile_atlas,
-    shipwright_delivery_coordinate, shipwright_price, shop_intelligence_adjusted_price,
+    QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST,
+    RESURRECT_SPELL_INDEX, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
+    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
+    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
+    SHADOWLORD_VANQUISHED, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
+    SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
+    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX,
+    SPECIAL_ITEM_SHARD_COWARDICE_INDEX, SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
+    SPECIAL_ITEM_SHARD_HATRED_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
+    STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShipwrightPurchaseKind,
+    Stable, TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
+    TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST,
+    TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TransportState, UNLOCK_MAGIC_COST,
+    UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
+    VAS_LOR_SPELL_INDEX, WHIRLPOOL_EMERGENCE_X, WHIRLPOOL_EMERGENCE_Y, WORD_OF_POWER_SEAL_XOR,
+    WORLD_SIDE, WindState, WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    combat_class_stats, default_party_equipment, default_party_experience,
+    default_party_intelligence, default_party_names, default_party_roster,
+    default_party_stay_counters, default_party_strengths, dungeon_cell_index,
+    dungeon_room_entry_seed_for_direction, inn_base_room_rate, load_play_options_from_save,
+    load_tile_atlas, shipwright_delivery_coordinate, shipwright_price,
+    shop_intelligence_adjusted_price,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -284,10 +287,21 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
     locate.party[0].mana = IN_WIS_COST;
     locate.party[0].level = IN_WIS_COST;
 
+    let mut rel_hur = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        wind: WindState::Calm,
+        wind_save_byte: WindState::Calm.save_byte(),
+        ..PlayOptions::default()
+    };
+    rel_hur.spell_charges[REL_HUR_SPELL_INDEX] = 1;
+    rel_hur.party[0].mana = REL_HUR_COST;
+    rel_hur.party[0].level = REL_HUR_COST;
+
     let mut light_open = PlayOptions::default();
+    light_open.spell_charges[IN_LOR_SPELL_INDEX] = 1;
     light_open.spell_charges[VAS_LOR_SPELL_INDEX] = 1;
     light_open.spell_charges[OPEN_SPELL_INDEX] = 1;
-    light_open.party[0].mana = VAS_LOR_COST + OPEN_SPELL_COST;
+    light_open.party[0].mana = IN_LOR_COST + VAS_LOR_COST + OPEN_SPELL_COST;
     light_open.party[0].level = VAS_LOR_COST.max(OPEN_SPELL_COST);
 
     let mut restore_spells = PlayOptions {
@@ -708,11 +722,19 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "britannia-rel-hur-east",
+            options: rel_hur,
+            script: &["C1HR6"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "castle-light-open-spell-route",
             options: light_open,
-            script: &["C1LV", "C1AS6"],
+            script: &["C1IL", "C1LV", "C1AS6"],
             expected: RouteSmokeExpectation::Town(castle),
-            min_turn: 2,
+            min_turn: 3,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
@@ -2119,6 +2141,46 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
+            name: "combat-fireball-target",
+            options: world.clone(),
+            script: &["C1FV7"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-reveal-hidden-target",
+            options: world.clone(),
+            script: &["C1QW"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-invisibility-caster",
+            options: world.clone(),
+            script: &["C1LS"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-cause-fear-target",
+            options: world.clone(),
+            script: &["C1CIQ"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-mass-charm-effect",
+            options: world.clone(),
+            script: &["C1AQW"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
             name: "combat-tremor-targets",
             options: world.clone(),
             script: &["C1IPVY"],
@@ -2681,6 +2743,11 @@ fn apply_route_smoke_case_setup(
             seed_dungeon_room_party_entry_route(state, game_dir)?;
         }
         "combat-magic-missile-target"
+        | "combat-fireball-target"
+        | "combat-reveal-hidden-target"
+        | "combat-invisibility-caster"
+        | "combat-cause-fear-target"
+        | "combat-mass-charm-effect"
         | "combat-tremor-targets"
         | "combat-repel-undead-targets"
         | "combat-charm-target"
@@ -3535,6 +3602,11 @@ fn seed_combat_utility_failure_route(
 
 fn combat_spell_route_code(case_name: &str) -> &'static str {
     match case_name {
+        "combat-fireball-target" => "FV",
+        "combat-reveal-hidden-target" => "QW",
+        "combat-invisibility-caster" => "LS",
+        "combat-cause-fear-target" => "CIQ",
+        "combat-mass-charm-effect" => "AQW",
         "combat-tremor-targets" => "IPVY",
         "combat-repel-undead-targets" => "ACX",
         "combat-charm-target" => "AEX",
@@ -3597,6 +3669,7 @@ fn seed_combat_spell_route(state: &mut PlayState, code: &str) -> io::Result<()> 
     }
     state.prng_state = match code {
         "GP" => first_nonzero_prng_roll_seed(15),
+        "FV" => first_nonzero_prng_roll_seed(29),
         "IPVY" => first_nonzero_prng_roll_seed(19),
         _ => 0,
     };
@@ -3616,12 +3689,15 @@ fn seed_combat_spell_route(state: &mut PlayState, code: &str) -> io::Result<()> 
         }
         "KX" | "BIX" | "CKX" => {}
         _ => {
-            let class = if matches!(code, "BRX" | "IPVY") {
+            let class = if matches!(code, "BRX" | "FV" | "IPVY") {
                 39
             } else {
                 COMBAT_CLASS_GIANT_RAT
             };
             seed_combat_route_monster(&mut actors, &mut active_objects, class, 6, 6, 5)?;
+            if code == "QW" {
+                actors[6].flags |= COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED;
+            }
         }
     }
 
@@ -3783,6 +3859,63 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             if !state.message.starts_with("Magic Missile!") {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete the targeted Magic Missile spell; message `{}`",
+                    state.message
+                )));
+            }
+        }
+        "combat-fireball-target" => {
+            if !state.message.starts_with("Fireball!")
+                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].hp_or_wound
+                    >= combat_class_stats(39)
+                        .map(|stats| stats.max_hp)
+                        .unwrap_or(u8::MAX)
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not damage the targeted actor with Fireball; message `{}`",
+                    state.message
+                )));
+            }
+        }
+        "combat-reveal-hidden-target" => {
+            if !state.message.starts_with("Revealed 1 combat actor")
+                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_hidden_or_unrevealed()
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not reveal the hidden combat actor; message `{}`",
+                    state.message
+                )));
+            }
+        }
+        "combat-invisibility-caster" => {
+            if !state.message.starts_with("Invisibility!")
+                || !state.combat_actors[0].is_hidden_or_unrevealed()
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not hide the active caster; message `{}`",
+                    state.message
+                )));
+            }
+        }
+        "combat-cause-fear-target" => {
+            if !state
+                .message
+                .starts_with("Cause Fear affected 1 combat actor")
+                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].flags & COMBAT_ACTOR_FLAG_FLEEING
+                    == 0
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not mark the hostile actor as fleeing; message `{}`",
+                    state.message
+                )));
+            }
+        }
+        "combat-mass-charm-effect" => {
+            if !state.message.starts_with("Mass charm!")
+                || state.active_effect_tag != Some(MASS_CHARM_ACTIVE_EFFECT_TAG)
+                || state.active_effect_counter != MASS_CHARM_ACTIVE_EFFECT_DURATION
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not install the Mass Charm active effect; message `{}`",
                     state.message
                 )));
             }
@@ -4004,9 +4137,22 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                 )));
             }
         }
+        "britannia-rel-hur-east" => {
+            if state.wind != WindState::East
+                || state.wind_save_byte != WindState::East.save_byte()
+                || state.spell_charges[REL_HUR_SPELL_INDEX] != 0
+                || state.party.first().is_none_or(|member| member.mana != 0)
+                || state.message != "Wind change! Calm Winds -> East Winds."
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the public Rel Hur wind mapping"
+                )));
+            }
+        }
         "castle-light-open-spell-route" => {
             let target = state.player.y * TOWN_GRID_SIDE + state.player.x + 1;
-            if state.spell_charges[VAS_LOR_SPELL_INDEX] != 0
+            if state.spell_charges[IN_LOR_SPELL_INDEX] != 0
+                || state.spell_charges[VAS_LOR_SPELL_INDEX] != 0
                 || state.spell_charges[OPEN_SPELL_INDEX] != 0
                 || state.light_spell_counter == 0
                 || state.grid.get(target).copied() != Some(0xb8)
@@ -4185,6 +4331,11 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             }
         }
         "combat-magic-missile-target"
+        | "combat-fireball-target"
+        | "combat-reveal-hidden-target"
+        | "combat-invisibility-caster"
+        | "combat-cause-fear-target"
+        | "combat-mass-charm-effect"
         | "combat-tremor-targets"
         | "combat-repel-undead-targets"
         | "combat-charm-target"

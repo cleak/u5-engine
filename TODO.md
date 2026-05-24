@@ -38,7 +38,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-24 with 213 scripted route cases (including save/reload checkpoints
+  2026-05-24 with 219 scripted route cases (including save/reload checkpoints
   for boarded horse, Gate Travel, chasm fall, fixed hidden treasure,
   horse-trader delivery, ship X-it/skiff, dungeon ladders, and dungeon exits,
   plus expanded active-shop/modal
@@ -49,7 +49,7 @@ Last known verification state:
   focused Create Food, fountain Look, Yew wanted-poster Look,
   Horse/non-horse wishing-well branches, death-vision Look, public
   #44 sleeping/praying Talk refusals, public #48 Blink ray landing,
-  Locate, Light/Open, restore-spell, active-effect, directed Sleep/Poison
+  Locate, In Lor/Light/Open, restore-spell, active-effect, directed Sleep/Poison
   Wind/Death Wind/Flame Wind combat casts, combat field marker casts/removal,
   combat utility fallback casts,
   targeted Magic Missile/Tremor/Repel Undead/Charm/Polymorph/Clone,
@@ -149,7 +149,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 552 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 566 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -282,7 +282,7 @@ Last known verification state:
   cinematic route steps on the composed Bevy framebuffer; the 2026-05-23
   expansion added public #48 Blink
   `route-britannia-blink-east-ray-01-c1ip6` `17ceb1f94bc6c6e3`,
-  Locate, Light/Open, restore-spell, active-effect, directed Sleep/Poison
+  Locate, In Lor/Light/Open, restore-spell, active-effect, directed Sleep/Poison
   Wind/Death Wind/Flame Wind combat casts, combat utility fallback casts,
   dungeon level, dungeon field/dispel, and dungeon Open spell route frames,
   public #51 poison gas `route-castle-poison-gas-step-01-d`

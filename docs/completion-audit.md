@@ -72,7 +72,7 @@ audit:
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 66 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 213 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 219 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
@@ -109,10 +109,10 @@ audit:
   `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls
   plus combat status-highlight and death/field/cursor marker galleries.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 552 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 566 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including horse-trader
   purchases, all nine public arms-shop first-stock purchases, accepted healer cure/heal/resurrect, all four public shipwright
-  delivery-row purchases, spell routes for Locate, Light/Open, restore, active effects,
+  delivery-row purchases, spell routes for Locate, In Lor/Light/Open, restore, active effects,
   directed Sleep/Poison Wind/Death Wind/Flame Wind combat casts, combat utility fallback casts, targeted
   Magic Missile/Tremor/Repel Undead/Charm/Polymorph/Clone, Conjure/Swarm/Summon
   Daemon, dungeon levels, dungeon fields/dispel, dungeon Open chest, utility
