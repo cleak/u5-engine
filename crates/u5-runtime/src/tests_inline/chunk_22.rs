@@ -182,6 +182,179 @@
     }
 
     #[test]
+    fn ambient_town_actor_countdown_animates_without_wandering() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: 0x22,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        state.advance_active_objects();
+
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (5, 5));
+        assert_eq!(state.active_objects[1].phase, 0x21);
+        assert_eq!(state.active_objects[1].tile, 193);
+    }
+
+    #[test]
+    fn ambient_town_actor_steps_on_open_terrain_and_marks_visibility_dirty() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.turn = 3;
+        state.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: 0x00,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        state.advance_active_objects();
+
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (6, 5));
+        assert_eq!(state.active_objects[1].phase, 0x22);
+        assert_eq!(state.active_objects[1].tile, 192);
+        assert!(state.visibility_dirty);
+    }
+
+    #[test]
+    fn ambient_town_actor_respects_blocked_terrain_and_occupancy() {
+        let mut blocked_grid = open_grid();
+        blocked_grid[5 * TOWN_GRID_SIDE + 6] = 0x00;
+        let mut terrain_blocked = test_state(blocked_grid, 1, 1);
+        terrain_blocked.turn = 3;
+        terrain_blocked.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: 0x00,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        terrain_blocked.advance_active_objects();
+        assert_eq!(
+            (terrain_blocked.active_objects[1].x, terrain_blocked.active_objects[1].y),
+            (5, 5)
+        );
+        assert_eq!(terrain_blocked.active_objects[1].phase, 0x00);
+
+        let mut object_blocked = test_state(open_grid(), 1, 1);
+        object_blocked.turn = 3;
+        object_blocked.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: 0x00,
+            aux1: 0,
+            aux3: 0,
+        });
+        object_blocked.active_objects.push(ActiveObject {
+            type_byte: 194,
+            tile: 194,
+            x: 6,
+            y: 5,
+            z: 0,
+            phase: 0x00,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        object_blocked.advance_active_objects();
+        assert_eq!(
+            (object_blocked.active_objects[1].x, object_blocked.active_objects[1].y),
+            (5, 5)
+        );
+        assert_eq!(object_blocked.active_objects[1].phase, 0x00);
+
+        let mut player_blocked = test_state(open_grid(), 6, 5);
+        player_blocked.turn = 3;
+        player_blocked.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: 0x00,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        player_blocked.advance_active_objects();
+        assert_eq!(
+            (player_blocked.active_objects[1].x, player_blocked.active_objects[1].y),
+            (5, 5)
+        );
+        assert_eq!(player_blocked.active_objects[1].phase, 0x00);
+    }
+
+    #[test]
+    fn ambient_town_actor_skips_npc_linked_and_off_floor_objects() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.turn = 3;
+        state.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: 0x00,
+            aux1: 0,
+            aux3: 0,
+        });
+        state.npcs.push(RuntimeNpc {
+            slot: 1,
+            type_byte: 192,
+            dialog_id: 1,
+            schedule: [0; NPC_SCHEDULE_RECORD_LEN],
+            state: NPC_STATE_IDLE,
+            x: 5,
+            y: 5,
+            z: 0,
+            cached_wp: 0,
+            move_queue: Vec::new(),
+            move_queue_pos: 0,
+            stuck_counter: 0,
+            active_object: Some(1),
+            player_phantom: false,
+        });
+        assert_eq!(state.npcs[0].active_object, Some(1));
+
+        state.advance_active_objects();
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (5, 5));
+        assert_eq!(state.active_objects[1].phase, 0x00);
+
+        let mut off_floor = test_state(open_grid(), 1, 1);
+        off_floor.turn = 3;
+        off_floor.active_objects.push(ActiveObject {
+            type_byte: 192,
+            tile: 192,
+            x: 5,
+            y: 5,
+            z: 1,
+            phase: 0x00,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        off_floor.advance_active_objects();
+        assert_eq!((off_floor.active_objects[1].x, off_floor.active_objects[1].y), (5, 5));
+        assert_eq!(off_floor.active_objects[1].phase, 0x00);
+    }
+
+    #[test]
     fn outdoor_water_creature_uses_water_predicate_and_rewrites_facing() {
         let mut grid = open_world_grid();
         grid[world_cell_index(4, 5)] = 1;

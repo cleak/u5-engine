@@ -471,6 +471,24 @@ fn cli_parser_accepts_frame_manifest_compare_mode() {
 }
 
 #[test]
+fn cli_parser_accepts_location_audit_mode() {
+    let args = parse_cli_args([
+        "--location-audit",
+        "target/location-audit.txt",
+        r"C:\Games\U5-Clean",
+    ])
+    .unwrap();
+
+    assert!(!args.play);
+    assert!(!args.visual);
+    assert_eq!(
+        args.location_audit,
+        Some(PathBuf::from("target/location-audit.txt"))
+    );
+    assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
+}
+
+#[test]
 fn cli_save_frame_suite_rejects_other_play_modes_and_overrides() {
     assert!(parse_cli_args(["--save-frame-suite", "out", "--play"]).is_err());
     assert!(parse_cli_args(["--save-frame-suite", "out", "--visual"]).is_err());
@@ -576,6 +594,30 @@ fn cli_frame_manifest_compare_rejects_other_modes_and_missing_paths() {
     );
 }
 
+#[test]
+fn cli_location_audit_rejects_other_modes_and_missing_path() {
+    assert!(parse_cli_args(["--location-audit"]).is_err());
+    assert!(parse_cli_args(["--location-audit", "out", "--play"]).is_err());
+    assert!(parse_cli_args(["--location-audit", "out", "--intro"]).is_err());
+    assert!(parse_cli_args(["--location-audit", "out", "--visual"]).is_err());
+    assert!(parse_cli_args(["--location-audit", "out", "--route-smoke"]).is_err());
+    assert!(parse_cli_args(["--location-audit", "out", "--save-frame", "frame.png"]).is_err());
+    assert!(parse_cli_args(["--location-audit", "out", "--scene", "BRITANNIA"]).is_err());
+    assert!(
+        parse_cli_args(["--location-audit", "one.txt", "--location-audit", "two.txt"]).is_err()
+    );
+    assert!(
+        parse_cli_args([
+            "--location-audit",
+            "out",
+            "--compare-frame-manifests",
+            "base",
+            "candidate"
+        ])
+        .is_err()
+    );
+}
+
 // from chunk_02
 #[test]
 fn cli_parser_rejects_missing_or_duplicate_play_script() {
@@ -591,6 +633,7 @@ fn cli_parser_rejects_missing_save_frame_path() {
     assert!(parse_cli_args(["--visual-route-suite"]).is_err());
     assert!(parse_cli_args(["--route-smoke", "--route-smoke-manifest"]).is_err());
     assert!(parse_cli_args(["--compare-frame-manifests"]).is_err());
+    assert!(parse_cli_args(["--location-audit"]).is_err());
 }
 
 // from chunk_02
@@ -1051,6 +1094,7 @@ fn cli_usage_lists_documented_smoke_commands() {
     assert!(CLI_USAGE.contains("--visual-frame-suite"));
     assert!(CLI_USAGE.contains("--visual-route-suite"));
     assert!(CLI_USAGE.contains("--compare-frame-manifests"));
+    assert!(CLI_USAGE.contains("--location-audit"));
     assert!(CLI_USAGE.contains("--scene"));
     assert!(CLI_USAGE.contains("--floor"));
     assert!(CLI_USAGE.contains("--create-character"));

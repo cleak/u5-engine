@@ -2349,7 +2349,11 @@ impl PlayState {
             let ship_wind_changed = !matches!(ship_wind, ActiveShipWind::None);
             let wandered = !ship_wind_changed
                 && (self.active_objects[slot].phase & 0x0f) == 0
-                && self.try_wander_active_object(slot);
+                && if matches!(self.area, Area::Town { .. }) {
+                    self.try_wander_town_active_object(slot)
+                } else {
+                    self.try_wander_active_object(slot)
+                };
             if wandered {
                 self.active_objects[slot].phase = (self.active_objects[slot].phase & 0xf0) | 0x02;
             }
@@ -2601,6 +2605,86 @@ impl PlayState {
             ^ self.clock.hour
             ^ self.clock.minute
             ^ (slot as u8).wrapping_mul(17)
+            ^ (self.player.x as u8).wrapping_mul(3)
+            ^ (self.player.y as u8).wrapping_mul(5)
+            ^ salt
+    }
+
+    pub fn try_wander_town_active_object(&mut self, slot: usize) -> bool {
+        let Area::Town { floor, .. } = self.area else {
+            return false;
+        };
+        let object = self.active_objects[slot];
+        if object.z != floor
+            || !is_ambient_wanderer_object(object)
+            || self.town_active_object_slot_is_npc_link(slot)
+        {
+            return false;
+        }
+
+        let seed = self.town_active_object_step_seed(slot, object.type_byte ^ object.tile);
+        if seed % 4 != 0 {
+            return false;
+        }
+        let direction = [
+            Direction::North,
+            Direction::East,
+            Direction::South,
+            Direction::West,
+        ][usize::from((seed >> 2) & 0x03)];
+        let (dx, dy) = direction.delta();
+        self.try_step_town_active_object(slot, object, dx, dy, direction)
+    }
+
+    pub fn try_step_town_active_object(
+        &mut self,
+        slot: usize,
+        object: ActiveObject,
+        dx: isize,
+        dy: isize,
+        direction: Direction,
+    ) -> bool {
+        let nx = object.x as isize + dx;
+        let ny = object.y as isize + dy;
+        if nx < 0 || ny < 0 || nx >= TOWN_GRID_SIDE as isize || ny >= TOWN_GRID_SIDE as isize {
+            return false;
+        }
+        let nx = nx as usize;
+        let ny = ny as usize;
+        if (nx, ny) == (self.player.x, self.player.y)
+            || self
+                .active_objects
+                .iter()
+                .enumerate()
+                .any(|(other_slot, other)| {
+                    other_slot != slot && !other.is_player() && self.object_occupies(*other, nx, ny)
+                })
+            || self.npc_at_current_floor(nx, ny).is_some()
+        {
+            return false;
+        }
+        let tile = self.grid[ny * TOWN_GRID_SIDE + nx];
+        if !town_active_object_step_accepts_tile(tile) {
+            return false;
+        }
+
+        self.active_objects[slot].phase =
+            active_object_phase_from_direction(direction, object.phase & 0x0f);
+        self.active_objects[slot].x = nx;
+        self.active_objects[slot].y = ny;
+        self.mark_visibility_dirty();
+        true
+    }
+
+    pub fn town_active_object_slot_is_npc_link(&self, slot: usize) -> bool {
+        self.npcs.iter().any(|npc| npc.active_object == Some(slot))
+    }
+
+    pub fn town_active_object_step_seed(&self, slot: usize, salt: u8) -> u8 {
+        self.turn as u8
+            ^ self.clock.hour
+            ^ self.clock.minute
+            ^ (slot as u8).wrapping_mul(29)
             ^ (self.player.x as u8).wrapping_mul(3)
             ^ (self.player.y as u8).wrapping_mul(5)
             ^ salt
@@ -3490,6 +3574,10 @@ pub fn is_outdoor_active_object_walker(object: ActiveObject) -> bool {
 
 pub const fn is_outdoor_active_object_walker_byte(byte: u8) -> bool {
     matches!(byte, 0x2c..=0x2f | 0x80..=0xff)
+}
+
+pub fn town_active_object_step_accepts_tile(tile: u8) -> bool {
+    npc_path_tile_open(tile)
 }
 
 pub fn outdoor_active_object_step_accepts_tile(

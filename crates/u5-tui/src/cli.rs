@@ -52,6 +52,8 @@ pub struct CliArgs {
     pub visual_route_suite: Option<PathBuf>,
     /// If set, compare two sanitized frame-suite manifests and exit.
     pub compare_frame_manifests: Option<(PathBuf, PathBuf)>,
+    /// If set, write a sanitized aggregate LOCATION.DAT audit and exit.
+    pub location_audit: Option<PathBuf>,
     pub create_character: Option<CreateCharacterCommand>,
     pub create_character_interactive: bool,
 }
@@ -92,6 +94,7 @@ where
     let mut visual_frame_suite: Option<PathBuf> = None;
     let mut visual_route_suite: Option<PathBuf> = None;
     let mut compare_frame_manifests: Option<(PathBuf, PathBuf)> = None;
+    let mut location_audit: Option<PathBuf> = None;
     let mut create_character_name: Option<Vec<u8>> = None;
     let mut create_character_male: Option<bool> = None;
     let mut create_character_winners: Option<Vec<ShrineVirtue>> = None;
@@ -160,6 +163,20 @@ where
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "--compare-frame-manifests may only be supplied once",
+                    ));
+                }
+            }
+            "--location-audit" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--location-audit requires a report output path",
+                    )
+                })?;
+                if location_audit.replace(PathBuf::from(value)).is_some() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--location-audit may only be supplied once",
                     ));
                 }
             }
@@ -357,6 +374,7 @@ where
             visual_frame_suite: None,
             visual_route_suite: None,
             compare_frame_manifests: None,
+            location_audit: None,
             create_character: None,
             create_character_interactive: false,
         });
@@ -375,6 +393,7 @@ where
             || visual_frame_suite.is_some()
             || visual_route_suite.is_some()
             || compare_frame_manifests.is_some()
+            || location_audit.is_some()
             || from_save
             || from_init
             || options != PlayOptions::default()
@@ -401,6 +420,7 @@ where
             || visual_frame_suite.is_some()
             || visual_route_suite.is_some()
             || compare_frame_manifests.is_some()
+            || location_audit.is_some()
             || route_smoke
             || route_smoke_manifest.is_some()
             || from_save
@@ -424,6 +444,7 @@ where
             || save_frame_suite.is_some()
             || visual_route_suite.is_some()
             || compare_frame_manifests.is_some()
+            || location_audit.is_some()
             || route_smoke
             || route_smoke_manifest.is_some()
             || from_save
@@ -447,6 +468,7 @@ where
             || save_frame_suite.is_some()
             || visual_frame_suite.is_some()
             || compare_frame_manifests.is_some()
+            || location_audit.is_some()
             || route_smoke
             || route_smoke_manifest.is_some()
             || from_save
@@ -471,6 +493,7 @@ where
             || save_frame_suite.is_some()
             || visual_frame_suite.is_some()
             || visual_route_suite.is_some()
+            || location_audit.is_some()
             || route_smoke
             || route_smoke_manifest.is_some()
             || from_save
@@ -487,6 +510,31 @@ where
             "--compare-frame-manifests is a standalone metadata check; it cannot be combined with play, intro, visual, route-smoke, save-frame, frame suites, from-save, from-init, play-script, scene, start, or gameplay overrides",
         ));
     }
+    if location_audit.is_some()
+        && (play
+            || intro
+            || visual
+            || save_frame.is_some()
+            || save_frame_suite.is_some()
+            || visual_frame_suite.is_some()
+            || visual_route_suite.is_some()
+            || compare_frame_manifests.is_some()
+            || route_smoke
+            || route_smoke_manifest.is_some()
+            || from_save
+            || from_init
+            || play_script.is_some()
+            || options != PlayOptions::default()
+            || wind_override.is_some()
+            || climbing_gear_override.is_some()
+            || pending_vehicle_override.is_some()
+            || transport_override.is_some())
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--location-audit is a standalone metadata report; it cannot be combined with play, intro, visual, route-smoke, save-frame, frame suites, compare-frame-manifests, from-save, from-init, play-script, scene, start, or gameplay overrides",
+        ));
+    }
     if intro
         && (play
             || save_frame.is_some()
@@ -494,6 +542,7 @@ where
             || visual_frame_suite.is_some()
             || visual_route_suite.is_some()
             || compare_frame_manifests.is_some()
+            || location_audit.is_some()
             || route_smoke
             || route_smoke_manifest.is_some()
             || from_save
@@ -513,6 +562,7 @@ where
             || visual_frame_suite.is_some()
             || visual_route_suite.is_some()
             || compare_frame_manifests.is_some()
+            || location_audit.is_some()
             || route_smoke
             || route_smoke_manifest.is_some()
             || from_save
@@ -539,6 +589,7 @@ where
             || visual_frame_suite.is_some()
             || visual_route_suite.is_some()
             || compare_frame_manifests.is_some()
+            || location_audit.is_some()
             || route_smoke
             || route_smoke_manifest.is_some()
             || from_save
@@ -616,6 +667,7 @@ where
         visual_frame_suite,
         visual_route_suite,
         compare_frame_manifests,
+        location_audit,
         create_character,
         create_character_interactive,
     })
@@ -677,6 +729,9 @@ OPTIONS:
                               Compare sanitized frame-suite or visual-route
                               manifests by labels, metadata, hashes, and
                               nonblack counts, then exit.
+        --location-audit <PATH>
+                              Write a sanitized aggregate LOCATION.DAT cell
+                              audit report, then exit.
 
 SMOKE COMMANDS:
     cargo run -- C:\\Games\\U5-Clean
@@ -686,6 +741,7 @@ SMOKE COMMANDS:
     cargo run -- --route-smoke --route-smoke-manifest target\\route-smoke\\manifest.txt C:\\Games\\U5-Clean
     cargo run -- --save-frame-suite target\\frame-suite C:\\Games\\U5-Clean
     cargo run -- --compare-frame-manifests target\\baseline\\manifest.txt target\\candidate\\manifest.txt
+    cargo run -- --location-audit target\\location-audit.txt C:\\Games\\U5-Clean
     cargo run -- --play --scene DUNGEON:0 --floor 0 C:\\Games\\U5-Clean
     cargo run -- --create-character Avatar --gender male --chargen-winners Honesty,Compassion,Valor,Justice,Sacrifice,Honor,Spirituality C:\\Games\\U5-Clean
     cargo run --features visual -- --visual --scene BRITANNIA C:\\Games\\U5-Clean

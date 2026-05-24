@@ -1,7 +1,9 @@
 use std::env;
+use std::fs;
 use std::io;
+use std::path::Path;
 
-use u5_runtime::run_report;
+use u5_runtime::{audit_location_dat_files, location_audit_report_text, run_report};
 use u5_tui::{
     CLI_USAGE, CliArgs, compare_manifest_files, parse_cli_args, run_create_character_command,
     run_interactive_create_character, run_intro_menu_loop, run_play_loop, run_route_smoke,
@@ -35,6 +37,9 @@ fn main() -> io::Result<()> {
     if args.create_character_interactive {
         run_interactive_create_character(&args.game_dir)?;
         return Ok(());
+    }
+    if let Some(out) = args.location_audit.as_deref() {
+        return run_location_audit(&args.game_dir, out);
     }
     if let Some((baseline, candidate)) = args.compare_frame_manifests.as_ref() {
         let report = compare_manifest_files(baseline, candidate)?;
@@ -85,6 +90,16 @@ fn main() -> io::Result<()> {
         );
     }
     run_report(&args.game_dir)
+}
+
+fn run_location_audit(game_dir: &Path, out: &Path) -> io::Result<()> {
+    let report = audit_location_dat_files(game_dir)?;
+    if let Some(parent) = out.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(out, location_audit_report_text(&report))?;
+    println!("Saved location audit: {}", out.display());
+    Ok(())
 }
 
 #[cfg(feature = "visual")]

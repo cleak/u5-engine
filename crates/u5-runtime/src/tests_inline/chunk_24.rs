@@ -66,16 +66,28 @@ fn location_audit_report_text_is_aggregate_only() {
         total_cells: 0,
         content_hash: 0x1234,
         owner_counts: [0; LOCATION_AUDIT_OWNER_COUNT],
+        tile_class_counts: [0; LOCATION_AUDIT_TILE_CLASS_COUNT],
+        view_class_counts: [0; LOCATION_AUDIT_VIEW_CLASS_COUNT],
+        npc_path_open_count: 0,
+        foot_walkable_count: 0,
         dawn_dusk_bottom_row_count: 0,
         dawn_dusk_unexpected_pair_count: 0,
     };
     report.owner_counts[LocationCellOwner::NpcStartMarker.index()] = 2;
     report.owner_counts[LocationCellOwner::Door.index()] = 3;
+    report.tile_class_counts[3] = 5;
+    report.view_class_counts[2] = 7;
+    report.npc_path_open_count = 11;
+    report.foot_walkable_count = 13;
 
     let text = location_audit_report_text(&report);
     assert!(text.contains("physical_pages=0"));
     assert!(text.contains("npc-start-marker=2"));
     assert!(text.contains("door=3"));
+    assert!(text.contains("path=5"));
+    assert!(text.contains("0x02=7"));
+    assert!(text.contains("npc_path_open=11"));
+    assert!(text.contains("foot_walkable=13"));
     assert!(!text.contains("32x32"));
     assert!(!text.contains("[["));
     assert!(!text.contains("0xAB"));
@@ -114,6 +126,16 @@ fn synthetic_location_dat_audit_reads_all_four_families_without_raw_report_rows(
     assert_eq!(report.physical_pages.len(), 64);
     assert_eq!(report.total_cells, 64 * TOWN_GRID_BYTES);
     assert_eq!(report.owner_counts.iter().sum::<usize>(), report.total_cells);
+    assert_eq!(
+        report.tile_class_counts.iter().sum::<usize>(),
+        report.total_cells
+    );
+    assert_eq!(
+        report.view_class_counts.iter().sum::<usize>(),
+        report.total_cells
+    );
+    assert!(report.npc_path_open_count > 0);
+    assert!(report.foot_walkable_count > 0);
     assert_eq!(report.dawn_dusk_bottom_row_count, 0);
     assert_eq!(report.dawn_dusk_unexpected_pair_count, 0);
     assert!(report.owner_counts[LocationCellOwner::NpcStartMarker.index()] > 0);
@@ -124,6 +146,9 @@ fn synthetic_location_dat_audit_reads_all_four_families_without_raw_report_rows(
     assert!(text.contains("physical_pages=64"));
     assert!(text.contains("cells=65536"));
     assert!(text.contains("hash="));
+    assert!(text.contains("tile_class_counts:"));
+    assert!(text.contains("view_class_counts:"));
+    assert!(text.contains("movement_counts"));
     assert!(!text.contains("TOWNE.DAT row"));
     assert!(!text.contains("[["));
 
@@ -149,6 +174,16 @@ fn shipped_location_dat_audit_covers_authored_cell_facets_when_assets_present() 
     assert_eq!(report.physical_pages.len(), 64);
     assert_eq!(report.total_cells, 64 * TOWN_GRID_BYTES);
     assert_eq!(report.owner_counts.iter().sum::<usize>(), report.total_cells);
+    assert_eq!(
+        report.tile_class_counts.iter().sum::<usize>(),
+        report.total_cells
+    );
+    assert_eq!(
+        report.view_class_counts.iter().sum::<usize>(),
+        report.total_cells
+    );
+    assert!(report.npc_path_open_count > 0);
+    assert!(report.foot_walkable_count > 0);
     assert!(report.logical_floors.len() >= 80);
     assert_eq!(report.dawn_dusk_bottom_row_count, 0);
     assert_eq!(report.dawn_dusk_unexpected_pair_count, 0);
@@ -189,6 +224,9 @@ fn shipped_location_dat_audit_covers_authored_cell_facets_when_assets_present() 
     let text = location_audit_report_text(&report);
     assert!(text.contains("physical_pages=64"));
     assert!(text.contains("owner_counts:"));
+    assert!(text.contains("tile_class_counts:"));
+    assert!(text.contains("view_class_counts:"));
+    assert!(text.contains("movement_counts"));
     assert!(!text.contains("[["));
     assert!(!text.contains("32x32"));
 }

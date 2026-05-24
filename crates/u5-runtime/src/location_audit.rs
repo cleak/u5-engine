@@ -127,6 +127,10 @@ pub struct LocationAuditReport {
     pub total_cells: usize,
     pub content_hash: u64,
     pub owner_counts: [usize; LOCATION_AUDIT_OWNER_COUNT],
+    pub tile_class_counts: [usize; LOCATION_AUDIT_TILE_CLASS_COUNT],
+    pub view_class_counts: [usize; LOCATION_AUDIT_VIEW_CLASS_COUNT],
+    pub npc_path_open_count: usize,
+    pub foot_walkable_count: usize,
     pub dawn_dusk_bottom_row_count: usize,
     pub dawn_dusk_unexpected_pair_count: usize,
 }
@@ -189,6 +193,10 @@ pub fn audit_location_dat_files(game_dir: &Path) -> io::Result<LocationAuditRepo
         total_cells: 0,
         content_hash: 0xcbf29ce484222325,
         owner_counts: [0; LOCATION_AUDIT_OWNER_COUNT],
+        tile_class_counts: [0; LOCATION_AUDIT_TILE_CLASS_COUNT],
+        view_class_counts: [0; LOCATION_AUDIT_VIEW_CLASS_COUNT],
+        npc_path_open_count: 0,
+        foot_walkable_count: 0,
         dawn_dusk_bottom_row_count: 0,
         dawn_dusk_unexpected_pair_count: 0,
     };
@@ -249,6 +257,26 @@ pub fn location_audit_report_text(report: &LocationAuditReport) -> String {
         }
     }
     text.push('\n');
+    text.push_str("tile_class_counts:");
+    for index in 0..LOCATION_AUDIT_TILE_CLASS_COUNT {
+        let count = report.tile_class_counts[index];
+        if count > 0 {
+            text.push_str(&format!(" {}={count}", tile_class_label(index)));
+        }
+    }
+    text.push('\n');
+    text.push_str("view_class_counts:");
+    for index in 0..LOCATION_AUDIT_VIEW_CLASS_COUNT {
+        let count = report.view_class_counts[index];
+        if count > 0 {
+            text.push_str(&format!(" {}={count}", view_class_label(index)));
+        }
+    }
+    text.push('\n');
+    text.push_str(&format!(
+        "movement_counts npc_path_open={} foot_walkable={}\n",
+        report.npc_path_open_count, report.foot_walkable_count
+    ));
     text.push_str(&format!(
         "dawn_dusk_anomalies bottom_row={} unexpected_pair={}\n",
         report.dawn_dusk_bottom_row_count, report.dawn_dusk_unexpected_pair_count
@@ -353,8 +381,16 @@ fn merge_location_floor_audit(report: &mut LocationAuditReport, floor: &Location
     report.content_hash = report.content_hash.wrapping_mul(0x100000001b3);
     report.dawn_dusk_bottom_row_count += floor.dawn_dusk_bottom_row_count;
     report.dawn_dusk_unexpected_pair_count += floor.dawn_dusk_unexpected_pair_count;
+    report.npc_path_open_count += floor.npc_path_open_count;
+    report.foot_walkable_count += floor.foot_walkable_count;
     for index in 0..LOCATION_AUDIT_OWNER_COUNT {
         report.owner_counts[index] += floor.owner_counts[index];
+    }
+    for index in 0..LOCATION_AUDIT_TILE_CLASS_COUNT {
+        report.tile_class_counts[index] += floor.tile_class_counts[index];
+    }
+    for index in 0..LOCATION_AUDIT_VIEW_CLASS_COUNT {
+        report.view_class_counts[index] += floor.view_class_counts[index];
     }
 }
 
@@ -374,6 +410,29 @@ fn tile_class_index(class: TileClass) -> usize {
         TileClass::VehicleArt => 11,
         TileClass::Npc => 12,
     }
+}
+
+fn tile_class_label(index: usize) -> &'static str {
+    match index {
+        0 => "sentinel",
+        1 => "water",
+        2 => "terrain",
+        3 => "path",
+        4 => "wall",
+        5 => "furniture",
+        6 => "door",
+        7 => "decoration",
+        8 => "barrier",
+        9 => "special",
+        10 => "vehicle",
+        11 => "vehicle-art",
+        12 => "npc",
+        _ => "unknown",
+    }
+}
+
+fn view_class_label(index: usize) -> String {
+    format!("0x{index:02x}")
 }
 
 fn town_search_inspectable_tile(tile: u8) -> bool {
