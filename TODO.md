@@ -137,7 +137,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 299 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 338 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -176,30 +176,36 @@ Last known verification state:
   `route-shop-sage-topic-miss-00-initial` `eafb6cf3478f4c49`,
   `route-shop-sage-topic-miss-01-mantra` `67cfc176459efad8`,
   `route-doom-combat-trigger-00-initial` `6fdbd1b19453bbea`,
-  `route-doom-combat-trigger-01-empty` `a2619c7eb20c407d`,
+  `route-doom-combat-trigger-01-empty` `30fecda7448a111d`,
   `route-doom-combat-pass-00-initial` `6fdbd1b19453bbea`,
-  `route-doom-combat-pass-01-empty` `a2619c7eb20c407d`,
-  `route-doom-combat-pass-02-empty` `3cf0bc15e87d80a5`,
+  `route-doom-combat-pass-01-empty` `30fecda7448a111d`,
+  `route-doom-combat-pass-02-empty` `c1ffc74f45610145`,
   `route-doom-combat-attack-00-initial` `6fdbd1b19453bbea`,
-  `route-doom-combat-attack-01-empty` `a2619c7eb20c407d`,
-  `route-doom-combat-attack-02-a6` `3cf0bc15e87d80a5`,
+  `route-doom-combat-attack-01-empty` `30fecda7448a111d`,
+  `route-doom-combat-attack-02-a6` `c1ffc74f45610145`,
   `route-doom-combat-board-refusal-00-initial` `6fdbd1b19453bbea`,
-  `route-doom-combat-board-refusal-01-empty` `a2619c7eb20c407d`,
-  `route-doom-combat-board-refusal-02-b` `3cf0bc15e87d80a5`,
+  `route-doom-combat-board-refusal-01-empty` `30fecda7448a111d`,
+  `route-doom-combat-board-refusal-02-b` `c1ffc74f45610145`,
   `route-doom-combat-z-stats-00-initial` `6fdbd1b19453bbea`,
-  `route-doom-combat-z-stats-01-empty` `a2619c7eb20c407d`,
-  `route-doom-combat-z-stats-02-z` `3cf0bc15e87d80a5`,
+  `route-doom-combat-z-stats-01-empty` `30fecda7448a111d`,
+  `route-doom-combat-z-stats-02-z` `c1ffc74f45610145`,
   `route-doom-combat-search-prompt-00-initial` `6fdbd1b19453bbea`,
-  `route-doom-combat-search-prompt-01-empty` `a2619c7eb20c407d`, and
-  `route-doom-combat-search-prompt-02-s` `3cf0bc15e87d80a5`. The
+  `route-doom-combat-search-prompt-01-empty` `30fecda7448a111d`, and
+  `route-doom-combat-search-prompt-02-s` `c1ffc74f45610145`. The
   latest combat visual-route expansion adds composed-frame Doom combat
   command coverage for digit selection/clear, direct movement,
   Use/Drop/Wear/Enter/Fire/Hole-up/Ignite/Mix/New Order/Talk/View/Look
   refusal or label branches, Cast/Get/Jimmy/Open/Push/Klimb directed
   prompts, Ready, Yell, and X-it, including representative terminal frames
-  `route-doom-combat-cast-refusal-02-c1il` `1571e1c7ad091db5`,
-  `route-doom-combat-ready-prompt-02-r` `3cf0bc15e87d80a5`,
-  and `route-doom-combat-xit-foes-remain-02-x` `3cf0bc15e87d80a5`. The
+  `route-doom-combat-cast-refusal-02-c1il` `325a6f1641bb2455`,
+  `route-doom-combat-ready-prompt-02-r` `c1ffc74f45610145`,
+  and `route-doom-combat-xit-foes-remain-02-x` `c1ffc74f45610145`. The
+  latest long-route expansion adds extended Britannia/castle/dungeon play
+  sessions plus sustained Doom combat pass rounds, including
+  `route-britannia-extended-exploration-12-empty` `96d8b1b3118012d7`,
+  `route-castle-extended-walk-and-save-09-z` `431f2a5ad9c4b417`,
+  `route-dungeon-extended-turn-and-search-09-s6` `eb8f6403c755776f`, and
+  `route-doom-combat-multi-round-pass-05-empty` `c1ffc74f45610145`. The
   latest endgame visual-route expansion adds the missing-box terminal tableau
   and full Sandalwood Box victory cinematic route steps on the composed Bevy
   framebuffer; the 2026-05-23 expansion added public #48 Blink

@@ -1492,6 +1492,53 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             script: &["", "S"],
             configure: None,
         },
+        VisualRouteSuiteCase {
+            label: "route-britannia-extended-exploration",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                ..PlayOptions::default()
+            },
+            script: &[
+                "d", "d", "s", "s", "a", "a", "w", "w", "l6", "empty", "Z", "empty",
+            ],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-extended-walk-and-save",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["s", "s", "d", "d", "w", "w", "Q", "N", "Z"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-extended-turn-and-search",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["a", "a", "d", "w", "s", "w", "d", "a", "S6"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-doom-combat-multi-round-pass",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(doom),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["empty", "empty", "empty", "empty", "empty"],
+            configure: None,
+        },
     ];
     cases.extend([
         visual_doom_combat_case("route-doom-combat-select-clear", doom, &["", "0"]),
@@ -2310,6 +2357,37 @@ fn apply_visual_route_command(
     game_dir: &Path,
 ) -> io::Result<PlayInputDisposition> {
     let command = command.trim();
+    let lower = command.to_ascii_lowercase();
+    if matches!(lower.as_str(), "empty" | "pass") {
+        handle_play_key_input(state, '\n', "", game_dir)?;
+        return Ok(PlayInputDisposition::Continue);
+    }
+    if matches!(lower.as_str(), "idle" | "tick" | "ticks") {
+        return handle_play_key_input(state, '.', "", game_dir);
+    }
+    if let Some(value) = lower
+        .strip_prefix("idle:")
+        .or_else(|| lower.strip_prefix("tick:"))
+    {
+        let count = value.parse::<usize>().map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("visual route idle command `{command}` has invalid tick count: {err}"),
+            )
+        })?;
+        if count == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("visual route idle command `{command}` must request at least one tick"),
+            ));
+        }
+        for _ in 0..count {
+            if handle_play_key_input(state, '.', "", game_dir)? == PlayInputDisposition::Quit {
+                return Ok(PlayInputDisposition::Quit);
+            }
+        }
+        return Ok(PlayInputDisposition::Continue);
+    }
     let mut chars = command.chars();
     let Some(key) = chars.next() else {
         return handle_play_key_input(state, '\n', "", game_dir);
@@ -2335,7 +2413,8 @@ fn visual_route_step_label(route_label: &str, step: usize, command: &str) -> Str
 }
 
 fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
-    route_label == "route-endgame-box-full-victory-cinematic" && (3..=18).contains(&step)
+    (route_label == "route-endgame-box-full-victory-cinematic" && (3..=18).contains(&step))
+        || (route_label == "route-doom-combat-multi-round-pass" && (2..=5).contains(&step))
 }
 
 fn run_visual_intro_menu_app(
@@ -6739,7 +6818,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 96);
+        assert_eq!(cases.len(), 100);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -6983,6 +7062,14 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-doom-combat-yell-word")
         );
+        for label in [
+            "route-britannia-extended-exploration",
+            "route-castle-extended-walk-and-save",
+            "route-dungeon-extended-turn-and-search",
+            "route-doom-combat-multi-round-pass",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert_eq!(
             visual_route_step_label("route-world-movement", 2, "."),
             "route-world-movement-02-idle"
@@ -7019,6 +7106,10 @@ mod tests {
             visual_route_step_label("route-endgame-missing-box-terminal-jitter", 3, ""),
             "route-endgame-missing-box-terminal-jitter-03-empty"
         );
+        assert_eq!(
+            visual_route_step_label("route-britannia-extended-exploration", 10, "empty"),
+            "route-britannia-extended-exploration-10-empty"
+        );
     }
 
     #[test]
@@ -7036,7 +7127,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 299);
+        assert_eq!(reports.len(), 338);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -7129,6 +7220,10 @@ mod tests {
         assert!(manifest.contains("route-doom-combat-ready-prompt-02-r"));
         assert!(manifest.contains("route-doom-combat-yell-word-02-yfallax"));
         assert!(manifest.contains("route-doom-combat-xit-foes-remain-02-x"));
+        assert!(manifest.contains("route-britannia-extended-exploration-12-empty"));
+        assert!(manifest.contains("route-castle-extended-walk-and-save-09-z"));
+        assert!(manifest.contains("route-dungeon-extended-turn-and-search-09-s6"));
+        assert!(manifest.contains("route-doom-combat-multi-round-pass-05-empty"));
         assert!(!manifest.contains("Avatar"));
         let _ = fs::remove_dir_all(dir);
     }
