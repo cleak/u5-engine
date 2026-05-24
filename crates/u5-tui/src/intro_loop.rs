@@ -289,6 +289,7 @@ fn run_return_to_view_preview(game_dir: &Path) -> io::Result<()> {
 
 fn return_to_view_frame_kind_label(kind: ReturnToViewFrameKind) -> &'static str {
     match kind {
+        ReturnToViewFrameKind::StripReveal { .. } => "map strip reveal",
         ReturnToViewFrameKind::PreviewTick => "preview title tick",
         ReturnToViewFrameKind::CellEffectStep { .. } => "local cell-effect step",
         ReturnToViewFrameKind::CellEffectFinalTick { .. } => "local cell-effect final tick",

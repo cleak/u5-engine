@@ -22,6 +22,8 @@ pub const RTV_STRIP_SOURCE_COLUMNS: usize = 19;
 pub const RTV_STRIP_SOURCE_ROWS: usize = 4;
 pub const RTV_STRIP_VISIBLE_COLUMNS: usize = 4;
 pub const RTV_STRIP_VISIBLE_ROWS: usize = 19;
+pub const RTV_STRIP_REVEAL_MIDDLE_ROW: usize = RTV_STRIP_VISIBLE_ROWS / 2;
+pub const RTV_STRIP_REVEAL_STEPS: u8 = RTV_STRIP_REVEAL_MIDDLE_ROW as u8 + 1;
 pub const RTV_STRIP_RECORD_BYTES: usize = MISCMAPS_RTV_STRIP_ROW_STRIDE * RTV_STRIP_SOURCE_ROWS;
 pub const RTV_STRIP_TILE_COUNT: usize = RTV_STRIP_VISIBLE_COLUMNS * RTV_STRIP_VISIBLE_ROWS;
 pub const RTV_EFFECT_SENTINEL_TILE: u8 = 0xfe;
@@ -294,6 +296,9 @@ impl ReturnToViewPreviewState {
             }
             ReturnToViewCommand::LoadMapStrip { strip } => {
                 self.load_map_strip(strips, strip)?;
+                self.total_ticks = self
+                    .total_ticks
+                    .saturating_add(u32::from(RTV_STRIP_REVEAL_STEPS));
             }
             ReturnToViewCommand::TemporaryActorDraw { slot }
             | ReturnToViewCommand::TemporaryActorDrawOverBacking { slot } => {
@@ -443,6 +448,7 @@ pub struct ReturnToViewPreviewRun {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReturnToViewFrameKind {
+    StripReveal { step: u8 },
     PreviewTick,
     CellEffectStep { step: u8 },
     CellEffectFinalTick { tick: u8 },
@@ -919,6 +925,17 @@ fn append_return_to_view_playback_frames(
                 );
             }
         }
+        ReturnToViewCommand::LoadMapStrip { .. } => {
+            for step in 0..RTV_STRIP_REVEAL_STEPS {
+                push_return_to_view_strip_reveal_frame(
+                    frames,
+                    command_index,
+                    before_ticks + u32::from(step) + 1,
+                    state,
+                    step,
+                );
+            }
+        }
         ReturnToViewCommand::OpenCellEffect { .. } | ReturnToViewCommand::CloseCellEffect => {
             for step in 0..RTV_CELL_EFFECT_STEPS {
                 push_return_to_view_frame(
@@ -1006,6 +1023,53 @@ fn append_return_to_view_playback_frames(
         }
         _ => {}
     }
+}
+
+fn push_return_to_view_strip_reveal_frame(
+    frames: &mut Vec<ReturnToViewPlaybackFrame>,
+    command_index: usize,
+    elapsed_title_ticks: u32,
+    state: &ReturnToViewPreviewState,
+    step: u8,
+) {
+    let mut state = state.clone();
+    mask_return_to_view_unrevealed_strip_rows(&mut state, step);
+    state.total_ticks = elapsed_title_ticks;
+    frames.push(ReturnToViewPlaybackFrame {
+        command_index,
+        elapsed_title_ticks,
+        kind: ReturnToViewFrameKind::StripReveal { step },
+        state,
+        actor_draw: None,
+    });
+}
+
+fn mask_return_to_view_unrevealed_strip_rows(state: &mut ReturnToViewPreviewState, step: u8) {
+    for row in 0..RTV_STRIP_VISIBLE_ROWS {
+        if return_to_view_strip_reveal_row_visible(row, step) {
+            continue;
+        }
+        for col in 0..RTV_STRIP_VISIBLE_COLUMNS {
+            let index = row * RTV_PREVIEW_SIDE + col;
+            state.visible[index] = 0;
+            state.backing[index] = 0;
+        }
+    }
+}
+
+pub const fn return_to_view_strip_reveal_row_visible(row: usize, step: u8) -> bool {
+    if row >= RTV_STRIP_VISIBLE_ROWS {
+        return false;
+    }
+    let step = step as usize;
+    let min_row = RTV_STRIP_REVEAL_MIDDLE_ROW.saturating_sub(step);
+    let expanded_max = RTV_STRIP_REVEAL_MIDDLE_ROW + step;
+    let max_row = if expanded_max > RTV_STRIP_VISIBLE_ROWS - 1 {
+        RTV_STRIP_VISIBLE_ROWS - 1
+    } else {
+        expanded_max
+    };
+    row >= min_row && row <= max_row
 }
 
 fn push_return_to_view_frame(
@@ -1451,7 +1515,7 @@ mod tests {
         assert_eq!(state.actors[3].x, 2);
         assert_eq!(state.actors[3].tile0, 0x44);
         assert_eq!(state.cell(2, 9), Some(RTV_CLOSE_EFFECT_FINAL_TILE));
-        assert_eq!(state.total_ticks, 34);
+        assert_eq!(state.total_ticks, 34 + u32::from(RTV_STRIP_REVEAL_STEPS));
         assert_eq!(state.cell_effect_steps, 30);
         assert_eq!(state.fixed_wait_ticks, 0);
     }
@@ -1477,7 +1541,7 @@ mod tests {
         assert!(report.restart_seen);
         assert_eq!(report.applied_commands, 9);
         assert_eq!(report.current_strip, Some(0));
-        assert_eq!(report.total_ticks, 6);
+        assert_eq!(report.total_ticks, 6 + u32::from(RTV_STRIP_REVEAL_STEPS));
         assert!(!report.max_commands_reached);
     }
 
@@ -1582,6 +1646,66 @@ mod tests {
     }
 
     #[test]
+    fn return_to_view_load_strip_reveals_from_middle_row_outward() {
+        let mut strips = ReturnToViewMapStrips {
+            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
+        };
+        for row in 0..RTV_STRIP_VISIBLE_ROWS {
+            for col in 0..RTV_STRIP_VISIBLE_COLUMNS {
+                strips.strips[0][row * RTV_STRIP_VISIBLE_COLUMNS + col] =
+                    (10 + row as u8).saturating_add(col as u8);
+            }
+        }
+        let script = ReturnToViewScript {
+            commands: vec![
+                ReturnToViewCommand::LoadMapStrip { strip: 0 },
+                ReturnToViewCommand::RestartStream,
+            ],
+        };
+
+        let playback = run_return_to_view_playback_until_restart(&strips, &script, 32).unwrap();
+
+        assert_eq!(RTV_STRIP_REVEAL_MIDDLE_ROW, 9);
+        assert_eq!(RTV_STRIP_REVEAL_STEPS, 10);
+        assert_eq!(
+            playback
+                .frames
+                .iter()
+                .filter(|frame| matches!(frame.kind, ReturnToViewFrameKind::StripReveal { .. }))
+                .count(),
+            RTV_STRIP_REVEAL_STEPS as usize
+        );
+        assert!(return_to_view_strip_reveal_row_visible(9, 0));
+        assert!(!return_to_view_strip_reveal_row_visible(8, 0));
+        assert!(return_to_view_strip_reveal_row_visible(8, 1));
+        assert!(return_to_view_strip_reveal_row_visible(10, 1));
+        assert!(return_to_view_strip_reveal_row_visible(0, 9));
+        assert!(return_to_view_strip_reveal_row_visible(18, 9));
+        assert!(!return_to_view_strip_reveal_row_visible(19, 9));
+
+        let first = playback
+            .frames
+            .iter()
+            .find(|frame| matches!(frame.kind, ReturnToViewFrameKind::StripReveal { step: 0 }))
+            .expect("first strip reveal frame");
+        assert_eq!(first.state.visible[9 * RTV_PREVIEW_SIDE], 19);
+        assert_eq!(first.state.visible[8 * RTV_PREVIEW_SIDE], 0);
+        assert_eq!(first.state.visible[10 * RTV_PREVIEW_SIDE], 0);
+
+        let final_frame = playback
+            .frames
+            .iter()
+            .find(|frame| matches!(frame.kind, ReturnToViewFrameKind::StripReveal { step: 9 }))
+            .expect("final strip reveal frame");
+        assert_eq!(final_frame.state.visible[0], 10);
+        assert_eq!(final_frame.state.visible[18 * RTV_PREVIEW_SIDE], 28);
+        assert_eq!(
+            playback.run.report.total_ticks,
+            u32::from(RTV_STRIP_REVEAL_STEPS)
+        );
+    }
+
+    #[test]
     fn return_to_view_playback_expands_timed_commands_into_title_tick_frames() {
         let strips = ReturnToViewMapStrips {
             strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
@@ -1614,7 +1738,18 @@ mod tests {
         let playback = run_return_to_view_playback_until_restart(&strips, &script, 64).unwrap();
 
         assert!(playback.run.report.restart_seen);
-        assert_eq!(playback.run.report.total_ticks, 36);
+        assert_eq!(
+            playback.run.report.total_ticks,
+            36 + u32::from(RTV_STRIP_REVEAL_STEPS)
+        );
+        assert_eq!(
+            playback
+                .frames
+                .iter()
+                .filter(|frame| matches!(frame.kind, ReturnToViewFrameKind::StripReveal { .. }))
+                .count(),
+            RTV_STRIP_REVEAL_STEPS as usize
+        );
         assert_eq!(
             playback
                 .frames
@@ -1663,7 +1798,7 @@ mod tests {
                 .frames
                 .last()
                 .map(|frame| frame.elapsed_title_ticks),
-            Some(36)
+            Some(36 + u32::from(RTV_STRIP_REVEAL_STEPS))
         );
         assert_eq!(playback.run.state.actors[0].x, 2);
 
@@ -1763,8 +1898,8 @@ mod tests {
             render_return_to_view_preview_viewport_at_title_tick(&strips, &script, &atlas, 1)
                 .unwrap();
 
-        assert_eq!(report.total_ticks, 2);
-        assert_eq!(viewport.pixel(0, 0), Some(0xDB % 16));
+        assert_eq!(report.total_ticks, 2 + u32::from(RTV_STRIP_REVEAL_STEPS));
+        assert_eq!(viewport.pixel(0, 0), Some(0xD9 % 16));
     }
 
     #[test]
@@ -1792,16 +1927,21 @@ mod tests {
             pixels,
         };
 
-        let playback = run_return_to_view_playback_until_restart(&strips, &script, 16).unwrap();
+        let playback = run_return_to_view_playback_until_restart(&strips, &script, 32).unwrap();
+        let preview_frames = playback
+            .frames
+            .iter()
+            .filter(|frame| frame.kind == ReturnToViewFrameKind::PreviewTick)
+            .collect::<Vec<_>>();
         let first =
-            render_return_to_view_playback_frame_viewport(&playback.frames[0], &atlas, 0).unwrap();
+            render_return_to_view_playback_frame_viewport(preview_frames[0], &atlas, 0).unwrap();
         let second =
-            render_return_to_view_playback_frame_viewport(&playback.frames[1], &atlas, 0).unwrap();
+            render_return_to_view_playback_frame_viewport(preview_frames[1], &atlas, 0).unwrap();
 
-        assert_eq!(playback.frames[0].elapsed_title_ticks, 1);
-        assert_eq!(first.pixel(0, 0), Some(0xD9 % 16));
-        assert_eq!(playback.frames[1].elapsed_title_ticks, 2);
-        assert_eq!(second.pixel(0, 0), Some(0xDA % 16));
+        assert_eq!(preview_frames[0].elapsed_title_ticks, 11);
+        assert_eq!(first.pixel(0, 0), Some(0xDB % 16));
+        assert_eq!(preview_frames[1].elapsed_title_ticks, 12);
+        assert_eq!(second.pixel(0, 0), Some(0xD8 % 16));
     }
 
     #[test]

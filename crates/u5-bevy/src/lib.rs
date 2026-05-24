@@ -68,7 +68,8 @@ use u5_runtime::{
     paint_message_text_window, paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
     rasterize_proportional_paragraph, read_u4_transfer_source_from_party_sav,
     render_play_text_window_system, render_return_to_view_playback_frame_viewport,
-    render_text_panel_rgba, render_text_window_rgba, run_return_to_view_playback_until_restart,
+    render_text_panel_rgba, render_text_window_rgba, return_to_view_fixed_wipe_rectangles,
+    run_return_to_view_playback_until_restart,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -94,6 +95,7 @@ const INTRO_DISPLAY_SCALE: f32 = 2.5;
 const RETURN_TO_VIEW_CAPTION_Y: usize = 4;
 const RETURN_TO_VIEW_CAPTION_HEIGHT: usize = 14;
 const RETURN_TO_VIEW_PREVIEW_Y: usize = 18;
+const RETURN_TO_VIEW_FIXED_WIPE_RGBA: [u8; 4] = [0xff, 0x55, 0xff, 0xff];
 const PROPORTIONAL_TEXT_LINE_HEIGHT: usize = PCS_GLYPH_HEIGHT + 2;
 const INTRO_STORY_TEXT_X: usize = 10;
 const INTRO_STORY_TEXT_Y: usize = 138;
@@ -3566,6 +3568,7 @@ fn summarize_intro_story(records: &StoryRecords, step: usize) -> String {
 
 fn visual_return_to_view_frame_kind_label(kind: ReturnToViewFrameKind) -> &'static str {
     match kind {
+        ReturnToViewFrameKind::StripReveal { .. } => "Map strip reveal",
         ReturnToViewFrameKind::PreviewTick => "Preview title tick",
         ReturnToViewFrameKind::CellEffectStep { .. } => "Local cell-effect step",
         ReturnToViewFrameKind::CellEffectFinalTick { .. } => "Local cell-effect final tick",
@@ -3881,8 +3884,8 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
         return rgba;
     };
 
-    let caption = frame_metadata
-        .get(*preview_frame_index)
+    let current_meta = frame_metadata.get(*preview_frame_index);
+    let caption = current_meta
         .and_then(|meta| meta.caption)
         .unwrap_or("Return to View");
     overlay_centered_text_band_rgba(
@@ -3906,6 +3909,33 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
             x,
             RETURN_TO_VIEW_PREVIEW_Y,
         );
+    }
+    if let Some(ReturnToViewFrameKind::FixedWipeRectangle { step }) =
+        current_meta.map(|meta| meta.kind)
+    {
+        if let Some(rects) = return_to_view_fixed_wipe_rectangles(step) {
+            let [((x0, y0), (x1, y1)), ((x2, y2), (x3, y3))] = rects;
+            fill_rgba_rect_inclusive(
+                &mut rgba,
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                INTRO_FRAMEBUFFER_HEIGHT as usize,
+                usize::from(x0),
+                usize::from(y0),
+                usize::from(x1),
+                usize::from(y1),
+                RETURN_TO_VIEW_FIXED_WIPE_RGBA,
+            );
+            fill_rgba_rect_inclusive(
+                &mut rgba,
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                INTRO_FRAMEBUFFER_HEIGHT as usize,
+                usize::from(x2),
+                usize::from(y2),
+                usize::from(x3),
+                usize::from(y3),
+                RETURN_TO_VIEW_FIXED_WIPE_RGBA,
+            );
+        }
     }
     rgba
 }
@@ -4319,6 +4349,33 @@ fn blit_rgba(
             dst.get_mut(dst_row..dst_row + bytes),
         ) {
             dst_slice.copy_from_slice(src_slice);
+        }
+    }
+}
+
+fn fill_rgba_rect_inclusive(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    x0: usize,
+    y0: usize,
+    x1: usize,
+    y1: usize,
+    color: [u8; 4],
+) {
+    if dst_width == 0 || dst_height == 0 {
+        return;
+    }
+    let min_x = x0.min(x1).min(dst_width - 1);
+    let max_x = x0.max(x1).min(dst_width - 1);
+    let min_y = y0.min(y1).min(dst_height - 1);
+    let max_y = y0.max(y1).min(dst_height - 1);
+    for y in min_y..=max_y {
+        for x in min_x..=max_x {
+            let offset = (y * dst_width + x) * 4;
+            if let Some(pixel) = dst.get_mut(offset..offset + 4) {
+                pixel.copy_from_slice(&color);
+            }
         }
     }
 }
@@ -7808,6 +7865,45 @@ mod tests {
                 .any(|pixel| { pixel != [0x00, 0x00, 0x00, 0xff] }),
             "Return-to-View should preserve or synthesize a visible intro backing surface"
         );
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn return_to_view_intro_frame_draws_fixed_wipe_rectangles() {
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_signature_progress: 0,
+            title_signature_complete: false,
+            title_tick_frame: 0,
+            message: String::new(),
+            panel: VisualIntroPanel::ReturnToView {
+                summary: "Preview".to_string(),
+                preview_frames_rgba: vec![vec![0x00, 0x00, 0x00, 0xff]],
+                frame_metadata: vec![VisualReturnToViewFrameMeta {
+                    command_index: 11,
+                    elapsed_title_ticks: 1,
+                    kind: ReturnToViewFrameKind::FixedWipeRectangle { step: 0 },
+                    caption: Some("The Summoning"),
+                }],
+                preview_frame_index: 0,
+                preview_width: 1,
+                preview_height: 1,
+            },
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        let frame = render_intro_frame(&mut intro);
+        let pixel = |x: usize, y: usize| -> &[u8] {
+            let offset = (y * INTRO_FRAMEBUFFER_WIDTH as usize + x) * 4;
+            &frame[offset..offset + 4]
+        };
+
+        assert_eq!(pixel(128, 152), RETURN_TO_VIEW_FIXED_WIPE_RGBA);
+        assert_eq!(pixel(137, 156), RETURN_TO_VIEW_FIXED_WIPE_RGBA);
+        assert_ne!(pixel(127, 152), RETURN_TO_VIEW_FIXED_WIPE_RGBA);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 

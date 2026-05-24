@@ -828,8 +828,9 @@ as public details become available.
     and descriptor-byte table wording still need a public spec clarification
     before claiming exact monster sleep wakeup parity.
   - Combat field placement now separates marker materialization from post-step
-    contact, uses Poison's unconditional placement path, and gates Fire/Sleep/
-    Energy with the public issue #10 one-in-eight clean-engine default.
+    contact and follows the corrected public issue #10 answer: Fire/Sleep/
+    Energy no longer use a random placement gate, while Poison still uses its
+    unconditional placement path.
   - Combat-local ambush/camp reveal records now follow the public helper shape:
     up to eight trigger coordinates, consume-on-fire, one or two in-range
     terrain stamps, out-of-range target sentinels, ordinary-combat clearing, and
