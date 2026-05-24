@@ -2442,36 +2442,43 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
 }
 
 fn append_asset_backed_conversation_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>) {
-    for (family, scene_byte) in [
-        ("towne", 1u8),
-        ("dwelling", 9u8),
-        ("castle", 17u8),
-        ("keep", 25u8),
+    for (family, scene_range) in [
+        ("towne", 1u8..=8u8),
+        ("dwelling", 9u8..=16u8),
+        ("castle", 17u8..=24u8),
+        ("keep", 25u8..=32u8),
     ] {
-        let scene = Scene::new(scene_byte).expect("representative TLK family scene is valid");
-        for (kind, command) in [
-            ("reserved-name", "NAME"),
-            ("reserved-job", "JOB"),
-            ("reserved-work", "WORK"),
-            ("reserved-bye", "BYE"),
-            ("reserved-thank", "THANK"),
-            ("ordinary-no-match", "XYZZY"),
-        ] {
-            let name: &'static str = Box::leak(format!("talk-{family}-{kind}").into_boxed_str());
-            let command: &'static str = Box::leak(command.to_string().into_boxed_str());
-            let script: &'static [&'static str] =
-                Box::leak(vec!["T", "6", command].into_boxed_slice());
-            cases.push(RouteSmokeCase {
-                name,
-                options: PlayOptions {
-                    target: PlayTarget::Town(scene),
-                    ..PlayOptions::default()
-                },
-                script,
-                expected: RouteSmokeExpectation::Town(scene),
-                min_turn: 1,
-                expected_frame_kind: "tile viewport",
-            });
+        let representative_scene = *scene_range.start();
+        for scene_byte in scene_range {
+            let scene = Scene::new(scene_byte).expect("representative TLK family scene is valid");
+            for (kind, command) in [
+                ("reserved-name", "NAME"),
+                ("reserved-job", "JOB"),
+                ("reserved-work", "WORK"),
+                ("reserved-bye", "BYE"),
+                ("reserved-thank", "THANK"),
+                ("ordinary-no-match", "XYZZY"),
+            ] {
+                let name: &'static str = if scene_byte == representative_scene {
+                    Box::leak(format!("talk-{family}-{kind}").into_boxed_str())
+                } else {
+                    Box::leak(format!("talk-{family}-{scene_byte:02}-{kind}").into_boxed_str())
+                };
+                let command: &'static str = Box::leak(command.to_string().into_boxed_str());
+                let script: &'static [&'static str] =
+                    Box::leak(vec!["T", "6", command].into_boxed_slice());
+                cases.push(RouteSmokeCase {
+                    name,
+                    options: PlayOptions {
+                        target: PlayTarget::Town(scene),
+                        ..PlayOptions::default()
+                    },
+                    script,
+                    expected: RouteSmokeExpectation::Town(scene),
+                    min_turn: 1,
+                    expected_frame_kind: "tile viewport",
+                });
+            }
         }
     }
 }

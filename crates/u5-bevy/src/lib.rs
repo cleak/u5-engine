@@ -3667,35 +3667,43 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
 }
 
 fn append_asset_backed_conversation_visual_route_cases(cases: &mut Vec<VisualRouteSuiteCase>) {
-    for (family, scene_byte) in [
-        ("towne", 1u8),
-        ("dwelling", 9u8),
-        ("castle", 17u8),
-        ("keep", 25u8),
+    for (family, scene_range) in [
+        ("towne", 1u8..=8u8),
+        ("dwelling", 9u8..=16u8),
+        ("castle", 17u8..=24u8),
+        ("keep", 25u8..=32u8),
     ] {
-        let scene = Scene::new(scene_byte).expect("representative TLK family scene is valid");
-        for (kind, command) in [
-            ("reserved-name", "NAME"),
-            ("reserved-job", "JOB"),
-            ("reserved-work", "WORK"),
-            ("reserved-bye", "BYE"),
-            ("reserved-thank", "THANK"),
-        ] {
-            let label: &'static str =
-                Box::leak(format!("route-talk-{family}-{kind}").into_boxed_str());
-            let command: &'static str = Box::leak(command.to_string().into_boxed_str());
-            let script: &'static [&'static str] =
-                Box::leak(vec!["T", "6", command].into_boxed_slice());
-            cases.push(VisualRouteSuiteCase {
-                label,
-                frame_kind: "visual route town frame",
-                options: PlayOptions {
-                    target: PlayTarget::Town(scene),
-                    ..PlayOptions::default()
-                },
-                script,
-                configure: Some(seed_visual_route_talk_ordinary_keyword),
-            });
+        let representative_scene = *scene_range.start();
+        for scene_byte in scene_range {
+            let scene = Scene::new(scene_byte).expect("representative TLK family scene is valid");
+            for (kind, command) in [
+                ("reserved-name", "NAME"),
+                ("reserved-job", "JOB"),
+                ("reserved-work", "WORK"),
+                ("reserved-bye", "BYE"),
+                ("reserved-thank", "THANK"),
+            ] {
+                let label: &'static str = if scene_byte == representative_scene {
+                    Box::leak(format!("route-talk-{family}-{kind}").into_boxed_str())
+                } else {
+                    Box::leak(
+                        format!("route-talk-{family}-{scene_byte:02}-{kind}").into_boxed_str(),
+                    )
+                };
+                let command: &'static str = Box::leak(command.to_string().into_boxed_str());
+                let script: &'static [&'static str] =
+                    Box::leak(vec!["T", "6", command].into_boxed_slice());
+                cases.push(VisualRouteSuiteCase {
+                    label,
+                    frame_kind: "visual route town frame",
+                    options: PlayOptions {
+                        target: PlayTarget::Town(scene),
+                        ..PlayOptions::default()
+                    },
+                    script,
+                    configure: Some(seed_visual_route_talk_ordinary_keyword),
+                });
+            }
         }
     }
 }
@@ -9803,7 +9811,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 348);
+        assert_eq!(cases.len(), 488);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -9919,9 +9927,13 @@ mod tests {
         }
         for label in [
             "route-talk-towne-reserved-name",
+            "route-talk-towne-08-reserved-thank",
             "route-talk-dwelling-reserved-job",
+            "route-talk-dwelling-16-reserved-bye",
             "route-talk-castle-reserved-thank",
+            "route-talk-castle-24-reserved-work",
             "route-talk-keep-reserved-work",
+            "route-talk-keep-32-reserved-name",
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
         }
@@ -10444,7 +10456,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 1033);
+        assert_eq!(reports.len(), 1593);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -10527,9 +10539,13 @@ mod tests {
         assert!(manifest.contains("route-castle-talk-status-praying-refusal-01-t6"));
         assert!(manifest.contains("route-castle-talk-ordinary-keyword-route-03-name"));
         assert!(manifest.contains("route-talk-towne-reserved-name-03-name"));
+        assert!(manifest.contains("route-talk-towne-08-reserved-thank-03-thank"));
         assert!(manifest.contains("route-talk-dwelling-reserved-job-03-job"));
+        assert!(manifest.contains("route-talk-dwelling-16-reserved-bye-03-bye"));
         assert!(manifest.contains("route-talk-castle-reserved-thank-03-thank"));
+        assert!(manifest.contains("route-talk-castle-24-reserved-work-03-work"));
         assert!(manifest.contains("route-talk-keep-reserved-work-03-work"));
+        assert!(manifest.contains("route-talk-keep-32-reserved-name-03-name"));
         assert!(manifest.contains("route-castle-native-stair-up-route-01-d"));
         assert!(manifest.contains("route-castle-native-stair-down-route-01-d"));
         assert!(manifest.contains("route-castle-native-stair-cross-route-01-w"));

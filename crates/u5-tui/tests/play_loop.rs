@@ -701,7 +701,7 @@ fn play_script_local_clean_smoke_runs_default_scene_when_present() {
 fn route_smoke_cases_cover_representative_modes() {
     let cases = route_smoke_cases();
 
-    assert_eq!(cases.len(), 295);
+    assert_eq!(cases.len(), 463);
     assert!(cases.iter().any(|case| matches!(
         case.expected,
         RouteSmokeExpectation::World(WorldPlane::Britannia)
@@ -948,9 +948,13 @@ fn route_smoke_cases_cover_representative_modes() {
     );
     for name in [
         "talk-towne-reserved-name",
+        "talk-towne-08-reserved-thank",
         "talk-dwelling-reserved-job",
+        "talk-dwelling-16-ordinary-no-match",
         "talk-castle-reserved-thank",
+        "talk-castle-24-reserved-work",
         "talk-keep-ordinary-no-match",
+        "talk-keep-32-reserved-bye",
     ] {
         assert!(cases.iter().any(|case| case.name == name), "{name}");
     }

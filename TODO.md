@@ -41,9 +41,9 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-24 with 295 scripted route cases (including all 40 published stock
+  2026-05-24 with 463 scripted route cases (including all 40 published stock
   world-location entry rows, native shrine/Codex quest routes, TLK-backed
-  conversation routes across all four location families, plus save/reload checkpoints
+  conversation routes across all 32 named-location scenes, plus save/reload checkpoints
   for boarded horse, Gate Travel, chasm fall, fixed hidden treasure,
   horse-trader delivery, ship X-it/skiff, dungeon ladders, and dungeon exits,
   plus expanded active-shop/modal
@@ -157,10 +157,10 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 1033 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 1593 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest, with all 40 published stock world-location entry rows, native
   shrine/Codex quest routes, TLK-backed reserved-word conversation routes across
-  all four location families, and
+  all 32 named-location scenes, and
   TUI-parity labels for additional ship/castle/shop/dungeon
   and Doom combat aliases as well as world/town/dungeon
   movement/pass/look/view/status, Minoc daily fixed-hidden, hourly
