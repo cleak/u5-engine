@@ -812,23 +812,13 @@ impl PlayState {
         } else {
             None
         };
-        let first_waterfall =
-            if transition.is_none() && moongate.is_none() && !self.player.transport.is_balloon() {
-                if let Some(game_dir) = game_dir {
-                    self.world_waterfall_at(game_dir, plane, nx, ny, tile)?
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
         if transition.is_none() && moongate.is_none() {
             if let Some(entry) = damage_tile {
                 if !entry.effect.allows_transport(self.player.transport) {
                     self.message = format!("Blocked by {} at ({nx}, {ny}).", entry.effect.label());
                     return Ok(MoveOutcome::Blocked);
                 }
-            } else if first_waterfall.is_none() && !self.tile_walkable(tile) {
+            } else if !self.tile_walkable(tile) {
                 self.message = format!("Blocked by {} at ({nx}, {ny}).", tile_class(tile));
                 return Ok(MoveOutcome::Blocked);
             }
@@ -893,61 +883,7 @@ impl PlayState {
             }
         }
         let verb = "Moved";
-        let waterfall = if final_moongate.is_none() && !self.player.transport.is_balloon() {
-            if let Some(game_dir) = game_dir {
-                self.world_waterfall_at(game_dir, plane, final_x, final_y, final_tile)?
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-        if let Some(entry) = waterfall {
-            let game_dir = game_dir.expect("waterfall entries require a game directory");
-            let sweep_prefix = |swept_steps: u8, x: usize, y: usize| {
-                format!(
-                    "{verb} {} to ({final_x}, {final_y}) on {}; waterfall swept party {swept_steps} step(s) {} to ({}, {}).",
-                    direction.name(),
-                    plane.key(),
-                    entry.direction.name(),
-                    x,
-                    y
-                )
-            };
-            match self.apply_world_waterfall_sweep(game_dir, plane, entry)? {
-                WorldWaterfallSweep::Settled { steps } => {
-                    self.message = sweep_prefix(steps, self.player.x, self.player.y);
-                    self.append_world_damage_tile_message(Some(game_dir), plane)?;
-                    self.append_world_status_tile_message(plane);
-                }
-                WorldWaterfallSweep::PlaneTransition {
-                    steps,
-                    entry: transition,
-                } => {
-                    let to_plane = transition.to_plane;
-                    let swept_x = self.player.x;
-                    let swept_y = self.player.y;
-                    self.apply_world_plane_transition(game_dir, transition)?;
-                    let transition_message = self.message.clone();
-                    self.message = format!(
-                        "{} {}",
-                        sweep_prefix(steps, swept_x, swept_y),
-                        transition_message
-                    );
-                    return Ok(MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
-                        from: plane,
-                        to: to_plane,
-                    }));
-                }
-                WorldWaterfallSweep::Moongate { steps, entry } => {
-                    self.pending_moongate = Some(entry);
-                    self.message = format!(
-                        "{} moongate! Enter? (Y/N).",
-                        sweep_prefix(steps, self.player.x, self.player.y)
-                    );
-                }
-            }
-        } else if let Some(entry) = final_moongate {
+        if let Some(entry) = final_moongate {
             self.pending_moongate = Some(entry);
             self.message = format!(
                 "{verb} {} to ({final_x}, {final_y}) on {}; moongate! Enter? (Y/N).",

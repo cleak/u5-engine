@@ -1,5 +1,5 @@
     #[test]
-    fn world_waterfall_sidecar_entry_tile_preempts_transport_passability() {
+    fn world_waterfall_sidecar_does_not_preempt_transport_passability() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(WORLD_WATERFALL_TABLE_FILE),
@@ -22,17 +22,13 @@
             state
                 .step_with_game_dir(Direction::East, Some(&dir))
                 .unwrap(),
-            MoveOutcome::Moved
+            MoveOutcome::Blocked
         );
 
-        assert_eq!((state.player.x, state.player.y), (2, 0));
-        assert_eq!(state.turn, 1);
-        assert!(state.message.contains("Moved East to (1, 0)"));
-        assert!(
-            state
-                .message
-                .contains("waterfall swept party 1 step(s) East")
-        );
+        assert_eq!((state.player.x, state.player.y), (0, 0));
+        assert_eq!(state.turn, 0);
+        assert!(state.message.contains("Blocked"));
+        assert!(!state.message.contains("waterfall swept"));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -399,7 +395,7 @@
     }
 
     #[test]
-    fn horse_world_movement_applies_first_cell_waterfall() {
+    fn horse_world_movement_ignores_first_cell_waterfall_sidecar() {
         let dir = debug_game_dir();
         fs::write(
             dir.join(WORLD_WATERFALL_TABLE_FILE),
@@ -416,18 +412,14 @@
             MoveOutcome::Moved
         );
 
-        assert_eq!((state.player.x, state.player.y), (3, 0));
+        assert_eq!((state.player.x, state.player.y), (1, 0));
         assert_eq!(
             (state.active_objects[0].x, state.active_objects[0].y),
-            (3, 0)
+            (1, 0)
         );
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("Moved East to (1, 0)"));
-        assert!(
-            state
-                .message
-                .contains("waterfall swept party 2 step(s) East")
-        );
+        assert!(!state.message.contains("waterfall swept"));
         let _ = fs::remove_dir_all(dir);
     }
 

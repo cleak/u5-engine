@@ -311,7 +311,7 @@
     }
 
     #[test]
-    fn world_render_water_underfoot_clears_effective_visibility_radius() {
+    fn world_render_ordinary_water_underfoot_keeps_visibility_radius() {
         let mut state = britannia_state(vec![1; WORLD_CELLS], 5, 5);
         state.ambient_light = FULL_DAYLIGHT;
         state.torch_counter = 1;
@@ -321,12 +321,10 @@
         let rows: Vec<_> = view.lines().skip(1).take(5).collect();
 
         assert_eq!(rows[2].chars().nth(2), Some('@'));
-        assert_eq!(
+        assert!(
             rows.iter()
                 .flat_map(|row| row.chars())
-                .filter(|ch| !matches!(ch, ' ' | '@'))
-                .count(),
-            0
+                .any(|ch| !matches!(ch, ' ' | '@'))
         );
         assert_eq!(state.ambient_light, FULL_DAYLIGHT);
         assert_eq!(state.torch_counter, 1);

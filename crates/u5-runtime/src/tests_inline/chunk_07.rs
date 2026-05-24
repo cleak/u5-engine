@@ -2239,7 +2239,7 @@ fn world_encounter_spawn_is_included_in_saved_overworld_overlay() {
 }
 
 #[test]
-fn world_waterfall_sidecar_sweeps_after_successful_water_movement() {
+fn world_waterfall_sidecar_does_not_sweep_after_successful_water_movement() {
     let dir = debug_game_dir();
     fs::write(
         dir.join(WORLD_WATERFALL_TABLE_FILE),
@@ -2263,20 +2263,18 @@ fn world_waterfall_sidecar_sweeps_after_successful_water_movement() {
         MoveOutcome::Moved
     );
 
-    assert_eq!((state.player.x, state.player.y), (4, 0));
+    assert_eq!((state.player.x, state.player.y), (1, 0));
     assert_eq!(
         (state.active_objects[0].x, state.active_objects[0].y),
-        (4, 0)
+        (1, 0)
     );
     assert_eq!(state.turn, 1);
-    assert!(state
-        .message
-        .contains("waterfall swept party 3 step(s) East"));
+    assert!(!state.message.contains("waterfall swept"));
     let _ = fs::remove_dir_all(dir);
 }
 
 #[test]
-fn world_waterfall_sweep_stops_before_clean_lava_sidecar_for_non_carpet() {
+fn ordinary_water_movement_does_not_queue_waterfall_sweep_or_lava_sidecar() {
     let dir = debug_game_dir();
     fs::write(
         dir.join(WORLD_WATERFALL_TABLE_FILE),
@@ -2305,17 +2303,15 @@ fn world_waterfall_sweep_stops_before_clean_lava_sidecar_for_non_carpet() {
         MoveOutcome::Moved
     );
 
-    assert_eq!((state.player.x, state.player.y), (2, 0));
+    assert_eq!((state.player.x, state.player.y), (1, 0));
     assert_eq!(state.turn, 1);
-    assert!(state
-        .message
-        .contains("waterfall swept party 1 step(s) East"));
+    assert!(!state.message.contains("waterfall swept"));
     assert!(!state.message.contains("lava damage"));
     let _ = fs::remove_dir_all(dir);
 }
 
 #[test]
-fn world_waterfall_sweep_applies_clean_plane_transition() {
+fn waterfall_sidecar_does_not_apply_clean_plane_transition() {
     let dir = debug_game_dir();
     fs::write(
         dir.join(WORLD_WATERFALL_TABLE_FILE),
@@ -2341,34 +2337,29 @@ fn world_waterfall_sweep_applies_clean_plane_transition() {
         state
             .step_with_game_dir(Direction::East, Some(&dir))
             .unwrap(),
-        MoveOutcome::Transition(AreaTransition::ChangedWorldPlane {
-            from: WorldPlane::Britannia,
-            to: WorldPlane::Underworld,
-        })
+        MoveOutcome::Moved
     );
 
     assert_eq!(
         state.area,
         Area::World {
-            plane: WorldPlane::Underworld
+            plane: WorldPlane::Britannia
         }
     );
-    assert_eq!((state.player.x, state.player.y), (30, 40));
-    assert_eq!(state.player.transport, TransportState::Foot);
+    assert_eq!((state.player.x, state.player.y), (1, 0));
+    assert!(matches!(state.player.transport, TransportState::Ship { .. }));
     assert_eq!(
         state.active_objects[0].z,
-        WorldPlane::Underworld.save_floor()
+        WorldPlane::Britannia.save_floor()
     );
     assert_eq!(state.turn, 1);
-    assert!(state
-        .message
-        .contains("waterfall swept party 2 step(s) East"));
-    assert!(state.message.contains("F-A-L-L-S!"));
+    assert!(!state.message.contains("waterfall swept"));
+    assert!(!state.message.contains("F-A-L-L-S!"));
     let _ = fs::remove_dir_all(dir);
 }
 
 #[test]
-fn world_waterfall_sweep_queues_moongate_landing_prompt() {
+fn waterfall_sidecar_does_not_queue_moongate_landing_prompt() {
     let dir = debug_game_dir();
     fs::write(
         dir.join(WORLD_WATERFALL_TABLE_FILE),
@@ -2402,26 +2393,11 @@ fn world_waterfall_sweep_queues_moongate_landing_prompt() {
         MoveOutcome::Moved
     );
 
-    assert_eq!((state.player.x, state.player.y), (3, 0));
-    assert_eq!(state.turn, 1);
-    assert_eq!(state.pending_moongate, state.moongates.first().copied());
-    assert!(state
-        .message
-        .contains("waterfall swept party 2 step(s) East"));
-    assert!(state.message.contains("moongate! Enter?"));
-
-    assert_eq!(
-        state.resolve_moongate_prompt('y', &dir).unwrap(),
-        Some(MoveOutcome::Transition(
-            AreaTransition::MoongateTeleported {
-                from: WorldPlane::Britannia,
-                to: WorldPlane::Britannia,
-            }
-        ))
-    );
-    assert_eq!((state.player.x, state.player.y), (30, 40));
+    assert_eq!((state.player.x, state.player.y), (1, 0));
     assert_eq!(state.turn, 1);
     assert_eq!(state.pending_moongate, None);
+    assert!(!state.message.contains("waterfall swept"));
+    assert!(!state.message.contains("moongate! Enter?"));
     let _ = fs::remove_dir_all(dir);
 }
 

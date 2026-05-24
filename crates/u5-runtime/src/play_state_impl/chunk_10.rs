@@ -281,12 +281,6 @@ impl PlayState {
                     {
                         return Ok(false);
                     }
-                    if self
-                        .world_waterfall_at(game_dir, plane, x, y, tile)?
-                        .is_some()
-                    {
-                        return Ok(false);
-                    }
                     if let Some(entry) = self.world_damage_tile_at(game_dir, plane, x, y, tile)? {
                         if !entry.effect.allows_transport(TransportState::Foot)
                             || entry.effect.damages_transport(TransportState::Foot)

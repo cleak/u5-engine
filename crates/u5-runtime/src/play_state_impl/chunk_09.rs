@@ -1497,13 +1497,7 @@ impl PlayState {
             return 0;
         }
 
-        if matches!(self.area, Area::World { .. })
-            && is_water_tile(self.grid[world_cell_index(self.player.x, self.player.y)])
-        {
-            0
-        } else {
-            self.surface_visibility_radius(requested)
-        }
+        self.surface_visibility_radius(requested)
     }
 
     pub fn world_underfoot_blackout_active(&self) -> bool {
@@ -2343,13 +2337,13 @@ impl PlayState {
     }
 
     pub fn advance_active_objects(&mut self) {
-        if matches!(self.area, Area::Dungeon { .. }) {
-            return;
-        }
-        if matches!(self.area, Area::World { .. }) {
-            self.advance_outdoor_active_objects();
-        } else {
-            self.animate_active_objects();
+        match self.area {
+            Area::Dungeon { .. } => return,
+            Area::World { .. } => self.advance_outdoor_active_objects(),
+            Area::Town { .. } => {
+                self.animate_active_objects();
+                self.advance_town_free_roaming_active_objects();
+            }
         }
         self.prune_far_overworld_objects();
     }
@@ -2366,6 +2360,8 @@ impl PlayState {
             if self.active_objects[slot].is_empty()
                 || self.active_objects[slot].is_player()
                 || self.active_objects[slot].is_player_phantom()
+                || (matches!(self.area, Area::Town { .. })
+                    && town_free_roaming_object_eligible(self.active_objects[slot]))
             {
                 continue;
             }
@@ -2377,12 +2373,9 @@ impl PlayState {
             };
             let ship_wind_changed = !matches!(ship_wind, ActiveShipWind::None);
             let wandered = !ship_wind_changed
+                && !matches!(self.area, Area::Town { .. })
                 && (self.active_objects[slot].phase & 0x0f) == 0
-                && if matches!(self.area, Area::Town { .. }) {
-                    self.try_wander_town_active_object(slot)
-                } else {
-                    self.try_wander_active_object(slot)
-                };
+                && self.try_wander_active_object(slot);
             if wandered {
                 self.active_objects[slot].phase = (self.active_objects[slot].phase & 0xf0) | 0x02;
             }
@@ -2639,30 +2632,49 @@ impl PlayState {
             ^ salt
     }
 
+    pub fn advance_town_free_roaming_active_objects(&mut self) {
+        for slot in 0..self.active_objects.len().min(OOL_SLOTS) {
+            self.try_wander_town_active_object(slot);
+        }
+    }
+
     pub fn try_wander_town_active_object(&mut self, slot: usize) -> bool {
         let Area::Town { floor, .. } = self.area else {
             return false;
         };
         let object = self.active_objects[slot];
-        if object.z != floor
-            || !is_ambient_wanderer_object(object)
-            || self.town_active_object_slot_is_npc_link(slot)
-        {
+        if object.z != floor || !town_free_roaming_object_eligible(object) {
             return false;
         }
 
-        let seed = self.town_active_object_step_seed(slot, object.type_byte ^ object.tile);
-        if seed % 4 != 0 {
+        if self.random_mod_u8(2) != 0 {
             return false;
         }
-        let direction = [
-            Direction::North,
-            Direction::East,
-            Direction::South,
-            Direction::West,
-        ][usize::from((seed >> 2) & 0x03)];
+        if !self.town_free_roaming_pen_open(object.x, object.y) {
+            return false;
+        }
+
+        let axis = self.random_mod_u8(2);
+        let sign = self.random_mod_u8(2);
+        let direction = town_free_roaming_direction(axis, sign);
         let (dx, dy) = direction.delta();
-        self.try_step_town_active_object(slot, object, dx, dy, direction)
+        let facing_byte = town_free_roaming_facing_byte(sign);
+        self.try_step_town_active_object(slot, object, dx, dy, facing_byte)
+    }
+
+    pub fn town_free_roaming_pen_open(&self, x: usize, y: usize) -> bool {
+        for (dx, dy) in [(0isize, -1isize), (1, 0), (0, 1), (-1, 0)] {
+            let nx = x as isize + dx;
+            let ny = y as isize + dy;
+            if nx < 0 || ny < 0 || nx >= TOWN_GRID_SIDE as isize || ny >= TOWN_GRID_SIDE as isize {
+                return false;
+            }
+            let tile = self.grid[ny as usize * TOWN_GRID_SIDE + nx as usize];
+            if !town_free_roaming_pen_tile_accepts(tile) {
+                return false;
+            }
+        }
+        true
     }
 
     pub fn try_step_town_active_object(
@@ -2671,7 +2683,7 @@ impl PlayState {
         object: ActiveObject,
         dx: isize,
         dy: isize,
-        direction: Direction,
+        facing_byte: u8,
     ) -> bool {
         let nx = object.x as isize + dx;
         let ny = object.y as isize + dy;
@@ -2686,9 +2698,8 @@ impl PlayState {
                 .iter()
                 .enumerate()
                 .any(|(other_slot, other)| {
-                    other_slot != slot && !other.is_player() && self.object_occupies(*other, nx, ny)
+                    other_slot != slot && self.object_occupies(*other, nx, ny)
                 })
-            || self.npc_at_current_floor(nx, ny).is_some()
         {
             return false;
         }
@@ -2697,8 +2708,8 @@ impl PlayState {
             return false;
         }
 
-        self.active_objects[slot].phase =
-            active_object_phase_from_direction(direction, object.phase & 0x0f);
+        self.active_objects[slot].type_byte = facing_byte;
+        self.active_objects[slot].tile = facing_byte;
         self.active_objects[slot].x = nx;
         self.active_objects[slot].y = ny;
         self.mark_visibility_dirty();
@@ -2707,16 +2718,6 @@ impl PlayState {
 
     pub fn town_active_object_slot_is_npc_link(&self, slot: usize) -> bool {
         self.npcs.iter().any(|npc| npc.active_object == Some(slot))
-    }
-
-    pub fn town_active_object_step_seed(&self, slot: usize, salt: u8) -> u8 {
-        self.turn as u8
-            ^ self.clock.hour
-            ^ self.clock.minute
-            ^ (slot as u8).wrapping_mul(29)
-            ^ (self.player.x as u8).wrapping_mul(3)
-            ^ (self.player.y as u8).wrapping_mul(5)
-            ^ salt
     }
 
     pub fn apply_world_active_object_engagement(
@@ -3607,6 +3608,27 @@ pub const fn is_outdoor_active_object_walker_byte(byte: u8) -> bool {
 
 pub fn town_active_object_step_accepts_tile(tile: u8) -> bool {
     npc_path_tile_open(tile)
+}
+
+pub const fn town_free_roaming_object_eligible(object: ActiveObject) -> bool {
+    (object.type_byte & 0xfe) == 0x10
+}
+
+pub const fn town_free_roaming_pen_tile_accepts(tile: u8) -> bool {
+    matches!(tile, 0xa2 | 0x43)
+}
+
+pub const fn town_free_roaming_direction(axis: u8, sign: u8) -> Direction {
+    match (axis & 1, sign & 1) {
+        (0, 0) => Direction::West,
+        (0, _) => Direction::East,
+        (_, 0) => Direction::North,
+        (_, _) => Direction::South,
+    }
+}
+
+pub const fn town_free_roaming_facing_byte(sign: u8) -> u8 {
+    0x10 + (sign & 1)
 }
 
 pub fn outdoor_active_object_step_accepts_tile(

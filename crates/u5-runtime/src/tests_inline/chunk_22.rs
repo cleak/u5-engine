@@ -181,12 +181,82 @@
         assert_eq!(object.phase, 0x60);
     }
 
+    fn town_free_roaming_grid() -> Vec<u8> {
+        vec![0x43; TOWN_GRID_SIDE * TOWN_GRID_SIDE]
+    }
+
     #[test]
-    fn ambient_town_actor_countdown_animates_without_wandering() {
-        let mut state = test_state(open_grid(), 1, 1);
+    fn town_free_roaming_actor_uses_prng_and_rewrites_record_on_success() {
+        let mut state = test_state(town_free_roaming_grid(), 1, 1);
+        state.prng_state = 0x0070;
         state.active_objects.push(ActiveObject {
-            type_byte: 192,
-            tile: 192,
+            type_byte: 0x10,
+            tile: 0x10,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: 0x66,
+            aux1: 7,
+            aux3: 9,
+        });
+
+        state.advance_active_objects();
+
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (6, 5));
+        assert_eq!(state.active_objects[1].type_byte, 0x11);
+        assert_eq!(state.active_objects[1].tile, 0x11);
+        assert_eq!(state.active_objects[1].phase, 0x66);
+        assert_eq!(state.active_objects[1].z, 0);
+        assert_eq!(state.active_objects[1].aux1, 7);
+        assert_eq!(state.active_objects[1].aux3, 9);
+        let mut expected_prng = 0x0070;
+        for _ in 0..3 {
+            expected_prng = u5_prng_advance_state(expected_prng);
+        }
+        assert_eq!(state.prng_state, expected_prng);
+        assert!(state.visibility_dirty);
+    }
+
+    #[test]
+    fn town_free_roaming_actor_skips_ineligible_and_off_floor_without_prng() {
+        let mut state = test_state(town_free_roaming_grid(), 1, 1);
+        state.prng_state = 0x1234;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x12,
+            tile: 0x10,
+            x: 5,
+            y: 5,
+            z: 0,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        });
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x10,
+            tile: 0x10,
+            x: 6,
+            y: 5,
+            z: 1,
+            phase: 0,
+            aux1: 0,
+            aux3: 0,
+        });
+
+        state.advance_active_objects();
+
+        assert_eq!(state.prng_state, 0x1234);
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (5, 5));
+        assert_eq!((state.active_objects[2].x, state.active_objects[2].y), (6, 5));
+        assert!(!state.visibility_dirty);
+    }
+
+    #[test]
+    fn town_free_roaming_actor_chance_skip_consumes_one_draw() {
+        let mut state = test_state(town_free_roaming_grid(), 1, 1);
+        state.prng_state = 0x0008;
+        state.active_objects.push(ActiveObject {
+            type_byte: 0x11,
+            tile: 0x11,
             x: 5,
             y: 5,
             z: 0,
@@ -198,160 +268,64 @@
         state.advance_active_objects();
 
         assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (5, 5));
-        assert_eq!(state.active_objects[1].phase, 0x21);
-        assert_eq!(state.active_objects[1].tile, 193);
-    }
-
-    #[test]
-    fn ambient_town_actor_steps_on_open_terrain_and_marks_visibility_dirty() {
-        let mut state = test_state(open_grid(), 1, 1);
-        state.turn = 3;
-        state.active_objects.push(ActiveObject {
-            type_byte: 192,
-            tile: 192,
-            x: 5,
-            y: 5,
-            z: 0,
-            phase: 0x00,
-            aux1: 0,
-            aux3: 0,
-        });
-
-        state.advance_active_objects();
-
-        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (6, 5));
         assert_eq!(state.active_objects[1].phase, 0x22);
-        assert_eq!(state.active_objects[1].tile, 192);
-        assert!(state.visibility_dirty);
+        assert_eq!(state.prng_state, u5_prng_advance_state(0x0008));
+        assert!(!state.visibility_dirty);
     }
 
     #[test]
-    fn ambient_town_actor_respects_blocked_terrain_and_occupancy() {
-        let mut blocked_grid = open_grid();
-        blocked_grid[5 * TOWN_GRID_SIDE + 6] = 0x00;
-        let mut terrain_blocked = test_state(blocked_grid, 1, 1);
-        terrain_blocked.turn = 3;
-        terrain_blocked.active_objects.push(ActiveObject {
-            type_byte: 192,
-            tile: 192,
+    fn town_free_roaming_actor_pen_and_destination_failures_do_not_dirty() {
+        let mut pen_blocked_grid = town_free_roaming_grid();
+        pen_blocked_grid[5 * TOWN_GRID_SIDE + 6] = 0x44;
+        let mut pen_blocked = test_state(pen_blocked_grid, 1, 1);
+        pen_blocked.prng_state = 0x0070;
+        pen_blocked.active_objects.push(ActiveObject {
+            type_byte: 0x10,
+            tile: 0x10,
             x: 5,
             y: 5,
             z: 0,
-            phase: 0x00,
+            phase: 0,
             aux1: 0,
             aux3: 0,
         });
 
-        terrain_blocked.advance_active_objects();
-        assert_eq!(
-            (terrain_blocked.active_objects[1].x, terrain_blocked.active_objects[1].y),
-            (5, 5)
-        );
-        assert_eq!(terrain_blocked.active_objects[1].phase, 0x00);
+        pen_blocked.advance_active_objects();
+        assert_eq!((pen_blocked.active_objects[1].x, pen_blocked.active_objects[1].y), (5, 5));
+        assert_eq!(pen_blocked.prng_state, u5_prng_advance_state(0x0070));
+        assert!(!pen_blocked.visibility_dirty);
 
-        let mut object_blocked = test_state(open_grid(), 1, 1);
-        object_blocked.turn = 3;
+        let mut object_blocked = test_state(town_free_roaming_grid(), 1, 1);
+        object_blocked.prng_state = 0x0070;
         object_blocked.active_objects.push(ActiveObject {
-            type_byte: 192,
-            tile: 192,
+            type_byte: 0x10,
+            tile: 0x10,
             x: 5,
             y: 5,
             z: 0,
-            phase: 0x00,
+            phase: 0,
             aux1: 0,
             aux3: 0,
         });
         object_blocked.active_objects.push(ActiveObject {
-            type_byte: 194,
-            tile: 194,
+            type_byte: 0xc0,
+            tile: 0xc0,
             x: 6,
             y: 5,
             z: 0,
-            phase: 0x00,
+            phase: 0,
             aux1: 0,
             aux3: 0,
         });
 
         object_blocked.advance_active_objects();
-        assert_eq!(
-            (object_blocked.active_objects[1].x, object_blocked.active_objects[1].y),
-            (5, 5)
-        );
-        assert_eq!(object_blocked.active_objects[1].phase, 0x00);
-
-        let mut player_blocked = test_state(open_grid(), 6, 5);
-        player_blocked.turn = 3;
-        player_blocked.active_objects.push(ActiveObject {
-            type_byte: 192,
-            tile: 192,
-            x: 5,
-            y: 5,
-            z: 0,
-            phase: 0x00,
-            aux1: 0,
-            aux3: 0,
-        });
-
-        player_blocked.advance_active_objects();
-        assert_eq!(
-            (player_blocked.active_objects[1].x, player_blocked.active_objects[1].y),
-            (5, 5)
-        );
-        assert_eq!(player_blocked.active_objects[1].phase, 0x00);
-    }
-
-    #[test]
-    fn ambient_town_actor_skips_npc_linked_and_off_floor_objects() {
-        let mut state = test_state(open_grid(), 1, 1);
-        state.turn = 3;
-        state.active_objects.push(ActiveObject {
-            type_byte: 192,
-            tile: 192,
-            x: 5,
-            y: 5,
-            z: 0,
-            phase: 0x00,
-            aux1: 0,
-            aux3: 0,
-        });
-        state.npcs.push(RuntimeNpc {
-            slot: 1,
-            type_byte: 192,
-            dialog_id: 1,
-            schedule: [0; NPC_SCHEDULE_RECORD_LEN],
-            state: NPC_STATE_IDLE,
-            x: 5,
-            y: 5,
-            z: 0,
-            cached_wp: 0,
-            move_queue: Vec::new(),
-            move_queue_pos: 0,
-            stuck_counter: 0,
-            active_object: Some(1),
-            player_phantom: false,
-        });
-        assert_eq!(state.npcs[0].active_object, Some(1));
-
-        state.advance_active_objects();
-        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (5, 5));
-        assert_eq!(state.active_objects[1].phase, 0x00);
-
-        let mut off_floor = test_state(open_grid(), 1, 1);
-        off_floor.turn = 3;
-        off_floor.active_objects.push(ActiveObject {
-            type_byte: 192,
-            tile: 192,
-            x: 5,
-            y: 5,
-            z: 1,
-            phase: 0x00,
-            aux1: 0,
-            aux3: 0,
-        });
-
-        off_floor.advance_active_objects();
-        assert_eq!((off_floor.active_objects[1].x, off_floor.active_objects[1].y), (5, 5));
-        assert_eq!(off_floor.active_objects[1].phase, 0x00);
+        assert_eq!((object_blocked.active_objects[1].x, object_blocked.active_objects[1].y), (5, 5));
+        let mut expected_prng = 0x0070;
+        for _ in 0..3 {
+            expected_prng = u5_prng_advance_state(expected_prng);
+        }
+        assert_eq!(object_blocked.prng_state, expected_prng);
+        assert!(!object_blocked.visibility_dirty);
     }
 
     #[test]

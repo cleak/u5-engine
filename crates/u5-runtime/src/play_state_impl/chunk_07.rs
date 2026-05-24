@@ -2466,20 +2466,21 @@ impl PlayState {
         }
         let px = self.player.x as isize;
         let py = self.player.y as isize;
-        let mut whirlpool_found = false;
+        let mut whirlpool_slot = None;
         for (dx, dy) in [(0isize, -1isize), (0, 1), (-1, 0), (1, 0)] {
             let x = (px + dx).rem_euclid(WORLD_SIDE as isize) as usize;
             let y = (py + dy).rem_euclid(WORLD_SIDE as isize) as usize;
-            if let Some(object) = self.world_object_at(x, y) {
+            if let Some((slot, object)) = self.world_object_slot_at(x, y) {
                 if is_whirlpool_object(*object) {
-                    whirlpool_found = true;
+                    whirlpool_slot = Some(slot);
                     break;
                 }
             }
         }
-        if !whirlpool_found {
+        let Some(whirlpool_slot) = whirlpool_slot else {
             return Ok(None);
-        }
+        };
+        self.free_active_object_slot(whirlpool_slot);
         let entry = WorldPlaneTransitionEntry {
             from_plane: plane,
             x: self.player.x,
