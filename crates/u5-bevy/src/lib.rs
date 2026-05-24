@@ -2599,7 +2599,13 @@ fn drive_visual_intro(
     };
     let mut handled = false;
     if keyboard.just_pressed(KeyCode::Escape) {
-        if cancel_visual_intro_panel(&mut intro) {
+        if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
+            if visual_intro_return_to_view_complete(&intro.panel)
+                && step_visual_intro_panel(&mut intro, '\x1b')
+            {
+                handled = true;
+            }
+        } else if cancel_visual_intro_panel(&mut intro) {
             handled = true;
         } else {
             exit.write(AppExit::Success);
@@ -2735,6 +2741,18 @@ fn advance_visual_intro_return_to_view(
     true
 }
 
+fn visual_intro_return_to_view_complete(panel: &VisualIntroPanel) -> bool {
+    let VisualIntroPanel::ReturnToView {
+        preview_frames_rgba,
+        preview_frame_index,
+        ..
+    } = panel
+    else {
+        return false;
+    };
+    preview_frame_index.saturating_add(1) >= preview_frames_rgba.len()
+}
+
 fn step_visual_intro(
     intro: &mut VisualIntroState,
     ch: char,
@@ -2832,11 +2850,21 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             result: IntroSubflowResult::ReturnedToMenu,
             message: "Acknowledgements complete.".to_string(),
         },
-        VisualIntroPanel::ReturnToView { .. } => VisualIntroPanelOutcome::ReturnToMenu {
-            subflow: IntroSubflow::ReturnToView,
-            result: IntroSubflowResult::ReturnedToMenu,
-            message: "Return-to-View preview complete.".to_string(),
-        },
+        VisualIntroPanel::ReturnToView {
+            preview_frames_rgba,
+            preview_frame_index,
+            ..
+        } => {
+            if preview_frame_index.saturating_add(1) >= preview_frames_rgba.len() {
+                VisualIntroPanelOutcome::ReturnToMenu {
+                    subflow: IntroSubflow::ReturnToView,
+                    result: IntroSubflowResult::ReturnedToMenu,
+                    message: "Return-to-View preview complete.".to_string(),
+                }
+            } else {
+                VisualIntroPanelOutcome::Stay
+            }
+        }
     };
 
     match outcome {
@@ -2928,11 +2956,7 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
             IntroSubflowResult::ReturnedToMenu,
             "Acknowledgements cancelled; returning to the intro menu.",
         )),
-        VisualIntroPanel::ReturnToView { .. } => Some((
-            IntroSubflow::ReturnToView,
-            IntroSubflowResult::ReturnedToMenu,
-            "Return-to-View preview cancelled; returning to the intro menu.",
-        )),
+        VisualIntroPanel::ReturnToView { .. } => None,
     }) else {
         return false;
     };
@@ -3382,7 +3406,7 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
                 String::new(),
                 frame_line,
                 frame_detail,
-                "Press any key to return to the intro menu.".to_string(),
+                "Press any key after playback completes.".to_string(),
             ]
             .join("\n");
         }
@@ -7811,6 +7835,94 @@ mod tests {
         assert!(matches!(
             intro.dispatch.submit_menu_key(b'A'),
             UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
+        ));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn return_to_view_intro_input_waits_until_final_frame() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(
+            dir.clone(),
+            VisualIntroPanel::ReturnToView {
+                summary: "Preview".to_string(),
+                preview_frames_rgba: vec![
+                    vec![0x00, 0x00, 0x00, 0xff],
+                    vec![0xff, 0xff, 0xff, 0xff],
+                ],
+                frame_metadata: vec![
+                    VisualReturnToViewFrameMeta {
+                        command_index: 0,
+                        elapsed_title_ticks: 1,
+                        kind: ReturnToViewFrameKind::PreviewTick,
+                        caption: Some("The Castle of Lord British"),
+                    },
+                    VisualReturnToViewFrameMeta {
+                        command_index: 1,
+                        elapsed_title_ticks: 2,
+                        kind: ReturnToViewFrameKind::FixedWait { tick: 0 },
+                        caption: Some("The Keep of Lord Blackthorn"),
+                    },
+                ],
+                preview_frame_index: 0,
+                preview_width: 1,
+                preview_height: 1,
+            },
+        );
+        intro.dispatch.submit_menu_key(b'R');
+
+        assert!(step_visual_intro_panel(&mut intro, 'x'));
+        assert!(matches!(
+            intro.panel,
+            VisualIntroPanel::ReturnToView {
+                preview_frame_index: 0,
+                ..
+            }
+        ));
+        assert!(intro.message.is_empty());
+
+        assert!(advance_visual_intro_panel_animation(
+            &mut intro.panel,
+            &mut intro.title_tick_frame
+        ));
+        assert!(step_visual_intro_panel(&mut intro, 'x'));
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message.contains("Return-to-View preview complete"));
+        assert!(matches!(
+            intro.dispatch.submit_menu_key(b'A'),
+            UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
+        ));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn return_to_view_intro_escape_cancel_is_not_available() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(
+            dir.clone(),
+            VisualIntroPanel::ReturnToView {
+                summary: "Preview".to_string(),
+                preview_frames_rgba: vec![vec![0x00, 0x00, 0x00, 0xff]],
+                frame_metadata: vec![VisualReturnToViewFrameMeta {
+                    command_index: 0,
+                    elapsed_title_ticks: 1,
+                    kind: ReturnToViewFrameKind::PreviewTick,
+                    caption: Some("The Castle of Lord British"),
+                }],
+                preview_frame_index: 0,
+                preview_width: 1,
+                preview_height: 1,
+            },
+        );
+        intro.dispatch.submit_menu_key(b'R');
+
+        assert!(!cancel_visual_intro_panel(&mut intro));
+        assert!(matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }));
+        assert!(intro.message.is_empty());
+        assert!(matches!(
+            intro.dispatch.submit_menu_key(b'A'),
+            UnifiedMenuStep::Ignored
         ));
         let _ = fs::remove_dir_all(dir);
     }
