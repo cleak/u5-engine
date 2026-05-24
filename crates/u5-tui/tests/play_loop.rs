@@ -1054,6 +1054,16 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "terrain-combat-party-entry")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "dungeon-room-party-entry")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "doom-combat-view-label-only")
     );
     assert!(
@@ -1195,6 +1205,11 @@ fn route_smoke_cases_cover_representative_modes() {
         "combat-conjure-animal",
         "combat-swarm-summon",
         "combat-summon-daemon-ring",
+        "combat-kill-gazer-eye-burst",
+        "combat-kill-gargoyle-lava-marker",
+        "combat-kill-shadowlord-vanish-marker",
+        "terrain-combat-party-entry",
+        "dungeon-room-party-entry",
     ] {
         assert!(cases.iter().any(|case| case.name == name), "{name}");
     }

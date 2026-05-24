@@ -34,6 +34,7 @@ set already tracked in `TODO.md` and the latest GitHub issue sweep:
 |------|-------|---------------|
 | `cleak/u5-spec#1` | Dungeon `0xF?` room-trigger and `0xA?` room-helper reload behavior | Implemented from latest issue answer and reconciled checked-in spec wording |
 | `cleak/u5-spec#3` | Terrain-combat arena records, spawn counts, replacement tiles, placement metadata, and pirate selector | Implemented from latest issue answer, including active-object byte-0 `0x2C..0x2F` pirate arena selector |
+| `cleak/u5-spec#5` | Combat party entry placement and descriptor seeding | Implemented for terrain and dungeon-room combat; party descriptor byte 3 links to the party slot while byte 1 keeps class-derived speed |
 | `cleak/u5-spec#8` | Combat non-party sleep/disabled state storage | Implemented from latest issue answer; descriptor byte 2 carries the sleep/disabled bit and byte 4 remains the active-object link |
 | `cleak/u5-spec#9`/`#22` | Directed Sleep/Wind combat cone targeting | Implemented from latest issue answer; cardinal direction cone targeting replaces target-slot targeting |
 | `cleak/u5-spec#10` | Combat arena field marker placement gate | Implemented from latest issue answer; Fire/Poison/Sleep/Energy markers place after confirmed impact without a random materialization gate |
@@ -69,7 +70,7 @@ audit:
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 64 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 174 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 176 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
@@ -81,7 +82,7 @@ audit:
   #48 Blink ray landing, directed Sleep/Poison Wind/Death Wind/Flame Wind
   combat casts, combat field marker casts/removal, targeted Magic Missile/Tremor/Repel
   Undead/Charm/Polymorph/Clone casts, Conjure/Swarm/Summon Daemon routes,
-  and special death-marker Kill routes,
+  special death-marker Kill routes, and combat-entry party descriptor routes,
   #51 poison-gas doorway step, public #47 dungeon no-direct-recovery rest and
   hourly ring tick, public #13 sage paid-success/short-funds paths, public #28
   all-stable horse-trader purchases, accepted shipwright frigate/skiff dock
@@ -101,7 +102,7 @@ audit:
   `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls
   and a combat death/field/cursor marker gallery.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 441 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 445 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including horse-trader
   purchases, accepted healer cure/heal/resurrect, all four public shipwright
   delivery-row purchases, spell routes for Locate, Light/Open, restore, active effects,

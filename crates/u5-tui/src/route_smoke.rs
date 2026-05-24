@@ -48,7 +48,8 @@ use u5_runtime::{
     WORD_OF_POWER_SEAL_XOR, WORLD_SIDE, WindState, WordOfPowerSeal, WorldPlane, WorldReturn,
     X_RAY_COST, X_RAY_SPELL_INDEX, combat_class_stats, default_party_equipment,
     default_party_experience, default_party_intelligence, default_party_names,
-    default_party_stay_counters, dungeon_cell_index, inn_base_room_rate, load_tile_atlas,
+    default_party_roster, default_party_stay_counters, default_party_strengths, dungeon_cell_index,
+    dungeon_room_entry_seed_for_direction, inn_base_room_rate, load_tile_atlas,
     shipwright_delivery_coordinate, shipwright_price, shop_intelligence_adjusted_price,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
@@ -1536,6 +1537,22 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
+            name: "terrain-combat-party-entry",
+            options: world.clone(),
+            script: &[],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 0,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "dungeon-room-party-entry",
+            options: doom_options.clone(),
+            script: &[],
+            expected: RouteSmokeExpectation::Dungeon(doom),
+            min_turn: 0,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
             name: "doom-combat-pass-round",
             options: doom_options.clone(),
             script: &["empty", "empty"],
@@ -2213,6 +2230,12 @@ fn apply_route_smoke_case_setup(
         }
         "combat-kill-shadowlord-vanish-marker" => {
             seed_combat_special_death_route(state, 47)?;
+        }
+        "terrain-combat-party-entry" => {
+            seed_terrain_combat_party_entry_route(state, game_dir)?;
+        }
+        "dungeon-room-party-entry" => {
+            seed_dungeon_room_party_entry_route(state, game_dir)?;
         }
         "combat-magic-missile-target"
         | "combat-tremor-targets"
@@ -3144,6 +3167,51 @@ fn seed_combat_special_death_route(state: &mut PlayState, class: u8) -> io::Resu
         active_objects,
         actors,
         [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    )?;
+    Ok(())
+}
+
+fn seed_combat_entry_party(state: &mut PlayState) {
+    state.party = vec![
+        route_party_member(0, b'A', b'G', 30, 30),
+        route_party_member(1, b'F', b'G', 30, 30),
+    ];
+    state.party_names = default_party_names(2);
+    state.party_experience = default_party_experience(2);
+    state.party_stay_counters = default_party_stay_counters(2);
+    state.party_strengths = default_party_strengths(2);
+    state.party_intelligence = default_party_intelligence(2);
+    state.party_equipment = default_party_equipment(2);
+    state.party_roster = default_party_roster(2);
+}
+
+fn seed_terrain_combat_party_entry_route(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    seed_combat_entry_party(state);
+    let trigger = ActiveObject {
+        type_byte: 0x50,
+        tile: 0xc0,
+        x: state.player.x,
+        y: state.player.y,
+        z: WorldPlane::Britannia.save_floor(),
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    };
+    state.enter_terrain_combat_from_world_object(game_dir, WorldPlane::Britannia, 1, trigger)?;
+    Ok(())
+}
+
+fn seed_dungeon_room_party_entry_route(state: &mut PlayState, game_dir: &Path) -> io::Result<()> {
+    seed_combat_entry_party(state);
+    state.enter_dungeon_room_combat(
+        game_dir,
+        DungeonScene::new(0x28).expect("Doom dungeon scene is valid"),
+        7,
+        15,
+        111,
+        dungeon_room_entry_seed_for_direction(Direction::South),
+        true,
+        false,
     )?;
     Ok(())
 }
@@ -4189,7 +4257,45 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                 )));
             }
         }
+        "terrain-combat-party-entry" | "dungeon-room-party-entry" | "doom-room-combat-trigger" => {
+            validate_combat_party_descriptor_links(state, case_name)?;
+        }
         _ => {}
+    }
+    Ok(())
+}
+
+fn validate_combat_party_descriptor_links(state: &PlayState, case_name: &str) -> io::Result<()> {
+    if !state.combat_active {
+        return Err(io::Error::other(format!(
+            "route smoke `{case_name}` did not enter combat"
+        )));
+    }
+
+    for slot in 0..state.party.len().min(COMBAT_PARTY_ACTOR_SLOTS) {
+        if !state.party[slot].conscious() {
+            continue;
+        }
+        let actor = state.combat_actors[slot];
+        let Some(object) = state.active_objects.get(slot).copied() else {
+            return Err(io::Error::other(format!(
+                "route smoke `{case_name}` did not seed party active-object slot {slot}"
+            )));
+        };
+        let expected_step = combat_class_stats(state.party[slot].class_byte)
+            .map(|stats| stats.speed_seed)
+            .unwrap_or(1);
+        if actor.owner_target_class != slot as u8
+            || actor.active_object_slot != slot as u8
+            || actor.base_step != expected_step
+            || actor.x != object.x as u8
+            || actor.y != object.y as u8
+            || !actor.has_field_lookup_selectable_bit()
+        {
+            return Err(io::Error::other(format!(
+                "route smoke `{case_name}` did not seed party slot {slot} with the public combat descriptor link"
+            )));
+        }
     }
     Ok(())
 }

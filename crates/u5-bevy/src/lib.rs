@@ -65,9 +65,9 @@ use u5_runtime::{
     VAS_LOR_SPELL_INDEX, WORLD_SIDE, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
     blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save, commit_u4_transfer_save,
     default_party_equipment, default_party_intelligence, default_party_names,
-    default_party_stay_counters, dungeon_cell_index, endgame_tableau_role_for_slot,
-    handle_play_key_input, hash_bytes, input_case_fold, input_function_key_code,
-    input_keypad_digit_direction_code,
+    default_party_stay_counters, dungeon_cell_index, dungeon_room_entry_seed_for_direction,
+    endgame_tableau_role_for_slot, handle_play_key_input, hash_bytes, input_case_fold,
+    input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -1653,6 +1653,27 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_combat_kill_shadowlord),
         },
         VisualRouteSuiteCase {
+            label: "route-terrain-combat-party-entry",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["setup:terrain-combat-party-entry"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-room-party-entry",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(doom),
+                floor: 0,
+                ..PlayOptions::default()
+            },
+            script: &["setup:dungeon-room-party-entry"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
             label: "route-dungeon-level-up-down-spells",
             frame_kind: "visual route dungeon frame",
             options: PlayOptions {
@@ -2190,6 +2211,19 @@ fn route_visual_party_member(
         max_hp,
         level: 1,
     }
+}
+
+fn seed_visual_route_combat_entry_party(state: &mut PlayState) {
+    state.party = vec![
+        route_visual_party_member(0, b'A', b'G', 30, 30),
+        route_visual_party_member(1, b'F', b'G', 30, 30),
+    ];
+    state.party_names = default_party_names(2);
+    state.party_experience = vec![0, 0];
+    state.party_stay_counters = default_party_stay_counters(2);
+    state.party_strengths = vec![30; 2];
+    state.party_intelligence = default_party_intelligence(2);
+    state.party_equipment = default_party_equipment(2);
 }
 
 fn seed_visual_route_restore_spells(state: &mut PlayState) {
@@ -3093,6 +3127,40 @@ fn apply_visual_route_command(
     }
     if lower == "setup:blackthorn-rescue" {
         state.apply_blackthorn_rescue_refuge(game_dir)?;
+        return Ok(PlayInputDisposition::Continue);
+    }
+    if lower == "setup:terrain-combat-party-entry" {
+        seed_visual_route_combat_entry_party(state);
+        let trigger = ActiveObject {
+            type_byte: 0x50,
+            tile: 0xc0,
+            x: state.player.x,
+            y: state.player.y,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+        state.enter_terrain_combat_from_world_object(
+            game_dir,
+            WorldPlane::Britannia,
+            1,
+            trigger,
+        )?;
+        return Ok(PlayInputDisposition::Continue);
+    }
+    if lower == "setup:dungeon-room-party-entry" {
+        seed_visual_route_combat_entry_party(state);
+        state.enter_dungeon_room_combat(
+            game_dir,
+            DungeonScene::new(0x28).expect("Doom dungeon scene is valid"),
+            7,
+            15,
+            111,
+            dungeon_room_entry_seed_for_direction(Direction::South),
+            true,
+            false,
+        )?;
         return Ok(PlayInputDisposition::Continue);
     }
     if matches!(lower.as_str(), "empty" | "pass") {
@@ -7555,7 +7623,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 141);
+        assert_eq!(cases.len(), 143);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -7722,6 +7790,8 @@ mod tests {
             "route-combat-kill-gazer-eye-burst",
             "route-combat-kill-gargoyle-lava-marker",
             "route-combat-kill-shadowlord-vanish-marker",
+            "route-terrain-combat-party-entry",
+            "route-dungeon-room-party-entry",
             "route-dungeon-level-up-down-spells",
             "route-dungeon-field-cycle-spells",
             "route-dungeon-open-chest-spell",
@@ -7923,7 +7993,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 441);
+        assert_eq!(reports.len(), 445);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -8015,6 +8085,13 @@ mod tests {
         assert!(manifest.contains("route-combat-kill-gazer-eye-burst-01-c1cx7"));
         assert!(manifest.contains("route-combat-kill-gargoyle-lava-marker-01-c1cx7"));
         assert!(manifest.contains("route-combat-kill-shadowlord-vanish-marker-01-c1cx7"));
+        assert!(
+            manifest
+                .contains("route-terrain-combat-party-entry-01-setup_terrain-combat-party-entry")
+        );
+        assert!(
+            manifest.contains("route-dungeon-room-party-entry-01-setup_dungeon-room-party-entry")
+        );
         assert!(manifest.contains("route-dungeon-level-up-down-spells-02-c1dp"));
         assert!(manifest.contains("route-dungeon-field-cycle-spells-08-c1ag6"));
         assert!(manifest.contains("route-dungeon-open-chest-spell-01-c1as"));

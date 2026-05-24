@@ -710,7 +710,7 @@ impl PlayState {
                 member.hp.min(u16::from(u8::MAX)) as u8,
                 base_step,
                 COMBAT_ACTOR_FLAG_SELECTABLE_80,
-                member.class_byte,
+                slot as u8,
                 slot as u8,
                 0,
                 x,

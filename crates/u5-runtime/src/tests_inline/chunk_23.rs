@@ -321,7 +321,11 @@
         );
         assert!(instance.actors[9].is_empty());
 
-        let state = test_state(open_grid(), 1, 1);
+        let mut state = test_state(open_grid(), 1, 1);
+        let mut second = state.party[0];
+        second.slot = 1;
+        second.class_byte = b'F';
+        state.party.push(second);
         state.populate_dungeon_room_combat_party(
             &mut instance.active_objects,
             &mut instance.actors,
@@ -331,6 +335,10 @@
 
         assert_eq!((instance.active_objects[0].x, instance.active_objects[0].y), (30, 40));
         assert_eq!((instance.actors[0].x, instance.actors[0].y), (30, 40));
+        assert_eq!(instance.actors[0].owner_target_class, 0);
+        assert_eq!(instance.actors[0].active_object_slot, 0);
+        assert_eq!(instance.actors[1].owner_target_class, 1);
+        assert_eq!(instance.actors[1].active_object_slot, 1);
     }
 
     #[test]
@@ -14559,6 +14567,8 @@
             (8, 7)
         );
         assert_eq!((instance.actors[0].x, instance.actors[0].y), (8, 7));
+        assert_eq!(instance.actors[0].owner_target_class, 0);
+        assert_eq!(instance.actors[0].active_object_slot, 0);
         assert_eq!(
             instance.actors[0].base_step,
             combat_class_stats(COMBAT_CLASS_GIANT_RAT).unwrap().speed_seed

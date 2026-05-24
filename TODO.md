@@ -37,7 +37,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-24 with 174 scripted route cases (including expanded active-shop/modal
+  2026-05-24 with 176 scripted route cases (including expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
@@ -48,7 +48,8 @@ Last known verification state:
   Locate, Light/Open, restore-spell, active-effect, directed Sleep/Poison
   Wind/Death Wind/Flame Wind combat casts, combat field marker casts/removal,
   targeted Magic Missile/Tremor/Repel Undead/Charm/Polymorph/Clone,
-  Conjure/Swarm/Summon Daemon, and special death-marker Kill combat spell casts,
+  Conjure/Swarm/Summon Daemon, special death-marker Kill combat spell casts,
+  and asset-backed combat-entry party descriptor routes,
   dungeon level, dungeon
   field/dispel, dungeon Open chest, light-decay, dungeon ladder-chain,
   dungeon-to-world return, hourly provision/poison/starvation/ring passes, public
@@ -137,7 +138,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 441 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 445 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -868,8 +869,10 @@ as public details become available.
     above the slot table instead of reproducing the original out-of-bounds edge,
     places the party after the monster slots, and applies the public
     one-in-nine early-spawn replacement-tile roll through the main
-    terrain-combat path. Exact visual review of every replacement byte remains
-    combat parity/audit work.
+    terrain-combat path. Party combat descriptors now seed byte 3 as the
+    party/character slot link while retaining class-derived speed in byte 1.
+    Exact visual review of every replacement byte remains combat parity/audit
+    work.
   - Combat-frame entry snapshots the previous mode state, loads clean runtime
     arena data, places actors, and restores the suspended state on exit.
   - Tests cover active-object preservation, trigger-slot reconciliation, actor
