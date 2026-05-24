@@ -2435,9 +2435,45 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
     ];
+    append_asset_backed_conversation_route_smoke_cases(&mut cases);
     append_shrine_route_smoke_cases(&mut cases);
     append_public_location_route_smoke_cases(&mut cases);
     cases
+}
+
+fn append_asset_backed_conversation_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>) {
+    for (family, scene_byte) in [
+        ("towne", 1u8),
+        ("dwelling", 9u8),
+        ("castle", 17u8),
+        ("keep", 25u8),
+    ] {
+        let scene = Scene::new(scene_byte).expect("representative TLK family scene is valid");
+        for (kind, command) in [
+            ("reserved-name", "NAME"),
+            ("reserved-job", "JOB"),
+            ("reserved-work", "WORK"),
+            ("reserved-bye", "BYE"),
+            ("reserved-thank", "THANK"),
+            ("ordinary-no-match", "XYZZY"),
+        ] {
+            let name: &'static str = Box::leak(format!("talk-{family}-{kind}").into_boxed_str());
+            let command: &'static str = Box::leak(command.to_string().into_boxed_str());
+            let script: &'static [&'static str] =
+                Box::leak(vec!["T", "6", command].into_boxed_slice());
+            cases.push(RouteSmokeCase {
+                name,
+                options: PlayOptions {
+                    target: PlayTarget::Town(scene),
+                    ..PlayOptions::default()
+                },
+                script,
+                expected: RouteSmokeExpectation::Town(scene),
+                min_turn: 1,
+                expected_frame_kind: "tile viewport",
+            });
+        }
+    }
 }
 
 fn append_shrine_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>) {
@@ -2972,6 +3008,9 @@ fn apply_route_smoke_case_setup(
         "castle-talk-ordinary-keyword-route" => {
             seed_town_ordinary_talk_route(state);
         }
+        _ if asset_backed_conversation_route_family(case_name).is_some() => {
+            seed_town_ordinary_talk_route(state);
+        }
         _ if shrine_route_virtue(case_name).is_some() => {
             let virtue = shrine_route_virtue(case_name).expect("shrine route virtue is known");
             seed_world_shrine_route(state, virtue);
@@ -3374,6 +3413,18 @@ fn shrine_route_virtue(case_name: &str) -> Option<ShrineVirtue> {
         .strip_prefix("shrine-native-")?
         .strip_suffix("-meditation")?;
     ShrineVirtue::from_key(key)
+}
+
+fn asset_backed_conversation_route_family(case_name: &str) -> Option<&str> {
+    let rest = case_name.strip_prefix("talk-")?;
+    let (family, kind) = rest.split_once('-')?;
+    matches!(family, "towne" | "dwelling" | "castle" | "keep")
+        .then_some(kind)
+        .map(|_| family)
+}
+
+fn asset_backed_conversation_route_exits(case_name: &str) -> bool {
+    case_name.ends_with("-reserved-bye") || case_name.ends_with("-reserved-thank")
 }
 
 fn seed_town_native_stair_route(state: &mut PlayState, facing: Direction, stair_tile: u8) {
@@ -5039,6 +5090,21 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not keep an ordinary asset-backed Talk session active"
+                )));
+            }
+        }
+        _ if asset_backed_conversation_route_family(case_name).is_some() => {
+            let exits = asset_backed_conversation_route_exits(case_name);
+            if (!exits && state.active_conversation.is_none())
+                || (exits && state.active_conversation.is_some())
+                || state.active_shop.is_some()
+                || state.message.is_empty()
+                || state.message.contains("[w")
+                || state.message.contains("Dialogue id")
+                || state.message.contains("funny look")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not complete the asset-backed TLK conversation path"
                 )));
             }
         }
