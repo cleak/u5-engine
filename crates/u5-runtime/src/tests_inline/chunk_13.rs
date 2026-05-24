@@ -16105,6 +16105,12 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
     }
     victory.resolve_endgame_confirmation(true);
     assert_eq!(victory.message, "Throne-room tableau");
+    assert_eq!(
+        victory.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
+        ENDGAME_TABLEAU_LORD_BRITISH_TYPE
+    );
+    victory.resolve_endgame_confirmation(true);
+    assert_eq!(victory.message, "Return-home arc (1)");
 }
 
 #[test]
@@ -16131,27 +16137,19 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     );
     assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 5));
 
-    // Walk all panels: throne → 6 narrative windows → certificate
-    // → origin closer → finished. That's 1 + 6 + 1 + 1 = 9 steps;
-    // after which endgame remains active.
+    // Leaving the throne tableau runs the blocking victory-exit tableau
+    // script before the first fixed narrative panel appears.
     state.resolve_endgame_confirmation(true);
-    assert_eq!(
-        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
-        ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE
-    );
-    state.resolve_endgame_confirmation(true);
-    assert_eq!(
-        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
-        0
-    );
+    assert_eq!(state.message, "Return-home arc (1)");
+    assert!((0..state.party.len().min(SAVE_PARTY_SIZE_MAX as usize))
+        .chain([
+            ENDGAME_TABLEAU_SCENE_MARKER_SLOT,
+            ENDGAME_TABLEAU_LORD_BRITISH_SLOT
+        ])
+        .all(|slot| state.active_objects[slot].type_byte == 0
+            && state.active_objects[slot].tile == 0));
 
-    while (0..state.party.len().min(SAVE_PARTY_SIZE_MAX as usize))
-        .chain([ENDGAME_TABLEAU_SCENE_MARKER_SLOT])
-        .any(|slot| state.active_objects[slot].type_byte != 0 || state.active_objects[slot].tile != 0)
-    {
-        state.resolve_endgame_confirmation(true);
-    }
-    for _ in 0..9 {
+    for _ in 0..8 {
         state.resolve_endgame_confirmation(true);
     }
     let endgame = state.endgame.as_ref().unwrap();
@@ -20399,6 +20397,52 @@ fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
 }
 
 #[test]
+fn endgame_tableau_install_preserves_non_type_tile_fields() {
+    // endgame.md Sections 4 and 7: setup clears only type/tile for every
+    // active-object slot. Rebuilt actors then receive x/y/phase, while z and
+    // aux bytes remain the existing resident values.
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party = vec![state.party[0]; 2];
+    state.active_objects = (0..OOL_SLOTS)
+        .map(|slot| ActiveObject {
+            type_byte: 0xa0 | (slot as u8 & 0x0f),
+            tile: 0xb0 | (slot as u8 & 0x0f),
+            x: 20 + slot,
+            y: 40 + slot,
+            z: -3,
+            phase: 0x7e,
+            aux1: 0x11,
+            aux3: 0x22,
+        })
+        .collect();
+
+    state.install_endgame_tableau();
+
+    let party_slot = state.active_objects[0];
+    assert_eq!((party_slot.x, party_slot.y), ENDGAME_TABLEAU_PARTY_START);
+    assert_eq!(party_slot.phase, ENDGAME_TABLEAU_PHASE);
+    assert_eq!((party_slot.z, party_slot.aux1, party_slot.aux3), (-3, 0x11, 0x22));
+
+    let empty_slot = state.active_objects[10];
+    assert_eq!((empty_slot.type_byte, empty_slot.tile), (0, 0));
+    assert_eq!((empty_slot.x, empty_slot.y), (30, 50));
+    assert_eq!(empty_slot.phase, 0x7e);
+    assert_eq!((empty_slot.z, empty_slot.aux1, empty_slot.aux3), (-3, 0x11, 0x22));
+
+    let marker = state.active_objects[ENDGAME_TABLEAU_SCENE_MARKER_SLOT];
+    assert_eq!(
+        (marker.type_byte, marker.tile),
+        (
+            ENDGAME_TABLEAU_SCENE_MARKER_TYPE,
+            ENDGAME_TABLEAU_SCENE_MARKER_TYPE
+        )
+    );
+    assert_eq!((marker.x, marker.y), (5, 8));
+    assert_eq!(marker.phase, ENDGAME_TABLEAU_PHASE);
+    assert_eq!((marker.z, marker.aux1, marker.aux3), (-3, 0x11, 0x22));
+}
+
+#[test]
 fn endgame_rendering_does_not_repopulate_gameplay_player_object() {
     let mut state = test_state(open_grid(), 5, 5);
     state.party = vec![state.party[0]; 2];
@@ -20430,12 +20474,34 @@ fn endgame_tableau_target_step_moves_active_objects_until_settled() {
     state.install_endgame_tableau();
     assert!(!state.endgame_tableau_is_settled());
 
+    let frame_before = state.animation.frame;
     assert!(state.advance_endgame_tableau_toward_targets());
     assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 8));
+    assert_eq!(state.animation.frame, (frame_before + 2) % 12);
 
+    let frame_before = state.animation.frame;
     let steps = state.settle_endgame_tableau_to_targets();
     assert!(steps > 0);
     assert!(state.endgame_tableau_is_settled());
+    assert_eq!(state.animation.frame, (frame_before + steps as u8) % 12);
+}
+
+#[test]
+fn endgame_tableau_terminal_jitter_ticks_once_per_eligible_actor() {
+    // endgame.md Section 7: every terminal-jitter actor call advances the
+    // display tick whether or not the random walk commits a movement.
+    let mut state = test_state(endgame_tableau_test_grid(), 5, 5);
+    state.party = vec![state.party[0]; 6];
+    state.install_endgame_tableau();
+    state.settle_endgame_tableau_to_targets();
+
+    state.animation.frame = 0;
+    state.advance_endgame_terminal_tableau_jitter();
+
+    assert_eq!(
+        state.animation.frame,
+        ENDGAME_TABLEAU_JITTER_SLOTS.len() as u8
+    );
 }
 
 #[test]

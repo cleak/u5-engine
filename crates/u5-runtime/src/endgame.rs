@@ -848,6 +848,7 @@ impl PlayState {
             if next != current {
                 object.x = next.0 as usize;
                 object.y = next.1 as usize;
+                self.animation.tick_static_tiles();
                 moved = true;
             }
         }
@@ -963,6 +964,7 @@ impl PlayState {
     }
 
     pub fn complete_endgame_victory_tableau(&mut self) {
+        let mut changed_lord_british_to_orb = false;
         if let Some(lord_british) = self
             .active_objects
             .get_mut(ENDGAME_TABLEAU_LORD_BRITISH_SLOT)
@@ -972,17 +974,24 @@ impl PlayState {
             {
                 lord_british.type_byte = ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE;
                 lord_british.tile = ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE;
+                changed_lord_british_to_orb = true;
             }
         }
+        if changed_lord_british_to_orb {
+            self.animation.tick_static_tiles();
+        }
         self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_LORD_BRITISH_SLOT);
+        self.animation.tick_static_tiles();
         self.step_endgame_tableau_slot_to_target(
             ENDGAME_TABLEAU_SCENE_MARKER_SLOT,
             ENDGAME_TABLEAU_VICTORY_EXIT_TARGET,
         );
         self.clear_endgame_tableau_slot_type_tile(ENDGAME_TABLEAU_SCENE_MARKER_SLOT);
+        self.animation.tick_static_tiles();
         for slot in 0..self.party.len().min(SAVE_PARTY_SIZE_MAX as usize) {
             self.step_endgame_tableau_slot_to_target(slot, ENDGAME_TABLEAU_VICTORY_EXIT_TARGET);
             self.clear_endgame_tableau_slot_type_tile(slot);
+            self.animation.tick_static_tiles();
         }
     }
 
@@ -1172,32 +1181,20 @@ impl PlayState {
                 if matches!(
                     current.cinematic.step,
                     crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau
-                ) && self.advance_endgame_victory_tableau_exit_step()
-                {
-                    if let Some(state) = self.endgame.as_ref() {
+                ) {
+                    self.complete_endgame_victory_tableau();
+                    if let Some(state) = self.endgame.as_mut() {
+                        state.advance_cinematic();
                         self.message = state.current_cinematic_text();
                     }
                     return MoveOutcome::Observed;
                 }
                 if let Some(state) = self.endgame.as_mut() {
-                    let mut entered_throne_tableau = false;
                     if state.cinematic_is_finished() {
                         self.message = state.current_cinematic_text();
                     } else {
-                        let previous_step = state.cinematic.step;
                         state.advance_cinematic();
-                        let next_step = state.cinematic.step;
                         self.message = state.current_cinematic_text();
-                        entered_throne_tableau = matches!(
-                            (previous_step, next_step),
-                            (
-                                crate::endgame_cinematic::EndgameCinematicStep::RiteMessage(_),
-                                crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau
-                            )
-                        );
-                    }
-                    if entered_throne_tableau {
-                        self.advance_endgame_victory_tableau_exit_step();
                     }
                     return MoveOutcome::Observed;
                 }

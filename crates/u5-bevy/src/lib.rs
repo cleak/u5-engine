@@ -4700,7 +4700,9 @@ fn render_endgame_framebuffer(
     let width = VISUAL_PLAY_FRAME_WIDTH as usize;
     let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
     let mut rgba = render_status_framebuffer(state, input_line, fallback, font);
-    if let Ok(viewport) = render_endgame_tableau_viewport(state, atlas) {
+    if endgame_frame_should_show_tableau(state)
+        && let Ok(viewport) = render_endgame_tableau_viewport(state, atlas)
+    {
         blit_rgba(
             &mut rgba,
             width,
@@ -4713,6 +4715,26 @@ fn render_endgame_framebuffer(
         );
     }
     rgba
+}
+
+fn endgame_frame_should_show_tableau(state: &PlayState) -> bool {
+    let Some(endgame) = state.endgame.as_ref() else {
+        return false;
+    };
+    if matches!(
+        endgame.outcome,
+        Some(u5_runtime::EndgameOutcome::MissingBoxOrRefused)
+    ) {
+        return true;
+    }
+    if !matches!(endgame.outcome, Some(u5_runtime::EndgameOutcome::Victory)) {
+        return true;
+    }
+    matches!(
+        endgame.cinematic.step,
+        u5_runtime::endgame_cinematic::EndgameCinematicStep::RiteMessage(_)
+            | u5_runtime::endgame_cinematic::EndgameCinematicStep::ThroneTableau
+    )
 }
 
 fn render_endgame_tableau_viewport(
@@ -6285,6 +6307,28 @@ mod tests {
             rgba.len(),
             (VISUAL_PLAY_FRAME_WIDTH as usize) * (VISUAL_PLAY_FRAME_HEIGHT as usize) * 4
         );
+    }
+
+    #[test]
+    fn visual_play_frame_stops_tableau_overlay_after_victory_throne() {
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
+        state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+        state.enter_endgame();
+        state.resolve_endgame_confirmation(true);
+        state.resolve_endgame_confirmation(true);
+        state.resolve_endgame_confirmation(true);
+        assert!(matches!(
+            state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
+            Some(u5_runtime::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(0))
+        ));
+
+        let mut expected_state = state.clone();
+        let expected = render_status_framebuffer(&mut expected_state, "", READY_HINT, &font);
+        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+
+        assert_eq!(rgba, expected);
     }
 
     #[test]
