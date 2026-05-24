@@ -950,6 +950,19 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "castle-hourly-ring-regeneration-pass")
     );
+    for name in [
+        "reload-boarded-horse-pass",
+        "reload-gate-travel-underworld-pass",
+        "reload-chasm-underworld-pass",
+        "reload-underworld-fixed-hidden-stack-search-get-search",
+        "reload-minoc-fixed-hidden-daily-search-get-repeat",
+        "reload-horse-trader-horse-and-rider-buy-pass",
+        "reload-ship-xit-skiff-pass",
+        "reload-dungeon-ladder-down-up-route",
+        "reload-dungeon-surface-exit-return-world",
+    ] {
+        assert!(cases.iter().any(|case| case.name == name), "{name}");
+    }
     assert!(
         cases
             .iter()

@@ -318,9 +318,21 @@ impl PlayState {
         };
         let saved_active_objects = options.saved_active_objects.clone();
         let has_saved_active_objects = saved_active_objects.is_some();
+        let saved_game_reload = options.save_template_source == SaveTemplateSource::SavedGame;
         let (x, y) = match options.start.or(table_start) {
             Some(pos) => {
-                validate_start(&grid, pos, passability.as_ref())?;
+                if pos.0 >= 32 || pos.1 >= 32 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "start coordinate must be inside 0..31, got ({}, {})",
+                            pos.0, pos.1
+                        ),
+                    ));
+                }
+                if !saved_game_reload {
+                    validate_start(&grid, pos, passability.as_ref())?;
+                }
                 pos
             }
             None => markers
@@ -542,9 +554,21 @@ impl PlayState {
         let level = options.floor as u8;
         let default_start = (1, 1);
         let saved_active_objects = options.saved_active_objects.clone();
+        let saved_game_reload = options.save_template_source == SaveTemplateSource::SavedGame;
         let (x, y) = match options.start {
             Some(pos) => {
-                validate_dungeon_start(&grid, scene, level, pos)?;
+                if pos.0 >= DUNGEON_SIDE || pos.1 >= DUNGEON_SIDE {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "dungeon coordinate must be inside 0..7, got ({}, {})",
+                            pos.0, pos.1
+                        ),
+                    ));
+                }
+                if !saved_game_reload {
+                    validate_dungeon_start(&grid, scene, level, pos)?;
+                }
                 pos
             }
             None => {
@@ -732,16 +756,28 @@ impl PlayState {
             WorldPlane::Britannia => (62, 124),
             WorldPlane::Underworld => (1, 1),
         };
+        let saved_game_reload = options.save_template_source == SaveTemplateSource::SavedGame;
         let (x, y) = match options.start {
             Some(pos) => {
-                validate_world_start_for_transport(
-                    &grid,
-                    pos,
-                    plane,
-                    passability.as_ref(),
-                    options.transport,
-                    &damage_tiles,
-                )?;
+                if pos.0 >= WORLD_SIDE || pos.1 >= WORLD_SIDE {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "world coordinate must be inside 0..255, got ({}, {})",
+                            pos.0, pos.1
+                        ),
+                    ));
+                }
+                if !saved_game_reload {
+                    validate_world_start_for_transport(
+                        &grid,
+                        pos,
+                        plane,
+                        passability.as_ref(),
+                        options.transport,
+                        &damage_tiles,
+                    )?;
+                }
                 pos
             }
             None => {

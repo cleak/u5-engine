@@ -38,7 +38,10 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-24 with 204 scripted route cases (including expanded active-shop/modal
+  2026-05-24 with 213 scripted route cases (including save/reload checkpoints
+  for boarded horse, Gate Travel, chasm fall, fixed hidden treasure,
+  horse-trader delivery, ship X-it/skiff, dungeon ladders, and dungeon exits,
+  plus expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle

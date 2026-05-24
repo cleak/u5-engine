@@ -28,31 +28,32 @@ use u5_runtime::{
     IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, Inn, MAGIC_LOCK_COST,
     MAGIC_LOCK_SPELL_INDEX, MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,
     NATURAL_MOONGATE_RESTORED_TERRAIN_TILE, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST,
-    NEGATE_MAGIC_SPELL_INDEX, NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot, OPEN_SPELL_COST,
+    NEGATE_MAGIC_SPELL_INDEX, NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot, OOL_SLOTS, OPEN_SPELL_COST,
     OPEN_SPELL_INDEX, PEER_COST, PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
     POISON_WIND_SPELL_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
     PendingVehicleAcquisition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
     QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, RESURRECT_COST, RESURRECT_SPELL_INDEX,
-    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
-    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
-    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
-    SHADOWLORD_VANQUISHED, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
-    SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
-    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX,
-    SPECIAL_ITEM_SHARD_COWARDICE_INDEX, SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
-    SPECIAL_ITEM_SHARD_HATRED_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
-    STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShipwrightPurchaseKind,
-    Stable, TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
-    TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST,
-    TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TransportState, UNLOCK_MAGIC_COST,
-    UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
-    VAS_LOR_SPELL_INDEX, WHIRLPOOL_EMERGENCE_X, WHIRLPOOL_EMERGENCE_Y, WORD_OF_POWER_SEAL_XOR,
-    WORLD_SIDE, WindState, WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
-    combat_class_stats, default_party_equipment, default_party_experience,
-    default_party_intelligence, default_party_names, default_party_roster,
-    default_party_stay_counters, default_party_strengths, dungeon_cell_index,
-    dungeon_room_entry_seed_for_direction, inn_base_room_rate, load_tile_atlas,
+    SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM,
+    SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM,
+    SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX,
+    SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SLEEP_COST,
+    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
+    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
+    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
+    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
+    SURFACE_CHASM_Y, Scene, Shipwright, ShipwrightPurchaseKind, Stable, TALK_NO_RESPONSE_MESSAGE,
+    TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
+    TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST, TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX,
+    TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern,
+    TileGraphicsDepth, TransportState, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX,
+    UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
+    WHIRLPOOL_EMERGENCE_X, WHIRLPOOL_EMERGENCE_Y, WORD_OF_POWER_SEAL_XOR, WORLD_SIDE, WindState,
+    WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, combat_class_stats,
+    default_party_equipment, default_party_experience, default_party_intelligence,
+    default_party_names, default_party_roster, default_party_stay_counters,
+    default_party_strengths, dungeon_cell_index, dungeon_room_entry_seed_for_direction,
+    inn_base_room_rate, load_play_options_from_save, load_tile_atlas,
     shipwright_delivery_coordinate, shipwright_price, shop_intelligence_adjusted_price,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
@@ -798,16 +799,32 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         },
         RouteSmokeCase {
             name: "britannia-board-horse-route",
-            options: board_horse,
+            options: board_horse.clone(),
             script: &["B"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 0,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "reload-boarded-horse-pass",
+            options: board_horse,
+            script: &["B", "empty"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "gate-travel-world-to-underworld",
-            options: gate_travel_to_underworld,
+            options: gate_travel_to_underworld.clone(),
             script: &["C1PRV1"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "reload-gate-travel-underworld-pass",
+            options: gate_travel_to_underworld,
+            script: &["C1PRV1", "empty"],
             expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -854,8 +871,16 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         },
         RouteSmokeCase {
             name: "britannia-chasm-fall-to-underworld",
-            options: chasm_fall,
+            options: chasm_fall.clone(),
             script: &["s"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "reload-chasm-underworld-pass",
+            options: chasm_fall,
+            script: &["s", "empty"],
             expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -926,10 +951,18 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         },
         RouteSmokeCase {
             name: "underworld-fixed-hidden-stack-search-get-search",
-            options: fixed_hidden_underworld_stack,
+            options: fixed_hidden_underworld_stack.clone(),
             script: &["S6", "G6", "S6"],
             expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
             min_turn: 3,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "reload-underworld-fixed-hidden-stack-search-get-search",
+            options: fixed_hidden_underworld_stack,
+            script: &["S6", "G6", "S6"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
+            min_turn: 1,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
@@ -1100,10 +1133,18 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         },
         RouteSmokeCase {
             name: "minoc-fixed-hidden-daily-search-get-repeat",
-            options: fixed_hidden_daily,
+            options: fixed_hidden_daily.clone(),
             script: &["S6", "G6", "S6"],
             expected: RouteSmokeExpectation::Town(minoc),
             min_turn: 2,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "reload-minoc-fixed-hidden-daily-search-get-repeat",
+            options: fixed_hidden_daily,
+            script: &["S6", "G6", "S6"],
+            expected: RouteSmokeExpectation::Town(minoc),
+            min_turn: 0,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
@@ -1462,6 +1503,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "reload-horse-trader-horse-and-rider-buy-pass",
+            options: PlayOptions::default(),
+            script: &["B", "Y", "empty"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "shop-horse-trader-stablehouse-buy",
             options: PlayOptions::default(),
             script: &["B", "Y"],
@@ -1575,10 +1624,18 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         },
         RouteSmokeCase {
             name: "ship-xit-launches-skiff",
-            options: ship_xit,
+            options: ship_xit.clone(),
             script: &["X", "empty"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 2,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "reload-ship-xit-skiff-pass",
+            options: ship_xit,
+            script: &["X", "empty"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
@@ -1662,9 +1719,25 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "dungeon first-person viewport",
         },
         RouteSmokeCase {
+            name: "reload-dungeon-ladder-down-up-route",
+            options: dungeon_options.clone(),
+            script: &[">", "<"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 1,
+            expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
             name: "dungeon-surface-exit-return-world",
             options: dungeon_options.clone(),
             script: &["K"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "reload-dungeon-surface-exit-return-world",
+            options: dungeon_options.clone(),
+            script: &["K", "empty"],
             expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
@@ -2316,6 +2389,7 @@ pub fn run_route_smoke_case(
     case: &RouteSmokeCase,
 ) -> io::Result<RouteSmokeReport> {
     let route_game_dir = prepare_route_smoke_case_game_dir(case.name)?;
+    let reload_save_dir = prepare_route_smoke_reload_save_dir(game_dir, case.name)?;
     let command_game_dir = route_game_dir.as_deref().unwrap_or(game_dir);
     let mut state = PlayState::load_scene(game_dir, case.options.clone())?;
     apply_route_smoke_case_setup(&mut state, case.name, game_dir)?;
@@ -2329,13 +2403,30 @@ pub fn run_route_smoke_case(
     let initial_raster = raster_diagnostic_line(&mut state, VIEWPORT_RADIUS, atlas)?;
     require_raster_available(case, &initial_raster)?;
 
-    let result =
-        replay_play_script_commands(&mut state, command_game_dir, &commands, |state, _, _| {
+    let reload_checkpoints = route_reload_checkpoints(case.name);
+    let result = replay_play_script_commands(
+        &mut state,
+        command_game_dir,
+        &commands,
+        |state, index, _| {
             commands_run += 1;
+            if reload_checkpoints.contains(&(index + 1)) {
+                let Some(save_dir) = reload_save_dir.as_deref() else {
+                    return Err(io::Error::other(format!(
+                        "route smoke `{}` has reload checkpoints but no temp save dir",
+                        case.name
+                    )));
+                };
+                reload_route_smoke_state_from_checkpoint(state, game_dir, save_dir)?;
+            }
             let raster = raster_diagnostic_line(state, VIEWPORT_RADIUS, atlas)?;
             require_raster_hash(case, &raster)
-        });
+        },
+    );
     if let Some(dir) = &route_game_dir {
+        let _ = fs::remove_dir_all(dir);
+    }
+    if let Some(dir) = &reload_save_dir {
         let _ = fs::remove_dir_all(dir);
     }
     result?;
@@ -2389,6 +2480,85 @@ fn prepare_route_smoke_case_game_dir(case_name: &str) -> io::Result<Option<PathB
     ));
     fs::create_dir_all(&dir)?;
     Ok(Some(dir))
+}
+
+fn prepare_route_smoke_reload_save_dir(
+    game_dir: &Path,
+    case_name: &str,
+) -> io::Result<Option<PathBuf>> {
+    if route_reload_checkpoints(case_name).is_empty() {
+        return Ok(None);
+    }
+    let dir = route_smoke_temp_dir(case_name, "reload")?;
+    seed_route_smoke_save_files(game_dir, &dir)?;
+    Ok(Some(dir))
+}
+
+fn route_smoke_temp_dir(case_name: &str, label: &str) -> io::Result<PathBuf> {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let dir = std::env::temp_dir().join(format!(
+        "u5-route-smoke-{case_name}-{label}-{}-{nonce}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
+fn seed_route_smoke_save_files(game_dir: &Path, save_dir: &Path) -> io::Result<()> {
+    if copy_route_smoke_save_file(game_dir, save_dir, SAVED_GAM_FILENAME, SAVED_GAM_FILENAME)
+        .is_err()
+    {
+        copy_route_smoke_save_file(game_dir, save_dir, "INIT.GAM", SAVED_GAM_FILENAME)?;
+    }
+    if let Err(saved_err) =
+        copy_route_smoke_save_file(game_dir, save_dir, SAVED_OOL_FILENAME, SAVED_OOL_FILENAME)
+    {
+        if game_dir.join("INIT.OOL").exists() {
+            copy_route_smoke_save_file(game_dir, save_dir, "INIT.OOL", SAVED_OOL_FILENAME)?;
+        } else {
+            fs::write(save_dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN])?;
+            let _ = saved_err;
+        }
+    }
+    Ok(())
+}
+
+fn copy_route_smoke_save_file(
+    game_dir: &Path,
+    save_dir: &Path,
+    source_name: &str,
+    destination_name: &str,
+) -> io::Result<()> {
+    fs::copy(game_dir.join(source_name), save_dir.join(destination_name)).map(|_| ())
+}
+
+fn route_reload_checkpoints(case_name: &str) -> &'static [usize] {
+    match case_name {
+        "reload-gate-travel-underworld-pass"
+        | "reload-chasm-underworld-pass"
+        | "reload-boarded-horse-pass"
+        | "reload-ship-xit-skiff-pass"
+        | "reload-dungeon-ladder-down-up-route"
+        | "reload-dungeon-surface-exit-return-world" => &[1],
+        "reload-underworld-fixed-hidden-stack-search-get-search"
+        | "reload-minoc-fixed-hidden-daily-search-get-repeat"
+        | "reload-horse-trader-horse-and-rider-buy-pass" => &[2],
+        _ => &[],
+    }
+}
+
+fn reload_route_smoke_state_from_checkpoint(
+    state: &mut PlayState,
+    game_dir: &Path,
+    save_dir: &Path,
+) -> io::Result<()> {
+    state.save_game_command(save_dir, Some(true))?;
+    let options = load_play_options_from_save(save_dir)?;
+    *state = PlayState::load_scene(game_dir, options)?;
+    Ok(())
 }
 
 fn apply_route_smoke_case_setup(
@@ -2530,7 +2700,8 @@ fn apply_route_smoke_case_setup(
         "serpents-hold-shard-cowardice-vanquish" => {
             seed_shadowlord_shard_route(state, SHADOWLORD_COWARDICE_INDEX, 15, 16);
         }
-        "underworld-fixed-hidden-stack-search-get-search" => {
+        "underworld-fixed-hidden-stack-search-get-search"
+        | "reload-underworld-fixed-hidden-stack-search-get-search" => {
             state.player.x = 232;
             state.player.y = 233;
             state.player.facing = Direction::East;
@@ -2545,7 +2716,8 @@ fn apply_route_smoke_case_setup(
             state.sync_player_object();
             state.mark_visibility_dirty();
         }
-        "minoc-fixed-hidden-daily-search-get-repeat" => {
+        "minoc-fixed-hidden-daily-search-get-repeat"
+        | "reload-minoc-fixed-hidden-daily-search-get-repeat" => {
             state.player.x = 1;
             state.player.y = 2;
             state.player.facing = Direction::East;
@@ -2580,7 +2752,7 @@ fn apply_route_smoke_case_setup(
         "castle-poison-gas-step" => {
             seed_town_poison_gas_route(state);
         }
-        "britannia-board-horse-route" => {
+        "britannia-board-horse-route" | "reload-boarded-horse-pass" => {
             seed_world_board_horse_route(state);
         }
         "castle-surface-fountain-look" => {
@@ -2627,7 +2799,7 @@ fn apply_route_smoke_case_setup(
         "britannia-word-of-power-seal-opens" | "underworld-doom-word-of-power-seal-opens" => {
             stamp_word_of_power_seal_route(state, case_name);
         }
-        "dungeon-ladder-down-up-route" => {
+        "dungeon-ladder-down-up-route" | "reload-dungeon-ladder-down-up-route" => {
             let current = dungeon_cell_index(0, state.player.x, state.player.y);
             let below = dungeon_cell_index(1, state.player.x, state.player.y);
             if let Some(cell) = state.grid.get_mut(current) {
@@ -2670,7 +2842,7 @@ fn apply_route_smoke_case_setup(
             state.sync_player_object();
             state.mark_visibility_dirty();
         }
-        "dungeon-surface-exit-return-world" => {
+        "dungeon-surface-exit-return-world" | "reload-dungeon-surface-exit-return-world" => {
             let current = dungeon_cell_index(0, state.player.x, state.player.y);
             if let Some(cell) = state.grid.get_mut(current) {
                 *cell = 0x60;
@@ -2747,6 +2919,7 @@ fn apply_route_smoke_case_setup(
         }
         "shop-horse-trader-decline-route"
         | "shop-horse-trader-horse-and-rider-buy"
+        | "reload-horse-trader-horse-and-rider-buy-pass"
         | "shop-horse-trader-stablehouse-buy"
         | "shop-horse-trader-wishing-well-buy" => {
             let stable = horse_trader_route_stable(case_name);
@@ -3081,7 +3254,10 @@ fn seed_world_board_horse_route(state: &mut PlayState) {
     state.player.facing = Direction::East;
     state.player.transport = TransportState::Foot;
     state.sync_player_object();
-    state.active_objects.push(ActiveObject {
+    state
+        .active_objects
+        .resize(OOL_SLOTS, ActiveObject::empty());
+    state.active_objects[1] = ActiveObject {
         type_byte: HORSE_PARKED_FIRST,
         tile: HORSE_PARKED_FIRST,
         x: 63,
@@ -3090,7 +3266,7 @@ fn seed_world_board_horse_route(state: &mut PlayState) {
         phase: 0,
         aux1: 0,
         aux3: 0,
-    });
+    };
     state.mark_visibility_dirty();
 }
 
@@ -4212,6 +4388,42 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                 )));
             }
         }
+        "reload-boarded-horse-pass" => {
+            if !matches!(state.player.transport, TransportState::Horse { .. })
+                || state.player.x != 62
+                || state.player.y != 124
+                || state.active_objects.first().is_none_or(|object| {
+                    object.x != state.player.x
+                        || object.y != state.player.y
+                        || object.z != WorldPlane::Britannia.save_floor()
+                })
+                || !state.message.contains("Pass")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not preserve boarded horse state across save/reload"
+                )));
+            }
+        }
+        "reload-gate-travel-underworld-pass" => {
+            if !matches!(
+                state.area,
+                Area::World {
+                    plane: WorldPlane::Underworld
+                }
+            ) || state.player.x != 231
+                || state.player.y != 5
+                || state.active_objects.first().is_none_or(|object| {
+                    object.x != state.player.x
+                        || object.y != state.player.y
+                        || object.z != WorldPlane::Underworld.save_floor()
+                })
+                || !state.message.contains("Pass")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not preserve Gate Travel destination across save/reload"
+                )));
+            }
+        }
         "natural-moongate-trammel-gate-travel" => {
             if !matches!(
                 state.area,
@@ -4266,6 +4478,26 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not land on the published chasm transition"
+                )));
+            }
+        }
+        "reload-chasm-underworld-pass" => {
+            if !matches!(
+                state.area,
+                Area::World {
+                    plane: WorldPlane::Underworld
+                }
+            ) || state.player.x != SURFACE_CHASM_X as usize
+                || state.player.y != SURFACE_CHASM_Y as usize
+                || state.active_objects.first().is_none_or(|object| {
+                    object.x != SURFACE_CHASM_X as usize
+                        || object.y != SURFACE_CHASM_Y as usize
+                        || object.z != WorldPlane::Underworld.save_floor()
+                })
+                || !state.message.contains("Pass")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not preserve chasm Underworld landing across save/reload"
                 )));
             }
         }
@@ -4648,6 +4880,27 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                 )));
             }
         }
+        "reload-horse-trader-horse-and-rider-buy-pass" => {
+            let stable = horse_trader_route_stable("shop-horse-trader-horse-and-rider-buy");
+            let raw = stable_horse_price(stable);
+            let speaker_intelligence = state.party_intelligence.first().copied().unwrap_or(0);
+            let expected_gold = 999 - shop_intelligence_adjusted_price(raw, speaker_intelligence);
+            let horse = state
+                .active_objects
+                .iter()
+                .find(|object| object.type_byte == HORSE_PARKED_FIRST);
+            let boardable = state.boardable_vehicle_slot_at(15, 16).is_some();
+            if state.gold != expected_gold
+                || state.active_shop.is_some()
+                || horse.is_none_or(|object| object.x != 15 || object.y != 16)
+                || !boardable
+                || !state.message.contains("Pass")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not preserve horse-trader delivery across save/reload"
+                )));
+            }
+        }
         "shop-shipwright-quote-decline-route" => {
             if state.gold != 999
                 || state
@@ -4734,7 +4987,7 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                 )));
             }
         }
-        "dungeon-ladder-down-up-route" => {
+        "dungeon-ladder-down-up-route" | "reload-dungeon-ladder-down-up-route" => {
             if state.current_floor() != Some(0) || !state.message.contains("level 0") {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not complete the down/up ladder chain"
@@ -4752,7 +5005,7 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                 )));
             }
         }
-        "dungeon-surface-exit-return-world" => {
+        "dungeon-surface-exit-return-world" | "reload-dungeon-surface-exit-return-world" => {
             if !matches!(
                 state.area,
                 Area::World {
@@ -4764,6 +5017,20 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not restore the saved overworld return"
+                )));
+            }
+        }
+        "reload-ship-xit-skiff-pass" => {
+            if !matches!(state.player.transport, TransportState::Skiff { .. })
+                || state.active_objects.first().is_none_or(|object| {
+                    object.x != state.player.x
+                        || object.y != state.player.y
+                        || object.z != WorldPlane::Britannia.save_floor()
+                })
+                || !state.message.contains("Pass")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not preserve launched skiff transport across save/reload"
                 )));
             }
         }
