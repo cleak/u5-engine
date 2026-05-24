@@ -1141,6 +1141,26 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "combat-directed-sleep-cone")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "combat-directed-poison-wind-cone")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "combat-directed-death-wind-cone")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "combat-directed-flame-wind-cone")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "doom-combat-get-direction")
     );
     assert!(

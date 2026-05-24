@@ -10,36 +10,40 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE,
-    BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX, COMBAT_PARTY_ACTOR_SLOTS,
-    CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX,
-    DEATH_VISION_OBJECT_CLASS, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
+    BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX,
+    COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_CLASS_GIANT_RAT,
+    COMBAT_PARTY_ACTOR_SLOTS, CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX,
+    CURE_COST, CURE_SPELL_INDEX, CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST,
+    DEATH_WIND_SPELL_INDEX, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
     DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_LEVEL_SPELL_COST, Direction,
     DungeonScene, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
     EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION,
     FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
-    FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, GATE_TRAVEL_COST,
-    GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GuildShop,
-    HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, HOURLY_STARVATION_DAMAGE_MAX,
-    HOURLY_STARVATION_DAMAGE_MIN, Healer, Herbalist, IN_LOR_SPELL_INDEX, IN_WIS_COST,
-    IN_WIS_SPELL_INDEX, Inn, MoonstoneGateSlot, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST,
-    NEGATE_MAGIC_SPELL_INDEX, NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot, OPEN_SPELL_COST,
-    OPEN_SPELL_INDEX, PEER_COST, PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX, PROTECTION_COST,
-    PROTECTION_SPELL_INDEX, PartyMember, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
-    QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, RESURRECT_COST, RESURRECT_SPELL_INDEX,
-    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
-    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, FLAME_WIND_COST,
+    FLAME_WIND_SPELL_INDEX, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST,
+    GREAT_HEAL_SPELL_INDEX, GameClock, GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST,
+    HOURLY_STARVATION_DAMAGE_MAX, HOURLY_STARVATION_DAMAGE_MIN, Healer, Herbalist,
+    IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, Inn, MoonstoneGateSlot,
+    NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
+    NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PEER_COST,
+    PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
+    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember, PlayOptions, PlayState, PlayTarget,
+    QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, RESURRECT_COST,
+    RESURRECT_SPELL_INDEX, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
+    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
     SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
-    SHADOWLORD_VANQUISHED, SLEEP_FIELD_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
-    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
-    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
-    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
-    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
-    SURFACE_CHASM_Y, Scene, Shipwright, Stable, TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE,
-    TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK,
-    TIME_STOP_COST, TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_GAS_DOORWAY_RANGE_MAX,
-    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TransportState,
-    UUS_POR_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WORD_OF_POWER_SEAL_XOR, WORLD_SIDE,
-    WindState, WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    SHADOWLORD_VANQUISHED, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
+    SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
+    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX,
+    SPECIAL_ITEM_SHARD_COWARDICE_INDEX, SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
+    SPECIAL_ITEM_SHARD_HATRED_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
+    STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, Stable,
+    TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
+    TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST,
+    TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TransportState, UUS_POR_SPELL_INDEX,
+    VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WORD_OF_POWER_SEAL_XOR, WORLD_SIDE, WindState,
+    WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, combat_class_stats,
     default_party_equipment, default_party_experience, default_party_intelligence,
     default_party_names, default_party_stay_counters, dungeon_cell_index, inn_base_room_rate,
     load_tile_atlas, shop_intelligence_adjusted_price,
@@ -48,7 +52,8 @@ use u5_runtime::{
         ReagentShopState, SageState, ShipBrokerState, TavernState,
     },
     shop_session::ActiveShopSession,
-    stable_horse_price, u5_prng_range_u16, word_of_power_seal_for_word, world_cell_index,
+    stable_horse_price, summoned_active_object_record, u5_prng_range_u16,
+    word_of_power_seal_for_word, world_cell_index,
 };
 
 use crate::{
@@ -1634,6 +1639,38 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
+            name: "combat-directed-sleep-cone",
+            options: world.clone(),
+            script: &["C1IZ6"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-directed-poison-wind-cone",
+            options: world.clone(),
+            script: &["C1HIN6"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-directed-death-wind-cone",
+            options: world.clone(),
+            script: &["C1CGIV6"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-directed-flame-wind-cone",
+            options: world.clone(),
+            script: &["C1FHI6"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
             name: "doom-combat-get-direction",
             options: doom_options.clone(),
             script: &["empty", "G6"],
@@ -1896,6 +1933,47 @@ fn apply_route_smoke_case_setup(
             }
             state.sync_player_object();
             state.mark_visibility_dirty();
+        }
+        "combat-directed-sleep-cone" => {
+            seed_directed_wind_combat_route(
+                state,
+                SLEEP_SPELL_INDEX,
+                SLEEP_COST,
+                2,
+                Some(1),
+                false,
+            )?;
+        }
+        "combat-directed-poison-wind-cone" => {
+            seed_directed_wind_combat_route(
+                state,
+                POISON_WIND_SPELL_INDEX,
+                POISON_WIND_COST,
+                3,
+                Some(2),
+                false,
+            )?;
+            state.prng_state = poison_wind_first_accept_seed();
+        }
+        "combat-directed-death-wind-cone" => {
+            seed_directed_wind_combat_route(
+                state,
+                DEATH_WIND_SPELL_INDEX,
+                DEATH_WIND_COST,
+                2,
+                Some(1),
+                true,
+            )?;
+        }
+        "combat-directed-flame-wind-cone" => {
+            seed_directed_wind_combat_route(
+                state,
+                FLAME_WIND_SPELL_INDEX,
+                FLAME_WIND_COST,
+                1,
+                None,
+                true,
+            )?;
         }
         "lycaeum-shard-falsehood-vanquish" => {
             seed_shadowlord_shard_route(state, SHADOWLORD_FALSEHOOD_INDEX, 15, 9);
@@ -2395,6 +2473,16 @@ fn ring_regeneration_first_heal_seed() -> u16 {
     unreachable!("PRNG range cycle must hit a ring regeneration roll")
 }
 
+fn poison_wind_first_accept_seed() -> u16 {
+    for candidate in 0..=u16::MAX {
+        let mut state = candidate;
+        if u5_prng_range_u16(&mut state, 0, 19) & 1 == 0 {
+            return candidate;
+        }
+    }
+    unreachable!("PRNG range cycle must hit a Poison Wind acceptance roll")
+}
+
 fn route_party_member(slot: u8, class_byte: u8, status: u8, hp: u16, max_hp: u16) -> PartyMember {
     PartyMember {
         slot,
@@ -2406,6 +2494,105 @@ fn route_party_member(slot: u8, class_byte: u8, status: u8, hp: u16, max_hp: u16
         max_hp,
         level: 8,
     }
+}
+
+fn route_combat_active_object(tile: u8, x: usize, y: usize, z: i8) -> ActiveObject {
+    ActiveObject {
+        type_byte: tile,
+        tile,
+        x,
+        y,
+        z,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
+    }
+}
+
+fn seed_directed_wind_combat_route(
+    state: &mut PlayState,
+    spell_index: usize,
+    cost: u8,
+    party_count: usize,
+    target_party_slot: Option<usize>,
+    include_monster_target: bool,
+) -> io::Result<()> {
+    state.party = (0..party_count)
+        .map(|slot| route_party_member(slot as u8, b'A', b'G', 12, 20))
+        .collect();
+    state.party_names = default_party_names(party_count);
+    state.party_experience = default_party_experience(party_count);
+    state.party_stay_counters = default_party_stay_counters(party_count);
+    state.party_strengths = vec![30; party_count];
+    state.party_intelligence = default_party_intelligence(party_count);
+    state.party_equipment = default_party_equipment(party_count);
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = cost;
+        caster.level = cost;
+    }
+    state.active_player = Some(0);
+    state.spell_charges[spell_index] = 1;
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    actors[0] =
+        CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+    if let Some(target_slot) = target_party_slot {
+        actors[target_slot] = CombatActorDescriptor::from_row([
+            12,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            target_slot as u8,
+            0,
+            6,
+            5,
+        ]);
+    }
+
+    let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+    for slot in 0..party_count {
+        let x = if Some(slot) == target_party_slot {
+            6
+        } else {
+            5
+        };
+        active_objects[slot] = route_combat_active_object(0x4c, x, 5, 0);
+    }
+
+    if include_monster_target {
+        let stats = combat_class_stats(COMBAT_CLASS_GIANT_RAT)
+            .ok_or_else(|| io::Error::other("giant rat combat stats are unavailable"))?;
+        let monster_slot = COMBAT_PARTY_ACTOR_SLOTS;
+        let monster_x = if target_party_slot.is_some() { 7 } else { 6 };
+        actors[monster_slot] = CombatActorDescriptor::for_monster_placement(
+            stats,
+            monster_slot as u8,
+            monster_x,
+            5,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+        );
+        active_objects[monster_slot] =
+            summoned_active_object_record(COMBAT_CLASS_GIANT_RAT, monster_x as usize, 5, 0)
+                .ok_or_else(|| io::Error::other("giant rat active object is unavailable"))?;
+
+        let reserve_slot = monster_slot + 1;
+        actors[reserve_slot] = CombatActorDescriptor::for_monster_placement(
+            stats,
+            reserve_slot as u8,
+            3,
+            5,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+        );
+        active_objects[reserve_slot] =
+            summoned_active_object_record(COMBAT_CLASS_GIANT_RAT, 3, 5, 0).ok_or_else(|| {
+                io::Error::other("reserve giant rat active object is unavailable")
+            })?;
+    }
+
+    state.enter_combat_frame(active_objects, actors)?;
+    Ok(())
 }
 
 fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Result<()> {
@@ -2494,6 +2681,72 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the active-effect spell sequence"
+                )));
+            }
+        }
+        "combat-directed-sleep-cone" => {
+            if !state.combat_active
+                || state.spell_charges[SLEEP_SPELL_INDEX] != 0
+                || state.party.first().is_none_or(|member| member.mana != 0)
+                || state
+                    .party
+                    .get(1)
+                    .is_none_or(|member| member.status != b'S')
+                || state.message != "Sleep!"
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the directed Sleep cone"
+                )));
+            }
+        }
+        "combat-directed-poison-wind-cone" => {
+            if !state.combat_active
+                || state.spell_charges[POISON_WIND_SPELL_INDEX] != 0
+                || state.party.first().is_none_or(|member| member.mana != 0)
+                || state
+                    .party
+                    .get(2)
+                    .is_none_or(|member| member.status != b'P')
+                || state.message != "Poison wind!"
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the directed Poison Wind cone"
+                )));
+            }
+        }
+        "combat-directed-death-wind-cone" => {
+            let stats = combat_class_stats(COMBAT_CLASS_GIANT_RAT)
+                .ok_or_else(|| io::Error::other("giant rat combat stats are unavailable"))?;
+            if !state.combat_active
+                || state.spell_charges[DEATH_WIND_SPELL_INDEX] != 0
+                || state
+                    .party
+                    .first()
+                    .is_none_or(|member| member.status != b'G')
+                || state
+                    .party
+                    .get(1)
+                    .is_none_or(|member| member.status != b'D')
+                || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_marked_dead()
+                || state
+                    .party_experience
+                    .first()
+                    .is_none_or(|xp| *xp != u16::from(stats.reward_unit()))
+                || !state.message.starts_with("Death wind!")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the directed Death Wind cone"
+                )));
+            }
+        }
+        "combat-directed-flame-wind-cone" => {
+            if !state.combat_active
+                || state.spell_charges[FLAME_WIND_SPELL_INDEX] != 0
+                || state.party.first().is_none_or(|member| member.mana != 0)
+                || !state.message.starts_with("Flame wind!")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the directed Flame Wind cone"
                 )));
             }
         }
