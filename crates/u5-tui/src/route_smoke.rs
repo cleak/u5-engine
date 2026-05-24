@@ -48,17 +48,19 @@ use u5_runtime::{
     SURFACE_CHASM_Y, Scene, Shipwright, ShipwrightPurchaseKind, ShrineVirtue, Stable,
     TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
     TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST,
-    TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TransportState, UNLOCK_MAGIC_COST,
-    UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
-    VAS_LOR_SPELL_INDEX, WHIRLPOOL_EMERGENCE_X, WHIRLPOOL_EMERGENCE_Y, WORD_OF_POWER_SEAL_XOR,
-    WORLD_SIDE, WindState, WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
-    combat_class_stats, default_party_equipment, default_party_experience,
-    default_party_intelligence, default_party_names, default_party_roster,
-    default_party_stay_counters, default_party_strengths, dungeon_cell_index,
-    dungeon_room_entry_seed_for_direction, inn_base_room_rate, load_play_options_from_save,
-    load_tile_atlas, published_world_location_entries, shipwright_delivery_coordinate,
-    shipwright_price, shop_intelligence_adjusted_price,
+    TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_ARREST_JAIL_FLOOR, TOWN_ARREST_JAIL_SCENE,
+    TOWN_ARREST_JAIL_X, TOWN_ARREST_JAIL_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TownNpcAlarmState, TransportState,
+    UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST,
+    VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WHIRLPOOL_EMERGENCE_X,
+    WHIRLPOOL_EMERGENCE_Y, WORD_OF_POWER_SEAL_XOR, WORLD_SIDE, WindState, WordOfPowerSeal,
+    WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, combat_class_stats,
+    default_party_equipment, default_party_experience, default_party_intelligence,
+    default_party_names, default_party_roster, default_party_stay_counters,
+    default_party_strengths, dungeon_cell_index, dungeon_room_entry_seed_for_direction,
+    inn_base_room_rate, load_play_options_from_save, load_tile_atlas,
+    published_world_location_entries, shipwright_delivery_coordinate, shipwright_price,
+    shop_intelligence_adjusted_price,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -1215,6 +1217,46 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             script: &["l6"],
             expected: RouteSmokeExpectation::Town(yew_poster_scene),
             min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-town-attack-death-mask-npc",
+            options: PlayOptions::default(),
+            script: &["A6"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-town-attack-guard-alarm",
+            options: PlayOptions::default(),
+            script: &["A6"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-town-hostile-adjacent-alarm",
+            options: PlayOptions::default(),
+            script: &["empty"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-town-guard-arrest-refusal",
+            options: PlayOptions::default(),
+            script: &["empty", "N"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "castle-town-guard-arrest-surrender-yew",
+            options: PlayOptions::default(),
+            script: &["empty", "Y"],
+            expected: RouteSmokeExpectation::Town(yew_poster_scene),
+            min_turn: 1,
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
@@ -2973,6 +3015,18 @@ fn apply_route_smoke_case_setup(
         "yew-wanted-poster-look" => {
             seed_yew_wanted_poster_route(state);
         }
+        "castle-town-attack-death-mask-npc" => {
+            seed_town_attack_death_mask_npc_route(state);
+        }
+        "castle-town-attack-guard-alarm" => {
+            seed_town_attack_guard_alarm_route(state);
+        }
+        "castle-town-hostile-adjacent-alarm" => {
+            seed_town_hostile_adjacent_alarm_route(state);
+        }
+        "castle-town-guard-arrest-refusal" | "castle-town-guard-arrest-surrender-yew" => {
+            seed_town_guard_arrest_route(state);
+        }
         "buccaneers-den-wishing-well-horse"
         | "buccaneers-den-wishing-well-ferrari-grants-horse" => {
             stamp_town_route_look_tile(state, 0xA1);
@@ -3467,6 +3521,71 @@ fn seed_yew_wanted_poster_route(state: &mut PlayState) {
     });
     state.sync_player_object();
     state.mark_visibility_dirty();
+}
+
+fn seed_town_route_scheduled_npc(
+    state: &mut PlayState,
+    slot: usize,
+    type_byte: u8,
+    npc_x: usize,
+    npc_y: usize,
+    ai: u8,
+) {
+    state.player.x = npc_x.saturating_sub(1);
+    state.player.y = npc_y;
+    state.player.facing = Direction::East;
+    state.clock = GameClock::new(8, 0).expect("route clock is valid");
+    state.load_scheduled_npcs(&[
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot,
+            type_byte,
+            dialog_id: 0,
+            schedule: [
+                ai,
+                ai,
+                ai,
+                npc_x as u8,
+                npc_x as u8,
+                npc_x as u8,
+                npc_y as u8,
+                npc_y as u8,
+                npc_y as u8,
+                0,
+                0,
+                0,
+                0,
+                8,
+                16,
+                20,
+            ],
+            name: None,
+        },
+    ]);
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_town_attack_death_mask_npc_route(state: &mut PlayState) {
+    seed_town_route_scheduled_npc(state, 1, 0x0E, 2, 1, 0);
+}
+
+fn seed_town_attack_guard_alarm_route(state: &mut PlayState) {
+    seed_town_route_scheduled_npc(state, 1, 0x70, 2, 1, 0);
+}
+
+fn seed_town_hostile_adjacent_alarm_route(state: &mut PlayState) {
+    seed_town_route_scheduled_npc(state, 1, 0x50, 6, 5, 4);
+}
+
+fn seed_town_guard_arrest_route(state: &mut PlayState) {
+    seed_town_route_scheduled_npc(state, 2, 0x70, 6, 5, 6);
 }
 
 fn seed_town_poison_gas_route(state: &mut PlayState) {
@@ -5110,6 +5229,70 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             if !state.message.contains("Wanted:") || !state.message.contains("Dead or Alive") {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not render the hard-coded Yew wanted poster"
+                )));
+            }
+        }
+        "castle-town-attack-death-mask-npc" => {
+            if !state.removed_town_npcs.contains(&(17, 0, 1))
+                || state.combat_active
+                || !state.message.contains("target removed")
+                || !state.npcs.is_empty()
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not remove the attackable town NPC through the death-mask path"
+                )));
+            }
+        }
+        "castle-town-attack-guard-alarm" => {
+            let castle_scene = Scene::new(17).expect("castle scene is valid");
+            if state.combat_active
+                || state.town_npc_alarm_state(castle_scene, 0, 1)
+                    != Some(TownNpcAlarmState::Fortified)
+                || !state.message.contains("alarm raised")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not raise the town alarm after attacking a guard-like NPC"
+                )));
+            }
+        }
+        "castle-town-hostile-adjacent-alarm" => {
+            let castle_scene = Scene::new(17).expect("castle scene is valid");
+            if state.combat_active
+                || state.town_npc_alarm_state(castle_scene, 0, 1)
+                    != Some(TownNpcAlarmState::Fortified)
+                || !state.message.contains("Hostile NPC slot 1")
+                || !state.message.contains("alarm raised")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not handle the adjacent hostile NPC through alarm cleanup"
+                )));
+            }
+        }
+        "castle-town-guard-arrest-refusal" => {
+            let castle_scene = Scene::new(17).expect("castle scene is valid");
+            if state.pending_town_arrest.is_some()
+                || state.town_npc_alarm_state(castle_scene, 0, 2)
+                    != Some(TownNpcAlarmState::Fortified)
+                || !state.message.contains("Refused surrender")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not refuse the guard arrest prompt into alarm cleanup"
+                )));
+            }
+        }
+        "castle-town-guard-arrest-surrender-yew" => {
+            let yew_scene = Scene::new(TOWN_ARREST_JAIL_SCENE).expect("Yew scene is valid");
+            if state.pending_town_arrest.is_some()
+                || !matches!(state.area, Area::Town { scene, floor }
+                    if scene == yew_scene && floor == TOWN_ARREST_JAIL_FLOOR as i8)
+                || state.player.x != TOWN_ARREST_JAIL_X as usize
+                || state.player.y != TOWN_ARREST_JAIL_Y as usize
+                || !matches!(state.player.transport, TransportState::Foot)
+                || state.clock.hour != 8
+                || !state.message.contains("Surrendered to the guards")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not surrender into the public Yew jail wakeup path"
                 )));
             }
         }

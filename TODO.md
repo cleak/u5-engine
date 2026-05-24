@@ -41,7 +41,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-24 with 479 scripted route cases (including all 40 published stock
+  2026-05-24 with 484 scripted route cases (including all 40 published stock
   world-location entry rows, native shrine/Codex quest routes, TLK-backed
   conversation routes across all 32 named-location scenes, plus save/reload checkpoints
   for boarded horse, Gate Travel, chasm fall, fixed hidden treasure,
@@ -51,7 +51,8 @@ Last known verification state:
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
   walk-and-rest, 9-step dungeon turn-and-search, 5-round Doom combat pass, and
-  focused Create Food, fountain Look, Yew wanted-poster Look,
+  focused Create Food, fountain Look, Yew wanted-poster Look, town
+  attack/alarm/arrest routes,
   Horse/non-horse wishing-well branches, death-vision Look, public
   #44 sleeping/praying Talk refusals, public #48 Blink ray landing,
   Locate, In Lor/Light/Open, restore-spell, active-effect, all-cardinal directed Sleep/Poison
@@ -165,7 +166,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 1625 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 1637 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest, with all 40 published stock world-location entry rows, native
   shrine/Codex quest routes, TLK-backed reserved-word conversation routes across
   all 32 named-location scenes, and

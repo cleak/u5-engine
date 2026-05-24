@@ -3460,6 +3460,41 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_yew_wanted_poster),
         },
         VisualRouteSuiteCase {
+            label: "route-castle-town-attack-death-mask-npc",
+            frame_kind: "visual route town frame",
+            options: PlayOptions::default(),
+            script: &["A6"],
+            configure: Some(seed_visual_route_town_attack_death_mask_npc),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-town-attack-guard-alarm",
+            frame_kind: "visual route town frame",
+            options: PlayOptions::default(),
+            script: &["A6"],
+            configure: Some(seed_visual_route_town_attack_guard_alarm),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-town-hostile-adjacent-alarm",
+            frame_kind: "visual route town frame",
+            options: PlayOptions::default(),
+            script: &["empty"],
+            configure: Some(seed_visual_route_town_hostile_adjacent_alarm),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-town-guard-arrest-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions::default(),
+            script: &["empty", "N"],
+            configure: Some(seed_visual_route_town_guard_arrest),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-town-guard-arrest-surrender-yew",
+            frame_kind: "visual route town frame",
+            options: PlayOptions::default(),
+            script: &["empty", "Y"],
+            configure: Some(seed_visual_route_town_guard_arrest),
+        },
+        VisualRouteSuiteCase {
             label: "route-buccaneers-den-wishing-well",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -5575,6 +5610,71 @@ fn seed_visual_route_yew_wanted_poster(state: &mut PlayState) {
     });
     state.sync_player_object();
     state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_town_scheduled_npc(
+    state: &mut PlayState,
+    slot: usize,
+    type_byte: u8,
+    npc_x: usize,
+    npc_y: usize,
+    ai: u8,
+) {
+    state.player.x = npc_x.saturating_sub(1);
+    state.player.y = npc_y;
+    state.player.facing = Direction::East;
+    state.clock = GameClock::new(8, 0).expect("visual route clock is valid");
+    state.load_scheduled_npcs(&[
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot,
+            type_byte,
+            dialog_id: 0,
+            schedule: [
+                ai,
+                ai,
+                ai,
+                npc_x as u8,
+                npc_x as u8,
+                npc_x as u8,
+                npc_y as u8,
+                npc_y as u8,
+                npc_y as u8,
+                0,
+                0,
+                0,
+                0,
+                8,
+                16,
+                20,
+            ],
+            name: None,
+        },
+    ]);
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_town_attack_death_mask_npc(state: &mut PlayState) {
+    seed_visual_route_town_scheduled_npc(state, 1, 0x0E, 2, 1, 0);
+}
+
+fn seed_visual_route_town_attack_guard_alarm(state: &mut PlayState) {
+    seed_visual_route_town_scheduled_npc(state, 1, 0x70, 2, 1, 0);
+}
+
+fn seed_visual_route_town_hostile_adjacent_alarm(state: &mut PlayState) {
+    seed_visual_route_town_scheduled_npc(state, 1, 0x50, 6, 5, 4);
+}
+
+fn seed_visual_route_town_guard_arrest(state: &mut PlayState) {
+    seed_visual_route_town_scheduled_npc(state, 2, 0x70, 6, 5, 6);
 }
 
 fn seed_visual_route_wishing_well(state: &mut PlayState) {
@@ -10311,7 +10411,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 504);
+        assert_eq!(cases.len(), 509);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -10745,6 +10845,15 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-yew-wanted-poster-look")
         );
+        for label in [
+            "route-castle-town-attack-death-mask-npc",
+            "route-castle-town-attack-guard-alarm",
+            "route-castle-town-hostile-adjacent-alarm",
+            "route-castle-town-guard-arrest-refusal",
+            "route-castle-town-guard-arrest-surrender-yew",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert!(
             cases
                 .iter()
@@ -10972,7 +11081,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 1625);
+        assert_eq!(reports.len(), 1637);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -11211,6 +11320,11 @@ mod tests {
         assert!(manifest.contains("route-castle-fountain-look-02-1"));
         assert!(manifest.contains("route-castle-surface-fountain-look-02-1"));
         assert!(manifest.contains("route-yew-wanted-poster-look-01-l6"));
+        assert!(manifest.contains("route-castle-town-attack-death-mask-npc-01-a6"));
+        assert!(manifest.contains("route-castle-town-attack-guard-alarm-01-a6"));
+        assert!(manifest.contains("route-castle-town-hostile-adjacent-alarm-01-empty"));
+        assert!(manifest.contains("route-castle-town-guard-arrest-refusal-02-n"));
+        assert!(manifest.contains("route-castle-town-guard-arrest-surrender-yew-02-y"));
         assert!(manifest.contains("route-buccaneers-den-wishing-well-03-horse"));
         assert!(manifest.contains("route-buccaneers-den-wishing-well-horse-03-horse"));
         assert!(

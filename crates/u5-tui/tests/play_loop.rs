@@ -701,7 +701,7 @@ fn play_script_local_clean_smoke_runs_default_scene_when_present() {
 fn route_smoke_cases_cover_representative_modes() {
     let cases = route_smoke_cases();
 
-    assert_eq!(cases.len(), 479);
+    assert_eq!(cases.len(), 484);
     assert!(cases.iter().any(|case| matches!(
         case.expected,
         RouteSmokeExpectation::World(WorldPlane::Britannia)
@@ -863,6 +863,15 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "endgame-box-full-victory-cinematic")
     );
+    for name in [
+        "castle-town-attack-death-mask-npc",
+        "castle-town-attack-guard-alarm",
+        "castle-town-hostile-adjacent-alarm",
+        "castle-town-guard-arrest-refusal",
+        "castle-town-guard-arrest-surrender-yew",
+    ] {
+        assert!(cases.iter().any(|case| case.name == name), "{name}");
+    }
     assert!(
         cases
             .iter()

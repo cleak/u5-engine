@@ -77,7 +77,7 @@ audit:
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 67 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 479 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 484 scripted cases pass,
   including TLK-backed reserved-word and no-match conversation routes across
   all 32 named-location scenes in the town, dwelling, castle, and keep
   dialogue families,
@@ -102,7 +102,8 @@ audit:
   all nine arms-shop first-stock purchases and terminator-letter refusals, public #28
   all-stable horse-trader purchases, accepted shipwright frigate/skiff dock
   deliveries, save/reload durability for queued shipwright deliveries before
-  town exit, native town walk-on stair up/down/crossing routes, and
+  town exit, native town walk-on stair up/down/crossing routes,
+  town attack/alarm/arrest routes, and
   ship broadside fire, horse boarding, dungeon torch ignition, Mix/Ready/New
   Order command workflow, combat-active Board/Enter/Fire/Hole-up/Ignite/Mix/New
   Order/Talk refusal rows, combat-active digit selection/clear, Escape abort,
@@ -123,7 +124,7 @@ audit:
   combat, and Talk, surface View class galleries for gem/Peer/X-Ray modes, plus
   combat status-highlight and death/field/cursor marker galleries.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 1625 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 1637 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including all 40
   published stock world-location entry rows, TLK-backed reserved-word
   conversation routes across all 32 named-location scenes, exact
