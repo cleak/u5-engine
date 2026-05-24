@@ -76,7 +76,7 @@ use u5_runtime::{
     shop_session::ActiveShopSession,
     spell_index_from_code, spell_mp_cost, stats_panel_active_cursor_visible,
     summarize_return_to_view_preview, summarize_return_to_view_script,
-    summoned_active_object_record, title_tick_next_frame, title_tick_palette_indices,
+    summoned_active_object_record, title_tick_flame_palette_index, title_tick_next_frame,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16,
 };
@@ -4056,55 +4056,6 @@ fn draw_title_tick_overlay_rgba(dst: &mut [u8], dst_width: usize, dst_height: us
             let rgb = EGA_PALETTE_RGB[usize::from(palette_index)];
             dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
         }
-    }
-}
-
-fn title_tick_flame_palette_index(local_x: usize, local_y: usize, frame: u8) -> Option<u8> {
-    let band_width = TITLE_TICK_FRAME_WIDTH as usize;
-    let band_height = TITLE_TICK_FRAME_HEIGHT as usize;
-    if local_x >= band_width || local_y >= band_height {
-        return None;
-    }
-
-    let flame_height = 34usize;
-    let flame_top = band_height.saturating_sub(flame_height);
-    if local_y < flame_top {
-        return None;
-    }
-
-    let from_base = band_height - 1 - local_y;
-    let frame = usize::from(frame % 4);
-    let mut inside = false;
-    for center in [54isize, 160, 266] {
-        let wave = ((local_y * 3 + frame * 5) % 11) as isize - 5;
-        let taper = from_base * 34 / flame_height;
-        let half_width = 42usize.saturating_sub(taper).max(5);
-        let dx = (local_x as isize - (center + wave)).unsigned_abs();
-        if dx <= half_width {
-            inside = true;
-            break;
-        }
-
-        // Add a narrow upper tongue so the stripe reads as flame rather than
-        // as three static wedges.
-        if from_base > 16 {
-            let tongue_center = center + ((frame as isize - 1) * 5);
-            let tongue_width = 10usize.saturating_sub((from_base - 16) / 2).max(3);
-            if (local_x as isize - tongue_center).unsigned_abs() <= tongue_width {
-                inside = true;
-                break;
-            }
-        }
-    }
-    if !inside {
-        return None;
-    }
-
-    let (bright, dim) = title_tick_palette_indices(frame as u8);
-    if local_y < band_height / 2 {
-        Some(bright)
-    } else {
-        Some(dim)
     }
 }
 

@@ -5140,10 +5140,10 @@ fn display_surface_draws_tiles_and_fixed_glyphs_to_front_buffer() {
 fn display_surface_title_tick_touches_only_published_rectangle_and_presents_explicitly() {
     let mut surface = EgaDisplaySurface::new();
     surface.set_current_color(0x03);
-    surface.plot_pixel(10, 64);
-    surface.plot_pixel(10, 65);
-    surface.plot_pixel(10, 113);
-    surface.plot_pixel(10, 114);
+    surface.plot_pixel(54, 64);
+    surface.plot_pixel(54, 65);
+    surface.plot_pixel(120, 85);
+    surface.plot_pixel(54, 114);
 
     let rect = surface.advance_title_tick();
 
@@ -5158,10 +5158,12 @@ fn display_surface_title_tick_touches_only_published_rectangle_and_presents_expl
     );
     let (bright, dim) = title_tick_palette_indices(0);
     assert_eq!(surface.title_tick_frame(), 1);
-    assert_eq!(surface.read_pixel(10, 64), Some(0x03));
-    assert_eq!(surface.read_pixel(10, 65), Some(bright));
-    assert_eq!(surface.read_pixel(10, 113), Some(dim));
-    assert_eq!(surface.read_pixel(10, 114), Some(0x03));
+    assert_eq!(surface.read_pixel(54, 64), Some(0x03));
+    assert_eq!(surface.read_pixel(54, 65), Some(0x03));
+    assert_eq!(surface.read_pixel(54, 85), Some(bright));
+    assert_eq!(surface.read_pixel(54, 105), Some(dim));
+    assert_eq!(surface.read_pixel(120, 85), Some(0x03));
+    assert_eq!(surface.read_pixel(54, 114), Some(0x03));
     assert_eq!(surface.presented_frames(), 0);
 
     surface.present_frame();

@@ -372,7 +372,6 @@ impl EgaDisplaySurface {
     }
 
     pub fn advance_title_tick(&mut self) -> DisplayPixelRect {
-        let (bright, dim) = title_tick_palette_indices(self.title_tick_frame);
         let rect = normalize_clamp_pixel_rect(
             i32::from(TITLE_TICK_FRAME_X),
             i32::from(TITLE_TICK_FRAME_Y),
@@ -381,13 +380,18 @@ impl EgaDisplaySurface {
         )
         .expect("title tick rectangle is inside the display surface");
         for y in rect.y0..=rect.y1 {
-            let color = if y - rect.y0 < rect.height() / 2 {
-                bright
-            } else {
-                dim
-            };
-            let start = y * DISPLAY_SURFACE_WIDTH + rect.x0;
-            self.front_pixels[start..=start + rect.width() - 1].fill(color);
+            let local_y = y - rect.y0;
+            for x in rect.x0..=rect.x1 {
+                let index = y * DISPLAY_SURFACE_WIDTH + x;
+                if self.front_pixels[index] != 0 {
+                    continue;
+                }
+                if let Some(color) =
+                    title_tick_flame_palette_index(x - rect.x0, local_y, self.title_tick_frame)
+                {
+                    self.front_pixels[index] = color;
+                }
+            }
         }
         self.title_tick_frame = title_tick_next_frame(self.title_tick_frame);
         rect
