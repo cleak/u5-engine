@@ -749,7 +749,7 @@ impl PlayState {
                         FIRE_FIELD_SPELL_INDEX,
                         FIELD_SPELL_COST,
                         CombatArenaFieldKind::Fire,
-                        parse_inline_cardinal_direction(suffix),
+                        parse_inline_combat_spell_coordinate(suffix, "FGI"),
                     ));
                 }
                 Ok(self.cast_dungeon_field_spell(
@@ -773,7 +773,7 @@ impl PlayState {
                         POISON_FIELD_SPELL_INDEX,
                         FIELD_SPELL_COST,
                         CombatArenaFieldKind::Poison,
-                        parse_inline_cardinal_direction(suffix),
+                        parse_inline_combat_spell_coordinate(suffix, "GIN"),
                     ));
                 }
                 Ok(self.cast_dungeon_field_spell(
@@ -797,7 +797,7 @@ impl PlayState {
                         SLEEP_FIELD_SPELL_INDEX,
                         FIELD_SPELL_COST,
                         CombatArenaFieldKind::Sleep,
-                        parse_inline_cardinal_direction(suffix),
+                        parse_inline_combat_spell_coordinate(suffix, "GIZ"),
                     ));
                 }
                 Ok(self.cast_dungeon_field_spell(
@@ -841,7 +841,7 @@ impl PlayState {
                         ENERGY_FIELD_SPELL_INDEX,
                         ENERGY_FIELD_COST,
                         CombatArenaFieldKind::Energy,
-                        parse_inline_cardinal_direction(suffix),
+                        parse_inline_combat_spell_coordinate(suffix, "GIS"),
                     ));
                 }
                 Ok(self.cast_dungeon_field_spell(

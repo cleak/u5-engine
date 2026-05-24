@@ -828,24 +828,56 @@ impl PlayState {
         })
     }
 
+    pub fn combat_field_cursor_cell_in_range(
+        &self,
+        caster_index: usize,
+        target_x: u8,
+        target_y: u8,
+    ) -> bool {
+        let Some(caster) = self.combat_actors.get(caster_index).copied() else {
+            return false;
+        };
+        combat_actor_is_active_not_dead(caster)
+            && usize::from(target_x) < COMBAT_ARENA_SIDE
+            && usize::from(target_y) < COMBAT_ARENA_SIDE
+            && combat_arena_range(caster.x, caster.y, target_x, target_y)
+                <= COMBAT_FIELD_CURSOR_RANGE
+    }
+
+    pub fn combat_field_cursor_start(&self, caster_index: usize) -> Option<(u8, u8)> {
+        let caster = self.combat_actors.get(caster_index).copied()?;
+        if !combat_actor_is_active_not_dead(caster) {
+            return None;
+        }
+        if let Some((x, y)) = self.combat_secondary_marker {
+            if self.combat_field_cursor_cell_in_range(caster_index, x, y) {
+                return Some((x, y));
+            }
+        }
+        (usize::from(caster.x) < COMBAT_ARENA_SIDE && usize::from(caster.y) < COMBAT_ARENA_SIDE)
+            .then_some((caster.x, caster.y))
+    }
+
+    pub fn resolve_combat_arena_field_impact(
+        &self,
+        caster_index: usize,
+        target: Option<(u8, u8)>,
+    ) -> Option<(u8, u8)> {
+        let (target_x, target_y) = target?;
+        self.combat_field_cursor_cell_in_range(caster_index, target_x, target_y)
+            .then_some((target_x, target_y))
+    }
+
     pub fn cast_combat_arena_field_spell(
         &mut self,
         caster_index: usize,
         spell_index: usize,
         mana_cost: u8,
         field: CombatArenaFieldKind,
-        direction: Option<Direction>,
+        target: Option<(u8, u8)>,
     ) -> MoveOutcome {
         if !self.combat_active || !self.spell_allowed_in_current_cast_context(spell_index) {
             self.message = "Not here!".to_string();
-            return MoveOutcome::Blocked;
-        }
-        let Some(direction) = direction else {
-            self.message = "Direction? Use C1FGI6/C1GIN6/C1GIZ6/C1GIS6.".to_string();
-            return MoveOutcome::Blocked;
-        };
-        if !direction.is_cardinal() {
-            self.message = "Field placement requires a cardinal direction.".to_string();
             return MoveOutcome::Blocked;
         }
         let Some(caster_actor) = self.combat_actors.get(caster_index).copied() else {
@@ -856,22 +888,40 @@ impl PlayState {
             self.message = "Who casts?".to_string();
             return MoveOutcome::Blocked;
         }
-        let (dx, dy) = direction.delta();
-        let target_x = caster_actor.x as isize + dx;
-        let target_y = caster_actor.y as isize + dy;
-        if !(0..COMBAT_ARENA_SIDE as isize).contains(&target_x)
-            || !(0..COMBAT_ARENA_SIDE as isize).contains(&target_y)
-        {
-            self.message = "Failed!".to_string();
-            return MoveOutcome::Blocked;
-        }
 
         if let Some(outcome) = self.cast_spell_resource_gate(caster_index, spell_index, mana_cost) {
             return outcome;
         }
 
-        let target_x = target_x as u8;
-        let target_y = target_y as u8;
+        self.confirm_spent_combat_arena_field_spell(caster_index, spell_index, field, target)
+    }
+
+    pub fn confirm_spent_combat_arena_field_spell(
+        &mut self,
+        caster_index: usize,
+        spell_index: usize,
+        field: CombatArenaFieldKind,
+        target: Option<(u8, u8)>,
+    ) -> MoveOutcome {
+        if !self.combat_active || !self.spell_allowed_in_current_cast_context(spell_index) {
+            self.message = "Not here!".to_string();
+            return MoveOutcome::Blocked;
+        }
+        let Some(caster_actor) = self.combat_actors.get(caster_index).copied() else {
+            self.message = "Who casts?".to_string();
+            return MoveOutcome::Blocked;
+        };
+        if caster_actor.is_empty() || caster_actor.is_marked_dead() {
+            self.message = "Who casts?".to_string();
+            return MoveOutcome::Blocked;
+        }
+
+        let Some((target_x, target_y)) =
+            self.resolve_combat_arena_field_impact(caster_index, target)
+        else {
+            self.message = "Target? Use C1FGI4,3/C1GIN4,3/C1GIZ4,3/C1GIS4,3.".to_string();
+            return MoveOutcome::Blocked;
+        };
         let target_slot = find_combat_actor_at_field_coordinate(
             &self.combat_actors,
             &self.active_objects,

@@ -381,6 +381,10 @@ public dungeon field-placement hooks one cell east from party slot 1; replace
 the trailing cardinal numpad digit with `8`, `6`, `2`, or `4` to choose the
 target cell. The live dungeon image accepts only passage bytes `0x00` and
 visit-marked `0x08`, preserving the marker bit in the placed field byte.
+In combat, the same four field spells use a target-cell cursor/coordinate
+instead of the dungeon direction prompt; inline smoke can use coordinates such
+as `C1FGI4,3`, and prompt Escape cancels after charge and mana are spent but
+before placing a marker.
 `C1AG6` casts Dispel Field from party slot 1, spending the saved charge,
 MP, and level gates before clearing a public dungeon field target back to
 passage while preserving the visit marker bit.

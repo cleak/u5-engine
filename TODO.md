@@ -441,13 +441,13 @@ Current worktree context when this TODO was refreshed:
   the party; successful destruction marks the native hideout byte and ORs the
   save-backed quest-progress word bits. Route smoke covers Lycaeum, Empath
   Abbey, and Serpent's Hold native paths.
-- The 2026-05-24 clean-engine audit retired #1/#3/#5/#8/#9/#11/#12/#13/#18/#19/#20/#31/#36/#38/#41/#43/#47/#49/#51/#54/#56/#57/#58
+- The 2026-05-24 clean-engine audit retired #1/#3/#5/#8/#9/#10/#11/#12/#13/#18/#19/#20/#31/#36/#38/#41/#43/#47/#49/#51/#54/#56/#57/#58
   as gameplay blockers after applying the current public answers and checked-in
-  spec. Current response-needed public blockers are #10, #53, #59, #60, #61
-  (town free-roaming active-object walker), and #62;
-  clean-engine follow-up comments are
-  currently latest on each of those issues, so do not post duplicate comments
-  unless new spec evidence or implementation questions appear.
+  spec. Current response-needed public blockers are #53, #60, and #62; #59
+  and #61 now have fresh public answers and are implementation follow-up items
+  rather than response-needed questions. Clean-engine follow-up comments are
+  currently latest on the response-needed issues, so do not post duplicate
+  comments unless new spec evidence or implementation questions appear.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the
@@ -987,8 +987,11 @@ as public details become available.
     actors remain present, occupy their cells, and spend the dispatch that
     clears the bit.
   - Combat field placement now separates marker materialization from post-step
-    contact and follows the corrected public issue #10 answer: Fire/Sleep/
-    Energy no longer use a random placement gate, while Poison still uses its
+    contact and follows the corrected public issue #10 answer: player combat
+    C-Cast Fire/Poison/Sleep/Energy Field uses the arena cursor and a confirmed
+    impact coordinate, not an adjacent direction prompt. Cursor Escape cancels
+    after charge/mana debit but before marker placement; Fire/Sleep/Energy no
+    longer use a random placement gate, while Poison still uses its
     unconditional placement path.
   - Combat-local ambush/camp reveal records now follow the public helper shape:
     up to eight trigger coordinates, consume-on-fire, one or two in-range

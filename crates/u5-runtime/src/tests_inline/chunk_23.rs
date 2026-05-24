@@ -2726,6 +2726,135 @@
     }
 
     #[test]
+    fn combat_field_cursor_start_prefers_valid_hint_else_caster_cell() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            30,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            5,
+            5,
+        ]);
+
+        state.combat_secondary_marker = Some((7, 5));
+        assert_eq!(state.combat_field_cursor_start(0), Some((7, 5)));
+
+        state.combat_secondary_marker = Some((99, 99));
+        assert_eq!(state.combat_field_cursor_start(0), Some((5, 5)));
+
+        state.combat_actors[0].x = 0;
+        state.combat_actors[0].y = 0;
+        state.combat_secondary_marker = Some((10, 10));
+        assert_eq!(state.combat_field_cursor_start(0), Some((0, 0)));
+    }
+
+    #[test]
+    fn active_combat_field_followup_cancels_after_spending_without_marker() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        state.party[0].mana = FIELD_SPELL_COST;
+        state.party[0].level = FIELD_SPELL_COST;
+        state.spell_charges[FIRE_FIELD_SPELL_INDEX] = 1;
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            30,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            3,
+            3,
+        ]);
+
+        assert_eq!(
+            state.start_combat_cast_spell_prompt(0, false),
+            MoveOutcome::Observed
+        );
+        assert!(state
+            .step_active_cast('F', "GI", std::path::Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(state
+            .step_active_cast(' ', "", std::path::Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(state.active_cast_followup.is_some());
+        assert_eq!(state.spell_charges[FIRE_FIELD_SPELL_INDEX], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 0);
+
+        assert!(state
+            .step_active_cast_followup('\u{1b}', "", std::path::Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(state.active_cast_followup.is_none());
+        assert_eq!(state.message, "None!");
+        assert_eq!(state.turn, 0);
+        assert!(state
+            .active_objects
+            .iter()
+            .all(|object| object.type_byte != COMBAT_FIELD_KIND_FIRE));
+    }
+
+    #[test]
+    fn active_combat_field_followup_ignores_out_of_bounds_cursor_move() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        state.combat_active = true;
+        state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
+        state.party[0].mana = FIELD_SPELL_COST;
+        state.party[0].level = FIELD_SPELL_COST;
+        state.spell_charges[POISON_FIELD_SPELL_INDEX] = 1;
+        state.combat_actors[0] = CombatActorDescriptor::from_row([
+            30,
+            1,
+            COMBAT_ACTOR_FLAG_SELECTABLE_80,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]);
+
+        assert_eq!(
+            state.start_combat_cast_spell_prompt(0, false),
+            MoveOutcome::Observed
+        );
+        assert!(state
+            .step_active_cast('G', "IN", std::path::Path::new(""))
+            .unwrap()
+            .is_none());
+        assert!(state
+            .step_active_cast(' ', "", std::path::Path::new(""))
+            .unwrap()
+            .is_none());
+        assert_eq!(state.message.lines().next(), Some("Target? (0, 0)"));
+
+        assert!(state
+            .step_active_cast_followup('4', "", std::path::Path::new(""))
+            .unwrap()
+            .is_none());
+        assert_eq!(state.message.lines().next(), Some("Target? (0, 0)"));
+        let result = state
+            .step_active_cast_followup(' ', "", std::path::Path::new(""))
+            .unwrap()
+            .expect("confirming the unchanged cursor should cast the field");
+
+        assert_eq!(result.0, MoveOutcome::Cast);
+        assert_eq!(state.turn, 1);
+        let marker = state
+            .active_objects
+            .iter()
+            .find(|object| object.type_byte == COMBAT_FIELD_KIND_POISON)
+            .expect("poison field marker should be placed");
+        assert_eq!((marker.x, marker.y), (0, 0));
+    }
+
+    #[test]
     fn combat_field_contact_skips_current_actor_and_poison_linked_monster_tiles() {
         let mut target = PartyMember {
             slot: 0,
@@ -12975,7 +13104,7 @@
 
         assert_eq!(
             state
-                .cast_spell_from_suffix("1GIN6", std::path::Path::new(""))
+                .cast_spell_from_suffix("1GIN4,3", std::path::Path::new(""))
                 .unwrap(),
             MoveOutcome::Cast
         );
@@ -13061,7 +13190,7 @@
 
         assert_eq!(
             state
-                .cast_spell_from_suffix("1FGI6", std::path::Path::new(""))
+                .cast_spell_from_suffix("1FGI4,3", std::path::Path::new(""))
                 .unwrap(),
             MoveOutcome::Cast
         );
@@ -13149,7 +13278,7 @@
 
         assert_eq!(
             state
-                .cast_spell_from_suffix("1FGI6", std::path::Path::new(""))
+                .cast_spell_from_suffix("1FGI4,3", std::path::Path::new(""))
                 .unwrap(),
             MoveOutcome::Cast
         );
@@ -13205,7 +13334,7 @@
 
         assert_eq!(
             state
-                .cast_spell_from_suffix("1GIN6", std::path::Path::new(""))
+                .cast_spell_from_suffix("1GIN4,3", std::path::Path::new(""))
                 .unwrap(),
             MoveOutcome::Cast
         );

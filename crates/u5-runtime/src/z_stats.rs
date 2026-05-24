@@ -97,11 +97,20 @@ pub struct CastFollowupSession {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CastFollowupKind {
-    Direction { pass_allowed: bool },
+    Direction {
+        pass_allowed: bool,
+    },
     PartyTarget,
     GatePhase,
-    CombatTarget { creature: bool },
-    CombatCoordinate { x: u8, y: u8 },
+    CombatTarget {
+        creature: bool,
+    },
+    CombatCoordinate {
+        x: u8,
+        y: u8,
+        range_origin: Option<(u8, u8)>,
+        max_range: Option<u8>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

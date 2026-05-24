@@ -299,7 +299,11 @@ pub fn parse_inline_cardinal_direction(value: &str) -> Option<Direction> {
 }
 
 pub fn parse_inline_blink_combat_coordinate(value: &str) -> Option<(u8, u8)> {
-    let (_, tail) = value.split_once("IP")?;
+    parse_inline_combat_spell_coordinate(value, "IP")
+}
+
+pub fn parse_inline_combat_spell_coordinate(value: &str, spell_code: &str) -> Option<(u8, u8)> {
+    let (_, tail) = value.split_once(spell_code)?;
     let trimmed = tail.trim();
     let (x, y) = trimmed
         .split_once(',')

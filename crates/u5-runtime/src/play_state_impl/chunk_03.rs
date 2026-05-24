@@ -209,7 +209,7 @@ impl PlayState {
                     };
                     format!("{label}? {value}\nChoose combat slot 1-{COMBAT_ACTOR_SLOTS}; Esc cancels.")
                 }
-                CastFollowupKind::CombatCoordinate { x, y } => {
+                CastFollowupKind::CombatCoordinate { x, y, .. } => {
                     format!("Target? ({x}, {y})\nMove cursor with cardinal keys; Space/Enter confirms; Esc cancels.")
                 }
             })
@@ -322,7 +322,12 @@ impl PlayState {
                         );
                     }
                 }
-                CastFollowupKind::CombatCoordinate { x, y } => {
+                CastFollowupKind::CombatCoordinate {
+                    x,
+                    y,
+                    range_origin,
+                    max_range,
+                } => {
                     if ch == '\u{1b}' {
                         self.message = "None!".to_string();
                         return Ok(None);
@@ -337,11 +342,24 @@ impl PlayState {
                         continue;
                     };
                     let (dx, dy) = direction.delta();
-                    let nx = (i16::from(x) + dx as i16).clamp(0, (COMBAT_ARENA_SIDE - 1) as i16);
-                    let ny = (i16::from(y) + dy as i16).clamp(0, (COMBAT_ARENA_SIDE - 1) as i16);
+                    let nx = i16::from(x) + dx as i16;
+                    let ny = i16::from(y) + dy as i16;
+                    if !combat_arena_coordinate_in_bounds(nx, ny) {
+                        continue;
+                    }
+                    let nx = nx as u8;
+                    let ny = ny as u8;
+                    if let (Some((origin_x, origin_y)), Some(max_range)) = (range_origin, max_range)
+                    {
+                        if combat_arena_range(origin_x, origin_y, nx, ny) > max_range {
+                            continue;
+                        }
+                    }
                     session.kind = CastFollowupKind::CombatCoordinate {
-                        x: nx as u8,
-                        y: ny as u8,
+                        x: nx,
+                        y: ny,
+                        range_origin,
+                        max_range,
                     };
                 }
             }
@@ -357,10 +375,46 @@ impl PlayState {
         tail: &str,
         game_dir: &Path,
     ) -> io::Result<Option<(MoveOutcome, Option<(usize, bool)>)>> {
-        let suffix = format!("{}{}{}", session.caster_index + 1, session.spell_code, tail);
         let combat = session
             .combat_actor_slot
             .map(|slot| (slot, session.combat_had_foe));
+        if self.combat_active {
+            let target = parse_inline_combat_spell_coordinate(
+                &format!("{}{}", session.spell_code, tail),
+                &session.spell_code,
+            );
+            let field_result = match session.spell_code.as_str() {
+                "FGI" => Some(self.confirm_spent_combat_arena_field_spell(
+                    session.caster_index,
+                    FIRE_FIELD_SPELL_INDEX,
+                    CombatArenaFieldKind::Fire,
+                    target,
+                )),
+                "GIN" => Some(self.confirm_spent_combat_arena_field_spell(
+                    session.caster_index,
+                    POISON_FIELD_SPELL_INDEX,
+                    CombatArenaFieldKind::Poison,
+                    target,
+                )),
+                "GIZ" => Some(self.confirm_spent_combat_arena_field_spell(
+                    session.caster_index,
+                    SLEEP_FIELD_SPELL_INDEX,
+                    CombatArenaFieldKind::Sleep,
+                    target,
+                )),
+                "GIS" => Some(self.confirm_spent_combat_arena_field_spell(
+                    session.caster_index,
+                    ENERGY_FIELD_SPELL_INDEX,
+                    CombatArenaFieldKind::Energy,
+                    target,
+                )),
+                _ => None,
+            };
+            if let Some(outcome) = field_result {
+                return Ok(Some((outcome, combat)));
+            }
+        }
+        let suffix = format!("{}{}{}", session.caster_index + 1, session.spell_code, tail);
         let outcome = self.cast_spell_from_suffix(&suffix, game_dir)?;
         Ok(Some((outcome, combat)))
     }
@@ -393,7 +447,22 @@ impl PlayState {
                 .map(|actor| CastFollowupKind::CombatCoordinate {
                     x: actor.x,
                     y: actor.y,
+                    range_origin: None,
+                    max_range: None,
                 })
+        } else if matches!(spell_code.as_str(), "FGI" | "GIN" | "GIZ" | "GIS")
+            && self.combat_active
+            && self.message.starts_with("Target? Use C")
+        {
+            self.combat_field_cursor_start(caster_index).map(|(x, y)| {
+                let caster = self.combat_actors[caster_index];
+                CastFollowupKind::CombatCoordinate {
+                    x,
+                    y,
+                    range_origin: Some((caster.x, caster.y)),
+                    max_range: Some(COMBAT_FIELD_CURSOR_RANGE),
+                }
+            })
         } else if self.message.starts_with("Target? Use C") {
             Some(CastFollowupKind::CombatTarget { creature: false })
         } else {
