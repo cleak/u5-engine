@@ -2342,12 +2342,14 @@ impl PlayState {
             })
     }
 
-    pub fn cast_unmodeled_combat_utility_spell(
+    pub fn cast_combat_utility_failure_spell(
         &mut self,
         caster_index: usize,
         spell_index: usize,
         mana_cost: u8,
     ) -> MoveOutcome {
+        // Public #37/#39: these utility spells are allowed in combat,
+        // spend resources, advance the caster, and then report Failed.
         if !self.combat_active || !self.spell_allowed_in_current_cast_context(spell_index) {
             self.message = "Not here!".to_string();
             return MoveOutcome::Blocked;
@@ -2370,7 +2372,7 @@ impl PlayState {
     }
 
     pub fn cast_combat_vanish(&mut self, caster_index: usize) -> MoveOutcome {
-        self.cast_unmodeled_combat_utility_spell(caster_index, VANISH_SPELL_INDEX, VANISH_COST)
+        self.cast_combat_utility_failure_spell(caster_index, VANISH_SPELL_INDEX, VANISH_COST)
     }
 
     pub fn cast_active_effect_spell(
@@ -2881,7 +2883,7 @@ impl PlayState {
         caster_index: usize,
         _direction: Option<Direction>,
     ) -> MoveOutcome {
-        self.cast_unmodeled_combat_utility_spell(caster_index, OPEN_SPELL_INDEX, OPEN_SPELL_COST)
+        self.cast_combat_utility_failure_spell(caster_index, OPEN_SPELL_INDEX, OPEN_SPELL_COST)
     }
 
     pub fn cast_open_ordinary_surface_door(&mut self, direction: Option<Direction>) -> MoveOutcome {
@@ -3351,7 +3353,7 @@ impl PlayState {
         caster_index: usize,
         _direction: Option<Direction>,
     ) -> MoveOutcome {
-        self.cast_unmodeled_combat_utility_spell(
+        self.cast_combat_utility_failure_spell(
             caster_index,
             MAGIC_LOCK_SPELL_INDEX,
             MAGIC_LOCK_COST,
@@ -3420,7 +3422,7 @@ impl PlayState {
         caster_index: usize,
         _direction: Option<Direction>,
     ) -> MoveOutcome {
-        self.cast_unmodeled_combat_utility_spell(
+        self.cast_combat_utility_failure_spell(
             caster_index,
             UNLOCK_MAGIC_SPELL_INDEX,
             UNLOCK_MAGIC_COST,

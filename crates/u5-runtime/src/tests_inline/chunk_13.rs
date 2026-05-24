@@ -4351,10 +4351,10 @@ fn directed_wind_cone_max_cells_matches_spec() {
     // magic.md §8: the directed wind-cone family (In Zu, In Nox
     // Hur, In Vas Grav Corp, In Flam Hur) builds up to sixty-three
     // de-duplicated arena cells from a cardinal direction.
-    assert_eq!(DIRECTED_TARGET_WALK_MAX_CELLS, 63);
+    assert_eq!(DIRECTED_WIND_MAX_CELLS, 63);
     // Sanity-check: the capped directed area cannot exceed the
     // 121-cell arena footprint.
-    assert!(DIRECTED_TARGET_WALK_MAX_CELLS <= COMBAT_ARENA_SIDE * COMBAT_ARENA_SIDE);
+    assert!(DIRECTED_WIND_MAX_CELLS <= COMBAT_ARENA_SIDE * COMBAT_ARENA_SIDE);
 }
 
 #[test]

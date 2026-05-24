@@ -36,12 +36,6 @@ pub const fn monster_kill_xp_reward(class_max_hp: u16) -> u16 {
     (class_max_hp / 4).saturating_add(1)
 }
 
-/// `magic.md §8` directed wind-cone output cap. In Zu, In Nox Hur,
-/// In Vas Grav Corp, and In Flam Hur prompt for a cardinal direction,
-/// then emit up to sixty-three de-duplicated arena coordinates from the
-/// widening clipped cone in front of the caster.
-pub const DIRECTED_TARGET_WALK_MAX_CELLS: usize = 63;
-
 /// `combat.md §11` Fire Field per-contact raw-damage roll. The
 /// post-step contact hook rolls a uniform `[1, 21]` value before the
 /// normal random defense subtraction. Caller passes the raw `0..=20`

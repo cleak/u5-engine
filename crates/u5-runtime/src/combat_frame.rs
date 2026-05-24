@@ -2590,7 +2590,7 @@ impl PlayState {
                 let cell = (x as u8, y as u8);
                 if !cells.contains(&cell) {
                     cells.push(cell);
-                    return cells.len() == DIRECTED_TARGET_WALK_MAX_CELLS;
+                    return cells.len() == DIRECTED_WIND_MAX_CELLS;
                 }
             }
             false

@@ -6206,7 +6206,7 @@
                 CombatDirectedSpellEffect::DeathWind,
             )
             .unwrap();
-        assert_eq!(capped.len(), DIRECTED_TARGET_WALK_MAX_CELLS);
+        assert_eq!(capped.len(), DIRECTED_WIND_MAX_CELLS);
         assert_eq!(&capped[0..3], &[(1, 4), (1, 5), (1, 6)]);
         assert_eq!(capped.last().copied(), Some((8, 5)));
         let unique: std::collections::HashSet<_> = capped.iter().copied().collect();
