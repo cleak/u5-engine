@@ -149,7 +149,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 526 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 552 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,

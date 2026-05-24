@@ -7,6 +7,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use bevy::image::ImageSampler;
 use bevy::prelude::*;
@@ -41,35 +42,35 @@ use u5_runtime::{
     MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X,
     NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
-    OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX,
+    OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX,
     PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
     POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX,
     PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget, ProportionalFont,
     ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, RESURRECT_COST,
     RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
-    ReturnToViewFrameKind, SAVED_GAM_FILENAME, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
-    SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
-    SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
-    SHADOWLORD_OBJECT_TILE_BASE, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
-    SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
-    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX,
-    SPECIAL_ITEM_SHARD_COWARDICE_INDEX, SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
-    SPECIAL_ITEM_SHARD_HATRED_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
-    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
-    STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene,
-    Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT,
-    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
-    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
-    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
-    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth,
-    TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState,
-    U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX,
-    UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
-    WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
-    blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save, commit_u4_transfer_save,
-    default_party_equipment, default_party_intelligence, default_party_names,
-    default_party_stay_counters, disk_io_error_message, dungeon_cell_index,
+    ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
+    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
+    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
+    SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
+    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
+    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
+    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_BOTTOM,
+    STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE,
+    SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS,
+    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST,
+    TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS,
+    TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT,
+    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX,
+    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas,
+    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
+    TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
+    UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
+    VAS_LOR_SPELL_INDEX, WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST,
+    X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save,
+    commit_u4_transfer_save, default_party_equipment, default_party_intelligence,
+    default_party_names, default_party_stay_counters, disk_io_error_message, dungeon_cell_index,
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
     hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
@@ -368,6 +369,8 @@ pub fn visual_route_suite(
     let mut reports = Vec::new();
 
     for case in visual_route_suite_cases() {
+        let reload_save_dir = prepare_visual_route_reload_save_dir(game_dir, case.label)?;
+        let reload_checkpoints = visual_route_reload_checkpoints(case.label);
         let mut state = PlayState::load_scene(game_dir, case.options)?;
         if let Some(configure) = case.configure {
             configure(&mut state);
@@ -385,6 +388,15 @@ pub fn visual_route_suite(
 
         for (index, command) in case.script.iter().enumerate() {
             apply_visual_route_command(&mut state, command, game_dir)?;
+            if reload_checkpoints.contains(&(index + 1)) {
+                let Some(save_dir) = reload_save_dir.as_deref() else {
+                    return Err(io::Error::other(format!(
+                        "visual route suite `{}` has reload checkpoints but no temp save dir",
+                        case.label
+                    )));
+                };
+                reload_visual_route_state_from_checkpoint(&mut state, game_dir, save_dir)?;
+            }
             let report = write_visual_play_report(
                 out_dir,
                 &visual_route_step_label(case.label, index + 1, command),
@@ -404,6 +416,9 @@ pub fn visual_route_suite(
             previous_hash = report.byte_hash;
             reports.push(report);
         }
+        if let Some(dir) = &reload_save_dir {
+            let _ = std::fs::remove_dir_all(dir);
+        }
     }
 
     for report in &reports {
@@ -416,6 +431,83 @@ pub fn visual_route_suite(
     }
     write_visual_frame_suite_manifest(out_dir, &reports)?;
     Ok(reports)
+}
+
+fn prepare_visual_route_reload_save_dir(
+    game_dir: &Path,
+    case_label: &str,
+) -> io::Result<Option<PathBuf>> {
+    if visual_route_reload_checkpoints(case_label).is_empty() {
+        return Ok(None);
+    }
+    let dir = visual_route_temp_dir(case_label, "reload")?;
+    seed_visual_route_save_files(game_dir, &dir)?;
+    Ok(Some(dir))
+}
+
+fn visual_route_temp_dir(case_label: &str, label: &str) -> io::Result<PathBuf> {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let dir = std::env::temp_dir().join(format!(
+        "u5-visual-route-{case_label}-{label}-{}-{nonce}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
+fn seed_visual_route_save_files(game_dir: &Path, save_dir: &Path) -> io::Result<()> {
+    if copy_visual_route_save_file(game_dir, save_dir, SAVED_GAM_FILENAME, SAVED_GAM_FILENAME)
+        .is_err()
+    {
+        copy_visual_route_save_file(game_dir, save_dir, "INIT.GAM", SAVED_GAM_FILENAME)?;
+    }
+    if copy_visual_route_save_file(game_dir, save_dir, SAVED_OOL_FILENAME, SAVED_OOL_FILENAME)
+        .is_err()
+    {
+        if game_dir.join("INIT.OOL").exists() {
+            copy_visual_route_save_file(game_dir, save_dir, "INIT.OOL", SAVED_OOL_FILENAME)?;
+        } else {
+            std::fs::write(save_dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN])?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_visual_route_save_file(
+    game_dir: &Path,
+    save_dir: &Path,
+    source_name: &str,
+    destination_name: &str,
+) -> io::Result<()> {
+    std::fs::copy(game_dir.join(source_name), save_dir.join(destination_name)).map(|_| ())
+}
+
+fn visual_route_reload_checkpoints(case_label: &str) -> &'static [usize] {
+    match case_label {
+        "route-reload-boarded-horse-pass"
+        | "route-reload-gate-travel-underworld-pass"
+        | "route-reload-chasm-underworld-pass"
+        | "route-reload-ship-xit-skiff-pass"
+        | "route-reload-dungeon-ladder-down-up"
+        | "route-reload-dungeon-surface-exit-return-world" => &[1],
+        "route-reload-underworld-fixed-hidden-stack-search-get-search"
+        | "route-reload-horse-trader-horse-and-rider-buy-pass" => &[2],
+        _ => &[],
+    }
+}
+
+fn reload_visual_route_state_from_checkpoint(
+    state: &mut PlayState,
+    game_dir: &Path,
+    save_dir: &Path,
+) -> io::Result<()> {
+    state.save_game_command(save_dir, Some(true))?;
+    let options = load_play_options_from_save(save_dir)?;
+    *state = PlayState::load_scene(game_dir, options)?;
+    Ok(())
 }
 
 struct VisualGameplayFrameCase {
@@ -1094,8 +1186,15 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         VisualRouteSuiteCase {
             label: "route-gate-travel-world-to-underworld",
             frame_kind: "visual route world frame",
-            options: gate_travel_to_underworld,
+            options: gate_travel_to_underworld.clone(),
             script: &["C1PRV1"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-reload-gate-travel-underworld-pass",
+            frame_kind: "visual route world frame",
+            options: gate_travel_to_underworld,
+            script: &["C1PRV1", "empty"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -1136,8 +1235,15 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         VisualRouteSuiteCase {
             label: "route-britannia-chasm-fall-to-underworld",
             frame_kind: "visual route world frame",
-            options: chasm_fall,
+            options: chasm_fall.clone(),
             script: &["s"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-reload-chasm-underworld-pass",
+            frame_kind: "visual route world frame",
+            options: chasm_fall,
+            script: &["s", "empty"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -1203,6 +1309,13 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         VisualRouteSuiteCase {
             label: "route-underworld-fixed-hidden-stack-search-get-search",
             frame_kind: "visual route world frame",
+            options: fixed_hidden_underworld_stack.clone(),
+            script: &["S6", "G6", "S6"],
+            configure: Some(seed_visual_route_underworld_fixed_hidden_stack),
+        },
+        VisualRouteSuiteCase {
+            label: "route-reload-underworld-fixed-hidden-stack-search-get-search",
+            frame_kind: "visual route world frame",
             options: fixed_hidden_underworld_stack,
             script: &["S6", "G6", "S6"],
             configure: Some(seed_visual_route_underworld_fixed_hidden_stack),
@@ -1265,7 +1378,26 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_board_horse),
         },
         VisualRouteSuiteCase {
+            label: "route-reload-boarded-horse-pass",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                facing: Some(Direction::East),
+                ..PlayOptions::default()
+            },
+            script: &["B", "empty"],
+            configure: Some(seed_visual_route_board_horse),
+        },
+        VisualRouteSuiteCase {
             label: "route-ship-xit-launches-skiff",
+            frame_kind: "visual route world frame",
+            options: ship_xit.clone(),
+            script: &["X", "empty"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-reload-ship-xit-skiff-pass",
             frame_kind: "visual route world frame",
             options: ship_xit,
             script: &["X", "empty"],
@@ -1312,6 +1444,30 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             },
             script: &["."],
             configure: Some(seed_visual_route_dungeon_heavy_door_variant),
+        },
+        VisualRouteSuiteCase {
+            label: "route-reload-dungeon-ladder-down-up",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &[">", "<"],
+            configure: Some(seed_visual_route_dungeon_ladder),
+        },
+        VisualRouteSuiteCase {
+            label: "route-reload-dungeon-surface-exit-return-world",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["K", "empty"],
+            configure: Some(seed_visual_route_dungeon_surface_exit),
         },
         VisualRouteSuiteCase {
             label: "route-dungeon-ignite-torch",
@@ -2010,6 +2166,16 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_horse_trader_horse_and_rider),
         },
         VisualRouteSuiteCase {
+            label: "route-reload-horse-trader-horse-and-rider-buy-pass",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "Y", "empty"],
+            configure: Some(seed_visual_route_horse_trader_horse_and_rider),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-horse-trader-stablehouse-buy",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -2405,7 +2571,10 @@ fn seed_visual_route_board_horse(state: &mut PlayState) {
     state.player.facing = Direction::East;
     state.player.transport = TransportState::Foot;
     state.sync_player_object();
-    state.active_objects.push(ActiveObject {
+    state
+        .active_objects
+        .resize(OOL_SLOTS, ActiveObject::empty());
+    state.active_objects[1] = ActiveObject {
         type_byte: HORSE_PARKED_FIRST,
         tile: HORSE_PARKED_FIRST,
         x: 63,
@@ -2414,7 +2583,7 @@ fn seed_visual_route_board_horse(state: &mut PlayState) {
         phase: 0,
         aux1: 0,
         aux3: 0,
-    });
+    };
     state.mark_visibility_dirty();
 }
 
@@ -3315,6 +3484,38 @@ fn seed_visual_route_dungeon_heavy_door_variant(state: &mut PlayState) {
         *cell = 0xE0;
     }
     state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_dungeon_ladder(state: &mut PlayState) {
+    let current = dungeon_cell_index(0, state.player.x, state.player.y);
+    let below = dungeon_cell_index(1, state.player.x, state.player.y);
+    if let Some(cell) = state.grid.get_mut(current) {
+        *cell = 0x30;
+    }
+    if let Some(cell) = state.grid.get_mut(below) {
+        *cell = 0x30;
+    }
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_dungeon_surface_exit(state: &mut PlayState) {
+    let current = dungeon_cell_index(0, state.player.x, state.player.y);
+    if let Some(cell) = state.grid.get_mut(current) {
+        *cell = 0x60;
+    }
+    state.return_world = Some(WorldReturn {
+        plane: WorldPlane::Britannia,
+        x: 62,
+        y: 124,
+        transport: TransportState::Foot,
+        timing_status: state.timing_status,
+        sail_cadence: state.sail_cadence,
+        sail_stall_pending: state.sail_stall_pending,
+        grid: vec![0; WORLD_SIDE * WORLD_SIDE],
+        active_objects: Vec::new(),
+        pending_vehicle: None,
+    });
     state.mark_visibility_dirty();
 }
 
@@ -8011,7 +8212,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 165);
+        assert_eq!(cases.len(), 173);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -8069,12 +8270,14 @@ mod tests {
             "route-ship-hms-cape-plans-use",
             "route-britannia-create-food-cast",
             "route-gate-travel-world-to-underworld",
+            "route-reload-gate-travel-underworld-pass",
             "route-gate-travel-world-to-castle",
             "route-gate-travel-invalid-slot-refusal",
             "route-gate-travel-shipboard-refusal",
             "route-natural-moongate-trammel-gate-travel",
             "route-natural-moongate-empty-slot-clears-live-tile",
             "route-britannia-chasm-fall-to-underworld",
+            "route-reload-chasm-underworld-pass",
             "route-britannia-whirlpool-forced-underworld",
             "route-britannia-fixed-narrative-gate-open-south-step",
             "route-britannia-fixed-narrative-gate-ordained-block",
@@ -8084,6 +8287,7 @@ mod tests {
             "route-britannia-fixed-hidden-single-use-search-get",
             "route-underworld-pass-and-idle",
             "route-underworld-fixed-hidden-stack-search-get-search",
+            "route-reload-underworld-fixed-hidden-stack-search-get-search",
             "route-blackthorn-fixed-hidden-zero-key-search",
             "route-castle-wooden-box-use",
         ] {
@@ -8109,7 +8313,17 @@ mod tests {
         assert!(
             cases
                 .iter()
+                .any(|case| case.label == "route-reload-boarded-horse-pass")
+        );
+        assert!(
+            cases
+                .iter()
                 .any(|case| case.label == "route-ship-xit-launches-skiff")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-reload-ship-xit-skiff-pass")
         );
         assert!(
             cases
@@ -8131,6 +8345,12 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-dungeon-heavy-door-variant-pass-through")
         );
+        for label in [
+            "route-reload-dungeon-ladder-down-up",
+            "route-reload-dungeon-surface-exit-return-world",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert!(
             cases
                 .iter()
@@ -8225,6 +8445,11 @@ mod tests {
             cases
                 .iter()
                 .any(|case| case.label == "route-shop-horse-trader-horse-and-rider-buy")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-reload-horse-trader-horse-and-rider-buy-pass")
         );
         assert!(
             cases
@@ -8386,6 +8611,10 @@ mod tests {
             "route-shop-horse-trader-stablehouse-buy-02-y"
         );
         assert_eq!(
+            visual_route_step_label("route-reload-dungeon-ladder-down-up", 2, "<"),
+            "route-reload-dungeon-ladder-down-up-02-_"
+        );
+        assert_eq!(
             visual_route_step_label("route-shop-shipwright-crows-nest-skiff-buy", 2, "Y"),
             "route-shop-shipwright-crows-nest-skiff-buy-02-y"
         );
@@ -8414,7 +8643,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 526);
+        assert_eq!(reports.len(), 552);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -8441,12 +8670,14 @@ mod tests {
         assert!(manifest.contains("route-ship-hms-cape-plans-use-01-up"));
         assert!(manifest.contains("route-britannia-create-food-cast-01-c1imx"));
         assert!(manifest.contains("route-gate-travel-world-to-underworld-01-c1prv1"));
+        assert!(manifest.contains("route-reload-gate-travel-underworld-pass-02-empty"));
         assert!(manifest.contains("route-gate-travel-world-to-castle-01-c1prv2"));
         assert!(manifest.contains("route-gate-travel-invalid-slot-refusal-01-c1prv4"));
         assert!(manifest.contains("route-gate-travel-shipboard-refusal-01-c1prv2"));
         assert!(manifest.contains("route-natural-moongate-trammel-gate-travel-01-idle_1"));
         assert!(manifest.contains("route-natural-moongate-empty-slot-clears-live-tile-01-idle_1"));
         assert!(manifest.contains("route-britannia-chasm-fall-to-underworld-01-s"));
+        assert!(manifest.contains("route-reload-chasm-underworld-pass-02-empty"));
         assert!(
             manifest.contains(
                 "route-britannia-whirlpool-forced-underworld-01-setup_whirlpool-engagement"
@@ -8460,6 +8691,9 @@ mod tests {
         assert!(manifest.contains("route-britannia-fixed-hidden-single-use-search-get-02-g6"));
         assert!(manifest.contains("route-underworld-pass-and-idle-02-idle_1"));
         assert!(manifest.contains("route-underworld-fixed-hidden-stack-search-get-search-03-s6"));
+        assert!(
+            manifest.contains("route-reload-underworld-fixed-hidden-stack-search-get-search-03-s6")
+        );
         assert!(manifest.contains("route-blackthorn-fixed-hidden-zero-key-search-01-s6"));
         assert!(manifest.contains("route-castle-wooden-box-use-01-ub"));
         assert!(manifest.contains("route-castle-save-refusal-02-n"));
@@ -8467,11 +8701,19 @@ mod tests {
         assert!(manifest.contains("route-debug-enter-castle-return-world-02-w"));
         assert!(manifest.contains("route-debug-enter-castle-from-underworld-02-empty"));
         assert!(manifest.contains("route-world-board-horse-01-b"));
+        assert!(manifest.contains("route-reload-boarded-horse-pass-02-empty"));
         assert!(manifest.contains("route-ship-xit-launches-skiff-01-x"));
+        assert!(manifest.contains("route-reload-ship-xit-skiff-pass-02-empty"));
         assert!(manifest.contains("route-ship-hoist-and-sail-east-02-d"));
         assert!(manifest.contains("route-ship-broadside-fire-01-f6"));
         assert!(manifest.contains("route-dungeon-movement-search-03-s6"));
         assert!(manifest.contains("route-dungeon-heavy-door-variant-pass-through-01-idle"));
+        assert!(manifest.contains(&visual_route_step_label(
+            "route-reload-dungeon-ladder-down-up",
+            2,
+            "<"
+        )));
+        assert!(manifest.contains("route-reload-dungeon-surface-exit-return-world-02-empty"));
         assert!(manifest.contains("route-dungeon-ignite-torch-01-i"));
         assert!(manifest.contains("route-debug-enter-dungeon-03-n"));
         assert!(manifest.contains("route-dungeon-exit-refusal-02-n"));
@@ -8532,6 +8774,7 @@ mod tests {
         assert!(manifest.contains("route-castle-poison-gas-step-01-d"));
         assert!(manifest.contains("route-shop-inn-rest-accept-02-y"));
         assert!(manifest.contains("route-shop-horse-trader-horse-and-rider-buy-02-y"));
+        assert!(manifest.contains("route-reload-horse-trader-horse-and-rider-buy-pass-03-empty"));
         assert!(manifest.contains("route-shop-horse-trader-stablehouse-buy-02-y"));
         assert!(manifest.contains("route-shop-horse-trader-wishing-well-buy-02-y"));
         assert!(manifest.contains("route-shop-sage-topic-paid-success-02-y"));
