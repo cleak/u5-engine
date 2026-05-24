@@ -1559,6 +1559,78 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "shop-tavern-honest-meal-lore-route",
+            options: PlayOptions::default(),
+            script: &["Y", "A", "C", "HONE", "Y"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-tavern-wayfarer-lore-route",
+            options: PlayOptions::default(),
+            script: &["Y", "A", "C", "HONE", "Y"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-tavern-sword-and-keg-lore-route",
+            options: PlayOptions::default(),
+            script: &["Y", "A", "C", "HONE", "Y"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-tavern-slaughtered-lamb-lore-route",
+            options: PlayOptions::default(),
+            script: &["Y", "R", "H", "HONE", "Y"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-tavern-humble-palate-lore-route",
+            options: PlayOptions::default(),
+            script: &["Y", "S", "A", "HONE", "Y"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-tavern-blue-boar-lore-route",
+            options: PlayOptions::default(),
+            script: &["Y", "C", "T", "HONE", "Y"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-tavern-cats-lair-lore-route",
+            options: PlayOptions::default(),
+            script: &["Y", "A", "C", "HONE", "Y"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-tavern-fallen-virgin-lore-route",
+            options: PlayOptions::default(),
+            script: &["Y", "R", "H", "HONE", "Y"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "shop-tavern-folley-tap-lore-route",
+            options: PlayOptions::default(),
+            script: &["Y", "A", "C", "HONE", "Y"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "shop-horse-trader-decline-route",
             options: PlayOptions::default(),
             script: &["B", "N"],
@@ -3210,6 +3282,21 @@ fn apply_route_smoke_case_setup(
                 Tavern::TheSwordAndKeg,
             )));
         }
+        "shop-tavern-honest-meal-lore-route"
+        | "shop-tavern-wayfarer-lore-route"
+        | "shop-tavern-sword-and-keg-lore-route"
+        | "shop-tavern-slaughtered-lamb-lore-route"
+        | "shop-tavern-humble-palate-lore-route"
+        | "shop-tavern-blue-boar-lore-route"
+        | "shop-tavern-cats-lair-lore-route"
+        | "shop-tavern-fallen-virgin-lore-route"
+        | "shop-tavern-folley-tap-lore-route" => {
+            state.gold = 999;
+            state.prng_state = 0x3456;
+            state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(
+                tavern_lore_route_tavern(case_name),
+            )));
+        }
         "shop-horse-trader-decline-route"
         | "shop-horse-trader-horse-and-rider-buy"
         | "reload-horse-trader-horse-and-rider-buy-pass"
@@ -3286,6 +3373,21 @@ fn seed_shadowlord_shard_route(state: &mut PlayState, index: usize, x: usize, y:
         aux3: state.shadowlord_hideouts.get(index).copied().unwrap_or(0),
     });
     state.mark_visibility_dirty();
+}
+
+fn tavern_lore_route_tavern(case_name: &str) -> Tavern {
+    match case_name {
+        "shop-tavern-honest-meal-lore-route" => Tavern::TheHonestMeal,
+        "shop-tavern-wayfarer-lore-route" => Tavern::TheWayfarerTavern,
+        "shop-tavern-sword-and-keg-lore-route" => Tavern::TheSwordAndKeg,
+        "shop-tavern-slaughtered-lamb-lore-route" => Tavern::TheSlaughteredLamb,
+        "shop-tavern-humble-palate-lore-route" => Tavern::TheHumblePalate,
+        "shop-tavern-blue-boar-lore-route" => Tavern::TheBlueBoarTavern,
+        "shop-tavern-cats-lair-lore-route" => Tavern::TheCatsLair,
+        "shop-tavern-fallen-virgin-lore-route" => Tavern::TheFallenVirgin,
+        "shop-tavern-folley-tap-lore-route" => Tavern::TheFolleyTap,
+        _ => Tavern::TheSwordAndKeg,
+    }
 }
 
 fn seed_dungeon_active_monster_route(state: &mut PlayState, phase: u8) {
@@ -5591,6 +5693,25 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not serve a drink round and provisions"
+                )));
+            }
+        }
+        "shop-tavern-honest-meal-lore-route"
+        | "shop-tavern-wayfarer-lore-route"
+        | "shop-tavern-sword-and-keg-lore-route"
+        | "shop-tavern-slaughtered-lamb-lore-route"
+        | "shop-tavern-humble-palate-lore-route"
+        | "shop-tavern-blue-boar-lore-route"
+        | "shop-tavern-cats-lair-lore-route"
+        | "shop-tavern-fallen-virgin-lore-route"
+        | "shop-tavern-folley-tap-lore-route" => {
+            if state.gold >= 999
+                || state.active_shop.is_some()
+                || !state.message.contains("Malik")
+                || !state.message.contains("Moonglow")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not route the public tavern lore selector into a paid sage topic"
                 )));
             }
         }

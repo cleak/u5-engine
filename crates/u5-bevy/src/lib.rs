@@ -2645,6 +2645,96 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_tavern),
         },
         VisualRouteSuiteCase {
+            label: "route-shop-tavern-honest-meal-lore",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "A", "C", "HONE", "Y"],
+            configure: Some(seed_visual_route_tavern_honest_meal_lore),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-tavern-wayfarer-lore",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "A", "C", "HONE", "Y"],
+            configure: Some(seed_visual_route_tavern_wayfarer_lore),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-tavern-sword-and-keg-lore",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "A", "C", "HONE", "Y"],
+            configure: Some(seed_visual_route_tavern_sword_and_keg_lore),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-tavern-slaughtered-lamb-lore",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "R", "H", "HONE", "Y"],
+            configure: Some(seed_visual_route_tavern_slaughtered_lamb_lore),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-tavern-humble-palate-lore",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "S", "A", "HONE", "Y"],
+            configure: Some(seed_visual_route_tavern_humble_palate_lore),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-tavern-blue-boar-lore",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "C", "T", "HONE", "Y"],
+            configure: Some(seed_visual_route_tavern_blue_boar_lore),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-tavern-cats-lair-lore",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "A", "C", "HONE", "Y"],
+            configure: Some(seed_visual_route_tavern_cats_lair_lore),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-tavern-fallen-virgin-lore",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "R", "H", "HONE", "Y"],
+            configure: Some(seed_visual_route_tavern_fallen_virgin_lore),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-tavern-folley-tap-lore",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Y", "A", "C", "HONE", "Y"],
+            configure: Some(seed_visual_route_tavern_folley_tap_lore),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-horse-trader-decline",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -5424,6 +5514,48 @@ fn seed_visual_route_tavern(state: &mut PlayState) {
     state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(
         Tavern::TheSwordAndKeg,
     )));
+}
+
+fn seed_visual_route_tavern_lore(state: &mut PlayState, tavern: Tavern) {
+    state.gold = 999;
+    state.prng_state = 0x3456;
+    state.active_shop = Some(ActiveShopSession::Tavern(TavernState::for_tavern(tavern)));
+}
+
+fn seed_visual_route_tavern_honest_meal_lore(state: &mut PlayState) {
+    seed_visual_route_tavern_lore(state, Tavern::TheHonestMeal);
+}
+
+fn seed_visual_route_tavern_wayfarer_lore(state: &mut PlayState) {
+    seed_visual_route_tavern_lore(state, Tavern::TheWayfarerTavern);
+}
+
+fn seed_visual_route_tavern_sword_and_keg_lore(state: &mut PlayState) {
+    seed_visual_route_tavern_lore(state, Tavern::TheSwordAndKeg);
+}
+
+fn seed_visual_route_tavern_slaughtered_lamb_lore(state: &mut PlayState) {
+    seed_visual_route_tavern_lore(state, Tavern::TheSlaughteredLamb);
+}
+
+fn seed_visual_route_tavern_humble_palate_lore(state: &mut PlayState) {
+    seed_visual_route_tavern_lore(state, Tavern::TheHumblePalate);
+}
+
+fn seed_visual_route_tavern_blue_boar_lore(state: &mut PlayState) {
+    seed_visual_route_tavern_lore(state, Tavern::TheBlueBoarTavern);
+}
+
+fn seed_visual_route_tavern_cats_lair_lore(state: &mut PlayState) {
+    seed_visual_route_tavern_lore(state, Tavern::TheCatsLair);
+}
+
+fn seed_visual_route_tavern_fallen_virgin_lore(state: &mut PlayState) {
+    seed_visual_route_tavern_lore(state, Tavern::TheFallenVirgin);
+}
+
+fn seed_visual_route_tavern_folley_tap_lore(state: &mut PlayState) {
+    seed_visual_route_tavern_lore(state, Tavern::TheFolleyTap);
 }
 
 fn seed_visual_route_horse_trader(state: &mut PlayState, stable: Stable) {
@@ -10411,7 +10543,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 509);
+        assert_eq!(cases.len(), 518);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -10688,6 +10820,15 @@ mod tests {
             "route-shop-reagent-buy-route",
             "route-shop-tavern-drink-and-food",
             "route-shop-tavern-drink-and-food-route",
+            "route-shop-tavern-honest-meal-lore",
+            "route-shop-tavern-wayfarer-lore",
+            "route-shop-tavern-sword-and-keg-lore",
+            "route-shop-tavern-slaughtered-lamb-lore",
+            "route-shop-tavern-humble-palate-lore",
+            "route-shop-tavern-blue-boar-lore",
+            "route-shop-tavern-cats-lair-lore",
+            "route-shop-tavern-fallen-virgin-lore",
+            "route-shop-tavern-folley-tap-lore",
             "route-shop-horse-trader-decline",
             "route-shop-horse-trader-decline-route",
             "route-shop-horse-trader-no-marker-refusal",
@@ -11081,7 +11222,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 1637);
+        assert_eq!(reports.len(), 1691);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -11235,6 +11376,15 @@ mod tests {
         assert!(manifest.contains("route-shop-reagent-buy-route-03-n"));
         assert!(manifest.contains("route-shop-tavern-drink-and-food-05-n"));
         assert!(manifest.contains("route-shop-tavern-drink-and-food-route-05-n"));
+        assert!(manifest.contains("route-shop-tavern-honest-meal-lore-05-y"));
+        assert!(manifest.contains("route-shop-tavern-wayfarer-lore-05-y"));
+        assert!(manifest.contains("route-shop-tavern-sword-and-keg-lore-05-y"));
+        assert!(manifest.contains("route-shop-tavern-slaughtered-lamb-lore-05-y"));
+        assert!(manifest.contains("route-shop-tavern-humble-palate-lore-05-y"));
+        assert!(manifest.contains("route-shop-tavern-blue-boar-lore-05-y"));
+        assert!(manifest.contains("route-shop-tavern-cats-lair-lore-05-y"));
+        assert!(manifest.contains("route-shop-tavern-fallen-virgin-lore-05-y"));
+        assert!(manifest.contains("route-shop-tavern-folley-tap-lore-05-y"));
         assert!(manifest.contains("route-shop-horse-trader-decline-02-n"));
         assert!(manifest.contains("route-shop-horse-trader-decline-route-02-n"));
         assert!(manifest.contains("route-shop-horse-trader-no-marker-refusal-02-y"));

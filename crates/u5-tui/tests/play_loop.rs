@@ -701,7 +701,7 @@ fn play_script_local_clean_smoke_runs_default_scene_when_present() {
 fn route_smoke_cases_cover_representative_modes() {
     let cases = route_smoke_cases();
 
-    assert_eq!(cases.len(), 484);
+    assert_eq!(cases.len(), 493);
     assert!(cases.iter().any(|case| matches!(
         case.expected,
         RouteSmokeExpectation::World(WorldPlane::Britannia)
@@ -1037,6 +1037,19 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "shop-sage-topic-short-funds-route")
     );
+    for name in [
+        "shop-tavern-honest-meal-lore-route",
+        "shop-tavern-wayfarer-lore-route",
+        "shop-tavern-sword-and-keg-lore-route",
+        "shop-tavern-slaughtered-lamb-lore-route",
+        "shop-tavern-humble-palate-lore-route",
+        "shop-tavern-blue-boar-lore-route",
+        "shop-tavern-cats-lair-lore-route",
+        "shop-tavern-fallen-virgin-lore-route",
+        "shop-tavern-folley-tap-lore-route",
+    ] {
+        assert!(cases.iter().any(|case| case.name == name), "{name}");
+    }
     assert!(
         cases
             .iter()
