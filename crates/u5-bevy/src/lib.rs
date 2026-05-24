@@ -123,8 +123,8 @@ const SURFACE_VIEW_CLASS_GALLERY_TILES: [u8; 17] = [
 
 const READY_HINT: &str =
     "Arrows/keypad: move. Shift+A attacks, Shift+S searches. Ctrl+S music. Esc quit.";
-const INTRO_FRAMEBUFFER_WIDTH: u32 = 320;
-const INTRO_FRAMEBUFFER_HEIGHT: u32 = 220;
+const INTRO_FRAMEBUFFER_WIDTH: u32 = TEXT_WINDOW_RENDER_WIDTH as u32;
+const INTRO_FRAMEBUFFER_HEIGHT: u32 = TEXT_WINDOW_RENDER_HEIGHT as u32;
 const INTRO_DISPLAY_SCALE: f32 = 2.5;
 const RETURN_TO_VIEW_CAPTION_Y: usize = 4;
 const RETURN_TO_VIEW_CAPTION_HEIGHT: usize = 14;
@@ -10851,6 +10851,14 @@ mod tests {
     }
 
     #[test]
+    fn intro_framebuffer_matches_public_display_surface() {
+        assert_eq!(INTRO_FRAMEBUFFER_WIDTH, 320);
+        assert_eq!(INTRO_FRAMEBUFFER_HEIGHT, 200);
+        assert_eq!(INTRO_FRAMEBUFFER_WIDTH, VISUAL_PLAY_FRAME_WIDTH);
+        assert_eq!(INTRO_FRAMEBUFFER_HEIGHT, VISUAL_PLAY_FRAME_HEIGHT);
+    }
+
+    #[test]
     fn intro_menu_frame_renders_nonblank_rgba() {
         let mut intro = VisualIntroState {
             game_dir: debug_game_dir(),
@@ -11682,6 +11690,9 @@ mod tests {
         assert!(manifest.contains("combat-arena-15"));
         assert!(manifest.contains("dungeon-combat-arena-000"));
         assert!(manifest.contains("dungeon-combat-arena-111"));
+        assert!(manifest.contains("intro-menu\t320x200\tintro menu"));
+        assert!(manifest.contains("intro-finished-menu\t320x200\tintro finished menu"));
+        assert!(manifest.contains("intro-return-to-view\t320x200\tintro return-to-view"));
         assert!(manifest.contains("coverage\ttotal-frames\t"));
         assert!(manifest.contains("coverage\tcombat-outdoor-arena-gallery\t16/16"));
         assert!(manifest.contains("coverage\tcombat-dungeon-room-gallery\t112/112"));
