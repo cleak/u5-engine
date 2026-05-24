@@ -27,10 +27,10 @@ use u5_runtime::{
     CREATE_FOOD_COST, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX, ChargenSession,
     ChargenSessionResult, ChargenSessionStep, CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS,
     DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX, DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK,
-    DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_LEVEL_SPELL_COST,
-    Direction, DiskIoHandlerPhase, DungeonScene, EGA_PALETTE_RGB, ENDGAME_TABLEAU_HEIGHT,
-    ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING,
-    EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
+    DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_CBT_RECORDS,
+    DUNGEON_LEVEL_SPELL_COST, Direction, DiskIoHandlerPhase, DungeonScene, EGA_PALETTE_RGB,
+    ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX,
+    EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
     EQUIPMENT_ID_RING_REGENERATION, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX,
     FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FLAME_WIND_COST,
     FLAME_WIND_SPELL_INDEX, FixedCellFont, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX,
@@ -75,14 +75,15 @@ use u5_runtime::{
     commit_chargen_save, commit_u4_transfer_save, default_party_equipment,
     default_party_experience, default_party_intelligence, default_party_names,
     default_party_roster, default_party_stay_counters, disk_io_error_message, dungeon_cell_index,
+    dungeon_room_combat_instance_from_setup, dungeon_room_combat_setup_from_record_for_entry,
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
     hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
     intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_brit_cbt,
-    load_british_bit, load_british_pth, load_graphic_image_directory, load_ibm_ch_font,
-    load_play_options_from_save, load_proportional_font, load_question_records,
+    load_british_bit, load_british_pth, load_dungeon_cbt, load_graphic_image_directory,
+    load_ibm_ch_font, load_play_options_from_save, load_proportional_font, load_question_records,
     load_return_to_view_assets, load_story_records, load_tile_atlas, load_title_bit,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_message_text_window, paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
@@ -791,6 +792,45 @@ fn push_visual_combat_gallery_reports(
         )?);
     }
 
+    let dungeon_bank = load_dungeon_cbt(game_dir)?;
+    for arena_index in 0..DUNGEON_CBT_RECORDS {
+        let record = dungeon_bank.record(arena_index).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("DUNGEON.CBT has no dungeon-room arena record {arena_index}"),
+            )
+        })?;
+        let setup = dungeon_room_combat_setup_from_record_for_entry(arena_index, record, 0, false);
+        let mut instance = dungeon_room_combat_instance_from_setup(&setup, 0);
+        let mut state = PlayState::load_scene(
+            game_dir,
+            PlayOptions {
+                target: PlayTarget::Dungeon(DungeonScene::new(0x21).expect("Deceit is valid")),
+                ..PlayOptions::default()
+            },
+        )?;
+        seed_visual_combat_gallery_party(&mut state);
+        state.populate_dungeon_room_combat_party(
+            &mut instance.active_objects,
+            &mut instance.actors,
+            0,
+            &setup.party_positions,
+        );
+        state.enter_combat_frame_with_terrain(
+            instance.active_objects,
+            instance.actors,
+            setup.terrain,
+        )?;
+        reports.push(write_visual_play_report(
+            out_dir,
+            &format!("dungeon-combat-arena-{arena_index:03}"),
+            "combat dungeon-room arena gallery",
+            &mut state,
+            atlas,
+            font,
+        )?);
+    }
+
     let mut marker_state = PlayState::load_scene(
         game_dir,
         PlayOptions {
@@ -810,14 +850,21 @@ fn push_visual_combat_gallery_reports(
     Ok(())
 }
 
+fn seed_visual_combat_gallery_party(state: &mut PlayState) {
+    state.party = (0..COMBAT_PARTY_ACTOR_SLOTS)
+        .map(|slot| route_visual_party_member(slot as u8, b'A', b'G', 30, 30))
+        .collect();
+    state.party_names = default_party_names(COMBAT_PARTY_ACTOR_SLOTS);
+    state.party_experience = default_party_experience(COMBAT_PARTY_ACTOR_SLOTS);
+    state.party_stay_counters = default_party_stay_counters(COMBAT_PARTY_ACTOR_SLOTS);
+    state.party_strengths = vec![30; COMBAT_PARTY_ACTOR_SLOTS];
+    state.party_intelligence = default_party_intelligence(COMBAT_PARTY_ACTOR_SLOTS);
+    state.party_equipment = default_party_equipment(COMBAT_PARTY_ACTOR_SLOTS);
+    state.party_roster = default_party_roster(COMBAT_PARTY_ACTOR_SLOTS);
+}
+
 fn seed_visual_combat_marker_gallery(state: &mut PlayState) -> io::Result<()> {
-    state.party = vec![route_visual_party_member(0, b'A', b'G', 20, 20)];
-    state.party_names = default_party_names(1);
-    state.party_experience = vec![0];
-    state.party_stay_counters = default_party_stay_counters(1);
-    state.party_strengths = vec![30];
-    state.party_intelligence = default_party_intelligence(1);
-    state.party_equipment = default_party_equipment(1);
+    seed_visual_combat_gallery_party(state);
     state.active_player = Some(0);
 
     let mut terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
@@ -9445,7 +9492,7 @@ mod tests {
         let reports = visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
         let has_story = game_dir.join(STORY_DAT_FILE).exists();
-        assert_eq!(reports.len(), if has_story { 35 } else { 34 });
+        assert_eq!(reports.len(), if has_story { 147 } else { 146 });
         for report in &reports {
             assert!(report.path.exists());
             assert!(report.nonblack_pixels > 0);
@@ -9480,6 +9527,15 @@ mod tests {
                 .iter()
                 .find(|report| report.label == label)
                 .expect("expected outdoor combat arena gallery report");
+            assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
+            assert_eq!(report.height, VISUAL_PLAY_FRAME_HEIGHT);
+        }
+        for arena_index in 0..DUNGEON_CBT_RECORDS {
+            let label = format!("dungeon-combat-arena-{arena_index:03}");
+            let report = reports
+                .iter()
+                .find(|report| report.label == label)
+                .expect("expected dungeon combat arena gallery report");
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
             assert_eq!(report.height, VISUAL_PLAY_FRAME_HEIGHT);
         }
@@ -9518,6 +9574,8 @@ mod tests {
         assert!(manifest.contains("endgame-status"));
         assert!(manifest.contains("combat-arena-00"));
         assert!(manifest.contains("combat-arena-15"));
+        assert!(manifest.contains("dungeon-combat-arena-000"));
+        assert!(manifest.contains("dungeon-combat-arena-111"));
         assert!(manifest.contains("combat-marker-gallery"));
         assert!(manifest.contains("intro-menu"));
         assert!(manifest.contains("intro-finished-menu"));

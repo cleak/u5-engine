@@ -127,10 +127,11 @@ Last known verification state:
   `bf7a428a4b00ad2b`, `z-stats-modal` `61b033bfa2488b46`, and
   `endgame-status` `532cb7f1bdd03ffd`.
 - `cargo run -p u5-tui --features visual -- --visual-frame-suite
-  target\codex-status-visual-frame-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 35 nonblank Bevy-owned PNGs plus a sanitized manifest, including all
-  16 public `BRIT.CBT` outdoor arenas with accepted early replacement rolls
-  and combat status-highlight plus death/field/cursor marker galleries:
+  target\codex-dungeon-cbt-visual-frame-suite C:\Games\U5-Clean` passed on 2026-05-24 and
+  wrote 147 nonblank Bevy-owned PNGs plus a sanitized manifest, including all
+  16 public `BRIT.CBT` outdoor arenas with accepted early replacement rolls,
+  all 112 public `DUNGEON.CBT` dungeon-room terrain records with source scanning
+  disabled, and combat status-highlight plus death/field/cursor marker galleries:
   `world-play` `f68b906acde0bd4a`, `world-after-step`
   `b9720ab18affa566`, `town-play` `2beb3b7734800e11`,
   `dungeon-play` `67e7e116d8be67aa`, `dungeon-dark`
@@ -142,8 +143,10 @@ Last known verification state:
   `x-ray-view-overlay` `2c64191172043730`, `z-stats-modal`
   `bee4e11801862ad1`, `endgame-status` `d6c3450bd51d97f0`,
   `combat-arena-00` `774828109138f22a`, `combat-arena-15`
-  `f5708df6d90c001b`, `combat-marker-gallery`
-  `49026b4f6ae59390`, `intro-menu` `9713a4bbd31395e8`,
+  `f5708df6d90c001b`, `dungeon-combat-arena-000`
+  `d40e5e2b05532e84`, `dungeon-combat-arena-111`
+  `e0d891685c17aefc`, `combat-marker-gallery`
+  `cfc0b921b067ec75`, `intro-menu` `9713a4bbd31395e8`,
   `intro-finished-menu` `16dfab9fc3d5f489`, `intro-story-art`
   `5aa68210c861bc65`, and `intro-return-to-view`
   `097761f6267d3b94`.
