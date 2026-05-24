@@ -137,7 +137,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 381 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 433 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -153,6 +153,25 @@ Last known verification state:
   (`route-castle-x-ray-overlay-01-c1imx` `703fdeef9d192429`),
   `route-britannia-look-00-initial` `f68b906acde0bd4a`,
   `route-britannia-look-01-l6` `da5ca5200c222d0f`,
+  progression frames `route-britannia-utility-use-items-03-uc`
+  `1e30ba357d12573d`, `route-ship-hms-cape-plans-use-01-up`
+  `7b537b8f442657a8`, `route-britannia-create-food-cast-01-c1imx`
+  `57ab276b9708111f`, `route-gate-travel-world-to-underworld-01-c1prv1`
+  `fc9f55e0e7eb7f61`, `route-gate-travel-world-to-castle-01-c1prv2`
+  `d2a09237e6bbeae9`, `route-gate-travel-invalid-slot-refusal-01-c1prv4`
+  `ae99ac800f08d8fa`, `route-gate-travel-shipboard-refusal-01-c1prv2`
+  `f72019db2ff927e1`, `route-natural-moongate-trammel-gate-travel-01-idle_1`
+  `fc9f55e0e7eb7f61`, `route-natural-moongate-empty-slot-clears-live-tile-01-idle_1`
+  `6d146362bede1794`, `route-britannia-chasm-fall-to-underworld-01-s`
+  `f4a55f01e90aedc0`, `route-britannia-hole-up-rest-01-h1`
+  `766522e62f639357`, `route-britannia-save-refusal-02-n`
+  `a89ba1fbff6881da`, `route-britannia-fixed-hidden-single-use-search-get-02-g6`
+  `eb0e32b031d839a3`, `route-underworld-fixed-hidden-stack-search-get-search-03-s6`
+  `c6cc1cfe27226f01`, `route-blackthorn-fixed-hidden-zero-key-search-01-s6`
+  `038f97f62b047471`, `route-castle-wooden-box-use-01-ub`
+  `de28d405fbe94478`, `route-blackthorn-audience-correct-02-ahm`
+  `b3016738bb32fbdb`, and `route-blackthorn-rescue-refuge-02-empty`
+  `ba5dc7f126f2411c`,
   Shadowlord/quest frames `route-virtue-town-shadowlord-entry-00-initial`
   `d1d1b68786dacfc7`, `route-virtue-town-shadowlord-yell-01-yfaulinei`
   `b7478369c5d5dcaa`, `route-lycaeum-shard-falsehood-vanquish-01-uf`

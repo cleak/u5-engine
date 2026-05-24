@@ -22,14 +22,15 @@ use u5_runtime::{
     COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE,
     COMBAT_FIELD_KIND_POISON, COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
     COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMBAT_PARTY_CORPSE_TILE,
-    COMBAT_VANISH_DEATH_MARKER_TILE, CURE_COST, CURE_SPELL_INDEX, ChargenSession,
-    ChargenSessionResult, ChargenSessionStep, CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS,
-    DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX, DEFAULT_CLIMB_STAT, DES_POR_SPELL_INDEX,
-    DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_LEVEL_SPELL_COST, Direction, DungeonScene,
-    EGA_PALETTE_RGB, ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST,
-    ENERGY_FIELD_SPELL_INDEX, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX,
-    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FLAME_WIND_COST,
-    FLAME_WIND_SPELL_INDEX, FixedCellFont, GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock,
+    COMBAT_VANISH_DEATH_MARKER_TILE, CREATE_FOOD_COST, CREATE_FOOD_SPELL_INDEX, CURE_COST,
+    CURE_SPELL_INDEX, ChargenSession, ChargenSessionResult, ChargenSessionStep,
+    CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
+    DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
+    DISPEL_FIELD_SPELL_INDEX, DUNGEON_LEVEL_SPELL_COST, Direction, DungeonScene, EGA_PALETTE_RGB,
+    ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX,
+    FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
+    FIRST_PLAYABLE_FULL_SHIP_HULL, FLAME_WIND_COST, FLAME_WIND_SPELL_INDEX, FixedCellFont,
+    GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock,
     GraphicImage, GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist,
     IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X,
     INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
@@ -37,34 +38,36 @@ use u5_runtime::{
     INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement,
     MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
     MISCMAPS_RTV_STRIP_SECTION_BYTES, MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap,
-    NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, OPEN_SPELL_COST, OPEN_SPELL_INDEX,
-    PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE,
-    POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX,
-    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions,
-    PlayState, PlayTarget, ProportionalFont, ProportionalWidthTable, QUICKNESS_COST,
-    QUICKNESS_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES,
-    RectColumnSweepTransition, ReturnToViewFrameKind, SCENE_EMPATH_ABBEY, SCENE_JHELOM,
-    SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM,
-    SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX,
-    SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE, SLEEP_COST,
-    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_OWNED_VALUE,
-    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    MoonstoneGateSlot, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
+    OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX,
+    PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
+    POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX,
+    PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget, ProportionalFont,
+    ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, RESURRECT_COST,
+    RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
+    ReturnToViewFrameKind, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD,
+    SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
+    SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
+    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
+    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
     SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
     SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_BOTTOM,
     STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE,
-    Scene, Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT,
-    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
-    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
-    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
-    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth,
-    TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState,
-    U4TransferOverrides, U4TransferSource, UUS_POR_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
-    WORLD_SIDE, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport,
-    combat_class_stats, commit_chargen_save, commit_u4_transfer_save, default_party_equipment,
-    default_party_intelligence, default_party_names, default_party_stay_counters,
-    dungeon_cell_index, endgame_tableau_role_for_slot, handle_play_key_input, hash_bytes,
-    input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
+    SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS,
+    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST,
+    TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS,
+    TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT,
+    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX,
+    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas,
+    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
+    TransportState, U4TransferOverrides, U4TransferSource, UUS_POR_SPELL_INDEX, VAS_LOR_COST,
+    VAS_LOR_SPELL_INDEX, WORLD_SIDE, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save, commit_u4_transfer_save,
+    default_party_equipment, default_party_intelligence, default_party_names,
+    default_party_stay_counters, dungeon_cell_index, endgame_tableau_role_for_slot,
+    handle_play_key_input, hash_bytes, input_case_fold, input_function_key_code,
+    input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -741,8 +744,108 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         hull: FIRST_PLAYABLE_FULL_SHIP_HULL,
         skiffs: 2,
     };
+    let world = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        ..PlayOptions::default()
+    };
+    let underworld = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Underworld),
+        ..PlayOptions::default()
+    };
+    let mut britannia_utility_use = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        clock: GameClock::new(20, 0).expect("20:00 is a valid game-clock time"),
+        ..PlayOptions::default()
+    };
+    britannia_utility_use.special_items[SPECIAL_ITEM_POCKET_WATCH_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    britannia_utility_use.special_items[SPECIAL_ITEM_SEXTANT_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    britannia_utility_use.special_items[SPECIAL_ITEM_MAGIC_CARPET_INDEX] = 1;
+    let mut hms_cape_plans = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        transport: ship_transport,
+        ..PlayOptions::default()
+    };
+    hms_cape_plans.special_items[SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    let mut create_food = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        food: DEFAULT_FOOD_STOCK,
+        ..PlayOptions::default()
+    };
+    create_food.spell_charges[CREATE_FOOD_SPELL_INDEX] = 1;
+    create_food.party[0].mana = CREATE_FOOD_COST;
+    create_food.party[0].level = CREATE_FOOD_COST;
     let shadowlord_town = Scene::new(SCENE_MOONGLOW).expect("Shadowlord hideout town is valid");
     let stonegate = Scene::new(SCENE_STONEGATE).expect("Stonegate scene is valid");
+    let mut gate_travel_to_underworld = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        ..PlayOptions::default()
+    };
+    seed_visual_route_gate_travel_resources(&mut gate_travel_to_underworld);
+    gate_travel_to_underworld.moonstone_slots[0] = MoonstoneGateSlot {
+        scene: 0,
+        x: 231,
+        y: 5,
+        z: WorldPlane::Underworld.save_floor() as u8,
+    };
+    let mut gate_travel_to_castle = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        ..PlayOptions::default()
+    };
+    seed_visual_route_gate_travel_resources(&mut gate_travel_to_castle);
+    gate_travel_to_castle.moonstone_slots[1] = MoonstoneGateSlot {
+        scene: castle.byte,
+        x: 7,
+        y: 0,
+        z: 0,
+    };
+    let mut gate_travel_invalid_slot = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        ..PlayOptions::default()
+    };
+    seed_visual_route_gate_travel_resources(&mut gate_travel_invalid_slot);
+    let mut gate_travel_shipboard_refusal = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        transport: ship_transport,
+        ..PlayOptions::default()
+    };
+    seed_visual_route_gate_travel_resources(&mut gate_travel_shipboard_refusal);
+    gate_travel_shipboard_refusal.moonstone_slots[1] = gate_travel_to_castle.moonstone_slots[1];
+    let mut natural_moongate_trammel = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        start: Some((62, 124)),
+        clock: GameClock::new(1, 0).expect("01:00 is a valid game-clock time"),
+        ..PlayOptions::default()
+    };
+    natural_moongate_trammel.moonstone_slots[0] = gate_travel_to_underworld.moonstone_slots[0];
+    let natural_moongate_empty_slot = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        start: Some((62, 124)),
+        clock: GameClock::new(1, 0).expect("01:00 is a valid game-clock time"),
+        ..PlayOptions::default()
+    };
+    let chasm_fall = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        start: Some((SURFACE_CHASM_X as usize, SURFACE_CHASM_Y as usize - 1)),
+        facing: Some(Direction::South),
+        ..PlayOptions::default()
+    };
+    let fixed_hidden_single_use = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        start: Some((79, 64)),
+        facing: Some(Direction::East),
+        ..PlayOptions::default()
+    };
+    let fixed_hidden_underworld_stack = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Underworld),
+        ..PlayOptions::default()
+    };
+    let blackthorn_fixed_hidden_key_cache = PlayOptions {
+        target: PlayTarget::Town(Scene::new(18).expect("Blackthorn castle scene is valid")),
+        floor: -1,
+        ..PlayOptions::default()
+    };
+    let mut wooden_box = PlayOptions::default();
+    wooden_box.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
     let mut shadowlord_town_entry = PlayOptions {
         target: PlayTarget::Town(shadowlord_town),
         ..PlayOptions::default()
@@ -892,6 +995,136 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(|state| {
                 state.special_items[SPECIAL_ITEM_SPYGLASS_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
             }),
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-utility-use-items",
+            frame_kind: "visual route world frame",
+            options: britannia_utility_use,
+            script: &["UW", "US", "UC"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-ship-hms-cape-plans-use",
+            frame_kind: "visual route world frame",
+            options: hms_cape_plans,
+            script: &["UP"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-create-food-cast",
+            frame_kind: "visual route world frame",
+            options: create_food,
+            script: &["C1IMX"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-gate-travel-world-to-underworld",
+            frame_kind: "visual route world frame",
+            options: gate_travel_to_underworld,
+            script: &["C1PRV1"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-gate-travel-world-to-castle",
+            frame_kind: "visual route town frame",
+            options: gate_travel_to_castle,
+            script: &["C1PRV2"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-gate-travel-invalid-slot-refusal",
+            frame_kind: "visual route world frame",
+            options: gate_travel_invalid_slot,
+            script: &["C1PRV4"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-gate-travel-shipboard-refusal",
+            frame_kind: "visual route world frame",
+            options: gate_travel_shipboard_refusal,
+            script: &["C1PRV2"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-natural-moongate-trammel-gate-travel",
+            frame_kind: "visual route world frame",
+            options: natural_moongate_trammel,
+            script: &["idle:1"],
+            configure: Some(seed_visual_route_natural_moongate),
+        },
+        VisualRouteSuiteCase {
+            label: "route-natural-moongate-empty-slot-clears-live-tile",
+            frame_kind: "visual route world frame",
+            options: natural_moongate_empty_slot,
+            script: &["idle:1"],
+            configure: Some(seed_visual_route_natural_moongate),
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-chasm-fall-to-underworld",
+            frame_kind: "visual route world frame",
+            options: chasm_fall,
+            script: &["s"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-hole-up-rest",
+            frame_kind: "visual route world frame",
+            options: world.clone(),
+            script: &["H1"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-save-refusal",
+            frame_kind: "visual route world frame",
+            options: world.clone(),
+            script: &["Q", "N"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-dispatcher-refusals",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                ..PlayOptions::default()
+            },
+            script: &["B"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-fixed-hidden-single-use-search-get",
+            frame_kind: "visual route world frame",
+            options: fixed_hidden_single_use,
+            script: &["S6", "G6"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-underworld-pass-and-idle",
+            frame_kind: "visual route world frame",
+            options: underworld,
+            script: &["empty", "idle:1"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-underworld-fixed-hidden-stack-search-get-search",
+            frame_kind: "visual route world frame",
+            options: fixed_hidden_underworld_stack,
+            script: &["S6", "G6", "S6"],
+            configure: Some(seed_visual_route_underworld_fixed_hidden_stack),
+        },
+        VisualRouteSuiteCase {
+            label: "route-blackthorn-fixed-hidden-zero-key-search",
+            frame_kind: "visual route town frame",
+            options: blackthorn_fixed_hidden_key_cache,
+            script: &["S6"],
+            configure: Some(seed_visual_route_blackthorn_fixed_hidden),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-wooden-box-use",
+            frame_kind: "visual route town frame",
+            options: wooden_box,
+            script: &["UB"],
+            configure: None,
         },
         VisualRouteSuiteCase {
             label: "route-castle-save-refusal",
@@ -1529,6 +1762,27 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_death_vision),
         },
         VisualRouteSuiteCase {
+            label: "route-blackthorn-audience-correct",
+            frame_kind: "visual route town frame",
+            options: PlayOptions::default(),
+            script: &["setup:blackthorn-audience", "Ahm"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-blackthorn-audience-wrong",
+            frame_kind: "visual route town frame",
+            options: PlayOptions::default(),
+            script: &["setup:blackthorn-audience", "wrong"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-blackthorn-rescue-refuge",
+            frame_kind: "visual route town frame",
+            options: PlayOptions::default(),
+            script: &["setup:blackthorn-rescue", "empty"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
             label: "route-virtue-town-shadowlord-entry",
             frame_kind: "visual route town frame",
             options: shadowlord_town_entry,
@@ -1780,6 +2034,41 @@ fn visual_doom_combat_case(
         script,
         configure: None,
     }
+}
+
+fn seed_visual_route_gate_travel_resources(options: &mut PlayOptions) {
+    options.spell_charges[GATE_TRAVEL_SPELL_INDEX] = 1;
+    if let Some(caster) = options.party.first_mut() {
+        caster.mana = GATE_TRAVEL_COST + 1;
+        caster.level = GATE_TRAVEL_COST;
+    }
+}
+
+fn seed_visual_route_natural_moongate(state: &mut PlayState) {
+    let idx = state.player.y * WORLD_SIDE + state.player.x;
+    if let Some(tile) = state.grid.get_mut(idx) {
+        *tile = NATURAL_MOONGATE_TERRAIN_TILE;
+    }
+    state.natural_moongate_live_cells = vec![idx];
+    state.set_cached_moon_glyph_slots(Some(0), None);
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_underworld_fixed_hidden_stack(state: &mut PlayState) {
+    state.player.x = 232;
+    state.player.y = 233;
+    state.player.facing = Direction::East;
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_blackthorn_fixed_hidden(state: &mut PlayState) {
+    state.player.x = 5;
+    state.player.y = 8;
+    state.player.facing = Direction::East;
+    state.keys = 0;
+    state.sync_player_object();
+    state.mark_visibility_dirty();
 }
 
 fn seed_visual_route_board_horse(state: &mut PlayState) {
@@ -2669,6 +2958,14 @@ fn apply_visual_route_command(
 ) -> io::Result<PlayInputDisposition> {
     let command = command.trim();
     let lower = command.to_ascii_lowercase();
+    if lower == "setup:blackthorn-audience" {
+        state.begin_blackthorn_audience_capture(game_dir)?;
+        return Ok(PlayInputDisposition::Continue);
+    }
+    if lower == "setup:blackthorn-rescue" {
+        state.apply_blackthorn_rescue_refuge(game_dir)?;
+        return Ok(PlayInputDisposition::Continue);
+    }
     if matches!(lower.as_str(), "empty" | "pass") {
         handle_play_key_input(state, '\n', "", game_dir)?;
         return Ok(PlayInputDisposition::Continue);
@@ -7129,7 +7426,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 116);
+        assert_eq!(cases.len(), 137);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -7182,6 +7479,28 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-britannia-spyglass-chunk-map")
         );
+        for label in [
+            "route-britannia-utility-use-items",
+            "route-ship-hms-cape-plans-use",
+            "route-britannia-create-food-cast",
+            "route-gate-travel-world-to-underworld",
+            "route-gate-travel-world-to-castle",
+            "route-gate-travel-invalid-slot-refusal",
+            "route-gate-travel-shipboard-refusal",
+            "route-natural-moongate-trammel-gate-travel",
+            "route-natural-moongate-empty-slot-clears-live-tile",
+            "route-britannia-chasm-fall-to-underworld",
+            "route-britannia-hole-up-rest",
+            "route-britannia-save-refusal",
+            "route-britannia-dispatcher-refusals",
+            "route-britannia-fixed-hidden-single-use-search-get",
+            "route-underworld-pass-and-idle",
+            "route-underworld-fixed-hidden-stack-search-get-search",
+            "route-blackthorn-fixed-hidden-zero-key-search",
+            "route-castle-wooden-box-use",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert!(
             cases
                 .iter()
@@ -7332,6 +7651,9 @@ mod tests {
                 .any(|case| case.label == "route-castle-death-vision-look")
         );
         for label in [
+            "route-blackthorn-audience-correct",
+            "route-blackthorn-audience-wrong",
+            "route-blackthorn-rescue-refuge",
             "route-virtue-town-shadowlord-entry",
             "route-virtue-town-shadowlord-yell",
             "route-lycaeum-shard-falsehood-vanquish",
@@ -7468,7 +7790,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 381);
+        assert_eq!(reports.len(), 433);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -7491,6 +7813,24 @@ mod tests {
         assert!(manifest.contains("route-castle-x-ray-overlay-02-idle"));
         assert!(manifest.contains("route-britannia-look-01-l6"));
         assert!(manifest.contains("route-britannia-spyglass-chunk-map-01-usp"));
+        assert!(manifest.contains("route-britannia-utility-use-items-03-uc"));
+        assert!(manifest.contains("route-ship-hms-cape-plans-use-01-up"));
+        assert!(manifest.contains("route-britannia-create-food-cast-01-c1imx"));
+        assert!(manifest.contains("route-gate-travel-world-to-underworld-01-c1prv1"));
+        assert!(manifest.contains("route-gate-travel-world-to-castle-01-c1prv2"));
+        assert!(manifest.contains("route-gate-travel-invalid-slot-refusal-01-c1prv4"));
+        assert!(manifest.contains("route-gate-travel-shipboard-refusal-01-c1prv2"));
+        assert!(manifest.contains("route-natural-moongate-trammel-gate-travel-01-idle_1"));
+        assert!(manifest.contains("route-natural-moongate-empty-slot-clears-live-tile-01-idle_1"));
+        assert!(manifest.contains("route-britannia-chasm-fall-to-underworld-01-s"));
+        assert!(manifest.contains("route-britannia-hole-up-rest-01-h1"));
+        assert!(manifest.contains("route-britannia-save-refusal-02-n"));
+        assert!(manifest.contains("route-britannia-dispatcher-refusals-01-b"));
+        assert!(manifest.contains("route-britannia-fixed-hidden-single-use-search-get-02-g6"));
+        assert!(manifest.contains("route-underworld-pass-and-idle-02-idle_1"));
+        assert!(manifest.contains("route-underworld-fixed-hidden-stack-search-get-search-03-s6"));
+        assert!(manifest.contains("route-blackthorn-fixed-hidden-zero-key-search-01-s6"));
+        assert!(manifest.contains("route-castle-wooden-box-use-01-ub"));
         assert!(manifest.contains("route-castle-save-refusal-02-n"));
         assert!(manifest.contains("route-world-board-horse-01-b"));
         assert!(manifest.contains("route-ship-broadside-fire-01-f6"));
@@ -7552,6 +7892,9 @@ mod tests {
         assert!(manifest.contains("route-yew-wanted-poster-look-01-l6"));
         assert!(manifest.contains("route-buccaneers-den-wishing-well-03-horse"));
         assert!(manifest.contains("route-castle-death-vision-look-02-1"));
+        assert!(manifest.contains("route-blackthorn-audience-correct-02-ahm"));
+        assert!(manifest.contains("route-blackthorn-audience-wrong-02-wrong"));
+        assert!(manifest.contains("route-blackthorn-rescue-refuge-02-empty"));
         assert!(manifest.contains("route-virtue-town-shadowlord-entry-00-initial"));
         assert!(manifest.contains("route-virtue-town-shadowlord-yell-01-yfaulinei"));
         assert!(manifest.contains("route-lycaeum-shard-falsehood-vanquish-01-uf"));
