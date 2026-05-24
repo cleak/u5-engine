@@ -27,8 +27,8 @@ pub use play_loop::{
     unclassified_escape_sequence,
 };
 pub use route_smoke::{
-    RouteSmokeCase, RouteSmokeExpectation, RouteSmokeReport, route_smoke_cases, run_route_smoke,
-    run_route_smoke_case, write_route_smoke_manifest,
+    RouteSmokeCase, RouteSmokeExpectation, RouteSmokeFrameReport, RouteSmokeReport,
+    route_smoke_cases, run_route_smoke, run_route_smoke_case, write_route_smoke_manifest,
 };
 pub use save_frame::{SavedFrameReport, run_save_frame, run_save_frame_suite, save_frame_suite};
 pub use visual_manifest::{ManifestCompareReport, compare_manifest_files, compare_manifest_text};

@@ -1407,6 +1407,13 @@ fn route_smoke_local_clean_cases_run_when_present() {
         assert!(report.final_width > 0);
         assert!(report.final_height > 0);
         assert!(report.final_hash != 0);
+        assert_eq!(report.frames.len(), case.script.len() + 2);
+        assert!(
+            report
+                .frames
+                .iter()
+                .any(|frame| frame.label == format!("route-{}", case.name))
+        );
     }
 }
 
@@ -1432,6 +1439,34 @@ fn route_smoke_manifest_is_sanitized_and_comparable() {
         final_height: 48,
         final_hash: 0xaaaaaaaaaaaaaaaa,
         final_nonblack_pixels: 42,
+        frames: vec![
+            RouteSmokeFrameReport {
+                label: "route-world\tmove-00-initial".to_string(),
+                frame_kind: "tile viewport".to_string(),
+                width: 48,
+                height: 48,
+                hash: 0xbbbbbbbbbbbbbbbb,
+                nonblack_pixels: 40,
+                metadata: vec![
+                    "phase=initial".to_string(),
+                    "commands 2".to_string(),
+                    "State:\tBRITANNIA".to_string(),
+                ],
+            },
+            RouteSmokeFrameReport {
+                label: "route-world\tmove".to_string(),
+                frame_kind: "tile viewport".to_string(),
+                width: 48,
+                height: 48,
+                hash: 0xaaaaaaaaaaaaaaaa,
+                nonblack_pixels: 42,
+                metadata: vec![
+                    "phase=final".to_string(),
+                    "commands 2".to_string(),
+                    "State:\tBRITANNIA\nhash 1234".to_string(),
+                ],
+            },
+        ],
     }];
 
     write_route_smoke_manifest(&path, &reports).unwrap();
@@ -1439,8 +1474,11 @@ fn route_smoke_manifest_is_sanitized_and_comparable() {
     let _ = fs::remove_dir_all(&dir);
 
     assert!(manifest.contains("coverage\ttotal-routes\t1"));
+    assert!(manifest.contains("coverage\ttotal-route-frames\t2"));
+    assert!(manifest.contains("route-world move-00-initial\t48x48\ttile viewport"));
     assert!(manifest.contains("route-world move\t48x48\ttile viewport"));
     assert!(manifest.contains("hash aaaaaaaaaaaaaaaa"));
+    assert!(manifest.contains("hash bbbbbbbbbbbbbbbb"));
     assert!(manifest.contains("nonblack 42"));
     assert!(!manifest.contains("world\tmove"));
     assert!(

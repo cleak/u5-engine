@@ -41,7 +41,9 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-24 with 493 scripted route cases (including all 40 published stock
+  2026-05-24 with 493 scripted route cases and the sanitized
+  `--route-smoke-manifest` wrote 2183 initial/per-command/final frame rows
+  that compare cleanly against themselves (including all 40 published stock
   world-location entry rows, native shrine/Codex quest routes, TLK-backed
   conversation routes across all 32 named-location scenes, plus save/reload checkpoints
   for boarded horse, Gate Travel, chasm fall, fixed hidden treasure,
@@ -836,8 +838,9 @@ experience.
     full-frame compositor, writes per-step PNGs plus a sanitized manifest, and
     fails if a scripted route step leaves the frame unchanged.
   - `--route-smoke --route-smoke-manifest <PATH>` writes a sanitized manifest
-    for the non-visual route suite with route labels, command counts, final
-    frame dimensions, hashes, nonblack counts, and state hashes.
+    for the non-visual route suite with initial, per-command, and final route
+    labels, command counts, frame dimensions, hashes, nonblack counts, and
+    state hashes.
   - `--compare-frame-manifests <BASE> <CURRENT>` compares sanitized manifests
     by coverage row, frame label, dimensions, frame kind, hash, nonblack count,
     and review metadata so PNG-generating suites can be used as a clean

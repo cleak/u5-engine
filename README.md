@@ -162,9 +162,9 @@ cargo run -- --play-script "d;empty;idle:4;q" --raster-diagnostics C:\Games\U5-C
 `--route-smoke` runs a bundled 493-case local-asset route suite covering world,
 town, dungeon, combat, shop, endgame, transition, save/reload, and modal
 routes. It prints sanitized state lines and raster hashes; add
-`--route-smoke-manifest <PATH>` to write a clean manifest with route labels,
-command counts, final frame dimensions, hashes, nonblack counts, and state
-hashes:
+`--route-smoke-manifest <PATH>` to write a clean manifest with initial,
+per-command, and final route labels, command counts, frame dimensions, hashes,
+nonblack counts, and state hashes:
 
 ```powershell
 cargo run -- --route-smoke C:\Games\U5-Clean

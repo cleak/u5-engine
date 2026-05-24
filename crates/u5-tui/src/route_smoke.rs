@@ -71,7 +71,8 @@ use u5_runtime::{
 };
 
 use crate::{
-    play_script_state_line, raster_diagnostic_line, raster_frame_kind, replay_play_script_commands,
+    play_script_command_label, play_script_state_line, raster_diagnostic_line, raster_frame_kind,
+    replay_play_script_commands,
 };
 
 const VIEWPORT_RADIUS: usize = 5;
@@ -131,6 +132,18 @@ pub struct RouteSmokeReport {
     pub final_height: usize,
     pub final_hash: u64,
     pub final_nonblack_pixels: usize,
+    pub frames: Vec<RouteSmokeFrameReport>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RouteSmokeFrameReport {
+    pub label: String,
+    pub frame_kind: String,
+    pub width: usize,
+    pub height: usize,
+    pub hash: u64,
+    pub nonblack_pixels: usize,
+    pub metadata: Vec<String>,
 }
 
 pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
@@ -2747,13 +2760,24 @@ pub fn run_route_smoke_case(
 
     let initial_raster = raster_diagnostic_line(&mut state, VIEWPORT_RADIUS, atlas)?;
     require_raster_available(case, &initial_raster)?;
+    let initial_metadata = vec![
+        "phase=initial".to_string(),
+        format!("commands {}", case.script.len()),
+        play_script_state_line(&state),
+    ];
+    let mut frames = vec![capture_route_smoke_frame(
+        &mut state,
+        atlas,
+        &format!("route-{}-00-initial", case.name),
+        initial_metadata,
+    )?];
 
     let reload_checkpoints = route_reload_checkpoints(case.name);
     let result = replay_play_script_commands(
         &mut state,
         command_game_dir,
         &commands,
-        |state, index, _| {
+        |state, index, command| {
             commands_run += 1;
             if reload_checkpoints.contains(&(index + 1)) {
                 let Some(save_dir) = reload_save_dir.as_deref() else {
@@ -2765,7 +2789,25 @@ pub fn run_route_smoke_case(
                 reload_route_smoke_state_from_checkpoint(state, game_dir, save_dir)?;
             }
             let raster = raster_diagnostic_line(state, VIEWPORT_RADIUS, atlas)?;
-            require_raster_hash(case, &raster)
+            require_raster_hash(case, &raster)?;
+            let metadata = vec![
+                "phase=step".to_string(),
+                format!("step {}", index + 1),
+                format!("input={}", sanitize_manifest_field(command)),
+                play_script_state_line(state),
+            ];
+            frames.push(capture_route_smoke_frame(
+                state,
+                atlas,
+                &format!(
+                    "route-{}-{:02}-{}",
+                    case.name,
+                    index + 1,
+                    sanitize_route_label_fragment(&play_script_command_label(command))
+                ),
+                metadata,
+            )?);
+            Ok(())
         },
     );
     if let Some(dir) = &route_game_dir {
@@ -2813,6 +2855,19 @@ pub fn run_route_smoke_case(
         .iter()
         .filter(|pixel| **pixel != 0)
         .count();
+    frames.push(RouteSmokeFrameReport {
+        label: format!("route-{}", case.name),
+        frame_kind: final_frame_kind.to_string(),
+        width: final_viewport.width,
+        height: final_viewport.height,
+        hash: hash_palette_indices(&final_viewport.pixels),
+        nonblack_pixels: final_nonblack_pixels,
+        metadata: vec![
+            "phase=final".to_string(),
+            format!("commands {}", commands_run),
+            play_script_state_line(&state),
+        ],
+    });
     Ok(RouteSmokeReport {
         name: case.name.to_string(),
         commands_run,
@@ -2823,6 +2878,7 @@ pub fn run_route_smoke_case(
         final_height: final_viewport.height,
         final_hash: hash_palette_indices(&final_viewport.pixels),
         final_nonblack_pixels,
+        frames,
     })
 }
 
@@ -2830,22 +2886,30 @@ pub fn write_route_smoke_manifest(path: &Path, reports: &[RouteSmokeReport]) -> 
     let mut manifest = String::new();
     manifest.push_str("# Ultima V route smoke manifest\n");
     manifest.push_str(
-        "# Sanitized: contains labels, command counts, dimensions, frame hashes, and state hashes only.\n",
+        "# Sanitized: contains route labels, command counts, dimensions, frame hashes, and state hashes only.\n",
     );
     manifest.push_str(&format!("coverage\ttotal-routes\t{}\n", reports.len()));
+    let total_frames: usize = reports.iter().map(|report| report.frames.len()).sum();
+    manifest.push_str(&format!("coverage\ttotal-route-frames\t{total_frames}\n"));
     manifest.push_str("# label\tdimensions\tframe-kind\thash\tnonblack\treview-metadata\n");
     for report in reports {
-        manifest.push_str(&format!(
-            "route-{}\t{}x{}\t{}\thash {:016x}\tnonblack {}\tcommands {}\t{}\n",
-            sanitize_manifest_field(&report.name),
-            report.final_width,
-            report.final_height,
-            sanitize_manifest_field(&report.final_frame_kind),
-            report.final_hash,
-            report.final_nonblack_pixels,
-            report.commands_run,
-            sanitize_manifest_field(&report.final_state_line),
-        ));
+        for frame in &report.frames {
+            manifest.push_str(&format!(
+                "{}\t{}x{}\t{}\thash {:016x}\tnonblack {}\t{}\n",
+                sanitize_manifest_field(&frame.label),
+                frame.width,
+                frame.height,
+                sanitize_manifest_field(&frame.frame_kind),
+                frame.hash,
+                frame.nonblack_pixels,
+                frame
+                    .metadata
+                    .iter()
+                    .map(|value| sanitize_manifest_field(value))
+                    .collect::<Vec<_>>()
+                    .join("\t"),
+            ));
+        }
     }
     if let Some(parent) = path
         .parent()
@@ -2858,6 +2922,51 @@ pub fn write_route_smoke_manifest(path: &Path, reports: &[RouteSmokeReport]) -> 
 
 fn sanitize_manifest_field(value: &str) -> String {
     value.replace(['\t', '\r', '\n'], " ")
+}
+
+fn sanitize_route_label_fragment(value: &str) -> String {
+    let mut label = String::new();
+    for ch in value.chars() {
+        if ch.is_ascii_alphanumeric() {
+            label.push(ch.to_ascii_lowercase());
+        } else if ch == '_' || ch == '-' {
+            label.push(ch);
+        } else if !label.ends_with('_') {
+            label.push('_');
+        }
+    }
+    let trimmed = label.trim_matches('_');
+    if trimmed.is_empty() {
+        "empty".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn capture_route_smoke_frame(
+    state: &mut PlayState,
+    atlas: &u5_runtime::TileAtlas,
+    label: &str,
+    metadata: Vec<String>,
+) -> io::Result<RouteSmokeFrameReport> {
+    let frame_kind = raster_frame_kind(state).to_string();
+    let viewport = state
+        .render_top_down_frame(VIEWPORT_RADIUS, atlas)?
+        .ok_or_else(|| {
+            io::Error::other(format!(
+                "route smoke frame `{label}` has no renderable viewport"
+            ))
+        })?;
+    let nonblack_pixels = viewport.pixels.iter().filter(|pixel| **pixel != 0).count();
+    Ok(RouteSmokeFrameReport {
+        label: label.to_string(),
+        frame_kind,
+        width: viewport.width,
+        height: viewport.height,
+        hash: hash_palette_indices(&viewport.pixels),
+        nonblack_pixels,
+        metadata,
+    })
 }
 
 fn prepare_route_smoke_case_game_dir(case_name: &str) -> io::Result<Option<PathBuf>> {

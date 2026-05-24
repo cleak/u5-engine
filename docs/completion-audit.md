@@ -78,7 +78,10 @@ audit:
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 67 tests pass.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 493 scripted cases pass,
-  including TLK-backed reserved-word and no-match conversation routes across
+  The same run can now write a sanitized 2183-frame initial/per-command/final
+  route manifest that compares cleanly against itself with
+  `--compare-frame-manifests`, including TLK-backed reserved-word and no-match
+  conversation routes across
   all 32 named-location scenes in the town, dwelling, castle, and keep
   dialogue families,
   including all 40 published stock world-location entry rows and four
