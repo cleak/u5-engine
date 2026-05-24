@@ -36,8 +36,9 @@ use u5_runtime::{
     INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y,
     INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X,
     INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
-    INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX,
-    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement, MAGIC_LOCK_COST,
+    MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
+    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X,
     NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
     OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX,
@@ -63,7 +64,8 @@ use u5_runtime::{
     TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
     TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth,
     TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState,
-    U4TransferOverrides, U4TransferSource, UUS_POR_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
+    U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX,
+    UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
     WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
     blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save, commit_u4_transfer_save,
     default_party_equipment, default_party_intelligence, default_party_names,
@@ -1668,6 +1670,46 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_combat_dispel_field),
         },
         VisualRouteSuiteCase {
+            label: "route-combat-utility-vanish-failure",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1AY"],
+            configure: Some(seed_visual_route_combat_utility_vanish),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-utility-open-failure",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1AS"],
+            configure: Some(seed_visual_route_combat_utility_open),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-utility-magic-lock-failure",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1AEP"],
+            configure: Some(seed_visual_route_combat_utility_magic_lock),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-utility-unlock-magic-failure",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1EIP"],
+            configure: Some(seed_visual_route_combat_utility_unlock_magic),
+        },
+        VisualRouteSuiteCase {
             label: "route-combat-magic-missile-target",
             frame_kind: "visual route combat frame",
             options: PlayOptions {
@@ -2599,6 +2641,50 @@ fn seed_visual_route_combat_dispel_field(state: &mut PlayState) {
     state
         .enter_combat_frame(active_objects, actors)
         .expect("visual route combat field dispel frame should seed");
+}
+
+fn seed_visual_route_combat_utility_failure(state: &mut PlayState, spell_index: usize, cost: u8) {
+    state.party = vec![route_visual_party_member(0, b'A', b'G', 20, 20)];
+    state.party_names = default_party_names(1);
+    state.party_experience = vec![0];
+    state.party_stay_counters = default_party_stay_counters(1);
+    state.party_strengths = vec![30];
+    state.party_intelligence = default_party_intelligence(1);
+    state.party_equipment = default_party_equipment(1);
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = cost;
+        caster.level = cost;
+    }
+    state.active_player = Some(0);
+    state.spell_charges[spell_index] = 1;
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    actors[0] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+
+    let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+    active_objects[0] = visual_route_combat_active_object(0x4c, 5, 5, 0);
+    active_objects[1] = visual_route_combat_active_object(0x50, 6, 5, 0);
+    state
+        .enter_combat_frame(active_objects, actors)
+        .expect("visual route combat utility frame should seed");
+    state.combat_terrain[5][6] = 0x97;
+}
+
+fn seed_visual_route_combat_utility_vanish(state: &mut PlayState) {
+    seed_visual_route_combat_utility_failure(state, VANISH_SPELL_INDEX, VANISH_COST);
+}
+
+fn seed_visual_route_combat_utility_open(state: &mut PlayState) {
+    seed_visual_route_combat_utility_failure(state, OPEN_SPELL_INDEX, OPEN_SPELL_COST);
+}
+
+fn seed_visual_route_combat_utility_magic_lock(state: &mut PlayState) {
+    seed_visual_route_combat_utility_failure(state, MAGIC_LOCK_SPELL_INDEX, MAGIC_LOCK_COST);
+}
+
+fn seed_visual_route_combat_utility_unlock_magic(state: &mut PlayState) {
+    seed_visual_route_combat_utility_failure(state, UNLOCK_MAGIC_SPELL_INDEX, UNLOCK_MAGIC_COST);
 }
 
 fn seed_visual_route_combat_magic_missile(state: &mut PlayState) {
@@ -7797,7 +7883,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 152);
+        assert_eq!(cases.len(), 156);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -8200,7 +8286,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 473);
+        assert_eq!(reports.len(), 481);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);

@@ -25,12 +25,13 @@ use u5_runtime::{
     FLAME_WIND_SPELL_INDEX, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST,
     GREAT_HEAL_SPELL_INDEX, GameClock, GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST,
     HOURLY_STARVATION_DAMAGE_MAX, HOURLY_STARVATION_DAMAGE_MIN, Healer, Herbalist,
-    IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, Inn, MoonstoneGateSlot, NARRATIVE_GATE_X,
-    NARRATIVE_GATE_Y, NATURAL_MOONGATE_RESTORED_TERRAIN_TILE, NATURAL_MOONGATE_TERRAIN_TILE,
-    NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot,
-    OPEN_SPELL_COST, OPEN_SPELL_INDEX, PEER_COST, PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX,
-    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX,
-    PartyMember, PendingVehicleAcquisition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
+    IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, Inn, MAGIC_LOCK_COST,
+    MAGIC_LOCK_SPELL_INDEX, MoonstoneGateSlot, NARRATIVE_GATE_X, NARRATIVE_GATE_Y,
+    NATURAL_MOONGATE_RESTORED_TERRAIN_TILE, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST,
+    NEGATE_MAGIC_SPELL_INDEX, NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot, OPEN_SPELL_COST,
+    OPEN_SPELL_INDEX, PEER_COST, PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
+    POISON_WIND_SPELL_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
+    PendingVehicleAcquisition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
     QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, RESURRECT_COST, RESURRECT_SPELL_INDEX,
     SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
     SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
@@ -44,12 +45,13 @@ use u5_runtime::{
     Stable, TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
     TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST,
     TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TransportState, UUS_POR_SPELL_INDEX,
-    VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WHIRLPOOL_EMERGENCE_X, WHIRLPOOL_EMERGENCE_Y,
-    WORD_OF_POWER_SEAL_XOR, WORLD_SIDE, WindState, WordOfPowerSeal, WorldPlane, WorldReturn,
-    X_RAY_COST, X_RAY_SPELL_INDEX, combat_class_stats, default_party_equipment,
-    default_party_experience, default_party_intelligence, default_party_names,
-    default_party_roster, default_party_stay_counters, default_party_strengths, dungeon_cell_index,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TransportState, UNLOCK_MAGIC_COST,
+    UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
+    VAS_LOR_SPELL_INDEX, WHIRLPOOL_EMERGENCE_X, WHIRLPOOL_EMERGENCE_Y, WORD_OF_POWER_SEAL_XOR,
+    WORLD_SIDE, WindState, WordOfPowerSeal, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
+    combat_class_stats, default_party_equipment, default_party_experience,
+    default_party_intelligence, default_party_names, default_party_roster,
+    default_party_stay_counters, default_party_strengths, dungeon_cell_index,
     dungeon_room_entry_seed_for_direction, inn_base_room_rate, load_tile_atlas,
     shipwright_delivery_coordinate, shipwright_price, shop_intelligence_adjusted_price,
     shop_runtime::{
@@ -1860,6 +1862,38 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
+            name: "combat-utility-vanish-failure",
+            options: world.clone(),
+            script: &["C1AY"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-utility-open-failure",
+            options: world.clone(),
+            script: &["C1AS"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-utility-magic-lock-failure",
+            options: world.clone(),
+            script: &["C1AEP"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-utility-unlock-magic-failure",
+            options: world.clone(),
+            script: &["C1EIP"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
             name: "combat-magic-missile-target",
             options: world.clone(),
             script: &["C1GP7"],
@@ -2296,6 +2330,13 @@ fn apply_route_smoke_case_setup(
         }
         "combat-field-dispel-empty-refusal" => {
             seed_combat_field_dispel_route(state, None)?;
+        }
+        "combat-utility-vanish-failure"
+        | "combat-utility-open-failure"
+        | "combat-utility-magic-lock-failure"
+        | "combat-utility-unlock-magic-failure" => {
+            let (spell_index, cost) = combat_utility_route_spell(case_name);
+            seed_combat_utility_failure_route(state, spell_index, cost)?;
         }
         "combat-kill-gazer-eye-burst" => {
             seed_combat_special_death_route(state, 28)?;
@@ -3093,6 +3134,46 @@ fn seed_combat_field_dispel_route(
     Ok(())
 }
 
+fn combat_utility_route_spell(case_name: &str) -> (usize, u8) {
+    match case_name {
+        "combat-utility-vanish-failure" => (VANISH_SPELL_INDEX, VANISH_COST),
+        "combat-utility-magic-lock-failure" => (MAGIC_LOCK_SPELL_INDEX, MAGIC_LOCK_COST),
+        "combat-utility-unlock-magic-failure" => (UNLOCK_MAGIC_SPELL_INDEX, UNLOCK_MAGIC_COST),
+        _ => (OPEN_SPELL_INDEX, OPEN_SPELL_COST),
+    }
+}
+
+fn seed_combat_utility_failure_route(
+    state: &mut PlayState,
+    spell_index: usize,
+    cost: u8,
+) -> io::Result<()> {
+    state.party = vec![route_party_member(0, b'A', b'G', 20, 20)];
+    state.party_names = default_party_names(1);
+    state.party_experience = default_party_experience(1);
+    state.party_stay_counters = default_party_stay_counters(1);
+    state.party_strengths = vec![30];
+    state.party_intelligence = default_party_intelligence(1);
+    state.party_equipment = default_party_equipment(1);
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = cost;
+        caster.level = cost;
+    }
+    state.active_player = Some(0);
+    state.spell_charges[spell_index] = 1;
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    actors[0] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+
+    let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+    active_objects[0] = route_combat_active_object(0x4c, 5, 5, 0);
+    active_objects[1] = route_combat_active_object(0x50, 6, 5, 0);
+    state.enter_combat_frame(active_objects, actors)?;
+    state.combat_terrain[5][6] = 0x97;
+    Ok(())
+}
+
 fn combat_spell_route_code(case_name: &str) -> &'static str {
     match case_name {
         "combat-tremor-targets" => "IPVY",
@@ -3721,6 +3802,26 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not spend resources and fail on a missing combat field"
+                )));
+            }
+        }
+        "combat-utility-vanish-failure"
+        | "combat-utility-open-failure"
+        | "combat-utility-magic-lock-failure"
+        | "combat-utility-unlock-magic-failure" => {
+            let (spell_index, _) = combat_utility_route_spell(case_name);
+            if !state.combat_active
+                || state.spell_charges[spell_index] != 0
+                || state.party.first().is_none_or(|member| member.mana != 0)
+                || state.message != "Failed!"
+                || state
+                    .active_objects
+                    .get(1)
+                    .is_none_or(|object| object.tile != 0x50 || object.x != 6 || object.y != 5)
+                || state.combat_terrain[5][6] != 0x97
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the combat utility failure fallback without arena mutation"
                 )));
             }
         }

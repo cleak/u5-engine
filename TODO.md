@@ -38,7 +38,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-24 with 182 scripted route cases (including expanded active-shop/modal
+  2026-05-24 with 186 scripted route cases (including expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
@@ -48,6 +48,7 @@ Last known verification state:
   #44 sleeping/praying Talk refusals, public #48 Blink ray landing,
   Locate, Light/Open, restore-spell, active-effect, directed Sleep/Poison
   Wind/Death Wind/Flame Wind combat casts, combat field marker casts/removal,
+  combat utility fallback casts,
   targeted Magic Missile/Tremor/Repel Undead/Charm/Polymorph/Clone,
   Conjure/Swarm/Summon Daemon, special death-marker Kill combat spell casts,
   asset-backed combat-entry party descriptor routes, and combat terminal cleanup routes,
@@ -142,7 +143,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 473 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 481 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -272,8 +273,8 @@ Last known verification state:
   expansion added public #48 Blink
   `route-britannia-blink-east-ray-01-c1ip6` `17ceb1f94bc6c6e3`,
   Locate, Light/Open, restore-spell, active-effect, directed Sleep/Poison
-  Wind/Death Wind/Flame Wind combat casts, dungeon level,
-  dungeon field/dispel, and dungeon Open spell route frames,
+  Wind/Death Wind/Flame Wind combat casts, combat utility fallback casts,
+  dungeon level, dungeon field/dispel, and dungeon Open spell route frames,
   public #51 poison gas `route-castle-poison-gas-step-01-d`
   `33ebf44d5ea24373`, public #15 inn rest
   `route-shop-inn-rest-accept-02-y` `2591d02e2c602824`, public #13 sage
