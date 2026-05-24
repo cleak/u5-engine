@@ -20,8 +20,9 @@ Created on 2026-05-19. This document satisfies the completion criterion in
   tests live in `crates/u5-runtime/src/tests_inline/chunk_*.rs`.
 - "Status" is one of:
   - **Implemented** — engine fully covers the public spec.
-  - **Implemented (first-playable)** — engine covers what the public spec
-    publishes; remaining detail is a documented v1 deferral or local policy.
+  - **Implemented (public-depth)** — engine covers what the public spec
+    publishes; remaining detail is a documented v1 deferral, presentation
+    deferral, or local compatibility policy.
   - **Blocked on `cleak/u5-spec#NN`** — the engine has a safe placeholder while
     a public-spec clarification is pending.
   - **Presentation work** — gameplay behavior is implemented; remaining work is
@@ -176,7 +177,7 @@ Notes:
 | §7 Prerequisites | `magic.rs::cast_dispatcher_gate` (`CastGateOutcome`) | gate tests | Implemented |
 | §8 Spell effects | per-spell handlers in `play_state_impl/chunk_*.rs`; field placement in `magic.rs::spell_field_placement_byte` | field-cast and restoration/status spell PRNG tests | Implemented (Heal uses the public shared-PRNG roll path; Create Food uses the latest public tiny PRNG grant; non-combat Blink follows public #48 directional ray-to-farthest-grass behavior) |
 | §9 Casting in combat | `combat_frame.rs` cast dispatch; scene allow-mask | combat-cast tests in `chunk_23.rs` | Implemented |
-| §10 Virtue/shrine linkage | `shrine_virtue.rs` stat reward, ordained mask | shrine-meditation tests | Implemented |
+| §10 Virtue/shrine linkage | `shrine_virtue.rs` stat reward, ordained/Codex masks, Codex urn read state, and all-virtues-complete predicate | shrine-meditation, Codex urn, and Codex turn-in tests | Implemented |
 | §11 Z-stats integration | `z_stats.rs`, `stats_panel.rs` | z-stats render tests | Implemented |
 | §12 Persistence | `save_load.rs` spell-charge and reagent stock | save/load tests | Implemented |
 | §13 Boundaries | `magic.rs` 48-spell dispatch (no per-class adjustments) | parser tests | Implemented |
@@ -211,7 +212,7 @@ Notes:
 | §2 T-Talk command | `play_state_impl/chunk_04.rs` Talk dispatch, position check | Talk tests in `chunk_21.rs` | Implemented |
 | §3 Four `.TLK` files | `tlk_runner.rs` filename dispatch | TLK file load tests | Implemented |
 | §4 NPC blob structure | `tlk_runner.rs` leading-entry parser, high-bit strip | parser tests | Implemented |
-| §5 Keyword scan | `conversation_session.rs::tlk_player_input_kind`, reserved-word table | keyword-match tests | Implemented (profanity-rebuke table absent — no spec issue filed; default `I cannot help thee...` message is rendered) |
+| §5 Keyword scan | `conversation_session.rs::tlk_player_input_kind`, reserved-word table | keyword-match tests | Implemented for the five functional reserved words; `cleak/u5-spec#58` tracks the unpublished 29 rebuke words and exact pause/presentation behavior, so other unmatched input uses the normal no-match response |
 | §6 Keyword input loop | `conversation_session.rs::AwaitingKeyword` phase | phase tests | Implemented |
 | §7 Byte runner | `tlk_runner.rs` full control-code dispatch | per-control-code tests | Implemented |
 | §7.1 Printable text | `tlk_runner.rs` word-buffer, soft-break | text emission tests | Implemented |
@@ -265,7 +266,7 @@ through the asset-backed Talk command path.
 
 | Section | Evidence | Tests | Status |
 |--------|----------|-------|--------|
-| §1–§11 | `karma.rs` selector, `shrine_virtue.rs`, `endmsg_io.rs` (KARMA.DAT 6-record verdicts), `tlk_runner.rs::tlk_if_else_alt_branches` | karma/threshold tests in `chunk_21.rs` | Implemented (`0x85` toll progress — `cleak/u5-spec#27`) |
+| §1–§11 | `karma.rs` selector, `shrine_virtue.rs` Codex turn-in rewards, `endmsg_io.rs` (KARMA.DAT 6-record verdicts), `tlk_runner.rs::tlk_if_else_alt_branches` | karma/threshold and Codex turn-in tests in chunks 13, 16, and 21 | Implemented (`0x85` toll progress — `cleak/u5-spec#27`) |
 
 ### `systems/intro.md`, `systems/chargen.md`, `systems/u4-transfer.md`
 
@@ -433,7 +434,7 @@ work in the public spec.
 
 These are visual/audio polish items called out in `TODO.md` Milestone 3 and the
 spec's "exact visual parity deferrals" section. They do not block gameplay
-correctness; the engine renders the published content with first-playable
+correctness; the engine renders the published content with clean substitute
 overlays where exact historical pixels are not public.
 
 - Title-tick exact historical silhouette pixels and palette fades.

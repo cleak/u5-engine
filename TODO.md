@@ -317,9 +317,8 @@ Last known verification state:
 
 Current worktree context when this TODO was refreshed:
 
-- `git status --short` in `u5-engine` already contained broad local edits from
-  the ongoing implementation/audit pass; preserve unrelated user changes.
-- `git status --short` was clean in `u5-spec` at `e34af6b`.
+- `u5-engine` was clean after `af47e8b Add Bevy visual route reload checkpoints`.
+- `u5-spec` was current with GitHub `origin/master` at `da0654d`.
 - `journal/capture/notes.py` was not present in the workspace, engine, or spec
   repository.
 - Town-family exit thresholds now prompt both when stepped onto and when
@@ -351,8 +350,8 @@ Current worktree context when this TODO was refreshed:
   `cleak/u5-spec#47`: rest advances time without a separate direct recovery
   grant. Hourly Ring of Regeneration is time-owned, non-combat only, checks the
   ring equipment slot, heals living wearers by exactly 1 HP on the 1-in-8 roll,
-  and clamps at max HP. Exact original random-jolt/camp recovery details remain
-  unresolved.
+  and clamps at max HP. Remaining work here is prompt/pacing presentation, not
+  the #47 recovery contract.
 - Non-combat Blink follows the latest public `cleak/u5-spec#48` guidance: it
   prompts for a cardinal direction and lands on the farthest legal grass cell
   along the bounded ray. Route-smoke and Bevy visual-route coverage exercise an
@@ -394,13 +393,12 @@ Current worktree context when this TODO was refreshed:
   the party; successful destruction marks the native hideout byte and ORs the
   save-backed quest-progress word bits. Route smoke covers Lycaeum, Empath
   Abbey, and Serpent's Hold native paths.
-- The 2026-05-23 clean-engine audit applied the remaining spec-backed tavern
-  drink-letter correction, expanded Doom combat visual routes, implemented the
-  latest dungeon-room placement contract, and retired #1/#3/#8/#18/#31/#47/#54/#56
-  as gameplay blockers. The current response-needed public blockers are #12
-  for non-Doom dungeon-room special-placement post-writes and #13 for exact
-  sage fee/short-funds text source; our comments are currently latest on both.
-  Current answers for #41/#43/#51 have been applied.
+- The 2026-05-24 clean-engine audit retired #1/#3/#5/#8/#9/#18/#31/#38/#41/#43/#47/#51/#56
+  as gameplay blockers after applying the current public answers and checked-in
+  spec. Current response-needed public blockers are #10, #11, #12/#19, #13,
+  #36, #49, #54, #57, and #58; clean-engine follow-up comments are currently
+  latest on each of those issues, so do not post duplicate comments unless new
+  spec evidence or implementation questions appear.
 - Shop session regression tests now lock the corrected public scene-byte rows
   for taverns, shipwrights, reagent vendors, guildmasters, inns, healers, and
   arms-shop identities, including old wrong-scene negative cases from the
@@ -463,7 +461,7 @@ changes. Do not revert unrelated work.
   diagnostic, or hash-based unless the user supplies clean-room-safe expected
   values.
 - When exact original behavior is not public, prefer a sidecar table or
-  deterministic first-playable approximation and document the gap clearly.
+  deterministic clean substitute and document the gap clearly.
 
 ## Immediate Next Actions
 
@@ -631,6 +629,7 @@ tables are not yet public or not yet encoded.
   - `world_damage_tiles.tsv`
   - `world_encounters.tsv` (now overrides matching terrain before native fallback)
   - `shrines.tsv`
+  - `codex_urns.tsv`
   - `dungeon_deeper_transitions.tsv`
   - `dungeon_teleports.tsv`
   - `dungeon_exit_tiles.tsv`
@@ -644,9 +643,11 @@ tables are not yet public or not yet encoded.
   - `town_trap_doors.tsv`
   - `town_exit_tiles.tsv`
   - `town_locks.tsv`
+  - `eternal_flames.tsv` (override/extension for the public native flame table)
   - `moongates.tsv`
   - `location_floor_pages.tsv`
   - `location_entry_y.tsv`
+  - `tile_passability.bin`
   - `common_words.tsv` (now an override for the public issue #33/#40 built-in
     common-word dictionary)
   - `end_narrative_windows.tsv` (now an override for public END.DAT
@@ -665,7 +666,7 @@ tables are not yet public or not yet encoded.
 ## Milestone 2: Save/Load Completeness
 
 Goal: make save/load robust enough that a player can leave and resume a
-first-playable session without losing supported state.
+clean-engine session without losing supported state.
 
 - Preserve unknown bytes.
   - Keep round-tripping unmapped `SAVED.GAM` and `SAVED.OOL` bytes.
@@ -699,15 +700,19 @@ first-playable session without losing supported state.
     - complete equipment/readied-item fields,
     - exact status byte transitions for all supported spells and hazards,
     - exact HP/MP recovery and hourly poison/starvation damage formulas where
-      still first-playable.
+      future public spec updates refine the current contract.
 
 - Quest and shrine state.
   - Current shrine implementation uses public ordained/Codex masks and
-    first-playable standing.
+    clean standing semantics.
+  - Codex urn sidecar rows, virtue-page stamping, turn-in stat rewards,
+    all-virtues-complete detection, and the menu-level Codex challenge are
+    implemented and tested.
   - Remaining work:
     - exact shrine standing byte layout,
     - complete quest flags related to doors, NPCs, and permanent world changes,
-    - save/load tests for shrine completion and Codex turn-in.
+    - continue broadening save/load tests for shrine completion, Codex urns,
+      and Codex turn-in.
 
 - Vehicles and timing tags.
   - Current tests cover ship/skiff/carpet/horse transport markers, hull/skiff
@@ -728,13 +733,12 @@ experience.
 
 ### Bevy Integration
 
-- A first visual slice now exists behind `cargo run --features visual --
-  --visual ...`. It opens one Bevy window, renders a single CPU-generated
-  RGBA framebuffer of the current viewport into one `Image`, and routes
-  keyboard input through the same handlers used by the terminal play loop.
-  Town/world scenes use the tile-atlas top-down view; dungeon scenes use a
-  clean first-person raster with the public light gate, wall/feature cues, and
-  active dungeon object overlays.
+- The Bevy visual frontend now exists behind `cargo run --features visual --
+  --visual ...`. It opens one Bevy window, renders the shared CPU-generated
+  frame surfaces into textures, and routes keyboard input through the same
+  handlers used by the terminal play loop. Town/world scenes use the tile-atlas
+  top-down view; dungeon scenes use a clean first-person raster with the public
+  light gate, wall/feature cues, and active dungeon object overlays.
 
 - Establish a Bevy app shell. (visual slice landed)
   - Game state resource wraps or adapts the existing `PlayState`. (done)
@@ -804,13 +808,13 @@ experience.
   - exact historical title-tick silhouette pixels,
   - exact remote-view panel for X-Ray/Peer,
   - exact dungeon minimap glyph/floodability edge cases.
-- These are not required for a first playable, but should be tracked if visual
-  parity becomes the target.
+- These do not block current public-depth gameplay, but should be tracked if
+  exact visual parity becomes the target.
 
 ## Milestone 4: Magic And Effects
 
-Goal: finish non-combat spell effects and keep combat-only spells safely routed
-until combat exists.
+Goal: finish non-combat spell effects and keep combat-only spells aligned with
+the public combat contract while exact combat presentation evolves.
 
 - Spell parser and resources.
   - Existing parser/resource gates are broad and heavily tested.
@@ -825,7 +829,7 @@ until combat exists.
     `C:\Projects\Rust\u5-clean\u5-spec\systems\magic.md`.
   - For each spell, classify:
     - already implemented,
-    - implemented as first-playable approximation,
+    - implemented as a clean substitute,
     - combat-only,
     - unimplemented but allowed,
     - out-of-scene refusal.
@@ -866,7 +870,7 @@ until combat exists.
 
 ## Milestone 5: Combat Handoff And Combat
 
-Goal: continue replacing first-playable combat coverage with spec-backed parity
+Goal: continue replacing substitute combat coverage with spec-backed parity
 as public details become available.
 
 - Current combat handoff.
@@ -1012,7 +1016,7 @@ Goal: keep asset readers complete while preserving repository cleanliness.
   - no raw asset dumps in repo outputs.
 
 - Areas to audit:
-  - all `.DAT` map and metadata files used by first-playable systems,
+  - all `.DAT` map and metadata files used by runtime systems,
   - all `.OOL` active-object overlays,
   - tile sheets and masks,
   - fonts,
@@ -1066,14 +1070,14 @@ Goal: make the project approachable without reading the entire codebase.
   - Command routing reference is now summarized in `docs/commands.md`.
   - Architecture notes are now summarized in `docs/architecture.md`.
 
-- Add a first-playable status matrix.
+- Keep the clean-engine status matrix current.
   - Rows: each command/system.
   - Columns:
     - world,
     - town,
     - dungeon,
     - implemented,
-    - first-playable approximation,
+    - clean substitute,
     - sidecar required,
     - tests,
     - public-spec gap.
@@ -1096,7 +1100,7 @@ Goal: make the project approachable without reading the entire codebase.
 - Keep clean-room provenance clear.
   - Every behavior derived from public spec should point to the relevant spec
     file.
-  - Every behavior that is first-playable-only should say so.
+  - Every behavior that is a clean substitute should say so.
   - Every exactness gap should say whether it is blocked on public spec,
     intentional v1 deferral, or Bevy presentation work.
 

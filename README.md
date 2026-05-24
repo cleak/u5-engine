@@ -1,24 +1,22 @@
 # u5-engine
 
-Verification harness and in-progress clean-room engine for the Ultima V specs.
+Verification harness and clean-room engine for the public Ultima V specs.
 
-This is not a full replacement engine yet, but the executable has grown beyond
-the original Lord British castle/throne-room slice. It reads the user's local
-Ultima V data at runtime, verifies public specs against real files, and exposes
-terminal plus Bevy play loops backed by the same runtime state:
+The executable exposes terminal and Bevy play loops backed by the same runtime
+state. It reads the user's local Ultima V data at runtime, verifies public specs
+against real files, and keeps raw game data out of the repository:
 
 - town-mode scene partitioning;
 - per-class `*.DAT`, `*.NPC`, and `*.TLK` joins;
-- location floor loading and render-class hashing;
-- marker, door, and stair detection;
-- schedule waypoint sampling;
-- conversation-name lookup;
+- save/load, Journey Onward, Create Character, and Ultima IV transfer flows;
+- world, town, dungeon, combat, shop, conversation, magic, rest/camp,
+  Blackthorn, Codex, Shadowlord, and endgame runtime paths;
 - public LZW graphics-envelope decoding for tile atlases, image directories,
   sprite/mask sheets, standalone `.BIT` bitmaps, and proportional/fixed font
   rasterization;
-- atlas-backed top-down viewport rasterization for town/world scenes plus a
-  clean first-person dungeon raster; and
-- a small class-derived movement/pathfinding smoke test.
+- atlas-backed top-down, dungeon, combat, intro, modal, status, and endgame
+  frame rendering; and
+- asset-backed route, frame, and visual-route smoke suites.
 
 The repository does not include game assets. Run it with a local Ultima V
 install path:
@@ -42,16 +40,15 @@ under `docs/`:
   test evidence.
 - `docs/sidecars.md` - clean-room TSV/binary sidecar files accepted at runtime.
 - `docs/status-matrix.md` - implementation status matrix and verification
-  commands for the current first-playable engine.
+  commands for the current clean engine.
 
-There is also an early first-playable terminal slice that drops the player into
-the Lord British castle binding verified by the report:
+For direct terminal play, start the shared runtime play loop:
 
 ```powershell
 cargo run -- --play C:\Games\U5-Clean
 ```
 
-## Bevy visual mode (first slice)
+## Bevy visual mode
 
 A minimal Bevy frontend renders the same `PlayState` to a real window instead
 of the terminal. It is feature-gated so the default build keeps the lean
@@ -136,16 +133,19 @@ cargo run -- --save-frame screenshots\dungeon.png --scene DUNGEON:0 --play-scrip
 ```
 
 `--save-frame-suite <DIR>` writes representative local-asset PNGs for
-Britannia, a moved Britannia frame, Castle:0, a lit Dungeon:0 frame, a synthetic
-combat viewport, and an endgame status panel, plus a sanitized manifest with
-dimensions, frame kinds, positions, and hashes:
+Britannia, a moved Britannia frame, Castle:0, a lit Dungeon:0 frame, composed
+combat, View/Peer/X-Ray/chunk-map overlays, intro/status/modal surfaces, and an
+endgame status panel, plus a sanitized manifest with dimensions, frame kinds,
+positions, and hashes. The Bevy feature also provides `--visual-frame-suite`
+for 35 composed Bevy-owned frames and `--visual-route-suite` for 552 per-step
+route frames:
 
 ```powershell
 cargo run -- --save-frame-suite target\frame-suite C:\Games\U5-Clean
 ```
 
 For repeatable smoke checks, `--play-script` runs a semicolon-separated command
-list through the same first-playable input handlers and then exits. Script mode
+list through the same runtime input handlers and then exits. Script mode
 prints compact state summaries and optional raster hashes instead of rendered
 map frames. Use `empty` or `pass` for an Enter/Space pass turn, and `idle:N`
 for N no-turn visual ticks:
@@ -154,10 +154,9 @@ for N no-turn visual ticks:
 cargo run -- --play-script "d;empty;idle:4;q" --raster-diagnostics C:\Games\U5-Clean
 ```
 
-`--route-smoke` runs a bundled local-asset route suite covering default castle
-play, Britannia movement, Z-stats modal routing, debug-enter town/dungeon
-transitions, and dungeon exit refusal. It prints sanitized state lines and
-raster hashes:
+`--route-smoke` runs a bundled 213-case local-asset route suite covering world,
+town, dungeon, combat, shop, endgame, transition, save/reload, and modal
+routes. It prints sanitized state lines and raster hashes:
 
 ```powershell
 cargo run -- --route-smoke C:\Games\U5-Clean
@@ -190,7 +189,7 @@ In top-down scenes, bare `Q` opens the resident save-and-continue prompt;
 `QY`/`QN` remain inline shortcuts. In dungeon mode, uppercase `Q` opens the
 public mode-loop `Exit to DOS?` prompt (`QY` exits the terminal play loop,
 `QN` cancels) and lowercase `q` remains a harness-only immediate quit.
-`Z` prints a first-playable text status summary covering active area, position,
+`Z` prints a text status summary covering active area, position,
 time, transport, wind, typeahead status, light, inventory, mixed spells, and
 runtime party order without spending a turn.
 `K` climbs unambiguous town stairs and walking onto those stair tiles also
@@ -199,7 +198,7 @@ two-way stair direction where the public subtype table is still open, and
 two-way town stairs prompt and let `<`/`>` choose the floor direction from the
 stair cell. Outdoor `K` follows the spec Grapple/on-foot gates and exposes
 semantic `--grapple` plus legacy `--climbing-gear` startup hooks for
-first-playable class-derived mountain-family climbs. Fall checks run against
+mountain-family climbs. Fall checks run against
 living saved-party members and use the saved roster Dexterity byte at `0x0D`;
 the Grapple gate reads the legacy magic-powder/climbing-gear byte at `0x0209`.
 Outdoor `K` also respects clean lava sidecar blockers and fires clean world
@@ -221,7 +220,7 @@ generic active-object blocking.
 Town-family `T`alk now prompts for a cardinal direction before resolving the
 scheduled NPC's dialogue id, including one-cell talk-through over table/counter
 furniture, through the matching runtime `.TLK` envelope and reports the clean
-first-playable conversation header. Inline `T<keyword>` input, such as `TJOB`,
+conversation header. Inline `T<keyword>` input, such as `TJOB`,
 runs a one-shot keyword lookup against the decoded `.TLK` fields using the
 public space-boundary match rule and applies supported TLK byte-runner side
 effects. Bare Talk opens the interactive conversation keyword loop when raw
@@ -241,13 +240,13 @@ forward/back, `A`/`D` turn left/right, blocked cardinal movement reports the
 public `Blocked!` refusal, `K` climbs one-way ladders or prompts on two-way
 ladders where `<`/`>` choose up/down, non-ladders return the public
 `Not climbable!` refusal, and `L` looks forward. The
-terminal renderer uses a first-playable text proxy for the public first-person
+terminal renderer uses a clean text proxy for the public first-person
 dungeon wireframe: it reports the current cell, up to
 four forward bands, side cells at each band, and hides bands behind the first
 front wall or boundary. `O` opens an underfoot dungeon chest in the visit-local
 runtime image, and `G` gets an underfoot dungeon chest through the same
-visit-local chest marker path, with the full content/trap generator still out
-of scope. `S` searches the facing dungeon cell: clean sidecar rows can reveal
+visit-local chest marker path with generated content/trap handling. `S`
+searches the facing dungeon cell: clean sidecar rows can reveal
 secret doors, public chest cells enter the same visit-local chest path, and
 exact public bomb-trap bytes are marked as fired without changing level; other
 public dungeon cell classes narrate without triggering movement tile effects.
@@ -280,7 +279,7 @@ subtypes to the selected party member without spending a turn. `T`alk reports
 the stock no-response line and world/vehicle command
 letters are routed as dungeon refusals before they can trigger overworld
 handlers. `I`gnite consumes a torch and starts or extends the torch counter with
-deterministic first-playable timing.
+deterministic clean timing.
 Dungeon command letters whose full systems are outside this slice no longer fall
 through to vi diagonal movement fallbacks. Bare `C` opens a spell-name prompt
 that accepts compact selector letters, ignores `J`/`O`, supports backspace and
@@ -324,14 +323,14 @@ stair/exit/trap-door transition cells when metadata is available, and refusing
 with the stock `Not here!` line when none exists. `Y` toggles ship sails.
 Horse, ship, skiff, and magic-carpet boarding now accepts the public parked
 object bytes and saves the documented transport marker byte for the active
-state, while still accepting the first-playable visual tile ids used by older
-debug hooks. Balloon support is currently a semantic debug transport only: it
+state, while still accepting the legacy visual tile ids used by older debug
+hooks. Balloon support is currently a semantic debug transport only: it
 follows wind direction over terrain, overflies clean damaging-terrain/waterfall
 sidecar effects, and can X-it only when the current cell is not mountain or
 wall-like; B-Board remains intentionally unpromoted for balloons.
 Furled ships use manual water movement; hoisted sails use the harness wind
 state, where calm/perpendicular wind stalls and same-axis wind advances on a
-deterministic first-playable cadence. After a stalled sail attempt, Pass
+deterministic clean cadence. After a stalled sail attempt, Pass
 reports and clears the short-lived wind-stall feedback; changing sail mode also
 starts a fresh wind-control cadence and clears pending stall feedback. `C1IL`
 and `C1LV` run the narrow Light and Great Light C-Cast hooks, setting the
@@ -384,10 +383,10 @@ picker/coordinate instead of the non-combat ray.
 Unlock Magic hooks from party slot 1, rewriting facing magic-lock rows supplied
 by the clean `town_locks.tsv` sidecar. `C1IQW` casts the narrow Peer hook in
 dungeon, indoor, or overworld mode, spending spell resources for the same
-first-playable modal map overlay as gem view without requiring or consuming a
+clean modal map overlay as gem view without requiring or consuming a
 gem.
 `C1AWY` casts the narrow X-Ray hook in indoor or overworld mode, using the
-same first-playable modal surface map overlay after the saved charge/MP/level
+same clean modal surface map overlay after the saved charge/MP/level
 gates succeed.
 `C1PRV2` casts the narrow Gate Travel hook from party slot 1 to saved Moonstone
 phase 2 in dungeon, indoor, and overworld play states; it refuses shipboard
@@ -408,17 +407,16 @@ charges, and zero, empty, or insufficient selections leave stock unchanged.
 When the party stands on a clean `shrines.tsv` row, bare `M` prompts for the
 shrine mantra, then prompts for an offering digit on completed shrines.
 `M<mantra>` and `M<mantra>/<offering-digit>` remain inline shortcuts for the
-same first-playable shrine meditation state machine against the public ordained
-and Codex quest masks while the exact persistent standing-byte layout remains
-open.
+same shrine meditation state machine against the public ordained and Codex
+quest masks while the exact persistent standing-byte layout remains open.
 `UT`/`UI` use a torch, `UG`/`UV` use a gem, and `UK`/`UJ` use a key through the
-shared first-playable Use command wrapper; key use reuses the same sidecar-backed
-town lock and dungeon heavy-door path as `J`. `U1` through `U8` bury the
+shared Use command wrapper; key use reuses the same sidecar-backed town lock
+and dungeon heavy-door path as `J`. `U1` through `U8` bury the
 corresponding Moonstone phase at the current non-dungeon location when the
 underfoot tile matches the public Moonstone bury set (`4..10`, `44`, or `45`).
 Surface and town `S`earch can also surface a saved Moonstone phase as a
-first-playable strange-rock pickup, and `G`et clears that pickup while
-invalidating the associated Gate Travel slot.
+clean strange-rock pickup, and `G`et clears that pickup while invalidating the
+associated Gate Travel slot.
 Save export still preserves existing non-calm wind bytes rather than inventing
 an unverified byte mapping.
 `N<from><to>` swaps two one-based runtime party positions and consumes a turn
@@ -428,7 +426,7 @@ slot twice is accepted as a turn-consuming no-op. The swap affects later
 party-position prompts such as `C2...` casts and runtime damage checks, and
 save export writes the reordered active records back to the front roster slots.
 In overworld ship mode, bare `F`/`f` opens the fire direction prompt and an
-inline direction (for example `f4`) fires a first-playable broadside:
+inline direction (for example `f4`) fires a clean broadside:
 bow/stern shots refuse, legal broadsides trace up to three cells, and the first
 target object hit has its active-object `+5` depletion byte reduced by a
 `1..=20` roll. Targets remain active on low results and clear their active
@@ -442,7 +440,7 @@ Town object hits also reduce moral standing by 5 and do not use ship-broadside
 depletion. Destroying a door also clears the active door auto-close tracker.
 
 In top-down scenes, bare `Q` opens the save prompt, `QY` writes a
-first-playable save-and-continue snapshot to `SAVED.GAM` and `SAVED.OOL`, and
+save-and-continue snapshot to `SAVED.GAM` and `SAVED.OOL`, and
 `QN` cancels without disk writes. The writer patches the supported scene,
 position,
 calendar/clock, party status/HP/MP/level, spell-charge stock, reagent stock,
@@ -464,7 +462,7 @@ clean-return-checked location exits, clean-room sidecar-backed town and
 overworld Get plus town Push, trap doors, town exit tiles, Hole-up rest, and a
 public #43 Look-special path for top-down fountains, scene-gated wishing wells,
 death-vision active objects, and sign/poster active-object classes, plus a clean-room
-first-playable dungeon text view with public-spec movement and ladder
+clean dungeon text view with public-spec movement and ladder
 transitions plus public pit, bomb trap, and typed energy-field status/damage
 reactions, fountain drink effects, underfoot chest opening, torch/light blackout,
 gem-backed map views, sidecar-backed scripted teleports and heavy-door opening,
@@ -474,7 +472,7 @@ off-floor schedule changes detach or attach visible slots by zeroing and
 first-empty allocation while exact stair subtype routing can be supplied through
 clean sidecar metadata. Overworld and dungeon turns leave any stale or synthetic
 schedule state inert. Town entry also attaches the high-indexed player phantom
-NPC to a sentinel active-object row; first-playable collision, rendering, and
+NPC to a sentinel active-object row; collision, rendering, and
 line-of-sight helpers keep that sentinel logical-only so the canonical player
 remains slot zero.
 Town floor entry and reloads harvest asterisk spawn markers and `0x48`/`0x49`
@@ -515,7 +513,7 @@ transitions run a zero-minute cleanup that refreshes the cached ambient
 daylight/visibility-dirty state without spending a turn. Consumed turn cleanup
 also reasserts slot zero as the canonical player/avatar active object before
 NPC and active-object updates. Clean sidecar-backed chasm falls apply
-first-playable fall damage only to conscious party members.
+deterministic clean fall damage only to conscious party members.
 Snapshot-backed interior entries start on foot while preserving the outside
 world snapshot; exits restore the saved world grid, active objects, boarded
 transport, and timing/status plus ship-sailing cadence/refusal feedback, while
@@ -543,7 +541,7 @@ the terminal view dirty for the next redraw. Runtime
 vehicle/fire removals, overworld scroll-base off-neighborhood pruning, town
 floor changes, and scheduled NPC relinking preserve table indices by zeroing
 non-player slot type bytes. Saved/OOL
-active-object decoders and the first-playable save writer keep empty non-player
+active-object decoders and the save writer keep empty non-player
 slot positions and payload bytes, plane transitions carry a runtime per-plane
 overlay cache without rewriting local asset files during movement, and vehicle
 exit or NPC relinking parks into the first empty active-object slot before
@@ -695,7 +693,7 @@ Matching `town_locks.tsv` rows make `O` refuse the locked cell without spending
 a turn. `J` with keys rewrites ordinary locked cells to `UNLOCKED_TILE`, marks
 the visit-local map dirty, and consumes one indoor turn; `MAGIC` rows report
 the magic-lock refusal without spending a turn or key. Missing rows keep the
-existing first-playable door behavior.
+existing clean fallback door behavior.
 
 Non-combat Blink (`In Por`) follows the public `cleak/u5-spec#48` rule. After
 the normal spell gates spend charge and mana, the spell prompts for a cardinal
@@ -726,12 +724,12 @@ handshake. Talk-entered shop sessions cover arms, healers, inns, taverns,
 sages, reagent sellers, guilds, shipwrights, horse traders, and companion
 pickup/dropoff flows through the shared prompt dispatcher. Use
 `frigate:x,y[,skiffs]` to place a ship-family active object with the
-first-playable full-hull auxiliary value and the supplied skiff count, or
+clean full-hull auxiliary value and the supplied skiff count, or
 `skiff:x,y` to place a standalone skiff.
 
-Overworld fixed-location entry reports a diagnostic until clean entrance
-coordinates are published. If you have a clean-room coordinate table, place it
-next to the game data as `world_locations.tsv` with one row per entry:
+Overworld fixed-location entry uses the public stock location table built into
+the engine. `world_locations.tsv` is an optional clean override/extension for
+focused tests and newly published rows:
 
 ```text
 # PLANE X Y TARGET [TOWN_ENTRY_Y] [TILE]
@@ -739,7 +737,6 @@ BRITANNIA 0 0 CASTLE:0 7 24
 UNDERWORLD 0 0 DUNGEON:0 24
 ```
 
-The repository intentionally does not ship that coordinate table.
 For town-family targets, the optional fifth column is the clean
 `LocationEntryYTable` value; X is fixed at 15 and floor is 0. A town row can use
 an optional sixth source-tile guard after that entry Y, while a dungeon row can
@@ -766,7 +763,7 @@ Rows are Britannia-only and use the public virtue order/mantras. Optional tile
 guards prevent stale authored coordinates from firing after a map edit. The
 runtime tracks ordained and Codex masks at the public save offsets and applies
 the public shrine stat rewards to the Avatar stat snapshot; shrine standing is
-kept as first-playable runtime state until its exact save layout is published.
+kept as runtime-only state until its exact save layout is published.
 
 Surface/underworld chasm and ascent transitions can be supplied as
 `world_plane_transitions.tsv`:
@@ -791,7 +788,7 @@ map edits.
 Mounted-horse movement follows the public one-cell overland step contract, so
 transition and current-sweep rows only fire when the accepted destination cell
 itself matches the sidecar row.
-Britannia-to-Underworld falls also apply deterministic first-playable fall
+Britannia-to-Underworld falls also apply deterministic clean fall
 damage to living saved-party members; ascent rows only move the party between
 planes.
 
@@ -814,7 +811,7 @@ is queued. The optional tile guard keeps stale coordinates from firing after
 local map edits.
 
 World damaging terrain includes the public molten-lava tile `0x8F`; foot and
-carpet travel can enter it and take deterministic first-playable lava damage,
+carpet travel can enter it and take deterministic clean lava damage,
 while mounted horses and watercraft are blocked. Additional authored damage
 cells can be supplied as a clean-room sidecar while the exact water/current
 damage split and original damage formula remain open:
@@ -832,10 +829,10 @@ Rows currently support `LAVA` and `DROWNING`; `WATER` is accepted as a
 `DROWNING` alias. A matching `LAVA` row marks the cell as lava for movement
 rules: magic carpets can cross it, other transports are blocked except the
 semantic debug balloon, and a successful carpet crossing applies deterministic
-first-playable damage to living party members while balloon overflight does not.
+clean damage to living party members while balloon overflight does not.
 A matching `DROWNING`/`WATER` row marks an authored water/current cell as
 enterable by foot and water/air/carpet transports, blocks horses, and applies
-deterministic first-playable damage only to foot travel. Explicit world debug
+deterministic clean damage only to foot travel. Explicit world debug
 starts validate sidecar transport allowance so focused tests can start on
 authored hazards, while automatic fallback start selection skips cells that
 would damage the selected transport. Consumed top-down commands while standing
@@ -905,7 +902,7 @@ rendered on the surface view. A destination coordinate of `255 255` is the
 public single-ended sentinel: the origin can render and prompt, but it does not
 render a destination overlay or teleport the party. Stepping onto a visible
 sidecar origin, or completing any turn-consuming top-down action while already
-standing on one, queues the first-playable landing prompt; `Y` teleports
+standing on one, queues the clean landing prompt; `Y` teleports
 through the queued destination without spending a second turn, while `N` leaves
 the party on the gate.
 
@@ -997,8 +994,9 @@ shared inventory effect, marks visibility dirty, and consumes one turn. Missing
 rows, mismatched floor/coordinate data, or a mismatched optional tile guard
 leave the object in place and fall through to the normal active-object refusal.
 
-Eternal Flame coordinates can be supplied as clean-room metadata while the
-public coordinate catalog remains deferred:
+The three native Eternal Flame coordinates are built in from the public spec.
+`eternal_flames.tsv` remains an optional clean override/extension for focused
+tests:
 
 ```text
 # TARGET FLOOR X Y FLAME [TILE]
@@ -1007,11 +1005,11 @@ UNDERWORLD -1 20 40 LOVE
 CASTLE:0 0 12 10 COURAGE 80
 ```
 
-`U`se on a carried Shadowlord shard now checks the existing public shard
-preconditions, then looks for a matching `eternal_flames.tsv` row at the
-party's current target/floor/coordinate. The row's `FLAME` must be the opposed
-principle for that shard, and the optional tile guard checks the current map
-tile. On success the shard is consumed, the matching Shadowlord slot is marked
+`U`se on a carried Shadowlord shard checks the public shard preconditions, then
+matches the party's target/floor/coordinate against the native flame table plus
+any `eternal_flames.tsv` override rows. The flame must be the opposed principle
+for that shard, and optional sidecar tile guards check the current map tile. On
+success the shard is consumed, the matching Shadowlord slot is marked
 vanquished, matching active Shadowlord encounter objects on the current floor
 are cleared, and one turn is consumed. Missing rows, stale tile guards, or the
 wrong flame keep the existing no-effect branch without consuming the shard.
@@ -1051,8 +1049,8 @@ ordinary rest advances time without a separate direct HP/MP recovery grant.
 Encounter
 interruption is owned by the overworld/dungeon rest-with-watch path rather than
 town beds.
-In overworld and dungeon modes the same `h8` input runs the first-playable
-rest-with-watch path: each rested hour performs three 20-minute cleanup ticks,
+In overworld and dungeon modes the same `h8` input runs the rest-with-watch
+path: each rested hour performs three 20-minute cleanup ticks,
 including time, light counters, animation, and existing area-specific per-turn
 hooks such as authored overworld damage tiles. A supplied watcher must be a
 living Good-status party member; invalid watcher choices leave no watch set.
@@ -1075,26 +1073,12 @@ top-down commands while already standing on a matching row apply the same
 underfoot trap-door transition after turn cleanup without spending a second
 turn. Missing or mismatched rows behave like ordinary movement.
 
-Town poison-gas doorway cells can be supplied as clean-room sidecar metadata:
-
-```text
-# SCENE FLOOR X Y [TILE]
-CASTLE:0 0 12 9 55
-```
-
-The runtime also accepts clean tile attributes:
-
-```text
-# TILE TILE_CLASS VEHICLE_BYTE
-55 4 0x1C
-```
-
-Stepping onto a tile whose attributes match the public `cleak/u5-spec#51`
-predicate (`tile_class == 4` and `vehicle_byte == 0x1C`), or onto a matching
-coordinate row, runs the town underfoot poison-gas branch against non-poisoned
-party slots with the latest public `0..=29` per-slot roll compared against each
-member's Dexterity. The coordinate sidecar remains a fallback until the full
-resident tile-attribute table is published in the clean spec.
+Stepping onto a native town tile `0x04` with foot transport runs the public
+`cleak/u5-spec#51` poison-gas branch against non-poisoned party slots with the
+latest public `0..=29` per-slot roll compared against each member's Dexterity.
+Older coordinate and tile-attribute poison-gas sidecars are kept only for
+compatibility with older clean saves/tests and no longer trigger the native
+branch.
 
 Town boundary exits use the native public threshold tile `0x59`. Additional
 authored exit cells can be supplied as clean-room sidecar metadata:
@@ -1203,9 +1187,9 @@ with inline confirmation shortcuts still accepted: enter `QY` to write
 per-plane mirrors, or `QN` to cancel. Inactive world-plane object staging comes
 from those per-plane mirrors, with the active plane supplied by live state; the
 underworld mirror is defensively re-flushed in the normal save entry mode. The
-first-playable writer intentionally leaves `INIT.GAM`, `INIT.OOL`, and static
-map assets alone; dungeon-mode saves write the current 512-byte dungeon working
-buffer into the save image. After `--from-init`, unresolved `SAVED.GAM` bytes are
+save writer intentionally leaves `INIT.GAM`, `INIT.OOL`, and static map assets
+alone; dungeon-mode saves write the current 512-byte dungeon working buffer
+into the save image. After `--from-init`, unresolved `SAVED.GAM` bytes are
 templated from `INIT.GAM` instead of any stale saved game.
 
 Use `--from-init` to seed the same harness from `INIT.GAM` without running
