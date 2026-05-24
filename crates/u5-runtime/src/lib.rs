@@ -423,6 +423,10 @@ pub use party::{
     resurrection_max_hp_for_level,
 };
 pub use play_options::*;
+pub use play_state_impl::{
+    town_free_roaming_direction, town_free_roaming_facing_byte, town_free_roaming_object_eligible,
+    town_free_roaming_pen_tile_blocks,
+};
 pub use play_state_struct::{
     CombatPotionPresentation, CombatPotionPresentationKind, PlayState, ViewOverlay,
     ViewOverlayKind, ViewOverlayMode, WhitePotionSweep, WorldOverlayCache, WorldReturn,

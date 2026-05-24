@@ -257,67 +257,6 @@ impl PlayState {
         self.random_range_u8(1, RANDOM_ENCOUNTER_DIE)
     }
 
-    pub fn apply_world_waterfall_sweep(
-        &mut self,
-        game_dir: &Path,
-        plane: WorldPlane,
-        entry: WorldWaterfallEntry,
-    ) -> io::Result<WorldWaterfallSweep> {
-        let (dx, dy) = entry.direction.delta();
-        let mut x = entry.x;
-        let mut y = entry.y;
-        let mut swept_steps = 0;
-        for _ in 0..entry.steps {
-            let nx = (x as isize + dx).rem_euclid(WORLD_SIDE as isize) as usize;
-            let ny = (y as isize + dy).rem_euclid(WORLD_SIDE as isize) as usize;
-            if self.world_object_at(nx, ny).is_some() {
-                break;
-            }
-            let tile = self.grid[world_cell_index(nx, ny)];
-            if let Some(entry) = self.world_plane_transition_at(game_dir, plane, nx, ny)? {
-                x = nx;
-                y = ny;
-                swept_steps += 1;
-                self.player.x = x;
-                self.player.y = y;
-                self.sync_player_object();
-                self.mark_visibility_dirty();
-                return Ok(WorldWaterfallSweep::PlaneTransition {
-                    steps: swept_steps,
-                    entry,
-                });
-            }
-            if let Some(entry) = self.moongate_at(plane, nx, ny) {
-                x = nx;
-                y = ny;
-                swept_steps += 1;
-                self.player.x = x;
-                self.player.y = y;
-                self.sync_player_object();
-                self.mark_visibility_dirty();
-                return Ok(WorldWaterfallSweep::Moongate {
-                    steps: swept_steps,
-                    entry,
-                });
-            }
-            if let Some(entry) = self.world_damage_tile_at(game_dir, plane, nx, ny, tile)? {
-                if !entry.effect.allows_transport(self.player.transport) {
-                    break;
-                }
-            } else if !self.tile_walkable(tile) {
-                break;
-            }
-            x = nx;
-            y = ny;
-            swept_steps += 1;
-        }
-        self.player.x = x;
-        self.player.y = y;
-        self.sync_player_object();
-        self.mark_visibility_dirty();
-        Ok(WorldWaterfallSweep::Settled { steps: swept_steps })
-    }
-
     pub fn apply_world_plane_transition(
         &mut self,
         game_dir: &Path,

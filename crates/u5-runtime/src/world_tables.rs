@@ -203,31 +203,6 @@ pub struct ObjectPickupEntry {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct WorldWaterfallEntry {
-    pub plane: WorldPlane,
-    pub x: usize,
-    pub y: usize,
-    pub direction: Direction,
-    pub steps: u8,
-    pub expected_tile: Option<u8>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum WorldWaterfallSweep {
-    Settled {
-        steps: u8,
-    },
-    PlaneTransition {
-        steps: u8,
-        entry: WorldPlaneTransitionEntry,
-    },
-    Moongate {
-        steps: u8,
-        entry: MoongateEntry,
-    },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WorldDamageEffect {
     Lava,
     NativeLava,

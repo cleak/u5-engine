@@ -49,7 +49,7 @@ move below level `7`. Missing rows preserve the conservative in-place block.
 | `town_locks.tsv` | Town lock rows for Jimmy/Open/Use-key handling. |
 | `secret_doors.tsv` | Search-revealed secret doors. |
 | `dungeon_chests.tsv` | Dungeon chest guard/grant metadata used by tests. |
-| `world_waterfalls.tsv` | Current/waterfall sweeps after accepted world movement. |
+| `world_waterfalls.tsv` | Retired compatibility/diagnostic artifact; current runtime movement ignores it because the public baseline has no waterfall/current sweep sidecar. |
 | `world_damage_tiles.tsv` | Lava/drowning damage cells and transport gates. |
 | `world_encounters.tsv` | Optional encounter spawn overrides; unmatched terrain uses the native public selector. |
 | `shrines.tsv` | Shrine coordinates and virtue binding. |

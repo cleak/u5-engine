@@ -1604,22 +1604,6 @@ impl PlayState {
         }))
     }
 
-    pub fn world_waterfall_at(
-        &self,
-        game_dir: &Path,
-        plane: WorldPlane,
-        x: usize,
-        y: usize,
-        tile: u8,
-    ) -> io::Result<Option<WorldWaterfallEntry>> {
-        Ok(load_world_waterfall_entries(game_dir)?.and_then(|entries| {
-            entries
-                .iter()
-                .find(|entry| world_waterfall_matches(**entry, plane, x, y, tile))
-                .copied()
-        }))
-    }
-
     pub fn world_damage_tile_at(
         &self,
         game_dir: &Path,

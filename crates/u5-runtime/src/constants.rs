@@ -7,6 +7,8 @@ pub const WORLD_LOCATION_TABLE_FILE: &str = "world_locations.tsv";
 pub const WORLD_PLANE_TRANSITION_TABLE_FILE: &str = "world_plane_transitions.tsv";
 pub const WORLD_GET_TILE_TABLE_FILE: &str = "world_get_tiles.tsv";
 pub const OBJECT_PICKUP_TABLE_FILE: &str = "object_pickups.tsv";
+/// Retired compatibility artifact name. The promoted runtime baseline does not
+/// load current/waterfall sweep sidecars.
 pub const WORLD_WATERFALL_TABLE_FILE: &str = "world_waterfalls.tsv";
 pub const WORLD_DAMAGE_TILE_TABLE_FILE: &str = "world_damage_tiles.tsv";
 pub const WORLD_ENCOUNTER_TABLE_FILE: &str = "world_encounters.tsv";

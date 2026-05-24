@@ -1300,21 +1300,6 @@ pub fn object_pickup_matches(
             .map_or(true, |expected| expected == object.tile)
 }
 
-pub fn world_waterfall_matches(
-    entry: WorldWaterfallEntry,
-    plane: WorldPlane,
-    x: usize,
-    y: usize,
-    tile: u8,
-) -> bool {
-    entry.plane == plane
-        && entry.x == x
-        && entry.y == y
-        && entry
-            .expected_tile
-            .map_or(true, |expected| expected == tile)
-}
-
 pub fn world_damage_tile_matches(
     entry: WorldDamageTileEntry,
     plane: WorldPlane,

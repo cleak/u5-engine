@@ -218,6 +218,19 @@
     }
 
     #[test]
+    fn town_free_roaming_direction_bits_and_facing_bytes_match_spec() {
+        assert_eq!(town_free_roaming_direction(0, 0), Direction::North);
+        assert_eq!(town_free_roaming_direction(0, 1), Direction::South);
+        assert_eq!(town_free_roaming_direction(1, 0), Direction::West);
+        assert_eq!(town_free_roaming_direction(1, 1), Direction::East);
+
+        assert_eq!(town_free_roaming_facing_byte(Direction::East, 0x11), 0x10);
+        assert_eq!(town_free_roaming_facing_byte(Direction::West, 0x10), 0x11);
+        assert_eq!(town_free_roaming_facing_byte(Direction::North, 0x11), 0x11);
+        assert_eq!(town_free_roaming_facing_byte(Direction::South, 0x10), 0x10);
+    }
+
+    #[test]
     fn town_free_roaming_actor_skips_ineligible_and_off_floor_without_prng() {
         let mut state = test_state(town_free_roaming_grid(), 1, 1);
         state.prng_state = 0x1234;

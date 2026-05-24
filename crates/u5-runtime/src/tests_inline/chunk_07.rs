@@ -1698,40 +1698,6 @@ fn world_plane_transition_table_requires_plane_change() {
 }
 
 #[test]
-fn parse_world_waterfall_entries_accepts_direction_steps_and_optional_tile_guard() {
-    let entries =
-        parse_world_waterfall_entries("BRITANNIA 10 20 EAST 3 1\nUNDERWORLD 1 2 north 1\n")
-            .unwrap();
-
-    assert_eq!(
-        entries,
-        vec![
-            WorldWaterfallEntry {
-                plane: WorldPlane::Britannia,
-                x: 10,
-                y: 20,
-                direction: Direction::East,
-                steps: 3,
-                expected_tile: Some(1),
-            },
-            WorldWaterfallEntry {
-                plane: WorldPlane::Underworld,
-                x: 1,
-                y: 2,
-                direction: Direction::North,
-                steps: 1,
-                expected_tile: None,
-            },
-        ]
-    );
-    assert!(parse_world_waterfall_entries("BRITANNIA 10 20 EAST 0\n").is_err());
-    assert!(parse_world_waterfall_entries("BRITANNIA 10 20 NORTHEAST 1\n").is_err());
-    assert!(
-        parse_world_waterfall_entries("BRITANNIA 10 20 EAST 1\nBRITANNIA 10 20 WEST 1\n").is_err()
-    );
-}
-
-#[test]
 fn parse_world_damage_tile_entries_accepts_lava_water_and_optional_tile_guard() {
     let entries = parse_world_damage_tile_entries(
         "BRITANNIA 10 20 LAVA 0x0e\nUNDERWORLD 1 2 water\nBRITANNIA 3 4 DROWNING 1\n",
@@ -2409,6 +2375,33 @@ fn world_waterfall_tile_guard_mismatch_keeps_normal_movement() {
         "BRITANNIA 1 0 EAST 3 2\n",
     )
     .unwrap();
+    let mut state = britannia_state(vec![1; WORLD_CELLS], 0, 0);
+    state.player.transport = TransportState::Ship {
+        type_byte: 168,
+        tile: 168,
+        sails_hoisted: false,
+        hull: 20,
+        skiffs: 1,
+    };
+    state.sync_player_object();
+
+    assert_eq!(
+        state
+            .step_with_game_dir(Direction::East, Some(&dir))
+            .unwrap(),
+        MoveOutcome::Moved
+    );
+
+    assert_eq!((state.player.x, state.player.y), (1, 0));
+    assert_eq!(state.turn, 1);
+    assert!(!state.message.contains("waterfall swept"));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn malformed_retired_waterfall_sidecar_is_ignored_by_runtime_movement() {
+    let dir = debug_game_dir();
+    fs::write(dir.join(WORLD_WATERFALL_TABLE_FILE), "not a promoted runtime sidecar\n").unwrap();
     let mut state = britannia_state(vec![1; WORLD_CELLS], 0, 0);
     state.player.transport = TransportState::Ship {
         type_byte: 168,
