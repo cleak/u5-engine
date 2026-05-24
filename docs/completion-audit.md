@@ -69,7 +69,7 @@ audit:
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 64 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 171 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 174 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
@@ -80,7 +80,8 @@ audit:
   accepted inn-rest pricing, public #44 sleeping/praying Talk refusals, public
   #48 Blink ray landing, directed Sleep/Poison Wind/Death Wind/Flame Wind
   combat casts, combat field marker casts/removal, targeted Magic Missile/Tremor/Repel
-  Undead/Charm/Polymorph/Clone casts and Conjure/Swarm/Summon Daemon routes,
+  Undead/Charm/Polymorph/Clone casts, Conjure/Swarm/Summon Daemon routes,
+  and special death-marker Kill routes,
   #51 poison-gas doorway step, public #47 dungeon no-direct-recovery rest and
   hourly ring tick, public #13 sage paid-success/short-funds paths, public #28
   all-stable horse-trader purchases, accepted shipwright frigate/skiff dock
@@ -100,7 +101,7 @@ audit:
   `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls
   and a combat death/field/cursor marker gallery.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 435 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 441 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including horse-trader
   purchases, accepted healer cure/heal/resurrect, all four public shipwright
   delivery-row purchases, spell routes for Locate, Light/Open, restore, active effects,
@@ -144,10 +145,8 @@ audit:
 Notes:
 
 - Gazer eye-burst tile and Gargoyle lava-pool special-death tile transitions
-  in §12 are described as "hand-tweaked" without published pixel/tile IDs in
-  the spec; the engine routes both to the default drop path until the public
-  spec promotes the exact transition. This is **Presentation work**, not a
-  gameplay correctness gap.
+  in section 12 use the published marker bytes and now have unit, route-smoke,
+  and visual-route evidence alongside the vanish-on-death marker path.
 - The Gremlin `cast_like_branch` flag in `monster-bestiary.md` §3 is loaded by
   `combat_stats.rs` but §6 of the bestiary documents that "no additional
   Gremlin-specific resource theft or nuisance writer is promoted." The engine
@@ -433,8 +432,6 @@ overlays where exact historical pixels are not public.
 - Return-to-View exact effect-raster pacing internals.
 - Exact remote-view panel pixels for X-Ray / Peer.
 - Exact dungeon minimap glyph/floodability edge cases.
-- Gazer eye-burst tile + particle and Gargoyle lava-pool transitions (the
-  spec describes both as "hand-tweaked" without published pixel/tile IDs).
 
 ## Conclusion
 

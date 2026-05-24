@@ -12,12 +12,13 @@ use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE,
     BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX,
     COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
-    COMBAT_PARTY_ACTOR_SLOTS, CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX,
-    CURE_COST, CURE_SPELL_INDEX, CombatActorDescriptor, CombatArenaFieldKind,
-    DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX, DEFAULT_FOOD_STOCK,
-    DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX,
-    DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_LEVEL_SPELL_COST, Direction, DungeonScene,
-    ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
+    COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
+    COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMBAT_VANISH_DEATH_MARKER_TILE,
+    CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX,
+    CombatActorDescriptor, CombatArenaFieldKind, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST,
+    DEATH_WIND_SPELL_INDEX, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
+    DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_LEVEL_SPELL_COST, Direction,
+    DungeonScene, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
     EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION,
     EndgameOutcome, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
     FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, FLAME_WIND_COST,
@@ -1863,6 +1864,30 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
+            name: "combat-kill-gazer-eye-burst",
+            options: world.clone(),
+            script: &["C1CX7"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-kill-gargoyle-lava-marker",
+            options: world.clone(),
+            script: &["C1CX7"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-kill-shadowlord-vanish-marker",
+            options: world.clone(),
+            script: &["C1CX7"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
             name: "doom-combat-get-direction",
             options: doom_options.clone(),
             script: &["empty", "G6"],
@@ -2179,6 +2204,15 @@ fn apply_route_smoke_case_setup(
         }
         "combat-field-dispel-empty-refusal" => {
             seed_combat_field_dispel_route(state, None)?;
+        }
+        "combat-kill-gazer-eye-burst" => {
+            seed_combat_special_death_route(state, 28)?;
+        }
+        "combat-kill-gargoyle-lava-marker" => {
+            seed_combat_special_death_route(state, 30)?;
+        }
+        "combat-kill-shadowlord-vanish-marker" => {
+            seed_combat_special_death_route(state, 47)?;
         }
         "combat-magic-missile-target"
         | "combat-tremor-targets"
@@ -2948,6 +2982,9 @@ fn combat_spell_route_code(case_name: &str) -> &'static str {
         "combat-conjure-animal" => "KX",
         "combat-swarm-summon" => "BIX",
         "combat-summon-daemon-ring" => "CKX",
+        "combat-kill-gazer-eye-burst"
+        | "combat-kill-gargoyle-lava-marker"
+        | "combat-kill-shadowlord-vanish-marker" => "CX",
         _ => "GP",
     }
 }
@@ -3060,6 +3097,57 @@ fn seed_combat_route_monster(
     Ok(())
 }
 
+fn seed_combat_special_death_route(state: &mut PlayState, class: u8) -> io::Result<()> {
+    let spell_index = spell_index_from_code("CX")
+        .ok_or_else(|| io::Error::other("Kill spell code is unavailable"))?;
+    let cost = spell_mp_cost(spell_index)
+        .ok_or_else(|| io::Error::other("Kill spell cost is unavailable"))?;
+
+    state.party = vec![route_party_member(0, b'A', b'G', 99, 99)];
+    state.party_names = default_party_names(1);
+    state.party_experience = default_party_experience(1);
+    state.party_stay_counters = default_party_stay_counters(1);
+    state.party_strengths = vec![30];
+    state.party_intelligence = default_party_intelligence(1);
+    state.party_equipment = default_party_equipment(1);
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = cost;
+        caster.level = cost;
+    }
+    state.active_player = Some(0);
+    state.spell_charges[spell_index] = 1;
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    actors[0] =
+        CombatActorDescriptor::from_row([99, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+
+    let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+    active_objects[0] = route_combat_active_object(0x4c, 5, 5, 0);
+    seed_combat_route_monster(
+        &mut actors,
+        &mut active_objects,
+        class,
+        COMBAT_PARTY_ACTOR_SLOTS,
+        6,
+        5,
+    )?;
+    seed_combat_route_monster(
+        &mut actors,
+        &mut active_objects,
+        COMBAT_CLASS_GIANT_RAT,
+        COMBAT_PARTY_ACTOR_SLOTS + 1,
+        8,
+        5,
+    )?;
+
+    state.enter_combat_frame_with_terrain(
+        active_objects,
+        actors,
+        [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    )?;
+    Ok(())
+}
+
 fn first_nonzero_prng_roll_seed(max: u16) -> u16 {
     for candidate in 0..=u16::MAX {
         let mut state = candidate;
@@ -3165,6 +3253,43 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not place the daemon around the target cell"
+                )));
+            }
+        }
+        "combat-kill-gazer-eye-burst" => {
+            if !state.message.starts_with("Kill!")
+                || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_marked_dead()
+                || state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile
+                    != COMBAT_GAZER_DEATH_MARKER_TILE
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not materialize the Gazer eye-burst death marker (message `{}`, actor {:?}, tile 0x{:02x})",
+                    state.message,
+                    state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS],
+                    state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile
+                )));
+            }
+        }
+        "combat-kill-gargoyle-lava-marker" => {
+            if !state.message.starts_with("Kill!")
+                || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_marked_dead()
+                || state.combat_terrain[5][6] != COMBAT_GARGOYLE_DEATH_TERRAIN_TILE
+                || state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile
+                    != COMBAT_DEFAULT_DEATH_DROP_TILE
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the Gargoyle lava/default death transition"
+                )));
+            }
+        }
+        "combat-kill-shadowlord-vanish-marker" => {
+            if !state.message.starts_with("Kill!")
+                || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty()
+                || state.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile
+                    != COMBAT_VANISH_DEATH_MARKER_TILE
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not clear the vanish-on-death actor and marker"
                 )));
             }
         }
@@ -3441,7 +3566,10 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
         | "combat-clone-target"
         | "combat-conjure-animal"
         | "combat-swarm-summon"
-        | "combat-summon-daemon-ring" => {
+        | "combat-summon-daemon-ring"
+        | "combat-kill-gazer-eye-burst"
+        | "combat-kill-gargoyle-lava-marker"
+        | "combat-kill-shadowlord-vanish-marker" => {
             validate_combat_spell_route_state(state, case_name)?;
         }
         "dungeon-level-up-down-spells" => {

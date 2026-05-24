@@ -1623,6 +1623,36 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_combat_summon_daemon),
         },
         VisualRouteSuiteCase {
+            label: "route-combat-kill-gazer-eye-burst",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1CX7"],
+            configure: Some(seed_visual_route_combat_kill_gazer),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-kill-gargoyle-lava-marker",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1CX7"],
+            configure: Some(seed_visual_route_combat_kill_gargoyle),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-kill-shadowlord-vanish-marker",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1CX7"],
+            configure: Some(seed_visual_route_combat_kill_shadowlord),
+        },
+        VisualRouteSuiteCase {
             label: "route-dungeon-level-up-down-spells",
             frame_kind: "visual route dungeon frame",
             options: PlayOptions {
@@ -2438,6 +2468,18 @@ fn seed_visual_route_combat_summon_daemon(state: &mut PlayState) {
     seed_visual_route_combat_spell(state, "CKX");
 }
 
+fn seed_visual_route_combat_kill_gazer(state: &mut PlayState) {
+    seed_visual_route_combat_special_death(state, 28);
+}
+
+fn seed_visual_route_combat_kill_gargoyle(state: &mut PlayState) {
+    seed_visual_route_combat_special_death(state, 30);
+}
+
+fn seed_visual_route_combat_kill_shadowlord(state: &mut PlayState) {
+    seed_visual_route_combat_special_death(state, 47);
+}
+
 fn seed_visual_route_combat_spell(state: &mut PlayState, code: &str) {
     let spell_index = spell_index_from_code(code).expect("visual route combat spell code is valid");
     let cost = spell_mp_cost(spell_index).expect("visual route combat spell cost is valid");
@@ -2514,6 +2556,56 @@ fn seed_visual_route_combat_spell(state: &mut PlayState, code: &str) {
     state
         .enter_combat_frame_with_terrain(active_objects, actors, combat_terrain)
         .expect("visual route combat spell frame should seed");
+}
+
+fn seed_visual_route_combat_special_death(state: &mut PlayState, class: u8) {
+    let spell_index = spell_index_from_code("CX").expect("visual route Kill spell code is valid");
+    let cost = spell_mp_cost(spell_index).expect("visual route Kill spell cost is valid");
+
+    state.party = vec![route_visual_party_member(0, b'A', b'G', 99, 99)];
+    state.party_names = default_party_names(1);
+    state.party_experience = vec![0];
+    state.party_stay_counters = default_party_stay_counters(1);
+    state.party_strengths = vec![30];
+    state.party_intelligence = default_party_intelligence(1);
+    state.party_equipment = default_party_equipment(1);
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = cost;
+        caster.level = cost;
+    }
+    state.active_player = Some(0);
+    state.spell_charges[spell_index] = 1;
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    actors[0] =
+        CombatActorDescriptor::from_row([99, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+
+    let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+    active_objects[0] = visual_route_combat_active_object(0x4c, 5, 5, 0);
+    seed_visual_route_combat_monster(
+        &mut actors,
+        &mut active_objects,
+        class,
+        COMBAT_PARTY_ACTOR_SLOTS,
+        6,
+        5,
+    );
+    seed_visual_route_combat_monster(
+        &mut actors,
+        &mut active_objects,
+        COMBAT_CLASS_GIANT_RAT,
+        COMBAT_PARTY_ACTOR_SLOTS + 1,
+        8,
+        5,
+    );
+
+    state
+        .enter_combat_frame_with_terrain(
+            active_objects,
+            actors,
+            [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+        )
+        .expect("visual route combat special death frame should seed");
 }
 
 fn seed_visual_route_combat_monster(
@@ -7463,7 +7555,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 138);
+        assert_eq!(cases.len(), 141);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -7627,6 +7719,9 @@ mod tests {
             "route-combat-conjure-animal",
             "route-combat-swarm-summon",
             "route-combat-summon-daemon-ring",
+            "route-combat-kill-gazer-eye-burst",
+            "route-combat-kill-gargoyle-lava-marker",
+            "route-combat-kill-shadowlord-vanish-marker",
             "route-dungeon-level-up-down-spells",
             "route-dungeon-field-cycle-spells",
             "route-dungeon-open-chest-spell",
@@ -7828,7 +7923,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 435);
+        assert_eq!(reports.len(), 441);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -7917,6 +8012,9 @@ mod tests {
         assert!(manifest.contains("route-combat-conjure-animal-01-c1kx"));
         assert!(manifest.contains("route-combat-swarm-summon-01-c1bix"));
         assert!(manifest.contains("route-combat-summon-daemon-ring-01-c1ckx6"));
+        assert!(manifest.contains("route-combat-kill-gazer-eye-burst-01-c1cx7"));
+        assert!(manifest.contains("route-combat-kill-gargoyle-lava-marker-01-c1cx7"));
+        assert!(manifest.contains("route-combat-kill-shadowlord-vanish-marker-01-c1cx7"));
         assert!(manifest.contains("route-dungeon-level-up-down-spells-02-c1dp"));
         assert!(manifest.contains("route-dungeon-field-cycle-spells-08-c1ag6"));
         assert!(manifest.contains("route-dungeon-open-chest-spell-01-c1as"));
