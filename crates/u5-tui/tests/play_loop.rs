@@ -719,6 +719,11 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| matches!(case.expected, RouteSmokeExpectation::Dungeon(_)))
     );
+    assert!(
+        cases
+            .iter()
+            .any(|case| matches!(case.expected, RouteSmokeExpectation::Endgame(_)))
+    );
     assert!(cases.iter().any(|case| case.name == "debug-enter-castle"));
     assert!(
         cases
@@ -820,7 +825,17 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "endgame-missing-box-terminal-jitter")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "endgame-box-victory-confirmation")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "endgame-box-full-victory-cinematic")
     );
     assert!(
         cases

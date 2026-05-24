@@ -58,16 +58,16 @@ until the public spec publishes the missing rule.
 ## Verification Baseline
 
 Runtime, TUI, and route-smoke results refreshed alongside this audit on
-2026-05-23; Bevy and visual-suite evidence remains from the latest display
+2026-05-24 for route-smoke; Bevy and visual-suite evidence remains from the latest display
 audit:
 
-- `cargo test -p u5-runtime` — 2590 tests pass.
+- `cargo test -p u5-runtime` — 2595 tests pass.
 - `cargo test -p u5-tui` — 79 tests pass, including temp-directory binary
   smoke for empty-save Journey Onward, deterministic Create Character followed
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 57 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 149 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 151 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
@@ -86,8 +86,9 @@ audit:
   Order command workflow, combat-active Board/Enter/Fire/Hole-up/Ignite/Mix/New
   Order/Talk refusal rows, combat-active digit selection/clear, Escape abort,
   Ctrl-S music toggle, lowercase direct movement, Horse and non-horse
-  wishing-well branches, and the public Britannia chasm fall route through real
-  asset-backed play states.
+  wishing-well branches, public #56 terminal endgame missing-box jitter and full
+  victory cinematic routes, and the public Britannia chasm fall route through
+  real asset-backed play states.
 - `cargo run -- --save-frame-suite target\audit-frame-suite C:\Games\U5-Clean`
   — 13 PNGs, every frame nonblank with stable hashes.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite

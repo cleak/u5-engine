@@ -433,7 +433,7 @@ impl PlayState {
         radius: usize,
         atlas: &TileAtlas,
     ) -> io::Result<Option<TileViewport>> {
-        if !self.combat_active {
+        if !self.combat_active && self.endgame.is_none() {
             self.sync_player_object();
         }
         let viewport = self.render_top_down_viewport(radius, atlas)?;

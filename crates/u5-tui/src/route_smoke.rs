@@ -18,7 +18,7 @@ use u5_runtime::{
     DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_LEVEL_SPELL_COST, Direction,
     DungeonScene, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
     EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION,
-    FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
+    EndgameOutcome, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
     FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, FLAME_WIND_COST,
     FLAME_WIND_SPELL_INDEX, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST,
     GREAT_HEAL_SPELL_INDEX, GameClock, GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST,
@@ -67,6 +67,7 @@ pub enum RouteSmokeExpectation {
     World(WorldPlane),
     Town(Scene),
     Dungeon(DungeonScene),
+    Endgame(EndgameOutcome),
 }
 
 impl RouteSmokeExpectation {
@@ -75,6 +76,9 @@ impl RouteSmokeExpectation {
             (Self::World(expected), Area::World { plane }) => expected == plane,
             (Self::Town(expected), Area::Town { scene, .. }) => expected == scene,
             (Self::Dungeon(expected), Area::Dungeon { scene, .. }) => expected == scene,
+            (Self::Endgame(expected), _) => {
+                state.endgame.as_ref().and_then(|endgame| endgame.outcome) == Some(expected)
+            }
             _ => false,
         }
     }
@@ -84,6 +88,10 @@ impl RouteSmokeExpectation {
             Self::World(plane) => plane.key().to_string(),
             Self::Town(scene) => scene.key(),
             Self::Dungeon(scene) => scene.key(),
+            Self::Endgame(EndgameOutcome::Victory) => "endgame victory".to_string(),
+            Self::Endgame(EndgameOutcome::MissingBoxOrRefused) => {
+                "endgame missing-box/refusal".to_string()
+            }
         }
     }
 }
@@ -897,17 +905,36 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             name: "endgame-missing-box-confirmation",
             options: PlayOptions::default(),
             script: &["Y", "Y"],
-            expected: RouteSmokeExpectation::Town(castle),
+            expected: RouteSmokeExpectation::Endgame(EndgameOutcome::MissingBoxOrRefused),
             min_turn: 0,
-            expected_frame_kind: "tile viewport",
+            expected_frame_kind: "endgame tableau",
+        },
+        RouteSmokeCase {
+            name: "endgame-missing-box-terminal-jitter",
+            options: PlayOptions::default(),
+            script: &["Y", "Y", "empty", "empty", "empty", "empty"],
+            expected: RouteSmokeExpectation::Endgame(EndgameOutcome::MissingBoxOrRefused),
+            min_turn: 0,
+            expected_frame_kind: "endgame tableau",
         },
         RouteSmokeCase {
             name: "endgame-box-victory-confirmation",
             options: PlayOptions::default(),
             script: &["Y", "Y", "empty"],
-            expected: RouteSmokeExpectation::Town(castle),
+            expected: RouteSmokeExpectation::Endgame(EndgameOutcome::Victory),
             min_turn: 0,
-            expected_frame_kind: "tile viewport",
+            expected_frame_kind: "endgame tableau",
+        },
+        RouteSmokeCase {
+            name: "endgame-box-full-victory-cinematic",
+            options: PlayOptions::default(),
+            script: &[
+                "Y", "Y", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
+                "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty",
+            ],
+            expected: RouteSmokeExpectation::Endgame(EndgameOutcome::Victory),
+            min_turn: 0,
+            expected_frame_kind: "endgame tableau",
         },
         RouteSmokeCase {
             name: "blackthorn-audience-correct",
@@ -1910,12 +1937,12 @@ fn apply_route_smoke_case_setup(
     game_dir: &Path,
 ) -> io::Result<()> {
     match case_name {
-        "endgame-missing-box-confirmation" => {
-            state.enter_endgame();
+        "endgame-missing-box-confirmation" | "endgame-missing-box-terminal-jitter" => {
+            state.enter_endgame_from_game_dir(Some(game_dir))?;
         }
-        "endgame-box-victory-confirmation" => {
+        "endgame-box-victory-confirmation" | "endgame-box-full-victory-cinematic" => {
             state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
-            state.enter_endgame();
+            state.enter_endgame_from_game_dir(Some(game_dir))?;
         }
         "blackthorn-audience-correct" | "blackthorn-audience-wrong" => {
             state.begin_blackthorn_audience_capture(game_dir)?;
@@ -2597,6 +2624,68 @@ fn seed_directed_wind_combat_route(
 
 fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Result<()> {
     match case_name {
+        "endgame-missing-box-confirmation" | "endgame-missing-box-terminal-jitter" => {
+            let outcome = state.endgame.as_ref().and_then(|endgame| endgame.outcome);
+            if outcome != Some(EndgameOutcome::MissingBoxOrRefused)
+                || state
+                    .endgame
+                    .as_ref()
+                    .is_none_or(|endgame| !endgame.is_terminal())
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not remain in the missing-box endgame tableau"
+                )));
+            }
+        }
+        "endgame-box-victory-confirmation" => {
+            let Some(endgame) = state.endgame.as_ref() else {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not enter the victory endgame"
+                )));
+            };
+            if endgame.outcome != Some(EndgameOutcome::Victory)
+                || endgame.cinematic_is_finished()
+                || endgame.certificate.is_none()
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not enter the active victory cinematic"
+                )));
+            }
+        }
+        "endgame-box-full-victory-cinematic" => {
+            let Some(endgame) = state.endgame.as_ref() else {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not enter the victory endgame"
+                )));
+            };
+            let party_slots_cleared = state
+                .active_objects
+                .iter()
+                .take(state.party.len().min(6))
+                .all(|object| object.is_empty());
+            let cinematic_slots_cleared = state
+                .active_objects
+                .get(6)
+                .is_none_or(|object| object.is_empty())
+                && state
+                    .active_objects
+                    .get(31)
+                    .is_none_or(|object| object.is_empty());
+            if endgame.outcome != Some(EndgameOutcome::Victory)
+                || !endgame.cinematic_is_finished()
+                || endgame.certificate.is_none()
+                || !party_slots_cleared
+                || !cinematic_slots_cleared
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not finish the victory cinematic and clear tableau actors (finished={}, certificate={}, party_slots_cleared={}, cinematic_slots_cleared={})",
+                    endgame.cinematic_is_finished(),
+                    endgame.certificate.is_some(),
+                    party_slots_cleared,
+                    cinematic_slots_cleared
+                )));
+            }
+        }
         "britannia-create-food-cast" => {
             let max_expected = DEFAULT_FOOD_STOCK.saturating_add(CREATE_FOOD_MAX_GRANT);
             if !(DEFAULT_FOOD_STOCK..=max_expected).contains(&state.food)

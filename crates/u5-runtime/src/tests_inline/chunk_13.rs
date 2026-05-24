@@ -20366,6 +20366,28 @@ fn enter_endgame_rebuilds_active_objects_as_terminal_tableau() {
 }
 
 #[test]
+fn endgame_rendering_does_not_repopulate_gameplay_player_object() {
+    let mut state = test_state(open_grid(), 5, 5);
+    state.party = vec![state.party[0]; 2];
+    state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    state.enter_endgame();
+    state.resolve_endgame_confirmation(true);
+    state.resolve_endgame_confirmation(true);
+    for _ in 0..8 {
+        state.resolve_endgame_confirmation(false);
+    }
+    assert!(state.active_objects[0].is_empty());
+
+    let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+    let _ = state.render_top_down_frame(5, &atlas).unwrap();
+
+    assert!(
+        state.active_objects[0].is_empty(),
+        "endgame tableau rendering must not sync the gameplay player object"
+    );
+}
+
+#[test]
 fn endgame_tableau_target_step_moves_active_objects_until_settled() {
     let mut state = test_state(open_grid(), 5, 5);
     state.party = vec![state.party[0]; 2];

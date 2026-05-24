@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-23, including 2590 tests
+- `cargo test -p u5-runtime` passed on 2026-05-24, including 2595 tests
   (latest verification includes public `cleak/u5-spec#47` hourly
   poison/provision/ring ordering, public #28 horse-trader adjacent placement
   priority plus no-marker refusal, public #15 inn pickup stay-counter billing,
@@ -25,11 +25,11 @@ Last known verification state:
   #21 dungeon active-monster ambush setup, combat round maintenance, combat-local
   ambush/camp reveal-slot helper coverage, and disk I/O retry wrapper
   coverage).
-- `cargo test -p u5-tui` passed on 2026-05-23, including 79 tests.
+- `cargo test -p u5-tui` passed on 2026-05-24, including 79 tests.
 - `cargo test -p u5-tui --features visual` passed on 2026-05-23.
 - `cargo test -p u5-bevy` passed on 2026-05-23, including 57 tests.
-- `cargo fmt -- --check` passed on 2026-05-23 after the latest Rust changes.
-- `git diff --check` passed on 2026-05-23; the only output was existing
+- `cargo fmt -- --check` passed on 2026-05-24 after the latest Rust changes.
+- `git diff --check` passed on 2026-05-24; the only output was existing
   CRLF-normalization warnings.
 - Representative raster smoke checks with local assets produced nonblank hashes:
   `BRITANNIA` top-down `fd923dc0f87a9f3c`, `BRITANNIA` after movement
@@ -37,7 +37,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-23 with 149 scripted route cases (including expanded active-shop/modal
+  2026-05-24 with 151 scripted route cases (including expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
@@ -91,8 +91,8 @@ Last known verification state:
   Order command workflow (`93018f522ce292ec`),
   town dispatcher refusals (`3126df0494b5870b`), town party overlay routes
   (`26d7ef40b57084af`), and terminal endgame missing-box
-  confirmation (`ff6287fbb741bd85`) and Wooden Box victory confirmation
-  (`0cf64339ccad08e1`), plus Blackthorn audience correct-password
+  confirmation/jitter plus Wooden Box victory confirmation/full cinematic
+  routes, plus Blackthorn audience correct-password
   (`338605b812db4ced`), wrong-password (`b700db952bc67bbf`), and
   rescue-refuge (`3c4488f67ab70cb5`) paths.
 - The TUI binary integration tests include temp-directory startup and save
