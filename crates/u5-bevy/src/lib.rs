@@ -74,7 +74,7 @@ use u5_runtime::{
     WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_class_stats,
     commit_chargen_save, commit_u4_transfer_save, default_party_equipment,
     default_party_experience, default_party_intelligence, default_party_names,
-    default_party_stay_counters, disk_io_error_message, dungeon_cell_index,
+    default_party_roster, default_party_stay_counters, disk_io_error_message, dungeon_cell_index,
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
     hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
@@ -1071,6 +1071,14 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         ],
         ..PlayOptions::default()
     };
+    let dungeon_long_camp_recovery = PlayOptions {
+        target: PlayTarget::Dungeon(dungeon),
+        floor: 0,
+        clock: GameClock::new(8, 0).expect("08:00 is valid"),
+        food: 99,
+        torch_counter: 9,
+        ..PlayOptions::default()
+    };
     let mut shadowlord_town_entry = PlayOptions {
         target: PlayTarget::Town(shadowlord_town),
         ..PlayOptions::default()
@@ -1758,6 +1766,13 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             options: dungeon_rest_no_direct_recovery,
             script: &["H1"],
             configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-long-camp-recovery",
+            frame_kind: "visual route dungeon frame",
+            options: dungeon_long_camp_recovery,
+            script: &["H6/4"],
+            configure: Some(seed_visual_route_long_camp_recovery),
         },
         VisualRouteSuiteCase {
             label: "route-dungeon-heavy-door-variant-pass-through",
@@ -3845,6 +3860,47 @@ fn route_visual_party_member(
         max_hp,
         level: 1,
     }
+}
+
+fn seed_visual_route_long_camp_recovery(state: &mut PlayState) {
+    state.party = vec![
+        route_visual_party_member(0, b'A', b'G', 1, 2),
+        route_visual_party_member(1, b'M', b'G', 4, 10),
+        route_visual_party_member(2, b'B', b'G', 5, 6),
+        route_visual_party_member(3, b'F', b'G', 5, 20),
+        route_visual_party_member(4, b'A', b'P', 20, 20),
+        route_visual_party_member(5, b'M', b'D', 0, 20),
+    ];
+    for (member, mana) in state.party.iter_mut().zip([0, 1, 2, 3, 4, 5]) {
+        member.mana = mana;
+        member.level = 8;
+    }
+    state.avatar_stats.intelligence = 22;
+    state.party_names = default_party_names(6);
+    state.party_experience = default_party_experience(6);
+    state.party_stay_counters = default_party_stay_counters(6);
+    state.party_strengths = vec![30; 6];
+    state.party_intelligence = vec![22, 24, 20, 18, 12, 8];
+    state.party_equipment = default_party_equipment(6);
+    state.party_roster = default_party_roster(6);
+    state.prng_state = visual_long_camp_no_ambush_seed();
+}
+
+fn visual_long_camp_no_ambush_seed() -> u16 {
+    for candidate in 0..=u16::MAX {
+        let mut state = candidate;
+        let mut safe = true;
+        for _ in 0..18 {
+            if u5_prng_range_u16(&mut state, 0, 63) == 0 {
+                safe = false;
+                break;
+            }
+        }
+        if safe {
+            return candidate;
+        }
+    }
+    unreachable!("PRNG range cycle must contain an uninterrupted six-hour camp seed")
 }
 
 fn seed_visual_route_combat_entry_party(state: &mut PlayState) {
@@ -9477,7 +9533,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 276);
+        assert_eq!(cases.len(), 277);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -9648,6 +9704,7 @@ mod tests {
             "route-dungeon-attack-direction-route",
             "route-dungeon-hole-up-rest",
             "route-dungeon-hole-up-no-direct-recovery",
+            "route-dungeon-long-camp-recovery",
             "route-dungeon-ladder-down-up-route",
             "route-dungeon-surface-exit-return-world",
             "route-dungeon-active-monster-attack-ambush",
@@ -10096,7 +10153,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 849);
+        assert_eq!(reports.len(), 851);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -10190,6 +10247,7 @@ mod tests {
         assert!(manifest.contains("route-dungeon-attack-direction-route-02-6"));
         assert!(manifest.contains("route-dungeon-hole-up-rest-01-h1"));
         assert!(manifest.contains("route-dungeon-hole-up-no-direct-recovery-01-h1"));
+        assert!(manifest.contains("route-dungeon-long-camp-recovery-01-h6_4"));
         assert!(manifest.contains("route-dungeon-heavy-door-variant-pass-through-01-idle"));
         assert!(manifest.contains("route-dungeon-ladder-down-up-route-02-_"));
         assert!(manifest.contains(&visual_route_step_label(

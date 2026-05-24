@@ -625,6 +625,13 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         ],
         ..PlayOptions::default()
     };
+    let dungeon_long_camp_recovery = PlayOptions {
+        target: PlayTarget::Dungeon(dungeon),
+        floor: 0,
+        clock: GameClock::new(8, 0).expect("08:00 is a valid game-clock time"),
+        food: 99,
+        ..PlayOptions::default()
+    };
 
     let doom_options = PlayOptions {
         target: PlayTarget::Dungeon(doom),
@@ -1706,6 +1713,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             script: &["H1"],
             expected: RouteSmokeExpectation::Dungeon(dungeon),
             min_turn: 3,
+            expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
+            name: "dungeon-long-camp-recovery",
+            options: dungeon_long_camp_recovery,
+            script: &["H6/4"],
+            expected: RouteSmokeExpectation::Dungeon(dungeon),
+            min_turn: 18,
             expected_frame_kind: "dungeon first-person viewport",
         },
         RouteSmokeCase {
@@ -2888,6 +2903,9 @@ fn apply_route_smoke_case_setup(
             state.sync_player_object();
             state.mark_visibility_dirty();
         }
+        "dungeon-long-camp-recovery" => {
+            seed_long_camp_recovery_route(state);
+        }
         "dungeon-field-cycle-spells" => {
             state.player.x = 1;
             state.player.y = 1;
@@ -3378,6 +3396,46 @@ fn route_party_member(slot: u8, class_byte: u8, status: u8, hp: u16, max_hp: u16
         max_hp,
         level: 8,
     }
+}
+
+fn seed_long_camp_recovery_route(state: &mut PlayState) {
+    state.party = vec![
+        route_party_member(0, b'A', b'G', 1, 2),
+        route_party_member(1, b'M', b'G', 4, 10),
+        route_party_member(2, b'B', b'G', 5, 6),
+        route_party_member(3, b'F', b'G', 5, 20),
+        route_party_member(4, b'A', b'P', 20, 20),
+        route_party_member(5, b'M', b'D', 0, 20),
+    ];
+    for (member, mana) in state.party.iter_mut().zip([0, 1, 2, 3, 4, 5]) {
+        member.mana = mana;
+    }
+    state.avatar_stats.intelligence = 22;
+    state.party_names = default_party_names(6);
+    state.party_experience = default_party_experience(6);
+    state.party_stay_counters = default_party_stay_counters(6);
+    state.party_strengths = default_party_strengths(6);
+    state.party_intelligence = vec![22, 24, 20, 18, 12, 8];
+    state.party_equipment = default_party_equipment(6);
+    state.party_roster = default_party_roster(6);
+    state.prng_state = long_camp_no_ambush_seed();
+}
+
+fn long_camp_no_ambush_seed() -> u16 {
+    for candidate in 0..=u16::MAX {
+        let mut state = candidate;
+        let mut safe = true;
+        for _ in 0..18 {
+            if u5_prng_range_u16(&mut state, 0, 63) == 0 {
+                safe = false;
+                break;
+            }
+        }
+        if safe {
+            return candidate;
+        }
+    }
+    unreachable!("PRNG range cycle must contain an uninterrupted six-hour camp seed")
 }
 
 fn route_combat_active_object(tile: u8, x: usize, y: usize, z: i8) -> ActiveObject {
@@ -5128,6 +5186,40 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not preserve no-direct-recovery rest behavior"
+                )));
+            }
+        }
+        "dungeon-long-camp-recovery" => {
+            if state.clock.hour != 14
+                || state.active_rest.is_some()
+                || state.party.get(0).is_none_or(|member| {
+                    member.status != b'G' || member.hp != 2 || member.mana != 22
+                })
+                || state.party.get(1).is_none_or(|member| {
+                    member.status != b'G' || !(5..=10).contains(&member.hp) || member.mana != 24
+                })
+                || state.party.get(2).is_none_or(|member| {
+                    member.status != b'G' || member.hp != 6 || member.mana != 10
+                })
+                || state.party.get(3).is_none_or(|member| {
+                    member.status != b'G' || member.hp != 5 || member.mana != 3
+                })
+                || state.party.get(4).is_none_or(|member| {
+                    member.status != b'P'
+                        || member.hp != 20 - u16::from(FIRST_PLAYABLE_HOURLY_POISON_DAMAGE) * 6
+                        || member.mana != 4
+                })
+                || state.party.get(5).is_none_or(|member| {
+                    member.status != b'D' || member.hp != 0 || member.mana != 5
+                })
+                || !state
+                    .message
+                    .contains("Party rested 6 hours; party slot 4 keeps watch")
+                || !state.message.contains("recovered")
+                || !state.message.contains("MP")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply public #47 completed long-camp recovery"
                 )));
             }
         }

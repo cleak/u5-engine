@@ -72,7 +72,7 @@ audit:
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 66 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 219 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 220 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
@@ -88,8 +88,8 @@ audit:
   combat casts, combat field marker casts/removal, combat utility fallback casts, targeted Magic Missile/Tremor/Repel
   Undead/Charm/Polymorph/Clone casts, Conjure/Swarm/Summon Daemon routes,
   special death-marker Kill routes, combat-entry party descriptor routes, and combat terminal cleanup routes,
-  #51 poison-gas doorway step, public #47 dungeon no-direct-recovery rest and
-  hourly ring tick, public #13 sage paid-success/short-funds paths, public #41
+  #51 poison-gas doorway step, public #47 dungeon no-direct-recovery rest,
+  completed long-camp recovery, and hourly ring tick, public #13 sage paid-success/short-funds paths, public #41
   all nine arms-shop first-stock purchases and terminator-letter refusals, public #28
   all-stable horse-trader purchases, accepted shipwright frigate/skiff dock
   deliveries, native town walk-on stair up/down/crossing routes, and
@@ -109,7 +109,7 @@ audit:
   `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls
   plus combat status-highlight and death/field/cursor marker galleries.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 849 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 851 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including exact
   TUI-label ship/castle/shop/dungeon/Doom/combat-field/terrain-exit aliases,
   light-decay, all nine public arms-shop first-stock purchases and terminator

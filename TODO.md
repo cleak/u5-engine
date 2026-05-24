@@ -38,7 +38,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-24 with 219 scripted route cases (including save/reload checkpoints
+  2026-05-24 with 220 scripted route cases (including save/reload checkpoints
   for boarded horse, Gate Travel, chasm fall, fixed hidden treasure,
   horse-trader delivery, ship X-it/skiff, dungeon ladders, and dungeon exits,
   plus expanded active-shop/modal
@@ -95,8 +95,8 @@ Last known verification state:
   (`1a25aca8d540a7fe`), fixed narrative gate open/ordained-block routes
   (`f41fe34d7c89a48b`, `061731b8753aad9c`), public #48 Blink ray landing
   (`f4b691ac224b385e`), public #51 poison-gas doorway step
-  (`836b6cd5af06c44e`), and public #47 dungeon no-direct-recovery rest
-  (`161ad48dd2a91725`) plus hourly Ring of Regeneration
+  (`836b6cd5af06c44e`), public #47 dungeon no-direct-recovery rest
+  (`161ad48dd2a91725`), completed long-camp recovery, plus hourly Ring of Regeneration
   (`be84488b7b199310`), plus ship broadside fire
   (`a7f1e8c1d62d7388`), horse boarding (`c346e297d616e667`),
   dungeon torch ignition (`06a7a60a0f84fb96`), and a combined Mix/Ready/New
@@ -149,11 +149,11 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 849 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 851 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest, with TUI-parity labels for additional ship/castle/shop/dungeon
   and Doom combat aliases as well as world/town/dungeon
   movement/pass/look/view/status, Minoc daily fixed-hidden, hourly
-  status/ring, native stair, dungeon rest/ladder/exit/search, and
+  status/ring, native stair, dungeon rest/long-camp/ladder/exit/search, and
   active-monster ambush routes: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,

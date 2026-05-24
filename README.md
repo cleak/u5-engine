@@ -137,7 +137,7 @@ Britannia, a moved Britannia frame, Castle:0, a lit Dungeon:0 frame, composed
 combat, View/Peer/X-Ray/chunk-map overlays, intro/status/modal surfaces, and an
 endgame status panel, plus a sanitized manifest with dimensions, frame kinds,
 positions, and hashes. The Bevy feature also provides `--visual-frame-suite`
-for 35 composed Bevy-owned frames and `--visual-route-suite` for 552 per-step
+for 35 composed Bevy-owned frames and `--visual-route-suite` for 851 per-step
 route frames:
 
 ```powershell
@@ -154,7 +154,7 @@ for N no-turn visual ticks:
 cargo run -- --play-script "d;empty;idle:4;q" --raster-diagnostics C:\Games\U5-Clean
 ```
 
-`--route-smoke` runs a bundled 213-case local-asset route suite covering world,
+`--route-smoke` runs a bundled 220-case local-asset route suite covering world,
 town, dungeon, combat, shop, endgame, transition, save/reload, and modal
 routes. It prints sanitized state lines and raster hashes:
 
