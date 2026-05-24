@@ -204,10 +204,10 @@ pub const COMBAT_ACTOR_FLAG_TEAM_TOGGLE: u8 = COMBAT_ACTOR_FLAG_CONTROLLED;
 pub const COMBAT_ACTOR_FLAG_FLEEING: u8 = 0x02;
 /// `combat.md` §6.2 / public issue #8: asleep/charmed/disabled skip bit.
 pub const COMBAT_ACTOR_FLAG_STATUS_DISABLED: u8 = 0x08;
-/// Public issue #8: per-slot sleep/charm duration counter block size.
-pub const COMBAT_SLEEP_DURATION_SLOTS: usize = 0x40;
-/// Clean fallback until the exact per-effect sleep durations are promoted.
-pub const COMBAT_SLEEP_DISABLED_DURATION_DEFAULT: u8 = 2;
+/// `combat.md` §6.2: disabled actors wake only on their own-turn 0..16 roll.
+pub const COMBAT_SLEEP_WAKE_ROLL_LOW: u8 = 0;
+pub const COMBAT_SLEEP_WAKE_ROLL_HIGH: u8 = 16;
+pub const COMBAT_SLEEP_WAKE_SUCCESS_ROLL: u8 = 16;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_80: u8 = 0x80;
 pub const COMBAT_ACTOR_FLAG_SELECTABLE_40: u8 = 0x40;
 pub const COMBAT_ACTOR_FLAG_MARKED_DEAD: u8 = 0x20;
@@ -1881,7 +1881,7 @@ pub fn tick_combat_actor_phase_counter(
     actor: &mut CombatActorDescriptor,
     refresh_constant: u8,
 ) -> CombatActorPhaseTick {
-    if !combat_actor_is_active_not_dead(*actor) {
+    if !combat_actor_is_present_not_dead(*actor) {
         return CombatActorPhaseTick::Inactive;
     }
 

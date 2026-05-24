@@ -496,8 +496,9 @@ the Doom underworld-entry exception and trigger-class entry cells. Dungeon
 room, rest-ambush, and outdoor encounter routes can enter the combat frame,
 which loads arena terrain, snapshots caller state, places actors, and routes
 player commands, monster AI, spells, fields, rewards, escape, and victory
-cleanup. Non-party combat sleep uses the public per-slot countdown path and
-keeps disabled actors present and targetable while their turns are skipped.
+cleanup. Non-party combat sleep uses the public own-turn 1-in-17 wake check and
+keeps disabled actors present and occupying their cells while wake-check turns
+are spent.
 Combat-frame exits restore the pre-combat active-object table and
 reconcile the caller's original terrain trigger slot, including water-creature
 victory rewrites into persistent body/retrieval objects while defeat and

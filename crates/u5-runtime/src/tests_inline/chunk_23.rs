@@ -3116,8 +3116,9 @@
         assert_eq!(COMBAT_ACTOR_FLAG_FLEEING, 0x02);
         assert_eq!(COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED, 0x04);
         assert_eq!(COMBAT_ACTOR_FLAG_STATUS_DISABLED, 0x08);
-        assert_eq!(COMBAT_SLEEP_DURATION_SLOTS, 0x40);
-        assert!(COMBAT_SLEEP_DISABLED_DURATION_DEFAULT > 0);
+        assert_eq!(COMBAT_SLEEP_WAKE_ROLL_LOW, 0);
+        assert_eq!(COMBAT_SLEEP_WAKE_ROLL_HIGH, 16);
+        assert_eq!(COMBAT_SLEEP_WAKE_SUCCESS_ROLL, 16);
     }
 
     #[test]
@@ -10466,13 +10467,18 @@
     }
 
     #[test]
-    fn combat_round_walk_decrements_sleep_durations_and_wakes_expired_actor() {
+    fn combat_round_walk_spends_disabled_actor_turn_on_wake_check() {
         let mut state = combat_ai_turn_state(8, 5);
         state.combat_actors[8].set_status_disabled();
-        state.combat_sleep_durations[8] = 1;
+        state.prng_state = (0..=u16::MAX)
+            .find(|seed| {
+                let mut prng = *seed;
+                u5_prng_range_u16(&mut prng, 0, 16) == 16
+            })
+            .unwrap();
 
         let application = state.apply_combat_round_walk_from_slot_with_inputs(
-            1,
+            8,
             30,
             false,
             false,
@@ -10491,8 +10497,49 @@
         );
 
         assert_eq!(application.stop_reason, CombatRoundWalkStopReason::EndOfRound);
-        assert_eq!(state.combat_sleep_durations[8], 0);
         assert!(!state.combat_actors[8].is_status_disabled());
+        assert!(application.applications.iter().any(|entry| matches!(
+            entry,
+            CombatActorSlotDispatchApplication::Slot {
+                slot: 8,
+                action:
+                    CombatActorDispatchAction::StatusDisabledWake {
+                        wake: CombatSleepWakeApplication {
+                            slot: 8,
+                            roll: 16,
+                            woke: true,
+                        },
+                    },
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn combat_disabled_actor_failed_wake_roll_does_not_run_ai() {
+        let mut state = combat_ai_turn_state(8, 5);
+        state.combat_actors[8].set_status_disabled();
+        state.prng_state = (0..=u16::MAX)
+            .find(|seed| {
+                let mut prng = *seed;
+                u5_prng_range_u16(&mut prng, 0, 16) != 16
+            })
+            .unwrap();
+
+        let application = state.apply_combat_actor_slot_dispatch(8, 30, false);
+
+        assert!(state.combat_actors[8].is_status_disabled());
+        assert!(matches!(
+            application,
+            CombatActorSlotDispatchApplication::Slot {
+                slot: 8,
+                action:
+                    CombatActorDispatchAction::StatusDisabledWake {
+                        wake: CombatSleepWakeApplication { woke: false, .. },
+                    },
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -13583,10 +13630,6 @@
         assert_eq!(state.party[0].status, b'S');
         assert!(state.combat_actors[target_slot].is_status_disabled());
         assert_eq!(
-            state.combat_sleep_durations[target_slot],
-            COMBAT_SLEEP_DISABLED_DURATION_DEFAULT
-        );
-        assert_eq!(
             state.apply_directed_combat_spell_status(
                 CombatDirectedSpellEffect::DeathWind,
                 &[(4, 4)],
@@ -13872,10 +13915,6 @@
         );
         assert_eq!(state.combat_actors[first_slot].hp_or_wound, stats.max_hp);
         assert!(state.combat_actors[second_slot].is_status_disabled());
-        assert_eq!(
-            state.combat_sleep_durations[second_slot],
-            COMBAT_SLEEP_DISABLED_DURATION_DEFAULT
-        );
 
         assert_eq!(
             state.apply_combat_arena_field_contact(

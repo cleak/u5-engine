@@ -506,6 +506,13 @@ pub struct CombatAiTurnApplication {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CombatSleepWakeApplication {
+    pub slot: usize,
+    pub roll: u8,
+    pub woke: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CombatPlayerCommandInput {
     Key(char),
     Direction(u8),
@@ -551,6 +558,9 @@ pub enum CombatActorDispatchAction {
     Inactive,
     PartyDeathSweep,
     Waiting,
+    StatusDisabledWake {
+        wake: CombatSleepWakeApplication,
+    },
     PlayerReady,
     MonsterAi {
         ai_turn: Option<CombatAiTurnApplication>,
@@ -593,39 +603,35 @@ pub struct CombatRoundLoopExitApplication {
 }
 
 impl PlayState {
-    pub fn clear_combat_sleep_durations(&mut self) {
-        self.combat_sleep_durations = [0; COMBAT_SLEEP_DURATION_SLOTS];
-    }
-
-    pub fn set_combat_actor_status_disabled(&mut self, slot: usize, duration: u8) -> bool {
+    pub fn set_combat_actor_status_disabled(&mut self, slot: usize) -> bool {
         let Some(actor) = self.combat_actors.get_mut(slot) else {
             return false;
         };
         actor.set_status_disabled();
-        if let Some(counter) = self.combat_sleep_durations.get_mut(slot) {
-            *counter = duration;
-        }
+        self.mark_visibility_dirty();
         true
     }
 
-    pub fn apply_combat_sleep_duration_round_tick(&mut self) -> usize {
-        let mut cleared = 0;
-        for slot in 0..COMBAT_ACTOR_SLOTS.min(COMBAT_SLEEP_DURATION_SLOTS) {
-            let counter = self.combat_sleep_durations[slot];
-            if counter == 0 {
-                continue;
-            }
-            let next_counter = counter.saturating_sub(1);
-            self.combat_sleep_durations[slot] = next_counter;
-            if next_counter == 0 {
-                let actor = &mut self.combat_actors[slot];
-                if actor.is_status_disabled() {
-                    actor.clear_status_disabled();
-                    cleared += 1;
-                }
-            }
+    pub fn combat_sleep_wake_roll(&mut self, slot: usize) -> u8 {
+        let _ = slot;
+        self.random_range_u8(COMBAT_SLEEP_WAKE_ROLL_LOW, COMBAT_SLEEP_WAKE_ROLL_HIGH)
+    }
+
+    pub fn apply_combat_sleep_wake_dispatch(
+        &mut self,
+        slot: usize,
+        roll: u8,
+    ) -> Option<CombatSleepWakeApplication> {
+        let actor = self.combat_actors.get_mut(slot)?;
+        if !actor.is_status_disabled() {
+            return None;
         }
-        cleared
+        let woke = roll == COMBAT_SLEEP_WAKE_SUCCESS_ROLL;
+        if woke {
+            actor.clear_status_disabled();
+            self.mark_visibility_dirty();
+        }
+        Some(CombatSleepWakeApplication { slot, roll, woke })
     }
 
     pub(crate) fn combat_party_name_for_slot(&self, slot: usize) -> Option<&[u8]> {
@@ -2003,7 +2009,6 @@ impl PlayState {
         };
         self.active_objects = active_objects;
         self.combat_actors = actors;
-        self.clear_combat_sleep_durations();
         self.combat_terrain = terrain;
         self.combat_magic_effects = [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
         self.combat_magic_effect_timer = 0;
@@ -2035,7 +2040,6 @@ impl PlayState {
         self.active_player =
             resolve_post_combat_active_player_restore(snapshot.active_player, &self.party);
         self.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
-        self.clear_combat_sleep_durations();
         self.combat_terrain = snapshot.combat_terrain;
         self.combat_magic_effects = [[0; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
         self.combat_magic_effect_timer = 0;
@@ -2098,7 +2102,6 @@ impl PlayState {
             }
             self.next_combat_actor_slot = 0;
             self.combat_actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
-            self.clear_combat_sleep_durations();
             self.combat_ambush_reveals = [None; COMBAT_AMBUSH_REVEAL_SLOT_COUNT];
             self.mark_visibility_dirty();
             false
@@ -2529,10 +2532,7 @@ impl PlayState {
                     }
                 }
                 CombatDirectedSpellEffect::Sleep => {
-                    self.set_combat_actor_status_disabled(
-                        slot,
-                        COMBAT_SLEEP_DISABLED_DURATION_DEFAULT,
-                    );
+                    self.set_combat_actor_status_disabled(slot);
                     CombatDirectedSpellSlotStatusApplication::NonPartySleepDisabled {
                         target_slot: slot,
                     }
@@ -2838,10 +2838,7 @@ impl PlayState {
             contact_outcome,
             CombatArenaFieldContactOutcome::SleepDisabledNonParty
         ) {
-            self.set_combat_actor_status_disabled(
-                target_slot,
-                COMBAT_SLEEP_DISABLED_DURATION_DEFAULT,
-            );
+            self.set_combat_actor_status_disabled(target_slot);
         }
 
         let damage_application = match contact_outcome {
@@ -3562,7 +3559,7 @@ impl PlayState {
         }
 
         let actor = self.combat_actors[slot];
-        if !combat_actor_is_active_not_dead(actor) {
+        if !combat_actor_is_present_not_dead(actor) {
             return CombatActorSlotDispatchApplication::Slot {
                 slot,
                 phase_tick: Some(CombatActorPhaseTick::Inactive),
@@ -3609,6 +3606,19 @@ impl PlayState {
                 slot,
                 phase_tick: Some(phase_tick),
                 action: CombatActorDispatchAction::Waiting,
+                control_after: self.combat_round_loop_control(leave_combat_flag, false),
+            };
+        }
+
+        if actor.is_status_disabled() {
+            let wake_roll = self.combat_sleep_wake_roll(slot);
+            let wake = self
+                .apply_combat_sleep_wake_dispatch(slot, wake_roll)
+                .expect("status-disabled actor should produce a wake dispatch");
+            return CombatActorSlotDispatchApplication::Slot {
+                slot,
+                phase_tick: Some(phase_tick),
+                action: CombatActorDispatchAction::StatusDisabledWake { wake },
                 control_after: self.combat_round_loop_control(leave_combat_flag, false),
             };
         }
@@ -3859,7 +3869,6 @@ impl PlayState {
 
             match &application {
                 CombatActorSlotDispatchApplication::EndOfRound { .. } => {
-                    self.apply_combat_sleep_duration_round_tick();
                     self.apply_combat_post_round_maintenance();
                     applications.push(application);
                     return CombatRoundWalkApplication {
@@ -3911,7 +3920,6 @@ impl PlayState {
 
             match &application {
                 CombatActorSlotDispatchApplication::EndOfRound { .. } => {
-                    self.apply_combat_sleep_duration_round_tick();
                     self.apply_combat_post_round_maintenance();
                     applications.push(application);
                     return CombatRoundWalkApplication {

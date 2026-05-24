@@ -441,10 +441,10 @@ Current worktree context when this TODO was refreshed:
   the party; successful destruction marks the native hideout byte and ORs the
   save-backed quest-progress word bits. Route smoke covers Lycaeum, Empath
   Abbey, and Serpent's Hold native paths.
-- The 2026-05-24 clean-engine audit retired #1/#3/#5/#9/#13/#18/#20/#31/#36/#38/#41/#43/#47/#49/#51/#54/#56/#57
+- The 2026-05-24 clean-engine audit retired #1/#3/#5/#8/#9/#11/#12/#13/#18/#19/#20/#31/#36/#38/#41/#43/#47/#49/#51/#54/#56/#57/#58
   as gameplay blockers after applying the current public answers and checked-in
-  spec. Current response-needed public blockers are #8, #10, #11, #12/#19,
-  #53, #58, #59, #60, #61 (town free-roaming active-object walker), and #62;
+  spec. Current response-needed public blockers are #10, #53, #59, #60, #61
+  (town free-roaming active-object walker), and #62;
   clean-engine follow-up comments are
   currently latest on each of those issues, so do not post duplicate comments
   unless new spec evidence or implementation questions appear.
@@ -983,10 +983,9 @@ as public details become available.
     the player-command path, Conjure uses fresh random arena-coordinate attempts,
     Swarm uses the caster ring, and player Summon uses independent random
     arena-coordinate probes plus its self-checking Oops branch. Issue #8
-    non-party sleep now has the published per-slot
-    countdown/targetability behavior, but exact per-effect starting durations
-    and descriptor-byte table wording still need a public spec clarification
-    before claiming exact monster sleep wakeup parity.
+    non-party sleep now has the published own-turn 1-in-17 wake check; disabled
+    actors remain present, occupy their cells, and spend the dispatch that
+    clears the bit.
   - Combat field placement now separates marker materialization from post-step
     contact and follows the corrected public issue #10 answer: Fire/Sleep/
     Energy no longer use a random placement gate, while Poison still uses its
@@ -1011,9 +1010,8 @@ as public details become available.
     summon-daemon class-flag hook rather than a general per-class script
     runner. Engine tests now pin every published combat stat row, ranged/effect
     side row, and the fixed three-bit hook order. Remaining combat parity work
-    is focused on behavioral/visual audit coverage, exact issue #8 duration
-    constants, and any future public data tables rather than inventing an
-    unpublished AI instruction interpreter.
+    is focused on behavioral/visual audit coverage and any future public data
+    tables rather than inventing an unpublished AI instruction interpreter.
 
 ## Milestone 6: Content Systems
 

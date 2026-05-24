@@ -84,7 +84,6 @@ pub struct PlayState {
     pub combat_secondary_marker: Option<(u8, u8)>,
     pub combat_ambush_reveals: [Option<CombatAmbushRevealRecord>; COMBAT_AMBUSH_REVEAL_SLOT_COUNT],
     pub combat_actors: [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
-    pub combat_sleep_durations: [u8; COMBAT_SLEEP_DURATION_SLOTS],
     pub sail_cadence: u8,
     pub sail_stall_pending: bool,
     pub turn: u64,
