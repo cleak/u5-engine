@@ -29,26 +29,27 @@ use u5_runtime::{
     DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX, DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK,
     DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX, DUNGEON_LEVEL_SPELL_COST,
     Direction, DiskIoHandlerPhase, DungeonScene, EGA_PALETTE_RGB, ENDGAME_TABLEAU_HEIGHT,
-    ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_WEAPON,
-    EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, FIELD_SPELL_COST,
-    FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL,
-    FLAME_WIND_COST, FLAME_WIND_SPELL_INDEX, FixedCellFont, GATE_TRAVEL_COST,
-    GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage,
-    GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist, IN_LOR_COST,
-    IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP,
-    INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE,
-    INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y,
-    INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn,
-    IntroStoryArtPlacement, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX,
-    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING,
+    EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
+    EQUIPMENT_ID_RING_REGENERATION, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX,
+    FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FLAME_WIND_COST,
+    FLAME_WIND_SPELL_INDEX, FixedCellFont, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX,
+    GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage, GuildShop, HEAL_COST,
+    HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist, IN_LOR_COST, IN_LOR_SPELL_INDEX,
+    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X,
+    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
+    INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE,
+    INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement,
+    MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
+    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X,
     NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
-    OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX,
-    PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
-    POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX,
-    PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget, ProportionalFont,
-    ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH,
-    REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
+    NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST,
+    PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, POISON_FIELD_SPELL_INDEX,
+    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST,
+    PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget,
+    ProportionalFont, ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX,
+    REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST, RESURRECT_SPELL_INDEX,
     RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition, ReturnToViewFrameKind, SAVED_GAM_FILENAME,
     SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
     SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
@@ -60,19 +61,20 @@ use u5_runtime::{
     SPECIAL_ITEM_SHARD_HATRED_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
     STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
     STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene,
-    Shipwright, Stable, StoryRecords, TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT,
-    TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST, TIME_STOP_SPELL_INDEX,
-    TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y,
-    TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH,
-    TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
-    TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth,
-    TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState,
-    U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX,
-    UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
-    WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
-    blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save, commit_u4_transfer_save,
-    default_party_equipment, default_party_experience, default_party_intelligence,
-    default_party_names, default_party_stay_counters, disk_io_error_message, dungeon_cell_index,
+    Shipwright, Stable, StoryRecords, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
+    TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
+    TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS,
+    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
+    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X,
+    TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE,
+    Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset,
+    TitleBitImages, TitleBitPlacement, TransportState, U4TransferOverrides, U4TransferSource,
+    UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST,
+    VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WORLD_SIDE, WindState, WorldPlane,
+    WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_class_stats,
+    commit_chargen_save, commit_u4_transfer_save, default_party_equipment,
+    default_party_experience, default_party_intelligence, default_party_names,
+    default_party_stay_counters, disk_io_error_message, dungeon_cell_index,
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
     hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
@@ -1007,6 +1009,12 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         target: PlayTarget::World(WorldPlane::Underworld),
         ..PlayOptions::default()
     };
+    let minoc = Scene::new(0x05).expect("Minoc scene is valid");
+    let fixed_hidden_daily = PlayOptions {
+        target: PlayTarget::Town(minoc),
+        clock: GameClock::new(5, 0).expect("05:00 is a valid game-clock time"),
+        ..PlayOptions::default()
+    };
     let blackthorn_fixed_hidden_key_cache = PlayOptions {
         target: PlayTarget::Town(Scene::new(18).expect("Blackthorn castle scene is valid")),
         floor: -1,
@@ -1014,6 +1022,52 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
     };
     let mut wooden_box = PlayOptions::default();
     wooden_box.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
+    let hourly_provision_poison = PlayOptions {
+        target: PlayTarget::Town(castle),
+        clock: GameClock::with_date(139, 4, 5, 5, 59).expect("05:59 is valid"),
+        food: 10,
+        party: vec![
+            route_visual_party_member(0, b'A', b'G', 12, 20),
+            route_visual_party_member(1, b'F', b'P', 12, 20),
+            route_visual_party_member(2, b'M', b'S', 12, 20),
+            route_visual_party_member(3, b'D', b'D', 0, 20),
+            route_visual_party_member(4, b'B', b'A', 0, 20),
+        ],
+        ..PlayOptions::default()
+    };
+    let hourly_poison_starvation = PlayOptions {
+        target: PlayTarget::Town(castle),
+        clock: GameClock::with_date(139, 4, 5, 8, 59).expect("08:59 is valid"),
+        food: 0,
+        party: vec![
+            route_visual_party_member(0, b'A', b'P', 20, 20),
+            route_visual_party_member(1, b'F', b'G', 20, 20),
+            route_visual_party_member(2, b'M', b'D', 0, 20),
+        ],
+        ..PlayOptions::default()
+    };
+    let mut hourly_ring_regeneration = PlayOptions {
+        target: PlayTarget::Town(castle),
+        clock: GameClock::with_date(139, 4, 5, 7, 59).expect("07:59 is valid"),
+        food: 99,
+        party: vec![route_visual_party_member(0, b'A', b'G', 19, 20)],
+        party_equipment: default_party_equipment(1),
+        ..PlayOptions::default()
+    };
+    hourly_ring_regeneration.party_equipment[0][EQUIP_SLOT_RING] =
+        EQUIPMENT_ID_RING_REGENERATION as u8;
+    let dungeon_rest_no_direct_recovery = PlayOptions {
+        target: PlayTarget::Dungeon(dungeon),
+        floor: 0,
+        clock: GameClock::new(8, 0).expect("08:00 is valid"),
+        torch_counter: 9,
+        party: vec![
+            route_visual_party_member(0, b'A', b'G', 5, 20),
+            route_visual_party_member(1, b'F', b'S', 3, 20),
+            route_visual_party_member(2, b'M', b'D', 0, 20),
+        ],
+        ..PlayOptions::default()
+    };
     let mut shadowlord_town_entry = PlayOptions {
         target: PlayTarget::Town(shadowlord_town),
         ..PlayOptions::default()
@@ -1074,7 +1128,38 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-britannia-move-pass-idle",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                ..PlayOptions::default()
+            },
+            script: &["d", "."],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-pass-and-idle",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["empty"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
             label: "route-town-status-modal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["Z"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-z-stats-modal",
             frame_kind: "visual route town frame",
             options: PlayOptions {
                 target: PlayTarget::Town(castle),
@@ -1100,6 +1185,30 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             frame_kind: "visual route world frame",
             options: PlayOptions {
                 target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["v", "."],
+            configure: Some(|state| {
+                state.gems = 1;
+            }),
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-view-overlay",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["v", "."],
+            configure: Some(|state| {
+                state.gems = 1;
+            }),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-view-overlay",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
             script: &["v", "."],
@@ -1146,6 +1255,26 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             frame_kind: "visual route world frame",
             options: PlayOptions {
                 target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["l6"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-look-pass",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["l6"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-look-pass",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
                 ..PlayOptions::default()
             },
             script: &["l6"],
@@ -1330,6 +1459,13 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_blackthorn_fixed_hidden),
         },
         VisualRouteSuiteCase {
+            label: "route-minoc-fixed-hidden-daily-search-get-repeat",
+            frame_kind: "visual route town frame",
+            options: fixed_hidden_daily,
+            script: &["S6", "G6", "S6"],
+            configure: Some(seed_visual_route_minoc_fixed_hidden_daily),
+        },
+        VisualRouteSuiteCase {
             label: "route-castle-wooden-box-use",
             frame_kind: "visual route town frame",
             options: wooden_box,
@@ -1377,6 +1513,78 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_command_workflows),
         },
         VisualRouteSuiteCase {
+            label: "route-castle-hourly-provision-poison-pass",
+            frame_kind: "visual route town frame",
+            options: hourly_provision_poison,
+            script: &["empty"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-hourly-poison-starvation-pass",
+            frame_kind: "visual route town frame",
+            options: hourly_poison_starvation,
+            script: &["empty"],
+            configure: Some(seed_visual_route_hourly_poison_starvation),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-hourly-ring-regeneration-pass",
+            frame_kind: "visual route town frame",
+            options: hourly_ring_regeneration,
+            script: &["empty"],
+            configure: Some(seed_visual_route_hourly_ring_regeneration),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-talk-status-sleeping-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["T6"],
+            configure: Some(seed_visual_route_talk_status_sleeping),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-talk-status-praying-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["T6"],
+            configure: Some(seed_visual_route_talk_status_praying),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-native-stair-up-route",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["d"],
+            configure: Some(seed_visual_route_native_stair_up),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-native-stair-down-route",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                floor: 1,
+                ..PlayOptions::default()
+            },
+            script: &["d"],
+            configure: Some(seed_visual_route_native_stair_down),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-native-stair-cross-route",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["w"],
+            configure: Some(seed_visual_route_native_stair_cross),
+        },
+        VisualRouteSuiteCase {
             label: "route-debug-enter-castle",
             frame_kind: "visual route town frame",
             options: world_to_castle.clone(),
@@ -1399,6 +1607,18 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         },
         VisualRouteSuiteCase {
             label: "route-world-board-horse",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                start: Some((62, 124)),
+                facing: Some(Direction::East),
+                ..PlayOptions::default()
+            },
+            script: &["B"],
+            configure: Some(seed_visual_route_board_horse),
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-board-horse-route",
             frame_kind: "visual route world frame",
             options: PlayOptions {
                 target: PlayTarget::World(WorldPlane::Britannia),
@@ -1466,6 +1686,49 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-dungeon-search-focus-route",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["S6"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-attack-direction-route",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["A", "6"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-hole-up-rest",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["H1"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-hole-up-no-direct-recovery",
+            frame_kind: "visual route dungeon frame",
+            options: dungeon_rest_no_direct_recovery,
+            script: &["H1"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
             label: "route-dungeon-heavy-door-variant-pass-through",
             frame_kind: "visual route dungeon frame",
             options: PlayOptions {
@@ -1476,6 +1739,18 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             },
             script: &["."],
             configure: Some(seed_visual_route_dungeon_heavy_door_variant),
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-ladder-down-up-route",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &[">", "<"],
+            configure: Some(seed_visual_route_dungeon_ladder),
         },
         VisualRouteSuiteCase {
             label: "route-reload-dungeon-ladder-down-up",
@@ -1490,6 +1765,18 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_dungeon_ladder),
         },
         VisualRouteSuiteCase {
+            label: "route-dungeon-surface-exit-return-world",
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["K"],
+            configure: Some(seed_visual_route_dungeon_surface_exit),
+        },
+        VisualRouteSuiteCase {
             label: "route-reload-dungeon-surface-exit-return-world",
             frame_kind: "visual route world frame",
             options: PlayOptions {
@@ -1500,6 +1787,30 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             },
             script: &["K", "empty"],
             configure: Some(seed_visual_route_dungeon_surface_exit),
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-active-monster-attack-ambush",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["A"],
+            configure: Some(seed_visual_route_dungeon_active_monster_attack),
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-active-monster-contact-ambush",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["empty"],
+            configure: Some(seed_visual_route_dungeon_active_monster_contact),
         },
         VisualRouteSuiteCase {
             label: "route-dungeon-ignite-torch",
@@ -1567,6 +1878,18 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 ..PlayOptions::default()
             },
             script: &["Q", "N"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-dungeon-exit-confirm",
+            frame_kind: "visual route dungeon frame",
+            options: PlayOptions {
+                target: PlayTarget::Dungeon(dungeon),
+                floor: 0,
+                torch_counter: 9,
+                ..PlayOptions::default()
+            },
+            script: &["Q", "Y"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -2726,6 +3049,128 @@ fn seed_visual_route_blackthorn_fixed_hidden(state: &mut PlayState) {
     state.player.facing = Direction::East;
     state.keys = 0;
     state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_minoc_fixed_hidden_daily(state: &mut PlayState) {
+    state.player.x = 1;
+    state.player.y = 2;
+    state.player.facing = Direction::East;
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_hourly_poison_starvation(state: &mut PlayState) {
+    state.prng_state = 0x3456;
+}
+
+fn seed_visual_route_hourly_ring_regeneration(state: &mut PlayState) {
+    state.prng_state = ring_regeneration_first_heal_seed();
+}
+
+fn ring_regeneration_first_heal_seed() -> u16 {
+    for candidate in 0..=u16::MAX {
+        let mut state = candidate;
+        if u5_prng_range_u16(&mut state, 0, 7) == 0 {
+            return candidate;
+        }
+    }
+    unreachable!("PRNG range cycle must hit a ring regeneration roll")
+}
+
+fn seed_visual_route_talk_status_sleeping(state: &mut PlayState) {
+    seed_visual_route_talk_status_tile(state, TALK_STATUS_TILE_SLEEPING);
+}
+
+fn seed_visual_route_talk_status_praying(state: &mut PlayState) {
+    seed_visual_route_talk_status_tile(state, TALK_STATUS_TILE_PRAYING);
+}
+
+fn seed_visual_route_talk_status_tile(state: &mut PlayState, status_tile: u8) {
+    state.player.x = 15;
+    state.player.y = 15;
+    state.player.facing = Direction::East;
+    state.sync_player_object();
+
+    let mut schedule = [0u8; 16];
+    schedule[3..6].copy_from_slice(&[16, 16, 16]);
+    schedule[6..9].copy_from_slice(&[15, 15, 15]);
+    schedule[12..16].copy_from_slice(&[0, 8, 16, 20]);
+    state.load_scheduled_npcs(&[
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot: 1,
+            type_byte: 1,
+            dialog_id: 0x84,
+            schedule,
+            name: None,
+        },
+    ]);
+    if let Some(slot) = state.npcs.first().and_then(|npc| npc.active_object)
+        && let Some(object) = state.active_objects.get_mut(slot)
+    {
+        object.type_byte = 1;
+        object.tile = status_tile;
+    }
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_native_stair_up(state: &mut PlayState) {
+    seed_visual_route_town_native_stair(state, Direction::East, 0xC5);
+}
+
+fn seed_visual_route_native_stair_down(state: &mut PlayState) {
+    seed_visual_route_town_native_stair(state, Direction::East, 0xC7);
+}
+
+fn seed_visual_route_native_stair_cross(state: &mut PlayState) {
+    seed_visual_route_town_native_stair(state, Direction::North, 0xC5);
+}
+
+fn seed_visual_route_town_native_stair(state: &mut PlayState, facing: Direction, stair_tile: u8) {
+    state.player.x = 15;
+    state.player.y = 15;
+    state.player.facing = facing;
+    let (dx, dy) = facing.delta();
+    let target_x = (state.player.x as isize + dx) as usize;
+    let target_y = (state.player.y as isize + dy) as usize;
+    let target_idx = target_y * TOWN_GRID_SIDE + target_x;
+    if let Some(cell) = state.grid.get_mut(target_idx) {
+        *cell = stair_tile;
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn seed_visual_route_dungeon_active_monster_attack(state: &mut PlayState) {
+    seed_visual_route_dungeon_active_monster(state, STEADY_PHASE);
+}
+
+fn seed_visual_route_dungeon_active_monster_contact(state: &mut PlayState) {
+    seed_visual_route_dungeon_active_monster(state, 0x20);
+}
+
+fn seed_visual_route_dungeon_active_monster(state: &mut PlayState, phase: u8) {
+    state.player.x = 1;
+    state.player.y = 1;
+    state.player.facing = Direction::East;
+    state.sync_player_object();
+    state.active_objects.push(ActiveObject {
+        type_byte: 0xC0,
+        tile: 0xC0,
+        x: 2,
+        y: 1,
+        z: state.current_floor().unwrap_or(0),
+        phase,
+        aux1: 0,
+        aux3: 0,
+    });
     state.mark_visibility_dirty();
 }
 
@@ -8442,7 +8887,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 188);
+        assert_eq!(cases.len(), 214);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -8496,6 +8941,13 @@ mod tests {
                 .any(|case| case.label == "route-britannia-spyglass-chunk-map")
         );
         for label in [
+            "route-britannia-move-pass-idle",
+            "route-castle-pass-and-idle",
+            "route-castle-z-stats-modal",
+            "route-britannia-view-overlay",
+            "route-castle-view-overlay",
+            "route-britannia-look-pass",
+            "route-castle-look-pass",
             "route-britannia-utility-use-items",
             "route-ship-hms-cape-plans-use",
             "route-britannia-create-food-cast",
@@ -8519,6 +8971,7 @@ mod tests {
             "route-underworld-fixed-hidden-stack-search-get-search",
             "route-reload-underworld-fixed-hidden-stack-search-get-search",
             "route-blackthorn-fixed-hidden-zero-key-search",
+            "route-minoc-fixed-hidden-daily-search-get-repeat",
             "route-castle-wooden-box-use",
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
@@ -8532,6 +8985,14 @@ mod tests {
             "route-castle-dispatcher-board-refusal",
             "route-castle-dispatcher-fire-refusal",
             "route-castle-command-workflow-overlays",
+            "route-castle-hourly-provision-poison-pass",
+            "route-castle-hourly-poison-starvation-pass",
+            "route-castle-hourly-ring-regeneration-pass",
+            "route-castle-talk-status-sleeping-refusal",
+            "route-castle-talk-status-praying-refusal",
+            "route-castle-native-stair-up-route",
+            "route-castle-native-stair-down-route",
+            "route-castle-native-stair-cross-route",
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
         }
@@ -8546,6 +9007,11 @@ mod tests {
             cases
                 .iter()
                 .any(|case| case.label == "route-world-board-horse")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-britannia-board-horse-route")
         );
         assert!(
             cases
@@ -8577,6 +9043,19 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-dungeon-movement-search")
         );
+        for label in [
+            "route-dungeon-search-focus-route",
+            "route-dungeon-attack-direction-route",
+            "route-dungeon-hole-up-rest",
+            "route-dungeon-hole-up-no-direct-recovery",
+            "route-dungeon-ladder-down-up-route",
+            "route-dungeon-surface-exit-return-world",
+            "route-dungeon-active-monster-attack-ambush",
+            "route-dungeon-active-monster-contact-ambush",
+            "route-dungeon-exit-confirm",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert!(
             cases
                 .iter()
@@ -8917,7 +9396,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 585);
+        assert_eq!(reports.len(), 645);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -8927,11 +9406,16 @@ mod tests {
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
         assert!(manifest.contains("route-world-movement-00-initial"));
         assert!(manifest.contains("route-world-movement-01-d"));
+        assert!(manifest.contains("route-britannia-move-pass-idle-02-idle"));
+        assert!(manifest.contains("route-castle-pass-and-idle-01-empty"));
         assert!(manifest.contains("route-town-status-modal-01-z"));
+        assert!(manifest.contains("route-castle-z-stats-modal-01-z"));
         assert!(manifest.contains("route-town-view-overlay-01-v"));
         assert!(manifest.contains("route-town-view-overlay-02-idle"));
         assert!(manifest.contains("route-world-view-overlay-01-v"));
         assert!(manifest.contains("route-world-view-overlay-02-idle"));
+        assert!(manifest.contains("route-britannia-view-overlay-02-idle"));
+        assert!(manifest.contains("route-castle-view-overlay-02-idle"));
         assert!(manifest.contains("route-dungeon-view-overlay-01-v"));
         assert!(manifest.contains("route-dungeon-view-overlay-02-idle"));
         assert!(manifest.contains("route-castle-peer-overlay-01-c1iqw"));
@@ -8939,6 +9423,8 @@ mod tests {
         assert!(manifest.contains("route-castle-x-ray-overlay-01-c1awy"));
         assert!(manifest.contains("route-castle-x-ray-overlay-02-idle"));
         assert!(manifest.contains("route-britannia-look-01-l6"));
+        assert!(manifest.contains("route-britannia-look-pass-01-l6"));
+        assert!(manifest.contains("route-castle-look-pass-01-l6"));
         assert!(manifest.contains("route-britannia-spyglass-chunk-map-01-usp"));
         assert!(manifest.contains("route-britannia-utility-use-items-03-uc"));
         assert!(manifest.contains("route-ship-hms-cape-plans-use-01-up"));
@@ -8969,34 +9455,53 @@ mod tests {
             manifest.contains("route-reload-underworld-fixed-hidden-stack-search-get-search-03-s6")
         );
         assert!(manifest.contains("route-blackthorn-fixed-hidden-zero-key-search-01-s6"));
+        assert!(manifest.contains("route-minoc-fixed-hidden-daily-search-get-repeat-03-s6"));
         assert!(manifest.contains("route-castle-wooden-box-use-01-ub"));
         assert!(manifest.contains("route-castle-save-refusal-02-n"));
         assert!(manifest.contains("route-castle-dispatcher-board-refusal-01-b"));
         assert!(manifest.contains("route-castle-dispatcher-fire-refusal-01-f6"));
         assert!(manifest.contains("route-castle-command-workflow-overlays-04-n23"));
+        assert!(manifest.contains("route-castle-hourly-provision-poison-pass-01-empty"));
+        assert!(manifest.contains("route-castle-hourly-poison-starvation-pass-01-empty"));
+        assert!(manifest.contains("route-castle-hourly-ring-regeneration-pass-01-empty"));
+        assert!(manifest.contains("route-castle-talk-status-sleeping-refusal-01-t6"));
+        assert!(manifest.contains("route-castle-talk-status-praying-refusal-01-t6"));
+        assert!(manifest.contains("route-castle-native-stair-up-route-01-d"));
+        assert!(manifest.contains("route-castle-native-stair-down-route-01-d"));
+        assert!(manifest.contains("route-castle-native-stair-cross-route-01-w"));
         assert!(manifest.contains("route-debug-enter-castle-03-idle_1"));
         assert!(manifest.contains("route-debug-enter-castle-return-world-02-w"));
         assert!(manifest.contains("route-debug-enter-castle-from-underworld-02-empty"));
         assert!(manifest.contains("route-world-board-horse-01-b"));
+        assert!(manifest.contains("route-britannia-board-horse-route-01-b"));
         assert!(manifest.contains("route-reload-boarded-horse-pass-02-empty"));
         assert!(manifest.contains("route-ship-xit-launches-skiff-01-x"));
         assert!(manifest.contains("route-reload-ship-xit-skiff-pass-02-empty"));
         assert!(manifest.contains("route-ship-hoist-and-sail-east-02-d"));
         assert!(manifest.contains("route-ship-broadside-fire-01-f6"));
         assert!(manifest.contains("route-dungeon-movement-search-03-s6"));
+        assert!(manifest.contains("route-dungeon-search-focus-route-01-s6"));
+        assert!(manifest.contains("route-dungeon-attack-direction-route-02-6"));
+        assert!(manifest.contains("route-dungeon-hole-up-rest-01-h1"));
+        assert!(manifest.contains("route-dungeon-hole-up-no-direct-recovery-01-h1"));
         assert!(manifest.contains("route-dungeon-heavy-door-variant-pass-through-01-idle"));
+        assert!(manifest.contains("route-dungeon-ladder-down-up-route-02-_"));
         assert!(manifest.contains(&visual_route_step_label(
             "route-reload-dungeon-ladder-down-up",
             2,
             "<"
         )));
+        assert!(manifest.contains("route-dungeon-surface-exit-return-world-01-k"));
         assert!(manifest.contains("route-reload-dungeon-surface-exit-return-world-02-empty"));
+        assert!(manifest.contains("route-dungeon-active-monster-attack-ambush-01-a"));
+        assert!(manifest.contains("route-dungeon-active-monster-contact-ambush-01-empty"));
         assert!(manifest.contains("route-dungeon-ignite-torch-01-i"));
         assert!(manifest.contains("route-dungeon-sjog-underfoot-get-01-g"));
         assert!(manifest.contains("route-dungeon-sjog-underfoot-jimmy-01-j"));
         assert!(manifest.contains("route-dungeon-sjog-underfoot-open-01-o"));
         assert!(manifest.contains("route-debug-enter-dungeon-03-n"));
         assert!(manifest.contains("route-dungeon-exit-refusal-02-n"));
+        assert!(manifest.contains("route-dungeon-exit-confirm-02-y"));
         assert!(manifest.contains("route-dungeon-refusal-board-01-b"));
         assert!(manifest.contains("route-dungeon-refusal-fire-01-f"));
         assert!(manifest.contains("route-shop-arms-local-buy-sell-06-n"));
