@@ -1203,6 +1203,147 @@ fn seed_visual_combat_marker_gallery(state: &mut PlayState) -> io::Result<()> {
     state.combat_cursor_blink = true;
     state.combat_secondary_marker = Some((3, 4));
     state.message = "Combat marker gallery".to_string();
+    validate_visual_combat_marker_gallery_state(state)?;
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CombatMarkerGalleryCell {
+    slot: usize,
+    tile: u8,
+    x: usize,
+    y: usize,
+    label: &'static str,
+}
+
+const COMBAT_MARKER_GALLERY_CELLS: [CombatMarkerGalleryCell; 10] = [
+    CombatMarkerGalleryCell {
+        slot: 0,
+        tile: 0x4c,
+        x: 5,
+        y: 8,
+        label: "controlled-party",
+    },
+    CombatMarkerGalleryCell {
+        slot: 1,
+        tile: COMBAT_PARTY_CORPSE_TILE,
+        x: 1,
+        y: 2,
+        label: "party-corpse",
+    },
+    CombatMarkerGalleryCell {
+        slot: 2,
+        tile: COMBAT_DEFAULT_DEATH_DROP_TILE,
+        x: 2,
+        y: 2,
+        label: "default-drop",
+    },
+    CombatMarkerGalleryCell {
+        slot: 3,
+        tile: COMBAT_VANISH_DEATH_MARKER_TILE,
+        x: 3,
+        y: 2,
+        label: "vanish",
+    },
+    CombatMarkerGalleryCell {
+        slot: 4,
+        tile: COMBAT_GAZER_DEATH_MARKER_TILE,
+        x: 4,
+        y: 2,
+        label: "gazer",
+    },
+    CombatMarkerGalleryCell {
+        slot: 5,
+        tile: COMBAT_DEFAULT_DEATH_DROP_TILE,
+        x: 6,
+        y: 6,
+        label: "gargoyle-terrain-drop",
+    },
+    CombatMarkerGalleryCell {
+        slot: 6,
+        tile: COMBAT_FIELD_KIND_POISON,
+        x: 7,
+        y: 3,
+        label: "poison-field",
+    },
+    CombatMarkerGalleryCell {
+        slot: 7,
+        tile: COMBAT_FIELD_KIND_SLEEP,
+        x: 8,
+        y: 3,
+        label: "sleep-field",
+    },
+    CombatMarkerGalleryCell {
+        slot: 8,
+        tile: COMBAT_FIELD_KIND_FIRE,
+        x: 7,
+        y: 4,
+        label: "fire-field",
+    },
+    CombatMarkerGalleryCell {
+        slot: 9,
+        tile: COMBAT_FIELD_KIND_ENERGY,
+        x: 8,
+        y: 4,
+        label: "energy-field",
+    },
+];
+
+fn validate_visual_combat_marker_gallery_state(state: &PlayState) -> io::Result<()> {
+    if !state.combat_active {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "combat marker gallery did not enter combat",
+        ));
+    }
+    if state.active_player != Some(0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "combat marker gallery active player is not slot 0",
+        ));
+    }
+    if !state.combat_cursor_blink {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "combat marker gallery cursor blink is not visible",
+        ));
+    }
+    if state.combat_secondary_marker != Some((3, 4)) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "combat marker gallery secondary marker is not at (3,4)",
+        ));
+    }
+    if state.combat_terrain[6][6] != COMBAT_GARGOYLE_DEATH_TERRAIN_TILE {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "combat marker gallery missing Gargoyle death terrain cell",
+        ));
+    }
+    for cell in COMBAT_MARKER_GALLERY_CELLS {
+        let Some(object) = state.active_objects.get(cell.slot) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("combat marker gallery missing slot {}", cell.slot),
+            ));
+        };
+        if object.tile != cell.tile || object.x != cell.x || object.y != cell.y {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "combat marker gallery {} slot {} expected tile 0x{:02x} at ({},{}), got tile 0x{:02x} at ({},{})",
+                    cell.label,
+                    cell.slot,
+                    cell.tile,
+                    cell.x,
+                    cell.y,
+                    object.tile,
+                    object.x,
+                    object.y
+                ),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -8873,6 +9014,12 @@ fn visual_review_metadata(report: &VisualFrameReport) -> String {
             report.label.trim_end_matches("-class-gallery")
         );
     }
+    if report.label == "combat-marker-gallery" {
+        return format!(
+            "file={}.png review=gallery/combat/markers markers=party-corpse,default-drop,vanish,gazer,gargoyle,poison,sleep,fire,energy cursor=slot0 secondary=(3,4)",
+            report.label
+        );
+    }
     if let Some((route, step, input)) = visual_route_step_metadata(&report.label) {
         return format!(
             "file={}.png review=route-step route={route} step={step} input={input}",
@@ -9667,6 +9814,15 @@ mod tests {
         ]
     }
 
+    fn ega_rgba(index: usize) -> [u8; 4] {
+        [
+            EGA_PALETTE_RGB[index][0],
+            EGA_PALETTE_RGB[index][1],
+            EGA_PALETTE_RGB[index][2],
+            0xff,
+        ]
+    }
+
     fn proportional_test_font() -> ProportionalFont {
         let glyph = |advance_width: u8, lit_width: usize| ProportionalGlyph {
             advance_width,
@@ -9761,6 +9917,50 @@ mod tests {
 
         assert_viewport_rgba_frame(&rgba);
         assert_nonblack_rgba(&rgba);
+    }
+
+    #[test]
+    fn combat_marker_gallery_seed_matches_visual_review_contract() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+
+        seed_visual_combat_marker_gallery(&mut state).unwrap();
+
+        validate_visual_combat_marker_gallery_state(&state).unwrap();
+        assert_eq!(COMBAT_MARKER_GALLERY_CELLS.len(), 10);
+    }
+
+    #[test]
+    fn visual_combat_marker_gallery_frame_preserves_marker_and_cursor_pixels() {
+        let mut state = world_state(open_world_grid(), 10, 20);
+        seed_visual_combat_marker_gallery(&mut state).unwrap();
+        let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+
+        let rgba = render_visual_play_frame(&mut state, &atlas, &font);
+        let width = VISUAL_PLAY_FRAME_WIDTH as usize;
+        let cell_center = |x: usize, y: usize| {
+            (
+                x * TILE_ATLAS_SIDE + TILE_ATLAS_SIDE / 2,
+                y * TILE_ATLAS_SIDE + TILE_ATLAS_SIDE / 2,
+            )
+        };
+
+        let (x, y) = cell_center(1, 2);
+        assert_eq!(
+            rgba_pixel(&rgba, width, x, y),
+            ega_rgba(usize::from(COMBAT_PARTY_CORPSE_TILE) % 16)
+        );
+        let (x, y) = cell_center(7, 3);
+        assert_eq!(
+            rgba_pixel(&rgba, width, x, y),
+            ega_rgba(usize::from(COMBAT_FIELD_KIND_POISON) % 16)
+        );
+        let (x, y) = cell_center(3, 4);
+        assert_eq!(rgba_pixel(&rgba, width, x, y), ega_rgba(11));
+        assert_eq!(
+            rgba_pixel(&rgba, width, 5 * TILE_ATLAS_SIDE, 8 * TILE_ATLAS_SIDE),
+            ega_rgba(14)
+        );
     }
 
     #[test]
@@ -10713,6 +10913,8 @@ mod tests {
         ));
         assert!(manifest.contains("review=gallery/surface-view-class mode=surface-view"));
         assert!(manifest.contains("combat-marker-gallery"));
+        assert!(manifest.contains("review=gallery/combat/markers"));
+        assert!(manifest.contains("cursor=slot0 secondary=(3,4)"));
         assert!(manifest.contains("intro-menu"));
         assert!(manifest.contains("intro-finished-menu"));
         if has_story {
