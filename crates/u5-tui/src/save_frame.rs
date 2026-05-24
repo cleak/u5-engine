@@ -540,7 +540,7 @@ fn save_frame_suite_z_stats(game_dir: &Path, out: &Path) -> io::Result<SavedFram
 
 fn save_frame_suite_endgame(game_dir: &Path, out: &Path) -> io::Result<SavedFrameReport> {
     let mut state = PlayState::load_scene(game_dir, PlayOptions::default())?;
-    state.enter_endgame();
+    state.enter_endgame_from_game_dir(Some(game_dir))?;
     let text = state.render_text_window_frame(None);
     save_text_window_report(out, "text window", &text, Some(&state))
 }

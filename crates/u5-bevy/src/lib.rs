@@ -50,8 +50,8 @@ use u5_runtime::{
     POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX,
     PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember, PlayInputDisposition, PlayOptions,
     PlayState, PlayTarget, ProportionalFont, ProportionalWidthTable, QUICKNESS_COST,
-    QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX, RESURRECT_COST,
-    RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
+    QUICKNESS_SPELL_INDEX, REAGENT_COUNT, REAGENT_SULFUR_ASH, REL_HUR_COST, REL_HUR_SPELL_INDEX,
+    RESURRECT_COST, RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
     ReturnToViewFrameKind, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SAVED_OOL_LEN,
     SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
     SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
@@ -69,19 +69,21 @@ use u5_runtime::{
     TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS,
     TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
     TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X,
-    TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE,
-    Tavern, TerrainCombatSetup, TextWindowSystem, TileAtlas, TileGraphicsDepth, TileViewport,
-    TitleBitAsset, TitleBitImages, TitleBitPlacement, TransportState, U4TransferOverrides,
-    U4TransferSource, UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX,
-    VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, ViewOverlayMode,
-    WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
-    blit_tile_id_to_viewport, combat_actor_is_active_not_dead, combat_class_stats,
-    commit_chargen_save, commit_u4_transfer_save, default_party_equipment,
-    default_party_experience, default_party_intelligence, default_party_names,
-    default_party_roster, default_party_stay_counters, disk_io_error_message, dungeon_cell_index,
-    dungeon_room_combat_instance_from_setup, dungeon_room_combat_setup_from_record_for_entry,
-    dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
-    hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
+    TITLE_TICK_FRAME_Y, TLK_TEXT_XOR_MASK, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TerrainCombatSetup, TextWindowSystem, TileAtlas,
+    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
+    TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
+    UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
+    VAS_LOR_SPELL_INDEX, ViewOverlayMode, WORLD_SIDE, WindState, WorldPlane, WorldReturn,
+    X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_actor_is_active_not_dead,
+    combat_class_stats, commit_chargen_save, commit_u4_transfer_save,
+    conversation_session::ConversationSession,
+    default_party_equipment, default_party_experience, default_party_intelligence,
+    default_party_names, default_party_roster, default_party_stay_counters, disk_io_error_message,
+    dungeon_cell_index, dungeon_room_combat_instance_from_setup,
+    dungeon_room_combat_setup_from_record_for_entry, dungeon_room_entry_seed_for_direction,
+    endgame_tableau_role_for_slot, handle_play_key_input, hash_bytes, input_case_fold,
+    input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -297,6 +299,9 @@ pub fn visual_frame_suite(
         if let Some(configure) = case.configure {
             configure(&mut state);
         }
+        if case.label == "endgame-status" {
+            state.enter_endgame_from_game_dir(Some(game_dir))?;
+        }
         if let Some(inputs) = case.inputs {
             for (key, suffix) in inputs {
                 handle_play_key_input(&mut state, *key, suffix, game_dir)?;
@@ -391,7 +396,7 @@ pub fn visual_route_suite(
         if let Some(configure) = case.configure {
             configure(&mut state);
         }
-        apply_visual_route_initial_setup(&mut state, case.label)?;
+        apply_visual_route_initial_setup(&mut state, case.label, game_dir)?;
         let initial = write_visual_play_report(
             out_dir,
             &visual_route_step_label(case.label, 0, "initial"),
@@ -440,6 +445,7 @@ pub fn visual_route_suite(
             let _ = std::fs::remove_dir_all(dir);
         }
     }
+    push_visual_key_route_reports(game_dir, out_dir, &atlas, &font, &mut reports)?;
 
     for report in &reports {
         if report.nonblack_pixels == 0 {
@@ -453,7 +459,11 @@ pub fn visual_route_suite(
     Ok(reports)
 }
 
-fn apply_visual_route_initial_setup(state: &mut PlayState, label: &str) -> io::Result<()> {
+fn apply_visual_route_initial_setup(
+    state: &mut PlayState,
+    label: &str,
+    game_dir: &Path,
+) -> io::Result<()> {
     if let Some(index) = visual_route_public_location_index(label) {
         let Some(entry) = published_world_location_entries().into_iter().nth(index) else {
             return Err(io::Error::other(format!(
@@ -475,6 +485,13 @@ fn apply_visual_route_initial_setup(state: &mut PlayState, label: &str) -> io::R
         return Ok(());
     }
     match label {
+        "route-endgame-missing-box-terminal-jitter"
+        | "route-endgame-missing-box-confirmation"
+        | "route-endgame-box-victory-confirmation"
+        | "route-endgame-box-full-victory-cinematic"
+        | "route-endgame-class-tableau-restoration" => {
+            state.enter_endgame_from_game_dir(Some(game_dir))?;
+        }
         "route-codex-urn-honesty-read" => {
             seed_visual_route_shrine(state, ShrineVirtue::Honesty);
             state.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
@@ -495,6 +512,138 @@ fn apply_visual_route_initial_setup(state: &mut PlayState, label: &str) -> io::R
         _ => {}
     }
     Ok(())
+}
+
+fn push_visual_key_route_reports(
+    game_dir: &Path,
+    out_dir: &Path,
+    atlas: &TileAtlas,
+    font: &FixedCellFont,
+    reports: &mut Vec<VisualFrameReport>,
+) -> io::Result<()> {
+    for case in visual_key_route_suite_cases() {
+        let mut state = PlayState::load_scene(game_dir, case.options)?;
+        if let Some(configure) = case.configure {
+            configure(&mut state);
+        }
+        let mut input_line = String::new();
+        let mut prompt_cursor_visible = visual_line_prompt_active(&state);
+        let initial = write_visual_play_report_with_input(
+            out_dir,
+            &visual_route_step_label(case.label, 0, "initial"),
+            case.frame_kind,
+            &mut state,
+            atlas,
+            font,
+            &input_line,
+            prompt_cursor_visible,
+        )?;
+        let mut previous_hash = initial.byte_hash;
+        reports.push(initial);
+
+        for (index, step) in case.steps.iter().enumerate() {
+            apply_visual_key_route_step(&mut state, &mut input_line, *step, game_dir)?;
+            prompt_cursor_visible = visual_line_prompt_active(&state);
+            let report = write_visual_play_report_with_input(
+                out_dir,
+                &visual_key_route_step_label(case.label, index + 1, step),
+                case.frame_kind,
+                &mut state,
+                atlas,
+                font,
+                &input_line,
+                prompt_cursor_visible,
+            )?;
+            if report.byte_hash == previous_hash {
+                return Err(io::Error::other(format!(
+                    "visual key route suite `{}` step `{}` did not change the frame",
+                    case.label, step.label
+                )));
+            }
+            previous_hash = report.byte_hash;
+            reports.push(report);
+        }
+    }
+    Ok(())
+}
+
+fn apply_visual_key_route_step(
+    state: &mut PlayState,
+    input_line: &mut String,
+    step: VisualKeyStep,
+    game_dir: &Path,
+) -> io::Result<()> {
+    if visual_line_prompt_active(state) {
+        match handle_visual_line_key(
+            state,
+            input_line,
+            step.key,
+            step.shift,
+            step.control,
+            game_dir,
+        )? {
+            Some(PlayInputDisposition::Quit) => {
+                return Err(io::Error::other(format!(
+                    "visual key route step `{}` requested quit",
+                    step.label
+                )));
+            }
+            Some(PlayInputDisposition::Continue) | None => return Ok(()),
+        }
+    }
+    if step.key == KeyCode::Escape && should_escape_quit_visual(state) {
+        return Err(io::Error::other(
+            "visual key route Escape would quit outside a prompt",
+        ));
+    }
+    let Some(ch) = key_code_to_char(step.key, step.shift, step.control) else {
+        return Ok(());
+    };
+    match handle_play_key_input(state, ch, "", game_dir)? {
+        PlayInputDisposition::Quit => Err(io::Error::other(format!(
+            "visual key route step `{}` requested quit",
+            step.label
+        ))),
+        PlayInputDisposition::Continue => Ok(()),
+    }
+}
+
+fn visual_key_route_step_label(route_label: &str, step: usize, key: &VisualKeyStep) -> String {
+    visual_route_step_label(route_label, step, key.label)
+}
+
+fn seed_visual_key_route_conversation(state: &mut PlayState) {
+    fn enc(text: &str) -> Vec<u8> {
+        text.bytes().map(|byte| byte ^ TLK_TEXT_XOR_MASK).collect()
+    }
+    let raw = vec![
+        enc("Ada"),
+        enc("a quiet smith"),
+        enc("Greetings, traveller."),
+        enc("I mend gear."),
+        enc("Farewell."),
+    ];
+    let decoded = vec![
+        "Ada".to_string(),
+        "a quiet smith".to_string(),
+        "Greetings, traveller.".to_string(),
+        "I mend gear.".to_string(),
+        "Farewell.".to_string(),
+    ];
+    state.active_conversation = Some(Box::new(ConversationSession::new(raw, decoded)));
+    state.advance_active_conversation_greeting();
+}
+
+fn seed_visual_key_route_shrine(state: &mut PlayState) {
+    seed_visual_route_shrine(state, ShrineVirtue::Honesty);
+}
+
+fn seed_visual_key_route_reagent_shop(state: &mut PlayState) {
+    state.gold = 100;
+    state.reagents = [0; REAGENT_COUNT];
+    state.active_shop = Some(ActiveShopSession::Reagent(ReagentShopState::for_herbalist(
+        Herbalist::Mysticism,
+    )));
 }
 
 fn visual_route_public_location_index(label: &str) -> Option<usize> {
@@ -964,9 +1113,7 @@ fn visual_gameplay_frame_cases() -> Vec<VisualGameplayFrameCase> {
             frame_kind: "visual endgame status frame",
             options: PlayOptions::default(),
             inputs: None,
-            configure: Some(|state| {
-                state.enter_endgame();
-            }),
+            configure: None,
             synthetic_combat: false,
         },
     ]
@@ -1610,6 +1757,141 @@ struct VisualRouteSuiteCase {
     options: PlayOptions,
     script: &'static [&'static str],
     configure: Option<fn(&mut PlayState)>,
+}
+
+#[derive(Clone)]
+struct VisualKeyRouteSuiteCase {
+    label: &'static str,
+    frame_kind: &'static str,
+    options: PlayOptions,
+    steps: &'static [VisualKeyStep],
+    configure: Option<fn(&mut PlayState)>,
+}
+
+#[derive(Clone, Copy)]
+struct VisualKeyStep {
+    label: &'static str,
+    key: KeyCode,
+    shift: bool,
+    control: bool,
+}
+
+impl VisualKeyStep {
+    const fn key(label: &'static str, key: KeyCode) -> Self {
+        Self {
+            label,
+            key,
+            shift: false,
+            control: false,
+        }
+    }
+
+    const fn control(label: &'static str, key: KeyCode) -> Self {
+        Self {
+            label,
+            key,
+            shift: false,
+            control: true,
+        }
+    }
+}
+
+const VISUAL_KEY_WORLD_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_d", KeyCode::KeyD),
+    VisualKeyStep::key("space", KeyCode::Space),
+    VisualKeyStep::control("ctrl_s", KeyCode::KeyS),
+];
+const VISUAL_KEY_SAVE_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_q", KeyCode::KeyQ),
+    VisualKeyStep::key("key_n", KeyCode::KeyN),
+];
+const VISUAL_KEY_TALK_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_j", KeyCode::KeyJ),
+    VisualKeyStep::key("key_o", KeyCode::KeyO),
+    VisualKeyStep::key("key_b", KeyCode::KeyB),
+    VisualKeyStep::key("backspace", KeyCode::Backspace),
+    VisualKeyStep::key("key_b", KeyCode::KeyB),
+    VisualKeyStep::key("enter", KeyCode::Enter),
+];
+const VISUAL_KEY_SHRINE_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_m", KeyCode::KeyM),
+    VisualKeyStep::key("key_a", KeyCode::KeyA),
+    VisualKeyStep::key("key_h", KeyCode::KeyH),
+    VisualKeyStep::key("key_m", KeyCode::KeyM),
+    VisualKeyStep::key("enter", KeyCode::Enter),
+];
+const VISUAL_KEY_SHOP_QUANTITY_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_a", KeyCode::KeyA),
+    VisualKeyStep::key("digit_1", KeyCode::Digit1),
+    VisualKeyStep::key("digit_2", KeyCode::Digit2),
+    VisualKeyStep::key("backspace", KeyCode::Backspace),
+    VisualKeyStep::key("digit_2", KeyCode::Digit2),
+    VisualKeyStep::key("enter", KeyCode::Enter),
+];
+const VISUAL_KEY_ESCAPE_STEPS: &[VisualKeyStep] = &[
+    VisualKeyStep::key("key_m", KeyCode::KeyM),
+    VisualKeyStep::key("key_a", KeyCode::KeyA),
+    VisualKeyStep::key("key_h", KeyCode::KeyH),
+    VisualKeyStep::key("escape", KeyCode::Escape),
+];
+
+fn visual_key_route_suite_cases() -> Vec<VisualKeyRouteSuiteCase> {
+    vec![
+        VisualKeyRouteSuiteCase {
+            label: "route-key-world-movement-pass-music",
+            frame_kind: "visual key route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            steps: VISUAL_KEY_WORLD_STEPS,
+            configure: None,
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-save-refusal",
+            frame_kind: "visual key route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            steps: VISUAL_KEY_SAVE_STEPS,
+            configure: None,
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-talk-keyword-buffer",
+            frame_kind: "visual key route prompt frame",
+            options: PlayOptions::default(),
+            steps: VISUAL_KEY_TALK_STEPS,
+            configure: Some(seed_visual_key_route_conversation),
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-shrine-mantra-buffer",
+            frame_kind: "visual key route prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            steps: VISUAL_KEY_SHRINE_STEPS,
+            configure: Some(seed_visual_key_route_shrine),
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-shop-quantity-buffer",
+            frame_kind: "visual key route prompt frame",
+            options: PlayOptions::default(),
+            steps: VISUAL_KEY_SHOP_QUANTITY_STEPS,
+            configure: Some(seed_visual_key_route_reagent_shop),
+        },
+        VisualKeyRouteSuiteCase {
+            label: "route-key-prompt-escape-cancel",
+            frame_kind: "visual key route prompt frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            steps: VISUAL_KEY_ESCAPE_STEPS,
+            configure: Some(seed_visual_key_route_shrine),
+        },
+    ]
 }
 
 fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
@@ -6281,12 +6563,10 @@ fn seed_visual_route_underworld_word_of_power(state: &mut PlayState) {
 
 fn seed_visual_route_endgame_missing_box(state: &mut PlayState) {
     state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 0;
-    state.enter_endgame();
 }
 
 fn seed_visual_route_endgame_victory(state: &mut PlayState) {
     state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
-    state.enter_endgame();
 }
 
 fn seed_visual_route_endgame_class_tableau(state: &mut PlayState) {
@@ -6314,7 +6594,6 @@ fn seed_visual_route_endgame_class_tableau(state: &mut PlayState) {
         })
         .collect();
     state.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = 0;
-    state.enter_endgame();
 }
 
 fn apply_visual_route_command(
@@ -8866,6 +9145,34 @@ fn write_visual_play_report(
     )
 }
 
+fn write_visual_play_report_with_input(
+    out_dir: &Path,
+    label: &str,
+    frame_kind: &'static str,
+    state: &mut PlayState,
+    atlas: &TileAtlas,
+    font: &FixedCellFont,
+    input_line: &str,
+    prompt_cursor_visible: bool,
+) -> io::Result<VisualFrameReport> {
+    let rgba = render_visual_play_frame_with_input_and_cursor(
+        state,
+        atlas,
+        font,
+        input_line,
+        READY_HINT,
+        prompt_cursor_visible,
+    );
+    write_visual_report(
+        out_dir,
+        label,
+        VISUAL_PLAY_FRAME_WIDTH,
+        VISUAL_PLAY_FRAME_HEIGHT,
+        frame_kind,
+        rgba,
+    )
+}
+
 fn write_visual_intro_report(
     out_dir: &Path,
     label: &str,
@@ -9223,6 +9530,19 @@ fn visual_review_coverage_reports(reports: &[VisualFrameReport]) -> Vec<VisualRe
             actual: route_steps,
             expected: None,
             note: "per-step Bevy route replay frames",
+        });
+    }
+
+    let key_route_steps = reports
+        .iter()
+        .filter(|report| report.label.starts_with("route-key-"))
+        .count();
+    if key_route_steps > 0 {
+        coverage.push(VisualReviewCoverage {
+            label: "visual-key-route-steps",
+            actual: key_route_steps,
+            expected: None,
+            note: "real-key Bevy input route frames",
         });
     }
 
@@ -11851,6 +12171,95 @@ mod tests {
     }
 
     #[test]
+    fn visual_key_route_suite_cases_cover_real_keyboard_prompts() {
+        let cases = visual_key_route_suite_cases();
+
+        assert_eq!(cases.len(), 6);
+        for label in [
+            "route-key-world-movement-pass-music",
+            "route-key-save-refusal",
+            "route-key-talk-keyword-buffer",
+            "route-key-shrine-mantra-buffer",
+            "route-key-shop-quantity-buffer",
+            "route-key-prompt-escape-cancel",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.steps.iter().any(|step| step.control))
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.steps.iter().any(|step| step.key == KeyCode::Backspace))
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.steps.iter().any(|step| step.key == KeyCode::Escape))
+        );
+    }
+
+    #[test]
+    fn visual_key_route_step_buffers_echo_before_submit() {
+        let mut state = test_state(open_grid(), 1, 1);
+        install_test_conversation(&mut state);
+        let mut input_line = String::new();
+
+        apply_visual_key_route_step(
+            &mut state,
+            &mut input_line,
+            VisualKeyStep::key("key-j", KeyCode::KeyJ),
+            Path::new(""),
+        )
+        .unwrap();
+        apply_visual_key_route_step(
+            &mut state,
+            &mut input_line,
+            VisualKeyStep::key("key-o", KeyCode::KeyO),
+            Path::new(""),
+        )
+        .unwrap();
+        apply_visual_key_route_step(
+            &mut state,
+            &mut input_line,
+            VisualKeyStep::key("key-x", KeyCode::KeyX),
+            Path::new(""),
+        )
+        .unwrap();
+        apply_visual_key_route_step(
+            &mut state,
+            &mut input_line,
+            VisualKeyStep::key("backspace", KeyCode::Backspace),
+            Path::new(""),
+        )
+        .unwrap();
+
+        assert_eq!(input_line, "jo");
+        assert!(!state.message.contains("mend"));
+
+        apply_visual_key_route_step(
+            &mut state,
+            &mut input_line,
+            VisualKeyStep::key("key-b", KeyCode::KeyB),
+            Path::new(""),
+        )
+        .unwrap();
+        apply_visual_key_route_step(
+            &mut state,
+            &mut input_line,
+            VisualKeyStep::key("enter", KeyCode::Enter),
+            Path::new(""),
+        )
+        .unwrap();
+
+        assert!(input_line.is_empty());
+        assert!(state.message.contains("mend"));
+    }
+
+    #[test]
     fn visual_route_suite_local_clean_writes_per_step_pngs_when_present() {
         let game_dir = Path::new(DEFAULT_GAME_DIR);
         if !game_dir.join("CASTLE.DAT").exists()
@@ -11865,7 +12274,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 1691);
+        assert_eq!(reports.len(), 1723);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -11873,10 +12282,23 @@ mod tests {
             assert!(report.nonblack_pixels > 0);
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
-        assert!(manifest.contains("coverage\tvisual-route-steps\t1691"));
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1723"));
+        assert!(manifest.contains("coverage\tvisual-key-route-steps\t32"));
         assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
         assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
         assert!(manifest.contains("review=route-step route=route-world-movement step=01 input=d"));
+        assert!(manifest.contains("route-key-world-movement-pass-music-03-ctrl_s"));
+        assert!(manifest.contains("route-key-save-refusal-02-key_n"));
+        assert!(manifest.contains("route-key-talk-keyword-buffer-04-backspace"));
+        assert!(manifest.contains("route-key-talk-keyword-buffer-06-enter"));
+        assert!(manifest.contains("route-key-shrine-mantra-buffer-05-enter"));
+        assert!(manifest.contains("route-key-shop-quantity-buffer-06-enter"));
+        assert!(manifest.contains("route-key-prompt-escape-cancel-04-escape"));
+        assert!(
+            manifest.contains(
+                "review=route-step route=route-key-talk-keyword-buffer step=03 input=key_b"
+            )
+        );
         assert!(manifest.contains("route-world-movement-00-initial"));
         assert!(manifest.contains("route-world-movement-01-d"));
         assert!(manifest.contains("route-britannia-move-pass-idle-02-idle"));
