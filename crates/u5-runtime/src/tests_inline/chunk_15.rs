@@ -60,6 +60,54 @@
         assert_ne!(row[4], ' ');
     }
 
+    fn scheduled_npc_test_slot(slot: usize, type_byte: u8, x: u8, y: u8) -> NpcSlot {
+        let mut schedule = [0u8; NPC_SCHEDULE_RECORD_LEN];
+        schedule[NPC_SCHEDULE_X_OFFSET] = x;
+        schedule[NPC_SCHEDULE_Y_OFFSET] = y;
+        schedule[NPC_SCHEDULE_Z_OFFSET] = 0;
+        schedule[NPC_SCHEDULE_TIME_OFFSET] = 0;
+        schedule[NPC_SCHEDULE_TIME_OFFSET + 1] = 6;
+        schedule[NPC_SCHEDULE_TIME_OFFSET + 2] = 12;
+        schedule[NPC_SCHEDULE_TIME_OFFSET + 3] = 18;
+        NpcSlot {
+            slot,
+            type_byte,
+            dialog_id: slot as u8,
+            schedule,
+            name: Some(format!("slot {slot}")),
+        }
+    }
+
+    #[test]
+    fn scheduled_npc_runtime_skips_slot_zero_even_when_bytes_are_nonzero() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.area = Area::Town {
+            scene: Scene::new(SCENE_MOONGLOW).unwrap(),
+            floor: 0,
+        };
+        state.clock = GameClock::new(0, 0).unwrap();
+        state.sync_player_object();
+        let slots = vec![
+            scheduled_npc_test_slot(NPC_SENTINEL_SLOT, 0x10, 4, 4),
+            scheduled_npc_test_slot(1, 0x11, 5, 5),
+        ];
+
+        let effective = effective_npc_slots(&slots)
+            .map(|slot| slot.slot)
+            .collect::<Vec<_>>();
+        assert_eq!(effective, vec![1]);
+
+        state.load_scheduled_npcs(&slots);
+
+        assert_eq!(state.npcs.len(), 1);
+        assert_eq!(state.npcs[0].slot, 1);
+        assert_eq!((state.npcs[0].x, state.npcs[0].y), (5, 5));
+        assert!(state
+            .active_objects
+            .iter()
+            .all(|object| object.type_byte != 0x10 || (object.x, object.y) != (4, 4)));
+    }
+
     #[test]
     fn world_render_line_of_sight_wraps_with_viewport() {
         // A propagation-blocking barrier at the wrapped viewport edge should

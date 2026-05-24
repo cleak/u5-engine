@@ -387,9 +387,7 @@ impl PlayState {
 
     pub fn load_scheduled_npcs(&mut self, slots: &[NpcSlot]) {
         let removed = self.removed_town_npc_markers_for_current_scene();
-        self.npcs = slots
-            .iter()
-            .skip(1)
+        self.npcs = effective_npc_slots(slots)
             .filter(|slot| {
                 slot.type_byte != 0
                     && !(town_npc_activation_mask_eligible(slot.type_byte)
@@ -402,9 +400,7 @@ impl PlayState {
 
     pub fn load_scheduled_npcs_from_existing_active_objects(&mut self, slots: &[NpcSlot]) {
         let removed = self.removed_town_npc_markers_for_current_scene();
-        self.npcs = slots
-            .iter()
-            .skip(1)
+        self.npcs = effective_npc_slots(slots)
             .filter(|slot| {
                 slot.type_byte != 0
                     && !(town_npc_activation_mask_eligible(slot.type_byte)

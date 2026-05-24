@@ -354,6 +354,10 @@ pub fn parse_npc_block(
     Ok(slots)
 }
 
+pub fn effective_npc_slots(slots: &[NpcSlot]) -> impl Iterator<Item = &NpcSlot> {
+    slots.iter().filter(|slot| slot.slot != NPC_SENTINEL_SLOT)
+}
+
 pub fn load_floor(game_dir: &Path, scene: Scene, floor: i8) -> io::Result<Vec<u8>> {
     let bytes = read(&game_dir.join(format!("{}.DAT", scene.family.stem())))?;
     let page = resolve_location_floor_page(game_dir, scene, floor)?;
