@@ -2028,6 +2028,30 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
+            name: "doom-combat-quit-defeat",
+            options: doom_options.clone(),
+            script: &["q"],
+            expected: RouteSmokeExpectation::Dungeon(doom),
+            min_turn: 0,
+            expected_frame_kind: "dungeon first-person viewport",
+        },
+        RouteSmokeCase {
+            name: "terrain-combat-xit-no-foes-clean-exit",
+            options: world.clone(),
+            script: &["X"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "terrain-combat-out-of-arena-leave",
+            options: world.clone(),
+            script: &["d"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "doom-combat-search-prompt",
             options: doom_options,
             script: &["empty", "S"],
@@ -2284,6 +2308,19 @@ fn apply_route_smoke_case_setup(
         }
         "terrain-combat-party-entry" => {
             seed_terrain_combat_party_entry_route(state, game_dir)?;
+        }
+        "doom-combat-quit-defeat" => {
+            seed_dungeon_room_party_entry_route(state, game_dir)?;
+            seed_route_combat_pending_party_actor(state);
+        }
+        "terrain-combat-xit-no-foes-clean-exit" => {
+            seed_terrain_combat_party_entry_route(state, game_dir)?;
+            clear_route_combat_non_party_actors(state);
+            seed_route_combat_pending_party_actor(state);
+        }
+        "terrain-combat-out-of-arena-leave" => {
+            seed_terrain_combat_party_entry_route(state, game_dir)?;
+            seed_route_combat_party_actor_at_east_edge(state);
         }
         "dungeon-room-party-entry" => {
             seed_dungeon_room_party_entry_route(state, game_dir)?;
@@ -4437,9 +4474,71 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
         "terrain-combat-party-entry" | "dungeon-room-party-entry" | "doom-room-combat-trigger" => {
             validate_combat_party_descriptor_links(state, case_name)?;
         }
+        "doom-combat-quit-defeat" => {
+            if state.combat_active
+                || !state.message.contains("Combat abandoned")
+                || state.combat_frame_snapshot.is_some()
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not abandon combat and restore the dungeon frame"
+                )));
+            }
+        }
+        "terrain-combat-xit-no-foes-clean-exit" => {
+            if state.combat_active
+                || !state.message.contains("Exit combat")
+                || state.combat_frame_snapshot.is_some()
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not exit no-foe combat through X-it cleanup (combat_active={}, snapshot={}, message `{}`)",
+                    state.combat_active,
+                    state.combat_frame_snapshot.is_some(),
+                    state.message
+                )));
+            }
+        }
+        "terrain-combat-out-of-arena-leave" => {
+            if state.combat_active
+                || !state.message.contains("Leaving combat")
+                || state.combat_frame_snapshot.is_some()
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not resolve an out-of-arena combat leave (combat_active={}, snapshot={}, message `{}`)",
+                    state.combat_active,
+                    state.combat_frame_snapshot.is_some(),
+                    state.message
+                )));
+            }
+        }
         _ => {}
     }
     Ok(())
+}
+
+fn clear_route_combat_non_party_actors(state: &mut PlayState) {
+    for slot in COMBAT_PARTY_ACTOR_SLOTS..COMBAT_ACTOR_SLOTS {
+        state.combat_actors[slot].clear();
+        if let Some(object) = state.active_objects.get_mut(slot) {
+            *object = ActiveObject::empty();
+        }
+    }
+}
+
+fn seed_route_combat_party_actor_at_east_edge(state: &mut PlayState) {
+    seed_route_combat_pending_party_actor(state);
+    if let Some(actor) = state.combat_actors.get_mut(0) {
+        actor.x = (COMBAT_ARENA_SIDE - 1) as u8;
+        actor.y = 5;
+    }
+    if let Some(object) = state.active_objects.get_mut(0) {
+        object.x = COMBAT_ARENA_SIDE - 1;
+        object.y = 5;
+    }
+}
+
+fn seed_route_combat_pending_party_actor(state: &mut PlayState) {
+    state.active_player = Some(0);
+    state.pending_combat_actor_slot = Some(0);
 }
 
 fn validate_combat_party_descriptor_links(state: &PlayState, case_name: &str) -> io::Result<()> {

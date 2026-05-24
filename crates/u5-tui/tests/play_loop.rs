@@ -1277,6 +1277,21 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "doom-combat-quit-defeat")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "terrain-combat-xit-no-foes-clean-exit")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "terrain-combat-out-of-arena-leave")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "doom-combat-search-prompt")
     );
 }

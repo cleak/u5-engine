@@ -37,7 +37,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-24 with 179 scripted route cases (including expanded active-shop/modal
+  2026-05-24 with 182 scripted route cases (including expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
@@ -49,7 +49,7 @@ Last known verification state:
   Wind/Death Wind/Flame Wind combat casts, combat field marker casts/removal,
   targeted Magic Missile/Tremor/Repel Undead/Charm/Polymorph/Clone,
   Conjure/Swarm/Summon Daemon, special death-marker Kill combat spell casts,
-  and asset-backed combat-entry party descriptor routes,
+  asset-backed combat-entry party descriptor routes, and combat terminal cleanup routes,
   dungeon level, dungeon
   field/dispel, dungeon Open chest, light-decay, dungeon ladder-chain,
   dungeon-to-world return, hourly provision/poison/starvation/ring passes, public
