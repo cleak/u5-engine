@@ -1182,7 +1182,10 @@ impl PlayState {
                     current.cinematic.step,
                     crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau
                 ) {
-                    self.complete_endgame_victory_tableau();
+                    if self.advance_endgame_victory_tableau_exit_step() {
+                        self.message = current.current_cinematic_text();
+                        return MoveOutcome::Observed;
+                    }
                     if let Some(state) = self.endgame.as_mut() {
                         state.advance_cinematic();
                         self.message = state.current_cinematic_text();

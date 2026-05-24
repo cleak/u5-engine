@@ -16367,7 +16367,12 @@ fn endgame_flow_uses_loaded_endmsg_records_for_prompts_rite_and_refusal() {
         victory.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
         ENDGAME_TABLEAU_LORD_BRITISH_TYPE
     );
-    victory.resolve_endgame_confirmation(true);
+    for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {
+        victory.resolve_endgame_confirmation(true);
+        if victory.message != "Throne-room tableau" {
+            break;
+        }
+    }
     assert_eq!(victory.message, "Return-home arc (1)");
 }
 
@@ -16395,10 +16400,44 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     );
     assert_eq!((state.active_objects[0].x, state.active_objects[0].y), (5, 5));
 
-    // Leaving the throne tableau runs the blocking victory-exit tableau
-    // script before the first fixed narrative panel appears.
+    // Leaving the throne tableau consumes visible tableau-exit steps before
+    // the first fixed narrative panel appears. The Lord British `0x08` phase
+    // must be observable before the slot clears.
     state.resolve_endgame_confirmation(true);
-    assert_eq!(state.message, "Return-home arc (1)");
+    assert_eq!(state.message, "Throne-room tableau");
+    assert!(matches!(
+        state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
+        Some(crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau)
+    ));
+    assert_eq!(
+        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
+        ENDGAME_TABLEAU_LORD_BRITISH_ORB_TYPE
+    );
+
+    state.resolve_endgame_confirmation(true);
+    assert_eq!(
+        state.active_objects[ENDGAME_TABLEAU_LORD_BRITISH_SLOT].type_byte,
+        0
+    );
+
+    let exit_slots = (0..state.party.len().min(SAVE_PARTY_SIZE_MAX as usize))
+        .chain([
+            ENDGAME_TABLEAU_SCENE_MARKER_SLOT,
+            ENDGAME_TABLEAU_LORD_BRITISH_SLOT,
+        ])
+        .collect::<Vec<_>>();
+    for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {
+        if exit_slots.iter().all(|slot| {
+            state.active_objects[*slot].type_byte == 0 && state.active_objects[*slot].tile == 0
+        }) {
+            break;
+        }
+        state.resolve_endgame_confirmation(true);
+        assert!(matches!(
+            state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
+            Some(crate::endgame_cinematic::EndgameCinematicStep::ThroneTableau)
+        ));
+    }
     assert!((0..state.party.len().min(SAVE_PARTY_SIZE_MAX as usize))
         .chain([
             ENDGAME_TABLEAU_SCENE_MARKER_SLOT,
@@ -16406,6 +16445,9 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
         ])
         .all(|slot| state.active_objects[slot].type_byte == 0
             && state.active_objects[slot].tile == 0));
+
+    state.resolve_endgame_confirmation(true);
+    assert_eq!(state.message, "Return-home arc (1)");
 
     for _ in 0..8 {
         state.resolve_endgame_confirmation(true);

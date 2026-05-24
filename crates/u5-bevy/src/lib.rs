@@ -6318,7 +6318,15 @@ mod tests {
         state.enter_endgame();
         state.resolve_endgame_confirmation(true);
         state.resolve_endgame_confirmation(true);
-        state.resolve_endgame_confirmation(true);
+        for _ in 0..(ENDGAME_TABLEAU_WIDTH * ENDGAME_TABLEAU_HEIGHT * 2) {
+            state.resolve_endgame_confirmation(true);
+            if matches!(
+                state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
+                Some(u5_runtime::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(0))
+            ) {
+                break;
+            }
+        }
         assert!(matches!(
             state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
             Some(u5_runtime::endgame_cinematic::EndgameCinematicStep::NarrativeWindow(0))
