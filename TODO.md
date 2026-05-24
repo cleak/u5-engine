@@ -138,7 +138,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 445 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 467 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -190,6 +190,9 @@ Last known verification state:
   `route-castle-save-refusal-02-n` `6465878cfb486dd1`,
   `route-world-board-horse-00-initial` `dad599d00fa00a6a`,
   `route-world-board-horse-01-b` `402223dd79b07b77`,
+  debug-enter transition frames for castle entry, castle return-to-world,
+  underworld-to-castle entry, and dungeon entry/exit-refusal,
+  ship/skiff frames for X-it launch and hoisted-sail eastward movement,
   `route-ship-broadside-fire-00-initial` `8b7440c1476c5f31`,
   `route-ship-broadside-fire-01-f6` `edd09405aa4bbd41`,
   `route-dungeon-movement-search-00-initial` `67e7e116d8be67aa`,

@@ -62,12 +62,12 @@ use u5_runtime::{
     TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas,
     TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
     TransportState, U4TransferOverrides, U4TransferSource, UUS_POR_SPELL_INDEX, VAS_LOR_COST,
-    VAS_LOR_SPELL_INDEX, WORLD_SIDE, WorldPlane, WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX,
-    blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save, commit_u4_transfer_save,
-    default_party_equipment, default_party_intelligence, default_party_names,
-    default_party_stay_counters, dungeon_cell_index, dungeon_room_entry_seed_for_direction,
-    endgame_tableau_role_for_slot, handle_play_key_input, hash_bytes, input_case_fold,
-    input_function_key_code, input_keypad_digit_direction_code,
+    VAS_LOR_SPELL_INDEX, WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST,
+    X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save,
+    commit_u4_transfer_save, default_party_equipment, default_party_intelligence,
+    default_party_names, default_party_stay_counters, dungeon_cell_index,
+    dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
+    hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -752,6 +752,33 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         target: PlayTarget::World(WorldPlane::Underworld),
         ..PlayOptions::default()
     };
+    let world_to_castle = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        debug_enter: Some(PlayTarget::Town(castle)),
+        ..PlayOptions::default()
+    };
+    let world_to_dungeon = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        debug_enter: Some(PlayTarget::Dungeon(dungeon)),
+        ..PlayOptions::default()
+    };
+    let underworld_to_castle = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Underworld),
+        debug_enter: Some(PlayTarget::Town(castle)),
+        ..PlayOptions::default()
+    };
+    let ship_xit = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        transport: ship_transport,
+        ..PlayOptions::default()
+    };
+    let ship_sail = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        transport: ship_transport,
+        wind: WindState::East,
+        wind_save_byte: WindState::East.save_byte(),
+        ..PlayOptions::default()
+    };
     let mut britannia_utility_use = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
         clock: GameClock::new(20, 0).expect("20:00 is a valid game-clock time"),
@@ -1137,6 +1164,27 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: None,
         },
         VisualRouteSuiteCase {
+            label: "route-debug-enter-castle",
+            frame_kind: "visual route town frame",
+            options: world_to_castle.clone(),
+            script: &["e", "empty", "idle:1"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-debug-enter-castle-return-world",
+            frame_kind: "visual route world frame",
+            options: world_to_castle,
+            script: &["e", "w", "idle:1"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-debug-enter-castle-from-underworld",
+            frame_kind: "visual route town frame",
+            options: underworld_to_castle,
+            script: &["e", "empty"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
             label: "route-world-board-horse",
             frame_kind: "visual route world frame",
             options: PlayOptions {
@@ -1147,6 +1195,20 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             },
             script: &["B"],
             configure: Some(seed_visual_route_board_horse),
+        },
+        VisualRouteSuiteCase {
+            label: "route-ship-xit-launches-skiff",
+            frame_kind: "visual route world frame",
+            options: ship_xit,
+            script: &["X", "empty"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-ship-hoist-and-sail-east",
+            frame_kind: "visual route world frame",
+            options: ship_sail,
+            script: &["Y", "d", "empty"],
+            configure: None,
         },
         VisualRouteSuiteCase {
             label: "route-ship-broadside-fire",
@@ -1194,6 +1256,13 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
                 ..PlayOptions::default()
             },
             script: &["I"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-debug-enter-dungeon",
+            frame_kind: "visual route dungeon frame",
+            options: world_to_dungeon,
+            script: &["e", "Q", "N"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -7623,7 +7692,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 143);
+        assert_eq!(cases.len(), 149);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -7703,10 +7772,27 @@ mod tests {
                 .iter()
                 .any(|case| case.label == "route-castle-save-refusal")
         );
+        for label in [
+            "route-debug-enter-castle",
+            "route-debug-enter-castle-return-world",
+            "route-debug-enter-castle-from-underworld",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert!(
             cases
                 .iter()
                 .any(|case| case.label == "route-world-board-horse")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-ship-xit-launches-skiff")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-ship-hoist-and-sail-east")
         );
         assert!(
             cases
@@ -7727,6 +7813,11 @@ mod tests {
             cases
                 .iter()
                 .any(|case| case.label == "route-dungeon-ignite-torch")
+        );
+        assert!(
+            cases
+                .iter()
+                .any(|case| case.label == "route-debug-enter-dungeon")
         );
         assert!(
             cases
@@ -7993,7 +8084,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 445);
+        assert_eq!(reports.len(), 467);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -8035,11 +8126,17 @@ mod tests {
         assert!(manifest.contains("route-blackthorn-fixed-hidden-zero-key-search-01-s6"));
         assert!(manifest.contains("route-castle-wooden-box-use-01-ub"));
         assert!(manifest.contains("route-castle-save-refusal-02-n"));
+        assert!(manifest.contains("route-debug-enter-castle-03-idle_1"));
+        assert!(manifest.contains("route-debug-enter-castle-return-world-02-w"));
+        assert!(manifest.contains("route-debug-enter-castle-from-underworld-02-empty"));
         assert!(manifest.contains("route-world-board-horse-01-b"));
+        assert!(manifest.contains("route-ship-xit-launches-skiff-01-x"));
+        assert!(manifest.contains("route-ship-hoist-and-sail-east-02-d"));
         assert!(manifest.contains("route-ship-broadside-fire-01-f6"));
         assert!(manifest.contains("route-dungeon-movement-search-03-s6"));
         assert!(manifest.contains("route-dungeon-heavy-door-variant-pass-through-01-idle"));
         assert!(manifest.contains("route-dungeon-ignite-torch-01-i"));
+        assert!(manifest.contains("route-debug-enter-dungeon-03-n"));
         assert!(manifest.contains("route-dungeon-exit-refusal-02-n"));
         assert!(manifest.contains("route-shop-arms-local-buy-sell-06-n"));
         assert!(manifest.contains("route-shop-healer-heal-decline-04-n"));
