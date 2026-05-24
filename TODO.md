@@ -37,7 +37,7 @@ Last known verification state:
   `CASTLE:0` top-down `be84488b7b199310`, and `DUNGEON:0` first-person
   `161ad48dd2a91725`.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` passed on
-  2026-05-24 with 176 scripted route cases (including expanded active-shop/modal
+  2026-05-24 with 179 scripted route cases (including expanded active-shop/modal
   routes for arms, healer, inn, reagent, tavern, horse trader, shipwright,
   guild, and sage flows, plus four extended-session
   cases: 12-step Britannia exploration with Z-stats and Look, 10-step castle
@@ -86,7 +86,9 @@ Last known verification state:
   `483b27d450a54309`, `d4a86e6efb5c8978`, `b862359d883858c9`),
   saved-slot natural moongate live-entry routes (`8989fd97ff26da04`,
   `0242f19174914479`), public Britannia chasm fall route
-  (`3f4fdf2e53e4e269`), public #48 Blink ray landing
+  (`3f4fdf2e53e4e269`), forced whirlpool Underworld branch
+  (`1a25aca8d540a7fe`), fixed narrative gate open/ordained-block routes
+  (`f41fe34d7c89a48b`, `061731b8753aad9c`), public #48 Blink ray landing
   (`f4b691ac224b385e`), public #51 poison-gas doorway step
   (`836b6cd5af06c44e`), and public #47 dungeon no-direct-recovery rest
   (`161ad48dd2a91725`) plus hourly Ring of Regeneration
@@ -138,7 +140,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 467 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 473 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest: `route-world-movement-00-initial` `f68b906acde0bd4a`,
   `route-world-movement-01-d` `ec7c5878d044dda6`,
   `route-world-movement-02-idle` `949d4d0fb006d273`,
@@ -164,7 +166,12 @@ Last known verification state:
   `f72019db2ff927e1`, `route-natural-moongate-trammel-gate-travel-01-idle_1`
   `fc9f55e0e7eb7f61`, `route-natural-moongate-empty-slot-clears-live-tile-01-idle_1`
   `6d146362bede1794`, `route-britannia-chasm-fall-to-underworld-01-s`
-  `f4a55f01e90aedc0`, `route-britannia-hole-up-rest-01-h1`
+  `f4a55f01e90aedc0`, `route-britannia-whirlpool-forced-underworld-01-setup_whirlpool-engagement`
+  `b0803c84058f9879`,
+  `route-britannia-fixed-narrative-gate-open-south-step-01-empty`
+  `ff4767117dbb9b7c`,
+  `route-britannia-fixed-narrative-gate-ordained-block-01-empty`
+  `ff4767117dbb9b7c`, `route-britannia-hole-up-rest-01-h1`
   `766522e62f639357`, `route-britannia-save-refusal-02-n`
   `a89ba1fbff6881da`, `route-britannia-fixed-hidden-single-use-search-get-02-g6`
   `eb0e32b031d839a3`, `route-underworld-fixed-hidden-stack-search-get-search-03-s6`

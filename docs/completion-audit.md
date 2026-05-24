@@ -70,7 +70,7 @@ audit:
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 65 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 176 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 179 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
@@ -92,8 +92,9 @@ audit:
   Order/Talk refusal rows, combat-active digit selection/clear, Escape abort,
   Ctrl-S music toggle, lowercase direct movement, Horse and non-horse
   wishing-well branches, public #56 terminal endgame missing-box jitter and full
-  victory cinematic routes, and the public Britannia chasm fall route through
-  real asset-backed play states.
+  victory cinematic routes, the public Britannia chasm fall route, the forced
+  whirlpool Underworld branch, and fixed narrative gate open/ordained-block
+  routes through real asset-backed play states.
 - `cargo run -- --save-frame-suite target\audit-frame-suite C:\Games\U5-Clean`
   — 13 PNGs, every frame nonblank with stable hashes.
 - `cargo run -p u5-tui --features visual -- --visual-frame-suite
@@ -102,7 +103,7 @@ audit:
   `BRIT.CBT` outdoor arena gallery frames with accepted early replacement rolls
   and a combat death/field/cursor marker gallery.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 467 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 473 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including horse-trader
   purchases, accepted healer cure/heal/resurrect, all four public shipwright
   delivery-row purchases, spell routes for Locate, Light/Open, restore, active effects,
@@ -110,7 +111,8 @@ audit:
   Magic Missile/Tremor/Repel Undead/Charm/Polymorph/Clone, Conjure/Swarm/Summon
   Daemon, dungeon levels, dungeon fields/dispel, dungeon Open chest, utility
   item use, Gate Travel success/refusal, natural moongate live-entry, chasm
-  fall, H-Hole-up rest, save/refusal, fixed hidden-treasure, Blackthorn
+  fall, forced whirlpool Underworld branch, fixed narrative gate open/ordained-block
+  routes, H-Hole-up rest, save/refusal, fixed hidden-treasure, Blackthorn
   audience/rescue routes, debug-enter town/dungeon transitions, ship X-it/skiff
   and hoisted-sail movement routes, extended Britannia/castle/dungeon routes,
   Shadowlord town entry/Yell/Stonegate, all three native shard vanquish paths,

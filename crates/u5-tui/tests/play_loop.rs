@@ -794,6 +794,26 @@ fn route_smoke_cases_cover_representative_modes() {
     assert!(
         cases
             .iter()
+            .any(|case| case.name == "britannia-chasm-fall-to-underworld")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "britannia-whirlpool-forced-underworld")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "britannia-fixed-narrative-gate-open-south-step")
+    );
+    assert!(
+        cases
+            .iter()
+            .any(|case| case.name == "britannia-fixed-narrative-gate-ordained-block")
+    );
+    assert!(
+        cases
+            .iter()
             .any(|case| case.name == "britannia-hole-up-rest")
     );
     assert!(cases.iter().any(|case| case.name == "castle-save-refusal"));

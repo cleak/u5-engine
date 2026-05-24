@@ -25,26 +25,27 @@ use u5_runtime::{
     FLAME_WIND_SPELL_INDEX, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX, GREAT_HEAL_COST,
     GREAT_HEAL_SPELL_INDEX, GameClock, GuildShop, HEAL_COST, HEAL_SPELL_INDEX, HORSE_PARKED_FIRST,
     HOURLY_STARVATION_DAMAGE_MAX, HOURLY_STARVATION_DAMAGE_MIN, Healer, Herbalist,
-    IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, Inn, MoonstoneGateSlot,
-    NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
-    NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PEER_COST,
-    PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
-    PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember, PendingVehicleAcquisition, PlayOptions,
-    PlayState, PlayTarget, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH,
-    RESURRECT_COST, RESURRECT_SPELL_INDEX, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
-    SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
-    SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
-    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
-    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
-    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
-    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
-    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
-    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
-    SURFACE_CHASM_Y, Scene, Shipwright, ShipwrightPurchaseKind, Stable, TALK_NO_RESPONSE_MESSAGE,
-    TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
-    TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST, TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX,
-    TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern,
-    TileGraphicsDepth, TransportState, UUS_POR_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX,
+    IN_LOR_SPELL_INDEX, IN_WIS_COST, IN_WIS_SPELL_INDEX, Inn, MoonstoneGateSlot, NARRATIVE_GATE_X,
+    NARRATIVE_GATE_Y, NATURAL_MOONGATE_RESTORED_TERRAIN_TILE, NATURAL_MOONGATE_TERRAIN_TILE,
+    NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, NEGATE_TIME_ACTIVE_EFFECT_TAG, NpcSlot,
+    OPEN_SPELL_COST, OPEN_SPELL_INDEX, PEER_COST, PEER_SPELL_INDEX, POISON_FIELD_SPELL_INDEX,
+    POISON_WIND_COST, POISON_WIND_SPELL_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX,
+    PartyMember, PendingVehicleAcquisition, PlayOptions, PlayState, PlayTarget, QUICKNESS_COST,
+    QUICKNESS_SPELL_INDEX, REAGENT_SULFUR_ASH, RESURRECT_COST, RESURRECT_SPELL_INDEX,
+    SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
+    SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
+    SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
+    SHADOWLORD_VANQUISHED, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
+    SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
+    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX,
+    SPECIAL_ITEM_SHARD_COWARDICE_INDEX, SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
+    SPECIAL_ITEM_SHARD_HATRED_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
+    STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShipwrightPurchaseKind,
+    Stable, TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
+    TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST,
+    TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
+    TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TransportState, UUS_POR_SPELL_INDEX,
+    VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WHIRLPOOL_EMERGENCE_X, WHIRLPOOL_EMERGENCE_Y,
     WORD_OF_POWER_SEAL_XOR, WORLD_SIDE, WindState, WordOfPowerSeal, WorldPlane, WorldReturn,
     X_RAY_COST, X_RAY_SPELL_INDEX, combat_class_stats, default_party_equipment,
     default_party_experience, default_party_intelligence, default_party_names,
@@ -486,6 +487,32 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         ..PlayOptions::default()
     };
 
+    let mut whirlpool_forced_underworld = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        start: Some((0, 0)),
+        transport: ship_transport,
+        ..PlayOptions::default()
+    };
+    whirlpool_forced_underworld.saved_active_objects = Some(vec![ActiveObject {
+        type_byte: 0xEC,
+        tile: 0xEC,
+        x: 1,
+        y: 0,
+        z: WorldPlane::Britannia.save_floor(),
+        phase: 0x80,
+        aux1: 0,
+        aux3: 0,
+    }]);
+
+    let narrative_gate_open = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        start: Some((NARRATIVE_GATE_X as usize, NARRATIVE_GATE_Y as usize)),
+        ..PlayOptions::default()
+    };
+
+    let mut narrative_gate_ordained_block = narrative_gate_open.clone();
+    narrative_gate_ordained_block.shrine_ordained_mask = 0b0000_0001;
+
     let mut wooden_box = PlayOptions::default();
     wooden_box.special_items[SPECIAL_ITEM_WOODEN_BOX_INDEX] = SPECIAL_ITEM_OWNED_VALUE;
 
@@ -828,6 +855,30 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             options: chasm_fall,
             script: &["s"],
             expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "britannia-whirlpool-forced-underworld",
+            options: whirlpool_forced_underworld,
+            script: &[],
+            expected: RouteSmokeExpectation::World(WorldPlane::Underworld),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "britannia-fixed-narrative-gate-open-south-step",
+            options: narrative_gate_open,
+            script: &["empty"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
+            name: "britannia-fixed-narrative-gate-ordained-block",
+            options: narrative_gate_ordained_block,
+            script: &["empty"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
             min_turn: 1,
             expected_frame_kind: "tile viewport",
         },
@@ -2287,6 +2338,16 @@ fn apply_route_smoke_case_setup(
             state.natural_moongate_live_cells = vec![idx];
             state.set_cached_moon_glyph_slots(Some(0), None);
             state.mark_visibility_dirty();
+        }
+        "britannia-whirlpool-forced-underworld" => {
+            if state
+                .apply_world_whirlpool_engagement(game_dir, WorldPlane::Britannia)?
+                .is_none()
+            {
+                return Err(io::Error::other(
+                    "seeded whirlpool route did not find adjacent whirlpool object",
+                ));
+            }
         }
         "castle-hourly-poison-starvation-pass" => {
             state.prng_state = 0x3456;
@@ -3827,6 +3888,122 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not board the adjacent horse"
+                )));
+            }
+        }
+        "natural-moongate-trammel-gate-travel" => {
+            if !matches!(
+                state.area,
+                Area::World {
+                    plane: WorldPlane::Underworld
+                }
+            ) || state.player.x != 231
+                || state.player.y != 5
+                || state.turn != 0
+                || !state.message.contains("Gate Travel phase 1")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not consume the cached natural moongate slot"
+                )));
+            }
+        }
+        "natural-moongate-empty-slot-clears-live-tile" => {
+            let idx = 124 * WORLD_SIDE + 62;
+            if !matches!(
+                state.area,
+                Area::World {
+                    plane: WorldPlane::Britannia
+                }
+            ) || state.player.x != 62
+                || state.player.y != 124
+                || state.turn != 0
+                || state.grid.get(idx).copied() != Some(NATURAL_MOONGATE_RESTORED_TERRAIN_TILE)
+                || !state.natural_moongate_live_cells.is_empty()
+                || !state
+                    .message
+                    .contains("Natural moongate phase 1 is not set")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not clear the empty natural moongate slot"
+                )));
+            }
+        }
+        "britannia-chasm-fall-to-underworld" => {
+            if !matches!(
+                state.area,
+                Area::World {
+                    plane: WorldPlane::Underworld
+                }
+            ) || state.player.x != SURFACE_CHASM_X as usize
+                || state.player.y != SURFACE_CHASM_Y as usize
+                || state.active_objects.first().is_none_or(|object| {
+                    object.x != SURFACE_CHASM_X as usize
+                        || object.y != SURFACE_CHASM_Y as usize
+                        || object.z != WorldPlane::Underworld.save_floor()
+                })
+                || !state.message.contains("underworld")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not land on the published chasm transition"
+                )));
+            }
+        }
+        "britannia-whirlpool-forced-underworld" => {
+            if !matches!(
+                state.area,
+                Area::World {
+                    plane: WorldPlane::Underworld
+                }
+            ) || state.player.x != WHIRLPOOL_EMERGENCE_X as usize
+                || state.player.y != WHIRLPOOL_EMERGENCE_Y as usize
+                || state.active_objects.first().is_none_or(|object| {
+                    object.x != WHIRLPOOL_EMERGENCE_X as usize
+                        || object.y != WHIRLPOOL_EMERGENCE_Y as usize
+                        || object.z != WorldPlane::Underworld.save_floor()
+                })
+                || !state.message.contains("Whirlpool")
+                || !state.message.contains("Sucked into the underworld")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the published whirlpool transition"
+                )));
+            }
+        }
+        "britannia-fixed-narrative-gate-open-south-step" => {
+            if !matches!(
+                state.area,
+                Area::World {
+                    plane: WorldPlane::Britannia
+                }
+            ) || state.player.x != NARRATIVE_GATE_X as usize
+                || state.player.y != NARRATIVE_GATE_Y as usize + 1
+                || state.active_objects.first().is_none_or(|object| {
+                    object.x != state.player.x
+                        || object.y != state.player.y
+                        || object.z != WorldPlane::Britannia.save_floor()
+                })
+                || !state.message.contains("fixed narrative gate opens")
+                || !state.message.contains("steps south")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the unordained narrative gate branch"
+                )));
+            }
+        }
+        "britannia-fixed-narrative-gate-ordained-block" => {
+            if !matches!(
+                state.area,
+                Area::World {
+                    plane: WorldPlane::Britannia
+                }
+            ) || state.player.x != NARRATIVE_GATE_X as usize
+                || state.player.y != NARRATIVE_GATE_Y as usize
+                || state.shrine_ordained_mask == 0
+                || !state.message.contains("fixed narrative gate opens")
+                || !state.message.contains("blocks entry")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply the ordained narrative gate branch"
                 )));
             }
         }

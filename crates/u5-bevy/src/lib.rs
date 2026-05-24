@@ -38,12 +38,12 @@ use u5_runtime::{
     INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT,
     INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement, MAIN_TEXT_WINDOW_INDEX,
     MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
-    MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, MoonstoneGateSlot,
-    NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX, OPEN_SPELL_COST,
-    OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX, PLAY_MUSIC_TOGGLE_KEY,
-    PLAYER_SPRITE_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST, POISON_WIND_SPELL_INDEX,
-    PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX, PartyMember,
-    PlayInputDisposition, PlayOptions, PlayState, PlayTarget, ProportionalFont,
+    MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X,
+    NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
+    OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST, PEER_SPELL_INDEX,
+    PLAY_MUSIC_TOGGLE_KEY, PLAYER_SPRITE_TILE, POISON_FIELD_SPELL_INDEX, POISON_WIND_COST,
+    POISON_WIND_SPELL_INDEX, PROMPT_TEXT_WINDOW_INDEX, PROTECTION_COST, PROTECTION_SPELL_INDEX,
+    PartyMember, PlayInputDisposition, PlayOptions, PlayState, PlayTarget, ProportionalFont,
     ProportionalWidthTable, QUICKNESS_COST, QUICKNESS_SPELL_INDEX, RESURRECT_COST,
     RESURRECT_SPELL_INDEX, RTV_COMMAND_STREAM_BYTES, RectColumnSweepTransition,
     ReturnToViewFrameKind, SAVED_GAM_FILENAME, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
@@ -858,6 +858,29 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         facing: Some(Direction::South),
         ..PlayOptions::default()
     };
+    let mut whirlpool_forced_underworld = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        start: Some((0, 0)),
+        transport: ship_transport,
+        ..PlayOptions::default()
+    };
+    whirlpool_forced_underworld.saved_active_objects = Some(vec![ActiveObject {
+        type_byte: 0xEC,
+        tile: 0xEC,
+        x: 1,
+        y: 0,
+        z: WorldPlane::Britannia.save_floor(),
+        phase: 0x80,
+        aux1: 0,
+        aux3: 0,
+    }]);
+    let narrative_gate_open = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        start: Some((NARRATIVE_GATE_X as usize, NARRATIVE_GATE_Y as usize)),
+        ..PlayOptions::default()
+    };
+    let mut narrative_gate_ordained_block = narrative_gate_open.clone();
+    narrative_gate_ordained_block.shrine_ordained_mask = 0b0000_0001;
     let fixed_hidden_single_use = PlayOptions {
         target: PlayTarget::World(WorldPlane::Britannia),
         start: Some((79, 64)),
@@ -1093,6 +1116,27 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             frame_kind: "visual route world frame",
             options: chasm_fall,
             script: &["s"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-whirlpool-forced-underworld",
+            frame_kind: "visual route world frame",
+            options: whirlpool_forced_underworld,
+            script: &["setup:whirlpool-engagement"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-fixed-narrative-gate-open-south-step",
+            frame_kind: "visual route world frame",
+            options: narrative_gate_open,
+            script: &["empty"],
+            configure: None,
+        },
+        VisualRouteSuiteCase {
+            label: "route-britannia-fixed-narrative-gate-ordained-block",
+            frame_kind: "visual route world frame",
+            options: narrative_gate_ordained_block,
+            script: &["empty"],
             configure: None,
         },
         VisualRouteSuiteCase {
@@ -3198,6 +3242,17 @@ fn apply_visual_route_command(
     }
     if lower == "setup:blackthorn-rescue" {
         state.apply_blackthorn_rescue_refuge(game_dir)?;
+        return Ok(PlayInputDisposition::Continue);
+    }
+    if lower == "setup:whirlpool-engagement" {
+        if state
+            .apply_world_whirlpool_engagement(game_dir, WorldPlane::Britannia)?
+            .is_none()
+        {
+            return Err(io::Error::other(
+                "seeded visual route did not find adjacent whirlpool object",
+            ));
+        }
         return Ok(PlayInputDisposition::Continue);
     }
     if lower == "setup:terrain-combat-party-entry" {
@@ -7698,7 +7753,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 149);
+        assert_eq!(cases.len(), 152);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -7762,6 +7817,9 @@ mod tests {
             "route-natural-moongate-trammel-gate-travel",
             "route-natural-moongate-empty-slot-clears-live-tile",
             "route-britannia-chasm-fall-to-underworld",
+            "route-britannia-whirlpool-forced-underworld",
+            "route-britannia-fixed-narrative-gate-open-south-step",
+            "route-britannia-fixed-narrative-gate-ordained-block",
             "route-britannia-hole-up-rest",
             "route-britannia-save-refusal",
             "route-britannia-dispatcher-refusals",
@@ -8050,6 +8108,14 @@ mod tests {
             "route-britannia-locate-cast-01-c1iw"
         );
         assert_eq!(
+            visual_route_step_label(
+                "route-britannia-whirlpool-forced-underworld",
+                1,
+                "setup:whirlpool-engagement"
+            ),
+            "route-britannia-whirlpool-forced-underworld-01-setup_whirlpool-engagement"
+        );
+        assert_eq!(
             visual_route_step_label("route-dungeon-field-cycle-spells", 8, "C1AG6"),
             "route-dungeon-field-cycle-spells-08-c1ag6"
         );
@@ -8090,7 +8156,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 467);
+        assert_eq!(reports.len(), 473);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -8123,6 +8189,13 @@ mod tests {
         assert!(manifest.contains("route-natural-moongate-trammel-gate-travel-01-idle_1"));
         assert!(manifest.contains("route-natural-moongate-empty-slot-clears-live-tile-01-idle_1"));
         assert!(manifest.contains("route-britannia-chasm-fall-to-underworld-01-s"));
+        assert!(
+            manifest.contains(
+                "route-britannia-whirlpool-forced-underworld-01-setup_whirlpool-engagement"
+            )
+        );
+        assert!(manifest.contains("route-britannia-fixed-narrative-gate-open-south-step-01-empty"));
+        assert!(manifest.contains("route-britannia-fixed-narrative-gate-ordained-block-01-empty"));
         assert!(manifest.contains("route-britannia-hole-up-rest-01-h1"));
         assert!(manifest.contains("route-britannia-save-refusal-02-n"));
         assert!(manifest.contains("route-britannia-dispatcher-refusals-01-b"));
