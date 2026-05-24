@@ -1891,6 +1891,26 @@ impl PlayState {
         viewport
     }
 
+    pub fn render_surface_view_class_cell_for_mode(
+        depth: TileGraphicsDepth,
+        class: u8,
+        tile: u8,
+        player_marker: bool,
+        mode: ViewOverlayMode,
+    ) -> TileViewport {
+        let scale = LOCAL_VIEW_CELL_PIXEL_SCALE;
+        let mut viewport = TileViewport {
+            depth,
+            cells_wide: 1,
+            cells_high: 1,
+            width: scale,
+            height: scale,
+            pixels: vec![0; scale * scale],
+        };
+        draw_surface_view_cell(&mut viewport, 0, 0, scale, class, tile, player_marker, mode);
+        viewport
+    }
+
     fn surface_view_tile_at(&self, cell_x: usize, cell_y: usize) -> u8 {
         let px = self.player.x as isize;
         let py = self.player.y as isize;
@@ -4040,6 +4060,22 @@ fn draw_surface_view_cell(
             }
         }
         0x10 => draw_view_overlay_fence(viewport, cell_x, cell_y, scale, color, tile),
+        0x5A => {
+            fill_view_overlay_cell(
+                viewport,
+                cell_x,
+                cell_y,
+                scale,
+                surface_view_class_color(0x0B, mode),
+            );
+            draw_view_overlay_box(
+                viewport,
+                cell_x,
+                cell_y,
+                scale,
+                surface_view_class_color(0x03, mode),
+            );
+        }
         _ => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
     }
 }
