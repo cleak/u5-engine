@@ -860,8 +860,9 @@ as public details become available.
   - Hostile world-object contact, Attack against combat-class objects, dungeon
     rooms, rest ambushes, and outdoor encounters can enter a combat frame.
   - Dungeon-room combat now uses the public issue #12/#19 source rules for
-    high-bit-masked ordinary monsters, compact source-order placement, skipped
-    low special markers except Doom's absorbable field, and party positions
+    high-bit-masked ordinary monsters, compact source-order placement, special
+    id post-write categories, `0xEC..0xEF` random-special selectors, guarded
+    unpublished special effects, Doom's absorbable field, and party positions
     after the placed ordinary monsters.
   - Dungeon active-monster combat now follows public issue #21: it uses the
     ambush framer path, builds a stock-floor 11-by-11 arena without loading

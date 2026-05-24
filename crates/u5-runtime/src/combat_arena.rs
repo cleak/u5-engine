@@ -286,25 +286,76 @@ impl DungeonRoomSetupSource {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DungeonRoomSetupSourceKind {
-    OrdinaryCombatant,
+    OrdinaryCombatant { setup_class: u8 },
     AbsorbableField,
-    SpecialPlacement,
+    SpecialPlacement(DungeonRoomSpecialPlacement),
+    RandomSpecialPlacement { selector: u8 },
 }
 
 impl DungeonRoomSetupSourceKind {
     pub fn from_source(source: u8) -> Self {
-        let family = source & DUNGEON_ROOM_SPECIAL_SOURCE_MASK;
         if dungeon_room_absorbable_field_family(source) {
             Self::AbsorbableField
-        } else if source >= DUNGEON_ROOM_ORDINARY_SOURCE_FIRST
-            && family != DUNGEON_ROOM_SPECIAL_SOURCE_B4
-            && family != DUNGEON_ROOM_SPECIAL_SOURCE_E8
-            && family != DUNGEON_ROOM_SPECIAL_SOURCE_EC
-        {
-            Self::OrdinaryCombatant
+        } else if let Some(setup_class) = dungeon_room_ordinary_setup_class(source) {
+            Self::OrdinaryCombatant { setup_class }
+        } else if let Some(selector) = dungeon_room_random_special_selector(source) {
+            Self::RandomSpecialPlacement { selector }
         } else {
-            Self::SpecialPlacement
+            Self::SpecialPlacement(DungeonRoomSpecialPlacement::from_setup_id(source))
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DungeonRoomSpecialPlacement {
+    pub setup_id: u8,
+    pub post_write: DungeonRoomSpecialPostWrite,
+}
+
+impl DungeonRoomSpecialPlacement {
+    pub const fn from_setup_id(setup_id: u8) -> Self {
+        Self {
+            setup_id,
+            post_write: dungeon_room_special_post_write(setup_id),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DungeonRoomSpecialPostWrite {
+    LevelDerived,
+    LevelScaledRandom,
+    ResidentRangeTable,
+    None,
+}
+
+pub const fn dungeon_room_ordinary_setup_class(source: u8) -> Option<u8> {
+    let family = source & DUNGEON_ROOM_SPECIAL_SOURCE_MASK;
+    if source >= DUNGEON_ROOM_ORDINARY_SOURCE_FIRST
+        && family != DUNGEON_ROOM_SPECIAL_SOURCE_B4
+        && family != DUNGEON_ROOM_SPECIAL_SOURCE_E8
+        && family != DUNGEON_ROOM_SPECIAL_SOURCE_EC
+    {
+        Some((source - DUNGEON_ROOM_ORDINARY_SOURCE_FIRST) / 4)
+    } else {
+        None
+    }
+}
+
+pub const fn dungeon_room_random_special_selector(source: u8) -> Option<u8> {
+    if source & DUNGEON_ROOM_SPECIAL_SOURCE_MASK == DUNGEON_ROOM_SPECIAL_SOURCE_EC {
+        Some(source & 0x03)
+    } else {
+        None
+    }
+}
+
+pub const fn dungeon_room_special_post_write(setup_id: u8) -> DungeonRoomSpecialPostWrite {
+    match setup_id {
+        1 => DungeonRoomSpecialPostWrite::LevelDerived,
+        2 => DungeonRoomSpecialPostWrite::LevelScaledRandom,
+        3..=15 => DungeonRoomSpecialPostWrite::ResidentRangeTable,
+        _ => DungeonRoomSpecialPostWrite::None,
     }
 }
 

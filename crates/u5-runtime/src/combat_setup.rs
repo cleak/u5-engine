@@ -170,7 +170,7 @@ pub fn combat_placement_slots_from_record(record: &CombatArenaRecord) -> Vec<Com
 
 pub fn dungeon_room_source_sprite(source: u8) -> Option<u8> {
     match DungeonRoomSetupSourceKind::from_source(source) {
-        DungeonRoomSetupSourceKind::OrdinaryCombatant => Some((source & 0x7f) | 0x80),
+        DungeonRoomSetupSourceKind::OrdinaryCombatant { .. } => Some((source & 0x7f) | 0x80),
         _ => None,
     }
 }
@@ -189,7 +189,7 @@ pub fn dungeon_room_combat_instance_from_setup(
             continue;
         }
         match source.kind {
-            DungeonRoomSetupSourceKind::OrdinaryCombatant => {
+            DungeonRoomSetupSourceKind::OrdinaryCombatant { .. } => {
                 let Some(tile) = dungeon_room_source_sprite(source.source) else {
                     continue;
                 };
@@ -229,17 +229,10 @@ pub fn dungeon_room_combat_instance_from_setup(
                 };
                 placed_count = placed_count.saturating_add(1);
             }
-            DungeonRoomSetupSourceKind::SpecialPlacement => {
-                active_objects[active_object_slot] = ActiveObject {
-                    type_byte: source.source,
-                    tile: source.source,
-                    x: usize::from(source.x),
-                    y: usize::from(source.y),
-                    z,
-                    phase: STEADY_PHASE,
-                    aux1: 0,
-                    aux3: 0,
-                };
+            DungeonRoomSetupSourceKind::SpecialPlacement(_)
+            | DungeonRoomSetupSourceKind::RandomSpecialPlacement { .. } => {
+                active_objects[active_object_slot] =
+                    dungeon_room_special_marker_active_object(source, z);
                 placed_count = placed_count.saturating_add(1);
             }
         }
@@ -251,6 +244,22 @@ pub fn dungeon_room_combat_instance_from_setup(
         requested_count: setup.setup_sources.len() as u8,
         placed_count,
         unplaced_count: (setup.setup_sources.len() as u8).saturating_sub(placed_count),
+    }
+}
+
+fn dungeon_room_special_marker_active_object(
+    source: &DungeonRoomSetupSource,
+    z: i8,
+) -> ActiveObject {
+    ActiveObject {
+        type_byte: source.source,
+        tile: source.source,
+        x: usize::from(source.x),
+        y: usize::from(source.y),
+        z,
+        phase: STEADY_PHASE,
+        aux1: 0,
+        aux3: 0,
     }
 }
 

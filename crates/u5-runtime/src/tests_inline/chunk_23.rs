@@ -156,44 +156,70 @@
                     source: 0x44,
                     x: 12,
                     y: 22,
-                    kind: DungeonRoomSetupSourceKind::OrdinaryCombatant,
+                    kind: DungeonRoomSetupSourceKind::OrdinaryCombatant { setup_class: 1 },
                 },
                 DungeonRoomSetupSource {
                     slot: 3,
                     source: 0xb4,
                     x: 13,
                     y: 23,
-                    kind: DungeonRoomSetupSourceKind::SpecialPlacement,
+                    kind: DungeonRoomSetupSourceKind::SpecialPlacement(
+                        DungeonRoomSpecialPlacement::from_setup_id(0xb4),
+                    ),
                 },
                 DungeonRoomSetupSource {
                     slot: 4,
                     source: 0xc4,
                     x: 14,
                     y: 24,
-                    kind: DungeonRoomSetupSourceKind::OrdinaryCombatant,
+                    kind: DungeonRoomSetupSourceKind::OrdinaryCombatant { setup_class: 33 },
                 },
                 DungeonRoomSetupSource {
                     slot: 5,
                     source: 0xe8,
                     x: 15,
                     y: 25,
-                    kind: DungeonRoomSetupSourceKind::SpecialPlacement,
+                    kind: DungeonRoomSetupSourceKind::SpecialPlacement(
+                        DungeonRoomSpecialPlacement::from_setup_id(0xe8),
+                    ),
                 },
                 DungeonRoomSetupSource {
                     slot: 6,
                     source: 0xec,
                     x: 16,
                     y: 26,
-                    kind: DungeonRoomSetupSourceKind::SpecialPlacement,
+                    kind: DungeonRoomSetupSourceKind::RandomSpecialPlacement { selector: 0 },
                 },
                 DungeonRoomSetupSource {
                     slot: 7,
                     source: 0xef,
                     x: 17,
                     y: 27,
-                    kind: DungeonRoomSetupSourceKind::SpecialPlacement,
+                    kind: DungeonRoomSetupSourceKind::RandomSpecialPlacement { selector: 3 },
                 },
             ]
+        );
+        assert_eq!(dungeon_room_ordinary_setup_class(0x44), Some(1));
+        assert_eq!(dungeon_room_ordinary_setup_class(0xc4), Some(33));
+        assert_eq!(dungeon_room_ordinary_setup_class(0xb4), None);
+        assert_eq!(dungeon_room_random_special_selector(0xec), Some(0));
+        assert_eq!(dungeon_room_random_special_selector(0xef), Some(3));
+        assert_eq!(dungeon_room_random_special_selector(0xe8), None);
+        assert_eq!(
+            dungeon_room_special_post_write(1),
+            DungeonRoomSpecialPostWrite::LevelDerived
+        );
+        assert_eq!(
+            dungeon_room_special_post_write(2),
+            DungeonRoomSpecialPostWrite::LevelScaledRandom
+        );
+        assert_eq!(
+            dungeon_room_special_post_write(15),
+            DungeonRoomSpecialPostWrite::ResidentRangeTable
+        );
+        assert_eq!(
+            dungeon_room_special_post_write(16),
+            DungeonRoomSpecialPostWrite::None
         );
         assert_eq!(dungeon_room_source_sprite(0x44), Some(0xc4));
         assert_eq!(dungeon_room_source_sprite(0xc4), Some(0xc4));
@@ -239,7 +265,7 @@
                     source: 0x44,
                     x: 2,
                     y: 13,
-                    kind: DungeonRoomSetupSourceKind::OrdinaryCombatant,
+                    kind: DungeonRoomSetupSourceKind::OrdinaryCombatant { setup_class: 1 },
                 },
             ]
         );
@@ -370,6 +396,66 @@
         assert!(instance.actors[COMBAT_PARTY_ACTOR_SLOTS + 1].is_empty());
         assert_eq!(instance.active_objects[COMBAT_PARTY_ACTOR_SLOTS + 2].tile, 0xc4);
         assert!(!instance.actors[COMBAT_PARTY_ACTOR_SLOTS + 2].is_empty());
+    }
+
+    #[test]
+    fn dungeon_room_special_setup_ids_keep_public_post_write_shape() {
+        let mut bytes = vec![0u8; COMBAT_ARENA_RECORD_LEN];
+        let source_base = DUNGEON_ROOM_SOURCE_ROW * COMBAT_ARENA_ROW_STRIDE
+            + DUNGEON_ROOM_SOURCE_COLUMN;
+        bytes[source_base] = 0x01;
+        bytes[source_base + 1] = 0x02;
+        bytes[source_base + 2] = 0x0f;
+        bytes[source_base + 3] = 0x10;
+        for index in 0..DUNGEON_ROOM_SOURCE_COUNT {
+            bytes[DUNGEON_ROOM_SOURCE_X_ROW * COMBAT_ARENA_ROW_STRIDE
+                + DUNGEON_ROOM_SOURCE_COLUMN
+                + index] = index as u8;
+            bytes[DUNGEON_ROOM_SOURCE_Y_ROW * COMBAT_ARENA_ROW_STRIDE
+                + DUNGEON_ROOM_SOURCE_COLUMN
+                + index] = (COMBAT_ARENA_SIDE - 1 - index.min(COMBAT_ARENA_SIDE - 1)) as u8;
+        }
+        let record = CombatArenaRecord::from_record_bytes(&bytes).unwrap();
+        let setup = dungeon_room_combat_setup_from_record(0, &record);
+
+        assert_eq!(
+            setup.setup_sources[0].kind,
+            DungeonRoomSetupSourceKind::SpecialPlacement(DungeonRoomSpecialPlacement {
+                setup_id: 1,
+                post_write: DungeonRoomSpecialPostWrite::LevelDerived,
+            })
+        );
+        assert_eq!(
+            setup.setup_sources[1].kind,
+            DungeonRoomSetupSourceKind::SpecialPlacement(DungeonRoomSpecialPlacement {
+                setup_id: 2,
+                post_write: DungeonRoomSpecialPostWrite::LevelScaledRandom,
+            })
+        );
+        assert_eq!(
+            setup.setup_sources[2].kind,
+            DungeonRoomSetupSourceKind::SpecialPlacement(DungeonRoomSpecialPlacement {
+                setup_id: 15,
+                post_write: DungeonRoomSpecialPostWrite::ResidentRangeTable,
+            })
+        );
+        assert_eq!(
+            setup.setup_sources[3].kind,
+            DungeonRoomSetupSourceKind::SpecialPlacement(DungeonRoomSpecialPlacement {
+                setup_id: 16,
+                post_write: DungeonRoomSpecialPostWrite::None,
+            })
+        );
+
+        let instance = dungeon_room_combat_instance_from_setup(&setup, 2);
+
+        assert_eq!(instance.requested_count, 4);
+        assert_eq!(instance.placed_count, 4);
+        for (offset, expected_tile) in [0x01, 0x02, 0x0f, 0x10].into_iter().enumerate() {
+            let slot = COMBAT_PARTY_ACTOR_SLOTS + offset;
+            assert_eq!(instance.active_objects[slot].tile, expected_tile);
+            assert!(instance.actors[slot].is_empty());
+        }
     }
 
     #[test]
@@ -14803,8 +14889,9 @@
                     source.y
                 );
                 match source.kind {
-                    DungeonRoomSetupSourceKind::OrdinaryCombatant => {
+                    DungeonRoomSetupSourceKind::OrdinaryCombatant { setup_class } => {
                         ordinary += 1;
+                        assert_eq!(dungeon_room_ordinary_setup_class(source.source), Some(setup_class));
                         assert!(dungeon_room_source_sprite(source.source).is_some());
                     }
                     DungeonRoomSetupSourceKind::AbsorbableField => {
@@ -14812,14 +14899,24 @@
                         assert!(dungeon_room_absorbable_field_family(source.source));
                         assert_eq!(dungeon_room_source_sprite(source.source), None);
                     }
-                    DungeonRoomSetupSourceKind::SpecialPlacement => {
+                    DungeonRoomSetupSourceKind::SpecialPlacement(special_placement) => {
                         special += 1;
+                        assert_eq!(
+                            special_placement,
+                            DungeonRoomSpecialPlacement::from_setup_id(source.source)
+                        );
                         assert_eq!(dungeon_room_source_sprite(source.source), None);
-                        if source.source & DUNGEON_ROOM_SPECIAL_SOURCE_MASK
-                            == DUNGEON_ROOM_SPECIAL_SOURCE_EC
-                        {
-                            random_special += 1;
-                        }
+                        assert_ne!(
+                            source.source & DUNGEON_ROOM_SPECIAL_SOURCE_MASK,
+                            DUNGEON_ROOM_SPECIAL_SOURCE_EC
+                        );
+                    }
+                    DungeonRoomSetupSourceKind::RandomSpecialPlacement { selector } => {
+                        special += 1;
+                        random_special += 1;
+                        assert_eq!(selector, source.source & 0x03);
+                        assert_eq!(dungeon_room_random_special_selector(source.source), Some(selector));
+                        assert_eq!(dungeon_room_source_sprite(source.source), None);
                     }
                 }
             }
