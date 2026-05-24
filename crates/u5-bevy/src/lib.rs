@@ -8720,19 +8720,186 @@ fn write_visual_frame_suite_manifest(
 ) -> io::Result<()> {
     let mut manifest = String::new();
     manifest.push_str("# Ultima V Bevy visual frame suite manifest\n");
-    manifest.push_str("# Sanitized: contains dimensions, frame kind, and hashes only.\n");
+    manifest.push_str(
+        "# Sanitized: contains dimensions, frame kind, hashes, and clean review metadata only.\n",
+    );
+    manifest.push_str(&format!("coverage\ttotal-frames\t{}\n", reports.len()));
+    for coverage in visual_review_coverage_reports(reports) {
+        if let Some(expected) = coverage.expected {
+            if coverage.actual != expected {
+                return Err(io::Error::other(format!(
+                    "visual review family `{}` wrote {} frame(s), expected {}",
+                    coverage.label, coverage.actual, expected
+                )));
+            }
+            manifest.push_str(&format!(
+                "coverage\t{}\t{}/{}\t{}\n",
+                coverage.label, coverage.actual, expected, coverage.note
+            ));
+        } else {
+            manifest.push_str(&format!(
+                "coverage\t{}\t{}\t{}\n",
+                coverage.label, coverage.actual, coverage.note
+            ));
+        }
+    }
+    manifest.push_str("# label\tdimensions\tframe-kind\thash\tnonblack\treview-metadata\n");
     for report in reports {
         manifest.push_str(&format!(
-            "{}\t{}x{}\t{}\thash {:016x}\tnonblack {}\n",
+            "{}\t{}x{}\t{}\thash {:016x}\tnonblack {}\t{}\n",
             report.label,
             report.width,
             report.height,
             report.frame_kind,
             report.byte_hash,
-            report.nonblack_pixels
+            report.nonblack_pixels,
+            visual_review_metadata(report)
         ));
     }
     std::fs::write(out_dir.join("manifest.txt"), manifest)
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct VisualReviewCoverage {
+    label: &'static str,
+    actual: usize,
+    expected: Option<usize>,
+    note: &'static str,
+}
+
+fn visual_review_coverage_reports(reports: &[VisualFrameReport]) -> Vec<VisualReviewCoverage> {
+    let mut coverage = Vec::new();
+    let outdoor_combat = reports
+        .iter()
+        .filter(|report| report.label.starts_with("combat-arena-"))
+        .count();
+    if outdoor_combat > 0 {
+        coverage.push(VisualReviewCoverage {
+            label: "combat-outdoor-arena-gallery",
+            actual: outdoor_combat,
+            expected: Some(BRIT_CBT_RECORDS),
+            note: "source=BRIT.CBT replacement-gallery",
+        });
+    }
+
+    let dungeon_combat = reports
+        .iter()
+        .filter(|report| report.label.starts_with("dungeon-combat-arena-"))
+        .count();
+    if dungeon_combat > 0 {
+        coverage.push(VisualReviewCoverage {
+            label: "combat-dungeon-room-gallery",
+            actual: dungeon_combat,
+            expected: Some(DUNGEON_CBT_RECORDS),
+            note: "source=DUNGEON.CBT source-scan-disabled",
+        });
+    }
+
+    let surface_view_class = reports
+        .iter()
+        .filter(|report| {
+            matches!(
+                report.label.as_str(),
+                "surface-view-class-gallery"
+                    | "peer-view-class-gallery"
+                    | "x-ray-view-class-gallery"
+            )
+        })
+        .count();
+    if surface_view_class > 0 {
+        coverage.push(VisualReviewCoverage {
+            label: "surface-view-class-gallery",
+            actual: surface_view_class,
+            expected: Some(3),
+            note: "modes=View,Peer,X-Ray",
+        });
+    }
+
+    let route_steps = reports
+        .iter()
+        .filter(|report| report.label.starts_with("route-"))
+        .count();
+    if route_steps > 0 {
+        coverage.push(VisualReviewCoverage {
+            label: "visual-route-steps",
+            actual: route_steps,
+            expected: None,
+            note: "per-step Bevy route replay frames",
+        });
+    }
+
+    let combat_route_steps = reports
+        .iter()
+        .filter(|report| {
+            report.label.starts_with("route-combat-")
+                || report.label.starts_with("route-doom-combat-")
+        })
+        .count();
+    if combat_route_steps > 0 {
+        coverage.push(VisualReviewCoverage {
+            label: "visual-route-combat-steps",
+            actual: combat_route_steps,
+            expected: None,
+            note: "combat and Doom combat route frames",
+        });
+    }
+
+    coverage
+}
+
+fn visual_review_metadata(report: &VisualFrameReport) -> String {
+    if let Some(index) = parse_visual_index(&report.label, "combat-arena-", 2) {
+        let replacement = terrain_combat_raw_replacement_tile_for_arena(index)
+            .map(|tile| format!("0x{tile:02x}"))
+            .unwrap_or_else(|| "none".to_string());
+        return format!(
+            "file={}.png review=gallery/combat/outdoor source=BRIT.CBT arena={index:02} replacement_tile={replacement}",
+            report.label
+        );
+    }
+    if let Some(index) = parse_visual_index(&report.label, "dungeon-combat-arena-", 3) {
+        return format!(
+            "file={}.png review=gallery/combat/dungeon-room source=DUNGEON.CBT arena={index:03} source_scan=disabled",
+            report.label
+        );
+    }
+    if matches!(
+        report.label.as_str(),
+        "surface-view-class-gallery" | "peer-view-class-gallery" | "x-ray-view-class-gallery"
+    ) {
+        return format!(
+            "file={}.png review=gallery/surface-view-class mode={}",
+            report.label,
+            report.label.trim_end_matches("-class-gallery")
+        );
+    }
+    if let Some((route, step, input)) = visual_route_step_metadata(&report.label) {
+        return format!(
+            "file={}.png review=route-step route={route} step={step} input={input}",
+            report.label
+        );
+    }
+    format!("file={}.png review=single-frame", report.label)
+}
+
+fn parse_visual_index(label: &str, prefix: &str, digits: usize) -> Option<usize> {
+    let suffix = label.strip_prefix(prefix)?;
+    if suffix.len() != digits || !suffix.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    suffix.parse().ok()
+}
+
+fn visual_route_step_metadata(label: &str) -> Option<(&str, &str, &str)> {
+    if !label.starts_with("route-") {
+        return None;
+    }
+    let (prefix, input) = label.rsplit_once('-')?;
+    let (route, step) = prefix.rsplit_once('-')?;
+    if step.len() != 2 || !step.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    Some((route, step, input))
 }
 
 fn write_rgba_png(out: &Path, width: u32, height: u32, rgba: Vec<u8>) -> io::Result<()> {
@@ -10528,6 +10695,23 @@ mod tests {
         assert!(manifest.contains("combat-arena-15"));
         assert!(manifest.contains("dungeon-combat-arena-000"));
         assert!(manifest.contains("dungeon-combat-arena-111"));
+        assert!(manifest.contains("coverage\ttotal-frames\t"));
+        assert!(manifest.contains("coverage\tcombat-outdoor-arena-gallery\t16/16"));
+        assert!(manifest.contains("coverage\tcombat-dungeon-room-gallery\t112/112"));
+        assert!(manifest.contains("coverage\tsurface-view-class-gallery\t3/3"));
+        assert!(
+            manifest.contains("combat-arena-00\t320x200\tcombat outdoor arena replacement gallery")
+        );
+        assert!(manifest.contains(
+            "review=gallery/combat/outdoor source=BRIT.CBT arena=00 replacement_tile=0x"
+        ));
+        assert!(manifest.contains(
+            "review=gallery/combat/dungeon-room source=DUNGEON.CBT arena=000 source_scan=disabled"
+        ));
+        assert!(manifest.contains(
+            "surface-view-class-gallery\t320x200\tvisual surface view class gallery frame"
+        ));
+        assert!(manifest.contains("review=gallery/surface-view-class mode=surface-view"));
         assert!(manifest.contains("combat-marker-gallery"));
         assert!(manifest.contains("intro-menu"));
         assert!(manifest.contains("intro-finished-menu"));
@@ -11230,6 +11414,10 @@ mod tests {
             assert!(report.nonblack_pixels > 0);
         }
         let manifest = fs::read_to_string(dir.join("manifest.txt")).unwrap();
+        assert!(manifest.contains("coverage\tvisual-route-steps\t1691"));
+        assert!(manifest.contains("coverage\tvisual-route-combat-steps\t"));
+        assert!(manifest.contains("route-world-movement-01-d\t320x200\t"));
+        assert!(manifest.contains("review=route-step route=route-world-movement step=01 input=d"));
         assert!(manifest.contains("route-world-movement-00-initial"));
         assert!(manifest.contains("route-world-movement-01-d"));
         assert!(manifest.contains("route-britannia-move-pass-idle-02-idle"));
