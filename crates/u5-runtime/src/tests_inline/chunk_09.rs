@@ -349,7 +349,7 @@
                 slot: 0,
                 class_byte: b'A',
                 status: b'G',
-                climb_stat: 30,
+                climb_stat: 0,
                 mana: 8,
                 hp: 10,
                 max_hp: 20,
@@ -359,7 +359,7 @@
                 slot: 1,
                 class_byte: b'A',
                 status: b'P',
-                climb_stat: 30,
+                climb_stat: 0,
                 mana: 8,
                 hp: 6,
                 max_hp: 20,
@@ -379,7 +379,7 @@
                 slot: 3,
                 class_byte: b'A',
                 status: b'S',
-                climb_stat: 30,
+                climb_stat: 0,
                 mana: 8,
                 hp: 8,
                 max_hp: 20,
@@ -426,14 +426,14 @@
         assert_eq!(state.clock, GameClock::new(12, 2).unwrap());
         assert_eq!(state.turn, 1);
         assert!(state.message.contains("F-A-L-L-S"));
-        assert!(state.message.contains("fall damage"));
+        assert!(!state.message.contains("fall damage"));
         assert!(state.message.contains("East Winds"));
-        assert!(state.message.contains("party slot 0"));
-        assert!(state.message.contains("party slot 1"));
+        assert!(!state.message.contains("party slot 0"));
+        assert!(!state.message.contains("party slot 1"));
         assert!(!state.message.contains("party slot 2"));
         assert!(!state.message.contains("party slot 3"));
-        assert!(state.party[0].hp < 10);
-        assert!(state.party[1].hp < 6);
+        assert_eq!(state.party[0].hp, 10);
+        assert_eq!(state.party[1].hp, 6);
         assert_eq!(state.party[2].hp, 9);
         assert_eq!(state.party[3].hp, 8);
         let _ = fs::remove_dir_all(dir);
@@ -461,6 +461,7 @@
             plane: WorldPlane::Britannia,
         };
         state.party[0].hp = 10;
+        state.party[0].climb_stat = 0;
         state.active_objects[0].z = WorldPlane::Britannia.save_floor();
         state.sync_player_object();
 
@@ -498,7 +499,7 @@
                 aux3: 0,
             }
         );
-        assert!(state.party[0].hp < 10);
+        assert_eq!(state.party[0].hp, 9);
         assert!(state.message.contains("F-A-L-L-S"));
         assert!(state.message.contains("fall damage"));
         let _ = fs::remove_dir_all(dir);
@@ -513,6 +514,7 @@
             usize::from(SURFACE_CHASM_Y),
         );
         state.party[0].hp = 10;
+        state.party[0].climb_stat = 0;
 
         assert_eq!(
             state.pass_turn_with_game_dir(Some(&dir)).unwrap(),
@@ -535,7 +537,7 @@
         assert_eq!(state.turn, 1);
         assert!(state.message.starts_with("Passed."));
         assert!(state.message.contains("F-A-L-L-S"));
-        assert!(state.party[0].hp < 10);
+        assert_eq!(state.party[0].hp, 9);
         let _ = fs::remove_dir_all(dir);
     }
 

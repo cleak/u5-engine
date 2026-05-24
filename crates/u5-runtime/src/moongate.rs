@@ -276,9 +276,9 @@ pub const fn is_surface_chasm_cell(x: u8, y: u8) -> bool {
     x == SURFACE_CHASM_X && y == SURFACE_CHASM_Y
 }
 
-/// `overworld.md §2`: maximum per-member fall-damage value rolled when
-/// the Britannia chasm or whirlpool plane writer transitions a
-/// conscious party member to the Underworld. The runtime draws a
-/// uniform `1..=WORLD_PLANE_FALL_DAMAGE_MAX` roll for each conscious
-/// member.
-pub const WORLD_PLANE_FALL_DAMAGE_MAX: u8 = 5;
+/// `overworld.md Section 8`: maximum Dexterity-save byte rolled when
+/// the Britannia chasm/falls handler checks each living party member.
+/// This cap is for the Dexterity save roll, not for damage amount.
+/// The runtime draws a uniform byte and applies one point of damage
+/// unless the member's Dexterity byte is greater than the roll.
+pub const WORLD_PLANE_FALL_SAVE_ROLL_MAX: u8 = u8::MAX;

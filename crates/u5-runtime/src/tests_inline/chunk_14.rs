@@ -875,12 +875,12 @@
         };
 
         assert_eq!(sample(1, 0, 0), Some(3));
-        assert_eq!(sample(1, scale / 2, scale / 2), Some(2));
+        assert_eq!(sample(1, scale / 2, scale / 2), Some(3));
         assert_eq!(sample(2, 0, 0), Some(14));
         assert_eq!(sample(2, 0, scale - 1), Some(14));
         assert_eq!(sample(2, 0, scale / 2), Some(0));
-        assert_eq!(sample(3, scale / 2, scale / 2), Some(12));
-        assert_eq!(sample(3, 1, 1), Some(5));
+        assert_eq!(sample(3, 0, 2), Some(12));
+        assert_eq!(sample(3, 1, 1), Some(0));
     }
 
     #[test]
@@ -987,9 +987,9 @@
             viewport.pixel((4 + index) * scale + local_x, 4 * scale + local_y)
         };
 
-        assert_eq!(sample(&gem, 10, scale / 2, scale / 2), Some(3));
-        assert_eq!(sample(&peer, 10, scale / 2, scale / 2), Some(3));
-        assert_eq!(sample(&x_ray, 10, scale / 2, scale / 2), Some(11));
+        assert_eq!(sample(&gem, 10, 1, 0), Some(3));
+        assert_eq!(sample(&peer, 10, 1, 0), Some(3));
+        assert_eq!(sample(&x_ray, 10, 1, 0), Some(11));
 
         assert_eq!(sample(&gem, 11, 0, 0), Some(11));
         assert_eq!(sample(&peer, 11, 0, 0), Some(11));
@@ -1026,12 +1026,12 @@
         assert_eq!(surface_view_audit_mask(0x00, 0x00, gem), [[0; 4]; 4]);
         assert_eq!(
             surface_view_audit_mask(0x01, 0x05, gem),
-            [[7, 0, 0, 7], [0, 0, 0, 0], [0, 0, 0, 0], [7, 0, 0, 7]]
+            [[0, 7, 0, 0], [0, 0, 0, 7], [0, 7, 0, 0], [0, 0, 0, 7]]
         );
         assert_eq!(surface_view_audit_mask(0x02, 0x09, gem), solid_2);
         assert_eq!(
             surface_view_audit_mask(0x03, 0x70, gem),
-            [[3, 3, 3, 3], [3, 2, 2, 3], [3, 2, 2, 3], [3, 3, 3, 3]]
+            [[3, 3, 3, 3], [3, 3, 3, 3], [3, 3, 3, 3], [3, 3, 3, 3]]
         );
         assert_eq!(
             surface_view_audit_mask(0x04, 0x1D, gem),
@@ -1047,7 +1047,7 @@
         );
         assert_eq!(
             surface_view_audit_mask(0x07, 0x0C, gem),
-            [[6, 0, 0, 6], [0, 6, 6, 0], [0, 6, 6, 0], [6, 0, 0, 6]]
+            [[6, 6, 6, 6], [6, 6, 6, 6], [6, 6, 6, 6], [6, 6, 6, 6]]
         );
         assert_eq!(
             surface_view_audit_mask(0x08, 0x0B, gem),
@@ -1055,29 +1055,29 @@
         );
         assert_eq!(
             surface_view_audit_mask(0x09, 0x06, gem),
-            [[0, 0, 0, 0], [10, 10, 10, 10], [10, 0, 10, 0], [0, 0, 10, 0]]
+            [[10, 10, 10, 10], [0, 0, 0, 0], [10, 10, 10, 10], [10, 0, 0, 0]]
         );
         assert_eq!(
             surface_view_audit_mask(0x0A, 0x60, gem),
-            [[3, 0, 0, 3], [0, 0, 0, 0], [0, 0, 3, 0], [3, 0, 0, 3]]
+            [[0, 3, 0, 0], [0, 0, 0, 3], [0, 3, 0, 0], [0, 0, 0, 3]]
         );
         assert_eq!(
             surface_view_audit_mask(0x0B, 0xD4, gem),
-            [[11, 0, 0, 11], [0, 11, 11, 0], [0, 11, 11, 0], [11, 0, 0, 11]]
+            [[11, 0, 0, 0], [0, 0, 0, 0], [0, 0, 11, 0], [0, 0, 0, 0]]
         );
         assert_eq!(surface_view_audit_mask(0x0C, 0x01, gem), [[0; 4]; 4]);
         assert_eq!(
             surface_view_audit_mask(0x0D, 0x04, gem),
-            [[12, 5, 12, 12], [5, 5, 12, 5], [12, 12, 12, 12], [12, 5, 12, 12]]
+            [[0, 2, 0, 0], [0, 0, 0, 2], [12, 0, 0, 0], [0, 0, 12, 0]]
         );
         assert_eq!(
             surface_view_audit_mask(0x0E, 0xE0, gem),
-            [[0, 0, 9, 9], [0, 0, 9, 9], [0, 0, 9, 9], [0, 0, 9, 9]]
+            [[0, 9, 9, 0], [0, 9, 9, 0], [0, 9, 9, 0], [0, 9, 9, 0]]
         );
         assert_eq!(surface_view_audit_mask(0x0F, 0xD8, gem), [[14, 14, 14, 14]; 4]);
         assert_eq!(
             surface_view_audit_mask(0x10, 0x20, gem),
-            [[1, 1, 1, 1], [1, 0, 0, 1], [1, 0, 0, 1], [1, 1, 1, 1]]
+            [[0, 0, 0, 0], [0, 3, 3, 0], [0, 3, 3, 0], [0, 0, 0, 0]]
         );
     }
 
@@ -1087,23 +1087,31 @@
 
         assert_eq!(
             surface_view_audit_mask(0x10, 0x21, gem),
-            [[1, 1, 1, 1], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+            [[0, 1, 1, 0], [0, 3, 3, 0], [0, 3, 3, 0], [0, 0, 0, 0]]
         );
         assert_eq!(
             surface_view_audit_mask(0x10, 0x22, gem),
-            [[0, 0, 0, 1], [0, 0, 0, 1], [0, 0, 0, 1], [0, 0, 0, 1]]
+            [[0, 0, 0, 0], [0, 3, 3, 1], [0, 1, 3, 1], [0, 0, 0, 0]]
+        );
+        assert_eq!(
+            surface_view_audit_mask(0x10, 0x23, gem),
+            [[0, 1, 1, 0], [0, 1, 3, 1], [0, 3, 3, 1], [0, 0, 0, 0]]
         );
         assert_eq!(
             surface_view_audit_mask(0x10, 0x24, gem),
-            [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1, 1, 1, 1]]
+            [[0, 0, 0, 0], [0, 3, 1, 0], [0, 3, 3, 0], [0, 1, 1, 0]]
         );
         assert_eq!(
-            surface_view_audit_mask(0x10, 0x28, gem),
-            [[1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]]
+            surface_view_audit_mask(0x10, 0x25, gem),
+            [[0, 1, 1, 0], [0, 3, 3, 0], [0, 3, 1, 0], [0, 1, 1, 0]]
+        );
+        assert_eq!(
+            surface_view_audit_mask(0x10, 0x26, gem),
+            [[0, 0, 0, 0], [0, 3, 3, 1], [0, 3, 3, 1], [0, 1, 1, 0]]
         );
         assert_eq!(
             surface_view_audit_mask(0x5A, 0x5A, gem),
-            [[3, 3, 3, 3], [3, 11, 11, 3], [3, 11, 11, 3], [3, 3, 3, 3]]
+            [[6, 6, 6, 6], [6, 6, 6, 6], [6, 6, 6, 6], [6, 6, 6, 6]]
         );
     }
 

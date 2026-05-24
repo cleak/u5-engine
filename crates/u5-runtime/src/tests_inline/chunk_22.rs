@@ -182,7 +182,7 @@
     }
 
     fn town_free_roaming_grid() -> Vec<u8> {
-        vec![0x43; TOWN_GRID_SIDE * TOWN_GRID_SIDE]
+        vec![0x05; TOWN_GRID_SIDE * TOWN_GRID_SIDE]
     }
 
     #[test]
@@ -202,9 +202,9 @@
 
         state.advance_active_objects();
 
-        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (6, 5));
-        assert_eq!(state.active_objects[1].type_byte, 0x11);
-        assert_eq!(state.active_objects[1].tile, 0x11);
+        assert_eq!((state.active_objects[1].x, state.active_objects[1].y), (5, 6));
+        assert_eq!(state.active_objects[1].type_byte, 0x10);
+        assert_eq!(state.active_objects[1].tile, 0x10);
         assert_eq!(state.active_objects[1].phase, 0x66);
         assert_eq!(state.active_objects[1].z, 0);
         assert_eq!(state.active_objects[1].aux1, 7);
@@ -276,7 +276,7 @@
     #[test]
     fn town_free_roaming_actor_pen_and_destination_failures_do_not_dirty() {
         let mut pen_blocked_grid = town_free_roaming_grid();
-        pen_blocked_grid[5 * TOWN_GRID_SIDE + 6] = 0x44;
+        pen_blocked_grid[5 * TOWN_GRID_SIDE + 6] = 0x43;
         let mut pen_blocked = test_state(pen_blocked_grid, 1, 1);
         pen_blocked.prng_state = 0x0070;
         pen_blocked.active_objects.push(ActiveObject {
@@ -295,7 +295,9 @@
         assert_eq!(pen_blocked.prng_state, u5_prng_advance_state(0x0070));
         assert!(!pen_blocked.visibility_dirty);
 
-        let mut object_blocked = test_state(town_free_roaming_grid(), 1, 1);
+        let mut destination_blocked_grid = town_free_roaming_grid();
+        destination_blocked_grid[6 * TOWN_GRID_SIDE + 5] = 0x04;
+        let mut object_blocked = test_state(destination_blocked_grid, 1, 1);
         object_blocked.prng_state = 0x0070;
         object_blocked.active_objects.push(ActiveObject {
             type_byte: 0x10,

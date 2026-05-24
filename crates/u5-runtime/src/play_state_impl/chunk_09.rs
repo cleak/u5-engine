@@ -323,6 +323,12 @@ impl PlayState {
         game_dir: &Path,
         entry: WorldPlaneTransitionEntry,
     ) -> io::Result<()> {
+        let is_surface_chasm_fall = entry.from_plane == WorldPlane::Britannia
+            && entry.to_plane == WorldPlane::Underworld
+            && entry.x == usize::from(SURFACE_CHASM_X)
+            && entry.y == usize::from(SURFACE_CHASM_Y);
+        let preserve_transport = is_surface_chasm_fall;
+        let pre_fall_transport = self.player.transport;
         let fall_damage_report = self.apply_world_plane_fall_damage(entry);
         self.cache_current_world_overlay();
         self.area = Area::World {
@@ -330,11 +336,16 @@ impl PlayState {
         };
         self.player.x = entry.to_x;
         self.player.y = entry.to_y;
-        self.force_foot_transport();
+        if preserve_transport {
+            self.player.transport = pre_fall_transport;
+        } else {
+            self.force_foot_transport();
+        }
         self.grid = load_world_map(game_dir, entry.to_plane)?;
         self.natural_moongate_live_cells.clear();
         self.npcs.clear();
         self.replace_world_active_objects(game_dir, entry.to_plane, entry.to_x, entry.to_y)?;
+        self.sync_player_object();
         self.clear_open_town_door_state();
         self.return_world = None;
         self.pending_moongate = None;
@@ -374,37 +385,44 @@ impl PlayState {
         &mut self,
         entry: WorldPlaneTransitionEntry,
     ) -> Option<String> {
-        if entry.from_plane != WorldPlane::Britannia || entry.to_plane != WorldPlane::Underworld {
+        if entry.from_plane != WorldPlane::Britannia
+            || entry.to_plane != WorldPlane::Underworld
+            || entry.x != usize::from(SURFACE_CHASM_X)
+            || entry.y != usize::from(SURFACE_CHASM_Y)
+        {
             return None;
         }
 
         let mut checked = 0;
         let mut reports = Vec::new();
         for index in 0..self.party.len() {
-            if !self.party[index].conscious() {
+            if !self.party[index].living() {
                 continue;
             }
             checked += 1;
-            let damage = self.world_plane_fall_damage_roll();
+            let roll = self.world_plane_fall_save_roll();
+            if self.party[index].climb_stat > roll {
+                continue;
+            }
             let slot = self.party[index].slot;
-            let applied = self.party[index].apply_damage(damage);
+            let applied = self.party[index].apply_damage(1);
             reports.push(format!(
-                "party slot {slot} took {applied} HP ({} HP left)",
+                "party slot {slot} failed Dex roll {roll} and took {applied} HP ({} HP left)",
                 self.party[index].hp
             ));
         }
 
         if reports.is_empty() {
             Some(format!(
-                "fall damage skipped for {checked} conscious member(s)"
+                "fall damage skipped for {checked} living member(s)"
             ))
         } else {
             Some(format!("fall damage: {}", reports.join("; ")))
         }
     }
 
-    pub fn world_plane_fall_damage_roll(&mut self) -> u8 {
-        self.random_range_u8(1, WORLD_PLANE_FALL_DAMAGE_MAX)
+    pub fn world_plane_fall_save_roll(&mut self) -> u8 {
+        self.random_range_u8(0, WORLD_PLANE_FALL_SAVE_ROLL_MAX)
     }
 
     pub fn render_text_frame(&mut self, radius: usize) -> String {
@@ -2658,7 +2676,7 @@ impl PlayState {
         let sign = self.random_mod_u8(2);
         let direction = town_free_roaming_direction(axis, sign);
         let (dx, dy) = direction.delta();
-        let facing_byte = town_free_roaming_facing_byte(sign);
+        let facing_byte = town_free_roaming_facing_byte(direction, object.type_byte);
         self.try_step_town_active_object(slot, object, dx, dy, facing_byte)
     }
 
@@ -2670,7 +2688,7 @@ impl PlayState {
                 return false;
             }
             let tile = self.grid[ny as usize * TOWN_GRID_SIDE + nx as usize];
-            if !town_free_roaming_pen_tile_accepts(tile) {
+            if town_free_roaming_pen_tile_blocks(tile) {
                 return false;
             }
         }
@@ -3607,28 +3625,36 @@ pub const fn is_outdoor_active_object_walker_byte(byte: u8) -> bool {
 }
 
 pub fn town_active_object_step_accepts_tile(tile: u8) -> bool {
-    npc_path_tile_open(tile)
+    tile_class_dispatcher_accepts(tile, 0x10)
 }
 
 pub const fn town_free_roaming_object_eligible(object: ActiveObject) -> bool {
     (object.type_byte & 0xfe) == 0x10
 }
 
-pub const fn town_free_roaming_pen_tile_accepts(tile: u8) -> bool {
+pub const fn town_free_roaming_pen_tile_blocks(tile: u8) -> bool {
     matches!(tile, 0xa2 | 0x43)
 }
 
 pub const fn town_free_roaming_direction(axis: u8, sign: u8) -> Direction {
     match (axis & 1, sign & 1) {
-        (0, 0) => Direction::West,
-        (0, _) => Direction::East,
-        (_, 0) => Direction::North,
-        (_, _) => Direction::South,
+        (0, 0) => Direction::North,
+        (0, _) => Direction::South,
+        (_, 0) => Direction::West,
+        (_, _) => Direction::East,
     }
 }
 
-pub const fn town_free_roaming_facing_byte(sign: u8) -> u8 {
-    0x10 + (sign & 1)
+pub const fn town_free_roaming_facing_byte(direction: Direction, current: u8) -> u8 {
+    match direction {
+        Direction::East => 0x10,
+        Direction::West => 0x11,
+        Direction::North | Direction::South => current,
+        Direction::NorthWest
+        | Direction::NorthEast
+        | Direction::SouthWest
+        | Direction::SouthEast => current,
+    }
 }
 
 pub fn outdoor_active_object_step_accepts_tile(

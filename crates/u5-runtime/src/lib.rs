@@ -382,7 +382,7 @@ pub use moongate::{
     MOONSTONE_BURIAL_BAND_LAST, MOONSTONE_BURIAL_TILE_EXTRA_A, MOONSTONE_BURIAL_TILE_EXTRA_B,
     MOONSTONE_GATE_INVALID_SCENE, NARRATIVE_GATE_X, NARRATIVE_GATE_Y, NATURAL_MOONGATE_LIVE_TILE,
     NATURAL_MOONGATE_UNDERLYING_TILE, NaturalMoongateCounterStep, SURFACE_CHASM_X, SURFACE_CHASM_Y,
-    TRAMMEL_GLYPH_BY_HOUR, TRAMMEL_OFF_HORIZON_SENTINEL, WORLD_PLANE_FALL_DAMAGE_MAX,
+    TRAMMEL_GLYPH_BY_HOUR, TRAMMEL_OFF_HORIZON_SENTINEL, WORLD_PLANE_FALL_SAVE_ROLL_MAX,
     cached_moon_glyph_bytes_for_hour, felucca_moonstone_slot_for_hour, is_surface_chasm_cell,
     moonstone_burial_tile_accepted, moonstone_slot_from_glyph_byte,
     natural_moongate_advance_counter, natural_moongate_cached_glyph_slot,

@@ -3996,22 +3996,13 @@ fn draw_surface_view_cell(
     match class {
         0x00 | 0x0C => {}
         0x01 => {
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 0, color);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale - 1, 0, color);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, scale - 1, color);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale - 1, scale - 1, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 0, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 2, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 1, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 3, color);
         }
         0x02 | 0x0F => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
-        0x03 => {
-            fill_view_overlay_cell(
-                viewport,
-                cell_x,
-                cell_y,
-                scale,
-                surface_view_class_color(0x02, mode),
-            );
-            draw_view_overlay_box(viewport, cell_x, cell_y, scale, color);
-        }
+        0x03 => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
         0x04 => {
             draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 0, color);
             draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale - 1, color);
@@ -4024,7 +4015,7 @@ fn draw_surface_view_cell(
             }
         }
         0x06 => draw_view_overlay_box(viewport, cell_x, cell_y, scale, color),
-        0x07 | 0x0B => draw_view_overlay_diagonals(viewport, cell_x, cell_y, scale, color),
+        0x07 => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
         0x08 => {
             for y in 0..scale {
                 for x in 0..scale {
@@ -4035,55 +4026,36 @@ fn draw_surface_view_cell(
             }
         }
         0x09 => {
-            draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 1.min(scale - 1), color);
-            for y in scale / 2..scale {
-                for x in (y + cell_x) % 2..scale {
-                    if x % 2 == 0 {
-                        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, color);
-                    }
-                }
-            }
+            draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 0, color);
+            draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 2, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 2, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 3, color);
         }
         0x0A => {
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 0, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 1, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 2, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 3, color);
+        }
+        0x0B => {
             set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 0, color);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale - 1, 0, color);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, scale - 1, color);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale - 1, scale - 1, color);
-            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, scale / 2, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, 2, color);
         }
         0x0D => {
-            fill_view_overlay_cell(
-                viewport,
-                cell_x,
-                cell_y,
-                scale,
-                surface_view_modal_background_color(mode),
-            );
-            draw_view_overlay_creature_marker(viewport, cell_x, cell_y, scale, color);
+            let fixed = surface_view_class_color(0x02, mode);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 0, fixed);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 1, fixed);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 2, color);
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, 3, color);
         }
         0x0E => {
             for y in 0..scale {
-                set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale / 2, y, color);
-                set_view_overlay_pixel(viewport, cell_x, cell_y, scale, (scale / 2) + 1, y, color);
+                set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, y, color);
+                set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, y, color);
             }
         }
-        0x10 => draw_view_overlay_fence(viewport, cell_x, cell_y, scale, color, tile),
-        0x5A => {
-            fill_view_overlay_cell(
-                viewport,
-                cell_x,
-                cell_y,
-                scale,
-                surface_view_class_color(0x0B, mode),
-            );
-            draw_view_overlay_box(
-                viewport,
-                cell_x,
-                cell_y,
-                scale,
-                surface_view_class_color(0x03, mode),
-            );
-        }
+        0x10 => draw_view_overlay_fence(viewport, cell_x, cell_y, scale, color, tile, mode),
+        0x5A => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
         _ => fill_view_overlay_cell(viewport, cell_x, cell_y, scale, color),
     }
 }
@@ -4204,14 +4176,6 @@ fn draw_dungeon_view_cell(
     draw_dungeon_view_glyph(viewport, cell_x, cell_y, scale, glyph, mode);
 }
 
-fn surface_view_modal_background_color(mode: ViewOverlayMode) -> u8 {
-    if mode.uses_alternate_view_bank() {
-        5
-    } else {
-        2
-    }
-}
-
 fn dungeon_view_door_color(mode: ViewOverlayMode) -> u8 {
     if mode.uses_alternate_view_bank() {
         14
@@ -4234,21 +4198,6 @@ fn dungeon_view_extra_wall_color(mode: ViewOverlayMode) -> u8 {
     } else {
         13
     }
-}
-
-fn draw_view_overlay_creature_marker(
-    viewport: &mut TileViewport,
-    cell_x: usize,
-    cell_y: usize,
-    scale: usize,
-    color: u8,
-) {
-    draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale / 2, color);
-    draw_view_overlay_vline(viewport, cell_x, cell_y, scale, scale / 2, color);
-    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 0, color);
-    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale - 1, 0, color);
-    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, scale - 1, color);
-    set_view_overlay_pixel(viewport, cell_x, cell_y, scale, scale - 1, scale - 1, color);
 }
 
 fn draw_dungeon_ladder_glyph(
@@ -4349,6 +4298,7 @@ fn surface_view_class_color(class: u8, mode: ViewOverlayMode) -> u8 {
         0x0E => 9,
         0x0F => 4,
         0x10 => 1,
+        0x5A => 6,
         _ => 7,
     }
 }
@@ -4408,19 +4358,42 @@ fn draw_view_overlay_fence(
     scale: usize,
     color: u8,
     tile: u8,
+    mode: ViewOverlayMode,
 ) {
+    let fill = surface_view_class_color(0x03, mode);
+    for y in 1..=2 {
+        for x in 1..=2 {
+            set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, fill);
+        }
+    }
+
     let mask = tile & 0x0f;
-    if mask == 0 || mask & 0x1 != 0 {
-        draw_view_overlay_hline(viewport, cell_x, cell_y, scale, 0, color);
+    if mask & 0x1 != 0 {
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 0, color);
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, 0, color);
     }
-    if mask == 0 || mask & 0x2 != 0 {
-        draw_view_overlay_vline(viewport, cell_x, cell_y, scale, scale - 1, color);
+    if mask & 0x2 != 0 {
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 1, color);
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 3, 2, color);
     }
-    if mask == 0 || mask & 0x4 != 0 {
-        draw_view_overlay_hline(viewport, cell_x, cell_y, scale, scale - 1, color);
+    if mask & 0x4 != 0 {
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 1, 3, color);
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 2, 3, color);
     }
-    if mask == 0 || mask & 0x8 != 0 {
-        draw_view_overlay_vline(viewport, cell_x, cell_y, scale, 0, color);
+    if mask & 0x8 != 0 {
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 1, color);
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, 0, 2, color);
+    }
+
+    let marker = match tile {
+        0x22 => Some((1, 2)),
+        0x23 => Some((1, 1)),
+        0x24 => Some((2, 1)),
+        0x25 => Some((2, 2)),
+        _ => None,
+    };
+    if let Some((x, y)) = marker {
+        set_view_overlay_pixel(viewport, cell_x, cell_y, scale, x, y, color);
     }
 }
 

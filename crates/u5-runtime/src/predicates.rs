@@ -1013,6 +1013,17 @@ pub fn is_tile_walkable_for_transport(
     }
 }
 
+pub fn tile_class_dispatcher_accepts(tile: u8, query: u8) -> bool {
+    match query {
+        0x10..=0x13 => horse_terrain_accepts(tile),
+        0x14..=0x17 => carpet_terrain_accepts(tile),
+        0x1c..=0x1f => foot_terrain_accepts(tile),
+        0x20..=0x27 => ship_terrain_accepts(tile),
+        0x28..=0x2b => skiff_terrain_accepts(tile, query & TRANSPORT_FACING_MASK),
+        _ => is_tile_walkable(tile, None),
+    }
+}
+
 /// True if the tile is open-ocean water that blocks foot movement and
 /// requires a ship or skiff. Swamp (0x04) is NOT water for movement
 /// purposes -- swamp is walkable terrain that poisons the party.

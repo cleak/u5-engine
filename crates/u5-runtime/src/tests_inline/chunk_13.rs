@@ -5876,17 +5876,17 @@ fn natural_moongate_counter_night_band_uses_shared_lighting_hours() {
 }
 
 #[test]
-fn world_plane_fall_damage_max_routes_through_named_constant() {
+fn world_plane_fall_save_roll_routes_through_named_constant() {
     // overworld.md §2: chasm and whirlpool plane writers apply a
     // random fall-damage roll per conscious party member. Promote
     // the upper bound so world_plane_fall_damage_roll does not
     // bake `5` as a bare modulus literal.
-    assert_eq!(WORLD_PLANE_FALL_DAMAGE_MAX, 5);
+    assert_eq!(WORLD_PLANE_FALL_SAVE_ROLL_MAX, u8::MAX);
     // The roll is `1..=WORLD_PLANE_FALL_DAMAGE_MAX`; every value
     // produced by the modulo is in that range.
     for seed in 0u8..=u8::MAX {
-        let roll = 1 + (seed % WORLD_PLANE_FALL_DAMAGE_MAX);
-        assert!((1..=WORLD_PLANE_FALL_DAMAGE_MAX).contains(&roll));
+        let roll = seed;
+        assert!((0..=WORLD_PLANE_FALL_SAVE_ROLL_MAX).contains(&roll));
     }
 }
 
