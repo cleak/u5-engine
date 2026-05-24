@@ -332,6 +332,150 @@
     }
 
     #[test]
+    fn save_game_command_persists_pending_shipwright_delivery_from_town_return_world() {
+        let dir = debug_game_dir();
+        let mut template = saved_game_seed_bytes(17, 0, 3, 4);
+        template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        fs::write(dir.join(SAVED_GAM_FILENAME), template).unwrap();
+        fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+        fs::write(dir.join(BRIT_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+        fs::write(dir.join(UNDER_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+
+        let stale_cached_object = ActiveObject {
+            type_byte: FIRST_PLAYABLE_SKIFF_TILE,
+            tile: FIRST_PLAYABLE_SKIFF_TILE,
+            x: 1,
+            y: 2,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        };
+        let pending = PendingVehicleAcquisition::Frigate {
+            x: 136,
+            y: 158,
+            skiffs: 3,
+        };
+        let expected = pending.active_object(WorldPlane::Britannia.save_floor());
+        let mut state = test_state(open_grid(), 3, 4);
+        state.return_world = Some(WorldReturn {
+            plane: WorldPlane::Britannia,
+            x: 12,
+            y: 21,
+            transport: TransportState::Foot,
+            timing_status: TimingStatusTag::Normal,
+            sail_cadence: 0,
+            sail_stall_pending: false,
+            grid: open_world_grid(),
+            active_objects: vec![ActiveObject {
+                type_byte: PLAYER_TILE,
+                tile: PLAYER_TILE,
+                x: 12,
+                y: 21,
+                z: WorldPlane::Britannia.save_floor(),
+                phase: STEADY_PHASE,
+                aux1: 0,
+                aux3: 0,
+            }],
+            pending_vehicle: Some(pending),
+        });
+        state
+            .world_overlays
+            .set(WorldPlane::Britannia, vec![stale_cached_object; OOL_SLOTS - 1]);
+
+        assert_eq!(
+            state.save_game_command(&dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+
+        let saved_ool = fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap();
+        let britannia_overlay = decode_ool_plane_objects(&saved_ool[..OOL_PLANE_LEN]).unwrap();
+        assert_eq!(britannia_overlay[0], expected);
+        assert!(!britannia_overlay.iter().any(|object| *object == stale_cached_object));
+        assert_eq!(
+            fs::read(dir.join(BRIT_OOL_FILENAME)).unwrap(),
+            saved_ool[..OOL_PLANE_LEN].to_vec()
+        );
+        assert_eq!(
+            load_world_overlay_objects(&dir, WorldPlane::Britannia).unwrap()[0],
+            expected
+        );
+        assert_eq!(
+            state.return_world.as_ref().and_then(|world| world.pending_vehicle),
+            Some(pending)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn save_game_command_persists_pending_skiff_delivery_from_town_return_world() {
+        let dir = debug_game_dir();
+        let mut template = saved_game_seed_bytes(17, 0, 3, 4);
+        template[SAVE_AVATAR_NAME_OFFSET] = b'A';
+        fs::write(dir.join(SAVED_GAM_FILENAME), template).unwrap();
+        fs::write(dir.join(SAVED_OOL_FILENAME), vec![0; SAVED_OOL_LEN]).unwrap();
+        fs::write(dir.join(BRIT_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+        fs::write(dir.join(UNDER_OOL_FILENAME), vec![0; OOL_PLANE_LEN]).unwrap();
+
+        let pending = PendingVehicleAcquisition::Skiff { x: 85, y: 107 };
+        let expected = pending.active_object(WorldPlane::Britannia.save_floor());
+        let mut world_objects = vec![ActiveObject {
+            type_byte: PLAYER_TILE,
+            tile: PLAYER_TILE,
+            x: 81,
+            y: 106,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: 0,
+            aux3: 0,
+        }];
+        world_objects.push(ActiveObject {
+            type_byte: FIRST_PLAYABLE_FRIGATE_TILE,
+            tile: FIRST_PLAYABLE_FRIGATE_TILE,
+            x: 82,
+            y: 106,
+            z: WorldPlane::Britannia.save_floor(),
+            phase: STEADY_PHASE,
+            aux1: FIRST_PLAYABLE_FULL_SHIP_HULL,
+            aux3: 1,
+        });
+        let mut state = test_state(open_grid(), 3, 4);
+        state.return_world = Some(WorldReturn {
+            plane: WorldPlane::Britannia,
+            x: 81,
+            y: 106,
+            transport: TransportState::Foot,
+            timing_status: TimingStatusTag::Normal,
+            sail_cadence: 0,
+            sail_stall_pending: false,
+            grid: open_world_grid(),
+            active_objects: world_objects,
+            pending_vehicle: Some(pending),
+        });
+
+        assert_eq!(
+            state.save_game_command(&dir, Some(true)).unwrap(),
+            MoveOutcome::Saved
+        );
+
+        let saved_ool = fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap();
+        let britannia_overlay = decode_ool_plane_objects(&saved_ool[..OOL_PLANE_LEN]).unwrap();
+        assert_eq!(
+            britannia_overlay
+                .iter()
+                .filter(|object| object.type_byte == FIRST_PLAYABLE_FRIGATE_TILE)
+                .count(),
+            1
+        );
+        assert!(britannia_overlay.iter().any(|object| *object == expected));
+        assert_eq!(
+            fs::read(dir.join(BRIT_OOL_FILENAME)).unwrap(),
+            saved_ool[..OOL_PLANE_LEN].to_vec()
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn save_game_command_writes_foot_transport_marker_with_current_facing() {
         let dir = debug_game_dir();
         let mut template = saved_game_seed_bytes(0, 0xff, 10, 20);

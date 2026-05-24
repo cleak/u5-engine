@@ -101,7 +101,8 @@ audit:
   completed long-camp recovery, and hourly ring tick, public #13 sage paid-success/short-funds paths, public #41
   all nine arms-shop first-stock purchases and terminator-letter refusals, public #28
   all-stable horse-trader purchases, accepted shipwright frigate/skiff dock
-  deliveries, native town walk-on stair up/down/crossing routes, and
+  deliveries, save/reload durability for queued shipwright deliveries before
+  town exit, native town walk-on stair up/down/crossing routes, and
   ship broadside fire, horse boarding, dungeon torch ignition, Mix/Ready/New
   Order command workflow, combat-active Board/Enter/Fire/Hole-up/Ignite/Mix/New
   Order/Talk refusal rows, combat-active digit selection/clear, Escape abort,

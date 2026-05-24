@@ -18,9 +18,14 @@ impl PlayState {
     }
 
     pub fn current_world_overlay_objects(&self) -> Vec<ActiveObject> {
+        Self::world_overlay_objects_from_active_objects(&self.active_objects)
+    }
+
+    fn world_overlay_objects_from_active_objects(
+        active_objects: &[ActiveObject],
+    ) -> Vec<ActiveObject> {
         let mut objects = vec![ActiveObject::empty(); OOL_SLOTS - 1];
-        for (index, object) in self
-            .active_objects
+        for (index, object) in active_objects
             .iter()
             .skip(1)
             .take(OOL_SLOTS - 1)
@@ -255,11 +260,33 @@ impl PlayState {
         game_dir: &Path,
         plane: WorldPlane,
     ) -> io::Result<Vec<ActiveObject>> {
+        if let Some(objects) = self.return_world_overlay_objects_for_plane(plane)? {
+            return Ok(objects);
+        }
         if let Some(objects) = self.world_overlays.get(plane) {
             Ok(objects)
         } else {
             load_world_overlay_mirror_objects(game_dir, plane)
         }
+    }
+
+    fn return_world_overlay_objects_for_plane(
+        &self,
+        plane: WorldPlane,
+    ) -> io::Result<Option<Vec<ActiveObject>>> {
+        let Some(return_world) = &self.return_world else {
+            return Ok(None);
+        };
+        if return_world.plane != plane || return_world.pending_vehicle.is_none() {
+            return Ok(None);
+        }
+        let mut active_objects = return_world.active_objects.clone();
+        if let Some(pending) = return_world.pending_vehicle {
+            place_pending_vehicle_acquisition(&mut active_objects, plane, pending)?;
+        }
+        Ok(Some(Self::world_overlay_objects_from_active_objects(
+            &active_objects,
+        )))
     }
 
     pub fn load_world_overlay_for_plane(

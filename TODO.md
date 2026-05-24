@@ -469,6 +469,11 @@ Current worktree context when this TODO was refreshed:
   modes. Runtime pixel tests pin no-op versus rendered classes and the
   alternate-bank colors for `0x0A`, `0x0B`, and `0x0F`; the TUI and Bevy frame
   suites emit the same class-gallery PNGs for visual audit.
+- Save/load now persists queued shipwright deliveries even when the player
+  saves before leaving the town/shop scene. The `SAVED.OOL` encoder gives the
+  matching `return_world.pending_vehicle` priority over a stale cached world
+  overlay, mirrors the result to `BRIT.OOL`, and regression tests cover both
+  frigate and skiff deliveries.
 - Route smoke now exercises a debug-enter world-to-castle-to-world round trip
   using clean return metadata in memory, an Underworld-to-castle entry,
   seeded ship/skiff sailing routes, a Spyglass-triggered Britannia chunk-map
