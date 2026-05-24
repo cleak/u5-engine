@@ -701,7 +701,7 @@ fn play_script_local_clean_smoke_runs_default_scene_when_present() {
 fn route_smoke_cases_cover_representative_modes() {
     let cases = route_smoke_cases();
 
-    assert_eq!(cases.len(), 260);
+    assert_eq!(cases.len(), 271);
     assert!(cases.iter().any(|case| matches!(
         case.expected,
         RouteSmokeExpectation::World(WorldPlane::Britannia)
@@ -946,6 +946,15 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "castle-talk-status-praying-refusal")
     );
+    for name in [
+        "shrine-native-honesty-meditation",
+        "shrine-native-humility-meditation",
+        "codex-urn-honesty-read",
+        "shrine-honesty-codex-turn-in",
+        "shrine-compassion-completed-offering",
+    ] {
+        assert!(cases.iter().any(|case| case.name == name), "{name}");
+    }
     assert!(
         cases
             .iter()

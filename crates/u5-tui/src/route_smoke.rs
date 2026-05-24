@@ -10,16 +10,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE,
-    BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX, COMBAT_ACTOR_FLAG_FLEEING,
-    COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED, COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS,
-    COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_DEFAULT_DEATH_DROP_TILE,
-    COMBAT_GARGOYLE_DEATH_TERRAIN_TILE, COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS,
-    COMBAT_VANISH_DEATH_MARKER_TILE, CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT,
-    CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX, CombatActorDescriptor,
-    CombatArenaFieldKind, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
-    DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX,
-    DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_LEVEL_SPELL_COST, Direction, DungeonScene,
-    ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
+    BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX, CODEX_URN_TABLE_FILE,
+    COMBAT_ACTOR_FLAG_FLEEING, COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+    COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
+    COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
+    COMBAT_GAZER_DEATH_MARKER_TILE, COMBAT_PARTY_ACTOR_SLOTS, COMBAT_VANISH_DEATH_MARKER_TILE,
+    CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX, CURE_COST, CURE_SPELL_INDEX,
+    CombatActorDescriptor, CombatArenaFieldKind, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST,
+    DEATH_WIND_SPELL_INDEX, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
+    DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_LEVEL_SPELL_COST, Direction,
+    DungeonScene, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
     EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION,
     EndgameOutcome, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
     FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, FLAME_WIND_COST,
@@ -39,13 +39,14 @@ use u5_runtime::{
     SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW, SCENE_SERPENTS_HOLD, SCENE_STONEGATE,
     SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX, SHADOWLORD_FALSEHOOD_INDEX,
     SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED, SHADOWLORD_OBJECT_TILE_BASE,
-    SHADOWLORD_VANQUISHED, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
-    SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
-    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX,
-    SPECIAL_ITEM_SHARD_COWARDICE_INDEX, SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
-    SPECIAL_ITEM_SHARD_HATRED_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
-    STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShipwrightPurchaseKind,
-    Stable, TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
+    SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
+    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
+    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
+    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
+    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STEADY_PHASE, SURFACE_CHASM_X,
+    SURFACE_CHASM_Y, Scene, Shipwright, ShipwrightPurchaseKind, ShrineVirtue, Stable,
+    TALK_NO_RESPONSE_MESSAGE, TALK_SLEEPING_MESSAGE, TALK_STATUS_TILE_PRAYING,
     TALK_STATUS_TILE_SLEEPING, TAVERN_AFFORDABILITY_REFUSAL_BARK, TIME_STOP_COST,
     TIME_STOP_DURATION, TIME_STOP_SPELL_INDEX, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE,
     TOWN_POISON_GAS_LIVE_TILE, Tavern, TileGraphicsDepth, TransportState, UNLOCK_MAGIC_COST,
@@ -2434,8 +2435,68 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
     ];
+    append_shrine_route_smoke_cases(&mut cases);
     append_public_location_route_smoke_cases(&mut cases);
     cases
+}
+
+fn append_shrine_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>) {
+    for virtue in ShrineVirtue::ALL {
+        let name: &'static str = Box::leak(
+            format!(
+                "shrine-native-{}-meditation",
+                virtue.name().to_ascii_lowercase()
+            )
+            .into_boxed_str(),
+        );
+        let command: &'static str = Box::leak(format!("M{}", virtue.mantra()).into_boxed_str());
+        let script: &'static [&'static str] = Box::leak(vec![command].into_boxed_slice());
+        cases.push(RouteSmokeCase {
+            name,
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script,
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 0,
+            expected_frame_kind: "tile viewport",
+        });
+    }
+    cases.push(RouteSmokeCase {
+        name: "codex-urn-honesty-read",
+        options: PlayOptions {
+            target: PlayTarget::World(WorldPlane::Britannia),
+            ..PlayOptions::default()
+        },
+        script: &["M"],
+        expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+        min_turn: 0,
+        expected_frame_kind: "tile viewport",
+    });
+    cases.push(RouteSmokeCase {
+        name: "shrine-honesty-codex-turn-in",
+        options: PlayOptions {
+            target: PlayTarget::World(WorldPlane::Britannia),
+            ..PlayOptions::default()
+        },
+        script: &["MAhm"],
+        expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+        min_turn: 0,
+        expected_frame_kind: "tile viewport",
+    });
+    cases.push(RouteSmokeCase {
+        name: "shrine-compassion-completed-offering",
+        options: PlayOptions {
+            target: PlayTarget::World(WorldPlane::Britannia),
+            gold: 500,
+            ..PlayOptions::default()
+        },
+        script: &["MMu/1"],
+        expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+        min_turn: 0,
+        expected_frame_kind: "tile viewport",
+    });
 }
 
 fn append_public_location_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>) {
@@ -2576,7 +2637,7 @@ pub fn run_route_smoke_case(
 }
 
 fn prepare_route_smoke_case_game_dir(case_name: &str) -> io::Result<Option<PathBuf>> {
-    if case_name != "castle-poison-gas-step" {
+    if case_name != "castle-poison-gas-step" && case_name != "codex-urn-honesty-read" {
         return Ok(None);
     }
     let nonce = SystemTime::now()
@@ -2588,6 +2649,12 @@ fn prepare_route_smoke_case_game_dir(case_name: &str) -> io::Result<Option<PathB
         std::process::id()
     ));
     fs::create_dir_all(&dir)?;
+    if case_name == "codex-urn-honesty-read" {
+        fs::write(
+            dir.join(CODEX_URN_TABLE_FILE),
+            format!("BRITANNIA 62 124 {SHRINE_ALTAR_TILE_FIRST}\n"),
+        )?;
+    }
     Ok(Some(dir))
 }
 
@@ -2904,6 +2971,27 @@ fn apply_route_smoke_case_setup(
         }
         "castle-talk-ordinary-keyword-route" => {
             seed_town_ordinary_talk_route(state);
+        }
+        _ if shrine_route_virtue(case_name).is_some() => {
+            let virtue = shrine_route_virtue(case_name).expect("shrine route virtue is known");
+            seed_world_shrine_route(state, virtue);
+        }
+        "codex-urn-honesty-read" => {
+            seed_world_shrine_route(state, ShrineVirtue::Honesty);
+            state.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
+            state.shrine_codex_mask = 0;
+        }
+        "shrine-honesty-codex-turn-in" => {
+            seed_world_shrine_route(state, ShrineVirtue::Honesty);
+            state.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
+            state.shrine_codex_mask = ShrineVirtue::Honesty.bit();
+            state.moral_standing = 10;
+        }
+        "shrine-compassion-completed-offering" => {
+            seed_world_shrine_route(state, ShrineVirtue::Compassion);
+            state.shrine_ordained_mask = 0;
+            state.shrine_codex_mask = ShrineVirtue::Compassion.bit();
+            state.moral_standing = 10;
         }
         "castle-native-stair-up-route" => {
             seed_town_native_stair_route(state, Direction::East, 0xC5);
@@ -3263,6 +3351,29 @@ fn seed_town_ordinary_talk_route(state: &mut PlayState) {
         },
     ]);
     state.mark_visibility_dirty();
+}
+
+fn seed_world_shrine_route(state: &mut PlayState, virtue: ShrineVirtue) {
+    state.area = Area::World {
+        plane: WorldPlane::Britannia,
+    };
+    state.player.x = 62;
+    state.player.y = 124;
+    state.player.facing = Direction::East;
+    let tile = SHRINE_ALTAR_TILE_FIRST + virtue.index() as u8;
+    let idx = world_cell_index(state.player.x, state.player.y);
+    if let Some(cell) = state.grid.get_mut(idx) {
+        *cell = tile;
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn shrine_route_virtue(case_name: &str) -> Option<ShrineVirtue> {
+    let key = case_name
+        .strip_prefix("shrine-native-")?
+        .strip_suffix("-meditation")?;
+    ShrineVirtue::from_key(key)
 }
 
 fn seed_town_native_stair_route(state: &mut PlayState, facing: Direction, stair_tile: u8) {
@@ -4928,6 +5039,50 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not keep an ordinary asset-backed Talk session active"
+                )));
+            }
+        }
+        _ if shrine_route_virtue(case_name).is_some() => {
+            let virtue = shrine_route_virtue(case_name).expect("shrine route virtue is known");
+            if state.shrine_ordained_mask & virtue.bit() == 0
+                || state.shrine_codex_mask != 0
+                || !state.message.contains("ordained")
+                || !state.message.contains(virtue.name())
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not complete native shrine meditation for {}",
+                    virtue.name()
+                )));
+            }
+        }
+        "codex-urn-honesty-read" => {
+            if state.shrine_codex_mask & ShrineVirtue::Honesty.bit() == 0
+                || !state.message.contains("Read Codex page for Honesty")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not stamp the Codex-read bit"
+                )));
+            }
+        }
+        "shrine-honesty-codex-turn-in" => {
+            if state.shrine_ordained_mask & ShrineVirtue::Honesty.bit() != 0
+                || state.shrine_codex_mask & ShrineVirtue::Honesty.bit() == 0
+                || state.moral_standing != 13
+                || !state.message.contains("Completed the Shrine of Honesty")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not clear ordained state and apply the Codex turn-in"
+                )));
+            }
+        }
+        "shrine-compassion-completed-offering" => {
+            if state.gold != 400
+                || state.shrine_codex_mask & ShrineVirtue::Compassion.bit() == 0
+                || state.moral_standing != 11
+                || !state.message.contains("Offered 100 gold")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not complete the completed-shrine offering"
                 )));
             }
         }

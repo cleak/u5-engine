@@ -18,7 +18,7 @@ use image::{ImageBuffer, Rgba};
 
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX,
-    BRIT_CBT_RECORDS, BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB,
+    BRIT_CBT_RECORDS, BRITISH_PTH_PEN_ORIGINS, BritishPth, CGA_PALETTE_RGB, CODEX_URN_TABLE_FILE,
     COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED, COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS,
     COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT, COMBAT_DEFAULT_DEATH_DROP_TILE,
     COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE, COMBAT_FIELD_KIND_POISON,
@@ -54,14 +54,14 @@ use u5_runtime::{
     SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
     SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
     SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
-    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
-    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
-    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
-    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SHRINE_ALTAR_TILE_FIRST, SLEEP_COST,
+    SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX,
+    SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX,
+    SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
     SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
     SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_BOTTOM,
     STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE,
-    SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, Stable, StoryRecords,
+    SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, ShrineVirtue, Stable, StoryRecords,
     TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING, TEXT_SCREEN_ROWS,
     TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST,
     TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS,
@@ -375,8 +375,10 @@ pub fn visual_route_suite(
     let mut reports = Vec::new();
 
     for case in visual_route_suite_cases() {
+        let route_game_dir = prepare_visual_route_case_game_dir(case.label)?;
         let reload_save_dir = prepare_visual_route_reload_save_dir(game_dir, case.label)?;
         let reload_checkpoints = visual_route_reload_checkpoints(case.label);
+        let command_game_dir = route_game_dir.as_deref().unwrap_or(game_dir);
         let mut state = PlayState::load_scene(game_dir, case.options)?;
         if let Some(configure) = case.configure {
             configure(&mut state);
@@ -394,7 +396,7 @@ pub fn visual_route_suite(
         reports.push(initial);
 
         for (index, command) in case.script.iter().enumerate() {
-            apply_visual_route_command(&mut state, command, game_dir)?;
+            apply_visual_route_command(&mut state, command, command_game_dir)?;
             if reload_checkpoints.contains(&(index + 1)) {
                 let Some(save_dir) = reload_save_dir.as_deref() else {
                     return Err(io::Error::other(format!(
@@ -426,6 +428,9 @@ pub fn visual_route_suite(
         if let Some(dir) = &reload_save_dir {
             let _ = std::fs::remove_dir_all(dir);
         }
+        if let Some(dir) = &route_game_dir {
+            let _ = std::fs::remove_dir_all(dir);
+        }
     }
 
     for report in &reports {
@@ -441,22 +446,46 @@ pub fn visual_route_suite(
 }
 
 fn apply_visual_route_initial_setup(state: &mut PlayState, label: &str) -> io::Result<()> {
-    let Some(index) = visual_route_public_location_index(label) else {
+    if let Some(index) = visual_route_public_location_index(label) {
+        let Some(entry) = published_world_location_entries().into_iter().nth(index) else {
+            return Err(io::Error::other(format!(
+                "visual route `{label}` does not map to a published location row"
+            )));
+        };
+        state.area = u5_runtime::Area::World { plane: entry.plane };
+        state.player.x = entry.x;
+        state.player.y = entry.y;
+        if let Some(object) = state.active_objects.get_mut(0) {
+            object.z = entry.plane.save_floor();
+        }
+        state.sync_player_object();
+        state.mark_visibility_dirty();
         return Ok(());
-    };
-    let Some(entry) = published_world_location_entries().into_iter().nth(index) else {
-        return Err(io::Error::other(format!(
-            "visual route `{label}` does not map to a published location row"
-        )));
-    };
-    state.area = u5_runtime::Area::World { plane: entry.plane };
-    state.player.x = entry.x;
-    state.player.y = entry.y;
-    if let Some(object) = state.active_objects.get_mut(0) {
-        object.z = entry.plane.save_floor();
     }
-    state.sync_player_object();
-    state.mark_visibility_dirty();
+    if let Some(virtue) = visual_route_shrine_virtue(label) {
+        seed_visual_route_shrine(state, virtue);
+        return Ok(());
+    }
+    match label {
+        "route-codex-urn-honesty-read" => {
+            seed_visual_route_shrine(state, ShrineVirtue::Honesty);
+            state.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
+            state.shrine_codex_mask = 0;
+        }
+        "route-shrine-honesty-codex-turn-in" => {
+            seed_visual_route_shrine(state, ShrineVirtue::Honesty);
+            state.shrine_ordained_mask = ShrineVirtue::Honesty.bit();
+            state.shrine_codex_mask = ShrineVirtue::Honesty.bit();
+            state.moral_standing = 10;
+        }
+        "route-shrine-compassion-completed-offering" => {
+            seed_visual_route_shrine(state, ShrineVirtue::Compassion);
+            state.shrine_ordained_mask = 0;
+            state.shrine_codex_mask = ShrineVirtue::Compassion.bit();
+            state.moral_standing = 10;
+        }
+        _ => {}
+    }
     Ok(())
 }
 
@@ -466,6 +495,41 @@ fn visual_route_public_location_index(label: &str) -> Option<usize> {
     (1..=published_world_location_entries().len())
         .contains(&row)
         .then_some(row - 1)
+}
+
+fn seed_visual_route_shrine(state: &mut PlayState, virtue: ShrineVirtue) {
+    state.area = u5_runtime::Area::World {
+        plane: WorldPlane::Britannia,
+    };
+    state.player.x = 62;
+    state.player.y = 124;
+    state.player.facing = Direction::East;
+    let tile = SHRINE_ALTAR_TILE_FIRST + virtue.index() as u8;
+    let idx = u5_runtime::world_cell_index(state.player.x, state.player.y);
+    if let Some(cell) = state.grid.get_mut(idx) {
+        *cell = tile;
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+}
+
+fn visual_route_shrine_virtue(label: &str) -> Option<ShrineVirtue> {
+    let key = label
+        .strip_prefix("route-shrine-native-")?
+        .strip_suffix("-meditation")?;
+    ShrineVirtue::from_key(key)
+}
+
+fn prepare_visual_route_case_game_dir(case_label: &str) -> io::Result<Option<PathBuf>> {
+    if case_label != "route-codex-urn-honesty-read" {
+        return Ok(None);
+    }
+    let dir = visual_route_temp_dir(case_label, "case")?;
+    std::fs::write(
+        dir.join(CODEX_URN_TABLE_FILE),
+        format!("BRITANNIA 62 124 {SHRINE_ALTAR_TILE_FIRST}\n"),
+    )?;
+    Ok(Some(dir))
 }
 
 fn prepare_visual_route_reload_save_dir(
@@ -3596,8 +3660,64 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         visual_doom_combat_case("route-doom-combat-yell-word", doom, &["", "YFALLAX"]),
         visual_doom_combat_case("route-doom-combat-xit-foes-remain", doom, &["", "X"]),
     ]);
+    append_shrine_visual_route_cases(&mut cases);
     append_public_location_visual_route_cases(&mut cases);
     cases
+}
+
+fn append_shrine_visual_route_cases(cases: &mut Vec<VisualRouteSuiteCase>) {
+    for virtue in ShrineVirtue::ALL {
+        let label: &'static str = Box::leak(
+            format!(
+                "route-shrine-native-{}-meditation",
+                virtue.name().to_ascii_lowercase()
+            )
+            .into_boxed_str(),
+        );
+        let command: &'static str = Box::leak(format!("M{}", virtue.mantra()).into_boxed_str());
+        let script: &'static [&'static str] = Box::leak(vec![command].into_boxed_slice());
+        cases.push(VisualRouteSuiteCase {
+            label,
+            frame_kind: "visual route world frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script,
+            configure: None,
+        });
+    }
+    cases.push(VisualRouteSuiteCase {
+        label: "route-codex-urn-honesty-read",
+        frame_kind: "visual route world frame",
+        options: PlayOptions {
+            target: PlayTarget::World(WorldPlane::Britannia),
+            ..PlayOptions::default()
+        },
+        script: &["M"],
+        configure: None,
+    });
+    cases.push(VisualRouteSuiteCase {
+        label: "route-shrine-honesty-codex-turn-in",
+        frame_kind: "visual route world frame",
+        options: PlayOptions {
+            target: PlayTarget::World(WorldPlane::Britannia),
+            ..PlayOptions::default()
+        },
+        script: &["MAhm"],
+        configure: None,
+    });
+    cases.push(VisualRouteSuiteCase {
+        label: "route-shrine-compassion-completed-offering",
+        frame_kind: "visual route world frame",
+        options: PlayOptions {
+            target: PlayTarget::World(WorldPlane::Britannia),
+            gold: 500,
+            ..PlayOptions::default()
+        },
+        script: &["MMu/1"],
+        configure: None,
+    });
 }
 
 fn append_public_location_visual_route_cases(cases: &mut Vec<VisualRouteSuiteCase>) {
@@ -9648,7 +9768,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 317);
+        assert_eq!(cases.len(), 328);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -10179,6 +10299,15 @@ mod tests {
             let label = format!("route-stock-location-enter-{row:02}");
             assert!(cases.iter().any(|case| case.label == label), "{label}");
         }
+        for label in [
+            "route-shrine-native-honesty-meditation",
+            "route-shrine-native-humility-meditation",
+            "route-codex-urn-honesty-read",
+            "route-shrine-honesty-codex-turn-in",
+            "route-shrine-compassion-completed-offering",
+        ] {
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert_eq!(
             visual_route_step_label("route-world-movement", 2, "."),
             "route-world-movement-02-idle"
@@ -10272,7 +10401,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 931);
+        assert_eq!(reports.len(), 953);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -10311,6 +10440,11 @@ mod tests {
         assert!(manifest.contains("route-gate-travel-invalid-slot-refusal-01-c1prv4"));
         assert!(manifest.contains("route-stock-location-enter-01-01-e"));
         assert!(manifest.contains("route-stock-location-enter-40-01-e"));
+        assert!(manifest.contains("route-shrine-native-honesty-meditation-01-mahm"));
+        assert!(manifest.contains("route-shrine-native-humility-meditation-01-mlum"));
+        assert!(manifest.contains("route-codex-urn-honesty-read-01-m"));
+        assert!(manifest.contains("route-shrine-honesty-codex-turn-in-01-mahm"));
+        assert!(manifest.contains("route-shrine-compassion-completed-offering-01-mmu_1"));
         assert!(manifest.contains("route-gate-travel-shipboard-refusal-01-c1prv2"));
         assert!(manifest.contains("route-natural-moongate-trammel-gate-travel-01-idle_1"));
         assert!(manifest.contains("route-natural-moongate-empty-slot-clears-live-tile-01-idle_1"));
