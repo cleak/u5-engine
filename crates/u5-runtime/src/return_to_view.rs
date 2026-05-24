@@ -857,6 +857,7 @@ pub fn run_return_to_view_playback_until_restart(
         let command_index = pc;
         let command = script.commands[pc];
         let before_ticks = state.total_ticks;
+        let before_state = state.clone();
         match state.apply_command(strips, command_index, command)? {
             ReturnToViewControl::Continue => pc += 1,
             ReturnToViewControl::JumpTo(target) => {
@@ -879,6 +880,7 @@ pub fn run_return_to_view_playback_until_restart(
             command_index,
             command,
             before_ticks,
+            &before_state,
             &state,
         );
         applied_commands += 1;
@@ -911,6 +913,7 @@ fn append_return_to_view_playback_frames(
     command_index: usize,
     command: ReturnToViewCommand,
     before_ticks: u32,
+    before_state: &ReturnToViewPreviewState,
     state: &ReturnToViewPreviewState,
 ) {
     match command {
@@ -936,23 +939,58 @@ fn append_return_to_view_playback_frames(
                 );
             }
         }
-        ReturnToViewCommand::OpenCellEffect { .. } | ReturnToViewCommand::CloseCellEffect => {
+        ReturnToViewCommand::OpenCellEffect { x, y } => {
             for step in 0..RTV_CELL_EFFECT_STEPS {
-                push_return_to_view_frame(
+                push_return_to_view_cell_effect_frame(
                     frames,
                     command_index,
                     before_ticks + u32::from(step) + 1,
                     ReturnToViewFrameKind::CellEffectStep { step },
-                    state,
+                    before_state,
+                    x,
+                    y.saturating_add(7),
+                    RTV_EFFECT_SENTINEL_TILE,
                 );
             }
             for tick in 0..RTV_CELL_EFFECT_FINAL_TICKS {
-                push_return_to_view_frame(
+                push_return_to_view_cell_effect_frame(
                     frames,
                     command_index,
                     before_ticks + u32::from(RTV_CELL_EFFECT_STEPS) + u32::from(tick) + 1,
                     ReturnToViewFrameKind::CellEffectFinalTick { tick },
                     state,
+                    x,
+                    y.saturating_add(7),
+                    RTV_OPEN_EFFECT_FINAL_TILE,
+                );
+            }
+        }
+        ReturnToViewCommand::CloseCellEffect => {
+            let Some((x, y)) = before_state.cached_effect_cell else {
+                return;
+            };
+            for step in 0..RTV_CELL_EFFECT_STEPS {
+                push_return_to_view_cell_effect_frame(
+                    frames,
+                    command_index,
+                    before_ticks + u32::from(step) + 1,
+                    ReturnToViewFrameKind::CellEffectStep { step },
+                    before_state,
+                    x,
+                    y,
+                    RTV_EFFECT_SENTINEL_TILE,
+                );
+            }
+            for tick in 0..RTV_CELL_EFFECT_FINAL_TICKS {
+                push_return_to_view_cell_effect_frame(
+                    frames,
+                    command_index,
+                    before_ticks + u32::from(RTV_CELL_EFFECT_STEPS) + u32::from(tick) + 1,
+                    ReturnToViewFrameKind::CellEffectFinalTick { tick },
+                    state,
+                    x,
+                    y,
+                    RTV_CLOSE_EFFECT_FINAL_TILE,
                 );
             }
         }
@@ -1039,6 +1077,31 @@ fn push_return_to_view_strip_reveal_frame(
         command_index,
         elapsed_title_ticks,
         kind: ReturnToViewFrameKind::StripReveal { step },
+        state,
+        actor_draw: None,
+    });
+}
+
+fn push_return_to_view_cell_effect_frame(
+    frames: &mut Vec<ReturnToViewPlaybackFrame>,
+    command_index: usize,
+    elapsed_title_ticks: u32,
+    kind: ReturnToViewFrameKind,
+    state: &ReturnToViewPreviewState,
+    x: u8,
+    y: u8,
+    tile: u8,
+) {
+    let mut state = state.clone();
+    if let Some(index) = preview_cell_index(x, y) {
+        state.visible[index] = tile;
+        state.backing[index] = tile;
+    }
+    state.total_ticks = elapsed_title_ticks;
+    frames.push(ReturnToViewPlaybackFrame {
+        command_index,
+        elapsed_title_ticks,
+        kind,
         state,
         actor_draw: None,
     });
@@ -1702,6 +1765,93 @@ mod tests {
         assert_eq!(
             playback.run.report.total_ticks,
             u32::from(RTV_STRIP_REVEAL_STEPS)
+        );
+    }
+
+    #[test]
+    fn return_to_view_cell_effect_playback_stages_sentinel_then_final_tile() {
+        let mut strips = ReturnToViewMapStrips {
+            strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
+        };
+        strips.strips[0][8 * RTV_STRIP_VISIBLE_COLUMNS + 2] = 0x33;
+        let script = ReturnToViewScript {
+            commands: vec![
+                ReturnToViewCommand::LoadMapStrip { strip: 0 },
+                ReturnToViewCommand::OpenCellEffect { x: 2, y: 1 },
+                ReturnToViewCommand::CloseCellEffect,
+                ReturnToViewCommand::RestartStream,
+            ],
+        };
+
+        let playback = run_return_to_view_playback_until_restart(&strips, &script, 96).unwrap();
+        let effect_index = preview_cell_index(2, 8).unwrap();
+
+        let open_step = playback
+            .frames
+            .iter()
+            .find(|frame| {
+                frame.command_index == 1
+                    && matches!(
+                        frame.kind,
+                        ReturnToViewFrameKind::CellEffectStep { step: 0 }
+                    )
+            })
+            .expect("open effect first step");
+        assert_eq!(
+            open_step.state.visible[effect_index],
+            RTV_EFFECT_SENTINEL_TILE
+        );
+
+        let open_final = playback
+            .frames
+            .iter()
+            .find(|frame| {
+                frame.command_index == 1
+                    && matches!(
+                        frame.kind,
+                        ReturnToViewFrameKind::CellEffectFinalTick { tick: 0 }
+                    )
+            })
+            .expect("open effect final tick");
+        assert_eq!(
+            open_final.state.visible[effect_index],
+            RTV_OPEN_EFFECT_FINAL_TILE
+        );
+
+        let close_step = playback
+            .frames
+            .iter()
+            .find(|frame| {
+                frame.command_index == 2
+                    && matches!(
+                        frame.kind,
+                        ReturnToViewFrameKind::CellEffectStep { step: 0 }
+                    )
+            })
+            .expect("close effect first step");
+        assert_eq!(
+            close_step.state.visible[effect_index],
+            RTV_EFFECT_SENTINEL_TILE
+        );
+
+        let close_final = playback
+            .frames
+            .iter()
+            .find(|frame| {
+                frame.command_index == 2
+                    && matches!(
+                        frame.kind,
+                        ReturnToViewFrameKind::CellEffectFinalTick { tick: 0 }
+                    )
+            })
+            .expect("close effect final tick");
+        assert_eq!(
+            close_final.state.visible[effect_index],
+            RTV_CLOSE_EFFECT_FINAL_TILE
+        );
+        assert_eq!(
+            playback.run.state.visible[effect_index],
+            RTV_CLOSE_EFFECT_FINAL_TILE
         );
     }
 
