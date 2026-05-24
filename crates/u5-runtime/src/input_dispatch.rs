@@ -1059,32 +1059,24 @@ fn handle_active_shop_key_input(
         }
         ActiveShopSession::ShipBroker(s) => {
             let outcome = if let Some(return_world) = state.return_world.as_mut() {
-                let delivery_x = return_world.x;
-                let delivery_y = return_world.y;
                 match (*s, yes, no) {
                     (ShipBrokerState::Greeting { .. }, _, _) => step_ship_broker(
                         s,
                         ShipBrokerInput::Key(key_byte),
                         &mut state.gold,
                         &mut return_world.pending_vehicle,
-                        delivery_x,
-                        delivery_y,
                     ),
                     (ShipBrokerState::ConfirmPurchase { .. }, true, _) => step_ship_broker(
                         s,
                         ShipBrokerInput::Confirm(true),
                         &mut state.gold,
                         &mut return_world.pending_vehicle,
-                        delivery_x,
-                        delivery_y,
                     ),
                     (ShipBrokerState::ConfirmPurchase { .. }, _, true) => step_ship_broker(
                         s,
                         ShipBrokerInput::Confirm(false),
                         &mut state.gold,
                         &mut return_world.pending_vehicle,
-                        delivery_x,
-                        delivery_y,
                     ),
                     _ => ShipBrokerOutcome::InvalidInput,
                 }

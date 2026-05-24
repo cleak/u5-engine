@@ -2643,6 +2643,17 @@ pub const fn shipwright_price(shipwright: Shipwright, kind: ShipwrightPurchaseKi
     }
 }
 
+pub const fn shipwright_delivery_coordinate(shipwright: Shipwright) -> (usize, usize) {
+    match shipwright {
+        // shops.md §8.7 / gazetteer.md §5.1: shipwright deliveries
+        // use the hosting scene's exterior entry/return coordinate.
+        Shipwright::IslandShipwrights => (36, 222),
+        Shipwright::TheCrowsNest => (159, 20),
+        Shipwright::TheOakenOar => (88, 106),
+        Shipwright::TheRustyBucket => (136, 158),
+    }
+}
+
 pub const fn quote_shipwright_purchase(
     shipwright: Shipwright,
     kind: ShipwrightPurchaseKind,

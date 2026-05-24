@@ -24,8 +24,8 @@ use crate::shops::{
     guild_unit_price, herbalist_menu_entries, inn_base_room_rate,
     inn_leave_companion_deposit_for_speaker, inn_main_action, inn_pickup_bill_for_speaker,
     quote_horse_purchase_for_speaker, quote_inn_rest, quote_inn_rest_for_speaker,
-    quote_shipwright_purchase, shipwright_menu_action, tavern_drink_prompt,
-    tavern_lore_menu_letter, tavern_menu_letters, tavern_provision_unit_price,
+    quote_shipwright_purchase, shipwright_delivery_coordinate, shipwright_menu_action,
+    tavern_drink_prompt, tavern_lore_menu_letter, tavern_menu_letters, tavern_provision_unit_price,
 };
 use crate::transport::PendingVehicleAcquisition;
 
@@ -1423,14 +1423,13 @@ pub fn step_ship_broker(
     input: ShipBrokerInput,
     gold: &mut u16,
     pending_vehicle: &mut Option<PendingVehicleAcquisition>,
-    delivery_x: usize,
-    delivery_y: usize,
 ) -> ShipBrokerOutcome {
     match (*state, input) {
         (ShipBrokerState::Greeting { shipwright }, ShipBrokerInput::Key(b)) => {
             match shipwright_menu_action(b) {
                 ShipwrightMenuAction::Purchase(kind) => {
                     let quote = quote_shipwright_purchase(shipwright, kind);
+                    let (delivery_x, delivery_y) = shipwright_delivery_coordinate(shipwright);
                     *state = ShipBrokerState::ConfirmPurchase {
                         quote,
                         delivery_x,
@@ -2981,8 +2980,6 @@ mod tests {
             ShipBrokerInput::Key(b'F'),
             &mut gold,
             &mut pending,
-            12,
-            21,
         );
         assert!(matches!(
             quote,
@@ -3000,8 +2997,6 @@ mod tests {
             ShipBrokerInput::Confirm(true),
             &mut gold,
             &mut pending,
-            12,
-            21,
         );
         assert!(matches!(
             outcome,
@@ -3016,8 +3011,8 @@ mod tests {
         assert_eq!(
             pending,
             Some(PendingVehicleAcquisition::Frigate {
-                x: 12,
-                y: 21,
+                x: 136,
+                y: 158,
                 skiffs: 2,
             })
         );
@@ -3037,16 +3032,12 @@ mod tests {
             ShipBrokerInput::Key(b'S'),
             &mut gold,
             &mut pending,
-            99,
-            99,
         );
         let outcome = step_ship_broker(
             &mut state,
             ShipBrokerInput::Confirm(true),
             &mut gold,
             &mut pending,
-            99,
-            99,
         );
         assert!(matches!(
             outcome,

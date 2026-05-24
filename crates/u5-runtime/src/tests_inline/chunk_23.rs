@@ -663,6 +663,26 @@
     }
 
     #[test]
+    fn shipwright_delivery_coordinates_use_scene_entry_rows() {
+        assert_eq!(
+            shipwright_delivery_coordinate(Shipwright::IslandShipwrights),
+            (36, 222)
+        );
+        assert_eq!(
+            shipwright_delivery_coordinate(Shipwright::TheCrowsNest),
+            (159, 20)
+        );
+        assert_eq!(
+            shipwright_delivery_coordinate(Shipwright::TheOakenOar),
+            (88, 106)
+        );
+        assert_eq!(
+            shipwright_delivery_coordinate(Shipwright::TheRustyBucket),
+            (136, 158)
+        );
+    }
+
+    #[test]
     fn shipwright_purchase_queues_delivery_or_adds_skiff_cargo() {
         let mut gold = 800;
         let mut pending = None;

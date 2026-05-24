@@ -232,7 +232,7 @@ through the asset-backed Talk command path.
 | §8.4 Innkeeper | `shop_runtime.rs` inn flow; stay counter in `clock.rs`; public issue #15 Intelligence-adjusted rest, leave, and pickup charges plus paid-rest class recovery and poison death conversion | inn tests | Implemented |
 | §8.5 Tavernkeeper | tavern arm in `shop_runtime.rs` | tavern tests | Implemented |
 | §8.6 Sage | sage arm: shared 26-row paid keyword lookup, strict four-letter topic boundary, fee quote/confirmation, gold debit before success-template RNG, short-funds exit, and SHOPPE record 85..=88 success rendering | sage runtime tests plus full public #13 table-sync and PRNG-timing tests | Implemented (exact fee/short-funds resident text source pending #13 follow-up) |
-| §8.7 Shipwright | shipwright arm; pending vehicle in `play_state_struct.rs` | shipwright tests | Implemented |
+| §8.7 Shipwright | shipwright arm; fixed scene-entry delivery coordinates; pending vehicle in `play_state_struct.rs` | shipwright tests | Implemented |
 | §8.8 Horse trader | horse arm | horse tests | Implemented |
 | §8.9 Reagent vendor | `shops.rs` per-herbalist matrix | reagent tests | Implemented |
 | §8.10 Horse trader correction | `shop_session.rs` public issue #28 horse-trader scene rows; `shop_runtime.rs` Intelligence-adjusted quote/no-marker refusal state machine; `input_dispatch.rs` adjacent marker placement and active-object creation | all-stable horse-trader route smoke/visual routes and talk/shop tests in `chunk_21.rs`, including no-marker refusal | Implemented; obsolete stationary-display purchase runtime removed |

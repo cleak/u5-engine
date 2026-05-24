@@ -4449,7 +4449,7 @@
     }
 
     #[test]
-    fn end_to_end_shipwright_frigate_queues_return_world_delivery() {
+    fn end_to_end_shipwright_frigate_queues_published_dock_delivery() {
         use crate::shop_runtime::ShipBrokerState;
         use crate::shop_session::ActiveShopSession;
 
@@ -4489,8 +4489,8 @@
         assert_eq!(
             state.return_world.as_ref().and_then(|world| world.pending_vehicle),
             Some(PendingVehicleAcquisition::Frigate {
-                x: 12,
-                y: 21,
+                x: 136,
+                y: 158,
                 skiffs: 2,
             })
         );
