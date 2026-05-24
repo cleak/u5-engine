@@ -75,8 +75,9 @@ audit:
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 67 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 220 scripted cases pass,
-  including four extended-session cases that exercise 5–12 commands across
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 260 scripted cases pass,
+  including all 40 published stock world-location entry rows and four
+  extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
   save/reload checkpoints across transport, plane transitions, fixed hidden
@@ -114,8 +115,9 @@ audit:
   source scanning disabled, plus combat status-highlight and death/field/cursor
   marker galleries.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 851 Bevy-owned per-step route
-  PNGs, every frame nonblank with a sanitized manifest, including exact
+  target\visual-route-suite C:\Games\U5-Clean` — 931 Bevy-owned per-step route
+  PNGs, every frame nonblank with a sanitized manifest, including all 40
+  published stock world-location entry rows, exact
   TUI-label ship/castle/shop/dungeon/Doom/combat-field/terrain-exit aliases,
   light-decay, all nine public arms-shop first-stock purchases and terminator
   refusals, horse-trader purchases, accepted healer cure/heal/resurrect, all four public shipwright

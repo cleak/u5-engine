@@ -54,27 +54,28 @@ use u5_runtime::{
     SAVED_OOL_FILENAME, SAVED_OOL_LEN, SCENE_EMPATH_ABBEY, SCENE_JHELOM, SCENE_MOONGLOW,
     SCENE_SERPENTS_HOLD, SCENE_STONEGATE, SCENE_THE_LYCAEUM, SHADOWLORD_COWARDICE_INDEX,
     SHADOWLORD_FALSEHOOD_INDEX, SHADOWLORD_HATRED_INDEX, SHADOWLORD_HIDEOUT_VANQUISHED,
-    SHADOWLORD_OBJECT_TILE_BASE, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX, SLEEP_SPELL_INDEX,
-    SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX, SPECIAL_ITEM_OWNED_VALUE,
-    SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX, SPECIAL_ITEM_SEXTANT_INDEX,
-    SPECIAL_ITEM_SHARD_COWARDICE_INDEX, SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX,
-    SPECIAL_ITEM_SHARD_HATRED_INDEX, SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX,
-    STATS_PANEL_TEXT_BOTTOM, STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT,
-    STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE, SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene,
-    Shipwright, Stable, StoryRecords, TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING,
-    TEXT_SCREEN_ROWS, TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE,
-    TIME_STOP_COST, TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS,
-    TITLE_BIT_REMAINING_PLACEMENTS, TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT,
-    TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT, TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X,
-    TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX, TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE,
-    Tavern, TextWindowSystem, TileAtlas, TileGraphicsDepth, TileViewport, TitleBitAsset,
-    TitleBitImages, TitleBitPlacement, TransportState, U4TransferOverrides, U4TransferSource,
-    UNLOCK_MAGIC_COST, UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST,
-    VANISH_SPELL_INDEX, VAS_LOR_COST, VAS_LOR_SPELL_INDEX, WORLD_SIDE, WindState, WorldPlane,
-    WorldReturn, X_RAY_COST, X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_class_stats,
-    commit_chargen_save, commit_u4_transfer_save, default_party_equipment,
-    default_party_experience, default_party_intelligence, default_party_names,
-    default_party_roster, default_party_stay_counters, disk_io_error_message, dungeon_cell_index,
+    SHADOWLORD_OBJECT_TILE_BASE, SHADOWLORD_VANQUISHED, SLEEP_COST, SLEEP_FIELD_SPELL_INDEX,
+    SLEEP_SPELL_INDEX, SPECIAL_ITEM_HMS_CAPE_PLANS_INDEX, SPECIAL_ITEM_MAGIC_CARPET_INDEX,
+    SPECIAL_ITEM_OWNED_VALUE, SPECIAL_ITEM_POCKET_WATCH_INDEX, SPECIAL_ITEM_SCEPTRE_LB_INDEX,
+    SPECIAL_ITEM_SEXTANT_INDEX, SPECIAL_ITEM_SHARD_COWARDICE_INDEX,
+    SPECIAL_ITEM_SHARD_FALSEHOOD_INDEX, SPECIAL_ITEM_SHARD_HATRED_INDEX,
+    SPECIAL_ITEM_SPYGLASS_INDEX, SPECIAL_ITEM_WOODEN_BOX_INDEX, STATS_PANEL_TEXT_BOTTOM,
+    STATS_PANEL_TEXT_LEFT, STATS_PANEL_TEXT_RIGHT, STATS_PANEL_TEXT_WINDOW_INDEX, STEADY_PHASE,
+    SURFACE_CHASM_X, SURFACE_CHASM_Y, Scene, Shipwright, Stable, StoryRecords,
+    TALK_STATUS_TILE_PRAYING, TALK_STATUS_TILE_SLEEPING, TEXT_SCREEN_ROWS,
+    TEXT_WINDOW_RENDER_HEIGHT, TEXT_WINDOW_RENDER_WIDTH, TILE_ATLAS_SIDE, TIME_STOP_COST,
+    TIME_STOP_SPELL_INDEX, TITLE_BIT_INITIAL_PLACEMENTS, TITLE_BIT_REMAINING_PLACEMENTS,
+    TITLE_LOWER_BAND_CLEAR_Y, TITLE_SURFACE_HEIGHT, TITLE_SURFACE_WIDTH, TITLE_TICK_FRAME_HEIGHT,
+    TITLE_TICK_FRAME_WIDTH, TITLE_TICK_FRAME_X, TITLE_TICK_FRAME_Y, TOWN_GAS_DOORWAY_RANGE_MAX,
+    TOWN_GRID_SIDE, TOWN_POISON_GAS_LIVE_TILE, Tavern, TextWindowSystem, TileAtlas,
+    TileGraphicsDepth, TileViewport, TitleBitAsset, TitleBitImages, TitleBitPlacement,
+    TransportState, U4TransferOverrides, U4TransferSource, UNLOCK_MAGIC_COST,
+    UNLOCK_MAGIC_SPELL_INDEX, UUS_POR_SPELL_INDEX, VANISH_COST, VANISH_SPELL_INDEX, VAS_LOR_COST,
+    VAS_LOR_SPELL_INDEX, WORLD_SIDE, WindState, WorldPlane, WorldReturn, X_RAY_COST,
+    X_RAY_SPELL_INDEX, blit_tile_id_to_viewport, combat_class_stats, commit_chargen_save,
+    commit_u4_transfer_save, default_party_equipment, default_party_experience,
+    default_party_intelligence, default_party_names, default_party_roster,
+    default_party_stay_counters, disk_io_error_message, dungeon_cell_index,
     dungeon_room_combat_instance_from_setup, dungeon_room_combat_setup_from_record_for_entry,
     dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
     hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
@@ -87,10 +88,10 @@ use u5_runtime::{
     load_return_to_view_assets, load_story_records, load_tile_atlas, load_title_bit,
     menu_dispatch::{UnifiedMenuDispatch, UnifiedMenuStep},
     paint_message_text_window, paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
-    rasterize_proportional_paragraph, read_u4_transfer_source_from_party_sav,
-    render_play_text_window_system, render_return_to_view_playback_frame_viewport,
-    render_text_panel_rgba, render_text_window_rgba, return_to_view_fixed_wipe_rectangles,
-    run_return_to_view_playback_until_restart,
+    published_world_location_entries, rasterize_proportional_paragraph,
+    read_u4_transfer_source_from_party_sav, render_play_text_window_system,
+    render_return_to_view_playback_frame_viewport, render_text_panel_rgba, render_text_window_rgba,
+    return_to_view_fixed_wipe_rectangles, run_return_to_view_playback_until_restart,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -380,6 +381,7 @@ pub fn visual_route_suite(
         if let Some(configure) = case.configure {
             configure(&mut state);
         }
+        apply_visual_route_initial_setup(&mut state, case.label)?;
         let initial = write_visual_play_report(
             out_dir,
             &visual_route_step_label(case.label, 0, "initial"),
@@ -436,6 +438,34 @@ pub fn visual_route_suite(
     }
     write_visual_frame_suite_manifest(out_dir, &reports)?;
     Ok(reports)
+}
+
+fn apply_visual_route_initial_setup(state: &mut PlayState, label: &str) -> io::Result<()> {
+    let Some(index) = visual_route_public_location_index(label) else {
+        return Ok(());
+    };
+    let Some(entry) = published_world_location_entries().into_iter().nth(index) else {
+        return Err(io::Error::other(format!(
+            "visual route `{label}` does not map to a published location row"
+        )));
+    };
+    state.area = u5_runtime::Area::World { plane: entry.plane };
+    state.player.x = entry.x;
+    state.player.y = entry.y;
+    if let Some(object) = state.active_objects.get_mut(0) {
+        object.z = entry.plane.save_floor();
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+    Ok(())
+}
+
+fn visual_route_public_location_index(label: &str) -> Option<usize> {
+    let suffix = label.strip_prefix("route-stock-location-enter-")?;
+    let row = suffix.parse::<usize>().ok()?;
+    (1..=published_world_location_entries().len())
+        .contains(&row)
+        .then_some(row - 1)
 }
 
 fn prepare_visual_route_reload_save_dir(
@@ -3566,7 +3596,34 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         visual_doom_combat_case("route-doom-combat-yell-word", doom, &["", "YFALLAX"]),
         visual_doom_combat_case("route-doom-combat-xit-foes-remain", doom, &["", "X"]),
     ]);
+    append_public_location_visual_route_cases(&mut cases);
     cases
+}
+
+fn append_public_location_visual_route_cases(cases: &mut Vec<VisualRouteSuiteCase>) {
+    for (index, entry) in published_world_location_entries().into_iter().enumerate() {
+        let label: &'static str =
+            Box::leak(format!("route-stock-location-enter-{:02}", index + 1).into_boxed_str());
+        let mut options = PlayOptions {
+            target: PlayTarget::World(entry.plane),
+            ..PlayOptions::default()
+        };
+        if matches!(entry.target, PlayTarget::Dungeon(scene) if scene.record == 7) {
+            options.shadowlord_hideouts = [SHADOWLORD_VANQUISHED; 3];
+        }
+        let frame_kind = match entry.target {
+            PlayTarget::Town(_) => "visual route town frame",
+            PlayTarget::Dungeon(_) => "visual route dungeon frame",
+            PlayTarget::World(_) => continue,
+        };
+        cases.push(VisualRouteSuiteCase {
+            label,
+            frame_kind,
+            options,
+            script: &["e"],
+            configure: None,
+        });
+    }
 }
 
 fn visual_doom_combat_case(
@@ -9591,7 +9648,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 277);
+        assert_eq!(cases.len(), 317);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -10118,6 +10175,10 @@ mod tests {
         ] {
             assert!(cases.iter().any(|case| case.label == label), "{label}");
         }
+        for row in 1..=published_world_location_entries().len() {
+            let label = format!("route-stock-location-enter-{row:02}");
+            assert!(cases.iter().any(|case| case.label == label), "{label}");
+        }
         assert_eq!(
             visual_route_step_label("route-world-movement", 2, "."),
             "route-world-movement-02-idle"
@@ -10211,7 +10272,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 851);
+        assert_eq!(reports.len(), 931);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -10248,6 +10309,8 @@ mod tests {
         assert!(manifest.contains("route-reload-gate-travel-underworld-pass-02-empty"));
         assert!(manifest.contains("route-gate-travel-world-to-castle-01-c1prv2"));
         assert!(manifest.contains("route-gate-travel-invalid-slot-refusal-01-c1prv4"));
+        assert!(manifest.contains("route-stock-location-enter-01-01-e"));
+        assert!(manifest.contains("route-stock-location-enter-40-01-e"));
         assert!(manifest.contains("route-gate-travel-shipboard-refusal-01-c1prv2"));
         assert!(manifest.contains("route-natural-moongate-trammel-gate-travel-01-idle_1"));
         assert!(manifest.contains("route-natural-moongate-empty-slot-clears-live-tile-01-idle_1"));

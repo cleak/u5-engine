@@ -701,6 +701,7 @@ fn play_script_local_clean_smoke_runs_default_scene_when_present() {
 fn route_smoke_cases_cover_representative_modes() {
     let cases = route_smoke_cases();
 
+    assert_eq!(cases.len(), 260);
     assert!(cases.iter().any(|case| matches!(
         case.expected,
         RouteSmokeExpectation::World(WorldPlane::Britannia)
@@ -1317,6 +1318,10 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "doom-combat-search-prompt")
     );
+    for row in 1..=published_world_location_entries().len() {
+        let name = format!("stock-location-enter-{row:02}");
+        assert!(cases.iter().any(|case| case.name == name), "{name}");
+    }
 }
 
 #[test]

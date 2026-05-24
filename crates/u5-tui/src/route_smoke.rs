@@ -56,8 +56,8 @@ use u5_runtime::{
     default_party_intelligence, default_party_names, default_party_roster,
     default_party_stay_counters, default_party_strengths, dungeon_cell_index,
     dungeon_room_entry_seed_for_direction, inn_base_room_rate, load_play_options_from_save,
-    load_tile_atlas, shipwright_delivery_coordinate, shipwright_price,
-    shop_intelligence_adjusted_price,
+    load_tile_atlas, published_world_location_entries, shipwright_delivery_coordinate,
+    shipwright_price, shop_intelligence_adjusted_price,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -639,7 +639,7 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
         ..PlayOptions::default()
     };
 
-    vec![
+    let mut cases = vec![
         RouteSmokeCase {
             name: "castle-pass-and-idle",
             options: PlayOptions::default(),
@@ -2433,7 +2433,39 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             min_turn: 4,
             expected_frame_kind: "combat viewport",
         },
-    ]
+    ];
+    append_public_location_route_smoke_cases(&mut cases);
+    cases
+}
+
+fn append_public_location_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>) {
+    for (index, entry) in published_world_location_entries().into_iter().enumerate() {
+        let name: &'static str =
+            Box::leak(format!("stock-location-enter-{:02}", index + 1).into_boxed_str());
+        let mut options = PlayOptions {
+            target: PlayTarget::World(entry.plane),
+            ..PlayOptions::default()
+        };
+        if matches!(entry.target, PlayTarget::Dungeon(scene) if scene.record == 7) {
+            options.shadowlord_hideouts = [SHADOWLORD_VANQUISHED; 3];
+        }
+        let (expected, expected_frame_kind) = match entry.target {
+            PlayTarget::Town(scene) => (RouteSmokeExpectation::Town(scene), "tile viewport"),
+            PlayTarget::Dungeon(scene) => (
+                RouteSmokeExpectation::Dungeon(scene),
+                "dungeon first-person viewport",
+            ),
+            PlayTarget::World(_) => continue,
+        };
+        cases.push(RouteSmokeCase {
+            name,
+            options,
+            script: &["e"],
+            expected,
+            min_turn: 0,
+            expected_frame_kind,
+        });
+    }
 }
 
 fn seed_gate_travel_resources(options: &mut PlayOptions) {
@@ -2643,6 +2675,10 @@ fn apply_route_smoke_case_setup(
     case_name: &str,
     game_dir: &Path,
 ) -> io::Result<()> {
+    if let Some(index) = route_smoke_public_location_index(case_name) {
+        seed_public_location_route_position(state, index)?;
+    }
+
     match case_name {
         "endgame-missing-box-confirmation" | "endgame-missing-box-terminal-jitter" => {
             state.enter_endgame_from_game_dir(Some(game_dir))?;
@@ -4096,6 +4132,49 @@ fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::
 }
 
 fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Result<()> {
+    if let Some(index) = route_smoke_public_location_index(case_name) {
+        let Some(entry) = published_world_location_entries().into_iter().nth(index) else {
+            return Err(io::Error::other(format!(
+                "route smoke `{case_name}` does not map to a published location row"
+            )));
+        };
+        let Some(return_world) = state.return_world.as_ref() else {
+            return Err(io::Error::other(format!(
+                "route smoke `{case_name}` did not cache a return-world checkpoint"
+            )));
+        };
+        if return_world.plane != entry.plane
+            || return_world.x != entry.x
+            || return_world.y != entry.y
+        {
+            return Err(io::Error::other(format!(
+                "route smoke `{case_name}` saved return ({}, {}, {}) instead of ({}, {}, {})",
+                return_world.plane.key(),
+                return_world.x,
+                return_world.y,
+                entry.plane.key(),
+                entry.x,
+                entry.y
+            )));
+        }
+        if let PlayTarget::Dungeon(scene) = entry.target {
+            let expected_level = if entry.plane == WorldPlane::Underworld && scene.record != 7 {
+                7
+            } else {
+                0
+            };
+            match state.area {
+                Area::Dungeon { level, .. } if level == expected_level => {}
+                _ => {
+                    return Err(io::Error::other(format!(
+                        "route smoke `{case_name}` did not enter the expected dungeon level {expected_level}"
+                    )));
+                }
+            }
+        }
+        return Ok(());
+    }
+
     match case_name {
         "endgame-missing-box-confirmation" | "endgame-missing-box-terminal-jitter" => {
             let outcome = state.endgame.as_ref().and_then(|endgame| endgame.outcome);
@@ -5335,6 +5414,31 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
         _ => {}
     }
     Ok(())
+}
+
+fn seed_public_location_route_position(state: &mut PlayState, index: usize) -> io::Result<()> {
+    let Some(entry) = published_world_location_entries().into_iter().nth(index) else {
+        return Err(io::Error::other(format!(
+            "published location route index {index} is out of range"
+        )));
+    };
+    state.area = Area::World { plane: entry.plane };
+    state.player.x = entry.x;
+    state.player.y = entry.y;
+    if let Some(object) = state.active_objects.get_mut(0) {
+        object.z = entry.plane.save_floor();
+    }
+    state.sync_player_object();
+    state.mark_visibility_dirty();
+    Ok(())
+}
+
+fn route_smoke_public_location_index(case_name: &str) -> Option<usize> {
+    let suffix = case_name.strip_prefix("stock-location-enter-")?;
+    let row = suffix.parse::<usize>().ok()?;
+    (1..=published_world_location_entries().len())
+        .contains(&row)
+        .then_some(row - 1)
 }
 
 fn clear_route_combat_non_party_actors(state: &mut PlayState) {
