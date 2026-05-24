@@ -37,12 +37,12 @@ use u5_runtime::{
     FLAME_WIND_SPELL_INDEX, FixedCellFont, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX,
     GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage, GuildShop, HEAL_COST,
     HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist, IN_LOR_COST, IN_LOR_SPELL_INDEX,
-    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X,
-    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
-    INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE,
-    INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement,
-    MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
-    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_START_MENU_REVEAL_RECT,
+    INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE,
+    INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y,
+    INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn,
+    IntroStoryArtPlacement, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX,
+    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X,
     NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
     NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST,
@@ -6992,6 +6992,7 @@ fn run_visual_intro_menu_app(
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            start_menu_reveal: Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT)),
             message: String::new(),
             panel: VisualIntroPanel::Menu,
             launch_result,
@@ -7121,6 +7122,7 @@ struct VisualIntroState {
     title_signature_progress: usize,
     title_signature_complete: bool,
     title_tick_frame: u8,
+    start_menu_reveal: Option<RectColumnSweepTransition>,
     message: String,
     panel: VisualIntroPanel,
     launch_result: Arc<Mutex<Option<PlayOptions>>>,
@@ -7339,6 +7341,9 @@ fn drive_visual_intro(
     let Some(mut intro) = intro else {
         return;
     };
+    if visual_intro_start_menu_reveal_active(&intro) {
+        return;
+    }
     let mut handled = false;
     if keyboard.just_pressed(KeyCode::Escape) {
         if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
@@ -7394,15 +7399,34 @@ fn animate_visual_intro_title_effects(
         let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
 
         intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
+        let reveal_advanced = advance_visual_intro_start_menu_reveal(&mut intro);
 
         if title_phase && !intro.title_signature_complete {
             let Ok(signature) = load_british_pth(&intro.game_dir) else {
                 intro.title_signature_complete = true;
+                if !reveal_advanced {
+                    return;
+                }
+                let rgba = render_intro_frame(&mut intro);
+                if let Some(handle) = intro.image_handle.as_ref()
+                    && let Some(image) = images.get_mut(handle)
+                {
+                    image.data = Some(rgba);
+                }
                 return;
             };
             let total_steps = british_signature_step_count(&signature);
             if total_steps == 0 {
                 intro.title_signature_complete = true;
+                if !reveal_advanced {
+                    return;
+                }
+                let rgba = render_intro_frame(&mut intro);
+                if let Some(handle) = intro.image_handle.as_ref()
+                    && let Some(image) = images.get_mut(handle)
+                {
+                    image.data = Some(rgba);
+                }
                 return;
             }
 
@@ -7435,6 +7459,16 @@ fn advance_visual_intro_panel_animation(
 ) -> bool {
     advance_visual_intro_story_wipe(panel, title_tick_frame)
         || advance_visual_intro_return_to_view(panel, title_tick_frame)
+}
+
+fn advance_visual_intro_start_menu_reveal(intro: &mut VisualIntroState) -> bool {
+    let Some(reveal) = intro.start_menu_reveal.as_mut() else {
+        return false;
+    };
+    if reveal.advance_title_tick() {
+        intro.start_menu_reveal = None;
+    }
+    true
 }
 
 fn advance_visual_intro_story_wipe(
@@ -7500,6 +7534,9 @@ fn step_visual_intro(
     ch: char,
     exit: &mut EventWriter<AppExit>,
 ) -> bool {
+    if visual_intro_start_menu_reveal_active(intro) {
+        return false;
+    }
     if !matches!(intro.panel, VisualIntroPanel::Menu) {
         return step_visual_intro_panel(intro, ch);
     }
@@ -7618,6 +7655,8 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
         } => {
             intro.panel = VisualIntroPanel::Menu;
             intro.dispatch.complete_subflow(subflow, result);
+            intro.start_menu_reveal =
+                Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT));
             intro.message = message;
         }
         VisualIntroPanelOutcome::CommitChargen(result) => {
@@ -8465,6 +8504,14 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
             );
         }
     }
+    if let Some(reveal) = intro.start_menu_reveal {
+        apply_rect_column_sweep_mask_rgba(
+            &mut rgba,
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+            reveal,
+        );
+    }
     rgba
 }
 
@@ -8712,6 +8759,10 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
 
 fn visual_intro_title_surface_visible(intro: &VisualIntroState) -> bool {
     matches!(intro.panel, VisualIntroPanel::Menu)
+}
+
+fn visual_intro_start_menu_reveal_active(intro: &VisualIntroState) -> bool {
+    matches!(intro.panel, VisualIntroPanel::Menu) && intro.start_menu_reveal.is_some()
 }
 
 fn visual_intro_title_art_rgba(
@@ -9436,6 +9487,7 @@ fn write_visual_intro_report_inner(
         title_signature_progress: 0,
         title_signature_complete: false,
         title_tick_frame: 0,
+        start_menu_reveal: None,
         message: String::new(),
         panel,
         launch_result: Arc::new(Mutex::new(None)),
@@ -10100,7 +10152,7 @@ fn render_status_framebuffer(
     }
     let mut rgba = render_text_window_rgba(&system, font)
         .unwrap_or_else(|_| vec![0; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4]);
-    apply_endgame_page_transition_mask(&mut rgba, &display_state);
+    apply_endgame_certificate_rect_operation_mask(&mut rgba, &display_state);
     rgba
 }
 
@@ -10166,23 +10218,28 @@ fn render_integrated_status_framebuffer(
     }
     let mut rgba = render_text_window_rgba(&system, font)
         .unwrap_or_else(|_| vec![0; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4]);
-    apply_endgame_page_transition_mask(&mut rgba, &display_state);
+    apply_endgame_certificate_rect_operation_mask(&mut rgba, &display_state);
     rgba
 }
 
-fn apply_endgame_page_transition_mask(rgba: &mut [u8], state: &PlayState) {
-    let Some(transition) = state
+fn apply_endgame_certificate_rect_operation_mask(rgba: &mut [u8], state: &PlayState) {
+    let Some(rect) = state
         .endgame
         .as_ref()
-        .and_then(|endgame| endgame.cinematic.page_transition)
+        .and_then(|endgame| endgame.cinematic.certificate_rect_operation)
     else {
         return;
     };
-    apply_rect_column_sweep_mask_rgba(
+    let (x0, y0, x1, y1) = rect;
+    fill_rgba_rect_inclusive(
         rgba,
         TEXT_WINDOW_RENDER_WIDTH,
         TEXT_WINDOW_RENDER_HEIGHT,
-        transition,
+        usize::from(x0),
+        usize::from(y0),
+        usize::from(x1),
+        usize::from(y1),
+        [0x00, 0x00, 0x00, 0xff],
     );
 }
 
@@ -10302,7 +10359,7 @@ fn advance_visual_wait_frame(state: &mut PlayState, prompt_cursor_visible: &mut 
     if visual_line_prompt_active(state) {
         *prompt_cursor_visible = !*prompt_cursor_visible;
         true
-    } else if advance_visual_endgame_page_transition(state) {
+    } else if advance_visual_endgame_frame_operation(state) {
         *prompt_cursor_visible = false;
         true
     } else {
@@ -10311,11 +10368,11 @@ fn advance_visual_wait_frame(state: &mut PlayState, prompt_cursor_visible: &mut 
     }
 }
 
-fn advance_visual_endgame_page_transition(state: &mut PlayState) -> bool {
+fn advance_visual_endgame_frame_operation(state: &mut PlayState) -> bool {
     state
         .endgame
         .as_mut()
-        .is_some_and(|endgame| endgame.cinematic.advance_page_transition_title_tick())
+        .is_some_and(|endgame| endgame.advance_cinematic_frame_operation())
 }
 
 fn should_escape_quit_visual(state: &PlayState) -> bool {
@@ -10891,6 +10948,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            start_menu_reveal: None,
             message: "Intro menu smoke".to_string(),
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
@@ -10905,6 +10963,41 @@ mod tests {
         );
         assert!(frame.chunks_exact(4).all(|pixel| pixel[3] == 0xff));
         assert_nonblack_rgba(&frame);
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_start_menu_reveal_blocks_input_until_full_startsc_rect_completes() {
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_signature_progress: 0,
+            title_signature_complete: false,
+            title_tick_frame: 0,
+            start_menu_reveal: Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT)),
+            message: String::new(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+        assert_eq!(INTRO_START_MENU_REVEAL_RECT, (0, 0, 319, 100));
+        assert!(visual_intro_start_menu_reveal_active(&intro));
+
+        let total_ticks =
+            u5_runtime::intro_rect_transition_tick_count(INTRO_START_MENU_REVEAL_RECT);
+        for expected_tick in 1..total_ticks {
+            assert!(advance_visual_intro_start_menu_reveal(&mut intro));
+            assert_eq!(
+                intro.start_menu_reveal.map(|reveal| reveal.tick),
+                Some(expected_tick)
+            );
+            assert!(visual_intro_start_menu_reveal_active(&intro));
+        }
+
+        assert!(advance_visual_intro_start_menu_reveal(&mut intro));
+        assert_eq!(intro.start_menu_reveal, None);
+        assert!(!visual_intro_start_menu_reveal_active(&intro));
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
@@ -11019,6 +11112,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: true,
             title_tick_frame: 0,
+            start_menu_reveal: None,
             message: String::new(),
             panel: VisualIntroPanel::Story {
                 records: StoryRecords {
@@ -11106,6 +11200,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            start_menu_reveal: None,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
@@ -11353,7 +11448,7 @@ mod tests {
     }
 
     #[test]
-    fn endgame_page_transition_mask_reveals_columns_from_left_edge() {
+    fn rect_column_sweep_mask_reveals_columns_from_left_edge() {
         let width = 8;
         let height = 4;
         let mut rgba = vec![0xff; width * height * 4];
@@ -11373,7 +11468,7 @@ mod tests {
     }
 
     #[test]
-    fn visual_wait_frame_advances_endgame_page_transition_during_modal_hold() {
+    fn visual_wait_frame_consumes_endgame_certificate_rect_operation_before_certificate() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);
         state.endgame = Some(u5_runtime::EndgameState::terminal(
             true,
@@ -11384,13 +11479,16 @@ mod tests {
             None,
         ));
         let endgame = state.endgame.as_mut().unwrap();
-        endgame.cinematic.advance();
+        for _ in 0..(1 + u5_runtime::endgame_cinematic::ENDGAME_NARRATIVE_WINDOW_COUNT) {
+            endgame.cinematic.advance();
+        }
         assert_eq!(
-            endgame
-                .cinematic
-                .page_transition
-                .map(|transition| transition.tick),
-            Some(0)
+            endgame.cinematic.step,
+            u5_runtime::endgame_cinematic::EndgameCinematicStep::CertificateRectOperation
+        );
+        assert_eq!(
+            endgame.cinematic.certificate_rect_operation,
+            Some(u5_runtime::endgame_cinematic::ENDGAME_CERTIFICATE_RECT_OPERATION)
         );
 
         let mut prompt_cursor_visible = true;
@@ -11401,12 +11499,15 @@ mod tests {
 
         assert!(!prompt_cursor_visible);
         assert_eq!(
+            state.endgame.as_ref().map(|endgame| endgame.cinematic.step),
+            Some(u5_runtime::endgame_cinematic::EndgameCinematicStep::Certificate)
+        );
+        assert_eq!(
             state
                 .endgame
                 .as_ref()
-                .and_then(|endgame| endgame.cinematic.page_transition)
-                .map(|transition| transition.tick),
-            Some(1)
+                .and_then(|endgame| endgame.cinematic.certificate_rect_operation),
+            None
         );
     }
 
@@ -13440,6 +13541,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            start_menu_reveal: None,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
             launch_result: Arc::new(Mutex::new(None)),
@@ -13524,6 +13626,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            start_menu_reveal: None,
             message: String::new(),
             panel: VisualIntroPanel::Story {
                 records: StoryRecords {
@@ -13568,6 +13671,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            start_menu_reveal: None,
             message: String::new(),
             panel,
             launch_result: Arc::new(Mutex::new(None)),
@@ -13865,6 +13969,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            start_menu_reveal: None,
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),
@@ -13914,6 +14019,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            start_menu_reveal: None,
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),
@@ -14004,6 +14110,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            start_menu_reveal: None,
             message: String::new(),
             panel: VisualIntroPanel::ReturnToView {
                 summary: "Preview".to_string(),

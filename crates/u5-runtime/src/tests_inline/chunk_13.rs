@@ -8150,6 +8150,23 @@ fn intro_rect_transition_column_sweep_matches_published_schedule() {
 }
 
 #[test]
+fn intro_start_menu_reveal_uses_published_startsc_rect() {
+    assert_eq!(INTRO_START_MENU_REVEAL_RECT, (0, 0, 319, 100));
+    assert_eq!(
+        intro_rect_transition_tick_count(INTRO_START_MENU_REVEAL_RECT),
+        320
+    );
+    assert_eq!(
+        intro_rect_transition_revealed_columns(INTRO_START_MENU_REVEAL_RECT, 0),
+        Some((0, 0))
+    );
+    assert_eq!(
+        intro_rect_transition_revealed_columns(INTRO_START_MENU_REVEAL_RECT, 319),
+        Some((0, 319))
+    );
+}
+
+#[test]
 fn rect_column_sweep_transition_state_advances_at_title_tick_cadence() {
     let mut transition = RectColumnSweepTransition::new(INTRO_STEP_1_RECT_TRANSITION);
     assert_eq!(transition.total_ticks(), 36);
@@ -16805,7 +16822,18 @@ fn victory_endgame_cinematic_advances_through_all_panels_then_holds_terminal_sta
     state.resolve_endgame_confirmation(true);
     assert_eq!(state.message, "Return-home arc (1)");
 
-    for _ in 0..8 {
+    for _ in 0..6 {
+        state.resolve_endgame_confirmation(true);
+    }
+    {
+        let endgame = state.endgame.as_mut().unwrap();
+        assert_eq!(
+            endgame.cinematic.step,
+            crate::endgame_cinematic::EndgameCinematicStep::CertificateRectOperation
+        );
+        assert!(endgame.advance_cinematic_frame_operation());
+    }
+    for _ in 0..2 {
         state.resolve_endgame_confirmation(true);
     }
     let endgame = state.endgame.as_ref().unwrap();

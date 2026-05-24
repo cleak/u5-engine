@@ -144,12 +144,17 @@ pub const INTRO_STEP_1_EXTRA_ART_X: u16 = 40;
 pub const INTRO_STEP_1_EXTRA_ART_Y: u16 = 86;
 pub const INTRO_STEP_1_EXTRA_SUBIMAGE: u8 = 2;
 pub const INTRO_STEP_1_RECT_TRANSITION: (u16, u16, u16, u16) = (40, 86, 75, 120);
+/// `intro.md §10` / `display-driver.md §8`: animated `STARTSC`
+/// start/menu loader reveal rectangle. Callers that pass the nonzero
+/// animated-loader argument reveal this inclusive rectangle from left
+/// to right at one pixel column per title tick, and sample input only
+/// after it completes.
+pub const INTRO_START_MENU_REVEAL_RECT: (u16, u16, u16, u16) = (0, 0, 319, 100);
 
 /// `cleak/u5-spec#53` published wipe contract for the step-1
 /// rectangle transition: a left-to-right column sweep at one pixel
-/// column per title tick, abrupt at each column boundary. The same
-/// helper is reused by the step-2 rectangle, story-page transitions,
-/// and endgame page-in transitions.
+/// column per title tick, abrupt at each column boundary. Other
+/// callers opt in explicitly with their own published rectangles.
 pub const INTRO_RECT_TRANSITION_COLUMNS_PER_TICK: u16 = 1;
 
 /// `cleak/u5-spec#53`: total ticks needed to reveal an inclusive

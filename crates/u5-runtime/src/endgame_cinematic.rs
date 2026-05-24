@@ -1,7 +1,9 @@
 //! Post-victory endgame cinematic state machine per
 //! `systems/endgame.md`. The framer walks through the six fixed
-//! `END.DAT` narrative windows, the certificate scroll, and the
-//! Origin attribution closer with one keystroke between each panel.
+//! `END.DAT` narrative windows, the late certificate rectangle
+//! operation, the certificate scroll, and the Origin attribution
+//! closer. Narrative panels advance by key; the rectangle operation is
+//! a display event between the last narrative panel and certificate.
 //!
 //! This is the page-flip presenter only; party restoration, throne-
 //! room tableau setup, and the binary "did you bring the box?"
@@ -22,6 +24,9 @@ pub enum EndgameCinematicStep {
     /// One of the six fixed `END.DAT` narrative windows is on screen,
     /// indexed `0..6`. Pressing a key advances to the next.
     NarrativeWindow(u8),
+    /// Late full-screen rectangle operation immediately before the
+    /// certificate setup. This is not an intro-style timed column wipe.
+    CertificateRectOperation,
     /// Certificate scroll is on screen.
     Certificate,
     /// Origin attribution closer is on screen.
@@ -32,12 +37,11 @@ pub enum EndgameCinematicStep {
 
 /// Total number of `END.DAT` narrative windows (per `endgame.md` §8).
 pub const ENDGAME_NARRATIVE_WINDOW_COUNT: u8 = 6;
-/// Clean v1 fallback for the shared `cleak/u5-spec#53` column-sweep
-/// page-in helper on final narrative windows. The exact per-window
-/// resident rectangles remain unpublished, so the runtime exposes a
-/// full EGA page rectangle while preserving the one-column-per-title-
-/// tick timing contract.
-pub const ENDGAME_NARRATIVE_WINDOW_TRANSITION_RECT: (u16, u16, u16, u16) = (0, 0, 319, 199);
+/// `endgame.md §7` / `§8`: traced late orb/certificate path rectangle
+/// operation. This is ordered before certificate setup and is not
+/// evidence for intro-style page wipes on the ordinary `END.DAT`
+/// narrative windows.
+pub const ENDGAME_CERTIFICATE_RECT_OPERATION: (u16, u16, u16, u16) = (0, 0, 319, 199);
 
 /// Run state for the cinematic.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -49,9 +53,8 @@ pub struct EndgameCinematic {
     /// Number of keystrokes consumed since the cinematic began. Useful
     /// for testing and for the UI's page indicator.
     pub keystrokes: u32,
-    /// Active narrative-window page-in transition, advanced by title
-    /// ticks independently of the keystroke page walker.
-    pub page_transition: Option<crate::RectColumnSweepTransition>,
+    /// Pending one-frame rectangle operation before certificate setup.
+    pub certificate_rect_operation: Option<(u16, u16, u16, u16)>,
 }
 
 impl EndgameCinematic {
@@ -71,7 +74,7 @@ impl EndgameCinematic {
             },
             rite_message_count,
             keystrokes: 0,
-            page_transition: None,
+            certificate_rect_operation: None,
         }
     }
 
@@ -79,7 +82,7 @@ impl EndgameCinematic {
     /// already `Finished` is a no-op.
     pub fn advance(&mut self) -> EndgameCinematicStep {
         self.keystrokes = self.keystrokes.saturating_add(1);
-        self.page_transition = None;
+        self.certificate_rect_operation = None;
         self.step = match self.step {
             EndgameCinematicStep::Inactive | EndgameCinematicStep::Finished => self.step,
             EndgameCinematicStep::RiteMessage(idx) => {
@@ -90,36 +93,31 @@ impl EndgameCinematic {
                     EndgameCinematicStep::ThroneTableau
                 }
             }
-            EndgameCinematicStep::ThroneTableau => {
-                self.page_transition = Some(crate::RectColumnSweepTransition::new(
-                    ENDGAME_NARRATIVE_WINDOW_TRANSITION_RECT,
-                ));
-                EndgameCinematicStep::NarrativeWindow(0)
-            }
+            EndgameCinematicStep::ThroneTableau => EndgameCinematicStep::NarrativeWindow(0),
             EndgameCinematicStep::NarrativeWindow(idx) => {
                 let next = idx.saturating_add(1);
                 if next >= ENDGAME_NARRATIVE_WINDOW_COUNT {
-                    EndgameCinematicStep::Certificate
+                    self.certificate_rect_operation = Some(ENDGAME_CERTIFICATE_RECT_OPERATION);
+                    EndgameCinematicStep::CertificateRectOperation
                 } else {
-                    self.page_transition = Some(crate::RectColumnSweepTransition::new(
-                        ENDGAME_NARRATIVE_WINDOW_TRANSITION_RECT,
-                    ));
                     EndgameCinematicStep::NarrativeWindow(next)
                 }
             }
+            EndgameCinematicStep::CertificateRectOperation => EndgameCinematicStep::Certificate,
             EndgameCinematicStep::Certificate => EndgameCinematicStep::OriginCloser,
             EndgameCinematicStep::OriginCloser => EndgameCinematicStep::Finished,
         };
         self.step
     }
 
-    pub fn advance_page_transition_title_tick(&mut self) -> bool {
-        let Some(transition) = self.page_transition.as_mut() else {
+    pub fn advance_certificate_rect_operation(&mut self) -> bool {
+        if !matches!(self.step, EndgameCinematicStep::CertificateRectOperation)
+            || self.certificate_rect_operation.is_none()
+        {
             return false;
-        };
-        if transition.advance_title_tick() {
-            self.page_transition = None;
         }
+        self.certificate_rect_operation = None;
+        self.step = EndgameCinematicStep::Certificate;
         true
     }
 
@@ -144,6 +142,7 @@ impl EndgameCinematic {
             EndgameCinematicStep::NarrativeWindow(4) => "Blackthorn judgment (2)",
             EndgameCinematicStep::NarrativeWindow(5) => "Blackthorn judgment (3)",
             EndgameCinematicStep::NarrativeWindow(_) => "Narrative window",
+            EndgameCinematicStep::CertificateRectOperation => "Certificate transition",
             EndgameCinematicStep::Certificate => "Quest certificate",
             EndgameCinematicStep::OriginCloser => "Origin closer",
             EndgameCinematicStep::Finished => "Cinematic finished",
@@ -160,7 +159,7 @@ mod tests {
         let cin = EndgameCinematic::start();
         assert_eq!(cin.step, EndgameCinematicStep::ThroneTableau);
         assert_eq!(cin.keystrokes, 0);
-        assert_eq!(cin.page_transition, None);
+        assert_eq!(cin.certificate_rect_operation, None);
         assert!(!cin.is_finished());
     }
 
@@ -168,49 +167,53 @@ mod tests {
     fn advance_walks_all_six_narrative_windows_in_order() {
         let mut cin = EndgameCinematic::start();
         assert_eq!(cin.advance(), EndgameCinematicStep::NarrativeWindow(0));
-        assert_eq!(
-            cin.page_transition,
-            Some(crate::RectColumnSweepTransition::new(
-                ENDGAME_NARRATIVE_WINDOW_TRANSITION_RECT
-            ))
-        );
+        assert_eq!(cin.certificate_rect_operation, None);
         for expected in 1..ENDGAME_NARRATIVE_WINDOW_COUNT {
             assert_eq!(
                 cin.advance(),
                 EndgameCinematicStep::NarrativeWindow(expected)
             );
-            assert_eq!(
-                cin.page_transition,
-                Some(crate::RectColumnSweepTransition::new(
-                    ENDGAME_NARRATIVE_WINDOW_TRANSITION_RECT
-                ))
-            );
+            assert_eq!(cin.certificate_rect_operation, None);
         }
     }
 
     #[test]
-    fn narrative_window_transition_advances_on_title_ticks() {
+    fn ordinary_narrative_windows_do_not_install_intro_style_page_wipes() {
         let mut cin = EndgameCinematic::start();
-        cin.advance();
-        for expected_tick in 1..=ENDGAME_NARRATIVE_WINDOW_TRANSITION_RECT.2 {
-            assert!(cin.advance_page_transition_title_tick());
-            assert_eq!(
-                cin.page_transition.map(|transition| transition.tick),
-                Some(expected_tick)
-            );
+        for _ in 0..ENDGAME_NARRATIVE_WINDOW_COUNT {
+            assert!(matches!(
+                cin.advance(),
+                EndgameCinematicStep::NarrativeWindow(_)
+            ));
+            assert_eq!(cin.certificate_rect_operation, None);
         }
-        assert!(cin.advance_page_transition_title_tick());
-        assert_eq!(cin.page_transition, None);
-        assert!(!cin.advance_page_transition_title_tick());
     }
 
     #[test]
-    fn advance_transitions_to_certificate_after_six_windows() {
+    fn advance_transitions_to_certificate_rect_operation_after_six_windows() {
         let mut cin = EndgameCinematic::start();
         for _ in 0..(1 + ENDGAME_NARRATIVE_WINDOW_COUNT) {
             cin.advance();
         }
+        assert_eq!(cin.step, EndgameCinematicStep::CertificateRectOperation);
+        assert_eq!(
+            cin.certificate_rect_operation,
+            Some(ENDGAME_CERTIFICATE_RECT_OPERATION)
+        );
+    }
+
+    #[test]
+    fn certificate_rect_operation_advances_without_keystroke() {
+        let mut cin = EndgameCinematic::start();
+        for _ in 0..(1 + ENDGAME_NARRATIVE_WINDOW_COUNT) {
+            cin.advance();
+        }
+        let keystrokes = cin.keystrokes;
+        assert!(cin.advance_certificate_rect_operation());
         assert_eq!(cin.step, EndgameCinematicStep::Certificate);
+        assert_eq!(cin.certificate_rect_operation, None);
+        assert_eq!(cin.keystrokes, keystrokes);
+        assert!(!cin.advance_certificate_rect_operation());
     }
 
     #[test]
@@ -219,6 +222,7 @@ mod tests {
         for _ in 0..(1 + ENDGAME_NARRATIVE_WINDOW_COUNT) {
             cin.advance();
         }
+        assert!(cin.advance_certificate_rect_operation());
         assert_eq!(cin.advance(), EndgameCinematicStep::OriginCloser);
         assert_eq!(cin.advance(), EndgameCinematicStep::Finished);
         assert!(cin.is_finished());
@@ -251,6 +255,8 @@ mod tests {
         for _ in 0..ENDGAME_NARRATIVE_WINDOW_COUNT {
             cin.advance();
         }
+        assert_eq!(cin.banner_label(), "Certificate transition");
+        assert!(cin.advance_certificate_rect_operation());
         assert_eq!(cin.banner_label(), "Quest certificate");
         cin.advance();
         assert_eq!(cin.banner_label(), "Origin closer");

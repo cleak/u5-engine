@@ -282,6 +282,12 @@ impl EndgameState {
         self.cinematic.banner_label()
     }
 
+    /// Advance a frame-owned cinematic display operation that does not
+    /// consume a keypress. Returns `true` when an operation was pending.
+    pub fn advance_cinematic_frame_operation(&mut self) -> bool {
+        self.cinematic.advance_certificate_rect_operation()
+    }
+
     /// `true` when the post-victory cinematic has presented every
     /// screen and the engine should remain on the terminal final panel.
     pub fn cinematic_is_finished(&self) -> bool {
