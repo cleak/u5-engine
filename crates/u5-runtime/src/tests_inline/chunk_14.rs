@@ -1648,6 +1648,43 @@
     }
 
     #[test]
+    fn play_text_window_system_paints_active_shop_modal_summary() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.message = "Mace costs 42 gold.".to_string();
+        state.active_shop = Some(crate::shop_session::ActiveShopSession::ArmsStocked(
+            crate::shop_runtime::ArmsShopState::BuyConfirm {
+                item: 1,
+                quoted_price: 42,
+                quote_record_id: SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST + 1,
+            },
+            ArmsShop::IolosBows.stock_table(),
+        ));
+
+        let system = render_play_text_window_system(&state, state.active_player, None);
+        let main = system
+            .region_rows(0, 0, MESSAGE_TEXT_WINDOW_RIGHT, 5, b' ')
+            .join("\n");
+
+        assert!(main.contains("Iolo"), "{main}");
+        assert!(main.contains("Item 1 costs 42 gold"), "{main}");
+        assert!(main.contains("Mace costs 42 gold."), "{main}");
+        assert_eq!(
+            system
+                .region_rows(
+                    STATS_PANEL_TEXT_LEFT,
+                    0,
+                    STATS_PANEL_TEXT_RIGHT,
+                    0,
+                    b' '
+                )
+                .first()
+                .unwrap()
+                .trim_end(),
+            "STATS"
+        );
+    }
+
+    #[test]
     fn prompt_text_window_cursor_glyph_paints_in_place() {
         let mut system = TextWindowSystem::new();
         configure_play_text_windows(&mut system);

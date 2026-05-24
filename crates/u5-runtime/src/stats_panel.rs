@@ -63,7 +63,12 @@ pub fn render_play_text_window_system(
 ) -> TextWindowSystem {
     let mut system = TextWindowSystem::new();
     configure_play_text_windows(&mut system);
-    paint_message_text_window(&mut system, &state.message);
+    let message = state
+        .active_shop
+        .as_ref()
+        .map(|shop| shop.modal_text(&state.message))
+        .unwrap_or_else(|| state.message.clone());
+    paint_message_text_window(&mut system, &message);
     paint_stats_panel_text_window(&mut system, state, active_cursor);
     if let Some(input_echo) = input_echo {
         paint_prompt_text_window(&mut system, input_echo);

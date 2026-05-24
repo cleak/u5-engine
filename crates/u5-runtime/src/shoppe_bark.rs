@@ -12,6 +12,7 @@
 use std::path::Path;
 use std::{error::Error, fmt, io};
 
+use crate::shoppe_records::ShoppeBand;
 use crate::shops::{
     SHOPPE_DAT_LEN, SHOPPE_DAT_NONEMPTY_RECORDS, SHOPPE_DAT_RECORD_SLOTS, ShopPlaceholderKind,
     sage_rumour_success_record_id_accepted, shop_placeholder_kind, shoppe_time_of_day_word,
@@ -127,6 +128,34 @@ pub struct ShoppeBarkContext<'a> {
     pub dictionary: Option<&'a [&'a str; COMMON_WORD_DICTIONARY_ENTRIES]>,
 }
 
+/// Sanitized render-audit summary for one SHOPPE.DAT band.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShoppeBandAudit {
+    pub band: ShoppeBand,
+    pub first_record: usize,
+    pub last_record: usize,
+    pub non_empty_records: usize,
+    pub tokenized_records: usize,
+    pub placeholder_records: usize,
+    pub max_rendered_len: usize,
+}
+
+/// Sanitized render-audit summary for SHOPPE.DAT.
+///
+/// This intentionally records only counts and lengths. It proves the
+/// public renderer can visit every shipped non-empty record without
+/// committing or printing shop prose.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShoppeTextAudit {
+    pub slot_count: usize,
+    pub non_empty_records: usize,
+    pub rendered_records: usize,
+    pub tokenized_records: usize,
+    pub placeholder_records: usize,
+    pub max_rendered_len: usize,
+    pub bands: Vec<ShoppeBandAudit>,
+}
+
 /// Parse a SHOPPE.DAT byte buffer into its 196 NUL-terminated records.
 /// Records that exceed the buffer or read as empty produce empty
 /// vectors at the right index so callers can look them up by id
@@ -230,6 +259,10 @@ impl ShoppeTextRenderer {
         Ok(Self::new(load_shoppe_records(path)?))
     }
 
+    pub fn load_from_game_dir(game_dir: &Path) -> io::Result<Self> {
+        Self::load(&game_dir.join("SHOPPE.DAT"))
+    }
+
     pub fn records(&self) -> &ShoppeRecords {
         &self.records
     }
@@ -251,6 +284,26 @@ impl ShoppeTextRenderer {
         let rendered = self.render_record(id, ctx)?;
         system.print_wrapped_string(&rendered);
         Ok(rendered)
+    }
+
+    pub fn render_sage_rumour_record(
+        &self,
+        record_id: usize,
+        matched_name: &str,
+        location: &str,
+        dictionary: Option<&[&str; COMMON_WORD_DICTIONARY_ENTRIES]>,
+    ) -> Result<String, ShoppeDatError> {
+        render_sage_rumour_shoppe_record(
+            &self.records,
+            record_id,
+            matched_name,
+            location,
+            dictionary,
+        )
+    }
+
+    pub fn audit_records(&self, ctx: &ShoppeBarkContext) -> ShoppeTextAudit {
+        audit_shoppe_records(&self.records, ctx)
     }
 }
 
@@ -319,6 +372,87 @@ pub fn render_shoppe_record(
 ) -> Result<String, ShoppeDatError> {
     let record = records.required_record(id)?;
     Ok(render_shoppe_bark(record, ctx))
+}
+
+/// Render every non-empty record and return sanitized aggregate coverage.
+pub fn audit_shoppe_records(records: &ShoppeRecords, ctx: &ShoppeBarkContext) -> ShoppeTextAudit {
+    const BANDS: [ShoppeBand; 11] = [
+        ShoppeBand::SharedBark,
+        ShoppeBand::ArmsDescription,
+        ShoppeBand::ArmsSell,
+        ShoppeBand::Tavern,
+        ShoppeBand::Sage,
+        ShoppeBand::HorseTrader,
+        ShoppeBand::ShipBroker,
+        ShoppeBand::Reagent,
+        ShoppeBand::Guild,
+        ShoppeBand::Healer,
+        ShoppeBand::Innkeeper,
+    ];
+
+    let mut audit = ShoppeTextAudit {
+        slot_count: records.slot_count(),
+        non_empty_records: 0,
+        rendered_records: 0,
+        tokenized_records: 0,
+        placeholder_records: 0,
+        max_rendered_len: 0,
+        bands: BANDS
+            .into_iter()
+            .map(|band| {
+                let (first, last) = band.range();
+                ShoppeBandAudit {
+                    band,
+                    first_record: first,
+                    last_record: last,
+                    non_empty_records: 0,
+                    tokenized_records: 0,
+                    placeholder_records: 0,
+                    max_rendered_len: 0,
+                }
+            })
+            .collect(),
+    };
+
+    for id in 0..records.slot_count() {
+        let Some(record) = records.record(id) else {
+            continue;
+        };
+        if record.is_empty() {
+            continue;
+        }
+        let tokenized = record
+            .iter()
+            .any(|byte| shoppe_dictionary_index(*byte).is_some());
+        let placeholders = record
+            .iter()
+            .any(|byte| shop_placeholder_kind(*byte).is_some());
+        let rendered_len = render_shoppe_bark(record, ctx).len();
+
+        audit.non_empty_records += 1;
+        audit.rendered_records += 1;
+        audit.max_rendered_len = audit.max_rendered_len.max(rendered_len);
+        if tokenized {
+            audit.tokenized_records += 1;
+        }
+        if placeholders {
+            audit.placeholder_records += 1;
+        }
+        if let Some(band) = ShoppeBand::classify(id)
+            && let Some(band_audit) = audit.bands.iter_mut().find(|entry| entry.band == band)
+        {
+            band_audit.non_empty_records += 1;
+            band_audit.max_rendered_len = band_audit.max_rendered_len.max(rendered_len);
+            if tokenized {
+                band_audit.tokenized_records += 1;
+            }
+            if placeholders {
+                band_audit.placeholder_records += 1;
+            }
+        }
+    }
+
+    audit
 }
 
 /// Render a public issue #13 sage rumour success record. Paid sage
@@ -518,6 +652,65 @@ mod tests {
             Err(ShoppeDatError::EmptyRecord { id: 0 })
         );
         assert_eq!(system.region_rows(0, 0, 9, 1, b'.'), before);
+    }
+
+    #[test]
+    fn shoppe_text_audit_summarizes_records_without_exposing_text() {
+        let mut records = vec![Vec::new(); SHOPPE_DAT_RECORD_SLOTS];
+        records[0] = vec![0x80, b' ', b'$', b' ', b'&'];
+        records[crate::SHOPPE_RECORDS_REAGENT_FIRST] = vec![b'%', b' ', b'^'];
+        records[crate::SHOPPE_RECORDS_SAGE_FIRST] = vec![b'&', b' ', b'*'];
+        let renderer = ShoppeTextRenderer::new(ShoppeRecords { records });
+        let audit = renderer.audit_records(&ShoppeBarkContext {
+            gold: 27,
+            quantity: 3,
+            vendor_name: "Julia",
+            item_name: "keys",
+            place_name: "Moonglow",
+            ..Default::default()
+        });
+
+        assert_eq!(audit.slot_count, SHOPPE_DAT_RECORD_SLOTS);
+        assert_eq!(audit.non_empty_records, 3);
+        assert_eq!(audit.rendered_records, 3);
+        assert_eq!(audit.tokenized_records, 1);
+        assert_eq!(audit.placeholder_records, 3);
+        assert!(audit.max_rendered_len > 0);
+        let sage = audit
+            .bands
+            .iter()
+            .find(|entry| entry.band == ShoppeBand::Sage)
+            .unwrap();
+        assert_eq!(sage.non_empty_records, 1);
+        assert_eq!(sage.placeholder_records, 1);
+    }
+
+    #[test]
+    fn local_shoppe_dat_asset_renders_sanitized_audit_when_present() {
+        let game_dir = Path::new(crate::DEFAULT_GAME_DIR);
+        let path = game_dir.join("SHOPPE.DAT");
+        if !path.exists() {
+            return;
+        }
+
+        let renderer = ShoppeTextRenderer::load(&path).unwrap();
+        let audit = renderer.audit_records(&ShoppeBarkContext {
+            gold: 999,
+            quantity: 9,
+            vendor_name: "Vendor",
+            item_name: "Item",
+            place_name: "Place",
+            shop_name: "Shop",
+            hour: 13,
+            ..Default::default()
+        });
+
+        assert_eq!(audit.slot_count, SHOPPE_DAT_RECORD_SLOTS);
+        assert_eq!(audit.non_empty_records, SHOPPE_DAT_NONEMPTY_RECORDS);
+        assert_eq!(audit.rendered_records, SHOPPE_DAT_NONEMPTY_RECORDS);
+        assert!(audit.tokenized_records > 0);
+        assert!(audit.placeholder_records > 0);
+        assert!(audit.max_rendered_len > 0);
     }
 
     #[test]

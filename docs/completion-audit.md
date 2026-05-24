@@ -254,7 +254,7 @@ Notes:
 | §7.6 Branching (`0x85`/`0x86`/`0x8C`/`0xFE`) | `tlk_control_codes.rs::TlkActionDispatchVerb`, `tlk_if_else_alt_branches`, `play_state_impl/chunk_04.rs::apply_tlk_action_grants` | gold-payment, action-letter, IF/ELSE, karma-threshold tests, plus a sanitized shipped-TLK corpus audit for public action/payment/branch controls | Implemented (`0x85` toll-milestone karma — `cleak/u5-spec#27`) |
 | §7.6 `0x87` follow-up scan | `tlk_runner.rs::TlkRunStop::FollowUpKeywordScan` | follow-up scan tests plus shipped-TLK corpus control-shape coverage | Implemented |
 | §7.7 Labels / GOTO | `tlk_runner.rs` label dispatch | label scan tests | Implemented |
-| §8 Common-word dictionary | `common_words_io.rs` public issue #33/#40 128-entry shared table; `shoppe_bark.rs` shared renderer path | dictionary and SHOPPE bark tests | Implemented |
+| §8 Common-word dictionary | `common_words_io.rs` public issue #33/#40 128-entry shared table; `shoppe_bark.rs` shared renderer path | dictionary, SHOPPE bark, and sanitized full-record render-audit tests | Implemented |
 | §9 Conversation flow | `conversation_session.rs` opening preamble (`TLK_OPENING_DESCRIPTION_PREFIX = "Thou seest "`), greeting, keyword loop, Bye cleanup | flow tests | Implemented |
 | `tlk.md` §1–§10 (format) | `tlk_runner.rs` decoder, dictionary | parser tests | Implemented |
 | `quest-flags.md` §1–§7 | `quest_flags.rs`, `conversation_session.rs` branch-flags state, action-grant cleanup in `play_state_impl/chunk_04.rs::run_final_conversation_cleanup` | branch-flag, cleanup tests | Implemented |
@@ -277,8 +277,8 @@ through the asset-backed Talk command path.
 | §1 Overview | `shops.rs`, `shop_runtime.rs`, `shop_session.rs` | shop-runtime tests | Implemented |
 | §2 Triggering | `conversation_session.rs` shop trigger detection, Talk → shop arm | shop-trigger tests | Implemented |
 | §3 Eight shop kinds | `shops.rs` arm dispatch (0x81..0x88) | per-arm tests | Implemented |
-| §4 SHOPPE.DAT structure | `shoppe_records.rs`, `shoppe_bark.rs` | parser tests | Implemented |
-| §5 Bark renderer | `shoppe_bark.rs` substitution (`%/^/$/&/*/#/@`) | bark tests | Implemented |
+| §4 SHOPPE.DAT structure | `shoppe_records.rs`, `shoppe_bark.rs` | parser and sanitized render-audit tests | Implemented |
+| §5 Bark renderer | `shoppe_bark.rs` substitution (`%/^/$/&/*/#/@`) | bark tests plus aggregate coverage that renders every non-empty local `SHOPPE.DAT` record when clean assets are present | Implemented |
 | §6 Pricing model | `shops.rs::arms_shop_price`, healer table, etc. | pricing tests in `chunk_21.rs` | Implemented |
 | §7 Inventory model | `equipment.rs` stock tables; inn registry in `play_state_struct.rs` | inn-stay tests | Implemented |
 | §8.1 Weaponsmith/armourer | `shops.rs::ArmsShop`, `shop_session.rs::arms_shop_for_scene`, `shops.rs::arms_shop_stock_letter_index` | arms scene-row, published stock-row, and transaction tests | Implemented (public #41 scene-to-`a..h` stock rows) |

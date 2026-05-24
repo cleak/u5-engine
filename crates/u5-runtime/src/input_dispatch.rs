@@ -1460,9 +1460,10 @@ fn render_shoppe_record_for_arms_quote(
         item_name: equipment_name(item as usize),
         ..Default::default()
     };
-    crate::shoppe_bark::load_shoppe_records(&game_dir.join("SHOPPE.DAT"))
-        .and_then(|records| {
-            crate::shoppe_bark::render_shoppe_record(&records, record_id, &placeholders)
+    crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
+        .and_then(|renderer| {
+            renderer
+                .render_record(record_id, &placeholders)
                 .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))
         })
         .unwrap_or_else(|_| format!("{} costs {price} gold.", equipment_name(item as usize)))
@@ -1594,17 +1595,17 @@ fn render_active_sage_outcome_with_shoppe(
     let crate::shop_runtime::SageOutcome::RumourFound { outcome, .. } = outcome else {
         return outcome;
     };
-    let rendered = crate::shoppe_bark::load_shoppe_records(&game_dir.join("SHOPPE.DAT"))
+    let rendered = crate::shoppe_bark::ShoppeTextRenderer::load_from_game_dir(game_dir)
         .ok()
-        .and_then(|records| {
-            crate::shoppe_bark::render_sage_rumour_shoppe_record(
-                &records,
-                outcome.record_id,
-                outcome.quote.entry.subject,
-                outcome.quote.entry.destination,
-                None,
-            )
-            .ok()
+        .and_then(|renderer| {
+            renderer
+                .render_sage_rumour_record(
+                    outcome.record_id,
+                    outcome.quote.entry.subject,
+                    outcome.quote.entry.destination,
+                    None,
+                )
+                .ok()
         })
         .unwrap_or_else(|| outcome.rendered.clone());
     crate::shop_runtime::SageOutcome::RumourFound { outcome, rendered }

@@ -6,7 +6,8 @@
 
 use crate::shop_runtime::*;
 use crate::shops::{
-    ArmsShop, ArmsStockTable, GuildShop, Healer, Herbalist, Inn, Shipwright, Stable, Tavern,
+    ArmsShop, ArmsStockTable, GuildShop, Healer, Herbalist, Inn, Shipwright,
+    ShipwrightPurchaseKind, Stable, Tavern, tavern_menu_letters,
 };
 
 /// Identifies which of the eight shop kinds is open and owns its
@@ -103,6 +104,225 @@ impl ActiveShopSession {
             _ => "Choose Buy / Sell / Yes / No.",
         }
     }
+
+    /// State-derived presentation for the active shop overlay.
+    ///
+    /// This is intentionally semantic rather than a claim of exact
+    /// SHOPPE.DAT record selection. The text-window/frontend layers can
+    /// present the current shop state consistently while `cleak/u5-spec#62`
+    /// tracks exact live bark selection and pacing.
+    pub fn modal_summary(&self) -> String {
+        let mut lines = vec![format!("{}.", self.modal_shop_label())];
+        match self {
+            Self::Arms(state) | Self::ArmsLocal(state, _) | Self::ArmsStocked(state, _) => {
+                match *state {
+                    ArmsShopState::Greeting => lines.push("Buy (B), Sell (S), or Space.".into()),
+                    ArmsShopState::BuyPickItem => lines.push("Buy: choose a stock item.".into()),
+                    ArmsShopState::BuyConfirm {
+                        item, quoted_price, ..
+                    } => lines.push(format!("Item {item} costs {quoted_price} gold. Buy? (Y/N)")),
+                    ArmsShopState::SellPickItem => {
+                        lines.push("Sell: choose an item to sell.".into())
+                    }
+                    ArmsShopState::SellConfirm { item, offer } => {
+                        lines.push(format!("Sell item {item} for {offer} gold? (Y/N)"));
+                    }
+                    ArmsShopState::Exited => lines.push("Closed.".into()),
+                }
+            }
+            Self::Healer(state, _) => match *state {
+                HealerShopState::Greeting => lines.push("Need healing? (Y/N)".into()),
+                HealerShopState::PickService => {
+                    lines.push("Cure (C), Heal (H), Resurrect (R), or Space.".into());
+                }
+                HealerShopState::PickPartyMember { service, cost } => {
+                    lines.push(format!(
+                        "{service:?} costs {cost} gold. Which party member?"
+                    ));
+                }
+                HealerShopState::Confirm {
+                    service,
+                    slot,
+                    cost,
+                } => {
+                    lines.push(format!(
+                        "{service:?} party member {} for {cost} gold? (Y/N)",
+                        slot + 1
+                    ));
+                }
+                HealerShopState::Exited => lines.push("Closed.".into()),
+            },
+            Self::Innkeeper(state) => match *state {
+                InnkeeperState::Greeting { .. } => {
+                    lines.push("Rest (R), Leave (L), Pick up (P), or Space.".into());
+                }
+                InnkeeperState::ConfirmRest { total_price, .. } => {
+                    lines.push(format!("Rest for {total_price} gold? (Y/N)"));
+                }
+                InnkeeperState::PickLeaveCompanion { deposit, .. } => {
+                    lines.push(format!("Leave companion: deposit is {deposit} gold. Who?"));
+                }
+                InnkeeperState::ConfirmLeaveCompanion {
+                    party_index,
+                    deposit,
+                    ..
+                } => lines.push(format!(
+                    "Leave party member {} for {deposit} gold? (Y/N)",
+                    party_index + 1
+                )),
+                InnkeeperState::PickUpCompanion { guest_count, .. } => lines.push(format!(
+                    "Pick up companion: choose 1-{guest_count}, or Space."
+                )),
+                InnkeeperState::ConfirmPickUpCompanion { bill, .. } => {
+                    lines.push(format!("Pick up companion for {bill} gold? (Y/N)"));
+                }
+                InnkeeperState::Exited => lines.push("Closed.".into()),
+            },
+            Self::Reagent(state) => match *state {
+                ReagentShopState::Greeting { .. } | ReagentShopState::PickReagent { .. } => {
+                    lines.push("Choose reagent A-E, or Space.".into());
+                }
+                ReagentShopState::PickQuantity {
+                    reagent,
+                    unit_price,
+                    ..
+                } => lines.push(format!(
+                    "{} costs {unit_price} gold each. Quantity?",
+                    reagent.display_name()
+                )),
+                ReagentShopState::Exited => lines.push("Closed.".into()),
+            },
+            Self::Sage(state) => match *state {
+                SageState::Prompt { .. } => {
+                    lines.push("Of what wouldst thou hear my lore?".into());
+                }
+                SageState::Confirm { quote, .. } => {
+                    lines.push(format!(
+                        "{} costs {} gold. Pay? (Y/N)",
+                        quote.entry.subject, quote.entry.fee
+                    ));
+                }
+                SageState::Exited => lines.push("Closed.".into()),
+            },
+            Self::Tavern(state) => match *state {
+                TavernState::Greeting { .. } => {
+                    lines.push("Drink? Yes (Y), No (N), or Space.".into())
+                }
+                TavernState::Menu {
+                    tavern,
+                    continuation_ready,
+                } => {
+                    let letters = tavern_menu_letters(tavern);
+                    let provisions = letters
+                        .provisions
+                        .map(|letter| format!(", provisions ({letter})"))
+                        .unwrap_or_default();
+                    let lore_note = if continuation_ready {
+                        ""
+                    } else {
+                        " after a drink"
+                    };
+                    lines.push(format!(
+                        "Round ({}), tavern ({}){provisions}, lore ({}){lore_note}, or Space.",
+                        letters.round, letters.secondary, letters.lore
+                    ));
+                }
+                TavernState::PickProvisionQuantity { unit_price, .. } => {
+                    lines.push(format!("Provisions cost {unit_price} gold each. Quantity?"));
+                }
+                TavernState::BlueBoarDrinkList { .. } => {
+                    lines.push("Choose Blue Boar drink A-F, or Space.".into());
+                }
+                TavernState::Exited => lines.push("Closed.".into()),
+            },
+            Self::HorseTrader(state) => match *state {
+                HorseTraderState::Greeting { .. } => lines.push("Buy a horse? (Y/N)".into()),
+                HorseTraderState::ConfirmPurchase { price, .. } => {
+                    lines.push(format!("Horse costs {price} gold. Buy? (Y/N)"));
+                }
+                HorseTraderState::Exited => lines.push("Closed.".into()),
+            },
+            Self::ShipBroker(state) => match *state {
+                ShipBrokerState::Greeting { .. } => {
+                    lines.push("Choose Frigate (F), Skiff (S), or Space.".into());
+                }
+                ShipBrokerState::ConfirmPurchase {
+                    quote,
+                    delivery_x,
+                    delivery_y,
+                } => {
+                    let kind = match quote.kind {
+                        ShipwrightPurchaseKind::Frigate => "Frigate",
+                        ShipwrightPurchaseKind::Skiff => "Skiff",
+                    };
+                    lines.push(format!(
+                        "{kind} costs {} gold; delivery at ({delivery_x}, {delivery_y}). Buy? (Y/N)",
+                        quote.price
+                    ));
+                }
+                ShipBrokerState::Exited => lines.push("Closed.".into()),
+            },
+            Self::Guild(state) => match *state {
+                GuildShopState::Greeting { .. } | GuildShopState::PickItem { .. } => {
+                    lines.push("Keys (A), Gems (B), Torches (C), or Space.".into());
+                }
+                GuildShopState::PickQuantity {
+                    commodity,
+                    unit_price,
+                    ..
+                } => lines.push(format!(
+                    "{} cost {unit_price} gold each. Quantity?",
+                    commodity.display_name()
+                )),
+                GuildShopState::Exited => lines.push("Closed.".into()),
+            },
+        }
+        lines.join("\n")
+    }
+
+    /// Presentation text for a shop modal plus the most recent outcome
+    /// message, when present.
+    pub fn modal_text(&self, message: &str) -> String {
+        let mut text = self.modal_summary();
+        if !message.trim().is_empty() {
+            text.push('\n');
+            text.push_str(message);
+        }
+        text
+    }
+
+    fn modal_shop_label(&self) -> &'static str {
+        match self {
+            Self::ArmsStocked(_, table) => arms_stock_table_label(*table),
+            Self::ArmsLocal(_, shop) => shop.display_name(),
+            _ => self.shop_label(),
+        }
+    }
+}
+
+fn arms_stock_table_label(table: ArmsStockTable) -> &'static str {
+    const ARMS_SHOPS: [ArmsShop; 9] = [
+        ArmsShop::IolosBows,
+        ArmsShop::NaughtyNomaans,
+        ArmsShop::ArmsOfJustice,
+        ArmsShop::DarkwatchArmoury,
+        ArmsShop::ThePaladinsProtectorate,
+        ArmsShop::NorthStarArmoury,
+        ArmsShop::BuccaneersBooty,
+        ArmsShop::TheShatteredShield,
+        ArmsShop::SiegeCrafters,
+    ];
+
+    let mut index = 0usize;
+    while index < ARMS_SHOPS.len() {
+        let shop = ARMS_SHOPS[index];
+        let stock = shop.stock_table();
+        if stock.item_ids == table.item_ids && stock.len == table.len {
+            return shop.display_name();
+        }
+        index += 1;
+    }
+    "Weaponsmith / Armourer"
 }
 
 /// Build a fresh session for the supplied Talk-resolved shop trigger
@@ -262,6 +482,7 @@ pub const fn inn_for_scene(scene_byte: u8) -> Option<Inn> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shops::{GuildCommodity, Reagent, ShipwrightPurchaseQuote};
 
     #[test]
     fn dialog_id_dispatch_picks_each_shop_kind() {
@@ -321,6 +542,68 @@ mod tests {
             let session = shop_session_for_dialog_id(id).unwrap();
             assert!(!session.shop_label().is_empty());
         }
+    }
+
+    #[test]
+    fn modal_summary_covers_every_shop_family() {
+        let sessions = [
+            ActiveShopSession::ArmsStocked(
+                ArmsShopState::BuyPickItem,
+                ArmsShop::IolosBows.stock_table(),
+            ),
+            ActiveShopSession::Healer(HealerShopState::PickService, Healer::WoundsOfHonour),
+            ActiveShopSession::Innkeeper(InnkeeperState::ConfirmRest {
+                inn: Inn::TheWayfarerInn,
+                base_room_rate: 2,
+                total_price: 12,
+            }),
+            ActiveShopSession::Reagent(ReagentShopState::PickQuantity {
+                herbalist: Herbalist::Mysticism,
+                reagent: Reagent::SpiderSilk,
+                unit_price: 6,
+            }),
+            ActiveShopSession::Sage(SageState::default()),
+            ActiveShopSession::Tavern(TavernState::Menu {
+                tavern: Tavern::TheHonestMeal,
+                continuation_ready: true,
+            }),
+            ActiveShopSession::HorseTrader(HorseTraderState::ConfirmPurchase {
+                stable: Stable::HorseAndRider,
+                price: 143,
+            }),
+            ActiveShopSession::ShipBroker(ShipBrokerState::ConfirmPurchase {
+                quote: ShipwrightPurchaseQuote {
+                    shipwright: Shipwright::TheOakenOar,
+                    kind: ShipwrightPurchaseKind::Skiff,
+                    price: 125,
+                },
+                delivery_x: 10,
+                delivery_y: 20,
+            }),
+            ActiveShopSession::Guild(GuildShopState::PickQuantity {
+                shop: GuildShop::TheNemesis,
+                commodity: GuildCommodity::Keys,
+                unit_price: 185,
+            }),
+        ];
+
+        for session in sessions {
+            let text = session.modal_summary();
+            assert!(!text.lines().next().unwrap().trim().is_empty(), "{text}");
+            assert!(text.lines().count() >= 2, "{text}");
+        }
+    }
+
+    #[test]
+    fn modal_text_appends_last_shop_outcome_message() {
+        let session = ActiveShopSession::HorseTrader(HorseTraderState::Greeting {
+            stable: Stable::HorseAndRider,
+        });
+        let text = session.modal_text("Thy horse awaits outside.");
+
+        assert!(text.contains("Horse & Rider"));
+        assert!(text.contains("Buy a horse"));
+        assert!(text.contains("Thy horse awaits outside."));
     }
 
     #[test]

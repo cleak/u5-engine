@@ -10085,7 +10085,15 @@ fn render_status_framebuffer(
     if display_state.message.is_empty() {
         display_state.message = fallback.to_string();
     }
-    let input_echo = visual_line_prompt_active(&display_state).then_some(input_line);
+    let input_echo = if visual_line_prompt_active(&display_state)
+        && !(display_state.active_shop.is_some()
+            && input_line.is_empty()
+            && !display_state.message.trim().is_empty())
+    {
+        Some(input_line)
+    } else {
+        None
+    };
     let system = render_play_text_window_system(&display_state, active_cursor, input_echo);
     if stats_panel_active_cursor_visible(state, active_cursor) {
         state.active_player = None;
@@ -10109,7 +10117,15 @@ fn render_integrated_status_framebuffer(
     if display_state.message.is_empty() {
         display_state.message = fallback.to_string();
     }
-    let input_echo = visual_line_prompt_active(&display_state).then_some(input_line);
+    let input_echo = if visual_line_prompt_active(&display_state)
+        && !(display_state.active_shop.is_some()
+            && input_line.is_empty()
+            && !display_state.message.trim().is_empty())
+    {
+        Some(input_line)
+    } else {
+        None
+    };
     let mut system = TextWindowSystem::new();
     system.set_window_rect(
         MAIN_TEXT_WINDOW_INDEX,
@@ -10133,7 +10149,12 @@ fn render_integrated_status_framebuffer(
         TEXT_SCREEN_ROWS - 1,
     );
     system.set_active_window(MAIN_TEXT_WINDOW_INDEX);
-    paint_message_text_window(&mut system, &display_state.message);
+    let message = display_state
+        .active_shop
+        .as_ref()
+        .map(|shop| shop.modal_text(&display_state.message))
+        .unwrap_or_else(|| display_state.message.clone());
+    paint_message_text_window(&mut system, &message);
     paint_stats_panel_text_window(&mut system, &display_state, active_cursor);
     if let Some(input_echo) = input_echo {
         let cursor_glyph = prompt_cursor_visible.then_some(PROMPT_CURSOR_GLYPH);
@@ -10526,7 +10547,9 @@ mod tests {
     use std::path::Path;
     use u5_runtime::blackthorn_session::BlackthornChallenge;
     use u5_runtime::conversation_session::ConversationSession;
-    use u5_runtime::shop_runtime::{GuildShopState, ReagentShopState, TavernState};
+    use u5_runtime::shop_runtime::{
+        ArmsShopState, GuildShopState, ReagentShopState, SageState, TavernState,
+    };
     use u5_runtime::shop_session::ActiveShopSession;
     use u5_runtime::test_fixtures::{
         debug_game_dir, dungeon_state, open_dungeon_record, open_grid, open_world_grid,
@@ -10534,13 +10557,14 @@ mod tests {
     };
     use u5_runtime::tlk_control_codes::TLK_TEXT_XOR_MASK;
     use u5_runtime::{
-        Area, BRIT_OOL_FILENAME, CH_CELL_SIDE, CH_FONT_LEN, COMBAT_ARENA_SIDE, DEFAULT_GAME_DIR,
-        Direction, EGA_PALETTE_RGB, GuildShop, Herbalist, IBM_CH_FILE, INIT_GAM_FILENAME,
-        INIT_OOL_FILENAME, OOL_PLANE_LEN, PenStroke, ProportionalGlyph, REAGENT_COUNT,
-        REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET,
-        SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET,
-        SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME, SHRINE_TABLE_FILE,
-        STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth,
+        Area, ArmsShop, BRIT_OOL_FILENAME, CH_CELL_SIDE, CH_FONT_LEN, COMBAT_ARENA_SIDE,
+        DEFAULT_GAME_DIR, Direction, EGA_PALETTE_RGB, GuildShop, Herbalist, IBM_CH_FILE,
+        INIT_GAM_FILENAME, INIT_OOL_FILENAME, OOL_PLANE_LEN, PenStroke, ProportionalGlyph,
+        REAGENT_COUNT, REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET,
+        SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN,
+        SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
+        SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue,
+        SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth,
         U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane, dungeon_cell_index,
         parse_ch_font, world_cell_index, wrap_text_panel_lines,
     };
@@ -13303,6 +13327,42 @@ mod tests {
             unit_price: 190,
         }));
         assert!(visual_line_prompt_active(&guild));
+    }
+
+    #[test]
+    fn visual_summary_includes_active_shop_modal_text() {
+        let mut state = test_state(open_grid(), 1, 1);
+        state.message = "Mace costs 42 gold.".to_string();
+        state.active_shop = Some(ActiveShopSession::ArmsStocked(
+            ArmsShopState::BuyConfirm {
+                item: 1,
+                quoted_price: 42,
+                quote_record_id: SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST + 1,
+            },
+            ArmsShop::IolosBows.stock_table(),
+        ));
+
+        let summary = summarize(&mut state, "", "");
+
+        assert!(summary.contains("Iolo"), "{summary}");
+        assert!(summary.contains("Item 1 costs 42 gold"), "{summary}");
+        assert!(summary.contains("Mace costs 42 gold."), "{summary}");
+        assert!(summary.contains("STATS"), "{summary}");
+    }
+
+    #[test]
+    fn visual_shop_line_prompt_empty_echo_preserves_outcome_text() {
+        let font = parse_ch_font(&vec![0xff; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let mut state = test_state(open_grid(), 1, 1);
+        state.active_shop = Some(ActiveShopSession::Sage(SageState::default()));
+
+        let before =
+            render_integrated_status_framebuffer(&mut state.clone(), "", READY_HINT, &font, false);
+        handle_play_key_input(&mut state, 'M', "ANTRA", Path::new("")).unwrap();
+        let after =
+            render_integrated_status_framebuffer(&mut state.clone(), "", READY_HINT, &font, false);
+
+        assert_ne!(hash_bytes(&before), hash_bytes(&after));
     }
 
     #[test]
