@@ -17,6 +17,12 @@ pub struct DiskIoRetryEvent {
     pub file_name: String,
 }
 
+impl DiskIoRetryEvent {
+    pub fn prompt_message(&self) -> String {
+        disk_io_retry_prompt_message(self)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DiskRetryPolicy {
     pub max_retries: Option<usize>,
@@ -80,6 +86,35 @@ pub fn write_disk_file_with_policy(
         |_| Ok(()),
         |_| {},
     )
+}
+
+pub fn disk_io_retry_prompt_message(event: &DiskIoRetryEvent) -> String {
+    let verb = match event.phase {
+        DiskIoHandlerPhase::ReadPrompt => "read",
+        DiskIoHandlerPhase::WritePrompt => "write",
+    };
+    format!(
+        "Disk {verb} retry {} for {}. Press any key after the disk is ready.",
+        event.attempt, event.file_name
+    )
+}
+
+pub fn disk_io_error_message(
+    phase: DiskIoHandlerPhase,
+    file_name: &str,
+    err: &io::Error,
+) -> String {
+    let verb = match phase {
+        DiskIoHandlerPhase::ReadPrompt => "read",
+        DiskIoHandlerPhase::WritePrompt => "write",
+    };
+    let action = match phase {
+        DiskIoHandlerPhase::ReadPrompt => "Check the mounted game/save directory and try again.",
+        DiskIoHandlerPhase::WritePrompt => {
+            "Check that the save directory is writable and try again."
+        }
+    };
+    format!("Disk {verb} failed for {file_name}: {err}. {action}")
 }
 
 pub fn read_with_retry<R, P>(

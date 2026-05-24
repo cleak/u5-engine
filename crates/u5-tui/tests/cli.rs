@@ -630,6 +630,7 @@ fn cli_intro_journey_onward_without_active_save_returns_to_menu() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("Journey Onward"));
+    assert!(stdout.contains("Disk read failed for SAVED.GAM"));
     assert!(stdout.contains("No active game"));
     assert!(stdout.contains("Intro Menu"));
     assert!(String::from_utf8(output.stderr).unwrap().is_empty());

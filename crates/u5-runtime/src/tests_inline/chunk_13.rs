@@ -4632,6 +4632,10 @@ fn disk_read_retry_wrapper_retries_zero_and_accepts_short_read() {
             file_name: "SAVED.GAM".to_string(),
         }]
     );
+    assert_eq!(
+        prompts[0].prompt_message(),
+        "Disk read retry 1 for SAVED.GAM. Press any key after the disk is ready."
+    );
 }
 
 #[test]
@@ -4675,6 +4679,29 @@ fn disk_write_retry_wrapper_restores_read_handler_after_retry() {
             DiskIoHandlerPhase::ReadPrompt,
         ]
     );
+    assert_eq!(
+        prompts[0].prompt_message(),
+        "Disk write retry 1 for SAVED.OOL. Press any key after the disk is ready."
+    );
+}
+
+#[test]
+fn disk_io_error_message_names_read_and_write_recovery_actions() {
+    let read = disk_io_error_message(
+        DiskIoHandlerPhase::ReadPrompt,
+        "SAVED.GAM",
+        &io::Error::new(io::ErrorKind::NotFound, "missing"),
+    );
+    assert!(read.contains("Disk read failed for SAVED.GAM"));
+    assert!(read.contains("mounted game/save directory"));
+
+    let write = disk_io_error_message(
+        DiskIoHandlerPhase::WritePrompt,
+        "SAVED.OOL",
+        &io::Error::new(io::ErrorKind::PermissionDenied, "readonly"),
+    );
+    assert!(write.contains("Disk write failed for SAVED.OOL"));
+    assert!(write.contains("save directory is writable"));
 }
 
 #[test]

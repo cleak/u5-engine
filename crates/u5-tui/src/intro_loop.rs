@@ -16,8 +16,8 @@ use u5_runtime::{
     INTRO_INLINE_DOORWAY_STEP, INTRO_STORY_STEP_COUNT, MISCMAPS_DAT_FILE,
     MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, RTV_COMMAND_STREAM_BYTES, ReturnToViewFrameKind,
-    TileGraphicsDepth, U4TransferOverrides, commit_u4_transfer_save,
-    intro_step_has_story6_secondary_pass, intro_step_transition_strips,
+    SAVED_GAM_FILENAME, TileGraphicsDepth, U4TransferOverrides, commit_u4_transfer_save,
+    disk_io_error_message, intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
     intro_story_step_waits_for_input, intro_story6_secondary_subimage, load_play_options_from_save,
     load_return_to_view_assets, load_story_records, read_u4_transfer_source_from_party_sav,
@@ -113,7 +113,14 @@ fn drive_intro_subflow(
                     }
                 }
                 Err(err) => {
-                    println!("No loadable saved game: {err}");
+                    println!(
+                        "{}",
+                        disk_io_error_message(
+                            u5_runtime::DiskIoHandlerPhase::ReadPrompt,
+                            SAVED_GAM_FILENAME,
+                            &err
+                        )
+                    );
                     dispatch.complete_subflow(subflow, IntroSubflowResult::Cancelled);
                     prompt_continue()?;
                 }

@@ -64,12 +64,12 @@ Runtime, TUI, route-smoke, and visual-route results refreshed alongside this
 audit on 2026-05-24; Bevy frame-suite evidence remains from the latest display
 audit:
 
-- `cargo test -p u5-runtime` — 2625 tests pass.
+- `cargo test -p u5-runtime` — 2628 tests pass.
 - `cargo test -p u5-tui` — 79 tests pass, including temp-directory binary
   smoke for empty-save Journey Onward, deterministic Create Character followed
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
-- `cargo test -p u5-bevy` — 64 tests pass.
+- `cargo test -p u5-bevy` — 65 tests pass.
 - `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 176 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
@@ -313,7 +313,7 @@ through the asset-backed Talk command path.
 | Section | Evidence | Tests | Status |
 |--------|----------|-------|--------|
 | `main-loop.md` | `play_state_impl/chunk_01.rs` mode dispatcher | mode-dispatch tests | Implemented |
-| `screen-mode-dispatch.md` | `play_state_impl/chunk_*.rs` mode-state ownership, `save_load.rs::normalize_disk_prompt_mode`, `disk_io.rs` read/write retry prompt phases | mode-state and disk-retry tests | Implemented (visible disk-prompt UI — Presentation work) |
+| `screen-mode-dispatch.md` | `play_state_impl/chunk_*.rs` mode-state ownership, `save_load.rs::normalize_disk_prompt_mode`, `disk_io.rs` read/write retry prompt phases, shared disk retry/error presentation surfaced by TUI and Bevy Journey Onward | mode-state and disk-retry tests; TUI and Bevy intro disk-error presentation tests | Implemented |
 | `runtime.md` | `play_state_struct.rs`, `play_options.rs`, boot in `boot.rs` | start-validation tests | Implemented |
 | `input.md` | `input_codes.rs`, `input_dispatch.rs` | typeahead tests | Implemented |
 | `commands.md` | `commands.rs` + per-command handlers in `play_state_impl/chunk_*.rs`; reference in `docs/commands.md` | per-command route-smoke and unit tests | Implemented |

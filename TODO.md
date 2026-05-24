@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime` passed on 2026-05-24, including 2595 tests
+- `cargo test -p u5-runtime` passed on 2026-05-24, including 2628 tests
   (latest verification includes public `cleak/u5-spec#47` hourly
   poison/provision/ring ordering, public #28 horse-trader adjacent placement
   priority plus no-marker refusal, public #15 inn pickup stay-counter billing,
@@ -23,11 +23,11 @@ Last known verification state:
   terrain-combat replacement-tile main path, public-spec View/Peer/X-Ray
   overlay raster-class and dungeon minimap glyph-id coverage, and public issue
   #21 dungeon active-monster ambush setup, combat round maintenance, combat-local
-  ambush/camp reveal-slot helper coverage, and disk I/O retry wrapper
-  coverage).
+  ambush/camp reveal-slot helper coverage, disk I/O retry wrapper coverage, and
+  shared TUI/Bevy Journey Onward disk-error presentation).
 - `cargo test -p u5-tui` passed on 2026-05-24, including 79 tests.
 - `cargo test -p u5-tui --features visual` passed on 2026-05-23.
-- `cargo test -p u5-bevy` passed on 2026-05-23, including 57 tests.
+- `cargo test -p u5-bevy` passed on 2026-05-24, including 65 tests.
 - `cargo fmt -- --check` passed on 2026-05-24 after the latest Rust changes.
 - `git diff --check` passed on 2026-05-24; the only output was existing
   CRLF-normalization warnings.
