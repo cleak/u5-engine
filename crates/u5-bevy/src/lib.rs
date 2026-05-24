@@ -3815,10 +3815,108 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
         visual_doom_combat_case("route-doom-combat-yell-word", doom, &["", "YFALLAX"]),
         visual_doom_combat_case("route-doom-combat-xit-foes-remain", doom, &["", "X"]),
     ]);
+    append_directed_wind_visual_route_cases(&mut cases);
     append_asset_backed_conversation_visual_route_cases(&mut cases);
     append_shrine_visual_route_cases(&mut cases);
     append_public_location_visual_route_cases(&mut cases);
     cases
+}
+
+fn append_directed_wind_visual_route_cases(cases: &mut Vec<VisualRouteSuiteCase>) {
+    let world = PlayOptions {
+        target: PlayTarget::World(WorldPlane::Britannia),
+        ..PlayOptions::default()
+    };
+    for (label, script, configure) in [
+        (
+            "route-combat-directed-sleep-cone-north",
+            &["C1IZ8"][..],
+            seed_visual_route_directed_sleep_north as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-sleep-cone-east",
+            &["C1IZ6"][..],
+            seed_visual_route_directed_sleep_east as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-sleep-cone-south",
+            &["C1IZ2"][..],
+            seed_visual_route_directed_sleep_south as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-sleep-cone-west",
+            &["C1IZ4"][..],
+            seed_visual_route_directed_sleep_west as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-poison-wind-cone-north",
+            &["C1HIN8"][..],
+            seed_visual_route_directed_poison_wind_north as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-poison-wind-cone-east",
+            &["C1HIN6"][..],
+            seed_visual_route_directed_poison_wind_east as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-poison-wind-cone-south",
+            &["C1HIN2"][..],
+            seed_visual_route_directed_poison_wind_south as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-poison-wind-cone-west",
+            &["C1HIN4"][..],
+            seed_visual_route_directed_poison_wind_west as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-death-wind-cone-north",
+            &["C1CGIV8"][..],
+            seed_visual_route_directed_death_wind_north as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-death-wind-cone-east",
+            &["C1CGIV6"][..],
+            seed_visual_route_directed_death_wind_east as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-death-wind-cone-south",
+            &["C1CGIV2"][..],
+            seed_visual_route_directed_death_wind_south as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-death-wind-cone-west",
+            &["C1CGIV4"][..],
+            seed_visual_route_directed_death_wind_west as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-flame-wind-cone-north",
+            &["C1FHI8"][..],
+            seed_visual_route_directed_flame_wind_north as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-flame-wind-cone-east",
+            &["C1FHI6"][..],
+            seed_visual_route_directed_flame_wind_east as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-flame-wind-cone-south",
+            &["C1FHI2"][..],
+            seed_visual_route_directed_flame_wind_south as fn(&mut PlayState),
+        ),
+        (
+            "route-combat-directed-flame-wind-cone-west",
+            &["C1FHI4"][..],
+            seed_visual_route_directed_flame_wind_west as fn(&mut PlayState),
+        ),
+    ] {
+        cases.push(VisualRouteSuiteCase {
+            label,
+            frame_kind: "visual route combat frame",
+            options: world.clone(),
+            script,
+            configure: Some(configure),
+        });
+    }
 }
 
 fn append_asset_backed_conversation_visual_route_cases(cases: &mut Vec<VisualRouteSuiteCase>) {
@@ -4392,6 +4490,7 @@ fn seed_visual_route_directed_wind_combat(
     party_count: usize,
     target_party_slot: Option<usize>,
     include_monster_target: bool,
+    direction: Direction,
 ) {
     state.party = (0..party_count)
         .map(|slot| route_visual_party_member(slot as u8, b'A', b'G', 12, 20))
@@ -4413,6 +4512,7 @@ fn seed_visual_route_directed_wind_combat(
     actors[0] =
         CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
     if let Some(target_slot) = target_party_slot {
+        let (target_x, target_y) = visual_directed_route_coordinate(direction, 1);
         actors[target_slot] = CombatActorDescriptor::from_row([
             12,
             1,
@@ -4420,50 +4520,61 @@ fn seed_visual_route_directed_wind_combat(
             0,
             target_slot as u8,
             0,
-            6,
-            5,
+            target_x,
+            target_y,
         ]);
     }
 
     let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
     for slot in 0..party_count {
-        let x = if Some(slot) == target_party_slot {
-            6
+        let (x, y) = if Some(slot) == target_party_slot {
+            visual_directed_route_coordinate(direction, 1)
         } else {
-            5
+            (5, 5)
         };
-        active_objects[slot] = visual_route_combat_active_object(0x4c, x, 5, 0);
+        active_objects[slot] =
+            visual_route_combat_active_object(0x4c, usize::from(x), usize::from(y), 0);
     }
 
     if include_monster_target {
         let stats =
             combat_class_stats(COMBAT_CLASS_GIANT_RAT).expect("giant rat combat stats exist");
         let monster_slot = COMBAT_PARTY_ACTOR_SLOTS;
-        let monster_x = if target_party_slot.is_some() { 7 } else { 6 };
+        let monster_distance = if target_party_slot.is_some() { 2 } else { 1 };
+        let (monster_x, monster_y) = visual_directed_route_coordinate(direction, monster_distance);
         actors[monster_slot] = CombatActorDescriptor::for_monster_placement(
             stats,
             monster_slot as u8,
             monster_x,
-            5,
+            monster_y,
             COMBAT_ACTOR_FLAG_SELECTABLE_80,
             0,
         );
-        active_objects[monster_slot] =
-            summoned_active_object_record(COMBAT_CLASS_GIANT_RAT, monster_x as usize, 5, 0)
-                .expect("giant rat active object exists");
+        active_objects[monster_slot] = summoned_active_object_record(
+            COMBAT_CLASS_GIANT_RAT,
+            monster_x as usize,
+            monster_y as usize,
+            0,
+        )
+        .expect("giant rat active object exists");
 
         let reserve_slot = monster_slot + 1;
+        let (reserve_x, reserve_y) = visual_directed_route_reserve_coordinate(direction);
         actors[reserve_slot] = CombatActorDescriptor::for_monster_placement(
             stats,
             reserve_slot as u8,
-            3,
-            5,
+            reserve_x,
+            reserve_y,
             COMBAT_ACTOR_FLAG_SELECTABLE_80,
             0,
         );
-        active_objects[reserve_slot] =
-            summoned_active_object_record(COMBAT_CLASS_GIANT_RAT, 3, 5, 0)
-                .expect("reserve giant rat active object exists");
+        active_objects[reserve_slot] = summoned_active_object_record(
+            COMBAT_CLASS_GIANT_RAT,
+            reserve_x as usize,
+            reserve_y as usize,
+            0,
+        )
+        .expect("reserve giant rat active object exists");
     }
 
     state
@@ -4471,11 +4582,100 @@ fn seed_visual_route_directed_wind_combat(
         .expect("visual route directed wind combat frame should seed");
 }
 
+fn visual_directed_route_coordinate(direction: Direction, distance: i16) -> (u8, u8) {
+    let (dx, dy) = direction.delta();
+    (
+        (5 + dx as i16 * distance) as u8,
+        (5 + dy as i16 * distance) as u8,
+    )
+}
+
+fn visual_directed_route_reserve_coordinate(direction: Direction) -> (u8, u8) {
+    match direction {
+        Direction::North => (5, 7),
+        Direction::South => (5, 3),
+        Direction::East => (3, 5),
+        Direction::West => (7, 5),
+        _ => (3, 5),
+    }
+}
+
 fn seed_visual_route_directed_sleep(state: &mut PlayState) {
-    seed_visual_route_directed_wind_combat(state, SLEEP_SPELL_INDEX, SLEEP_COST, 2, Some(1), false);
+    seed_visual_route_directed_sleep_east(state);
+}
+
+fn seed_visual_route_directed_sleep_north(state: &mut PlayState) {
+    seed_visual_route_directed_wind_combat(
+        state,
+        SLEEP_SPELL_INDEX,
+        SLEEP_COST,
+        2,
+        Some(1),
+        false,
+        Direction::North,
+    );
+}
+
+fn seed_visual_route_directed_sleep_east(state: &mut PlayState) {
+    seed_visual_route_directed_wind_combat(
+        state,
+        SLEEP_SPELL_INDEX,
+        SLEEP_COST,
+        2,
+        Some(1),
+        false,
+        Direction::East,
+    );
+}
+
+fn seed_visual_route_directed_sleep_south(state: &mut PlayState) {
+    seed_visual_route_directed_wind_combat(
+        state,
+        SLEEP_SPELL_INDEX,
+        SLEEP_COST,
+        2,
+        Some(1),
+        false,
+        Direction::South,
+    );
+}
+
+fn seed_visual_route_directed_sleep_west(state: &mut PlayState) {
+    seed_visual_route_directed_wind_combat(
+        state,
+        SLEEP_SPELL_INDEX,
+        SLEEP_COST,
+        2,
+        Some(1),
+        false,
+        Direction::West,
+    );
 }
 
 fn seed_visual_route_directed_poison_wind(state: &mut PlayState) {
+    seed_visual_route_directed_poison_wind_east(state);
+}
+
+fn seed_visual_route_directed_poison_wind_north(state: &mut PlayState) {
+    seed_visual_route_directed_poison_wind_for_direction(state, Direction::North);
+}
+
+fn seed_visual_route_directed_poison_wind_east(state: &mut PlayState) {
+    seed_visual_route_directed_poison_wind_for_direction(state, Direction::East);
+}
+
+fn seed_visual_route_directed_poison_wind_south(state: &mut PlayState) {
+    seed_visual_route_directed_poison_wind_for_direction(state, Direction::South);
+}
+
+fn seed_visual_route_directed_poison_wind_west(state: &mut PlayState) {
+    seed_visual_route_directed_poison_wind_for_direction(state, Direction::West);
+}
+
+fn seed_visual_route_directed_poison_wind_for_direction(
+    state: &mut PlayState,
+    direction: Direction,
+) {
     seed_visual_route_directed_wind_combat(
         state,
         POISON_WIND_SPELL_INDEX,
@@ -4483,11 +4683,35 @@ fn seed_visual_route_directed_poison_wind(state: &mut PlayState) {
         3,
         Some(2),
         false,
+        direction,
     );
     state.prng_state = poison_wind_first_accept_seed();
 }
 
 fn seed_visual_route_directed_death_wind(state: &mut PlayState) {
+    seed_visual_route_directed_death_wind_east(state);
+}
+
+fn seed_visual_route_directed_death_wind_north(state: &mut PlayState) {
+    seed_visual_route_directed_death_wind_for_direction(state, Direction::North);
+}
+
+fn seed_visual_route_directed_death_wind_east(state: &mut PlayState) {
+    seed_visual_route_directed_death_wind_for_direction(state, Direction::East);
+}
+
+fn seed_visual_route_directed_death_wind_south(state: &mut PlayState) {
+    seed_visual_route_directed_death_wind_for_direction(state, Direction::South);
+}
+
+fn seed_visual_route_directed_death_wind_west(state: &mut PlayState) {
+    seed_visual_route_directed_death_wind_for_direction(state, Direction::West);
+}
+
+fn seed_visual_route_directed_death_wind_for_direction(
+    state: &mut PlayState,
+    direction: Direction,
+) {
     seed_visual_route_directed_wind_combat(
         state,
         DEATH_WIND_SPELL_INDEX,
@@ -4495,10 +4719,34 @@ fn seed_visual_route_directed_death_wind(state: &mut PlayState) {
         2,
         Some(1),
         true,
+        direction,
     );
 }
 
 fn seed_visual_route_directed_flame_wind(state: &mut PlayState) {
+    seed_visual_route_directed_flame_wind_east(state);
+}
+
+fn seed_visual_route_directed_flame_wind_north(state: &mut PlayState) {
+    seed_visual_route_directed_flame_wind_for_direction(state, Direction::North);
+}
+
+fn seed_visual_route_directed_flame_wind_east(state: &mut PlayState) {
+    seed_visual_route_directed_flame_wind_for_direction(state, Direction::East);
+}
+
+fn seed_visual_route_directed_flame_wind_south(state: &mut PlayState) {
+    seed_visual_route_directed_flame_wind_for_direction(state, Direction::South);
+}
+
+fn seed_visual_route_directed_flame_wind_west(state: &mut PlayState) {
+    seed_visual_route_directed_flame_wind_for_direction(state, Direction::West);
+}
+
+fn seed_visual_route_directed_flame_wind_for_direction(
+    state: &mut PlayState,
+    direction: Direction,
+) {
     seed_visual_route_directed_wind_combat(
         state,
         FLAME_WIND_SPELL_INDEX,
@@ -4506,6 +4754,7 @@ fn seed_visual_route_directed_flame_wind(state: &mut PlayState) {
         1,
         None,
         true,
+        direction,
     );
 }
 
@@ -9992,7 +10241,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 488);
+        assert_eq!(cases.len(), 504);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -10302,6 +10551,22 @@ mod tests {
             "route-combat-directed-poison-wind-cone",
             "route-combat-directed-death-wind-cone",
             "route-combat-directed-flame-wind-cone",
+            "route-combat-directed-sleep-cone-north",
+            "route-combat-directed-sleep-cone-east",
+            "route-combat-directed-sleep-cone-south",
+            "route-combat-directed-sleep-cone-west",
+            "route-combat-directed-poison-wind-cone-north",
+            "route-combat-directed-poison-wind-cone-east",
+            "route-combat-directed-poison-wind-cone-south",
+            "route-combat-directed-poison-wind-cone-west",
+            "route-combat-directed-death-wind-cone-north",
+            "route-combat-directed-death-wind-cone-east",
+            "route-combat-directed-death-wind-cone-south",
+            "route-combat-directed-death-wind-cone-west",
+            "route-combat-directed-flame-wind-cone-north",
+            "route-combat-directed-flame-wind-cone-east",
+            "route-combat-directed-flame-wind-cone-south",
+            "route-combat-directed-flame-wind-cone-west",
             "route-combat-field-fire-marker",
             "route-combat-field-fire-marker-placement",
             "route-combat-field-poison-marker",
@@ -10637,7 +10902,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 1593);
+        assert_eq!(reports.len(), 1625);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -10818,6 +11083,10 @@ mod tests {
         assert!(manifest.contains("route-combat-directed-poison-wind-cone-01-c1hin6"));
         assert!(manifest.contains("route-combat-directed-death-wind-cone-01-c1cgiv6"));
         assert!(manifest.contains("route-combat-directed-flame-wind-cone-01-c1fhi6"));
+        assert!(manifest.contains("route-combat-directed-sleep-cone-north-01-c1iz8"));
+        assert!(manifest.contains("route-combat-directed-poison-wind-cone-west-01-c1hin4"));
+        assert!(manifest.contains("route-combat-directed-death-wind-cone-south-01-c1cgiv2"));
+        assert!(manifest.contains("route-combat-directed-flame-wind-cone-east-01-c1fhi6"));
         assert!(manifest.contains("route-combat-field-fire-marker-01-c1fgi6"));
         assert!(manifest.contains("route-combat-field-fire-marker-placement-01-c1fgi6"));
         assert!(manifest.contains("route-combat-field-poison-marker-01-c1gin6"));

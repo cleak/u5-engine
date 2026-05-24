@@ -75,7 +75,7 @@ audit:
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 67 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 463 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 479 scripted cases pass,
   including TLK-backed reserved-word and no-match conversation routes across
   all 32 named-location scenes in the town, dwelling, castle, and keep
   dialogue families,
@@ -91,7 +91,7 @@ audit:
   PRV Gate Travel success/refusal paths, saved-slot natural moongate live-entry
   paths, public #31 native shard/Eternal Flame destruction routes, public #32 Britannia/Doom Word-of-Power seal opening, public #15
   accepted inn-rest pricing, public #44 sleeping/praying Talk refusals, public
-  #48 Blink ray landing, directed Sleep/Poison Wind/Death Wind/Flame Wind
+  #48 Blink ray landing, all-cardinal directed Sleep/Poison Wind/Death Wind/Flame Wind
   combat casts, combat field marker casts/removal, combat utility fallback casts, targeted Magic Missile/Tremor/Repel
   Undead/Charm/Polymorph/Clone casts, Conjure/Swarm/Summon Daemon routes,
   special death-marker Kill routes, combat-entry party descriptor routes, and combat terminal cleanup routes,
@@ -119,7 +119,7 @@ audit:
   combat, and Talk, plus combat status-highlight and death/field/cursor marker
   galleries.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 1593 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 1625 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including all 40
   published stock world-location entry rows, TLK-backed reserved-word
   conversation routes across all 32 named-location scenes, exact
@@ -127,7 +127,7 @@ audit:
   light-decay, all nine public arms-shop first-stock purchases and terminator
   refusals, horse-trader purchases, accepted healer cure/heal/resurrect, all four public shipwright
   delivery-row purchases, spell routes for Locate, In Lor/Light/Open, restore, active effects,
-  directed Sleep/Poison Wind/Death Wind/Flame Wind combat casts, combat utility fallback casts, targeted
+  all-cardinal directed Sleep/Poison Wind/Death Wind/Flame Wind combat casts, combat utility fallback casts, targeted
   Magic Missile/Tremor/Repel Undead/Charm/Polymorph/Clone, Conjure/Swarm/Summon
   Daemon, dungeon levels, dungeon fields/dispel, dungeon Open chest, utility
   item use, Gate Travel success/refusal, natural moongate live-entry, chasm

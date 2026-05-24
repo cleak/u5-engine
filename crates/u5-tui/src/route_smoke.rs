@@ -2037,38 +2037,6 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
-            name: "combat-directed-sleep-cone",
-            options: world.clone(),
-            script: &["C1IZ6"],
-            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
-            expected_frame_kind: "combat viewport",
-        },
-        RouteSmokeCase {
-            name: "combat-directed-poison-wind-cone",
-            options: world.clone(),
-            script: &["C1HIN6"],
-            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
-            expected_frame_kind: "combat viewport",
-        },
-        RouteSmokeCase {
-            name: "combat-directed-death-wind-cone",
-            options: world.clone(),
-            script: &["C1CGIV6"],
-            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
-            expected_frame_kind: "combat viewport",
-        },
-        RouteSmokeCase {
-            name: "combat-directed-flame-wind-cone",
-            options: world.clone(),
-            script: &["C1FHI6"],
-            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
-            min_turn: 1,
-            expected_frame_kind: "combat viewport",
-        },
-        RouteSmokeCase {
             name: "combat-field-fire-marker-placement",
             options: world.clone(),
             script: &["C1FGI6"],
@@ -2435,10 +2403,45 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
     ];
+    append_directed_wind_route_smoke_cases(&mut cases, world.clone());
     append_asset_backed_conversation_route_smoke_cases(&mut cases);
     append_shrine_route_smoke_cases(&mut cases);
     append_public_location_route_smoke_cases(&mut cases);
     cases
+}
+
+fn append_directed_wind_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>, world: PlayOptions) {
+    for (name, script) in [
+        ("combat-directed-sleep-cone", &["C1IZ6"][..]),
+        ("combat-directed-sleep-cone-north", &["C1IZ8"][..]),
+        ("combat-directed-sleep-cone-east", &["C1IZ6"][..]),
+        ("combat-directed-sleep-cone-south", &["C1IZ2"][..]),
+        ("combat-directed-sleep-cone-west", &["C1IZ4"][..]),
+        ("combat-directed-poison-wind-cone", &["C1HIN6"][..]),
+        ("combat-directed-poison-wind-cone-north", &["C1HIN8"][..]),
+        ("combat-directed-poison-wind-cone-east", &["C1HIN6"][..]),
+        ("combat-directed-poison-wind-cone-south", &["C1HIN2"][..]),
+        ("combat-directed-poison-wind-cone-west", &["C1HIN4"][..]),
+        ("combat-directed-death-wind-cone", &["C1CGIV6"][..]),
+        ("combat-directed-death-wind-cone-north", &["C1CGIV8"][..]),
+        ("combat-directed-death-wind-cone-east", &["C1CGIV6"][..]),
+        ("combat-directed-death-wind-cone-south", &["C1CGIV2"][..]),
+        ("combat-directed-death-wind-cone-west", &["C1CGIV4"][..]),
+        ("combat-directed-flame-wind-cone", &["C1FHI6"][..]),
+        ("combat-directed-flame-wind-cone-north", &["C1FHI8"][..]),
+        ("combat-directed-flame-wind-cone-east", &["C1FHI6"][..]),
+        ("combat-directed-flame-wind-cone-south", &["C1FHI2"][..]),
+        ("combat-directed-flame-wind-cone-west", &["C1FHI4"][..]),
+    ] {
+        cases.push(RouteSmokeCase {
+            name,
+            options: world.clone(),
+            script,
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        });
+    }
 }
 
 fn append_asset_backed_conversation_route_smoke_cases(cases: &mut Vec<RouteSmokeCase>) {
@@ -2814,46 +2817,27 @@ fn apply_route_smoke_case_setup(
             state.sync_player_object();
             state.mark_visibility_dirty();
         }
-        "combat-directed-sleep-cone" => {
+        case_name if directed_wind_route_config(case_name).is_some() => {
+            let (
+                spell_index,
+                cost,
+                party_count,
+                target_party_slot,
+                include_monster_target,
+                direction,
+            ) = directed_wind_route_config(case_name).expect("directed wind route config exists");
             seed_directed_wind_combat_route(
                 state,
-                SLEEP_SPELL_INDEX,
-                SLEEP_COST,
-                2,
-                Some(1),
-                false,
+                spell_index,
+                cost,
+                party_count,
+                target_party_slot,
+                include_monster_target,
+                direction,
             )?;
-        }
-        "combat-directed-poison-wind-cone" => {
-            seed_directed_wind_combat_route(
-                state,
-                POISON_WIND_SPELL_INDEX,
-                POISON_WIND_COST,
-                3,
-                Some(2),
-                false,
-            )?;
-            state.prng_state = poison_wind_first_accept_seed();
-        }
-        "combat-directed-death-wind-cone" => {
-            seed_directed_wind_combat_route(
-                state,
-                DEATH_WIND_SPELL_INDEX,
-                DEATH_WIND_COST,
-                2,
-                Some(1),
-                true,
-            )?;
-        }
-        "combat-directed-flame-wind-cone" => {
-            seed_directed_wind_combat_route(
-                state,
-                FLAME_WIND_SPELL_INDEX,
-                FLAME_WIND_COST,
-                1,
-                None,
-                true,
-            )?;
+            if spell_index == POISON_WIND_SPELL_INDEX {
+                state.prng_state = poison_wind_first_accept_seed();
+            }
         }
         "combat-field-fire-marker-placement"
         | "combat-field-poison-marker-placement"
@@ -3656,6 +3640,76 @@ fn route_combat_active_object(tile: u8, x: usize, y: usize, z: i8) -> ActiveObje
     }
 }
 
+fn directed_wind_route_config(
+    case_name: &str,
+) -> Option<(usize, u8, usize, Option<usize>, bool, Direction)> {
+    let direction = if case_name.ends_with("-north") {
+        Direction::North
+    } else if case_name.ends_with("-south") {
+        Direction::South
+    } else if case_name.ends_with("-west") {
+        Direction::West
+    } else {
+        Direction::East
+    };
+
+    let base_name = case_name
+        .strip_suffix("-north")
+        .or_else(|| case_name.strip_suffix("-east"))
+        .or_else(|| case_name.strip_suffix("-south"))
+        .or_else(|| case_name.strip_suffix("-west"))
+        .unwrap_or(case_name);
+
+    match base_name {
+        "combat-directed-sleep-cone" => {
+            Some((SLEEP_SPELL_INDEX, SLEEP_COST, 2, Some(1), false, direction))
+        }
+        "combat-directed-poison-wind-cone" => Some((
+            POISON_WIND_SPELL_INDEX,
+            POISON_WIND_COST,
+            3,
+            Some(2),
+            false,
+            direction,
+        )),
+        "combat-directed-death-wind-cone" => Some((
+            DEATH_WIND_SPELL_INDEX,
+            DEATH_WIND_COST,
+            2,
+            Some(1),
+            true,
+            direction,
+        )),
+        "combat-directed-flame-wind-cone" => Some((
+            FLAME_WIND_SPELL_INDEX,
+            FLAME_WIND_COST,
+            1,
+            None,
+            true,
+            direction,
+        )),
+        _ => None,
+    }
+}
+
+fn directed_route_coordinate_from_caster(direction: Direction, distance: i16) -> (u8, u8) {
+    let (dx, dy) = direction.delta();
+    (
+        (5 + dx as i16 * distance) as u8,
+        (5 + dy as i16 * distance) as u8,
+    )
+}
+
+fn directed_route_reserve_coordinate(direction: Direction) -> (u8, u8) {
+    match direction {
+        Direction::North => (5, 7),
+        Direction::South => (5, 3),
+        Direction::East => (3, 5),
+        Direction::West => (7, 5),
+        _ => (3, 5),
+    }
+}
+
 fn seed_directed_wind_combat_route(
     state: &mut PlayState,
     spell_index: usize,
@@ -3663,6 +3717,7 @@ fn seed_directed_wind_combat_route(
     party_count: usize,
     target_party_slot: Option<usize>,
     include_monster_target: bool,
+    direction: Direction,
 ) -> io::Result<()> {
     state.party = (0..party_count)
         .map(|slot| route_party_member(slot as u8, b'A', b'G', 12, 20))
@@ -3684,6 +3739,7 @@ fn seed_directed_wind_combat_route(
     actors[0] =
         CombatActorDescriptor::from_row([12, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
     if let Some(target_slot) = target_party_slot {
+        let (target_x, target_y) = directed_route_coordinate_from_caster(direction, 1);
         actors[target_slot] = CombatActorDescriptor::from_row([
             12,
             1,
@@ -3691,51 +3747,61 @@ fn seed_directed_wind_combat_route(
             0,
             target_slot as u8,
             0,
-            6,
-            5,
+            target_x,
+            target_y,
         ]);
     }
 
     let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
     for slot in 0..party_count {
-        let x = if Some(slot) == target_party_slot {
-            6
+        let (x, y) = if Some(slot) == target_party_slot {
+            directed_route_coordinate_from_caster(direction, 1)
         } else {
-            5
+            (5, 5)
         };
-        active_objects[slot] = route_combat_active_object(0x4c, x, 5, 0);
+        active_objects[slot] = route_combat_active_object(0x4c, usize::from(x), usize::from(y), 0);
     }
 
     if include_monster_target {
         let stats = combat_class_stats(COMBAT_CLASS_GIANT_RAT)
             .ok_or_else(|| io::Error::other("giant rat combat stats are unavailable"))?;
         let monster_slot = COMBAT_PARTY_ACTOR_SLOTS;
-        let monster_x = if target_party_slot.is_some() { 7 } else { 6 };
+        let monster_distance = if target_party_slot.is_some() { 2 } else { 1 };
+        let (monster_x, monster_y) =
+            directed_route_coordinate_from_caster(direction, monster_distance);
         actors[monster_slot] = CombatActorDescriptor::for_monster_placement(
             stats,
             monster_slot as u8,
             monster_x,
-            5,
+            monster_y,
             COMBAT_ACTOR_FLAG_SELECTABLE_80,
             0,
         );
-        active_objects[monster_slot] =
-            summoned_active_object_record(COMBAT_CLASS_GIANT_RAT, monster_x as usize, 5, 0)
-                .ok_or_else(|| io::Error::other("giant rat active object is unavailable"))?;
+        active_objects[monster_slot] = summoned_active_object_record(
+            COMBAT_CLASS_GIANT_RAT,
+            monster_x as usize,
+            monster_y as usize,
+            0,
+        )
+        .ok_or_else(|| io::Error::other("giant rat active object is unavailable"))?;
 
         let reserve_slot = monster_slot + 1;
+        let (reserve_x, reserve_y) = directed_route_reserve_coordinate(direction);
         actors[reserve_slot] = CombatActorDescriptor::for_monster_placement(
             stats,
             reserve_slot as u8,
-            3,
-            5,
+            reserve_x,
+            reserve_y,
             COMBAT_ACTOR_FLAG_SELECTABLE_80,
             0,
         );
-        active_objects[reserve_slot] =
-            summoned_active_object_record(COMBAT_CLASS_GIANT_RAT, 3, 5, 0).ok_or_else(|| {
-                io::Error::other("reserve giant rat active object is unavailable")
-            })?;
+        active_objects[reserve_slot] = summoned_active_object_record(
+            COMBAT_CLASS_GIANT_RAT,
+            reserve_x as usize,
+            reserve_y as usize,
+            0,
+        )
+        .ok_or_else(|| io::Error::other("reserve giant rat active object is unavailable"))?;
     }
 
     state.enter_combat_frame(active_objects, actors)?;
@@ -4508,70 +4574,77 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                 )));
             }
         }
-        "combat-directed-sleep-cone" => {
+        case_name if directed_wind_route_config(case_name).is_some() => {
+            let (spell_index, _, _, target_party_slot, include_monster_target, _) =
+                directed_wind_route_config(case_name).expect("directed wind route config exists");
             if !state.combat_active
-                || state.spell_charges[SLEEP_SPELL_INDEX] != 0
+                || state.spell_charges[spell_index] != 0
                 || state.party.first().is_none_or(|member| member.mana != 0)
-                || state
-                    .party
-                    .get(1)
-                    .is_none_or(|member| member.status != b'S')
-                || state.message != "Sleep!"
             {
                 return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not apply the directed Sleep cone"
+                    "route smoke `{case_name}` did not spend directed wind resources"
                 )));
             }
-        }
-        "combat-directed-poison-wind-cone" => {
-            if !state.combat_active
-                || state.spell_charges[POISON_WIND_SPELL_INDEX] != 0
-                || state.party.first().is_none_or(|member| member.mana != 0)
-                || state
-                    .party
-                    .get(2)
-                    .is_none_or(|member| member.status != b'P')
-                || state.message != "Poison wind!"
-            {
-                return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not apply the directed Poison Wind cone"
-                )));
-            }
-        }
-        "combat-directed-death-wind-cone" => {
-            let stats = combat_class_stats(COMBAT_CLASS_GIANT_RAT)
-                .ok_or_else(|| io::Error::other("giant rat combat stats are unavailable"))?;
-            if !state.combat_active
-                || state.spell_charges[DEATH_WIND_SPELL_INDEX] != 0
-                || state
-                    .party
-                    .first()
-                    .is_none_or(|member| member.status != b'G')
-                || state
-                    .party
-                    .get(1)
-                    .is_none_or(|member| member.status != b'D')
-                || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_marked_dead()
-                || state
-                    .party_experience
-                    .first()
-                    .is_none_or(|xp| *xp != u16::from(stats.reward_unit()))
-                || !state.message.starts_with("Death wind!")
-            {
-                return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not apply the directed Death Wind cone"
-                )));
-            }
-        }
-        "combat-directed-flame-wind-cone" => {
-            if !state.combat_active
-                || state.spell_charges[FLAME_WIND_SPELL_INDEX] != 0
-                || state.party.first().is_none_or(|member| member.mana != 0)
-                || !state.message.starts_with("Flame wind!")
-            {
-                return Err(io::Error::other(format!(
-                    "route smoke `{case_name}` did not apply the directed Flame Wind cone"
-                )));
+
+            match spell_index {
+                SLEEP_SPELL_INDEX => {
+                    let target_slot = target_party_slot
+                        .ok_or_else(|| io::Error::other("Sleep route missing target slot"))?;
+                    if state
+                        .party
+                        .get(target_slot)
+                        .is_none_or(|member| member.status != b'S')
+                        || state.message != "Sleep!"
+                    {
+                        return Err(io::Error::other(format!(
+                            "route smoke `{case_name}` did not apply the directed Sleep cone"
+                        )));
+                    }
+                }
+                POISON_WIND_SPELL_INDEX => {
+                    let target_slot = target_party_slot
+                        .ok_or_else(|| io::Error::other("Poison Wind route missing target slot"))?;
+                    if state
+                        .party
+                        .get(target_slot)
+                        .is_none_or(|member| member.status != b'P')
+                        || state.message != "Poison wind!"
+                    {
+                        return Err(io::Error::other(format!(
+                            "route smoke `{case_name}` did not apply the directed Poison Wind cone"
+                        )));
+                    }
+                }
+                DEATH_WIND_SPELL_INDEX => {
+                    let stats = combat_class_stats(COMBAT_CLASS_GIANT_RAT).ok_or_else(|| {
+                        io::Error::other("giant rat combat stats are unavailable")
+                    })?;
+                    let target_slot = target_party_slot
+                        .ok_or_else(|| io::Error::other("Death Wind route missing target slot"))?;
+                    if state
+                        .party
+                        .get(target_slot)
+                        .is_none_or(|member| member.status != b'D')
+                        || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_marked_dead()
+                        || state
+                            .party_experience
+                            .first()
+                            .is_none_or(|xp| *xp != u16::from(stats.reward_unit()))
+                        || !state.message.starts_with("Death wind!")
+                    {
+                        return Err(io::Error::other(format!(
+                            "route smoke `{case_name}` did not apply the directed Death Wind cone"
+                        )));
+                    }
+                }
+                FLAME_WIND_SPELL_INDEX => {
+                    if !include_monster_target || !state.message.starts_with("Flame wind!") {
+                        return Err(io::Error::other(format!(
+                            "route smoke `{case_name}` did not apply the directed Flame Wind cone"
+                        )));
+                    }
+                }
+                _ => unreachable!("directed route config only yields directed wind spell ids"),
             }
         }
         "combat-field-fire-marker-placement"

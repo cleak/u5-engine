@@ -701,7 +701,7 @@ fn play_script_local_clean_smoke_runs_default_scene_when_present() {
 fn route_smoke_cases_cover_representative_modes() {
     let cases = route_smoke_cases();
 
-    assert_eq!(cases.len(), 463);
+    assert_eq!(cases.len(), 479);
     assert!(cases.iter().any(|case| matches!(
         case.expected,
         RouteSmokeExpectation::World(WorldPlane::Britannia)
@@ -1251,6 +1251,26 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "combat-directed-flame-wind-cone")
     );
+    for name in [
+        "combat-directed-sleep-cone-north",
+        "combat-directed-sleep-cone-east",
+        "combat-directed-sleep-cone-south",
+        "combat-directed-sleep-cone-west",
+        "combat-directed-poison-wind-cone-north",
+        "combat-directed-poison-wind-cone-east",
+        "combat-directed-poison-wind-cone-south",
+        "combat-directed-poison-wind-cone-west",
+        "combat-directed-death-wind-cone-north",
+        "combat-directed-death-wind-cone-east",
+        "combat-directed-death-wind-cone-south",
+        "combat-directed-death-wind-cone-west",
+        "combat-directed-flame-wind-cone-north",
+        "combat-directed-flame-wind-cone-east",
+        "combat-directed-flame-wind-cone-south",
+        "combat-directed-flame-wind-cone-west",
+    ] {
+        assert!(cases.iter().any(|case| case.name == name), "{name}");
+    }
     for name in [
         "combat-field-fire-marker-placement",
         "combat-field-poison-marker-placement",
