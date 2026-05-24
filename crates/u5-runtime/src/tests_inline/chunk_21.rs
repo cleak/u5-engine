@@ -1251,6 +1251,200 @@
     }
 
     #[test]
+    fn shipped_npc_roster_corpus_matches_public_catalog_counts() {
+        let game_dir = Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join(TOWNE_NPC_FILENAME).exists() {
+            return;
+        }
+
+        let corpora = [
+            (
+                TOWNE_NPC_FILENAME,
+                TOWNE_TLK_FILENAME,
+                1u8..=8u8,
+                107usize,
+                47usize,
+                (31usize, 1usize, 28usize),
+            ),
+            (
+                DWELLING_NPC_FILENAME,
+                DWELLING_TLK_FILENAME,
+                9u8..=16u8,
+                18usize,
+                14usize,
+                (3usize, 1usize, 0usize),
+            ),
+            (
+                CASTLE_NPC_FILENAME,
+                CASTLE_TLK_FILENAME,
+                17u8..=24u8,
+                112usize,
+                44usize,
+                (42usize, 1usize, 25usize),
+            ),
+            (
+                KEEP_NPC_FILENAME,
+                KEEP_TLK_FILENAME,
+                25u8..=32u8,
+                88usize,
+                31usize,
+                (50usize, 1usize, 6usize),
+            ),
+        ];
+        let expected_tags = [
+            0x01, 0x0e, 0x10, 0x11, 0x1b, 0x1e, 0x28, 0x40, 0x44, 0x48, 0x50, 0x54,
+            0x58, 0x5c, 0x68, 0x6c, 0x70, 0x78, 0x90, 0x94, 0xb5, 0xb6, 0xb8, 0xd8,
+            0xfc,
+        ];
+
+        let mut total_occupied = 0usize;
+        let mut total_named = 0usize;
+        let mut total_dialog_zero = 0usize;
+        let mut total_dialog_one = 0usize;
+        let mut total_high_special = 0usize;
+        let mut distinct_tags = Vec::<u8>::new();
+
+        for (
+            npc_file,
+            tlk_file,
+            scenes,
+            expected_occupied,
+            expected_named,
+            (expected_zero, expected_one, expected_high),
+        ) in corpora
+        {
+            let npc_len = fs::metadata(game_dir.join(npc_file)).unwrap().len() as usize;
+            assert_eq!(npc_len, NPC_FILE_LEN, "{npc_file}");
+
+            let tlk = parse_tlk(&game_dir.join(tlk_file)).unwrap();
+
+            let mut family_occupied = 0usize;
+            let mut family_named = 0usize;
+            let mut family_dialog_zero = 0usize;
+            let mut family_dialog_one = 0usize;
+            let mut family_high_special = 0usize;
+
+            for scene_byte in scenes {
+                let scene = Scene::new(scene_byte).unwrap();
+                assert_eq!(npc_roster_filename(scene_byte), Some(npc_file));
+                assert_eq!(npc_tlk_filename(scene_byte), Some(tlk_file));
+
+                let slots = parse_npc_block(game_dir, scene, &tlk).unwrap();
+                assert_eq!(slots.len(), NPC_SLOTS_PER_SUB_MAP);
+                assert_eq!(slots[NPC_SENTINEL_SLOT].slot, NPC_SENTINEL_SLOT);
+
+                for slot in slots.iter().skip(1) {
+                    assert!(slot.slot < NPC_SLOTS_PER_SUB_MAP);
+                    let occupied = npc_type_byte_occupied(slot.type_byte);
+                    assert_eq!(
+                        occupied,
+                        npc_type_byte_class(slot.type_byte) != NpcTypeByteClass::Empty
+                    );
+                    if !occupied {
+                        continue;
+                    }
+
+                    family_occupied += 1;
+                    if !distinct_tags.contains(&slot.type_byte) {
+                        distinct_tags.push(slot.type_byte);
+                    }
+
+                    for waypoint in 0..NPC_SCHEDULE_WAYPOINT_COUNT {
+                        let ai = slot.schedule[NPC_SCHEDULE_AI_OFFSET + waypoint];
+                        let x = slot.schedule[NPC_SCHEDULE_X_OFFSET + waypoint];
+                        let y = slot.schedule[NPC_SCHEDULE_Y_OFFSET + waypoint];
+                        let z = slot.schedule[NPC_SCHEDULE_Z_OFFSET + waypoint];
+                        assert!(
+                            npc_ai_behavior(ai).is_some(),
+                            "{npc_file} scene {scene_byte} slot {} waypoint {waypoint} has invalid AI byte {ai}",
+                            slot.slot
+                        );
+                        assert!(
+                            x < TOWN_GRID_SIDE as u8 && y < TOWN_GRID_SIDE as u8,
+                            "{npc_file} scene {scene_byte} slot {} waypoint {waypoint} has out-of-grid coordinate ({x},{y})",
+                            slot.slot
+                        );
+                        assert!(
+                            z <= 7 || z == u8::MAX,
+                            "{npc_file} scene {scene_byte} slot {} waypoint {waypoint} has unexpected floor byte {z}",
+                            slot.slot
+                        );
+                    }
+
+                    for boundary in 0..NPC_SCHEDULE_TIME_BOUNDARY_COUNT {
+                        let hour = slot.schedule[NPC_SCHEDULE_TIME_OFFSET + boundary];
+                        assert!(
+                            hour < 24,
+                            "{npc_file} scene {scene_byte} slot {} has out-of-day boundary {hour}",
+                            slot.slot
+                        );
+                    }
+
+                    let time = [
+                        slot.schedule[NPC_SCHEDULE_TIME_OFFSET],
+                        slot.schedule[NPC_SCHEDULE_TIME_OFFSET + 1],
+                        slot.schedule[NPC_SCHEDULE_TIME_OFFSET + 2],
+                        slot.schedule[NPC_SCHEDULE_TIME_OFFSET + 3],
+                    ];
+                    for hour in 0..24 {
+                        assert!(npc_schedule_waypoint_for_hour(time, hour) < 3);
+                    }
+
+                    match npc_dialog_id_kind(slot.dialog_id) {
+                        NpcDialogIdKind::NoDialogue => family_dialog_zero += 1,
+                        NpcDialogIdKind::TlkHeaderSentinel => family_dialog_one += 1,
+                        NpcDialogIdKind::OrdinaryBlobId => {
+                            assert!(
+                                tlk.contains_key(&(slot.dialog_id as u16)),
+                                "{npc_file} scene {scene_byte} slot {} references missing TLK id {}",
+                                slot.slot,
+                                slot.dialog_id
+                            );
+                            family_named += 1;
+                        }
+                        NpcDialogIdKind::HighSpecial => {
+                            assert!(
+                                slot.dialog_id == NPC_DIALOG_ID_HIGH_FALLBACK
+                                    || npc_shop_trigger(slot.dialog_id).is_some()
+                                    || (NPC_DIALOG_ID_HIGH_FIRST..=NPC_DIALOG_ID_HIGH_LAST)
+                                        .contains(&slot.dialog_id),
+                                "{npc_file} scene {scene_byte} slot {} has unexpected high dialog id {}",
+                                slot.slot,
+                                slot.dialog_id
+                            );
+                            family_high_special += 1;
+                        }
+                    }
+                }
+            }
+
+            assert_eq!(family_occupied, expected_occupied, "{npc_file}");
+            assert_eq!(family_named, expected_named, "{npc_file}");
+            assert_eq!(family_dialog_zero, expected_zero, "{npc_file}");
+            assert_eq!(family_dialog_one, expected_one, "{npc_file}");
+            assert_eq!(family_high_special, expected_high, "{npc_file}");
+
+            total_occupied += family_occupied;
+            total_named += family_named;
+            total_dialog_zero += family_dialog_zero;
+            total_dialog_one += family_dialog_one;
+            total_high_special += family_high_special;
+        }
+
+        distinct_tags.sort_unstable();
+        assert_eq!(distinct_tags, expected_tags);
+        assert_eq!(total_occupied, 325);
+        assert_eq!(total_named, 136);
+        assert_eq!(total_dialog_zero, 126);
+        assert_eq!(total_dialog_one, 4);
+        assert_eq!(total_high_special, 59);
+        assert_eq!(
+            total_named + total_dialog_zero + total_dialog_one + total_high_special,
+            total_occupied
+        );
+    }
+
+    #[test]
     fn town_talk_dialog_id_one_uses_sentinel_alias() {
         let dialogue = parse_tlk_bytes(&tlk_bytes(&[(
             2,

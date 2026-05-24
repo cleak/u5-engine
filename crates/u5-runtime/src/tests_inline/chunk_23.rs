@@ -127,6 +127,8 @@
         bytes[source_base + 3] = 0xb4;
         bytes[source_base + 4] = 0xc4;
         bytes[source_base + 5] = 0xe8;
+        bytes[source_base + 6] = 0xec;
+        bytes[source_base + 7] = 0xef;
         let source_x_base =
             DUNGEON_ROOM_SOURCE_X_ROW * COMBAT_ARENA_ROW_STRIDE + DUNGEON_ROOM_SOURCE_COLUMN;
         let source_y_base =
@@ -177,12 +179,28 @@
                     y: 25,
                     kind: DungeonRoomSetupSourceKind::SpecialPlacement,
                 },
+                DungeonRoomSetupSource {
+                    slot: 6,
+                    source: 0xec,
+                    x: 16,
+                    y: 26,
+                    kind: DungeonRoomSetupSourceKind::SpecialPlacement,
+                },
+                DungeonRoomSetupSource {
+                    slot: 7,
+                    source: 0xef,
+                    x: 17,
+                    y: 27,
+                    kind: DungeonRoomSetupSourceKind::SpecialPlacement,
+                },
             ]
         );
         assert_eq!(dungeon_room_source_sprite(0x44), Some(0xc4));
         assert_eq!(dungeon_room_source_sprite(0xc4), Some(0xc4));
         assert_eq!(dungeon_room_source_sprite(0xb4), None);
         assert_eq!(dungeon_room_source_sprite(0xe8), None);
+        assert_eq!(dungeon_room_source_sprite(0xec), None);
+        assert_eq!(dungeon_room_source_sprite(0xef), None);
         assert!(dungeon_room_absorbable_field_family(0x3c));
         assert!(dungeon_room_absorbable_field_family(0x3f));
         assert!(!dungeon_room_absorbable_field_family(0x38));
@@ -313,6 +331,37 @@
 
         assert_eq!((instance.active_objects[0].x, instance.active_objects[0].y), (30, 40));
         assert_eq!((instance.actors[0].x, instance.actors[0].y), (30, 40));
+    }
+
+    #[test]
+    fn dungeon_room_random_special_family_does_not_spawn_ordinary_actor() {
+        let mut bytes = vec![0u8; COMBAT_ARENA_RECORD_LEN];
+        let source_base = DUNGEON_ROOM_SOURCE_ROW * COMBAT_ARENA_ROW_STRIDE
+            + DUNGEON_ROOM_SOURCE_COLUMN;
+        bytes[source_base] = DUNGEON_ROOM_SPECIAL_SOURCE_EC;
+        bytes[source_base + 1] = 0xef;
+        bytes[source_base + 2] = 0xc4;
+        for index in 0..DUNGEON_ROOM_SOURCE_COUNT {
+            bytes[DUNGEON_ROOM_SOURCE_X_ROW * COMBAT_ARENA_ROW_STRIDE
+                + DUNGEON_ROOM_SOURCE_COLUMN
+                + index] = (index + 1) as u8;
+            bytes[DUNGEON_ROOM_SOURCE_Y_ROW * COMBAT_ARENA_ROW_STRIDE
+                + DUNGEON_ROOM_SOURCE_COLUMN
+                + index] = (index + 2) as u8;
+        }
+        let record = CombatArenaRecord::from_record_bytes(&bytes).unwrap();
+        let setup = dungeon_room_combat_setup_from_record(0, &record);
+
+        let instance = dungeon_room_combat_instance_from_setup(&setup, 0);
+
+        assert_eq!(instance.requested_count, 3);
+        assert_eq!(instance.placed_count, 3);
+        assert_eq!(instance.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile, 0xec);
+        assert_eq!(instance.active_objects[COMBAT_PARTY_ACTOR_SLOTS + 1].tile, 0xef);
+        assert!(instance.actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty());
+        assert!(instance.actors[COMBAT_PARTY_ACTOR_SLOTS + 1].is_empty());
+        assert_eq!(instance.active_objects[COMBAT_PARTY_ACTOR_SLOTS + 2].tile, 0xc4);
+        assert!(!instance.actors[COMBAT_PARTY_ACTOR_SLOTS + 2].is_empty());
     }
 
     #[test]
@@ -14719,6 +14768,58 @@
                 assert!(record.metadata(0, COMBAT_ARENA_METADATA_START).is_some());
             }
         }
+    }
+
+    #[test]
+    fn dungeon_cbt_local_clean_room_source_census_when_present() {
+        let game_dir = std::path::Path::new(DEFAULT_GAME_DIR);
+        if !game_dir.join(DUNGEON_CBT_FILE).exists() {
+            return;
+        }
+
+        let dungeon = load_dungeon_cbt(game_dir).unwrap();
+        let mut ordinary = 0usize;
+        let mut absorbable = 0usize;
+        let mut special = 0usize;
+        let mut random_special = 0usize;
+
+        for record in &dungeon.records {
+            for source in record.dungeon_room_setup_sources() {
+                assert!(
+                    source.x < COMBAT_ARENA_SIDE as u8 && source.y < COMBAT_ARENA_SIDE as u8,
+                    "DUNGEON.CBT source {} has out-of-arena coordinate ({},{})",
+                    source.source,
+                    source.x,
+                    source.y
+                );
+                match source.kind {
+                    DungeonRoomSetupSourceKind::OrdinaryCombatant => {
+                        ordinary += 1;
+                        assert!(dungeon_room_source_sprite(source.source).is_some());
+                    }
+                    DungeonRoomSetupSourceKind::AbsorbableField => {
+                        absorbable += 1;
+                        assert!(dungeon_room_absorbable_field_family(source.source));
+                        assert_eq!(dungeon_room_source_sprite(source.source), None);
+                    }
+                    DungeonRoomSetupSourceKind::SpecialPlacement => {
+                        special += 1;
+                        assert_eq!(dungeon_room_source_sprite(source.source), None);
+                        if source.source & DUNGEON_ROOM_SPECIAL_SOURCE_MASK
+                            == DUNGEON_ROOM_SPECIAL_SOURCE_EC
+                        {
+                            random_special += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        assert!(ordinary > 0);
+        assert!(special > 0);
+        assert!(absorbable > 0);
+        assert!(random_special > 0);
+        assert!(ordinary + absorbable + special > DUNGEON_CBT_RECORDS);
     }
 
     /// Regression: without a save and without `--at`, the world fallback

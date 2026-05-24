@@ -54,6 +54,7 @@ pub const DUNGEON_ROOM_ORDINARY_SOURCE_FIRST: u8 = 0x40;
 pub const DUNGEON_ROOM_SPECIAL_SOURCE_MASK: u8 = 0xfc;
 pub const DUNGEON_ROOM_SPECIAL_SOURCE_B4: u8 = 0xb4;
 pub const DUNGEON_ROOM_SPECIAL_SOURCE_E8: u8 = 0xe8;
+pub const DUNGEON_ROOM_SPECIAL_SOURCE_EC: u8 = 0xec;
 
 /// `formats/cbt.md §5` outdoor metadata band slices. Per-arena setup
 /// tables A and B sit on row 3 at columns 11..=16 and 17..=22; the
@@ -298,6 +299,7 @@ impl DungeonRoomSetupSourceKind {
         } else if source >= DUNGEON_ROOM_ORDINARY_SOURCE_FIRST
             && family != DUNGEON_ROOM_SPECIAL_SOURCE_B4
             && family != DUNGEON_ROOM_SPECIAL_SOURCE_E8
+            && family != DUNGEON_ROOM_SPECIAL_SOURCE_EC
         {
             Self::OrdinaryCombatant
         } else {
