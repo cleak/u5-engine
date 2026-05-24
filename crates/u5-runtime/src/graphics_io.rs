@@ -185,7 +185,6 @@ pub fn parse_graphic_image_directory_body(
     Ok(GraphicImageDirectory { depth, images })
 }
 
-#[cfg(test)]
 pub fn load_graphic_sprite_sheet(
     game_dir: &Path,
     stem: &str,
@@ -195,7 +194,6 @@ pub fn load_graphic_sprite_sheet(
     parse_graphic_sprite_sheet(&read(&game_dir.join(&file_name))?, depth, &file_name)
 }
 
-#[cfg(test)]
 pub fn parse_graphic_sprite_sheet(
     bytes: &[u8],
     depth: TileGraphicsDepth,
@@ -205,7 +203,6 @@ pub fn parse_graphic_sprite_sheet(
     parse_graphic_sprite_sheet_body(&body, depth, resource_name)
 }
 
-#[cfg(test)]
 pub fn parse_graphic_sprite_sheet_body(
     body: &[u8],
     depth: TileGraphicsDepth,
@@ -348,7 +345,6 @@ pub fn parse_graphic_image_block(
     })
 }
 
-#[cfg(test)]
 pub fn parse_graphic_mask_block(
     body: &[u8],
     offset: usize,

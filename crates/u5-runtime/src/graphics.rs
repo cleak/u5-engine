@@ -441,14 +441,12 @@ pub struct GraphicImageDirectory {
     pub images: Vec<Option<GraphicImage>>,
 }
 
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GraphicSprite {
     pub image: GraphicImage,
     pub transparent_mask: Vec<u8>,
 }
 
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GraphicSpriteSheet {
     pub depth: TileGraphicsDepth,

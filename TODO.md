@@ -14,7 +14,7 @@ this file alone.
 
 Last known verification state:
 
-- `cargo test -p u5-runtime --lib` passed on 2026-05-24, including 2652 tests
+- `cargo test -p u5-runtime --lib` passed on 2026-05-24, including 2653 tests
   (latest verification includes public `cleak/u5-spec#47` hourly
   poison/provision/ring ordering, public #28 horse-trader adjacent placement
   priority plus no-marker refusal, public #15 inn pickup stay-counter billing,
@@ -24,7 +24,8 @@ Last known verification state:
   overlay raster-class and dungeon minimap glyph-id coverage, sanitized
   aggregate `LOCATION.DAT` authored-cell audit coverage, sanitized aggregate
   `.OOL` active-object overlay audit coverage, sanitized aggregate tile-atlas
-  and fixed-font audit coverage, and public issue #21 dungeon
+  and fixed-font audit coverage, expanded sanitized paired-graphics image-directory
+  and sprite-sheet audit coverage, and public issue #21 dungeon
   active-monster ambush setup, combat round maintenance, combat-local ambush/camp
   reveal-slot helper coverage, stats-panel combat inverse-video overlay
   coverage, disk I/O retry wrapper coverage, and shared TUI/Bevy Journey Onward

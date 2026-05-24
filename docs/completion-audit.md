@@ -400,7 +400,7 @@ through the asset-backed Talk command path.
 | `formats/shoppe-dat.md` | `shoppe_records.rs` | SHOPPE decode tests | Implemented |
 | `formats/signs-dat.md` | `signs_io.rs` | SIGNS lookup tests | Implemented |
 | `formats/story-dat.md` | `story_io.rs` | STORY decode tests | Implemented |
-| `formats/tiles.md` | `graphics.rs`, `graphics_io.rs` tile sheet decode, `visual_asset_audit.rs::audit_visual_assets` tile-atlas aggregate report | tile-sheet tests plus synthetic and local-clean aggregate audits for `TILES.16` and `TILES.4` when assets are present | Implemented |
+| `formats/tiles.md` | `graphics.rs`, `graphics_io.rs` tile sheet, paired image-directory, and sprite-sheet decode; `visual_asset_audit.rs::audit_visual_assets` aggregate report for tile atlases, image directories, and sprite sheets | tile-sheet/image-directory/sprite-sheet tests plus synthetic and local-clean aggregate audits for `TILES`, `STARTSC`, `TEXT`, `DNG1`-`DNG3`, `ENDSC`, `END1`/`END2`, `STORY1`-`STORY6`, `ULTIMA`, `CREATE`, `ITEMS`, and `MON0`-`MON7` in both `.16` and `.4` depths when assets are present | Implemented |
 | `formats/tlk.md` | `tlk_runner.rs`, `tlk_control_codes.rs` | TLK runner tests | Implemented |
 | `formats/under-dat.md` | `map_io.rs::load_under_dat` | underworld decode tests | Implemented |
 
