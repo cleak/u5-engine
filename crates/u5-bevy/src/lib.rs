@@ -1002,6 +1002,46 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_directed_flame_wind),
         },
         VisualRouteSuiteCase {
+            label: "route-combat-field-fire-marker",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1FGI6"],
+            configure: Some(seed_visual_route_combat_fire_field),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-field-poison-marker",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1GIN6"],
+            configure: Some(seed_visual_route_combat_poison_field),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-field-sleep-marker",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1GIZ6"],
+            configure: Some(seed_visual_route_combat_sleep_field),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-field-energy-marker",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1GIS6"],
+            configure: Some(seed_visual_route_combat_energy_field),
+        },
+        VisualRouteSuiteCase {
             label: "route-dungeon-level-up-down-spells",
             frame_kind: "visual route dungeon frame",
             options: PlayOptions {
@@ -1538,6 +1578,48 @@ fn seed_visual_route_directed_flame_wind(state: &mut PlayState) {
         None,
         true,
     );
+}
+
+fn seed_visual_route_combat_field(state: &mut PlayState, spell_index: usize, cost: u8) {
+    state.party = vec![route_visual_party_member(0, b'A', b'G', 20, 20)];
+    state.party_names = default_party_names(1);
+    state.party_experience = vec![0];
+    state.party_stay_counters = default_party_stay_counters(1);
+    state.party_strengths = vec![30];
+    state.party_intelligence = default_party_intelligence(1);
+    state.party_equipment = default_party_equipment(1);
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = cost;
+        caster.level = cost;
+    }
+    state.active_player = Some(0);
+    state.spell_charges[spell_index] = 1;
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    actors[0] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+
+    let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+    active_objects[0] = visual_route_combat_active_object(0x4c, 5, 5, 0);
+    state
+        .enter_combat_frame(active_objects, actors)
+        .expect("visual route combat field frame should seed");
+}
+
+fn seed_visual_route_combat_fire_field(state: &mut PlayState) {
+    seed_visual_route_combat_field(state, FIRE_FIELD_SPELL_INDEX, FIELD_SPELL_COST);
+}
+
+fn seed_visual_route_combat_poison_field(state: &mut PlayState) {
+    seed_visual_route_combat_field(state, POISON_FIELD_SPELL_INDEX, FIELD_SPELL_COST);
+}
+
+fn seed_visual_route_combat_sleep_field(state: &mut PlayState) {
+    seed_visual_route_combat_field(state, SLEEP_FIELD_SPELL_INDEX, FIELD_SPELL_COST);
+}
+
+fn seed_visual_route_combat_energy_field(state: &mut PlayState) {
+    seed_visual_route_combat_field(state, ENERGY_FIELD_SPELL_INDEX, ENERGY_FIELD_COST);
 }
 
 fn poison_wind_first_accept_seed() -> u16 {
@@ -6181,7 +6263,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 83);
+        assert_eq!(cases.len(), 87);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -6296,6 +6378,10 @@ mod tests {
             "route-combat-directed-poison-wind-cone",
             "route-combat-directed-death-wind-cone",
             "route-combat-directed-flame-wind-cone",
+            "route-combat-field-fire-marker",
+            "route-combat-field-poison-marker",
+            "route-combat-field-sleep-marker",
+            "route-combat-field-energy-marker",
             "route-dungeon-level-up-down-spells",
             "route-dungeon-field-cycle-spells",
             "route-dungeon-open-chest-spell",
@@ -6465,7 +6551,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 273);
+        assert_eq!(reports.len(), 281);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -6515,6 +6601,10 @@ mod tests {
         assert!(manifest.contains("route-combat-directed-poison-wind-cone-01-c1hin6"));
         assert!(manifest.contains("route-combat-directed-death-wind-cone-01-c1cgiv6"));
         assert!(manifest.contains("route-combat-directed-flame-wind-cone-01-c1fhi6"));
+        assert!(manifest.contains("route-combat-field-fire-marker-01-c1fgi6"));
+        assert!(manifest.contains("route-combat-field-poison-marker-01-c1gin6"));
+        assert!(manifest.contains("route-combat-field-sleep-marker-01-c1giz6"));
+        assert!(manifest.contains("route-combat-field-energy-marker-01-c1gis6"));
         assert!(manifest.contains("route-dungeon-level-up-down-spells-02-c1dp"));
         assert!(manifest.contains("route-dungeon-field-cycle-spells-08-c1ag6"));
         assert!(manifest.contains("route-dungeon-open-chest-spell-01-c1as"));

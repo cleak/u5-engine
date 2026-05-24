@@ -1181,6 +1181,14 @@ fn route_smoke_cases_cover_representative_modes() {
             .iter()
             .any(|case| case.name == "combat-directed-flame-wind-cone")
     );
+    for name in [
+        "combat-field-fire-marker-placement",
+        "combat-field-poison-marker-placement",
+        "combat-field-sleep-marker-placement",
+        "combat-field-energy-marker-placement",
+    ] {
+        assert!(cases.iter().any(|case| case.name == name), "{name}");
+    }
     assert!(
         cases
             .iter()

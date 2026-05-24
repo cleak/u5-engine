@@ -13,10 +13,11 @@ use u5_runtime::{
     BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX,
     COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_CLASS_GIANT_RAT,
     COMBAT_PARTY_ACTOR_SLOTS, CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX,
-    CURE_COST, CURE_SPELL_INDEX, CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST,
-    DEATH_WIND_SPELL_INDEX, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
-    DISPEL_FIELD_SPELL_INDEX, DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_LEVEL_SPELL_COST, Direction,
-    DungeonScene, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
+    CURE_COST, CURE_SPELL_INDEX, CombatActorDescriptor, CombatArenaFieldKind,
+    DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX, DEFAULT_FOOD_STOCK,
+    DES_POR_SPELL_INDEX, DISPEL_FIELD_COST, DISPEL_FIELD_SPELL_INDEX,
+    DUNGEON_AMBUSH_ARENA_FLOOR_TILE, DUNGEON_LEVEL_SPELL_COST, Direction, DungeonScene,
+    ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON,
     EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW, EQUIPMENT_ID_RING_REGENERATION,
     EndgameOutcome, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX, FIRST_PLAYABLE_FRIGATE_TILE,
     FIRST_PLAYABLE_FULL_SHIP_HULL, FIRST_PLAYABLE_HOURLY_POISON_DAMAGE, FLAME_WIND_COST,
@@ -1734,6 +1735,38 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
+            name: "combat-field-fire-marker-placement",
+            options: world.clone(),
+            script: &["C1FGI6"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-field-poison-marker-placement",
+            options: world.clone(),
+            script: &["C1GIN6"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-field-sleep-marker-placement",
+            options: world.clone(),
+            script: &["C1GIZ6"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-field-energy-marker-placement",
+            options: world.clone(),
+            script: &["C1GIS6"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
             name: "doom-combat-get-direction",
             options: doom_options.clone(),
             script: &["empty", "G6"],
@@ -2037,6 +2070,13 @@ fn apply_route_smoke_case_setup(
                 None,
                 true,
             )?;
+        }
+        "combat-field-fire-marker-placement"
+        | "combat-field-poison-marker-placement"
+        | "combat-field-sleep-marker-placement"
+        | "combat-field-energy-marker-placement" => {
+            let (spell_index, cost, _) = combat_field_route_spell(case_name);
+            seed_combat_field_route(state, spell_index, cost)?;
         }
         "lycaeum-shard-falsehood-vanquish" => {
             seed_shadowlord_shard_route(state, SHADOWLORD_FALSEHOOD_INDEX, 15, 9);
@@ -2672,6 +2712,56 @@ fn seed_directed_wind_combat_route(
     Ok(())
 }
 
+fn combat_field_route_spell(case_name: &str) -> (usize, u8, CombatArenaFieldKind) {
+    match case_name {
+        "combat-field-poison-marker-placement" => (
+            POISON_FIELD_SPELL_INDEX,
+            FIELD_SPELL_COST,
+            CombatArenaFieldKind::Poison,
+        ),
+        "combat-field-sleep-marker-placement" => (
+            SLEEP_FIELD_SPELL_INDEX,
+            FIELD_SPELL_COST,
+            CombatArenaFieldKind::Sleep,
+        ),
+        "combat-field-energy-marker-placement" => (
+            ENERGY_FIELD_SPELL_INDEX,
+            ENERGY_FIELD_COST,
+            CombatArenaFieldKind::Energy,
+        ),
+        _ => (
+            FIRE_FIELD_SPELL_INDEX,
+            FIELD_SPELL_COST,
+            CombatArenaFieldKind::Fire,
+        ),
+    }
+}
+
+fn seed_combat_field_route(state: &mut PlayState, spell_index: usize, cost: u8) -> io::Result<()> {
+    state.party = vec![route_party_member(0, b'A', b'G', 20, 20)];
+    state.party_names = default_party_names(1);
+    state.party_experience = default_party_experience(1);
+    state.party_stay_counters = default_party_stay_counters(1);
+    state.party_strengths = vec![30];
+    state.party_intelligence = default_party_intelligence(1);
+    state.party_equipment = default_party_equipment(1);
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = cost;
+        caster.level = cost;
+    }
+    state.active_player = Some(0);
+    state.spell_charges[spell_index] = 1;
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    actors[0] =
+        CombatActorDescriptor::from_row([20, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+
+    let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+    active_objects[0] = route_combat_active_object(0x4c, 5, 5, 0);
+    state.enter_combat_frame(active_objects, actors)?;
+    Ok(())
+}
+
 fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Result<()> {
     match case_name {
         "endgame-missing-box-confirmation" | "endgame-missing-box-terminal-jitter" => {
@@ -2887,6 +2977,25 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the directed Flame Wind cone"
+                )));
+            }
+        }
+        "combat-field-fire-marker-placement"
+        | "combat-field-poison-marker-placement"
+        | "combat-field-sleep-marker-placement"
+        | "combat-field-energy-marker-placement" => {
+            let (spell_index, _, field) = combat_field_route_spell(case_name);
+            let marker = state.find_combat_arena_field_marker(6, 5);
+            if !state.combat_active
+                || state.spell_charges[spell_index] != 0
+                || state.party.first().is_none_or(|member| member.mana != 0)
+                || marker.is_none_or(|(_, placed)| placed != field)
+                || !state
+                    .message
+                    .contains(&format!("{} field placed.", field.label()))
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not materialize the public combat field marker"
                 )));
             }
         }
