@@ -1107,6 +1107,112 @@
         );
     }
 
+    fn dungeon_view_audit_mask(glyph: Option<u8>, mode: ViewOverlayMode) -> [[u8; 4]; 4] {
+        assert_eq!(LOCAL_VIEW_CELL_PIXEL_SCALE, 4);
+        let viewport = PlayState::render_dungeon_view_glyph_cell_for_mode(
+            TileGraphicsDepth::Ega16,
+            glyph,
+            mode,
+        );
+        let mut mask = [[0; 4]; 4];
+        for (y, row) in mask.iter_mut().enumerate() {
+            for (x, pixel) in row.iter_mut().enumerate() {
+                *pixel = viewport.pixel(x, y).unwrap();
+            }
+        }
+        mask
+    }
+
+    #[test]
+    fn dungeon_view_overlay_audit_masks_cover_public_glyph_families() {
+        let gem = ViewOverlayMode::GemView;
+
+        assert_eq!(dungeon_view_audit_mask(None, gem), [[0; 4]; 4]);
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0xff), gem),
+            [[0, 0, 15, 0], [0, 0, 15, 0], [15, 15, 15, 15], [0, 0, 15, 0]]
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x18), gem),
+            [[0, 0, 0, 0], [0, 0, 0, 0], [7, 7, 7, 7], [0, 0, 0, 0]]
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x2E), gem),
+            [[14, 14, 14, 14], [0, 0, 14, 0], [0, 0, 14, 0], [0, 0, 14, 0]]
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x2D), gem),
+            [[0, 0, 14, 0], [0, 0, 14, 0], [0, 0, 14, 0], [14, 14, 14, 14]]
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x2F), gem),
+            [[14, 14, 14, 14], [0, 0, 14, 0], [14, 14, 14, 14], [14, 14, 14, 14]]
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x70), gem),
+            [[14, 14, 14, 14], [14, 6, 6, 14], [14, 6, 6, 14], [14, 14, 14, 14]]
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x12), gem),
+            [[0, 0, 11, 0], [0, 0, 11, 0], [11, 11, 11, 11], [0, 0, 11, 0]]
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x19), gem),
+            [[14, 14, 14, 14], [14, 0, 0, 14], [14, 0, 14, 14], [14, 14, 14, 14]]
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x71), gem),
+            [[12, 0, 0, 12], [0, 12, 12, 0], [0, 12, 12, 0], [12, 0, 0, 12]]
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x72), gem),
+            [[14, 0, 0, 14], [0, 14, 14, 0], [0, 14, 14, 0], [14, 0, 0, 14]]
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x73), gem),
+            [[0, 0, 14, 14], [0, 0, 14, 14], [14, 14, 14, 14], [0, 0, 14, 14]]
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x74), gem),
+            [[13, 13, 13, 13], [13, 0, 0, 13], [13, 0, 0, 13], [13, 13, 13, 13]]
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x75), gem),
+            [[13, 13, 14, 13], [13, 0, 14, 13], [13, 0, 14, 13], [13, 13, 14, 13]]
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x76), gem),
+            [[5, 5, 5, 5], [5, 0, 0, 5], [5, 0, 14, 5], [5, 5, 5, 5]]
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x77), gem),
+            [[14, 14, 14, 14], [14, 0, 14, 14], [14, 14, 14, 14], [14, 14, 14, 14]]
+        );
+        assert_eq!(dungeon_view_audit_mask(Some(0x7F), gem), [[13, 13, 13, 13]; 4]);
+    }
+
+    #[test]
+    fn dungeon_view_overlay_audit_pins_peer_gem_tint_against_xray_mode() {
+        let gem = ViewOverlayMode::GemView;
+        let peer = ViewOverlayMode::PeerSpell;
+        let x_ray = ViewOverlayMode::XRaySpell;
+
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x2E), gem),
+            dungeon_view_audit_mask(Some(0x2E), peer)
+        );
+        assert_eq!(
+            dungeon_view_audit_mask(Some(0x73), gem),
+            dungeon_view_audit_mask(Some(0x73), peer)
+        );
+
+        assert_eq!(dungeon_view_audit_mask(Some(0x2E), x_ray)[0][0], 15);
+        assert_eq!(dungeon_view_audit_mask(Some(0x12), x_ray)[2][0], 9);
+        assert_eq!(dungeon_view_audit_mask(Some(0x73), x_ray)[2][0], 11);
+        assert_eq!(dungeon_view_audit_mask(Some(0x74), x_ray)[0][0], 8);
+        assert_eq!(dungeon_view_audit_mask(Some(0x76), x_ray)[0][0], 13);
+    }
+
     #[test]
     fn ignite_torch_consumes_stock_and_lights_dungeon() {
         let mut state = dungeon_state(open_dungeon_record(), 0, 1, 1);

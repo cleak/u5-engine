@@ -1977,6 +1977,24 @@ impl PlayState {
         viewport
     }
 
+    pub fn render_dungeon_view_glyph_cell_for_mode(
+        depth: TileGraphicsDepth,
+        glyph: Option<u8>,
+        mode: ViewOverlayMode,
+    ) -> TileViewport {
+        let scale = LOCAL_VIEW_CELL_PIXEL_SCALE;
+        let mut viewport = TileViewport {
+            depth,
+            cells_wide: 1,
+            cells_high: 1,
+            width: scale,
+            height: scale,
+            pixels: vec![0; scale * scale],
+        };
+        draw_dungeon_view_glyph(&mut viewport, 0, 0, scale, glyph, mode);
+        viewport
+    }
+
     pub fn render_britannia_chunk_map_overlay(&self, depth: TileGraphicsDepth) -> TileViewport {
         let text_map = self.britannia_chunk_overview_map();
         let cells_high = text_map.lines().count();
