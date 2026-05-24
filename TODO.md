@@ -981,8 +981,9 @@ as public details become available.
   - Combat descriptor byte-2 flags now use the public issue #6/#7 controlled
     and flee bits. Charmed/possessed and summoned non-party actors route through
     the player-command path, Conjure uses fresh random arena-coordinate attempts,
-    Swarm uses the caster ring, and player Summon uses fixed north-clockwise
-    ring order. Issue #8 non-party sleep now has the published per-slot
+    Swarm uses the caster ring, and player Summon uses independent random
+    arena-coordinate probes plus its self-checking Oops branch. Issue #8
+    non-party sleep now has the published per-slot
     countdown/targetability behavior, but exact per-effect starting durations
     and descriptor-byte table wording still need a public spec clarification
     before claiming exact monster sleep wakeup parity.

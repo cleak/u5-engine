@@ -1034,10 +1034,6 @@ impl PlayState {
                     self.message = "Not here!".to_string();
                     return MoveOutcome::Blocked;
                 }
-                let Some(direction) = direction else {
-                    self.message = "Direction? Use UCKX6.".to_string();
-                    return MoveOutcome::Blocked;
-                };
                 let Some(caster) = self.combat_actors.first().copied() else {
                     self.message = "Who uses?".to_string();
                     return MoveOutcome::Blocked;
@@ -1046,28 +1042,22 @@ impl PlayState {
                     self.message = "Who uses?".to_string();
                     return MoveOutcome::Blocked;
                 }
-                let Some((target_x, target_y)) =
-                    combat_direction_target_coordinate(caster.x, caster.y, direction)
-                else {
-                    self.message = "Summon requires a cardinal direction.".to_string();
-                    return MoveOutcome::Blocked;
-                };
-                let applied = self.apply_combat_summon_class_around_target_coordinate(
-                    COMBAT_CLASS_DAEMON,
+                let legal_cells = self.combat_legal_cell_mask();
+                let applied = self.apply_combat_summon_daemon_with_random_attempts(
                     self.combat_actor_z(0),
-                    target_x,
-                    target_y,
+                    &legal_cells,
                 );
                 self.advance_turn();
-                self.message = if applied.is_some() {
-                    "Summon Daemon!".to_string()
-                } else {
-                    "Failed!".to_string()
-                };
-                if applied.is_some() {
-                    MoveOutcome::Used
-                } else {
+                if applied.is_none() {
+                    self.message = "Failed!".to_string();
+                    return MoveOutcome::Blocked;
+                }
+                if self.combat_summon_daemon_self_check_oops(0) {
+                    self.message = "Oops...".to_string();
                     MoveOutcome::Blocked
+                } else {
+                    self.message = "Summon Daemon!".to_string();
+                    MoveOutcome::Used
                 }
             }
             SCROLL_RESURRECTION_INDEX => self.use_resurrection_scroll(target),

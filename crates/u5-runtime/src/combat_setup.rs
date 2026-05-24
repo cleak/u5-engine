@@ -58,6 +58,7 @@ pub struct DungeonRoomCombatSetup {
     pub placement_slots: Vec<CombatPlacementSlot>,
     pub party_positions: [(u8, u8); COMBAT_PARTY_ACTOR_SLOTS],
     pub setup_sources: Vec<DungeonRoomSetupSource>,
+    pub scan_sources: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -154,6 +155,7 @@ pub fn dungeon_room_combat_setup_from_record_for_entry(
         placement_slots: combat_placement_slots_from_record(record),
         party_positions: record.dungeon_room_party_positions_for_seed(entry_seed),
         setup_sources: record.dungeon_room_setup_sources_with_scan(scan_sources),
+        scan_sources,
     }
 }
 
@@ -179,9 +181,20 @@ pub fn dungeon_room_combat_instance_from_setup(
     setup: &DungeonRoomCombatSetup,
     z: i8,
 ) -> TerrainCombatInstance {
+    let mut prng_state = 0;
+    dungeon_room_combat_instance_from_setup_with_prng(setup, z, &mut prng_state)
+}
+
+pub fn dungeon_room_combat_instance_from_setup_with_prng(
+    setup: &DungeonRoomCombatSetup,
+    z: i8,
+    prng_state: &mut u16,
+) -> TerrainCombatInstance {
     let mut active_objects = vec![ActiveObject::empty(); OOL_SLOTS];
     let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
     let mut placed_count = 0u8;
+    let random_special_setup_ids =
+        dungeon_room_random_special_setup_ids(setup.scan_sources, prng_state);
 
     for source in &setup.setup_sources {
         let active_object_slot = COMBAT_PARTY_ACTOR_SLOTS + usize::from(placed_count);
@@ -229,10 +242,19 @@ pub fn dungeon_room_combat_instance_from_setup(
                 };
                 placed_count = placed_count.saturating_add(1);
             }
-            DungeonRoomSetupSourceKind::SpecialPlacement(_)
-            | DungeonRoomSetupSourceKind::RandomSpecialPlacement { .. } => {
+            DungeonRoomSetupSourceKind::SpecialPlacement(placement) => {
                 active_objects[active_object_slot] =
-                    dungeon_room_special_marker_active_object(source, z);
+                    dungeon_room_special_marker_active_object(source, z, placement, prng_state);
+                placed_count = placed_count.saturating_add(1);
+            }
+            DungeonRoomSetupSourceKind::RandomSpecialPlacement { selector } => {
+                let setup_id = random_special_setup_ids
+                    .get(usize::from(selector))
+                    .copied()
+                    .unwrap_or(source.source);
+                let placement = DungeonRoomSpecialPlacement::from_setup_id(setup_id);
+                active_objects[active_object_slot] =
+                    dungeon_room_special_marker_active_object(source, z, placement, prng_state);
                 placed_count = placed_count.saturating_add(1);
             }
         }
@@ -247,18 +269,60 @@ pub fn dungeon_room_combat_instance_from_setup(
     }
 }
 
+pub fn dungeon_room_random_special_setup_ids(
+    scan_sources: bool,
+    prng_state: &mut u16,
+) -> [u8; DUNGEON_ROOM_RANDOM_SPECIAL_ROLL_COUNT] {
+    let mut ids = [0u8; DUNGEON_ROOM_RANDOM_SPECIAL_ROLL_COUNT];
+    if scan_sources {
+        for id in &mut ids {
+            let palette_index = u5_prng_range_u16(
+                prng_state,
+                0,
+                (DUNGEON_ROOM_RANDOM_SPECIAL_SETUP_PALETTE.len() - 1) as u16,
+            ) as usize;
+            *id = DUNGEON_ROOM_RANDOM_SPECIAL_SETUP_PALETTE[palette_index];
+        }
+    }
+    ids
+}
+
+pub fn dungeon_room_special_aux1(
+    post_write: DungeonRoomSpecialPostWrite,
+    z: i8,
+    prng_state: &mut u16,
+) -> u8 {
+    let z = z.max(0) as u8;
+    match post_write {
+        DungeonRoomSpecialPostWrite::LevelTimesThreePlusSeven => z.saturating_mul(3) + 7,
+        DungeonRoomSpecialPostWrite::LevelScaledRandom => {
+            let high = u16::from(z) * 10 + 10;
+            u5_prng_range_u16(prng_state, 1, high) as u8
+        }
+        DungeonRoomSpecialPostWrite::RandomRange { low, high } => {
+            u5_prng_range_u16(prng_state, u16::from(low), u16::from(high)) as u8
+        }
+        DungeonRoomSpecialPostWrite::RandomRangePlus { base, low, high } => base
+            .saturating_add(u5_prng_range_u16(prng_state, u16::from(low), u16::from(high)) as u8),
+        DungeonRoomSpecialPostWrite::Constant(value) => value,
+        DungeonRoomSpecialPostWrite::None => 0,
+    }
+}
+
 fn dungeon_room_special_marker_active_object(
     source: &DungeonRoomSetupSource,
     z: i8,
+    placement: DungeonRoomSpecialPlacement,
+    prng_state: &mut u16,
 ) -> ActiveObject {
     ActiveObject {
-        type_byte: source.source,
-        tile: source.source,
+        type_byte: placement.setup_id,
+        tile: placement.setup_id,
         x: usize::from(source.x),
         y: usize::from(source.y),
         z,
         phase: STEADY_PHASE,
-        aux1: 0,
+        aux1: dungeon_room_special_aux1(placement.post_write, z, prng_state),
         aux3: 0,
     }
 }
@@ -451,7 +515,11 @@ impl PlayState {
             .setup_sources
             .iter()
             .any(|source| source.kind == DungeonRoomSetupSourceKind::AbsorbableField);
-        let mut instance = dungeon_room_combat_instance_from_setup(&setup, level as i8);
+        let mut instance = dungeon_room_combat_instance_from_setup_with_prng(
+            &setup,
+            level as i8,
+            &mut self.prng_state,
+        );
         self.populate_dungeon_room_combat_party(
             &mut instance.active_objects,
             &mut instance.actors,

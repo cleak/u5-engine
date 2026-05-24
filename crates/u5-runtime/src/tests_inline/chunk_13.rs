@@ -11954,6 +11954,10 @@ fn tlk_player_input_kind_folds_keyword_loop_outcomes() {
         TlkPlayerInputKind::Reserved(ReservedKeywordEffect::ByePath)
     );
     assert_eq!(
+        tlk_player_input_kind(b"ASS HAT"),
+        TlkPlayerInputKind::ReservedRebuke { table_index: 12 }
+    );
+    assert_eq!(
         tlk_player_input_kind(b"JOIN"),
         TlkPlayerInputKind::OrdinaryKeywordScan
     );
@@ -18732,11 +18736,42 @@ fn reserved_keyword_effect_matches_spec_words() {
         reserved_keyword_effect(b"THANK"),
         Some(ReservedKeywordEffect::ByePath)
     );
+    assert_eq!(
+        reserved_keyword_effect(b"JOB NOW"),
+        Some(ReservedKeywordEffect::JobEntry)
+    );
+    assert_eq!(reserved_functional_keyword_index(b"WORK PLEASE"), Some(2));
     // JOIN and WHO ART THOU are not engine-reserved.
     assert_eq!(reserved_keyword_effect(b"JOIN"), None);
     assert_eq!(reserved_keyword_effect(b"WHO ART THOU"), None);
-    // Case sensitivity: caller is responsible for the upper-case fold.
-    assert_eq!(reserved_keyword_effect(b"name"), None);
+    assert_eq!(reserved_keyword_effect(b"JOBS"), None);
+    // The reserved-table compare uses the same normalized matching style.
+    assert_eq!(
+        reserved_keyword_effect(b"name"),
+        Some(ReservedKeywordEffect::NameEntry)
+    );
+}
+
+#[test]
+fn reserved_rebuke_keywords_match_fixed_table_with_space_boundary() {
+    // conversation.md §5-§6
+    assert_eq!(RESERVED_KEYWORD_TABLE_ENTRIES, 34);
+    assert_eq!(RESERVED_KEYWORD_FUNCTIONAL_WORDS.len(), 5);
+    assert_eq!(RESERVED_KEYWORD_REBUKE_WORDS.len(), 29);
+    assert_eq!(TLK_RESERVED_REBUKE_PAUSE_LIMIT, 28);
+    for (index, keyword) in RESERVED_KEYWORD_REBUKE_WORDS.iter().enumerate() {
+        assert_eq!(reserved_rebuke_keyword_index(keyword), Some(index));
+    }
+    assert_eq!(reserved_rebuke_keyword_index(b"ASSIST"), None);
+    assert_eq!(reserved_rebuke_keyword_index(b"ASS HAT"), Some(7));
+    assert_eq!(
+        tlk_player_input_kind(b"ASS HAT"),
+        TlkPlayerInputKind::ReservedRebuke { table_index: 12 }
+    );
+    assert_eq!(
+        TLK_RESERVED_REBUKE_MESSAGE,
+        "With language like that, how did you become an Avatar?\n\n"
+    );
 }
 
 #[test]

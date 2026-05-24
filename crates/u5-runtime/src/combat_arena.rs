@@ -323,11 +323,16 @@ impl DungeonRoomSpecialPlacement {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DungeonRoomSpecialPostWrite {
-    LevelDerived,
+    LevelTimesThreePlusSeven,
     LevelScaledRandom,
-    ResidentRangeTable,
+    RandomRange { low: u8, high: u8 },
+    RandomRangePlus { base: u8, low: u8, high: u8 },
+    Constant(u8),
     None,
 }
+
+pub const DUNGEON_ROOM_RANDOM_SPECIAL_SETUP_PALETTE: [u8; 8] = [20, 21, 22, 34, 33, 24, 31, 24];
+pub const DUNGEON_ROOM_RANDOM_SPECIAL_ROLL_COUNT: usize = 4;
 
 pub const fn dungeon_room_ordinary_setup_class(source: u8) -> Option<u8> {
     let family = source & DUNGEON_ROOM_SPECIAL_SOURCE_MASK;
@@ -352,9 +357,37 @@ pub const fn dungeon_room_random_special_selector(source: u8) -> Option<u8> {
 
 pub const fn dungeon_room_special_post_write(setup_id: u8) -> DungeonRoomSpecialPostWrite {
     match setup_id {
-        1 => DungeonRoomSpecialPostWrite::LevelDerived,
+        1 => DungeonRoomSpecialPostWrite::LevelTimesThreePlusSeven,
         2 => DungeonRoomSpecialPostWrite::LevelScaledRandom,
-        3..=15 => DungeonRoomSpecialPostWrite::ResidentRangeTable,
+        3 | 4 => DungeonRoomSpecialPostWrite::RandomRange { low: 0, high: 7 },
+        5 => DungeonRoomSpecialPostWrite::RandomRangePlus {
+            base: 30,
+            low: 0,
+            high: 3,
+        },
+        6 => DungeonRoomSpecialPostWrite::RandomRangePlus {
+            base: 4,
+            low: 0,
+            high: 2,
+        },
+        7 | 8 | 13 | 15 => DungeonRoomSpecialPostWrite::RandomRange { low: 1, high: 7 },
+        9 => DungeonRoomSpecialPostWrite::RandomRange { low: 0, high: 3 },
+        10 => DungeonRoomSpecialPostWrite::RandomRangePlus {
+            base: 42,
+            low: 0,
+            high: 2,
+        },
+        11 => DungeonRoomSpecialPostWrite::RandomRangePlus {
+            base: 9,
+            low: 0,
+            high: 5,
+        },
+        12 => DungeonRoomSpecialPostWrite::RandomRangePlus {
+            base: 45,
+            low: 0,
+            high: 2,
+        },
+        14 => DungeonRoomSpecialPostWrite::Constant(1),
         _ => DungeonRoomSpecialPostWrite::None,
     }
 }

@@ -207,7 +207,7 @@
         assert_eq!(dungeon_room_random_special_selector(0xe8), None);
         assert_eq!(
             dungeon_room_special_post_write(1),
-            DungeonRoomSpecialPostWrite::LevelDerived
+            DungeonRoomSpecialPostWrite::LevelTimesThreePlusSeven
         );
         assert_eq!(
             dungeon_room_special_post_write(2),
@@ -215,7 +215,7 @@
         );
         assert_eq!(
             dungeon_room_special_post_write(15),
-            DungeonRoomSpecialPostWrite::ResidentRangeTable
+            DungeonRoomSpecialPostWrite::RandomRange { low: 1, high: 7 }
         );
         assert_eq!(
             dungeon_room_special_post_write(16),
@@ -386,12 +386,20 @@
         let record = CombatArenaRecord::from_record_bytes(&bytes).unwrap();
         let setup = dungeon_room_combat_setup_from_record(0, &record);
 
+        let mut expected_prng = 0;
+        let expected_random_ids = dungeon_room_random_special_setup_ids(true, &mut expected_prng);
         let instance = dungeon_room_combat_instance_from_setup(&setup, 0);
 
         assert_eq!(instance.requested_count, 3);
         assert_eq!(instance.placed_count, 3);
-        assert_eq!(instance.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile, 0xec);
-        assert_eq!(instance.active_objects[COMBAT_PARTY_ACTOR_SLOTS + 1].tile, 0xef);
+        assert_eq!(
+            instance.active_objects[COMBAT_PARTY_ACTOR_SLOTS].tile,
+            expected_random_ids[0]
+        );
+        assert_eq!(
+            instance.active_objects[COMBAT_PARTY_ACTOR_SLOTS + 1].tile,
+            expected_random_ids[3]
+        );
         assert!(instance.actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty());
         assert!(instance.actors[COMBAT_PARTY_ACTOR_SLOTS + 1].is_empty());
         assert_eq!(instance.active_objects[COMBAT_PARTY_ACTOR_SLOTS + 2].tile, 0xc4);
@@ -422,7 +430,7 @@
             setup.setup_sources[0].kind,
             DungeonRoomSetupSourceKind::SpecialPlacement(DungeonRoomSpecialPlacement {
                 setup_id: 1,
-                post_write: DungeonRoomSpecialPostWrite::LevelDerived,
+                post_write: DungeonRoomSpecialPostWrite::LevelTimesThreePlusSeven,
             })
         );
         assert_eq!(
@@ -436,7 +444,7 @@
             setup.setup_sources[2].kind,
             DungeonRoomSetupSourceKind::SpecialPlacement(DungeonRoomSpecialPlacement {
                 setup_id: 15,
-                post_write: DungeonRoomSpecialPostWrite::ResidentRangeTable,
+                post_write: DungeonRoomSpecialPostWrite::RandomRange { low: 1, high: 7 },
             })
         );
         assert_eq!(
@@ -447,7 +455,12 @@
             })
         );
 
-        let instance = dungeon_room_combat_instance_from_setup(&setup, 2);
+        let mut expected_prng = 0;
+        let _expected_random_ids = dungeon_room_random_special_setup_ids(true, &mut expected_prng);
+        let expected_id2_aux = u5_prng_range_u16(&mut expected_prng, 1, 30) as u8;
+        let expected_id15_aux = u5_prng_range_u16(&mut expected_prng, 1, 7) as u8;
+        let mut actual_prng = 0;
+        let instance = dungeon_room_combat_instance_from_setup_with_prng(&setup, 2, &mut actual_prng);
 
         assert_eq!(instance.requested_count, 4);
         assert_eq!(instance.placed_count, 4);
@@ -456,6 +469,17 @@
             assert_eq!(instance.active_objects[slot].tile, expected_tile);
             assert!(instance.actors[slot].is_empty());
         }
+        assert_eq!(instance.active_objects[COMBAT_PARTY_ACTOR_SLOTS].aux1, 13);
+        assert_eq!(
+            instance.active_objects[COMBAT_PARTY_ACTOR_SLOTS + 1].aux1,
+            expected_id2_aux
+        );
+        assert_eq!(
+            instance.active_objects[COMBAT_PARTY_ACTOR_SLOTS + 2].aux1,
+            expected_id15_aux
+        );
+        assert_eq!(instance.active_objects[COMBAT_PARTY_ACTOR_SLOTS + 3].aux1, 0);
+        assert_eq!(actual_prng, expected_prng);
     }
 
     #[test]
@@ -7602,8 +7626,7 @@
     fn combat_cast_summon_daemon_routes_resources_and_places_daemon() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
-        state.combat_terrain = [[0x0c; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
-        state.combat_terrain[4][6] = 0x04;
+        state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
         state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
         state.party = vec![PartyMember {
             slot: 0,
@@ -7615,6 +7638,7 @@
             max_hp: 30,
             level: 8,
         }];
+        state.party_intelligence = vec![31];
         state.prng_state = 0;
         let spell_index = spell_index_from_code("CKX").unwrap();
         state.spell_charges[spell_index] = 1;
@@ -7638,11 +7662,22 @@
             aux1: 0,
             aux3: 0,
         };
-        let expected_prng = state.prng_state;
+        let mut expected_prng = state.prng_state;
+        let (expected_x, expected_y) = loop {
+            let x = u5_prng_range_u16(&mut expected_prng, 0, 15) as u8;
+            let y = u5_prng_range_u16(&mut expected_prng, 0, 15) as u8;
+            if usize::from(x) < COMBAT_ARENA_SIDE
+                && usize::from(y) < COMBAT_ARENA_SIDE
+                && (x, y) != (5, 5)
+            {
+                break (x, y);
+            }
+        };
+        let _self_check_roll = u5_prng_range_u16(&mut expected_prng, 1, 30);
 
         assert_eq!(
             state
-                .cast_spell_from_suffix("1CKX6", std::path::Path::new(""))
+                .cast_spell_from_suffix("1CKX", std::path::Path::new(""))
                 .unwrap(),
             MoveOutcome::Cast
         );
@@ -7657,8 +7692,8 @@
             resolve_summoned_combat_actor_descriptor(
                 COMBAT_CLASS_DAEMON,
                 COMBAT_PARTY_ACTOR_SLOTS as u8,
-                6,
-                4,
+                expected_x,
+                expected_y,
                 COMBAT_SUMMONED_ACTOR_FLAGS,
                 0,
             )
@@ -7666,14 +7701,22 @@
         );
         assert_eq!(
             state.active_objects[COMBAT_PARTY_ACTOR_SLOTS],
-            summoned_active_object_record(COMBAT_CLASS_DAEMON, 6, 4, 0).unwrap()
+            summoned_active_object_record(
+                COMBAT_CLASS_DAEMON,
+                usize::from(expected_x),
+                usize::from(expected_y),
+                0
+            )
+            .unwrap()
         );
     }
 
     #[test]
-    fn combat_cast_summon_daemon_requires_direction_before_spending_resources() {
+    fn combat_cast_summon_daemon_does_not_require_direction_and_can_oops() {
         let mut state = world_state(open_world_grid(), 10, 20);
         state.combat_active = true;
+        state.combat_terrain = [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE];
+        state.active_objects.resize(OOL_SLOTS, ActiveObject::empty());
         state.party = vec![PartyMember {
             slot: 0,
             class_byte: 1,
@@ -7684,6 +7727,7 @@
             max_hp: 30,
             level: 8,
         }];
+        state.party_intelligence = vec![1];
         let spell_index = spell_index_from_code("CKX").unwrap();
         state.spell_charges[spell_index] = 1;
         state.combat_actors[0] = CombatActorDescriptor::from_row([
@@ -7703,10 +7747,11 @@
                 .unwrap(),
             MoveOutcome::Blocked
         );
-        assert_eq!(state.message, "Direction? Use C1CKX6.");
-        assert_eq!(state.spell_charges[spell_index], 1);
-        assert_eq!(state.party[0].mana, 8);
-        assert_eq!(state.turn, 0);
+        assert_eq!(state.message, "Oops...");
+        assert_eq!(state.spell_charges[spell_index], 0);
+        assert_eq!(state.party[0].mana, 0);
+        assert_eq!(state.turn, 1);
+        assert!(!state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty());
     }
 
     #[test]

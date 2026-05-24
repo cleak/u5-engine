@@ -199,17 +199,22 @@ impl ConversationSession {
             .map(|b| (*b & 0x7F).to_ascii_uppercase())
             .collect();
         let kind = tlk_player_input_kind(&input_upper);
+        let mut out = ConversationSessionOutput::default();
+        if matches!(kind, TlkPlayerInputKind::ReservedRebuke { .. }) {
+            out.text = TLK_RESERVED_REBUKE_MESSAGE.to_string();
+            return out;
+        }
         let field_idx = match kind {
             TlkPlayerInputKind::EmptyByeShortcut => 4usize,
             TlkPlayerInputKind::Reserved(ReservedKeywordEffect::NameEntry) => 0,
             TlkPlayerInputKind::Reserved(ReservedKeywordEffect::JobEntry) => 3,
             TlkPlayerInputKind::Reserved(ReservedKeywordEffect::ByePath) => 4,
+            TlkPlayerInputKind::ReservedRebuke { .. } => unreachable!(),
             TlkPlayerInputKind::OrdinaryKeywordScan => self
                 .find_ordinary_keyword_match_from(&input_upper, TLK_LEADING_ENTRY_COUNT)
                 .map(|matched| matched.response_idx)
                 .unwrap_or(usize::MAX),
         };
-        let mut out = ConversationSessionOutput::default();
         if field_idx == usize::MAX {
             out.text = TLK_NO_KEYWORD_MATCH_MESSAGE.to_string();
             return out;
@@ -1155,6 +1160,18 @@ mod tests {
         let out = s.submit_keyword("xyzzy", &ctx());
         assert_eq!(out.text, TLK_NO_KEYWORD_MATCH_MESSAGE);
         assert!(out.text.ends_with("\n\n"));
+    }
+
+    #[test]
+    fn reserved_rebuke_keyword_returns_to_prompt_without_ending() {
+        let mut s = baseline_session();
+        s.present_greeting(&ctx());
+
+        let out = s.submit_keyword("ASS HAT", &ctx());
+
+        assert_eq!(out.text, TLK_RESERVED_REBUKE_MESSAGE);
+        assert!(!out.ended);
+        assert_eq!(s.phase, ConversationSessionPhase::AwaitingKeyword);
     }
 
     #[test]

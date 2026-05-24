@@ -1269,6 +1269,29 @@ impl PlayState {
         None
     }
 
+    pub fn apply_combat_summon_daemon_with_random_attempts(
+        &mut self,
+        z: i8,
+        legal_cells: &[[bool; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE],
+    ) -> Option<CombatSummonApplication> {
+        for _ in 0..8 {
+            let x = self.random_range_u8(0, 15);
+            let y = self.random_range_u8(0, 15);
+            if usize::from(x) >= COMBAT_ARENA_SIDE || usize::from(y) >= COMBAT_ARENA_SIDE {
+                continue;
+            }
+            if let Some(application) = self.apply_combat_summon_class_with_legal_mask(
+                COMBAT_CLASS_DAEMON,
+                z,
+                legal_cells,
+                &[(x, y)],
+            ) {
+                return Some(application);
+            }
+        }
+        None
+    }
+
     pub fn apply_combat_summon_class_around_slot(
         &mut self,
         class: u8,
@@ -1824,18 +1847,9 @@ impl PlayState {
         &mut self,
         caster_index: usize,
         spell_index: usize,
-        direction: Option<Direction>,
     ) -> MoveOutcome {
         if !self.combat_active || !self.spell_allowed_in_current_cast_context(spell_index) {
             self.message = "Not here!".to_string();
-            return MoveOutcome::Blocked;
-        }
-        let Some(direction) = direction else {
-            self.message = "Direction? Use C1CKX6.".to_string();
-            return MoveOutcome::Blocked;
-        };
-        if !direction.is_cardinal() {
-            self.message = "Summon requires a cardinal direction.".to_string();
             return MoveOutcome::Blocked;
         }
         let Some(caster) = self.combat_actors.get(caster_index).copied() else {
@@ -1846,35 +1860,42 @@ impl PlayState {
             self.message = "Who casts?".to_string();
             return MoveOutcome::Blocked;
         }
-        let Some((target_x, target_y)) =
-            combat_direction_target_coordinate(caster.x, caster.y, direction)
-        else {
-            self.message = "Summon requires a cardinal direction.".to_string();
-            return MoveOutcome::Blocked;
-        };
 
         let mana_cost = (spell_index / 6 + 1) as u8;
         if let Some(outcome) = self.cast_spell_resource_gate(caster_index, spell_index, mana_cost) {
             return outcome;
         }
 
-        let applied = self.apply_combat_summon_class_around_target_coordinate(
-            COMBAT_CLASS_DAEMON,
+        let legal_cells = self.combat_legal_cell_mask();
+        let applied = self.apply_combat_summon_daemon_with_random_attempts(
             self.combat_actor_z(caster_index),
-            target_x,
-            target_y,
+            &legal_cells,
         );
         self.advance_turn();
-        self.message = if applied.is_some() {
-            "Summon Daemon!".to_string()
-        } else {
-            "Failed!".to_string()
-        };
-        if applied.is_some() {
-            MoveOutcome::Cast
-        } else {
-            MoveOutcome::Blocked
+        if applied.is_none() {
+            self.message = "Failed!".to_string();
+            return MoveOutcome::Blocked;
         }
+        if self.combat_summon_daemon_self_check_oops(caster_index) {
+            self.message = "Oops...".to_string();
+            MoveOutcome::Blocked
+        } else {
+            self.message = "Summon Daemon!".to_string();
+            MoveOutcome::Cast
+        }
+    }
+
+    pub fn combat_summon_daemon_self_check_threshold(&self, caster_index: usize) -> u8 {
+        self.party_intelligence
+            .get(caster_index)
+            .copied()
+            .unwrap_or(self.avatar_stats.intelligence)
+    }
+
+    pub fn combat_summon_daemon_self_check_oops(&mut self, caster_index: usize) -> bool {
+        let threshold = self.combat_summon_daemon_self_check_threshold(caster_index);
+        let roll = self.random_range_u8(1, 30);
+        roll >= threshold
     }
 
     pub fn cast_combat_clone_spell(

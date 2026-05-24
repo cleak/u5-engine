@@ -97,6 +97,41 @@ pub const RESERVED_KEYWORD_FUNCTIONAL_COUNT: usize = 5;
 pub const RESERVED_KEYWORD_REBUKE_COUNT: usize =
     RESERVED_KEYWORD_TABLE_ENTRIES - RESERVED_KEYWORD_FUNCTIONAL_COUNT;
 
+pub const RESERVED_KEYWORD_FUNCTIONAL_WORDS: [&[u8]; RESERVED_KEYWORD_FUNCTIONAL_COUNT] =
+    [b"NAME", b"JOB", b"WORK", b"BYE", b"THANK"];
+
+pub const RESERVED_KEYWORD_REBUKE_WORDS: [&[u8]; RESERVED_KEYWORD_REBUKE_COUNT] = [
+    b"FUCK",
+    b"SHIT",
+    b"DAMN",
+    b"DICK",
+    b"PRICK",
+    b"PUSSY",
+    b"CUNT",
+    b"ASS",
+    b"BUTT",
+    b"BOOGER",
+    b"PISS",
+    b"JACK OFF",
+    b"MASTURBATE",
+    b"SUCK",
+    b"FART",
+    b"TITS",
+    b"BOOB",
+    b"MELONS",
+    b"BLOW",
+    b"PENIS",
+    b"BREAST",
+    b"CLIT",
+    b"BALLS",
+    b"SCROTUM",
+    b"NUTS",
+    b"BULLSHIT",
+    b"CUM",
+    b"CROTCH",
+    b"MOTHERFUCKER",
+];
+
 /// `conversation.md §7.7` per-blob label count. The byte runner
 /// supports up to fifteen distinct label bytes per NPC blob,
 /// occupying values `0x91..=0x9F`. Labels are byte-level flow
@@ -427,6 +462,10 @@ pub const TLK_EMPTY_INPUT_BYE_MESSAGE: &str = "BYE\n\n";
 /// own their own line breaks.
 pub const TLK_NO_KEYWORD_MATCH_MESSAGE: &str = "I cannot help thee with that.\n\n";
 
+pub const TLK_RESERVED_REBUKE_MESSAGE: &str =
+    "With language like that, how did you become an Avatar?\n\n";
+pub const TLK_RESERVED_REBUKE_PAUSE_LIMIT: u8 = 28;
+
 /// `conversation.md §7` top-level byte-runner dispatcher class. Each
 /// byte read from any text stream (the five leading entries, every
 /// keyword response, IF/ELSE arm bodies, GOTO targets) is classified
@@ -679,17 +718,27 @@ pub enum ReservedKeywordEffect {
 }
 
 /// `conversation.md §6`: classify a typed reserved-keyword input. The
-/// caller provides an already-uppercased buffer; this helper compares
-/// against the five functional words and returns the entry to run.
-/// Profanity/default rebuke matching is not part of the public reserved
-/// list — that branch belongs to the engine's profanity sweep below.
+/// helper compares against the five functional words with the fixed
+/// table's space-boundary match and returns the entry to run.
 pub fn reserved_keyword_effect(input: &[u8]) -> Option<ReservedKeywordEffect> {
-    Some(match input {
-        b"NAME" => ReservedKeywordEffect::NameEntry,
-        b"JOB" | b"WORK" => ReservedKeywordEffect::JobEntry,
-        b"BYE" | b"THANK" => ReservedKeywordEffect::ByePath,
+    Some(match reserved_functional_keyword_index(input)? {
+        0 => ReservedKeywordEffect::NameEntry,
+        1 | 2 => ReservedKeywordEffect::JobEntry,
+        3 | 4 => ReservedKeywordEffect::ByePath,
         _ => return None,
     })
+}
+
+pub fn reserved_functional_keyword_index(input: &[u8]) -> Option<usize> {
+    RESERVED_KEYWORD_FUNCTIONAL_WORDS
+        .iter()
+        .position(|keyword| tlk_keyword_matches(keyword, input))
+}
+
+pub fn reserved_rebuke_keyword_index(input: &[u8]) -> Option<usize> {
+    RESERVED_KEYWORD_REBUKE_WORDS
+        .iter()
+        .position(|keyword| tlk_keyword_matches(keyword, input))
 }
 
 /// `conversation.md §6`: maximum keyword length the input pipeline
@@ -697,11 +746,11 @@ pub fn reserved_keyword_effect(input: &[u8]) -> Option<ReservedKeywordEffect> {
 /// backspace handling).
 pub const TLK_INPUT_MAX_LEN: usize = 15;
 
-/// `conversation.md §6` three-way fan-out the keyword input loop
+/// `conversation.md §6` fan-out the keyword input loop
 /// performs after reading a free-text line. The empty-input shortcut
-/// runs the NPC's Bye entry; a reserved-table hit runs the published
-/// engine entry; everything else falls through to the per-NPC
-/// keyword-pair scan.
+/// runs the NPC's Bye entry; a functional reserved-table hit runs the
+/// published engine entry; a rebuke hit prints the fixed chastisement;
+/// everything else falls through to the per-NPC keyword-pair scan.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TlkPlayerInputKind {
     /// Player pressed Enter on an empty line — engine prints
@@ -711,23 +760,29 @@ pub enum TlkPlayerInputKind {
     /// Input matched one of the five reserved functional words —
     /// engine runs the named published entry.
     Reserved(ReservedKeywordEffect),
+    /// Input matched one of the fixed rebuke words; engine prints
+    /// the reserved chastisement and returns to the keyword prompt.
+    ReservedRebuke { table_index: usize },
     /// Reserved scan missed — engine walks the per-NPC ordinary
     /// keyword/response pairs after the five mandatory leading
     /// entries.
     OrdinaryKeywordScan,
 }
 
-/// `conversation.md §6`: fold the keyword-loop's three observable
-/// outcomes for the typed input. Caller supplies an uppercased buffer
-/// (the input pipeline already capitalises the line). Profanity /
-/// default rebuke matching is not part of this fan-out — the engine
-/// sweeps it independently as a side-effect of the reserved scan.
+/// `conversation.md §6`: fold the keyword-loop's observable outcomes
+/// for the typed input. Caller normally supplies an uppercased buffer,
+/// and the shared keyword matcher also folds case and strips bit 7.
 pub fn tlk_player_input_kind(input: &[u8]) -> TlkPlayerInputKind {
     if input.is_empty() {
         return TlkPlayerInputKind::EmptyByeShortcut;
     }
     if let Some(effect) = reserved_keyword_effect(input) {
         return TlkPlayerInputKind::Reserved(effect);
+    }
+    if let Some(index) = reserved_rebuke_keyword_index(input) {
+        return TlkPlayerInputKind::ReservedRebuke {
+            table_index: RESERVED_KEYWORD_FUNCTIONAL_COUNT + index,
+        };
     }
     TlkPlayerInputKind::OrdinaryKeywordScan
 }
