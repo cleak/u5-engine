@@ -418,26 +418,33 @@ are kept out of gameplay logic until the public spec publishes exact data.
 
 | Issue | Public gap | Engine placeholder |
 |------|------------|--------------------|
+| `cleak/u5-spec#8` | Exact combat sleep wakeup/decrement counters for each Sleep-producing path | Descriptor byte 2 bit `0x08` and the per-slot non-party sleep/disabled state are implemented; effect-specific starting durations and wake timing stay conservative until the clean table is published |
 | `cleak/u5-spec#10` | Exact player C-Cast field-spell impact-cell input path and out-of-arena resource behavior | Combat field markers follow the corrected no-random-gate placement/contact contract; the current target-coordinate path remains conservative until the input helper is published |
 | `cleak/u5-spec#11` | Exact Summon target-coordinate helper, off-arena behavior, and self-checking/rebound branch | Summon uses the public ordered clipped ring around the adjacent direction target, applies summoned/controlled flags, and leaves the unpublished self-checking branch unmodeled |
 | `cleak/u5-spec#12` | Exact non-Doom dungeon-room special-placement id post-write tables and actor/descriptor effects | Engine consumes the published party/source row layout, source-owned coordinates, helper-cell scan suppression, ordinary/source-family boundary, special id post-write categories, and Doom marker behavior; non-Doom special sources remain guarded markers until the exact formulas/tables are published |
 | `cleak/u5-spec#13` | Exact resident text source for the sage fee quote/confirmation and short-funds refusal | Shared paid 26-row table, strict matching, confirmation/debit, short-funds exit, post-debit success-record RNG timing, and success rendering are implemented from the checked-in spec; prompt wording remains conservative until published |
 | `cleak/u5-spec#19` | Same non-Doom dungeon-room special-placement id/post-write table as `#12`, plus the unpublished four pre-rolled setup ids used by `0xEC..0xEF` | Ordinary dungeon-room sources, random-special low-bit selectors, special id categories, and Doom `0x3C` follow the public contract; effects that require unpublished tables remain guarded markers |
+| `cleak/u5-spec#20` | Stale gazetteer known-gaps wording versus the coordinate families still unpublished after the 40-row stock location table | Stock world-location entry/return rows use the native checked-in gazetteer table; remaining moongate/plane-transition coordinate families stay sidecar-backed or separately owned until the spec names them |
 | `cleak/u5-spec#36` | Exact `.BIT` / `PROPORT.PCS` pre-decoded variant-detection and layout contract | Canonical sparse resources are normative; local compatibility fallbacks remain conservative and are not promoted to clean spec behavior |
 | `cleak/u5-spec#49` | Exact Create Food grant range/message contract (`0..=2` versus `1..=3`) | Engine uses the latest issue-comment leaning: uniform `0..=2`, cap at 9999, and successful zero-grant casts after normal resource gates |
 | `cleak/u5-spec#54` | Return-to-View exact strip-reveal schedule and local cell-effect rasters | Parser/scheduler/overlay composition implement the public 4x19 source layout, fixed captions from LoadMapStrip, high-opcode no-ops, `(x, y + 7)` effect coordinates, and timing model; exact reveal/raster parity is clean-spec-deferred presentation work |
 | `cleak/u5-spec#57` | Whether shipped `.NPC` slot-zero records may contain nonzero schedule/dialog/type bytes and how validators should treat them | Runtime scheduling, occupancy, Talk, and roster counts skip slot zero regardless of stored bytes; no strict byte-zero validation is applied |
 | `cleak/u5-spec#58` | The unpublished 29 reserved rebuke words and exact rebuke/pause behavior in conversations | The five functional reserved words are active; other unmatched input follows the normal no-match path until the clean table is published |
+| `cleak/u5-spec#59` | Exact overworld water/current transition, transport, damage, and precedence rules | Existing waterfall/chasm/whirlpool routes remain conservative and route-tested; exact current/waterfall forced-movement parity waits on the published transition table |
 
 Follow-up questions were current as of the 2026-05-24 issue audit for the
 remaining response-needed items:
 
+- `cleak/u5-spec#8`: exact combat sleep starting counters and decrement/wakeup
+  timing for each Sleep-producing path.
 - `cleak/u5-spec#10`: exact player C-Cast field-spell target/impact path.
 - `cleak/u5-spec#11`: exact Summon target helper and self-checking rebound.
 - `cleak/u5-spec#12` / `#19`: exact non-Doom dungeon-room special-placement
   id derivation, post-write formulas, range tables, and actor/descriptor effects.
 - `cleak/u5-spec#13`: exact resident text source/templates for the sage fee
   quote/confirmation prompt and short-funds refusal branch.
+- `cleak/u5-spec#20`: clarification of which coordinate families remain
+  unpublished now that the main 40-row stock location table is checked in.
 - `cleak/u5-spec#36`: exact pre-decoded `.BIT` / `PROPORT.PCS` variant
   detection, if that compatibility format is intended to be normative.
 - `cleak/u5-spec#49`: exact Create Food grant range and success-message
@@ -447,11 +454,13 @@ remaining response-needed items:
 - `cleak/u5-spec#57`: exact `.NPC` slot-zero byte/validator policy.
 - `cleak/u5-spec#58`: exact conversation reserved rebuke keyword table and
   presentation behavior.
+- `cleak/u5-spec#59`: exact overworld water/current forced-transition,
+  transport, damage, and precedence rules.
 
-No remaining response-needed issue in this audit is about #1, #3, #8, #18,
-#31, #41, #43, #47, #51, or #56; those are implemented from current checked-in
-public spec plus latest issue answers, or explicitly deferred as presentation
-work in the public spec.
+No remaining response-needed issue in this audit is about #1, #3, #5, #9,
+#18, #31, #38, #41, #43, #47, #51, or #56; those are implemented from current
+checked-in public spec plus latest issue answers, or explicitly deferred as
+presentation work in the public spec.
 
 ## Presentation Work (Separate From Gameplay Correctness)
 

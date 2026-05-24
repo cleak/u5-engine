@@ -49,6 +49,8 @@ pub struct CliArgs {
     /// If set, replay representative routes through the Bevy renderer and
     /// write a sanitized per-step frame manifest into the supplied directory.
     pub visual_route_suite: Option<PathBuf>,
+    /// If set, compare two sanitized frame-suite manifests and exit.
+    pub compare_frame_manifests: Option<(PathBuf, PathBuf)>,
     pub create_character: Option<CreateCharacterCommand>,
     pub create_character_interactive: bool,
 }
@@ -87,6 +89,7 @@ where
     let mut save_frame_suite: Option<PathBuf> = None;
     let mut visual_frame_suite: Option<PathBuf> = None;
     let mut visual_route_suite: Option<PathBuf> = None;
+    let mut compare_frame_manifests: Option<(PathBuf, PathBuf)> = None;
     let mut create_character_name: Option<Vec<u8>> = None;
     let mut create_character_male: Option<bool> = None;
     let mut create_character_winners: Option<Vec<ShrineVirtue>> = None;
@@ -134,6 +137,29 @@ where
                     )
                 })?;
                 visual_route_suite = Some(PathBuf::from(value));
+            }
+            "--compare-frame-manifests" => {
+                let baseline = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--compare-frame-manifests requires a baseline manifest path",
+                    )
+                })?;
+                let candidate = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--compare-frame-manifests requires a candidate manifest path",
+                    )
+                })?;
+                if compare_frame_manifests
+                    .replace((PathBuf::from(baseline), PathBuf::from(candidate)))
+                    .is_some()
+                {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--compare-frame-manifests may only be supplied once",
+                    ));
+                }
             }
             "--play-script" => {
                 play = true;
@@ -313,6 +339,7 @@ where
             save_frame_suite: None,
             visual_frame_suite: None,
             visual_route_suite: None,
+            compare_frame_manifests: None,
             create_character: None,
             create_character_interactive: false,
         });
@@ -330,6 +357,7 @@ where
             || save_frame_suite.is_some()
             || visual_frame_suite.is_some()
             || visual_route_suite.is_some()
+            || compare_frame_manifests.is_some()
             || from_save
             || from_init
             || options != PlayOptions::default()
@@ -340,7 +368,7 @@ where
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--route-smoke runs its own scripted scenes; it cannot be combined with play, visual, save-frame, visual-frame-suite, visual-route-suite, from-save, from-init, scene, start, or gameplay overrides",
+            "--route-smoke runs its own scripted scenes; it cannot be combined with play, visual, save-frame, visual-frame-suite, visual-route-suite, compare-frame-manifests, from-save, from-init, scene, start, or gameplay overrides",
         ));
     }
     if save_frame_suite.is_some()
@@ -349,6 +377,7 @@ where
             || save_frame.is_some()
             || visual_frame_suite.is_some()
             || visual_route_suite.is_some()
+            || compare_frame_manifests.is_some()
             || route_smoke
             || from_save
             || from_init
@@ -361,7 +390,7 @@ where
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--save-frame-suite runs its own scenes; it cannot be combined with play, visual, route-smoke, save-frame, visual-frame-suite, visual-route-suite, from-save, from-init, play-script, scene, start, or gameplay overrides",
+            "--save-frame-suite runs its own scenes; it cannot be combined with play, visual, route-smoke, save-frame, visual-frame-suite, visual-route-suite, compare-frame-manifests, from-save, from-init, play-script, scene, start, or gameplay overrides",
         ));
     }
     if visual_frame_suite.is_some()
@@ -370,6 +399,7 @@ where
             || save_frame.is_some()
             || save_frame_suite.is_some()
             || visual_route_suite.is_some()
+            || compare_frame_manifests.is_some()
             || route_smoke
             || from_save
             || from_init
@@ -382,7 +412,7 @@ where
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--visual-frame-suite runs its own Bevy scenes; it cannot be combined with play, visual, route-smoke, save-frame, save-frame-suite, visual-route-suite, from-save, from-init, play-script, scene, start, or gameplay overrides",
+            "--visual-frame-suite runs its own Bevy scenes; it cannot be combined with play, visual, route-smoke, save-frame, save-frame-suite, visual-route-suite, compare-frame-manifests, from-save, from-init, play-script, scene, start, or gameplay overrides",
         ));
     }
     if visual_route_suite.is_some()
@@ -391,6 +421,7 @@ where
             || save_frame.is_some()
             || save_frame_suite.is_some()
             || visual_frame_suite.is_some()
+            || compare_frame_manifests.is_some()
             || route_smoke
             || from_save
             || from_init
@@ -403,7 +434,30 @@ where
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--visual-route-suite replays its own Bevy routes; it cannot be combined with play, visual, route-smoke, save-frame, save-frame-suite, visual-frame-suite, from-save, from-init, play-script, scene, start, or gameplay overrides",
+            "--visual-route-suite replays its own Bevy routes; it cannot be combined with play, visual, route-smoke, save-frame, save-frame-suite, visual-frame-suite, compare-frame-manifests, from-save, from-init, play-script, scene, start, or gameplay overrides",
+        ));
+    }
+    if compare_frame_manifests.is_some()
+        && (play
+            || intro
+            || visual
+            || save_frame.is_some()
+            || save_frame_suite.is_some()
+            || visual_frame_suite.is_some()
+            || visual_route_suite.is_some()
+            || route_smoke
+            || from_save
+            || from_init
+            || play_script.is_some()
+            || options != PlayOptions::default()
+            || wind_override.is_some()
+            || climbing_gear_override.is_some()
+            || pending_vehicle_override.is_some()
+            || transport_override.is_some())
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--compare-frame-manifests is a standalone metadata check; it cannot be combined with play, intro, visual, route-smoke, save-frame, frame suites, from-save, from-init, play-script, scene, start, or gameplay overrides",
         ));
     }
     if intro
@@ -412,13 +466,14 @@ where
             || save_frame_suite.is_some()
             || visual_frame_suite.is_some()
             || visual_route_suite.is_some()
+            || compare_frame_manifests.is_some()
             || route_smoke
             || from_save
             || from_init)
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--intro owns the title/menu flow; it cannot be combined with play, route-smoke, save-frame, save-frame-suite, visual-frame-suite, visual-route-suite, from-save, or from-init",
+            "--intro owns the title/menu flow; it cannot be combined with play, route-smoke, save-frame, save-frame-suite, visual-frame-suite, visual-route-suite, compare-frame-manifests, from-save, or from-init",
         ));
     }
     if create_character_interactive
@@ -429,13 +484,14 @@ where
             || save_frame_suite.is_some()
             || visual_frame_suite.is_some()
             || visual_route_suite.is_some()
+            || compare_frame_manifests.is_some()
             || route_smoke
             || from_save
             || from_init)
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "--create-character-interactive writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, route-smoke, save-frame, save-frame-suite, visual-frame-suite, visual-route-suite, from-save, or from-init",
+            "--create-character-interactive writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, route-smoke, save-frame, save-frame-suite, visual-frame-suite, visual-route-suite, compare-frame-manifests, from-save, or from-init",
         ));
     }
     if create_character_interactive && create_character_name.is_some() {
@@ -453,13 +509,14 @@ where
             || save_frame_suite.is_some()
             || visual_frame_suite.is_some()
             || visual_route_suite.is_some()
+            || compare_frame_manifests.is_some()
             || route_smoke
             || from_save
             || from_init
         {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "--create-character writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, route-smoke, save-frame, save-frame-suite, visual-frame-suite, visual-route-suite, from-save, or from-init",
+                "--create-character writes a save and returns to the intro/menu state; it cannot be combined with intro, play, visual, route-smoke, save-frame, save-frame-suite, visual-frame-suite, visual-route-suite, compare-frame-manifests, from-save, or from-init",
             ));
         }
         let male = create_character_male.ok_or_else(|| {
@@ -527,6 +584,7 @@ where
         save_frame_suite,
         visual_frame_suite,
         visual_route_suite,
+        compare_frame_manifests,
         create_character,
         create_character_interactive,
     })
@@ -581,6 +639,10 @@ OPTIONS:
                               Replay representative routes through Bevy frames
                               and write per-step PNGs plus a sanitized manifest.
                               Requires building with `--features visual`.
+        --compare-frame-manifests <BASE> <CURRENT>
+                              Compare sanitized frame-suite or visual-route
+                              manifests by labels, metadata, hashes, and
+                              nonblack counts, then exit.
 
 SMOKE COMMANDS:
     cargo run -- C:\\Games\\U5-Clean
@@ -588,6 +650,7 @@ SMOKE COMMANDS:
     cargo run -- --play-script \"z;q\" C:\\Games\\U5-Clean
     cargo run -- --route-smoke C:\\Games\\U5-Clean
     cargo run -- --save-frame-suite target\\frame-suite C:\\Games\\U5-Clean
+    cargo run -- --compare-frame-manifests target\\baseline\\manifest.txt target\\candidate\\manifest.txt
     cargo run -- --play --scene DUNGEON:0 --floor 0 C:\\Games\\U5-Clean
     cargo run -- --create-character Avatar --gender male --chargen-winners Honesty,Compassion,Valor,Justice,Sacrifice,Honor,Spirituality C:\\Games\\U5-Clean
     cargo run --features visual -- --visual --scene BRITANNIA C:\\Games\\U5-Clean

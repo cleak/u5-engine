@@ -139,10 +139,14 @@ endgame status panel, plus a sanitized manifest with dimensions, frame kinds,
 positions, and hashes. The Bevy feature also provides `--visual-frame-suite`
 for 163 composed Bevy-owned frames and `--visual-route-suite` for 1691
 per-step route frames; both Bevy manifests include review coverage rows and
-per-frame clean metadata for auditing generated screenshots:
+per-frame clean metadata for auditing generated screenshots. Use
+`--compare-frame-manifests <BASE> <CURRENT>` to gate sanitized manifests by
+frame labels, dimensions, frame kinds, hashes, nonblack counts, and review
+metadata without committing PNGs:
 
 ```powershell
 cargo run -- --save-frame-suite target\frame-suite C:\Games\U5-Clean
+cargo run -- --compare-frame-manifests target\baseline\manifest.txt target\frame-suite\manifest.txt
 ```
 
 For repeatable smoke checks, `--play-script` runs a semicolon-separated command

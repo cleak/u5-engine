@@ -434,6 +434,26 @@ fn cli_parser_accepts_visual_route_suite_mode() {
 }
 
 #[test]
+fn cli_parser_accepts_frame_manifest_compare_mode() {
+    let args = parse_cli_args([
+        "--compare-frame-manifests",
+        "target/baseline/manifest.txt",
+        "target/candidate/manifest.txt",
+    ])
+    .unwrap();
+
+    assert!(!args.play);
+    assert!(!args.visual);
+    assert_eq!(
+        args.compare_frame_manifests,
+        Some((
+            PathBuf::from("target/baseline/manifest.txt"),
+            PathBuf::from("target/candidate/manifest.txt")
+        ))
+    );
+}
+
+#[test]
 fn cli_save_frame_suite_rejects_other_play_modes_and_overrides() {
     assert!(parse_cli_args(["--save-frame-suite", "out", "--play"]).is_err());
     assert!(parse_cli_args(["--save-frame-suite", "out", "--visual"]).is_err());
@@ -443,6 +463,16 @@ fn cli_save_frame_suite_rejects_other_play_modes_and_overrides() {
     assert!(parse_cli_args(["--save-frame-suite", "out", "--play-script", "q"]).is_err());
     assert!(parse_cli_args(["--save-frame-suite", "out", "--visual-frame-suite", "vis"]).is_err());
     assert!(parse_cli_args(["--save-frame-suite", "out", "--visual-route-suite", "vis"]).is_err());
+    assert!(
+        parse_cli_args([
+            "--save-frame-suite",
+            "out",
+            "--compare-frame-manifests",
+            "base",
+            "candidate"
+        ])
+        .is_err()
+    );
 }
 
 #[test]
@@ -471,6 +501,16 @@ fn cli_visual_frame_suite_rejects_other_play_modes_and_overrides() {
         ])
         .is_err()
     );
+    assert!(
+        parse_cli_args([
+            "--visual-frame-suite",
+            "out",
+            "--compare-frame-manifests",
+            "base",
+            "candidate"
+        ])
+        .is_err()
+    );
 }
 
 #[test]
@@ -490,6 +530,33 @@ fn cli_visual_route_suite_rejects_other_play_modes_and_overrides() {
     assert!(parse_cli_args(["--visual-route-suite", "out", "--route-smoke"]).is_err());
     assert!(parse_cli_args(["--visual-route-suite", "out", "--scene", "BRITANNIA"]).is_err());
     assert!(parse_cli_args(["--visual-route-suite", "out", "--play-script", "q"]).is_err());
+    assert!(
+        parse_cli_args([
+            "--visual-route-suite",
+            "out",
+            "--compare-frame-manifests",
+            "base",
+            "candidate"
+        ])
+        .is_err()
+    );
+}
+
+#[test]
+fn cli_frame_manifest_compare_rejects_other_modes_and_missing_paths() {
+    assert!(parse_cli_args(["--compare-frame-manifests"]).is_err());
+    assert!(parse_cli_args(["--compare-frame-manifests", "base"]).is_err());
+    assert!(parse_cli_args(["--compare-frame-manifests", "base", "candidate", "--play"]).is_err());
+    assert!(
+        parse_cli_args([
+            "--compare-frame-manifests",
+            "base",
+            "candidate",
+            "--visual-frame-suite",
+            "out"
+        ])
+        .is_err()
+    );
 }
 
 // from chunk_02
@@ -505,6 +572,7 @@ fn cli_parser_rejects_missing_save_frame_path() {
     assert!(parse_cli_args(["--save-frame-suite"]).is_err());
     assert!(parse_cli_args(["--visual-frame-suite"]).is_err());
     assert!(parse_cli_args(["--visual-route-suite"]).is_err());
+    assert!(parse_cli_args(["--compare-frame-manifests"]).is_err());
 }
 
 // from chunk_02
@@ -963,6 +1031,8 @@ fn cli_usage_lists_documented_smoke_commands() {
     assert!(CLI_USAGE.contains("--route-smoke"));
     assert!(CLI_USAGE.contains("--save-frame-suite"));
     assert!(CLI_USAGE.contains("--visual-frame-suite"));
+    assert!(CLI_USAGE.contains("--visual-route-suite"));
+    assert!(CLI_USAGE.contains("--compare-frame-manifests"));
     assert!(CLI_USAGE.contains("--scene"));
     assert!(CLI_USAGE.contains("--floor"));
     assert!(CLI_USAGE.contains("--create-character"));

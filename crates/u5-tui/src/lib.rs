@@ -8,6 +8,7 @@ pub mod intro_loop;
 pub mod play_loop;
 pub mod route_smoke;
 pub mod save_frame;
+pub mod visual_manifest;
 
 pub use cli::{
     CLI_USAGE, CliArgs, CreateCharacterCommand, parse_chargen_gender_arg,
@@ -30,3 +31,4 @@ pub use route_smoke::{
     run_route_smoke_case,
 };
 pub use save_frame::{SavedFrameReport, run_save_frame, run_save_frame_suite, save_frame_suite};
+pub use visual_manifest::{ManifestCompareReport, compare_manifest_files, compare_manifest_text};
