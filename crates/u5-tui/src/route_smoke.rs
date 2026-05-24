@@ -1132,6 +1132,14 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "tile viewport",
         },
         RouteSmokeCase {
+            name: "castle-talk-ordinary-keyword-route",
+            options: PlayOptions::default(),
+            script: &["T", "6", "NAME"],
+            expected: RouteSmokeExpectation::Town(castle),
+            min_turn: 1,
+            expected_frame_kind: "tile viewport",
+        },
+        RouteSmokeCase {
             name: "castle-light-decay-route",
             options: light_decay,
             script: &["empty", "empty"],
@@ -2242,6 +2250,9 @@ fn apply_route_smoke_case_setup(
         "castle-talk-status-praying-refusal" => {
             seed_town_talk_status_tile_route(state, TALK_STATUS_TILE_PRAYING);
         }
+        "castle-talk-ordinary-keyword-route" => {
+            seed_town_ordinary_talk_route(state);
+        }
         "castle-native-stair-up-route" => {
             seed_town_native_stair_route(state, Direction::East, 0xC5);
         }
@@ -2527,6 +2538,35 @@ fn seed_town_talk_status_tile_route(state: &mut PlayState, status_tile: u8) {
             object.tile = status_tile;
         }
     }
+    state.mark_visibility_dirty();
+}
+
+fn seed_town_ordinary_talk_route(state: &mut PlayState) {
+    state.player.x = 15;
+    state.player.y = 15;
+    state.player.facing = Direction::East;
+    state.sync_player_object();
+
+    let mut schedule = [0u8; 16];
+    schedule[3..6].copy_from_slice(&[16, 16, 16]);
+    schedule[6..9].copy_from_slice(&[15, 15, 15]);
+    schedule[12..16].copy_from_slice(&[0, 8, 16, 20]);
+    state.load_scheduled_npcs(&[
+        NpcSlot {
+            slot: 0,
+            type_byte: 0,
+            dialog_id: 0,
+            schedule: [0; 16],
+            name: None,
+        },
+        NpcSlot {
+            slot: 1,
+            type_byte: 1,
+            dialog_id: 2,
+            schedule,
+            name: None,
+        },
+    ]);
     state.mark_visibility_dirty();
 }
 
@@ -3585,6 +3625,19 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
             if state.message != TALK_NO_RESPONSE_MESSAGE || state.active_shop.is_some() {
                 return Err(io::Error::other(format!(
                     "route smoke `{case_name}` did not apply the praying Talk refusal"
+                )));
+            }
+        }
+        "castle-talk-ordinary-keyword-route" => {
+            if state.active_conversation.is_none()
+                || state.active_shop.is_some()
+                || state.message.is_empty()
+                || state.message.contains("[w")
+                || state.message.contains("Dialogue id")
+                || state.message.contains("funny look")
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not keep an ordinary asset-backed Talk session active"
                 )));
             }
         }
