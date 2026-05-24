@@ -62,6 +62,7 @@ pub struct PlayState {
     pub visibility_grid: [u8; VISIBILITY_GRID_LEN],
     pub terrain_band: [u8; TERRAIN_BAND_LEN],
     pub visibility_buffers_ready: bool,
+    pub world_underfoot_blackout_latched: bool,
     pub wind: WindState,
     pub wind_save_byte: u8,
     pub timing_status: TimingStatusTag,

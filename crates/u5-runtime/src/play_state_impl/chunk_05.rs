@@ -792,6 +792,7 @@ impl PlayState {
         if let Some(outcome) = self.resolve_sailed_ship_wind_gate(direction) {
             return Ok(outcome);
         }
+        let underfoot_blackout_latched = self.refresh_world_underfoot_blackout_latch();
 
         let nx = nx.rem_euclid(WORLD_SIDE as isize) as usize;
         let ny = ny.rem_euclid(WORLD_SIDE as isize) as usize;
@@ -861,6 +862,15 @@ impl PlayState {
                 object.tile
             );
             return Ok(MoveOutcome::Blocked);
+        }
+
+        if underfoot_blackout_latched {
+            self.advance_turn();
+            self.message = format!(
+                "Movement held by special underfoot tile at ({}, {}).",
+                self.player.x, self.player.y
+            );
+            return Ok(MoveOutcome::Used);
         }
 
         let final_x = nx;

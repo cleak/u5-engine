@@ -1509,7 +1509,19 @@
 
         bytes[SAVE_TIMING_STATUS_TAG_OFFSET] = b'X';
         let unknown = play_options_from_save_bytes(&bytes).unwrap();
-        assert_eq!(unknown.timing_status, TimingStatusTag::Normal);
+        assert_eq!(unknown.timing_status, TimingStatusTag::Opaque(b'X'));
+        assert_eq!(unknown.timing_status.save_byte(), b'X');
+
+        bytes[SAVE_TIMING_STATUS_TAG_OFFSET] = OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG;
+        let underfoot_exempt = play_options_from_save_bytes(&bytes).unwrap();
+        assert_eq!(
+            underfoot_exempt.timing_status,
+            TimingStatusTag::Opaque(OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG)
+        );
+        assert_eq!(
+            underfoot_exempt.timing_status.save_byte(),
+            OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG
+        );
     }
 
     #[test]

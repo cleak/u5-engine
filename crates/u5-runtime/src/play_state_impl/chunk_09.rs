@@ -1493,6 +1493,10 @@ impl PlayState {
     }
 
     pub fn world_visibility_radius(&self, requested: usize) -> usize {
+        if self.world_underfoot_blackout_active() {
+            return 0;
+        }
+
         if matches!(self.area, Area::World { .. })
             && is_water_tile(self.grid[world_cell_index(self.player.x, self.player.y)])
         {
@@ -1500,6 +1504,31 @@ impl PlayState {
         } else {
             self.surface_visibility_radius(requested)
         }
+    }
+
+    pub fn world_underfoot_blackout_active(&self) -> bool {
+        if !matches!(self.area, Area::World { .. }) {
+            return false;
+        }
+        let tile = self.grid[world_cell_index(self.player.x, self.player.y)];
+        overworld_underfoot_forces_dark(tile, self.timing_status.save_byte())
+    }
+
+    pub fn refresh_world_underfoot_blackout_latch(&mut self) -> bool {
+        if self.world_underfoot_blackout_active() {
+            if !self.world_underfoot_blackout_latched || self.ambient_light != 0 {
+                self.mark_visibility_dirty();
+            }
+            self.world_underfoot_blackout_latched = true;
+            self.ambient_light = 0;
+            return true;
+        }
+
+        if self.world_underfoot_blackout_latched {
+            self.world_underfoot_blackout_latched = false;
+            self.mode_zero_cleanup();
+        }
+        false
     }
 
     pub fn town_cell_visible(

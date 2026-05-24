@@ -8,14 +8,16 @@ pub enum TimingStatusTag {
     Normal,
     HalfTime,
     NoMinuteLight,
+    Opaque(u8),
 }
 
 impl TimingStatusTag {
     pub fn from_save_byte(byte: u8) -> Self {
         match byte {
+            0 => Self::Normal,
             b'Q' => Self::HalfTime,
             b'T' => Self::NoMinuteLight,
-            _ => Self::Normal,
+            other => Self::Opaque(other),
         }
     }
 
@@ -33,6 +35,7 @@ impl TimingStatusTag {
             Self::HalfTime if base == 0 => 0,
             Self::HalfTime => (base / 2).max(1),
             Self::NoMinuteLight => 0,
+            Self::Opaque(_) => base,
         }
     }
 
@@ -41,6 +44,7 @@ impl TimingStatusTag {
             Self::Normal => 0,
             Self::HalfTime => b'Q',
             Self::NoMinuteLight => b'T',
+            Self::Opaque(byte) => byte,
         }
     }
 
@@ -49,6 +53,7 @@ impl TimingStatusTag {
             Self::Normal => "normal",
             Self::HalfTime => "half-time",
             Self::NoMinuteLight => "no-minute-light",
+            Self::Opaque(_) => "opaque",
         }
     }
 
@@ -60,6 +65,7 @@ impl TimingStatusTag {
             Self::Normal => true,
             Self::HalfTime => turn_before % 2 == 1,
             Self::NoMinuteLight => false,
+            Self::Opaque(_) => true,
         }
     }
 }

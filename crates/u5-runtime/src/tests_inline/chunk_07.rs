@@ -1477,6 +1477,88 @@ fn horse_world_movement_uses_one_cell_on_rough_terrain() {
 }
 
 #[test]
+fn overworld_special_underfoot_latch_forces_darkness_and_holds_valid_movement() {
+    let mut grid = open_world_grid();
+    grid[world_cell_index(5, 5)] = OVERWORLD_UNDERFOOT_BLACKOUT_TILE;
+    let mut state = britannia_state(grid, 5, 5);
+    state.ambient_light = FULL_DAYLIGHT;
+    state.visibility_dirty = false;
+
+    assert!(state.refresh_world_underfoot_blackout_latch());
+    assert!(state.world_underfoot_blackout_latched);
+    assert_eq!(state.ambient_light, 0);
+    assert!(state.visibility_dirty);
+    assert_eq!(state.world_visibility_radius(5), 0);
+
+    state.visibility_dirty = false;
+    assert_eq!(
+        state
+            .step_world(Direction::East, 6, 5, WorldPlane::Britannia, None)
+            .unwrap(),
+        MoveOutcome::Used
+    );
+    assert_eq!((state.player.x, state.player.y), (5, 5));
+    assert_eq!(state.turn, 1);
+    assert!(state.message.contains("special underfoot tile"));
+}
+
+#[test]
+fn overworld_special_underfoot_latch_allows_blocked_target_probe_without_turn() {
+    let mut grid = open_world_grid();
+    grid[world_cell_index(5, 5)] = OVERWORLD_UNDERFOOT_BLACKOUT_TILE;
+    grid[world_cell_index(6, 5)] = 0x28;
+    let mut state = britannia_state(grid, 5, 5);
+
+    assert_eq!(
+        state
+            .step_world(Direction::East, 6, 5, WorldPlane::Britannia, None)
+            .unwrap(),
+        MoveOutcome::Blocked
+    );
+    assert_eq!((state.player.x, state.player.y), (5, 5));
+    assert_eq!(state.turn, 0);
+    assert!(state.world_underfoot_blackout_latched);
+}
+
+#[test]
+fn overworld_special_underfoot_exempt_tag_skips_latch() {
+    let mut grid = open_world_grid();
+    grid[world_cell_index(5, 5)] = OVERWORLD_UNDERFOOT_BLACKOUT_TILE;
+    let mut state = britannia_state(grid, 5, 5);
+    state.timing_status = TimingStatusTag::Opaque(OVERWORLD_UNDERFOOT_BLACKOUT_EXEMPT_TAG);
+
+    assert!(!state.refresh_world_underfoot_blackout_latch());
+    assert_eq!(state.world_visibility_radius(5), 5);
+    assert_eq!(
+        state
+            .step_world(Direction::East, 6, 5, WorldPlane::Britannia, None)
+            .unwrap(),
+        MoveOutcome::Moved
+    );
+    assert_eq!((state.player.x, state.player.y), (6, 5));
+}
+
+#[test]
+fn overworld_special_underfoot_latch_clears_with_zero_minute_daylight_recompute() {
+    let mut grid = open_world_grid();
+    grid[world_cell_index(5, 5)] = OVERWORLD_UNDERFOOT_BLACKOUT_TILE;
+    let mut state = britannia_state(grid, 5, 5);
+    state.clock = GameClock::new(12, 0).unwrap();
+    state.ambient_light = FULL_DAYLIGHT;
+
+    assert!(state.refresh_world_underfoot_blackout_latch());
+
+    state.grid[world_cell_index(5, 5)] = 5;
+    state.visibility_dirty = false;
+    assert!(!state.refresh_world_underfoot_blackout_latch());
+
+    assert!(!state.world_underfoot_blackout_latched);
+    assert_eq!(state.ambient_light, FULL_DAYLIGHT);
+    assert!(state.visibility_dirty);
+    assert_eq!(state.turn, 0);
+}
+
+#[test]
 fn horse_world_movement_does_not_skip_first_cell_plane_transition() {
     let dir = debug_game_dir();
     fs::write(
