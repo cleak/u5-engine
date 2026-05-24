@@ -9,6 +9,87 @@ pub const DISPLAY_SURFACE_HEIGHT: usize = TITLE_SURFACE_HEIGHT as usize;
 pub const DISPLAY_SURFACE_PIXELS: usize = DISPLAY_SURFACE_WIDTH * DISPLAY_SURFACE_HEIGHT;
 pub const DISPLAY_TEXT_COLUMNS: usize = TEXT_SCREEN_COLUMNS as usize;
 pub const DISPLAY_TEXT_ROWS: usize = TEXT_SCREEN_ROWS as usize;
+pub const EGA_DRIVER_SLOT_COUNT: u8 = 38;
+pub const EGA_DRIVER_LAST_DISPATCH_OFFSET: u8 = (EGA_DRIVER_SLOT_COUNT - 1) * 3;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DisplayRenderTarget {
+    Front,
+    Back,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EgaDispatchResult {
+    None,
+    ScreenHeight(u16),
+    BackBufferSegment(u16),
+    Pixel(u8),
+    Rect(DisplayPixelRect),
+}
+
+pub enum EgaDisplayOperation<'a> {
+    ScreenHeight,
+    EnterGraphicsMode,
+    InitBackBuffer,
+    ReleaseBackBuffer,
+    SetRenderTarget(DisplayRenderTarget),
+    PrepareBackBufferState,
+    SetCurrentColor(u8),
+    ReadPixel {
+        x: usize,
+        y: usize,
+    },
+    PlotPixel {
+        x: usize,
+        y: usize,
+    },
+    ScrollTextUp {
+        rect: DisplayPixelRect,
+        blank_color: u8,
+    },
+    FillBackRect {
+        rect: DisplayPixelRect,
+        color: u8,
+    },
+    FillOldRect {
+        rect: DisplayPixelRect,
+        color: u8,
+    },
+    FillClippedRect(DisplayPixelRect),
+    CopyBackToFront(DisplayPixelRect),
+    DissolveBackToFront(DisplayPixelRect),
+    DrawTile {
+        atlas: &'a TileAtlas,
+        tile: usize,
+        dst_x: i32,
+        dst_y: i32,
+    },
+    DrawGlyph {
+        font: &'a FixedCellFont,
+        code: u8,
+        cell_x: usize,
+        cell_y: usize,
+        foreground: u8,
+        background: u8,
+    },
+    AdvanceTitleTick,
+    PresentFrame,
+    NoOp,
+}
+
+pub fn ega_driver_dispatch_slot(dispatch_offset: u8) -> Option<u8> {
+    if dispatch_offset % 3 != 0 || dispatch_offset > EGA_DRIVER_LAST_DISPATCH_OFFSET {
+        return None;
+    }
+    Some(dispatch_offset / 3)
+}
+
+pub fn ega_driver_dispatch_offset(slot: u8) -> Option<u8> {
+    if slot >= EGA_DRIVER_SLOT_COUNT {
+        return None;
+    }
+    Some(slot * 3)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DisplayPixelRect {
@@ -70,9 +151,12 @@ pub fn text_cell_rect_to_pixel_rect(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EgaDisplaySurface {
     front_pixels: Vec<u8>,
+    back_pixels: Vec<u8>,
     current_color: u8,
     title_tick_frame: u8,
     presented_frames: u64,
+    render_target: DisplayRenderTarget,
+    back_buffer_active: bool,
 }
 
 impl Default for EgaDisplaySurface {
@@ -85,14 +169,21 @@ impl EgaDisplaySurface {
     pub fn new() -> Self {
         Self {
             front_pixels: vec![0; DISPLAY_SURFACE_PIXELS],
+            back_pixels: vec![0; DISPLAY_SURFACE_PIXELS],
             current_color: 0,
             title_tick_frame: 0,
             presented_frames: 0,
+            render_target: DisplayRenderTarget::Front,
+            back_buffer_active: false,
         }
     }
 
     pub fn front_pixels(&self) -> &[u8] {
         &self.front_pixels
+    }
+
+    pub fn back_pixels(&self) -> &[u8] {
+        &self.back_pixels
     }
 
     pub fn current_color(&self) -> u8 {
@@ -105,6 +196,29 @@ impl EgaDisplaySurface {
 
     pub fn presented_frames(&self) -> u64 {
         self.presented_frames
+    }
+
+    pub fn render_target(&self) -> DisplayRenderTarget {
+        self.render_target
+    }
+
+    pub fn back_buffer_active(&self) -> bool {
+        self.back_buffer_active
+    }
+
+    pub fn set_render_target(&mut self, target: DisplayRenderTarget) {
+        self.render_target = target;
+    }
+
+    pub fn init_back_buffer(&mut self) -> u16 {
+        self.back_buffer_active = true;
+        0
+    }
+
+    pub fn release_back_buffer(&mut self) {
+        self.back_buffer_active = false;
+        self.render_target = DisplayRenderTarget::Front;
+        self.back_pixels.fill(0);
     }
 
     pub fn set_current_color(&mut self, color: u8) {
@@ -133,10 +247,12 @@ impl EgaDisplaySurface {
 
     pub fn fill_rect(&mut self, rect: DisplayPixelRect, color: u8) {
         let color = color & 0x0f;
-        for y in rect.y0..=rect.y1 {
-            let start = y * DISPLAY_SURFACE_WIDTH + rect.x0;
-            self.front_pixels[start..=start + rect.width() - 1].fill(color);
-        }
+        fill_pixels_rect(&mut self.front_pixels, rect, color);
+    }
+
+    pub fn fill_back_rect(&mut self, rect: DisplayPixelRect, color: u8) {
+        let color = color & 0x0f;
+        fill_pixels_rect(&mut self.back_pixels, rect, color);
     }
 
     pub fn clear_rect(&mut self, rect: DisplayPixelRect) {
@@ -166,6 +282,14 @@ impl EgaDisplaySurface {
 
     pub fn scroll_text_rect_up_one_row(&mut self, rect: DisplayPixelRect, blank_color: u8) {
         self.scroll_rect(rect, 0, -(CH_CELL_SIDE as i32), blank_color);
+    }
+
+    pub fn copy_back_to_front_rect(&mut self, rect: DisplayPixelRect) {
+        copy_rect_between_buffers(&self.back_pixels, &mut self.front_pixels, rect);
+    }
+
+    pub fn dissolve_back_to_front_rect(&mut self, rect: DisplayPixelRect) {
+        copy_rect_between_buffers(&self.back_pixels, &mut self.front_pixels, rect);
     }
 
     pub fn blit_tile_at_pixel(
@@ -271,5 +395,125 @@ impl EgaDisplaySurface {
 
     pub fn present_frame(&mut self) {
         self.presented_frames = self.presented_frames.saturating_add(1);
+    }
+
+    pub fn execute(&mut self, operation: EgaDisplayOperation<'_>) -> io::Result<EgaDispatchResult> {
+        match operation {
+            EgaDisplayOperation::ScreenHeight => Ok(EgaDispatchResult::ScreenHeight(
+                DISPLAY_SURFACE_HEIGHT as u16,
+            )),
+            EgaDisplayOperation::EnterGraphicsMode => {
+                self.render_target = DisplayRenderTarget::Front;
+                Ok(EgaDispatchResult::None)
+            }
+            EgaDisplayOperation::InitBackBuffer => {
+                let segment = self.init_back_buffer();
+                Ok(EgaDispatchResult::BackBufferSegment(segment))
+            }
+            EgaDisplayOperation::ReleaseBackBuffer => {
+                self.release_back_buffer();
+                Ok(EgaDispatchResult::None)
+            }
+            EgaDisplayOperation::SetRenderTarget(target) => {
+                self.set_render_target(target);
+                Ok(EgaDispatchResult::None)
+            }
+            EgaDisplayOperation::PrepareBackBufferState => {
+                self.back_buffer_active = true;
+                Ok(EgaDispatchResult::None)
+            }
+            EgaDisplayOperation::SetCurrentColor(color) => {
+                self.set_current_color(color);
+                Ok(EgaDispatchResult::None)
+            }
+            EgaDisplayOperation::ReadPixel { x, y } => {
+                Ok(EgaDispatchResult::Pixel(self.read_pixel(x, y).unwrap_or(0)))
+            }
+            EgaDisplayOperation::PlotPixel { x, y } => {
+                if self.render_target == DisplayRenderTarget::Front {
+                    self.plot_pixel(x, y);
+                } else if x < DISPLAY_SURFACE_WIDTH && y < DISPLAY_SURFACE_HEIGHT {
+                    self.back_pixels[y * DISPLAY_SURFACE_WIDTH + x] = self.current_color;
+                }
+                Ok(EgaDispatchResult::None)
+            }
+            EgaDisplayOperation::ScrollTextUp { rect, blank_color } => {
+                if self.render_target == DisplayRenderTarget::Front {
+                    self.scroll_text_rect_up_one_row(rect, blank_color);
+                }
+                Ok(EgaDispatchResult::None)
+            }
+            EgaDisplayOperation::FillBackRect { rect, color }
+            | EgaDisplayOperation::FillOldRect { rect, color } => {
+                if self.render_target == DisplayRenderTarget::Back {
+                    self.fill_back_rect(rect, color);
+                } else {
+                    self.fill_rect(rect, color);
+                }
+                Ok(EgaDispatchResult::Rect(rect))
+            }
+            EgaDisplayOperation::FillClippedRect(rect) => {
+                if self.render_target == DisplayRenderTarget::Front {
+                    self.fill_rect_current_color(rect);
+                }
+                Ok(EgaDispatchResult::Rect(rect))
+            }
+            EgaDisplayOperation::CopyBackToFront(rect) => {
+                self.copy_back_to_front_rect(rect);
+                Ok(EgaDispatchResult::Rect(rect))
+            }
+            EgaDisplayOperation::DissolveBackToFront(rect) => {
+                self.dissolve_back_to_front_rect(rect);
+                Ok(EgaDispatchResult::Rect(rect))
+            }
+            EgaDisplayOperation::DrawTile {
+                atlas,
+                tile,
+                dst_x,
+                dst_y,
+            } => {
+                if self.render_target == DisplayRenderTarget::Front {
+                    self.blit_tile_at_pixel(atlas, tile, dst_x, dst_y)?;
+                }
+                Ok(EgaDispatchResult::None)
+            }
+            EgaDisplayOperation::DrawGlyph {
+                font,
+                code,
+                cell_x,
+                cell_y,
+                foreground,
+                background,
+            } => {
+                if self.render_target == DisplayRenderTarget::Front {
+                    self.draw_fixed_glyph_cell(font, code, cell_x, cell_y, foreground, background)?;
+                }
+                Ok(EgaDispatchResult::None)
+            }
+            EgaDisplayOperation::AdvanceTitleTick => {
+                let rect = self.advance_title_tick();
+                Ok(EgaDispatchResult::Rect(rect))
+            }
+            EgaDisplayOperation::PresentFrame => {
+                self.present_frame();
+                Ok(EgaDispatchResult::None)
+            }
+            EgaDisplayOperation::NoOp => Ok(EgaDispatchResult::None),
+        }
+    }
+}
+
+fn fill_pixels_rect(pixels: &mut [u8], rect: DisplayPixelRect, color: u8) {
+    for y in rect.y0..=rect.y1 {
+        let start = y * DISPLAY_SURFACE_WIDTH + rect.x0;
+        pixels[start..=start + rect.width() - 1].fill(color);
+    }
+}
+
+fn copy_rect_between_buffers(src: &[u8], dst: &mut [u8], rect: DisplayPixelRect) {
+    for y in rect.y0..=rect.y1 {
+        let start = y * DISPLAY_SURFACE_WIDTH + rect.x0;
+        let end = start + rect.width();
+        dst[start..end].copy_from_slice(&src[start..end]);
     }
 }

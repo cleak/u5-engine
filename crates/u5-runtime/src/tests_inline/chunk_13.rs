@@ -5170,6 +5170,144 @@ fn display_surface_title_tick_touches_only_published_rectangle_and_presents_expl
 }
 
 #[test]
+fn display_driver_dispatch_slots_map_byte_offsets_to_public_inventory() {
+    assert_eq!(EGA_DRIVER_SLOT_COUNT, 38);
+    assert_eq!(ega_driver_dispatch_slot(0x00), Some(0));
+    assert_eq!(ega_driver_dispatch_slot(0x3f), Some(21));
+    assert_eq!(ega_driver_dispatch_slot(0x42), Some(22));
+    assert_eq!(ega_driver_dispatch_slot(0x6f), Some(37));
+    assert_eq!(ega_driver_dispatch_slot(0x40), None);
+    assert_eq!(ega_driver_dispatch_slot(0x72), None);
+    assert_eq!(ega_driver_dispatch_offset(21), Some(0x3f));
+    assert_eq!(ega_driver_dispatch_offset(22), Some(0x42));
+    assert_eq!(ega_driver_dispatch_offset(38), None);
+}
+
+#[test]
+fn display_driver_executes_back_buffer_copy_and_front_fill_boundaries() {
+    let mut surface = EgaDisplaySurface::new();
+    let rect = normalize_clamp_pixel_rect(2, 2, 4, 3).unwrap();
+
+    assert_eq!(
+        surface.execute(EgaDisplayOperation::ScreenHeight).unwrap(),
+        EgaDispatchResult::ScreenHeight(200)
+    );
+    assert_eq!(
+        surface.execute(EgaDisplayOperation::InitBackBuffer).unwrap(),
+        EgaDispatchResult::BackBufferSegment(0)
+    );
+    assert!(surface.back_buffer_active());
+    surface
+        .execute(EgaDisplayOperation::SetRenderTarget(
+            DisplayRenderTarget::Back,
+        ))
+        .unwrap();
+    surface
+        .execute(EgaDisplayOperation::SetCurrentColor(0x0d))
+        .unwrap();
+
+    surface
+        .execute(EgaDisplayOperation::FillClippedRect(rect))
+        .unwrap();
+    assert_eq!(surface.read_pixel(2, 2), Some(0));
+
+    surface
+        .execute(EgaDisplayOperation::FillBackRect { rect, color: 0x1e })
+        .unwrap();
+    assert_eq!(
+        surface.back_pixels()[2 * DISPLAY_SURFACE_WIDTH + 2],
+        0x0e
+    );
+    assert_eq!(surface.read_pixel(2, 2), Some(0));
+
+    surface
+        .execute(EgaDisplayOperation::DissolveBackToFront(rect))
+        .unwrap();
+    assert_eq!(surface.read_pixel(2, 2), Some(0x0e));
+    assert_eq!(surface.read_pixel(4, 3), Some(0x0e));
+    assert_eq!(surface.read_pixel(5, 3), Some(0));
+
+    surface
+        .execute(EgaDisplayOperation::ReleaseBackBuffer)
+        .unwrap();
+    assert!(!surface.back_buffer_active());
+    assert_eq!(surface.render_target(), DisplayRenderTarget::Front);
+    assert!(surface.back_pixels().iter().all(|pixel| *pixel == 0));
+}
+
+#[test]
+fn display_driver_executes_front_buffer_tile_glyph_pixel_and_title_ops() {
+    let mut surface = EgaDisplaySurface::new();
+    let atlas = synthetic_tile_atlas(TileGraphicsDepth::Ega16);
+    surface
+        .execute(EgaDisplayOperation::SetRenderTarget(
+            DisplayRenderTarget::Back,
+        ))
+        .unwrap();
+    surface
+        .execute(EgaDisplayOperation::DrawTile {
+            atlas: &atlas,
+            tile: 5,
+            dst_x: 0,
+            dst_y: 0,
+        })
+        .unwrap();
+    assert_eq!(surface.read_pixel(0, 0), Some(0));
+
+    surface
+        .execute(EgaDisplayOperation::SetRenderTarget(
+            DisplayRenderTarget::Front,
+        ))
+        .unwrap();
+    surface
+        .execute(EgaDisplayOperation::DrawTile {
+            atlas: &atlas,
+            tile: 5,
+            dst_x: 0,
+            dst_y: 0,
+        })
+        .unwrap();
+    assert_eq!(surface.read_pixel(0, 0), Some(5));
+
+    let mut font_bytes = vec![0u8; CH_FONT_LEN];
+    let glyph = usize::from(b'Z') * CH_CELL_SIDE;
+    font_bytes[glyph] = 0b1000_0000;
+    let font = parse_ch_font(&font_bytes, "fixture").unwrap();
+    surface
+        .execute(EgaDisplayOperation::DrawGlyph {
+            font: &font,
+            code: b'Z',
+            cell_x: 2,
+            cell_y: 0,
+            foreground: 0x0c,
+            background: 0x02,
+        })
+        .unwrap();
+    assert_eq!(surface.read_pixel(16, 0), Some(0x0c));
+    assert_eq!(surface.read_pixel(17, 0), Some(0x02));
+
+    surface
+        .execute(EgaDisplayOperation::SetCurrentColor(0x1f))
+        .unwrap();
+    surface
+        .execute(EgaDisplayOperation::PlotPixel { x: 319, y: 199 })
+        .unwrap();
+    assert_eq!(
+        surface
+            .execute(EgaDisplayOperation::ReadPixel { x: 319, y: 199 })
+            .unwrap(),
+        EgaDispatchResult::Pixel(0x0f)
+    );
+
+    let title_rect = surface
+        .execute(EgaDisplayOperation::AdvanceTitleTick)
+        .unwrap();
+    assert!(matches!(title_rect, EgaDispatchResult::Rect(_)));
+    surface.execute(EgaDisplayOperation::PresentFrame).unwrap();
+    assert_eq!(surface.presented_frames(), 1);
+}
+
+#[test]
 fn chest_content_roll_die_and_secondary_attempt_formula_match_spec() {
     // containers.md §4: chest content gates use a `1..=30` die,
     // and the secondary-pool attempt count is `floor(chest_class
