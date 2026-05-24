@@ -922,6 +922,8 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
     create_food.spell_charges[CREATE_FOOD_SPELL_INDEX] = 1;
     create_food.party[0].mana = CREATE_FOOD_COST;
     create_food.party[0].level = CREATE_FOOD_COST;
+    let mut castle_light_decay = PlayOptions::default();
+    castle_light_decay.light_spell_counter = 2;
     let shadowlord_town = Scene::new(SCENE_MOONGLOW).expect("Shadowlord hideout town is valid");
     let stonegate = Scene::new(SCENE_STONEGATE).expect("Stonegate scene is valid");
     let mut gate_travel_to_underworld = PlayOptions {
@@ -2068,6 +2070,96 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_arms_siege_crafters),
         },
         VisualRouteSuiteCase {
+            label: "route-shop-arms-iolos-bows-terminator-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "H", "\x1b"],
+            configure: Some(seed_visual_route_arms_iolos_bows),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-naughty-nomaans-terminator-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "H", "\x1b"],
+            configure: Some(seed_visual_route_arms_naughty_nomaans),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-arms-of-justice-terminator-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "H", "\x1b"],
+            configure: Some(seed_visual_route_arms_arms_of_justice),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-darkwatch-armoury-terminator-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "H", "\x1b"],
+            configure: Some(seed_visual_route_arms_darkwatch_armoury),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-paladins-protectorate-terminator-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "H", "\x1b"],
+            configure: Some(seed_visual_route_arms_paladins_protectorate),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-north-star-armoury-terminator-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "H", "\x1b"],
+            configure: Some(seed_visual_route_arms_north_star_armoury),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-buccaneers-booty-terminator-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "H", "\x1b"],
+            configure: Some(seed_visual_route_arms_buccaneers_booty),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-shattered-shield-terminator-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "H", "\x1b"],
+            configure: Some(seed_visual_route_arms_shattered_shield),
+        },
+        VisualRouteSuiteCase {
+            label: "route-shop-arms-siege-crafters-terminator-refusal",
+            frame_kind: "visual route town frame",
+            options: PlayOptions {
+                target: PlayTarget::Town(castle),
+                ..PlayOptions::default()
+            },
+            script: &["B", "H", "\x1b"],
+            configure: Some(seed_visual_route_arms_siege_crafters),
+        },
+        VisualRouteSuiteCase {
             label: "route-shop-healer-heal-decline",
             frame_kind: "visual route town frame",
             options: PlayOptions {
@@ -2384,6 +2476,13 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             },
             script: &["C1LV", "C1AS6"],
             configure: Some(seed_visual_route_light_open),
+        },
+        VisualRouteSuiteCase {
+            label: "route-castle-light-decay-route",
+            frame_kind: "visual route town frame",
+            options: castle_light_decay,
+            script: &["empty", "empty"],
+            configure: None,
         },
         VisualRouteSuiteCase {
             label: "route-castle-restore-spell-suite",
@@ -4943,6 +5042,10 @@ fn visual_route_step_label(route_label: &str, step: usize, command: &str) -> Str
 fn visual_route_allows_unchanged_step(route_label: &str, step: usize) -> bool {
     (route_label == "route-endgame-box-full-victory-cinematic" && (3..=18).contains(&step))
         || (route_label == "route-doom-combat-multi-round-pass" && (2..=5).contains(&step))
+        || (route_label == "route-castle-light-decay-route" && (1..=2).contains(&step))
+        || (route_label.starts_with("route-shop-arms-")
+            && route_label.ends_with("-terminator-refusal")
+            && (1..=3).contains(&step))
 }
 
 fn run_visual_intro_menu_app(
@@ -9374,7 +9477,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 266);
+        assert_eq!(cases.len(), 276);
         assert!(cases.iter().all(|case| {
             !case.script.is_empty()
                 || matches!(
@@ -9609,6 +9712,24 @@ mod tests {
         );
         for label in [
             "route-shop-arms-local-buy-sell",
+            "route-shop-arms-iolos-bows-buy-first",
+            "route-shop-arms-naughty-nomaans-buy-first",
+            "route-shop-arms-arms-of-justice-buy-first",
+            "route-shop-arms-darkwatch-armoury-buy-first",
+            "route-shop-arms-paladins-protectorate-buy-first",
+            "route-shop-arms-north-star-armoury-buy-first",
+            "route-shop-arms-buccaneers-booty-buy-first",
+            "route-shop-arms-shattered-shield-buy-first",
+            "route-shop-arms-siege-crafters-buy-first",
+            "route-shop-arms-iolos-bows-terminator-refusal",
+            "route-shop-arms-naughty-nomaans-terminator-refusal",
+            "route-shop-arms-arms-of-justice-terminator-refusal",
+            "route-shop-arms-darkwatch-armoury-terminator-refusal",
+            "route-shop-arms-paladins-protectorate-terminator-refusal",
+            "route-shop-arms-north-star-armoury-terminator-refusal",
+            "route-shop-arms-buccaneers-booty-terminator-refusal",
+            "route-shop-arms-shattered-shield-terminator-refusal",
+            "route-shop-arms-siege-crafters-terminator-refusal",
             "route-shop-healer-heal-decline",
             "route-shop-healer-heal-decline-route",
             "route-shop-healer-cure-accept",
@@ -9646,6 +9767,7 @@ mod tests {
             "route-castle-in-lor-spell",
             "route-castle-light-open-spell",
             "route-castle-light-open-spell-route",
+            "route-castle-light-decay-route",
             "route-castle-restore-spell-suite",
             "route-castle-active-effect-spell-suite",
             "route-combat-directed-sleep-cone",
@@ -9974,7 +10096,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 810);
+        assert_eq!(reports.len(), 849);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -10099,6 +10221,8 @@ mod tests {
         assert!(manifest.contains("route-dungeon-refusal-fire-01-f"));
         assert!(manifest.contains("route-shop-arms-local-buy-sell-06-n"));
         assert!(manifest.contains("route-shop-arms-local-buy-sell-route-06-n"));
+        assert!(manifest.contains("route-shop-arms-iolos-bows-terminator-refusal-03-_"));
+        assert!(manifest.contains("route-shop-arms-siege-crafters-terminator-refusal-03-_"));
         assert!(manifest.contains("route-shop-healer-heal-decline-04-n"));
         assert!(manifest.contains("route-shop-healer-heal-decline-route-04-n"));
         assert!(manifest.contains("route-shop-healer-cure-accept-04-y"));
@@ -10130,6 +10254,7 @@ mod tests {
         assert!(manifest.contains("route-castle-in-lor-spell-01-c1il"));
         assert!(manifest.contains("route-castle-light-open-spell-02-c1as6"));
         assert!(manifest.contains("route-castle-light-open-spell-route-02-c1as6"));
+        assert!(manifest.contains("route-castle-light-decay-route-02-empty"));
         assert!(manifest.contains("route-castle-restore-spell-suite-05-c1cim4"));
         assert!(manifest.contains("route-castle-active-effect-spell-suite-04-c1at"));
         assert!(manifest.contains("route-combat-directed-sleep-cone-01-c1iz6"));

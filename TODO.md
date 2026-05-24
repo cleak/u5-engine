@@ -149,7 +149,7 @@ Last known verification state:
   `097761f6267d3b94`.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
   target\visual-route-suite C:\Games\U5-Clean` passed on 2026-05-24 and
-  wrote 810 nonblank Bevy-owned per-step route PNGs plus a sanitized
+  wrote 849 nonblank Bevy-owned per-step route PNGs plus a sanitized
   manifest, with TUI-parity labels for additional ship/castle/shop/dungeon
   and Doom combat aliases as well as world/town/dungeon
   movement/pass/look/view/status, Minoc daily fixed-hidden, hourly
@@ -251,7 +251,10 @@ Last known verification state:
   overlay, active shop, dungeon torch/turn/SJOG/refusal/reload, Minoc reload,
   wishing-well, terrain combat exit, endgame confirmation, combat field, and
   Doom room combat/pass/selection/direct-step/attack/refusal/Escape/music
-  toggle/quit label coverage. The
+  toggle/quit label coverage. Bevy visual-route coverage now also includes
+  the exact TUI-label light-decay route and all nine arms-shop terminator
+  refusal routes, with those inert/terminal frames explicitly allowed as
+  unchanged where the underlying route produces no visual delta. The
   latest combat visual-route expansion adds composed-frame Doom combat
   command coverage for digit selection/clear, direct movement,
   Use/Drop/Wear/Enter/Fire/Hole-up/Ignite/Mix/New Order/Talk/View/Look
