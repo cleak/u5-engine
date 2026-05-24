@@ -11,7 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, Area, ArmsShop, BLACKTHORN_CAPTIVE_CELL_SCENE,
     BLACKTHORN_RESCUE_HANDOFF_SCENE, BLINK_COST, BLINK_SPELL_INDEX,
-    COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_CLASS_GIANT_RAT,
+    COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
     COMBAT_PARTY_ACTOR_SLOTS, CREATE_FOOD_COST, CREATE_FOOD_MAX_GRANT, CREATE_FOOD_SPELL_INDEX,
     CURE_COST, CURE_SPELL_INDEX, CombatActorDescriptor, CombatArenaFieldKind,
     DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX, DEFAULT_FOOD_STOCK,
@@ -54,8 +54,8 @@ use u5_runtime::{
         ReagentShopState, SageState, ShipBrokerState, TavernState,
     },
     shop_session::ActiveShopSession,
-    stable_horse_price, summoned_active_object_record, u5_prng_range_u16,
-    word_of_power_seal_for_word, world_cell_index,
+    spell_index_from_code, spell_mp_cost, stable_horse_price, summoned_active_object_record,
+    u5_prng_range_u16, word_of_power_seal_for_word, world_cell_index,
 };
 
 use crate::{
@@ -1767,6 +1767,78 @@ pub fn route_smoke_cases() -> Vec<RouteSmokeCase> {
             expected_frame_kind: "combat viewport",
         },
         RouteSmokeCase {
+            name: "combat-magic-missile-target",
+            options: world.clone(),
+            script: &["C1GP7"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-tremor-targets",
+            options: world.clone(),
+            script: &["C1IPVY"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-repel-undead-targets",
+            options: world.clone(),
+            script: &["C1ACX"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-charm-target",
+            options: world.clone(),
+            script: &["C1AEX7"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-polymorph-target",
+            options: world.clone(),
+            script: &["C1BRX7"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-clone-target",
+            options: world.clone(),
+            script: &["C1IQX7"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-conjure-animal",
+            options: world.clone(),
+            script: &["C1KX"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-swarm-summon",
+            options: world.clone(),
+            script: &["C1BIX"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
+            name: "combat-summon-daemon-ring",
+            options: world.clone(),
+            script: &["C1CKX6"],
+            expected: RouteSmokeExpectation::World(WorldPlane::Britannia),
+            min_turn: 1,
+            expected_frame_kind: "combat viewport",
+        },
+        RouteSmokeCase {
             name: "doom-combat-get-direction",
             options: doom_options.clone(),
             script: &["empty", "G6"],
@@ -1959,8 +2031,8 @@ pub fn run_route_smoke_case(
     }
     if state.turn < case.min_turn {
         return Err(io::Error::other(format!(
-            "route smoke `{}` ended at turn {}; expected at least {}",
-            case.name, state.turn, case.min_turn
+            "route smoke `{}` ended at turn {}; expected at least {}; message `{}`",
+            case.name, state.turn, case.min_turn, state.message
         )));
     }
     let final_frame_kind = raster_frame_kind(&state);
@@ -2077,6 +2149,17 @@ fn apply_route_smoke_case_setup(
         | "combat-field-energy-marker-placement" => {
             let (spell_index, cost, _) = combat_field_route_spell(case_name);
             seed_combat_field_route(state, spell_index, cost)?;
+        }
+        "combat-magic-missile-target"
+        | "combat-tremor-targets"
+        | "combat-repel-undead-targets"
+        | "combat-charm-target"
+        | "combat-polymorph-target"
+        | "combat-clone-target"
+        | "combat-conjure-animal"
+        | "combat-swarm-summon"
+        | "combat-summon-daemon-ring" => {
+            seed_combat_spell_route(state, combat_spell_route_code(case_name))?;
         }
         "lycaeum-shard-falsehood-vanquish" => {
             seed_shadowlord_shard_route(state, SHADOWLORD_FALSEHOOD_INDEX, 15, 9);
@@ -2762,6 +2845,241 @@ fn seed_combat_field_route(state: &mut PlayState, spell_index: usize, cost: u8) 
     Ok(())
 }
 
+fn combat_spell_route_code(case_name: &str) -> &'static str {
+    match case_name {
+        "combat-tremor-targets" => "IPVY",
+        "combat-repel-undead-targets" => "ACX",
+        "combat-charm-target" => "AEX",
+        "combat-polymorph-target" => "BRX",
+        "combat-clone-target" => "IQX",
+        "combat-conjure-animal" => "KX",
+        "combat-swarm-summon" => "BIX",
+        "combat-summon-daemon-ring" => "CKX",
+        _ => "GP",
+    }
+}
+
+fn seed_combat_spell_route(state: &mut PlayState, code: &str) -> io::Result<()> {
+    let spell_index = spell_index_from_code(code)
+        .ok_or_else(|| io::Error::other(format!("unknown combat spell code `{code}`")))?;
+    let cost = spell_mp_cost(spell_index)
+        .ok_or_else(|| io::Error::other(format!("unknown combat spell cost for `{code}`")))?;
+
+    state.party = vec![route_party_member(0, b'A', b'G', 99, 99)];
+    state.party_names = default_party_names(1);
+    state.party_experience = default_party_experience(1);
+    state.party_stay_counters = default_party_stay_counters(1);
+    state.party_strengths = vec![30];
+    state.party_intelligence = default_party_intelligence(1);
+    state.party_equipment = default_party_equipment(1);
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = cost;
+        caster.level = cost;
+    }
+    state.active_player = Some(0);
+    state.spell_charges[spell_index] = 1;
+    let mut combat_terrain = if matches!(code, "IQX" | "KX" | "BIX" | "CKX") {
+        [[0x0c; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE]
+    } else {
+        [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE]
+    };
+    match code {
+        "IQX" => {
+            combat_terrain[1][8] = 0x04;
+            combat_terrain[5][5] = 0x04;
+            combat_terrain[5][6] = 0x04;
+        }
+        "KX" => {
+            combat_terrain[0][7] = 0x04;
+            combat_terrain[5][5] = 0x04;
+        }
+        "BIX" => {
+            combat_terrain[5][5] = 0x04;
+            combat_terrain[4][5] = 0x04;
+            combat_terrain[4][6] = 0x04;
+        }
+        "CKX" => {
+            combat_terrain[5][5] = 0x04;
+            combat_terrain[4][6] = 0x04;
+        }
+        _ => {}
+    }
+    state.prng_state = match code {
+        "GP" => first_nonzero_prng_roll_seed(15),
+        "IPVY" => first_nonzero_prng_roll_seed(19),
+        _ => 0,
+    };
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    actors[0] =
+        CombatActorDescriptor::from_row([99, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+
+    let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+    active_objects[0] = route_combat_active_object(0x4c, 5, 5, 0);
+
+    match code {
+        "ACX" => {
+            seed_combat_route_monster(&mut actors, &mut active_objects, 23, 6, 4, 5)?;
+            seed_combat_route_monster(&mut actors, &mut active_objects, 33, 7, 5, 4)?;
+            seed_combat_route_monster(&mut actors, &mut active_objects, 32, 8, 6, 5)?;
+        }
+        "KX" | "BIX" | "CKX" => {}
+        _ => {
+            let class = if matches!(code, "BRX" | "IPVY") {
+                39
+            } else {
+                COMBAT_CLASS_GIANT_RAT
+            };
+            seed_combat_route_monster(&mut actors, &mut active_objects, class, 6, 6, 5)?;
+        }
+    }
+
+    state.enter_combat_frame_with_terrain(active_objects, actors, combat_terrain)?;
+    Ok(())
+}
+
+fn seed_combat_route_monster(
+    actors: &mut [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
+    active_objects: &mut [ActiveObject],
+    class: u8,
+    slot: usize,
+    x: u8,
+    y: u8,
+) -> io::Result<()> {
+    let stats = combat_class_stats(class).ok_or_else(|| {
+        io::Error::other(format!("combat stats for class {class} are unavailable"))
+    })?;
+    let active_object_slot = slot as u8;
+    actors[slot] = CombatActorDescriptor::for_monster_placement(
+        stats,
+        active_object_slot,
+        x,
+        y,
+        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        0,
+    );
+    active_objects[slot] = summoned_active_object_record(class, usize::from(x), usize::from(y), 0)
+        .ok_or_else(|| {
+            io::Error::other(format!(
+                "active-object record for combat class {class} is unavailable"
+            ))
+        })?;
+    Ok(())
+}
+
+fn first_nonzero_prng_roll_seed(max: u16) -> u16 {
+    for candidate in 0..=u16::MAX {
+        let mut state = candidate;
+        if u5_prng_range_u16(&mut state, 0, max) > 0 {
+            return candidate;
+        }
+    }
+    0
+}
+
+fn validate_combat_spell_route_state(state: &PlayState, case_name: &str) -> io::Result<()> {
+    let code = combat_spell_route_code(case_name);
+    let spell_index = spell_index_from_code(code)
+        .ok_or_else(|| io::Error::other(format!("unknown combat spell code `{code}`")))?;
+    if !state.combat_active
+        || state.spell_charges[spell_index] != 0
+        || state.party.first().is_none_or(|member| member.mana != 0)
+        || state.turn < 1
+    {
+        return Err(io::Error::other(format!(
+            "route smoke `{case_name}` did not spend combat spell resources"
+        )));
+    }
+
+    match case_name {
+        "combat-magic-missile-target" => {
+            if !state.message.starts_with("Magic Missile!") {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not complete the targeted Magic Missile spell; message `{}`",
+                    state.message
+                )));
+            }
+        }
+        "combat-tremor-targets" => {
+            if !state.message.starts_with("Tremor!")
+                || state
+                    .party
+                    .first()
+                    .is_none_or(|member| member.hp >= member.max_hp)
+                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].hp_or_wound
+                    >= combat_class_stats(39)
+                        .map(|stats| stats.max_hp)
+                        .unwrap_or(u8::MAX)
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not apply Tremor to party and monster slots"
+                )));
+            }
+        }
+        "combat-repel-undead-targets" => {
+            if !state
+                .message
+                .starts_with("Repel Undead! 2 undead repelled.")
+                || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_marked_dead()
+                || !state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].is_marked_dead()
+                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 2].is_marked_dead()
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not repel only undead combat actors"
+                )));
+            }
+        }
+        "combat-charm-target" => {
+            if !state.message.starts_with("Charm!") {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not charm the targeted combat actor"
+                )));
+            }
+        }
+        "combat-polymorph-target" => {
+            if !state.message.starts_with("Polymorph!")
+                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].owner_target_class
+                    != COMBAT_CLASS_GIANT_RAT
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not polymorph the hostile target"
+                )));
+            }
+        }
+        "combat-clone-target" => {
+            if !state.message.starts_with("Clone!")
+                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1].is_empty()
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not place a cloned combat actor; message `{}`, slot 7 {:?}",
+                    state.message,
+                    state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS + 1]
+                )));
+            }
+        }
+        "combat-conjure-animal" | "combat-swarm-summon" => {
+            if !state.message.starts_with("Success!")
+                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty()
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not place summoned combat actors"
+                )));
+            }
+        }
+        "combat-summon-daemon-ring" => {
+            if !state.message.starts_with("Summon Daemon!")
+                || state.combat_actors[COMBAT_PARTY_ACTOR_SLOTS].is_empty()
+            {
+                return Err(io::Error::other(format!(
+                    "route smoke `{case_name}` did not place the daemon around the target cell"
+                )));
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Result<()> {
     match case_name {
         "endgame-missing-box-confirmation" | "endgame-missing-box-terminal-jitter" => {
@@ -2998,6 +3316,17 @@ fn validate_route_smoke_case_state(state: &PlayState, case_name: &str) -> io::Re
                     "route smoke `{case_name}` did not materialize the public combat field marker"
                 )));
             }
+        }
+        "combat-magic-missile-target"
+        | "combat-tremor-targets"
+        | "combat-repel-undead-targets"
+        | "combat-charm-target"
+        | "combat-polymorph-target"
+        | "combat-clone-target"
+        | "combat-conjure-animal"
+        | "combat-swarm-summon"
+        | "combat-summon-daemon-ring" => {
+            validate_combat_spell_route_state(state, case_name)?;
         }
         "dungeon-level-up-down-spells" => {
             if !matches!(state.area, Area::Dungeon { level: 1, .. })

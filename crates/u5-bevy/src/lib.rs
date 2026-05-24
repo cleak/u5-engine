@@ -74,9 +74,9 @@ use u5_runtime::{
         ReagentShopState, SageState, ShipBrokerState, TavernState,
     },
     shop_session::ActiveShopSession,
-    stats_panel_active_cursor_visible, summarize_return_to_view_preview,
-    summarize_return_to_view_script, summoned_active_object_record, title_tick_next_frame,
-    title_tick_palette_indices,
+    spell_index_from_code, spell_mp_cost, stats_panel_active_cursor_visible,
+    summarize_return_to_view_preview, summarize_return_to_view_script,
+    summoned_active_object_record, title_tick_next_frame, title_tick_palette_indices,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16,
 };
@@ -1042,6 +1042,96 @@ fn visual_route_suite_cases() -> Vec<VisualRouteSuiteCase> {
             configure: Some(seed_visual_route_combat_energy_field),
         },
         VisualRouteSuiteCase {
+            label: "route-combat-magic-missile-target",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1GP7"],
+            configure: Some(seed_visual_route_combat_magic_missile),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-tremor-targets",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1IPVY"],
+            configure: Some(seed_visual_route_combat_tremor),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-repel-undead-targets",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1ACX"],
+            configure: Some(seed_visual_route_combat_repel_undead),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-charm-target",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1AEX7"],
+            configure: Some(seed_visual_route_combat_charm),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-polymorph-target",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1BRX7"],
+            configure: Some(seed_visual_route_combat_polymorph),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-clone-target",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1IQX7"],
+            configure: Some(seed_visual_route_combat_clone),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-conjure-animal",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1KX"],
+            configure: Some(seed_visual_route_combat_conjure),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-swarm-summon",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1BIX"],
+            configure: Some(seed_visual_route_combat_swarm),
+        },
+        VisualRouteSuiteCase {
+            label: "route-combat-summon-daemon-ring",
+            frame_kind: "visual route combat frame",
+            options: PlayOptions {
+                target: PlayTarget::World(WorldPlane::Britannia),
+                ..PlayOptions::default()
+            },
+            script: &["C1CKX6"],
+            configure: Some(seed_visual_route_combat_summon_daemon),
+        },
+        VisualRouteSuiteCase {
             label: "route-dungeon-level-up-down-spells",
             frame_kind: "visual route dungeon frame",
             options: PlayOptions {
@@ -1620,6 +1710,152 @@ fn seed_visual_route_combat_sleep_field(state: &mut PlayState) {
 
 fn seed_visual_route_combat_energy_field(state: &mut PlayState) {
     seed_visual_route_combat_field(state, ENERGY_FIELD_SPELL_INDEX, ENERGY_FIELD_COST);
+}
+
+fn seed_visual_route_combat_magic_missile(state: &mut PlayState) {
+    seed_visual_route_combat_spell(state, "GP");
+}
+
+fn seed_visual_route_combat_tremor(state: &mut PlayState) {
+    seed_visual_route_combat_spell(state, "IPVY");
+}
+
+fn seed_visual_route_combat_repel_undead(state: &mut PlayState) {
+    seed_visual_route_combat_spell(state, "ACX");
+}
+
+fn seed_visual_route_combat_charm(state: &mut PlayState) {
+    seed_visual_route_combat_spell(state, "AEX");
+}
+
+fn seed_visual_route_combat_polymorph(state: &mut PlayState) {
+    seed_visual_route_combat_spell(state, "BRX");
+}
+
+fn seed_visual_route_combat_clone(state: &mut PlayState) {
+    seed_visual_route_combat_spell(state, "IQX");
+}
+
+fn seed_visual_route_combat_conjure(state: &mut PlayState) {
+    seed_visual_route_combat_spell(state, "KX");
+}
+
+fn seed_visual_route_combat_swarm(state: &mut PlayState) {
+    seed_visual_route_combat_spell(state, "BIX");
+}
+
+fn seed_visual_route_combat_summon_daemon(state: &mut PlayState) {
+    seed_visual_route_combat_spell(state, "CKX");
+}
+
+fn seed_visual_route_combat_spell(state: &mut PlayState, code: &str) {
+    let spell_index = spell_index_from_code(code).expect("visual route combat spell code is valid");
+    let cost = spell_mp_cost(spell_index).expect("visual route combat spell cost is valid");
+
+    state.party = vec![route_visual_party_member(0, b'A', b'G', 99, 99)];
+    state.party_names = default_party_names(1);
+    state.party_experience = vec![0];
+    state.party_stay_counters = default_party_stay_counters(1);
+    state.party_strengths = vec![30];
+    state.party_intelligence = default_party_intelligence(1);
+    state.party_equipment = default_party_equipment(1);
+    if let Some(caster) = state.party.first_mut() {
+        caster.mana = cost;
+        caster.level = cost;
+    }
+    state.active_player = Some(0);
+    state.spell_charges[spell_index] = 1;
+    let mut combat_terrain = if matches!(code, "IQX" | "KX" | "BIX" | "CKX") {
+        [[0x0c; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE]
+    } else {
+        [[0x04; COMBAT_ARENA_SIDE]; COMBAT_ARENA_SIDE]
+    };
+    match code {
+        "IQX" => {
+            combat_terrain[1][8] = 0x04;
+            combat_terrain[5][5] = 0x04;
+            combat_terrain[5][6] = 0x04;
+        }
+        "KX" => {
+            combat_terrain[0][7] = 0x04;
+            combat_terrain[5][5] = 0x04;
+        }
+        "BIX" => {
+            combat_terrain[5][5] = 0x04;
+            combat_terrain[4][5] = 0x04;
+            combat_terrain[4][6] = 0x04;
+        }
+        "CKX" => {
+            combat_terrain[5][5] = 0x04;
+            combat_terrain[4][6] = 0x04;
+        }
+        _ => {}
+    }
+    state.prng_state = match code {
+        "GP" => first_nonzero_prng_roll_seed(15),
+        "IPVY" => first_nonzero_prng_roll_seed(19),
+        _ => 0,
+    };
+
+    let mut actors = [CombatActorDescriptor::empty(); COMBAT_ACTOR_SLOTS];
+    actors[0] =
+        CombatActorDescriptor::from_row([99, 1, COMBAT_ACTOR_FLAG_SELECTABLE_80, 0, 0, 0, 5, 5]);
+
+    let mut active_objects = vec![ActiveObject::empty(); COMBAT_ACTOR_SLOTS];
+    active_objects[0] = visual_route_combat_active_object(0x4c, 5, 5, 0);
+
+    match code {
+        "ACX" => {
+            seed_visual_route_combat_monster(&mut actors, &mut active_objects, 23, 6, 4, 5);
+            seed_visual_route_combat_monster(&mut actors, &mut active_objects, 33, 7, 5, 4);
+            seed_visual_route_combat_monster(&mut actors, &mut active_objects, 32, 8, 6, 5);
+        }
+        "KX" | "BIX" | "CKX" => {}
+        _ => {
+            let class = if matches!(code, "BRX" | "IPVY") {
+                39
+            } else {
+                COMBAT_CLASS_GIANT_RAT
+            };
+            seed_visual_route_combat_monster(&mut actors, &mut active_objects, class, 6, 6, 5);
+        }
+    }
+
+    state
+        .enter_combat_frame_with_terrain(active_objects, actors, combat_terrain)
+        .expect("visual route combat spell frame should seed");
+}
+
+fn seed_visual_route_combat_monster(
+    actors: &mut [CombatActorDescriptor; COMBAT_ACTOR_SLOTS],
+    active_objects: &mut [ActiveObject],
+    class: u8,
+    slot: usize,
+    x: u8,
+    y: u8,
+) {
+    let stats = combat_class_stats(class).expect("visual route combat monster stats exist");
+    let active_object_slot = slot as u8;
+    actors[slot] = CombatActorDescriptor::for_monster_placement(
+        stats,
+        active_object_slot,
+        x,
+        y,
+        COMBAT_ACTOR_FLAG_SELECTABLE_80,
+        0,
+    );
+    active_objects[slot] = summoned_active_object_record(class, usize::from(x), usize::from(y), 0)
+        .expect("visual route combat monster active object exists");
+}
+
+fn first_nonzero_prng_roll_seed(max: u16) -> u16 {
+    for candidate in 0..=u16::MAX {
+        let mut state = candidate;
+        if u5_prng_range_u16(&mut state, 0, max) > 0 {
+            return candidate;
+        }
+    }
+    0
 }
 
 fn poison_wind_first_accept_seed() -> u16 {
@@ -6263,7 +6499,7 @@ mod tests {
     fn visual_route_suite_cases_cover_multi_step_play_routes() {
         let cases = visual_route_suite_cases();
 
-        assert_eq!(cases.len(), 87);
+        assert_eq!(cases.len(), 96);
         assert!(cases.iter().all(|case| !case.script.is_empty()));
         assert!(
             cases
@@ -6382,6 +6618,15 @@ mod tests {
             "route-combat-field-poison-marker",
             "route-combat-field-sleep-marker",
             "route-combat-field-energy-marker",
+            "route-combat-magic-missile-target",
+            "route-combat-tremor-targets",
+            "route-combat-repel-undead-targets",
+            "route-combat-charm-target",
+            "route-combat-polymorph-target",
+            "route-combat-clone-target",
+            "route-combat-conjure-animal",
+            "route-combat-swarm-summon",
+            "route-combat-summon-daemon-ring",
             "route-dungeon-level-up-down-spells",
             "route-dungeon-field-cycle-spells",
             "route-dungeon-open-chest-spell",
@@ -6551,7 +6796,7 @@ mod tests {
         let dir = temp_output_dir("routes");
         let reports = visual_route_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        assert_eq!(reports.len(), 281);
+        assert_eq!(reports.len(), 299);
         for report in &reports {
             assert!(report.path.exists());
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
@@ -6605,6 +6850,15 @@ mod tests {
         assert!(manifest.contains("route-combat-field-poison-marker-01-c1gin6"));
         assert!(manifest.contains("route-combat-field-sleep-marker-01-c1giz6"));
         assert!(manifest.contains("route-combat-field-energy-marker-01-c1gis6"));
+        assert!(manifest.contains("route-combat-magic-missile-target-01-c1gp7"));
+        assert!(manifest.contains("route-combat-tremor-targets-01-c1ipvy"));
+        assert!(manifest.contains("route-combat-repel-undead-targets-01-c1acx"));
+        assert!(manifest.contains("route-combat-charm-target-01-c1aex7"));
+        assert!(manifest.contains("route-combat-polymorph-target-01-c1brx7"));
+        assert!(manifest.contains("route-combat-clone-target-01-c1iqx7"));
+        assert!(manifest.contains("route-combat-conjure-animal-01-c1kx"));
+        assert!(manifest.contains("route-combat-swarm-summon-01-c1bix"));
+        assert!(manifest.contains("route-combat-summon-daemon-ring-01-c1ckx6"));
         assert!(manifest.contains("route-dungeon-level-up-down-spells-02-c1dp"));
         assert!(manifest.contains("route-dungeon-field-cycle-spells-08-c1ag6"));
         assert!(manifest.contains("route-dungeon-open-chest-spell-01-c1as"));

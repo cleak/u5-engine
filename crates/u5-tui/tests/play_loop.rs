@@ -1186,6 +1186,15 @@ fn route_smoke_cases_cover_representative_modes() {
         "combat-field-poison-marker-placement",
         "combat-field-sleep-marker-placement",
         "combat-field-energy-marker-placement",
+        "combat-magic-missile-target",
+        "combat-tremor-targets",
+        "combat-repel-undead-targets",
+        "combat-charm-target",
+        "combat-polymorph-target",
+        "combat-clone-target",
+        "combat-conjure-animal",
+        "combat-swarm-summon",
+        "combat-summon-daemon-ring",
     ] {
         assert!(cases.iter().any(|case| case.name == name), "{name}");
     }

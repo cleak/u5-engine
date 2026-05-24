@@ -57,8 +57,8 @@ until the public spec publishes the missing rule.
 
 ## Verification Baseline
 
-Runtime, TUI, and route-smoke results refreshed alongside this audit on
-2026-05-24 for route-smoke; Bevy and visual-suite evidence remains from the latest display
+Runtime, TUI, route-smoke, and visual-route results refreshed alongside this
+audit on 2026-05-24; Bevy frame-suite evidence remains from the latest display
 audit:
 
 - `cargo test -p u5-runtime` — 2595 tests pass.
@@ -67,7 +67,7 @@ audit:
   by `--from-save --play-script`, intro-driven U4 transfer commit, and a
   confirmed `QY` save/reload round trip.
 - `cargo test -p u5-bevy` — 57 tests pass.
-- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 159 scripted cases pass,
+- `cargo run -p u5-tui -- --route-smoke C:\Games\U5-Clean` — 168 scripted cases pass,
   including four extended-session cases that exercise 5–12 commands across
   Britannia exploration, castle walking, dungeon turning/search, and
   multi-round Doom combat to prove the engine sustains long playable sessions,
@@ -77,7 +77,8 @@ audit:
   paths, public #31 native shard/Eternal Flame destruction routes, public #32 Britannia/Doom Word-of-Power seal opening, public #15
   accepted inn-rest pricing, public #44 sleeping/praying Talk refusals, public
   #48 Blink ray landing, directed Sleep/Poison Wind/Death Wind/Flame Wind
-  combat casts, combat field marker casts,
+  combat casts, combat field marker casts, targeted Magic Missile/Tremor/Repel
+  Undead/Charm/Polymorph/Clone casts and Conjure/Swarm/Summon Daemon routes,
   #51 poison-gas doorway step, public #47 dungeon no-direct-recovery rest and
   hourly ring tick, public #13 sage paid-success/short-funds paths, public #28
   all-stable horse-trader purchases, accepted shipwright frigate/skiff dock
@@ -92,11 +93,12 @@ audit:
 - `cargo run -- --save-frame-suite target\audit-frame-suite C:\Games\U5-Clean`
   — 13 PNGs, every frame nonblank with stable hashes.
 - `cargo run -p u5-tui --features visual -- --visual-route-suite
-  target\visual-route-suite C:\Games\U5-Clean` — 281 Bevy-owned per-step route
+  target\visual-route-suite C:\Games\U5-Clean` — 299 Bevy-owned per-step route
   PNGs, every frame nonblank with a sanitized manifest, including horse-trader
   purchases, spell routes for Locate, Light/Open, restore, active effects,
-  directed Sleep/Poison Wind/Death Wind/Flame Wind combat casts, dungeon levels,
-  dungeon fields/dispel, dungeon Open chest, and broad Doom combat command routes
+  directed Sleep/Poison Wind/Death Wind/Flame Wind combat casts, targeted
+  Magic Missile/Tremor/Repel Undead/Charm/Polymorph/Clone, Conjure/Swarm/Summon
+  Daemon, dungeon levels, dungeon fields/dispel, dungeon Open chest, and broad Doom combat command routes
   covering digit selection, direct movement, command refusals/prompts, Ready,
   Yell, and X-it.
 - `cargo fmt -- --check` passed, and `git diff --check` reported only
