@@ -37,12 +37,12 @@ use u5_runtime::{
     FLAME_WIND_SPELL_INDEX, FixedCellFont, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX,
     GREAT_HEAL_COST, GREAT_HEAL_SPELL_INDEX, GameClock, GraphicImage, GuildShop, HEAL_COST,
     HEAL_SPELL_INDEX, HORSE_PARKED_FIRST, Healer, Herbalist, IN_LOR_COST, IN_LOR_SPELL_INDEX,
-    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_START_MENU_REVEAL_RECT,
-    INTRO_STEP_1_EXTRA_ART_X, INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE,
-    INTRO_STEP_1_RECT_TRANSITION, INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y,
-    INTRO_STEP_6_EXTRA_SUBIMAGE, INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn,
-    IntroStoryArtPlacement, MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX,
-    MISCMAPS_DAT_FILE, MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
+    IN_WIS_COST, IN_WIS_SPELL_INDEX, INTRO_INLINE_DOORWAY_STEP, INTRO_STEP_1_EXTRA_ART_X,
+    INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
+    INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE,
+    INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement,
+    MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
+    MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X,
     NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
     NpcSlot, OOL_SLOTS, OPEN_SPELL_COST, OPEN_SPELL_INDEX, PCS_GLYPH_HEIGHT, PEER_COST,
@@ -8228,12 +8228,10 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             result,
             message,
         } => {
-            let reveal_backing = intro_buffer_from_rgba_frame(&render_intro_frame(intro));
             intro.panel = VisualIntroPanel::Menu;
             intro.dispatch.complete_subflow(subflow, result);
-            intro.start_menu_reveal =
-                Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT));
-            intro.start_menu_reveal_backing = Some(reveal_backing);
+            intro.start_menu_reveal = None;
+            intro.start_menu_reveal_backing = None;
             intro.modal_backing = None;
             intro.menu_idle_ticks = 0;
             intro.message_waiting_for_key = false;
@@ -8306,11 +8304,10 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
         return false;
     };
 
-    let reveal_backing = intro_buffer_from_rgba_frame(&render_intro_frame(intro));
     intro.panel = VisualIntroPanel::Menu;
     intro.dispatch.complete_subflow(subflow, result);
-    intro.start_menu_reveal = Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT));
-    intro.start_menu_reveal_backing = Some(reveal_backing);
+    intro.start_menu_reveal = None;
+    intro.start_menu_reveal_backing = None;
     intro.modal_backing = None;
     intro.menu_idle_ticks = 0;
     intro.message_waiting_for_key = false;
@@ -12118,12 +12115,12 @@ mod tests {
     use u5_runtime::{
         Area, ArmsShop, BRIT_OOL_FILENAME, CH_CELL_SIDE, CH_FONT_LEN, COMBAT_ARENA_SIDE,
         DEFAULT_GAME_DIR, Direction, EGA_PALETTE_RGB, GuildShop, Herbalist, IBM_CH_FILE,
-        INIT_GAM_FILENAME, INIT_OOL_FILENAME, OOL_PLANE_LEN, PenStroke, ProportionalGlyph,
-        REAGENT_COUNT, REAGENT_SPIDER_SILK, SAVE_CHARACTER_DEX_OFFSET,
-        SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET, SAVE_CHARACTER_NAME_LEN,
-        SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME, SAVED_OOL_FILENAME,
-        SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue,
-        SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth,
+        INIT_GAM_FILENAME, INIT_OOL_FILENAME, INTRO_START_MENU_REVEAL_RECT, OOL_PLANE_LEN,
+        PenStroke, ProportionalGlyph, REAGENT_COUNT, REAGENT_SPIDER_SILK,
+        SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET,
+        SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME,
+        SAVED_OOL_FILENAME, SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, SHRINE_TABLE_FILE,
+        STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth,
         U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane, dungeon_cell_index,
         parse_ch_font, world_cell_index, wrap_text_panel_lines,
     };
@@ -15831,6 +15828,8 @@ mod tests {
 
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert!(intro.message.contains("Introduction complete"));
+        assert_eq!(intro.start_menu_reveal, None);
+        assert_eq!(intro.start_menu_reveal_backing, None);
         assert!(matches!(
             intro.dispatch.submit_menu_key(b'A'),
             UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
@@ -16070,6 +16069,8 @@ mod tests {
 
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert!(intro.message.contains("Character creation cancelled"));
+        assert_eq!(intro.start_menu_reveal, None);
+        assert_eq!(intro.start_menu_reveal_backing, None);
         assert!(!dir.join(SAVED_GAM_FILENAME).exists());
         assert!(matches!(
             intro.dispatch.submit_menu_key(b'A'),
