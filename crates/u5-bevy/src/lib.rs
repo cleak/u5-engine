@@ -8924,129 +8924,97 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     let menu_panel = visual_intro_title_surface_visible(intro);
     let title_phase =
         menu_panel && matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
-    let mut rgba =
-        vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
-    for pixel in rgba.chunks_exact_mut(4) {
-        pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
-    }
+    intro.surface.clear(0);
+    let mut drew_surface = false;
     if menu_panel {
         let title_flourish_step =
             (title_phase && !intro.title_flourish_complete).then_some(intro.title_flourish_step);
         let signature_progress = (title_phase && !intro.title_signature_complete)
             .then_some(intro.title_signature_progress);
-        let mut drew_title = false;
-        let panel_rgba = if title_phase {
-            visual_intro_title_art_rgba(&intro.game_dir, title_flourish_step, signature_progress)
-        } else {
-            visual_intro_start_menu_rgba(
+        if title_phase {
+            if let Some(title_rgba) = visual_intro_title_art_rgba(
                 &intro.game_dir,
-                intro.raster_depth,
-                intro.title_tick_visible_frame,
-                intro.dispatch.intro.cached_selection,
-            )
-            .or_else(|| visual_intro_title_art_rgba(&intro.game_dir, None, None))
-        };
-        if let Some(title_rgba) = panel_rgba {
-            blit_rgba(
-                &mut rgba,
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                INTRO_FRAMEBUFFER_HEIGHT as usize,
+                title_flourish_step,
+                signature_progress,
+            ) {
+                intro.surface.blit_rgba(
+                    &title_rgba,
+                    TITLE_SURFACE_WIDTH as usize,
+                    TITLE_SURFACE_HEIGHT as usize,
+                    0,
+                    0,
+                );
+                drew_surface = true;
+            }
+        } else if draw_visual_intro_start_menu_to_buffer(
+            &mut intro.surface,
+            &intro.game_dir,
+            intro.raster_depth,
+            intro.title_tick_visible_frame,
+            intro.dispatch.intro.cached_selection,
+        )
+        .is_some()
+        {
+            drew_surface = true;
+        } else if let Some(title_rgba) = visual_intro_title_art_rgba(&intro.game_dir, None, None) {
+            intro.surface.blit_rgba(
                 &title_rgba,
                 TITLE_SURFACE_WIDTH as usize,
                 TITLE_SURFACE_HEIGHT as usize,
                 0,
                 0,
             );
-            drew_title = true;
+            drew_surface = true;
         }
-        if !drew_title {
-            rgba = render_text_panel_rgba(
+
+        let mut rgba = if drew_surface {
+            intro.surface.to_rgba()
+        } else {
+            render_text_panel_rgba(
                 &summary,
                 INTRO_FRAMEBUFFER_WIDTH as usize,
                 INTRO_FRAMEBUFFER_HEIGHT as usize,
             )
-            .unwrap_or(rgba);
-        } else if !title_phase {
+            .unwrap_or_else(|_| new_intro_display_buffer().to_rgba())
+        };
+        if drew_surface && !title_phase {
             overlay_intro_menu_message_rgba(&mut rgba, &intro.game_dir, &intro.message);
         }
+        if let Some(reveal) = intro.start_menu_reveal {
+            let source_buffer = IntroDisplayBuffer::from_rgba(
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                INTRO_FRAMEBUFFER_HEIGHT as usize,
+                &rgba,
+            );
+            let backing_rgba = intro
+                .start_menu_reveal_backing
+                .clone()
+                .unwrap_or_else(|| visual_intro_final_title_backing_rgba(intro));
+            let mut backing_buffer = IntroDisplayBuffer::from_rgba(
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                INTRO_FRAMEBUFFER_HEIGHT as usize,
+                &backing_rgba,
+            );
+            backing_buffer.copy_revealed_columns_from(&source_buffer, reveal);
+            rgba = backing_buffer.to_rgba();
+        }
+        rgba
     } else {
-        rgba = render_text_panel_rgba(
+        render_text_panel_rgba(
             &summary,
             INTRO_FRAMEBUFFER_WIDTH as usize,
             INTRO_FRAMEBUFFER_HEIGHT as usize,
         )
-        .unwrap_or(rgba);
+        .unwrap_or_else(|_| new_intro_display_buffer().to_rgba())
     }
-    if let VisualIntroPanel::Story {
-        step, transition, ..
-    } = &intro.panel
-    {
-        for draw in visual_intro_story_art_draws_rgba(
-            &intro.game_dir,
-            intro.raster_depth,
-            *step,
-            *transition,
-        ) {
-            blit_rgba(
-                &mut rgba,
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                INTRO_FRAMEBUFFER_HEIGHT as usize,
-                &draw.rgba,
-                draw.width,
-                draw.height,
-                usize::from(draw.top_left_x),
-                usize::from(draw.top_left_y),
-            );
-        }
-    }
-    if let VisualIntroPanel::ReturnToView {
-        preview_frames_rgba,
-        preview_frame_index,
-        preview_width,
-        preview_height,
-        ..
-    } = &intro.panel
-    {
-        if let Some(preview_rgba) = preview_frames_rgba.get(*preview_frame_index) {
-            let x = ((INTRO_FRAMEBUFFER_WIDTH as usize).saturating_sub(*preview_width)) / 2;
-            blit_rgba(
-                &mut rgba,
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                INTRO_FRAMEBUFFER_HEIGHT as usize,
-                preview_rgba,
-                *preview_width,
-                *preview_height,
-                x,
-                RETURN_TO_VIEW_PREVIEW_Y,
-            );
-        }
-    }
-    if let Some(reveal) = intro.start_menu_reveal {
-        let source_buffer = IntroDisplayBuffer::from_rgba(
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            INTRO_FRAMEBUFFER_HEIGHT as usize,
-            &rgba,
-        );
-        let backing_rgba = intro
-            .start_menu_reveal_backing
-            .clone()
-            .unwrap_or_else(|| visual_intro_final_title_backing_rgba(intro));
-        let mut backing_buffer = IntroDisplayBuffer::from_rgba(
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            INTRO_FRAMEBUFFER_HEIGHT as usize,
-            &backing_rgba,
-        );
-        backing_buffer.copy_revealed_columns_from(&source_buffer, reveal);
-        rgba = backing_buffer.to_rgba();
-    }
-    rgba
 }
 
 fn visual_intro_final_title_backing_rgba(intro: &VisualIntroState) -> Vec<u8> {
-    let mut buffer = IntroDisplayBuffer::new(
-        INTRO_FRAMEBUFFER_WIDTH as usize,
-        INTRO_FRAMEBUFFER_HEIGHT as usize,
-    );
+    visual_intro_final_title_backing_buffer(intro).to_rgba()
+}
+
+fn visual_intro_final_title_backing_buffer(intro: &VisualIntroState) -> IntroDisplayBuffer {
+    let mut buffer = new_intro_display_buffer();
     buffer.clear(0);
     if let Some(title_rgba) = visual_intro_title_art_rgba(&intro.game_dir, None, None) {
         buffer.blit_rgba(
@@ -9057,21 +9025,18 @@ fn visual_intro_final_title_backing_rgba(intro: &VisualIntroState) -> Vec<u8> {
             0,
         );
     }
-    buffer.to_rgba()
+    buffer
 }
 
-fn visual_intro_start_menu_rgba(
+fn draw_visual_intro_start_menu_to_buffer(
+    buffer: &mut IntroDisplayBuffer,
     game_dir: &Path,
     depth: TileGraphicsDepth,
     title_tick_frame: u8,
     highlighted: Option<IntroSubflow>,
-) -> Option<Vec<u8>> {
-    let mut buffer = IntroDisplayBuffer::new(
-        INTRO_FRAMEBUFFER_WIDTH as usize,
-        INTRO_FRAMEBUFFER_HEIGHT as usize,
-    );
+) -> Option<()> {
     buffer.clear(0);
-    blit_image_panel_specs_intro_buffer(&mut buffer, game_dir, depth, &STARTSC_PANEL_SPECS)?;
+    blit_image_panel_specs_intro_buffer(buffer, game_dir, depth, &STARTSC_PANEL_SPECS)?;
     buffer.clear_rect_inclusive(
         0,
         136,
@@ -9080,9 +9045,9 @@ fn visual_intro_start_menu_rgba(
         0,
     );
     let font = load_ibm_ch_font(game_dir).ok()?;
-    draw_intro_menu_labels_intro_buffer(&mut buffer, &font, highlighted);
+    draw_intro_menu_labels_intro_buffer(buffer, &font, highlighted);
     buffer.draw_title_tick(title_tick_frame);
-    Some(buffer.to_rgba())
+    Some(())
 }
 
 #[cfg(test)]
@@ -12156,6 +12121,31 @@ mod tests {
             (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4
         );
         assert!(frame.chunks_exact(4).all(|pixel| pixel[3] == 0xff));
+        assert_nonblack_rgba(&frame);
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_menu_render_updates_persistent_surface() {
+        let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
+        let mut expected_surface = new_intro_display_buffer();
+        if draw_visual_intro_start_menu_to_buffer(
+            &mut expected_surface,
+            &intro.game_dir,
+            intro.raster_depth,
+            intro.title_tick_visible_frame,
+            intro.dispatch.intro.cached_selection,
+        )
+        .is_none()
+        {
+            let _ = fs::remove_dir_all(&intro.game_dir);
+            return;
+        }
+
+        let frame = render_intro_frame(&mut intro);
+
+        assert_eq!(frame, intro.surface.to_rgba());
+        assert_eq!(intro.surface, expected_surface);
         assert_nonblack_rgba(&frame);
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
