@@ -10955,6 +10955,13 @@ fn overlay_centered_text_band_rgba(
         y < dst_height && band_height > 0,
         "intro centered text band outside framebuffer: y={y}, band_height={band_height}, dst_height={dst_height}"
     );
+    let band_end_y = y
+        .checked_add(band_height)
+        .expect("intro centered text band y extent overflowed");
+    assert!(
+        band_end_y <= dst_height,
+        "intro centered text band y={y} height={band_height} exceeds framebuffer height {dst_height}"
+    );
     let glyph_advance = 4usize;
     let max_cols = dst_width / glyph_advance;
     let text_cols = text.chars().count();
@@ -10962,12 +10969,11 @@ fn overlay_centered_text_band_rgba(
         text_cols <= max_cols,
         "intro centered text band text has {text_cols} column(s), but band width only fits {max_cols}"
     );
-    let pad_cols = max_cols.saturating_sub(text_cols) / 2;
+    let pad_cols = (max_cols - text_cols) / 2;
     let centered = format!("{}{}", " ".repeat(pad_cols), text);
     let text_rgba = render_text_panel_rgba(&centered, dst_width, band_height)
         .expect("intro centered text band rendering failed");
 
-    let band_height = band_height.min(dst_height - y);
     for row in 0..band_height {
         for x in 0..dst_width {
             let src_offset = (row * dst_width + x) * 4;
@@ -14429,6 +14435,13 @@ mod tests {
             rgba.chunks_exact(4)
                 .any(|pixel| pixel == [0xaa, 0xbb, 0xcc, 0xff])
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "intro centered text band")]
+    fn intro_centered_text_band_rejects_clipped_geometry() {
+        let mut rgba = vec![0; 8 * 8 * 4];
+        overlay_centered_text_band_rgba(&mut rgba, 8, 8, "X", 6, 4);
     }
 
     #[test]
