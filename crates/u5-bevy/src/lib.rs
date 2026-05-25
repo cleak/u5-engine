@@ -8153,16 +8153,24 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
     }
 
     if matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle) {
-        intro.title_flourish_step = 0;
-        intro.title_flourish_complete = true;
+        if ch.eq_ignore_ascii_case(&'J') {
+            intro.title_flourish_step = 0;
+            intro.title_flourish_complete = true;
+            intro.title_signature_progress = 0;
+            intro.title_signature_complete = true;
+            intro.title_tick_frame = 0;
+            intro.title_tick_visible_frame = 0;
+            finish_visual_intro_title_to_menu(intro);
+            return resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward);
+        }
+        if !intro.title_flourish_complete {
+            return false;
+        }
         intro.title_signature_progress = 0;
         intro.title_signature_complete = true;
         intro.title_tick_frame = 0;
         intro.title_tick_visible_frame = 0;
         finish_visual_intro_title_to_menu(intro);
-        if ch.eq_ignore_ascii_case(&'J') {
-            return resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward);
-        }
         return true;
     }
 
@@ -13098,6 +13106,83 @@ mod tests {
 
         assert_eq!(intro.title_tick_visible_frame, 0);
         assert_eq!(intro.title_tick_frame, title_tick_next_frame(0));
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_title_flourish_ignores_non_j_keys_until_signature_phase() {
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: 3,
+            title_flourish_complete: false,
+            title_signature_progress: 0,
+            title_signature_complete: false,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
+            start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
+            message: String::new(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        assert!(!step_visual_intro(&mut intro, 'x'));
+
+        assert!(matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        assert_eq!(intro.title_flourish_step, 3);
+        assert!(!intro.title_flourish_complete);
+        assert!(!intro.title_signature_complete);
+        assert_eq!(intro.title_tick_frame, 0);
+        assert_eq!(intro.title_tick_visible_frame, 0);
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_signature_phase_key_skips_to_start_menu_without_advancing_path() {
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: intro_title_flourish_total_steps(),
+            title_flourish_complete: true,
+            title_signature_progress: 42,
+            title_signature_complete: false,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
+            start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
+            menu_idle_ticks: 9,
+            message_waiting_for_key: false,
+            message: "stale".to_string(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        assert!(step_visual_intro(&mut intro, 'x'));
+
+        assert!(!matches!(
+            intro.dispatch.tick_title(),
+            UnifiedMenuStep::PresentTitle
+        ));
+        assert_eq!(intro.title_signature_progress, 0);
+        assert!(intro.title_signature_complete);
+        assert_eq!(intro.title_tick_visible_frame, 0);
+        assert_eq!(intro.title_tick_frame, title_tick_next_frame(0));
+        assert_eq!(intro.menu_idle_ticks, 0);
+        assert!(intro.message.is_empty());
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
