@@ -7121,8 +7121,6 @@ fn run_visual_intro_menu_app(
         .ok()
         .map(|s| s.chars().collect())
         .unwrap_or_default();
-    let mut dispatch = UnifiedMenuDispatch::new();
-    dispatch.dismiss_title();
 
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -7138,9 +7136,9 @@ fn run_visual_intro_menu_app(
         .insert_resource(VisualIntroState {
             game_dir,
             raster_depth,
-            dispatch,
+            dispatch: UnifiedMenuDispatch::new(),
             title_signature_progress: 0,
-            title_signature_complete: true,
+            title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
             message: String::new(),
@@ -7627,8 +7625,12 @@ fn animate_visual_intro_title_effects(
     if matches!(intro.panel, VisualIntroPanel::Menu) {
         let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
 
-        intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
-        let reveal_advanced = advance_visual_intro_start_menu_reveal(&mut intro);
+        let reveal_advanced = if title_phase {
+            false
+        } else {
+            intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
+            advance_visual_intro_start_menu_reveal(&mut intro)
+        };
 
         if title_phase && !intro.title_signature_complete {
             let Ok(signature) = load_british_pth(&intro.game_dir) else {
@@ -9161,7 +9163,7 @@ fn visual_intro_title_art_rgba(
 ) -> Option<Vec<u8>> {
     let title = load_title_bit(game_dir).ok()?;
     let british = load_british_bit(game_dir).ok()?;
-    let mut rgba = compose_intro_title_art_rgba(&title, &british);
+    let mut rgba = compose_intro_title_art_rgba(&title, &british, signature_progress.is_none());
     if let Some(progress) = signature_progress.filter(|progress| *progress > 0) {
         let signature = load_british_pth(game_dir).ok()?;
         draw_british_signature_rgba(
@@ -9175,7 +9177,11 @@ fn visual_intro_title_art_rgba(
     Some(rgba)
 }
 
-fn compose_intro_title_art_rgba(title: &TitleBitImages, british: &MonochromeBitmap) -> Vec<u8> {
+fn compose_intro_title_art_rgba(
+    title: &TitleBitImages,
+    british: &MonochromeBitmap,
+    completed_signature: bool,
+) -> Vec<u8> {
     let width = TITLE_SURFACE_WIDTH as usize;
     let height = TITLE_SURFACE_HEIGHT as usize;
     let mut rgba = vec![0; width * height * 4];
@@ -9187,8 +9193,26 @@ fn compose_intro_title_art_rgba(title: &TitleBitImages, british: &MonochromeBitm
         blit_intro_title_placement_rgba(&mut rgba, width, height, title, british, *placement);
     }
     clear_rgba_band(&mut rgba, width, height, TITLE_LOWER_BAND_CLEAR_Y as usize);
-    for placement in &TITLE_BIT_REMAINING_PLACEMENTS {
-        blit_intro_title_placement_rgba(&mut rgba, width, height, title, british, *placement);
+    for placement in TITLE_BIT_REMAINING_PLACEMENTS
+        .iter()
+        .copied()
+        .filter(|placement| {
+            matches!(placement.asset, TitleBitAsset::Title) && matches!(placement.slot, 7 | 8)
+        })
+    {
+        blit_intro_title_placement_rgba(&mut rgba, width, height, title, british, placement);
+    }
+    if completed_signature {
+        for placement in TITLE_BIT_REMAINING_PLACEMENTS
+            .iter()
+            .copied()
+            .filter(|placement| {
+                matches!(placement.asset, TitleBitAsset::British)
+                    || (matches!(placement.asset, TitleBitAsset::Title) && placement.slot == 9)
+            })
+        {
+            blit_intro_title_placement_rgba(&mut rgba, width, height, title, british, placement);
+        }
     }
 
     rgba
@@ -11769,6 +11793,16 @@ mod tests {
             height: 1,
             pixels: vec![1],
         };
+        blocks[8] = MonochromeBitmap {
+            width: 1,
+            height: 1,
+            pixels: vec![1],
+        };
+        blocks[9] = MonochromeBitmap {
+            width: 1,
+            height: 1,
+            pixels: vec![1],
+        };
         let title = TitleBitImages { blocks };
         let british = MonochromeBitmap {
             width: 1,
@@ -11776,14 +11810,55 @@ mod tests {
             pixels: vec![1],
         };
 
-        let rgba = compose_intro_title_art_rgba(&title, &british);
+        let rgba = compose_intro_title_art_rgba(&title, &british, true);
         let width = TITLE_SURFACE_WIDTH as usize;
 
         assert_eq!(rgba.len(), width * (TITLE_SURFACE_HEIGHT as usize) * 4);
         assert_eq!(rgba_pixel(&rgba, width, 20, 139), [0xff, 0xff, 0xff, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 20, 140), [0, 0, 0, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 108, 140), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 152, 0), [0xff, 0xff, 0xff, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 24, 66), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 104, 160), [0xff, 0xff, 0xff, 0xff]);
+    }
+
+    #[test]
+    fn intro_title_art_defers_completed_signature_overlays_until_path_finishes() {
+        let blank = MonochromeBitmap {
+            width: 1,
+            height: 1,
+            pixels: vec![0],
+        };
+        let mut blocks = vec![blank; 10];
+        blocks[7] = MonochromeBitmap {
+            width: 1,
+            height: 1,
+            pixels: vec![1],
+        };
+        blocks[8] = MonochromeBitmap {
+            width: 1,
+            height: 1,
+            pixels: vec![1],
+        };
+        blocks[9] = MonochromeBitmap {
+            width: 1,
+            height: 1,
+            pixels: vec![1],
+        };
+        let title = TitleBitImages { blocks };
+        let british = MonochromeBitmap {
+            width: 1,
+            height: 1,
+            pixels: vec![1],
+        };
+
+        let rgba = compose_intro_title_art_rgba(&title, &british, false);
+        let width = TITLE_SURFACE_WIDTH as usize;
+
+        assert_eq!(rgba_pixel(&rgba, width, 108, 140), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 152, 0), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 24, 66), [0, 0, 0, 0xff]);
+        assert_eq!(rgba_pixel(&rgba, width, 104, 160), [0, 0, 0, 0xff]);
     }
 
     #[test]
