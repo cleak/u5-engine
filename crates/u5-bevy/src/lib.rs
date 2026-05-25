@@ -9171,70 +9171,71 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
 }
 
 fn render_chargen_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
-    let mut rgba =
-        vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
-    for pixel in rgba.chunks_exact_mut(4) {
-        pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
-    }
-
-    let VisualIntroPanel::CharacterCreation {
-        session,
-        input_line,
-    } = &intro.panel
-    else {
-        return rgba;
+    intro.surface.clear(0);
+    let Some((session, input_line)) = (match &intro.panel {
+        VisualIntroPanel::CharacterCreation {
+            session,
+            input_line,
+        } => Some((session, input_line.as_str())),
+        _ => None,
+    }) else {
+        return intro.surface.to_rgba();
     };
 
-    if !render_chargen_intro_graphics(&mut rgba, intro, session, input_line) {
+    if let Some(rgba) = render_chargen_intro_graphics(
+        &mut intro.surface,
+        &intro.game_dir,
+        intro.raster_depth,
+        session,
+        input_line,
+    ) {
+        rgba
+    } else {
         let summary = summarize_visual_chargen(session, input_line);
-        rgba = render_text_panel_rgba(
+        render_text_panel_rgba(
             &summary,
             INTRO_FRAMEBUFFER_WIDTH as usize,
             INTRO_FRAMEBUFFER_HEIGHT as usize,
         )
-        .unwrap_or(rgba);
+        .unwrap_or_else(|_| intro.surface.to_rgba())
     }
-    rgba
 }
 
 fn render_chargen_intro_graphics(
-    rgba: &mut [u8],
-    intro: &VisualIntroState,
+    buffer: &mut IntroDisplayBuffer,
+    game_dir: &Path,
+    depth: TileGraphicsDepth,
     session: &ChargenSession,
     input_line: &str,
-) -> bool {
+) -> Option<Vec<u8>> {
     let width = INTRO_FRAMEBUFFER_WIDTH as usize;
     let height = INTRO_FRAMEBUFFER_HEIGHT as usize;
-    let Ok(font) = load_ibm_ch_font(&intro.game_dir) else {
-        return false;
+    let Ok(font) = load_ibm_ch_font(game_dir) else {
+        return None;
     };
     match session.current_step() {
         ChargenSessionStep::PromptName => {
-            overlay_fixed_cell_text_rgba(
-                rgba,
-                width,
-                height,
+            overlay_fixed_cell_text_intro_buffer(
+                buffer,
                 &font,
                 "By what name shalt thou be known?",
                 3,
                 17,
                 false,
             );
-            overlay_fixed_cell_text_rgba(rgba, width, height, &font, input_line, 14, 19, false);
-            true
+            overlay_fixed_cell_text_intro_buffer(buffer, &font, input_line, 14, 19, false);
+            Some(buffer.to_rgba())
         }
         ChargenSessionStep::PromptGender => {
-            overlay_fixed_cell_text_rgba(
-                rgba,
-                width,
-                height,
+            overlay_fixed_cell_text_intro_buffer(
+                buffer,
                 &font,
                 "Art thou Male or Female?",
                 8,
                 21,
                 false,
             );
-            true
+            Some(buffer.to_rgba())
         }
         ChargenSessionStep::PresentIntro { record, text } => {
             let panel = if record == 0 {
@@ -9242,17 +9243,8 @@ fn render_chargen_intro_graphics(
             } else {
                 CREATE_RESULT_PANEL
             };
-            if blit_image_panel_specs_rgba(
-                rgba,
-                width,
-                height,
-                &intro.game_dir,
-                intro.raster_depth,
-                &[panel],
-            )
-            .is_none()
-            {
-                return false;
+            if blit_image_panel_specs_intro_buffer(buffer, game_dir, depth, &[panel]).is_none() {
+                return None;
             }
             let placement = if record == 0 {
                 ProportionalTextPlacement {
@@ -9273,25 +9265,20 @@ fn render_chargen_intro_graphics(
                     shadow: true,
                 }
             };
+            let mut rgba = buffer.to_rgba();
             overlay_proportional_text_from_assets_rgba(
-                rgba,
-                width,
-                height,
-                &intro.game_dir,
-                &text,
-                placement,
+                &mut rgba, width, height, game_dir, &text, placement,
             )
-            .is_ok()
+            .ok()?;
+            Some(rgba)
         }
         ChargenSessionStep::PresentQuestion(question) => {
             let option_a = create_virtue_panel_spec(question.option_a, 0);
             let option_b = create_virtue_panel_spec(question.option_b, 184);
-            if blit_image_panel_specs_rgba(
-                rgba,
-                width,
-                height,
-                &intro.game_dir,
-                intro.raster_depth,
+            if blit_image_panel_specs_intro_buffer(
+                buffer,
+                game_dir,
+                depth,
                 &[
                     CREATE_QUESTION_BACKING_LEFT,
                     CREATE_QUESTION_BACKING_RIGHT,
@@ -9301,15 +9288,16 @@ fn render_chargen_intro_graphics(
             )
             .is_none()
             {
-                return false;
+                return None;
             }
-            overlay_fixed_cell_text_rgba(rgba, width, height, &font, "A", 3, 2, false);
-            overlay_fixed_cell_text_rgba(rgba, width, height, &font, "B", 26, 2, false);
+            overlay_fixed_cell_text_intro_buffer(buffer, &font, "A", 3, 2, false);
+            overlay_fixed_cell_text_intro_buffer(buffer, &font, "B", 26, 2, false);
+            let mut rgba = buffer.to_rgba();
             overlay_proportional_text_from_assets_rgba(
-                rgba,
+                &mut rgba,
                 width,
                 height,
-                &intro.game_dir,
+                game_dir,
                 &question.text,
                 ProportionalTextPlacement {
                     x: CHARGEN_QUESTION_TEXT_X,
@@ -9320,30 +9308,27 @@ fn render_chargen_intro_graphics(
                     shadow: true,
                 },
             )
-            .is_ok()
+            .ok()?;
+            Some(rgba)
         }
         ChargenSessionStep::Completed(result) => {
-            let _ = blit_image_panel_specs_rgba(
-                rgba,
-                width,
-                height,
-                &intro.game_dir,
-                intro.raster_depth,
+            let _ = blit_image_panel_specs_intro_buffer(
+                buffer,
+                game_dir,
+                depth,
                 &[CREATE_RESULT_PANEL],
             );
-            overlay_fixed_cell_text_rgba(
-                rgba,
-                width,
-                height,
+            overlay_fixed_cell_text_intro_buffer(
+                buffer,
                 &font,
                 &format!("Writing save for {}.", display_name_bytes(&result.name)),
                 3,
                 21,
                 false,
             );
-            true
+            Some(buffer.to_rgba())
         }
-        ChargenSessionStep::Aborted | ChargenSessionStep::Ignored => false,
+        ChargenSessionStep::Aborted | ChargenSessionStep::Ignored => None,
     }
 }
 
@@ -10078,34 +10063,6 @@ fn graphic_image_to_rgba_clipped(
         }
     }
     rgba
-}
-
-fn blit_image_panel_specs_rgba(
-    dst: &mut [u8],
-    dst_width: usize,
-    dst_height: usize,
-    game_dir: &Path,
-    depth: TileGraphicsDepth,
-    specs: &[ImagePanelSpec],
-) -> Option<()> {
-    for spec in specs {
-        let directory = load_graphic_image_directory(game_dir, spec.stem, depth).ok()?;
-        let image = directory.images.get(usize::from(spec.subimage))?.as_ref()?;
-        let width = spec.width.min(image.width);
-        let height = spec.height.min(image.height);
-        let rgba = graphic_image_to_rgba_clipped(image, depth, width, height);
-        blit_rgba(
-            dst,
-            dst_width,
-            dst_height,
-            &rgba,
-            width,
-            height,
-            spec.top_left_x,
-            spec.top_left_y,
-        );
-    }
-    Some(())
 }
 
 fn blit_image_panel_specs_intro_buffer(
@@ -15329,6 +15286,32 @@ mod tests {
         assert_eq!(
             fs::read(dir.join(SAVED_OOL_FILENAME)).unwrap(),
             [vec![0u8; OOL_PLANE_LEN], vec![0x44; OOL_PLANE_LEN]].concat()
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_intro_chargen_prompt_renders_from_persistent_surface() {
+        let dir = debug_game_dir();
+        if load_ibm_ch_font(&dir).is_err() {
+            let _ = fs::remove_dir_all(dir);
+            return;
+        }
+        let session = ChargenSession::new(chargen_records(), (0u8..=127).collect()).unwrap();
+        let mut intro = visual_intro_state_with_panel(
+            dir.clone(),
+            VisualIntroPanel::CharacterCreation {
+                session,
+                input_line: "Av".to_string(),
+            },
+        );
+
+        let frame = render_intro_frame(&mut intro);
+
+        assert_eq!(frame, intro.surface.to_rgba());
+        assert!(
+            intro.surface.pixels.iter().any(|pixel| *pixel != 0),
+            "chargen fixed prompt should draw into the intro display buffer"
         );
         let _ = fs::remove_dir_all(dir);
     }
