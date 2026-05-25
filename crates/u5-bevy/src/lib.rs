@@ -8953,11 +8953,17 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
         return render_return_to_view_intro_frame(intro);
     }
+    if matches!(intro.panel, VisualIntroPanel::U4Transfer { .. }) {
+        return render_u4_transfer_intro_frame(intro);
+    }
     if matches!(intro.panel, VisualIntroPanel::Story { .. }) {
         return render_story_intro_frame(intro);
     }
     if matches!(intro.panel, VisualIntroPanel::CharacterCreation { .. }) {
         return render_chargen_intro_frame(intro);
+    }
+    if matches!(intro.panel, VisualIntroPanel::Acknowledgements) {
+        return render_acknowledgements_intro_frame(intro);
     }
 
     let summary = summarize_intro(intro);
@@ -8965,91 +8971,56 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     let title_phase =
         menu_panel && matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
     intro.surface.clear(0);
-    let mut drew_surface = false;
     if menu_panel {
         let title_flourish_step =
             (title_phase && !intro.title_flourish_complete).then_some(intro.title_flourish_step);
         let signature_progress = (title_phase && !intro.title_signature_complete)
             .then_some(intro.title_signature_progress);
         if title_phase {
-            if let Some(title_buffer) = visual_intro_title_art_buffer(
+            intro.surface = visual_intro_title_art_buffer(
                 &intro.game_dir,
                 title_flourish_step,
                 signature_progress,
-            ) {
-                intro.surface = title_buffer;
-                drew_surface = true;
-            }
-        } else if draw_visual_intro_start_menu_to_buffer(
-            &mut intro.surface,
-            &intro.game_dir,
-            intro.raster_depth,
-            intro.title_tick_visible_frame,
-            intro.dispatch.intro.cached_selection,
-        )
-        .is_some()
-        {
-            drew_surface = true;
-        } else if let Some(title_buffer) =
-            visual_intro_title_art_buffer(&intro.game_dir, None, None)
-        {
-            intro.surface = title_buffer;
-            drew_surface = true;
+            );
+        } else {
+            draw_visual_intro_start_menu_to_buffer(
+                &mut intro.surface,
+                &intro.game_dir,
+                intro.raster_depth,
+                intro.title_tick_visible_frame,
+                intro.dispatch.intro.cached_selection,
+            );
         }
 
-        let mut rgba = if drew_surface {
-            intro.surface.to_rgba()
-        } else {
-            render_text_panel_rgba(
-                &summary,
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                INTRO_FRAMEBUFFER_HEIGHT as usize,
-            )
-            .unwrap_or_else(|_| new_intro_display_buffer().to_rgba())
-        };
-        if drew_surface && !title_phase {
+        let mut rgba = intro.surface.to_rgba();
+        if !title_phase {
             overlay_intro_menu_message_rgba(&mut rgba, &intro.game_dir, &intro.message);
         }
         if let Some(reveal) = intro.start_menu_reveal {
             let source_buffer = {
                 let mut source = new_intro_display_buffer();
-                if draw_visual_intro_start_menu_art_to_buffer(
+                draw_visual_intro_start_menu_art_to_buffer(
                     &mut source,
                     &intro.game_dir,
                     intro.raster_depth,
-                )
-                .is_some()
-                {
-                    source
-                } else {
-                    intro_buffer_from_rgba_frame(&rgba)
-                }
+                );
+                source
             };
             let mut backing_buffer = intro
                 .start_menu_reveal_backing
                 .clone()
-                .unwrap_or_else(|| visual_intro_final_title_backing_buffer(intro));
+                .expect("STARTSC reveal requires preserved intro backing surface");
             backing_buffer.copy_revealed_columns_from(&source_buffer, reveal);
             rgba = backing_buffer.to_rgba();
         }
         rgba
     } else {
-        render_text_panel_rgba(
-            &summary,
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            INTRO_FRAMEBUFFER_HEIGHT as usize,
-        )
-        .unwrap_or_else(|_| new_intro_display_buffer().to_rgba())
+        panic!("unhandled visual intro panel fell through renderer: {summary}")
     }
 }
 
 fn visual_intro_final_title_backing_buffer(intro: &VisualIntroState) -> IntroDisplayBuffer {
-    let mut buffer = new_intro_display_buffer();
-    buffer.clear(0);
-    if let Some(title_buffer) = visual_intro_title_art_buffer(&intro.game_dir, None, None) {
-        buffer = title_buffer;
-    }
-    buffer
+    visual_intro_title_art_buffer(&intro.game_dir, None, None)
 }
 
 fn draw_visual_intro_start_menu_to_buffer(
@@ -9058,21 +9029,20 @@ fn draw_visual_intro_start_menu_to_buffer(
     depth: TileGraphicsDepth,
     title_tick_frame: u8,
     highlighted: Option<IntroSubflow>,
-) -> Option<()> {
-    draw_visual_intro_start_menu_art_to_buffer(buffer, game_dir, depth)?;
-    let font = load_ibm_ch_font(game_dir).ok()?;
+) {
+    draw_visual_intro_start_menu_art_to_buffer(buffer, game_dir, depth);
+    let font = load_ibm_ch_font(game_dir).expect("intro menu requires IBM fixed-cell font");
     draw_intro_menu_labels_intro_buffer(buffer, &font, highlighted);
     buffer.draw_title_tick(title_tick_frame);
-    Some(())
 }
 
 fn draw_visual_intro_start_menu_art_to_buffer(
     buffer: &mut IntroDisplayBuffer,
     game_dir: &Path,
     depth: TileGraphicsDepth,
-) -> Option<()> {
+) {
     buffer.clear(0);
-    blit_image_panel_specs_intro_buffer(buffer, game_dir, depth, &STARTSC_PANEL_SPECS)?;
+    blit_image_panel_specs_intro_buffer(buffer, game_dir, depth, &STARTSC_PANEL_SPECS);
     buffer.clear_rect_inclusive(
         0,
         136,
@@ -9080,7 +9050,6 @@ fn draw_visual_intro_start_menu_art_to_buffer(
         INTRO_FRAMEBUFFER_HEIGHT as usize - 1,
         0,
     );
-    Some(())
 }
 
 #[cfg(test)]
@@ -9131,9 +9100,9 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
             *transition,
             visual_intro_story_text(records, *step).map(str::to_owned),
         )),
-        _ => None,
+        _ => panic!("render_story_intro_frame called for non-story intro panel"),
     }) else {
-        return new_intro_display_buffer().to_rgba();
+        unreachable!("story intro panel match must either produce data or panic");
     };
 
     draw_visual_intro_story_art_to_buffer(
@@ -9144,9 +9113,13 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         transition,
     );
 
+    if text.is_none() && step != INTRO_INLINE_DOORWAY_STEP {
+        panic!("intro story step {step} requires a STORY.DAT record");
+    }
+
     if let Some(text) = text {
         clear_intro_story_text_band(&mut intro.surface);
-        if overlay_proportional_text_from_assets_buffer(
+        overlay_proportional_text_from_assets_buffer(
             &mut intro.surface,
             &intro.game_dir,
             &text,
@@ -9159,21 +9132,10 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
                 shadow: true,
             },
         )
-        .is_ok()
-        {
-            return intro.surface.to_rgba();
-        }
+        .expect("intro story requires proportional font");
     }
 
-    let mut rgba = intro.surface.to_rgba();
-    let summary = summarize_intro(intro);
-    overlay_nonblack_text_panel_rgba(
-        &mut rgba,
-        INTRO_FRAMEBUFFER_WIDTH as usize,
-        INTRO_FRAMEBUFFER_HEIGHT as usize,
-        &summary,
-    );
-    rgba
+    intro.surface.to_rgba()
 }
 
 fn clear_intro_story_text_band(buffer: &mut IntroDisplayBuffer) {
@@ -9193,28 +9155,110 @@ fn render_chargen_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
             session,
             input_line,
         } => Some((session, input_line.as_str())),
-        _ => None,
+        _ => panic!("render_chargen_intro_frame called for non-character-creation intro panel"),
     }) else {
-        return intro.surface.to_rgba();
+        unreachable!("character creation intro panel match must either produce data or panic");
     };
 
-    if let Some(rgba) = render_chargen_intro_graphics(
+    render_chargen_intro_graphics(
         &mut intro.surface,
         &intro.game_dir,
         intro.raster_depth,
         session,
         input_line,
-    ) {
-        rgba
-    } else {
-        let summary = summarize_visual_chargen(session, input_line);
-        render_text_panel_rgba(
-            &summary,
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            INTRO_FRAMEBUFFER_HEIGHT as usize,
-        )
-        .unwrap_or_else(|_| intro.surface.to_rgba())
+    )
+    .expect("character creation intro step has no renderable graphics")
+}
+
+fn render_u4_transfer_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
+    intro.surface.clear(0);
+    let Some((source, preview, overrides, stage, input_line)) = (match &intro.panel {
+        VisualIntroPanel::U4Transfer {
+            source,
+            preview,
+            overrides,
+            stage,
+            input_line,
+        } => Some((source, preview, overrides, *stage, input_line.as_str())),
+        _ => panic!("render_u4_transfer_intro_frame called for non-U4-transfer intro panel"),
+    }) else {
+        unreachable!("U4 transfer intro panel match must either produce data or panic");
+    };
+
+    let font =
+        load_ibm_ch_font(&intro.game_dir).expect("U4 transfer intro requires IBM fixed-cell font");
+
+    draw_fixed_cell_box_intro_buffer(&mut intro.surface, &font, 0, 0, 40, 25);
+    draw_fixed_cell_box_intro_buffer(&mut intro.surface, &font, 0, 2, 20, 16);
+    draw_fixed_cell_box_intro_buffer(&mut intro.surface, &font, 21, 2, 19, 16);
+    draw_fixed_cell_box_intro_buffer(&mut intro.surface, &font, 0, 20, 40, 5);
+    overlay_fixed_cell_text_intro_buffer(
+        &mut intro.surface,
+        &font,
+        "Transfer from Ultima IV",
+        8,
+        1,
+        false,
+    );
+    draw_u4_transfer_details_intro_buffer(
+        &mut intro.surface,
+        &font,
+        2,
+        4,
+        "Imported",
+        &preview.name,
+        source.male,
+        preview.class_index,
+        preview.strength,
+        preview.dexterity,
+        preview.intelligence,
+        source.experience / 10,
+    );
+    let selected_name = overrides
+        .name
+        .as_deref()
+        .map(display_name_bytes)
+        .unwrap_or_else(|| preview.name.clone());
+    draw_u4_transfer_details_intro_buffer(
+        &mut intro.surface,
+        &font,
+        23,
+        4,
+        "Selected",
+        &selected_name,
+        overrides.male.unwrap_or(source.male),
+        preview.class_index,
+        preview.strength,
+        preview.dexterity,
+        preview.intelligence,
+        source.experience / 10,
+    );
+    draw_u4_transfer_prompt_intro_buffer(
+        &mut intro.surface,
+        &font,
+        preview,
+        source,
+        stage,
+        input_line,
+    );
+    intro.surface.to_rgba()
+}
+
+fn render_acknowledgements_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
+    intro.surface.clear(0);
+    let font =
+        load_ibm_ch_font(&intro.game_dir).expect("acknowledgements requires IBM fixed-cell font");
+    draw_fixed_cell_box_intro_buffer(&mut intro.surface, &font, 1, 1, 38, 23);
+    for (row, line) in u5_runtime::ACKNOWLEDGEMENTS_LINES.iter().enumerate() {
+        let text = line.chars().take(36).collect::<String>();
+        let x = if text.len() >= 36 {
+            2
+        } else {
+            2 + (36usize.saturating_sub(text.len())) / 2
+        };
+        overlay_fixed_cell_text_intro_buffer(&mut intro.surface, &font, &text, x, 3 + row, false);
     }
+    intro.surface.to_rgba()
 }
 
 fn render_chargen_intro_graphics(
@@ -9224,9 +9268,7 @@ fn render_chargen_intro_graphics(
     session: &ChargenSession,
     input_line: &str,
 ) -> Option<Vec<u8>> {
-    let Ok(font) = load_ibm_ch_font(game_dir) else {
-        return None;
-    };
+    let font = load_ibm_ch_font(game_dir).expect("character creation requires IBM fixed-cell font");
     match session.current_step() {
         ChargenSessionStep::PromptName => {
             overlay_fixed_cell_text_intro_buffer(
@@ -9257,9 +9299,7 @@ fn render_chargen_intro_graphics(
             } else {
                 CREATE_RESULT_PANEL
             };
-            if blit_image_panel_specs_intro_buffer(buffer, game_dir, depth, &[panel]).is_none() {
-                return None;
-            }
+            blit_image_panel_specs_intro_buffer(buffer, game_dir, depth, &[panel]);
             let placement = if record == 0 {
                 ProportionalTextPlacement {
                     x: CHARGEN_PROPORTIONAL_TEXT_X,
@@ -9280,13 +9320,13 @@ fn render_chargen_intro_graphics(
                 }
             };
             overlay_proportional_text_from_assets_buffer(buffer, game_dir, &text, placement)
-                .ok()?;
+                .expect("character creation requires proportional font");
             Some(buffer.to_rgba())
         }
         ChargenSessionStep::PresentQuestion(question) => {
             let option_a = create_virtue_panel_spec(question.option_a, 0);
             let option_b = create_virtue_panel_spec(question.option_b, 184);
-            if blit_image_panel_specs_intro_buffer(
+            blit_image_panel_specs_intro_buffer(
                 buffer,
                 game_dir,
                 depth,
@@ -9296,11 +9336,7 @@ fn render_chargen_intro_graphics(
                     option_a,
                     option_b,
                 ],
-            )
-            .is_none()
-            {
-                return None;
-            }
+            );
             overlay_fixed_cell_text_intro_buffer(buffer, &font, "A", 3, 2, false);
             overlay_fixed_cell_text_intro_buffer(buffer, &font, "B", 26, 2, false);
             overlay_proportional_text_from_assets_buffer(
@@ -9316,16 +9352,11 @@ fn render_chargen_intro_graphics(
                     shadow: true,
                 },
             )
-            .ok()?;
+            .expect("character creation question requires proportional font");
             Some(buffer.to_rgba())
         }
         ChargenSessionStep::Completed(result) => {
-            let _ = blit_image_panel_specs_intro_buffer(
-                buffer,
-                game_dir,
-                depth,
-                &[CREATE_RESULT_PANEL],
-            );
+            blit_image_panel_specs_intro_buffer(buffer, game_dir, depth, &[CREATE_RESULT_PANEL]);
             overlay_fixed_cell_text_intro_buffer(
                 buffer,
                 &font,
@@ -9359,17 +9390,11 @@ fn visual_intro_story_text(records: &StoryRecords, step: usize) -> Option<&str> 
 }
 
 fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
-    let mut buffer = intro.modal_backing.as_ref().cloned().unwrap_or_else(|| {
-        if let Ok(rgba) = render_text_panel_rgba(
-            "Return to View",
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            INTRO_FRAMEBUFFER_HEIGHT as usize,
-        ) {
-            intro_buffer_from_rgba_frame(&rgba)
-        } else {
-            visual_intro_final_title_backing_buffer(intro)
-        }
-    });
+    let mut buffer = intro
+        .modal_backing
+        .as_ref()
+        .cloned()
+        .expect("Return-to-View requires preserved intro backing surface");
     buffer.draw_title_tick(intro.title_tick_visible_frame);
 
     let VisualIntroPanel::ReturnToView {
@@ -9441,9 +9466,9 @@ fn visual_intro_title_art_buffer(
     game_dir: &Path,
     flourish_step: Option<usize>,
     signature_progress: Option<usize>,
-) -> Option<IntroDisplayBuffer> {
-    let title = load_title_bit(game_dir).ok()?;
-    let british = load_british_bit(game_dir).ok()?;
+) -> IntroDisplayBuffer {
+    let title = load_title_bit(game_dir).expect("intro title requires TITLE.BIT");
+    let british = load_british_bit(game_dir).expect("intro title requires BRITISH.BIT");
     let mut buffer = compose_intro_title_art_buffer(
         &title,
         &british,
@@ -9456,10 +9481,10 @@ fn visual_intro_title_art_buffer(
         },
     );
     if let Some(progress) = signature_progress.filter(|progress| *progress > 0) {
-        let signature = load_british_pth(game_dir).ok()?;
+        let signature = load_british_pth(game_dir).expect("intro title requires BRITISH.PTH");
         draw_british_signature_buffer(&mut buffer, &signature, progress);
     }
-    Some(buffer)
+    buffer
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -9992,9 +10017,19 @@ fn visual_intro_story_art_draws_rgba(
 ) -> Vec<IntroStoryDrawRgba> {
     visual_intro_story_draw_specs_for_active_panel(step, transition)
         .into_iter()
-        .filter_map(|spec| {
-            let directory = load_graphic_image_directory(game_dir, spec.stem, depth).ok()?;
-            let image = directory.images.get(usize::from(spec.subimage))?.as_ref()?;
+        .map(|spec| {
+            let directory = load_graphic_image_directory(game_dir, spec.stem, depth)
+                .unwrap_or_else(|err| panic!("intro story requires {} asset: {err}", spec.stem));
+            let image = directory
+                .images
+                .get(usize::from(spec.subimage))
+                .and_then(Option::as_ref)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "intro story asset {} is missing subimage {}",
+                        spec.stem, spec.subimage
+                    )
+                });
             let width = spec
                 .clip_width
                 .map(usize::from)
@@ -10010,13 +10045,13 @@ fn visual_intro_story_art_draws_rgba(
             } else {
                 graphic_image_to_rgba(image, depth)
             };
-            Some(IntroStoryDrawRgba {
+            IntroStoryDrawRgba {
                 rgba,
                 width,
                 height,
                 top_left_x: spec.top_left_x,
                 top_left_y: spec.top_left_y,
-            })
+            }
         })
         .collect()
 }
@@ -10084,16 +10119,25 @@ fn blit_image_panel_specs_intro_buffer(
     game_dir: &Path,
     depth: TileGraphicsDepth,
     specs: &[ImagePanelSpec],
-) -> Option<()> {
+) {
     for spec in specs {
-        let directory = load_graphic_image_directory(game_dir, spec.stem, depth).ok()?;
-        let image = directory.images.get(usize::from(spec.subimage))?.as_ref()?;
+        let directory = load_graphic_image_directory(game_dir, spec.stem, depth)
+            .unwrap_or_else(|err| panic!("intro requires {} image directory: {err}", spec.stem));
+        let image = directory
+            .images
+            .get(usize::from(spec.subimage))
+            .and_then(Option::as_ref)
+            .unwrap_or_else(|| {
+                panic!(
+                    "intro image directory {} is missing subimage {}",
+                    spec.stem, spec.subimage
+                )
+            });
         let width = spec.width.min(image.width);
         let height = spec.height.min(image.height);
         let rgba = graphic_image_to_rgba_clipped(image, depth, width, height);
         dst.blit_rgba(&rgba, width, height, spec.top_left_x, spec.top_left_y);
     }
-    Some(())
 }
 
 fn ega_palette_index_from_rgba(rgba: &[u8]) -> u8 {
@@ -10163,7 +10207,9 @@ fn overlay_fixed_cell_text_intro_buffer(
             if target_y >= dst.height {
                 break;
             }
-            let mut row_bits = font.glyph_row(code, glyph_y).unwrap_or(0);
+            let mut row_bits = font
+                .glyph_row(code, glyph_y)
+                .expect("intro fixed-cell text requires complete IBM.CH glyph rows");
             if inverse {
                 row_bits = !row_bits;
             }
@@ -10181,6 +10227,116 @@ fn overlay_fixed_cell_text_intro_buffer(
             }
         }
     }
+}
+
+fn draw_fixed_cell_box_intro_buffer(
+    dst: &mut IntroDisplayBuffer,
+    font: &FixedCellFont,
+    cell_x: usize,
+    cell_y: usize,
+    cells_w: usize,
+    cells_h: usize,
+) {
+    assert!(
+        cells_w >= 2 && cells_h >= 2,
+        "intro fixed-cell box requires at least 2x2 cells, got {cells_w}x{cells_h}"
+    );
+    let horizontal = "-".repeat(cells_w.saturating_sub(2));
+    overlay_fixed_cell_text_intro_buffer(
+        dst,
+        font,
+        &format!("+{horizontal}+"),
+        cell_x,
+        cell_y,
+        false,
+    );
+    for row in 1..cells_h.saturating_sub(1) {
+        overlay_fixed_cell_text_intro_buffer(dst, font, "|", cell_x, cell_y + row, false);
+        overlay_fixed_cell_text_intro_buffer(
+            dst,
+            font,
+            "|",
+            cell_x + cells_w.saturating_sub(1),
+            cell_y + row,
+            false,
+        );
+    }
+    overlay_fixed_cell_text_intro_buffer(
+        dst,
+        font,
+        &format!("+{horizontal}+"),
+        cell_x,
+        cell_y + cells_h.saturating_sub(1),
+        false,
+    );
+}
+
+fn draw_u4_transfer_details_intro_buffer(
+    dst: &mut IntroDisplayBuffer,
+    font: &FixedCellFont,
+    cell_x: usize,
+    cell_y: usize,
+    title: &str,
+    name: &str,
+    male: bool,
+    class_index: u8,
+    strength: u8,
+    dexterity: u8,
+    intelligence: u8,
+    experience: u32,
+) {
+    let rows = [
+        title.to_string(),
+        format!("Name {name}"),
+        format!("Sex  {}", if male { "Male" } else { "Female" }),
+        format!("Class {class_index}"),
+        format!("Str  {strength:>3}"),
+        format!("Dex  {dexterity:>3}"),
+        format!("Int  {intelligence:>3}"),
+        format!("Exp  {experience:>4}"),
+    ];
+    for (index, row) in rows.iter().enumerate() {
+        overlay_fixed_cell_text_intro_buffer(
+            dst,
+            font,
+            &row.chars().take(16).collect::<String>(),
+            cell_x,
+            cell_y + index,
+            false,
+        );
+    }
+}
+
+fn draw_u4_transfer_prompt_intro_buffer(
+    dst: &mut IntroDisplayBuffer,
+    font: &FixedCellFont,
+    preview: &U4TransferPreview,
+    source: &U4TransferSource,
+    stage: VisualU4TransferStage,
+    input_line: &str,
+) {
+    let prompt = match stage {
+        VisualU4TransferStage::ConfirmName => {
+            format!("Use name {}?  Y/N", preview.name)
+        }
+        VisualU4TransferStage::ReplacementName => {
+            format!("Name: {input_line}")
+        }
+        VisualU4TransferStage::ConfirmGender => {
+            format!("Use gender {}?  Y/N", if source.male { "M" } else { "F" })
+        }
+        VisualU4TransferStage::ReplacementGender => "Gender: M or F".to_string(),
+        VisualU4TransferStage::ConfirmCommit => "Write transfer save?  Y/N".to_string(),
+    };
+    overlay_fixed_cell_text_intro_buffer(
+        dst,
+        font,
+        &prompt.chars().take(36).collect::<String>(),
+        2,
+        21,
+        false,
+    );
+    overlay_fixed_cell_text_intro_buffer(dst, font, "Esc returns to menu", 2, 23, false);
 }
 
 fn overlay_fixed_cell_text_rgba(
@@ -10455,9 +10611,8 @@ fn overlay_nonblack_text_panel_rgba(
     dst_height: usize,
     text: &str,
 ) {
-    let Ok(text_rgba) = render_text_panel_rgba(text, dst_width, dst_height) else {
-        return;
-    };
+    let text_rgba = render_text_panel_rgba(text, dst_width, dst_height)
+        .expect("intro text overlay rendering failed");
     let text_pixels: Vec<(usize, [u8; 4])> = text_rgba
         .chunks_exact(4)
         .enumerate()
@@ -10496,17 +10651,17 @@ fn overlay_centered_text_band_rgba(
     y: usize,
     band_height: usize,
 ) {
-    if y >= dst_height || band_height == 0 {
-        return;
-    }
+    assert!(
+        y < dst_height && band_height > 0,
+        "intro centered text band outside framebuffer: y={y}, band_height={band_height}, dst_height={dst_height}"
+    );
     let glyph_advance = 4usize;
     let max_cols = dst_width / glyph_advance;
     let text_cols = text.chars().count().min(max_cols);
     let pad_cols = max_cols.saturating_sub(text_cols) / 2;
     let centered = format!("{}{}", " ".repeat(pad_cols), text);
-    let Ok(text_rgba) = render_text_panel_rgba(&centered, dst_width, band_height) else {
-        return;
-    };
+    let text_rgba = render_text_panel_rgba(&centered, dst_width, band_height)
+        .expect("intro centered text band rendering failed");
 
     let band_height = band_height.min(dst_height - y);
     for row in 0..band_height {
@@ -10647,6 +10802,9 @@ fn write_visual_intro_report_inner(
     };
     if title_dismissed {
         intro.dispatch.dismiss_title();
+    }
+    if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
+        intro.modal_backing = Some(visual_intro_final_title_backing_buffer(&intro));
     }
     let rgba = render_intro_frame(&mut intro);
     write_visual_report(
@@ -11840,6 +11998,38 @@ mod tests {
         std::env::temp_dir().join(format!("u5-bevy-frame-suite-{name}-{nonce}"))
     }
 
+    fn install_intro_assets(dir: &Path) {
+        let source_dir = Path::new(DEFAULT_GAME_DIR);
+        for file_name in [
+            "IBM.CH",
+            "PROPORT.PCS",
+            "TITLE.BIT",
+            "BRITISH.BIT",
+            "BRITISH.PTH",
+            "STARTSC.16",
+            "CREATE.16",
+            "TEXT.16",
+            "STORY1.16",
+            "STORY2.16",
+            "STORY3.16",
+            "STORY4.16",
+            "STORY5.16",
+            "STORY6.16",
+        ] {
+            let src = source_dir.join(file_name);
+            assert!(
+                src.exists(),
+                "intro rendering tests require clean local asset {src:?}"
+            );
+            let dst = dir.join(file_name);
+            if !dst.exists() {
+                fs::copy(&src, &dst).unwrap_or_else(|err| {
+                    panic!("failed to install intro test asset {file_name}: {err}")
+                });
+            }
+        }
+    }
+
     fn install_test_conversation(state: &mut PlayState) {
         let raw = vec![
             enc_tlk_text("Ada"),
@@ -12174,8 +12364,10 @@ mod tests {
 
     #[test]
     fn intro_menu_frame_renders_nonblank_rgba() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
         let mut intro = VisualIntroState {
-            game_dir: debug_game_dir(),
+            game_dir: dir,
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
             title_flourish_step: intro_title_flourish_total_steps(),
@@ -12211,18 +12403,13 @@ mod tests {
     fn intro_menu_render_updates_persistent_surface() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
         let mut expected_surface = new_intro_display_buffer();
-        if draw_visual_intro_start_menu_to_buffer(
+        draw_visual_intro_start_menu_to_buffer(
             &mut expected_surface,
             &intro.game_dir,
             intro.raster_depth,
             intro.title_tick_visible_frame,
             intro.dispatch.intro.cached_selection,
-        )
-        .is_none()
-        {
-            let _ = fs::remove_dir_all(&intro.game_dir);
-            return;
-        }
+        );
 
         let frame = render_intro_frame(&mut intro);
 
@@ -12310,6 +12497,7 @@ mod tests {
         }
 
         let dir = debug_game_dir();
+        install_intro_assets(&dir);
         let mut frame0_intro = reveal_intro_with_title_frame(dir.clone(), 0);
         let mut frame1_intro = reveal_intro_with_title_frame(dir.clone(), 1);
 
@@ -12695,15 +12883,12 @@ mod tests {
     #[test]
     fn intro_title_phase_renders_into_persistent_surface() {
         let dir = debug_game_dir();
-        if visual_intro_title_art_buffer(&dir, Some(0), None).is_none() {
-            let _ = fs::remove_dir_all(dir);
-            return;
-        }
+        install_intro_assets(&dir);
         let mut intro = VisualIntroState {
             game_dir: dir.clone(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
-            title_flourish_step: 0,
+            title_flourish_step: 3,
             title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
@@ -15364,7 +15549,11 @@ mod tests {
         let mut intro = visual_intro_state_with_panel(
             debug_game_dir(),
             VisualIntroPanel::Story {
-                records: StoryRecords { records: vec![] },
+                records: StoryRecords {
+                    records: (0..20)
+                        .map(|index| format!("Story record {index}"))
+                        .collect(),
+                },
                 step: 0,
                 transition: None,
             },
@@ -15431,8 +15620,10 @@ mod tests {
 
     #[test]
     fn visual_intro_story_panel_pages_back_to_menu_after_final_step() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
         let mut intro = VisualIntroState {
-            game_dir: debug_game_dir(),
+            game_dir: dir.clone(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
             title_flourish_step: 0,
@@ -15469,7 +15660,7 @@ mod tests {
             intro.dispatch.submit_menu_key(b'A'),
             UnifiedMenuStep::EnteredSubflow(IntroSubflow::Acknowledgements)
         ));
-        let _ = fs::remove_dir_all(&intro.game_dir);
+        let _ = fs::remove_dir_all(dir);
     }
 
     fn chargen_records() -> Vec<String> {
@@ -15482,9 +15673,10 @@ mod tests {
         dir: std::path::PathBuf,
         panel: VisualIntroPanel,
     ) -> VisualIntroState {
+        install_intro_assets(&dir);
         let mut dispatch = UnifiedMenuDispatch::new();
         dispatch.dismiss_title();
-        VisualIntroState {
+        let mut intro = VisualIntroState {
             game_dir: dir,
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch,
@@ -15504,7 +15696,11 @@ mod tests {
             panel,
             launch_result: Arc::new(Mutex::new(None)),
             image_handle: None,
+        };
+        if matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }) {
+            intro.modal_backing = Some(visual_intro_final_title_backing_buffer(&intro));
         }
+        intro
     }
 
     #[test]
@@ -15580,6 +15776,66 @@ mod tests {
         assert!(
             intro.surface.pixels.iter().any(|pixel| *pixel != 0),
             "chargen fixed prompt should draw into the intro display buffer"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_intro_acknowledgements_render_from_display_buffer() {
+        let dir = debug_game_dir();
+        let mut intro =
+            visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Acknowledgements);
+
+        let frame = render_intro_frame(&mut intro);
+
+        assert_eq!(frame, intro.surface.to_rgba());
+        assert!(
+            intro.surface.pixels.iter().any(|pixel| *pixel != 0),
+            "acknowledgements should render into the intro display buffer"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_intro_u4_transfer_renders_from_display_buffer() {
+        let dir = debug_game_dir();
+        let source = U4TransferSource {
+            name: b"OLDNAME\0\0".to_vec(),
+            male: true,
+            class_index: 6,
+            strength: 35,
+            dexterity: 20,
+            intelligence: 22,
+            experience: 1500,
+        };
+        let preview = u4_transfer_preview_from_u4_values(
+            display_name_bytes(&source.name),
+            source.class_index,
+            source.strength,
+            source.dexterity,
+            source.intelligence,
+            0,
+        );
+        let mut intro = visual_intro_state_with_panel(
+            dir.clone(),
+            VisualIntroPanel::U4Transfer {
+                source,
+                preview,
+                overrides: U4TransferOverrides {
+                    name: None,
+                    male: None,
+                },
+                stage: VisualU4TransferStage::ConfirmName,
+                input_line: String::new(),
+            },
+        );
+
+        let frame = render_intro_frame(&mut intro);
+
+        assert_eq!(frame, intro.surface.to_rgba());
+        assert!(
+            intro.surface.pixels.iter().any(|pixel| *pixel != 0),
+            "U4 transfer should render into the intro display buffer"
         );
         let _ = fs::remove_dir_all(dir);
     }
@@ -15821,8 +16077,11 @@ mod tests {
             0xff, 0x00, 0x00, 0xff, 0x00, 0xff, 0x00, 0xff, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
             0xff, 0xff,
         ];
+        let dir = debug_game_dir();
+        let mut backing = new_intro_display_buffer();
+        backing.clear(3);
         let mut intro = VisualIntroState {
-            game_dir: debug_game_dir(),
+            game_dir: dir.clone(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
             title_flourish_step: 0,
@@ -15834,7 +16093,7 @@ mod tests {
             surface: new_intro_display_buffer(),
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
-            modal_backing: None,
+            modal_backing: Some(backing),
             menu_idle_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
@@ -15874,7 +16133,7 @@ mod tests {
                 .any(|pixel| { pixel != [0x00, 0x00, 0x00, 0xff] }),
             "Return-to-View should preserve or synthesize a visible intro backing surface"
         );
-        let _ = fs::remove_dir_all(&intro.game_dir);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -15966,8 +16225,11 @@ mod tests {
 
     #[test]
     fn return_to_view_intro_frame_draws_fixed_wipe_rectangles() {
+        let dir = debug_game_dir();
+        let mut backing = new_intro_display_buffer();
+        backing.clear(3);
         let mut intro = VisualIntroState {
-            game_dir: debug_game_dir(),
+            game_dir: dir.clone(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
             title_flourish_step: 0,
@@ -15979,7 +16241,7 @@ mod tests {
             surface: new_intro_display_buffer(),
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
-            modal_backing: None,
+            modal_backing: Some(backing),
             menu_idle_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
@@ -16013,7 +16275,7 @@ mod tests {
         assert_eq!(pixel(128, 152), RETURN_TO_VIEW_FIXED_WIPE_RGBA);
         assert_eq!(pixel(137, 156), RETURN_TO_VIEW_FIXED_WIPE_RGBA);
         assert_ne!(pixel(127, 152), RETURN_TO_VIEW_FIXED_WIPE_RGBA);
-        let _ = fs::remove_dir_all(&intro.game_dir);
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
