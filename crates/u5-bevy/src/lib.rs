@@ -7429,6 +7429,18 @@ struct ScreenshotState {
     frames_after_shot: u32,
 }
 
+fn replace_visual_image_data(
+    images: &mut Assets<Image>,
+    handle: &Handle<Image>,
+    rgba: Vec<u8>,
+    context: &str,
+) {
+    images
+        .get_mut(handle)
+        .unwrap_or_else(|| panic!("{context} framebuffer image is missing"))
+        .data = Some(rgba);
+}
+
 fn screenshot_system(
     mut commands: Commands,
     config: Res<ScreenshotConfig>,
@@ -7455,9 +7467,7 @@ fn screenshot_system(
             let v: &mut VisualState = visual.as_mut();
             let rgba =
                 render_visual_play_frame_with_input(&mut v.state, &v.atlas, &v.text_font, "", "");
-            if let Some(image) = images.get_mut(&v.image_handle) {
-                image.data = Some(rgba);
-            }
+            replace_visual_image_data(&mut images, &v.image_handle, rgba, "screenshot preset play");
             state.preset_keys_applied = true;
         } else if let Some(mut intro) = intro {
             let mut handled = false;
@@ -7466,11 +7476,11 @@ fn screenshot_system(
             }
             if handled {
                 let rgba = render_intro_frame(&mut intro);
-                if let Some(handle) = intro.image_handle.as_ref() {
-                    if let Some(image) = images.get_mut(handle) {
-                        image.data = Some(rgba);
-                    }
-                }
+                let handle = intro
+                    .image_handle
+                    .as_ref()
+                    .expect("screenshot preset intro redraw requires framebuffer handle");
+                replace_visual_image_data(&mut images, handle, rgba, "screenshot preset intro");
             }
             state.preset_keys_applied = true;
         }
@@ -7656,9 +7666,7 @@ fn animate_static_tiles(
         "",
         v.prompt_cursor_visible,
     );
-    if let Some(image) = images.get_mut(&v.image_handle) {
-        image.data = Some(rgba);
-    }
+    replace_visual_image_data(&mut images, &v.image_handle, rgba, "static tile animation");
 }
 
 fn setup(
@@ -7801,11 +7809,11 @@ fn drive_visual_intro(
     }
     if handled {
         let rgba = render_intro_frame(&mut intro);
-        if let Some(handle) = intro.image_handle.as_ref() {
-            if let Some(image) = images.get_mut(handle) {
-                image.data = Some(rgba);
-            }
-        }
+        let handle = intro
+            .image_handle
+            .as_ref()
+            .expect("intro input redraw requires framebuffer handle");
+        replace_visual_image_data(&mut images, handle, rgba, "intro input redraw");
     }
     let launch_options = intro
         .launch_result
@@ -7846,10 +7854,7 @@ fn transition_visual_intro_to_gameplay(
         .expect("Journey Onward requires the intro visual framebuffer handle");
     intro.image_handle = None;
     let rgba = render_visual_play_frame_with_input(&mut state, &atlas, &text_font, "", READY_HINT);
-    images
-        .get_mut(&image_handle)
-        .expect("Journey Onward visual framebuffer image is missing")
-        .data = Some(rgba);
+    replace_visual_image_data(images, &image_handle, rgba, "Journey Onward");
     for mut sprite in sprites.iter_mut() {
         sprite.custom_size = Some(Vec2::new(
             VISUAL_PLAY_FRAME_WIDTH as f32 * DISPLAY_SCALE,
@@ -7904,10 +7909,7 @@ fn animate_visual_intro_title_effects(
         .image_handle
         .as_ref()
         .expect("intro animation tick requires a visual framebuffer handle");
-    images
-        .get_mut(handle)
-        .expect("intro animation tick framebuffer image is missing")
-        .data = Some(rgba);
+    replace_visual_image_data(&mut images, handle, rgba, "intro animation tick");
 }
 
 fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
@@ -8672,9 +8674,7 @@ fn drive_visual(
         "",
         v.prompt_cursor_visible,
     );
-    if let Some(image) = images.get_mut(&v.image_handle) {
-        image.data = Some(rgba);
-    }
+    replace_visual_image_data(&mut images, &v.image_handle, rgba, "play input redraw");
 }
 
 fn summarize_intro(intro: &mut VisualIntroState) -> String {
@@ -11019,9 +11019,16 @@ fn render_visual_play_frame_with_input(
     atlas: &TileAtlas,
     font: &FixedCellFont,
     input_line: &str,
-    fallback: &str,
+    default_message: &str,
 ) -> Vec<u8> {
-    render_visual_play_frame_with_input_and_cursor(state, atlas, font, input_line, fallback, false)
+    render_visual_play_frame_with_input_and_cursor(
+        state,
+        atlas,
+        font,
+        input_line,
+        default_message,
+        false,
+    )
 }
 
 fn render_visual_play_frame_with_input_and_cursor(
@@ -11029,11 +11036,11 @@ fn render_visual_play_frame_with_input_and_cursor(
     atlas: &TileAtlas,
     font: &FixedCellFont,
     input_line: &str,
-    fallback: &str,
+    default_message: &str,
     prompt_cursor_visible: bool,
 ) -> Vec<u8> {
     if state.endgame.is_some() {
-        return render_endgame_framebuffer(state, atlas, input_line, fallback, font);
+        return render_endgame_framebuffer(state, atlas, input_line, default_message, font);
     }
 
     let width = VISUAL_PLAY_FRAME_WIDTH as usize;
@@ -11041,7 +11048,7 @@ fn render_visual_play_frame_with_input_and_cursor(
     let mut rgba = render_integrated_status_framebuffer(
         state,
         input_line,
-        fallback,
+        default_message,
         font,
         prompt_cursor_visible,
     );
@@ -11065,15 +11072,15 @@ fn render_endgame_framebuffer(
     state: &mut PlayState,
     atlas: &TileAtlas,
     input_line: &str,
-    fallback: &str,
+    default_message: &str,
     font: &FixedCellFont,
 ) -> Vec<u8> {
     let width = VISUAL_PLAY_FRAME_WIDTH as usize;
     let height = VISUAL_PLAY_FRAME_HEIGHT as usize;
-    let mut rgba = render_status_framebuffer(state, input_line, fallback, font);
-    if endgame_frame_should_show_tableau(state)
-        && let Ok(viewport) = render_endgame_tableau_viewport(state, atlas)
-    {
+    let mut rgba = render_status_framebuffer(state, input_line, default_message, font);
+    if endgame_frame_should_show_tableau(state) {
+        let viewport = render_endgame_tableau_viewport(state, atlas)
+            .unwrap_or_else(|err| panic!("endgame tableau render failed: {err}"));
         blit_rgba(
             &mut rgba,
             width,
@@ -11509,12 +11516,13 @@ fn render_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> {
                 center_rgba_on_viewport(rgba, viewport.width, viewport.height)
             }
         }
-        _ => render_text_panel_rgba(
+        Ok(None) => render_text_panel_rgba(
             &state.render_text_view(VIEWPORT_RADIUS),
             VIEWPORT_SIZE_PX as usize,
             VIEWPORT_SIZE_PX as usize,
         )
-        .unwrap_or_else(|_| vec![0; (VIEWPORT_SIZE_PX as usize) * (VIEWPORT_SIZE_PX as usize) * 4]),
+        .unwrap_or_else(|err| panic!("visual frame text panel render failed: {err}")),
+        Err(err) => panic!("visual top-down frame render failed: {err}"),
     }
 }
 
@@ -11530,12 +11538,13 @@ fn render_base_framebuffer(state: &mut PlayState, atlas: &TileAtlas) -> Vec<u8> 
                 center_rgba_on_viewport(rgba, viewport.width, viewport.height)
             }
         }
-        _ => render_text_panel_rgba(
+        Ok(None) => render_text_panel_rgba(
             &state.render_text_view(VIEWPORT_RADIUS),
             VIEWPORT_SIZE_PX as usize,
             VIEWPORT_SIZE_PX as usize,
         )
-        .unwrap_or_else(|_| vec![0; (VIEWPORT_SIZE_PX as usize) * (VIEWPORT_SIZE_PX as usize) * 4]),
+        .unwrap_or_else(|err| panic!("visual base text panel render failed: {err}")),
+        Err(err) => panic!("visual base top-down frame render failed: {err}"),
     }
 }
 
@@ -11593,14 +11602,14 @@ fn center_rgba_on_viewport(src: Vec<u8>, src_width: usize, src_height: usize) ->
 fn render_status_framebuffer(
     state: &mut PlayState,
     input_line: &str,
-    fallback: &str,
+    default_message: &str,
     font: &FixedCellFont,
 ) -> Vec<u8> {
     let active_cursor = state.active_player;
     let mut display_state = state.clone();
     display_state.refresh_cached_moon_glyphs();
     if display_state.message.is_empty() {
-        display_state.message = fallback.to_string();
+        display_state.message = default_message.to_string();
     } else {
         display_state.message = visual_display_message(&display_state);
     }
@@ -11618,7 +11627,7 @@ fn render_status_framebuffer(
         state.active_player = None;
     }
     let mut rgba = render_text_window_rgba(&system, font)
-        .unwrap_or_else(|_| vec![0; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4]);
+        .unwrap_or_else(|err| panic!("visual status text window render failed: {err}"));
     apply_endgame_certificate_rect_operation_mask(&mut rgba, &display_state);
     rgba
 }
@@ -11626,7 +11635,7 @@ fn render_status_framebuffer(
 fn render_integrated_status_framebuffer(
     state: &mut PlayState,
     input_line: &str,
-    fallback: &str,
+    default_message: &str,
     font: &FixedCellFont,
     prompt_cursor_visible: bool,
 ) -> Vec<u8> {
@@ -11634,7 +11643,7 @@ fn render_integrated_status_framebuffer(
     let mut display_state = state.clone();
     display_state.refresh_cached_moon_glyphs();
     if display_state.message.is_empty() {
-        display_state.message = fallback.to_string();
+        display_state.message = default_message.to_string();
     } else {
         display_state.message = visual_display_message(&display_state);
     }
@@ -11705,7 +11714,7 @@ fn render_integrated_status_framebuffer(
         state.active_player = None;
     }
     let mut rgba = render_text_window_rgba(&system, font)
-        .unwrap_or_else(|_| vec![0; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4]);
+        .unwrap_or_else(|err| panic!("visual integrated text window render failed: {err}"));
     apply_endgame_certificate_rect_operation_mask(&mut rgba, &display_state);
     rgba
 }
@@ -11800,14 +11809,14 @@ fn apply_rect_column_sweep_reveal_rgba(
 }
 
 #[cfg(test)]
-fn summarize(state: &mut PlayState, fallback: &str, input_line: &str) -> String {
+fn summarize(state: &mut PlayState, default_message: &str, input_line: &str) -> String {
     let dungeon_note = if matches!(state.area, u5_runtime::Area::Dungeon { .. }) {
         " [Dungeon first-person panel]"
     } else {
         ""
     };
     let msg = if state.message.is_empty() {
-        fallback.to_string()
+        default_message.to_string()
     } else {
         state.message.clone()
     };
@@ -13129,7 +13138,7 @@ mod tests {
     }
 
     #[test]
-    fn visual_intro_journey_without_save_panics_instead_of_menu_fallback() {
+    fn visual_intro_journey_without_save_panics() {
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
 
@@ -13171,7 +13180,7 @@ mod tests {
     }
 
     #[test]
-    fn visual_intro_missing_question_dat_panics_instead_of_menu_fallback() {
+    fn visual_intro_missing_question_dat_panics() {
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
 
@@ -13187,7 +13196,7 @@ mod tests {
     }
 
     #[test]
-    fn visual_intro_missing_u4_transfer_source_panics_instead_of_menu_fallback() {
+    fn visual_intro_missing_u4_transfer_source_panics() {
         let dir = debug_game_dir();
         let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
 
