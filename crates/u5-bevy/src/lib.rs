@@ -10185,40 +10185,60 @@ fn visual_intro_story_draw_specs_for_active_panel(
 ) -> Vec<IntroStoryDrawSpec> {
     let mut specs = visual_intro_story_draw_specs(step);
     if step != 1 {
+        assert!(
+            transition.is_none(),
+            "intro story transition state is only published for step 1, got step {step}"
+        );
         return specs;
     }
 
     let Some(transition) = transition else {
+        let original_len = specs.len();
         specs.retain(|spec| {
             !(spec.stem == "STORY1"
                 && spec.subimage == INTRO_STEP_1_EXTRA_SUBIMAGE
                 && spec.top_left_x == INTRO_STEP_1_EXTRA_ART_X
                 && spec.top_left_y == INTRO_STEP_1_EXTRA_ART_Y)
         });
+        assert_eq!(
+            original_len - specs.len(),
+            1,
+            "intro story step 1 hidden extra art spec must exist exactly once before transition"
+        );
         return specs;
     };
 
-    if let Some((start_x, end_x)) = transition.revealed_columns() {
-        let (_rect_x0, rect_y0, _rect_x1, rect_y1) = transition.rect;
-        let clip_width = end_x
-            .checked_sub(start_x)
-            .and_then(|width| width.checked_add(1))
-            .expect("intro story transition revealed columns are invalid");
-        let clip_height = rect_y1
-            .checked_sub(rect_y0)
-            .and_then(|height| height.checked_add(1))
-            .expect("intro story transition rectangle rows are invalid");
-        for spec in &mut specs {
-            if spec.stem == "STORY1"
-                && spec.subimage == INTRO_STEP_1_EXTRA_SUBIMAGE
-                && spec.top_left_x == INTRO_STEP_1_EXTRA_ART_X
-                && spec.top_left_y == INTRO_STEP_1_EXTRA_ART_Y
-            {
-                spec.clip_width = Some(clip_width);
-                spec.clip_height = Some(clip_height);
-            }
+    let (start_x, end_x) = transition.revealed_columns().unwrap_or_else(|| {
+        panic!(
+            "intro story step 1 transition has no revealed columns for rect {:?} tick {}",
+            transition.rect, transition.tick
+        )
+    });
+    let (_rect_x0, rect_y0, _rect_x1, rect_y1) = transition.rect;
+    let clip_width = end_x
+        .checked_sub(start_x)
+        .and_then(|width| width.checked_add(1))
+        .expect("intro story transition revealed columns are invalid");
+    let clip_height = rect_y1
+        .checked_sub(rect_y0)
+        .and_then(|height| height.checked_add(1))
+        .expect("intro story transition rectangle rows are invalid");
+    let mut matched_extra_art = 0usize;
+    for spec in &mut specs {
+        if spec.stem == "STORY1"
+            && spec.subimage == INTRO_STEP_1_EXTRA_SUBIMAGE
+            && spec.top_left_x == INTRO_STEP_1_EXTRA_ART_X
+            && spec.top_left_y == INTRO_STEP_1_EXTRA_ART_Y
+        {
+            matched_extra_art += 1;
+            spec.clip_width = Some(clip_width);
+            spec.clip_height = Some(clip_height);
         }
     }
+    assert_eq!(
+        matched_extra_art, 1,
+        "intro story step 1 transition must clip exactly one extra art spec"
+    );
     specs
 }
 
@@ -12935,6 +12955,48 @@ mod tests {
             .unwrap();
         assert_eq!(extra.clip_width, Some(36));
         assert_eq!(extra.clip_height, Some(35));
+    }
+
+    #[test]
+    fn intro_story_transition_rejects_unpublished_step() {
+        let result = std::panic::catch_unwind(|| {
+            let _ = visual_intro_story_draw_specs_for_active_panel(
+                2,
+                Some(RectColumnSweepTransition::new(INTRO_STEP_1_RECT_TRANSITION)),
+            );
+        });
+
+        let payload = result.expect_err("transition on an unpublished story step must panic");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("transition panic payload must be a string");
+        assert!(
+            message.contains("transition state is only published for step 1"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn intro_story_step_one_transition_rejects_invalid_reveal_rect() {
+        let result = std::panic::catch_unwind(|| {
+            let _ = visual_intro_story_draw_specs_for_active_panel(
+                1,
+                Some(RectColumnSweepTransition {
+                    rect: (75, 86, 40, 120),
+                    tick: 0,
+                }),
+            );
+        });
+
+        let payload = result.expect_err("invalid story transition rect must panic");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("transition panic payload must be a string");
+        assert!(message.contains("has no revealed columns"), "{message}");
     }
 
     #[test]
