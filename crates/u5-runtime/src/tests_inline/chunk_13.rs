@@ -5355,10 +5355,10 @@ fn display_surface_title_tick_touches_only_published_rectangle_and_presents_expl
     let (bright, dim) = title_tick_palette_indices(0);
     assert_eq!(surface.title_tick_frame(), 1);
     assert_eq!(surface.read_pixel(54, 64), Some(0x03));
-    assert_eq!(surface.read_pixel(54, 65), Some(0x03));
+    assert_eq!(surface.read_pixel(54, 65), Some(0x00));
     assert_eq!(surface.read_pixel(54, 85), Some(bright));
     assert_eq!(surface.read_pixel(54, 105), Some(dim));
-    assert_eq!(surface.read_pixel(120, 85), Some(0x03));
+    assert_eq!(surface.read_pixel(120, 85), Some(0x00));
     assert_eq!(surface.read_pixel(54, 114), Some(0x03));
     assert_eq!(surface.presented_frames(), 0);
 

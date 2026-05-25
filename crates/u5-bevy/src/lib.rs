@@ -160,6 +160,142 @@ struct ImagePanelSpec {
     height: usize,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct IntroDisplayBuffer {
+    width: usize,
+    height: usize,
+    pixels: Vec<u8>,
+}
+
+impl IntroDisplayBuffer {
+    fn new(width: usize, height: usize) -> Self {
+        Self {
+            width,
+            height,
+            pixels: vec![0; width.saturating_mul(height)],
+        }
+    }
+
+    fn clear(&mut self, color: u8) {
+        self.pixels.fill(color & 0x0f);
+    }
+
+    fn clear_rect_inclusive(&mut self, x0: usize, y0: usize, x1: usize, y1: usize, color: u8) {
+        if self.width == 0 || self.height == 0 {
+            return;
+        }
+        let x0 = x0.min(self.width - 1);
+        let x1 = x1.min(self.width - 1);
+        let y0 = y0.min(self.height - 1);
+        let y1 = y1.min(self.height - 1);
+        if x0 > x1 || y0 > y1 {
+            return;
+        }
+        for y in y0..=y1 {
+            let start = y * self.width + x0;
+            let end = y * self.width + x1 + 1;
+            self.pixels[start..end].fill(color & 0x0f);
+        }
+    }
+
+    fn blit_rgba(
+        &mut self,
+        src: &[u8],
+        src_width: usize,
+        src_height: usize,
+        dst_x: usize,
+        dst_y: usize,
+    ) {
+        for row in 0..src_height {
+            let y = dst_y + row;
+            if y >= self.height {
+                break;
+            }
+            let cols = src_width.min(self.width.saturating_sub(dst_x));
+            for col in 0..cols {
+                let src_offset = (row * src_width + col) * 4;
+                let Some(rgba) = src.get(src_offset..src_offset + 4) else {
+                    continue;
+                };
+                self.pixels[y * self.width + dst_x + col] = ega_palette_index_from_rgba(rgba);
+            }
+        }
+    }
+
+    fn draw_title_tick(&mut self, frame: u8) {
+        let start_x = TITLE_TICK_FRAME_X as usize;
+        let start_y = TITLE_TICK_FRAME_Y as usize;
+        let end_x = start_x
+            .saturating_add(TITLE_TICK_FRAME_WIDTH as usize)
+            .min(self.width);
+        let end_y = start_y
+            .saturating_add(TITLE_TICK_FRAME_HEIGHT as usize)
+            .min(self.height);
+
+        for y in start_y..end_y {
+            let local_y = y - start_y;
+            for x in start_x..end_x {
+                let local_x = x - start_x;
+                self.pixels[y * self.width + x] =
+                    title_tick_flame_palette_index(local_x, local_y, frame).unwrap_or(0);
+            }
+        }
+    }
+
+    fn copy_revealed_columns_from(
+        &mut self,
+        source: &IntroDisplayBuffer,
+        transition: RectColumnSweepTransition,
+    ) {
+        if self.width != source.width || self.height != source.height {
+            return;
+        }
+        let Some((start_x, end_x)) = transition.revealed_columns() else {
+            return;
+        };
+        let (rect_x0, rect_y0, rect_x1, rect_y1) = transition.rect;
+        if self.width == 0 || self.height == 0 {
+            return;
+        }
+        let y0 = usize::from(rect_y0).min(self.height - 1);
+        let y1 = usize::from(rect_y1).min(self.height - 1);
+        let x0 = usize::from(rect_x0).min(self.width - 1);
+        let x1 = usize::from(rect_x1).min(self.width - 1);
+        let revealed_start = usize::from(start_x).min(self.width - 1);
+        let revealed_end = usize::from(end_x).min(self.width - 1);
+        if x0 > x1 || y0 > y1 {
+            return;
+        }
+
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                if x < revealed_start || x > revealed_end {
+                    continue;
+                }
+                let index = y * self.width + x;
+                self.pixels[index] = source.pixels[index];
+            }
+        }
+    }
+
+    fn from_rgba(width: usize, height: usize, rgba: &[u8]) -> Self {
+        let mut buffer = Self::new(width, height);
+        for (index, pixel) in rgba.chunks_exact(4).take(width * height).enumerate() {
+            buffer.pixels[index] = ega_palette_index_from_rgba(pixel);
+        }
+        buffer
+    }
+
+    fn to_rgba(&self) -> Vec<u8> {
+        let mut rgba = Vec::with_capacity(self.pixels.len() * 4);
+        for palette_index in &self.pixels {
+            let rgb = EGA_PALETTE_RGB[usize::from(*palette_index & 0x0f)];
+            rgba.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
+        }
+        rgba
+    }
+}
+
 const STARTSC_PANEL_SPECS: [ImagePanelSpec; 3] = [
     ImagePanelSpec {
         stem: "STARTSC",
@@ -7660,9 +7796,12 @@ fn animate_visual_intro_title_effects(
 
     pump.accumulator += time.delta_secs();
     let mut advanced = false;
-    while pump.accumulator >= pump.interval {
+    if pump.accumulator >= pump.interval {
         pump.accumulator -= pump.interval;
-        advanced |= advance_visual_intro_animation_tick(&mut intro);
+        if pump.accumulator >= pump.interval {
+            pump.accumulator = 0.0;
+        }
+        advanced = advance_visual_intro_animation_tick(&mut intro);
     }
     if !advanced {
         return;
@@ -8873,34 +9012,34 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         }
     }
     if let Some(reveal) = intro.start_menu_reveal {
-        let source_rgba = rgba;
-        let mut backing_rgba = intro
+        let source_buffer = IntroDisplayBuffer::from_rgba(
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+            &rgba,
+        );
+        let backing_rgba = intro
             .start_menu_reveal_backing
             .clone()
             .unwrap_or_else(|| visual_intro_final_title_backing_rgba(intro));
-        apply_rect_column_sweep_reveal_rgba(
-            &mut backing_rgba,
-            &source_rgba,
+        let mut backing_buffer = IntroDisplayBuffer::from_rgba(
             INTRO_FRAMEBUFFER_WIDTH as usize,
             INTRO_FRAMEBUFFER_HEIGHT as usize,
-            reveal,
+            &backing_rgba,
         );
-        rgba = backing_rgba;
+        backing_buffer.copy_revealed_columns_from(&source_buffer, reveal);
+        rgba = backing_buffer.to_rgba();
     }
     rgba
 }
 
 fn visual_intro_final_title_backing_rgba(intro: &VisualIntroState) -> Vec<u8> {
-    let mut rgba =
-        vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
-    for pixel in rgba.chunks_exact_mut(4) {
-        pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
-    }
+    let mut buffer = IntroDisplayBuffer::new(
+        INTRO_FRAMEBUFFER_WIDTH as usize,
+        INTRO_FRAMEBUFFER_HEIGHT as usize,
+    );
+    buffer.clear(0);
     if let Some(title_rgba) = visual_intro_title_art_rgba(&intro.game_dir, None, None) {
-        blit_rgba(
-            &mut rgba,
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            INTRO_FRAMEBUFFER_HEIGHT as usize,
+        buffer.blit_rgba(
             &title_rgba,
             TITLE_SURFACE_WIDTH as usize,
             TITLE_SURFACE_HEIGHT as usize,
@@ -8908,7 +9047,7 @@ fn visual_intro_final_title_backing_rgba(intro: &VisualIntroState) -> Vec<u8> {
             0,
         );
     }
-    rgba
+    buffer.to_rgba()
 }
 
 fn visual_intro_start_menu_rgba(
@@ -8917,40 +9056,26 @@ fn visual_intro_start_menu_rgba(
     title_tick_frame: u8,
     highlighted: Option<IntroSubflow>,
 ) -> Option<Vec<u8>> {
-    let mut rgba =
-        vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
-    for pixel in rgba.chunks_exact_mut(4) {
-        pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
-    }
-    blit_image_panel_specs_rgba(
-        &mut rgba,
+    let mut buffer = IntroDisplayBuffer::new(
         INTRO_FRAMEBUFFER_WIDTH as usize,
         INTRO_FRAMEBUFFER_HEIGHT as usize,
-        game_dir,
-        depth,
-        &STARTSC_PANEL_SPECS,
-    )?;
-    fill_rgba_rect_inclusive(
-        &mut rgba,
-        INTRO_FRAMEBUFFER_WIDTH as usize,
-        INTRO_FRAMEBUFFER_HEIGHT as usize,
+    );
+    buffer.clear(0);
+    blit_image_panel_specs_intro_buffer(&mut buffer, game_dir, depth, &STARTSC_PANEL_SPECS)?;
+    buffer.clear_rect_inclusive(
         0,
         136,
         INTRO_FRAMEBUFFER_WIDTH as usize - 1,
         INTRO_FRAMEBUFFER_HEIGHT as usize - 1,
-        [0x00, 0x00, 0x00, 0xff],
+        0,
     );
     let font = load_ibm_ch_font(game_dir).ok()?;
-    draw_intro_menu_labels_rgba(&mut rgba, &font, highlighted);
-    draw_title_tick_overlay_rgba(
-        &mut rgba,
-        INTRO_FRAMEBUFFER_WIDTH as usize,
-        INTRO_FRAMEBUFFER_HEIGHT as usize,
-        title_tick_frame,
-    );
-    Some(rgba)
+    draw_intro_menu_labels_intro_buffer(&mut buffer, &font, highlighted);
+    buffer.draw_title_tick(title_tick_frame);
+    Some(buffer.to_rgba())
 }
 
+#[cfg(test)]
 fn draw_intro_menu_labels_rgba(
     rgba: &mut [u8],
     font: &FixedCellFont,
@@ -8961,6 +9086,23 @@ fn draw_intro_menu_labels_rgba(
             rgba,
             INTRO_FRAMEBUFFER_WIDTH as usize,
             INTRO_FRAMEBUFFER_HEIGHT as usize,
+            font,
+            label,
+            col,
+            row,
+            highlighted == Some(subflow),
+        );
+    }
+}
+
+fn draw_intro_menu_labels_intro_buffer(
+    buffer: &mut IntroDisplayBuffer,
+    font: &FixedCellFont,
+    highlighted: Option<IntroSubflow>,
+) {
+    for (subflow, col, row, label) in INTRO_MENU_LABELS {
+        overlay_fixed_cell_text_intro_buffer(
+            buffer,
             font,
             label,
             col,
@@ -9964,6 +10106,42 @@ fn blit_image_panel_specs_rgba(
     Some(())
 }
 
+fn blit_image_panel_specs_intro_buffer(
+    dst: &mut IntroDisplayBuffer,
+    game_dir: &Path,
+    depth: TileGraphicsDepth,
+    specs: &[ImagePanelSpec],
+) -> Option<()> {
+    for spec in specs {
+        let directory = load_graphic_image_directory(game_dir, spec.stem, depth).ok()?;
+        let image = directory.images.get(usize::from(spec.subimage))?.as_ref()?;
+        let width = spec.width.min(image.width);
+        let height = spec.height.min(image.height);
+        let rgba = graphic_image_to_rgba_clipped(image, depth, width, height);
+        dst.blit_rgba(&rgba, width, height, spec.top_left_x, spec.top_left_y);
+    }
+    Some(())
+}
+
+fn ega_palette_index_from_rgba(rgba: &[u8]) -> u8 {
+    if rgba.len() < 3 {
+        return 0;
+    }
+    let mut best_index = 0u8;
+    let mut best_distance = u32::MAX;
+    for (index, rgb) in EGA_PALETTE_RGB.iter().enumerate() {
+        let dr = i32::from(rgba[0]) - i32::from(rgb[0]);
+        let dg = i32::from(rgba[1]) - i32::from(rgb[1]);
+        let db = i32::from(rgba[2]) - i32::from(rgb[2]);
+        let distance = (dr * dr + dg * dg + db * db) as u32;
+        if distance < best_distance {
+            best_distance = distance;
+            best_index = index as u8;
+        }
+    }
+    best_index
+}
+
 fn blit_rgba(
     dst: &mut [u8],
     dst_width: usize,
@@ -9988,6 +10166,46 @@ fn blit_rgba(
             dst.get_mut(dst_row..dst_row + bytes),
         ) {
             dst_slice.copy_from_slice(src_slice);
+        }
+    }
+}
+
+fn overlay_fixed_cell_text_intro_buffer(
+    dst: &mut IntroDisplayBuffer,
+    font: &FixedCellFont,
+    text: &str,
+    cell_x: usize,
+    cell_y: usize,
+    inverse: bool,
+) {
+    for (index, byte) in text.bytes().enumerate() {
+        let px = cell_x.saturating_add(index).saturating_mul(CH_CELL_SIDE);
+        let py = cell_y.saturating_mul(CH_CELL_SIDE);
+        if px >= dst.width || py >= dst.height {
+            break;
+        }
+        let code = byte & 0x7f;
+        for glyph_y in 0..CH_CELL_SIDE {
+            let target_y = py + glyph_y;
+            if target_y >= dst.height {
+                break;
+            }
+            let mut row_bits = font.glyph_row(code, glyph_y).unwrap_or(0);
+            if inverse {
+                row_bits = !row_bits;
+            }
+            for glyph_x in 0..CH_CELL_SIDE {
+                let target_x = px + glyph_x;
+                if target_x >= dst.width {
+                    break;
+                }
+                dst.pixels[target_y * dst.width + target_x] =
+                    if row_bits & (1 << (7 - glyph_x)) != 0 {
+                        0x0f
+                    } else {
+                        0x00
+                    };
+            }
         }
     }
 }
@@ -11180,6 +11398,7 @@ fn apply_endgame_certificate_rect_operation_mask(rgba: &mut [u8], state: &PlaySt
     );
 }
 
+#[cfg(test)]
 fn apply_rect_column_sweep_reveal_rgba(
     destination: &mut [u8],
     source: &[u8],
@@ -12601,6 +12820,34 @@ mod tests {
                 .all(|(_, pixel)| pixel == [0x00, 0x00, 0x00, 0xff])
         );
         assert_ne!(frame0, frame1);
+    }
+
+    #[test]
+    fn intro_display_title_tick_overwrites_full_spec_strip() {
+        let mut buffer = IntroDisplayBuffer::new(
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+        );
+        buffer.clear(0x03);
+
+        buffer.draw_title_tick(0);
+
+        assert_eq!(
+            buffer.pixels[(TITLE_TICK_FRAME_Y as usize - 1) * buffer.width + 54],
+            0x03
+        );
+        assert_eq!(
+            buffer.pixels[TITLE_TICK_FRAME_Y as usize * buffer.width + 54],
+            0x00
+        );
+        assert_eq!(
+            buffer.pixels[(TITLE_TICK_FRAME_Y as usize + 20) * buffer.width + 54],
+            title_tick_flame_palette_index(54, 20, 0).unwrap()
+        );
+        assert_eq!(
+            buffer.pixels[(TITLE_TICK_FRAME_Y as usize + 20) * buffer.width + 120],
+            0x00
+        );
     }
 
     #[test]

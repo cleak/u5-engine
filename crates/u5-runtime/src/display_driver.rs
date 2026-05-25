@@ -557,14 +557,9 @@ impl EgaDisplaySurface {
             let local_y = y - rect.y0;
             for x in rect.x0..=rect.x1 {
                 let index = y * DISPLAY_SURFACE_WIDTH + x;
-                if self.front_pixels[index] != 0 {
-                    continue;
-                }
-                if let Some(color) =
+                self.front_pixels[index] =
                     title_tick_flame_palette_index(x - rect.x0, local_y, self.title_tick_frame)
-                {
-                    self.front_pixels[index] = color;
-                }
+                        .unwrap_or(0);
             }
         }
         self.title_tick_frame = title_tick_next_frame(self.title_tick_frame);
