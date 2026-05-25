@@ -29,9 +29,9 @@ use u5_runtime::{
     CombatActorDescriptor, DEATH_VISION_OBJECT_CLASS, DEATH_WIND_COST, DEATH_WIND_SPELL_INDEX,
     DEFAULT_CLIMB_STAT, DEFAULT_FOOD_STOCK, DES_POR_SPELL_INDEX, DISPEL_FIELD_COST,
     DISPEL_FIELD_SPELL_INDEX, DUNGEON_CBT_RECORDS, DUNGEON_LEVEL_SPELL_COST, Direction,
-    DiskIoHandlerPhase, DungeonRoomCombatSetup, DungeonScene, EGA_PALETTE_RGB,
-    ENDGAME_TABLEAU_HEIGHT, ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX,
-    EQUIP_SLOT_RING, EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
+    DungeonRoomCombatSetup, DungeonScene, EGA_PALETTE_RGB, ENDGAME_TABLEAU_HEIGHT,
+    ENDGAME_TABLEAU_WIDTH, ENERGY_FIELD_COST, ENERGY_FIELD_SPELL_INDEX, EQUIP_SLOT_RING,
+    EQUIP_SLOT_WEAPON, EQUIPMENT_EMPTY, EQUIPMENT_ID_ARROWS, EQUIPMENT_ID_BOW,
     EQUIPMENT_ID_RING_REGENERATION, FIELD_SPELL_COST, FIRE_FIELD_SPELL_INDEX,
     FIRST_PLAYABLE_FRIGATE_TILE, FIRST_PLAYABLE_FULL_SHIP_HULL, FLAME_WIND_COST,
     FLAME_WIND_SPELL_INDEX, FixedCellFont, GATE_TRAVEL_COST, GATE_TRAVEL_SPELL_INDEX,
@@ -81,11 +81,10 @@ use u5_runtime::{
     configure_talk_shop_text_window,
     conversation_session::ConversationSession,
     default_party_equipment, default_party_experience, default_party_intelligence,
-    default_party_names, default_party_roster, default_party_stay_counters, disk_io_error_message,
-    dungeon_cell_index, dungeon_room_combat_instance_from_setup,
-    dungeon_room_combat_setup_from_record_for_entry, dungeon_room_entry_seed_for_direction,
-    endgame_tableau_role_for_slot, handle_play_key_input, hash_bytes, input_case_fold,
-    input_function_key_code, input_keypad_digit_direction_code,
+    default_party_names, default_party_roster, default_party_stay_counters, dungeon_cell_index,
+    dungeon_room_combat_instance_from_setup, dungeon_room_combat_setup_from_record_for_entry,
+    dungeon_room_entry_seed_for_direction, endgame_tableau_role_for_slot, handle_play_key_input,
+    hash_bytes, input_case_fold, input_function_key_code, input_keypad_digit_direction_code,
     intro_menu::{IntroSubflow, IntroSubflowResult},
     intro_step_has_story6_secondary_pass, intro_step_transition_strips,
     intro_story_art_file_for_step, intro_story_art_placement_for_step,
@@ -7838,18 +7837,8 @@ fn transition_visual_intro_to_gameplay(
         let text_font = load_ibm_ch_font(&game_dir)?;
         Ok((state, atlas, text_font))
     });
-    let (mut state, atlas, text_font) = match launch {
-        Ok(launch) => launch,
-        Err(err) => {
-            intro.message = format!("Journey Onward failed: {err}");
-            intro.message_waiting_for_key = true;
-            intro.menu_idle_ticks = 0;
-            intro
-                .dispatch
-                .complete_subflow(IntroSubflow::JourneyOnward, IntroSubflowResult::Cancelled);
-            return;
-        }
-    };
+    let (mut state, atlas, text_font) =
+        launch.unwrap_or_else(|err| panic!("Journey Onward launch failed: {err}"));
     let image_handle = intro
         .image_handle
         .clone()
@@ -8251,63 +8240,39 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             intro.message = message;
         }
         VisualIntroPanelOutcome::CommitChargen(result) => {
-            match commit_chargen_save(
+            let avatar = commit_chargen_save(
                 &intro.game_dir,
                 &result.entered_name,
                 result.male,
                 result.tournament.stats,
-            ) {
-                Ok(avatar) => {
-                    intro.panel = VisualIntroPanel::Menu;
-                    intro.dispatch.complete_subflow(
-                        IntroSubflow::CharacterCreation,
-                        IntroSubflowResult::SaveReady,
-                    );
-                    intro.menu_idle_ticks = 0;
-                    intro.message_waiting_for_key = false;
-                    intro.message = format!(
-                        "Created {}. Choose Journey Onward to load the new save.",
-                        display_name_bytes(&avatar.name)
-                    );
-                }
-                Err(err) => {
-                    intro.panel = VisualIntroPanel::Menu;
-                    intro.dispatch.complete_subflow(
-                        IntroSubflow::CharacterCreation,
-                        IntroSubflowResult::Cancelled,
-                    );
-                    intro.menu_idle_ticks = 0;
-                    intro.message_waiting_for_key = false;
-                    intro.message = format!("Character creation failed: {err}");
-                }
-            }
+            )
+            .unwrap_or_else(|err| panic!("Character creation save commit failed: {err}"));
+            intro.panel = VisualIntroPanel::Menu;
+            intro.dispatch.complete_subflow(
+                IntroSubflow::CharacterCreation,
+                IntroSubflowResult::SaveReady,
+            );
+            intro.menu_idle_ticks = 0;
+            intro.message_waiting_for_key = false;
+            intro.message = format!(
+                "Created {}. Choose Journey Onward to load the new save.",
+                display_name_bytes(&avatar.name)
+            );
         }
         VisualIntroPanelOutcome::CommitU4Transfer { source, overrides } => {
-            match commit_u4_transfer_save(&intro.game_dir, &source, Some(&overrides)) {
-                Ok(avatar) => {
-                    intro.panel = VisualIntroPanel::Menu;
-                    intro.dispatch.complete_subflow(
-                        IntroSubflow::UltimaIvTransfer,
-                        IntroSubflowResult::SaveReady,
-                    );
-                    intro.menu_idle_ticks = 0;
-                    intro.message_waiting_for_key = false;
-                    intro.message = format!(
-                        "Transferred {}. Choose Journey Onward to load the new save.",
-                        display_name_bytes(&avatar.name)
-                    );
-                }
-                Err(err) => {
-                    intro.panel = VisualIntroPanel::Menu;
-                    intro.dispatch.complete_subflow(
-                        IntroSubflow::UltimaIvTransfer,
-                        IntroSubflowResult::Cancelled,
-                    );
-                    intro.menu_idle_ticks = 0;
-                    intro.message_waiting_for_key = false;
-                    intro.message = format!("Transfer failed: {err}");
-                }
-            }
+            let avatar = commit_u4_transfer_save(&intro.game_dir, &source, Some(&overrides))
+                .unwrap_or_else(|err| panic!("Ultima IV transfer save commit failed: {err}"));
+            intro.panel = VisualIntroPanel::Menu;
+            intro.dispatch.complete_subflow(
+                IntroSubflow::UltimaIvTransfer,
+                IntroSubflowResult::SaveReady,
+            );
+            intro.menu_idle_ticks = 0;
+            intro.message_waiting_for_key = false;
+            intro.message = format!(
+                "Transferred {}. Choose Journey Onward to load the new save.",
+                display_name_bytes(&avatar.name)
+            );
         }
     }
     true
@@ -8508,63 +8473,30 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
         intro.modal_backing = None;
     }
     match subflow {
-        IntroSubflow::JourneyOnward => match load_play_options_from_save(&intro.game_dir) {
-            Ok(options) => {
-                intro
-                    .dispatch
-                    .complete_subflow(subflow, IntroSubflowResult::SaveReady);
-                *intro
-                    .launch_result
-                    .lock()
-                    .expect("visual intro launch lock poisoned") = Some(options);
-            }
-            Err(err) => {
-                intro
-                    .dispatch
-                    .complete_subflow(subflow, IntroSubflowResult::Cancelled);
-                intro.message = visual_intro_load_error_message(&err);
-                intro.message_waiting_for_key = true;
-            }
-        },
-        IntroSubflow::CharacterCreation => match load_question_records(&intro.game_dir) {
-            Ok(Some(records)) => {
-                match ChargenSession::new(records.records, visual_chargen_rng_pool()) {
-                    Ok(session) => {
-                        intro.panel = VisualIntroPanel::CharacterCreation {
-                            session,
-                            input_line: String::new(),
-                        };
-                        intro.message_waiting_for_key = false;
-                        intro.message.clear();
-                    }
-                    Err(err) => {
-                        intro.panel = VisualIntroPanel::Menu;
-                        intro
-                            .dispatch
-                            .complete_subflow(subflow, IntroSubflowResult::Cancelled);
-                        intro.message_waiting_for_key = false;
-                        intro.message = format!("QUESTION.DAT could not start chargen: {err}");
-                    }
-                }
-            }
-            Ok(None) => {
-                intro.panel = VisualIntroPanel::Menu;
-                intro
-                    .dispatch
-                    .complete_subflow(subflow, IntroSubflowResult::Cancelled);
-                intro.message_waiting_for_key = false;
-                intro.message =
-                    "QUESTION.DAT is required for visual character creation.".to_string();
-            }
-            Err(err) => {
-                intro.panel = VisualIntroPanel::Menu;
-                intro
-                    .dispatch
-                    .complete_subflow(subflow, IntroSubflowResult::Cancelled);
-                intro.message_waiting_for_key = false;
-                intro.message = format!("QUESTION.DAT could not be loaded: {err}");
-            }
-        },
+        IntroSubflow::JourneyOnward => {
+            let options = load_play_options_from_save(&intro.game_dir)
+                .unwrap_or_else(|err| panic!("Journey Onward requires loadable SAVED.GAM: {err}"));
+            intro
+                .dispatch
+                .complete_subflow(subflow, IntroSubflowResult::SaveReady);
+            *intro
+                .launch_result
+                .lock()
+                .expect("visual intro launch lock poisoned") = Some(options);
+        }
+        IntroSubflow::CharacterCreation => {
+            let records = load_question_records(&intro.game_dir)
+                .unwrap_or_else(|err| panic!("QUESTION.DAT could not be loaded: {err}"))
+                .unwrap_or_else(|| panic!("visual character creation requires QUESTION.DAT"));
+            let session = ChargenSession::new(records.records, visual_chargen_rng_pool())
+                .unwrap_or_else(|err| panic!("QUESTION.DAT could not start chargen: {err}"));
+            intro.panel = VisualIntroPanel::CharacterCreation {
+                session,
+                input_line: String::new(),
+            };
+            intro.message_waiting_for_key = false;
+            intro.message.clear();
+        }
         IntroSubflow::UltimaIvTransfer => {
             match read_u4_transfer_source_from_party_sav(&intro.game_dir) {
                 Ok(source) => {
@@ -8589,14 +8521,7 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
                     intro.message_waiting_for_key = false;
                     intro.message.clear();
                 }
-                Err(err) => {
-                    intro.panel = VisualIntroPanel::Menu;
-                    intro
-                        .dispatch
-                        .complete_subflow(subflow, IntroSubflowResult::Cancelled);
-                    intro.message_waiting_for_key = false;
-                    intro.message = format!("Transfer source rejected: {err}");
-                }
+                Err(err) => panic!("Ultima IV transfer source rejected: {err}"),
             }
         }
         IntroSubflow::StorySlides => match load_story_records(&intro.game_dir) {
@@ -8730,10 +8655,6 @@ fn drive_visual(
     if let Some(image) = images.get_mut(&v.image_handle) {
         image.data = Some(rgba);
     }
-}
-
-fn visual_intro_load_error_message(err: &io::Error) -> String {
-    disk_io_error_message(DiskIoHandlerPhase::ReadPrompt, SAVED_GAM_FILENAME, err)
 }
 
 fn summarize_intro(intro: &mut VisualIntroState) -> String {
@@ -9103,9 +9024,9 @@ fn draw_visual_intro_start_menu_to_buffer(
     highlighted: Option<IntroSubflow>,
 ) {
     draw_visual_intro_start_menu_art_to_buffer(buffer, game_dir, depth);
+    buffer.draw_title_tick(title_tick_frame);
     let font = load_ibm_ch_font(game_dir).expect("intro menu requires IBM fixed-cell font");
     draw_intro_menu_labels_intro_buffer(buffer, &font, highlighted);
-    buffer.draw_title_tick(title_tick_frame);
 }
 
 fn draw_visual_intro_start_menu_art_to_buffer(
@@ -13188,6 +13109,54 @@ mod tests {
     }
 
     #[test]
+    fn visual_intro_journey_without_save_panics_instead_of_menu_fallback() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            resolve_visual_intro_subflow(&mut intro, IntroSubflow::JourneyOnward);
+        }));
+
+        assert!(
+            result.is_err(),
+            "Journey Onward must panic when SAVED.GAM cannot be loaded"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_intro_missing_question_dat_panics_instead_of_menu_fallback() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            resolve_visual_intro_subflow(&mut intro, IntroSubflow::CharacterCreation);
+        }));
+
+        assert!(
+            result.is_err(),
+            "character creation must panic when QUESTION.DAT cannot be loaded"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_intro_missing_u4_transfer_source_panics_instead_of_menu_fallback() {
+        let dir = debug_game_dir();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            resolve_visual_intro_subflow(&mut intro, IntroSubflow::UltimaIvTransfer);
+        }));
+
+        assert!(
+            result.is_err(),
+            "Ultima IV transfer must panic when PARTY4.SAV cannot be loaded"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     #[should_panic(expected = "Return-to-View requires MISCMAPS.DAT")]
     fn visual_intro_menu_idle_timeout_requires_return_to_view_assets() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
@@ -15708,15 +15677,6 @@ mod tests {
         assert!(menu.contains("Create New Character"));
         assert!(menu.contains("Choose a path."));
         let _ = fs::remove_dir_all(&intro.game_dir);
-    }
-
-    #[test]
-    fn visual_intro_load_error_message_surfaces_disk_prompt_boundary() {
-        let message =
-            visual_intro_load_error_message(&io::Error::new(io::ErrorKind::NotFound, "missing"));
-
-        assert!(message.contains("Disk read failed for SAVED.GAM"));
-        assert!(message.contains("mounted game/save directory"));
     }
 
     #[test]
