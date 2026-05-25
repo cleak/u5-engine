@@ -9169,6 +9169,12 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         unreachable!("story intro panel match must either produce data or panic");
     };
 
+    if step == INTRO_INLINE_DOORWAY_STEP {
+        panic!(
+            "intro story step {step} requires published inline doorway text; see cleak/u5-spec#69"
+        );
+    }
+
     draw_visual_intro_story_art_to_buffer(
         &mut intro.surface,
         &intro.game_dir,
@@ -9177,7 +9183,7 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         transition,
     );
 
-    if text.is_none() && step != INTRO_INLINE_DOORWAY_STEP {
+    if text.is_none() {
         panic!("intro story step {step} requires a STORY.DAT record");
     }
 
@@ -16090,6 +16096,38 @@ mod tests {
                 EGA_PALETTE_RGB[3][2],
                 0xff
             ]
+        );
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn visual_intro_story_step_six_panics_until_inline_text_is_specified() {
+        let mut intro = visual_intro_state_with_panel(
+            debug_game_dir(),
+            VisualIntroPanel::Story {
+                records: StoryRecords {
+                    records: (0..20)
+                        .map(|index| format!("Story record {index}"))
+                        .collect(),
+                },
+                step: INTRO_INLINE_DOORWAY_STEP,
+                transition: None,
+            },
+        );
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = render_story_intro_frame(&mut intro);
+        }));
+
+        let payload = result.expect_err("step 6 render must panic until inline text is specified");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("step 6 panic payload must be a string");
+        assert!(
+            message.contains("intro story step 6 requires published inline doorway text"),
+            "{message}"
         );
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
