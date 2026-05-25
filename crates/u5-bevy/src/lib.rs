@@ -212,13 +212,6 @@ pub fn run_visual_intro_loop(
 ) -> std::io::Result<()> {
     let launch_result = Arc::new(Mutex::new(None));
     run_visual_intro_menu_app(game_dir.to_path_buf(), raster_depth, launch_result.clone());
-    let options = launch_result
-        .lock()
-        .expect("visual intro launch lock poisoned")
-        .take();
-    if let Some(options) = options {
-        run_visual_loop(game_dir, options, raster_depth)?;
-    }
     Ok(())
 }
 
@@ -6995,7 +6988,7 @@ fn run_visual_intro_menu_app(
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
-            start_menu_reveal: Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT)),
+            start_menu_reveal: None,
             message: String::new(),
             panel: VisualIntroPanel::Menu,
             launch_result,
@@ -7336,9 +7329,12 @@ fn setup_intro(
 }
 
 fn drive_visual_intro(
+    mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
     intro: Option<ResMut<VisualIntroState>>,
     mut images: ResMut<Assets<Image>>,
+    mut sprites: Query<&mut Sprite>,
+    mut windows: Query<&mut Window>,
     mut exit: EventWriter<AppExit>,
 ) {
     let Some(mut intro) = intro else {
@@ -7386,6 +7382,82 @@ fn drive_visual_intro(
             }
         }
     }
+    let launch_options = intro
+        .launch_result
+        .lock()
+        .expect("visual intro launch lock poisoned")
+        .take();
+    if let Some(options) = launch_options {
+        transition_visual_intro_to_gameplay(
+            &mut commands,
+            &mut intro,
+            &mut images,
+            &mut sprites,
+            &mut windows,
+            options,
+        );
+    }
+}
+
+fn transition_visual_intro_to_gameplay(
+    commands: &mut Commands,
+    intro: &mut VisualIntroState,
+    images: &mut Assets<Image>,
+    sprites: &mut Query<&mut Sprite>,
+    windows: &mut Query<&mut Window>,
+    options: PlayOptions,
+) {
+    let game_dir = intro.game_dir.clone();
+    let launch = PlayState::load_scene(&game_dir, options).and_then(|state| {
+        let atlas = load_tile_atlas(&game_dir, intro.raster_depth)?;
+        let text_font = load_ibm_ch_font(&game_dir)?;
+        Ok((state, atlas, text_font))
+    });
+    let (mut state, atlas, text_font) = match launch {
+        Ok(launch) => launch,
+        Err(err) => {
+            intro.message = format!("Journey Onward failed: {err}");
+            intro
+                .dispatch
+                .complete_subflow(IntroSubflow::JourneyOnward, IntroSubflowResult::Cancelled);
+            return;
+        }
+    };
+    let Some(image_handle) = intro.image_handle.clone() else {
+        intro.message = "Journey Onward failed: missing visual framebuffer.".to_string();
+        intro
+            .dispatch
+            .complete_subflow(IntroSubflow::JourneyOnward, IntroSubflowResult::Cancelled);
+        return;
+    };
+    intro.image_handle = None;
+    let rgba = render_visual_play_frame_with_input(&mut state, &atlas, &text_font, "", READY_HINT);
+    if let Some(image) = images.get_mut(&image_handle) {
+        image.data = Some(rgba);
+    }
+    for mut sprite in sprites.iter_mut() {
+        sprite.custom_size = Some(Vec2::new(
+            VISUAL_PLAY_FRAME_WIDTH as f32 * DISPLAY_SCALE,
+            VISUAL_PLAY_FRAME_HEIGHT as f32 * DISPLAY_SCALE,
+        ));
+    }
+    if let Ok(mut window) = windows.single_mut() {
+        window.title = "Ultima V".to_string();
+        window.resolution.set(
+            VISUAL_PLAY_FRAME_WIDTH as f32 * DISPLAY_SCALE,
+            VISUAL_PLAY_FRAME_HEIGHT as f32 * DISPLAY_SCALE,
+        );
+    }
+    commands.insert_resource(VisualState {
+        game_dir,
+        state,
+        atlas,
+        image_handle,
+        text_font,
+        input_line: String::new(),
+        prompt_cursor_visible: false,
+    });
+    commands.remove_resource::<VisualIntroState>();
 }
 
 fn animate_visual_intro_title_effects(
@@ -7900,7 +7972,7 @@ fn yes_no_key(ch: char) -> Option<bool> {
 fn resolve_visual_intro_subflow(
     intro: &mut VisualIntroState,
     subflow: IntroSubflow,
-    exit: &mut EventWriter<AppExit>,
+    _exit: &mut EventWriter<AppExit>,
 ) -> bool {
     match subflow {
         IntroSubflow::JourneyOnward => match load_play_options_from_save(&intro.game_dir) {
@@ -7912,7 +7984,6 @@ fn resolve_visual_intro_subflow(
                     .launch_result
                     .lock()
                     .expect("visual intro launch lock poisoned") = Some(options);
-                exit.write(AppExit::Success);
             }
             Err(err) => {
                 intro
