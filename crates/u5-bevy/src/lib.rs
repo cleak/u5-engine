@@ -7976,11 +7976,21 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
                 "intro signature path has no drawable steps"
             );
 
-            intro.title_signature_progress =
-                (intro.title_signature_progress + SIGNATURE_STEPS_PER_TICK).min(total_steps);
-            if intro.title_signature_progress >= total_steps {
+            let next_progress = intro
+                .title_signature_progress
+                .checked_add(SIGNATURE_STEPS_PER_TICK)
+                .expect("intro signature progress counter overflowed");
+            assert!(
+                next_progress <= total_steps,
+                "intro signature progress advanced past BRITISH.PTH path length: {} + {} > {total_steps}",
+                intro.title_signature_progress,
+                SIGNATURE_STEPS_PER_TICK
+            );
+            if next_progress == total_steps {
                 intro.title_signature_progress = 0;
                 intro.title_signature_complete = true;
+            } else {
+                intro.title_signature_progress = next_progress;
             }
             advanced = true;
         } else if title_phase && intro.title_signature_complete {
@@ -13430,6 +13440,52 @@ mod tests {
         let menu_frame = render_intro_frame(&mut intro);
         assert_eq!(menu_frame, intro.surface.to_rgba());
         assert_nonblack_rgba(&menu_frame);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn intro_signature_tick_rejects_progress_past_path_length() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let signature = load_british_pth(&dir).unwrap();
+        let total_steps = british_signature_step_count(&signature);
+        assert!(total_steps > 0);
+        let mut intro = VisualIntroState {
+            game_dir: dir.clone(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: intro_title_flourish_total_steps(),
+            title_flourish_complete: true,
+            title_signature_progress: total_steps,
+            title_signature_complete: false,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
+            start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
+            message: String::new(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = advance_visual_intro_animation_tick(&mut intro);
+        }));
+
+        let payload = result.expect_err("signature tick beyond path length must panic");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("signature tick panic payload must be a string");
+        assert!(
+            message.contains("advanced past BRITISH.PTH path length"),
+            "{message}"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
