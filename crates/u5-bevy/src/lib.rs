@@ -9223,7 +9223,6 @@ fn render_chargen_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         session,
         input_line,
     )
-    .expect("character creation intro step has no renderable graphics")
 }
 
 fn render_u4_transfer_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
@@ -9323,7 +9322,7 @@ fn render_chargen_intro_graphics(
     depth: TileGraphicsDepth,
     session: &ChargenSession,
     input_line: &str,
-) -> Option<Vec<u8>> {
+) -> Vec<u8> {
     let font = load_ibm_ch_font(game_dir).expect("character creation requires IBM fixed-cell font");
     match session.current_step() {
         ChargenSessionStep::PromptName => {
@@ -9336,7 +9335,7 @@ fn render_chargen_intro_graphics(
                 false,
             );
             overlay_fixed_cell_text_intro_buffer(buffer, &font, input_line, 14, 19, false);
-            Some(buffer.to_rgba())
+            buffer.to_rgba()
         }
         ChargenSessionStep::PromptGender => {
             overlay_fixed_cell_text_intro_buffer(
@@ -9347,13 +9346,15 @@ fn render_chargen_intro_graphics(
                 21,
                 false,
             );
-            Some(buffer.to_rgba())
+            buffer.to_rgba()
         }
         ChargenSessionStep::PresentIntro { record, text } => {
-            let panel = if record == 0 {
-                CREATE_OPENING_PANEL
-            } else {
-                CREATE_RESULT_PANEL
+            let panel = match record {
+                0 => CREATE_OPENING_PANEL,
+                1 => CREATE_RESULT_PANEL,
+                _ => panic!(
+                    "character creation has no CREATE panel for QUESTION.DAT record {record}"
+                ),
             };
             blit_image_panel_specs_intro_buffer(buffer, game_dir, depth, &[panel]);
             let placement = if record == 0 {
@@ -9377,7 +9378,7 @@ fn render_chargen_intro_graphics(
             };
             overlay_proportional_text_from_assets_buffer(buffer, game_dir, &text, placement)
                 .expect("character creation requires proportional font");
-            Some(buffer.to_rgba())
+            buffer.to_rgba()
         }
         ChargenSessionStep::PresentQuestion(question) => {
             let option_a = create_virtue_panel_spec(question.option_a, 0);
@@ -9409,27 +9410,28 @@ fn render_chargen_intro_graphics(
                 },
             )
             .expect("character creation question requires proportional font");
-            Some(buffer.to_rgba())
+            buffer.to_rgba()
         }
-        ChargenSessionStep::Completed(result) => {
-            blit_image_panel_specs_intro_buffer(buffer, game_dir, depth, &[CREATE_RESULT_PANEL]);
-            overlay_fixed_cell_text_intro_buffer(
-                buffer,
-                &font,
-                &format!("Writing save for {}.", display_name_bytes(&result.name)),
-                3,
-                21,
-                false,
-            );
-            Some(buffer.to_rgba())
+        ChargenSessionStep::Completed(_) => {
+            panic!(
+                "character creation completed state must commit and return to menu before render"
+            )
         }
-        ChargenSessionStep::Aborted | ChargenSessionStep::Ignored => None,
+        ChargenSessionStep::Aborted => {
+            panic!("character creation aborted state must return to menu before render")
+        }
+        ChargenSessionStep::Ignored => {
+            panic!("character creation ignored state has no renderable graphics")
+        }
     }
 }
 
 fn create_virtue_panel_spec(virtue: ShrineVirtue, x_offset: usize) -> ImagePanelSpec {
     let mut spec = CREATE_VIRTUE_PANEL_SPECS[virtue.index()];
-    spec.top_left_x = spec.top_left_x.saturating_add(x_offset);
+    spec.top_left_x = spec
+        .top_left_x
+        .checked_add(x_offset)
+        .expect("CREATE virtue panel x offset overflowed");
     spec
 }
 
@@ -10403,7 +10405,14 @@ fn draw_fixed_cell_box_intro_buffer(
         cells_w >= 2 && cells_h >= 2,
         "intro fixed-cell box requires at least 2x2 cells, got {cells_w}x{cells_h}"
     );
-    let horizontal = "-".repeat(cells_w.saturating_sub(2));
+    assert!(
+        cell_x + cells_w <= dst.width / CH_CELL_SIDE
+            && cell_y + cells_h <= dst.height / CH_CELL_SIDE,
+        "intro fixed-cell box at cell ({cell_x}, {cell_y}) with size {cells_w}x{cells_h} exceeds framebuffer {}x{}",
+        dst.width,
+        dst.height
+    );
+    let horizontal = "-".repeat(cells_w - 2);
     overlay_fixed_cell_text_intro_buffer(
         dst,
         font,
@@ -10412,13 +10421,13 @@ fn draw_fixed_cell_box_intro_buffer(
         cell_y,
         false,
     );
-    for row in 1..cells_h.saturating_sub(1) {
+    for row in 1..cells_h - 1 {
         overlay_fixed_cell_text_intro_buffer(dst, font, "|", cell_x, cell_y + row, false);
         overlay_fixed_cell_text_intro_buffer(
             dst,
             font,
             "|",
-            cell_x + cells_w.saturating_sub(1),
+            cell_x + cells_w - 1,
             cell_y + row,
             false,
         );
@@ -10428,7 +10437,7 @@ fn draw_fixed_cell_box_intro_buffer(
         font,
         &format!("+{horizontal}+"),
         cell_x,
-        cell_y + cells_h.saturating_sub(1),
+        cell_y + cells_h - 1,
         false,
     );
 }
@@ -15845,6 +15854,44 @@ mod tests {
         assert!(
             intro.surface.pixels.iter().any(|pixel| *pixel != 0),
             "chargen fixed prompt should draw into the intro display buffer"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_intro_chargen_completed_state_panics_before_placeholder_render() {
+        let dir = debug_game_dir();
+        if load_ibm_ch_font(&dir).is_err() {
+            let _ = fs::remove_dir_all(dir);
+            return;
+        }
+        let mut session = ChargenSession::new(chargen_records(), (0u8..=127).collect()).unwrap();
+        session.submit_name("Avatar");
+        session.submit_gender_key(b'M');
+        session.advance_intro();
+        for _ in 0..7 {
+            session.submit_answer_key(b'A');
+        }
+        session.advance_intro();
+        assert!(matches!(
+            session.current_step(),
+            ChargenSessionStep::Completed(_)
+        ));
+
+        let mut buffer = new_intro_display_buffer();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            render_chargen_intro_graphics(
+                &mut buffer,
+                &dir,
+                TileGraphicsDepth::Ega16,
+                &session,
+                "",
+            );
+        }));
+
+        assert!(
+            result.is_err(),
+            "completed chargen render must panic instead of drawing a placeholder"
         );
         let _ = fs::remove_dir_all(dir);
     }
