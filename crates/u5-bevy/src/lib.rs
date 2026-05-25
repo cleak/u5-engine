@@ -9567,6 +9567,11 @@ fn visual_intro_title_art_buffer(
     );
     if let Some(progress) = signature_progress.filter(|progress| *progress > 0) {
         let signature = load_british_pth(game_dir).expect("intro title requires BRITISH.PTH");
+        let total_steps = british_signature_step_count(&signature);
+        assert!(
+            progress < total_steps,
+            "intro title signature progress {progress} must be less than BRITISH.PTH path length {total_steps} while signature phase is active"
+        );
         draw_british_signature_buffer(&mut buffer, &signature, progress);
     }
     buffer
@@ -9969,6 +9974,11 @@ fn draw_british_signature_rgba(
         BRITISH_PTH_PEN_ORIGINS.len(),
         "intro signature RGBA draw requires one path segment per published pen origin"
     );
+    let total_steps = british_signature_step_count(signature);
+    assert!(
+        max_steps <= total_steps,
+        "intro signature RGBA draw requested {max_steps} step(s), but BRITISH.PTH contains {total_steps}"
+    );
     let mut remaining = max_steps;
     for (segment_index, origin) in BRITISH_PTH_PEN_ORIGINS.iter().enumerate() {
         let segment = signature
@@ -9999,6 +10009,11 @@ fn draw_british_signature_buffer(
         signature.segments.len(),
         BRITISH_PTH_PEN_ORIGINS.len(),
         "intro signature requires one path segment per published pen origin"
+    );
+    let total_steps = british_signature_step_count(signature);
+    assert!(
+        max_steps <= total_steps,
+        "intro signature draw requested {max_steps} step(s), but BRITISH.PTH contains {total_steps}"
     );
     let mut remaining = max_steps;
     for (segment_index, origin) in BRITISH_PTH_PEN_ORIGINS.iter().enumerate() {
@@ -13762,7 +13777,7 @@ mod tests {
             TITLE_SURFACE_WIDTH as usize,
             TITLE_SURFACE_HEIGHT as usize,
             &signature,
-            usize::MAX,
+            british_signature_step_count(&signature),
         );
         let width = TITLE_SURFACE_WIDTH as usize;
 
@@ -13772,6 +13787,79 @@ mod tests {
         assert_eq!(rgba_pixel(&rgba, width, 94, 65), [0xff, 0xff, 0xff, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 77, 143), [0xff, 0xff, 0xff, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 106, 166), [0, 0, 0, 0xff]);
+    }
+
+    #[test]
+    fn british_signature_renderer_rejects_progress_past_path_length() {
+        let mut rgba =
+            vec![0; (TITLE_SURFACE_WIDTH as usize) * (TITLE_SURFACE_HEIGHT as usize) * 4];
+        let signature = BritishPth {
+            segments: vec![
+                vec![PenStroke {
+                    dx: 1,
+                    dy: 0,
+                    pen_down: true,
+                }],
+                vec![PenStroke {
+                    dx: 0,
+                    dy: 1,
+                    pen_down: true,
+                }],
+                vec![PenStroke {
+                    dx: -1,
+                    dy: 0,
+                    pen_down: true,
+                }],
+                vec![PenStroke {
+                    dx: 1,
+                    dy: -1,
+                    pen_down: false,
+                }],
+            ],
+        };
+        let requested_steps = british_signature_step_count(&signature) + 1;
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            draw_british_signature_rgba(
+                &mut rgba,
+                TITLE_SURFACE_WIDTH as usize,
+                TITLE_SURFACE_HEIGHT as usize,
+                &signature,
+                requested_steps,
+            );
+        }));
+
+        let payload = result.expect_err("signature progress past the path must panic");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("signature panic payload must be a string");
+        assert!(message.contains("BRITISH.PTH contains"), "{message}");
+    }
+
+    #[test]
+    fn intro_title_art_rejects_active_signature_at_completed_progress() {
+        let dir = debug_game_dir();
+        install_intro_assets(&dir);
+        let signature = load_british_pth(&dir).unwrap();
+        let total_steps = british_signature_step_count(&signature);
+
+        let result = std::panic::catch_unwind(|| {
+            let _ = visual_intro_title_art_buffer(&dir, None, Some(total_steps));
+        });
+
+        let payload = result.expect_err("completed signature progress must use completed phase");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("signature progress panic payload must be a string");
+        assert!(
+            message.contains("must be less than BRITISH.PTH path length"),
+            "{message}"
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
