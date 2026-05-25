@@ -7961,10 +7961,21 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
         advanced |= advance_visual_intro_finished_menu_idle(intro);
 
         if title_phase && !intro.title_flourish_complete {
-            if intro.title_flourish_step + 1 >= intro_title_flourish_total_steps() {
+            let total_flourish_steps = intro_title_flourish_total_steps();
+            assert!(
+                intro.title_flourish_step < total_flourish_steps,
+                "intro title flourish step {} is outside the published range 0..{} while flourish phase is active",
+                intro.title_flourish_step,
+                total_flourish_steps - 1
+            );
+            let next_step = intro
+                .title_flourish_step
+                .checked_add(1)
+                .expect("intro title flourish step counter overflowed");
+            if next_step >= total_flourish_steps {
                 intro.title_flourish_complete = true;
             } else {
-                intro.title_flourish_step += 1;
+                intro.title_flourish_step = next_step;
             }
             advanced = true;
         } else if title_phase && !intro.title_signature_complete {
@@ -13266,6 +13277,44 @@ mod tests {
 
         assert_eq!(intro.title_tick_visible_frame, 0);
         assert_eq!(intro.title_tick_frame, title_tick_next_frame(0));
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_title_flourish_tick_rejects_unpublished_step() {
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: intro_title_flourish_total_steps(),
+            title_flourish_complete: false,
+            title_signature_progress: 0,
+            title_signature_complete: false,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
+            start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
+            message: String::new(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = advance_visual_intro_animation_tick(&mut intro);
+        }));
+
+        let payload = result.expect_err("unpublished active title flourish step must panic");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("title flourish panic payload must be a string");
+        assert!(message.contains("outside the published range"), "{message}");
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
