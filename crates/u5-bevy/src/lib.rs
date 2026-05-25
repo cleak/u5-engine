@@ -7730,8 +7730,24 @@ fn advance_visual_intro_panel_animation(
     panel: &mut VisualIntroPanel,
     title_tick_frame: &mut u8,
 ) -> bool {
-    advance_visual_intro_story_wipe(panel, title_tick_frame)
+    advance_visual_intro_story_auto_step(panel)
+        || advance_visual_intro_story_wipe(panel, title_tick_frame)
         || advance_visual_intro_return_to_view(panel, title_tick_frame)
+}
+
+fn advance_visual_intro_story_auto_step(panel: &mut VisualIntroPanel) -> bool {
+    let VisualIntroPanel::Story {
+        step, transition, ..
+    } = panel
+    else {
+        return false;
+    };
+    if *step + 1 >= INTRO_STORY_STEP_COUNT || intro_story_step_waits_for_input(*step) {
+        return false;
+    }
+    *step = (*step).saturating_add(1);
+    *transition = None;
+    true
 }
 
 fn advance_visual_intro_start_menu_reveal(intro: &mut VisualIntroState) -> bool {
@@ -12056,6 +12072,28 @@ mod tests {
             _ => panic!("story panel should remain active"),
         }
         let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_story_step_zero_auto_advances_without_keypress() {
+        let mut panel = VisualIntroPanel::Story {
+            records: StoryRecords {
+                records: (0..20).map(|i| format!("Story record {i}")).collect(),
+            },
+            step: 0,
+            transition: None,
+        };
+
+        assert!(advance_visual_intro_story_auto_step(&mut panel));
+        match panel {
+            VisualIntroPanel::Story {
+                step, transition, ..
+            } => {
+                assert_eq!(step, 1);
+                assert_eq!(transition, None);
+            }
+            _ => panic!("story panel should remain active"),
+        }
     }
 
     #[test]
