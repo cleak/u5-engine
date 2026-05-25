@@ -10106,6 +10106,11 @@ struct IntroStoryDrawRgba {
 }
 
 fn visual_intro_story_draw_specs(step: usize) -> Vec<IntroStoryDrawSpec> {
+    assert!(
+        step < INTRO_STORY_STEP_COUNT,
+        "intro story step {step} is outside the published range 0..{}",
+        INTRO_STORY_STEP_COUNT - 1
+    );
     let mut specs = Vec::new();
     if let Some(strips) = intro_step_transition_strips(step) {
         for (subimage, top_left_x, top_left_y) in strips {
@@ -10120,18 +10125,18 @@ fn visual_intro_story_draw_specs(step: usize) -> Vec<IntroStoryDrawSpec> {
         }
     }
 
-    if let Some(file) = intro_story_art_file_for_step(step) {
-        if let Some(placement) = intro_story_art_placement_for_step(step) {
-            specs.push(IntroStoryDrawSpec {
-                stem: intro_story_stem(file),
-                subimage: placement.subimage,
-                top_left_x: placement.top_left_x,
-                top_left_y: placement.top_left_y,
-                clip_width: None,
-                clip_height: None,
-            });
-        }
-    }
+    let file = intro_story_art_file_for_step(step)
+        .unwrap_or_else(|| panic!("intro story step {step} has no published art file"));
+    let placement = intro_story_art_placement_for_step(step)
+        .unwrap_or_else(|| panic!("intro story step {step} has no published art placement"));
+    specs.push(IntroStoryDrawSpec {
+        stem: intro_story_stem(file),
+        subimage: placement.subimage,
+        top_left_x: placement.top_left_x,
+        top_left_y: placement.top_left_y,
+        clip_width: None,
+        clip_height: None,
+    });
 
     match step {
         1 => specs.push(IntroStoryDrawSpec {
@@ -10295,13 +10300,13 @@ fn draw_visual_intro_story_art_to_buffer(
 
 fn intro_story_stem(file: &'static str) -> &'static str {
     match file {
-        "STORY1.16" => "STORY1",
-        "STORY2.16" => "STORY2",
-        "STORY3.16" => "STORY3",
-        "STORY4.16" => "STORY4",
-        "STORY5.16" => "STORY5",
-        "STORY6.16" => "STORY6",
-        other => other,
+        "STORY1.16" | "STORY1" => "STORY1",
+        "STORY2.16" | "STORY2" => "STORY2",
+        "STORY3.16" | "STORY3" => "STORY3",
+        "STORY4.16" | "STORY4" => "STORY4",
+        "STORY5.16" | "STORY5" => "STORY5",
+        "STORY6.16" | "STORY6" => "STORY6",
+        other => panic!("unknown intro story art file {other}"),
     }
 }
 
@@ -12879,6 +12884,21 @@ mod tests {
                 clip_height: None,
             })
         );
+    }
+
+    #[test]
+    fn intro_story_draw_specs_reject_unpublished_steps() {
+        let result = std::panic::catch_unwind(|| {
+            let _ = visual_intro_story_draw_specs(INTRO_STORY_STEP_COUNT);
+        });
+
+        let payload = result.expect_err("unpublished intro story step must panic");
+        let message = payload
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| payload.downcast_ref::<&str>().copied())
+            .expect("story step panic payload must be a string");
+        assert!(message.contains("outside the published range"), "{message}");
     }
 
     #[test]
@@ -16053,6 +16073,10 @@ mod tests {
     fn visual_intro_story_art_helpers_use_spec_file_stem_and_palette() {
         assert_eq!(intro_story_stem("STORY3.16"), "STORY3");
         assert_eq!(intro_story_stem("STORY3"), "STORY3");
+        let result = std::panic::catch_unwind(|| {
+            let _ = intro_story_stem("UNKNOWN.16");
+        });
+        assert!(result.is_err());
         let image = GraphicImage {
             width: 2,
             height: 1,
