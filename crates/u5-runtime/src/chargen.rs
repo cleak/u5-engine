@@ -213,11 +213,11 @@ impl ChargenSession {
 
     pub fn advance_intro(&mut self) -> ChargenSessionStep {
         match self.phase {
-            ChargenSessionPhase::GypsyArrival => {
-                self.phase = ChargenSessionPhase::GypsyInvitation;
+            ChargenSessionPhase::GypsyArrival => self.prepare_next_question(),
+            ChargenSessionPhase::GypsyInvitation => {
+                self.phase = ChargenSessionPhase::Completed;
                 self.current_step()
             }
-            ChargenSessionPhase::GypsyInvitation => self.prepare_next_question(),
             _ => ChargenSessionStep::Ignored,
         }
     }
@@ -257,7 +257,7 @@ impl ChargenSession {
         self.question_in_round += 1;
 
         if self.question_index == CHARGEN_QUESTION_COUNT {
-            self.phase = ChargenSessionPhase::Completed;
+            self.phase = ChargenSessionPhase::GypsyInvitation;
             return self.current_step();
         }
         if self.question_in_round >= CHARGEN_QUESTIONS_PER_ROUND[self.round_index] {
@@ -821,10 +821,6 @@ mod tests {
             session.submit_gender_key(b'M'),
             ChargenSessionStep::PresentIntro { record: 0, .. }
         ));
-        assert!(matches!(
-            session.advance_intro(),
-            ChargenSessionStep::PresentIntro { record: 1, .. }
-        ));
         let mut step = session.advance_intro();
         let mut answered = 0usize;
         while let ChargenSessionStep::PresentQuestion(question) = step {
@@ -836,6 +832,11 @@ mod tests {
             answered += 1;
         }
         assert_eq!(answered, CHARGEN_QUESTION_COUNT);
+        assert!(matches!(
+            step,
+            ChargenSessionStep::PresentIntro { record: 1, .. }
+        ));
+        let step = session.advance_intro();
         let ChargenSessionStep::Completed(result) = step else {
             panic!("expected completed result");
         };

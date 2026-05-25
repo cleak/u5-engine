@@ -19,7 +19,7 @@ use image::{ImageBuffer, Rgba};
 use u5_runtime::{
     AWAKEN_COST, AWAKEN_SPELL_INDEX, ActiveObject, ArmsShop, BLINK_COST, BLINK_SPELL_INDEX,
     BRIT_CBT_RECORDS, BRITISH_PTH_PEN_ORIGINS, BritishPth, CBT_PLACEMENT_SLOT_COUNT,
-    CGA_PALETTE_RGB, CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
+    CGA_PALETTE_RGB, CH_CELL_SIDE, CODEX_URN_TABLE_FILE, COMBAT_ACTOR_FLAG_HIDDEN_OR_UNREVEALED,
     COMBAT_ACTOR_FLAG_SELECTABLE_80, COMBAT_ACTOR_SLOTS, COMBAT_ARENA_SIDE, COMBAT_CLASS_GIANT_RAT,
     COMBAT_DEFAULT_DEATH_DROP_TILE, COMBAT_FIELD_KIND_ENERGY, COMBAT_FIELD_KIND_FIRE,
     COMBAT_FIELD_KIND_POISON, COMBAT_FIELD_KIND_SLEEP, COMBAT_GARGOYLE_DEATH_TERRAIN_TILE,
@@ -140,7 +140,159 @@ const INTRO_STORY_TEXT_WIDTH: usize = 300;
 const CHARGEN_PROPORTIONAL_TEXT_X: usize = 16;
 const CHARGEN_PROPORTIONAL_TEXT_Y: usize = 34;
 const CHARGEN_PROPORTIONAL_TEXT_WIDTH: usize = 288;
+const CHARGEN_QUESTION_TEXT_X: usize = 8;
+const CHARGEN_QUESTION_TEXT_Y: usize = 150;
+const CHARGEN_QUESTION_TEXT_WIDTH: usize = 304;
+const CHARGEN_RESULT_TEXT_X: usize = 16;
+const CHARGEN_RESULT_TEXT_Y: usize = 24;
+const CHARGEN_RESULT_TEXT_WIDTH: usize = 292;
 const PROMPT_CURSOR_GLYPH: u8 = 4;
+
+#[derive(Clone, Copy)]
+struct ImagePanelSpec {
+    stem: &'static str,
+    subimage: u8,
+    top_left_x: usize,
+    top_left_y: usize,
+    width: usize,
+    height: usize,
+}
+
+const STARTSC_PANEL_SPECS: [ImagePanelSpec; 3] = [
+    ImagePanelSpec {
+        stem: "STARTSC",
+        subimage: 0,
+        top_left_x: 0,
+        top_left_y: 0,
+        width: 16,
+        height: 137,
+    },
+    ImagePanelSpec {
+        stem: "STARTSC",
+        subimage: 1,
+        top_left_x: 16,
+        top_left_y: 0,
+        width: 288,
+        height: 137,
+    },
+    ImagePanelSpec {
+        stem: "STARTSC",
+        subimage: 2,
+        top_left_x: 304,
+        top_left_y: 0,
+        width: 16,
+        height: 137,
+    },
+];
+
+const INTRO_MENU_LABELS: [(usize, usize, &str); 6] = [
+    (12, 17, " Journey Onward "),
+    (9, 18, " Create New Char. "),
+    (8, 19, " Transfer from U4 "),
+    (9, 20, " Ultima V Intro. "),
+    (11, 21, " Acknowledgements "),
+    (10, 22, " Return to View "),
+];
+
+const CREATE_OPENING_PANEL: ImagePanelSpec = ImagePanelSpec {
+    stem: "CREATE",
+    subimage: 0,
+    top_left_x: 0,
+    top_left_y: 96,
+    width: 168,
+    height: 96,
+};
+const CREATE_QUESTION_BACKING_LEFT: ImagePanelSpec = ImagePanelSpec {
+    stem: "CREATE",
+    subimage: 1,
+    top_left_x: 16,
+    top_left_y: 0,
+    width: 120,
+    height: 148,
+};
+const CREATE_QUESTION_BACKING_RIGHT: ImagePanelSpec = ImagePanelSpec {
+    stem: "CREATE",
+    subimage: 1,
+    top_left_x: 200,
+    top_left_y: 0,
+    width: 120,
+    height: 148,
+};
+const CREATE_RESULT_PANEL: ImagePanelSpec = ImagePanelSpec {
+    stem: "CREATE",
+    subimage: 10,
+    top_left_x: 168,
+    top_left_y: 100,
+    width: 152,
+    height: 100,
+};
+
+const CREATE_VIRTUE_PANEL_SPECS: [ImagePanelSpec; 8] = [
+    ImagePanelSpec {
+        stem: "CREATE",
+        subimage: 2,
+        top_left_x: 40,
+        top_left_y: 5,
+        width: 51,
+        height: 67,
+    },
+    ImagePanelSpec {
+        stem: "CREATE",
+        subimage: 3,
+        top_left_x: 48,
+        top_left_y: 7,
+        width: 43,
+        height: 67,
+    },
+    ImagePanelSpec {
+        stem: "CREATE",
+        subimage: 4,
+        top_left_x: 48,
+        top_left_y: 4,
+        width: 34,
+        height: 69,
+    },
+    ImagePanelSpec {
+        stem: "CREATE",
+        subimage: 5,
+        top_left_x: 40,
+        top_left_y: 10,
+        width: 55,
+        height: 58,
+    },
+    ImagePanelSpec {
+        stem: "CREATE",
+        subimage: 6,
+        top_left_x: 40,
+        top_left_y: 8,
+        width: 48,
+        height: 61,
+    },
+    ImagePanelSpec {
+        stem: "CREATE",
+        subimage: 7,
+        top_left_x: 48,
+        top_left_y: 0,
+        width: 42,
+        height: 64,
+    },
+    ImagePanelSpec {
+        stem: "CREATE",
+        subimage: 8,
+        top_left_x: 40,
+        top_left_y: 5,
+        width: 50,
+        height: 65,
+    },
+    ImagePanelSpec {
+        stem: "CREATE",
+        subimage: 9,
+        top_left_x: 48,
+        top_left_y: 6,
+        width: 42,
+        height: 65,
+    },
+];
 
 pub fn run_visual_loop(
     game_dir: &Path,
@@ -7858,10 +8010,10 @@ fn step_visual_chargen_panel(
             session.submit_gender_key(ch as u8);
             VisualIntroPanelOutcome::Stay
         }
-        ChargenSessionStep::PresentIntro { .. } => {
-            session.advance_intro();
-            VisualIntroPanelOutcome::Stay
-        }
+        ChargenSessionStep::PresentIntro { .. } => match session.advance_intro() {
+            ChargenSessionStep::Completed(result) => VisualIntroPanelOutcome::CommitChargen(result),
+            _ => VisualIntroPanelOutcome::Stay,
+        },
         ChargenSessionStep::PresentQuestion(_) => {
             session.submit_answer_key(ch as u8);
             match session.current_step() {
@@ -8496,9 +8648,17 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         let signature_progress = (title_phase && !intro.title_signature_complete)
             .then_some(intro.title_signature_progress);
         let mut drew_title = false;
-        if let Some(title_rgba) =
+        let panel_rgba = if title_phase {
             visual_intro_title_art_rgba(&intro.game_dir, signature_progress, intro.title_tick_frame)
-        {
+        } else {
+            visual_intro_start_menu_rgba(
+                &intro.game_dir,
+                intro.raster_depth,
+                intro.title_tick_frame,
+            )
+            .or_else(|| visual_intro_title_art_rgba(&intro.game_dir, None, intro.title_tick_frame))
+        };
+        if let Some(title_rgba) = panel_rgba {
             blit_rgba(
                 &mut rgba,
                 INTRO_FRAMEBUFFER_WIDTH as usize,
@@ -8519,12 +8679,7 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
             )
             .unwrap_or(rgba);
         } else if !title_phase {
-            overlay_nonblack_text_panel_rgba(
-                &mut rgba,
-                INTRO_FRAMEBUFFER_WIDTH as usize,
-                INTRO_FRAMEBUFFER_HEIGHT as usize,
-                &summary,
-            );
+            overlay_intro_menu_message_rgba(&mut rgba, &intro.game_dir, &intro.message);
         }
     } else {
         rgba = render_text_panel_rgba(
@@ -8587,6 +8742,56 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         );
     }
     rgba
+}
+
+fn visual_intro_start_menu_rgba(
+    game_dir: &Path,
+    depth: TileGraphicsDepth,
+    title_tick_frame: u8,
+) -> Option<Vec<u8>> {
+    let mut rgba =
+        vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+    }
+    blit_image_panel_specs_rgba(
+        &mut rgba,
+        INTRO_FRAMEBUFFER_WIDTH as usize,
+        INTRO_FRAMEBUFFER_HEIGHT as usize,
+        game_dir,
+        depth,
+        &STARTSC_PANEL_SPECS,
+    )?;
+    fill_rgba_rect_inclusive(
+        &mut rgba,
+        INTRO_FRAMEBUFFER_WIDTH as usize,
+        INTRO_FRAMEBUFFER_HEIGHT as usize,
+        0,
+        136,
+        INTRO_FRAMEBUFFER_WIDTH as usize - 1,
+        INTRO_FRAMEBUFFER_HEIGHT as usize - 1,
+        [0x00, 0x00, 0x00, 0xff],
+    );
+    let font = load_ibm_ch_font(game_dir).ok()?;
+    for (col, row, label) in INTRO_MENU_LABELS {
+        overlay_fixed_cell_text_rgba(
+            &mut rgba,
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+            &font,
+            label,
+            col,
+            row,
+            false,
+        );
+    }
+    draw_title_tick_overlay_rgba(
+        &mut rgba,
+        INTRO_FRAMEBUFFER_WIDTH as usize,
+        INTRO_FRAMEBUFFER_HEIGHT as usize,
+        title_tick_frame,
+    );
+    Some(rgba)
 }
 
 fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
@@ -8665,32 +8870,8 @@ fn render_chargen_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
     else {
         return rgba;
     };
-    overlay_centered_text_band_rgba(
-        &mut rgba,
-        INTRO_FRAMEBUFFER_WIDTH as usize,
-        INTRO_FRAMEBUFFER_HEIGHT as usize,
-        "Create New Character",
-        8,
-        14,
-    );
-    let proportional_text = visual_chargen_proportional_text(session, input_line);
-    if overlay_proportional_text_from_assets_rgba(
-        &mut rgba,
-        INTRO_FRAMEBUFFER_WIDTH as usize,
-        INTRO_FRAMEBUFFER_HEIGHT as usize,
-        &intro.game_dir,
-        &proportional_text,
-        ProportionalTextPlacement {
-            x: CHARGEN_PROPORTIONAL_TEXT_X,
-            y: CHARGEN_PROPORTIONAL_TEXT_Y,
-            width: CHARGEN_PROPORTIONAL_TEXT_WIDTH,
-            line_height: PROPORTIONAL_TEXT_LINE_HEIGHT,
-            color: [0xff, 0xff, 0xff, 0xff],
-            shadow: true,
-        },
-    )
-    .is_err()
-    {
+
+    if !render_chargen_intro_graphics(&mut rgba, intro, session, input_line) {
         let summary = summarize_visual_chargen(session, input_line);
         rgba = render_text_panel_rgba(
             &summary,
@@ -8700,6 +8881,162 @@ fn render_chargen_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         .unwrap_or(rgba);
     }
     rgba
+}
+
+fn render_chargen_intro_graphics(
+    rgba: &mut [u8],
+    intro: &VisualIntroState,
+    session: &ChargenSession,
+    input_line: &str,
+) -> bool {
+    let width = INTRO_FRAMEBUFFER_WIDTH as usize;
+    let height = INTRO_FRAMEBUFFER_HEIGHT as usize;
+    let Ok(font) = load_ibm_ch_font(&intro.game_dir) else {
+        return false;
+    };
+    match session.current_step() {
+        ChargenSessionStep::PromptName => {
+            overlay_fixed_cell_text_rgba(
+                rgba,
+                width,
+                height,
+                &font,
+                "By what name shalt thou be known?",
+                3,
+                17,
+                false,
+            );
+            overlay_fixed_cell_text_rgba(rgba, width, height, &font, input_line, 14, 19, false);
+            true
+        }
+        ChargenSessionStep::PromptGender => {
+            overlay_fixed_cell_text_rgba(
+                rgba,
+                width,
+                height,
+                &font,
+                "Art thou Male or Female?",
+                8,
+                21,
+                false,
+            );
+            true
+        }
+        ChargenSessionStep::PresentIntro { record, text } => {
+            let panel = if record == 0 {
+                CREATE_OPENING_PANEL
+            } else {
+                CREATE_RESULT_PANEL
+            };
+            if blit_image_panel_specs_rgba(
+                rgba,
+                width,
+                height,
+                &intro.game_dir,
+                intro.raster_depth,
+                &[panel],
+            )
+            .is_none()
+            {
+                return false;
+            }
+            let placement = if record == 0 {
+                ProportionalTextPlacement {
+                    x: CHARGEN_PROPORTIONAL_TEXT_X,
+                    y: CHARGEN_PROPORTIONAL_TEXT_Y,
+                    width: CHARGEN_PROPORTIONAL_TEXT_WIDTH,
+                    line_height: PROPORTIONAL_TEXT_LINE_HEIGHT,
+                    color: [0xff, 0xff, 0xff, 0xff],
+                    shadow: true,
+                }
+            } else {
+                ProportionalTextPlacement {
+                    x: CHARGEN_RESULT_TEXT_X,
+                    y: CHARGEN_RESULT_TEXT_Y,
+                    width: CHARGEN_RESULT_TEXT_WIDTH,
+                    line_height: PROPORTIONAL_TEXT_LINE_HEIGHT,
+                    color: [0xff, 0xff, 0xff, 0xff],
+                    shadow: true,
+                }
+            };
+            overlay_proportional_text_from_assets_rgba(
+                rgba,
+                width,
+                height,
+                &intro.game_dir,
+                &text,
+                placement,
+            )
+            .is_ok()
+        }
+        ChargenSessionStep::PresentQuestion(question) => {
+            let option_a = create_virtue_panel_spec(question.option_a, 0);
+            let option_b = create_virtue_panel_spec(question.option_b, 184);
+            if blit_image_panel_specs_rgba(
+                rgba,
+                width,
+                height,
+                &intro.game_dir,
+                intro.raster_depth,
+                &[
+                    CREATE_QUESTION_BACKING_LEFT,
+                    CREATE_QUESTION_BACKING_RIGHT,
+                    option_a,
+                    option_b,
+                ],
+            )
+            .is_none()
+            {
+                return false;
+            }
+            overlay_fixed_cell_text_rgba(rgba, width, height, &font, "A", 3, 2, false);
+            overlay_fixed_cell_text_rgba(rgba, width, height, &font, "B", 26, 2, false);
+            overlay_proportional_text_from_assets_rgba(
+                rgba,
+                width,
+                height,
+                &intro.game_dir,
+                &question.text,
+                ProportionalTextPlacement {
+                    x: CHARGEN_QUESTION_TEXT_X,
+                    y: CHARGEN_QUESTION_TEXT_Y,
+                    width: CHARGEN_QUESTION_TEXT_WIDTH,
+                    line_height: PROPORTIONAL_TEXT_LINE_HEIGHT,
+                    color: [0xff, 0xff, 0xff, 0xff],
+                    shadow: true,
+                },
+            )
+            .is_ok()
+        }
+        ChargenSessionStep::Completed(result) => {
+            let _ = blit_image_panel_specs_rgba(
+                rgba,
+                width,
+                height,
+                &intro.game_dir,
+                intro.raster_depth,
+                &[CREATE_RESULT_PANEL],
+            );
+            overlay_fixed_cell_text_rgba(
+                rgba,
+                width,
+                height,
+                &font,
+                &format!("Writing save for {}.", display_name_bytes(&result.name)),
+                3,
+                21,
+                false,
+            );
+            true
+        }
+        ChargenSessionStep::Aborted | ChargenSessionStep::Ignored => false,
+    }
+}
+
+fn create_virtue_panel_spec(virtue: ShrineVirtue, x_offset: usize) -> ImagePanelSpec {
+    let mut spec = CREATE_VIRTUE_PANEL_SPECS[virtue.index()];
+    spec.top_left_x = spec.top_left_x.saturating_add(x_offset);
+    spec
 }
 
 fn visual_intro_story_text(records: &StoryRecords, step: usize) -> Option<&str> {
@@ -8712,27 +9049,6 @@ fn visual_intro_story_text(records: &StoryRecords, step: usize) -> Option<&str> 
         step - 1
     };
     records.record(record_index)
-}
-
-fn visual_chargen_proportional_text(session: &ChargenSession, input_line: &str) -> String {
-    match session.current_step() {
-        ChargenSessionStep::PromptName => {
-            format!("By what name shalt thou be known?\n> {input_line}")
-        }
-        ChargenSessionStep::PromptGender => "Art thou Male or Female?".to_string(),
-        ChargenSessionStep::PresentIntro { text, .. } => text,
-        ChargenSessionStep::PresentQuestion(question) => format!(
-            "{}\n\nA: {}    B: {}",
-            question.text,
-            question.option_a.name(),
-            question.option_b.name()
-        ),
-        ChargenSessionStep::Completed(result) => {
-            format!("Writing save for {}.", display_name_bytes(&result.name))
-        }
-        ChargenSessionStep::Aborted => "Character creation aborted.".to_string(),
-        ChargenSessionStep::Ignored => "Character creation is waiting.".to_string(),
-    }
 }
 
 fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
@@ -8972,12 +9288,8 @@ fn british_signature_step_count(signature: &BritishPth) -> usize {
 }
 
 fn draw_title_tick_overlay_rgba(dst: &mut [u8], dst_width: usize, dst_height: usize, frame: u8) {
-    // `cleak/u5-spec#52`: the published title-tick effect is a
-    // palette-cycled flame stripe over the band. This is an
-    // independently-authored silhouette that follows the public
-    // rectangle, four-frame color cycle, and "three upward-tapering
-    // flames" visual contract without copying the original driver
-    // pixel pattern.
+    // `cleak/u5-spec#65`: the clean replacement is a deterministic,
+    // opaque four-frame overlay in the public title-tick rectangle.
     let start_x = TITLE_TICK_FRAME_X as usize;
     let start_y = TITLE_TICK_FRAME_Y as usize;
     let end_x = start_x
@@ -8992,13 +9304,8 @@ fn draw_title_tick_overlay_rgba(dst: &mut [u8], dst_width: usize, dst_height: us
         for x in start_x..end_x {
             let local_x = x - start_x;
             let offset = (y * dst_width + x) * 4;
-            if dst[offset] != 0 || dst[offset + 1] != 0 || dst[offset + 2] != 0 {
-                continue;
-            }
-            let Some(palette_index) = title_tick_flame_palette_index(local_x, local_y, frame)
-            else {
-                continue;
-            };
+            let palette_index =
+                title_tick_flame_palette_index(local_x, local_y, frame).unwrap_or(0);
             let rgb = EGA_PALETTE_RGB[usize::from(palette_index)];
             dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
         }
@@ -9220,6 +9527,34 @@ fn graphic_image_to_rgba_clipped(
     rgba
 }
 
+fn blit_image_panel_specs_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    game_dir: &Path,
+    depth: TileGraphicsDepth,
+    specs: &[ImagePanelSpec],
+) -> Option<()> {
+    for spec in specs {
+        let directory = load_graphic_image_directory(game_dir, spec.stem, depth).ok()?;
+        let image = directory.images.get(usize::from(spec.subimage))?.as_ref()?;
+        let width = spec.width.min(image.width);
+        let height = spec.height.min(image.height);
+        let rgba = graphic_image_to_rgba_clipped(image, depth, width, height);
+        blit_rgba(
+            dst,
+            dst_width,
+            dst_height,
+            &rgba,
+            width,
+            height,
+            spec.top_left_x,
+            spec.top_left_y,
+        );
+    }
+    Some(())
+}
+
 fn blit_rgba(
     dst: &mut [u8],
     dst_width: usize,
@@ -9246,6 +9581,78 @@ fn blit_rgba(
             dst_slice.copy_from_slice(src_slice);
         }
     }
+}
+
+fn overlay_fixed_cell_text_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    font: &FixedCellFont,
+    text: &str,
+    cell_x: usize,
+    cell_y: usize,
+    inverse: bool,
+) {
+    let foreground = EGA_PALETTE_RGB[15];
+    let background = EGA_PALETTE_RGB[0];
+    for (index, byte) in text.bytes().enumerate() {
+        let px = cell_x.saturating_add(index).saturating_mul(CH_CELL_SIDE);
+        let py = cell_y.saturating_mul(CH_CELL_SIDE);
+        if px >= dst_width || py >= dst_height {
+            break;
+        }
+        let code = byte & 0x7f;
+        for glyph_y in 0..CH_CELL_SIDE {
+            let target_y = py + glyph_y;
+            if target_y >= dst_height {
+                break;
+            }
+            let mut row_bits = font.glyph_row(code, glyph_y).unwrap_or(0);
+            if inverse {
+                row_bits = !row_bits;
+            }
+            for glyph_x in 0..CH_CELL_SIDE {
+                let target_x = px + glyph_x;
+                if target_x >= dst_width {
+                    break;
+                }
+                let rgb = if row_bits & (1 << (7 - glyph_x)) != 0 {
+                    foreground
+                } else {
+                    background
+                };
+                let offset = (target_y * dst_width + target_x) * 4;
+                if let Some(pixel) = dst.get_mut(offset..offset + 4) {
+                    pixel.copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
+                }
+            }
+        }
+    }
+}
+
+fn overlay_intro_menu_message_rgba(dst: &mut [u8], game_dir: &Path, message: &str) {
+    if message.is_empty() {
+        return;
+    }
+    let Ok(font) = load_ibm_ch_font(game_dir) else {
+        overlay_nonblack_text_panel_rgba(
+            dst,
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+            message,
+        );
+        return;
+    };
+    overlay_fixed_cell_text_rgba(
+        dst,
+        INTRO_FRAMEBUFFER_WIDTH as usize,
+        INTRO_FRAMEBUFFER_HEIGHT as usize,
+        &font,
+        message,
+        1,
+        24,
+        false,
+    );
 }
 
 fn fill_rgba_rect_inclusive(
@@ -11432,7 +11839,7 @@ mod tests {
     }
 
     #[test]
-    fn title_tick_overlay_stays_inside_spec_strip_and_preserves_title_pixels() {
+    fn title_tick_overlay_stays_inside_spec_strip_and_overwrites_title_pixels() {
         let width = TITLE_SURFACE_WIDTH as usize;
         let height = TITLE_SURFACE_HEIGHT as usize;
         let mut frame0 = vec![0; width * height * 4];
@@ -11450,7 +11857,7 @@ mod tests {
 
         assert_eq!(
             rgba_pixel(&frame0, width, preserved_x, preserved_y),
-            [0xff, 0xff, 0xff, 0xff]
+            [0, 0, 0, 0xff]
         );
         assert!(frame0.chunks_exact(4).enumerate().any(|(index, pixel)| {
             let x = index % width;
@@ -11476,9 +11883,9 @@ mod tests {
 
     #[test]
     fn title_tick_flame_stripe_uses_published_palette_cycle() {
-        // `cleak/u5-spec#52`: the clean replacement is a three-flame
-        // upward-tapering stripe. It uses the published bright/dim
-        // palette pairs while leaving pixels outside the silhouette alone.
+        // `cleak/u5-spec#65`: the clean replacement keeps the
+        // independently-authored flame silhouette and treats non-flame
+        // pixels as opaque black inside the title-tick rectangle.
         assert_eq!(title_tick_flame_palette_index(54, 8, 0), None);
         assert_eq!(title_tick_flame_palette_index(54, 20, 0), Some(0x0E));
         assert_eq!(title_tick_flame_palette_index(54, 40, 0), Some(0x06));
@@ -13800,6 +14207,7 @@ mod tests {
         for _ in 0..7 {
             step_visual_intro_panel(&mut intro, 'A');
         }
+        step_visual_intro_panel(&mut intro, ' ');
 
         assert!(matches!(intro.panel, VisualIntroPanel::Menu));
         assert!(intro.message.contains("Created Avatar"));
