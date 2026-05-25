@@ -106,6 +106,10 @@ where
             "--intro" => intro = true,
             "--play" => play = true,
             "--visual" => visual = true,
+            "--visual-playable" => {
+                intro = true;
+                visual = true;
+            }
             "--save-frame" => {
                 let value = args.next().ok_or_else(|| {
                     io::Error::new(
@@ -711,6 +715,8 @@ OPTIONS:
         --visual              Launch the Bevy visual harness.
                               Requires building with `--features visual`.
                               Combine with --intro for the Bevy intro/menu shell.
+        --visual-playable     Launch the Bevy minimally playable v0 shell.
+                              Alias for --intro --visual.
         --save-frame <PATH>   Render the current viewport (after running
                               --play-script if given) to a PNG and exit.
                               Useful for verifying movement without a desktop.
@@ -745,6 +751,7 @@ SMOKE COMMANDS:
     cargo run -- --play --scene DUNGEON:0 --floor 0 C:\\Games\\U5-Clean
     cargo run -- --create-character Avatar --gender male --chargen-winners Honesty,Compassion,Valor,Justice,Sacrifice,Honor,Spirituality C:\\Games\\U5-Clean
     cargo run --features visual -- --visual --scene BRITANNIA C:\\Games\\U5-Clean
+    cargo run --features visual -- --visual-playable C:\\Games\\U5-Clean
     cargo run --features visual -- --visual-frame-suite target\\visual-frame-suite C:\\Games\\U5-Clean
     cargo run --features visual -- --visual-route-suite target\\visual-route-suite C:\\Games\\U5-Clean
     cargo run --features visual -- --visual --scene CASTLE:0 --floor 0 C:\\Games\\U5-Clean

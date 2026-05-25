@@ -135,8 +135,8 @@ fn run_visual(_args: CliArgs) -> io::Result<()> {
 fn run_visual_intro(_args: CliArgs) -> io::Result<()> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
-        "--intro --visual requires building with --features visual (e.g. \
-         `cargo run --features visual -- --intro --visual <GAME_DIR>`).",
+        "--visual-playable / --intro --visual requires building with --features visual (e.g. \
+         `cargo run --features visual -- --visual-playable <GAME_DIR>`).",
     ))
 }
 

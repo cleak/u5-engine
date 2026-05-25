@@ -695,6 +695,16 @@ fn cli_parser_accepts_visual_intro_menu_mode() {
 }
 
 #[test]
+fn cli_parser_accepts_visual_playable_alias() {
+    let args = parse_cli_args(["--visual-playable", r"C:\Games\U5-Clean"]).unwrap();
+
+    assert!(args.intro);
+    assert!(args.visual);
+    assert!(!args.play);
+    assert_eq!(args.game_dir, PathBuf::from(r"C:\Games\U5-Clean"));
+}
+
+#[test]
 fn cli_intro_rejects_direct_play_or_save_creation_modes() {
     assert!(parse_cli_args(["--intro", "--play"]).is_err());
     assert!(parse_cli_args(["--intro", "--from-save"]).is_err());
@@ -1093,6 +1103,7 @@ fn cli_usage_lists_documented_smoke_commands() {
     assert!(CLI_USAGE.contains("--save-frame-suite"));
     assert!(CLI_USAGE.contains("--visual-frame-suite"));
     assert!(CLI_USAGE.contains("--visual-route-suite"));
+    assert!(CLI_USAGE.contains("--visual-playable"));
     assert!(CLI_USAGE.contains("--compare-frame-manifests"));
     assert!(CLI_USAGE.contains("--location-audit"));
     assert!(CLI_USAGE.contains("--scene"));

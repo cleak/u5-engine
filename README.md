@@ -37,6 +37,8 @@ under `docs/`:
 
 - `docs/architecture.md` - crate layout, runtime boundaries, and clean-room
   data rules.
+- `docs/bevy-minimal-playable.md` - Bevy v0 launch, smoke gate, and known
+  limits.
 - `docs/commands.md` - current A-Z command routing by mode, with representative
   test evidence.
 - `docs/sidecars.md` - clean-room TSV/binary sidecar files accepted at runtime.
@@ -57,10 +59,18 @@ verification dependency surface. It currently covers top-down overworld/town
 scenes plus the clean first-person dungeon raster:
 
 ```powershell
+cargo run --features visual -- --visual-playable C:\Games\U5-Clean
 cargo run --features visual -- --visual --scene BRITANNIA C:\Games\U5-Clean
 cargo run --features visual -- --visual --scene CASTLE:0 --floor 0 C:\Games\U5-Clean
 cargo run --features visual -- --intro --visual C:\Games\U5-Clean
 ```
+
+`--visual-playable` is the minimally playable Bevy v0 entrypoint. It opens the
+Bevy intro/menu shell, lets the player create or transfer a save, then Journey
+Onward into the same runtime gameplay loop used by the terminal harness.
+Presentation is still v0: shops, conversations, and other text-heavy flows use
+the shared fixed-cell status/modal surface while exact original window pacing
+continues to be tracked as parity work.
 
 The window draws a single CPU-generated 11x11 tile viewport (an `EGA` or `CGA`
 indexed framebuffer converted to RGBA) into one Bevy `Image` and displays it
