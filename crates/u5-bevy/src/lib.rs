@@ -8971,18 +8971,12 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         let signature_progress = (title_phase && !intro.title_signature_complete)
             .then_some(intro.title_signature_progress);
         if title_phase {
-            if let Some(title_rgba) = visual_intro_title_art_rgba(
+            if let Some(title_buffer) = visual_intro_title_art_buffer(
                 &intro.game_dir,
                 title_flourish_step,
                 signature_progress,
             ) {
-                intro.surface.blit_rgba(
-                    &title_rgba,
-                    TITLE_SURFACE_WIDTH as usize,
-                    TITLE_SURFACE_HEIGHT as usize,
-                    0,
-                    0,
-                );
+                intro.surface = title_buffer;
                 drew_surface = true;
             }
         } else if draw_visual_intro_start_menu_to_buffer(
@@ -8995,14 +8989,10 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         .is_some()
         {
             drew_surface = true;
-        } else if let Some(title_rgba) = visual_intro_title_art_rgba(&intro.game_dir, None, None) {
-            intro.surface.blit_rgba(
-                &title_rgba,
-                TITLE_SURFACE_WIDTH as usize,
-                TITLE_SURFACE_HEIGHT as usize,
-                0,
-                0,
-            );
+        } else if let Some(title_buffer) =
+            visual_intro_title_art_buffer(&intro.game_dir, None, None)
+        {
+            intro.surface = title_buffer;
             drew_surface = true;
         }
 
@@ -9042,14 +9032,8 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
 fn visual_intro_final_title_backing_buffer(intro: &VisualIntroState) -> IntroDisplayBuffer {
     let mut buffer = new_intro_display_buffer();
     buffer.clear(0);
-    if let Some(title_rgba) = visual_intro_title_art_rgba(&intro.game_dir, None, None) {
-        buffer.blit_rgba(
-            &title_rgba,
-            TITLE_SURFACE_WIDTH as usize,
-            TITLE_SURFACE_HEIGHT as usize,
-            0,
-            0,
-        );
+    if let Some(title_buffer) = visual_intro_title_art_buffer(&intro.game_dir, None, None) {
+        buffer = title_buffer;
     }
     buffer
 }
@@ -9429,14 +9413,14 @@ fn visual_intro_start_menu_reveal_active(intro: &VisualIntroState) -> bool {
     matches!(intro.panel, VisualIntroPanel::Menu) && intro.start_menu_reveal.is_some()
 }
 
-fn visual_intro_title_art_rgba(
+fn visual_intro_title_art_buffer(
     game_dir: &Path,
     flourish_step: Option<usize>,
     signature_progress: Option<usize>,
-) -> Option<Vec<u8>> {
+) -> Option<IntroDisplayBuffer> {
     let title = load_title_bit(game_dir).ok()?;
     let british = load_british_bit(game_dir).ok()?;
-    let mut rgba = compose_intro_title_art_rgba(
+    let mut buffer = compose_intro_title_art_buffer(
         &title,
         &british,
         if let Some(step) = flourish_step {
@@ -9449,15 +9433,9 @@ fn visual_intro_title_art_rgba(
     );
     if let Some(progress) = signature_progress.filter(|progress| *progress > 0) {
         let signature = load_british_pth(game_dir).ok()?;
-        draw_british_signature_rgba(
-            &mut rgba,
-            TITLE_SURFACE_WIDTH as usize,
-            TITLE_SURFACE_HEIGHT as usize,
-            &signature,
-            progress,
-        );
+        draw_british_signature_buffer(&mut buffer, &signature, progress);
     }
-    Some(rgba)
+    Some(buffer)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -9560,21 +9538,26 @@ fn intro_title_flourish_frame_for_step(step: usize) -> Option<(usize, usize)> {
         .map(|last_group| (TITLE_FLOURISH_ROW_REVEAL_GROUPS.len() - 1, last_group))
 }
 
+#[cfg(test)]
 fn compose_intro_title_art_rgba(
     title: &TitleBitImages,
     british: &MonochromeBitmap,
     phase: IntroTitleCompositionPhase,
 ) -> Vec<u8> {
-    let width = TITLE_SURFACE_WIDTH as usize;
-    let height = TITLE_SURFACE_HEIGHT as usize;
-    let mut rgba = vec![0; width * height * 4];
-    for pixel in rgba.chunks_exact_mut(4) {
-        pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
-    }
+    compose_intro_title_art_buffer(title, british, phase).to_rgba()
+}
+
+fn compose_intro_title_art_buffer(
+    title: &TitleBitImages,
+    british: &MonochromeBitmap,
+    phase: IntroTitleCompositionPhase,
+) -> IntroDisplayBuffer {
+    let mut buffer = new_intro_display_buffer();
+    buffer.clear(0);
 
     if let IntroTitleCompositionPhase::Flourish { step } = phase {
-        blit_intro_title_flourish_step_rgba(&mut rgba, width, height, title, step);
-        return rgba;
+        blit_intro_title_flourish_step_buffer(&mut buffer, title, step);
+        return buffer;
     }
 
     if let Some(placement) = TITLE_BIT_INITIAL_PLACEMENTS
@@ -9582,17 +9565,15 @@ fn compose_intro_title_art_rgba(
         .copied()
         .find(|placement| placement.slot == 6)
     {
-        blit_intro_title_placement_rgba_with_rgb(
-            &mut rgba,
-            width,
-            height,
-            title,
-            british,
-            placement,
-            EGA_PALETTE_RGB[9],
-        );
+        blit_intro_title_placement_buffer_with_color(&mut buffer, title, british, placement, 9);
     }
-    clear_rgba_band(&mut rgba, width, height, TITLE_LOWER_BAND_CLEAR_Y as usize);
+    buffer.clear_rect_inclusive(
+        0,
+        TITLE_LOWER_BAND_CLEAR_Y as usize,
+        TITLE_SURFACE_WIDTH as usize - 1,
+        TITLE_SURFACE_HEIGHT as usize - 1,
+        0,
+    );
     for placement in TITLE_BIT_REMAINING_PLACEMENTS
         .iter()
         .copied()
@@ -9600,7 +9581,7 @@ fn compose_intro_title_art_rgba(
             matches!(placement.asset, TitleBitAsset::Title) && matches!(placement.slot, 7 | 8)
         })
     {
-        blit_intro_title_placement_rgba(&mut rgba, width, height, title, british, placement);
+        blit_intro_title_placement_buffer(&mut buffer, title, british, placement);
     }
     if matches!(
         phase,
@@ -9616,29 +9597,15 @@ fn compose_intro_title_art_rgba(
                     || (matches!(placement.asset, TitleBitAsset::Title) && placement.slot == 9)
             })
         {
-            blit_intro_title_placement_rgba(&mut rgba, width, height, title, british, placement);
+            blit_intro_title_placement_buffer(&mut buffer, title, british, placement);
         }
     }
 
-    rgba
+    buffer
 }
 
-fn clear_rgba_band(rgba: &mut [u8], width: usize, height: usize, start_y: usize) {
-    if start_y >= height {
-        return;
-    }
-    for y in start_y..height {
-        for x in 0..width {
-            let offset = (y * width + x) * 4;
-            rgba[offset..offset + 4].copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
-        }
-    }
-}
-
-fn blit_intro_title_flourish_step_rgba(
-    dst: &mut [u8],
-    dst_width: usize,
-    dst_height: usize,
+fn blit_intro_title_flourish_step_buffer(
+    dst: &mut IntroDisplayBuffer,
     title: &TitleBitImages,
     step: usize,
 ) {
@@ -9660,85 +9627,66 @@ fn blit_intro_title_flourish_step_rgba(
     };
     let draw_height = usize::from(placement.height).min(src.height);
     let draw_width = usize::from(placement.width).min(src.width);
-    let rgb = EGA_PALETTE_RGB[9];
     for group in groups.iter().take(group_index + 1) {
         for row in group.iter().copied().map(usize::from) {
             if row >= draw_height {
                 continue;
             }
-            blit_intro_title_row_rgba(
+            blit_intro_title_row_buffer(
                 dst,
-                dst_width,
-                dst_height,
                 src,
                 usize::from(placement.top_left_x),
                 usize::from(placement.top_left_y),
                 draw_width,
                 row,
-                rgb,
+                9,
             );
         }
     }
 }
 
-fn blit_intro_title_row_rgba(
-    dst: &mut [u8],
-    dst_width: usize,
-    dst_height: usize,
+fn blit_intro_title_row_buffer(
+    dst: &mut IntroDisplayBuffer,
     src: &MonochromeBitmap,
     base_x: usize,
     base_y: usize,
     draw_width: usize,
     source_y: usize,
-    foreground_rgb: [u8; 3],
+    foreground: u8,
 ) {
     let target_y = base_y + source_y;
-    if target_y >= dst_height {
+    if target_y >= dst.height {
         return;
     }
     for x in 0..draw_width {
         let target_x = base_x + x;
-        if target_x >= dst_width {
+        if target_x >= dst.width {
             break;
         }
         let source_pixel = src.pixels[source_y * src.width + x];
-        let rgb = if source_pixel == 0 {
-            [0x00, 0x00, 0x00]
+        dst.pixels[target_y * dst.width + target_x] = if source_pixel == 0 {
+            0
         } else {
-            foreground_rgb
+            foreground & 0x0f
         };
-        let offset = (target_y * dst_width + target_x) * 4;
-        dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
     }
 }
 
-fn blit_intro_title_placement_rgba(
-    dst: &mut [u8],
-    dst_width: usize,
-    dst_height: usize,
+fn blit_intro_title_placement_buffer(
+    dst: &mut IntroDisplayBuffer,
     title: &TitleBitImages,
     british: &MonochromeBitmap,
     placement: TitleBitPlacement,
 ) {
-    blit_intro_title_placement_rgba_with_rgb(
-        dst,
-        dst_width,
-        dst_height,
-        title,
-        british,
-        placement,
-        EGA_PALETTE_RGB[15],
-    );
+    blit_intro_title_placement_buffer_with_color(dst, title, british, placement, 15);
 }
 
-fn blit_intro_title_placement_rgba_with_rgb(
-    dst: &mut [u8],
-    dst_width: usize,
-    dst_height: usize,
+fn blit_intro_title_placement_buffer_with_color(
+    dst: &mut IntroDisplayBuffer,
     title: &TitleBitImages,
     british: &MonochromeBitmap,
     placement: TitleBitPlacement,
-    foreground_rgb: [u8; 3],
+    foreground: u8,
 ) {
     let src = match placement.asset {
         TitleBitAsset::Title => title.blocks.get(usize::from(placement.slot)),
@@ -9754,26 +9702,25 @@ fn blit_intro_title_placement_rgba_with_rgb(
     let base_y = usize::from(placement.top_left_y);
     for y in 0..draw_height {
         let target_y = base_y + y;
-        if target_y >= dst_height {
+        if target_y >= dst.height {
             break;
         }
         for x in 0..draw_width {
             let target_x = base_x + x;
-            if target_x >= dst_width {
+            if target_x >= dst.width {
                 break;
             }
             let source_pixel = src.pixels[y * src.width + x];
-            let rgb = if source_pixel == 0 {
-                [0x00, 0x00, 0x00]
+            dst.pixels[target_y * dst.width + target_x] = if source_pixel == 0 {
+                0
             } else {
-                foreground_rgb
+                foreground & 0x0f
             };
-            let offset = (target_y * dst_width + target_x) * 4;
-            dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
         }
     }
 }
 
+#[cfg(test)]
 fn draw_british_signature_rgba(
     dst: &mut [u8],
     dst_width: usize,
@@ -9796,6 +9743,35 @@ fn draw_british_signature_rgba(
             y += i16::from(stroke.dy);
             if stroke.pen_down {
                 paint_signature_pixel_rgba(dst, dst_width, dst_height, x, y);
+            }
+            remaining -= 1;
+        }
+    }
+}
+
+fn draw_british_signature_buffer(
+    dst: &mut IntroDisplayBuffer,
+    signature: &BritishPth,
+    max_steps: usize,
+) {
+    let mut remaining = max_steps;
+    for (segment_index, origin) in BRITISH_PTH_PEN_ORIGINS.iter().enumerate() {
+        if remaining == 0 {
+            break;
+        }
+        let Some(segment) = signature.segments.get(segment_index) else {
+            break;
+        };
+        let mut x = i16::from(origin.0);
+        let mut y = i16::from(origin.1);
+        for stroke in segment {
+            if remaining == 0 {
+                break;
+            }
+            x += i16::from(stroke.dx);
+            y += i16::from(stroke.dy);
+            if stroke.pen_down {
+                paint_signature_pixel_buffer(dst, x, y);
             }
             remaining -= 1;
         }
@@ -9832,6 +9808,7 @@ fn draw_title_tick_overlay_rgba(dst: &mut [u8], dst_width: usize, dst_height: us
     }
 }
 
+#[cfg(test)]
 fn paint_signature_pixel_rgba(dst: &mut [u8], dst_width: usize, dst_height: usize, x: i16, y: i16) {
     let Ok(x) = usize::try_from(x) else {
         return;
@@ -9845,6 +9822,19 @@ fn paint_signature_pixel_rgba(dst: &mut [u8], dst_width: usize, dst_height: usiz
     let rgb = EGA_PALETTE_RGB[15];
     let offset = (y * dst_width + x) * 4;
     dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
+}
+
+fn paint_signature_pixel_buffer(dst: &mut IntroDisplayBuffer, x: i16, y: i16) {
+    let Ok(x) = usize::try_from(x) else {
+        return;
+    };
+    let Ok(y) = usize::try_from(y) else {
+        return;
+    };
+    if x >= dst.width || y >= dst.height {
+        return;
+    }
+    dst.pixels[y * dst.width + x] = 15;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -12497,6 +12487,42 @@ mod tests {
         assert_eq!(intro.title_tick_visible_frame, 0);
         assert_eq!(intro.title_tick_frame, title_tick_next_frame(0));
         let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_title_phase_renders_into_persistent_surface() {
+        let dir = debug_game_dir();
+        if visual_intro_title_art_buffer(&dir, Some(0), None).is_none() {
+            let _ = fs::remove_dir_all(dir);
+            return;
+        }
+        let mut intro = VisualIntroState {
+            game_dir: dir.clone(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: 0,
+            title_flourish_complete: false,
+            title_signature_progress: 0,
+            title_signature_complete: false,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
+            start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
+            message: String::new(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        let frame = render_intro_frame(&mut intro);
+
+        assert_eq!(frame, intro.surface.to_rgba());
+        assert!(intro.surface.pixels.iter().any(|pixel| *pixel != 0));
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
