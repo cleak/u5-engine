@@ -127,7 +127,13 @@ impl ReturnToViewScript {
     }
 
     pub fn known_command_count(&self) -> usize {
-        self.commands.len().saturating_sub(self.no_op_count())
+        let no_ops = self.no_op_count();
+        assert!(
+            no_ops <= self.commands.len(),
+            "Return-to-View no-op count {no_ops} exceeds parsed command count {}",
+            self.commands.len()
+        );
+        self.commands.len() - no_ops
     }
 }
 
@@ -1466,6 +1472,7 @@ mod tests {
             ReturnToViewCommand::NoOp { opcode: 0xf0 }
         );
         assert_eq!(script.no_op_count(), 1);
+        assert_eq!(script.known_command_count(), script.commands.len() - 1);
     }
 
     #[test]
