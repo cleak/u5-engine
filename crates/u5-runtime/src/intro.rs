@@ -251,7 +251,11 @@ pub fn title_tick_flame_palette_index(local_x: usize, local_y: usize, frame: u8)
     }
 
     let flame_height = 34usize;
-    let flame_top = band_height.saturating_sub(flame_height);
+    assert!(
+        band_height >= flame_height,
+        "title-tick flame height {flame_height} exceeds band height {band_height}"
+    );
+    let flame_top = band_height - flame_height;
     if local_y < flame_top {
         return None;
     }
@@ -262,7 +266,11 @@ pub fn title_tick_flame_palette_index(local_x: usize, local_y: usize, frame: u8)
     for center in [54isize, 160, 266] {
         let wave = ((local_y * 3 + frame * 5) % 11) as isize - 5;
         let taper = from_base * 34 / flame_height;
-        let half_width = 42usize.saturating_sub(taper).max(5);
+        assert!(
+            taper <= 42,
+            "title-tick flame taper {taper} exceeds base half-width"
+        );
+        let half_width = 42usize - taper;
         let dx = (local_x as isize - (center + wave)).unsigned_abs();
         if dx <= half_width {
             inside = true;
@@ -273,7 +281,12 @@ pub fn title_tick_flame_palette_index(local_x: usize, local_y: usize, frame: u8)
         // as three static wedges.
         if from_base > 16 {
             let tongue_center = center + ((frame as isize - 1) * 5);
-            let tongue_width = 10usize.saturating_sub((from_base - 16) / 2).max(3);
+            let tongue_taper = (from_base - 16) / 2;
+            assert!(
+                tongue_taper <= 10,
+                "title-tick flame tongue taper {tongue_taper} exceeds base width"
+            );
+            let tongue_width = (10usize - tongue_taper).max(3);
             if (local_x as isize - tongue_center).unsigned_abs() <= tongue_width {
                 inside = true;
                 break;
@@ -553,5 +566,16 @@ mod tests {
         assert_eq!(title_tick_palette_index(120, 20, 0), 0x00);
         assert_eq!(title_tick_palette_index(54, 20, 0), 0x0E);
         assert_eq!(title_tick_palette_index(54, 40, 0), 0x06);
+    }
+
+    #[test]
+    fn title_tick_flame_generator_covers_published_rect_without_internal_clamps() {
+        for frame in 0..TITLE_TICK_FRAME_COUNT {
+            for y in 0..TITLE_TICK_FRAME_HEIGHT as usize {
+                for x in 0..TITLE_TICK_FRAME_WIDTH as usize {
+                    let _ = title_tick_palette_index(x, y, frame);
+                }
+            }
+        }
     }
 }
