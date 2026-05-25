@@ -329,7 +329,6 @@ pub fn run_visual_loop(
         .ok()
         .map(|s| s.chars().collect())
         .unwrap_or_default();
-
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -7122,6 +7121,8 @@ fn run_visual_intro_menu_app(
         .ok()
         .map(|s| s.chars().collect())
         .unwrap_or_default();
+    let mut dispatch = UnifiedMenuDispatch::new();
+    dispatch.dismiss_title();
 
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -7137,9 +7138,9 @@ fn run_visual_intro_menu_app(
         .insert_resource(VisualIntroState {
             game_dir,
             raster_depth,
-            dispatch: UnifiedMenuDispatch::new(),
+            dispatch,
             title_signature_progress: 0,
-            title_signature_complete: false,
+            title_signature_complete: true,
             title_tick_frame: 0,
             start_menu_reveal: None,
             message: String::new(),
