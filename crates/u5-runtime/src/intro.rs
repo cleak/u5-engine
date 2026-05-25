@@ -229,6 +229,17 @@ pub fn title_tick_flame_palette_index(local_x: usize, local_y: usize, frame: u8)
     }
 }
 
+/// `intro.md §5`: opaque title-tick replacement pixel for every position
+/// inside the published title-tick rectangle. Pixels outside the authored
+/// flame silhouette are explicitly palette index 0 because the driver-owned
+/// title tick overwrites the whole rectangle, including black pixels.
+pub fn title_tick_palette_index(local_x: usize, local_y: usize, frame: u8) -> u8 {
+    match title_tick_flame_palette_index(local_x, local_y, frame) {
+        Some(index) => index,
+        None => 0,
+    }
+}
+
 /// `intro.md §12`: Return-to-View loads `MISCMAPS.DAT`. The first
 /// four records are shown as 4-by-19 map strips, followed by a
 /// 655-byte command stream driving preview actors and animation beats.
@@ -470,5 +481,14 @@ mod tests {
             ACKNOWLEDGEMENTS_LINES.iter().all(|line| line.len() <= 60),
             "every acknowledgement line must fit a 60-column 320x200 layout"
         );
+    }
+
+    #[test]
+    fn title_tick_palette_index_is_opaque_across_entire_rect() {
+        assert_eq!(title_tick_flame_palette_index(54, 8, 0), None);
+        assert_eq!(title_tick_palette_index(54, 8, 0), 0x00);
+        assert_eq!(title_tick_palette_index(120, 20, 0), 0x00);
+        assert_eq!(title_tick_palette_index(54, 20, 0), 0x0E);
+        assert_eq!(title_tick_palette_index(54, 40, 0), 0x06);
     }
 }

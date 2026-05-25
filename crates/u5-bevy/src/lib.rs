@@ -110,7 +110,7 @@ use u5_runtime::{
     summarize_return_to_view_preview, summarize_return_to_view_script,
     summoned_active_object_record, terrain_combat_instance_from_setup,
     terrain_combat_raw_replacement_tile_for_arena, terrain_combat_setup_from_record,
-    terrain_combat_tile_for_spawn_index, title_tick_flame_palette_index, title_tick_next_frame,
+    terrain_combat_tile_for_spawn_index, title_tick_next_frame, title_tick_palette_index,
     town_resident_name,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16, word_of_power_seal_for_word,
@@ -268,8 +268,7 @@ impl IntroDisplayBuffer {
             let local_y = y - start_y;
             for x in start_x..end_x {
                 let local_x = x - start_x;
-                self.pixels[y * self.width + x] =
-                    title_tick_flame_palette_index(local_x, local_y, frame).unwrap_or(0);
+                self.pixels[y * self.width + x] = title_tick_palette_index(local_x, local_y, frame);
             }
         }
     }
@@ -279,25 +278,42 @@ impl IntroDisplayBuffer {
         source: &IntroDisplayBuffer,
         transition: RectColumnSweepTransition,
     ) {
-        if self.width != source.width || self.height != source.height {
-            return;
-        }
-        let Some((start_x, end_x)) = transition.revealed_columns() else {
-            return;
-        };
+        assert_eq!(
+            (self.width, self.height),
+            (source.width, source.height),
+            "intro column reveal requires matching source and destination buffers"
+        );
+        let (start_x, end_x) = transition
+            .revealed_columns()
+            .expect("intro column reveal requires a valid transition rectangle");
         let (rect_x0, rect_y0, rect_x1, rect_y1) = transition.rect;
-        if self.width == 0 || self.height == 0 {
-            return;
-        }
-        let y0 = usize::from(rect_y0).min(self.height - 1);
-        let y1 = usize::from(rect_y1).min(self.height - 1);
-        let x0 = usize::from(rect_x0).min(self.width - 1);
-        let x1 = usize::from(rect_x1).min(self.width - 1);
-        let revealed_start = usize::from(start_x).min(self.width - 1);
-        let revealed_end = usize::from(end_x).min(self.width - 1);
-        if x0 > x1 || y0 > y1 {
-            return;
-        }
+        assert!(
+            rect_x0 <= rect_x1 && rect_y0 <= rect_y1,
+            "intro column reveal rectangle is inverted: {:?}",
+            transition.rect
+        );
+        assert!(
+            self.width > 0 && self.height > 0,
+            "intro column reveal requires a non-empty display buffer"
+        );
+        let y0 = usize::from(rect_y0);
+        let y1 = usize::from(rect_y1);
+        let x0 = usize::from(rect_x0);
+        let x1 = usize::from(rect_x1);
+        let revealed_start = usize::from(start_x);
+        let revealed_end = usize::from(end_x);
+        assert!(
+            x1 < self.width && y1 < self.height,
+            "intro column reveal rectangle {:?} exceeds framebuffer {}x{}",
+            transition.rect,
+            self.width,
+            self.height
+        );
+        assert!(
+            revealed_start >= x0 && revealed_end <= x1 && revealed_start <= revealed_end,
+            "intro column reveal range {revealed_start}..={revealed_end} is outside rectangle {:?}",
+            transition.rect
+        );
 
         for y in y0..=y1 {
             for x in x0..=x1 {
@@ -9889,8 +9905,7 @@ fn draw_title_tick_overlay_rgba(dst: &mut [u8], dst_width: usize, dst_height: us
         for x in start_x..end_x {
             let local_x = x - start_x;
             let offset = (y * dst_width + x) * 4;
-            let palette_index =
-                title_tick_flame_palette_index(local_x, local_y, frame).unwrap_or(0);
+            let palette_index = title_tick_palette_index(local_x, local_y, frame);
             let rgb = EGA_PALETTE_RGB[usize::from(palette_index)];
             dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
         }
@@ -13281,7 +13296,7 @@ mod tests {
         );
         assert_eq!(
             buffer.pixels[(TITLE_TICK_FRAME_Y as usize + 20) * buffer.width + 54],
-            title_tick_flame_palette_index(54, 20, 0).unwrap()
+            title_tick_palette_index(54, 20, 0)
         );
         assert_eq!(
             buffer.pixels[(TITLE_TICK_FRAME_Y as usize + 20) * buffer.width + 120],
@@ -13294,14 +13309,35 @@ mod tests {
         // `cleak/u5-spec#65`: the clean replacement keeps the
         // independently-authored flame silhouette and treats non-flame
         // pixels as opaque black inside the title-tick rectangle.
-        assert_eq!(title_tick_flame_palette_index(54, 8, 0), None);
-        assert_eq!(title_tick_flame_palette_index(54, 20, 0), Some(0x0E));
-        assert_eq!(title_tick_flame_palette_index(54, 40, 0), Some(0x06));
-        assert_eq!(title_tick_flame_palette_index(160, 20, 1), Some(0x0C));
-        assert_eq!(title_tick_flame_palette_index(160, 40, 1), Some(0x04));
-        assert_eq!(title_tick_flame_palette_index(266, 20, 2), Some(0x0E));
-        assert_eq!(title_tick_flame_palette_index(266, 40, 3), Some(0x06));
-        assert_eq!(title_tick_flame_palette_index(120, 20, 0), None);
+        assert_eq!(u5_runtime::title_tick_flame_palette_index(54, 8, 0), None);
+        assert_eq!(
+            u5_runtime::title_tick_flame_palette_index(54, 20, 0),
+            Some(0x0E)
+        );
+        assert_eq!(
+            u5_runtime::title_tick_flame_palette_index(54, 40, 0),
+            Some(0x06)
+        );
+        assert_eq!(
+            u5_runtime::title_tick_flame_palette_index(160, 20, 1),
+            Some(0x0C)
+        );
+        assert_eq!(
+            u5_runtime::title_tick_flame_palette_index(160, 40, 1),
+            Some(0x04)
+        );
+        assert_eq!(
+            u5_runtime::title_tick_flame_palette_index(266, 20, 2),
+            Some(0x0E)
+        );
+        assert_eq!(
+            u5_runtime::title_tick_flame_palette_index(266, 40, 3),
+            Some(0x06)
+        );
+        assert_eq!(u5_runtime::title_tick_flame_palette_index(120, 20, 0), None);
+        assert_eq!(title_tick_palette_index(54, 8, 0), 0x00);
+        assert_eq!(title_tick_palette_index(120, 20, 0), 0x00);
+        assert_eq!(title_tick_palette_index(54, 20, 0), 0x0E);
     }
 
     #[test]
