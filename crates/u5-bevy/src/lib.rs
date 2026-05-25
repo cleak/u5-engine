@@ -7144,6 +7144,7 @@ fn run_visual_intro_menu_app(
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            title_tick_visible_frame: 0,
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -7281,6 +7282,7 @@ struct VisualIntroState {
     title_signature_progress: usize,
     title_signature_complete: bool,
     title_tick_frame: u8,
+    title_tick_visible_frame: u8,
     start_menu_reveal: Option<RectColumnSweepTransition>,
     start_menu_reveal_backing: Option<Vec<u8>>,
     modal_backing: Option<Vec<u8>>,
@@ -7682,7 +7684,7 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
         let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
 
         if !title_phase && !intro.message_waiting_for_key {
-            intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
+            clear_carry_visual_intro_title_tick(intro);
             advanced = true;
             advanced |= advance_visual_intro_start_menu_reveal(intro);
         }
@@ -7718,12 +7720,19 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
         return advanced;
     } else {
         let mut title_tick_frame = intro.title_tick_frame;
+        let title_tick_visible_frame = intro.title_tick_frame;
         if !advance_visual_intro_panel_animation(&mut intro.panel, &mut title_tick_frame) {
             return false;
         }
         intro.title_tick_frame = title_tick_frame;
+        intro.title_tick_visible_frame = title_tick_visible_frame;
         true
     }
+}
+
+fn clear_carry_visual_intro_title_tick(intro: &mut VisualIntroState) {
+    intro.title_tick_visible_frame = intro.title_tick_frame;
+    intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
 }
 
 fn advance_visual_intro_panel_animation(
@@ -7857,6 +7866,8 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
         intro.title_signature_progress = 0;
         intro.title_signature_complete = true;
         intro.title_tick_frame = 0;
+        intro.title_tick_visible_frame = 0;
+        clear_carry_visual_intro_title_tick(intro);
         intro.menu_idle_ticks = 0;
         intro.start_menu_reveal = None;
         intro.start_menu_reveal_backing = None;
@@ -7872,6 +7883,7 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
     if intro.message_waiting_for_key {
         intro.message_waiting_for_key = false;
         intro.message.clear();
+        clear_carry_visual_intro_title_tick(intro);
         intro.menu_idle_ticks = 0;
         return true;
     }
@@ -8780,7 +8792,7 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
             visual_intro_start_menu_rgba(
                 &intro.game_dir,
                 intro.raster_depth,
-                intro.title_tick_frame,
+                intro.title_tick_visible_frame,
             )
             .or_else(|| visual_intro_title_art_rgba(&intro.game_dir, None, None))
         };
@@ -9214,6 +9226,12 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
         )
         .unwrap_or_else(|_| visual_intro_final_title_backing_rgba(intro))
     });
+    draw_title_tick_overlay_rgba(
+        &mut rgba,
+        INTRO_FRAMEBUFFER_WIDTH as usize,
+        INTRO_FRAMEBUFFER_HEIGHT as usize,
+        intro.title_tick_visible_frame,
+    );
 
     let VisualIntroPanel::ReturnToView {
         preview_frames_rgba,
@@ -10356,6 +10374,7 @@ fn write_visual_intro_report_inner(
         title_signature_progress: 0,
         title_signature_complete: static_title,
         title_tick_frame: 0,
+        title_tick_visible_frame: 0,
         start_menu_reveal: None,
         start_menu_reveal_backing: None,
         modal_backing: None,
@@ -11864,6 +11883,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            title_tick_visible_frame: 0,
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -11897,6 +11917,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            title_tick_visible_frame: 0,
             start_menu_reveal: Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT)),
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -12040,6 +12061,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: true,
             title_tick_frame: 0,
+            title_tick_visible_frame: 0,
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -12156,6 +12178,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            title_tick_visible_frame: 0,
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -12216,10 +12239,55 @@ mod tests {
     }
 
     #[test]
+    fn intro_title_dismiss_runs_startsc_clear_carry_tick() {
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: intro_title_flourish_total_steps(),
+            title_flourish_complete: true,
+            title_signature_progress: 0,
+            title_signature_complete: true,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
+            message: String::new(),
+            panel: VisualIntroPanel::Menu,
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        assert!(step_visual_intro(&mut intro, 'x'));
+
+        assert_eq!(intro.title_tick_visible_frame, 0);
+        assert_eq!(intro.title_tick_frame, title_tick_next_frame(0));
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_menu_idle_draws_current_title_tick_then_advances_counter() {
+        let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
+        intro.title_tick_frame = 2;
+        intro.title_tick_visible_frame = 0;
+
+        assert!(advance_visual_intro_animation_tick(&mut intro));
+
+        assert_eq!(intro.title_tick_visible_frame, 2);
+        assert_eq!(intro.title_tick_frame, title_tick_next_frame(2));
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
     fn visual_intro_menu_message_wait_consumes_next_key_without_dispatch() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
         intro.message = "No active game".to_string();
         intro.message_waiting_for_key = true;
+        intro.title_tick_frame = 2;
+        intro.title_tick_visible_frame = 0;
         intro.menu_idle_ticks = 57;
 
         assert!(step_visual_intro(&mut intro, 'j'));
@@ -12228,6 +12296,8 @@ mod tests {
         assert!(intro.message.is_empty());
         assert!(!intro.message_waiting_for_key);
         assert_eq!(intro.menu_idle_ticks, 0);
+        assert_eq!(intro.title_tick_visible_frame, 2);
+        assert_eq!(intro.title_tick_frame, title_tick_next_frame(2));
         assert!(intro.launch_result.lock().unwrap().is_none());
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
@@ -14688,6 +14758,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            title_tick_visible_frame: 0,
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -14779,6 +14850,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            title_tick_visible_frame: 0,
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -14830,6 +14902,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            title_tick_visible_frame: 0,
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -15135,6 +15208,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            title_tick_visible_frame: 0,
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -15181,6 +15255,46 @@ mod tests {
     }
 
     #[test]
+    fn return_to_view_intro_frame_ticks_over_preserved_backing() {
+        let mut intro = visual_intro_state_with_panel(
+            debug_game_dir(),
+            VisualIntroPanel::ReturnToView {
+                summary: "Preview".to_string(),
+                preview_frames_rgba: vec![vec![0x00, 0x00, 0x00, 0xff]],
+                frame_metadata: vec![VisualReturnToViewFrameMeta {
+                    command_index: 6,
+                    elapsed_title_ticks: 12,
+                    kind: ReturnToViewFrameKind::PreviewTick,
+                    caption: Some("The Castle of Lord British"),
+                }],
+                preview_frame_index: 0,
+                preview_width: 1,
+                preview_height: 1,
+            },
+        );
+        intro.modal_backing = Some(vec![
+            0x00;
+            (INTRO_FRAMEBUFFER_WIDTH as usize)
+                * (INTRO_FRAMEBUFFER_HEIGHT as usize)
+                * 4
+        ]);
+        intro.title_tick_visible_frame = 0;
+
+        let frame = render_intro_frame(&mut intro);
+
+        assert_eq!(
+            rgba_pixel(
+                &frame,
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                54,
+                TITLE_TICK_FRAME_Y as usize + 20
+            ),
+            [0xff, 0xff, 0x55, 0xff]
+        );
+        let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
     fn return_to_view_intro_frame_draws_fixed_wipe_rectangles() {
         let mut intro = VisualIntroState {
             game_dir: debug_game_dir(),
@@ -15191,6 +15305,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            title_tick_visible_frame: 0,
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
@@ -15288,6 +15403,7 @@ mod tests {
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
+            title_tick_visible_frame: 0,
             start_menu_reveal: None,
             start_menu_reveal_backing: None,
             modal_backing: None,
