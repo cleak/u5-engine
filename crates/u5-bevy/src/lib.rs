@@ -7887,15 +7887,13 @@ fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
             }
             advanced = true;
         } else if title_phase && !intro.title_signature_complete {
-            let Ok(signature) = load_british_pth(&intro.game_dir) else {
-                intro.title_signature_complete = true;
-                return true;
-            };
+            let signature =
+                load_british_pth(&intro.game_dir).expect("intro signature requires BRITISH.PTH");
             let total_steps = british_signature_step_count(&signature);
-            if total_steps == 0 {
-                intro.title_signature_complete = true;
-                return true;
-            }
+            assert!(
+                total_steps > 0,
+                "intro signature path has no drawable steps"
+            );
 
             intro.title_signature_progress =
                 (intro.title_signature_progress + SIGNATURE_STEPS_PER_TICK).min(total_steps);
@@ -9659,28 +9657,35 @@ fn blit_intro_title_flourish_step_buffer(
     step: usize,
 ) {
     let Some((slot, group_index)) = intro_title_flourish_frame_for_step(step) else {
-        return;
+        panic!("intro title flourish step {step} has no published reveal group");
     };
     let Some(placement) = TITLE_BIT_INITIAL_PLACEMENTS
         .iter()
         .copied()
         .find(|placement| usize::from(placement.slot) == slot)
     else {
-        return;
+        panic!("intro title flourish slot {slot} has no published placement");
     };
     let Some(groups) = TITLE_FLOURISH_ROW_REVEAL_GROUPS.get(slot) else {
-        return;
+        panic!("intro title flourish slot {slot} has no row reveal groups");
     };
     let Some(src) = title.blocks.get(slot) else {
-        return;
+        panic!("TITLE.BIT is missing intro flourish slot {slot}");
     };
-    let draw_height = usize::from(placement.height).min(src.height);
-    let draw_width = usize::from(placement.width).min(src.width);
+    let draw_height = usize::from(placement.height);
+    let draw_width = usize::from(placement.width);
+    assert!(
+        src.width >= draw_width && src.height >= draw_height,
+        "TITLE.BIT flourish slot {slot} is {}x{}, expected at least {draw_width}x{draw_height}",
+        src.width,
+        src.height
+    );
     for group in groups.iter().take(group_index + 1) {
         for row in group.iter().copied().map(usize::from) {
-            if row >= draw_height {
-                continue;
-            }
+            assert!(
+                row < draw_height,
+                "intro title flourish slot {slot} reveal row {row} exceeds height {draw_height}"
+            );
             blit_intro_title_row_buffer(
                 dst,
                 src,
@@ -9704,14 +9709,24 @@ fn blit_intro_title_row_buffer(
     foreground: u8,
 ) {
     let target_y = base_y + source_y;
-    if target_y >= dst.height {
-        return;
-    }
+    assert!(
+        target_y < dst.height,
+        "intro title row target y {target_y} outside framebuffer height {}",
+        dst.height
+    );
+    assert!(
+        source_y < src.height && draw_width <= src.width,
+        "intro title row source ({draw_width}x row {source_y}) outside bitmap {}x{}",
+        src.width,
+        src.height
+    );
     for x in 0..draw_width {
         let target_x = base_x + x;
-        if target_x >= dst.width {
-            break;
-        }
+        assert!(
+            target_x < dst.width,
+            "intro title row target x {target_x} outside framebuffer width {}",
+            dst.width
+        );
         let source_pixel = src.pixels[source_y * src.width + x];
         dst.pixels[target_y * dst.width + target_x] = if source_pixel == 0 {
             0
@@ -9742,23 +9757,42 @@ fn blit_intro_title_placement_buffer_with_color(
         TitleBitAsset::British => (placement.slot == 0).then_some(british),
     };
     let Some(src) = src else {
-        return;
+        panic!(
+            "intro title placement requires {:?} slot {}",
+            placement.asset, placement.slot
+        );
     };
 
-    let draw_width = usize::from(placement.width).min(src.width);
-    let draw_height = usize::from(placement.height).min(src.height);
+    let draw_width = usize::from(placement.width);
+    let draw_height = usize::from(placement.height);
+    assert!(
+        src.width >= draw_width && src.height >= draw_height,
+        "intro title placement {:?} slot {} is {}x{}, expected at least {draw_width}x{draw_height}",
+        placement.asset,
+        placement.slot,
+        src.width,
+        src.height
+    );
     let base_x = usize::from(placement.top_left_x);
     let base_y = usize::from(placement.top_left_y);
     for y in 0..draw_height {
         let target_y = base_y + y;
-        if target_y >= dst.height {
-            break;
-        }
+        assert!(
+            target_y < dst.height,
+            "intro title placement {:?} slot {} target y {target_y} outside framebuffer height {}",
+            placement.asset,
+            placement.slot,
+            dst.height
+        );
         for x in 0..draw_width {
             let target_x = base_x + x;
-            if target_x >= dst.width {
-                break;
-            }
+            assert!(
+                target_x < dst.width,
+                "intro title placement {:?} slot {} target x {target_x} outside framebuffer width {}",
+                placement.asset,
+                placement.slot,
+                dst.width
+            );
             let source_pixel = src.pixels[y * src.width + x];
             dst.pixels[target_y * dst.width + target_x] = if source_pixel == 0 {
                 0
@@ -9803,14 +9837,20 @@ fn draw_british_signature_buffer(
     signature: &BritishPth,
     max_steps: usize,
 ) {
+    assert_eq!(
+        signature.segments.len(),
+        BRITISH_PTH_PEN_ORIGINS.len(),
+        "intro signature requires one path segment per published pen origin"
+    );
     let mut remaining = max_steps;
     for (segment_index, origin) in BRITISH_PTH_PEN_ORIGINS.iter().enumerate() {
         if remaining == 0 {
             break;
         }
-        let Some(segment) = signature.segments.get(segment_index) else {
-            break;
-        };
+        let segment = signature
+            .segments
+            .get(segment_index)
+            .expect("intro signature segment was validated above");
         let mut x = i16::from(origin.0);
         let mut y = i16::from(origin.1);
         for stroke in segment {
@@ -12083,6 +12123,14 @@ mod tests {
         ]
     }
 
+    fn solid_bitmap(width: usize, height: usize, value: u8) -> MonochromeBitmap {
+        MonochromeBitmap {
+            width,
+            height,
+            pixels: vec![value; width * height],
+        }
+    }
+
     fn intro_test_preview_buffer(width: usize, height: usize, rgba: Vec<u8>) -> IntroDisplayBuffer {
         IntroDisplayBuffer::from_rgba(width, height, &rgba)
     }
@@ -12992,38 +13040,14 @@ mod tests {
 
     #[test]
     fn intro_title_art_composition_clears_lower_band_then_draws_remaining_slots() {
-        let blank = MonochromeBitmap {
-            width: 1,
-            height: 1,
-            pixels: vec![0],
-        };
+        let blank = solid_bitmap(1, 1, 0);
         let mut blocks = vec![blank; 10];
-        blocks[6] = MonochromeBitmap {
-            width: 1,
-            height: 61,
-            pixels: vec![1; 61],
-        };
-        blocks[7] = MonochromeBitmap {
-            width: 1,
-            height: 1,
-            pixels: vec![1],
-        };
-        blocks[8] = MonochromeBitmap {
-            width: 1,
-            height: 1,
-            pixels: vec![1],
-        };
-        blocks[9] = MonochromeBitmap {
-            width: 1,
-            height: 1,
-            pixels: vec![1],
-        };
+        blocks[6] = solid_bitmap(280, 61, 1);
+        blocks[7] = solid_bitmap(104, 33, 1);
+        blocks[8] = solid_bitmap(16, 15, 1);
+        blocks[9] = solid_bitmap(112, 33, 1);
         let title = TitleBitImages { blocks };
-        let british = MonochromeBitmap {
-            width: 1,
-            height: 1,
-            pixels: vec![1],
-        };
+        let british = solid_bitmap(272, 62, 1);
 
         let rgba = compose_intro_title_art_rgba(
             &title,
@@ -13050,33 +13074,14 @@ mod tests {
 
     #[test]
     fn intro_title_art_defers_completed_signature_overlays_until_path_finishes() {
-        let blank = MonochromeBitmap {
-            width: 1,
-            height: 1,
-            pixels: vec![0],
-        };
+        let blank = solid_bitmap(1, 1, 0);
         let mut blocks = vec![blank; 10];
-        blocks[7] = MonochromeBitmap {
-            width: 1,
-            height: 1,
-            pixels: vec![1],
-        };
-        blocks[8] = MonochromeBitmap {
-            width: 1,
-            height: 1,
-            pixels: vec![1],
-        };
-        blocks[9] = MonochromeBitmap {
-            width: 1,
-            height: 1,
-            pixels: vec![1],
-        };
+        blocks[6] = solid_bitmap(280, 61, 0);
+        blocks[7] = solid_bitmap(104, 33, 1);
+        blocks[8] = solid_bitmap(16, 15, 1);
+        blocks[9] = solid_bitmap(112, 33, 1);
         let title = TitleBitImages { blocks };
-        let british = MonochromeBitmap {
-            width: 1,
-            height: 1,
-            pixels: vec![1],
-        };
+        let british = solid_bitmap(272, 62, 1);
 
         let rgba = compose_intro_title_art_rgba(
             &title,
@@ -13095,28 +13100,12 @@ mod tests {
 
     #[test]
     fn intro_title_flourish_replaces_prior_slots_and_reveals_rows() {
-        let blank = MonochromeBitmap {
-            width: 1,
-            height: 1,
-            pixels: vec![0],
-        };
+        let blank = solid_bitmap(1, 1, 0);
         let mut blocks = vec![blank; 10];
-        blocks[0] = MonochromeBitmap {
-            width: 24,
-            height: 3,
-            pixels: vec![1; 24 * 3],
-        };
-        blocks[1] = MonochromeBitmap {
-            width: 40,
-            height: 7,
-            pixels: vec![1; 40 * 7],
-        };
+        blocks[0] = solid_bitmap(24, 3, 1);
+        blocks[1] = solid_bitmap(40, 7, 1);
         let title = TitleBitImages { blocks };
-        let british = MonochromeBitmap {
-            width: 1,
-            height: 1,
-            pixels: vec![0],
-        };
+        let british = solid_bitmap(1, 1, 0);
 
         let rgba = compose_intro_title_art_rgba(
             &title,
