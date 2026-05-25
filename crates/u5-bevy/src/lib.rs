@@ -7995,7 +7995,9 @@ fn advance_visual_intro_story_auto_step(panel: &mut VisualIntroPanel) -> bool {
     if *step + 1 >= INTRO_STORY_STEP_COUNT || intro_story_step_waits_for_input(*step) {
         return false;
     }
-    *step = (*step).saturating_add(1);
+    *step = step
+        .checked_add(1)
+        .expect("intro story auto-step counter overflowed");
     *transition = None;
     true
 }
@@ -8030,7 +8032,9 @@ fn advance_visual_intro_story_wipe(
 
     *title_tick_frame = title_tick_next_frame(*title_tick_frame);
     if active_transition.advance_title_tick() {
-        *step = (*step).saturating_add(1);
+        *step = step
+            .checked_add(1)
+            .expect("intro story wipe step counter overflowed");
         *transition = None;
     }
     true
@@ -8048,7 +8052,9 @@ fn advance_visual_intro_return_to_view(
     else {
         return false;
     };
-    let next_index = preview_frame_index.saturating_add(1);
+    let next_index = preview_frame_index
+        .checked_add(1)
+        .expect("Return-to-View preview frame index overflowed");
     if next_index >= preview_frames.len() {
         return false;
     }
@@ -8066,7 +8072,10 @@ fn visual_intro_return_to_view_complete(panel: &VisualIntroPanel) -> bool {
     else {
         return false;
     };
-    preview_frame_index.saturating_add(1) >= preview_frames.len()
+    preview_frame_index
+        .checked_add(1)
+        .expect("Return-to-View preview frame index overflowed")
+        >= preview_frames.len()
 }
 
 fn advance_visual_intro_finished_menu_idle(intro: &mut VisualIntroState) -> bool {
@@ -8077,7 +8086,10 @@ fn advance_visual_intro_finished_menu_idle(intro: &mut VisualIntroState) -> bool
     {
         return false;
     }
-    intro.menu_idle_ticks = intro.menu_idle_ticks.saturating_add(1);
+    intro.menu_idle_ticks = intro
+        .menu_idle_ticks
+        .checked_add(1)
+        .expect("intro menu idle tick counter overflowed");
     if intro.menu_idle_ticks < INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS {
         return false;
     }
@@ -8203,7 +8215,11 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             preview_frame_index,
             ..
         } => {
-            if preview_frame_index.saturating_add(1) >= preview_frames.len() {
+            if preview_frame_index
+                .checked_add(1)
+                .expect("Return-to-View preview frame index overflowed")
+                >= preview_frames.len()
+            {
                 VisualIntroPanelOutcome::ReturnToMenu {
                     subflow: IntroSubflow::ReturnToView,
                     result: IntroSubflowResult::ReturnedToMenu,
@@ -8984,7 +9000,6 @@ fn summarize_intro_story(records: &StoryRecords, step: usize) -> String {
 
 fn visual_return_to_view_frame_kind_label(kind: ReturnToViewFrameKind) -> &'static str {
     match kind {
-        ReturnToViewFrameKind::StripReveal { .. } => "Map strip reveal",
         ReturnToViewFrameKind::PreviewTick => "Preview title tick",
         ReturnToViewFrameKind::CellEffectStep { .. } => "Local cell-effect step",
         ReturnToViewFrameKind::CellEffectFinalTick { .. } => "Local cell-effect final tick",
@@ -10063,20 +10078,21 @@ fn visual_intro_story_draw_specs(step: usize) -> Vec<IntroStoryDrawSpec> {
         }),
         _ => {
             if intro_step_has_story6_secondary_pass(step) {
-                if let Some(primary) = intro_story_art_placement_for_step(step) {
-                    if let Some(subimage) = intro_story6_secondary_subimage(step) {
-                        specs.push(IntroStoryDrawSpec {
-                            stem: "STORY6",
-                            subimage,
-                            top_left_x: primary.top_left_x,
-                            top_left_y: primary
-                                .top_left_y
-                                .saturating_add(INTRO_STORY6_SECONDARY_Y_DELTA),
-                            clip_width: None,
-                            clip_height: None,
-                        });
-                    }
-                }
+                let primary = intro_story_art_placement_for_step(step)
+                    .expect("intro STORY6 secondary pass requires a primary placement");
+                let subimage = intro_story6_secondary_subimage(step)
+                    .expect("intro STORY6 secondary pass requires a published secondary subimage");
+                specs.push(IntroStoryDrawSpec {
+                    stem: "STORY6",
+                    subimage,
+                    top_left_x: primary.top_left_x,
+                    top_left_y: primary
+                        .top_left_y
+                        .checked_add(INTRO_STORY6_SECONDARY_Y_DELTA)
+                        .expect("intro STORY6 secondary Y placement overflowed"),
+                    clip_width: None,
+                    clip_height: None,
+                });
             }
         }
     }
@@ -10105,8 +10121,14 @@ fn visual_intro_story_draw_specs_for_active_panel(
 
     if let Some((start_x, end_x)) = transition.revealed_columns() {
         let (_rect_x0, rect_y0, _rect_x1, rect_y1) = transition.rect;
-        let clip_width = end_x.saturating_sub(start_x).saturating_add(1);
-        let clip_height = rect_y1.saturating_sub(rect_y0).saturating_add(1);
+        let clip_width = end_x
+            .checked_sub(start_x)
+            .and_then(|width| width.checked_add(1))
+            .expect("intro story transition revealed columns are invalid");
+        let clip_height = rect_y1
+            .checked_sub(rect_y0)
+            .and_then(|height| height.checked_add(1))
+            .expect("intro story transition rectangle rows are invalid");
         for spec in &mut specs {
             if spec.stem == "STORY1"
                 && spec.subimage == INTRO_STEP_1_EXTRA_SUBIMAGE
@@ -10655,13 +10677,21 @@ fn overlay_proportional_text_rgba(
         placement.line_height,
     )?;
     if placement.shadow {
+        let shadow_x = placement
+            .x
+            .checked_add(1)
+            .expect("proportional text shadow X placement overflowed");
+        let shadow_y = placement
+            .y
+            .checked_add(1)
+            .expect("proportional text shadow Y placement overflowed");
         overlay_monochrome_bitmap_rgba(
             dst,
             dst_width,
             dst_height,
             &bitmap,
-            placement.x.saturating_add(1),
-            placement.y.saturating_add(1),
+            shadow_x,
+            shadow_y,
             [0x00, 0x00, 0x00, 0xff],
         );
     }
@@ -10692,11 +10722,19 @@ fn overlay_proportional_text_buffer(
         placement.line_height,
     )?;
     if placement.shadow {
+        let shadow_x = placement
+            .x
+            .checked_add(1)
+            .expect("proportional text shadow X placement overflowed");
+        let shadow_y = placement
+            .y
+            .checked_add(1)
+            .expect("proportional text shadow Y placement overflowed");
         overlay_monochrome_bitmap_buffer(
             dst,
             &bitmap,
-            placement.x.saturating_add(1),
-            placement.y.saturating_add(1),
+            shadow_x,
+            shadow_y,
             ega_palette_index_from_rgba(&[0x00, 0x00, 0x00, 0xff]),
         );
     }

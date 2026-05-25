@@ -22,8 +22,6 @@ pub const RTV_STRIP_SOURCE_COLUMNS: usize = 19;
 pub const RTV_STRIP_SOURCE_ROWS: usize = 4;
 pub const RTV_STRIP_VISIBLE_COLUMNS: usize = 4;
 pub const RTV_STRIP_VISIBLE_ROWS: usize = 19;
-pub const RTV_STRIP_REVEAL_MIDDLE_ROW: usize = RTV_STRIP_VISIBLE_ROWS / 2;
-pub const RTV_STRIP_REVEAL_STEPS: u8 = RTV_STRIP_REVEAL_MIDDLE_ROW as u8 + 1;
 pub const RTV_STRIP_RECORD_BYTES: usize = MISCMAPS_RTV_STRIP_ROW_STRIDE * RTV_STRIP_SOURCE_ROWS;
 pub const RTV_STRIP_TILE_COUNT: usize = RTV_STRIP_VISIBLE_COLUMNS * RTV_STRIP_VISIBLE_ROWS;
 pub const RTV_EFFECT_SENTINEL_TILE: u8 = 0xfe;
@@ -61,7 +59,11 @@ pub const RTV_WAIT_EXITS_ON_KEYPRESS: bool = true;
 /// `formats/location-dat.md` Return-to-View commands draw special actors in
 /// the visible text/map screen seven tile rows below the script-local actor Y.
 pub const fn return_to_view_actor_screen_y(actor_y: u8) -> u8 {
-    actor_y.saturating_add(7)
+    assert!(
+        actor_y <= u8::MAX - 7,
+        "Return-to-View actor screen Y overflows"
+    );
+    actor_y + 7
 }
 
 /// Resolve a Return-to-View map-cell tile through the title-screen
@@ -270,10 +272,20 @@ impl ReturnToViewPreviewState {
                 self.move_actor(slot, direction)?;
             }
             ReturnToViewCommand::RunPreviewTick { ticks } => {
-                self.total_ticks = self.total_ticks.saturating_add(u32::from(ticks));
+                add_return_to_view_counter(
+                    &mut self.total_ticks,
+                    u32::from(ticks),
+                    "Return-to-View total tick counter overflowed",
+                );
             }
             ReturnToViewCommand::OpenCellEffect { x, y } => {
-                self.open_cell_effect(x, y.saturating_add(7))?;
+                let screen_y = y.checked_add(7).ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Return-to-View open-cell effect Y overflows screen row offset",
+                    )
+                })?;
+                self.open_cell_effect(x, screen_y)?;
             }
             ReturnToViewCommand::CloseCellEffect => {
                 let Some((x, y)) = self.cached_effect_cell else {
@@ -287,25 +299,30 @@ impl ReturnToViewPreviewState {
                 self.backing[index] = RTV_EFFECT_SENTINEL_TILE;
                 self.visible[index] = RTV_CLOSE_EFFECT_FINAL_TILE;
                 self.backing[index] = RTV_CLOSE_EFFECT_FINAL_TILE;
-                self.cell_effect_steps = self
-                    .cell_effect_steps
-                    .saturating_add(u32::from(RTV_CELL_EFFECT_STEPS));
-                self.total_ticks = self.total_ticks.saturating_add(u32::from(
-                    RTV_CELL_EFFECT_STEPS + RTV_CELL_EFFECT_FINAL_TICKS,
-                ));
+                add_return_to_view_counter(
+                    &mut self.cell_effect_steps,
+                    u32::from(RTV_CELL_EFFECT_STEPS),
+                    "Return-to-View cell-effect step counter overflowed",
+                );
+                add_return_to_view_counter(
+                    &mut self.total_ticks,
+                    u32::from(RTV_CELL_EFFECT_STEPS + RTV_CELL_EFFECT_FINAL_TICKS),
+                    "Return-to-View total tick counter overflowed",
+                );
             }
             ReturnToViewCommand::LoadMapStrip { strip } => {
                 self.load_map_strip(strips, strip)?;
-                self.total_ticks = self
-                    .total_ticks
-                    .saturating_add(u32::from(RTV_STRIP_REVEAL_STEPS));
             }
             ReturnToViewCommand::TemporaryActorDraw { slot }
             | ReturnToViewCommand::TemporaryActorDrawOverBacking { slot } => {
                 let slot = rtv_slot_index(slot)?;
                 let actor = self.actors[slot];
                 let _ = preview_cell_index_checked(actor.x, actor.y)?;
-                self.temporary_actor_draws = self.temporary_actor_draws.saturating_add(1);
+                add_return_to_view_counter(
+                    &mut self.temporary_actor_draws,
+                    1,
+                    "Return-to-View temporary actor draw counter overflowed",
+                );
             }
             ReturnToViewCommand::RestartStream => {
                 return Ok(ReturnToViewControl::Restart);
@@ -319,23 +336,37 @@ impl ReturnToViewPreviewState {
                 let slot = rtv_slot_index(slot)?;
                 let actor = self.actors[slot];
                 let _ = preview_cell_index_checked(actor.x, actor.y)?;
-                self.fixed_wipes = self.fixed_wipes.saturating_add(1);
-                self.fixed_wipe_rectangle_steps = self
-                    .fixed_wipe_rectangle_steps
-                    .saturating_add(u32::from(RTV_FIXED_WIPE_STEPS));
-                self.fixed_wait_ticks = self
-                    .fixed_wait_ticks
-                    .saturating_add(u32::from(RTV_WAIT_FIXED_TICKS));
-                self.total_ticks = self
-                    .total_ticks
-                    .saturating_add(u32::from(RTV_FIXED_WIPE_TOTAL_TICKS));
+                add_return_to_view_counter(
+                    &mut self.fixed_wipes,
+                    1,
+                    "Return-to-View fixed wipe counter overflowed",
+                );
+                add_return_to_view_counter(
+                    &mut self.fixed_wipe_rectangle_steps,
+                    u32::from(RTV_FIXED_WIPE_STEPS),
+                    "Return-to-View fixed wipe rectangle counter overflowed",
+                );
+                add_return_to_view_counter(
+                    &mut self.fixed_wait_ticks,
+                    u32::from(RTV_WAIT_FIXED_TICKS),
+                    "Return-to-View fixed wait tick counter overflowed",
+                );
+                add_return_to_view_counter(
+                    &mut self.total_ticks,
+                    u32::from(RTV_FIXED_WIPE_TOTAL_TICKS),
+                    "Return-to-View total tick counter overflowed",
+                );
             }
             ReturnToViewCommand::ClearActors => {
                 self.actors = [ReturnToViewActor::default(); RTV_ACTOR_SLOTS];
             }
             ReturnToViewCommand::MoveActorAndTick { slot, direction } => {
                 self.move_actor(slot, direction)?;
-                self.total_ticks = self.total_ticks.saturating_add(1);
+                add_return_to_view_counter(
+                    &mut self.total_ticks,
+                    1,
+                    "Return-to-View total tick counter overflowed",
+                );
             }
             ReturnToViewCommand::LoopStart { count } => {
                 self.loop_count = count;
@@ -406,14 +437,22 @@ impl ReturnToViewPreviewState {
         self.backing[index] = RTV_EFFECT_SENTINEL_TILE;
         self.visible[index] = RTV_OPEN_EFFECT_FINAL_TILE;
         self.backing[index] = RTV_OPEN_EFFECT_FINAL_TILE;
-        self.cell_effect_steps = self
-            .cell_effect_steps
-            .saturating_add(u32::from(RTV_CELL_EFFECT_STEPS));
-        self.total_ticks = self.total_ticks.saturating_add(u32::from(
-            RTV_CELL_EFFECT_STEPS + RTV_CELL_EFFECT_FINAL_TICKS,
-        ));
+        add_return_to_view_counter(
+            &mut self.cell_effect_steps,
+            u32::from(RTV_CELL_EFFECT_STEPS),
+            "Return-to-View cell-effect step counter overflowed",
+        );
+        add_return_to_view_counter(
+            &mut self.total_ticks,
+            u32::from(RTV_CELL_EFFECT_STEPS + RTV_CELL_EFFECT_FINAL_TICKS),
+            "Return-to-View total tick counter overflowed",
+        );
         Ok(())
     }
+}
+
+fn add_return_to_view_counter(counter: &mut u32, amount: u32, message: &'static str) {
+    *counter = counter.checked_add(amount).expect(message);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -448,7 +487,6 @@ pub struct ReturnToViewPreviewRun {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReturnToViewFrameKind {
-    StripReveal { step: u8 },
     PreviewTick,
     CellEffectStep { step: u8 },
     CellEffectFinalTick { tick: u8 },
@@ -928,18 +966,11 @@ fn append_return_to_view_playback_frames(
                 );
             }
         }
-        ReturnToViewCommand::LoadMapStrip { .. } => {
-            for step in 0..RTV_STRIP_REVEAL_STEPS {
-                push_return_to_view_strip_reveal_frame(
-                    frames,
-                    command_index,
-                    before_ticks + u32::from(step) + 1,
-                    state,
-                    step,
-                );
-            }
-        }
+        ReturnToViewCommand::LoadMapStrip { .. } => {}
         ReturnToViewCommand::OpenCellEffect { x, y } => {
+            let screen_y = y
+                .checked_add(7)
+                .expect("Return-to-View open-cell playback Y overflows screen row offset");
             for step in 0..RTV_CELL_EFFECT_STEPS {
                 push_return_to_view_cell_effect_frame(
                     frames,
@@ -948,7 +979,7 @@ fn append_return_to_view_playback_frames(
                     ReturnToViewFrameKind::CellEffectStep { step },
                     before_state,
                     x,
-                    y.saturating_add(7),
+                    screen_y,
                     RTV_EFFECT_SENTINEL_TILE,
                 );
             }
@@ -960,15 +991,15 @@ fn append_return_to_view_playback_frames(
                     ReturnToViewFrameKind::CellEffectFinalTick { tick },
                     state,
                     x,
-                    y.saturating_add(7),
+                    screen_y,
                     RTV_OPEN_EFFECT_FINAL_TILE,
                 );
             }
         }
         ReturnToViewCommand::CloseCellEffect => {
-            let Some((x, y)) = before_state.cached_effect_cell else {
-                return;
-            };
+            let (x, y) = before_state
+                .cached_effect_cell
+                .expect("Return-to-View close-cell playback has no cached open-cell coordinate");
             for step in 0..RTV_CELL_EFFECT_STEPS {
                 push_return_to_view_cell_effect_frame(
                     frames,
@@ -1063,25 +1094,6 @@ fn append_return_to_view_playback_frames(
     }
 }
 
-fn push_return_to_view_strip_reveal_frame(
-    frames: &mut Vec<ReturnToViewPlaybackFrame>,
-    command_index: usize,
-    elapsed_title_ticks: u32,
-    state: &ReturnToViewPreviewState,
-    step: u8,
-) {
-    let mut state = state.clone();
-    mask_return_to_view_unrevealed_strip_rows(&mut state, step);
-    state.total_ticks = elapsed_title_ticks;
-    frames.push(ReturnToViewPlaybackFrame {
-        command_index,
-        elapsed_title_ticks,
-        kind: ReturnToViewFrameKind::StripReveal { step },
-        state,
-        actor_draw: None,
-    });
-}
-
 fn push_return_to_view_cell_effect_frame(
     frames: &mut Vec<ReturnToViewPlaybackFrame>,
     command_index: usize,
@@ -1093,10 +1105,10 @@ fn push_return_to_view_cell_effect_frame(
     tile: u8,
 ) {
     let mut state = state.clone();
-    if let Some(index) = preview_cell_index(x, y) {
-        state.visible[index] = tile;
-        state.backing[index] = tile;
-    }
+    let index = preview_cell_index_checked(x, y)
+        .expect("Return-to-View cell-effect playback coordinate is outside preview buffer");
+    state.visible[index] = tile;
+    state.backing[index] = tile;
     state.total_ticks = elapsed_title_ticks;
     frames.push(ReturnToViewPlaybackFrame {
         command_index,
@@ -1105,34 +1117,6 @@ fn push_return_to_view_cell_effect_frame(
         state,
         actor_draw: None,
     });
-}
-
-fn mask_return_to_view_unrevealed_strip_rows(state: &mut ReturnToViewPreviewState, step: u8) {
-    for row in 0..RTV_STRIP_VISIBLE_ROWS {
-        if return_to_view_strip_reveal_row_visible(row, step) {
-            continue;
-        }
-        for col in 0..RTV_STRIP_VISIBLE_COLUMNS {
-            let index = row * RTV_PREVIEW_SIDE + col;
-            state.visible[index] = 0;
-            state.backing[index] = 0;
-        }
-    }
-}
-
-pub const fn return_to_view_strip_reveal_row_visible(row: usize, step: u8) -> bool {
-    if row >= RTV_STRIP_VISIBLE_ROWS {
-        return false;
-    }
-    let step = step as usize;
-    let min_row = RTV_STRIP_REVEAL_MIDDLE_ROW.saturating_sub(step);
-    let expanded_max = RTV_STRIP_REVEAL_MIDDLE_ROW + step;
-    let max_row = if expanded_max > RTV_STRIP_VISIBLE_ROWS - 1 {
-        RTV_STRIP_VISIBLE_ROWS - 1
-    } else {
-        expanded_max
-    };
-    row >= min_row && row <= max_row
 }
 
 fn push_return_to_view_frame(
@@ -1164,15 +1148,14 @@ fn push_return_to_view_actor_draw_frame(
 ) {
     let mut state = state.clone();
     let slot_index = usize::from(slot);
-    if slot_index >= state.actors.len() {
-        push_return_to_view_frame(frames, command_index, elapsed_title_ticks, kind, &state);
-        return;
-    }
-    let actor = state.actors[slot_index];
+    let actor = *state
+        .actors
+        .get(slot_index)
+        .expect("Return-to-View actor draw slot is outside actor table");
     let original_tile = actor.tile0;
-    let backing_tile = preview_cell_index(actor.x, actor.y)
-        .map(|index| state.backing[index])
-        .unwrap_or_default();
+    let backing_index = preview_cell_index_checked(actor.x, actor.y)
+        .expect("Return-to-View actor draw coordinate is outside preview buffer");
+    let backing_tile = state.backing[backing_index];
     state.actors[slot_index].tile0 = RTV_TEMPORARY_ACTOR_TILE;
     state.actors[slot_index].tile1 = RTV_TEMPORARY_ACTOR_TILE;
     frames.push(ReturnToViewPlaybackFrame {
@@ -1207,7 +1190,12 @@ fn push_return_to_view_fixed_actor_draw_frame(
     slot: u8,
 ) {
     let slot_index = usize::from(slot);
-    let actor = state.actors.get(slot_index).copied().unwrap_or_default();
+    let actor = *state
+        .actors
+        .get(slot_index)
+        .expect("Return-to-View fixed actor draw slot is outside actor table");
+    let _ = preview_cell_index_checked(actor.x, actor.y)
+        .expect("Return-to-View fixed actor draw coordinate is outside preview buffer");
     frames.push(ReturnToViewPlaybackFrame {
         command_index,
         elapsed_title_ticks,
@@ -1271,7 +1259,9 @@ pub fn render_return_to_view_preview_viewport_at_title_tick(
     let viewport = render_return_to_view_state_viewport(
         &run.state,
         atlas,
-        starting_title_tick.wrapping_add(run.report.total_ticks),
+        starting_title_tick
+            .checked_add(run.report.total_ticks)
+            .expect("Return-to-View render title tick overflowed"),
     )?;
     Ok((viewport, run.report))
 }
@@ -1284,7 +1274,9 @@ pub fn render_return_to_view_playback_frame_viewport(
     render_return_to_view_state_viewport(
         &frame.state,
         atlas,
-        starting_title_tick.wrapping_add(frame.elapsed_title_ticks),
+        starting_title_tick
+            .checked_add(frame.elapsed_title_ticks)
+            .expect("Return-to-View playback title tick overflowed"),
     )
 }
 
@@ -1578,7 +1570,7 @@ mod tests {
         assert_eq!(state.actors[3].x, 2);
         assert_eq!(state.actors[3].tile0, 0x44);
         assert_eq!(state.cell(2, 9), Some(RTV_CLOSE_EFFECT_FINAL_TILE));
-        assert_eq!(state.total_ticks, 34 + u32::from(RTV_STRIP_REVEAL_STEPS));
+        assert_eq!(state.total_ticks, 34);
         assert_eq!(state.cell_effect_steps, 30);
         assert_eq!(state.fixed_wait_ticks, 0);
     }
@@ -1604,7 +1596,7 @@ mod tests {
         assert!(report.restart_seen);
         assert_eq!(report.applied_commands, 9);
         assert_eq!(report.current_strip, Some(0));
-        assert_eq!(report.total_ticks, 6 + u32::from(RTV_STRIP_REVEAL_STEPS));
+        assert_eq!(report.total_ticks, 6);
         assert!(!report.max_commands_reached);
     }
 
@@ -1709,14 +1701,14 @@ mod tests {
     }
 
     #[test]
-    fn return_to_view_load_strip_reveals_from_middle_row_outward() {
+    fn return_to_view_load_strip_is_single_untimed_script_action() {
         let mut strips = ReturnToViewMapStrips {
             strips: [[0; RTV_STRIP_TILE_COUNT]; RTV_STRIP_COUNT],
         };
         for row in 0..RTV_STRIP_VISIBLE_ROWS {
             for col in 0..RTV_STRIP_VISIBLE_COLUMNS {
                 strips.strips[0][row * RTV_STRIP_VISIBLE_COLUMNS + col] =
-                    (10 + row as u8).saturating_add(col as u8);
+                    10 + row as u8 + col as u8;
             }
         }
         let script = ReturnToViewScript {
@@ -1728,44 +1720,11 @@ mod tests {
 
         let playback = run_return_to_view_playback_until_restart(&strips, &script, 32).unwrap();
 
-        assert_eq!(RTV_STRIP_REVEAL_MIDDLE_ROW, 9);
-        assert_eq!(RTV_STRIP_REVEAL_STEPS, 10);
-        assert_eq!(
-            playback
-                .frames
-                .iter()
-                .filter(|frame| matches!(frame.kind, ReturnToViewFrameKind::StripReveal { .. }))
-                .count(),
-            RTV_STRIP_REVEAL_STEPS as usize
-        );
-        assert!(return_to_view_strip_reveal_row_visible(9, 0));
-        assert!(!return_to_view_strip_reveal_row_visible(8, 0));
-        assert!(return_to_view_strip_reveal_row_visible(8, 1));
-        assert!(return_to_view_strip_reveal_row_visible(10, 1));
-        assert!(return_to_view_strip_reveal_row_visible(0, 9));
-        assert!(return_to_view_strip_reveal_row_visible(18, 9));
-        assert!(!return_to_view_strip_reveal_row_visible(19, 9));
-
-        let first = playback
-            .frames
-            .iter()
-            .find(|frame| matches!(frame.kind, ReturnToViewFrameKind::StripReveal { step: 0 }))
-            .expect("first strip reveal frame");
-        assert_eq!(first.state.visible[9 * RTV_PREVIEW_SIDE], 19);
-        assert_eq!(first.state.visible[8 * RTV_PREVIEW_SIDE], 0);
-        assert_eq!(first.state.visible[10 * RTV_PREVIEW_SIDE], 0);
-
-        let final_frame = playback
-            .frames
-            .iter()
-            .find(|frame| matches!(frame.kind, ReturnToViewFrameKind::StripReveal { step: 9 }))
-            .expect("final strip reveal frame");
-        assert_eq!(final_frame.state.visible[0], 10);
-        assert_eq!(final_frame.state.visible[18 * RTV_PREVIEW_SIDE], 28);
-        assert_eq!(
-            playback.run.report.total_ticks,
-            u32::from(RTV_STRIP_REVEAL_STEPS)
-        );
+        assert!(playback.frames.is_empty());
+        assert_eq!(playback.run.report.total_ticks, 0);
+        assert_eq!(playback.run.state.visible[0], 10);
+        assert_eq!(playback.run.state.visible[9 * RTV_PREVIEW_SIDE], 19);
+        assert_eq!(playback.run.state.visible[18 * RTV_PREVIEW_SIDE], 28);
     }
 
     #[test]
@@ -1888,18 +1847,7 @@ mod tests {
         let playback = run_return_to_view_playback_until_restart(&strips, &script, 64).unwrap();
 
         assert!(playback.run.report.restart_seen);
-        assert_eq!(
-            playback.run.report.total_ticks,
-            36 + u32::from(RTV_STRIP_REVEAL_STEPS)
-        );
-        assert_eq!(
-            playback
-                .frames
-                .iter()
-                .filter(|frame| matches!(frame.kind, ReturnToViewFrameKind::StripReveal { .. }))
-                .count(),
-            RTV_STRIP_REVEAL_STEPS as usize
-        );
+        assert_eq!(playback.run.report.total_ticks, 36);
         assert_eq!(
             playback
                 .frames
@@ -1948,7 +1896,7 @@ mod tests {
                 .frames
                 .last()
                 .map(|frame| frame.elapsed_title_ticks),
-            Some(36 + u32::from(RTV_STRIP_REVEAL_STEPS))
+            Some(36)
         );
         assert_eq!(playback.run.state.actors[0].x, 2);
 
@@ -2048,8 +1996,8 @@ mod tests {
             render_return_to_view_preview_viewport_at_title_tick(&strips, &script, &atlas, 1)
                 .unwrap();
 
-        assert_eq!(report.total_ticks, 2 + u32::from(RTV_STRIP_REVEAL_STEPS));
-        assert_eq!(viewport.pixel(0, 0), Some(0xD9 % 16));
+        assert_eq!(report.total_ticks, 2);
+        assert_eq!(viewport.pixel(0, 0), Some(0xDB % 16));
     }
 
     #[test]
@@ -2088,10 +2036,10 @@ mod tests {
         let second =
             render_return_to_view_playback_frame_viewport(preview_frames[1], &atlas, 0).unwrap();
 
-        assert_eq!(preview_frames[0].elapsed_title_ticks, 11);
-        assert_eq!(first.pixel(0, 0), Some(0xDB % 16));
-        assert_eq!(preview_frames[1].elapsed_title_ticks, 12);
-        assert_eq!(second.pixel(0, 0), Some(0xD8 % 16));
+        assert_eq!(preview_frames[0].elapsed_title_ticks, 1);
+        assert_eq!(first.pixel(0, 0), Some(0xD9 % 16));
+        assert_eq!(preview_frames[1].elapsed_title_ticks, 2);
+        assert_eq!(second.pixel(0, 0), Some(0xDA % 16));
     }
 
     #[test]
