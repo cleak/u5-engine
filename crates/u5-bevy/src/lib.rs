@@ -8229,6 +8229,9 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
         VisualIntroPanel::Story {
             step, transition, ..
         } => {
+            if !intro_story_step_waits_for_input(*step) {
+                return false;
+            }
             if *step == 1 {
                 if transition.is_none() {
                     *transition =
@@ -12975,6 +12978,50 @@ mod tests {
             }
             _ => panic!("story panel should remain active"),
         }
+    }
+
+    #[test]
+    fn intro_story_step_zero_ignores_keypress_before_auto_advance() {
+        let mut intro = VisualIntroState {
+            game_dir: debug_game_dir(),
+            raster_depth: TileGraphicsDepth::Ega16,
+            dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: intro_title_flourish_total_steps(),
+            title_flourish_complete: true,
+            title_signature_progress: 0,
+            title_signature_complete: true,
+            title_tick_frame: 0,
+            title_tick_visible_frame: 0,
+            surface: new_intro_display_buffer(),
+            start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
+            menu_idle_ticks: 0,
+            message_waiting_for_key: false,
+            message: String::new(),
+            panel: VisualIntroPanel::Story {
+                records: StoryRecords {
+                    records: (0..20).map(|i| format!("Story record {i}")).collect(),
+                },
+                step: 0,
+                transition: None,
+            },
+            launch_result: Arc::new(Mutex::new(None)),
+            image_handle: None,
+        };
+
+        assert!(!step_visual_intro_panel(&mut intro, ' '));
+
+        match &intro.panel {
+            VisualIntroPanel::Story {
+                step, transition, ..
+            } => {
+                assert_eq!(*step, 0);
+                assert_eq!(*transition, None);
+            }
+            _ => panic!("story panel should remain active"),
+        }
+        let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
     #[test]
