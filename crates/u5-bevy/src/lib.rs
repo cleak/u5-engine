@@ -111,6 +111,7 @@ use u5_runtime::{
     summoned_active_object_record, terrain_combat_instance_from_setup,
     terrain_combat_raw_replacement_tile_for_arena, terrain_combat_setup_from_record,
     terrain_combat_tile_for_spawn_index, title_tick_flame_palette_index, title_tick_next_frame,
+    town_resident_name,
     u4_transfer_session::{U4TransferPreview, u4_transfer_preview_from_u4_values},
     u5_prng_range_u16, word_of_power_seal_for_word,
 };
@@ -10617,6 +10618,8 @@ fn render_status_framebuffer(
     display_state.refresh_cached_moon_glyphs();
     if display_state.message.is_empty() {
         display_state.message = fallback.to_string();
+    } else {
+        display_state.message = visual_display_message(&display_state);
     }
     let input_echo = if visual_line_prompt_active(&display_state)
         && !(display_state.active_shop.is_some()
@@ -10649,6 +10652,8 @@ fn render_integrated_status_framebuffer(
     display_state.refresh_cached_moon_glyphs();
     if display_state.message.is_empty() {
         display_state.message = fallback.to_string();
+    } else {
+        display_state.message = visual_display_message(&display_state);
     }
     let input_echo = if visual_line_prompt_active(&display_state)
         && !(display_state.active_shop.is_some()
@@ -10720,6 +10725,18 @@ fn render_integrated_status_framebuffer(
         .unwrap_or_else(|_| vec![0; TEXT_WINDOW_RENDER_WIDTH * TEXT_WINDOW_RENDER_HEIGHT * 4]);
     apply_endgame_certificate_rect_operation_mask(&mut rgba, &display_state);
     rgba
+}
+
+fn visual_display_message(state: &PlayState) -> String {
+    match state.area {
+        u5_runtime::Area::Town { scene, .. } => town_resident_name(scene.byte)
+            .map(|name| state.message.replacen(&scene.key(), name, 1))
+            .unwrap_or_else(|| state.message.clone()),
+        u5_runtime::Area::Dungeon { scene, .. } => {
+            state.message.replacen(&scene.key(), scene.name(), 1)
+        }
+        u5_runtime::Area::World { .. } => state.message.clone(),
+    }
 }
 
 fn apply_endgame_certificate_rect_operation_mask(rgba: &mut [u8], state: &PlayState) {
@@ -10851,7 +10868,7 @@ fn visual_idle_tick(state: &mut PlayState) -> bool {
     if visual_modal_prompt_active(state) {
         return false;
     }
-    let _ = state.idle_tick();
+    state.advance_visual_tick();
     true
 }
 
@@ -12121,6 +12138,20 @@ mod tests {
         );
         assert!(rgba.chunks_exact(4).all(|pixel| pixel[3] == 0xff));
         assert_nonblack_rgba(&rgba);
+    }
+
+    #[test]
+    fn visual_display_message_uses_named_starting_location() {
+        let mut state = test_state(open_grid(), 15, 15);
+        state.area = u5_runtime::Area::Town {
+            scene: Scene::new(u5_runtime::CHARGEN_STARTING_SCENE).unwrap(),
+            floor: 0,
+        };
+        state.message = "Entered DWELLING:4 at (15, 15).".to_string();
+
+        let message = visual_display_message(&state);
+
+        assert_eq!(message, "Entered Iolo's Hut at (15, 15).");
     }
 
     #[test]
@@ -13586,6 +13617,7 @@ mod tests {
     #[test]
     fn visual_idle_tick_advances_runtime_wait_tick_without_game_time() {
         let mut state = world_state(open_world_grid(), 10, 20);
+        state.message = "Ready.".to_string();
         let clock_before = state.clock;
 
         assert!(visual_idle_tick(&mut state));
@@ -13593,7 +13625,7 @@ mod tests {
         assert_eq!(state.turn, 0);
         assert_eq!(state.clock, clock_before);
         assert_eq!(state.animation.frame, 1);
-        assert!(state.message.contains("Idle animation tick."));
+        assert_eq!(state.message, "Ready.");
     }
 
     #[test]
