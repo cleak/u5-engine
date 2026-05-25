@@ -34,14 +34,15 @@ pub enum TitleBitAsset {
     British,
 }
 
-/// `intro.md §3` initial title mark — `TITLE.BIT` slots 0..=6 drawn
-/// in ascending order.
+/// `intro.md §3` visible initial title mark placements. `TITLE.BIT`
+/// slots 0..=6 are presented one at a time, replacing the previous
+/// visible flourish frame rather than accumulating.
 pub const TITLE_BIT_INITIAL_PLACEMENTS: [TitleBitPlacement; 7] = [
     TitleBitPlacement {
         asset: TitleBitAsset::Title,
         slot: 0,
         top_left_x: 148,
-        top_left_y: 0,
+        top_left_y: 75,
         width: 24,
         height: 3,
     },
@@ -49,7 +50,7 @@ pub const TITLE_BIT_INITIAL_PLACEMENTS: [TitleBitPlacement; 7] = [
         asset: TitleBitAsset::Title,
         slot: 1,
         top_left_x: 140,
-        top_left_y: 3,
+        top_left_y: 72,
         width: 40,
         height: 7,
     },
@@ -57,7 +58,7 @@ pub const TITLE_BIT_INITIAL_PLACEMENTS: [TitleBitPlacement; 7] = [
         asset: TitleBitAsset::Title,
         slot: 2,
         top_left_x: 124,
-        top_left_y: 10,
+        top_left_y: 71,
         width: 72,
         height: 11,
     },
@@ -65,7 +66,7 @@ pub const TITLE_BIT_INITIAL_PLACEMENTS: [TitleBitPlacement; 7] = [
         asset: TitleBitAsset::Title,
         slot: 3,
         top_left_x: 104,
-        top_left_y: 21,
+        top_left_y: 66,
         width: 112,
         height: 20,
     },
@@ -73,7 +74,7 @@ pub const TITLE_BIT_INITIAL_PLACEMENTS: [TitleBitPlacement; 7] = [
         asset: TitleBitAsset::Title,
         slot: 4,
         top_left_x: 84,
-        top_left_y: 41,
+        top_left_y: 60,
         width: 152,
         height: 32,
     },
@@ -81,7 +82,7 @@ pub const TITLE_BIT_INITIAL_PLACEMENTS: [TitleBitPlacement; 7] = [
         asset: TitleBitAsset::Title,
         slot: 5,
         top_left_x: 52,
-        top_left_y: 73,
+        top_left_y: 53,
         width: 216,
         height: 45,
     },
@@ -89,7 +90,7 @@ pub const TITLE_BIT_INITIAL_PLACEMENTS: [TitleBitPlacement; 7] = [
         asset: TitleBitAsset::Title,
         slot: 6,
         top_left_x: 20,
-        top_left_y: 118,
+        top_left_y: 46,
         width: 280,
         height: 61,
     },

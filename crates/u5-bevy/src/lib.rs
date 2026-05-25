@@ -7137,6 +7137,8 @@ fn run_visual_intro_menu_app(
             game_dir,
             raster_depth,
             dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: 0,
+            title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
@@ -7267,6 +7269,8 @@ struct VisualIntroState {
     game_dir: PathBuf,
     raster_depth: TileGraphicsDepth,
     dispatch: UnifiedMenuDispatch,
+    title_flourish_step: usize,
+    title_flourish_complete: bool,
     title_signature_progress: usize,
     title_signature_complete: bool,
     title_tick_frame: u8,
@@ -7632,7 +7636,13 @@ fn animate_visual_intro_title_effects(
             advance_visual_intro_start_menu_reveal(&mut intro)
         };
 
-        if title_phase && !intro.title_signature_complete {
+        if title_phase && !intro.title_flourish_complete {
+            if intro.title_flourish_step + 1 >= intro_title_flourish_total_steps() {
+                intro.title_flourish_complete = true;
+            } else {
+                intro.title_flourish_step += 1;
+            }
+        } else if title_phase && !intro.title_signature_complete {
             let Ok(signature) = load_british_pth(&intro.game_dir) else {
                 intro.title_signature_complete = true;
                 if !reveal_advanced {
@@ -7774,6 +7784,8 @@ fn step_visual_intro(
 
     if matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle) {
         intro.dispatch.dismiss_title();
+        intro.title_flourish_step = 0;
+        intro.title_flourish_complete = true;
         intro.title_signature_progress = 0;
         intro.title_signature_complete = true;
         intro.title_tick_frame = 0;
@@ -8649,18 +8661,20 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
     }
     if menu_panel {
+        let title_flourish_step =
+            (title_phase && !intro.title_flourish_complete).then_some(intro.title_flourish_step);
         let signature_progress = (title_phase && !intro.title_signature_complete)
             .then_some(intro.title_signature_progress);
         let mut drew_title = false;
         let panel_rgba = if title_phase {
-            visual_intro_title_art_rgba(&intro.game_dir, signature_progress)
+            visual_intro_title_art_rgba(&intro.game_dir, title_flourish_step, signature_progress)
         } else {
             visual_intro_start_menu_rgba(
                 &intro.game_dir,
                 intro.raster_depth,
                 intro.title_tick_frame,
             )
-            .or_else(|| visual_intro_title_art_rgba(&intro.game_dir, None))
+            .or_else(|| visual_intro_title_art_rgba(&intro.game_dir, None, None))
         };
         if let Some(title_rgba) = panel_rgba {
             blit_rgba(
@@ -9061,7 +9075,7 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
     for pixel in rgba.chunks_exact_mut(4) {
         pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
     }
-    if let Some(title_rgba) = visual_intro_title_art_rgba(&intro.game_dir, None) {
+    if let Some(title_rgba) = visual_intro_title_art_rgba(&intro.game_dir, None, None) {
         blit_rgba(
             &mut rgba,
             INTRO_FRAMEBUFFER_WIDTH as usize,
@@ -9159,11 +9173,22 @@ fn visual_intro_start_menu_reveal_active(intro: &VisualIntroState) -> bool {
 
 fn visual_intro_title_art_rgba(
     game_dir: &Path,
+    flourish_step: Option<usize>,
     signature_progress: Option<usize>,
 ) -> Option<Vec<u8>> {
     let title = load_title_bit(game_dir).ok()?;
     let british = load_british_bit(game_dir).ok()?;
-    let mut rgba = compose_intro_title_art_rgba(&title, &british, signature_progress.is_none());
+    let mut rgba = compose_intro_title_art_rgba(
+        &title,
+        &british,
+        if let Some(step) = flourish_step {
+            IntroTitleCompositionPhase::Flourish { step }
+        } else {
+            IntroTitleCompositionPhase::Signature {
+                completed_signature: signature_progress.is_none(),
+            }
+        },
+    );
     if let Some(progress) = signature_progress.filter(|progress| *progress > 0) {
         let signature = load_british_pth(game_dir).ok()?;
         draw_british_signature_rgba(
@@ -9177,10 +9202,110 @@ fn visual_intro_title_art_rgba(
     Some(rgba)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IntroTitleCompositionPhase {
+    Flourish { step: usize },
+    Signature { completed_signature: bool },
+}
+
+const TITLE_FLOURISH_ROW_REVEAL_GROUPS: &[&[&[u8]]] = &[
+    &[&[], &[], &[], &[1], &[], &[], &[], &[], &[0, 2], &[]],
+    &[
+        &[],
+        &[],
+        &[1, 5],
+        &[],
+        &[],
+        &[2, 4],
+        &[],
+        &[],
+        &[3],
+        &[],
+        &[0, 6],
+        &[],
+    ],
+    &[
+        &[],
+        &[],
+        &[2, 8],
+        &[3, 7],
+        &[1, 9],
+        &[4, 6],
+        &[5],
+        &[0, 10],
+        &[],
+    ],
+    &[
+        &[],
+        &[4, 15],
+        &[1, 7, 12, 18],
+        &[5, 14],
+        &[2, 8, 11, 17],
+        &[3, 6, 13, 16],
+        &[9, 10],
+        &[0, 19],
+        &[],
+    ],
+    &[
+        &[],
+        &[7, 24],
+        &[2, 12, 19, 29],
+        &[3, 8, 13, 18, 23, 28],
+        &[1, 6, 11, 20, 25, 30],
+        &[4, 9, 14, 17, 22, 27],
+        &[5, 10, 15, 16, 21, 26],
+        &[0, 31],
+        &[],
+    ],
+    &[
+        &[],
+        &[4, 11, 18, 26, 33, 40],
+        &[1, 8, 15, 19, 36, 43],
+        &[6, 13, 20, 24, 31, 38],
+        &[3, 10, 17, 22, 27, 34, 41],
+        &[2, 5, 9, 12, 16, 19, 25, 28, 32, 35, 39, 42],
+        &[7, 14, 21, 23, 30, 37],
+        &[0, 44],
+        &[],
+    ],
+    &[
+        &[],
+        &[28, 23, 18, 13, 8, 3, 32, 37, 42, 47, 52, 57],
+        &[26, 21, 16, 11, 6, 1, 34, 39, 44, 49, 54, 59],
+        &[29, 24, 19, 14, 9, 4, 31, 36, 41, 46, 51, 56],
+        &[27, 22, 17, 12, 7, 2, 33, 38, 43, 48, 53, 58],
+        &[25, 15, 5, 35, 45, 55],
+        &[30, 40, 50, 20, 10],
+        &[0, 60],
+        &[],
+    ],
+];
+
+fn intro_title_flourish_total_steps() -> usize {
+    TITLE_FLOURISH_ROW_REVEAL_GROUPS
+        .iter()
+        .map(|groups| groups.len())
+        .sum()
+}
+
+fn intro_title_flourish_frame_for_step(step: usize) -> Option<(usize, usize)> {
+    let mut remaining = step;
+    for (slot, groups) in TITLE_FLOURISH_ROW_REVEAL_GROUPS.iter().enumerate() {
+        if remaining < groups.len() {
+            return Some((slot, remaining));
+        }
+        remaining -= groups.len();
+    }
+    TITLE_FLOURISH_ROW_REVEAL_GROUPS
+        .last()
+        .and_then(|groups| groups.len().checked_sub(1))
+        .map(|last_group| (TITLE_FLOURISH_ROW_REVEAL_GROUPS.len() - 1, last_group))
+}
+
 fn compose_intro_title_art_rgba(
     title: &TitleBitImages,
     british: &MonochromeBitmap,
-    completed_signature: bool,
+    phase: IntroTitleCompositionPhase,
 ) -> Vec<u8> {
     let width = TITLE_SURFACE_WIDTH as usize;
     let height = TITLE_SURFACE_HEIGHT as usize;
@@ -9189,8 +9314,25 @@ fn compose_intro_title_art_rgba(
         pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
     }
 
-    for placement in &TITLE_BIT_INITIAL_PLACEMENTS {
-        blit_intro_title_placement_rgba(&mut rgba, width, height, title, british, *placement);
+    if let IntroTitleCompositionPhase::Flourish { step } = phase {
+        blit_intro_title_flourish_step_rgba(&mut rgba, width, height, title, step);
+        return rgba;
+    }
+
+    if let Some(placement) = TITLE_BIT_INITIAL_PLACEMENTS
+        .iter()
+        .copied()
+        .find(|placement| placement.slot == 6)
+    {
+        blit_intro_title_placement_rgba_with_rgb(
+            &mut rgba,
+            width,
+            height,
+            title,
+            british,
+            placement,
+            EGA_PALETTE_RGB[9],
+        );
     }
     clear_rgba_band(&mut rgba, width, height, TITLE_LOWER_BAND_CLEAR_Y as usize);
     for placement in TITLE_BIT_REMAINING_PLACEMENTS
@@ -9202,7 +9344,12 @@ fn compose_intro_title_art_rgba(
     {
         blit_intro_title_placement_rgba(&mut rgba, width, height, title, british, placement);
     }
-    if completed_signature {
+    if matches!(
+        phase,
+        IntroTitleCompositionPhase::Signature {
+            completed_signature: true
+        }
+    ) {
         for placement in TITLE_BIT_REMAINING_PLACEMENTS
             .iter()
             .copied()
@@ -9230,6 +9377,83 @@ fn clear_rgba_band(rgba: &mut [u8], width: usize, height: usize, start_y: usize)
     }
 }
 
+fn blit_intro_title_flourish_step_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    title: &TitleBitImages,
+    step: usize,
+) {
+    let Some((slot, group_index)) = intro_title_flourish_frame_for_step(step) else {
+        return;
+    };
+    let Some(placement) = TITLE_BIT_INITIAL_PLACEMENTS
+        .iter()
+        .copied()
+        .find(|placement| usize::from(placement.slot) == slot)
+    else {
+        return;
+    };
+    let Some(groups) = TITLE_FLOURISH_ROW_REVEAL_GROUPS.get(slot) else {
+        return;
+    };
+    let Some(src) = title.blocks.get(slot) else {
+        return;
+    };
+    let draw_height = usize::from(placement.height).min(src.height);
+    let draw_width = usize::from(placement.width).min(src.width);
+    let rgb = EGA_PALETTE_RGB[9];
+    for group in groups.iter().take(group_index + 1) {
+        for row in group.iter().copied().map(usize::from) {
+            if row >= draw_height {
+                continue;
+            }
+            blit_intro_title_row_rgba(
+                dst,
+                dst_width,
+                dst_height,
+                src,
+                usize::from(placement.top_left_x),
+                usize::from(placement.top_left_y),
+                draw_width,
+                row,
+                rgb,
+            );
+        }
+    }
+}
+
+fn blit_intro_title_row_rgba(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    src: &MonochromeBitmap,
+    base_x: usize,
+    base_y: usize,
+    draw_width: usize,
+    source_y: usize,
+    foreground_rgb: [u8; 3],
+) {
+    let target_y = base_y + source_y;
+    if target_y >= dst_height {
+        return;
+    }
+    for x in 0..draw_width {
+        let target_x = base_x + x;
+        if target_x >= dst_width {
+            break;
+        }
+        let source_pixel = src.pixels[source_y * src.width + x];
+        let rgb = if source_pixel == 0 {
+            [0x00, 0x00, 0x00]
+        } else {
+            foreground_rgb
+        };
+        let offset = (target_y * dst_width + target_x) * 4;
+        dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
+    }
+}
+
 fn blit_intro_title_placement_rgba(
     dst: &mut [u8],
     dst_width: usize,
@@ -9237,6 +9461,26 @@ fn blit_intro_title_placement_rgba(
     title: &TitleBitImages,
     british: &MonochromeBitmap,
     placement: TitleBitPlacement,
+) {
+    blit_intro_title_placement_rgba_with_rgb(
+        dst,
+        dst_width,
+        dst_height,
+        title,
+        british,
+        placement,
+        EGA_PALETTE_RGB[15],
+    );
+}
+
+fn blit_intro_title_placement_rgba_with_rgb(
+    dst: &mut [u8],
+    dst_width: usize,
+    dst_height: usize,
+    title: &TitleBitImages,
+    british: &MonochromeBitmap,
+    placement: TitleBitPlacement,
+    foreground_rgb: [u8; 3],
 ) {
     let src = match placement.asset {
         TitleBitAsset::Title => title.blocks.get(usize::from(placement.slot)),
@@ -9264,7 +9508,7 @@ fn blit_intro_title_placement_rgba(
             let rgb = if source_pixel == 0 {
                 [0x00, 0x00, 0x00]
             } else {
-                EGA_PALETTE_RGB[15]
+                foreground_rgb
             };
             let offset = (target_y * dst_width + target_x) * 4;
             dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
@@ -9978,12 +10222,19 @@ fn write_visual_intro_report_inner(
     raster_depth: TileGraphicsDepth,
     title_dismissed: bool,
 ) -> io::Result<VisualFrameReport> {
+    let static_title = matches!(panel, VisualIntroPanel::Menu) && !title_dismissed;
     let mut intro = VisualIntroState {
         game_dir: game_dir.to_path_buf(),
         raster_depth,
         dispatch: UnifiedMenuDispatch::new(),
+        title_flourish_step: if static_title {
+            intro_title_flourish_total_steps()
+        } else {
+            0
+        },
+        title_flourish_complete: static_title || title_dismissed,
         title_signature_progress: 0,
-        title_signature_complete: false,
+        title_signature_complete: static_title,
         title_tick_frame: 0,
         start_menu_reveal: None,
         message: String::new(),
@@ -11478,6 +11729,8 @@ mod tests {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: intro_title_flourish_total_steps(),
+            title_flourish_complete: true,
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
@@ -11505,6 +11758,8 @@ mod tests {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: 0,
+            title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
@@ -11642,6 +11897,8 @@ mod tests {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: intro_title_flourish_total_steps(),
+            title_flourish_complete: true,
             title_signature_progress: 0,
             title_signature_complete: true,
             title_tick_frame: 0,
@@ -11730,6 +11987,8 @@ mod tests {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: 0,
+            title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
@@ -11785,8 +12044,8 @@ mod tests {
         let mut blocks = vec![blank; 10];
         blocks[6] = MonochromeBitmap {
             width: 1,
-            height: 24,
-            pixels: vec![1; 24],
+            height: 61,
+            pixels: vec![1; 61],
         };
         blocks[7] = MonochromeBitmap {
             width: 1,
@@ -11810,11 +12069,22 @@ mod tests {
             pixels: vec![1],
         };
 
-        let rgba = compose_intro_title_art_rgba(&title, &british, true);
+        let rgba = compose_intro_title_art_rgba(
+            &title,
+            &british,
+            IntroTitleCompositionPhase::Signature {
+                completed_signature: true,
+            },
+        );
         let width = TITLE_SURFACE_WIDTH as usize;
+        let flourish_rgb = EGA_PALETTE_RGB[9];
 
         assert_eq!(rgba.len(), width * (TITLE_SURFACE_HEIGHT as usize) * 4);
-        assert_eq!(rgba_pixel(&rgba, width, 20, 139), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(
+            rgba_pixel(&rgba, width, 20, 46),
+            [flourish_rgb[0], flourish_rgb[1], flourish_rgb[2], 0xff]
+        );
+        assert_eq!(rgba_pixel(&rgba, width, 20, 118), [0, 0, 0, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 20, 140), [0, 0, 0, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 108, 140), [0xff, 0xff, 0xff, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 152, 0), [0xff, 0xff, 0xff, 0xff]);
@@ -11852,13 +12122,60 @@ mod tests {
             pixels: vec![1],
         };
 
-        let rgba = compose_intro_title_art_rgba(&title, &british, false);
+        let rgba = compose_intro_title_art_rgba(
+            &title,
+            &british,
+            IntroTitleCompositionPhase::Signature {
+                completed_signature: false,
+            },
+        );
         let width = TITLE_SURFACE_WIDTH as usize;
 
         assert_eq!(rgba_pixel(&rgba, width, 108, 140), [0xff, 0xff, 0xff, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 152, 0), [0xff, 0xff, 0xff, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 24, 66), [0, 0, 0, 0xff]);
         assert_eq!(rgba_pixel(&rgba, width, 104, 160), [0, 0, 0, 0xff]);
+    }
+
+    #[test]
+    fn intro_title_flourish_replaces_prior_slots_and_reveals_rows() {
+        let blank = MonochromeBitmap {
+            width: 1,
+            height: 1,
+            pixels: vec![0],
+        };
+        let mut blocks = vec![blank; 10];
+        blocks[0] = MonochromeBitmap {
+            width: 24,
+            height: 3,
+            pixels: vec![1; 24 * 3],
+        };
+        blocks[1] = MonochromeBitmap {
+            width: 40,
+            height: 7,
+            pixels: vec![1; 40 * 7],
+        };
+        let title = TitleBitImages { blocks };
+        let british = MonochromeBitmap {
+            width: 1,
+            height: 1,
+            pixels: vec![0],
+        };
+
+        let rgba = compose_intro_title_art_rgba(
+            &title,
+            &british,
+            IntroTitleCompositionPhase::Flourish { step: 12 },
+        );
+        let width = TITLE_SURFACE_WIDTH as usize;
+        let flourish_rgb = EGA_PALETTE_RGB[9];
+
+        assert_eq!(rgba_pixel(&rgba, width, 148, 75), [0, 0, 0, 0xff]);
+        assert_eq!(
+            rgba_pixel(&rgba, width, 140, 73),
+            [flourish_rgb[0], flourish_rgb[1], flourish_rgb[2], 0xff]
+        );
+        assert_eq!(rgba_pixel(&rgba, width, 140, 72), [0, 0, 0, 0xff]);
     }
 
     #[test]
@@ -14137,6 +14454,8 @@ mod tests {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: 0,
+            title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
@@ -14222,6 +14541,8 @@ mod tests {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: 0,
+            title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
@@ -14267,6 +14588,8 @@ mod tests {
             game_dir: dir,
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch,
+            title_flourish_step: intro_title_flourish_total_steps(),
+            title_flourish_complete: true,
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
@@ -14566,6 +14889,8 @@ mod tests {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: 0,
+            title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
@@ -14616,6 +14941,8 @@ mod tests {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: 0,
+            title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
@@ -14707,6 +15034,8 @@ mod tests {
             game_dir: debug_game_dir(),
             raster_depth: TileGraphicsDepth::Ega16,
             dispatch: UnifiedMenuDispatch::new(),
+            title_flourish_step: 0,
+            title_flourish_complete: false,
             title_signature_progress: 0,
             title_signature_complete: false,
             title_tick_frame: 0,
