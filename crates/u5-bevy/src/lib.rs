@@ -10070,16 +10070,16 @@ fn visual_intro_story_art_draws_rgba(
                         spec.stem, spec.subimage
                     )
                 });
-            let width = spec
-                .clip_width
-                .map(usize::from)
-                .unwrap_or(image.width)
-                .min(image.width);
-            let height = spec
-                .clip_height
-                .map(usize::from)
-                .unwrap_or(image.height)
-                .min(image.height);
+            let width = spec.clip_width.map(usize::from).unwrap_or(image.width);
+            let height = spec.clip_height.map(usize::from).unwrap_or(image.height);
+            assert!(
+                image.width >= width && image.height >= height,
+                "intro story asset {} subimage {} is {}x{}, expected at least {width}x{height}",
+                spec.stem,
+                spec.subimage,
+                image.width,
+                image.height
+            );
             let rgba = if spec.clip_width.is_some() || spec.clip_height.is_some() {
                 graphic_image_to_rgba_clipped(image, depth, width, height)
             } else {
@@ -10104,6 +10104,17 @@ fn draw_visual_intro_story_art_to_buffer(
     transition: Option<RectColumnSweepTransition>,
 ) {
     for draw in visual_intro_story_art_draws_rgba(game_dir, depth, step, transition) {
+        assert!(
+            usize::from(draw.top_left_x) + draw.width <= buffer.width
+                && usize::from(draw.top_left_y) + draw.height <= buffer.height,
+            "intro story draw at ({}, {}) with size {}x{} exceeds framebuffer {}x{}",
+            draw.top_left_x,
+            draw.top_left_y,
+            draw.width,
+            draw.height,
+            buffer.width,
+            buffer.height
+        );
         buffer.blit_rgba(
             &draw.rgba,
             draw.width,
@@ -10173,8 +10184,31 @@ fn blit_image_panel_specs_intro_buffer(
                     spec.stem, spec.subimage
                 )
             });
-        let width = spec.width.min(image.width);
-        let height = spec.height.min(image.height);
+        assert!(
+            image.width >= spec.width && image.height >= spec.height,
+            "intro panel {} subimage {} is {}x{}, expected at least {}x{}",
+            spec.stem,
+            spec.subimage,
+            image.width,
+            image.height,
+            spec.width,
+            spec.height
+        );
+        assert!(
+            spec.top_left_x + spec.width <= dst.width
+                && spec.top_left_y + spec.height <= dst.height,
+            "intro panel {} subimage {} at ({}, {}) with size {}x{} exceeds framebuffer {}x{}",
+            spec.stem,
+            spec.subimage,
+            spec.top_left_x,
+            spec.top_left_y,
+            spec.width,
+            spec.height,
+            dst.width,
+            dst.height
+        );
+        let width = spec.width;
+        let height = spec.height;
         let rgba = graphic_image_to_rgba_clipped(image, depth, width, height);
         dst.blit_rgba(&rgba, width, height, spec.top_left_x, spec.top_left_y);
     }
