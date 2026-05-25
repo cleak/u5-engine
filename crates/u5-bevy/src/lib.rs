@@ -9121,12 +9121,9 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         transition,
     );
 
-    let mut rgba = intro.surface.to_rgba();
     if let Some(text) = text {
-        if overlay_proportional_text_from_assets_rgba(
-            &mut rgba,
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            INTRO_FRAMEBUFFER_HEIGHT as usize,
+        if overlay_proportional_text_from_assets_buffer(
+            &mut intro.surface,
             &intro.game_dir,
             &text,
             ProportionalTextPlacement {
@@ -9140,10 +9137,11 @@ fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         )
         .is_ok()
         {
-            return rgba;
+            return intro.surface.to_rgba();
         }
     }
 
+    let mut rgba = intro.surface.to_rgba();
     let summary = summarize_intro(intro);
     overlay_nonblack_text_panel_rgba(
         &mut rgba,
@@ -9192,8 +9190,6 @@ fn render_chargen_intro_graphics(
     session: &ChargenSession,
     input_line: &str,
 ) -> Option<Vec<u8>> {
-    let width = INTRO_FRAMEBUFFER_WIDTH as usize;
-    let height = INTRO_FRAMEBUFFER_HEIGHT as usize;
     let Ok(font) = load_ibm_ch_font(game_dir) else {
         return None;
     };
@@ -9249,12 +9245,9 @@ fn render_chargen_intro_graphics(
                     shadow: true,
                 }
             };
-            let mut rgba = buffer.to_rgba();
-            overlay_proportional_text_from_assets_rgba(
-                &mut rgba, width, height, game_dir, &text, placement,
-            )
-            .ok()?;
-            Some(rgba)
+            overlay_proportional_text_from_assets_buffer(buffer, game_dir, &text, placement)
+                .ok()?;
+            Some(buffer.to_rgba())
         }
         ChargenSessionStep::PresentQuestion(question) => {
             let option_a = create_virtue_panel_spec(question.option_a, 0);
@@ -9276,11 +9269,8 @@ fn render_chargen_intro_graphics(
             }
             overlay_fixed_cell_text_intro_buffer(buffer, &font, "A", 3, 2, false);
             overlay_fixed_cell_text_intro_buffer(buffer, &font, "B", 26, 2, false);
-            let mut rgba = buffer.to_rgba();
-            overlay_proportional_text_from_assets_rgba(
-                &mut rgba,
-                width,
-                height,
+            overlay_proportional_text_from_assets_buffer(
+                buffer,
                 game_dir,
                 &question.text,
                 ProportionalTextPlacement {
@@ -9293,7 +9283,7 @@ fn render_chargen_intro_graphics(
                 },
             )
             .ok()?;
-            Some(rgba)
+            Some(buffer.to_rgba())
         }
         ChargenSessionStep::Completed(result) => {
             let _ = blit_image_panel_specs_intro_buffer(
@@ -10268,18 +10258,17 @@ struct ProportionalTextPlacement {
     shadow: bool,
 }
 
-fn overlay_proportional_text_from_assets_rgba(
-    dst: &mut [u8],
-    dst_width: usize,
-    dst_height: usize,
+fn overlay_proportional_text_from_assets_buffer(
+    dst: &mut IntroDisplayBuffer,
     game_dir: &Path,
     text: &str,
     placement: ProportionalTextPlacement,
 ) -> io::Result<()> {
     let font = load_legacy_proportional_font(game_dir)?;
-    overlay_proportional_text_rgba(dst, dst_width, dst_height, &font, text, placement)
+    overlay_proportional_text_buffer(dst, &font, text, placement)
 }
 
+#[cfg(test)]
 fn overlay_proportional_text_rgba(
     dst: &mut [u8],
     dst_width: usize,
@@ -10319,6 +10308,39 @@ fn overlay_proportional_text_rgba(
     Ok(())
 }
 
+fn overlay_proportional_text_buffer(
+    dst: &mut IntroDisplayBuffer,
+    font: &ProportionalFont,
+    text: &str,
+    placement: ProportionalTextPlacement,
+) -> io::Result<()> {
+    let widths = visual_proportional_width_table(font);
+    let bitmap = rasterize_proportional_paragraph(
+        font,
+        &widths,
+        text.as_bytes(),
+        placement.width,
+        placement.line_height,
+    )?;
+    if placement.shadow {
+        overlay_monochrome_bitmap_buffer(
+            dst,
+            &bitmap,
+            placement.x.saturating_add(1),
+            placement.y.saturating_add(1),
+            ega_palette_index_from_rgba(&[0x00, 0x00, 0x00, 0xff]),
+        );
+    }
+    overlay_monochrome_bitmap_buffer(
+        dst,
+        &bitmap,
+        placement.x,
+        placement.y,
+        ega_palette_index_from_rgba(&placement.color),
+    );
+    Ok(())
+}
+
 fn visual_proportional_width_table(font: &ProportionalFont) -> ProportionalWidthTable {
     let mut widths = ProportionalWidthTable::from_font_advances(font);
     if widths.widths[usize::from(b' ')] == 0 {
@@ -10337,6 +10359,7 @@ fn visual_proportional_width_table(font: &ProportionalFont) -> ProportionalWidth
     widths
 }
 
+#[cfg(test)]
 fn overlay_monochrome_bitmap_rgba(
     dst: &mut [u8],
     dst_width: usize,
@@ -10363,6 +10386,31 @@ fn overlay_monochrome_bitmap_rgba(
             if let Some(pixel) = dst.get_mut(offset..offset + 4) {
                 pixel.copy_from_slice(&color);
             }
+        }
+    }
+}
+
+fn overlay_monochrome_bitmap_buffer(
+    dst: &mut IntroDisplayBuffer,
+    bitmap: &MonochromeBitmap,
+    x: usize,
+    y: usize,
+    color: u8,
+) {
+    for row in 0..bitmap.height {
+        let target_y = y + row;
+        if target_y >= dst.height {
+            break;
+        }
+        for col in 0..bitmap.width {
+            if bitmap.pixels[row * bitmap.width + col] == 0 {
+                continue;
+            }
+            let target_x = x + col;
+            if target_x >= dst.width {
+                break;
+            }
+            dst.pixels[target_y * dst.width + target_x] = color & 0x0f;
         }
     }
 }
@@ -11871,6 +11919,33 @@ mod tests {
         assert_eq!(rgba_pixel(&rgba, 40, 4, 5), [0xee, 0xdd, 0xcc, 0xff]);
         assert_eq!(rgba_pixel(&rgba, 40, 5, 6), [0xee, 0xdd, 0xcc, 0xff]);
         assert_eq!(rgba_pixel(&rgba, 40, 7, 8), [0x00, 0x00, 0x00, 0xff]);
+    }
+
+    #[test]
+    fn proportional_intro_overlay_draws_into_display_buffer() {
+        let font = proportional_test_font();
+        let mut buffer = IntroDisplayBuffer::new(40, 30);
+        buffer.clear(8);
+
+        overlay_proportional_text_buffer(
+            &mut buffer,
+            &font,
+            "AB",
+            ProportionalTextPlacement {
+                x: 4,
+                y: 5,
+                width: 24,
+                line_height: PROPORTIONAL_TEXT_LINE_HEIGHT,
+                color: [0xff, 0xff, 0xff, 0xff],
+                shadow: true,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(buffer.pixels[5 * 40 + 4], 15);
+        assert_eq!(buffer.pixels[6 * 40 + 5], 15);
+        assert_eq!(buffer.pixels[8 * 40 + 7], 0);
+        assert_eq!(buffer.pixels[4 * 40 + 4], 8);
     }
 
     #[test]
