@@ -182,16 +182,20 @@ impl IntroDisplayBuffer {
     }
 
     fn clear_rect_inclusive(&mut self, x0: usize, y0: usize, x1: usize, y1: usize, color: u8) {
-        if self.width == 0 || self.height == 0 {
-            return;
-        }
-        let x0 = x0.min(self.width - 1);
-        let x1 = x1.min(self.width - 1);
-        let y0 = y0.min(self.height - 1);
-        let y1 = y1.min(self.height - 1);
-        if x0 > x1 || y0 > y1 {
-            return;
-        }
+        assert!(
+            self.width > 0 && self.height > 0,
+            "intro clear rectangle requires a non-empty display buffer"
+        );
+        assert!(
+            x0 <= x1 && y0 <= y1,
+            "intro clear rectangle is inverted: ({x0}, {y0})..({x1}, {y1})"
+        );
+        assert!(
+            x1 < self.width && y1 < self.height,
+            "intro clear rectangle ({x0}, {y0})..({x1}, {y1}) exceeds framebuffer {}x{}",
+            self.width,
+            self.height
+        );
         for y in y0..=y1 {
             let start = y * self.width + x0;
             let end = y * self.width + x1 + 1;
@@ -218,51 +222,77 @@ impl IntroDisplayBuffer {
         dst_x: usize,
         dst_y: usize,
     ) {
+        assert!(
+            src_width > 0 && src_height > 0,
+            "intro RGBA blit requires a non-empty source"
+        );
+        assert!(
+            src.len() >= src_width * src_height * 4,
+            "intro RGBA blit source has {} byte(s), expected at least {}",
+            src.len(),
+            src_width * src_height * 4
+        );
+        assert!(
+            dst_x + src_width <= self.width && dst_y + src_height <= self.height,
+            "intro RGBA blit at ({dst_x}, {dst_y}) with size {src_width}x{src_height} exceeds framebuffer {}x{}",
+            self.width,
+            self.height
+        );
         for row in 0..src_height {
             let y = dst_y + row;
-            if y >= self.height {
-                break;
-            }
-            let cols = src_width.min(self.width.saturating_sub(dst_x));
-            for col in 0..cols {
+            for col in 0..src_width {
                 let src_offset = (row * src_width + col) * 4;
-                let Some(rgba) = src.get(src_offset..src_offset + 4) else {
-                    continue;
-                };
+                let rgba = &src[src_offset..src_offset + 4];
                 self.pixels[y * self.width + dst_x + col] = ega_palette_index_from_rgba(rgba);
             }
         }
     }
 
-    fn blit_buffer(&mut self, src: &IntroDisplayBuffer, dst_x: usize, dst_y: usize) {
-        for row in 0..src.height {
-            let y = dst_y + row;
-            if y >= self.height {
-                break;
-            }
-            let cols = src.width.min(self.width.saturating_sub(dst_x));
+    fn blit_return_to_view_preview_buffer(
+        &mut self,
+        src: &IntroDisplayBuffer,
+        dst_x: usize,
+        dst_y: usize,
+    ) {
+        assert!(
+            src.width > 0 && src.height > 0,
+            "Return-to-View preview blit requires a non-empty source"
+        );
+        assert!(
+            dst_x + src.width <= self.width && dst_y < self.height,
+            "Return-to-View preview blit at ({dst_x}, {dst_y}) with size {}x{} cannot enter framebuffer {}x{}",
+            src.width,
+            src.height,
+            self.width,
+            self.height
+        );
+        let visible_height = src.height.min(self.height - dst_y);
+        assert!(
+            visible_height > 0,
+            "Return-to-View preview blit has no visible rows"
+        );
+        for row in 0..visible_height {
             let src_start = row * src.width;
-            let dst_start = y * self.width + dst_x;
-            let src_end = src_start + cols;
-            let dst_end = dst_start + cols;
-            if let (Some(src_slice), Some(dst_slice)) = (
-                src.pixels.get(src_start..src_end),
-                self.pixels.get_mut(dst_start..dst_end),
-            ) {
-                dst_slice.copy_from_slice(src_slice);
-            }
+            let dst_start = (dst_y + row) * self.width + dst_x;
+            let src_end = src_start + src.width;
+            let dst_end = dst_start + src.width;
+            self.pixels[dst_start..dst_end].copy_from_slice(&src.pixels[src_start..src_end]);
         }
     }
 
     fn draw_title_tick(&mut self, frame: u8) {
         let start_x = TITLE_TICK_FRAME_X as usize;
         let start_y = TITLE_TICK_FRAME_Y as usize;
-        let end_x = start_x
-            .saturating_add(TITLE_TICK_FRAME_WIDTH as usize)
-            .min(self.width);
-        let end_y = start_y
-            .saturating_add(TITLE_TICK_FRAME_HEIGHT as usize)
-            .min(self.height);
+        let end_x = start_x + TITLE_TICK_FRAME_WIDTH as usize;
+        let end_y = start_y + TITLE_TICK_FRAME_HEIGHT as usize;
+        assert!(
+            end_x <= self.width && end_y <= self.height,
+            "intro title tick rectangle ({start_x}, {start_y}) size {}x{} exceeds framebuffer {}x{}",
+            TITLE_TICK_FRAME_WIDTH,
+            TITLE_TICK_FRAME_HEIGHT,
+            self.width,
+            self.height
+        );
 
         for y in start_y..end_y {
             let local_y = y - start_y;
@@ -9442,7 +9472,7 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
         let x = ((INTRO_FRAMEBUFFER_WIDTH as usize).saturating_sub(*preview_width)) / 2;
         debug_assert_eq!(preview_buffer.width, *preview_width);
         debug_assert_eq!(preview_buffer.height, *preview_height);
-        buffer.blit_buffer(preview_buffer, x, RETURN_TO_VIEW_PREVIEW_Y);
+        buffer.blit_return_to_view_preview_buffer(preview_buffer, x, RETURN_TO_VIEW_PREVIEW_Y);
     }
     if let Some(ReturnToViewFrameKind::FixedWipeRectangle { step }) =
         current_meta.map(|meta| meta.kind)
@@ -13302,6 +13332,31 @@ mod tests {
             buffer.pixels[(TITLE_TICK_FRAME_Y as usize + 20) * buffer.width + 120],
             0x00
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "intro clear rectangle")]
+    fn intro_display_buffer_rejects_out_of_bounds_clear_rect() {
+        let mut buffer = IntroDisplayBuffer::new(8, 8);
+        buffer.clear_rect_inclusive(0, 0, 8, 7, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "intro RGBA blit")]
+    fn intro_display_buffer_rejects_out_of_bounds_rgba_blit() {
+        let mut buffer = IntroDisplayBuffer::new(8, 8);
+        let rgba = vec![0xff; 4 * 4 * 4];
+        buffer.blit_rgba(&rgba, 4, 4, 5, 0);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "intro column reveal requires matching source and destination buffers"
+    )]
+    fn intro_display_buffer_rejects_mismatched_column_reveal_buffers() {
+        let mut buffer = IntroDisplayBuffer::new(8, 8);
+        let source = IntroDisplayBuffer::new(7, 8);
+        buffer.copy_revealed_columns_from(&source, RectColumnSweepTransition::new((0, 0, 1, 1)));
     }
 
     #[test]
