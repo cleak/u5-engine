@@ -170,10 +170,13 @@ struct IntroDisplayBuffer {
 
 impl IntroDisplayBuffer {
     fn new(width: usize, height: usize) -> Self {
+        let pixel_count = width
+            .checked_mul(height)
+            .expect("intro display buffer dimensions overflow");
         Self {
             width,
             height,
-            pixels: vec![0; width.saturating_mul(height)],
+            pixels: vec![0; pixel_count],
         }
     }
 
@@ -357,6 +360,12 @@ impl IntroDisplayBuffer {
     }
 
     fn from_rgba(width: usize, height: usize, rgba: &[u8]) -> Self {
+        assert!(
+            rgba.len() >= width * height * 4,
+            "intro RGBA buffer has {} byte(s), expected at least {} for {width}x{height}",
+            rgba.len(),
+            width * height * 4
+        );
         let mut buffer = Self::new(width, height);
         for (index, pixel) in rgba.chunks_exact(4).take(width * height).enumerate() {
             buffer.pixels[index] = ega_palette_index_from_rgba(pixel);
@@ -7556,7 +7565,7 @@ enum VisualIntroPanel {
     },
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct VisualReturnToViewPreview {
     summary: String,
     frames: Vec<IntroDisplayBuffer>,
@@ -7840,33 +7849,30 @@ fn transition_visual_intro_to_gameplay(
             return;
         }
     };
-    let Some(image_handle) = intro.image_handle.clone() else {
-        intro.message = "Journey Onward failed: missing visual framebuffer.".to_string();
-        intro.message_waiting_for_key = true;
-        intro.menu_idle_ticks = 0;
-        intro
-            .dispatch
-            .complete_subflow(IntroSubflow::JourneyOnward, IntroSubflowResult::Cancelled);
-        return;
-    };
+    let image_handle = intro
+        .image_handle
+        .clone()
+        .expect("Journey Onward requires the intro visual framebuffer handle");
     intro.image_handle = None;
     let rgba = render_visual_play_frame_with_input(&mut state, &atlas, &text_font, "", READY_HINT);
-    if let Some(image) = images.get_mut(&image_handle) {
-        image.data = Some(rgba);
-    }
+    images
+        .get_mut(&image_handle)
+        .expect("Journey Onward visual framebuffer image is missing")
+        .data = Some(rgba);
     for mut sprite in sprites.iter_mut() {
         sprite.custom_size = Some(Vec2::new(
             VISUAL_PLAY_FRAME_WIDTH as f32 * DISPLAY_SCALE,
             VISUAL_PLAY_FRAME_HEIGHT as f32 * DISPLAY_SCALE,
         ));
     }
-    if let Ok(mut window) = windows.single_mut() {
-        window.title = "Ultima V".to_string();
-        window.resolution.set(
-            VISUAL_PLAY_FRAME_WIDTH as f32 * DISPLAY_SCALE,
-            VISUAL_PLAY_FRAME_HEIGHT as f32 * DISPLAY_SCALE,
-        );
-    }
+    let mut window = windows
+        .single_mut()
+        .expect("Journey Onward requires exactly one Bevy window");
+    window.title = "Ultima V".to_string();
+    window.resolution.set(
+        VISUAL_PLAY_FRAME_WIDTH as f32 * DISPLAY_SCALE,
+        VISUAL_PLAY_FRAME_HEIGHT as f32 * DISPLAY_SCALE,
+    );
     commands.insert_resource(VisualState {
         game_dir,
         state,
@@ -7903,11 +7909,14 @@ fn animate_visual_intro_title_effects(
     }
 
     let rgba = render_intro_frame(&mut intro);
-    if let Some(handle) = intro.image_handle.as_ref() {
-        if let Some(image) = images.get_mut(handle) {
-            image.data = Some(rgba);
-        }
-    }
+    let handle = intro
+        .image_handle
+        .as_ref()
+        .expect("intro animation tick requires a visual framebuffer handle");
+    images
+        .get_mut(handle)
+        .expect("intro animation tick framebuffer image is missing")
+        .data = Some(rgba);
 }
 
 fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
@@ -8584,22 +8593,8 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
                 intro.message_waiting_for_key = false;
                 intro.message.clear();
             }
-            Ok(None) => {
-                intro.panel = VisualIntroPanel::Menu;
-                intro
-                    .dispatch
-                    .complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
-                intro.message_waiting_for_key = false;
-                intro.message = "STORY.DAT is missing; returning to the intro menu.".to_string();
-            }
-            Err(err) => {
-                intro.panel = VisualIntroPanel::Menu;
-                intro
-                    .dispatch
-                    .complete_subflow(subflow, IntroSubflowResult::ReturnedToMenu);
-                intro.message_waiting_for_key = false;
-                intro.message = format!("STORY.DAT could not be loaded: {err}");
-            }
+            Ok(None) => panic!("intro story requires STORY.DAT"),
+            Err(err) => panic!("intro story requires readable STORY.DAT: {err}"),
         },
         IntroSubflow::Acknowledgements => {
             intro.panel = VisualIntroPanel::Acknowledgements;
@@ -8609,6 +8604,19 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
         IntroSubflow::ReturnToView => {
             intro.modal_backing = Some(intro_buffer_from_rgba_frame(&render_intro_frame(intro)));
             let preview = visual_return_to_view_summary(&intro.game_dir, intro.raster_depth);
+            assert!(
+                !preview.frames.is_empty(),
+                "Return-to-View requires at least one rendered playback frame"
+            );
+            assert_eq!(
+                preview.frames.len(),
+                preview.frame_metadata.len(),
+                "Return-to-View rendered frame count must match metadata count"
+            );
+            assert!(
+                preview.width > 0 && preview.height > 0,
+                "Return-to-View preview dimensions must be non-zero"
+            );
             intro.panel = VisualIntroPanel::ReturnToView {
                 summary: preview.summary,
                 preview_frames: preview.frames,
@@ -8746,28 +8754,33 @@ fn summarize_intro(intro: &mut VisualIntroState) -> String {
             preview_frame_index,
             ..
         } => {
-            let frame_line = if preview_frames.is_empty() {
-                "No rendered playback frames are available.".to_string()
-            } else {
-                format!(
-                    "Playback frame {} of {}.",
-                    preview_frame_index.saturating_add(1),
-                    preview_frames.len()
-                )
-            };
-            let frame_detail = frame_metadata
+            assert!(
+                !preview_frames.is_empty(),
+                "Return-to-View summary requires rendered playback frames"
+            );
+            assert_eq!(
+                preview_frames.len(),
+                frame_metadata.len(),
+                "Return-to-View summary frame metadata count must match rendered frames"
+            );
+            let frame_line = format!(
+                "Playback frame {} of {}.",
+                preview_frame_index + 1,
+                preview_frames.len()
+            );
+            let meta = frame_metadata
                 .get(*preview_frame_index)
-                .map(|meta| {
-                    let caption = meta.caption.unwrap_or("No active map-strip caption");
-                    format!(
-                        "{}; command {}; title tick {}; caption: {}.",
-                        visual_return_to_view_frame_kind_label(meta.kind),
-                        meta.command_index,
-                        meta.elapsed_title_ticks,
-                        caption
-                    )
-                })
-                .unwrap_or_else(|| "No playback metadata for this frame.".to_string());
+                .expect("Return-to-View summary requires current frame metadata");
+            let caption = meta
+                .caption
+                .expect("Return-to-View summary requires current frame caption");
+            let frame_detail = format!(
+                "{}; command {}; title tick {}; caption: {}.",
+                visual_return_to_view_frame_kind_label(meta.kind),
+                meta.command_index,
+                meta.elapsed_title_ticks,
+                caption
+            );
             return [
                 "Return to View".to_string(),
                 String::new(),
@@ -8949,12 +8962,11 @@ fn summarize_intro_story(records: &StoryRecords, step: usize) -> String {
         } else {
             step - 1
         };
-        if let Some(text) = records.record(record_index) {
-            lines.push(String::new());
-            lines.push(text.to_string());
-        } else {
-            lines.push(format!("Missing STORY.DAT record {record_index}."));
-        }
+        let text = records.record(record_index).unwrap_or_else(|| {
+            panic!("intro story summary requires STORY.DAT record {record_index}")
+        });
+        lines.push(String::new());
+        lines.push(text.to_string());
     }
     if intro_step_has_story6_secondary_pass(step) {
         if let Some(subimage) = intro_story6_secondary_subimage(step) {
@@ -9450,13 +9462,20 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
         ..
     } = &intro.panel
     else {
-        return buffer.to_rgba();
+        panic!("render_return_to_view_intro_frame called for non-Return-to-View panel");
     };
 
-    let current_meta = frame_metadata.get(*preview_frame_index);
+    assert_eq!(
+        preview_frames.len(),
+        frame_metadata.len(),
+        "Return-to-View frame metadata count must match rendered frame count"
+    );
+    let current_meta = frame_metadata
+        .get(*preview_frame_index)
+        .expect("Return-to-View current frame metadata is missing");
     let caption = current_meta
-        .and_then(|meta| meta.caption)
-        .unwrap_or("Return to View");
+        .caption
+        .expect("Return-to-View current frame is missing its caption");
     let mut rgba = buffer.to_rgba();
     overlay_centered_text_band_rgba(
         &mut rgba,
@@ -9468,32 +9487,32 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
     );
     buffer = intro_buffer_from_rgba_frame(&rgba);
 
-    if let Some(preview_buffer) = preview_frames.get(*preview_frame_index) {
-        let x = ((INTRO_FRAMEBUFFER_WIDTH as usize).saturating_sub(*preview_width)) / 2;
-        debug_assert_eq!(preview_buffer.width, *preview_width);
-        debug_assert_eq!(preview_buffer.height, *preview_height);
-        buffer.blit_return_to_view_preview_buffer(preview_buffer, x, RETURN_TO_VIEW_PREVIEW_Y);
-    }
-    if let Some(ReturnToViewFrameKind::FixedWipeRectangle { step }) =
-        current_meta.map(|meta| meta.kind)
-    {
-        if let Some(rects) = return_to_view_fixed_wipe_rectangles(step) {
-            let [((x0, y0), (x1, y1)), ((x2, y2), (x3, y3))] = rects;
-            buffer.fill_rgba_rect_inclusive(
-                usize::from(x0),
-                usize::from(y0),
-                usize::from(x1),
-                usize::from(y1),
-                RETURN_TO_VIEW_FIXED_WIPE_RGBA,
-            );
-            buffer.fill_rgba_rect_inclusive(
-                usize::from(x2),
-                usize::from(y2),
-                usize::from(x3),
-                usize::from(y3),
-                RETURN_TO_VIEW_FIXED_WIPE_RGBA,
-            );
-        }
+    let preview_buffer = preview_frames
+        .get(*preview_frame_index)
+        .expect("Return-to-View current preview frame is missing");
+    let x = ((INTRO_FRAMEBUFFER_WIDTH as usize).saturating_sub(*preview_width)) / 2;
+    assert_eq!(preview_buffer.width, *preview_width);
+    assert_eq!(preview_buffer.height, *preview_height);
+    buffer.blit_return_to_view_preview_buffer(preview_buffer, x, RETURN_TO_VIEW_PREVIEW_Y);
+
+    if let ReturnToViewFrameKind::FixedWipeRectangle { step } = current_meta.kind {
+        let rects = return_to_view_fixed_wipe_rectangles(step)
+            .expect("Return-to-View fixed wipe rectangle step is outside the published range");
+        let [((x0, y0), (x1, y1)), ((x2, y2), (x3, y3))] = rects;
+        buffer.fill_rgba_rect_inclusive(
+            usize::from(x0),
+            usize::from(y0),
+            usize::from(x1),
+            usize::from(y1),
+            RETURN_TO_VIEW_FIXED_WIPE_RGBA,
+        );
+        buffer.fill_rgba_rect_inclusive(
+            usize::from(x2),
+            usize::from(y2),
+            usize::from(x3),
+            usize::from(y3),
+            RETURN_TO_VIEW_FIXED_WIPE_RGBA,
+        );
     }
     buffer.to_rgba()
 }
@@ -9625,10 +9644,7 @@ fn intro_title_flourish_frame_for_step(step: usize) -> Option<(usize, usize)> {
         }
         remaining -= groups.len();
     }
-    TITLE_FLOURISH_ROW_REVEAL_GROUPS
-        .last()
-        .and_then(|groups| groups.len().checked_sub(1))
-        .map(|last_group| (TITLE_FLOURISH_ROW_REVEAL_GROUPS.len() - 1, last_group))
+    None
 }
 
 #[cfg(test)]
@@ -9857,11 +9873,16 @@ fn draw_british_signature_rgba(
     signature: &BritishPth,
     max_steps: usize,
 ) {
+    assert_eq!(
+        signature.segments.len(),
+        BRITISH_PTH_PEN_ORIGINS.len(),
+        "intro signature RGBA draw requires one path segment per published pen origin"
+    );
     let mut remaining = max_steps;
     for (segment_index, origin) in BRITISH_PTH_PEN_ORIGINS.iter().enumerate() {
-        let Some(segment) = signature.segment(segment_index) else {
-            continue;
-        };
+        let segment = signature
+            .segment(segment_index)
+            .expect("intro signature segment was validated above");
         let mut x = i16::from(origin.0);
         let mut y = i16::from(origin.1);
         for stroke in segment {
@@ -9923,12 +9944,20 @@ fn draw_title_tick_overlay_rgba(dst: &mut [u8], dst_width: usize, dst_height: us
     // opaque four-frame overlay in the public title-tick rectangle.
     let start_x = TITLE_TICK_FRAME_X as usize;
     let start_y = TITLE_TICK_FRAME_Y as usize;
-    let end_x = start_x
-        .saturating_add(TITLE_TICK_FRAME_WIDTH as usize)
-        .min(dst_width);
-    let end_y = start_y
-        .saturating_add(TITLE_TICK_FRAME_HEIGHT as usize)
-        .min(dst_height);
+    let end_x = start_x + TITLE_TICK_FRAME_WIDTH as usize;
+    let end_y = start_y + TITLE_TICK_FRAME_HEIGHT as usize;
+    assert!(
+        end_x <= dst_width && end_y <= dst_height,
+        "intro title tick RGBA rectangle ({start_x}, {start_y}) size {}x{} exceeds target {dst_width}x{dst_height}",
+        TITLE_TICK_FRAME_WIDTH,
+        TITLE_TICK_FRAME_HEIGHT
+    );
+    assert!(
+        dst.len() >= dst_width * dst_height * 4,
+        "intro title tick RGBA target has {} byte(s), expected at least {}",
+        dst.len(),
+        dst_width * dst_height * 4
+    );
 
     for y in start_y..end_y {
         let local_y = y - start_y;
@@ -9944,30 +9973,26 @@ fn draw_title_tick_overlay_rgba(dst: &mut [u8], dst_width: usize, dst_height: us
 
 #[cfg(test)]
 fn paint_signature_pixel_rgba(dst: &mut [u8], dst_width: usize, dst_height: usize, x: i16, y: i16) {
-    let Ok(x) = usize::try_from(x) else {
-        return;
-    };
-    let Ok(y) = usize::try_from(y) else {
-        return;
-    };
-    if x >= dst_width || y >= dst_height {
-        return;
-    }
+    let x = usize::try_from(x).expect("intro signature pen moved to a negative x coordinate");
+    let y = usize::try_from(y).expect("intro signature pen moved to a negative y coordinate");
+    assert!(
+        x < dst_width && y < dst_height,
+        "intro signature pen coordinate ({x}, {y}) exceeds framebuffer {dst_width}x{dst_height}"
+    );
     let rgb = EGA_PALETTE_RGB[15];
     let offset = (y * dst_width + x) * 4;
     dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
 }
 
 fn paint_signature_pixel_buffer(dst: &mut IntroDisplayBuffer, x: i16, y: i16) {
-    let Ok(x) = usize::try_from(x) else {
-        return;
-    };
-    let Ok(y) = usize::try_from(y) else {
-        return;
-    };
-    if x >= dst.width || y >= dst.height {
-        return;
-    }
+    let x = usize::try_from(x).expect("intro signature pen moved to a negative x coordinate");
+    let y = usize::try_from(y).expect("intro signature pen moved to a negative y coordinate");
+    assert!(
+        x < dst.width && y < dst.height,
+        "intro signature pen coordinate ({x}, {y}) exceeds framebuffer {}x{}",
+        dst.width,
+        dst.height
+    );
     dst.pixels[y * dst.width + x] = 15;
 }
 
@@ -10197,13 +10222,22 @@ fn graphic_image_to_rgba_clipped(
         TileGraphicsDepth::Cga4 => &CGA_PALETTE_RGB,
     };
     let limit = palette.len();
-    let width = width.min(image.width);
-    let height = height.min(image.height);
+    assert!(
+        width <= image.width && height <= image.height,
+        "graphic image clip {width}x{height} exceeds source {}x{}",
+        image.width,
+        image.height
+    );
     let mut rgba = Vec::with_capacity(width * height * 4);
     for row in 0..height {
         let row_start = row * image.width;
         for pixel in &image.pixels[row_start..row_start + width] {
-            let rgb = palette[usize::from(*pixel) % limit];
+            assert!(
+                usize::from(*pixel) < limit,
+                "graphic image palette index {pixel} exceeds {:?} palette length {limit}",
+                depth
+            );
+            let rgb = palette[usize::from(*pixel)];
             rgba.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
         }
     }
@@ -10260,9 +10294,10 @@ fn blit_image_panel_specs_intro_buffer(
 }
 
 fn ega_palette_index_from_rgba(rgba: &[u8]) -> u8 {
-    if rgba.len() < 3 {
-        return 0;
-    }
+    assert!(
+        rgba.len() >= 3,
+        "EGA palette conversion requires at least three RGBA/RGB bytes"
+    );
     let mut best_index = 0u8;
     let mut best_distance = u32::MAX;
     for (index, rgb) in EGA_PALETTE_RGB.iter().enumerate() {
@@ -10288,21 +10323,28 @@ fn blit_rgba(
     dst_x: usize,
     dst_y: usize,
 ) {
+    assert!(
+        src.len() >= src_width * src_height * 4,
+        "RGBA blit source has {} byte(s), expected at least {}",
+        src.len(),
+        src_width * src_height * 4
+    );
+    assert!(
+        dst.len() >= dst_width * dst_height * 4,
+        "RGBA blit destination has {} byte(s), expected at least {}",
+        dst.len(),
+        dst_width * dst_height * 4
+    );
+    assert!(
+        dst_x + src_width <= dst_width && dst_y + src_height <= dst_height,
+        "RGBA blit at ({dst_x}, {dst_y}) with size {src_width}x{src_height} exceeds target {dst_width}x{dst_height}"
+    );
     for row in 0..src_height {
         let y = dst_y + row;
-        if y >= dst_height {
-            break;
-        }
         let src_row = row * src_width * 4;
         let dst_row = (y * dst_width + dst_x) * 4;
-        let cols = src_width.min(dst_width.saturating_sub(dst_x));
-        let bytes = cols * 4;
-        if let (Some(src_slice), Some(dst_slice)) = (
-            src.get(src_row..src_row + bytes),
-            dst.get_mut(dst_row..dst_row + bytes),
-        ) {
-            dst_slice.copy_from_slice(src_slice);
-        }
+        let bytes = src_width * 4;
+        dst[dst_row..dst_row + bytes].copy_from_slice(&src[src_row..src_row + bytes]);
     }
 }
 
@@ -10314,18 +10356,21 @@ fn overlay_fixed_cell_text_intro_buffer(
     cell_y: usize,
     inverse: bool,
 ) {
+    assert!(
+        cell_x + text.bytes().count() <= dst.width / CH_CELL_SIDE
+            && cell_y < dst.height / CH_CELL_SIDE,
+        "intro fixed-cell buffer text at cell ({cell_x}, {cell_y}) with {} byte(s) exceeds framebuffer {}x{}",
+        text.bytes().count(),
+        dst.width,
+        dst.height
+    );
     for (index, byte) in text.bytes().enumerate() {
-        let px = cell_x.saturating_add(index).saturating_mul(CH_CELL_SIDE);
-        let py = cell_y.saturating_mul(CH_CELL_SIDE);
-        if px >= dst.width || py >= dst.height {
-            break;
-        }
+        let px = (cell_x + index) * CH_CELL_SIDE;
+        let py = cell_y * CH_CELL_SIDE;
         let code = byte & 0x7f;
         for glyph_y in 0..CH_CELL_SIDE {
             let target_y = py + glyph_y;
-            if target_y >= dst.height {
-                break;
-            }
+            assert!(target_y < dst.height);
             let mut row_bits = font
                 .glyph_row(code, glyph_y)
                 .expect("intro fixed-cell text requires complete IBM.CH glyph rows");
@@ -10334,9 +10379,7 @@ fn overlay_fixed_cell_text_intro_buffer(
             }
             for glyph_x in 0..CH_CELL_SIDE {
                 let target_x = px + glyph_x;
-                if target_x >= dst.width {
-                    break;
-                }
+                assert!(target_x < dst.width);
                 dst.pixels[target_y * dst.width + target_x] =
                     if row_bits & (1 << (7 - glyph_x)) != 0 {
                         0x0f
@@ -10470,36 +10513,43 @@ fn overlay_fixed_cell_text_rgba(
 ) {
     let foreground = EGA_PALETTE_RGB[15];
     let background = EGA_PALETTE_RGB[0];
+    assert!(
+        dst.len() >= dst_width * dst_height * 4,
+        "intro fixed-cell RGBA target has {} byte(s), expected at least {}",
+        dst.len(),
+        dst_width * dst_height * 4
+    );
+    assert!(
+        cell_x + text.bytes().count() <= dst_width / CH_CELL_SIDE
+            && cell_y < dst_height / CH_CELL_SIDE,
+        "intro fixed-cell text at cell ({cell_x}, {cell_y}) with {} byte(s) exceeds framebuffer {}x{}",
+        text.bytes().count(),
+        dst_width,
+        dst_height
+    );
     for (index, byte) in text.bytes().enumerate() {
-        let px = cell_x.saturating_add(index).saturating_mul(CH_CELL_SIDE);
-        let py = cell_y.saturating_mul(CH_CELL_SIDE);
-        if px >= dst_width || py >= dst_height {
-            break;
-        }
+        let px = (cell_x + index) * CH_CELL_SIDE;
+        let py = cell_y * CH_CELL_SIDE;
         let code = byte & 0x7f;
         for glyph_y in 0..CH_CELL_SIDE {
             let target_y = py + glyph_y;
-            if target_y >= dst_height {
-                break;
-            }
-            let mut row_bits = font.glyph_row(code, glyph_y).unwrap_or(0);
+            assert!(target_y < dst_height);
+            let mut row_bits = font
+                .glyph_row(code, glyph_y)
+                .expect("intro fixed-cell RGBA text requires complete IBM.CH glyph rows");
             if inverse {
                 row_bits = !row_bits;
             }
             for glyph_x in 0..CH_CELL_SIDE {
                 let target_x = px + glyph_x;
-                if target_x >= dst_width {
-                    break;
-                }
+                assert!(target_x < dst_width);
                 let rgb = if row_bits & (1 << (7 - glyph_x)) != 0 {
                     foreground
                 } else {
                     background
                 };
                 let offset = (target_y * dst_width + target_x) * 4;
-                if let Some(pixel) = dst.get_mut(offset..offset + 4) {
-                    pixel.copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
-                }
+                dst[offset..offset + 4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
             }
         }
     }
@@ -10509,15 +10559,7 @@ fn overlay_intro_menu_message_rgba(dst: &mut [u8], game_dir: &Path, message: &st
     if message.is_empty() {
         return;
     }
-    let Ok(font) = load_ibm_ch_font(game_dir) else {
-        overlay_nonblack_text_panel_rgba(
-            dst,
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            INTRO_FRAMEBUFFER_HEIGHT as usize,
-            message,
-        );
-        return;
-    };
+    let font = load_ibm_ch_font(game_dir).expect("intro menu message requires IBM.CH");
     overlay_fixed_cell_text_rgba(
         dst,
         INTRO_FRAMEBUFFER_WIDTH as usize,
@@ -10540,19 +10582,28 @@ fn fill_rgba_rect_inclusive(
     y1: usize,
     color: [u8; 4],
 ) {
-    if dst_width == 0 || dst_height == 0 {
-        return;
-    }
-    let min_x = x0.min(x1).min(dst_width - 1);
-    let max_x = x0.max(x1).min(dst_width - 1);
-    let min_y = y0.min(y1).min(dst_height - 1);
-    let max_y = y0.max(y1).min(dst_height - 1);
-    for y in min_y..=max_y {
-        for x in min_x..=max_x {
+    assert!(
+        dst_width > 0 && dst_height > 0,
+        "RGBA rectangle fill requires a non-empty target"
+    );
+    assert!(
+        dst.len() >= dst_width * dst_height * 4,
+        "RGBA rectangle target has {} byte(s), expected at least {}",
+        dst.len(),
+        dst_width * dst_height * 4
+    );
+    assert!(
+        x0 <= x1 && y0 <= y1,
+        "RGBA rectangle is inverted: ({x0}, {y0})..({x1}, {y1})"
+    );
+    assert!(
+        x1 < dst_width && y1 < dst_height,
+        "RGBA rectangle ({x0}, {y0})..({x1}, {y1}) exceeds target {dst_width}x{dst_height}"
+    );
+    for y in y0..=y1 {
+        for x in x0..=x1 {
             let offset = (y * dst_width + x) * 4;
-            if let Some(pixel) = dst.get_mut(offset..offset + 4) {
-                pixel.copy_from_slice(&color);
-            }
+            dst[offset..offset + 4].copy_from_slice(&color);
         }
     }
 }
@@ -10651,21 +10702,7 @@ fn overlay_proportional_text_buffer(
 }
 
 fn visual_proportional_width_table(font: &ProportionalFont) -> ProportionalWidthTable {
-    let mut widths = ProportionalWidthTable::from_font_advances(font);
-    if widths.widths[usize::from(b' ')] == 0 {
-        widths.widths[usize::from(b' ')] = 4;
-    }
-    for byte in b'A'..=b'Z' {
-        if widths.widths[usize::from(byte)] == 0 {
-            widths.widths[usize::from(byte)] = 6;
-        }
-    }
-    for byte in b'a'..=b'z' {
-        if widths.widths[usize::from(byte)] == 0 {
-            widths.widths[usize::from(byte)] = 6;
-        }
-    }
-    widths
+    ProportionalWidthTable::from_font_advances(font)
 }
 
 #[cfg(test)]
@@ -10678,23 +10715,27 @@ fn overlay_monochrome_bitmap_rgba(
     y: usize,
     color: [u8; 4],
 ) {
+    assert!(
+        x + bitmap.width <= dst_width && y + bitmap.height <= dst_height,
+        "intro monochrome RGBA blit at ({x}, {y}) with size {}x{} exceeds target {dst_width}x{dst_height}",
+        bitmap.width,
+        bitmap.height
+    );
+    assert!(
+        dst.len() >= dst_width * dst_height * 4,
+        "intro monochrome RGBA target has {} byte(s), expected at least {}",
+        dst.len(),
+        dst_width * dst_height * 4
+    );
     for row in 0..bitmap.height {
         let target_y = y + row;
-        if target_y >= dst_height {
-            break;
-        }
         for col in 0..bitmap.width {
             if bitmap.pixels[row * bitmap.width + col] == 0 {
                 continue;
             }
             let target_x = x + col;
-            if target_x >= dst_width {
-                break;
-            }
             let offset = (target_y * dst_width + target_x) * 4;
-            if let Some(pixel) = dst.get_mut(offset..offset + 4) {
-                pixel.copy_from_slice(&color);
-            }
+            dst[offset..offset + 4].copy_from_slice(&color);
         }
     }
 }
@@ -10706,58 +10747,22 @@ fn overlay_monochrome_bitmap_buffer(
     y: usize,
     color: u8,
 ) {
+    assert!(
+        x + bitmap.width <= dst.width && y + bitmap.height <= dst.height,
+        "intro monochrome buffer blit at ({x}, {y}) with size {}x{} exceeds framebuffer {}x{}",
+        bitmap.width,
+        bitmap.height,
+        dst.width,
+        dst.height
+    );
     for row in 0..bitmap.height {
         let target_y = y + row;
-        if target_y >= dst.height {
-            break;
-        }
         for col in 0..bitmap.width {
             if bitmap.pixels[row * bitmap.width + col] == 0 {
                 continue;
             }
             let target_x = x + col;
-            if target_x >= dst.width {
-                break;
-            }
             dst.pixels[target_y * dst.width + target_x] = color & 0x0f;
-        }
-    }
-}
-
-fn overlay_nonblack_text_panel_rgba(
-    dst: &mut [u8],
-    dst_width: usize,
-    dst_height: usize,
-    text: &str,
-) {
-    let text_rgba = render_text_panel_rgba(text, dst_width, dst_height)
-        .expect("intro text overlay rendering failed");
-    let text_pixels: Vec<(usize, [u8; 4])> = text_rgba
-        .chunks_exact(4)
-        .enumerate()
-        .filter_map(|(index, pixel)| {
-            (pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
-                .then_some((index, [pixel[0], pixel[1], pixel[2], pixel[3]]))
-        })
-        .collect();
-
-    for (index, _) in &text_pixels {
-        let x = index % dst_width;
-        let y = index / dst_width;
-        let shadow_x = x + 1;
-        let shadow_y = y + 1;
-        if shadow_x < dst_width && shadow_y < dst_height {
-            let offset = (shadow_y * dst_width + shadow_x) * 4;
-            if let Some(pixel) = dst.get_mut(offset..offset + 4) {
-                pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
-            }
-        }
-    }
-
-    for (index, pixel) in text_pixels {
-        let offset = index * 4;
-        if let Some(dst_pixel) = dst.get_mut(offset..offset + 4) {
-            dst_pixel.copy_from_slice(&pixel);
         }
     }
 }
@@ -10776,7 +10781,11 @@ fn overlay_centered_text_band_rgba(
     );
     let glyph_advance = 4usize;
     let max_cols = dst_width / glyph_advance;
-    let text_cols = text.chars().count().min(max_cols);
+    let text_cols = text.chars().count();
+    assert!(
+        text_cols <= max_cols,
+        "intro centered text band text has {text_cols} column(s), but band width only fits {max_cols}"
+    );
     let pad_cols = max_cols.saturating_sub(text_cols) / 2;
     let centered = format!("{}{}", " ".repeat(pad_cols), text);
     let text_rgba = render_text_panel_rgba(&centered, dst_width, band_height)
@@ -10786,16 +10795,12 @@ fn overlay_centered_text_band_rgba(
     for row in 0..band_height {
         for x in 0..dst_width {
             let src_offset = (row * dst_width + x) * 4;
-            let Some(pixel) = text_rgba.get(src_offset..src_offset + 4) else {
-                continue;
-            };
+            let pixel = &text_rgba[src_offset..src_offset + 4];
             if pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0 {
                 continue;
             }
             let dst_offset = ((y + row) * dst_width + x) * 4;
-            if let Some(dst_pixel) = dst.get_mut(dst_offset..dst_offset + 4) {
-                dst_pixel.copy_from_slice(pixel);
-            }
+            dst[dst_offset..dst_offset + 4].copy_from_slice(pixel);
         }
     }
 }
@@ -11341,112 +11346,77 @@ fn visual_return_to_view_summary(
     raster_depth: TileGraphicsDepth,
 ) -> VisualReturnToViewPreview {
     let path = game_dir.join(MISCMAPS_DAT_FILE);
-    match std::fs::metadata(&path) {
-        Ok(metadata) => {
-            let header = format!(
-                "{} found ({} bytes). Return-to-View strips start at byte {}, span {} bytes; command stream starts at byte {} and spans {} bytes.",
-                MISCMAPS_DAT_FILE,
-                metadata.len(),
-                MISCMAPS_RTV_STRIP_SECTION_OFFSET,
-                MISCMAPS_RTV_STRIP_SECTION_BYTES,
-                MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
-                RTV_COMMAND_STREAM_BYTES
-            );
-            match load_return_to_view_assets(game_dir) {
-                Ok(Some(assets)) => {
-                    let script_summary = summarize_return_to_view_script(&assets.script);
-                    let playback_result = run_return_to_view_playback_until_restart(
-                        &assets.strips,
-                        &assets.script,
-                        4096,
-                    );
-                    let frames = load_tile_atlas(game_dir, raster_depth).and_then(|atlas| {
-                        let playback = playback_result?;
-                        let metadata = playback
-                            .frames
-                            .iter()
-                            .map(|frame| VisualReturnToViewFrameMeta {
-                                command_index: frame.command_index,
-                                elapsed_title_ticks: frame.elapsed_title_ticks,
-                                kind: frame.kind,
-                                caption: frame.state.current_caption,
-                            })
-                            .collect::<Vec<_>>();
-                        let rendered_frames = playback
-                            .frames
-                            .iter()
-                            .map(|frame| {
-                                render_return_to_view_playback_frame_viewport(frame, &atlas, 0).map(
-                                    |viewport| {
-                                        (
-                                            IntroDisplayBuffer::from_rgba(
-                                                viewport.width,
-                                                viewport.height,
-                                                &viewport.to_rgba(),
-                                            ),
-                                            viewport.width,
-                                            viewport.height,
-                                        )
-                                    },
-                                )
-                            })
-                            .collect::<io::Result<Vec<_>>>()?;
-                        Ok((rendered_frames, metadata))
-                    });
-                    match (
-                        summarize_return_to_view_preview(&assets.strips, &assets.script),
-                        frames,
-                    ) {
-                        (Ok(preview_summary), Ok((rendered_frames, frame_metadata))) => {
-                            let (width, height) = rendered_frames
-                                .first()
-                                .map(|(_, width, height)| (*width, *height))
-                                .unwrap_or((0, 0));
-                            let frames = rendered_frames
-                                .into_iter()
-                                .map(|(buffer, _, _)| buffer)
-                                .collect::<Vec<_>>();
-                            VisualReturnToViewPreview {
-                                summary: format!(
-                                    "{header} {script_summary} {preview_summary} Rendered {} playback frame(s).",
-                                    frames.len()
-                                ),
-                                frames,
-                                frame_metadata,
-                                width,
-                                height,
-                            }
-                        }
-                        (Ok(preview_summary), Err(err)) => VisualReturnToViewPreview {
-                            summary: format!(
-                                "{header} {script_summary} {preview_summary} Render error: {err}"
-                            ),
-                            ..Default::default()
-                        },
-                        (Err(err), _) => VisualReturnToViewPreview {
-                            summary: format!("{header} {script_summary} Dry-run error: {err}"),
-                            ..Default::default()
-                        },
-                    }
-                }
-                Ok(None) => VisualReturnToViewPreview {
-                    summary: format!("{MISCMAPS_DAT_FILE} is missing; preview cannot run."),
-                    ..Default::default()
-                },
-                Err(err) => VisualReturnToViewPreview {
-                    summary: format!("{header} Script error: {err}"),
-                    ..Default::default()
-                },
-            }
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => VisualReturnToViewPreview {
-            summary: format!("{MISCMAPS_DAT_FILE} is missing; preview cannot run."),
-            ..Default::default()
-        },
-        Err(err) => VisualReturnToViewPreview {
-            summary: format!("Return-to-View preview error: {err}"),
-            ..Default::default()
-        },
+    let metadata = std::fs::metadata(&path)
+        .unwrap_or_else(|err| panic!("Return-to-View requires {MISCMAPS_DAT_FILE}: {err}"));
+    let header = format!(
+        "{} found ({} bytes). Return-to-View strips start at byte {}, span {} bytes; command stream starts at byte {} and spans {} bytes.",
+        MISCMAPS_DAT_FILE,
+        metadata.len(),
+        MISCMAPS_RTV_STRIP_SECTION_OFFSET,
+        MISCMAPS_RTV_STRIP_SECTION_BYTES,
+        MISCMAPS_RTV_COMMAND_SECTION_OFFSET,
+        RTV_COMMAND_STREAM_BYTES
+    );
+    let assets = load_return_to_view_assets(game_dir)
+        .unwrap_or_else(|err| panic!("Return-to-View requires readable assets: {err}"))
+        .expect("Return-to-View asset loader returned no assets after metadata succeeded");
+    let script_summary = summarize_return_to_view_script(&assets.script);
+    let preview_summary = summarize_return_to_view_preview(&assets.strips, &assets.script)
+        .unwrap_or_else(|err| panic!("Return-to-View preview dry-run failed: {err}"));
+    let playback = run_return_to_view_playback_until_restart(&assets.strips, &assets.script, 4096)
+        .unwrap_or_else(|err| panic!("Return-to-View playback failed: {err}"));
+    assert!(
+        !playback.frames.is_empty(),
+        "Return-to-View playback emitted no frames"
+    );
+    let atlas = load_tile_atlas(game_dir, raster_depth)
+        .unwrap_or_else(|err| panic!("Return-to-View requires tile atlas: {err}"));
+    let frame_metadata = playback
+        .frames
+        .iter()
+        .map(|frame| VisualReturnToViewFrameMeta {
+            command_index: frame.command_index,
+            elapsed_title_ticks: frame.elapsed_title_ticks,
+            kind: frame.kind,
+            caption: frame.state.current_caption,
+        })
+        .collect::<Vec<_>>();
+    let rendered_frames = playback
+        .frames
+        .iter()
+        .map(|frame| {
+            render_return_to_view_playback_frame_viewport(frame, &atlas, 0).unwrap_or_else(|err| {
+                panic!(
+                    "Return-to-View frame {} at title tick {} failed to render: {err}",
+                    frame.command_index, frame.elapsed_title_ticks
+                )
+            })
+        })
+        .map(|viewport| {
+            (
+                IntroDisplayBuffer::from_rgba(viewport.width, viewport.height, &viewport.to_rgba()),
+                viewport.width,
+                viewport.height,
+            )
+        })
+        .collect::<Vec<_>>();
+    let (width, height) = rendered_frames
+        .first()
+        .map(|(_, width, height)| (*width, *height))
+        .expect("Return-to-View rendered frame list unexpectedly empty");
+    let frames = rendered_frames
+        .into_iter()
+        .map(|(buffer, _, _)| buffer)
+        .collect::<Vec<_>>();
+    VisualReturnToViewPreview {
+        summary: format!(
+            "{header} {script_summary} {preview_summary} Rendered {} playback frame(s).",
+            frames.len()
+        ),
+        frames,
+        frame_metadata,
+        width,
+        height,
     }
 }
 
@@ -11723,23 +11693,42 @@ fn apply_rect_column_sweep_reveal_rgba(
     height: usize,
     transition: RectColumnSweepTransition,
 ) {
-    if destination.len() != source.len() {
-        return;
-    }
-    let Some((start_x, end_x)) = transition.revealed_columns() else {
-        return;
-    };
+    assert_eq!(
+        destination.len(),
+        source.len(),
+        "rect column sweep requires matching source/destination buffers"
+    );
+    assert!(
+        destination.len() >= width * height * 4,
+        "rect column sweep target has {} byte(s), expected at least {}",
+        destination.len(),
+        width * height * 4
+    );
+    let (start_x, end_x) = transition
+        .revealed_columns()
+        .expect("rect column sweep requires a valid transition rectangle");
     let (rect_x0, rect_y0, rect_x1, rect_y1) = transition.rect;
-    let y0 = usize::from(rect_y0).min(height);
-    let y1 = usize::from(rect_y1).min(height.saturating_sub(1));
-    let x0 = usize::from(rect_x0).min(width);
-    let x1 = usize::from(rect_x1).min(width.saturating_sub(1));
-    let revealed_start = usize::from(start_x).min(width);
-    let revealed_end = usize::from(end_x).min(width.saturating_sub(1));
-
-    if x0 > x1 || y0 > y1 {
-        return;
-    }
+    assert!(
+        rect_x0 <= rect_x1 && rect_y0 <= rect_y1,
+        "rect column sweep rectangle is inverted: {:?}",
+        transition.rect
+    );
+    let y0 = usize::from(rect_y0);
+    let y1 = usize::from(rect_y1);
+    let x0 = usize::from(rect_x0);
+    let x1 = usize::from(rect_x1);
+    let revealed_start = usize::from(start_x);
+    let revealed_end = usize::from(end_x);
+    assert!(
+        x1 < width && y1 < height,
+        "rect column sweep rectangle {:?} exceeds target {width}x{height}",
+        transition.rect
+    );
+    assert!(
+        revealed_start >= x0 && revealed_end <= x1 && revealed_start <= revealed_end,
+        "rect column sweep reveal range {revealed_start}..={revealed_end} is outside {:?}",
+        transition.rect
+    );
 
     for y in y0..=y1 {
         for x in x0..=x1 {
@@ -11747,11 +11736,7 @@ fn apply_rect_column_sweep_reveal_rgba(
                 continue;
             }
             let offset = (y * width + x) * 4;
-            if let Some(src_pixel) = source.get(offset..offset + 4)
-                && let Some(dst_pixel) = destination.get_mut(offset..offset + 4)
-            {
-                dst_pixel.copy_from_slice(src_pixel);
-            }
+            destination[offset..offset + 4].copy_from_slice(&source[offset..offset + 4]);
         }
     }
 }
@@ -12904,26 +12889,6 @@ mod tests {
             UnifiedMenuStep::PresentTitle
         ));
 
-        let mut frame = vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * 16 * 4];
-        for pixel in frame.chunks_exact_mut(4) {
-            pixel.copy_from_slice(&[0x22, 0x22, 0x22, 0xff]);
-        }
-        overlay_nonblack_text_panel_rgba(
-            &mut frame,
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            16,
-            "J  Journey Onward",
-        );
-        assert!(frame.chunks_exact(4).any(|pixel| {
-            pixel[3] == 0xff
-                && (pixel[0] != 0x22 || pixel[1] != 0x22 || pixel[2] != 0x22)
-                && (pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0)
-        }));
-        assert!(
-            frame
-                .chunks_exact(4)
-                .any(|pixel| pixel == [0x22, 0x22, 0x22, 0xff])
-        );
         let _ = fs::remove_dir_all(&intro.game_dir);
     }
 
@@ -13106,15 +13071,12 @@ mod tests {
     }
 
     #[test]
-    fn visual_intro_menu_idle_timeout_enters_return_to_view() {
+    #[should_panic(expected = "Return-to-View requires MISCMAPS.DAT")]
+    fn visual_intro_menu_idle_timeout_requires_return_to_view_assets() {
         let mut intro = visual_intro_state_with_panel(debug_game_dir(), VisualIntroPanel::Menu);
         intro.menu_idle_ticks = INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS - 1;
 
-        assert!(advance_visual_intro_finished_menu_idle(&mut intro));
-
-        assert!(matches!(intro.panel, VisualIntroPanel::ReturnToView { .. }));
-        assert_eq!(intro.menu_idle_ticks, 0);
-        let _ = fs::remove_dir_all(&intro.game_dir);
+        advance_visual_intro_finished_menu_idle(&mut intro);
     }
 
     #[test]
@@ -15612,19 +15574,12 @@ mod tests {
     }
 
     #[test]
-    fn visual_return_to_view_summary_reports_miscmap_shape() {
+    #[should_panic(expected = "Return-to-View requires readable assets")]
+    fn visual_return_to_view_summary_rejects_invalid_miscmap_asset() {
         let dir = debug_game_dir();
         fs::write(dir.join(MISCMAPS_DAT_FILE), vec![0u8; 128]).unwrap();
 
-        let preview = visual_return_to_view_summary(&dir, TileGraphicsDepth::Ega16);
-
-        assert!(preview.summary.contains(MISCMAPS_DAT_FILE));
-        assert!(preview.summary.contains("128 bytes"));
-        assert!(preview.summary.contains("Return-to-View strips"));
-        assert!(preview.frames.is_empty());
-        assert_eq!(preview.width, 0);
-        assert_eq!(preview.height, 0);
-        let _ = fs::remove_dir_all(dir);
+        visual_return_to_view_summary(&dir, TileGraphicsDepth::Ega16);
     }
 
     #[test]
