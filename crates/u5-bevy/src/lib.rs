@@ -8650,14 +8650,14 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
             .then_some(intro.title_signature_progress);
         let mut drew_title = false;
         let panel_rgba = if title_phase {
-            visual_intro_title_art_rgba(&intro.game_dir, signature_progress, intro.title_tick_frame)
+            visual_intro_title_art_rgba(&intro.game_dir, signature_progress)
         } else {
             visual_intro_start_menu_rgba(
                 &intro.game_dir,
                 intro.raster_depth,
                 intro.title_tick_frame,
             )
-            .or_else(|| visual_intro_title_art_rgba(&intro.game_dir, None, intro.title_tick_frame))
+            .or_else(|| visual_intro_title_art_rgba(&intro.game_dir, None))
         };
         if let Some(title_rgba) = panel_rgba {
             blit_rgba(
@@ -9058,9 +9058,7 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
     for pixel in rgba.chunks_exact_mut(4) {
         pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
     }
-    if let Some(title_rgba) =
-        visual_intro_title_art_rgba(&intro.game_dir, None, intro.title_tick_frame)
-    {
+    if let Some(title_rgba) = visual_intro_title_art_rgba(&intro.game_dir, None) {
         blit_rgba(
             &mut rgba,
             INTRO_FRAMEBUFFER_WIDTH as usize,
@@ -9159,7 +9157,6 @@ fn visual_intro_start_menu_reveal_active(intro: &VisualIntroState) -> bool {
 fn visual_intro_title_art_rgba(
     game_dir: &Path,
     signature_progress: Option<usize>,
-    title_tick_frame: u8,
 ) -> Option<Vec<u8>> {
     let title = load_title_bit(game_dir).ok()?;
     let british = load_british_bit(game_dir).ok()?;
@@ -9174,12 +9171,6 @@ fn visual_intro_title_art_rgba(
             progress,
         );
     }
-    draw_title_tick_overlay_rgba(
-        &mut rgba,
-        TITLE_SURFACE_WIDTH as usize,
-        TITLE_SURFACE_HEIGHT as usize,
-        title_tick_frame,
-    );
     Some(rgba)
 }
 
