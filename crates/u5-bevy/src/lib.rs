@@ -134,6 +134,7 @@ const RETURN_TO_VIEW_CAPTION_Y: usize = 4;
 const RETURN_TO_VIEW_CAPTION_HEIGHT: usize = 14;
 const RETURN_TO_VIEW_PREVIEW_Y: usize = 18;
 const RETURN_TO_VIEW_FIXED_WIPE_RGBA: [u8; 4] = [0xff, 0x55, 0xff, 0xff];
+const INTRO_ANIMATION_TICK_INTERVAL_SECS: f32 = 1.0 / 18.2;
 const PROPORTIONAL_TEXT_LINE_HEIGHT: usize = PCS_GLYPH_HEIGHT + 2;
 const INTRO_STORY_TEXT_X: usize = 10;
 const INTRO_STORY_TEXT_Y: usize = 138;
@@ -7144,6 +7145,8 @@ fn run_visual_intro_menu_app(
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
             menu_idle_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
@@ -7151,6 +7154,7 @@ fn run_visual_intro_menu_app(
             launch_result,
             image_handle: None,
         })
+        .insert_resource(VisualIntroAnimationPump::default())
         .insert_resource(ScreenshotConfig {
             path: screenshot_path,
             frame_delay: screenshot_delay,
@@ -7278,6 +7282,8 @@ struct VisualIntroState {
     title_signature_complete: bool,
     title_tick_frame: u8,
     start_menu_reveal: Option<RectColumnSweepTransition>,
+    start_menu_reveal_backing: Option<Vec<u8>>,
+    modal_backing: Option<Vec<u8>>,
     menu_idle_ticks: u16,
     message_waiting_for_key: bool,
     message: String,
@@ -7358,6 +7364,21 @@ impl Default for AnimationPump {
         Self {
             accumulator: 0.0,
             interval: 0.33,
+        }
+    }
+}
+
+#[derive(Resource)]
+struct VisualIntroAnimationPump {
+    accumulator: f32,
+    interval: f32,
+}
+
+impl Default for VisualIntroAnimationPump {
+    fn default() -> Self {
+        Self {
+            accumulator: 0.0,
+            interval: INTRO_ANIMATION_TICK_INTERVAL_SECS,
         }
     }
 }
@@ -7626,77 +7647,23 @@ fn transition_visual_intro_to_gameplay(
 }
 
 fn animate_visual_intro_title_effects(
+    time: Res<Time>,
+    mut pump: ResMut<VisualIntroAnimationPump>,
     intro: Option<ResMut<VisualIntroState>>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    const SIGNATURE_STEPS_PER_FRAME: usize = 24;
-
     let Some(mut intro) = intro else {
         return;
     };
 
-    if matches!(intro.panel, VisualIntroPanel::Menu) {
-        let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
-
-        let reveal_advanced = if title_phase {
-            false
-        } else if intro.message_waiting_for_key {
-            false
-        } else {
-            intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
-            advance_visual_intro_start_menu_reveal(&mut intro)
-        };
-
-        advance_visual_intro_finished_menu_idle(&mut intro);
-
-        if title_phase && !intro.title_flourish_complete {
-            if intro.title_flourish_step + 1 >= intro_title_flourish_total_steps() {
-                intro.title_flourish_complete = true;
-            } else {
-                intro.title_flourish_step += 1;
-            }
-        } else if title_phase && !intro.title_signature_complete {
-            let Ok(signature) = load_british_pth(&intro.game_dir) else {
-                intro.title_signature_complete = true;
-                if !reveal_advanced {
-                    return;
-                }
-                let rgba = render_intro_frame(&mut intro);
-                if let Some(handle) = intro.image_handle.as_ref()
-                    && let Some(image) = images.get_mut(handle)
-                {
-                    image.data = Some(rgba);
-                }
-                return;
-            };
-            let total_steps = british_signature_step_count(&signature);
-            if total_steps == 0 {
-                intro.title_signature_complete = true;
-                if !reveal_advanced {
-                    return;
-                }
-                let rgba = render_intro_frame(&mut intro);
-                if let Some(handle) = intro.image_handle.as_ref()
-                    && let Some(image) = images.get_mut(handle)
-                {
-                    image.data = Some(rgba);
-                }
-                return;
-            }
-
-            intro.title_signature_progress =
-                (intro.title_signature_progress + SIGNATURE_STEPS_PER_FRAME).min(total_steps);
-            if intro.title_signature_progress >= total_steps {
-                intro.title_signature_progress = 0;
-                intro.title_signature_complete = true;
-            }
-        }
-    } else {
-        let mut title_tick_frame = intro.title_tick_frame;
-        if !advance_visual_intro_panel_animation(&mut intro.panel, &mut title_tick_frame) {
-            return;
-        }
-        intro.title_tick_frame = title_tick_frame;
+    pump.accumulator += time.delta_secs();
+    let mut advanced = false;
+    while pump.accumulator >= pump.interval {
+        pump.accumulator -= pump.interval;
+        advanced |= advance_visual_intro_animation_tick(&mut intro);
+    }
+    if !advanced {
+        return;
     }
 
     let rgba = render_intro_frame(&mut intro);
@@ -7704,6 +7671,58 @@ fn animate_visual_intro_title_effects(
         if let Some(image) = images.get_mut(handle) {
             image.data = Some(rgba);
         }
+    }
+}
+
+fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
+    const SIGNATURE_STEPS_PER_TICK: usize = 24;
+
+    if matches!(intro.panel, VisualIntroPanel::Menu) {
+        let mut advanced = false;
+        let title_phase = matches!(intro.dispatch.tick_title(), UnifiedMenuStep::PresentTitle);
+
+        if !title_phase && !intro.message_waiting_for_key {
+            intro.title_tick_frame = title_tick_next_frame(intro.title_tick_frame);
+            advanced = true;
+            advanced |= advance_visual_intro_start_menu_reveal(intro);
+        }
+
+        advanced |= advance_visual_intro_finished_menu_idle(intro);
+
+        if title_phase && !intro.title_flourish_complete {
+            if intro.title_flourish_step + 1 >= intro_title_flourish_total_steps() {
+                intro.title_flourish_complete = true;
+            } else {
+                intro.title_flourish_step += 1;
+            }
+            advanced = true;
+        } else if title_phase && !intro.title_signature_complete {
+            let Ok(signature) = load_british_pth(&intro.game_dir) else {
+                intro.title_signature_complete = true;
+                return true;
+            };
+            let total_steps = british_signature_step_count(&signature);
+            if total_steps == 0 {
+                intro.title_signature_complete = true;
+                return true;
+            }
+
+            intro.title_signature_progress =
+                (intro.title_signature_progress + SIGNATURE_STEPS_PER_TICK).min(total_steps);
+            if intro.title_signature_progress >= total_steps {
+                intro.title_signature_progress = 0;
+                intro.title_signature_complete = true;
+            }
+            advanced = true;
+        }
+        return advanced;
+    } else {
+        let mut title_tick_frame = intro.title_tick_frame;
+        if !advance_visual_intro_panel_animation(&mut intro.panel, &mut title_tick_frame) {
+            return false;
+        }
+        intro.title_tick_frame = title_tick_frame;
+        true
     }
 }
 
@@ -7721,6 +7740,7 @@ fn advance_visual_intro_start_menu_reveal(intro: &mut VisualIntroState) -> bool 
     };
     if reveal.advance_title_tick() {
         intro.start_menu_reveal = None;
+        intro.start_menu_reveal_backing = None;
     }
     true
 }
@@ -7822,6 +7842,9 @@ fn step_visual_intro(intro: &mut VisualIntroState, ch: char) -> bool {
         intro.title_signature_complete = true;
         intro.title_tick_frame = 0;
         intro.menu_idle_ticks = 0;
+        intro.start_menu_reveal = None;
+        intro.start_menu_reveal_backing = None;
+        intro.modal_backing = None;
         intro.message_waiting_for_key = false;
         if ch.eq_ignore_ascii_case(&'J') {
             return resolve_visual_intro_subflow(intro, IntroSubflow::JourneyOnward);
@@ -7930,10 +7953,13 @@ fn step_visual_intro_panel(intro: &mut VisualIntroState, ch: char) -> bool {
             result,
             message,
         } => {
+            let reveal_backing = render_intro_frame(intro);
             intro.panel = VisualIntroPanel::Menu;
             intro.dispatch.complete_subflow(subflow, result);
             intro.start_menu_reveal =
                 Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT));
+            intro.start_menu_reveal_backing = Some(reveal_backing);
+            intro.modal_backing = None;
             intro.menu_idle_ticks = 0;
             intro.message_waiting_for_key = false;
             intro.message = message;
@@ -8029,8 +8055,12 @@ fn cancel_visual_intro_panel(intro: &mut VisualIntroState) -> bool {
         return false;
     };
 
+    let reveal_backing = render_intro_frame(intro);
     intro.panel = VisualIntroPanel::Menu;
     intro.dispatch.complete_subflow(subflow, result);
+    intro.start_menu_reveal = Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT));
+    intro.start_menu_reveal_backing = Some(reveal_backing);
+    intro.modal_backing = None;
     intro.menu_idle_ticks = 0;
     intro.message_waiting_for_key = false;
     intro.message = message.to_string();
@@ -8186,6 +8216,11 @@ fn yes_no_key(ch: char) -> Option<bool> {
 fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubflow) -> bool {
     intro.menu_idle_ticks = 0;
     intro.message_waiting_for_key = false;
+    intro.start_menu_reveal = None;
+    intro.start_menu_reveal_backing = None;
+    if !matches!(subflow, IntroSubflow::ReturnToView) {
+        intro.modal_backing = None;
+    }
     match subflow {
         IntroSubflow::JourneyOnward => match load_play_options_from_save(&intro.game_dir) {
             Ok(options) => {
@@ -8311,6 +8346,7 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
             intro.message.clear();
         }
         IntroSubflow::ReturnToView => {
+            intro.modal_backing = Some(render_intro_frame(intro));
             let preview = visual_return_to_view_summary(&intro.game_dir, intro.raster_depth);
             intro.panel = VisualIntroPanel::ReturnToView {
                 summary: preview.summary,
@@ -8808,11 +8844,39 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
         }
     }
     if let Some(reveal) = intro.start_menu_reveal {
-        apply_rect_column_sweep_mask_rgba(
-            &mut rgba,
+        let source_rgba = rgba;
+        let mut backing_rgba = intro
+            .start_menu_reveal_backing
+            .clone()
+            .unwrap_or_else(|| visual_intro_final_title_backing_rgba(intro));
+        apply_rect_column_sweep_reveal_rgba(
+            &mut backing_rgba,
+            &source_rgba,
             INTRO_FRAMEBUFFER_WIDTH as usize,
             INTRO_FRAMEBUFFER_HEIGHT as usize,
             reveal,
+        );
+        rgba = backing_rgba;
+    }
+    rgba
+}
+
+fn visual_intro_final_title_backing_rgba(intro: &VisualIntroState) -> Vec<u8> {
+    let mut rgba =
+        vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+    }
+    if let Some(title_rgba) = visual_intro_title_art_rgba(&intro.game_dir, None, None) {
+        blit_rgba(
+            &mut rgba,
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+            &title_rgba,
+            TITLE_SURFACE_WIDTH as usize,
+            TITLE_SURFACE_HEIGHT as usize,
+            0,
+            0,
         );
     }
     rgba
@@ -9126,30 +9190,14 @@ fn visual_intro_story_text(records: &StoryRecords, step: usize) -> Option<&str> 
 }
 
 fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
-    let mut rgba =
-        vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
-    for pixel in rgba.chunks_exact_mut(4) {
-        pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
-    }
-    if let Some(title_rgba) = visual_intro_title_art_rgba(&intro.game_dir, None, None) {
-        blit_rgba(
-            &mut rgba,
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            INTRO_FRAMEBUFFER_HEIGHT as usize,
-            &title_rgba,
-            TITLE_SURFACE_WIDTH as usize,
-            TITLE_SURFACE_HEIGHT as usize,
-            0,
-            0,
-        );
-    } else {
-        rgba = render_text_panel_rgba(
+    let mut rgba = intro.modal_backing.clone().unwrap_or_else(|| {
+        render_text_panel_rgba(
             "Return to View",
             INTRO_FRAMEBUFFER_WIDTH as usize,
             INTRO_FRAMEBUFFER_HEIGHT as usize,
         )
-        .unwrap_or(rgba);
-    }
+        .unwrap_or_else(|_| visual_intro_final_title_backing_rgba(intro))
+    });
 
     let VisualIntroPanel::ReturnToView {
         preview_frames_rgba,
@@ -10293,6 +10341,8 @@ fn write_visual_intro_report_inner(
         title_signature_complete: static_title,
         title_tick_frame: 0,
         start_menu_reveal: None,
+        start_menu_reveal_backing: None,
+        modal_backing: None,
         menu_idle_ticks: 0,
         message_waiting_for_key: false,
         message: String::new(),
@@ -11085,12 +11135,16 @@ fn apply_endgame_certificate_rect_operation_mask(rgba: &mut [u8], state: &PlaySt
     );
 }
 
-fn apply_rect_column_sweep_mask_rgba(
-    rgba: &mut [u8],
+fn apply_rect_column_sweep_reveal_rgba(
+    destination: &mut [u8],
+    source: &[u8],
     width: usize,
     height: usize,
     transition: RectColumnSweepTransition,
 ) {
+    if destination.len() != source.len() {
+        return;
+    }
     let Some((start_x, end_x)) = transition.revealed_columns() else {
         return;
     };
@@ -11108,12 +11162,14 @@ fn apply_rect_column_sweep_mask_rgba(
 
     for y in y0..=y1 {
         for x in x0..=x1 {
-            if x >= revealed_start && x <= revealed_end {
+            if x < revealed_start || x > revealed_end {
                 continue;
             }
             let offset = (y * width + x) * 4;
-            if let Some(pixel) = rgba.get_mut(offset..offset + 4) {
-                pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+            if let Some(src_pixel) = source.get(offset..offset + 4)
+                && let Some(dst_pixel) = destination.get_mut(offset..offset + 4)
+            {
+                dst_pixel.copy_from_slice(src_pixel);
             }
         }
     }
@@ -11793,6 +11849,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
             menu_idle_ticks: 0,
             message_waiting_for_key: false,
             message: "Intro menu smoke".to_string(),
@@ -11824,6 +11882,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: Some(RectColumnSweepTransition::new(INTRO_START_MENU_REVEAL_RECT)),
+            start_menu_reveal_backing: None,
+            modal_backing: None,
             menu_idle_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
@@ -11965,6 +12025,8 @@ mod tests {
             title_signature_complete: true,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
             menu_idle_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
@@ -12057,6 +12119,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
             menu_idle_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
@@ -12457,23 +12521,42 @@ mod tests {
     }
 
     #[test]
-    fn rect_column_sweep_mask_reveals_columns_from_left_edge() {
+    fn rect_column_sweep_reveal_copies_columns_from_source() {
         let width = 8;
         let height = 4;
-        let mut rgba = vec![0xff; width * height * 4];
+        let mut destination = vec![0x11; width * height * 4];
+        let source = vec![0xee; width * height * 4];
         let transition = RectColumnSweepTransition {
             rect: (2, 1, 6, 2),
             tick: 1,
         };
 
-        apply_rect_column_sweep_mask_rgba(&mut rgba, width, height, transition);
+        apply_rect_column_sweep_reveal_rgba(&mut destination, &source, width, height, transition);
 
-        assert_eq!(rgba_pixel(&rgba, width, 2, 1), [0xff, 0xff, 0xff, 0xff]);
-        assert_eq!(rgba_pixel(&rgba, width, 3, 2), [0xff, 0xff, 0xff, 0xff]);
-        assert_eq!(rgba_pixel(&rgba, width, 4, 1), [0x00, 0x00, 0x00, 0xff]);
-        assert_eq!(rgba_pixel(&rgba, width, 6, 2), [0x00, 0x00, 0x00, 0xff]);
-        assert_eq!(rgba_pixel(&rgba, width, 7, 1), [0xff, 0xff, 0xff, 0xff]);
-        assert_eq!(rgba_pixel(&rgba, width, 4, 3), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(
+            rgba_pixel(&destination, width, 2, 1),
+            [0xee, 0xee, 0xee, 0xee]
+        );
+        assert_eq!(
+            rgba_pixel(&destination, width, 3, 2),
+            [0xee, 0xee, 0xee, 0xee]
+        );
+        assert_eq!(
+            rgba_pixel(&destination, width, 4, 1),
+            [0x11, 0x11, 0x11, 0x11]
+        );
+        assert_eq!(
+            rgba_pixel(&destination, width, 6, 2),
+            [0x11, 0x11, 0x11, 0x11]
+        );
+        assert_eq!(
+            rgba_pixel(&destination, width, 7, 1),
+            [0x11, 0x11, 0x11, 0x11]
+        );
+        assert_eq!(
+            rgba_pixel(&destination, width, 4, 3),
+            [0x11, 0x11, 0x11, 0x11]
+        );
     }
 
     #[test]
@@ -14568,6 +14651,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
             menu_idle_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
@@ -14657,6 +14742,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
             menu_idle_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
@@ -14706,6 +14793,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
             menu_idle_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
@@ -15009,6 +15098,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
             menu_idle_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
@@ -15063,6 +15154,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
             menu_idle_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
@@ -15158,6 +15251,8 @@ mod tests {
             title_signature_complete: false,
             title_tick_frame: 0,
             start_menu_reveal: None,
+            start_menu_reveal_backing: None,
+            modal_backing: None,
             menu_idle_ticks: 0,
             message_waiting_for_key: false,
             message: String::new(),
