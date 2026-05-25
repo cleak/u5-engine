@@ -41,7 +41,8 @@ use u5_runtime::{
     INTRO_STEP_1_EXTRA_ART_Y, INTRO_STEP_1_EXTRA_SUBIMAGE, INTRO_STEP_1_RECT_TRANSITION,
     INTRO_STEP_6_EXTRA_ART_X, INTRO_STEP_6_EXTRA_ART_Y, INTRO_STEP_6_EXTRA_SUBIMAGE,
     INTRO_STORY_STEP_COUNT, INTRO_STORY6_SECONDARY_Y_DELTA, Inn, IntroStoryArtPlacement,
-    MAGIC_LOCK_COST, MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
+    LOAD_EMPTY_SAVE_LINE_1, LOAD_EMPTY_SAVE_LINE_2, LOAD_EMPTY_SAVE_LINE_3, MAGIC_LOCK_COST,
+    MAGIC_LOCK_SPELL_INDEX, MAIN_TEXT_WINDOW_INDEX, MISCMAPS_DAT_FILE,
     MISCMAPS_RTV_COMMAND_SECTION_OFFSET, MISCMAPS_RTV_STRIP_SECTION_BYTES,
     MISCMAPS_RTV_STRIP_SECTION_OFFSET, MonochromeBitmap, MoonstoneGateSlot, NARRATIVE_GATE_X,
     NARRATIVE_GATE_Y, NATURAL_MOONGATE_TERRAIN_TILE, NEGATE_MAGIC_COST, NEGATE_MAGIC_SPELL_INDEX,
@@ -97,10 +98,10 @@ use u5_runtime::{
     paint_inn_pickup_register_text_window, paint_message_text_window,
     paint_prompt_text_window_with_cursor, paint_stats_panel_text_window,
     paint_talk_shop_text_window, published_world_location_entries,
-    rasterize_proportional_paragraph, read_u4_transfer_source_from_party_sav,
+    rasterize_proportional_paragraph, read_save_image_file, read_u4_transfer_source_from_party_sav,
     render_play_text_window_system, render_return_to_view_playback_frame_viewport,
     render_text_panel_rgba, render_text_window_rgba, return_to_view_fixed_wipe_rectangles,
-    run_return_to_view_playback_until_restart,
+    run_return_to_view_playback_until_restart, save_image_has_active_avatar,
     shop_runtime::{
         ArmsShopState, GuildShopState, HealerShopState, HorseTraderState, InnkeeperState,
         ReagentShopState, SageState, ShipBrokerState, TavernState,
@@ -8471,6 +8472,19 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
     }
     match subflow {
         IntroSubflow::JourneyOnward => {
+            let save_image =
+                read_save_image_file(&intro.game_dir.join(SAVED_GAM_FILENAME), SAVED_GAM_FILENAME)
+                    .unwrap_or_else(|err| {
+                        panic!("Journey Onward requires readable SAVED.GAM: {err}")
+                    });
+            if !save_image_has_active_avatar(&save_image) {
+                intro
+                    .dispatch
+                    .complete_subflow(subflow, IntroSubflowResult::Cancelled);
+                intro.message = visual_intro_empty_save_message();
+                intro.message_waiting_for_key = true;
+                return true;
+            }
             let options = load_play_options_from_save(&intro.game_dir)
                 .unwrap_or_else(|err| panic!("Journey Onward requires loadable SAVED.GAM: {err}"));
             intro
@@ -8569,6 +8583,15 @@ fn resolve_visual_intro_subflow(intro: &mut VisualIntroState, subflow: IntroSubf
         }
     }
     true
+}
+
+fn visual_intro_empty_save_message() -> String {
+    [
+        LOAD_EMPTY_SAVE_LINE_1,
+        LOAD_EMPTY_SAVE_LINE_2,
+        LOAD_EMPTY_SAVE_LINE_3,
+    ]
+    .join("\n")
 }
 
 fn drive_visual(
@@ -12119,10 +12142,10 @@ mod tests {
         PenStroke, ProportionalGlyph, REAGENT_COUNT, REAGENT_SPIDER_SILK,
         SAVE_CHARACTER_DEX_OFFSET, SAVE_CHARACTER_GENDER_OFFSET, SAVE_CHARACTER_INT_OFFSET,
         SAVE_CHARACTER_NAME_LEN, SAVE_CHARACTER_STR_OFFSET, SAVE_ROSTER_OFFSET, SAVED_GAM_FILENAME,
-        SAVED_OOL_FILENAME, SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST, SHRINE_TABLE_FILE,
-        STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern, TileGraphicsDepth,
-        U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane, dungeon_cell_index,
-        parse_ch_font, world_cell_index, wrap_text_panel_lines,
+        SAVED_GAM_LEN, SAVED_OOL_FILENAME, SHOPPE_RECORDS_ARMS_DESCRIPTIONS_FIRST,
+        SHRINE_TABLE_FILE, STORY_DAT_FILE, ShrineVirtue, SurfaceChestVerb, TILES_EGA_FILE, Tavern,
+        TileGraphicsDepth, U4_TRANSFER_U5_SEED_GAM_FILENAME, U4TransferSource, WorldPlane,
+        dungeon_cell_index, parse_ch_font, world_cell_index, wrap_text_panel_lines,
     };
 
     fn enc_tlk_text(text: &str) -> Vec<u8> {
@@ -13118,6 +13141,32 @@ mod tests {
             result.is_err(),
             "Journey Onward must panic when SAVED.GAM cannot be loaded"
         );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn visual_intro_journey_empty_save_uses_published_no_active_game_message() {
+        let dir = debug_game_dir();
+        fs::write(dir.join(SAVED_GAM_FILENAME), vec![0u8; SAVED_GAM_LEN]).unwrap();
+        let mut intro = visual_intro_state_with_panel(dir.clone(), VisualIntroPanel::Menu);
+
+        assert!(resolve_visual_intro_subflow(
+            &mut intro,
+            IntroSubflow::JourneyOnward
+        ));
+
+        assert!(matches!(intro.panel, VisualIntroPanel::Menu));
+        assert!(intro.message_waiting_for_key);
+        assert_eq!(
+            intro.message,
+            [
+                LOAD_EMPTY_SAVE_LINE_1,
+                LOAD_EMPTY_SAVE_LINE_2,
+                LOAD_EMPTY_SAVE_LINE_3
+            ]
+            .join("\n")
+        );
+        assert!(intro.launch_result.lock().unwrap().is_none());
         let _ = fs::remove_dir_all(dir);
     }
 
