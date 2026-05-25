@@ -559,18 +559,11 @@ pub fn run_visual_loop(
     // waits a few frames (so the swapchain has a real image), takes a
     // screenshot via Bevy's `Screenshot` component, then exits. Lets us
     // verify end-to-end Bevy rendering without an interactive desktop.
-    let screenshot_path: Option<PathBuf> =
-        std::env::var("U5_BEVY_SCREENSHOT").ok().map(PathBuf::from);
-    let screenshot_delay: u32 = std::env::var("U5_BEVY_SCREENSHOT_DELAY")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(60);
+    let screenshot_path: Option<PathBuf> = optional_env_path("U5_BEVY_SCREENSHOT");
+    let screenshot_delay: u32 = screenshot_delay_from_env();
     // Optional pre-screenshot keystrokes (single chars), e.g.
     // `U5_BEVY_PRESS=dddss` to step east 3 then south 2 before the shot.
-    let preset_keys: Vec<char> = std::env::var("U5_BEVY_PRESS")
-        .ok()
-        .map(|s| s.chars().collect())
-        .unwrap_or_default();
+    let preset_keys: Vec<char> = preset_keys_from_env();
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -607,6 +600,32 @@ pub fn run_visual_intro_loop(
     let launch_result = Arc::new(Mutex::new(None));
     run_visual_intro_menu_app(game_dir.to_path_buf(), raster_depth, launch_result.clone());
     Ok(())
+}
+
+fn optional_env_path(name: &str) -> Option<PathBuf> {
+    match std::env::var(name) {
+        Ok(value) => Some(PathBuf::from(value)),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(err) => panic!("{name} could not be read: {err}"),
+    }
+}
+
+fn screenshot_delay_from_env() -> u32 {
+    match std::env::var("U5_BEVY_SCREENSHOT_DELAY") {
+        Ok(value) => value.parse().unwrap_or_else(|err| {
+            panic!("U5_BEVY_SCREENSHOT_DELAY must be an unsigned frame count: {err}")
+        }),
+        Err(std::env::VarError::NotPresent) => 60,
+        Err(err) => panic!("U5_BEVY_SCREENSHOT_DELAY could not be read: {err}"),
+    }
+}
+
+fn preset_keys_from_env() -> Vec<char> {
+    match std::env::var("U5_BEVY_PRESS") {
+        Ok(value) => value.chars().collect(),
+        Err(std::env::VarError::NotPresent) => Vec::new(),
+        Err(err) => panic!("U5_BEVY_PRESS could not be read: {err}"),
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -725,20 +744,20 @@ pub fn visual_frame_suite(
         game_dir,
         raster_depth,
     )?);
-    if let Some(records) = load_story_records(game_dir)? {
-        reports.push(write_visual_intro_report(
-            out_dir,
-            "intro-story-art",
-            "intro story art",
-            VisualIntroPanel::Story {
-                records,
-                step: 7,
-                transition: None,
-            },
-            game_dir,
-            raster_depth,
-        )?);
-    }
+    let records = load_story_records(game_dir)?
+        .ok_or_else(|| io::Error::other("visual frame suite requires STORY.DAT"))?;
+    reports.push(write_visual_intro_report(
+        out_dir,
+        "intro-story-art",
+        "intro story art",
+        VisualIntroPanel::Story {
+            records,
+            step: 7,
+            transition: None,
+        },
+        game_dir,
+        raster_depth,
+    )?);
     let preview = visual_return_to_view_summary(game_dir, raster_depth);
     reports.push(write_visual_intro_report(
         out_dir,
@@ -7353,16 +7372,9 @@ fn run_visual_intro_menu_app(
     raster_depth: TileGraphicsDepth,
     launch_result: Arc<Mutex<Option<PlayOptions>>>,
 ) {
-    let screenshot_path: Option<PathBuf> =
-        std::env::var("U5_BEVY_SCREENSHOT").ok().map(PathBuf::from);
-    let screenshot_delay: u32 = std::env::var("U5_BEVY_SCREENSHOT_DELAY")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(60);
-    let preset_keys: Vec<char> = std::env::var("U5_BEVY_PRESS")
-        .ok()
-        .map(|s| s.chars().collect())
-        .unwrap_or_default();
+    let screenshot_path: Option<PathBuf> = optional_env_path("U5_BEVY_SCREENSHOT");
+    let screenshot_delay: u32 = screenshot_delay_from_env();
+    let preset_keys: Vec<char> = preset_keys_from_env();
 
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -7462,7 +7474,8 @@ fn screenshot_system(
         if let Some(mut visual) = visual {
             let game_dir = visual.game_dir.clone();
             for ch in &config.preset_keys {
-                let _ = handle_play_key_input(&mut visual.state, *ch, "", &game_dir);
+                handle_play_key_input(&mut visual.state, *ch, "", &game_dir)
+                    .unwrap_or_else(|err| panic!("screenshot preset play input failed: {err}"));
             }
             // Re-render the framebuffer to reflect the new state.
             let v: &mut VisualState = visual.as_mut();
@@ -7892,13 +7905,8 @@ fn animate_visual_intro_title_effects(
         return;
     };
 
-    pump.accumulator += time.delta_secs();
     let mut advanced = false;
-    if pump.accumulator >= pump.interval {
-        pump.accumulator -= pump.interval;
-        if pump.accumulator >= pump.interval {
-            pump.accumulator = 0.0;
-        }
+    if advance_intro_animation_pump(&mut pump, time.delta_secs()) {
         advanced = advance_visual_intro_animation_tick(&mut intro);
     }
     if !advanced {
@@ -7911,6 +7919,30 @@ fn animate_visual_intro_title_effects(
         .as_ref()
         .expect("intro animation tick requires a visual framebuffer handle");
     replace_visual_image_data(&mut images, handle, rgba, "intro animation tick");
+}
+
+fn advance_intro_animation_pump(pump: &mut VisualIntroAnimationPump, delta: f32) -> bool {
+    assert!(
+        pump.interval.is_finite() && pump.interval > 0.0,
+        "intro animation pump interval must be positive and finite, got {}",
+        pump.interval
+    );
+    assert!(
+        delta.is_finite() && delta >= 0.0,
+        "intro animation delta must be non-negative and finite, got {delta}"
+    );
+    pump.accumulator += delta;
+    assert!(
+        pump.accumulator < pump.interval * 2.0,
+        "intro animation missed at least one pump tick: accumulator {} interval {}",
+        pump.accumulator,
+        pump.interval
+    );
+    if pump.accumulator < pump.interval {
+        return false;
+    }
+    pump.accumulator -= pump.interval;
+    true
 }
 
 fn advance_visual_intro_animation_tick(intro: &mut VisualIntroState) -> bool {
@@ -9457,7 +9489,13 @@ fn render_return_to_view_intro_frame(intro: &VisualIntroState) -> Vec<u8> {
     let preview_buffer = preview_frames
         .get(*preview_frame_index)
         .expect("Return-to-View current preview frame is missing");
-    let x = ((INTRO_FRAMEBUFFER_WIDTH as usize).saturating_sub(*preview_width)) / 2;
+    assert!(
+        *preview_width <= INTRO_FRAMEBUFFER_WIDTH as usize,
+        "Return-to-View preview width {} exceeds intro framebuffer width {}",
+        preview_width,
+        INTRO_FRAMEBUFFER_WIDTH
+    );
+    let x = ((INTRO_FRAMEBUFFER_WIDTH as usize) - *preview_width) / 2;
     assert_eq!(preview_buffer.width, *preview_width);
     assert_eq!(preview_buffer.height, *preview_height);
     buffer.blit_return_to_view_preview_buffer(preview_buffer, x, RETURN_TO_VIEW_PREVIEW_Y);
@@ -12550,6 +12588,26 @@ mod tests {
     }
 
     #[test]
+    fn intro_animation_pump_panics_instead_of_dropping_missed_ticks() {
+        let mut pump = VisualIntroAnimationPump::default();
+
+        assert!(!advance_intro_animation_pump(
+            &mut pump,
+            INTRO_ANIMATION_TICK_INTERVAL_SECS * 0.5
+        ));
+        assert!(advance_intro_animation_pump(
+            &mut pump,
+            INTRO_ANIMATION_TICK_INTERVAL_SECS * 0.5
+        ));
+
+        let mut missed = VisualIntroAnimationPump::default();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            advance_intro_animation_pump(&mut missed, INTRO_ANIMATION_TICK_INTERVAL_SECS * 2.0);
+        }));
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn intro_menu_frame_renders_nonblank_rgba() {
         let dir = debug_game_dir();
         install_intro_assets(&dir);
@@ -13956,6 +14014,7 @@ mod tests {
         if !game_dir.join("CASTLE.DAT").exists()
             || !game_dir.join(TILES_EGA_FILE).exists()
             || !game_dir.join(IBM_CH_FILE).exists()
+            || !game_dir.join(STORY_DAT_FILE).exists()
         {
             return;
         }
@@ -13963,8 +14022,7 @@ mod tests {
         let dir = temp_output_dir("suite");
         let reports = visual_frame_suite(game_dir, TileGraphicsDepth::Ega16, &dir).unwrap();
 
-        let has_story = game_dir.join(STORY_DAT_FILE).exists();
-        assert_eq!(reports.len(), if has_story { 163 } else { 162 });
+        assert_eq!(reports.len(), 163);
         for report in &reports {
             assert!(report.path.exists());
             assert!(report.nonblack_pixels > 0);
@@ -14027,16 +14085,12 @@ mod tests {
             assert_eq!(report.width, VISUAL_PLAY_FRAME_WIDTH);
             assert_eq!(report.height, VISUAL_PLAY_FRAME_HEIGHT);
         }
-        let intro_labels: &[&str] = if has_story {
-            &[
-                "intro-menu",
-                "intro-finished-menu",
-                "intro-story-art",
-                "intro-return-to-view",
-            ]
-        } else {
-            &["intro-menu", "intro-finished-menu", "intro-return-to-view"]
-        };
+        let intro_labels: &[&str] = &[
+            "intro-menu",
+            "intro-finished-menu",
+            "intro-story-art",
+            "intro-return-to-view",
+        ];
         for label in intro_labels {
             let report = reports
                 .iter()
@@ -14105,9 +14159,7 @@ mod tests {
         assert!(manifest.contains("cursor=slot0 secondary=(3,4)"));
         assert!(manifest.contains("intro-menu"));
         assert!(manifest.contains("intro-finished-menu"));
-        if has_story {
-            assert!(manifest.contains("intro-story-art"));
-        }
+        assert!(manifest.contains("intro-story-art"));
         assert!(manifest.contains("intro-return-to-view"));
         assert!(!manifest.contains("Avatar"));
         let _ = fs::remove_dir_all(dir);
