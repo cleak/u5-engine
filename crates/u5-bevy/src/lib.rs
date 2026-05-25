@@ -318,9 +318,7 @@ impl IntroDisplayBuffer {
             (source.width, source.height),
             "intro column reveal requires matching source and destination buffers"
         );
-        let (start_x, end_x) = transition
-            .revealed_columns()
-            .expect("intro column reveal requires a valid transition rectangle");
+        let (start_x, end_x) = transition.revealed_columns();
         let (rect_x0, rect_y0, rect_x1, rect_y1) = transition.rect;
         assert!(
             rect_x0 <= rect_x1 && rect_y0 <= rect_y1,
@@ -10245,12 +10243,7 @@ fn visual_intro_story_draw_specs_for_active_panel(
         return specs;
     };
 
-    let (start_x, end_x) = transition.revealed_columns().unwrap_or_else(|| {
-        panic!(
-            "intro story step 1 transition has no revealed columns for rect {:?} tick {}",
-            transition.rect, transition.tick
-        )
-    });
+    let (start_x, end_x) = transition.revealed_columns();
     let (_rect_x0, rect_y0, _rect_x1, rect_y1) = transition.rect;
     let clip_width = end_x
         .checked_sub(start_x)
@@ -11903,9 +11896,7 @@ fn apply_rect_column_sweep_reveal_rgba(
         destination.len(),
         width * height * 4
     );
-    let (start_x, end_x) = transition
-        .revealed_columns()
-        .expect("rect column sweep requires a valid transition rectangle");
+    let (start_x, end_x) = transition.revealed_columns();
     let (rect_x0, rect_y0, rect_x1, rect_y1) = transition.rect;
     assert!(
         rect_x0 <= rect_x1 && rect_y0 <= rect_y1,
@@ -13040,7 +13031,10 @@ mod tests {
             .map(String::as_str)
             .or_else(|| payload.downcast_ref::<&str>().copied())
             .expect("transition panic payload must be a string");
-        assert!(message.contains("has no revealed columns"), "{message}");
+        assert!(
+            message.contains("intro rectangle transition has inverted X bounds"),
+            "{message}"
+        );
     }
 
     #[test]

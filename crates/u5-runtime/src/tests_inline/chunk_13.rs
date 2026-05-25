@@ -8129,24 +8129,30 @@ fn intro_rect_transition_column_sweep_matches_published_schedule() {
     // Tick 0 reveals only column 40.
     assert_eq!(
         intro_rect_transition_revealed_columns(INTRO_STEP_1_RECT_TRANSITION, 0),
-        Some((40, 40))
+        (40, 40)
     );
     // Tick 1 reveals columns 40..=41.
     assert_eq!(
         intro_rect_transition_revealed_columns(INTRO_STEP_1_RECT_TRANSITION, 1),
-        Some((40, 41))
+        (40, 41)
     );
     // Tick 35 reveals the full rectangle (40..=75).
     assert_eq!(
         intro_rect_transition_revealed_columns(INTRO_STEP_1_RECT_TRANSITION, 35),
-        Some((40, 75))
+        (40, 75)
     );
-    // After the sweep completes, the rectangle stays fully
-    // revealed for any subsequent tick.
-    assert_eq!(
-        intro_rect_transition_revealed_columns(INTRO_STEP_1_RECT_TRANSITION, 99),
-        Some((40, 75))
-    );
+}
+
+#[test]
+#[should_panic(expected = "intro rectangle transition tick 99 is outside the published range")]
+fn intro_rect_transition_rejects_tick_after_published_schedule() {
+    let _ = intro_rect_transition_revealed_columns(INTRO_STEP_1_RECT_TRANSITION, 99);
+}
+
+#[test]
+#[should_panic(expected = "intro rectangle transition has inverted X bounds")]
+fn intro_rect_transition_rejects_inverted_rect() {
+    let _ = intro_rect_transition_tick_count((75, 86, 40, 120));
 }
 
 #[test]
@@ -8158,11 +8164,11 @@ fn intro_start_menu_reveal_uses_published_startsc_rect() {
     );
     assert_eq!(
         intro_rect_transition_revealed_columns(INTRO_START_MENU_REVEAL_RECT, 0),
-        Some((0, 0))
+        (0, 0)
     );
     assert_eq!(
         intro_rect_transition_revealed_columns(INTRO_START_MENU_REVEAL_RECT, 319),
-        Some((0, 319))
+        (0, 319)
     );
 }
 
@@ -8170,15 +8176,25 @@ fn intro_start_menu_reveal_uses_published_startsc_rect() {
 fn rect_column_sweep_transition_state_advances_at_title_tick_cadence() {
     let mut transition = RectColumnSweepTransition::new(INTRO_STEP_1_RECT_TRANSITION);
     assert_eq!(transition.total_ticks(), 36);
-    assert_eq!(transition.revealed_columns(), Some((40, 40)));
+    assert_eq!(transition.revealed_columns(), (40, 40));
 
     for expected_end in 41..=75 {
         assert!(!transition.advance_title_tick());
-        assert_eq!(transition.revealed_columns(), Some((40, expected_end)));
+        assert_eq!(transition.revealed_columns(), (40, expected_end));
     }
 
     assert!(transition.advance_title_tick());
-    assert_eq!(transition.revealed_columns(), Some((40, 75)));
+    assert_eq!(transition.revealed_columns(), (40, 75));
+}
+
+#[test]
+#[should_panic(expected = "intro rectangle transition tick 36 is outside the published range")]
+fn rect_column_sweep_transition_rejects_advance_after_completion() {
+    let mut transition = RectColumnSweepTransition {
+        rect: INTRO_STEP_1_RECT_TRANSITION,
+        tick: 36,
+    };
+    let _ = transition.advance_title_tick();
 }
 
 #[test]

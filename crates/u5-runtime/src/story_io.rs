@@ -163,40 +163,37 @@ pub const INTRO_RECT_TRANSITION_COLUMNS_PER_TICK: u16 = 1;
 /// one column per title tick.
 pub const fn intro_rect_transition_tick_count(rect: (u16, u16, u16, u16)) -> u16 {
     let (x0, _y0, x1, _y1) = rect;
-    if x1 < x0 {
-        return 0;
-    }
-    let width = x1.saturating_sub(x0).saturating_add(1);
+    assert!(x1 >= x0, "intro rectangle transition has inverted X bounds");
+    let width = x1 - x0 + 1;
     width / INTRO_RECT_TRANSITION_COLUMNS_PER_TICK
 }
 
 /// `cleak/u5-spec#53`: returns the inclusive X-column range
 /// `[start_x, end_x]` revealed by the column sweep at the given
 /// zero-based `tick` over the published rectangle. Each tick adds
-/// [`INTRO_RECT_TRANSITION_COLUMNS_PER_TICK`] columns; once the
-/// sweep finishes, every subsequent tick keeps the full rectangle
-/// revealed. Returns `None` before the first tick (`tick == 0`
-/// reveals column `x0`).
-pub fn intro_rect_transition_revealed_columns(
-    rect: (u16, u16, u16, u16),
-    tick: u16,
-) -> Option<(u16, u16)> {
+/// [`INTRO_RECT_TRANSITION_COLUMNS_PER_TICK`] columns. Passing a
+/// tick outside the published range is a caller bug and panics
+/// rather than silently clamping to the completed frame.
+pub fn intro_rect_transition_revealed_columns(rect: (u16, u16, u16, u16), tick: u16) -> (u16, u16) {
     let (x0, _y0, x1, _y1) = rect;
-    if x1 < x0 {
-        return None;
-    }
     let last_tick = intro_rect_transition_tick_count(rect);
-    if last_tick == 0 {
-        return None;
-    }
-    let clamped_tick = if tick + 1 > last_tick {
+    assert!(last_tick > 0, "intro rectangle transition is empty");
+    assert!(
+        tick < last_tick,
+        "intro rectangle transition tick {tick} is outside the published range 0..{}",
         last_tick - 1
-    } else {
-        tick
-    };
-    let added = clamped_tick.saturating_mul(INTRO_RECT_TRANSITION_COLUMNS_PER_TICK);
-    let end_x = x0.saturating_add(added).min(x1);
-    Some((x0, end_x))
+    );
+    let added = tick
+        .checked_mul(INTRO_RECT_TRANSITION_COLUMNS_PER_TICK)
+        .expect("intro rectangle transition tick multiplication overflowed");
+    let end_x = x0
+        .checked_add(added)
+        .expect("intro rectangle transition end column overflowed");
+    assert!(
+        end_x <= x1,
+        "intro rectangle transition end column {end_x} exceeds rectangle x1 {x1}"
+    );
+    (x0, end_x)
 }
 
 /// `intro.md §10` step 6 extra `STORY2.16` doorway-transition art
@@ -219,17 +216,25 @@ impl RectColumnSweepTransition {
         intro_rect_transition_tick_count(self.rect)
     }
 
-    pub fn revealed_columns(self) -> Option<(u16, u16)> {
+    pub fn revealed_columns(self) -> (u16, u16) {
         intro_rect_transition_revealed_columns(self.rect, self.tick)
     }
 
     pub fn advance_title_tick(&mut self) -> bool {
         let total_ticks = self.total_ticks();
-        if total_ticks == 0 {
-            return true;
-        }
-        if self.tick.saturating_add(1) < total_ticks {
-            self.tick = self.tick.saturating_add(1);
+        assert!(total_ticks > 0, "intro rectangle transition is empty");
+        assert!(
+            self.tick < total_ticks,
+            "intro rectangle transition tick {} is outside the published range 0..{}",
+            self.tick,
+            total_ticks - 1
+        );
+        let next_tick = self
+            .tick
+            .checked_add(1)
+            .expect("intro rectangle transition tick counter overflowed");
+        if next_tick < total_ticks {
+            self.tick = next_tick;
             false
         } else {
             true
