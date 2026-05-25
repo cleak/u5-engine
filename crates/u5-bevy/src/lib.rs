@@ -187,13 +187,13 @@ const STARTSC_PANEL_SPECS: [ImagePanelSpec; 3] = [
     },
 ];
 
-const INTRO_MENU_LABELS: [(usize, usize, &str); 6] = [
-    (12, 17, " Journey Onward "),
-    (9, 18, " Create New Char. "),
-    (8, 19, " Transfer from U4 "),
-    (9, 20, " Ultima V Intro. "),
-    (11, 21, " Acknowledgements "),
-    (10, 22, " Return to View "),
+const INTRO_MENU_LABELS: [(IntroSubflow, usize, usize, &str); 6] = [
+    (IntroSubflow::JourneyOnward, 12, 17, " Journey Onward "),
+    (IntroSubflow::CharacterCreation, 9, 18, " Create New Char. "),
+    (IntroSubflow::UltimaIvTransfer, 8, 19, " Transfer from U4 "),
+    (IntroSubflow::StorySlides, 9, 20, " Ultima V Intro. "),
+    (IntroSubflow::Acknowledgements, 11, 21, " Acknowledgements "),
+    (IntroSubflow::ReturnToView, 10, 22, " Return to View "),
 ];
 const INTRO_MENU_IDLE_RETURN_TO_VIEW_TICKS: u16 = 200;
 
@@ -8793,6 +8793,7 @@ fn render_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
                 &intro.game_dir,
                 intro.raster_depth,
                 intro.title_tick_visible_frame,
+                intro.dispatch.intro.cached_selection,
             )
             .or_else(|| visual_intro_title_art_rgba(&intro.game_dir, None, None))
         };
@@ -8914,6 +8915,7 @@ fn visual_intro_start_menu_rgba(
     game_dir: &Path,
     depth: TileGraphicsDepth,
     title_tick_frame: u8,
+    highlighted: Option<IntroSubflow>,
 ) -> Option<Vec<u8>> {
     let mut rgba =
         vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
@@ -8939,18 +8941,7 @@ fn visual_intro_start_menu_rgba(
         [0x00, 0x00, 0x00, 0xff],
     );
     let font = load_ibm_ch_font(game_dir).ok()?;
-    for (col, row, label) in INTRO_MENU_LABELS {
-        overlay_fixed_cell_text_rgba(
-            &mut rgba,
-            INTRO_FRAMEBUFFER_WIDTH as usize,
-            INTRO_FRAMEBUFFER_HEIGHT as usize,
-            &font,
-            label,
-            col,
-            row,
-            false,
-        );
-    }
+    draw_intro_menu_labels_rgba(&mut rgba, &font, highlighted);
     draw_title_tick_overlay_rgba(
         &mut rgba,
         INTRO_FRAMEBUFFER_WIDTH as usize,
@@ -8958,6 +8949,25 @@ fn visual_intro_start_menu_rgba(
         title_tick_frame,
     );
     Some(rgba)
+}
+
+fn draw_intro_menu_labels_rgba(
+    rgba: &mut [u8],
+    font: &FixedCellFont,
+    highlighted: Option<IntroSubflow>,
+) {
+    for (subflow, col, row, label) in INTRO_MENU_LABELS {
+        overlay_fixed_cell_text_rgba(
+            rgba,
+            INTRO_FRAMEBUFFER_WIDTH as usize,
+            INTRO_FRAMEBUFFER_HEIGHT as usize,
+            font,
+            label,
+            col,
+            row,
+            highlighted == Some(subflow),
+        );
+    }
 }
 
 fn render_story_intro_frame(intro: &mut VisualIntroState) -> Vec<u8> {
@@ -12279,6 +12289,37 @@ mod tests {
         assert_eq!(intro.title_tick_visible_frame, 2);
         assert_eq!(intro.title_tick_frame, title_tick_next_frame(2));
         let _ = fs::remove_dir_all(&intro.game_dir);
+    }
+
+    #[test]
+    fn intro_menu_cached_selection_renders_inverse_highlight() {
+        let font = parse_ch_font(&vec![0x00; CH_FONT_LEN], IBM_CH_FILE).unwrap();
+        let mut frame =
+            vec![0; (INTRO_FRAMEBUFFER_WIDTH as usize) * (INTRO_FRAMEBUFFER_HEIGHT as usize) * 4];
+        for pixel in frame.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[0x00, 0x00, 0x00, 0xff]);
+        }
+
+        draw_intro_menu_labels_rgba(&mut frame, &font, Some(IntroSubflow::Acknowledgements));
+
+        assert_eq!(
+            rgba_pixel(
+                &frame,
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                11 * CH_CELL_SIDE,
+                21 * CH_CELL_SIDE
+            ),
+            [0xff, 0xff, 0xff, 0xff]
+        );
+        assert_eq!(
+            rgba_pixel(
+                &frame,
+                INTRO_FRAMEBUFFER_WIDTH as usize,
+                12 * CH_CELL_SIDE,
+                17 * CH_CELL_SIDE
+            ),
+            [0x00, 0x00, 0x00, 0xff]
+        );
     }
 
     #[test]
